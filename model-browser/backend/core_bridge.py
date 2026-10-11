@@ -7,23 +7,27 @@ them, every `AppContainer` attribute the plugin uses is read here and nowhere
 else, so a core refactor breaks one file, and `check_container()` and
 tests/test_core_bridge.py name the attribute that moved.
 
-Phase 0: the attribute check, plus typed stubs that phase 3 implements. The
-functions take and return plain values (str, dict, list), never a core class,
-so the rest of the plugin never depends on one.
+Phase 1 implements the content policy and the user groups; the other functions
+are typed stubs that phase 3 implements. The functions take and return plain
+values (str, dict, list), never a core class, so the rest of the plugin never
+depends on one. Each reaches the container through `_container_attribute`, which
+names the attribute when the core moved it: a moved attribute only breaks the
+features that use it.
 """
 
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, get_args
 
 from src.plugin_api import User, get_container
 
 #: Every container attribute this module relies on, as a dotted path from the
-#: `AppContainer` (`src/bootstrap/container.py`). Phase 3 narrows each entry to
-#: the methods it actually calls.
+#: `AppContainer` (`src/bootstrap/container.py`). The implemented functions list
+#: the methods they call; phase 3 narrows the other entries the same way.
 REQUIRED_ATTRIBUTES = (
     "download_queue",
     "download_repository",
-    "content_policy_resolver",
-    "user_group_repository",
+    "content_policy_resolver.resolve",
+    "user_group_repository.get_user_groups",
+    "user_group_repository.get_all_groups",
     "model_repository.get_available_model_ids_for_user",
     "model_index_manager.assignments.assign_model_to_user",
     "model_index_manager.provider_info.run_provider_fetch",
@@ -38,8 +42,27 @@ REQUIRED_ATTRIBUTES = (
 
 #: The core's content policy modes, as `effective_policy()` returns them.
 ContentPolicy = Literal["allowed", "blur", "blocked"]
+CONTENT_POLICIES = get_args(ContentPolicy)
 
 _PHASE_3 = "model-browser: implemented in phase 3"
+
+
+def _walk(node: Any, path: str) -> Any:
+    """The object at dotted `path` from `node`, or None when a segment is absent or None."""
+    for name in path.split("."):
+        node = getattr(node, name, None)
+        if node is None:
+            return None
+    return node
+
+
+def _moved(paths: Sequence[str]) -> RuntimeError:
+    return RuntimeError(
+        "model-browser: PotionUI's AppContainer no longer provides "
+        + ", ".join(paths)
+        + ". The core renamed or removed attributes this plugin relies on: update "
+        "REQUIRED_ATTRIBUTES and the functions that use them in backend/core_bridge.py."
+    )
 
 
 def missing_attributes(container: Any) -> List[str]:
@@ -49,15 +72,7 @@ def missing_attributes(container: Any) -> List[str]:
     of its segments is absent or None, and is reported in full: with `plans` gone,
     both "plans.guard" and "plans.events" are listed.
     """
-    missing = []
-    for path in REQUIRED_ATTRIBUTES:
-        node = container
-        for name in path.split("."):
-            node = getattr(node, name, None)
-            if node is None:
-                missing.append(path)
-                break
-    return missing
+    return [path for path in REQUIRED_ATTRIBUTES if _walk(container, path) is None]
 
 
 def check_container() -> Any:
@@ -70,13 +85,22 @@ def check_container() -> Any:
     container = get_container()
     missing = missing_attributes(container)
     if missing:
-        raise RuntimeError(
-            "model-browser: PotionUI's AppContainer no longer provides "
-            + ", ".join(missing)
-            + ". The core renamed or removed attributes this plugin relies on: update "
-            "REQUIRED_ATTRIBUTES and the functions that use them in backend/core_bridge.py."
-        )
+        raise _moved(missing)
     return container
+
+
+def _container_attribute(path: str) -> Any:
+    """The object at `path`, one of `REQUIRED_ATTRIBUTES`, on the live container.
+
+    Raises RuntimeError naming `path` when the core renamed or removed it (and,
+    before the application is composed, the RuntimeError of `get_container()`).
+    """
+    if path not in REQUIRED_ATTRIBUTES:
+        raise ValueError(f"{path!r} is missing from REQUIRED_ATTRIBUTES")
+    node = _walk(get_container(), path)
+    if node is None:
+        raise _moved([path])
+    return node
 
 
 # Downloads ------------------------------------------------------------------
@@ -177,25 +201,38 @@ def write_attributes(model_id: str, values: Mapping[str, Any]) -> None:
 def effective_policy(user_id: str) -> ContentPolicy:
     """The content policy that applies to `user_id`: the instance setting, made stricter by their groups.
 
-    Will use `content_policy_resolver.resolve(user_id).mode`.
+    Uses `content_policy_resolver.resolve(user_id).mode`; a mode this plugin does not
+    know counts as "blocked".
     """
-    raise NotImplementedError(_PHASE_3)
+    policy = _container_attribute("content_policy_resolver.resolve")(user_id)
+    mode = getattr(policy, "mode", None)
+    return mode if mode in CONTENT_POLICIES else "blocked"
 
 
 def user_groups(user_id: str) -> List[Dict[str, Any]]:
-    """The groups `user_id` belongs to, as `{"id", "name"}` dicts.
+    """The groups `user_id` belongs to, as `{"id", "name", "is_system", "content_policy"}` dicts.
 
-    Will use `user_group_repository.get_user_groups(user_id)`.
+    Uses `user_group_repository.get_user_groups(user_id)`.
     """
-    raise NotImplementedError(_PHASE_3)
+    return [_group(group) for group in _container_attribute("user_group_repository.get_user_groups")(user_id)]
 
 
 def list_groups() -> List[Dict[str, Any]]:
-    """Every user group, as `{"id", "name"}` dicts.
+    """Every user group, as `{"id", "name", "is_system", "content_policy"}` dicts, in the core's order (by name).
 
-    Will use `user_group_repository.get_all_groups()`.
+    Uses `user_group_repository.get_all_groups()`.
     """
-    raise NotImplementedError(_PHASE_3)
+    return [_group(group) for group in _container_attribute("user_group_repository.get_all_groups")()]
+
+
+def _group(group: Any) -> Dict[str, Any]:
+    """A core `UserGroup` record as a plain dict."""
+    return {
+        "id": group.id,
+        "name": group.name,
+        "is_system": bool(getattr(group, "is_system", False)),
+        "content_policy": getattr(group, "content_policy", None),
+    }
 
 
 # Notifications and plan limits ---------------------------------------------

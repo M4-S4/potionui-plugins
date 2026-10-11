@@ -33,3 +33,50 @@ docs:
   - path: "README.md"
     title: "Model Browser"
     audience: "admin"
+
+# Defaults are applied by backend/settings.py (the core stores values as strings and does
+# not seed them); keep the two in step.
+settings:
+  - name: "nsfw_ceiling"
+    type: "select"
+    label: "NSFW in the browser"
+    description: "Can only make the instance and group content policy stricter"
+    default: "inherit"
+    options:
+      - { value: "inherit", label: "Follow the content policy" }
+      - { value: "blur",    label: "Blur at most" }
+      - { value: "blocked", label: "Never show" }
+  - name: "nsfw_max_level"
+    type: "select"
+    label: "Highest CivitAI image level treated as safe"
+    description: "Images above this level count as NSFW and follow the content policy; models whose images are all above it count as NSFW models"
+    default: "2"
+    options:
+      - { value: "1", label: "PG" }
+      - { value: "2", label: "PG-13" }
+      - { value: "4", label: "R" }
+      - { value: "8", label: "X" }
+  - name: "hide_poi"
+    type: "boolean"
+    label: "Hide CivitAI models depicting real people"
+    default: false
+  - name: "civitai_api_base"
+    type: "string"
+    label: "CivitAI API base URL"
+    description: "Switch to https://civitai.red/api/v1 if civitai.com starts filtering the API to SFW content"
+    default: "https://civitai.com/api/v1"
+  - name: "enable_civarchive"
+    type: "boolean"
+    label: "Enable CivArchive (experimental, unofficial)"
+    default: false
+  - name: "cache_ttl_minutes"
+    type: "number"
+    label: "Search cache TTL (minutes)"
+    description: "1 to 1440; raw source answers are cached in the database and filtered per user on every request"
+    default: 10
+  - name: "providers_notice"
+    type: "info"
+    label: "Logged-in downloads use the CivitAI and Hugging Face provider plugins"
+    description: "Configure their API key / token there; models that require a login fail with 401 otherwise."
+    href: "/admin?tab=plugins&id=civitai-provider"
+    link_label: "Open the CivitAI provider"
