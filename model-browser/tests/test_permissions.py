@@ -18,6 +18,7 @@ from backend.permissions import (
     current_principal,
     merge_rows,
     require,
+    require_any,
     require_browse,
     require_download,
     resolve_grant,
@@ -318,6 +319,38 @@ def test_require_yields_the_principal_when_the_capability_is_granted(membership)
 def test_require_rejects_an_unknown_capability():
     with pytest.raises(ValueError):
         require("manage")
+
+
+def test_require_any_yields_the_principal_when_one_of_the_capabilities_is_granted(membership):
+    membership["user-1"] = ["all_users"]  # browse + request by default
+    either = require_any("download", "request")
+
+    principal = either(user=_user())
+
+    assert isinstance(principal, Principal)
+    assert principal.grant.capabilities == {"browse", "request"}
+    assert either.__name__ == "require_any_download_request"
+
+
+def test_require_any_refuses_a_user_with_none_of_the_capabilities(membership):
+    membership["user-1"] = ["all_users"]
+
+    with pytest.raises(HTTPException) as raised:
+        require_any("download", "approve")(user=_user())
+
+    assert raised.value.status_code == 403
+    assert raised.value.detail == {
+        "success": False,
+        "error": "forbidden",
+        "message": "This action needs one of these permissions: 'download', 'approve'",
+    }
+    assert require_any("download", "approve")(user=_user("admin-1", AccountType.ADMIN)).is_admin
+
+
+@pytest.mark.parametrize("capabilities", [(), ("download", "manage")])
+def test_require_any_rejects_no_capability_or_an_unknown_one(capabilities):
+    with pytest.raises(ValueError):
+        require_any(*capabilities)
 
 
 def test_current_principal_needs_no_capability(membership):

@@ -142,6 +142,35 @@ def require(capability: str) -> Callable[..., Principal]:
     return dependency
 
 
+def require_any(*capabilities: str) -> Callable[..., Principal]:
+    """A FastAPI dependency: the signed-in user must hold at least one of `capabilities`; yields their `Principal`.
+
+    Like `require`, bind it once at module level in the routes so tests can override it.
+    """
+    if not capabilities:
+        raise ValueError("require_any needs at least one capability")
+    unknown = [capability for capability in capabilities if capability not in CAPABILITIES]
+    if unknown:
+        raise ValueError(f"unknown capabilities {unknown!r}")
+
+    def dependency(user: User = Depends(get_current_active_user)) -> Principal:
+        grant = resolve_grant(user)
+        if not any(grant.has(capability) for capability in capabilities):
+            names = ", ".join(f"'{capability}'" for capability in capabilities)
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "success": False,
+                    "error": "forbidden",
+                    "message": f"This action needs one of these permissions: {names}",
+                },
+            )
+        return Principal(user=user, grant=grant)
+
+    dependency.__name__ = "require_any_" + "_".join(capabilities)
+    return dependency
+
+
 require_browse = require("browse")
 require_request = require("request")
 require_download = require("download")

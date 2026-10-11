@@ -18,6 +18,8 @@ hooks:
       handler: "hooks.lifecycle_hooks.on_ready"       # run_on_app_loop(watcher.run())
     - hook: "plugin.lifecycle.disable"
       handler: "hooks.lifecycle_hooks.on_disable"     # stops the watcher
+    - hook: "provider.register"
+      handler: "hooks.provider_hooks.register_providers"   # the `model-browser` provider (PLAN.md §7.3)
 
 pages:
   - route: "model-browser"           # page URL: /plugins/model-browser
@@ -29,10 +31,38 @@ sidebar:
     icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"   # `d` attribute of a 24x24 SVG path
     order: 75                        # no require_role: access is decided by the plugin's RBAC (PLAN.md §4)
 
+admin_tabs:
+  - id: "permissions"
+    label: "Permissions"
+    component: "PermissionsTab.js"      # frontend/src/PermissionsTab.svelte, built standalone
+    order: 10
+
+# Admin -> Plugins "Setup": downloads that need a login use these providers' credentials.
+# `check` is "module.path:Class" from the plugin root, loaded by PluginLoader.load_class.
+setup:
+  - kind: "check"
+    check: "backend.setup_checks:CivitaiProviderReady"
+    label: "Configure the CivitAI provider (API key) so logged-in downloads work"
+  - kind: "check"
+    check: "backend.setup_checks:HuggingFaceProviderReady"
+    label: "Configure the Hugging Face provider (token) for gated repositories"
+
 docs:
   - path: "README.md"
     title: "Model Browser"
     audience: "admin"
+
+# Model attributes filled after a download (PLAN.md §7.4 step 7). No source-URL attribute:
+# the model page's "Mirrors" section links the source through get_model_page_url().
+model_metadata_fields:
+  - key: "mb_base_model"
+    label: "Base model"
+    field_type: "text"
+    description: "Base model as the source states it (filled by Model Browser)"
+  - key: "mb_license"
+    label: "License"
+    field_type: "text"
+    description: "License as the source states it (filled by Model Browser)"
 
 # Defaults are applied by backend/settings.py (the core stores values as strings and does
 # not seed them); keep the two in step.

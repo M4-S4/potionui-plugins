@@ -7,11 +7,22 @@ description, previews, tags, base model and license filled in. Admins and users 
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
 
-## Status: phase 2 (API only)
+## Status: phase 3 (API and admin screen)
 
-CivitAI and Hugging Face browsing work through the API for every signed-in user with the
-`browse` right; the page at `/plugins/model-browser` is still the phase 0 placeholder
-(phase 4 builds it), and nothing can be downloaded yet (phase 3).
+CivitAI and Hugging Face browsing and downloads work through the API for every signed-in
+user with the `browse` / `download` rights; the page at `/plugins/model-browser` is still the
+phase 0 placeholder (phase 4 builds it). Admins edit the rights per user group in
+Admin → Plugins → Model Browser → Permissions.
+
+- `POST /downloads` queues one file on PotionUI's download queue (checksum, provider
+  credentials, model type folder, optional subfolder, remote destination); the background
+  watcher follows it, assigns the indexed model to the requester (or their group) and fills
+  the description, safe previews, trigger words, tags, `mb_base_model` / `mb_license` and a
+  "Mirrors" link through the plugin's own `model-browser` provider. A file already on disk
+  is only assigned. `GET /downloads` lists the caller's downloads with their live status;
+  `POST /installed` tells which SHA256s are installed and visible to the caller.
+- The requester gets a notification when the model is ready or the download failed.
+- Admin → Plugins shows setup steps for the CivitAI and Hugging Face provider plugins.
 
 - A **Model Browser** entry in the sidebar; `GET /api/plugins/model-browser/health`.
 - `GET /me`: the caller's capabilities, download parameters and NSFW context.
