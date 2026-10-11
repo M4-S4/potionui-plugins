@@ -5,6 +5,7 @@ only creates and closes it.
 """
 
 import asyncio
+import json
 import ssl
 import threading
 import time
@@ -18,12 +19,14 @@ from backend import PLUGIN_VERSION
 from backend import http as http_module
 from backend.http import (
     USER_AGENT,
+    SourceAnswerTooLarge,
     SourceError,
     SourceHttp,
     SourceInvalidRequest,
     SourceNotFound,
     SourceRateLimited,
     SourceUnavailable,
+    decode_text,
     normalise_params,
     parse_retry_after,
     upstream_message,
@@ -378,3 +381,145 @@ def test_shutdown_without_a_session_does_nothing(monkeypatch):
     monkeypatch.setattr(http_module, "http", SourceHttp())
 
     http_module.shutdown()
+
+
+# Headers and text (Hugging Face) ------------------------------------------------------------
+
+HF_URL = "https://huggingface.co/api/models"
+README_URL = "https://huggingface.co/latent-consistency/lcm-lora-sdxl/raw/main/README.md"
+
+
+def _hf_client(fetch, **kwargs):
+    kwargs.setdefault("limits", {"huggingface": (0.0, 4)})
+    return SourceHttp(fetch=fetch, **kwargs)
+
+
+async def test_get_gives_the_status_the_lower_case_headers_and_the_body():
+    link = '<https://huggingface.co/api/models?cursor=abc>; rel="next"'
+    client = _hf_client(_answer(200, b"[]", {"Link": link, "Content-Type": "application/json"}))
+
+    status, headers, body = await client.get("huggingface", HF_URL, {"limit": 3})
+
+    assert (status, body) == (200, b"[]")
+    assert headers == {"link": link, "content-type": "application/json"}
+
+
+async def test_get_json_with_headers_gives_the_link_header():
+    from .huggingface_fakes import body as hf_body
+    from .huggingface_fakes import load as hf_load
+
+    fixture = hf_load("models_search_lora")
+    client = _hf_client(_answer(200, json.dumps(fixture["body"]).encode(), fixture["_headers"]))
+
+    data, headers = await client.get_json_with_headers("huggingface", HF_URL)
+
+    assert data == hf_body("models_search_lora")
+    assert headers["link"] == fixture["_headers"]["Link"]
+
+
+async def test_get_text_decodes_the_readme():
+    from .huggingface_fakes import load as hf_load
+
+    fixture = hf_load("readme_lcm_lora_sdxl")
+    client = _hf_client(_answer(200, fixture["body"].encode("utf-8"), fixture["_headers"]))
+
+    text = await client.get_text("huggingface", README_URL)
+
+    assert text == fixture["body"]
+    assert "🤗" in text
+
+
+@pytest.mark.parametrize(
+    "headers, payload, expected",
+    [
+        ({"Content-Type": "text/plain; charset=utf-8"}, "é".encode("utf-8"), "é"),
+        ({"Content-Type": "text/plain; charset=ISO-8859-1"}, "é".encode("latin-1"), "é"),
+        ({"content-type": 'text/plain; charset="latin-1"'}, "é".encode("latin-1"), "é"),
+        ({"Content-Type": "text/plain; charset=nope"}, "é".encode("utf-8"), "é"),
+        ({"Content-Type": "text/plain; charset=base64"}, "é".encode("utf-8"), "é"),
+        ({}, "\N{ZERO WIDTH NO-BREAK SPACE}hello".encode("utf-8"), "hello"),
+        ({}, b"bad \xff byte", "bad \N{REPLACEMENT CHARACTER} byte"),
+        ({}, b"", ""),
+    ],
+)
+def test_decode_text(headers, payload, expected):
+    assert decode_text(headers, payload) == expected
+
+
+async def test_a_gated_readme_is_a_401_invalid_request():
+    from .huggingface_fakes import load as hf_load
+
+    fixture = hf_load("readme_flux_dev_gated")
+    client = _hf_client(_answer(fixture["_status"], fixture["body"].encode(), fixture["_headers"]))
+
+    with pytest.raises(SourceInvalidRequest) as caught:
+        await client.get_text("huggingface", README_URL)
+
+    assert caught.value.status == 401
+    assert caught.value.message == "Hugging Face refused the request (HTTP 401)"
+
+
+async def test_an_unknown_repo_is_a_401_with_hugging_face_s_message():
+    from .huggingface_fakes import load as hf_load
+
+    fixture = hf_load("error_401_unknown_repo")
+    client = _hf_client(_answer(401, json.dumps(fixture["body"]).encode(), fixture["_headers"]))
+
+    with pytest.raises(SourceInvalidRequest) as caught:
+        await client.get_json_with_headers("huggingface", f"{HF_URL}/no-such-org/no-such-repo")
+
+    assert caught.value.message == "Hugging Face refused the request: Invalid username or password."
+
+
+async def test_max_bytes_refuses_a_larger_answer_for_one_call():
+    client = _hf_client(_answer(200, b"x" * 101))
+
+    with pytest.raises(SourceAnswerTooLarge, match="larger than 100 bytes") as caught:
+        await client.get_text("huggingface", README_URL, max_bytes=100)
+    assert await client.get_text("huggingface", README_URL, max_bytes=101) == "x" * 101
+    assert await client.get_text("huggingface", README_URL) == "x" * 101
+
+    assert isinstance(caught.value, SourceUnavailable)
+    assert caught.value.status == 200
+
+
+async def test_max_bytes_never_raises_the_client_cap():
+    client = _hf_client(_answer(200, b"x" * 65), max_body_bytes=64)
+
+    with pytest.raises(SourceAnswerTooLarge, match="larger than 64 bytes"):
+        await client.get("huggingface", README_URL, max_bytes=10_000)
+
+
+async def test_the_size_check_comes_before_the_status():
+    client = _hf_client(_answer(503, b"x" * 65), max_body_bytes=64)
+
+    with pytest.raises(SourceAnswerTooLarge):
+        await client.get_json("huggingface", HF_URL)
+
+
+async def test_get_raises_the_same_errors_as_get_json():
+    for status, error in ((404, SourceNotFound), (429, SourceRateLimited), (400, SourceInvalidRequest), (502, SourceUnavailable)):
+        client = _hf_client(_answer(status, b'{"error": "x"}'))
+        with pytest.raises(error):
+            await client.get("huggingface", HF_URL)
+        with pytest.raises(error):
+            await client.get_text("huggingface", README_URL)
+
+
+def test_hugging_face_waits_a_fifth_of_a_second_between_requests_with_four_in_flight():
+    assert http_module.DEFAULT_LIMITS["huggingface"] == (0.2, 4)
+
+
+async def test_hugging_face_requests_are_spaced_by_its_interval():
+    now = [10.0]
+    sleeps = []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    client = SourceHttp(fetch=_answer(), clock=lambda: now[0], sleep=sleep)
+    for _ in range(3):
+        await client.get("huggingface", HF_URL)
+
+    assert sleeps == [pytest.approx(0.2), pytest.approx(0.2)]

@@ -7,11 +7,11 @@ description, previews, tags, base model and license filled in. Admins and users 
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
 
-## Status: phase 1 (API only)
+## Status: phase 2 (API only)
 
-CivitAI browsing works through the API for every signed-in user with the `browse` right;
-the page at `/plugins/model-browser` is still the phase 0 placeholder (phase 4 builds it),
-and nothing can be downloaded yet (phase 3).
+CivitAI and Hugging Face browsing work through the API for every signed-in user with the
+`browse` right; the page at `/plugins/model-browser` is still the phase 0 placeholder
+(phase 4 builds it), and nothing can be downloaded yet (phase 3).
 
 - A **Model Browser** entry in the sidebar; `GET /api/plugins/model-browser/health`.
 - `GET /me`: the caller's capabilities, download parameters and NSFW context.

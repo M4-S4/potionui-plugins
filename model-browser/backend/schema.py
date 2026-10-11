@@ -112,6 +112,8 @@ class SearchItem(BaseModel):
     nsfw: bool = False
     poi: bool = False
     early_access: bool = False
+    #: Downloads need the source's credentials (Hugging Face gated repos): the page warns before downloading.
+    gated: bool = False
     thumbnail: Optional[Image] = None
     stats: Stats = Field(default_factory=Stats)
     tags: List[str] = Field(default_factory=list)
@@ -142,6 +144,7 @@ class ModelDetail(BaseModel):
     source_url: str
     nsfw: bool = False
     poi: bool = False
+    gated: bool = False
     stats: Stats = Field(default_factory=Stats)
     versions: List[Version] = Field(default_factory=list)
 

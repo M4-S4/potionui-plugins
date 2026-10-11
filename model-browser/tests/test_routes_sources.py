@@ -2,8 +2,9 @@
 plugin's real router.
 
 `require_browse` is overridden with a signed-in user, `nsfw.resolve_nsfw` is replaced by the
-context each test sets, the settings are faked, CivitAI is the fake transport serving the
-recorded fixtures, and the raw cache lives in a scratch database.
+context each test sets, the settings are faked, CivitAI and Hugging Face are fake transports
+serving the recorded fixtures (behind one shared `SourceHttp`), and the raw cache lives in a
+scratch database.
 """
 
 from types import SimpleNamespace
@@ -24,6 +25,8 @@ from backend.tables import create_tables
 from src.plugin_api import AccountType, User
 
 from .civitai_fakes import ABSENT, FakeTransport, body, context, fake_settings, image_urls, item, page_body
+from .huggingface_fakes import REPOS, HuggingFaceTransport, combined_fetch, cursor_of
+from .huggingface_fakes import body as hf_body
 
 BASE = "/api/plugins/model-browser"
 PAGE_1_CURSOR = "409619|21294|82098"
@@ -40,13 +43,20 @@ def state():
 
 
 @pytest.fixture
-def transport(plugin_db, monkeypatch, state):
+def hf_transport():
+    return HuggingFaceTransport()
+
+
+@pytest.fixture
+def transport(plugin_db, monkeypatch, state, hf_transport):
+    """The CivitAI fake; Hugging Face URLs go to `hf_transport` through the same `SourceHttp`."""
     create_tables()
     fake_settings(monkeypatch)
     monkeypatch.setattr(nsfw, "resolve_nsfw", lambda user: state.ctx)
     monkeypatch.setattr(cache_module, "cache", Cache())
     fake = FakeTransport().add("/enums", "enums")
-    monkeypatch.setattr(http_module, "http", SourceHttp(fetch=fake, limits={"civitai": (0.0, 4)}))
+    client = SourceHttp(fetch=combined_fetch(fake, hf_transport), limits={"civitai": (0.0, 4), "huggingface": (0.0, 4)})
+    monkeypatch.setattr(http_module, "http", client)
     return fake
 
 
@@ -77,16 +87,21 @@ def _error(response):
 # /sources ------------------------------------------------------------------------------
 
 
-def test_sources_lists_civitai_with_its_filters(client):
+def test_sources_lists_civitai_and_hugging_face_with_their_filters(client, hf_transport):
     response = client.get(f"{BASE}/sources")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["success"] is True
-    [civitai] = payload["data"]
+    civitai, huggingface = payload["data"]
     assert civitai["id"] == "civitai"
     assert [option["value"] for option in civitai["types"]] == body("enums")["ModelType"]
     assert [option["value"] for option in civitai["base_models"]] == body("enums")["ActiveBaseModel"]
+    assert (huggingface["id"], huggingface["label"], huggingface["enabled"]) == ("huggingface", "Hugging Face", True)
+    assert [option["value"] for option in huggingface["types"]][:2] == ["text-to-image", "image-to-image"]
+    assert (huggingface["base_models"], huggingface["periods"]) == ([], [])
+    assert [option["value"] for option in huggingface["sorts"]] == ["trending", "downloads", "likes", "updated", "newest"]
+    assert hf_transport.calls == []
 
 
 def test_the_routes_need_a_signed_in_user(transport):
@@ -424,3 +439,215 @@ def test_nsfw_media_is_404_when_the_model_itself_is_hidden(client, transport, st
     state.ctx = context("allowed", "hide", max_level=2)
 
     assert client.get(f"{BASE}/civitai/models/122359/nsfw-media").status_code == 404
+
+
+# Hugging Face ------------------------------------------------------------------------------
+
+LCM = REPOS["lcm_lora_sdxl"]
+LORA_IDS = [
+    "ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA",
+    "akatz-ai/MiniMax-H3-Character-Swap-LoRA",
+    "pablodawson/MiniMax-H3-360-Orbit-LoRA",
+]
+
+
+def _nsfw_demo_repo(hf_transport):
+    """org/demo: an NSFW-tagged repo whose README shows one image of the repo; returns that image's url."""
+    raw = hf_body("model_lcm_lora_sdxl")
+    raw["id"] = raw["modelId"] = "org/demo"
+    raw["tags"].append("not-for-all-audiences")
+    tree = [
+        {"type": "file", "path": "README.md", "size": 60},
+        {"type": "file", "path": "images/preview.png", "size": 10},
+        {"type": "file", "path": "demo.safetensors", "size": 99, "lfs": {"oid": "ab" * 32, "size": 99}},
+    ]
+    hf_transport.add("/api/models/org/demo", (200, {}, raw))
+    hf_transport.add("/api/models/org/demo/tree/main", (200, {}, tree))
+    hf_transport.add(
+        "/org/demo/raw/main/README.md", (200, {"Content-Type": "text/plain"}, "# Demo\n\n![p](images/preview.png)\n")
+    )
+    return "https://huggingface.co/org/demo/resolve/main/images/preview.png"
+
+
+def _hf_paths(hf_transport):
+    return [path for path, _ in hf_transport.calls]
+
+
+def test_the_hugging_face_routes_need_a_signed_in_user(transport, hf_transport):
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as anonymous:
+        for path in ("/huggingface/search", f"/huggingface/models/{LCM}", f"/huggingface/models/{LCM}/nsfw-media"):
+            assert anonymous.get(f"{BASE}{path}").status_code in (401, 403), path
+    assert hf_transport.calls == []
+
+
+def test_hugging_face_search_through_the_route(client, hf_transport):
+    hf_transport.add("/api/models", "models_search_lora")
+
+    response = client.get(f"{BASE}/huggingface/search", params={"q": "lora", "limit": 3})
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["source"] == "huggingface"
+    assert _ids(response) == LORA_IDS
+    assert data["next_cursor"] == cursor_of("models_search_lora")
+    assert data["items"][0]["mb_type"] == "lora" and data["items"][0]["thumbnail"] is None
+    assert hf_transport.calls_to("/api/models") == [
+        {"direction": "-1", "full": "true", "limit": "3", "search": "lora", "sort": "trendingScore"}
+    ]
+
+
+def test_hugging_face_cursors_go_back_upstream_whole(client, hf_transport):
+    hf_transport.add("/api/models", "models_search_lora_page2", cursor=cursor_of("models_search_lora"))
+    long_cursor = "x" * 2048
+
+    page2 = client.get(
+        f"{BASE}/huggingface/search", params={"q": "lora", "limit": 3, "cursor": cursor_of("models_search_lora")}
+    )
+    long = client.get(f"{BASE}/huggingface/search", params={"limit": 3, "cursor": long_cursor})
+    too_long = client.get(f"{BASE}/huggingface/search", params={"cursor": long_cursor + "x"})
+
+    assert page2.status_code == 200
+    assert _ids(page2)[0] == "RunningHubAI/rh-qwen-image-2.1-lora-2104918997757157378"
+    assert page2.json()["data"]["next_cursor"] == cursor_of("models_search_lora_page2")
+    # A cursor longer than CivitAI's goes upstream untouched (the fake knows no such page: 404).
+    assert long.status_code == 404
+    assert hf_transport.calls_to("/api/models")[-1]["cursor"] == long_cursor
+    assert too_long.status_code == 422
+
+
+def test_a_blocked_user_gets_the_page_refilled_from_the_link_cursor(client, hf_transport, state):
+    nsfw_cursor = cursor_of("models_filter_nsfw_tag")
+    hf_transport.add("/api/models", "models_filter_nsfw_tag", cursor=ABSENT)
+    hf_transport.add("/api/models", "models_search_lora", cursor=nsfw_cursor)
+    state.ctx = context("blocked", "hide")
+
+    response = client.get(f"{BASE}/huggingface/search", params={"limit": 2})
+
+    assert response.status_code == 200
+    # The first page is all NSFW; the second one is kept whole (its cursor cannot point inside it).
+    assert _ids(response) == LORA_IDS
+    assert response.json()["data"]["next_cursor"] == cursor_of("models_search_lora")
+    assert [call.get("cursor") for call in hf_transport.calls_to("/api/models")] == [None, nsfw_cursor]
+
+
+def test_a_user_who_shows_nsfw_gets_the_tagged_repos(client, hf_transport, state):
+    hf_transport.add("/api/models", "models_filter_nsfw_tag")
+    state.ctx = context("allowed", "show")
+
+    response = client.get(f"{BASE}/huggingface/search", params={"q": "#not-for-all-audiences", "limit": 2})
+
+    assert [found["nsfw"] for found in response.json()["data"]["items"]] == [True, True]
+    assert response.json()["data"]["next_cursor"] == cursor_of("models_filter_nsfw_tag")
+
+
+def test_hugging_face_detail_with_a_slash_in_its_id(client, hf_transport):
+    hf_transport.add_repo("lcm_lora_sdxl")
+
+    response = client.get(f"{BASE}/huggingface/models/{LCM}")
+    encoded = client.get(f"{BASE}/huggingface/models/latent-consistency%2Flcm-lora-sdxl")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert (data["id"], data["mb_type"], data["gated"]) == (LCM, "lora", False)
+    assert data["license"]["summary"] == "openrail++"
+    [version] = data["versions"]
+    assert [file["name"] for file in version["files"]] == ["pytorch_lora_weights.safetensors"]
+    assert version["files"][0]["download_url"] == (
+        f"https://huggingface.co/{LCM}/resolve/main/pytorch_lora_weights.safetensors"
+    )
+    assert data["description_html"].startswith("<h3>")
+    assert encoded.json()["data"] == data
+
+
+def test_an_unknown_hugging_face_repo_is_404(client, hf_transport):
+    hf_transport.add("/api/models/no-such-org/no-such-repo", "error_401_unknown_repo")
+    hf_transport.add("/api/models/no-such-org/no-such-repo/tree/main", "error_401_unknown_tree")
+
+    for path in ("/huggingface/models/no-such-org/no-such-repo", "/huggingface/models/no-such-org/no-such-repo/nsfw-media"):
+        response = client.get(f"{BASE}{path}")
+        assert response.status_code == 404, path
+        assert _error(response)["error"] == "not_found"
+
+
+def test_an_nsfw_hugging_face_repo_in_blur_mode(client, hf_transport, state):
+    url = _nsfw_demo_repo(hf_transport)
+    state.ctx = context("blur", "blur")
+
+    detail = client.get(f"{BASE}/huggingface/models/org/demo")
+    media = client.get(f"{BASE}/huggingface/models/org/demo/nsfw-media")
+
+    assert detail.status_code == 200
+    data = detail.json()["data"]
+    assert data["nsfw"] is True and data["versions"][0]["nsfw"] is True
+    [image] = data["versions"][0]["images"]
+    assert (image["url"], image["nsfw"], image["nsfw_level"]) == (None, True, 8)
+    assert url not in detail.text
+    assert media.status_code == 200
+    [revealed] = media.json()["data"]["images"]
+    assert (revealed["url"], revealed["id"]) == (url, image["id"])
+
+
+def test_an_nsfw_hugging_face_repo_for_a_user_who_shows_it(client, hf_transport, state):
+    url = _nsfw_demo_repo(hf_transport)
+    state.ctx = context("allowed", "show")
+
+    data = client.get(f"{BASE}/huggingface/models/org/demo").json()["data"]
+
+    assert [image["url"] for image in data["versions"][0]["images"]] == [url]
+
+
+@pytest.mark.parametrize("ctx", [context("blocked", "hide"), context("allowed", "hide")])
+def test_an_nsfw_hugging_face_repo_is_404_for_a_user_who_hides_nsfw(client, hf_transport, state, ctx):
+    _nsfw_demo_repo(hf_transport)
+    state.ctx = ctx
+
+    detail = client.get(f"{BASE}/huggingface/models/org/demo")
+    media = client.get(f"{BASE}/huggingface/models/org/demo/nsfw-media")
+
+    assert (detail.status_code, media.status_code) == (404, 404)
+    # The detail asked once; nsfw-media either did not ask (blocked) or read the raw cache.
+    assert _hf_paths(hf_transport).count("/api/models/org/demo") == 1
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/huggingface/models/org/%2E%2E/secret",
+        "/huggingface/models/%2E%2E%2Fsecret",
+        "/huggingface/models/org/%2E%2E/secret/nsfw-media",
+        "/huggingface/models//etc/passwd",
+        "/huggingface/models//etc/passwd/nsfw-media",
+        "/huggingface/models/",
+        "/huggingface/models/org%5Crepo",
+        "/huggingface/models/org/repo%00",
+        "/huggingface/models/" + "a" * 201,
+        "/civitai/models/%2E%2E",
+    ],
+)
+def test_model_ids_that_could_escape_are_refused(client, transport, hf_transport, path):
+    response = client.get(f"{BASE}{path}")
+
+    assert response.status_code == 400, path
+    assert _error(response) == {"success": False, "error": "invalid_request", "message": "Invalid model id"}
+    assert transport.calls == [] and hf_transport.calls == []
+
+
+def test_a_200_character_id_reaches_the_source(client, hf_transport):
+    response = client.get(f"{BASE}/huggingface/models/" + "a" * 200)
+
+    assert response.status_code == 404  # longer than a Hugging Face name: not found, without asking
+    assert _error(response)["error"] == "not_found"
+    assert hf_transport.calls == []
+
+
+def test_civitai_ids_still_work_with_the_path_routes(client, transport, state):
+    transport.add("/models/122359", "model_122359")
+    state.ctx = context("allowed", "show", max_level=4)
+
+    assert client.get(f"{BASE}/civitai/models/122359").json()["data"]["id"] == "122359"
+    assert client.get(f"{BASE}/civitai/models/122359/nsfw-media").json()["data"] == {"images": []}
+    nested = client.get(f"{BASE}/civitai/models/122359/versions")
+    assert nested.status_code == 404 and _error(nested)["error"] == "not_found"
+    assert [path for path, _ in transport.calls] == ["/models/122359"]

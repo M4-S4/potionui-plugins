@@ -9,9 +9,14 @@ User-Agent naming the plugin, a rate limit per source, and typed errors that
   small cap on requests in flight.
 - The transport is injectable: `SourceHttp(fetch=...)` takes an async
   `fetch(url, params) -> (status, headers, body_bytes)`, so tests never open a socket.
+- Reading: `get` gives a 2xx answer as `(status, headers, body_bytes)` (header names in
+  lower case, e.g. `link` for Hugging Face's pagination), `get_json` its decoded JSON,
+  `get_json_with_headers` both, `get_text` its text (charset from `Content-Type`, UTF-8
+  by default). `max_bytes` lowers the size cap for one call (a README).
 - Errors: `SourceNotFound` (404), `SourceRateLimited` (429, with `retry_after` from the
   `Retry-After` header), `SourceInvalidRequest` (any other 4xx, with the upstream message),
-  `SourceUnavailable` (5xx, timeouts, connection and TLS errors, answers that are not JSON).
+  `SourceUnavailable` (5xx, timeouts, connection and TLS errors, answers that are not JSON;
+  `SourceAnswerTooLarge` for an answer over the size cap).
 """
 
 import asyncio
@@ -38,7 +43,7 @@ MAX_BODY_BYTES = 32 * 1024 * 1024
 #: Per source: (minimum seconds between two request starts, requests in flight).
 DEFAULT_LIMITS: Dict[str, Tuple[float, int]] = {
     "civitai": (0.25, 4),
-    "huggingface": (0.1, 4),
+    "huggingface": (0.2, 4),
     "openmodeldb": (0.5, 2),
     "civarchive": (1.0, 1),
 }
@@ -83,6 +88,10 @@ class SourceRateLimited(SourceError):
 
 class SourceUnavailable(SourceError):
     """The source is down or unreachable: 5xx, timeout, connection or TLS error, an answer that is not JSON."""
+
+
+class SourceAnswerTooLarge(SourceUnavailable):
+    """The answer is larger than the size cap (the client's, or the `max_bytes` of the call)."""
 
 
 def source_label(source_id: str) -> str:
@@ -177,6 +186,31 @@ def normalise_params(params: ParamsInput) -> Params:
     return pairs
 
 
+def decode_json(source_id: str, status: int, body: bytes) -> Any:
+    """The JSON of an answer body; `SourceUnavailable` when it is not JSON (a challenge page, a proxy error)."""
+    try:
+        return json.loads(body)
+    except (ValueError, TypeError):
+        raise SourceUnavailable(
+            f"{source_label(source_id)} sent an answer that is not JSON (HTTP {status})", status
+        ) from None
+
+
+def decode_text(headers: Mapping[str, str], body: bytes) -> str:
+    """An answer body as text: the `Content-Type` charset (UTF-8 by default), undecodable bytes replaced, BOM dropped."""
+    charset = "utf-8"
+    content_type = next((str(value) for name, value in (headers or {}).items() if str(name).lower() == "content-type"), "")
+    for part in content_type.split(";")[1:]:
+        name, _, value = part.strip().partition("=")
+        if name.strip().lower() == "charset" and value.strip().strip('"'):
+            charset = value.strip().strip('"')
+    try:
+        text = (body or b"").decode(charset, errors="replace")
+    except LookupError:  # an unknown charset, or a codec that is not a text encoding ("base64")
+        text = (body or b"").decode("utf-8", errors="replace")
+    return text[1:] if text.startswith("\N{ZERO WIDTH NO-BREAK SPACE}") else text
+
+
 class _Limiter:
     """Spaces request starts by `min_interval` seconds and caps the requests in flight.
 
@@ -209,7 +243,7 @@ class _Limiter:
 
 
 class SourceHttp:
-    """GET JSON from the sources, politely. One instance is shared by every source (`http` below)."""
+    """GET JSON and text from the sources, politely. One instance is shared by every source (`http` below)."""
 
     def __init__(
         self,
@@ -236,14 +270,24 @@ class SourceHttp:
 
     # Requests ----------------------------------------------------------------
 
-    async def get_json(self, source_id: str, url: str, params: ParamsInput = None) -> Any:
-        """GET `url` with `params` and return the decoded JSON body; raises a `SourceError` subclass."""
+    async def get(
+        self, source_id: str, url: str, params: ParamsInput = None, *, max_bytes: Optional[int] = None
+    ) -> Tuple[int, Dict[str, str], bytes]:
+        """GET `url` with `params`: the status, the headers (names in lower case) and the body of a 2xx answer.
+
+        Raises a `SourceError` subclass for any other answer or failure; `max_bytes` (never
+        above the client's own cap) refuses a larger body with `SourceAnswerTooLarge`.
+        """
         pairs = normalise_params(params)
         label = source_label(source_id)
+        cap = self._max_body_bytes if max_bytes is None else max(0, min(int(max_bytes), self._max_body_bytes))
         started = time.monotonic()
         async with self._limiter(source_id):
             try:
-                status, headers, body = await self._transport()(url, pairs)
+                if self._fetch is not None:
+                    status, headers, body = await self._fetch(url, pairs)
+                else:
+                    status, headers, body = await self._aiohttp_fetch(url, pairs, max_bytes=cap)
             except SourceError:
                 raise
             except asyncio.TimeoutError:
@@ -261,13 +305,29 @@ class SourceHttp:
             "[MODEL-BROWSER] GET %s %s -> %s (%d bytes, %.0f ms)",
             url, pairs, status, len(body), (time.monotonic() - started) * 1000,
         )
-        if len(body) > self._max_body_bytes:
-            raise SourceUnavailable(f"{label} sent an answer larger than {self._max_body_bytes} bytes", status)
+        if len(body) > cap:
+            raise SourceAnswerTooLarge(f"{label} sent an answer larger than {cap} bytes", status)
         self._raise_for_status(source_id, status, headers, body)
-        try:
-            return json.loads(body)
-        except (ValueError, TypeError):
-            raise SourceUnavailable(f"{label} sent an answer that is not JSON (HTTP {status})", status) from None
+        return status, headers, body
+
+    async def get_json(self, source_id: str, url: str, params: ParamsInput = None) -> Any:
+        """GET `url` with `params` and return the decoded JSON body; raises a `SourceError` subclass."""
+        status, _, body = await self.get(source_id, url, params)
+        return decode_json(source_id, status, body)
+
+    async def get_json_with_headers(
+        self, source_id: str, url: str, params: ParamsInput = None
+    ) -> Tuple[Any, Dict[str, str]]:
+        """`get_json`, with the answer's headers (names in lower case) for the pagination `link`."""
+        status, headers, body = await self.get(source_id, url, params)
+        return decode_json(source_id, status, body), headers
+
+    async def get_text(
+        self, source_id: str, url: str, params: ParamsInput = None, *, max_bytes: Optional[int] = None
+    ) -> str:
+        """GET `url` and return the body as text (see `decode_text`); same errors as `get`."""
+        _, headers, body = await self.get(source_id, url, params, max_bytes=max_bytes)
+        return decode_text(headers, body)
 
     @staticmethod
     def _raise_for_status(source_id: str, status: int, headers: Mapping[str, str], body: bytes) -> None:
@@ -310,8 +370,6 @@ class SourceHttp:
             self._limiters[source_id] = limiter
         return limiter
 
-    def _transport(self) -> Fetch:
-        return self._fetch if self._fetch is not None else self._aiohttp_fetch
 
     def _get_session(self) -> aiohttp.ClientSession:
         """The shared session, created on the running loop the first time it is needed."""
@@ -327,20 +385,23 @@ class SourceHttp:
             self._session_loop = loop
         return self._session
 
-    async def _aiohttp_fetch(self, url: str, params: Params) -> Tuple[int, Mapping[str, str], bytes]:
+    async def _aiohttp_fetch(
+        self, url: str, params: Params, max_bytes: Optional[int] = None
+    ) -> Tuple[int, Mapping[str, str], bytes]:
+        cap = self._max_body_bytes if max_bytes is None else max_bytes
         session = self._get_session()
         async with session.get(url, params=params) as response:
-            too_large = SourceUnavailable(
-                f"The answer from {response.url.host} is larger than {self._max_body_bytes} bytes", response.status
+            too_large = SourceAnswerTooLarge(
+                f"The answer from {response.url.host} is larger than {cap} bytes", response.status
             )
             length = response.content_length
-            if length is not None and length > self._max_body_bytes:
+            if length is not None and length > cap:
                 raise too_large
             chunks: List[bytes] = []
             size = 0
             async for chunk in response.content.iter_chunked(64 * 1024):
                 size += len(chunk)
-                if size > self._max_body_bytes:
+                if size > cap:
                     raise too_large
                 chunks.append(chunk)
             return response.status, response.headers, b"".join(chunks)

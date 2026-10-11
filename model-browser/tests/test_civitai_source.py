@@ -737,11 +737,11 @@ async def test_info_without_civitai_still_lists_the_source():
 # Registry ------------------------------------------------------------------------------------
 
 
-def test_the_registry_has_civitai_only_in_phase_1(_settings):
+def test_the_registry_has_civitai_and_hugging_face_in_phase_2(_settings):
     _settings["enable_civarchive"] = True
 
-    assert [source.id for source in enabled_sources()] == ["civitai"]
+    assert [source.id for source in enabled_sources()] == ["civitai", "huggingface"]
     assert get_source("civitai") is get_source("civitai")
-    for unknown in ("civarchive", "huggingface", "nope"):
+    for unknown in ("civarchive", "openmodeldb", "nope"):
         with pytest.raises(UnknownSource):
             get_source(unknown)

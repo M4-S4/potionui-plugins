@@ -85,6 +85,26 @@ def test_every_source_has_an_allowlist():
     assert set(DOWNLOAD_HOSTS) == {"civitai", "huggingface", "openmodeldb", "civarchive"}
 
 
+@pytest.mark.parametrize(
+    "repo, path",
+    [
+        ("latent-consistency/lcm-lora-sdxl", "pytorch_lora_weights.safetensors"),
+        ("black-forest-labs/FLUX.1-dev", "text_encoder_2/model-00001-of-00002.safetensors"),
+        ("stabilityai/stable-diffusion-xl-base-1.0", "text_encoder/model.onnx"),
+        ("org/demo", "sub dir/my model+v2 (final).safetensors"),
+        ("org/demo", "q/model-Q4_K_M.gguf"),
+    ],
+)
+def test_hugging_face_resolve_urls_are_allowed(repo, path):
+    from backend.sources.huggingface import resolve_url
+
+    url = resolve_url(repo, path)
+
+    assert url.startswith(f"https://huggingface.co/{repo}/resolve/main/")
+    assert is_allowed_download_url("huggingface", url)
+    assert not is_allowed_download_url("civitai", url)
+
+
 # HTML sanitiser ----------------------------------------------------------------
 
 _KEPT_TAGS = {"p", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "h3", "h4", "blockquote", "code", "pre", "hr", "a"}

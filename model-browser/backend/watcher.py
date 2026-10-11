@@ -51,7 +51,22 @@ class Watcher:
                 await self._sleep(POLL_INTERVAL_SECONDS)
         finally:
             self._loop = None
+            await self._release_resources()
             logger.info("[MODEL-BROWSER] Download watcher stopped")
+
+    async def _release_resources(self) -> None:
+        """Close the sources' shared aiohttp session on this loop.
+
+        The core fires no shutdown hook for plugins; this task is cancelled when the
+        application loop stops, so this is the last chance to close the session before
+        `ClientSession.__del__` complains about it during interpreter teardown.
+        """
+        try:
+            from .http import http as source_http
+
+            await source_http.close()
+        except Exception:
+            logger.debug("[MODEL-BROWSER] Could not close the sources' HTTP session", exc_info=True)
 
     def request_stop(self) -> None:
         """Make `run()` return at its next await, without waiting for it. Safe from any thread."""
