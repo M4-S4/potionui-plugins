@@ -1,8 +1,10 @@
 """Routes about who may do what: `GET /me`, `GET/PUT /permissions` (PLAN.md §4, §7.3).
 
 Included by `backend/api.py` under `/api/plugins/model-browser`.
-- `GET /me`, for any signed-in user: their capabilities, download parameters and NSFW
-  context. The page shows or hides its actions from it; every route still checks.
+- `GET /me`, for any signed-in user: their capabilities, download parameters, NSFW
+  context and the groups a download can be assigned to (`{id, name}`: their own groups, every
+  group for an admin, as `POST /downloads` accepts them). The page shows or hides its
+  actions from it; every route still checks.
 - `GET /permissions` (admin): one entry per core user group, with its stored row or its
   default, and the values each field accepts.
 - `PUT /permissions` (admin): replaces the whole table; a group left out of the body
@@ -76,9 +78,13 @@ class PermissionsUpdate(BaseModel):
 
 @router.get("/me")
 def get_me(principal: Principal = Depends(current_principal)) -> Dict[str, Any]:
-    """What the signed-in user may do, with which download parameters, and how NSFW media is shown to them."""
+    """What the signed-in user may do, with which download parameters, and how NSFW media is shown to them.
+
+    `groups` is where a download can be assigned: the user's own groups, or every group for an admin.
+    """
     user, grant = principal.user, principal.grant
     context = nsfw.resolve_nsfw(user)
+    groups = core_bridge.list_groups() if principal.is_admin else core_bridge.user_groups(user.id)
     return _ok(
         {
             "user": {"id": user.id, "username": user.username, "is_admin": principal.is_admin},
@@ -99,6 +105,7 @@ def get_me(principal: Principal = Depends(current_principal)) -> Dict[str, Any]:
                 "hide_poi": context.hide_poi,
                 "setting_key": CORE_USER_NSFW_SETTING,
             },
+            "groups": [{"id": group["id"], "name": group["name"]} for group in groups],
         }
     )
 

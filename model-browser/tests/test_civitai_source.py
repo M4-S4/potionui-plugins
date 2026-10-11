@@ -2,6 +2,8 @@
 request flow (cursors, `ids` chunks, refetches, removed models) through the fake transport.
 """
 
+import re
+
 import pytest
 
 from backend.http import SourceInvalidRequest, SourceNotFound, SourceUnavailable
@@ -151,6 +153,130 @@ def test_videos_and_poi_are_marked():
 
     assert normalised.poi is True
     assert normalised.thumbnail.id == "692332"  # stills without a real person first
+
+
+# The hash of the listed file ------------------------------------------------------------
+
+
+def _file(file_id, sha256, primary=False):
+    """A raw CivitAI file; `sha256=None` has no `hashes` entry for it."""
+    return {
+        "id": file_id,
+        "name": f"file-{file_id}.safetensors",
+        "primary": primary,
+        "hashes": {"SHA256": sha256} if sha256 else {},
+        "downloadUrl": f"https://civitai.com/api/download/models/1?fileId={file_id}",
+    }
+
+
+def test_primary_sha256_is_the_lower_cased_hash_of_the_first_versions_primary_file():
+    items = _items("models_lora_page1")
+
+    # The recorded hashes are upper case. 264290 lists its newest version (the first), not the older one.
+    assert items[264290].primary_sha256 == "df7c757437ef3696e76ee5cc18c063681478639132547b6292b0b4d773814ba5"
+    assert items[58390].primary_sha256 == "47aaaf0d2945ca937151d61304946dd229b3f072140b85484bc93e38f2a6e2f7"
+    assert items[264290].installed is None  # set per request by the search route, never by a source
+
+
+@pytest.mark.parametrize(
+    "name", ["models_lora_page1", "models_lora_page2", "models_flux_nsfwlevel", "models_query", "models_ids"]
+)
+def test_every_recorded_list_item_has_the_hash_its_detail_gives(name):
+    for raw in body(name)["items"]:
+        listed = normalize_item(raw, 2).primary_sha256
+
+        assert re.fullmatch(r"[0-9a-f]{64}", listed)
+        assert listed == normalize_detail(raw, 2).versions[0].files[0].sha256
+
+
+def test_the_primary_file_is_preferred_to_a_file_listed_before_it():
+    raw = item("models_lora_page1", 58390)
+    raw["modelVersions"][0]["files"].insert(0, _file(1, "1" * 64))
+
+    assert normalize_item(raw, 2).primary_sha256 == "47aaaf0d2945ca937151d61304946dd229b3f072140b85484bc93e38f2a6e2f7"
+
+
+def test_without_a_usable_primary_hash_the_first_file_with_one_is_used():
+    raw = item("models_lora_page1", 58390)
+    files = raw["modelVersions"][0]["files"]
+    files[0]["hashes"]["SHA256"] = "not-a-hash"  # the primary file's hash is unusable
+    files.extend([_file(2, None), _file(3, "AB" * 32), _file(4, "cd" * 32)])
+
+    assert normalize_item(raw, 2).primary_sha256 == "ab" * 32
+
+
+def test_without_a_primary_file_the_first_file_with_a_hash_is_used():
+    raw = item("models_lora_page1", 58390)
+    files = raw["modelVersions"][0]["files"]
+    files[0]["primary"] = False
+    files.insert(0, _file(2, None))
+
+    assert normalize_item(raw, 2).primary_sha256 == "47aaaf0d2945ca937151d61304946dd229b3f072140b85484bc93e38f2a6e2f7"
+
+
+def test_only_the_listed_first_version_is_read():
+    raw = item("models_lora_page1", 264290)
+    for file in raw["modelVersions"][0]["files"]:
+        file.pop("hashes")  # the listed version has no hash, its older version has one
+
+    assert raw["modelVersions"][1]["files"][0]["hashes"]["SHA256"]
+    assert normalize_item(raw, 2).primary_sha256 is None
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda version: version.pop("files"),
+        lambda version: version.update(files=[]),
+        lambda version: version.update(files="not a list"),
+        lambda version: version.update(files=["not a file", None, 7]),
+        lambda version: [file.pop("hashes") for file in version["files"]],
+        lambda version: [file.update(hashes=["SHA256"]) for file in version["files"]],
+        lambda version: [file.update(hashes={"AutoV2": "abcdef0123"}) for file in version["files"]],
+        lambda version: [file.update(hashes={"SHA256": None}) for file in version["files"]],
+        lambda version: [file.update(hashes={"SHA256": 1234}) for file in version["files"]],
+        lambda version: [file.update(hashes={"SHA256": "not-a-hash"}) for file in version["files"]],
+        lambda version: [file.update(hashes={"SHA256": "ab" * 31}) for file in version["files"]],
+        lambda version: [file.update(hashes={"SHA256": "ab" * 33}) for file in version["files"]],
+        lambda version: [file.update(hashes={"SHA256": " " + "ab" * 32}) for file in version["files"]],
+        lambda version: [file.update(hashes={"SHA256": "ab" * 32 + chr(10)}) for file in version["files"]],
+    ],
+    ids=[
+        "no-files-key",
+        "no-files",
+        "files-not-a-list",
+        "files-not-objects",
+        "no-hashes",
+        "hashes-not-an-object",
+        "no-sha256",
+        "sha256-null",
+        "sha256-number",
+        "sha256-not-hex",
+        "sha256-too-short",
+        "sha256-too-long",
+        "sha256-padded",
+        "sha256-newline",
+    ],
+)
+def test_an_item_without_a_usable_file_hash_has_no_primary_sha256(change):
+    raw = item("models_lora_page1", 58390)
+    change(raw["modelVersions"][0])
+
+    normalised = normalize_item(raw, 2)
+
+    assert normalised.primary_sha256 is None
+    assert normalised.installed is None
+
+
+@pytest.mark.parametrize("versions", [[], None, "not a list", [None, 3]], ids=["empty", "missing", "not-a-list", "not-objects"])
+def test_an_item_without_versions_has_no_primary_sha256(versions):
+    raw = item("models_lora_page1", 58390)
+    if versions is None:
+        raw.pop("modelVersions")
+    else:
+        raw["modelVersions"] = versions
+
+    assert normalize_item(raw, 2).primary_sha256 is None
 
 
 # Normalisation of a detail -------------------------------------------------------------

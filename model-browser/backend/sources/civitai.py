@@ -17,7 +17,10 @@ Search is `GET /models`:
 - `baseModels` is only sent when the selection does not cover every active base model;
 - a model the `ids` answer left out, or a model listed without versions, is fetched again
   by id (`GET /models/{id}`, at most 10 per page);
-- models whose `mode` is `Archived` (no files) or `TakenDown` (no images) are dropped.
+- models whose `mode` is `Archived` (no files) or `TakenDown` (no images) are dropped;
+- an item carries the SHA256 of the primary file of its first version (`primary_sha256`,
+  lower-case): list answers include the hashes, and the search route uses it for the
+  `installed` badge.
 
 Detail is `GET /models/{id}`, filters come from `GET /enums` (cached 24 h). Every raw
 answer goes through the cache; normalisation runs on every request.
@@ -394,6 +397,30 @@ def pick_thumbnail(images: Sequence[Image]) -> Optional[Image]:
     return images[best]
 
 
+def _file_sha256(raw: Any) -> Optional[str]:
+    """The lower-case `hashes.SHA256` of a raw file; None when it has none or not 64 hexadecimal characters."""
+    hashes = raw.get("hashes") if isinstance(raw, dict) else None
+    sha256 = hashes.get("SHA256") if isinstance(hashes, dict) else None
+    return sha256.lower() if isinstance(sha256, str) and _SHA256.fullmatch(sha256) else None
+
+
+def primary_file_sha256(raw_version: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The SHA256 of a raw version's primary file, else of its first file that has one; None without any.
+
+    Same hash rule as `normalize_file`, but read from the raw files: a list answer's
+    `modelVersions[].files[]` is enough to tell whether the file is installed, with no download URL needed.
+    """
+    if raw_version is None:
+        return None
+    files = [raw for raw in _list(raw_version.get("files")) if isinstance(raw, dict)]
+    # The primary file first, then every file in order.
+    for raw in [raw for raw in files if _is_true(raw.get("primary"))] + files:
+        sha256 = _file_sha256(raw)
+        if sha256:
+            return sha256
+    return None
+
+
 def normalize_file(raw: Any) -> Optional[File]:
     """One file of a version; None without an id or a download URL."""
     if not isinstance(raw, dict):
@@ -403,14 +430,12 @@ def normalize_file(raw: Any) -> Optional[File]:
     if file_id is None or url is None:
         return None
     size_kb = _float(raw.get("sizeKB"))
-    hashes = raw.get("hashes") if isinstance(raw.get("hashes"), dict) else {}
-    sha256 = hashes.get("SHA256")
     metadata = raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {}
     return File(
         id=str(file_id),
         name=_text(raw.get("name")) or f"file-{file_id}",
         size_bytes=round(size_kb * 1024) if size_kb is not None and size_kb >= 0 else None,
-        sha256=sha256.lower() if isinstance(sha256, str) and _SHA256.fullmatch(sha256) else None,
+        sha256=_file_sha256(raw),
         format=_text(metadata.get("format")),
         precision=_text(metadata.get("fp")),
         file_type=_text(raw.get("type")),
@@ -623,6 +648,7 @@ def normalize_item(raw: Dict[str, Any], max_level: int) -> SearchItem:
         tags=_tags(raw),
         updated_at=_version_date(first) if first else None,
         source_url=model_page_url(model_id, nsfw),
+        primary_sha256=primary_file_sha256(first),
     )
 
 

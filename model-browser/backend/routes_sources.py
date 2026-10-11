@@ -6,7 +6,10 @@ Included by `backend/api.py` under `/api/plugins/model-browser`. Every route nee
 applied by `nsfw_filter.py` to every answer:
 - search asks the source for safe content when the user cannot see NSFW at all
   (`blocked` ceiling or `hide` mode), then filters, following the source's cursor
-  (up to `MAX_UPSTREAM_PAGES` pages) until the page has `limit` items;
+  (up to `MAX_UPSTREAM_PAGES` pages) until the page has `limit` items, then marks each item
+  whose source gave the SHA256 of its primary file as installed or not for the caller
+  (`installed.mark_installed`, one lookup for the page; the core failing leaves `installed`
+  unset rather than failing the search);
 - a detail the user may not see is a 404, like `nsfw-media` under a `blocked` ceiling.
 
 Model ids may contain `/` (Hugging Face `org/repo`): the detail routes take the rest of
@@ -29,6 +32,7 @@ from pydantic import ValidationError
 
 from . import nsfw, nsfw_filter, sources
 from .http import SourceError, SourceInvalidRequest, SourceNotFound, SourceRateLimited
+from .installed import mark_installed
 from .permissions import Principal, require_browse
 from .schema import NsfwContext, SearchItem, SearchPage
 from .sources import MAX_LIMIT, MAX_QUERY_LENGTH, SearchQuery, Source, UnknownSource
@@ -158,9 +162,14 @@ async def search(
     period: Optional[str] = Query(None, max_length=64),
     cursor: Optional[str] = Query(None, max_length=MAX_CURSOR_LENGTH),
     limit: int = Query(24, ge=1, le=MAX_LIMIT),
+    principal: Principal = Depends(require_browse),
     ctx: NsfwContext = Depends(nsfw_context),
 ) -> Dict[str, Any]:
-    """One page of results for this user: `SearchPage` filtered for their NSFW context."""
+    """One page of results for this user: `SearchPage` filtered for their NSFW context.
+
+    Each item with a `primary_sha256` also carries `installed`: True when that file is indexed
+    and visible to the caller (an admin sees every model), False when not, None without a hash.
+    """
     source = _get_source(source_id)
     try:
         query = SearchQuery(
@@ -179,6 +188,7 @@ async def search(
         page = await fill_page(source, query, ctx)
     except SourceError as exc:
         raise source_http_error(exc) from None
+    await mark_installed(page.items, principal)
     return {"success": True, "data": page.model_dump(mode="json")}
 
 

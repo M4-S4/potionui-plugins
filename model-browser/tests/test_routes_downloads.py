@@ -380,6 +380,61 @@ def test_installed_for_a_user_counts_only_the_models_they_can_see(client_as, cor
     assert core.calls_to("visible_model_ids") == [("user-1",)]
 
 
+def test_installed_for_a_user_does_not_count_a_visible_model_whose_file_has_gone(client_as, core):
+    core.models_by_sha[SHA] = model("model-1", is_available=False)
+    core.visible["user-1"] = ["model-1"]
+
+    response = client_as(principal()).post(f"{BASE}/installed", json={"sha256s": [SHA]})
+
+    assert response.json()["data"]["installed"] == {SHA: False}
+
+
+def test_installed_follows_the_visible_models_of_whoever_asks(client_as, core):
+    core.models_by_sha[SHA] = model("model-1")
+    core.visible["user-1"] = ["model-1"]
+    core.visible["user-2"] = []
+
+    first = client_as(principal("user-1")).post(f"{BASE}/installed", json={"sha256s": [SHA]})
+    second = client_as(principal("user-2")).post(f"{BASE}/installed", json={"sha256s": [SHA]})
+
+    assert first.json()["data"]["installed"] == {SHA: True}
+    assert second.json()["data"]["installed"] == {SHA: False}
+
+
+def test_installed_is_answered_by_the_helper_the_search_badge_uses(client_as, core, monkeypatch):
+    asked = []
+
+    async def installed_map(sha256s, who):
+        asked.append((list(sha256s), who))
+        return {sha256: True for sha256 in sha256s}
+
+    monkeypatch.setattr(routes_downloads, "installed_map", installed_map)
+    who = principal()
+
+    response = client_as(who).post(f"{BASE}/installed", json={"sha256s": [SHA.upper(), OTHER_SHA, " " + SHA]})
+
+    assert response.json() == {"success": True, "data": {"installed": {SHA: True, OTHER_SHA: True}}}
+    assert asked == [([SHA, OTHER_SHA], who)]  # validated, lower-case, once each
+    assert core.calls == []
+
+
+def test_installed_fails_rather_than_claim_that_nothing_is_installed_when_the_core_cannot_answer(
+    app, client_as, core, monkeypatch
+):
+    client_as(principal())  # puts the principal in place on `app`
+
+    def moved(sha256):
+        raise RuntimeError("PotionUI AppContainer no longer provides model_repository.get_by_sha256")
+
+    monkeypatch.setattr(core_bridge, "find_model_by_sha256", moved)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(f"{BASE}/installed", json={"sha256s": [SHA]})
+
+    assert response.status_code == 500
+    assert "installed" not in response.text
+
+
 def test_installed_with_no_hash_asks_nothing(client_as, core):
     response = client_as(principal()).post(f"{BASE}/installed", json={"sha256s": []})
 

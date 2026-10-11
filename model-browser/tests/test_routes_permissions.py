@@ -45,6 +45,12 @@ _NSFW_JSON = {
     "setting_key": "media_nsfw_filter_mode",
 }
 
+_ALL_GROUPS_JSON = [
+    {"id": "all_admins", "name": "All Admins"},
+    {"id": "all_users", "name": "All Users"},
+    {"id": "artists", "name": "Artists"},
+]
+
 _DEFAULT_PARAMS = {
     "sources": ["civitai", "huggingface", "openmodeldb"],
     "model_types": [],
@@ -146,6 +152,7 @@ def test_me_for_an_admin(app, client, core):
                 "unrestricted": True,
             },
             "nsfw": _NSFW_JSON,
+            "groups": _ALL_GROUPS_JSON,
         },
     }
     assert core.nsfw_users == ["admin-1"]
@@ -171,6 +178,7 @@ def test_me_for_a_user_with_the_default_rights(app, client, core):
                 "unrestricted": False,
             },
             "nsfw": _NSFW_JSON,
+            "groups": [{"id": "all_users", "name": "All Users"}],
         },
     }
     assert core.nsfw_users == ["user-1"]
@@ -183,6 +191,56 @@ def test_me_answers_a_user_without_any_capability(app, client):
 
     assert response.status_code == 200
     assert response.json()["data"]["capabilities"] == []
+
+
+def test_me_lists_only_the_groups_a_user_belongs_to(app, client):
+    _sign_in(app, ARTIST)
+
+    groups = client.get(ME_URL).json()["data"]["groups"]
+
+    assert groups == [{"id": "all_users", "name": "All Users"}, {"id": "artists", "name": "Artists"}]
+
+
+def test_me_does_not_list_a_group_the_user_is_not_in(app, client):
+    _sign_in(app, USER)
+
+    groups = client.get(ME_URL).json()["data"]["groups"]
+
+    assert "artists" not in [group["id"] for group in groups]
+
+
+def test_me_lists_every_group_for_an_admin_even_one_they_are_not_in(app, client):
+    assert "artists" not in _MEMBERSHIP["admin-1"]
+    _sign_in(app, ADMIN)
+
+    groups = client.get(ME_URL).json()["data"]["groups"]
+
+    assert groups == _ALL_GROUPS_JSON
+
+
+def test_me_groups_carry_an_id_and_a_name_only(app, client):
+    for who in (ADMIN, ARTIST):
+        _sign_in(app, who)
+
+        groups = client.get(ME_URL).json()["data"]["groups"]
+
+        assert groups and all(set(group) == {"id", "name"} for group in groups)
+
+
+def test_me_groups_are_empty_for_a_user_in_no_group(app, client):
+    _sign_in(app, _user("loner"))
+
+    response = client.get(ME_URL)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["groups"] == []
+
+
+def test_me_takes_the_groups_of_an_admin_from_the_list_of_every_core_group(app, client, monkeypatch):
+    _sign_in(app, ADMIN)
+    monkeypatch.setattr(core_bridge, "list_groups", lambda: [{"id": "testers", "name": "Testers", "is_system": False}])
+
+    assert client.get(ME_URL).json()["data"]["groups"] == [{"id": "testers", "name": "Testers"}]
 
 
 def test_me_follows_what_the_admin_saved(app, client):

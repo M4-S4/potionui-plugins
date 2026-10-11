@@ -130,6 +130,7 @@ def test_search_items_are_normalised():
         ],
         "updated_at": "2026-10-05T13:49:00.000Z",
         "source_url": "https://huggingface.co/ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA",
+        "primary_sha256": None,
         "installed": None,
     }
     assert [(found.type, found.mb_type) for found in items.values()] == [
@@ -142,6 +143,14 @@ def test_search_items_are_normalised():
         "akatz-ai", 40640, ["Comfy-Org/MiniMax-H3"],
     )
     assert "dataset:akatz-ai/H3-Character-Swap-v1" in character.tags
+
+
+def test_list_answers_carry_no_file_hash():
+    # The Hugging Face list API has no hashes: the installed badge stays unknown for these items.
+    for name in ("models_search_lora", "models_search_lora_page2", "models_text_to_image_top", "models_author"):
+        for normalised in _items(name).values():
+            assert normalised.primary_sha256 is None
+            assert normalised.installed is None
 
 
 def test_license_base_model_and_region_tags_are_not_listed():

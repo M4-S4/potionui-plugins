@@ -1,12 +1,14 @@
 """`GET /sources`, `/{source}/search`, `/{source}/models/{id}` and `.../nsfw-media` through the
 plugin's real router.
 
-`require_browse` is overridden with a signed-in user, `nsfw.resolve_nsfw` is replaced by the
-context each test sets, the settings are faked, CivitAI and Hugging Face are fake transports
-serving the recorded fixtures (behind one shared `SourceHttp`), and the raw cache lives in a
-scratch database.
+`require_browse` is overridden with the principal each test sets (a signed-in user unless it
+says otherwise), `nsfw.resolve_nsfw` is replaced by the context each test sets, the settings are
+faked, CivitAI and Hugging Face are fake transports serving the recorded fixtures (behind one
+shared `SourceHttp`), the core is `FakeCore` in place of `core_bridge` (the installed badge of
+the search results asks it), and the raw cache lives in a scratch database.
 """
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -14,17 +16,19 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend import cache as cache_module
+from backend import core_bridge
 from backend import http as http_module
-from backend import nsfw
+from backend import nsfw, permissions
 from backend.api import router
 from backend.cache import Cache
 from backend.http import SourceHttp
 from backend.permissions import require_browse
 from backend.routes_sources import MAX_UPSTREAM_PAGES
 from backend.tables import create_tables
-from src.plugin_api import AccountType, User
+from src.plugin_api import get_current_active_user
 
 from .civitai_fakes import ABSENT, FakeTransport, body, context, fake_settings, image_urls, item, page_body
+from .download_fakes import USER_GRANT, FakeCore, admin, model, principal, user
 from .huggingface_fakes import REPOS, HuggingFaceTransport, combined_fetch, cursor_of
 from .huggingface_fakes import body as hf_body
 
@@ -33,13 +37,16 @@ PAGE_1_CURSOR = "409619|21294|82098"
 PAGE_2_CURSOR = "287938|23768|12597"
 
 
-def _user():
-    return User(id="user-1", username="user", email="user@test.com", password_hash="hash", account_type=AccountType.USER)
+@pytest.fixture
+def state():
+    """What the next request sees: the caller's NSFW context and who they are (a non-admin, user-1)."""
+    return SimpleNamespace(ctx=context("allowed", "show"), principal=principal())
 
 
 @pytest.fixture
-def state():
-    return SimpleNamespace(ctx=context("allowed", "show"))
+def core(monkeypatch):
+    """The core as `core_bridge` shows it: nothing indexed, nothing visible until a test says so."""
+    return FakeCore().install(monkeypatch)
 
 
 @pytest.fixture
@@ -48,7 +55,7 @@ def hf_transport():
 
 
 @pytest.fixture
-def transport(plugin_db, monkeypatch, state, hf_transport):
+def transport(plugin_db, monkeypatch, state, hf_transport, core):
     """The CivitAI fake; Hugging Face URLs go to `hf_transport` through the same `SourceHttp`."""
     create_tables()
     fake_settings(monkeypatch)
@@ -61,10 +68,10 @@ def transport(plugin_db, monkeypatch, state, hf_transport):
 
 
 @pytest.fixture
-def client(transport):
+def client(transport, state):
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[require_browse] = lambda: SimpleNamespace(user=_user())
+    app.dependency_overrides[require_browse] = lambda: state.principal
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -274,6 +281,166 @@ def test_two_users_share_one_cached_upstream_page(client, transport, state):
 
     assert len(transport.calls_to("/models")) == 1
     assert _ids(blurred) == _ids(shown) == ["122359", "58390"]
+
+
+# The installed badge -------------------------------------------------------------------
+
+#: 122359 and 58390 are the two models of the `models_query` answer.
+SHA_122359 = "0d9bd1b873a7863e128b4672e3e245838858f71469a3cec58123c16c06f83bd7"
+SHA_58390 = "47aaaf0d2945ca937151d61304946dd229b3f072140b85484bc93e38f2a6e2f7"
+
+
+def _sha(name, model_id):
+    """The lower-case SHA256 of the first file of the first version of a recorded model."""
+    return item(name, model_id)["modelVersions"][0]["files"][0]["hashes"]["SHA256"].lower()
+
+
+def _marks(response):
+    return {found["id"]: found["installed"] for found in response.json()["data"]["items"]}
+
+
+def _query_search(client):
+    return client.get(f"{BASE}/civitai/search", params={"q": "detail tweaker", "limit": 2})
+
+
+def test_search_marks_each_item_installed_when_it_is_indexed_and_visible_to_the_user(client, transport, core):
+    transport.add("/models", "models_query")
+    core.models_by_sha[SHA_122359] = model("model-122359", SHA_122359)
+    core.visible["user-1"] = ["model-122359"]
+
+    response = _query_search(client)
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    assert [(found["id"], found["primary_sha256"], found["installed"]) for found in items] == [
+        ("122359", SHA_122359, True),
+        ("58390", SHA_58390, False),
+    ]
+
+
+def test_an_indexed_model_the_user_cannot_see_is_not_installed_for_them(client, transport, core):
+    transport.add("/models", "models_query")
+    core.models_by_sha[SHA_122359] = model("model-122359", SHA_122359)
+    core.visible["user-1"] = ["some-other-model"]
+
+    assert _marks(_query_search(client)) == {"122359": False, "58390": False}
+
+
+def test_an_admin_sees_every_indexed_model_as_installed(client, transport, core, state):
+    transport.add("/models", "models_query")
+    core.models_by_sha[SHA_122359] = model("model-122359", SHA_122359)
+    state.principal = admin()
+
+    assert _marks(_query_search(client)) == {"122359": True, "58390": False}
+    assert "visible_model_ids" not in core.names()
+
+
+def test_a_model_whose_file_has_gone_from_the_disk_is_not_installed(client, transport, core, state):
+    transport.add("/models", "models_query")
+    core.models_by_sha[SHA_122359] = model("model-122359", SHA_122359, is_available=False)
+    state.principal = admin()
+
+    assert _marks(_query_search(client)) == {"122359": False, "58390": False}
+
+
+def test_the_badge_is_resolved_once_for_the_page_and_only_for_the_items_the_user_may_see(client, transport, core, state):
+    _lora_pages(transport)  # page 1: 264290 (NSFW) and 58390; page 2: 82098 and 200255 (NSFW)
+    state.ctx = context("blocked", "hide")
+    sha_82098 = _sha("models_lora_page2", 82098)
+    core.models_by_sha[sha_82098] = model("model-82098", sha_82098)
+    core.visible["user-1"] = ["model-82098"]
+
+    response = client.get(f"{BASE}/civitai/search", params={"limit": 2})
+
+    assert _ids(response) == ["58390", "82098"]
+    assert _marks(response) == {"58390": False, "82098": True}
+    assert len(transport.calls_to("/models")) == 2  # two upstream pages, one lookup
+    assert core.names().count("visible_model_ids") == 1
+    assert core.calls_to("find_model_by_sha256") == [(_sha("models_lora_page1", 58390),), (sha_82098,)]
+
+
+def test_two_users_get_their_own_badges_from_one_cached_page(client, transport, core, state):
+    transport.add("/models", "models_query")
+    core.models_by_sha[SHA_122359] = model("model-122359", SHA_122359)
+    core.visible["user-1"] = ["model-122359"]
+    core.visible["user-2"] = []
+
+    state.principal = principal("user-1")
+    first = _query_search(client)
+    state.principal = principal("user-2")
+    second = _query_search(client)
+    state.principal = admin()
+    third = _query_search(client)
+
+    assert len(transport.calls_to("/models")) == 1
+    assert _marks(first) == {"122359": True, "58390": False}
+    assert _marks(second) == {"122359": False, "58390": False}
+    assert _marks(third) == {"122359": True, "58390": False}
+
+
+def test_the_real_principal_reaches_the_badge_and_is_resolved_once_per_search(transport, core, monkeypatch):
+    resolved = []
+
+    def resolve_grant(who):
+        resolved.append(who.id)
+        return replace(USER_GRANT, capabilities=frozenset({"browse"}))
+
+    monkeypatch.setattr(permissions, "resolve_grant", resolve_grant)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_current_active_user] = lambda: user("user-1")
+    transport.add("/models", "models_query")
+    core.models_by_sha[SHA_122359] = model("model-122359", SHA_122359)
+    core.visible["user-1"] = ["model-122359"]
+
+    with TestClient(app) as client:
+        response = _query_search(client)
+
+    assert response.status_code == 200
+    assert resolved == ["user-1"]
+    assert _marks(response) == {"122359": True, "58390": False}
+
+
+def test_an_ids_search_carries_the_badge_too(client, transport, core, state):
+    transport.add("/models", "models_ids")
+    transport.add("/models/58390", (200, {}, item("models_lora_page1", 58390)))
+    core.models_by_sha[SHA_58390] = model("model-58390", SHA_58390)
+    state.principal = admin()
+
+    response = client.get(f"{BASE}/civitai/search", params={"q": "$#122359,58390"})
+
+    assert _marks(response) == {"122359": False, "58390": True}
+
+
+def test_hugging_face_items_have_no_hash_so_no_badge_and_the_core_is_not_asked(client, hf_transport, core):
+    hf_transport.add("/api/models", "models_search_lora")
+
+    response = client.get(f"{BASE}/huggingface/search", params={"q": "lora", "limit": 3})
+
+    items = response.json()["data"]["items"]
+    assert len(items) == 3
+    assert all(found["primary_sha256"] is None and found["installed"] is None for found in items)
+    assert core.calls == []
+
+
+@pytest.mark.parametrize("failing", ["find_model_by_sha256", "visible_model_ids"])
+def test_a_core_failure_does_not_fail_the_search_and_leaves_the_badges_unset(
+    client, transport, core, monkeypatch, failing
+):
+    transport.add("/models", "models_query")
+
+    def moved(*args):
+        raise RuntimeError("The AppContainer no longer provides model_repository.get_by_sha256")
+
+    monkeypatch.setattr(core_bridge, failing, moved)
+
+    response = _query_search(client)
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    assert [found["id"] for found in items] == ["122359", "58390"]
+    assert [found["installed"] for found in items] == [None, None]
+    assert [found["primary_sha256"] for found in items] == [SHA_122359, SHA_58390]
 
 
 # Errors --------------------------------------------------------------------------------

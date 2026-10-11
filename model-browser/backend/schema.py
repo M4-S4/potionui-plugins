@@ -120,7 +120,12 @@ class SearchItem(BaseModel):
     updated_at: Optional[str] = None
     #: Web page of the model on the source (`.red` for an NSFW CivitAI model).
     source_url: str
-    #: Filled by the `/installed` lookup (phase 3); None when unknown.
+    #: Lower-case SHA256 of the primary file of the listed version, when the source gives it in
+    #: list answers (CivitAI does, Hugging Face does not).
+    primary_sha256: Optional[str] = None
+    #: Whether that file is installed and visible to the caller, set per request by
+    #: `GET /{source}/search` (`backend/installed.py`) on the items that have a `primary_sha256`;
+    #: None when unknown (no hash, or the core could not answer).
     installed: Optional[bool] = None
 
 

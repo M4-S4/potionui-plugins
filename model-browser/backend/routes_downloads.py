@@ -9,7 +9,8 @@ Included by `backend/api.py` under `/api/plugins/model-browser`.
   user's for an admin or an `approve` holder (`?all=false`: their own only). `?limit=`
   1 to 200, 50 by default.
 - `POST /installed` (`browse`): which of up to 200 SHA256 are installed; for a non-admin,
-  installed **and** visible to them (assigned directly or through a group).
+  installed **and** visible to them (assigned directly or through a group). Answered by
+  `installed.installed_map`, the rule `GET /{source}/search` also uses for its `installed` badge.
 
 Pending rows are sent with their `info` filtered for the viewer's NSFW context and without
 the model's description (`downloads.row_for_viewer`), and the core's download record with
@@ -32,6 +33,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from . import core_bridge, downloads, nsfw, pending
 from .downloads import DownloadError, DownloadRequest
 from .http import SourceError
+from .installed import installed_map
 from .permissions import Principal, require_any, require_browse, require_download
 from .routes_sources import source_http_error
 
@@ -133,7 +135,7 @@ class InstalledRequest(BaseModel):
 
 
 @router.post("/installed")
-def installed(
+async def installed(
     body: Any = Body(...),
     principal: Principal = Depends(require_browse),
 ) -> Dict[str, Any]:
@@ -146,15 +148,4 @@ def installed(
         request = InstalledRequest.model_validate(body)
     except ValidationError as error:
         raise _error(400, "invalid_request", downloads.describe_validation_error(error, "hash list")) from None
-    visible = None
-    if request.sha256s and not principal.is_admin:
-        visible = set(core_bridge.visible_model_ids(principal.user.id))
-    result: Dict[str, bool] = {}
-    for sha256 in request.sha256s:
-        model = core_bridge.find_model_by_sha256(sha256)
-        result[sha256] = (
-            model is not None
-            and model.get("is_available", True) is not False
-            and (visible is None or model.get("id") in visible)
-        )
-    return {"success": True, "data": {"installed": result}}
+    return {"success": True, "data": {"installed": await installed_map(request.sha256s, principal)}}
