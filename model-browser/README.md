@@ -43,8 +43,9 @@ repository.
 
 4. **Docker dev instance** (`POTIONUI_CONTAINER` in `.env.local`): the plugin folder is
    bind-mounted on `/app/content/plugins/local/model-browser`, so edits are live. New or changed
-   manifest: `scripts/potionui-docker.ps1 scan`, then `enable -Plugin model-browser`; changed
-   Python code: `scripts/potionui-docker.ps1 restart`.
+   plugin: `scripts/potionui-docker.ps1 scan`, then `enable -Plugin model-browser`; changed
+   manifest or Python code: `scripts/potionui-docker.ps1 restart` (a rescan reloads the
+   plugin without firing `disable`, so its old background task would keep running).
 
 Restart PotionUI after changing Python code: disabling and enabling the plugin re-imports
 only the modules the manifest names, not the ones they import.
