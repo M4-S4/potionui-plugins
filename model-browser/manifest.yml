@@ -1,0 +1,35 @@
+id: "model-browser"
+name: "Model Browser"
+version: "0.1.0"
+description: "Browse and download models from CivitAI, Hugging Face, OpenModelDB and CivArchive"
+author: "Masa"
+license: "GPL-3.0"
+type: "full-stack"
+category: "sources"
+
+api:
+  module: "backend/api.py"
+
+hooks:
+  backend:
+    - hook: "plugin.lifecycle.boot"
+      handler: "hooks.lifecycle_hooks.on_boot"        # tables (idempotent); watcher on a runtime enable
+    - hook: "plugin.lifecycle.ready"
+      handler: "hooks.lifecycle_hooks.on_ready"       # run_on_app_loop(watcher.run())
+    - hook: "plugin.lifecycle.disable"
+      handler: "hooks.lifecycle_hooks.on_disable"     # stops the watcher
+
+pages:
+  - route: "model-browser"           # page URL: /plugins/model-browser
+    component: "ModelBrowserPage.js"
+    label: "Model Browser"
+sidebar:
+  - label: "Model Browser"
+    route: "model-browser"           # must be the same as pages[].route
+    icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"   # `d` attribute of a 24x24 SVG path
+    order: 75                        # no require_role: access is decided by the plugin's RBAC (PLAN.md §4)
+
+docs:
+  - path: "README.md"
+    title: "Model Browser"
+    audience: "admin"

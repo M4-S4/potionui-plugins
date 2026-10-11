@@ -1,0 +1,11 @@
+# The plugins run inside a Linux container and are built by Node/esbuild: keep LF everywhere,
+# whatever the Windows checkout's core.autocrlf says.
+* text=auto eol=lf
+
+# Binaries
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
