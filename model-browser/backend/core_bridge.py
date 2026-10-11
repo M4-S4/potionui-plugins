@@ -17,10 +17,13 @@ classes and operation modules (`src.features...`): each such import sits inside 
 function that needs it, with a comment naming the core file. The core's refusals
 come out as `CoreBridgeError(code, message)`.
 
-`limit_status` stays a stub until phase 5 (plan limits).
+Plan limits are read here (`limit_status`, through `plans.guard`); the events behind them
+are recorded and refunded with `LimitEvents`, which `src.plugin_api` exports
+(`backend/limits.py`).
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, get_args
 
 from src.plugin_api import User, get_container, model_for_path
@@ -36,6 +39,7 @@ REQUIRED_ATTRIBUTES = (
     "user_group_repository.get_user_groups",
     "user_group_repository.get_all_groups",
     "user_group_repository.get_group_by_id",
+    "user_group_repository.get_group_members",
     "user_group_repository.assign_model_to_group",
     "model_repository.get_by_sha256",
     "model_repository.get_by_id",
@@ -45,9 +49,12 @@ REQUIRED_ATTRIBUTES = (
     "model_index_manager.metadata.update_model_metadata",
     "plugin_registry",
     "notification_manager",
-    # Phase 5 (plan limits, `limit_status`).
-    "plans.guard",
-    "plans.events",
+    # Plan limits (`limit_status`).
+    "plans.guard.resolution",
+    "plans.guard.is_exempt",
+    "plans.guard.measure",
+    "plans.guard.settings.read",
+    "limit_kind_registry.get",
 )
 
 #: The core's content policy modes, as `effective_policy()` returns them.
@@ -56,8 +63,6 @@ CONTENT_POLICIES = get_args(ContentPolicy)
 
 #: `source` of the notifications this plugin raises.
 NOTIFICATION_SOURCE = "model-browser"
-
-_PHASE_5 = "model-browser: implemented in phase 5"
 
 #: Parts of the core's own `DownloadQueueException` messages that refuse a parameter
 #: (`src/features/downloads/queue.py`): a sub-folder or destination outside the depot,
@@ -408,6 +413,15 @@ def list_groups() -> List[Dict[str, Any]]:
     return [_group(group) for group in _container_attribute("user_group_repository.get_all_groups")()]
 
 
+def group_member_ids(group_id: str) -> List[str]:
+    """Ids of the members of a user group, without duplicates; none for a group that does not exist.
+
+    Uses `user_group_repository.get_group_members(group_id)`.
+    """
+    members = _container_attribute("user_group_repository.get_group_members")(group_id)
+    return list(dict.fromkeys(member.user_id for member in members if getattr(member, "user_id", None)))
+
+
 def _group(group: Any) -> Dict[str, Any]:
     """A core `UserGroup` record as a plain dict."""
     return {
@@ -455,11 +469,99 @@ def notify(
         logger.warning("[MODEL-BROWSER] Could not send the %r notification to %s", notification_type, user_id, exc_info=True)
 
 
-def limit_status(user_id: str, kind: str) -> Dict[str, Any]:
-    """Where `user_id` stands against the plan limit `kind`: exempt or not, the limit, the usage so far.
+def register_notification_types(registry: Any, types: Sequence[Any]) -> List[str]:
+    """Declare notification types on the registry `notification_type.register` hands its
+    handlers (`context.data["registry"]`); returns the keys it added.
 
-    Will use `plans.guard` (`resolution(user_id)`, `is_exempt(subject, settings)`,
-    `measure(kind: LimitKind, user_id, tz_name)`) and `plans.events`, the ledger behind
-    `LimitEvents`.
+    Each item has `key`, `label`, `description` and `category`, and becomes the core's
+    `NotificationTypeSpec` (src/features/notifications/types.py, not exported by
+    `src.plugin_api`), which shows it in every user's notification preferences. A key
+    already registered is left as it is, so registering twice is harmless.
     """
-    raise NotImplementedError(_PHASE_5)
+    # Internal record and exception, src/features/notifications/types.py.
+    from src.features.notifications.types import DuplicateNotificationTypeError, NotificationTypeSpec
+
+    added: List[str] = []
+    for item in types:
+        if registry.has(item.key):
+            continue
+        try:
+            registry.register(
+                NotificationTypeSpec(
+                    key=item.key, label=item.label, description=item.description, category=item.category
+                )
+            )
+        except DuplicateNotificationTypeError:
+            continue
+        added.append(item.key)
+    return added
+
+
+def _unlimited(kind: str) -> Dict[str, Any]:
+    return {"kind": kind, "limit": None, "used": None, "exempt": False, "resets_at": None, "contact_line": ""}
+
+
+def _local_iso(moment: Optional[datetime], tz_name: Optional[str]) -> Optional[str]:
+    """`moment` as ISO 8601 in the plans' day time zone (UTC when that zone is unknown here)."""
+    if moment is None:
+        return None
+    zone: Any = timezone.utc
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+
+            zone = ZoneInfo(tz_name)
+        except Exception:
+            zone = timezone.utc
+    return moment.astimezone(zone).isoformat()
+
+
+def limit_status(user_id: str, kind: str) -> Dict[str, Any]:
+    """Where `user_id` stands against the plan limit `kind` in its current window.
+
+    Returns `{"kind", "limit", "used", "exempt", "resets_at", "contact_line"}`:
+    - `limit` None: unlimited. The user has no plan, the plan that applies to them sets no
+      limit for `kind`, or the kind is not registered (the plugin's `limit_kinds` did not load);
+    - `exempt` True: an admin while the plan settings exempt admins (`limit` is kept, `used`
+      is not measured);
+    - otherwise `used` is the usage measured in the current window, `resets_at` the end of
+      that window (ISO 8601 in the plans' day time zone), `contact_line` the admin's line for
+      refusals.
+    Never raises: when the plans cannot be read, the failure is logged and the answer is
+    "unlimited", so a broken quota never blocks a download.
+
+    Uses `plans.guard.resolution(user_id)` (`Resolution.value(kind)`: the limit after the core
+    merged the plans that apply to the user), `plans.guard.settings.read()` (exempt admins,
+    day time zone, contact line), `plans.guard.is_exempt(subject, settings)`,
+    `limit_kind_registry.get(kind)` (`measure` takes the `LimitKind`, not its key) and
+    `plans.guard.measure(kind, user_id, tz_name)`.
+    """
+    try:
+        resolution = _container_attribute("plans.guard.resolution")(user_id)
+        if resolution is None:
+            return _unlimited(kind)
+        limit = resolution.value(kind)
+        if limit is None:
+            return _unlimited(kind)
+        settings = _container_attribute("plans.guard.settings.read")()
+        contact_line = str(getattr(settings, "contact_line", "") or "")
+        if _container_attribute("plans.guard.is_exempt")(resolution.subject, settings):
+            return {**_unlimited(kind), "limit": limit, "exempt": True, "contact_line": contact_line}
+        limit_kind = _container_attribute("limit_kind_registry.get")(kind)
+        if limit_kind is None:
+            return _unlimited(kind)
+        tz_name = getattr(settings, "day_timezone", None)
+        measured = _container_attribute("plans.guard.measure")(limit_kind, user_id, tz_name)
+        return {
+            "kind": kind,
+            "limit": limit,
+            "used": measured.used,
+            "exempt": False,
+            "resets_at": _local_iso(measured.resets_at, tz_name),
+            "contact_line": contact_line,
+        }
+    except Exception:
+        logger.warning(
+            "[MODEL-BROWSER] Could not read the %s limit of user %s; treating it as unlimited", kind, user_id, exc_info=True
+        )
+        return _unlimited(kind)

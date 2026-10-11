@@ -1,15 +1,18 @@
 """Test doubles for the download flow: normalised details, principals, a fake source, and
 `FakeCore`, the core as `backend.core_bridge` shows it (download queue, model index,
-assignment, provider fetch, attributes, notifications), installed with `monkeypatch`.
+assignment, provider fetch, attributes, notifications, group members, plan limits), plus the
+users `src.plugin_api.get_user` / `list_user_ids` know and the `LimitEvents` ledger,
+installed with `monkeypatch`.
 """
 
 import copy
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from backend import core_bridge, sources
-from backend.permissions import ADMIN_GRANT, Grant, Principal
+from backend import core_bridge, limits, permissions, sources
+from backend.permissions import ADMIN_GRANT, Grant, Params, Principal
 from backend.schema import File, Image, License, ModelDetail, Version
 from backend.sources import UnknownSource
 from src.plugin_api import AccountType, User
@@ -23,6 +26,9 @@ GIB = 1024 ** 3
 SAFE_IMAGE = "https://image.civitai.com/safe.jpeg"
 NSFW_IMAGE = "https://image.civitai.com/nsfw.jpeg"
 
+#: The request view of `USER_GRANT`: the same two sources, every type, no size limit.
+REQUEST_PARAMS = Params(sources=frozenset({"civitai", "huggingface"}))
+
 USER_GRANT = Grant(
     capabilities=frozenset({"browse", "request", "download"}),
     sources=frozenset({"civitai", "huggingface"}),
@@ -31,7 +37,13 @@ USER_GRANT = Grant(
     assign_to="user",
     allow_remote=False,
     unrestricted=False,
+    request_params=REQUEST_PARAMS,
 )
+
+
+def requesting(**params: Any) -> Params:
+    """`REQUEST_PARAMS` with some values changed, for `principal(request_params=...)`."""
+    return replace(REQUEST_PARAMS, **params)
 
 
 def user(user_id: str = "user-1", *, admin: bool = False) -> User:
@@ -45,7 +57,8 @@ def user(user_id: str = "user-1", *, admin: bool = False) -> User:
 
 
 def principal(user_id: str = "user-1", **grant: Any) -> Principal:
-    """A non-admin with `download` on CivitAI and Hugging Face; `grant` overrides `USER_GRANT` fields."""
+    """A non-admin with `download` and `request` on CivitAI and Hugging Face; `grant` overrides
+    `USER_GRANT` fields (`request_params=requesting(...)` for the request view)."""
     return Principal(user=user(user_id), grant=replace(USER_GRANT, **grant))
 
 
@@ -198,8 +211,28 @@ def model(model_id: str = "model-1", sha256: Optional[str] = SHA, *, created: st
     return values
 
 
+def unlimited(kind: str) -> Dict[str, Any]:
+    """`core_bridge.limit_status` for a user without a limit of this kind."""
+    return {"kind": kind, "limit": None, "used": None, "exempt": False, "resets_at": None, "contact_line": ""}
+
+
+def limited(kind: str, limit: float, used: float, **fields: Any) -> Dict[str, Any]:
+    """`core_bridge.limit_status` for a user with this limit and usage, resetting on Nov 1."""
+    values = {
+        "kind": kind,
+        "limit": limit,
+        "used": used,
+        "exempt": False,
+        "resets_at": "2026-11-01T00:00:00+00:00",
+        "contact_line": "Ask your admin for more.",
+    }
+    values.update(fields)
+    return values
+
+
 class FakeCore:
-    """What `backend.core_bridge` would get from PotionUI, in memory. `install()` puts it in place."""
+    """What `backend.core_bridge` would get from PotionUI, in memory. `install()` puts it in place,
+    with the users `permissions` looks up and the `LimitEvents` ledger `limits` writes to."""
 
     PATCHED = (
         "queue_model_download",
@@ -209,11 +242,13 @@ class FakeCore:
         "visible_model_ids",
         "user_groups",
         "list_groups",
+        "group_member_ids",
         "assign_to_user",
         "assign_to_group",
         "run_provider_fetch",
         "write_attributes",
         "notify",
+        "limit_status",
     )
 
     def __init__(self) -> None:
@@ -233,12 +268,36 @@ class FakeCore:
         self.fetch_errors: Dict[str, BaseException] = {}
         self.attributes_error: Optional[BaseException] = None
         self.notifications: List[Dict[str, Any]] = []
+        #: Users by id, for `get_user` and `list_user_ids`.
+        self.users: Dict[str, User] = {}
+        #: The acting admin's id (or None) of each `assign_to_group` call, in order.
+        self.group_admins: List[Optional[str]] = []
+        #: `(user_id, kind)` -> what `limit_status` answers; unlimited otherwise.
+        self.limits: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        #: `LimitEvents.record` calls, as `(user_id, kind, units, ref_id)`, and `refund` ref ids.
+        self.limit_events: List[Tuple[str, str, float, Optional[str]]] = []
+        self.refunds: List[str] = []
         self._downloads_made = 0
 
     def install(self, monkeypatch) -> "FakeCore":
         for name in self.PATCHED:
             monkeypatch.setattr(core_bridge, name, getattr(self, name))
+        monkeypatch.setattr(permissions, "get_user", self.get_user)
+        monkeypatch.setattr(permissions, "list_user_ids", self.list_user_ids)
+        monkeypatch.setattr(
+            limits,
+            "LimitEvents",
+            SimpleNamespace(record=self.record_limit_event, refund=self.refund_limit_events),
+        )
         return self
+
+    def add_user(self, user_id: str, *, admin: bool = False, groups: Sequence[str] = ()) -> User:
+        """A user `get_user` knows, member of `groups` (for `user_groups` and `group_member_ids`)."""
+        account = user(user_id, admin=admin)
+        self.users[user_id] = account
+        if groups:
+            self.memberships[user_id] = list(groups)
+        return account
 
     def names(self) -> List[str]:
         return [call[0] for call in self.calls]
@@ -327,6 +386,10 @@ class FakeCore:
         self.calls.append(("list_groups",))
         return [self._group(group_id) for group_id in self.group_ids]
 
+    def group_member_ids(self, group_id: str) -> List[str]:
+        self.calls.append(("group_member_ids", group_id))
+        return [user_id for user_id, groups in self.memberships.items() if group_id in groups]
+
     def assign_to_user(self, model_id: str, user_id: str) -> bool:
         self.calls.append(("assign_to_user", model_id, user_id))
         if self.assign_user_error is not None:
@@ -335,9 +398,32 @@ class FakeCore:
 
     def assign_to_group(self, group_id: str, model_ids: Sequence[str], acting_admin: Any = None) -> List[str]:
         self.calls.append(("assign_to_group", group_id, list(model_ids)))
+        self.group_admins.append(getattr(acting_admin, "id", None))
         if self.assign_group_error is not None:
             raise self.assign_group_error
         return list(model_ids)
+
+    # Users
+
+    def get_user(self, user_id: str) -> Optional[User]:
+        return self.users.get(user_id)
+
+    def list_user_ids(self) -> List[str]:
+        return list(self.users)
+
+    # Plan limits
+
+    def limit_status(self, user_id: str, kind: str) -> Dict[str, Any]:
+        self.calls.append(("limit_status", user_id, kind))
+        return dict(self.limits.get((user_id, kind), unlimited(kind)))
+
+    def record_limit_event(self, user_id: str, kind: str, units: float = 1, ref_id: Optional[str] = None) -> str:
+        self.limit_events.append((user_id, kind, units, ref_id))
+        return f"event-{len(self.limit_events)}"
+
+    def refund_limit_events(self, ref_id: str) -> int:
+        self.refunds.append(ref_id)
+        return sum(1 for event in self.limit_events if event[3] == ref_id)
 
     # Enrichment
 

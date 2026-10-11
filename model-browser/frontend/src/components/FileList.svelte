@@ -1,14 +1,23 @@
 <script>
 	// The files of one version: name (a star for the primary file), size, format, precision and
 	// type, an "Installed" badge (from `POST /installed` on their SHA256), "Needs login" for a gated
-	// repo, and the action the user's capabilities allow (lib/capabilities.fileAction):
-	// Download, a disabled Download when their permissions exclude the source, a disabled
-	// "Request (coming soon)" for request-only users, nothing for browse-only users.
+	// repo, and the action the user's capabilities allow for that file (`actionFor(file)`, from
+	// lib/capabilities.fileActionInfo): Download (the download parameters decide on the source),
+	// Request when the request parameters allow the file (source, suggested type, size; none for
+	// a file already in their models), a disabled button with its reason otherwise, nothing for
+	// browse-only users.
 	import Icon from './Icon.svelte';
 	import Pill from './Pill.svelte';
 	import { formatBytes } from '../lib/format.js';
 
-	let { files = [], installed = new Map(), gated = false, action = 'none', sourceLabel = 'this source', onDownload } = $props();
+	let {
+		files = [],
+		installed = new Map(),
+		gated = false,
+		actionFor = () => ({ action: 'none', reason: '' }),
+		onDownload,
+		onRequest
+	} = $props();
 
 	function meta(file) {
 		return [formatBytes(file.size_bytes), file.format, file.precision, file.file_type].filter(Boolean);
@@ -24,6 +33,7 @@
 {:else}
 	<ul class="divide-y divide-line" aria-label="Files">
 		{#each files as file (file.id)}
+			{@const info = actionFor(file)}
 			<li class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
 				<div class="min-w-0 flex-1">
 					<p class="flex min-w-0 items-center gap-1.5">
@@ -54,7 +64,7 @@
 					</div>
 				</div>
 
-				{#if action === 'download'}
+				{#if info.action === 'download'}
 					<button
 						type="button"
 						class="inline-flex flex-shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded bg-accent px-2.5 py-1 text-xs font-medium text-accent-contrast transition-colors duration-100 hover:bg-accent-hover active:bg-accent-active"
@@ -64,7 +74,7 @@
 						<Icon name="download" class="h-3.5 w-3.5" />
 						Download
 					</button>
-				{:else if action === 'source-blocked'}
+				{:else if info.action === 'source-blocked'}
 					<div class="flex flex-shrink-0 flex-col items-end gap-0.5">
 						<button
 							type="button"
@@ -74,17 +84,31 @@
 							<Icon name="download" class="h-3.5 w-3.5" />
 							Download
 						</button>
-						<span class="text-2xs text-fg-subtle">Not allowed from {sourceLabel}</span>
+						<span class="text-2xs text-fg-subtle">{info.reason}</span>
 					</div>
-				{:else if action === 'request'}
+				{:else if info.action === 'request' && !isInstalled(file)}
 					<button
 						type="button"
-						class="inline-flex flex-shrink-0 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded bg-surface-3 px-2.5 py-1 text-xs font-medium text-fg opacity-50"
-						title="Asking an admin for a model comes in a later version"
-						disabled
+						class="inline-flex flex-shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded bg-accent px-2.5 py-1 text-xs font-medium text-accent-contrast transition-colors duration-100 hover:bg-accent-hover active:bg-accent-active"
+						aria-label={`Request ${file.name}`}
+						title="Ask an admin to download this file for you"
+						onclick={(event) => onRequest?.(file, event.currentTarget)}
 					>
-						Request (coming soon)
+						<Icon name="hand" class="h-3.5 w-3.5" strokeWidth={1.5} />
+						Request
 					</button>
+				{:else if info.action === 'request-blocked'}
+					<div class="flex flex-shrink-0 flex-col items-end gap-0.5">
+						<button
+							type="button"
+							class="inline-flex cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded bg-surface-3 px-2.5 py-1 text-xs font-medium text-fg opacity-50"
+							disabled
+						>
+							<Icon name="hand" class="h-3.5 w-3.5" strokeWidth={1.5} />
+							Request
+						</button>
+						<span class="text-2xs text-fg-subtle">{info.reason}</span>
+					</div>
 				{/if}
 			</li>
 		{/each}

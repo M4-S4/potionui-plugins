@@ -36,7 +36,9 @@ if (-not $container) { throw 'Set POTIONUI_CONTAINER in .env.local (container na
 $baseUrl = (Get-DotEnvValue 'POTIONUI_URL')
 if (-not $baseUrl) { $baseUrl = 'http://localhost:26730' }
 $baseUrl = $baseUrl.TrimEnd('/')
-$Rest = @($Rest | Where-Object { $_ -ne '--' })
+# `$null | Where-Object` still emits one `$null`, which `@Rest` would splat as an empty argument
+# (pytest then reads '' as "the current folder" and collects the whole of /app).
+$Rest = @($Rest | Where-Object { $null -ne $_ -and $_ -ne '--' })
 
 function Get-Token {
     $user = Get-DotEnvValue 'POTIONUI_USER'

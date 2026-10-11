@@ -1,9 +1,11 @@
 """The plugin's own tables in PotionUI's database (PLAN.md §4.3, §4.4, §7.3).
 
 Created by `plugin.lifecycle.boot` on every process start; `CREATE TABLE IF NOT
-EXISTS` makes that idempotent. JSON columns hold `json.dumps` text. None of the
-tables has a foreign key on a core table: rows pointing at a deleted group, user
-or model are cleaned up by the plugin when it reads them.
+EXISTS` makes that idempotent. A column added to a table after its first release is
+declared last (where `ALTER TABLE ... ADD COLUMN` puts it) and listed in `_ADDED_COLUMNS`,
+so a table created by an older version gets it at the next start. JSON columns hold
+`json.dumps` text. None of the tables has a foreign key on a core table: rows pointing at
+a deleted group, user or model are cleaned up by the plugin when it reads them.
 """
 
 _COLUMNS = {
@@ -27,7 +29,8 @@ _COLUMNS = {
         decision_note TEXT,
         sha256 TEXT,                    -- model_browser_pending.sha256 once the download is queued
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        assign_to TEXT                  -- "user:<id>" | "group:<id>" | "none", decided at approval (phase 5)
     """,
     "model_browser_cache": """
         key TEXT PRIMARY KEY,           -- md5(source + normalized query); raw, unfiltered response
@@ -58,11 +61,20 @@ _COLUMNS = {
 #: Every table this plugin owns, all prefixed with `model_browser_`.
 TABLE_NAMES = tuple(_COLUMNS)
 
+#: Columns declared after their table was first released, as `(table, column, type)`: a
+#: table created by an older version of the plugin gets them at the next start.
+_ADDED_COLUMNS = (("model_browser_requests", "assign_to", "TEXT"),)
+
 
 def create_tables() -> None:
-    """Create the plugin's tables if they are missing; existing tables and rows are left as they are."""
+    """Create the plugin's tables if they are missing, and add the columns an older table lacks;
+    existing rows are left as they are."""
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:
         for name, columns in _COLUMNS.items():
             cursor.execute(f"CREATE TABLE IF NOT EXISTS {name} ({columns})")
+        for table, column, column_type in _ADDED_COLUMNS:
+            cursor.execute(f"PRAGMA table_info({table})")
+            if column not in {row["name"] for row in cursor.fetchall()}:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")

@@ -18,14 +18,15 @@ only its public fields to a non-admin (`downloads.PUBLIC_DOWNLOAD_FIELDS`).
 
 Success: `{"success": true, "data": ...}`. Errors: `HTTPException` with
 `{"success": false, "error": <code>, "message": ...}`: `invalid_request` and `invalid` (400),
-`forbidden` (403), `not_found` and `unknown_source` (404), `blocked` (409, the core or
-another plugin refused to queue the file), the sources' errors as in `routes_sources.py`
-(429, 502), `internal_error` (500).
+`forbidden` (403), `limit_exceeded` (403, a plan quota of the plugin, with `kind`, `label`,
+`used`, `limit`, `incoming` and `resets_at` too), `not_found` and `unknown_source` (404),
+`blocked` (409, the core or another plugin refused to queue the file), the sources' errors as
+in `routes_sources.py` (429, 502), `internal_error` (500).
 """
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -50,8 +51,15 @@ MAX_LIST_LIMIT = 200
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
-def _error(status: int, code: str, message: str) -> HTTPException:
-    return HTTPException(status_code=status, detail={"success": False, "error": code, "message": message})
+def _error(status: int, code: str, message: str, extra: Optional[Mapping[str, Any]] = None) -> HTTPException:
+    return HTTPException(
+        status_code=status, detail={"success": False, "error": code, "message": message, **dict(extra or {})}
+    )
+
+
+def download_http_error(exc: DownloadError) -> HTTPException:
+    """A refused download as the HTTP error the page gets (the request routes answer the same way)."""
+    return _error(exc.status, exc.code, exc.message, exc.extra)
 
 
 @router.post("/downloads")
@@ -72,7 +80,7 @@ async def post_download(
     try:
         data = await downloads.start_download(principal, request)
     except DownloadError as exc:
-        raise _error(exc.status, exc.code, exc.message) from None
+        raise download_http_error(exc) from None
     except SourceError as exc:
         raise source_http_error(exc) from None
     except Exception:

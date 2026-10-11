@@ -5,12 +5,15 @@
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import FileList from './FileList.svelte';
 	import MediaGallery from './MediaGallery.svelte';
-	import { fileAction } from '../lib/capabilities.js';
+	import { fileActionInfo } from '../lib/capabilities.js';
 	import { plural } from '../lib/format.js';
 
-	let { detail, version, me, installed, sourceLabel, revealCache, onDownload, onPreview } = $props();
+	let { detail, version, me, installed, sourceLabel, revealCache, onDownload, onRequest, onPreview } = $props();
 
-	const action = $derived(fileAction(me, detail.source));
+	// Per file: a request depends on the file's size too (and on the model's suggested type).
+	const actionFor = $derived((file) =>
+		fileActionInfo(me, detail.source, { type: detail.mb_type ?? null, sizeBytes: file.size_bytes ?? null }, sourceLabel)
+	);
 	const files = $derived(version?.files ?? []);
 	const images = $derived(version?.images ?? []);
 </script>
@@ -20,7 +23,14 @@
 </HostUi>
 
 <HostUi name="DetailSection" props={{ label: files.length ? plural(files.length, 'File') : 'Files', icon: 'document', padded: false }}>
-	<FileList {files} {installed} gated={detail.gated} {action} {sourceLabel} onDownload={(file, opener) => onDownload?.({ detail, version, file, opener })} />
+	<FileList
+		{files}
+		{installed}
+		gated={detail.gated}
+		{actionFor}
+		onDownload={(file, opener) => onDownload?.({ detail, version, file, opener })}
+		onRequest={(file, opener) => onRequest?.({ detail, version, file, opener })}
+	/>
 </HostUi>
 
 {#if detail.description_html}

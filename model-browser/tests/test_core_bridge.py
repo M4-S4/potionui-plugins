@@ -21,8 +21,10 @@ def test_a_missing_leaf_and_a_missing_parent_are_reported_in_full(fake_container
 
     assert missing_attributes(fake_container) == [
         "model_index_manager.assignments.assign_model_to_user",
-        "plans.guard",
-        "plans.events",
+        "plans.guard.resolution",
+        "plans.guard.is_exempt",
+        "plans.guard.measure",
+        "plans.guard.settings.read",
     ]
 
 
@@ -573,6 +575,144 @@ def test_a_phase_3_function_names_the_attribute_the_core_moved(live_container, c
     assert path in str(raised.value)
 
 
-def test_limit_status_is_still_a_phase_5_stub():
-    with pytest.raises(NotImplementedError, match="implemented in phase 5"):
-        core_bridge.limit_status("user-1", "model-browser.downloads")
+# Phase 5: group members, notification types, plan limits -------------------------------
+
+
+def test_group_member_ids_are_the_members_user_ids_once_each(live_container):
+    from src.features.user_groups.records import UserGroupMember
+
+    asked = []
+
+    def get_group_members(group_id):
+        asked.append(group_id)
+        return [
+            UserGroupMember(group_id=group_id, user_id="user-2", id="m-2"),
+            UserGroupMember(group_id=group_id, user_id="user-1", id="m-1"),
+            UserGroupMember(group_id=group_id, user_id="user-2", id="m-3"),
+        ]
+
+    live_container.user_group_repository.get_group_members = get_group_members
+
+    assert core_bridge.group_member_ids("approvers") == ["user-2", "user-1"]
+    assert asked == ["approvers"]
+
+
+def test_register_notification_types_declares_each_type_once_on_the_cores_registry():
+    from src.features.notifications.types import NotificationTypeRegistry, NotificationTypeSpec
+
+    registry = NotificationTypeRegistry()
+    registry.register(NotificationTypeSpec(key="model-browser.download_done", label="Already there"))
+    types = [
+        SimpleNamespace(key="model-browser.download_done", label="Model ready", description="d", category="plugin"),
+        SimpleNamespace(key="model-browser.request_received", label="New request", description="r", category="plugin"),
+    ]
+
+    assert core_bridge.register_notification_types(registry, types) == ["model-browser.request_received"]
+    assert core_bridge.register_notification_types(registry, types) == []
+    spec = registry.get("model-browser.request_received")
+    assert isinstance(spec, NotificationTypeSpec)
+    assert (spec.label, spec.description, spec.category, spec.default_enabled, spec.admin_only) == (
+        "New request", "r", "plugin", True, False,
+    )
+    assert registry.get("model-browser.download_done").label == "Already there"
+
+
+def _plans(live_container, *, limit=None, admin=False, exempt_admins=True, used=2.0, registered=True):
+    """The plans machinery the way `limit_status` reads it, built from the core's own records."""
+    from datetime import datetime, timezone
+
+    from src.features.plans.guard import Measured, PlanSettings
+    from src.features.plans.records import Plan, PlanLimit, PlanSubject
+    from src.features.plans.resolver import PlanResolver
+    from src.platform.plugins.limit_kinds import LimitKind
+
+    kind = LimitKind(key="model-browser.downloads", label="Model downloads per month", value_type="count",
+                     window="month", measure=lambda context: 0, source="model-browser")
+    limits = (PlanLimit(kind="model-browser.downloads", value=limit),) if limit is not None else ()
+    plans = {"plan-1": Plan(id="plan-1", name="Starter", limits=limits)}
+    subject = PlanSubject(user_id="user-1", username="user", email="u@test.com",
+                          account_type="ADMIN" if admin else "USER", override_plan_id="plan-1",
+                          groups=(), default_plan_id=None)
+    resolver = PlanResolver(is_active=lambda key: registered and key == kind.key)
+    measured_for = []
+
+    def measure(limit_kind, user_id, tz_name=None, now=None):
+        measured_for.append((limit_kind, user_id, tz_name))
+        return Measured(used=used, window_start=datetime(2026, 10, 1, tzinfo=timezone.utc),
+                        resets_at=datetime(2026, 10, 31, 23, 0, tzinfo=timezone.utc))
+
+    settings = PlanSettings(exempt_admins=exempt_admins, day_timezone="Europe/Paris", contact_line="Ask your admin.")
+    guard = live_container.plans.guard
+    guard.resolution = lambda user_id: resolver.resolve(subject, plans) if user_id == "user-1" else None
+    guard.is_exempt = lambda subject, settings: settings.exempt_admins and subject.is_admin
+    guard.measure = measure
+    guard.settings.read = lambda: settings
+    live_container.limit_kind_registry.get = lambda key: kind if registered and key == kind.key else None
+    return SimpleNamespace(kind=kind, measured_for=measured_for)
+
+
+def test_limit_status_measures_the_usage_against_the_users_limit(live_container):
+    plans = _plans(live_container, limit=5, used=2.0)
+
+    status = core_bridge.limit_status("user-1", "model-browser.downloads")
+
+    assert status == {
+        "kind": "model-browser.downloads",
+        "limit": 5,
+        "used": 2.0,
+        "exempt": False,
+        "resets_at": "2026-11-01T00:00:00+01:00",  # the end of the window, in the plans' time zone
+        "contact_line": "Ask your admin.",
+    }
+    assert plans.measured_for == [(plans.kind, "user-1", "Europe/Paris")]  # the LimitKind, not its key
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["no-plan-limit", "unknown-user", "kind-not-registered"],
+)
+def test_limit_status_is_unlimited_without_a_limit_for_the_kind(live_container, case):
+    plans = _plans(live_container, limit=None if case == "no-plan-limit" else 5, registered=case != "kind-not-registered")
+    user_id = "ghost" if case == "unknown-user" else "user-1"
+
+    status = core_bridge.limit_status(user_id, "model-browser.downloads")
+
+    assert (status["limit"], status["used"], status["exempt"]) == (None, None, False)
+    assert plans.measured_for == []
+
+
+def test_limit_status_of_an_exempt_admin_is_not_measured(live_container):
+    plans = _plans(live_container, limit=1, admin=True)
+
+    status = core_bridge.limit_status("user-1", "model-browser.downloads")
+
+    assert (status["limit"], status["exempt"], status["used"]) == (1, True, None)
+    assert plans.measured_for == []
+
+
+def test_limit_status_measures_an_admin_when_admins_are_not_exempt(live_container):
+    _plans(live_container, limit=1, admin=True, exempt_admins=False, used=1.0)
+
+    status = core_bridge.limit_status("user-1", "model-browser.downloads")
+
+    assert (status["exempt"], status["used"], status["limit"]) == (False, 1.0, 1)
+
+
+def test_limit_status_reads_unlimited_when_the_plans_cannot_be_read(live_container, caplog):
+    _plans(live_container, limit=1)
+
+    def broken(user_id):
+        raise RuntimeError("no such table: plans")
+
+    live_container.plans.guard.resolution = broken
+
+    status = core_bridge.limit_status("user-1", "model-browser.downloads")
+
+    assert status["limit"] is None
+    assert "treating it as unlimited" in caplog.text
+
+
+def test_limit_status_reads_unlimited_when_the_core_moved_the_plans(live_container):
+    del live_container.plans
+
+    assert core_bridge.limit_status("user-1", "model-browser.downloads")["limit"] is None

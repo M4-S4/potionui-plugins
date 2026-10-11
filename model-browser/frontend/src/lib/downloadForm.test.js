@@ -83,6 +83,23 @@ test('sizeProblem explains a file over the limit', () => {
 	assert.equal(sizeProblem(LIMITED, null), '');
 });
 
+test('sizeProblem with purpose request reads the request parameters', () => {
+	const me = normalizeMe({
+		user: { id: 'u1', is_admin: false },
+		capabilities: ['browse', 'download', 'request'],
+		params: { sources: ['civitai'], max_file_gb: 1 },
+		request_params: { sources: ['civitai'], max_file_gb: 8 }
+	});
+	assert.equal(sizeProblem(me, 5 * 1024 ** 3), 'This file is 5.0 GB: your permissions allow files of at most 1 GB');
+	assert.equal(sizeProblem(me, 5 * 1024 ** 3, { purpose: 'request' }), '');
+	assert.equal(
+		sizeProblem(me, 9 * 1024 ** 3, { purpose: 'request' }),
+		'This file is 9.0 GB: your permissions let you ask for files of at most 8 GB'
+	);
+	// Without request_params, the download parameters bound requests too.
+	assert.equal(sizeProblem(LIMITED, 5 * 1024 ** 3, { purpose: 'request' }), 'This file is 5.0 GB: your permissions let you ask for files of at most 1 GB');
+});
+
 test('initialForm starts on the suggested type when allowed', () => {
 	assert.deepEqual(initialForm(LIMITED, DETAIL, FILE), {
 		modelType: 'lora',

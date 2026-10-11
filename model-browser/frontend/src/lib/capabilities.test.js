@@ -7,10 +7,15 @@ import {
 	canChooseGroup,
 	canChooseRemote,
 	canDownloadFrom,
+	canRequestFrom,
 	exceedsSizeLimit,
 	fileAction,
+	fileActionInfo,
 	groupChoices,
 	normalizeMe,
+	paramsFor,
+	requestBlock,
+	requestBlockReason,
 	sizeLimitBytes
 } from './capabilities.js';
 
@@ -50,7 +55,8 @@ const DOWNLOADER = normalizeMe(
 );
 
 const BROWSER = normalizeMe(meData({ capabilities: ['browse'] }));
-const REQUESTER = normalizeMe(meData());
+// The default parameters of `all_users` (browse + request).
+const REQUESTER = normalizeMe(meData({ params: { sources: ['civitai', 'huggingface', 'openmodeldb'], model_types: [], max_file_gb: null } }));
 
 test('normalizeMe keeps a well formed answer', () => {
 	assert.deepEqual(DOWNLOADER.user, { id: 'u1', username: 'alice', is_admin: false });
@@ -168,6 +174,133 @@ test('fileAction depends on the capabilities and the sources allowed', () => {
 	assert.equal(fileAction(BROWSER, 'civitai'), 'none');
 	assert.equal(canDownloadFrom(DOWNLOADER, 'huggingface'), true);
 	assert.equal(canDownloadFrom(REQUESTER, 'civitai'), false);
+});
+
+test('fileAction and canRequestFrom: requests are bounded by the sources of the parameters', () => {
+	const civitaiOnly = normalizeMe(meData({ params: { sources: ['civitai'] } }));
+	assert.equal(fileAction(civitaiOnly, 'civitai'), 'request');
+	assert.equal(fileAction(civitaiOnly, 'huggingface'), 'request-blocked');
+	assert.equal(canRequestFrom(civitaiOnly, 'huggingface'), false);
+	assert.equal(canRequestFrom(REQUESTER, 'huggingface'), true);
+	assert.equal(canRequestFrom(REQUESTER, 'civarchive'), false);
+	assert.equal(fileAction(normalizeMe(meData()), 'civitai'), 'request-blocked');
+	assert.equal(canRequestFrom(ADMIN, 'civarchive'), true);
+	assert.equal(canRequestFrom(BROWSER, 'civitai'), false);
+	assert.equal(canRequestFrom(null, 'civitai'), false);
+});
+
+// A downloader of LoRA from CivitAI up to 2 GB who may also ask for embeddings and checkpoints
+// from CivitAI and Hugging Face up to 10 GB (the phase 5 /me: `params` for downloads,
+// `request_params` for requests).
+const SPLIT = normalizeMe(
+	meData({
+		capabilities: ['browse', 'download', 'request'],
+		params: { sources: ['civitai'], model_types: ['lora'], max_file_gb: 2, assign_to: 'user', allow_remote: true, unrestricted: false },
+		request_params: { sources: ['civitai', 'huggingface'], model_types: ['embedding', 'checkpoint'], max_file_gb: 10, assign_to: 'group' }
+	})
+);
+const ASKER = normalizeMe(
+	meData({
+		capabilities: ['browse', 'request'],
+		params: { sources: [], model_types: [], max_file_gb: null },
+		request_params: { sources: ['civitai'], model_types: ['lora'], max_file_gb: 1 }
+	})
+);
+
+test('normalizeMe reads request_params apart from params', () => {
+	assert.deepEqual(SPLIT.request_params, {
+		sources: ['civitai', 'huggingface'],
+		model_types: ['embedding', 'checkpoint'],
+		max_file_gb: 10,
+		assign_to: 'group',
+		unrestricted: false
+	});
+	assert.deepEqual(SPLIT.params, {
+		sources: ['civitai'],
+		model_types: ['lora'],
+		max_file_gb: 2,
+		assign_to: 'user',
+		allow_remote: true,
+		unrestricted: false
+	});
+	assert.equal('allow_remote' in SPLIT.request_params, false);
+});
+
+test('normalizeMe falls back to params when request_params is missing, and cleans a malformed one', () => {
+	assert.deepEqual(DOWNLOADER.request_params, {
+		sources: ['civitai', 'huggingface'],
+		model_types: ['embedding', 'lora'],
+		max_file_gb: 2,
+		assign_to: 'group',
+		unrestricted: false
+	});
+	const odd = normalizeMe(meData({ request_params: { sources: 'civitai', model_types: [3, 'lora'], max_file_gb: 0, assign_to: 'team' } }));
+	assert.deepEqual(odd.request_params, { sources: [], model_types: ['lora'], max_file_gb: null, assign_to: 'user', unrestricted: false });
+	assert.equal(normalizeMe(meData({ request_params: 'all' })).request_params.max_file_gb, null);
+	assert.equal(ADMIN.request_params.unrestricted, true);
+	assert.deepEqual(normalizeMe(null).request_params, { sources: [], model_types: [], max_file_gb: null, assign_to: 'user', unrestricted: false });
+});
+
+test('paramsFor, allowedTypes and the size limit per purpose', () => {
+	assert.equal(paramsFor(SPLIT), SPLIT.params);
+	assert.equal(paramsFor(SPLIT, 'request'), SPLIT.request_params);
+	assert.equal(paramsFor({ params: SPLIT.params }, 'request'), SPLIT.params);
+	assert.equal(paramsFor(null, 'request'), null);
+	assert.deepEqual(allowedTypes(SPLIT, 'lora'), { types: ['lora'], selected: 'lora', suggestionAllowed: true });
+	assert.deepEqual(allowedTypes(SPLIT, 'lora', { purpose: 'request' }), {
+		types: ['checkpoint', 'embedding'],
+		selected: '',
+		suggestionAllowed: false
+	});
+	assert.deepEqual(allowedTypes(SPLIT, 'embedding', { purpose: 'request' }).types, ['embedding', 'checkpoint']);
+	assert.equal(sizeLimitBytes(SPLIT), 2 * 1024 ** 3);
+	assert.equal(sizeLimitBytes(SPLIT, { purpose: 'request' }), 10 * 1024 ** 3);
+	assert.equal(exceedsSizeLimit(SPLIT, 5 * 1024 ** 3), true);
+	assert.equal(exceedsSizeLimit(SPLIT, 5 * 1024 ** 3, { purpose: 'request' }), false);
+	assert.equal(sizeLimitBytes(ADMIN, { purpose: 'request' }), null);
+});
+
+test('requestBlock and canRequestFrom read the request parameters: source, suggested type, size', () => {
+	assert.equal(canRequestFrom(SPLIT, 'huggingface'), true);
+	assert.equal(canDownloadFrom(SPLIT, 'huggingface'), false);
+	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'lora', sizeBytes: 500 * 1024 ** 2 }), '');
+	assert.equal(requestBlock(ASKER, { source: 'huggingface', type: 'lora' }), 'source');
+	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'checkpoint' }), 'type');
+	// No suggestion: the type is chosen in the dialog.
+	assert.equal(requestBlock(ASKER, { source: 'civitai', type: null }), '');
+	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'lora', sizeBytes: 2 * 1024 ** 3 }), 'size');
+	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'lora', sizeBytes: null }), '');
+	assert.equal(requestBlock(BROWSER, { source: 'civitai' }), 'capability');
+	assert.equal(requestBlock(ADMIN, { source: 'civarchive', type: 'vae', sizeBytes: 10 ** 12 }), '');
+	assert.equal(requestBlockReason(ASKER, { source: 'huggingface' }, 'Hugging Face'), 'Not allowed from Hugging Face');
+	assert.equal(requestBlockReason(ASKER, { source: 'civitai', type: 'checkpoint' }), 'Checkpoint models not allowed');
+	assert.equal(requestBlockReason(ASKER, { source: 'civitai', type: 'lora', sizeBytes: 2 * 1024 ** 3 }), 'Over your 1 GB limit');
+	assert.equal(requestBlockReason(ASKER, { source: 'civitai', type: 'lora' }), '');
+});
+
+test('fileAction: downloads by params, requests by request_params', () => {
+	assert.equal(fileAction(SPLIT, 'civitai', { type: 'lora' }), 'download');
+	// Not a download source, but one they may ask for: Request.
+	assert.equal(fileAction(SPLIT, 'huggingface', { type: 'checkpoint', sizeBytes: 6 * 1024 ** 3 }), 'request');
+	assert.equal(fileAction(SPLIT, 'huggingface', { type: 'lora' }), 'source-blocked');
+	assert.equal(fileAction(SPLIT, 'openmodeldb'), 'source-blocked');
+	assert.equal(fileAction(ASKER, 'civitai', { type: 'lora', sizeBytes: 100 }), 'request');
+	assert.equal(fileAction(ASKER, 'civitai', { type: 'vae' }), 'request-blocked');
+	assert.equal(fileAction(ASKER, 'civitai', { type: 'lora', sizeBytes: 2 * 1024 ** 3 }), 'request-blocked');
+	assert.equal(fileAction(ASKER, 'huggingface'), 'request-blocked');
+	assert.deepEqual(fileActionInfo(SPLIT, 'openmodeldb', {}, 'OpenModelDB'), { action: 'source-blocked', reason: 'Not allowed from OpenModelDB' });
+	assert.deepEqual(fileActionInfo(ASKER, 'civitai', { type: 'vae' }, 'CivitAI'), { action: 'request-blocked', reason: 'VAE models not allowed' });
+	assert.deepEqual(fileActionInfo(ASKER, 'civitai', { type: 'lora' }, 'CivitAI'), { action: 'request', reason: '' });
+	assert.deepEqual(fileActionInfo(BROWSER, 'civitai'), { action: 'none', reason: '' });
+});
+
+test('normalizeMe keeps the open request count, null when absent or malformed', () => {
+	assert.deepEqual(normalizeMe(meData({ requests: { open_count: 4 } })).requests, { open_count: 4 });
+	assert.deepEqual(normalizeMe(meData({ requests: { open_count: 2.9 } })).requests, { open_count: 2 });
+	assert.deepEqual(normalizeMe(meData()).requests, { open_count: null });
+	assert.deepEqual(normalizeMe(meData({ requests: { open_count: -1 } })).requests, { open_count: null });
+	assert.deepEqual(normalizeMe(meData({ requests: { open_count: '3' } })).requests, { open_count: null });
+	assert.deepEqual(normalizeMe(null).requests, { open_count: null });
 });
 
 test('size limits apply to restricted users only, in GiB', () => {

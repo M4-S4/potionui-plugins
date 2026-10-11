@@ -20,6 +20,8 @@ hooks:
       handler: "hooks.lifecycle_hooks.on_disable"     # stops the watcher
     - hook: "provider.register"
       handler: "hooks.provider_hooks.register_providers"   # the `model-browser` provider (PLAN.md §7.3)
+    - hook: "notification_type.register"
+      handler: "hooks.notification_hooks.register_types"   # request / download notification types (PLAN.md §4.4)
 
 pages:
   - route: "model-browser"           # page URL: /plugins/model-browser
@@ -63,6 +65,35 @@ model_metadata_fields:
     label: "License"
     field_type: "text"
     description: "License as the source states it (filled by Model Browser)"
+
+# Plan limits an admin can add to the core's plans (PLAN.md §4.5). The core only enforces
+# limits on submits and uploads, so the plugin enforces these itself before it queues a
+# download (backend/limits.py): `applies_handler` keeps the core from ever applying them,
+# and the usage is the ledger the plugin records into (one event per queued file, refunded
+# when the download fails). `measure_handler` reads that ledger back: without `ledger: true`
+# the core requires one. Handlers are "module.path.function" from the plugin root.
+limit_kinds:
+  - key: "model-browser.downloads"
+    label: "Model downloads per month"
+    short_label: "Model downloads"
+    description: "Files queued from the Model Browser for the user (downloads and approved requests); a failed download is refunded"
+    value_type: "count"
+    unit: "per month"
+    window: "month"
+    enforce_at: ["submit"]
+    ledger: false
+    measure_handler: "backend.limit_handlers.ledger_total"
+    applies_handler: "backend.limit_handlers.never_applies"
+  - key: "model-browser.download_bytes"
+    label: "Downloaded model bytes per month"
+    short_label: "Model download volume"
+    description: "Size of the files queued from the Model Browser for the user; a failed download is refunded"
+    value_type: "bytes"
+    window: "month"
+    enforce_at: ["submit"]
+    ledger: false
+    measure_handler: "backend.limit_handlers.ledger_total"
+    applies_handler: "backend.limit_handlers.never_applies"
 
 # Defaults are applied by backend/settings.py (the core stores values as strings and does
 # not seed them); keep the two in step.

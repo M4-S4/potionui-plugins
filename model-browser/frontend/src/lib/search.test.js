@@ -19,7 +19,9 @@ import {
 	sourceSections,
 	switchSource,
 	toggleType,
-	unknownInstalledHashes
+	unknownInstalledHashes,
+	wantsRequestsTab,
+	withoutRequestsTab
 } from './search.js';
 
 // The shape of backend/routes_sources.py's GET /sources (trimmed lists).
@@ -107,6 +109,29 @@ test('decodeState reads every key, types repeated', () => {
 		model: '58390'
 	});
 	assert.deepEqual(decodeState(''), emptyState(''));
+});
+
+test('wantsRequestsTab spots the link of the request notifications', () => {
+	assert.equal(wantsRequestsTab('?tab=requests'), true);
+	assert.equal(wantsRequestsTab('source=civitai&tab=requests'), true);
+	assert.equal(wantsRequestsTab(new URLSearchParams('tab=other&tab=requests')), true);
+	assert.equal(wantsRequestsTab('?tab=other'), false);
+	assert.equal(wantsRequestsTab('?requests=tab'), false);
+	assert.equal(wantsRequestsTab(''), false);
+	assert.equal(wantsRequestsTab(undefined), false);
+});
+
+test('withoutRequestsTab drops tab=requests only, keeping the rest in order', () => {
+	assert.equal(withoutRequestsTab('?tab=requests'), '');
+	assert.equal(withoutRequestsTab('?source=civitai&tab=requests&q=detail'), 'source=civitai&q=detail');
+	assert.equal(withoutRequestsTab('tab=other&tab=requests&foo=1'), 'tab=other&foo=1');
+	assert.equal(withoutRequestsTab(new URLSearchParams('model=org%2Frepo&tab=requests')), 'model=org%2Frepo');
+	assert.equal(withoutRequestsTab(''), '');
+});
+
+test('encodeState never writes tab=requests back', () => {
+	assert.equal(encodeState(emptyState('civitai'), '?tab=requests&foo=1'), 'foo=1&source=civitai');
+	assert.equal(encodeState(emptyState('civitai'), '?tab=other'), 'tab=other&source=civitai');
 });
 
 test('encodeState leaves defaults out and keeps foreign keys', () => {

@@ -8,9 +8,9 @@
 	// localStorage ('auth_token') and goes in an `Authorization: Bearer` header, never in the
 	// markup or the URL. Both routes are admin-only (PLAN.md section 4.3).
 	//
-	// Minimal screen: one card per user group (its four rights, and the download parameters while
-	// Download is on), saved in one PUT that replaces the whole table. All the logic that can be
-	// tested without a browser lives in lib/permissions.js.
+	// Minimal screen: one card per user group (its four rights, and its parameters while Download or
+	// Request is on: they bound its downloads and its requests), saved in one PUT that replaces the
+	// whole table. All the logic that can be tested without a browser lives in lib/permissions.js.
 	import { onMount } from 'svelte';
 	// Host wrapper from the PotionUI plugin SDK: resolves only when the plugin sits at
 	// content/plugins/<tree>/model-browser (scripts/build-plugins.ps1 mirrors it there).
@@ -190,7 +190,7 @@
 		{/if}
 
 		{#each groups as group (group.group_id)}
-			{@const canDownload = group.capabilities.includes('download')}
+			{@const usesParams = group.capabilities.includes('download') || group.capabilities.includes('request')}
 			{@const sizeInvalid = !parseMaxFileGb(group.params.max_file_gb).ok}
 			<section class="rounded-lg border border-line bg-surface-1 p-4 shadow-raised" aria-label="Permissions of {group.name}">
 				<div class="flex flex-wrap items-center gap-2">
@@ -221,9 +221,9 @@
 					{/each}
 				</div>
 
-				{#if canDownload}
+				{#if usesParams}
 					<div class="mt-4 space-y-3 border-t border-line pt-4">
-						<p class="font-mono text-2xs font-medium uppercase tracking-[0.07em] text-fg-subtle">Download parameters</p>
+						<p class="font-mono text-2xs font-medium uppercase tracking-[0.07em] text-fg-subtle">Download and request parameters</p>
 
 						<div class="flex flex-col gap-1 sm:flex-row sm:gap-4">
 							<span class="w-32 flex-shrink-0 text-sm text-fg-muted">Sources</span>
@@ -333,7 +333,7 @@
 						</div>
 					</div>
 				{:else}
-					<p class="mt-3 text-xs text-fg-subtle">Turn on Download to choose what this group may download.</p>
+					<p class="mt-3 text-xs text-fg-subtle">Turn on Download or Request to choose what this group may download or ask for.</p>
 				{/if}
 			</section>
 		{/each}
@@ -343,10 +343,9 @@
 			<ul class="mt-2 list-disc space-y-1 pl-4 text-xs text-fg-muted">
 				<li>A user gets every right that at least one of their groups grants.</li>
 				<li>
-					Download parameters only come from the groups that grant Download: sources and model types are added up (a group
-					with no model type checked allows every type), the largest file size wins (no limit beats any limit), "one of the
-					user's groups" applies as soon as one group asks for it, and remote backends are allowed as soon as one group
-					allows them.
+					A group's parameters bound both its downloads and its requests. For a user in several groups, the download parameters
+					are merged from the groups that grant Download, the request parameters from the groups that grant Request: sources and
+					types united, the largest size wins, no limit beats any limit, 'group' assignment as soon as one group says so.
 				</li>
 				<li>Admins have every right and no limit, whatever is set here.</li>
 				<li>

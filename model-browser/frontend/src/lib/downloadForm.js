@@ -74,11 +74,13 @@ export function filenameEdited(text, original) {
 	return (typeof text === 'string' ? text.trim() : '') !== baseName(original);
 }
 
-/** Why the file is too large for the user, or ''. */
-export function sizeProblem(me, sizeBytes) {
-	if (!exceedsSizeLimit(me, sizeBytes)) return '';
-	const limitGb = sizeLimitBytes(me) / 1024 ** 3;
-	return `This file is ${formatBytes(sizeBytes)}: your permissions allow files of at most ${limitGb} GB`;
+/** Why the file is too large for the user to download (or to ask for, `purpose: 'request'`), or ''. */
+export function sizeProblem(me, sizeBytes, { purpose = 'download' } = {}) {
+	if (!exceedsSizeLimit(me, sizeBytes, { purpose })) return '';
+	const limitGb = sizeLimitBytes(me, { purpose }) / 1024 ** 3;
+	return purpose === 'request'
+		? `This file is ${formatBytes(sizeBytes)}: your permissions let you ask for files of at most ${limitGb} GB`
+		: `This file is ${formatBytes(sizeBytes)}: your permissions allow files of at most ${limitGb} GB`;
 }
 
 /**

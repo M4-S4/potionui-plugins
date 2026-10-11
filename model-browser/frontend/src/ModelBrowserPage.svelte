@@ -9,8 +9,11 @@
 	//   URL query string (`history.replaceState`), so a reload restores it (lib/search.js).
 	// - Results page by cursor (infinite scroll in ResultGrid); `POST /installed` fills the
 	//   "Installed" badges when the server sends `primary_sha256` without `installed`.
-	// - A card opens DetailPanel over the results; a file opens DownloadDialog; DownloadTray
-	//   follows the downloads.
+	// - A card opens DetailPanel over the results; a file opens DownloadDialog, or RequestDialog
+	//   for users who may only ask (phase 5); DownloadTray follows the downloads, RequestsButton
+	//   the requests (RequestsPanel: follow-up, and the decisions of `approve` holders).
+	// - `?tab=requests` (the link of the request notifications) opens the requests drawer once and
+	//   leaves the URL at once (lib/search.wantsRequestsTab / withoutRequestsTab).
 	import { onMount } from 'svelte';
 	// Host wrapper from the PotionUI plugin SDK: resolves only when the plugin sits at
 	// content/plugins/<tree>/model-browser (scripts/build-plugins.ps1 mirrors it there).
@@ -21,10 +24,13 @@
 	import FilterChips from './components/FilterChips.svelte';
 	import FilterPopover from './components/FilterPopover.svelte';
 	import NsfwModeControl from './components/NsfwModeControl.svelte';
+	import RequestDialog from './components/RequestDialog.svelte';
+	import RequestsButton from './components/RequestsButton.svelte';
 	import ResultGrid from './components/ResultGrid.svelte';
 	import { getInstalled, getMe, getNsfwMedia, getSources, searchModels, setNsfwMode } from './lib/client.js';
 	import { can, normalizeMe } from './lib/capabilities.js';
 	import { MODE_LABELS, createRevealCache, effectiveMode, isRevealable, nsfwInfo } from './lib/nsfw.js';
+	import { showsRequests } from './lib/requests.js';
 	import {
 		applyInstalled,
 		clearFilters,
@@ -41,7 +47,9 @@
 		sourceDefaults,
 		sourceSections,
 		switchSource,
-		unknownInstalledHashes
+		unknownInstalledHashes,
+		wantsRequestsTab,
+		withoutRequestsTab
 	} from './lib/search.js';
 	import { scrollParent, toast } from './lib/dom.js';
 
@@ -64,10 +72,14 @@
 	let moreError = $state.raw(null);
 	let detailItem = $state.raw(null);
 	let downloadTarget = $state.raw(null);
+	let requestTarget = $state.raw(null);
 	let modeBusy = $state(false);
 	let reloadToken = $state(0);
 	let installedToken = $state(0);
 	let tray = $state();
+	let requestsButton = $state();
+	/** `?tab=requests` was in the URL: the requests drawer opens once the page is ready. */
+	let requestsAsked = $state(false);
 	let content = $state();
 
 	let searchSeq = 0;
@@ -75,6 +87,7 @@
 	let emptyPages = 0;
 	let detailOpener = null;
 	let alive = true;
+	let pagePath = '';
 
 	const revealCache = createRevealCache((source, id) => getNsfwMedia(api, source, id));
 
@@ -82,6 +95,7 @@
 	const sections = $derived(sourceSections(sources));
 	const chips = $derived(filterChips(query, info));
 	const showTray = $derived(can(me, 'download') || can(me, 'request'));
+	const showRequests = $derived(showsRequests(me));
 	const emptyDescription = $derived(
 		nsfwInfo(me).locked
 			? 'Try other words, another sort, or fewer filters. NSFW models are never shown to you here.'
@@ -108,12 +122,33 @@
 	onMount(() => {
 		// LibraryPage draws its own header (title, search, sort), so hide the host's header row.
 		setHeaderHidden?.(true);
+		pagePath = location.pathname;
+		takeRequestsLink();
 		boot();
+		// On the page already, the link of a notification only changes the URL (the host keeps the
+		// page mounted): follow such changes where the browser has the Navigation API.
+		const navigation = /** @type {any} */ (window).navigation;
+		const onEntryChange = () => setTimeout(takeRequestsLink, 0);
+		navigation?.addEventListener?.('currententrychange', onEntryChange);
 		return () => {
 			alive = false;
 			searchSeq += 1;
 			clearTimeout(searchTimer);
+			navigation?.removeEventListener?.('currententrychange', onEntryChange);
 		};
+	});
+
+	// `?tab=requests` opens the requests drawer as a click on its button would, once the page is
+	// ready and the button is there; users without the button just stay on the page.
+	$effect(() => {
+		if (!requestsAsked || phase !== 'ready') return;
+		if (!showRequests) {
+			requestsAsked = false;
+			return;
+		}
+		if (!requestsButton) return;
+		requestsAsked = false;
+		requestsButton.openPanel?.();
 	});
 
 	async function boot() {
@@ -150,6 +185,17 @@
 	}
 
 	// The URL ---------------------------------------------------------------------------------
+
+	/**
+	 * `tab=requests` in the URL (the link of the request notifications): take it out at once, so
+	 * that neither a reload nor the page's own URL writes act on it again, and ask for the drawer.
+	 */
+	function takeRequestsLink() {
+		if (!alive || location.pathname !== pagePath || !wantsRequestsTab(location.search)) return;
+		const search = withoutRequestsTab(location.search);
+		history.replaceState(history.state, '', `${location.pathname}${search ? `?${search}` : ''}${location.hash}`);
+		requestsAsked = true;
+	}
 
 	/** Write the state in the query string, keeping the router's own `history.state`. */
 	function writeUrl() {
@@ -293,6 +339,7 @@
 		if (!detailItem) return;
 		detailItem = null;
 		downloadTarget = null;
+		requestTarget = null;
 		query = { ...query, model: '' };
 		writeUrl();
 		const opener = detailOpener;
@@ -303,6 +350,10 @@
 	function onDownloadStarted(data) {
 		tray?.noteStarted?.(data?.pending);
 		if (data?.already_installed) installedToken += 1;
+	}
+
+	function onRequestCreated() {
+		requestsButton?.refreshCount?.();
 	}
 
 	function sourceLabel(id) {
@@ -364,6 +415,9 @@
 						{#if showTray}
 							<DownloadTray bind:this={tray} {api} />
 						{/if}
+						{#if showRequests}
+							<RequestsButton bind:this={requestsButton} {api} {me} {sourceLabel} />
+						{/if}
 					</div>
 				</div>
 
@@ -413,11 +467,18 @@
 		{installedToken}
 		onClose={() => closeDetail()}
 		onDownload={(target) => (downloadTarget = target)}
+		onRequest={(target) => (requestTarget = target)}
 	/>
 {/if}
 
 {#if downloadTarget}
 	{#key downloadTarget}
 		<DownloadDialog {api} {me} target={downloadTarget} onClose={() => (downloadTarget = null)} onStarted={onDownloadStarted} />
+	{/key}
+{/if}
+
+{#if requestTarget}
+	{#key requestTarget}
+		<RequestDialog {api} {me} target={requestTarget} onClose={() => (requestTarget = null)} onCreated={onRequestCreated} />
 	{/key}
 {/if}

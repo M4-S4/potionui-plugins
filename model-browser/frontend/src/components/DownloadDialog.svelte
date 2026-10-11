@@ -8,6 +8,7 @@
 	import { onMount } from 'svelte';
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
+	import LicenceBox from './LicenceBox.svelte';
 	import { listRemoteBackends, startDownload } from '../lib/client.js';
 	import { allowedTypes, canChooseGroup, canChooseRemote, groupChoices } from '../lib/capabilities.js';
 	import {
@@ -17,8 +18,7 @@
 		downloadWarnings,
 		extensionOf,
 		formProblems,
-		initialForm,
-		licenseFlags
+		initialForm
 	} from '../lib/downloadForm.js';
 	import { formatBytes, modelTypeLabel } from '../lib/format.js';
 	import { startToast } from '../lib/downloads.js';
@@ -45,7 +45,6 @@
 	const problems = $derived(formProblems(form, { me, detail, file }));
 	const ready = $derived(canSubmit(problems) && !busy);
 	const warnings = $derived(downloadWarnings({ detail, version, file }));
-	const flags = $derived(licenseFlags(detail.license));
 	const showRemote = $derived(canChooseRemote(me));
 	const showGroups = $derived(canChooseGroup(me) && (me.groups?.length ?? 0) > 0);
 	const groupNote = $derived(!me.params?.unrestricted && me.params?.assign_to === 'group' && (me.groups?.length ?? 0) === 0);
@@ -221,23 +220,7 @@
 				<p class="text-xs text-fg-subtle">You are in no user group: the model is assigned to you.</p>
 			{/if}
 
-			<section class="rounded border border-line bg-surface-2 px-3 py-2.5" aria-label="Licence">
-				<p class="font-mono text-2xs uppercase tracking-[0.07em] text-fg-subtle">Licence</p>
-				{#if detail.license}
-					<p class="mt-1 text-sm text-fg">{detail.license.summary}</p>
-					{#if flags.length > 0}
-						<p class="mt-1 text-xs text-fg-muted">{flags.join(' · ')}</p>
-					{/if}
-					{#if detail.license.url}
-						<a class="mt-1 inline-flex items-center gap-1 text-xs text-signal underline underline-offset-2" href={detail.license.url} target="_blank" rel="noopener noreferrer">
-							Read the licence
-							<Icon name="external-link" class="h-3 w-3" />
-						</a>
-					{/if}
-				{:else}
-					<p class="mt-1 text-sm text-fg-subtle">The source states no licence: check the model page before using it.</p>
-				{/if}
-			</section>
+			<LicenceBox license={detail.license} />
 
 			{#if serverError}
 				<HostUi name="Alert" props={{ variant: 'danger', density: 'compact', icon: true, title: 'The server refused this download' }}>

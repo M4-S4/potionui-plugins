@@ -41,14 +41,16 @@ DEFAULT_SOURCES = frozenset({"civitai", "huggingface", "openmodeldb"})
 
 @dataclass(frozen=True)
 class Row:
-    """One group's rights. The parameters only count when `capabilities` includes `download`."""
+    """One group's rights, with one parameter set. It counts in a user's download view when
+    `capabilities` includes `download`, and in their request view when it includes `request`
+    (`allow_remote` only ever counts for downloads); otherwise it is ignored."""
 
     group_id: str
     capabilities: FrozenSet[str] = frozenset()
     sources: FrozenSet[str] = DEFAULT_SOURCES
-    #: PotionUI model types the group may download; empty means every type.
+    #: PotionUI model types the group may download or request; empty means every type.
     model_types: FrozenSet[str] = frozenset()
-    #: Largest file the group may download, in GB; None means no limit.
+    #: Largest file the group may download or request, in GB; None means no limit.
     max_file_gb: Optional[float] = None
     assign_to: str = "user"
     allow_remote: bool = False

@@ -109,15 +109,20 @@ export function healthLabel(result) {
 
 // Errors -------------------------------------------------------------------------------------
 
-/** HTTP status of the backend's error codes (routes_sources.py, routes_downloads.py, permissions.py). */
+/** HTTP status of the backend's error codes (routes_sources.py, routes_downloads.py, permissions.py, requests). */
 const STATUS_BY_CODE = {
 	invalid_request: 400,
 	invalid: 400,
 	unauthorized: 401,
 	forbidden: 403,
+	limit_exceeded: 403,
+	not_visible_to_requester: 403,
 	not_found: 404,
 	unknown_source: 404,
 	blocked: 409,
+	already_available: 409,
+	not_open: 409,
+	requester_gone: 409,
 	rate_limited: 429,
 	internal_error: 500,
 	source_unavailable: 502
@@ -234,8 +239,17 @@ export function unwrap(payload, status = 0, retryAfterHeader = null) {
 
 // Plugin routes ------------------------------------------------------------------------------
 
-/** @returns {Promise<CallResult>} */
-async function callPlugin(api, method, path, body) {
+/**
+ * One call to a plugin route through the host's `api` (`get`, `post`, `put` or `delete`), as a
+ * call result. Exported for the other lib modules (requests.js); never rejects.
+ *
+ * @param {any} api
+ * @param {'get' | 'post' | 'put' | 'delete'} method
+ * @param {string} path  Under `/api/plugins/model-browser`, with its query string.
+ * @param {unknown} [body]
+ * @returns {Promise<CallResult>}
+ */
+export async function callPlugin(api, method, path, body) {
 	if (!api || typeof api[method] !== 'function') {
 		return { ok: false, error: { status: 0, code: 'no_api', message: 'The page has no connection to the server', retryAfter: null } };
 	}

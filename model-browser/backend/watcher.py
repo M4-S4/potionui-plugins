@@ -11,7 +11,11 @@ moves each unfinished row on, as far as it can go in one pass:
   `UNQUEUED_GRACE_PASSES` passes.
 - `indexed`: assign per `assign_to`: `user:<id>` to that user, `group:<id>` to the group
   (to the requester when the group is gone), `none` to nobody (an admin's download, every
-  admin sees every model). Then `assigned`; a refusal from the core is `failed`.
+  admin sees every model). A group picked when a request was approved is assigned through
+  the core's group operation, in the name of the approving admin. Then `assigned`; a
+  refusal from the core is `failed`. The other approved requests for the same file
+  (`requests.list_approved_for_sha256`: users who asked for it while it was on its way for
+  someone else) are assigned at the same step, each to its own `assign_to`.
 - `assigned`: enrich: the `model-browser` provider fetch (`provider/pending_provider.py`,
   which answers from this row: description, trigger words, tags, safe previews, the source
   page as the model's mirror), then the `mb_base_model` / `mb_license` attributes from the
@@ -19,8 +23,12 @@ moves each unfinished row on, as far as it can go in one pass:
   `enriched` (the model is downloaded and visible). The core's own `civitai` provider is
   never asked: it hands every image of the version to the core as previews, NSFW ones
   included, and previews are shown to everyone the model is assigned to.
-The requester is notified when a row ends: `model-browser.download_done` or
-`model-browser.download_failed`.
+When a row ends, its requester is notified (`model-browser.download_done` or
+`model-browser.download_failed`), and the approved requests linked to it (its own
+`request_id`, and every approved request with its `sha256`) are closed: `done` (a requester
+approved after the assignment step is assigned then), or `failed`; each of their requesters
+is notified too, once. A failed row refunds its quota events (`limits.refund(limit_ref_id)`),
+whatever the cause: the user got no model.
 
 Finding the model once the download is `completed`: the worker marks a download
 completed *before* indexing it, so the lookup is retried on each pass:
@@ -37,9 +45,10 @@ unknown path, the core answers the one model with the same file name, which may 
 another file. After `MAX_INDEX_LOOKUPS` lookups (about 30 minutes) the row fails.
 
 The first pass after a start is the reconciliation (PLAN.md §7.4 step 8): rows left
-unfinished by a restart are simply taken up where they were. One row's error never stops
-the pass: it is logged and retried on the next pass, and a row that fails
-`MAX_ROW_ERRORS` passes in a row is given up (`failed`).
+unfinished by a restart are simply taken up where they were, and approved requests whose
+row ended while the server was stopping are closed. One row's error never stops the pass:
+it is logged and retried on the next pass, and a row that fails `MAX_ROW_ERRORS` passes in
+a row is given up (`failed`).
 
 `plugin.lifecycle.ready` starts this task with `run_on_app_loop(watcher.run())`;
 `plugin.lifecycle.disable` stops it.
@@ -51,9 +60,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional
 
-from . import PLUGIN_ID, core_bridge, pending
+from . import PLUGIN_ID, core_bridge, limits, notifications, pending, permissions, requests
 from .core_bridge import CoreBridgeError
 from .pending import PendingRow
+from .requests import Request
 
 logger = logging.getLogger("plugins.model-browser")
 
@@ -78,8 +88,10 @@ WAITING_STATUSES = frozenset({"pending", "downloading", "paused"})
 
 #: The plugin's own provider (`provider/pending_provider.py`), which answers from the pending rows.
 PENDING_PROVIDER_ID = PLUGIN_ID
-NOTIFY_DOWNLOAD_DONE = "model-browser.download_done"
-NOTIFY_DOWNLOAD_FAILED = "model-browser.download_failed"
+NOTIFY_DOWNLOAD_DONE = notifications.DOWNLOAD_DONE
+NOTIFY_DOWNLOAD_FAILED = notifications.DOWNLOAD_FAILED
+#: Why a requester whose request was linked to a finished download did not get its model.
+NOT_ASSIGNED_TO_REQUESTER = "The model was downloaded but could not be made visible to you"
 
 _HASH_CHUNK_BYTES = 8 * 1024 * 1024
 
@@ -136,6 +148,27 @@ def _label(row: PendingRow) -> str:
     return row.file_name
 
 
+def _where(assign_to: str) -> str:
+    """Where a finished download put the model, for the notification of a user it was assigned to as `assign_to`."""
+    if assign_to.startswith("group:"):
+        return "it is now available to your group"
+    if assign_to == "none":
+        return "it is now installed"
+    return "it is now in your models"
+
+
+def _metadata(row: PendingRow) -> Dict[str, Any]:
+    """What a download notification carries."""
+    return {
+        "source": row.source,
+        "source_model_id": row.source_model_id,
+        "source_version_id": row.source_version_id,
+        "sha256": None if row.nohash else row.sha256,
+        "model_id": row.model_id,
+        "download_id": row.download_id,
+    }
+
+
 class Watcher:
     """One run of the watcher: `run()` is awaited on the app loop, once.
 
@@ -153,6 +186,8 @@ class Watcher:
         self._unqueued: Dict[str, int] = {}
         self._digests: Dict[str, Optional[str]] = {}
         self._errors: Dict[str, int] = {}
+        #: Per row key: the linked requests the assignment step assigned, and where the model went.
+        self._assigned_requests: Dict[str, Dict[str, str]] = {}
         self._pass_failing = False
 
     @property
@@ -218,7 +253,8 @@ class Watcher:
     # One pass ---------------------------------------------------------------
 
     async def run_pass(self, *, reconcile: bool = False) -> None:
-        """Move every unfinished row on, oldest first. Never raises (but for a cancellation)."""
+        """Move every unfinished row on, oldest first; with `reconcile`, close the approved
+        requests of rows that ended meanwhile too. Never raises (but for a cancellation)."""
         try:
             rows = await asyncio.to_thread(pending.list_unfinished)
         except Exception:
@@ -233,6 +269,23 @@ class Watcher:
             if self._stop_requested:
                 return
             await self._advance_safely(row)
+        if reconcile and not self._stop_requested:
+            await self._settle_orphans()
+
+    async def _settle_orphans(self) -> None:
+        """Close the approved requests whose row already ended (the server stopped in between)."""
+        try:
+            approved = await asyncio.to_thread(lambda: requests.list_rows(statuses=[requests.APPROVED], limit=1000))
+            ended: Dict[str, PendingRow] = {}
+            for request in approved:
+                if request.sha256 and request.sha256 not in ended:
+                    row = await asyncio.to_thread(pending.get, request.sha256)
+                    if row is not None and row.finished:
+                        ended[row.sha256] = row
+            for row in ended.values():
+                await self._settle_requests(row, done=row.status == "enriched")
+        except Exception:
+            logger.warning("[MODEL-BROWSER] Could not close the requests of finished downloads", exc_info=True)
 
     async def _advance_safely(self, row: PendingRow) -> None:
         try:
@@ -336,6 +389,8 @@ class Watcher:
         if model_sha and model_sha != key:
             if await asyncio.to_thread(pending.get, model_sha) is None:
                 moved = await asyncio.to_thread(pending.rekey, key, model_sha)
+                # The requests linked to the old key follow the row (or the row it merged into).
+                await asyncio.to_thread(requests.relink, key, model_sha)
                 if moved is None or moved.download_id != row.download_id:
                     logger.warning("[MODEL-BROWSER] %s merged into the row of %s meanwhile", key, model_sha)
                     self._forget(key)
@@ -361,8 +416,9 @@ class Watcher:
             if row.assign_to == "none":
                 pass  # an admin's download: admins see every model
             elif kind == "group" and target:
+                acting_admin = await asyncio.to_thread(self._approving_admin, row)
                 try:
-                    await asyncio.to_thread(core_bridge.assign_to_group, target, [row.model_id])
+                    await asyncio.to_thread(core_bridge.assign_to_group, target, [row.model_id], acting_admin)
                 except CoreBridgeError as exc:
                     if exc.code != "not_found":
                         raise
@@ -381,7 +437,124 @@ class Watcher:
         fields: Dict[str, Any] = {"status": "assigned", "error": note}
         if assign_to != row.assign_to:
             fields["assign_to"] = assign_to
-        return await asyncio.to_thread(pending.update, row.sha256, **fields)
+        updated = await asyncio.to_thread(pending.update, row.sha256, **fields)
+        await self._assign_requests(updated or row)
+        return updated
+
+    def _approving_admin(self, row: PendingRow) -> Optional[Any]:
+        """The admin who approved the request `row` comes from, if any (the acting admin of a group assignment)."""
+        if not row.request_id:
+            return None
+        request = requests.get(row.request_id)
+        return permissions.admin_by_id(request.decided_by) if request is not None else None
+
+    # Requests linked to a row -----------------------------------------------------
+
+    def _linked_requests(self, row: PendingRow) -> List[Request]:
+        """The approved requests waiting for `row`: its own (`request_id`) and every one linked by `sha256`."""
+        linked = {request.id: request for request in requests.list_approved_for_sha256(row.sha256)}
+        if row.request_id and row.request_id not in linked:
+            own = requests.get(row.request_id)
+            if own is not None and own.status == requests.APPROVED:
+                linked[own.id] = own
+        return list(linked.values())
+
+    async def _assign_requests(self, row: PendingRow) -> None:
+        """Assign `row`'s model to the requesters of the other approved requests linked to it. Never raises."""
+        try:
+            linked = await asyncio.to_thread(self._linked_requests, row)
+        except Exception:
+            logger.warning("[MODEL-BROWSER] Could not read the requests waiting for %s", row.sha256, exc_info=True)
+            return
+        assigned = self._assigned_requests.setdefault(row.sha256, {})
+        for request in linked:
+            if request.id == row.request_id or request.id in assigned:
+                continue
+            target = await self._assign_request(row, request)
+            if target is not None:
+                assigned[request.id] = target
+
+    async def _assign_request(self, row: PendingRow, request: Request) -> Optional[str]:
+        """Make `row`'s model visible as `request.assign_to` says (to its requester by default);
+        returns where it went (`user:<id>`, `group:<id>`, `none`), None when the core refused.
+        Never raises.
+
+        A group is assigned in the name of the admin who approved the request (the core's
+        group operation, with its hooks), or directly when the approver is not an admin; a
+        group that no longer exists falls back to the requester.
+        """
+        target = request.assign_to or f"user:{request.user_id}"
+        kind, _, target_id = target.partition(":")
+        try:
+            if target == "none":
+                return target  # an admin's request: admins see every model
+            if kind == "group" and target_id:
+                admin = await asyncio.to_thread(permissions.admin_by_id, request.decided_by)
+                try:
+                    await asyncio.to_thread(core_bridge.assign_to_group, target_id, [row.model_id], admin)
+                except CoreBridgeError as exc:
+                    if exc.code != "not_found":
+                        raise
+                    logger.warning(
+                        "[MODEL-BROWSER] The group '%s' of request %s no longer exists: assigning its requester",
+                        target_id,
+                        request.id,
+                    )
+                    await asyncio.to_thread(core_bridge.assign_to_user, row.model_id, request.user_id)
+                    return f"user:{request.user_id}"
+                return target
+            user_id = target_id if kind == "user" and target_id else request.user_id
+            await asyncio.to_thread(core_bridge.assign_to_user, row.model_id, user_id)
+            return f"user:{user_id}"
+        except Exception as exc:
+            message = exc.message if isinstance(exc, CoreBridgeError) else str(exc)
+            logger.warning(
+                "[MODEL-BROWSER] Could not assign model %s for request %s: %s", row.model_id, request.id, message
+            )
+            return None
+
+    async def _settle_requests(self, row: PendingRow, *, done: bool) -> None:
+        """Close the approved requests linked to `row`, which just ended: `done` (a requester
+        approved after the assignment step is assigned now) with where the model went, or
+        `failed`. Each of their requesters is notified, but the row's own, who already was.
+        Never raises."""
+        try:
+            linked = await asyncio.to_thread(self._linked_requests, row)
+        except Exception:
+            logger.warning("[MODEL-BROWSER] Could not read the requests waiting for %s", row.sha256, exc_info=True)
+            return
+        assigned = self._assigned_requests.pop(row.sha256, {})
+        for request in linked:
+            target: Optional[str] = None
+            if done:
+                if request.id == row.request_id:
+                    target = row.assign_to
+                elif request.id in assigned:
+                    target = assigned[request.id]
+                else:
+                    target = await self._assign_request(row, request)
+            status = requests.DONE if target is not None else requests.FAILED
+            try:
+                closed = await asyncio.to_thread(
+                    lambda: requests.set_status(request.id, status, assign_to=target, only_from=(requests.APPROVED,))
+                )
+            except Exception:
+                logger.warning("[MODEL-BROWSER] Could not close request %s", request.id, exc_info=True)
+                continue
+            if closed is None:
+                continue  # closed meanwhile
+            logger.info("[MODEL-BROWSER] Request %s %s", closed.id, status)
+            if closed.user_id != row.requested_by:
+                await self._notify_requester(row, closed, served=target is not None)
+
+    async def _notify_requester(self, row: PendingRow, request: Request, *, served: bool) -> None:
+        metadata = {**_metadata(row), "request_id": request.id}
+        if served:
+            where = _where(request.assign_to or f"user:{request.user_id}")
+            await asyncio.to_thread(notifications.download_done, request.user_id, _label(row), where, metadata)
+        else:
+            reason = NOT_ASSIGNED_TO_REQUESTER if row.status == "enriched" else row.error
+            await asyncio.to_thread(notifications.download_failed, request.user_id, _label(row), reason, metadata)
 
     # assigned -> enriched -----------------------------------------------------
 
@@ -399,7 +572,9 @@ class Watcher:
         error = "; ".join(notes)[:MAX_ERROR_LENGTH] or None
         updated = await asyncio.to_thread(pending.update, row.sha256, status="enriched", error=error)
         logger.info("[MODEL-BROWSER] %s ready (model %s)%s", row.file_name, row.model_id, f": {error}" if error else "")
-        await self._notify(updated or row, done=True)
+        ended = updated or pending.with_status(row, "enriched", error)
+        await self._notify(ended, done=True)
+        await self._settle_requests(ended, done=True)
         return updated
 
     async def _fetch(self, provider: str, model_id: Optional[str]) -> List[str]:
@@ -426,41 +601,23 @@ class Watcher:
         self._forget(row.sha256)
         updated = await asyncio.to_thread(pending.update, row.sha256, status="failed", error=message[:MAX_ERROR_LENGTH])
         logger.warning("[MODEL-BROWSER] %s failed: %s", row.file_name, message)
-        await self._notify(updated or pending.with_status(row, "failed", message), done=False)
+        ended = updated or pending.with_status(row, "failed", message)
+        if ended.limit_ref_id:
+            refunded = await asyncio.to_thread(limits.refund, ended.limit_ref_id)
+            if refunded:
+                logger.info("[MODEL-BROWSER] Refunded %d quota event(s) of %s", refunded, row.file_name)
+        await self._notify(ended, done=False)
+        await self._settle_requests(ended, done=False)
         return updated
 
     async def _notify(self, row: PendingRow, *, done: bool) -> None:
-        label = _label(row)
+        """Tell the row's requester how it ended (`notifications.download_done` / `download_failed`)."""
         if done:
-            if row.assign_to.startswith("group:"):
-                where = "it is now available to your group"
-            elif row.assign_to == "none":
-                where = "it is now installed"
-            else:
-                where = "it is now in your models"
-            title, message, level, kind = "Model downloaded", f"{label}: {where}.", "success", NOTIFY_DOWNLOAD_DONE
-        else:
-            title, message, level, kind = "Model download failed", f"{label}: {row.error}", "error", NOTIFY_DOWNLOAD_FAILED
-        metadata = {
-            "source": row.source,
-            "source_model_id": row.source_model_id,
-            "source_version_id": row.source_version_id,
-            "sha256": None if row.nohash else row.sha256,
-            "model_id": row.model_id,
-            "download_id": row.download_id,
-        }
-        try:
             await asyncio.to_thread(
-                core_bridge.notify,
-                user_id=row.requested_by,
-                notification_type=kind,
-                title=title,
-                message=message,
-                level=level,
-                metadata=metadata,
+                notifications.download_done, row.requested_by, _label(row), _where(row.assign_to), _metadata(row)
             )
-        except Exception:
-            logger.warning("[MODEL-BROWSER] Could not notify %s about %s", row.requested_by, row.sha256, exc_info=True)
+        else:
+            await asyncio.to_thread(notifications.download_failed, row.requested_by, _label(row), row.error, _metadata(row))
 
     def _forget(self, key: str) -> None:
         for counters in (self._lookups, self._unqueued, self._digests):

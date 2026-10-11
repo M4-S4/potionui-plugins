@@ -1,10 +1,15 @@
 """Routes about who may do what: `GET /me`, `GET/PUT /permissions` (PLAN.md §4, §7.3).
 
 Included by `backend/api.py` under `/api/plugins/model-browser`.
-- `GET /me`, for any signed-in user: their capabilities, download parameters, NSFW
-  context and the groups a download can be assigned to (`{id, name}`: their own groups, every
-  group for an admin, as `POST /downloads` accepts them). The page shows or hides its
-  actions from it; every route still checks.
+- `GET /me`, for any signed-in user: their capabilities; `params`, the download view of
+  their grant (from their groups that grant `download`; `unrestricted` for an admin);
+  `request_params`, its request view (from their groups that grant `request`: `sources`,
+  `model_types`, `max_file_gb`, `assign_to`, the same conventions as `params`); their NSFW
+  context; the groups a download can be assigned to (`{id, name}`: their own groups, every
+  group for an admin, as `POST /downloads` accepts them); and `requests.open_count`, the open
+  requests they may decide on (all of them for an admin, the other users' for an `approve`
+  holder, 0 otherwise: the page's badge). The page shows or hides its actions from it;
+  every route still checks.
 - `GET /permissions` (admin): one entry per core user group, with its stored row or its
   default, and the values each field accepts.
 - `PUT /permissions` (admin): replaces the whole table; a group left out of the body
@@ -24,7 +29,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationErr
 from src.plugin_api import User, get_current_admin_user
 from src.plugin_api.models import MODEL_TYPES
 
-from . import core_bridge, nsfw, permissions_store
+from . import core_bridge, nsfw, permissions_store, requests
 from .permissions import CAPABILITIES, Principal, current_principal
 from .permissions_store import DEFAULT_SOURCES, SOURCE_IDS, Row
 from .settings import CORE_USER_NSFW_SETTING
@@ -47,7 +52,9 @@ def _only(allowed: Sequence[str], what: str) -> Callable[[List[str]], List[str]]
 
 
 class ParamsUpdate(BaseModel):
-    """A group's download parameters (`Row.params_json()`); a key left out takes its default."""
+    """A group's parameters (`Row.params_json()`): one set, which binds its downloads when the
+    group grants `download` and its requests when it grants `request`; a key left out takes
+    its default."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -78,7 +85,7 @@ class PermissionsUpdate(BaseModel):
 
 @router.get("/me")
 def get_me(principal: Principal = Depends(current_principal)) -> Dict[str, Any]:
-    """What the signed-in user may do, with which download parameters, and how NSFW media is shown to them.
+    """What the signed-in user may do, with which download and request parameters, and how NSFW media is shown to them.
 
     `groups` is where a download can be assigned: the user's own groups, or every group for an admin.
     """
@@ -97,6 +104,12 @@ def get_me(principal: Principal = Depends(current_principal)) -> Dict[str, Any]:
                 "allow_remote": grant.allow_remote,
                 "unrestricted": grant.unrestricted,
             },
+            "request_params": {
+                "sources": sorted(grant.request_params.sources),
+                "model_types": sorted(grant.request_params.model_types),
+                "max_file_gb": grant.request_params.max_file_gb,
+                "assign_to": grant.request_params.assign_to,
+            },
             "nsfw": {
                 "ceiling": context.ceiling,
                 "mode": context.mode,
@@ -106,8 +119,18 @@ def get_me(principal: Principal = Depends(current_principal)) -> Dict[str, Any]:
                 "setting_key": CORE_USER_NSFW_SETTING,
             },
             "groups": [{"id": group["id"], "name": group["name"]} for group in groups],
+            "requests": {"open_count": _open_requests(principal)},
         }
     )
+
+
+def _open_requests(principal: Principal) -> int:
+    """`requests.open_count_for`, 0 when the table cannot be read (a badge never fails `/me`)."""
+    try:
+        return requests.open_count_for(principal)
+    except Exception:
+        logger.warning("[MODEL-BROWSER] Could not count the open requests", exc_info=True)
+        return 0
 
 
 @router.get("/permissions")

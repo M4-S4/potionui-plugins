@@ -8,6 +8,7 @@ _EXPECTED_COLUMNS = {
     "model_browser_requests": [
         "id", "user_id", "source", "source_model_id", "source_version_id", "file_id", "snapshot",
         "note", "status", "decided_by", "decision_note", "sha256", "created_at", "updated_at",
+        "assign_to",  # phase 5: added last, where ALTER TABLE puts it on an older table
     ],
     "model_browser_cache": ["key", "source", "payload", "fetched_at"],
     "model_browser_pending": [
@@ -45,6 +46,28 @@ def test_tables_have_the_planned_columns(plugin_db):
     create_tables()
 
     assert {table: _columns(plugin_db, table) for table in TABLE_NAMES} == _EXPECTED_COLUMNS
+
+
+def test_a_requests_table_from_phase_3_gets_the_new_column_and_keeps_its_rows(plugin_db):
+    with plugin_db.get_cursor() as cursor:  # the table as phase 3 created it
+        cursor.execute(
+            "CREATE TABLE model_browser_requests (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, source TEXT NOT NULL, "
+            "source_model_id TEXT NOT NULL, source_version_id TEXT, file_id TEXT NOT NULL, snapshot TEXT NOT NULL, "
+            "note TEXT, status TEXT NOT NULL, decided_by TEXT, decision_note TEXT, sha256 TEXT, "
+            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+        cursor.execute(
+            "INSERT INTO model_browser_requests (id, user_id, source, source_model_id, file_id, snapshot, status) "
+            "VALUES ('r-1', 'user-1', 'civitai', '1', '3', '{}', 'open')"
+        )
+
+    create_tables()
+    create_tables()
+
+    assert _columns(plugin_db, "model_browser_requests") == _EXPECTED_COLUMNS["model_browser_requests"]
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute("SELECT id, status, assign_to FROM model_browser_requests")
+        assert [tuple(row) for row in cursor.fetchall()] == [("r-1", "open", None)]
 
 
 def test_create_tables_twice_keeps_tables_and_rows(plugin_db):

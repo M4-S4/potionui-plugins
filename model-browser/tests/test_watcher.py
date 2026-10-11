@@ -1,8 +1,9 @@
 """`backend.watcher.Watcher`: the run loop, and the state machine that takes each pending row
-from `queued` to `enriched` (or `failed`).
+from `queued` to `enriched` (or `failed`); the approved requests linked to a row, and the
+quota refund of a failed one.
 
-The core is `FakeCore` in place of `core_bridge`; the pending rows live in a scratch
-database. The state machine is driven pass by pass with `run_pass()`.
+The core is `FakeCore` in place of `core_bridge`; the pending rows and the requests live in
+a scratch database. The state machine is driven pass by pass with `run_pass()`.
 """
 
 import asyncio
@@ -11,7 +12,7 @@ import logging
 
 import pytest
 
-from backend import core_bridge, downloads, pending
+from backend import core_bridge, downloads, pending, requests
 from backend import watcher as watcher_module
 from backend.core_bridge import CoreBridgeError
 from backend.pending import NOHASH_PREFIX, PendingRow
@@ -544,6 +545,271 @@ async def test_one_rows_error_does_not_stop_the_others_and_a_row_that_keeps_fail
     assert _row("c" * 64).status == "failed"
     assert _row("c" * 64).error == "Stopped following this download after repeated errors: database is locked"
     assert caplog.text.count("Could not move") == 1  # logged in full once
+
+
+# Requests linked to a row ---------------------------------------------------------------
+
+LABEL = "Detail Tweaker XL (add-detail-xl.safetensors)"
+
+
+def _approved_request(user_id, *, sha256=SHA, assign_to="user", decided_by="admin-1"):
+    """An approved request of `user_id` linked to the row `sha256`; `assign_to="user"` means `user:<user_id>`."""
+    created = requests.create(
+        user_id=user_id,
+        source="civitai",
+        source_model_id="122359",
+        source_version_id="135867",
+        file_id="1001",
+        snapshot={"name": "Detail Tweaker XL", "file_name": "add-detail-xl.safetensors"},
+    )
+    return requests.set_status(
+        created.id,
+        "approved",
+        decided_by=decided_by,
+        sha256=sha256,
+        assign_to=f"user:{user_id}" if assign_to == "user" else assign_to,
+    )
+
+
+def _status(request):
+    return requests.get(request.id).status
+
+
+def _sent(core, kind):
+    return [(n["user_id"], n["message"]) for n in core.notifications if n["notification_type"] == kind]
+
+
+async def test_other_approved_requesters_are_assigned_with_the_row_and_closed_when_the_model_is_ready(core):
+    core.add_user("admin-1", admin=True)
+    core.add_download("dl-1", "completed")
+    core.models_by_sha[SHA] = model("model-1")
+    _insert(requested_by="user-2", assign_to="user:user-2")  # someone else's download
+    first = _approved_request("user-1")
+    grouped = _approved_request("user-3", assign_to="group:artists")
+
+    await Watcher().run_pass()
+
+    assert _row().status == "enriched"
+    assert core.calls_to("assign_to_user") == [("model-1", "user-2"), ("model-1", "user-1")]
+    assert core.calls_to("assign_to_group") == [("artists", ["model-1"])]
+    assert core.group_admins == ["admin-1"]  # in the name of the admin who approved
+    names = core.names()
+    assert names.index("assign_to_group") < names.index("run_provider_fetch")  # at the assignment step
+    assert (_status(first), _status(grouped)) == ("done", "done")
+    assert _sent(core, "model-browser.download_done") == [
+        ("user-2", f"{LABEL}: it is now in your models."),
+        ("user-1", f"{LABEL}: it is now in your models."),
+        ("user-3", f"{LABEL}: it is now available to your group."),
+    ]
+    assert core.notifications[1]["metadata"]["request_id"] == first.id
+    assert core.notifications[1]["metadata"]["model_id"] == "model-1"
+
+
+async def test_the_rows_own_request_is_done_and_its_requester_notified_once(core):
+    core.add_download("dl-1", "completed")
+    core.models_by_sha[SHA] = model("model-1")
+    own = _approved_request("user-1")
+    _insert(request_id=own.id)
+
+    await Watcher().run_pass()
+
+    assert _status(own) == "done"
+    assert core.calls_to("assign_to_user") == [("model-1", "user-1")]
+    assert [n["user_id"] for n in core.notifications] == ["user-1"]
+
+
+async def test_another_request_of_the_rows_own_requester_is_closed_without_a_second_notification(core):
+    _insert(status="assigned", model_id="model-1")  # user-1's own direct download
+    duplicate = _approved_request("user-1")
+
+    await Watcher().run_pass()
+
+    assert _status(duplicate) == "done"
+    assert [n["user_id"] for n in core.notifications] == ["user-1"]
+
+
+@pytest.mark.parametrize(
+    "decided_by, admin_id",
+    [("admin-1", "admin-1"), ("approver-1", None), ("gone", None)],
+    ids=["admin", "non-admin-approver", "approver-gone"],
+)
+async def test_a_group_picked_at_approval_is_assigned_in_the_approving_admins_name(core, decided_by, admin_id):
+    core.add_user("admin-1", admin=True)
+    core.add_user("approver-1")
+    own = _approved_request("user-1", assign_to="group:artists", decided_by=decided_by)
+    _insert(status="indexed", model_id="model-1", assign_to="group:artists", request_id=own.id)
+
+    await Watcher().run_pass()
+
+    assert core.calls_to("assign_to_group") == [("artists", ["model-1"])]
+    assert core.group_admins == [admin_id]
+    assert _status(own) == "done"
+
+
+async def test_a_direct_group_download_has_no_acting_admin(core):
+    core.add_user("admin-1", admin=True)
+    _insert(status="indexed", model_id="model-1", assign_to="group:artists")
+
+    await Watcher().run_pass()
+
+    assert core.group_admins == [None]
+
+
+async def test_a_request_approved_after_the_assignment_step_is_assigned_when_the_model_is_ready(core):
+    _insert(status="assigned", model_id="model-1", requested_by="user-2", assign_to="user:user-2")
+    created = requests.create(
+        user_id="user-1", source="civitai", source_model_id="122359", source_version_id="135867", file_id="1001",
+        snapshot={},
+    )
+    late = requests.set_status(created.id, "approved", decided_by="admin-1", sha256=SHA)  # no assign_to: the requester
+
+    await Watcher().run_pass()
+
+    assert core.calls_to("assign_to_user") == [("model-1", "user-1")]
+    assert _status(late) == "done"
+
+
+async def test_a_requester_who_cannot_be_assigned_gets_a_failed_request(core, monkeypatch):
+    real_assign = core.assign_to_user
+
+    def assign_to_user(model_id, user_id):
+        if user_id == "user-1":
+            raise CoreBridgeError("refused", "Could not assign model 'model-1' to user 'user-1' - no such user")
+        return real_assign(model_id, user_id)
+
+    monkeypatch.setattr(core_bridge, "assign_to_user", assign_to_user)
+    core.add_download("dl-1", "completed")
+    core.models_by_sha[SHA] = model("model-1")
+    _insert(requested_by="user-2", assign_to="user:user-2")
+    request = _approved_request("user-1")
+
+    await Watcher().run_pass()
+
+    assert _row().status == "enriched"
+    assert _status(request) == "failed"
+    assert _sent(core, "model-browser.download_failed") == [
+        ("user-1", f"{LABEL}: The model was downloaded but could not be made visible to you"),
+    ]
+
+
+async def test_a_group_gone_since_the_approval_falls_back_to_the_requester(core):
+    core.assign_group_error = CoreBridgeError("not_found", "There is no user group with the id 'artists'")
+    _insert(status="assigned", model_id="model-1", requested_by="user-2", assign_to="user:user-2")
+    request = _approved_request("user-1", assign_to="group:artists")
+
+    await Watcher().run_pass()
+
+    assert core.calls_to("assign_to_user") == [("model-1", "user-1")]
+    closed = requests.get(request.id)
+    assert (closed.status, closed.assign_to) == ("done", "user:user-1")
+    assert _sent(core, "model-browser.download_done")[-1] == ("user-1", f"{LABEL}: it is now in your models.")
+
+
+async def test_the_rows_own_request_records_where_the_model_went(core):
+    core.assign_group_error = CoreBridgeError("not_found", "There is no user group with the id 'artists'")
+    own = _approved_request("user-1", assign_to="group:artists")
+    _insert(status="indexed", model_id="model-1", assign_to="group:artists", request_id=own.id)
+
+    await Watcher().run_pass()
+
+    assert (_row().assign_to, requests.get(own.id).assign_to) == ("user:user-1", "user:user-1")
+
+
+async def test_a_failed_download_fails_its_requests_refunds_the_quota_and_tells_every_requester(core):
+    core.add_download("dl-1", "failed", error_message="Access denied (HTTP 401)")
+    own = _approved_request("user-1")
+    other = _approved_request("user-2")
+    _insert(request_id=own.id, limit_ref_id="model-browser:ref-1")
+
+    await Watcher().run_pass()
+
+    assert _row().status == "failed"
+    assert core.refunds == ["model-browser:ref-1"]
+    assert (_status(own), _status(other)) == ("failed", "failed")
+    assert _sent(core, "model-browser.download_failed") == [
+        ("user-1", f"{LABEL}: Access denied (HTTP 401)"),
+        ("user-2", f"{LABEL}: Access denied (HTTP 401)"),
+    ]
+    assert "assign_to_user" not in core.names()
+
+
+@pytest.mark.parametrize("ending", ["cancelled", "gone-from-the-queue", "never-queued", "never-indexed"])
+async def test_a_download_that_ends_without_a_model_refunds_its_quota(core, monkeypatch, ending):
+    monkeypatch.setattr(watcher_module, "UNQUEUED_GRACE_PASSES", 0)
+    monkeypatch.setattr(watcher_module, "MAX_INDEX_LOOKUPS", 1)
+    if ending == "cancelled":
+        core.add_download("dl-1", "cancelled")
+    elif ending == "never-indexed":
+        core.add_download("dl-1", "completed")
+    _insert(limit_ref_id="model-browser:ref-1", download_id=None if ending == "never-queued" else "dl-1")
+
+    await Watcher().run_pass()
+
+    assert _row().status == "failed"
+    assert core.refunds == ["model-browser:ref-1"]
+
+
+async def test_a_download_that_succeeds_or_fails_without_a_ref_refunds_nothing(core):
+    core.add_download("dl-1", "completed")
+    core.add_download("dl-2", "failed", error_message="HTTP 500")
+    core.models_by_sha[SHA] = model("model-1")
+    _insert(SHA, limit_ref_id="model-browser:ref-1")
+    _insert(OTHER_SHA, download_id="dl-2")
+
+    await Watcher().run_pass()
+
+    assert (_row(SHA).status, _row(OTHER_SHA).status) == ("enriched", "failed")
+    assert core.refunds == []
+
+
+async def test_a_nohash_row_moved_to_its_models_hash_takes_its_requests_along(core):
+    key = NOHASH_PREFIX + HF_URL
+    core.add_download("dl-1", "completed", destination_path=HF_PATH)
+    core.models_by_path[HF_PATH] = model("model-2", OTHER_SHA)
+    own = _approved_request("user-1", sha256=key)
+    other = _approved_request("user-2", sha256=key)
+    _insert(key, source="huggingface", request_id=own.id)
+
+    await Watcher().run_pass()
+
+    assert _row(OTHER_SHA).status == "enriched"
+    assert requests.get(own.id).sha256 == OTHER_SHA
+    assert (_status(own), _status(other)) == ("done", "done")
+    assert core.calls_to("assign_to_user") == [("model-2", "user-1"), ("model-2", "user-2")]
+
+
+async def test_the_reconciliation_closes_the_requests_of_rows_that_ended_meanwhile(core):
+    _insert(SHA, status="enriched", model_id="model-1", requested_by="user-2", download_id="dl-1")
+    _insert(OTHER_SHA, status="failed", error="HTTP 500", requested_by="user-2", download_id="dl-2")
+    done = _approved_request("user-1")
+    failed = _approved_request("user-3", sha256=OTHER_SHA)
+    unlinked = _approved_request("user-4", sha256=None)
+    watcher = Watcher()
+
+    await watcher.run_pass()
+    assert (_status(done), _status(failed)) == ("approved", "approved")  # only a reconciliation looks
+
+    await watcher.run_pass(reconcile=True)
+
+    assert (_status(done), _status(failed), _status(unlinked)) == ("done", "failed", "approved")
+    assert core.calls_to("assign_to_user") == [("model-1", "user-1")]
+    assert sorted((n["user_id"], n["notification_type"]) for n in core.notifications) == [
+        ("user-1", "model-browser.download_done"),
+        ("user-3", "model-browser.download_failed"),
+    ]
+
+
+async def test_requests_that_cannot_be_read_never_stop_a_row(core, monkeypatch, caplog):
+    def broken(sha256):
+        raise RuntimeError("no such table: model_browser_requests")
+
+    monkeypatch.setattr(requests, "list_approved_for_sha256", broken)
+    _insert(status="indexed", model_id="model-1")
+
+    await Watcher().run_pass()
+
+    assert _row().status == "enriched"
+    assert "Could not read the requests waiting for" in caplog.text
 
 
 # Helpers --------------------------------------------------------------------------------

@@ -25,7 +25,8 @@
 		reloadToken = 0,
 		installedToken = 0,
 		onClose,
-		onDownload
+		onDownload,
+		onRequest
 	} = $props();
 
 	const uid = $props.id();
@@ -244,7 +245,17 @@
 			</div>
 			<div bind:this={mainEl} class="flex flex-col gap-4">
 				{#if detail}
-					<DetailMain {detail} {version} {me} {installed} {sourceLabel} {revealCache} {onDownload} onPreview={(media) => (preview = media)} />
+					<DetailMain
+						{detail}
+						{version}
+						{me}
+						{installed}
+						{sourceLabel}
+						{revealCache}
+						{onDownload}
+						{onRequest}
+						onPreview={(media) => (preview = media)}
+					/>
 				{/if}
 			</div>
 			<div bind:this={asideEl} class="flex flex-col gap-4">

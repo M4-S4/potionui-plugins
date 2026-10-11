@@ -1,20 +1,32 @@
 """Starting a download for a user (PLAN.md §7.4, steps 1 to 4): checks, then the core queue.
 
-`start_download(principal, request)` is what `POST /downloads` runs (and what approving a
-request will run for the requester, phase 5):
-1. checks, in this order: the source is allowed and enabled; the detail, filtered for the
-   requester's NSFW context, still holds the version and the file (else 404: a user who
-   may not see a model never downloads it); the PotionUI type (the request's, else the
-   detail's `mb_type`) exists and is allowed; the file fits `max_file_gb`; a remote
-   destination needs `allow_remote`; the download URL passes `security.is_allowed_download_url`;
-   a target group needs `assign_to == "group"` and must be one of the requester's groups
-   (any group for an admin);
+`start_download(principal, request)` is what `POST /downloads` runs. It is two steps, which
+the request routes also use on their own (`routes_requests.py`): `prepare_download` checks,
+`queue_prepared` queues.
+1. checks (`prepare_download`), against one view of the requester's grant (`purpose`: the
+   download view for a direct download, the request view for a request; `Grant.params`),
+   in this order: the source is allowed and enabled; the detail, filtered for the
+   requester's NSFW context, still holds the version and the file (else 404: a user who may
+   not see a model never downloads it); the PotionUI type (the request's, else the detail's
+   `mb_type`) exists and is allowed; the file fits `max_file_gb`; a remote destination needs
+   `allow_remote` (never for a request); the download URL passes
+   `security.is_allowed_download_url`; a target group needs `assign_to == "group"` and must
+   be one of the requester's groups (any group for an admin);
 2. one row per file (`pending.key_for`): a file already on its way answers that row
    (`already_queued`, nothing queued twice); a finished row (`failed`, `enriched`) is replaced;
    a file whose SHA256 is already indexed is not downloaded again: its row starts at
    `indexed` and the watcher assigns and enriches it (`already_installed`);
-3. otherwise the row is written (`queued`), then the file is put on the core queue; a
-   refusal from the core deletes the row.
+3. otherwise the requester's plan quota is checked (`limits.check_quota`: 403
+   `limit_exceeded`), the row is written (`queued`, with a fresh `limit_ref_id`), then the
+   file is put on the core queue, and once it is there one event per quota kind is recorded
+   for the requester (`limits.record`). A refusal from the core deletes the row.
+
+A request is checked with `purpose="request"` when it is made (the messages then speak of
+requesting), and approving it runs the same two steps for the requester, `on_behalf` of the
+approver (`prepare_download(..., purpose="request", on_behalf=True)`): the messages speak of
+the requester, and a model or version the requester's NSFW context hides is a 403
+`not_visible_to_requester` rather than a 404. The core download is then created by the
+approver (`created_by`), and the answer shows the row as the approver may see it.
 
 Where the file lands: the type's folder, then `subdir`, then `filename`. Without a
 `filename` in the request, the file keeps its own name, and the folders of a nested
@@ -29,17 +41,17 @@ import asyncio
 import logging
 import posixpath
 import sqlite3
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Annotated, Any, Dict, List, Mapping, Optional, Tuple
 
 from pydantic import BaseModel, BeforeValidator, Field, ValidationError, field_validator
 
 from src.plugin_api.models import MODEL_TYPES
 
-from . import core_bridge, nsfw, nsfw_filter, pending, security, sources
+from . import core_bridge, limits, nsfw, nsfw_filter, pending, security, sources
 from .core_bridge import CoreBridgeError
 from .pending import PendingRow
-from .permissions import Principal
+from .permissions import PURPOSES, Principal
 from .routes_sources import MAX_MODEL_ID_LENGTH
 from .schema import File, ModelDetail, NsfwContext, Version
 from .sources import UnknownSource
@@ -74,13 +86,17 @@ PUBLIC_DOWNLOAD_FIELDS = (
 
 
 class DownloadError(Exception):
-    """A refused download, with the HTTP status and the error code the route answers with."""
+    """A refused download, with the HTTP status and the error code the route answers with.
 
-    def __init__(self, status: int, code: str, message: str) -> None:
+    `extra`: more fields for the error body (the quota refusal's kind, usage and limit).
+    """
+
+    def __init__(self, status: int, code: str, message: str, extra: Optional[Mapping[str, Any]] = None) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+        self.extra: Dict[str, Any] = dict(extra or {})
 
 
 def _forbidden(message: str) -> DownloadError:
@@ -143,8 +159,9 @@ def plain_name(value: str) -> str:
     return value
 
 
-class DownloadRequest(BaseModel):
-    """The body of `POST /downloads`."""
+class FileRef(BaseModel):
+    """One file of one model at a source, and the PotionUI type to download it as: what a
+    download and a request (`POST /requests`) both name."""
 
     source: str = Field(min_length=1, max_length=64)
     model_id: Annotated[str, BeforeValidator(_text)] = Field(min_length=1, max_length=MAX_MODEL_ID_LENGTH)
@@ -152,16 +169,6 @@ class DownloadRequest(BaseModel):
     file_id: Annotated[str, BeforeValidator(_text)] = Field(min_length=1, max_length=MAX_FILE_ID_LENGTH)
     #: A PotionUI model type; the detail's `mb_type` when left out.
     model_type: Annotated[Optional[str], BeforeValidator(_optional_text)] = None
-    #: Folder under the type's folder, relative.
-    subdir: Annotated[Optional[str], BeforeValidator(_optional_text)] = Field(None, max_length=MAX_SUBDIR_LENGTH)
-    #: The file's name on disk; the source's when left out.
-    filename: Annotated[Optional[str], BeforeValidator(_optional_text)] = Field(None, max_length=MAX_FILENAME_LENGTH)
-    #: A `native.remote` backend to download to instead of this server (needs `allow_remote`).
-    destination_backend_id: Annotated[Optional[str], BeforeValidator(_optional_text)] = Field(
-        None, max_length=MAX_ID_LENGTH
-    )
-    #: One of the requester's user groups to assign the model to (needs `assign_to == "group"`).
-    assign_group_id: Annotated[Optional[str], BeforeValidator(_optional_text)] = Field(None, max_length=MAX_ID_LENGTH)
 
     @field_validator("model_id")
     @classmethod
@@ -184,6 +191,21 @@ class DownloadRequest(BaseModel):
         if value is not None and value not in MODEL_TYPES:
             raise ValueError(f"unknown model type '{value[:64]}'")
         return value
+
+
+class DownloadRequest(FileRef):
+    """The body of `POST /downloads`."""
+
+    #: Folder under the type's folder, relative.
+    subdir: Annotated[Optional[str], BeforeValidator(_optional_text)] = Field(None, max_length=MAX_SUBDIR_LENGTH)
+    #: The file's name on disk; the source's when left out.
+    filename: Annotated[Optional[str], BeforeValidator(_optional_text)] = Field(None, max_length=MAX_FILENAME_LENGTH)
+    #: A `native.remote` backend to download to instead of this server (needs `allow_remote`).
+    destination_backend_id: Annotated[Optional[str], BeforeValidator(_optional_text)] = Field(
+        None, max_length=MAX_ID_LENGTH
+    )
+    #: One of the requester's user groups to assign the model to (needs `assign_to == "group"`).
+    assign_group_id: Annotated[Optional[str], BeforeValidator(_optional_text)] = Field(None, max_length=MAX_ID_LENGTH)
 
     @field_validator("subdir")
     @classmethod
@@ -305,8 +327,14 @@ def destination(request: DownloadRequest, file: File) -> Tuple[Optional[str], st
     return subdir, filename
 
 
-async def _assign_target(principal: Principal, group_id: Optional[str]) -> str:
-    """The row's `assign_to` for this requester and the group they picked, if any."""
+async def _assign_target(
+    principal: Principal, group_id: Optional[str], *, purpose: str = "download", on_behalf: bool = False
+) -> str:
+    """The row's `assign_to` for this requester and the group picked for them, if any, as the
+    `assign_to` of the view of `purpose` allows.
+
+    `on_behalf`: an approver picked the group, among the requester's.
+    """
     user, grant = principal.user, principal.grant
     if group_id is None:
         return "none" if principal.is_admin else f"user:{user.id}"
@@ -315,11 +343,18 @@ async def _assign_target(principal: Principal, group_id: Optional[str]) -> str:
         if group_id not in {group["id"] for group in groups}:
             raise _invalid(f"There is no user group with the id '{group_id}'")
         return f"group:{group_id}"
-    if grant.assign_to != "group":
-        raise _forbidden("Your downloads are assigned to you: your permissions do not let you pick a group")
+    noun = "request" if purpose == "request" else "download"
+    if grant.params(purpose).assign_to != "group":
+        if on_behalf:
+            raise _forbidden(
+                f"The requester's {noun}s are assigned to them: their permissions do not let you pick a group"
+            )
+        raise _forbidden(f"Your {noun}s are assigned to you: your permissions do not let you pick a group")
     groups = await asyncio.to_thread(core_bridge.user_groups, user.id)
     if group_id not in {group["id"] for group in groups}:
-        raise _forbidden("You can only assign a download to one of your own groups")
+        if on_behalf:
+            raise _forbidden(f"A {noun} can only be assigned to one of the requester's groups")
+        raise _forbidden(f"You can only assign a {noun} to one of your own groups")
     return f"group:{group_id}"
 
 
@@ -350,32 +385,74 @@ async def _existing_download(row: PendingRow) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def start_download(
-    principal: Principal, request: DownloadRequest, *, request_id: Optional[str] = None
-) -> Dict[str, Any]:
-    """Check, then queue (or reuse) the download of one file for `principal`.
+#: The error code of a request the requester may no longer see (approval only).
+NOT_VISIBLE_TO_REQUESTER = "not_visible_to_requester"
 
-    Returns `{"pending": <row, info filtered for the requester>, "download": <the core
-    download (public fields for a non-admin), or None>, "already_installed": bool,
-    "already_queued": bool}`. Raises `DownloadError` for a refusal, and the sources'
+
+def _not_visible() -> DownloadError:
+    return DownloadError(
+        403, NOT_VISIBLE_TO_REQUESTER, "The requester may not see this model: their content settings hide it"
+    )
+
+
+@dataclass(frozen=True)
+class Prepared:
+    """A download that passed its checks (`prepare_download`), for `queue_prepared`."""
+
+    #: Who the file is for: the requester.
+    principal: Principal
+    request: DownloadRequest
+    #: The requester's NSFW context.
+    ctx: NsfwContext
+    #: The detail as the requester may see it, and the chosen version and file.
+    detail: ModelDetail
+    version: Version
+    file: File
+    model_type: str
+    #: The pending row's `assign_to`.
+    assign_to: str
+    subdir: Optional[str]
+    filename: str
+    #: An approver acts on the requester's request.
+    on_behalf: bool = False
+    #: The view of the grant the file was checked against: "download" or "request".
+    purpose: str = "download"
+
+
+async def prepare_download(
+    principal: Principal, request: DownloadRequest, *, purpose: str = "download", on_behalf: bool = False
+) -> Prepared:
+    """Step 1: check that the file may be downloaded for `principal` (see the module docstring).
+
+    `purpose`: "download" checks the grant's download view (`POST /downloads`), "request" its
+    request view (a request, made or approved); the messages say "downloading" or
+    "requesting". `on_behalf`: an approver asks for it on `principal`'s request; the messages
+    then speak of the requester, and a model or version their NSFW context hides is a 403
+    `not_visible_to_requester`. Raises `DownloadError` for a refusal, and the sources'
     `SourceError` when the source cannot be read.
     """
+    if purpose not in PURPOSES:
+        raise ValueError(f"unknown purpose {purpose!r}")
     user, grant = principal.user, principal.grant
-    admin = principal.is_admin
-
-    # 1. Checks.
-    if not grant.allows_source(request.source):
-        raise _forbidden(f"Your permissions do not allow downloads from '{request.source[:64]}'")
+    params = grant.params(purpose)
+    asking = purpose == "request"
+    whose = "The requester's" if on_behalf else "Your"
+    if not grant.allows_source(request.source, purpose):
+        what = "requesting models from" if asking else "downloads from"
+        raise _forbidden(f"{whose} permissions do not allow {what} '{request.source[:64]}'")
     try:
         source = sources.get_source(request.source)
     except UnknownSource:
         raise DownloadError(404, "unknown_source", f"Unknown source '{request.source[:64]}'") from None
     ctx = await asyncio.to_thread(nsfw.resolve_nsfw, user)
-    detail = nsfw_filter.filter_detail(await source.detail(request.model_id, max_level=ctx.max_level), ctx)
+    raw = await source.detail(request.model_id, max_level=ctx.max_level)
+    detail = nsfw_filter.filter_detail(raw, ctx)
     if detail is None:
-        raise _not_found("Model not found")
+        raise _not_visible() if on_behalf else _not_found("Model not found")
     version = next((version for version in detail.versions if version.id == request.version_id), None)
     if version is None:
+        if on_behalf and any(hidden.id == request.version_id for hidden in raw.versions):
+            raise _not_visible()
         raise _not_found("Version not found")
     file = next((file for file in version.files if file.id == request.file_id), None)
     if file is None:
@@ -385,18 +462,68 @@ async def start_download(
         raise _invalid("Choose the model type to download this file as")
     if model_type not in MODEL_TYPES:
         raise _invalid(f"Unknown model type '{model_type}'")
-    if not grant.allows_type(model_type):
-        raise _forbidden(f"Your permissions do not allow downloading '{model_type}' models")
-    if grant.max_file_gb is not None and file.size_bytes is not None and file.size_bytes > grant.max_file_gb * GIB:
-        raise _forbidden(
-            f"This file is {file.size_bytes / GIB:.2f} GB: your permissions allow at most {grant.max_file_gb:g} GB"
-        )
-    if request.destination_backend_id and not grant.allow_remote:
-        raise _forbidden("Your permissions do not allow downloading to a remote backend")
+    if not grant.allows_type(model_type, purpose):
+        verb = "requesting" if asking else "downloading"
+        raise _forbidden(f"{whose} permissions do not allow {verb} '{model_type}' models")
+    max_gb = None if grant.unrestricted else params.max_file_gb
+    if max_gb is not None and file.size_bytes is not None and file.size_bytes > max_gb * GIB:
+        allowed = f"requesting files of at most {max_gb:g} GB" if asking else f"at most {max_gb:g} GB"
+        raise _forbidden(f"This file is {file.size_bytes / GIB:.2f} GB: {whose.lower()} permissions allow {allowed}")
+    if request.destination_backend_id and (asking or not params.allow_remote):
+        if asking:
+            raise _forbidden("A request cannot choose a remote destination: the file is downloaded to this server")
+        raise _forbidden(f"{whose} permissions do not allow downloading to a remote backend")
     if not security.is_allowed_download_url(request.source, file.download_url):
         raise _forbidden("This file's download address is not one the plugin downloads from")
-    assign_to = await _assign_target(principal, request.assign_group_id)
+    assign_to = await _assign_target(principal, request.assign_group_id, purpose=purpose, on_behalf=on_behalf)
     subdir, filename = destination(request, file)
+    return Prepared(
+        principal=principal,
+        request=request,
+        ctx=ctx,
+        detail=detail,
+        version=version,
+        file=file,
+        model_type=model_type,
+        assign_to=assign_to,
+        subdir=subdir,
+        filename=filename,
+        on_behalf=on_behalf,
+        purpose=purpose,
+    )
+
+
+def _check_quota(prepared: Prepared) -> None:
+    """The requester's plan quota for one more file (`limits.check_quota`), as a `DownloadError`."""
+    user = prepared.principal.user
+    try:
+        limits.check_quota(
+            user.id, prepared.file.size_bytes, requester_name=user.username if prepared.on_behalf else None
+        )
+    except limits.QuotaExceeded as exc:
+        raise DownloadError(403, "limit_exceeded", exc.message, extra=exc.payload()) from None
+
+
+async def queue_prepared(
+    prepared: Prepared,
+    *,
+    request_id: Optional[str] = None,
+    created_by: Optional[str] = None,
+    viewer_ctx: Optional[NsfwContext] = None,
+    viewer_admin: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Steps 2 and 3: reuse the file's row, or check the quota and queue the file for the requester.
+
+    `request_id`: the request the download comes from (kept on the row). `created_by`: who
+    the core download is created by (the approver of a request; the requester by default).
+    `viewer_ctx`, `viewer_admin`: who the answer is for (the approver; the requester by default).
+    Returns what `start_download` returns.
+    """
+    user = prepared.principal.user
+    detail, version, file = prepared.detail, prepared.version, prepared.file
+    filename = prepared.filename
+    ctx = viewer_ctx if viewer_ctx is not None else prepared.ctx
+    admin = prepared.principal.is_admin if viewer_admin is None else viewer_admin
 
     # 2. One row per file.
     key = pending.key_for(file.sha256, file.download_url)
@@ -413,9 +540,9 @@ async def start_download(
         source_version_id=version.id,
         file_name=filename,
         requested_by=user.id,
-        assign_to=assign_to,
+        assign_to=prepared.assign_to,
         request_id=request_id,
-        info=pending_info(detail, version, file, model_type),
+        info=pending_info(detail, version, file, prepared.model_type),
         status="queued",
     )
 
@@ -428,21 +555,23 @@ async def start_download(
             logger.info("[MODEL-BROWSER] %s is already installed (model %s): assigning it only", filename, model["id"])
             return _answer(inserted, None, ctx, admin=admin, already_installed=True)
 
-    # 3. Queue.
-    inserted, raced = await _insert(row)
+    # 3. Quota, then queue.
+    await asyncio.to_thread(_check_quota, prepared)
+    ref_id = limits.new_ref_id()
+    inserted, raced = await _insert(replace(row, limit_ref_id=ref_id))
     if raced:
         return _answer(inserted, await _existing_download(inserted), ctx, admin=admin, already_queued=True)
     try:
         download = await core_bridge.queue_model_download(
             file.download_url,
             filename=filename,
-            model_type=model_type,
-            subdir=subdir,
+            model_type=prepared.model_type,
+            subdir=prepared.subdir,
             tags=[DOWNLOAD_TAG, f"{DOWNLOAD_TAG}:{detail.source}"],
             checksum_sha256=file.sha256 or None,
             provider_id=file.auth_provider_id,
-            created_by=user.id,
-            destination_backend_id=request.destination_backend_id,
+            created_by=created_by or user.id,
+            destination_backend_id=prepared.request.destination_backend_id,
         )
     except CoreBridgeError as exc:
         await asyncio.to_thread(pending.delete, key)
@@ -452,10 +581,31 @@ async def start_download(
         await asyncio.to_thread(pending.delete, key)
         raise
     updated = await asyncio.to_thread(pending.update, key, download_id=download.get("id"))
+    await asyncio.to_thread(limits.record, user.id, file.size_bytes, ref_id)
     logger.info(
-        "[MODEL-BROWSER] Queued %s for %s (download %s, %s)", filename, user.username, download.get("id"), assign_to
+        "[MODEL-BROWSER] Queued %s for %s (download %s, %s%s)",
+        filename,
+        user.username,
+        download.get("id"),
+        prepared.assign_to,
+        f", approved by {created_by}" if created_by and created_by != user.id else "",
     )
     return _answer(updated or inserted, download, ctx, admin=admin)
+
+
+async def start_download(
+    principal: Principal, request: DownloadRequest, *, request_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """Check, then queue (or reuse) the download of one file for `principal`
+    (`prepare_download`, then `queue_prepared`).
+
+    Returns `{"pending": <row, info filtered for the requester>, "download": <the core
+    download (public fields for a non-admin), or None>, "already_installed": bool,
+    "already_queued": bool}`. Raises `DownloadError` for a refusal (403 `limit_exceeded`
+    with the quota's figures in `extra`), and the sources' `SourceError` when the source
+    cannot be read.
+    """
+    return await queue_prepared(await prepare_download(principal, request), request_id=request_id)
 
 
 async def _insert(row: PendingRow) -> Tuple[PendingRow, bool]:

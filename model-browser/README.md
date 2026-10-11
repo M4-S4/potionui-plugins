@@ -7,13 +7,15 @@ description, previews, tags, base model and license filled in. Admins and users 
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
 
-## Status: phase 4 (browsing and downloading from the page)
+## Status: phase 5 (requests, notifications, plan quotas)
 
 The **Model Browser** page (`/plugins/model-browser`) searches CivitAI and Hugging Face,
 shows a model's versions, previews, files and licence, and downloads a file into PotionUI
-for every signed-in user with the `browse` / `download` rights. Admins edit the rights per
-user group in Admin → Plugins → Model Browser → Permissions. Model requests for users
-without `download` come with phase 5.
+for every signed-in user with the `browse` / `download` rights. A user with `request` but
+not `download` asks for a file instead; an admin (or a holder of `approve`) approves or
+declines the request from the page, and the model lands in the requester's models. Admins
+edit the rights per user group in Admin → Plugins → Model Browser → Permissions, and can cap
+downloads per month through PotionUI's plans.
 
 - Search box with `#tag`, `@creator`, `$#id1,id2` and pasted model links, filters (types,
   base model, period), sort, infinite scroll; badges for NSFW, installed, early access,
@@ -35,11 +37,31 @@ without `download` come with phase 5.
 - The requester gets a notification when the model is ready or the download failed.
 - Admin → Plugins shows setup steps for the CivitAI and Hugging Face provider plugins.
 
+- **Requests**: a file row shows **Request** to a user who may request but not download it;
+  the dialog takes the model type and a note for the admin. The **Requests** drawer (toolbar
+  button, with the count of requests to review) lists the user's own requests, and for
+  approvers every open request with Approve (type override, note) and Reject (note); the
+  author can cancel an open request. Approving re-checks the requester's own rights and NSFW
+  context and queues the file for them (or only assigns an already installed model); other
+  approved requesters of the same file get it when it arrives.
+- Notification types `model-browser.request_received` (to approvers), `request_approved`,
+  `request_rejected`, `download_done` and `download_failed` appear in each user's notification
+  preferences; the request notifications link to the page's drawer (`?tab=requests`).
+- **Quotas**: two limit kinds for Admin → Plans, "Model downloads per month" and "Downloaded
+  model bytes per month". The plugin enforces them itself before queueing a file (direct
+  download or approval, 403 `limit_exceeded`), records the usage in the core's limit ledger
+  and refunds a failed download. Admins are exempt when the plans say so.
+
 - A **Model Browser** entry in the sidebar; `GET /api/plugins/model-browser/health`.
-- `GET /me`: the caller's capabilities, download parameters and NSFW context.
+- `GET /me`: the caller's capabilities, download parameters (`params`, merged from the groups
+  that grant `download`), request parameters (`request_params`, from the groups that grant
+  `request`), NSFW context and open request count.
 - Admin `GET`/`PUT /permissions`: rights per user group (`browse`, `request`, `download`,
-  `approve`, plus the download parameters). Defaults: everyone may browse and request,
-  admins may do everything.
+  `approve`, plus the parameters that bound the group's downloads and requests: sources,
+  model types, file size, assignment, remote destination). Defaults: everyone may browse and
+  request, admins may do everything.
+- `POST /requests`, `GET /requests`, `POST /requests/{id}/approve`, `POST /requests/{id}/reject`,
+  `DELETE /requests/{id}`: the request flow above.
 - `GET /sources`, `GET /civitai/search`, `GET /civitai/models/{id}` and
   `GET /civitai/models/{id}/nsfw-media`: search and detail, filtered per user from the
   core's content policy, the plugin's `nsfw_ceiling` / `nsfw_max_level` settings and the

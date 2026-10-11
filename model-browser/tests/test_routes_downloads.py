@@ -195,6 +195,29 @@ def test_post_downloads_of_an_nsfw_model_is_a_404_for_a_blocked_user(client_as, 
     assert core.queued == []
 
 
+def test_post_downloads_over_a_plan_quota_answers_limit_exceeded_with_its_figures(client_as, core, civitai):
+    from .download_fakes import limited
+
+    core.limits[("user-1", "model-browser.downloads")] = limited("model-browser.downloads", 2, 2)
+
+    response = client_as(principal()).post(f"{BASE}/downloads", json=body())
+
+    assert response.status_code == 403
+    assert _error(response) == {
+        "success": False,
+        "error": "limit_exceeded",
+        "message": "You have reached your model downloads per month limit: 2 of 2 used. It resets on Nov 1. "
+        "Ask your admin for more.",
+        "kind": "model-browser.downloads",
+        "label": "Model downloads per month",
+        "used": 2,
+        "limit": 2,
+        "incoming": 1,
+        "resets_at": "2026-11-01T00:00:00+00:00",
+    }
+    assert core.queued == [] and pending.list_rows() == []
+
+
 @pytest.mark.parametrize("code, status", [("blocked", 409), ("invalid", 400)])
 def test_post_downloads_passes_the_cores_refusal_on(client_as, core, civitai, code, status):
     core.queue_error = CoreBridgeError(code, "Blocked by the quota plugin")

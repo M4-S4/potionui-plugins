@@ -134,15 +134,38 @@ export function switchSource(state, sourceId) {
 }
 
 /**
+ * The query string key and value that open the requests drawer: the link of the request
+ * notifications (`/plugins/model-browser?tab=requests`, backend notifications.py). The page acts
+ * on it once and takes it out of the URL, so a reload does not open the drawer again.
+ */
+export const REQUESTS_LINK = { key: 'tab', value: 'requests' };
+
+/** Whether a query string (with or without '?', or URLSearchParams) asks for the requests drawer. */
+export function wantsRequestsTab(search) {
+	const params = search instanceof URLSearchParams ? search : new URLSearchParams(String(search ?? ''));
+	return params.getAll(REQUESTS_LINK.key).includes(REQUESTS_LINK.value);
+}
+
+/** A query string (no '?') without `tab=requests`; every other key and value kept, in order. */
+export function withoutRequestsTab(search) {
+	const params = search instanceof URLSearchParams ? search : new URLSearchParams(String(search ?? ''));
+	const kept = new URLSearchParams();
+	for (const [key, value] of params) {
+		if (key !== REQUESTS_LINK.key || value !== REQUESTS_LINK.value) kept.append(key, value);
+	}
+	return kept.toString();
+}
+
+/**
  * The page's query string for a state (no '?'), defaults left out, any key the page does not
- * own kept from `currentSearch`.
+ * own kept from `currentSearch` (but never `tab=requests`, which is acted on once).
  *
  * @param {ReturnType<typeof emptyState>} state
  * @param {string} [currentSearch]
  * @returns {string}
  */
 export function encodeState(state, currentSearch = '') {
-	const params = new URLSearchParams(String(currentSearch ?? ''));
+	const params = new URLSearchParams(withoutRequestsTab(currentSearch));
 	for (const key of Object.values(URL_KEYS)) params.delete(key);
 	if (state.source) params.set(URL_KEYS.source, state.source);
 	if (state.q) params.set(URL_KEYS.q, state.q);

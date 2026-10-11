@@ -24,6 +24,7 @@ HANDLER_MODULES = {
     "plugin.lifecycle.ready": "model_browser.hooks.lifecycle_hooks",
     "plugin.lifecycle.disable": "model_browser.hooks.lifecycle_hooks",
     "provider.register": "model_browser.hooks.provider_hooks",
+    "notification_type.register": "model_browser.hooks.notification_hooks",
 }
 #: `setup:` check references, in order, and the provider each one waits for.
 SETUP_CHECKS = {
@@ -166,6 +167,135 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
     )
     create_tables()
     assert await registry.get_model_by_hash("model-browser", "0" * 64, raise_errors=True) is None
+
+
+# notification_type.register ---------------------------------------------------------
+
+
+def test_notification_type_register_declares_the_plugins_types_on_the_cores_registry(loader, manifest):
+    from backend import notifications
+    from src.features.notifications.types import NotificationTypeRegistry
+    from src.plugin_api import HookContext
+
+    register = _handler(loader, manifest, "notification_type.register")
+    registry = NotificationTypeRegistry()
+    context = HookContext(hook_name="notification_type.register", plugin_id="system", data={"registry": registry})
+
+    assert register(context) is context
+    assert register(context) is context  # a second run is harmless
+
+    assert [spec.key for spec in registry.all()] == [
+        "model-browser.request_received",
+        "model-browser.request_approved",
+        "model-browser.request_rejected",
+        "model-browser.download_done",
+        "model-browser.download_failed",
+    ]
+    assert list(notifications.KEYS) == [spec.key for spec in registry.all()]
+    for spec in registry.all():
+        assert spec.label.startswith("Model Browser: ") and spec.description
+        assert (spec.category, spec.default_enabled, spec.admin_only) == ("plugin", True, False)
+    # The handler reaches the backend through the plugin's package, never a top-level `backend`.
+    hooks_module = sys.modules["model_browser.hooks.notification_hooks"]
+    assert hooks_module.core_bridge.__name__ == "model_browser.backend.core_bridge"
+
+
+def test_notification_type_register_never_raises(loader, manifest):
+    from src.plugin_api import HookContext
+
+    register = _handler(loader, manifest, "notification_type.register")
+    empty = HookContext(hook_name="notification_type.register", plugin_id="system", data={})
+    broken = HookContext(hook_name="notification_type.register", plugin_id="system", data={"registry": "not one"})
+
+    assert register(empty) is empty
+    assert register(broken) is broken
+
+
+# limit_kinds: --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def limit_kinds(manifest, tmp_path):
+    """The plugin's limit kinds as the core registers them when it enables the plugin."""
+    from src.platform.plugins.limit_kinds import LimitKindRegistry
+    from src.platform.plugins.registry import PluginRegistry
+
+    kinds = LimitKindRegistry()
+    plugins = PluginRegistry(
+        marketplace_dir=str(tmp_path / "marketplace"), local_dir=str(PLUGIN_ROOT.parent), limit_kind_registry=kinds
+    )
+    assert plugins._register_plugin_limit_kinds(manifest) is None
+    return kinds
+
+
+def test_the_limit_kinds_load_through_the_cores_registration(limit_kinds):
+    from backend import limits
+
+    downloads, volume = limit_kinds.get(limits.DOWNLOADS), limit_kinds.get(limits.DOWNLOAD_BYTES)
+    assert [kind.key for kind in limit_kinds.all()] == list(limits.KINDS)
+    assert (downloads.label, downloads.value_type, downloads.window) == ("Model downloads per month", "count", "month")
+    assert (volume.label, volume.value_type, volume.window) == ("Downloaded model bytes per month", "bytes", "month")
+    for kind in (downloads, volume):
+        assert kind.label == limits.LABELS[kind.key]
+        assert (kind.enforce_at, kind.ledger, kind.source) == (("submit",), False, PLUGIN_ID)
+        assert kind.applies.__module__ == "model_browser.backend.limit_handlers"
+        assert kind.measure.__module__ == "model_browser.backend.limit_handlers"
+
+
+def test_the_core_never_enforces_nor_records_the_plugin_limit_kinds(limit_kinds):
+    """A plan limit of 0 never refuses a submit, and admitting one records nothing for these kinds."""
+    from src.features.plans.guard import LimitGuard, PlanSettings
+    from src.features.plans.records import Plan, PlanLimit, PlanSubject
+    from src.platform.plugins.limit_kinds import AdmissionRequest
+
+    plan = Plan(
+        id="tiny", name="Tiny", limits=(PlanLimit("model-browser.downloads", 0), PlanLimit("model-browser.download_bytes", 0))
+    )
+    subject = PlanSubject(user_id="user-1", username="user", email="u@test.com", account_type="USER",
+                          override_plan_id="tiny", groups=(), default_plan_id=None)
+    events = _Ledger(totals={("user-1", "model-browser.downloads"): 3.0})
+    guard = LimitGuard(
+        registry=limit_kinds,
+        plans=SimpleNamespace(subject=lambda user_id: subject, list_plans=lambda: [plan]),
+        events=events,
+        usage=None,
+        settings=SimpleNamespace(read=lambda: PlanSettings(exempt_admins=True, day_timezone="UTC", contact_line="")),
+    )
+
+    guard.check(AdmissionRequest(point="submit", user_id="user-1"))
+    guard.check(AdmissionRequest(point="upload", user_id="user-1", incoming_bytes=10))
+    guard.admit(AdmissionRequest(point="submit", user_id="user-1", ref_id="generation-1"))
+
+    assert events.recorded == []
+    assert guard.resolution("user-1").value("model-browser.downloads") == 0  # the plan does carry the limit
+    # The plugin's own check measures the usage through the kind's measure_handler: the ledger total.
+    measured = guard.measure(limit_kinds.get("model-browser.downloads"), "user-1", "UTC")
+    assert measured.used == 3.0
+    assert measured.resets_at is not None and measured.resets_at.day == 1
+    assert events.totals_asked[-1][:2] == ("user-1", "model-browser.downloads")
+
+
+class _Ledger:
+    """The core's `LimitEventRepository`, in memory."""
+
+    def __init__(self, totals):
+        self.totals = totals
+        self.totals_asked = []
+        self.recorded = []
+
+    def total(self, user_id, kind, since, until):
+        self.totals_asked.append((user_id, kind, since, until))
+        return self.totals.get((user_id, kind), 0.0)
+
+    def record(self, user_id, kind, units, ref_id, at):
+        self.recorded.append((user_id, kind, units, ref_id))
+        return "event"
+
+    def refund(self, ref_id, at):
+        return 0
+
+    def prune(self, before):
+        return 0
 
 
 # setup: ---------------------------------------------------------------------------

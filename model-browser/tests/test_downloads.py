@@ -1,8 +1,10 @@
-"""`backend.downloads.start_download`: the checks, the pending row and the call to the core queue.
+"""`backend.downloads.start_download`: the checks, the pending row and the call to the core queue;
+the plan quota; and the same two steps run on behalf of a requester (`prepare_download(...,
+on_behalf=True)`, `queue_prepared`).
 
 The sources are fakes serving normalised details, the core is `FakeCore` (in place of
-`core_bridge`), the requester's NSFW context is set per test, and the pending table
-lives in a scratch database.
+`core_bridge`, with the plan limits and the `LimitEvents` ledger), the requester's NSFW
+context is set per test, and the pending table lives in a scratch database.
 """
 
 import sqlite3
@@ -34,9 +36,14 @@ from .download_fakes import (
     civitai_detail,
     hf_detail,
     install_sources,
+    limited,
     model,
     principal,
+    requesting,
 )
+
+DOWNLOADS_KIND = "model-browser.downloads"
+BYTES_KIND = "model-browser.download_bytes"
 
 
 @pytest.fixture
@@ -597,3 +604,258 @@ def test_row_for_viewer_filters_the_info_of_the_row():
     assert data["info"]["model"]["name"] == "Detail Tweaker XL"
     assert row.info["model"]["description_html"] == "<p>Adds detail.</p>"
     assert row.info["model"]["versions"][0]["images"][1]["url"] == NSFW_IMAGE  # the row is untouched
+
+
+# The plan quota ---------------------------------------------------------------------------
+
+
+async def test_a_queued_file_counts_one_download_and_its_size_for_the_requester(core, civitai):
+    await _start(principal())
+
+    row = pending.get(SHA)
+    assert row.limit_ref_id.startswith("model-browser:")
+    assert core.limit_events == [
+        ("user-1", DOWNLOADS_KIND, 1, row.limit_ref_id),
+        ("user-1", BYTES_KIND, 228_000_000, row.limit_ref_id),
+    ]
+    assert core.calls_to("limit_status") == [("user-1", DOWNLOADS_KIND), ("user-1", BYTES_KIND)]
+
+
+async def test_each_queued_file_gets_its_own_ref_id(core, civitai):
+    await _start(principal())
+    await _start(principal(), file_id="1002")
+
+    assert pending.get(SHA).limit_ref_id != pending.get(OTHER_SHA).limit_ref_id
+
+
+async def test_a_download_over_the_count_is_refused_before_anything_is_written(core, civitai):
+    core.limits[("user-1", DOWNLOADS_KIND)] = limited(DOWNLOADS_KIND, 1, 1)
+
+    error = await _refused(principal())
+
+    assert (error.status, error.code) == (403, "limit_exceeded")
+    assert error.message.startswith("You have reached your model downloads per month limit: 1 of 1 used.")
+    assert error.extra == {
+        "kind": DOWNLOADS_KIND,
+        "label": "Model downloads per month",
+        "used": 1,
+        "limit": 1,
+        "incoming": 1,
+        "resets_at": "2026-11-01T00:00:00+00:00",
+    }
+    assert core.queued == [] and pending.list_rows() == [] and core.limit_events == []
+
+
+async def test_a_file_over_the_volume_is_refused(core, civitai):
+    core.limits[("user-1", BYTES_KIND)] = limited(BYTES_KIND, 3 * 1024 ** 3, 2.5 * 1024 ** 3)
+
+    await _start(principal())  # 228 MB still fits
+    error = await _refused(principal(), file_id="1002")  # 3 GB does not
+
+    assert (error.code, error.extra["kind"], error.extra["incoming"]) == ("limit_exceeded", BYTES_KIND, 3 * 1024 ** 3)
+    assert len(core.queued) == 1
+
+
+async def test_an_installed_file_and_a_file_already_on_its_way_use_no_quota(core, civitai):
+    core.limits[("user-1", DOWNLOADS_KIND)] = limited(DOWNLOADS_KIND, 1, 1)
+    core.limits[("user-2", DOWNLOADS_KIND)] = limited(DOWNLOADS_KIND, 1, 1)
+    core.models_by_sha[SHA] = model("model-9")
+
+    installed = await _start(principal())
+    await _start(admin(), file_id="1002")
+    queued = await _start(principal("user-2"), file_id="1002")
+
+    assert installed["already_installed"] and queued["already_queued"]
+    assert pending.get(SHA).limit_ref_id is None
+    assert [event[0] for event in core.limit_events] == ["admin-1", "admin-1"]
+    assert [call[0] for call in core.calls_to("limit_status")] == ["admin-1", "admin-1"]
+
+
+async def test_a_download_the_core_refuses_records_nothing(core, civitai):
+    core.queue_error = CoreBridgeError("blocked", "Disk full")
+
+    await _refused(principal())
+
+    assert core.limit_events == []
+
+
+# A request: the request view of the grant ------------------------------------------------
+
+
+async def test_a_request_is_checked_against_the_request_view_only(core, civitai):
+    may_only_request = principal(sources=frozenset(), request_params=requesting())
+
+    prepared = await downloads.prepare_download(may_only_request, _request(), purpose="request")
+
+    assert (prepared.purpose, prepared.on_behalf, prepared.assign_to) == ("request", False, "user:user-1")
+    with pytest.raises(DownloadError) as raised:
+        await downloads.prepare_download(may_only_request, _request())  # the download view is empty
+    assert raised.value.message == "Your permissions do not allow downloads from 'civitai'"
+
+    may_only_download = principal(request_params=requesting(sources=frozenset()))
+    assert (await downloads.prepare_download(may_only_download, _request())).purpose == "download"
+    with pytest.raises(DownloadError):
+        await downloads.prepare_download(may_only_download, _request(), purpose="request")
+
+
+@pytest.mark.parametrize(
+    "view, overrides, message",
+    [
+        ({"sources": frozenset({"huggingface"})}, {}, "Your permissions do not allow requesting models from 'civitai'"),
+        ({"model_types": frozenset({"embedding"})}, {}, "Your permissions do not allow requesting 'lora' models"),
+        ({"max_file_gb": 0.1}, {}, "This file is 0.21 GB: your permissions allow requesting files of at most 0.1 GB"),
+        (
+            {},
+            {"assign_group_id": "artists"},
+            "Your requests are assigned to you: your permissions do not let you pick a group",
+        ),
+        (
+            {"assign_to": "group"},
+            {"assign_group_id": "testers"},
+            "You can only assign a request to one of your own groups",
+        ),
+    ],
+    ids=["source", "type", "size", "group-not-allowed", "group-not-theirs"],
+)
+async def test_request_refusals_speak_of_requesting(core, civitai, view, overrides, message):
+    core.memberships["user-1"] = ["all_users", "artists"]
+
+    with pytest.raises(DownloadError) as raised:
+        await downloads.prepare_download(principal(request_params=requesting(**view)), _request(**overrides), purpose="request")
+
+    assert (raised.value.status, raised.value.code, raised.value.message) == (403, "forbidden", message)
+
+
+async def test_a_request_never_names_a_remote_destination(core, civitai):
+    with pytest.raises(DownloadError) as raised:
+        await downloads.prepare_download(admin(), _request(destination_backend_id="worker-1"), purpose="request")
+
+    assert raised.value.message == "A request cannot choose a remote destination: the file is downloaded to this server"
+    assert (await downloads.prepare_download(admin(), _request(destination_backend_id="worker-1"))).purpose == "download"
+
+
+async def test_an_unknown_purpose_is_a_programming_error(core, civitai):
+    with pytest.raises(ValueError):
+        await downloads.prepare_download(principal(), _request(), purpose="upload")
+
+
+# On behalf of a requester -----------------------------------------------------------------
+
+
+async def _prepare_for(who, **overrides):
+    return await downloads.prepare_download(who, _request(**overrides), purpose="request", on_behalf=True)
+
+
+async def _refused_for(who, **overrides):
+    with pytest.raises(DownloadError) as raised:
+        await _prepare_for(who, **overrides)
+    return raised.value
+
+
+async def test_a_file_queued_for_a_requester_is_theirs_created_by_the_approver_and_shown_to_the_approver(core, civitai):
+    prepared = await _prepare_for(principal("user-1"))
+
+    answer = await downloads.queue_prepared(
+        prepared, request_id="req-1", created_by="admin-1", viewer_ctx=context("blocked", "hide"), viewer_admin=True
+    )
+
+    assert core.queued[0]["created_by"] == "admin-1"
+    row = pending.get(SHA)
+    assert (row.requested_by, row.assign_to, row.request_id) == ("user-1", "user:user-1", "req-1")
+    assert answer["download"]["destination_path"]  # the admin approver sees the whole download
+    images = answer["pending"]["info"]["model"]["versions"][0]["images"]
+    assert [image["url"] for image in images] == [SAFE_IMAGE]  # filtered for the approver
+    assert {event[0] for event in core.limit_events} == {"user-1"}  # the quota is the requester's
+
+
+async def test_without_a_viewer_the_answer_is_for_the_requester(core, civitai):
+    answer = await downloads.queue_prepared(await _prepare_for(principal()), created_by="admin-1")
+
+    assert set(answer["download"]) == set(downloads.PUBLIC_DOWNLOAD_FIELDS)
+    assert len(answer["pending"]["info"]["model"]["versions"][0]["images"]) == 2
+
+
+@pytest.mark.parametrize(
+    "view, overrides, message",
+    [
+        (
+            {"sources": frozenset({"huggingface"})},
+            {},
+            "The requester's permissions do not allow requesting models from 'civitai'",
+        ),
+        (
+            {"model_types": frozenset({"embedding"})},
+            {},
+            "The requester's permissions do not allow requesting 'lora' models",
+        ),
+        (
+            {"max_file_gb": 0.1},
+            {},
+            "This file is 0.21 GB: the requester's permissions allow requesting files of at most 0.1 GB",
+        ),
+        (
+            {},
+            {"assign_group_id": "artists"},
+            "The requester's requests are assigned to them: their permissions do not let you pick a group",
+        ),
+        (
+            {"assign_to": "group"},
+            {"assign_group_id": "testers"},
+            "A request can only be assigned to one of the requester's groups",
+        ),
+    ],
+    ids=["source", "type", "size", "group-not-allowed", "group-not-theirs"],
+)
+async def test_on_behalf_refusals_speak_of_the_requester(core, civitai, view, overrides, message):
+    core.memberships["user-1"] = ["all_users", "artists"]
+
+    error = await _refused_for(principal(request_params=requesting(**view)), **overrides)
+
+    assert (error.status, error.code, error.message) == (403, "forbidden", message)
+
+
+async def test_on_behalf_the_requesters_download_view_does_not_count(core, civitai):
+    """A requester who may not download anything is still served by an approval."""
+    prepared = await _prepare_for(principal(sources=frozenset(), max_file_gb=0.01))
+
+    assert prepared.on_behalf and prepared.purpose == "request"
+
+
+async def test_an_approver_may_pick_one_of_the_requesters_groups(core, civitai):
+    core.memberships["user-1"] = ["all_users", "artists"]
+
+    prepared = await _prepare_for(principal(request_params=requesting(assign_to="group")), assign_group_id="artists")
+
+    assert prepared.assign_to == "group:artists" and prepared.on_behalf
+
+
+async def test_a_model_the_requester_may_not_see_is_not_visible_to_requester(core, civitai, viewer):
+    civitai.detail_value = civitai_detail(nsfw=True)
+    viewer.ctx = context("blocked", "hide")
+
+    error = await _refused_for(principal())
+
+    assert (error.status, error.code) == (403, "not_visible_to_requester")
+    assert core.queued == []
+
+
+async def test_a_hidden_version_is_not_visible_but_a_missing_one_is_not_found(core, civitai, viewer):
+    civitai.detail_value = civitai_detail(version_nsfw=True)
+    viewer.ctx = context("blocked", "hide")
+
+    assert (await _refused_for(principal())).code == "not_visible_to_requester"
+    missing = await _refused_for(principal(), version_id="999")
+    assert (missing.status, missing.code, missing.message) == (404, "not_found", "Version not found")
+
+
+async def test_the_quota_refusal_on_behalf_names_the_requester(core, civitai):
+    core.limits[("user-1", DOWNLOADS_KIND)] = limited(DOWNLOADS_KIND, 1, 1)
+    prepared = await _prepare_for(principal())
+
+    with pytest.raises(DownloadError) as raised:
+        await downloads.queue_prepared(prepared, created_by="admin-1")
+
+    assert raised.value.code == "limit_exceeded"
+    assert raised.value.message == (
+        "user-1 has reached their model downloads per month limit: 1 of 1 used. It resets on Nov 1."
+    )

@@ -151,8 +151,10 @@ def test_me_for_an_admin(app, client, core):
                 "allow_remote": True,
                 "unrestricted": True,
             },
+            "request_params": {"sources": [], "model_types": [], "max_file_gb": None, "assign_to": "user"},
             "nsfw": _NSFW_JSON,
             "groups": _ALL_GROUPS_JSON,
+            "requests": {"open_count": 0},
         },
     }
     assert core.nsfw_users == ["admin-1"]
@@ -169,6 +171,7 @@ def test_me_for_a_user_with_the_default_rights(app, client, core):
         "data": {
             "user": {"id": "user-1", "username": "user-1-name", "is_admin": False},
             "capabilities": ["browse", "request"],
+            # No group grants `download`: nothing may be downloaded directly.
             "params": {
                 "sources": [],
                 "model_types": [],
@@ -177,8 +180,16 @@ def test_me_for_a_user_with_the_default_rights(app, client, core):
                 "allow_remote": False,
                 "unrestricted": False,
             },
+            # `all_users` grants `request`: its default parameters bind what the user requests.
+            "request_params": {
+                "sources": ["civitai", "huggingface", "openmodeldb"],
+                "model_types": [],
+                "max_file_gb": None,
+                "assign_to": "user",
+            },
             "nsfw": _NSFW_JSON,
             "groups": [{"id": "all_users", "name": "All Users"}],
+            "requests": {"open_count": 0},
         },
     }
     assert core.nsfw_users == ["user-1"]
@@ -268,6 +279,7 @@ def test_me_follows_what_the_admin_saved(app, client):
     data = client.get(ME_URL).json()["data"]
 
     assert data["capabilities"] == ["browse", "download", "request"]  # `request` from all_users' default
+    # Downloads: the artists' parameters only (the only group granting `download`).
     assert data["params"] == {
         "sources": ["civitai"],
         "model_types": ["lora"],
@@ -276,6 +288,81 @@ def test_me_follows_what_the_admin_saved(app, client):
         "allow_remote": False,
         "unrestricted": False,
     }
+    # Requests: all_users' default parameters (the only group granting `request`).
+    assert data["request_params"] == {
+        "sources": ["civitai", "huggingface", "openmodeldb"],
+        "model_types": [],
+        "max_file_gb": None,
+        "assign_to": "user",
+    }
+
+
+def test_me_request_params_follow_the_groups_granting_request(app, client):
+    _sign_in(app, ADMIN)
+    client.put(
+        PERMISSIONS_URL,
+        json={
+            "groups": [
+                {
+                    "group_id": "all_users",
+                    "capabilities": ["browse", "request"],
+                    "params": {
+                        "sources": ["huggingface", "civitai"],
+                        "model_types": ["embedding", "lora"],
+                        "max_file_gb": 1.5,
+                        "assign_to": "group",
+                        "allow_remote": True,
+                    },
+                }
+            ]
+        },
+    ).raise_for_status()
+    _sign_in(app, USER)
+
+    data = client.get(ME_URL).json()["data"]
+
+    assert data["request_params"] == {
+        "sources": ["civitai", "huggingface"],
+        "model_types": ["embedding", "lora"],
+        "max_file_gb": 1.5,
+        "assign_to": "group",
+    }
+    assert data["params"]["sources"] == [] and data["params"]["allow_remote"] is False
+
+
+def test_me_counts_the_open_requests_for_an_approver_only(app, client):
+    from backend import requests
+
+    for user_id, status in (("user-1", "open"), ("artist-1", "open"), ("user-1", "rejected")):
+        created = requests.create(
+            user_id=user_id, source="civitai", source_model_id="1", source_version_id="2", file_id="3", snapshot={}
+        )
+        if status != "open":
+            requests.set_status(created.id, status, decided_by="admin-1")
+
+    _sign_in(app, ADMIN)
+    assert client.get(ME_URL).json()["data"]["requests"] == {"open_count": 2}
+    _sign_in(app, USER)
+    assert client.get(ME_URL).json()["data"]["requests"] == {"open_count": 0}
+    # An `approve` holder who is not an admin does not decide on their own request.
+    save_rows([Row(group_id="artists", capabilities=frozenset({"browse", "approve"}))])
+    _sign_in(app, ARTIST)
+    assert client.get(ME_URL).json()["data"]["requests"] == {"open_count": 1}
+
+
+def test_me_still_answers_when_the_requests_cannot_be_counted(app, client, monkeypatch):
+    from backend import requests
+
+    def broken():
+        raise RuntimeError("no such table: model_browser_requests")
+
+    monkeypatch.setattr(requests, "open_count", broken)
+    _sign_in(app, ADMIN)
+
+    response = client.get(ME_URL)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["requests"] == {"open_count": 0}
 
 
 def test_me_with_the_real_nsfw_resolution(app, client, monkeypatch):
