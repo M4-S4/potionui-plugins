@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node and plugin builds (release dist/ is committed, source maps never)
+node_modules/
+*.map
+
+# Local environment: credentials and machine-specific paths
+.env.local
+*.local.env
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
