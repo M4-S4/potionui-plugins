@@ -615,6 +615,9 @@ def test_build_model_info_is_usable_on_its_own():
         ("huggingface:stabilityai/stable-diffusion-3.5-large", None, "https://huggingface.co/stabilityai/stable-diffusion-3.5-large"),
         ("openmodeldb:4x-UltraSharp", None, "https://openmodeldb.info/models/4x-UltraSharp"),
         ("openmodeldb:4x-Nomos8kSC", "4x-Nomos8kSC", "https://openmodeldb.info/models/4x-Nomos8kSC"),
+        ("civarchive:78291", "83095", "https://civarchive.com/models/78291?modelVersionId=83095"),
+        ("civarchive:78291", None, "https://civarchive.com/models/78291"),
+        ("civarchive:78291", "1&x=2", "https://civarchive.com/models/78291"),
     ],
 )
 def test_the_mirror_link_points_at_the_source_page(provider, model_id, version_id, url):
@@ -649,7 +652,10 @@ def test_the_mirror_link_points_at_the_source_page(provider, model_id, version_i
         "openmodeldb:../x",
         "openmodeldb:4x x",
         "openmodeldb:org/repo",
-        "civarchive:122359",
+        "civarchive:",
+        "civarchive:abc",
+        "civarchive:12 3",
+        "civarchive:١٢٣",
         "unknown:1",
     ],
 )

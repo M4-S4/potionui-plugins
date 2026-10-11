@@ -4,7 +4,9 @@
 	//
 	// - `GET /me` first: without `browse`, an EmptyState and nothing else; the capabilities decide
 	//   which buttons exist (lib/capabilities.js), the NSFW part feeds the mode control.
-	// - `GET /sources`: one rail section of the host's LibraryPage per enabled source.
+	// - `GET /sources`: one rail section of the host's LibraryPage per enabled source; the `notice`
+	//   of the selected source (CivArchive: an unofficial index) is a warning line under the search
+	//   help.
 	// - The search state (source, text, types, base model, sort, period, open model) lives in the
 	//   URL query string (`history.replaceState`), so a reload restores it (lib/search.js).
 	// - Results page by cursor (infinite scroll in ResultGrid); `POST /installed` fills the
@@ -23,6 +25,7 @@
 	import DownloadTray from './components/DownloadTray.svelte';
 	import FilterChips from './components/FilterChips.svelte';
 	import FilterPopover from './components/FilterPopover.svelte';
+	import Icon from './components/Icon.svelte';
 	import NsfwModeControl from './components/NsfwModeControl.svelte';
 	import RequestDialog from './components/RequestDialog.svelte';
 	import RequestsButton from './components/RequestsButton.svelte';
@@ -425,6 +428,18 @@
 						{/if}
 					</div>
 				</div>
+
+				<!-- The warning of the source (CivArchive is an unofficial index), under its search help. It
+				     is not part of the sticky bar: it scrolls away with the results instead of taking room for
+				     good. No dismiss button; nothing is drawn when the source sends no notice. -->
+				{#if info?.notice}
+					<div class="px-4 pt-3 sm:px-6">
+						<p class="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning" role="note">
+							<Icon name="warning" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+							<span class="min-w-0">{info.notice}</span>
+						</p>
+					</div>
+				{/if}
 
 				{#if chips.length > 0}
 					<div class="px-4 pt-3 sm:px-6">

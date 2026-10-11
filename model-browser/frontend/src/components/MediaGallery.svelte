@@ -1,8 +1,10 @@
 <script>
 	// The previews of one version. NSFW previews the server sent without their url are drawn
 	// blurred; "click to reveal" on one, or "Reveal all", asks `nsfw-media` once for the whole
-	// model (the reveal cache) and maps its urls to the previews by image id. A visible preview
-	// opens in the host's MediaPreviewModal (`onPreview`).
+	// model (the reveal cache) and maps its urls to the previews by image id. When the versions of
+	// the model come one by one (lib/versions.js), `modelId` is the id of the version on screen: the
+	// urls are kept for each id asked, so a version seen before keeps what was revealed. A visible
+	// preview opens in the host's MediaPreviewModal (`onPreview`).
 	import Icon from './Icon.svelte';
 	import NsfwMedia from './NsfwMedia.svelte';
 	import { isRevealable } from '../lib/nsfw.js';
@@ -14,9 +16,11 @@
 	const LIMIT = 9;
 	let showAll = $state(false);
 	let revealing = $state(false);
-	/** @type {Map<string, string>} urls of the NSFW previews, by image id, after "Reveal all" */
-	let revealed = $state.raw(new Map());
+	/** @type {Map<string, Map<string, string>>} after "Reveal all": urls of the NSFW previews by image id, for each model id asked */
+	let revealedById = $state.raw(new Map());
+	const NO_URLS = new Map();
 
+	const revealed = $derived(revealedById.get(String(modelId)) ?? NO_URLS);
 	const visible = $derived(showAll ? images : images.slice(0, LIMIT));
 	const blurred = $derived(images.filter((image) => isRevealable(image, me) && !revealed.has(String(image.id))));
 
@@ -28,13 +32,14 @@
 	async function revealAll() {
 		if (revealing) return;
 		revealing = true;
+		const asked = String(modelId);
 		const result = await revealCache.urls(source, modelId);
 		revealing = false;
 		if (!result.ok) {
 			toast('error', `Could not reveal the previews: ${result.error?.message ?? 'unknown error'}`);
 			return;
 		}
-		revealed = result.urls;
+		revealedById = new Map(revealedById).set(asked, result.urls);
 	}
 </script>
 

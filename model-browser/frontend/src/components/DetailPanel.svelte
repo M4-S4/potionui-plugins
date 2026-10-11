@@ -5,6 +5,10 @@
 	// select past 8), DetailBody, and DetailLayout with the main column (DetailMain) and the side
 	// column (DetailAside). `GET /{source}/models/{id}` answers 404 for a model the user may not
 	// see; `POST /installed` marks the files already installed.
+	//
+	// Some sources send one version in full and the others as shells (`partial: true`, CivArchive):
+	// a shell is fetched when it comes on screen, `GET /{source}/models/<model id>:<version id>`,
+	// and replaces itself in the detail (lib/versions.js). Nothing is kept once the drawer closes.
 	import { onMount, untrack } from 'svelte';
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
@@ -13,6 +17,7 @@
 	import { getInstalled, getModel } from '../lib/client.js';
 	import { escapeCloses, hostLayer, onEscape, portal, slotOf, trapFocus } from '../lib/dom.js';
 	import { modelTypeLabel } from '../lib/format.js';
+	import { hasPartialVersions, isPartial, mergeVersion, versionRef } from '../lib/versions.js';
 
 	let {
 		api,
@@ -44,6 +49,13 @@
 	let mainEl = $state();
 	let asideEl = $state();
 	let seq = 0;
+	// Versions the source sent as shells: the ids being fetched, and the errors by id (a failed
+	// version is fetched again by its Retry button only). `byVersion`: some version of this detail
+	// was a shell, so the NSFW previews of every version are revealed through its own
+	// `<model id>:<version id>` (the server holds the images of the version it was asked for).
+	let loadingIds = new Set();
+	let failedIds = $state.raw(new Map());
+	let byVersion = $state(false);
 	// The drawer is moved under <body> (use:portal). Svelte removes a block by walking from its
 	// first node to its last, so a moved node must be the only node of its block: hence its own
 	// `{#if mounted}`.
@@ -79,6 +91,7 @@
 			: (error?.message ?? 'Something went wrong')
 	);
 	const redLink = $derived(sourceHost === 'civitai.red');
+	const versionError = $derived(version ? (failedIds.get(version.id) ?? null) : null);
 
 	$effect(() => {
 		// Reload when the model changes, or when the page asks (the NSFW mode changed).
@@ -94,6 +107,14 @@
 		untrack(() => {
 			if (detail) loadInstalled(seq, detail);
 		});
+	});
+
+	// A shell version that comes on screen (picked in the tabs, or kept across a reload) is fetched.
+	$effect(() => {
+		const current = version;
+		if (phase !== 'ready' || !isPartial(current)) return;
+		const id = current.id;
+		untrack(() => loadVersion(id));
 	});
 
 	// The image preview closes before the drawer on Escape.
@@ -132,6 +153,8 @@
 		const mine = ++seq;
 		phase = 'loading';
 		error = null;
+		loadingIds = new Set();
+		failedIds = new Map();
 		const result = await getModel(api, source, modelId);
 		if (mine !== seq) return;
 		if (!result.ok || !result.data || typeof result.data !== 'object') {
@@ -141,6 +164,7 @@
 		}
 		const data = { ...result.data, versions: Array.isArray(result.data.versions) ? result.data.versions : [] };
 		detail = data;
+		byVersion = hasPartialVersions(data);
 		if (!data.versions.some((entry) => entry.id === versionId)) versionId = data.versions[0]?.id ?? '';
 		phase = 'ready';
 		loadInstalled(mine, data);
@@ -159,6 +183,32 @@
 		const result = await getInstalled(api, hashes);
 		if (mine !== seq || !result.ok) return;
 		installed = new Map(Object.entries(result.data?.installed ?? {}));
+	}
+
+	/**
+	 * A shell version in full: `GET /{source}/models/<model id>:<version id>`, whose answer replaces
+	 * the shell in the detail as it is when the answer comes (the other versions and the selection
+	 * stay). A failure is kept for the version, shown in its panel with a Retry button: it is not
+	 * fetched again unless `retry`. An answer of a detail that was reloaded meanwhile is dropped.
+	 */
+	async function loadVersion(id, { retry = false } = {}) {
+		if (!detail || loadingIds.has(id)) return;
+		if (failedIds.has(id)) {
+			if (!retry) return;
+			failedIds = new Map([...failedIds].filter(([key]) => key !== id));
+		}
+		const mine = seq;
+		loadingIds.add(id);
+		const result = await getModel(api, source, versionRef(detail.id, id));
+		if (mine !== seq) return;
+		loadingIds.delete(id);
+		const merged = result.ok ? mergeVersion(detail, id, result.data) : result;
+		if (!merged.ok) {
+			failedIds = new Map(failedIds).set(id, merged.error);
+			return;
+		}
+		detail = merged.detail;
+		loadInstalled(mine, merged.detail);
 	}
 
 	function onBackdrop(event) {
@@ -253,6 +303,9 @@
 						{installed}
 						{sourceLabel}
 						{revealCache}
+						{byVersion}
+						{versionError}
+						onRetryVersion={() => version && loadVersion(version.id, { retry: true })}
 						{onDownload}
 						{onRequest}
 						onPreview={(media) => (preview = media)}

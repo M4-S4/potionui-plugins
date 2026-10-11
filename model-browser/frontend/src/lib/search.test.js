@@ -109,6 +109,7 @@ test('enabledSources keeps the enabled sources with their option lists', () => {
 		sorts: [],
 		periods: [],
 		search_help: '',
+		notice: '',
 		types_label: 'Types',
 		base_models_label: 'Base model',
 		base_model_label: 'Base model'
@@ -143,6 +144,38 @@ test('enabledSources names the filter groups and the base model line, with defau
 		['Types', 'Scale', 'Base model'],
 		['Types', 'Base model', 'Architecture']
 	]);
+});
+
+test('enabledSources keeps the notice of a source, trimmed, and gives "" when it is missing or not a string', () => {
+	const notices = (list) => enabledSources(list).map((source) => source.notice);
+	// The CivArchive entry of GET /sources: kept as sent. The other sources send none (null or absent).
+	const CIVARCHIVE_NOTICE =
+		'Unofficial source: civarchive.com is a community index of CivitAI, not an official API. Deleted models may be unavailable, or come from third-party mirrors.';
+	assert.deepEqual(
+		notices([
+			{ id: 'civarchive', label: 'CivArchive', enabled: true, notice: CIVARCHIVE_NOTICE },
+			{ id: 'civitai', label: 'CivitAI', enabled: true, notice: null },
+			{ id: 'huggingface', label: 'Hugging Face', enabled: true }
+		]),
+		[CIVARCHIVE_NOTICE, '', '']
+	);
+	// The fixtures above send no notice at all.
+	assert.deepEqual(SOURCES.map((source) => source.notice), ['', '']);
+	assert.equal(OPENMODELDB.notice, '');
+	// Only a string with text in it counts, and it is trimmed; anything else gives ''.
+	assert.deepEqual(
+		notices([
+			{ id: 'a', notice: '  Careful, unofficial.  ' },
+			{ id: 'b', notice: '' },
+			{ id: 'c', notice: '   ' },
+			{ id: 'd', notice: 7 },
+			{ id: 'e', notice: true },
+			{ id: 'f', notice: ['Careful'] },
+			{ id: 'g', notice: { text: 'Careful' } },
+			{ id: 'h', notice: undefined }
+		]),
+		['Careful, unofficial.', '', '', '', '', '', '', '']
+	);
 });
 
 test('sourceSections gives each source a rail icon', () => {

@@ -12,7 +12,9 @@ User-Agent naming the plugin, a rate limit per source, and typed errors that
 - Reading: `get` gives a 2xx answer as `(status, headers, body_bytes)` (header names in
   lower case, e.g. `link` for Hugging Face's pagination), `get_json` its decoded JSON,
   `get_json_with_headers` both, `get_text` its text (charset from `Content-Type`, UTF-8
-  by default). `max_bytes` lowers the size cap for one call (a README).
+  by default). `max_bytes` lowers the size cap for one call (a README); `get`'s
+  `accept_statuses` hands some error statuses back to read rather than raising (CivArchive
+  answers an unknown model with a 500 page).
 - Errors: `SourceNotFound` (404), `SourceRateLimited` (429, with `retry_after` from the
   `Retry-After` header), `SourceInvalidRequest` (any other 4xx, with the upstream message),
   `SourceUnavailable` (5xx, timeouts, connection and TLS errors, answers that are not JSON;
@@ -27,7 +29,7 @@ import math
 import ssl
 import time
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Awaitable, Callable, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
 import aiohttp
 
@@ -45,6 +47,8 @@ DEFAULT_LIMITS: Dict[str, Tuple[float, int]] = {
     "civitai": (0.25, 4),
     "huggingface": (0.2, 4),
     "openmodeldb": (0.5, 2),
+    # An unofficial site read through its pages' data routes, with no API and no stated limit: be
+    # gentle, one request per second and one at a time (PLAN.md §8.5).
     "civarchive": (1.0, 1),
 }
 _FALLBACK_LIMIT = (0.5, 2)
@@ -271,12 +275,20 @@ class SourceHttp:
     # Requests ----------------------------------------------------------------
 
     async def get(
-        self, source_id: str, url: str, params: ParamsInput = None, *, max_bytes: Optional[int] = None
+        self,
+        source_id: str,
+        url: str,
+        params: ParamsInput = None,
+        *,
+        max_bytes: Optional[int] = None,
+        accept_statuses: Collection[int] = (),
     ) -> Tuple[int, Dict[str, str], bytes]:
         """GET `url` with `params`: the status, the headers (names in lower case) and the body of a 2xx answer.
 
-        Raises a `SourceError` subclass for any other answer or failure; `max_bytes` (never
-        above the client's own cap) refuses a larger body with `SourceAnswerTooLarge`.
+        Raises a `SourceError` subclass for any other answer or failure, except for the statuses
+        of `accept_statuses`, answered like a 2xx for the caller to read (CivArchive's 500 page
+        that says "Model not found"); `max_bytes` (never above the client's own cap) refuses a
+        larger body with `SourceAnswerTooLarge`.
         """
         pairs = normalise_params(params)
         label = source_label(source_id)
@@ -307,7 +319,8 @@ class SourceHttp:
         )
         if len(body) > cap:
             raise SourceAnswerTooLarge(f"{label} sent an answer larger than {cap} bytes", status)
-        self._raise_for_status(source_id, status, headers, body)
+        if status not in accept_statuses:
+            self._raise_for_status(source_id, status, headers, body)
         return status, headers, body
 
     async def get_json(self, source_id: str, url: str, params: ParamsInput = None) -> Any:

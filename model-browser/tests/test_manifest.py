@@ -94,7 +94,7 @@ def test_docs_files_exist(manifest):
 # provider.register --------------------------------------------------------------
 
 
-def test_provider_register_adds_both_providers_next_to_the_others(loader, manifest):
+def test_provider_register_adds_the_three_providers_next_to_the_others(loader, manifest):
     from src.plugin_api import HookContext, MarketplaceProviderBase
 
     register = _handler(loader, manifest, "provider.register")
@@ -105,9 +105,13 @@ def test_provider_register_adds_both_providers_next_to_the_others(loader, manife
 
     assert result is context
     providers = result.data["providers"]
-    assert list(providers) == ["civitai", "model-browser", "openmodeldb"]
+    assert list(providers) == ["civitai", "model-browser", "openmodeldb", "civarchive"]
     assert providers["civitai"] is other
-    for provider_id, module in (("model-browser", "pending_provider"), ("openmodeldb", "openmodeldb_provider")):
+    for provider_id, module in (
+        ("model-browser", "pending_provider"),
+        ("openmodeldb", "openmodeldb_provider"),
+        ("civarchive", "civarchive_provider"),
+    ):
         provider_class = providers[provider_id]
         assert issubclass(provider_class, MarketplaceProviderBase)
         assert provider_class.__module__ == f"model_browser.provider.{module}"
@@ -117,6 +121,9 @@ def test_provider_register_adds_both_providers_next_to_the_others(loader, manife
     openmodeldb_module = sys.modules["model_browser.provider.openmodeldb_provider"]
     assert openmodeldb_module.openmodeldb.__name__ == "model_browser.backend.sources.openmodeldb"
     assert openmodeldb_module.sources.__name__ == "model_browser.backend.sources"
+    civarchive_module = sys.modules["model_browser.provider.civarchive_provider"]
+    assert civarchive_module.civarchive.__name__ == "model_browser.backend.sources.civarchive"
+    assert civarchive_module.plugin_settings.__name__ == "model_browser.backend.settings"
 
 
 def test_provider_register_creates_the_providers_map_and_never_raises(loader, manifest):
@@ -130,12 +137,13 @@ def test_provider_register_creates_the_providers_map_and_never_raises(loader, ma
     assert {provider_id: cls.__name__ for provider_id, cls in registered.items()} == {
         "model-browser": "PendingProvider",
         "openmodeldb": "OpenModelDBProvider",
+        "civarchive": "CivArchiveProvider",
     }
     assert register(broken) is broken
     assert broken.data["providers"] == "not a map"
 
 
-def test_a_broken_openmodeldb_provider_does_not_keep_the_model_browser_one_out(monkeypatch, caplog):
+def test_a_broken_openmodeldb_provider_does_not_keep_the_others_out(monkeypatch, caplog):
     """The handler as the tests import it (top-level `hooks`), with the OpenModelDB provider module broken."""
     import importlib
     import logging
@@ -156,7 +164,7 @@ def test_a_broken_openmodeldb_provider_does_not_keep_the_model_browser_one_out(m
     with caplog.at_level(logging.ERROR, logger="plugins.model-browser"):
         assert provider_hooks.register_providers(context) is context
 
-    assert list(context.data["providers"]) == ["model-browser"]
+    assert list(context.data["providers"]) == ["model-browser", "civarchive"]
     assert "Could not register the OpenModelDBProvider marketplace provider" in caplog.text
 
 
@@ -188,13 +196,19 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
     # Settings would be read from the providers' own plugins, which do not exist.
     monkeypatch.setattr(registry, "_get_provider_settings", lambda provider_id: {})
 
-    assert [metadata.id for metadata in await registry.discover_providers()] == ["model-browser", "openmodeldb"]
-    assert await registry.initialize_providers() == {"model-browser": True, "openmodeldb": True}
-    assert registry.is_provider_initialized("model-browser") and registry.is_provider_initialized("openmodeldb")
+    assert [metadata.id for metadata in await registry.discover_providers()] == ["model-browser", "openmodeldb", "civarchive"]
+    assert await registry.initialize_providers() == {"model-browser": True, "openmodeldb": True, "civarchive": True}
+    assert all(registry.is_provider_initialized(provider_id) for provider_id in ("model-browser", "openmodeldb", "civarchive"))
     provider, openmodeldb = registry.get_provider("model-browser"), registry.get_provider("openmodeldb")
-    assert registry.get_providers_with_capability(ProviderCapability.HASH_LOOKUP) == [provider, openmodeldb]
+    civarchive = registry.get_provider("civarchive")
+    assert registry.get_providers_with_capability(ProviderCapability.HASH_LOOKUP) == [provider, openmodeldb, civarchive]
     # What the model page's "Mirrors" section and run_provider_fetch call.
-    assert (provider.provider_name, openmodeldb.provider_name) == ("Model Browser", "OpenModelDB")
+    assert (provider.provider_name, openmodeldb.provider_name, civarchive.provider_name) == (
+        "Model Browser", "OpenModelDB", "CivArchive",
+    )
+    assert civarchive.get_model_page_url("civarchive:78291", "83095") == (
+        "https://civarchive.com/models/78291?modelVersionId=83095"
+    )
     assert provider.get_model_page_url("civitai:122359", "135867") == (
         "https://civitai.com/models/122359?modelVersionId=135867"
     )
@@ -203,6 +217,8 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
     assert await registry.get_model_by_hash("model-browser", "0" * 64, raise_errors=True) is None
     # A value that is not a SHA256 answers None before any catalogue is loaded.
     assert await registry.get_model_by_hash("openmodeldb", "not-a-hash", raise_errors=True) is None
+    # CivArchive is off by default: None without a request (the tests block the network).
+    assert await registry.get_model_by_hash("civarchive", "0" * 64, raise_errors=True) is None
 
 
 # notification_type.register ---------------------------------------------------------

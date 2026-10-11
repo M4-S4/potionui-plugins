@@ -294,6 +294,8 @@ def test_detail_is_normalised():
     assert detail.source_url == "https://civitai.com/models/122359"
     assert detail.stats.downloads == 457351
     assert [version.id for version in detail.versions] == ["135867", "133241"]
+    # CivitAI answers every version whole: none is partial.
+    assert [version.partial for version in detail.versions] == [False, False]
 
     latest = detail.versions[0]
     assert (latest.name, latest.base_model, latest.created_at) == ("v1.0", "SDXL 1.0", "2023-08-07T14:55:02.627Z")
@@ -864,15 +866,20 @@ async def test_info_without_civitai_still_lists_the_source():
 # Registry ------------------------------------------------------------------------------------
 
 
-def test_the_registry_has_civitai_hugging_face_and_openmodeldb_in_phase_6(_settings):
-    _settings["enable_civarchive"] = True
-
+def test_the_registry_has_civarchive_only_while_its_setting_is_on(_settings):
     assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb"]
     assert get_source("civitai") is get_source("civitai")
     assert get_source("openmodeldb") is get_source("openmodeldb")
     for unknown in ("civarchive", "nope"):
         with pytest.raises(UnknownSource):
             get_source(unknown)
+
+    _settings["enable_civarchive"] = True
+
+    assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb", "civarchive"]
+    assert get_source("civarchive") is get_source("civarchive")
+    with pytest.raises(UnknownSource):
+        get_source("nope")
 
 
 # civitai.red -----------------------------------------------------------------------------------

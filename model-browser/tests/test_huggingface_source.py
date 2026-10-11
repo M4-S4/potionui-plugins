@@ -589,6 +589,7 @@ async def test_detail_of_a_public_lora():
     assert (detail.source, detail.id, detail.name) == ("huggingface", LCM, LCM)
     assert (detail.type, detail.mb_type, detail.creator) == ("text-to-image", "lora", "latent-consistency")
     assert (detail.nsfw, detail.gated, detail.poi) == (False, False, False)
+    assert [version.partial for version in detail.versions] == [False]
     assert detail.source_url == f"https://huggingface.co/{LCM}"
     assert detail.tags == ["diffusers", "lora", "text-to-image", "arxiv:2311.05556"]
     assert detail.stats.model_dump() == {"downloads": 42591, "likes": 774, "rating": None}

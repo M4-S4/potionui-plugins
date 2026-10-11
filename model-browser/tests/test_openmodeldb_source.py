@@ -319,6 +319,7 @@ def test_detail_of_an_oracle_model():
         "16x-ESRGAN", "Release", "ESRGAN 16x", "2019-07-06",
     )
     assert (version.trigger_words, version.images, version.early_access, version.nsfw) == ([], [], False, False)
+    assert version.partial is False
     assert [file.model_dump() for file in version.files] == [
         {
             "id": "8701acac21c4c412a3e05242b389700c1248ff52314380793c045326f4c61dfb",
@@ -1042,6 +1043,8 @@ async def test_info_lists_the_architectures_and_scales_with_their_labels(clock):
         "types_label": "Architecture",
         "base_models_label": "Scale",
         "base_model_label": "Architecture",
+        # The page's warning line: only CivArchive (an unofficial index) has one.
+        "notice": None,
     }
 
 

@@ -20,7 +20,9 @@ from urllib.parse import urlsplit
 #: subdomains of example.com, not example.com itself. OpenModelDB's are the hosts of the
 #: direct file URLs `sources/openmodeldb.py::is_direct_url` accepts (Hugging Face, GitHub
 #: releases and raw files, Oracle and Backblaze object storage); its Google Drive, Mega ...
-#: links are pages, never downloads.
+#: links are pages, never downloads. CivArchive's are the sources it indexes, CivitAI and
+#: the Hugging Face mirrors (`sources/civarchive.py::download_for`), never civarchive.com
+#: itself: it hosts no file, and its `robots.txt` disallows `/api`.
 DOWNLOAD_HOSTS: Dict[str, FrozenSet[str]] = {
     "civitai": frozenset({"civitai.com"}),
     "huggingface": frozenset({"huggingface.co", "*.huggingface.co"}),
@@ -32,7 +34,7 @@ DOWNLOAD_HOSTS: Dict[str, FrozenSet[str]] = {
         "*.oraclecloud.com",
         "*.backblazeb2.com",
     }),
-    "civarchive": frozenset({"civitai.com", "civarchive.com"}),
+    "civarchive": frozenset({"civitai.com", "huggingface.co"}),
 }
 
 

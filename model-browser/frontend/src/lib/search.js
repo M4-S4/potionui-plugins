@@ -55,14 +55,16 @@ export function emptyState(source = '') {
 }
 
 /**
- * The sources of `GET /sources` that are on, each with its option lists present and the names it
+ * The sources of `GET /sources` that are on, each with its option lists present, the names it
  * gives things (`types_label`, `base_models_label` for the two filter groups, `base_model_label`
- * for the base model of a version: the defaults when missing or blank).
+ * for the base model of a version: the defaults when missing or blank) and its `notice`, a
+ * warning the page shows under the search help (CivArchive is an unofficial index): trimmed,
+ * '' when the source sends none (missing, blank or not a string).
  *
  * @param {unknown} sources
  * @returns {{ id: string, label: string, types: {value: string, label: string}[], base_models: {value: string, label: string}[],
  *             sorts: {value: string, label: string}[], periods: {value: string, label: string}[], search_help: string,
- *             types_label: string, base_models_label: string, base_model_label: string }[]}
+ *             notice: string, types_label: string, base_models_label: string, base_model_label: string }[]}
  */
 export function enabledSources(sources) {
 	if (!Array.isArray(sources)) return [];
@@ -80,6 +82,7 @@ export function enabledSources(sources) {
 			sorts: options(source.sorts),
 			periods: options(source.periods),
 			search_help: text(source.search_help),
+			notice: text(source.notice).trim(),
 			types_label: text(source.types_label).trim() || DEFAULT_TYPES_LABEL,
 			base_models_label: text(source.base_models_label).trim() || DEFAULT_BASE_MODELS_LABEL,
 			base_model_label: text(source.base_model_label).trim() || DEFAULT_BASE_MODEL_LABEL

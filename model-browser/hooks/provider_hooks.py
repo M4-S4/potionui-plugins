@@ -1,18 +1,20 @@
-"""`provider.register` handler of the model-browser plugin (PLAN.md §7.3, §8.4).
+"""`provider.register` handler of the model-browser plugin (PLAN.md §7.3, §8.4, §8.5).
 
-Registers the plugin's two marketplace providers:
+Registers the plugin's three marketplace providers:
 - `model-browser` (`provider/pending_provider.py`) enriches the models this plugin
   downloaded, from what it recorded when it queued them (any source);
 - `openmodeldb` (`provider/openmodeldb_provider.py`) looks a SHA256 up in OpenModelDB's
-  catalogue, so the core can enrich upscalers already on disk, whoever downloaded them.
+  catalogue, so the core can enrich upscalers already on disk, whoever downloaded them;
+- `civarchive` (`provider/civarchive_provider.py`) looks a SHA256 up on civarchive.com, while
+  the admin has the CivArchive source on (it answers None without a request otherwise).
 The core's provider registry instantiates each class and calls `initialize` itself.
 
 Like the lifecycle handlers: synchronous, never raises, returns the context it was given;
 a provider that fails to register is logged and the next one is still registered (the
-`openmodeldb` one cannot keep `model-browser` out). The providers are imported inside the
-handler, through the plugin's package when PotionUI's loader imported this module as
-`model_browser.hooks.provider_hooks`, and as the top-level `provider` package in the
-plugin's tests.
+`openmodeldb` and `civarchive` ones cannot keep `model-browser` out). The providers are
+imported inside the handler, through the plugin's package when PotionUI's loader imported
+this module as `model_browser.hooks.provider_hooks`, and as the top-level `provider` package
+in the plugin's tests.
 """
 
 import importlib
@@ -26,6 +28,7 @@ logger = logging.getLogger("plugins.model-browser")
 PROVIDERS = (
     ("pending_provider", "PendingProvider"),
     ("openmodeldb_provider", "OpenModelDBProvider"),
+    ("civarchive_provider", "CivArchiveProvider"),
 )
 
 
@@ -36,7 +39,7 @@ def _provider_module(name: str):
 
 
 def register_providers(context: HookContext) -> HookContext:
-    """Add `PendingProvider` and `OpenModelDBProvider` to `context.data["providers"]`, next to the other plugins' providers."""
+    """Add the plugin's providers (`PROVIDERS`) to `context.data["providers"]`, next to the other plugins' providers."""
     for module_name, class_name in PROVIDERS:
         try:
             module = _provider_module(module_name)

@@ -12,7 +12,7 @@ NSFW flags are set at normalisation time from the admin's `nsfw_max_level` setti
 
 from typing import List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SourceId = Literal["civitai", "huggingface", "openmodeldb", "civarchive"]
 NsfwCeiling = Literal["allowed", "blur", "blocked"]
@@ -79,6 +79,15 @@ class Version(BaseModel):
     nsfw: bool = False
     images: List[Image] = Field(default_factory=list)
     files: List[File] = Field(default_factory=list)
+    #: The source answered this version without its files and images: load
+    #: `<model id>:<version id>` to get them (CivArchive). A partial version never carries any.
+    partial: bool = False
+
+    @model_validator(mode="after")
+    def _partial_has_no_files_or_images(self) -> "Version":
+        if self.partial and (self.files or self.images):
+            raise ValueError("a partial version carries no files or images")
+        return self
 
 
 class License(BaseModel):
@@ -178,3 +187,5 @@ class SourceInfo(BaseModel):
     #: What the `base_model` of an item or a version holds, the label of that line in the
     #: detail ("Architecture" for OpenModelDB, whose `base_model` reads "ESRGAN 4x").
     base_model_label: str = "Base model"
+    #: A warning the page shows under the search help (CivArchive: an unofficial index); None for none.
+    notice: Optional[str] = None

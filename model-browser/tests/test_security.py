@@ -24,7 +24,9 @@ from backend.security import DOWNLOAD_HOSTS, html_to_text, is_allowed_download_u
         ("openmodeldb", "https://raw.githubusercontent.com/terrainer/AI-Upscaling-Models/main/4xSPANkendata/x.onnx"),
         ("openmodeldb", "https://f002.backblazeb2.com/file/ESRGAN/_RELEASE/4x_Fatality_01_375000_G.pth"),
         ("civarchive", "https://civitai.com/api/download/models/1"),
-        ("civarchive", "https://civarchive.com/files/model.safetensors"),
+        ("civarchive", "https://civitai.com/api/download/models/181422?type=Training%20Data"),
+        ("civarchive", "https://huggingface.co/baycon/for_Colab/resolve/main/lowra_v10.safetensors"),
+        ("civarchive", "https://huggingface.co/tim9292654/lora/resolve/main/%E7%BB%86%E5%8C%96/x.safetensors"),
     ],
 )
 def test_allowed_download_urls(source, url):
@@ -57,7 +59,16 @@ def test_allowed_download_urls(source, url):
         ("openmodeldb", "https://user-images.githubusercontent.com/x.png"),
         ("openmodeldb", "https://www.dropbox.com/s/x/model.pth"),
         ("openmodeldb", "https://u.pcloud.link/publink/show?code=x"),
+        # CivArchive hosts nothing: only the sources it indexes (CivitAI, Hugging Face mirrors).
+        ("civarchive", "https://civarchive.com/files/model.safetensors"),
         ("civarchive", "https://www.civarchive.com/x"),
+        ("civarchive", "https://civarchive.com/api/download/models/1"),
+        ("civarchive", "https://civitai.red/api/download/models/1"),
+        ("civarchive", "https://cdn-lfs.huggingface.co/repos/ab/cd/file"),
+        ("civarchive", "https://civitasbay.org/torrents/3A5909181098853299CEA64112B70284D199B24C"),
+        ("civarchive", "https://tensordrive.app/files/fc6defee-4bb2-432f-9a4d-7f6fbeb9daef"),
+        ("civarchive", "https://huggingface.co/tim9292654/lora/resolve/main/细化/x.safetensors"),
+        ("civarchive", "https://huggingface.co/QEEWDFHGFH/052723/resolve/main/x (1).safetensors"),
         # IP literals, local names, numeric hosts
         ("civitai", "https://127.0.0.1/api/download/models/1"),
         ("civitai", "https://10.0.0.5/api/download/models/1"),

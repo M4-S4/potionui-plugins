@@ -2,13 +2,31 @@
 	// The main column of the detail (DetailLayout `main`): the previews and the files of the version
 	// on screen, then the model's description. `description_html` was sanitised by the server
 	// (backend/security.py keeps text tags and https links only), so it is inserted as is.
+	// A version the source sent as a shell (lib/versions.js) has neither yet: its panel says that it
+	// is loading (DetailPanel fetches it), or why it could not be, with a Retry button. The previews
+	// of a version are revealed through `mediaModelId`: its own composite id when the versions of
+	// the detail come one by one (`byVersion`), else the id of the model.
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import FileList from './FileList.svelte';
 	import MediaGallery from './MediaGallery.svelte';
 	import { fileActionInfo } from '../lib/capabilities.js';
 	import { plural } from '../lib/format.js';
+	import { isPartial, mediaModelId } from '../lib/versions.js';
 
-	let { detail, version, me, installed, sourceLabel, revealCache, onDownload, onRequest, onPreview } = $props();
+	let {
+		detail,
+		version,
+		me,
+		installed,
+		sourceLabel,
+		revealCache,
+		byVersion = false,
+		versionError = null,
+		onRetryVersion,
+		onDownload,
+		onRequest,
+		onPreview
+	} = $props();
 
 	// Per file: a request depends on the file's size too (and on the model's suggested type).
 	const actionFor = $derived((file) =>
@@ -16,22 +34,37 @@
 	);
 	const files = $derived(version?.files ?? []);
 	const images = $derived(version?.images ?? []);
+	const shell = $derived(isPartial(version));
+	const shellTitle = $derived(
+		versionError?.status === 404 ? 'Version not found' : versionError?.status === 429 ? 'Rate limited' : "Couldn't load this version"
+	);
 </script>
 
-<HostUi name="DetailSection" props={{ label: images.length ? `Previews (${images.length})` : 'Previews', icon: 'image' }}>
-	<MediaGallery {images} name={detail.name} source={detail.source} modelId={detail.id} {me} {revealCache} {onPreview} />
-</HostUi>
+{#if shell}
+	{#if versionError}
+		<HostUi name="LoadErrorState" props={{ title: shellTitle, message: versionError.message, onRetry: onRetryVersion }} />
+	{:else}
+		<div class="flex items-center justify-center gap-3 py-16 text-sm text-fg-muted">
+			<HostUi name="Spinner" props={{ size: 'md' }} />
+			<span>Loading version…</span>
+		</div>
+	{/if}
+{:else}
+	<HostUi name="DetailSection" props={{ label: images.length ? `Previews (${images.length})` : 'Previews', icon: 'image' }}>
+		<MediaGallery {images} name={detail.name} source={detail.source} modelId={mediaModelId(detail, version, byVersion)} {me} {revealCache} {onPreview} />
+	</HostUi>
 
-<HostUi name="DetailSection" props={{ label: files.length ? plural(files.length, 'File') : 'Files', icon: 'document', padded: false }}>
-	<FileList
-		{files}
-		{installed}
-		gated={detail.gated}
-		{actionFor}
-		onDownload={(file, opener) => onDownload?.({ detail, version, file, opener })}
-		onRequest={(file, opener) => onRequest?.({ detail, version, file, opener })}
-	/>
-</HostUi>
+	<HostUi name="DetailSection" props={{ label: files.length ? plural(files.length, 'File') : 'Files', icon: 'document', padded: false }}>
+		<FileList
+			{files}
+			{installed}
+			gated={detail.gated}
+			{actionFor}
+			onDownload={(file, opener) => onDownload?.({ detail, version, file, opener })}
+			onRequest={(file, opener) => onRequest?.({ detail, version, file, opener })}
+		/>
+	</HostUi>
+{/if}
 
 {#if detail.description_html}
 	<HostUi name="DetailSection" props={{ label: 'Description', icon: 'document' }}>

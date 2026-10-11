@@ -167,13 +167,15 @@ def make_source(transport: HuggingFaceTransport, cache: Any = None):
     return HuggingFaceSource(http_client=client, cache_store=cache if cache is not None else MemoryCache())
 
 
-#: OpenModelDB's site (`openmodeldb_fakes.SITE`), for `combined_fetch`.
+#: OpenModelDB's and CivArchive's sites (`openmodeldb_fakes.SITE`, `civarchive_fakes.SITE`), for `combined_fetch`.
 OPENMODELDB_SITE = "https://openmodeldb.info"
+CIVARCHIVE_SITE = "https://civarchive.com"
 
 
-def combined_fetch(civitai, huggingface, openmodeldb=None):
+def combined_fetch(civitai, huggingface, openmodeldb=None, civarchive=None):
     """One `fetch` for the shared `SourceHttp` of the route tests: huggingface.co URLs to one
-    fake, openmodeldb.info URLs to `openmodeldb` (a 503 without one), the rest to `civitai`."""
+    fake, openmodeldb.info URLs to `openmodeldb` and civarchive.com URLs to `civarchive` (a 503
+    without one), the rest to `civitai`."""
 
     async def fetch(url: str, params):
         if url.startswith(SITE + "/"):
@@ -182,6 +184,10 @@ def combined_fetch(civitai, huggingface, openmodeldb=None):
             if openmodeldb is None:
                 return 503, {"Content-Type": "text/plain"}, b"OpenModelDB is not faked in this test"
             return await openmodeldb(url, params)
+        if url.startswith(CIVARCHIVE_SITE + "/"):
+            if civarchive is None:
+                return 503, {"Content-Type": "text/plain"}, b"CivArchive is not faked in this test"
+            return await civarchive(url, params)
         return await civitai(url, params)
 
     return fetch

@@ -572,6 +572,7 @@ def test_detail_for_a_user_who_may_see_it(client, transport, state):
     assert data["source_url"] == "https://civitai.com/models/122359"
     assert data["license"]["summary"].startswith("Credit required")
     assert [version["id"] for version in data["versions"]] == ["135867", "133241"]
+    assert [version["partial"] for version in data["versions"]] == [False, False]
 
 
 def test_detail_of_an_nsfw_model_is_404_for_a_blocked_user(client, transport, state):
@@ -766,6 +767,7 @@ def test_hugging_face_detail_with_a_slash_in_its_id(client, hf_transport):
     assert (data["id"], data["mb_type"], data["gated"]) == (LCM, "lora", False)
     assert data["license"]["summary"] == "openrail++"
     [version] = data["versions"]
+    assert version["partial"] is False
     assert [file["name"] for file in version["files"]] == ["pytorch_lora_weights.safetensors"]
     assert version["files"][0]["download_url"] == (
         f"https://huggingface.co/{LCM}/resolve/main/pytorch_lora_weights.safetensors"

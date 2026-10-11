@@ -1,14 +1,15 @@
 """The model catalogues the browser can search (PLAN.md §8), and their registry.
 
 CivitAI (phase 1), Hugging Face (phase 2) and OpenModelDB (phase 6) are always enabled.
-CivArchive comes in a later phase: it registers here, and as an opt-in source it is only
-enabled when its admin setting is on.
+CivArchive (phase 7, `sources/civarchive.py`) is an opt-in source: it is only enabled while
+its admin setting, `enable_civarchive`, is on.
 """
 
 from typing import Callable, Dict, List
 
 from .. import settings
 from .base import DEFAULT_LIMIT, MAX_LIMIT, MAX_QUERY_LENGTH, SearchQuery, Source, UnknownSource
+from .civarchive import CivArchiveSource
 from .civitai import CivitaiSource
 from .huggingface import HuggingFaceSource
 from .openmodeldb import OpenModelDBSource
@@ -31,6 +32,7 @@ _FACTORIES: Dict[str, Callable[[], Source]] = {
     "civitai": CivitaiSource,
     "huggingface": HuggingFaceSource,
     "openmodeldb": OpenModelDBSource,
+    "civarchive": CivArchiveSource,
 }
 #: Sources an admin setting has to switch on (PLAN.md §8.5).
 _OPT_IN_SETTINGS = {"civarchive": "enable_civarchive"}

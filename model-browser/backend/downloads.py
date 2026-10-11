@@ -395,6 +395,19 @@ def _not_visible() -> DownloadError:
     )
 
 
+async def source_detail(source: Any, request: FileRef, max_level: int) -> ModelDetail:
+    """The source's detail of the requested model, holding the requested version in full.
+
+    A source that answers one version in full and the others without files (CivArchive) says
+    so with a `version_detail(model_id, version_id, max_level=...)`, asked for the version the
+    request names; any other source gives its `detail`.
+    """
+    version_detail = getattr(source, "version_detail", None)
+    if callable(version_detail):
+        return await version_detail(request.model_id, request.version_id, max_level=max_level)
+    return await source.detail(request.model_id, max_level=max_level)
+
+
 @dataclass(frozen=True)
 class Prepared:
     """A download that passed its checks (`prepare_download`), for `queue_prepared`."""
@@ -445,7 +458,7 @@ async def prepare_download(
     except UnknownSource:
         raise DownloadError(404, "unknown_source", f"Unknown source '{request.source[:64]}'") from None
     ctx = await asyncio.to_thread(nsfw.resolve_nsfw, user)
-    raw = await source.detail(request.model_id, max_level=ctx.max_level)
+    raw = await source_detail(source, request, ctx.max_level)
     detail = nsfw_filter.filter_detail(raw, ctx)
     if detail is None:
         raise _not_visible() if on_behalf else _not_found("Model not found")

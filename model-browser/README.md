@@ -7,11 +7,12 @@ description, previews, tags, base model and license filled in. Admins and users 
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
 
-## Status: phase 6 (OpenModelDB)
+## Status: phase 7 (CivArchive, experimental)
 
-The **Model Browser** page (`/plugins/model-browser`) searches CivitAI, Hugging Face and
-OpenModelDB, shows a model's versions, previews, files and licence, and downloads a file into
-PotionUI for every signed-in user with the `browse` / `download` rights. A user with `request` but
+The **Model Browser** page (`/plugins/model-browser`) searches CivitAI, Hugging Face,
+OpenModelDB and, when an admin switches it on, CivArchive; it shows a model's versions,
+previews, files and licence, and downloads a file into PotionUI for every signed-in user
+with the `browse` / `download` rights. A user with `request` but
 not `download` asks for a file instead; an admin (or a holder of `approve`) approves or
 declines the request from the page, and the model lands in the requester's models. Admins
 edit the rights per user group in Admin → Plugins → Model Browser → Permissions, and can cap
@@ -64,6 +65,15 @@ downloads per month through PotionUI's plans.
 - CivitAI's API answers the same catalogue on `civitai.com` and `civitai.red` (checked
   2026-10-11); with `civitai_api_base` set to the `.red` host, download links are rewritten to
   `civitai.com` so the `civitai` provider still authenticates them.
+- **CivArchive** (experimental, off by default: the `enable_civarchive` setting): an
+  unofficial community index of CivitAI read through the site's Next.js data endpoints (the
+  page's build id is resolved from the home page and renewed when it goes stale), one
+  request per second. Search with `#tag`, `@user`, pasted links, CivitAI type and base
+  model filters, sort and period; models deleted from CivitAI are served from their
+  Hugging Face mirrors when they have one (torrent-only models show "Not downloadable").
+  A model's other versions load when their tab is opened. The page shows an "unofficial
+  source" notice, the source is excluded from the default download rights, and the
+  `civarchive` marketplace provider answers hash lookups only while the setting is on.
 
 - A **Model Browser** entry in the sidebar; `GET /api/plugins/model-browser/health`.
 - `GET /me`: the caller's capabilities, download parameters (`params`, merged from the groups

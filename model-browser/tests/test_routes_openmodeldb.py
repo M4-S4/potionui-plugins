@@ -175,7 +175,9 @@ def test_detail_of_a_downloadable_upscaler(client):
     assert (data["source"], data["id"], data["type"], data["mb_type"]) == ("openmodeldb", ONNX_FIRST, "HAT", "upscaler")
     assert data["license"]["summary"] == "CC-BY-4.0"
     (version,) = data["versions"]
-    assert (version["id"], version["name"], version["base_model"]) == (ONNX_FIRST, "Release", "HAT 4x")
+    assert (version["id"], version["name"], version["base_model"], version["partial"]) == (
+        ONNX_FIRST, "Release", "HAT 4x", False,
+    )
     # The onnx is not offered: PotionUI can neither index nor load it.
     assert [(file["name"], file["primary"], file["auth_provider_id"]) for file in version["files"]] == [
         ("4xNomos8kSCHAT-S.pth", True, None),

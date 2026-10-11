@@ -61,7 +61,13 @@ class Source(Protocol):
         ...
 
     async def detail(self, model_id: str, *, max_level: Optional[int] = None) -> ModelDetail:
-        """One model with its versions, files and images, normalised and unfiltered."""
+        """One model with its versions, files and images, normalised and unfiltered.
+
+        A source that answers one version in full and lists the others without files
+        (CivArchive) also has `version_detail(model_id, version_id, *, max_level=None)`, the
+        model with that version in full: a download checks its file against it
+        (`downloads.source_detail`).
+        """
         ...
 
 
