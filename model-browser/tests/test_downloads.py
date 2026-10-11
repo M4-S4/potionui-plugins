@@ -179,7 +179,7 @@ async def test_a_source_the_grant_does_not_allow_is_refused_before_reading_it(co
 
 
 async def test_an_unknown_source_is_a_404(core, civitai):
-    error = await _refused(admin(), source="openmodeldb")
+    error = await _refused(admin(), source="civarchive")
 
     assert (error.status, error.code) == (404, "unknown_source")
 

@@ -1,11 +1,20 @@
 <script>
 	// The "Filters" button and its popover, in the host's FilterPopoverFrame: the source's types
-	// (several at once), its base model (one, with a search box; CivitAI only) and its period (when
-	// it has periods). Every change applies at once, as the frame says. The sort is the select of
-	// the page header (LibraryPage's own sort select).
+	// (several at once), its base model (one, with a search box; when the source has any) and its
+	// period (when it has periods); a group the source does not offer is not drawn. The first two
+	// are titled with the source's own words (`types_label`, `base_models_label`: "Architecture"
+	// and "Scale" for OpenModelDB). Every change applies at once, as the frame says. The sort is the
+	// select of the page header (LibraryPage's own sort select).
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
-	import { clearFilters, matchOptions, sourceDefaults, toggleType } from '../lib/search.js';
+	import {
+		DEFAULT_BASE_MODELS_LABEL,
+		DEFAULT_TYPES_LABEL,
+		clearFilters,
+		matchOptions,
+		sourceDefaults,
+		toggleType
+	} from '../lib/search.js';
 	import { escapeCloses } from '../lib/dom.js';
 
 	let { info, filters, count = 0, onChange } = $props();
@@ -21,6 +30,11 @@
 	const types = $derived(info?.types ?? []);
 	const baseModels = $derived(info?.base_models ?? []);
 	const periods = $derived(info?.periods ?? []);
+	const typesLabel = $derived(info?.types_label || DEFAULT_TYPES_LABEL);
+	const baseLabel = $derived(info?.base_models_label || DEFAULT_BASE_MODELS_LABEL);
+	// The base model label is a singular noun ("Base model", "Scale"): in the sentences of the
+	// group it is lower case, and plural with an "s" ("Search 12 scales").
+	const baseNoun = $derived(baseLabel.toLowerCase());
 	const offered = $derived(types.length > 0 || baseModels.length > 0 || periods.length > 0);
 	const baseMatches = $derived(matchOptions(baseModels, baseQuery));
 	const period = $derived(filters.period || sourceDefaults(info).period);
@@ -87,7 +101,7 @@
 				>
 					{#if types.length > 0}
 						<div class="col-span-2 flex flex-col gap-1.5">
-							<span class="text-xs font-medium text-fg-muted" id="{uid}-types">Types</span>
+							<span class="text-xs font-medium text-fg-muted" id="{uid}-types">{typesLabel}</span>
 							<div
 								class="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto rounded border border-line-strong bg-surface-2 p-1.5"
 								role="group"
@@ -112,16 +126,16 @@
 
 					{#if baseModels.length > 0}
 						<div class="col-span-2 flex flex-col gap-1.5">
-							<label class="text-xs font-medium text-fg-muted" for="{uid}-base">Base model</label>
+							<label class="text-xs font-medium text-fg-muted" for="{uid}-base">{baseLabel}</label>
 							<input
 								id="{uid}-base"
 								type="text"
 								class="input h-8 w-full text-xs"
-								placeholder={`Search ${baseModels.length} base models`}
+								placeholder={`Search ${baseModels.length} ${baseNoun}${baseModels.length === 1 ? '' : 's'}`}
 								autocomplete="off"
 								bind:value={baseQuery}
 							/>
-							<div class="max-h-32 overflow-y-auto rounded border border-line-strong bg-surface-2 p-1" role="group" aria-label="Base model">
+							<div class="max-h-32 overflow-y-auto rounded border border-line-strong bg-surface-2 p-1" role="group" aria-label={baseLabel}>
 								<button
 									type="button"
 									class="block w-full rounded px-2 py-1 text-left text-xs {filters.baseModel === ''
@@ -130,7 +144,7 @@
 									aria-pressed={filters.baseModel === ''}
 									onclick={() => setBaseModel('')}
 								>
-									Any base model
+									Any {baseNoun}
 								</button>
 								{#each baseMatches as option (option.value)}
 									<button
@@ -145,7 +159,7 @@
 									</button>
 								{/each}
 								{#if baseMatches.length === 0}
-									<p class="px-2 py-1 text-xs text-fg-subtle">No base model matches.</p>
+									<p class="px-2 py-1 text-xs text-fg-subtle">No {baseNoun} matches.</p>
 								{/if}
 							</div>
 						</div>

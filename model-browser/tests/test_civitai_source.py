@@ -2,6 +2,7 @@
 request flow (cursors, `ids` chunks, refetches, removed models) through the fake transport.
 """
 
+import json
 import re
 
 import pytest
@@ -863,11 +864,63 @@ async def test_info_without_civitai_still_lists_the_source():
 # Registry ------------------------------------------------------------------------------------
 
 
-def test_the_registry_has_civitai_and_hugging_face_in_phase_2(_settings):
+def test_the_registry_has_civitai_hugging_face_and_openmodeldb_in_phase_6(_settings):
     _settings["enable_civarchive"] = True
 
-    assert [source.id for source in enabled_sources()] == ["civitai", "huggingface"]
+    assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb"]
     assert get_source("civitai") is get_source("civitai")
-    for unknown in ("civarchive", "openmodeldb", "nope"):
+    assert get_source("openmodeldb") is get_source("openmodeldb")
+    for unknown in ("civarchive", "nope"):
         with pytest.raises(UnknownSource):
             get_source(unknown)
+
+
+# civitai.red -----------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("https://civitai.red/api/download/models/135867?type=Model&format=SafeTensor",
+         "https://civitai.com/api/download/models/135867?type=Model&format=SafeTensor"),
+        ("https://www.civitai.red/api/download/models/1", "https://civitai.com/api/download/models/1"),
+        ("https://CIVITAI.RED/api/download/models/1", "https://civitai.com/api/download/models/1"),
+        # Anything else is left alone (the allowlist refuses what it must).
+        ("https://civitai.com/api/download/models/1", "https://civitai.com/api/download/models/1"),
+        ("https://civitai.red:8443/api/download/models/1", "https://civitai.red:8443/api/download/models/1"),
+        ("https://user@civitai.red/api/download/models/1", "https://user@civitai.red/api/download/models/1"),
+        ("https://civitai.red.evil.example/x", "https://civitai.red.evil.example/x"),
+        ("https://[broken/x", "https://[broken/x"),
+    ],
+)
+def test_civitai_red_download_urls_move_to_civitai_com(url, expected):
+    from backend.sources.civitai import com_download_url
+
+    assert com_download_url(url) == expected
+
+
+async def test_a_red_api_base_still_gives_downloads_the_allowlist_and_the_provider_accept(_settings):
+    """`civitai_api_base` = https://civitai.red/api/v1: the same answers, download URLs on civitai.red."""
+    from backend.http import SourceHttp
+    from backend.security import is_allowed_download_url
+
+    _settings["civitai_api_base"] = "https://civitai.red/api/v1"
+    raw = body("model_122359")
+    for version in raw["modelVersions"]:
+        for file in version["files"]:
+            file["downloadUrl"] = file["downloadUrl"].replace("https://civitai.com/", "https://civitai.red/")
+    seen = []
+
+    async def fetch(url, params):
+        seen.append(url)
+        return 200, {}, json.dumps(raw).encode("utf-8")
+
+    source = CivitaiSource(http_client=SourceHttp(fetch=fetch, limits={"civitai": (0, 4)}), cache_store=MemoryCache())
+    detail = await source.detail("122359", max_level=2)
+
+    files = [file for version in detail.versions for file in version.files]
+    assert seen == ["https://civitai.red/api/v1/models/122359"]
+    assert files and all(file.download_url.startswith("https://civitai.com/api/download/models/") for file in files)
+    assert all(is_allowed_download_url("civitai", file.download_url) for file in files)
+    assert {file.auth_provider_id for file in files} == {"civitai"}
+    assert files[0].download_url == "https://civitai.com/api/download/models/135867?fileId=99264"

@@ -1,15 +1,17 @@
 <script>
 	// The side column of the detail (DetailLayout `aside`): the version on screen (base model,
 	// date, trigger words with copy buttons), the model (type, creator, stats, source link), its
-	// licence and its tags, in host DetailSection / KVGrid / KVItem.
+	// licence and its tags, in host DetailSection / KVGrid / KVItem. The base model line takes the
+	// source's own name for it (`baseModelLabel`: "Architecture" for OpenModelDB).
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Pill from './Pill.svelte';
 	import Icon from './Icon.svelte';
 	import { formatCount, formatDate, modelTypeLabel } from '../lib/format.js';
 	import { licenseFlags } from '../lib/downloadForm.js';
 	import { copyText, toast } from '../lib/dom.js';
+	import { DEFAULT_BASE_MODEL_LABEL } from '../lib/search.js';
 
-	let { detail, version, sourceUrl = '', sourceHost = '' } = $props();
+	let { detail, version, sourceUrl = '', sourceHost = '', baseModelLabel = '' } = $props();
 
 	const triggers = $derived((version?.trigger_words ?? []).filter((word) => typeof word === 'string' && word.trim()));
 	const flags = $derived(licenseFlags(detail.license));
@@ -34,7 +36,7 @@
 			<HostUi name="KVItem" props={{ label: 'Name', full: true }}>
 				<span class="break-words">{version.name}</span>
 			</HostUi>
-			<HostUi name="KVItem" props={{ label: 'Base model' }}>{version.base_model || '—'}</HostUi>
+			<HostUi name="KVItem" props={{ label: baseModelLabel || DEFAULT_BASE_MODEL_LABEL }}>{version.base_model || '—'}</HostUi>
 			<HostUi name="KVItem" props={{ label: 'Published' }}>{formatDate(version.created_at) || '—'}</HostUi>
 			{#if version.early_access || version.nsfw}
 				<HostUi name="KVItem" props={{ label: 'Flags', full: true }}>

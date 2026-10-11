@@ -94,7 +94,7 @@ def test_docs_files_exist(manifest):
 # provider.register --------------------------------------------------------------
 
 
-def test_provider_register_adds_the_model_browser_provider_next_to_the_others(loader, manifest):
+def test_provider_register_adds_both_providers_next_to_the_others(loader, manifest):
     from src.plugin_api import HookContext, MarketplaceProviderBase
 
     register = _handler(loader, manifest, "provider.register")
@@ -105,14 +105,18 @@ def test_provider_register_adds_the_model_browser_provider_next_to_the_others(lo
 
     assert result is context
     providers = result.data["providers"]
+    assert list(providers) == ["civitai", "model-browser", "openmodeldb"]
     assert providers["civitai"] is other
-    provider_class = providers["model-browser"]
-    assert issubclass(provider_class, MarketplaceProviderBase)
-    assert provider_class.__module__ == "model_browser.provider.pending_provider"
-    assert provider_class().get_metadata().id == "model-browser"
-    # The provider reaches the backend through the plugin's package, never a top-level `backend`.
-    provider_module = sys.modules["model_browser.provider.pending_provider"]
-    assert provider_module.pending.__name__ == "model_browser.backend.pending"
+    for provider_id, module in (("model-browser", "pending_provider"), ("openmodeldb", "openmodeldb_provider")):
+        provider_class = providers[provider_id]
+        assert issubclass(provider_class, MarketplaceProviderBase)
+        assert provider_class.__module__ == f"model_browser.provider.{module}"
+        assert provider_class().get_metadata().id == provider_id
+    # The providers reach the backend through the plugin's package, never a top-level `backend`.
+    assert sys.modules["model_browser.provider.pending_provider"].pending.__name__ == "model_browser.backend.pending"
+    openmodeldb_module = sys.modules["model_browser.provider.openmodeldb_provider"]
+    assert openmodeldb_module.openmodeldb.__name__ == "model_browser.backend.sources.openmodeldb"
+    assert openmodeldb_module.sources.__name__ == "model_browser.backend.sources"
 
 
 def test_provider_register_creates_the_providers_map_and_never_raises(loader, manifest):
@@ -122,9 +126,38 @@ def test_provider_register_creates_the_providers_map_and_never_raises(loader, ma
     empty = HookContext(hook_name="provider.register", plugin_id=PLUGIN_ID, data={})
     broken = HookContext(hook_name="provider.register", plugin_id=PLUGIN_ID, data={"providers": "not a map"})
 
-    assert register(empty).data["providers"]["model-browser"].__name__ == "PendingProvider"
+    registered = register(empty).data["providers"]
+    assert {provider_id: cls.__name__ for provider_id, cls in registered.items()} == {
+        "model-browser": "PendingProvider",
+        "openmodeldb": "OpenModelDBProvider",
+    }
     assert register(broken) is broken
     assert broken.data["providers"] == "not a map"
+
+
+def test_a_broken_openmodeldb_provider_does_not_keep_the_model_browser_one_out(monkeypatch, caplog):
+    """The handler as the tests import it (top-level `hooks`), with the OpenModelDB provider module broken."""
+    import importlib
+    import logging
+
+    from hooks import provider_hooks
+    from src.plugin_api import HookContext
+
+    real = importlib.import_module
+
+    def failing(name, package=None):
+        if name.endswith("openmodeldb_provider"):
+            raise ImportError("broken")
+        return real(name, package)
+
+    monkeypatch.setattr(provider_hooks.importlib, "import_module", failing)
+    context = HookContext(hook_name="provider.register", plugin_id=PLUGIN_ID, data={"providers": {}})
+
+    with caplog.at_level(logging.ERROR, logger="plugins.model-browser"):
+        assert provider_hooks.register_providers(context) is context
+
+    assert list(context.data["providers"]) == ["model-browser"]
+    assert "Could not register the OpenModelDBProvider marketplace provider" in caplog.text
 
 
 async def test_the_core_provider_registry_discovers_and_initializes_the_provider(
@@ -152,21 +185,24 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
             return final, all(result.success for result in results)
 
     registry = ProviderRegistry(registry=Plugins())
-    # Settings would be read from the `model-browser-provider` plugin, which does not exist.
+    # Settings would be read from the providers' own plugins, which do not exist.
     monkeypatch.setattr(registry, "_get_provider_settings", lambda provider_id: {})
 
-    assert [metadata.id for metadata in await registry.discover_providers()] == ["model-browser"]
-    assert await registry.initialize_providers() == {"model-browser": True}
-    assert registry.is_provider_initialized("model-browser")
-    provider = registry.get_provider("model-browser")
-    assert registry.get_providers_with_capability(ProviderCapability.HASH_LOOKUP) == [provider]
+    assert [metadata.id for metadata in await registry.discover_providers()] == ["model-browser", "openmodeldb"]
+    assert await registry.initialize_providers() == {"model-browser": True, "openmodeldb": True}
+    assert registry.is_provider_initialized("model-browser") and registry.is_provider_initialized("openmodeldb")
+    provider, openmodeldb = registry.get_provider("model-browser"), registry.get_provider("openmodeldb")
+    assert registry.get_providers_with_capability(ProviderCapability.HASH_LOOKUP) == [provider, openmodeldb]
     # What the model page's "Mirrors" section and run_provider_fetch call.
-    assert provider.provider_name == "Model Browser"
+    assert (provider.provider_name, openmodeldb.provider_name) == ("Model Browser", "OpenModelDB")
     assert provider.get_model_page_url("civitai:122359", "135867") == (
         "https://civitai.com/models/122359?modelVersionId=135867"
     )
+    assert openmodeldb.get_model_page_url("openmodeldb:4x-UltraSharp") == "https://openmodeldb.info/models/4x-UltraSharp"
     create_tables()
     assert await registry.get_model_by_hash("model-browser", "0" * 64, raise_errors=True) is None
+    # A value that is not a SHA256 answers None before any catalogue is loaded.
+    assert await registry.get_model_by_hash("openmodeldb", "not-a-hash", raise_errors=True) is None
 
 
 # notification_type.register ---------------------------------------------------------

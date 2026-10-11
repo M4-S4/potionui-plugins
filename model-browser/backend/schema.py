@@ -171,3 +171,10 @@ class SourceInfo(BaseModel):
     periods: List[FilterOption] = Field(default_factory=list)
     #: One line for the search box, e.g. "#tag, @user, $#id1,id2 or a pasted model URL".
     search_help: Optional[str] = None
+    #: Heading of the `types` filter in the page's filter popover ("Architecture" for OpenModelDB).
+    types_label: str = "Types"
+    #: Heading of the `base_models` filter ("Scale" for OpenModelDB).
+    base_models_label: str = "Base model"
+    #: What the `base_model` of an item or a version holds, the label of that line in the
+    #: detail ("Architecture" for OpenModelDB, whose `base_model` reads "ESRGAN 4x").
+    base_model_label: str = "Base model"

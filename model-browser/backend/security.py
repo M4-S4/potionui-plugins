@@ -17,11 +17,21 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 #: Hosts each source may hand out as a download URL. "*.example.com" allows the
-#: subdomains of example.com, not example.com itself.
+#: subdomains of example.com, not example.com itself. OpenModelDB's are the hosts of the
+#: direct file URLs `sources/openmodeldb.py::is_direct_url` accepts (Hugging Face, GitHub
+#: releases and raw files, Oracle and Backblaze object storage); its Google Drive, Mega ...
+#: links are pages, never downloads.
 DOWNLOAD_HOSTS: Dict[str, FrozenSet[str]] = {
     "civitai": frozenset({"civitai.com"}),
     "huggingface": frozenset({"huggingface.co", "*.huggingface.co"}),
-    "openmodeldb": frozenset({"huggingface.co", "github.com", "objects.githubusercontent.com", "*.oraclecloud.com"}),
+    "openmodeldb": frozenset({
+        "huggingface.co",
+        "github.com",
+        "objects.githubusercontent.com",
+        "raw.githubusercontent.com",
+        "*.oraclecloud.com",
+        "*.backblazeb2.com",
+    }),
     "civarchive": frozenset({"civitai.com", "civarchive.com"}),
 }
 

@@ -28,6 +28,17 @@ const SOURCE_ICONS = {
 	civarchive: 'library'
 };
 
+/**
+ * How the UI names things when `GET /sources` does not say (OpenModelDB sends its own):
+ * - `types_label` and `base_models_label` name the two groups of the filter popover ("Architecture"
+ *   and "Scale"), which filter by `types` and `base_models`;
+ * - `base_model_label` names the base model line of a version in the detail panel ("Architecture":
+ *   its `base_model` is like "ESRGAN 4x"). It is not `base_models_label`.
+ */
+export const DEFAULT_TYPES_LABEL = 'Types';
+export const DEFAULT_BASE_MODELS_LABEL = 'Base model';
+export const DEFAULT_BASE_MODEL_LABEL = 'Base model';
+
 const SHA256 = /^[0-9a-f]{64}$/;
 
 function isObject(value) {
@@ -44,11 +55,14 @@ export function emptyState(source = '') {
 }
 
 /**
- * The sources of `GET /sources` that are on, each with its option lists present.
+ * The sources of `GET /sources` that are on, each with its option lists present and the names it
+ * gives things (`types_label`, `base_models_label` for the two filter groups, `base_model_label`
+ * for the base model of a version: the defaults when missing or blank).
  *
  * @param {unknown} sources
  * @returns {{ id: string, label: string, types: {value: string, label: string}[], base_models: {value: string, label: string}[],
- *             sorts: {value: string, label: string}[], periods: {value: string, label: string}[], search_help: string }[]}
+ *             sorts: {value: string, label: string}[], periods: {value: string, label: string}[], search_help: string,
+ *             types_label: string, base_models_label: string, base_model_label: string }[]}
  */
 export function enabledSources(sources) {
 	if (!Array.isArray(sources)) return [];
@@ -65,7 +79,10 @@ export function enabledSources(sources) {
 			base_models: options(source.base_models),
 			sorts: options(source.sorts),
 			periods: options(source.periods),
-			search_help: text(source.search_help)
+			search_help: text(source.search_help),
+			types_label: text(source.types_label).trim() || DEFAULT_TYPES_LABEL,
+			base_models_label: text(source.base_models_label).trim() || DEFAULT_BASE_MODELS_LABEL,
+			base_model_label: text(source.base_model_label).trim() || DEFAULT_BASE_MODEL_LABEL
 		}));
 }
 
@@ -238,7 +255,9 @@ function labelOf(list, value) {
 
 /**
  * The active filters as chips (`LibraryFilterChipRow`): each type, the base model, a period other
- * than the default. The sort is not a filter (it has its own select).
+ * than the default. A chip is the value alone, with no group name in front of it (so the source's
+ * `types_label` / `base_models_label` have no place here). The sort is not a filter (it has its
+ * own select).
  *
  * @returns {{ key: string, label: string }[]}
  */

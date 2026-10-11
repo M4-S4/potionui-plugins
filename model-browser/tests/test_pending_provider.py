@@ -613,6 +613,8 @@ def test_build_model_info_is_usable_on_its_own():
         ("huggingface:latent-consistency/lcm-lora-sdxl", "main", "https://huggingface.co/latent-consistency/lcm-lora-sdxl"),
         ("huggingface:gpt2", None, "https://huggingface.co/gpt2"),
         ("huggingface:stabilityai/stable-diffusion-3.5-large", None, "https://huggingface.co/stabilityai/stable-diffusion-3.5-large"),
+        ("openmodeldb:4x-UltraSharp", None, "https://openmodeldb.info/models/4x-UltraSharp"),
+        ("openmodeldb:4x-Nomos8kSC", "4x-Nomos8kSC", "https://openmodeldb.info/models/4x-Nomos8kSC"),
     ],
 )
 def test_the_mirror_link_points_at_the_source_page(provider, model_id, version_id, url):
@@ -643,7 +645,10 @@ def test_the_mirror_link_points_at_the_source_page(provider, model_id, version_i
         "huggingface:org/repo?x=1",
         "huggingface:org/re..po",
         "huggingface:org/-repo",
-        "openmodeldb:4x-UltraSharp",
+        "openmodeldb:",
+        "openmodeldb:../x",
+        "openmodeldb:4x x",
+        "openmodeldb:org/repo",
         "civarchive:122359",
         "unknown:1",
     ],

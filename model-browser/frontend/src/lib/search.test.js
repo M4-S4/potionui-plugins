@@ -65,6 +65,34 @@ const SOURCES = enabledSources([
 const CIVITAI = SOURCES[0];
 const HF = SOURCES[1];
 
+// An OpenModelDB-shaped entry (illustrative values): its filters are architectures and scales and
+// the base model of a version is an architecture, all named by labels the other entries leave out;
+// it has no periods.
+const OPENMODELDB = enabledSources([
+	{
+		id: 'openmodeldb',
+		label: 'OpenModelDB',
+		enabled: true,
+		types: [
+			{ value: 'esrgan', label: 'ESRGAN' },
+			{ value: 'swinir', label: 'SwinIR' }
+		],
+		base_models: [
+			{ value: '2', label: '2x' },
+			{ value: '4', label: '4x' }
+		],
+		sorts: [
+			{ value: 'newest', label: 'Newest' },
+			{ value: 'name', label: 'Name' }
+		],
+		periods: [],
+		search_help: 'Text, #tag',
+		types_label: 'Architecture',
+		base_models_label: 'Scale',
+		base_model_label: 'Architecture'
+	}
+])[0];
+
 test('enabledSources keeps the enabled sources with their option lists', () => {
 	assert.deepEqual(
 		SOURCES.map((source) => source.id),
@@ -80,8 +108,41 @@ test('enabledSources keeps the enabled sources with their option lists', () => {
 		base_models: [],
 		sorts: [],
 		periods: [],
-		search_help: ''
+		search_help: '',
+		types_label: 'Types',
+		base_models_label: 'Base model',
+		base_model_label: 'Base model'
 	});
+});
+
+test('enabledSources names the filter groups and the base model line, with defaults', () => {
+	const names = (source) => [source.types_label, source.base_models_label, source.base_model_label];
+	// CivitAI and Hugging Face send no label: "Types", "Base model" and "Base model".
+	assert.deepEqual(names(CIVITAI), ['Types', 'Base model', 'Base model']);
+	assert.deepEqual(names(HF), ['Types', 'Base model', 'Base model']);
+	// OpenModelDB sends its own: architectures and scales to filter by, and the architecture as the
+	// base model of a version ("ESRGAN 4x").
+	assert.deepEqual(names(OPENMODELDB), ['Architecture', 'Scale', 'Architecture']);
+	// Only a non-blank string counts, it is trimmed, and the three labels are independent (the
+	// singular base_model_label is not the plural base_models_label).
+	const odd = enabledSources([
+		{ id: 'a', types_label: '', base_models_label: '   ', base_model_label: '' },
+		{ id: 'b', types_label: 7, base_models_label: null, base_model_label: false },
+		{ id: 'c', types_label: ['Kind'], base_models_label: {}, base_model_label: ['Kind'] },
+		{ id: 'd', types_label: '  Family ', base_models_label: ' Size ', base_model_label: ' Origin ' },
+		{ id: 'e', types_label: 'Kind' },
+		{ id: 'f', base_models_label: 'Scale' },
+		{ id: 'g', base_model_label: 'Architecture' }
+	]).map(names);
+	assert.deepEqual(odd, [
+		['Types', 'Base model', 'Base model'],
+		['Types', 'Base model', 'Base model'],
+		['Types', 'Base model', 'Base model'],
+		['Family', 'Size', 'Origin'],
+		['Kind', 'Base model', 'Base model'],
+		['Types', 'Scale', 'Base model'],
+		['Types', 'Base model', 'Architecture']
+	]);
 });
 
 test('sourceSections gives each source a rail icon', () => {
@@ -220,6 +281,24 @@ test('filterChips lists types, base model and a period other than the default', 
 		{ key: 'period', label: 'Past month' }
 	]);
 	assert.deepEqual(filterChips(emptyState('civitai'), CIVITAI), []);
+});
+
+test('a source without periods and with its own group names filters like the others', () => {
+	assert.deepEqual(OPENMODELDB.periods, []);
+	assert.deepEqual(sourceDefaults(OPENMODELDB), { sort: 'newest', period: '' });
+	// A period left in the URL is dropped, and none is sent.
+	const stale = { ...emptyState('openmodeldb'), period: 'month' };
+	assert.equal(normalizeState(stale, [OPENMODELDB]).period, '');
+	assert.equal(searchRequest(stale, OPENMODELDB), `sort=newest&limit=${DEFAULT_LIMIT}`);
+	// Types and base models (the scales) travel as for the other sources.
+	const state = { ...emptyState('openmodeldb'), types: ['esrgan'], baseModel: '4' };
+	assert.deepEqual(normalizeState(state, [OPENMODELDB]), state);
+	assert.equal(searchRequest(state, OPENMODELDB), `types=esrgan&base_models=4&sort=newest&limit=${DEFAULT_LIMIT}`);
+	// A chip is the value alone: the group names do not appear in it.
+	assert.deepEqual(filterChips(state, OPENMODELDB), [
+		{ key: 'type:esrgan', label: 'ESRGAN' },
+		{ key: 'base', label: '4x' }
+	]);
 });
 
 test('removeChip, clearFilters and toggleType', () => {

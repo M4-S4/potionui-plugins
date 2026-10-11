@@ -19,7 +19,7 @@ hooks:
     - hook: "plugin.lifecycle.disable"
       handler: "hooks.lifecycle_hooks.on_disable"     # stops the watcher
     - hook: "provider.register"
-      handler: "hooks.provider_hooks.register_providers"   # the `model-browser` provider (PLAN.md §7.3)
+      handler: "hooks.provider_hooks.register_providers"   # the `model-browser` and `openmodeldb` providers (PLAN.md §7.3, §8.4)
     - hook: "notification_type.register"
       handler: "hooks.notification_hooks.register_types"   # request / download notification types (PLAN.md §4.4)
 

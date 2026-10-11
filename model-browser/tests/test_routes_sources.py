@@ -3,9 +3,11 @@ plugin's real router.
 
 `require_browse` is overridden with the principal each test sets (a signed-in user unless it
 says otherwise), `nsfw.resolve_nsfw` is replaced by the context each test sets, the settings are
-faked, CivitAI and Hugging Face are fake transports serving the recorded fixtures (behind one
-shared `SourceHttp`), the core is `FakeCore` in place of `core_bridge` (the installed badge of
-the search results asks it), and the raw cache lives in a scratch database.
+faked, CivitAI, Hugging Face and OpenModelDB are fake transports serving the recorded fixtures
+(behind one shared `SourceHttp`), the core is `FakeCore` in place of `core_bridge` (the installed
+badge of the search results asks it), the raw cache lives in a scratch database, and every test
+starts with new source instances (OpenModelDB keeps its catalogue in memory).
+OpenModelDB's own routes are in `test_routes_openmodeldb.py`.
 """
 
 from dataclasses import replace
@@ -19,6 +21,7 @@ from backend import cache as cache_module
 from backend import core_bridge
 from backend import http as http_module
 from backend import nsfw, permissions
+from backend import sources as sources_module
 from backend.api import router
 from backend.cache import Cache
 from backend.http import SourceHttp
@@ -31,6 +34,7 @@ from .civitai_fakes import ABSENT, FakeTransport, body, context, fake_settings, 
 from .download_fakes import USER_GRANT, FakeCore, admin, model, principal, user
 from .huggingface_fakes import REPOS, HuggingFaceTransport, combined_fetch, cursor_of
 from .huggingface_fakes import body as hf_body
+from .openmodeldb_fakes import OpenModelDBTransport
 
 BASE = "/api/plugins/model-browser"
 PAGE_1_CURSOR = "409619|21294|82098"
@@ -55,14 +59,23 @@ def hf_transport():
 
 
 @pytest.fixture
-def transport(plugin_db, monkeypatch, state, hf_transport, core):
-    """The CivitAI fake; Hugging Face URLs go to `hf_transport` through the same `SourceHttp`."""
+def omdb_transport():
+    return OpenModelDBTransport()
+
+
+@pytest.fixture
+def transport(plugin_db, monkeypatch, state, hf_transport, omdb_transport, core):
+    """The CivitAI fake; Hugging Face and OpenModelDB URLs go to their fakes through the same `SourceHttp`."""
     create_tables()
     fake_settings(monkeypatch)
     monkeypatch.setattr(nsfw, "resolve_nsfw", lambda user: state.ctx)
     monkeypatch.setattr(cache_module, "cache", Cache())
+    monkeypatch.setattr(sources_module, "_instances", {})
     fake = FakeTransport().add("/enums", "enums")
-    client = SourceHttp(fetch=combined_fetch(fake, hf_transport), limits={"civitai": (0.0, 4), "huggingface": (0.0, 4)})
+    client = SourceHttp(
+        fetch=combined_fetch(fake, hf_transport, omdb_transport),
+        limits={"civitai": (0.0, 4), "huggingface": (0.0, 4), "openmodeldb": (0.0, 2)},
+    )
     monkeypatch.setattr(http_module, "http", client)
     return fake
 
@@ -94,13 +107,13 @@ def _error(response):
 # /sources ------------------------------------------------------------------------------
 
 
-def test_sources_lists_civitai_and_hugging_face_with_their_filters(client, hf_transport):
+def test_sources_lists_civitai_hugging_face_and_openmodeldb_with_their_filters(client, hf_transport, omdb_transport):
     response = client.get(f"{BASE}/sources")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["success"] is True
-    civitai, huggingface = payload["data"]
+    civitai, huggingface, openmodeldb = payload["data"]
     assert civitai["id"] == "civitai"
     assert [option["value"] for option in civitai["types"]] == body("enums")["ModelType"]
     assert [option["value"] for option in civitai["base_models"]] == body("enums")["ActiveBaseModel"]
@@ -109,6 +122,39 @@ def test_sources_lists_civitai_and_hugging_face_with_their_filters(client, hf_tr
     assert (huggingface["base_models"], huggingface["periods"]) == ([], [])
     assert [option["value"] for option in huggingface["sorts"]] == ["trending", "downloads", "likes", "updated", "newest"]
     assert hf_transport.calls == []
+    # The filter headings and the base model line: CivitAI and Hugging Face keep the defaults.
+    for source in (civitai, huggingface):
+        assert (source["types_label"], source["base_models_label"], source["base_model_label"]) == (
+            "Types", "Base model", "Base model",
+        )
+    assert (openmodeldb["id"], openmodeldb["label"], openmodeldb["enabled"]) == ("openmodeldb", "OpenModelDB", True)
+    assert (openmodeldb["types_label"], openmodeldb["base_models_label"], openmodeldb["base_model_label"]) == (
+        "Architecture", "Scale", "Architecture",
+    )
+    assert openmodeldb["types"][:4] == [
+        {"value": "cain", "label": "CAIN"},
+        {"value": "compact", "label": "Compact"},
+        {"value": "dat", "label": "DAT"},
+        {"value": "esrgan", "label": "ESRGAN"},
+    ]
+    assert [option["label"] for option in openmodeldb["base_models"]] == ["1x", "2x", "3x", "4x", "8x", "16x"]
+    assert openmodeldb["sorts"][0] == {"value": "downloadable", "label": "Downloadable first"}
+    assert [option["value"] for option in openmodeldb["sorts"]] == ["downloadable", "newest", "oldest", "name"]
+    assert openmodeldb["periods"] == []
+    assert "@author" in openmodeldb["search_help"]
+    # The catalogue is read once, and a second call answers from memory.
+    assert sorted(omdb_transport.calls) == ["/api/v1/architectures.json", "/api/v1/models.json", "/api/v1/tags.json"]
+    assert client.get(f"{BASE}/sources").json()["data"][2] == openmodeldb
+    assert len(omdb_transport.calls) == 3
+
+
+def test_sources_still_lists_openmodeldb_when_it_is_down(client, omdb_transport):
+    omdb_transport.responses["/api/v1/models.json"] = (503, {}, b"")
+
+    data = client.get(f"{BASE}/sources").json()["data"]
+
+    assert [source["id"] for source in data] == ["civitai", "huggingface", "openmodeldb"]
+    assert (data[2]["types"], data[2]["base_models"], data[2]["types_label"]) == ([], [], "Architecture")
 
 
 def test_the_routes_need_a_signed_in_user(transport):

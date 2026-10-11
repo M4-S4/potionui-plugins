@@ -7,11 +7,11 @@ description, previews, tags, base model and license filled in. Admins and users 
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
 
-## Status: phase 5 (requests, notifications, plan quotas)
+## Status: phase 6 (OpenModelDB)
 
-The **Model Browser** page (`/plugins/model-browser`) searches CivitAI and Hugging Face,
-shows a model's versions, previews, files and licence, and downloads a file into PotionUI
-for every signed-in user with the `browse` / `download` rights. A user with `request` but
+The **Model Browser** page (`/plugins/model-browser`) searches CivitAI, Hugging Face and
+OpenModelDB, shows a model's versions, previews, files and licence, and downloads a file into
+PotionUI for every signed-in user with the `browse` / `download` rights. A user with `request` but
 not `download` asks for a file instead; an admin (or a holder of `approve`) approves or
 declines the request from the page, and the model lands in the requester's models. Admins
 edit the rights per user group in Admin → Plugins → Model Browser → Permissions, and can cap
@@ -51,6 +51,19 @@ downloads per month through PotionUI's plans.
   model bytes per month". The plugin enforces them itself before queueing a file (direct
   download or approval, 403 `limit_exceeded`), records the usage in the core's limit ledger
   and refunds a failed download. Admins are exempt when the plans say so.
+- **OpenModelDB** (upscalers): the whole catalogue (`models.json`, with its tags and
+  architectures) is cached for six hours and searched in the plugin (text, `#tag`, `@author`,
+  a pasted model link, architecture and scale filters, "Downloadable first" by default, then
+  date or name). Only PyTorch files on a direct host are offered (Hugging Face, GitHub
+  releases or raw files, Oracle object storage, Backblaze; no ONNX, no archives); a model
+  that only lives on Google Drive, Mega or the like shows "Not downloadable" and the link to
+  its OpenModelDB page. Downloads are filed as `upscaler`; PotionUI's built-in upscaler runs
+  ESRGAN `.pth` models only, so other architectures carry a note in their description. The
+  `openmodeldb` marketplace provider answers hash lookups from the catalogue, so an upscaler
+  already on disk gets its name, description, previews and licence too.
+- CivitAI's API answers the same catalogue on `civitai.com` and `civitai.red` (checked
+  2026-10-11); with `civitai_api_base` set to the `.red` host, download links are rewritten to
+  `civitai.com` so the `civitai` provider still authenticates them.
 
 - A **Model Browser** entry in the sidebar; `GET /api/plugins/model-browser/health`.
 - `GET /me`: the caller's capabilities, download parameters (`params`, merged from the groups
@@ -62,8 +75,9 @@ downloads per month through PotionUI's plans.
   request, admins may do everything.
 - `POST /requests`, `GET /requests`, `POST /requests/{id}/approve`, `POST /requests/{id}/reject`,
   `DELETE /requests/{id}`: the request flow above.
-- `GET /sources`, `GET /civitai/search`, `GET /civitai/models/{id}` and
-  `GET /civitai/models/{id}/nsfw-media`: search and detail, filtered per user from the
+- `GET /sources`, `GET /{source}/search`, `GET /{source}/models/{id}` and
+  `GET /{source}/models/{id}/nsfw-media` (`civitai`, `huggingface`, `openmodeldb`): search
+  and detail, filtered per user from the
   core's content policy, the plugin's `nsfw_ceiling` / `nsfw_max_level` settings and the
   user's own `media_nsfw_filter_mode`. Raw answers are cached in the database
   (`cache_ttl_minutes`) and filtered on every request.

@@ -19,6 +19,7 @@
 		me,
 		source,
 		sourceLabel = '',
+		baseModelLabel = '',
 		modelId,
 		item = null,
 		revealCache,
@@ -260,7 +261,7 @@
 			</div>
 			<div bind:this={asideEl} class="flex flex-col gap-4">
 				{#if detail}
-					<DetailAside {detail} {version} {sourceUrl} {sourceHost} />
+					<DetailAside {detail} {version} {sourceUrl} {sourceHost} {baseModelLabel} />
 				{/if}
 			</div>
 		</div>

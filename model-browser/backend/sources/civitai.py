@@ -2,7 +2,10 @@
 
 civitai.com and civitai.red are one catalogue behind one API (`civitai_api_base`,
 `https://civitai.com/api/v1` by default). Model pages link to civitai.red for an NSFW
-model and to civitai.com otherwise; pasted links from either host are understood.
+model and to civitai.com otherwise; pasted links from either host are understood. The
+API on civitai.red gives its download URLs on civitai.red: files keep them on civitai.com
+(same path and query), the host the download allowlist and the core's `civitai` provider
+know.
 
 Search is `GET /models`:
 - `limit` = page size + 20 (at most 100), so one upstream page usually still fills a
@@ -39,7 +42,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from pydantic import ValidationError
 
@@ -421,8 +424,29 @@ def primary_file_sha256(raw_version: Optional[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
+#: Hosts of CivitAI download URLs that are the same files on civitai.com.
+_RED_HOSTS = frozenset({"civitai.red", "www.civitai.red"})
+
+
+def com_download_url(url: str) -> str:
+    """A civitai.red download URL moved to civitai.com, same path and query (PLAN.md §8.2).
+
+    `https://civitai.red/api/v1` answers like civitai.com, but its `downloadUrl`s are on
+    civitai.red: on civitai.com they pass the allowlist (`security.DOWNLOAD_HOSTS`) and the
+    core's `civitai` provider authenticates them. Any other URL is returned as it is.
+    """
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return url
+    if (parts.hostname or "").lower() not in _RED_HOSTS or port is not None or "@" in parts.netloc:
+        return url
+    return urlunsplit((parts.scheme, "civitai.com", parts.path, parts.query, parts.fragment))
+
+
 def normalize_file(raw: Any) -> Optional[File]:
-    """One file of a version; None without an id or a download URL."""
+    """One file of a version; None without an id or a download URL (a civitai.red one is moved to civitai.com)."""
     if not isinstance(raw, dict):
         return None
     file_id = _id(raw.get("id"))
@@ -440,7 +464,7 @@ def normalize_file(raw: Any) -> Optional[File]:
         precision=_text(metadata.get("fp")),
         file_type=_text(raw.get("type")),
         primary=_is_true(raw.get("primary")),
-        download_url=url,
+        download_url=com_download_url(url),
         auth_provider_id=SOURCE_ID,
     )
 

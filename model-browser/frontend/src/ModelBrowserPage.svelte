@@ -359,6 +359,11 @@
 	function sourceLabel(id) {
 		return sources.find((source) => source.id === id)?.label ?? id;
 	}
+
+	/** What the source calls the base model of a version in the detail panel ('' for the default). */
+	function baseModelLabel(id) {
+		return sources.find((source) => source.id === id)?.base_model_label ?? '';
+	}
 </script>
 
 {#if phase === 'loading'}
@@ -460,6 +465,7 @@
 		{me}
 		source={detailItem.source}
 		sourceLabel={sourceLabel(detailItem.source)}
+		baseModelLabel={baseModelLabel(detailItem.source)}
 		modelId={detailItem.id}
 		item={detailItem}
 		{revealCache}
