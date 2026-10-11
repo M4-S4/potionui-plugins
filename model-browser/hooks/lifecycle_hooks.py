@@ -76,12 +76,26 @@ def on_disable(context: HookContext) -> HookContext:
     `disable` is broadcast to every enabled plugin's handler; `plugin_id` in the
     payload names the plugin being disabled.
     """
+    if context.get("plugin_id") != PLUGIN_ID:
+        return context
     try:
-        if context.get("plugin_id") == PLUGIN_ID:
-            _stop_watcher()
+        _stop_watcher()
     except Exception:
         logger.exception("[MODEL-BROWSER] Could not stop the download watcher")
+    try:
+        _shutdown_http()
+    except Exception:
+        logger.exception("[MODEL-BROWSER] Could not close the sources' HTTP session")
     return context
+
+
+def _shutdown_http() -> None:
+    """Close the sources' shared aiohttp session (`backend/http.py`): safe from any thread, never waits."""
+    if __name__.count(".") >= 2:
+        from ..backend import http
+    else:
+        from backend import http
+    http.shutdown()
 
 
 def _app_loop_running() -> bool:

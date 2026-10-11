@@ -7,15 +7,26 @@ description, previews, tags, base model and license filled in. Admins and users 
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
 
-## Status: phase 0
+## Status: phase 1 (API only)
 
-This version only lays the groundwork; nothing can be searched or downloaded yet.
+CivitAI browsing works through the API for every signed-in user with the `browse` right;
+the page at `/plugins/model-browser` is still the phase 0 placeholder (phase 4 builds it),
+and nothing can be downloaded yet (phase 3).
 
-- A **Model Browser** entry in the sidebar, opening `/plugins/model-browser`.
-- `GET /api/plugins/model-browser/health`, for any signed-in user.
-- The plugin's tables (`model_browser_*`), created at every start.
-- An idle background task (the download watcher), started with the application and stopped
-  when the plugin is disabled. Look for `[MODEL-BROWSER]` lines in the server log.
+- A **Model Browser** entry in the sidebar; `GET /api/plugins/model-browser/health`.
+- `GET /me`: the caller's capabilities, download parameters and NSFW context.
+- Admin `GET`/`PUT /permissions`: rights per user group (`browse`, `request`, `download`,
+  `approve`, plus the download parameters). Defaults: everyone may browse and request,
+  admins may do everything.
+- `GET /sources`, `GET /civitai/search`, `GET /civitai/models/{id}` and
+  `GET /civitai/models/{id}/nsfw-media`: search and detail, filtered per user from the
+  core's content policy, the plugin's `nsfw_ceiling` / `nsfw_max_level` settings and the
+  user's own `media_nsfw_filter_mode`. Raw answers are cached in the database
+  (`cache_ttl_minutes`) and filtered on every request.
+- Settings in Admin → Plugins → Model Browser → Settings.
+- The plugin's tables (`model_browser_*`), created at every start, and an idle background
+  task (the download watcher) started with the application and stopped when the plugin is
+  disabled. Look for `[MODEL-BROWSER]` lines in the server log.
 
 The design and the roadmap are in [PLAN.md](PLAN.md) (in French).
 
