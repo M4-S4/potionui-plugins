@@ -7,12 +7,23 @@ description, previews, tags, base model and license filled in. Admins and users 
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
 
-## Status: phase 3 (API and admin screen)
+## Status: phase 4 (browsing and downloading from the page)
 
-CivitAI and Hugging Face browsing and downloads work through the API for every signed-in
-user with the `browse` / `download` rights; the page at `/plugins/model-browser` is still the
-phase 0 placeholder (phase 4 builds it). Admins edit the rights per user group in
-Admin → Plugins → Model Browser → Permissions.
+The **Model Browser** page (`/plugins/model-browser`) searches CivitAI and Hugging Face,
+shows a model's versions, previews, files and licence, and downloads a file into PotionUI
+for every signed-in user with the `browse` / `download` rights. Admins edit the rights per
+user group in Admin → Plugins → Model Browser → Permissions. Model requests for users
+without `download` come with phase 5.
+
+- Search box with `#tag`, `@creator`, `$#id1,id2` and pasted model links, filters (types,
+  base model, period), sort, infinite scroll; badges for NSFW, installed, early access,
+  login-gated and non-downloadable models. The state lives in the URL.
+- NSFW previews arrive blurred (a blurhash, no URL) and are revealed on click when the
+  content policy allows; the "Sensitive content" control changes the app-wide
+  `media_nsfw_filter_mode` within the policy's ceiling.
+- Detail drawer with versions, previews, trigger words, files, licence and the source link;
+  download dialog with model type, subfolder, file name, remote destination and target
+  group (when allowed); downloads tray with live status.
 
 - `POST /downloads` queues one file on PotionUI's download queue (checksum, provider
   credentials, model type folder, optional subfolder, remote destination); the background
