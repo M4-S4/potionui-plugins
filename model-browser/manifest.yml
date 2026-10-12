@@ -117,19 +117,30 @@ settings:
       - { value: "2", label: "PG-13" }
       - { value: "4", label: "R" }
       - { value: "8", label: "X" }
+  # The two yes/no settings are two-option selects, not `boolean`: PotionUI's admin form
+  # (0.0.15, PluginsTab.svelte) stores a boolean as `str(value)` ("False") and shows any
+  # non-empty stored string as checked, so a `boolean` switched off came back on after each
+  # save. A select is stored and shown as the string it was given; backend/settings.py
+  # parses "true" / "false" and rewrites older "True" / "False" rows at boot.
   - name: "hide_poi"
-    type: "boolean"
+    type: "select"
     label: "Hide CivitAI models depicting real people"
-    default: false
+    default: "false"
+    options:
+      - { value: "false", label: "Show" }
+      - { value: "true",  label: "Hide" }
   - name: "civitai_api_base"
     type: "string"
     label: "CivitAI API base URL"
     description: "Switch to https://civitai.red/api/v1 if civitai.com starts filtering the API to SFW content"
     default: "https://civitai.com/api/v1"
   - name: "enable_civarchive"
-    type: "boolean"
+    type: "select"
     label: "Enable CivArchive (experimental, unofficial)"
-    default: false
+    default: "false"
+    options:
+      - { value: "false", label: "Off" }
+      - { value: "true",  label: "On" }
   - name: "cache_ttl_minutes"
     type: "number"
     label: "Search cache TTL (minutes)"

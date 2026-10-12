@@ -7,7 +7,7 @@ back to the default, and `cache_ttl_minutes` is clamped to its range, rather tha
 breaking a request.
 """
 
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 from urllib.parse import urlsplit
 
 from . import PLUGIN_ID
@@ -18,7 +18,7 @@ USER_NSFW_MODES = ("show", "blur", "hide")
 DEFAULTS: Dict[str, Any] = {
     "nsfw_ceiling": "inherit",            # inherit | blur | blocked (PLAN.md §5.1)
     "nsfw_max_level": 2,                  # 1 PG | 2 PG-13 | 4 R | 8 X (§5.3)
-    "hide_poi": False,                    # hide CivitAI models flagged `poi` (real people)
+    "hide_poi": False,                    # hide CivitAI models flagged `poi` (real people); see BOOLEAN_SETTINGS
     "civitai_api_base": "https://civitai.com/api/v1",
     "enable_civarchive": False,
     "cache_ttl_minutes": 10,
@@ -57,6 +57,14 @@ def _parse_api_base(value: str) -> str:
     return value
 
 
+#: The yes/no settings. The manifest declares them as a two-option `select` ("true" /
+#: "false") rather than `boolean`: PotionUI's admin form (0.0.15, `PluginsTab.svelte`) stores
+#: a boolean as `str(value)` ("False") and shows any non-empty stored string as checked, so
+#: a `boolean` switched off came back on after every save. A select is stored and shown as
+#: the string it was given. Rows written while they were `boolean` hold "True" / "False":
+#: `normalise_stored_booleans` rewrites them at boot so the form shows the stored choice.
+BOOLEAN_SETTINGS = ("hide_poi", "enable_civarchive")
+
 _PARSERS: Dict[str, Callable[[str], Any]] = {
     "nsfw_ceiling": _parse_choice("inherit", "blur", "blocked"),
     "nsfw_max_level": _parse_int(1, 8, allowed=(1, 2, 4, 8)),
@@ -85,6 +93,29 @@ def get_setting(key: str) -> Any:
 
     row = PluginRepository().get_plugin_setting(PLUGIN_ID, key)
     return parse_setting(key, None if row is None else row.setting_value)
+
+
+def normalise_stored_booleans() -> List[str]:
+    """Rewrite the stored rows of `BOOLEAN_SETTINGS` that are not "true" / "false" (the manifest's
+    option values) as the lowercase form of what they parse to, and return the keys rewritten.
+
+    A row the core wrote while the setting was a `boolean` holds "True" / "False": the plugin
+    reads it fine, but the admin form's select shows no choice until the admin clicks one. A
+    missing row is left alone (the form shows the manifest default). The value's meaning never
+    changes, so no audit entry is recorded.
+    """
+    from src.plugin_api import PluginRepository
+
+    repository = PluginRepository()
+    rewritten: List[str] = []
+    for key in BOOLEAN_SETTINGS:
+        row = repository.get_plugin_setting(PLUGIN_ID, key)
+        if row is None or row.setting_value in ("true", "false"):
+            continue
+        value = "true" if parse_setting(key, row.setting_value) else "false"
+        repository.set_plugin_setting(plugin_id=PLUGIN_ID, setting_key=key, setting_value=value)
+        rewritten.append(key)
+    return rewritten
 
 
 def user_nsfw_mode(user_id: str) -> str:

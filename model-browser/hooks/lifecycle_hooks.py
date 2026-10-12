@@ -1,7 +1,8 @@
 """Lifecycle handlers of the model-browser plugin (PLAN.md §3).
 
 - `plugin.lifecycle.boot`, on every process start and right after a runtime
-  enable: create the plugin's tables.
+  enable: create the plugin's tables, then rewrite the yes/no settings the core
+  stored as "True" / "False" (`settings.normalise_stored_booleans`).
 - `plugin.lifecycle.ready`, once the application's event loop runs: check the
   core's container (`core_bridge.check_container`, a warning names what is missing),
   then start the download watcher with `run_on_app_loop`.
@@ -24,10 +25,10 @@ from src.plugin_api import HookContext
 # app it must never be a bare `import backend`: every plugin that ships a `backend`
 # package competes for that top-level name.
 if __name__.count(".") >= 2:
-    from ..backend import PLUGIN_ID, core_bridge, tables
+    from ..backend import PLUGIN_ID, core_bridge, settings, tables
     from ..backend.watcher import Watcher
 else:
-    from backend import PLUGIN_ID, core_bridge, tables
+    from backend import PLUGIN_ID, core_bridge, settings, tables
     from backend.watcher import Watcher
 
 logger = logging.getLogger("plugins.model-browser")
@@ -41,7 +42,7 @@ _watcher_future = None  # its concurrent.futures.Future, from run_on_app_loop
 
 
 def on_boot(context: HookContext) -> HookContext:
-    """Create the plugin's tables (idempotent).
+    """Create the plugin's tables (idempotent), then normalise the stored yes/no settings.
 
     Also starts the watcher when the app loop already runs, which means a runtime
     enable: the core fires `ready` once per plugin and process
@@ -54,6 +55,12 @@ def on_boot(context: HookContext) -> HookContext:
         logger.info("[MODEL-BROWSER] Tables ready: %s", ", ".join(tables.TABLE_NAMES))
     except Exception:
         logger.exception("[MODEL-BROWSER] Could not create the plugin's tables")
+    try:
+        rewritten = settings.normalise_stored_booleans()
+        if rewritten:
+            logger.info("[MODEL-BROWSER] Settings rewritten as true/false: %s", ", ".join(rewritten))
+    except Exception:
+        logger.exception("[MODEL-BROWSER] Could not normalise the plugin's stored settings")
     try:
         if _app_loop_running():
             _start_watcher()

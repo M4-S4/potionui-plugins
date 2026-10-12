@@ -14,10 +14,16 @@ import time
 import pytest
 
 import src.plugin_api.hooks as plugin_hooks
-from backend import core_bridge, tables
+from backend import core_bridge, settings, tables
 from backend.watcher import Watcher
 from hooks import lifecycle_hooks
 from src.plugin_api import HookContext
+
+
+@pytest.fixture(autouse=True)
+def _no_settings_rewrite(monkeypatch):
+    """`on_boot` rewrites the stored yes/no settings: keep it off the database in these tests."""
+    monkeypatch.setattr(settings, "normalise_stored_booleans", lambda: [])
 
 
 def _context(hook, subject="model-browser"):
@@ -113,6 +119,31 @@ def test_on_boot_creates_the_tables_and_returns_its_context(monkeypatch, process
     assert calls == ["create_tables"]
     assert process_start == []  # at process start the watcher waits for `ready`
     assert lifecycle_hooks._watcher_future is None
+
+
+def test_on_boot_normalises_the_stored_settings_after_the_tables(monkeypatch, process_start, caplog):
+    calls = []
+    monkeypatch.setattr(tables, "create_tables", lambda: calls.append("create_tables"))
+    monkeypatch.setattr(settings, "normalise_stored_booleans", lambda: calls.append("normalise") or ["hide_poi"])
+    context = _context("plugin.lifecycle.boot")
+
+    with caplog.at_level("INFO", logger="plugins.model-browser"):
+        assert lifecycle_hooks.on_boot(context) is context
+    assert calls == ["create_tables", "normalise"]
+    assert "Settings rewritten as true/false: hide_poi" in caplog.text
+
+
+def test_on_boot_logs_and_swallows_a_settings_error(monkeypatch, process_start, caplog):
+    def normalise():
+        raise RuntimeError("no such table: plugin_settings")
+
+    monkeypatch.setattr(tables, "create_tables", lambda: None)
+    monkeypatch.setattr(settings, "normalise_stored_booleans", normalise)
+    context = _context("plugin.lifecycle.boot")
+
+    assert lifecycle_hooks.on_boot(context) is context
+    assert "Could not normalise the plugin's stored settings" in caplog.text
+    assert process_start == []
 
 
 def test_on_boot_logs_and_swallows_a_table_error(monkeypatch, process_start, caplog):
