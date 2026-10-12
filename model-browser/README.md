@@ -7,7 +7,11 @@ description, previews, tags, base model and license filled in. Admins and users 
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
 
-## Status: phase 7 (CivArchive, experimental)
+## Status: phase 8 (upstream PRs prepared, not yet opened)
+
+The core gaps this plugin works around (`backend/core_bridge.py`) have fixes ready as
+local branches of a PotionUI clone; see `upstream/` at the repository root. Until they
+are merged the plugin keeps reaching the application's managers through `core_bridge.py`.
 
 The **Model Browser** page (`/plugins/model-browser`) searches CivitAI, Hugging Face,
 OpenModelDB and, when an admin switches it on, CivArchive; it shows a model's versions,
