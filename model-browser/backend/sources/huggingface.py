@@ -1,41 +1,3 @@
-"""Hugging Face as a model-browser source (PLAN.md §8.3, §5.3).
-
-The API base is `https://huggingface.co` (no setting) and no token is ever sent: the
-browser sees what is public. Gated repos are listed and marked `gated`; their downloads
-are authenticated later by the core's `huggingface` provider (`auth_provider_id`).
-
-Search is `GET /api/models?limit=&full=true&sort=&direction=-1[&cursor=]`:
-- sorts: `trending` (`trendingScore`, the default), `downloads`, `likes`, `updated`
-  (`lastModified`), `newest` (`createdAt`); no periods (a period is ignored);
-- the search box: `@author` -> `author=`, `#tag` -> `filter=<tag>`, an exact repo id
-  `org/repo` or a pasted huggingface.co / hf.co link -> that one repo through
-  `GET /api/models/{repo}` (one item, no cursor; a repo that does not exist falls back to
-  `search=<org/repo>`), a pasted profile link -> `author=`, anything else -> `search=`;
-- `types`: one pipeline task (`text-to-image` ...) -> `pipeline_tag=`, the kind tags
-  (`lora`, `controlnet`, `gguf`, `safetensors`, `diffusers`) -> one `filter=` each;
-  `base_models` -> `filter=base_model:<id>`. Hugging Face requires every `filter=`;
-- `next_cursor` is the `cursor` parameter of the `rel="next"` URL of the `Link` header,
-  sent back as `cursor=` with the same parameters;
-- `query.safe` drops the repos tagged `not-for-all-audiences` from the page: Hugging Face
-  has no negative filter, the routes refill the page from the next cursor.
-
-Detail is `GET /api/models/{repo}` and `GET /api/models/{repo}/tree/main?recursive=1`
-(its `Link` pages followed, at most `MAX_TREE_PAGES`), then `GET /{repo}/raw/main/README.md`
-when the tree has a README of at most 256 KB. A 401 on the model or its tree means the
-repo does not exist or is private (`SourceNotFound`); a 401 on the README is a gated repo
-(no description). One version, `main`, lists the weight files of the tree with their
-LFS SHA256 (Hugging Face masks it for a gated repo without a token).
-
-The README becomes `description_html` through `markdown2` (escaped paragraphs when it is
-not installed) and `sanitize_html`, off the event loop; its huggingface.co images (relative
-paths resolved on `main`, at most 6) become the version's images.
-
-NSFW (PLAN.md §5.3): the `not-for-all-audiences` tag is the only marker. A tagged repo, its
-version and its images are NSFW (image level 8), anything else is not (level 1);
-`max_level` does not apply. Every raw answer goes through the cache (`cache.py`):
-JSON as `{"body", "link"}`, the README as `{"text"}` (None for a gated or missing one).
-"""
-
 import asyncio
 import hashlib
 import html
@@ -77,24 +39,15 @@ SOURCE_ID = "huggingface"
 LABEL = "Hugging Face"
 SITE = "https://huggingface.co"
 API_BASE = SITE + "/api"
-#: The only revision the browser reads and downloads from.
 REVISION = "main"
 
-#: The tag that marks a repo NSFW (PLAN.md §5.3).
 NSFW_TAG = "not-for-all-audiences"
-#: README answers larger than this are not shown.
-# 64 KiB: markdown2 is O(n) per character on crafted input (about 0.2 ms each), so the cap
-# bounds the worker-thread time a hostile README can cost; model cards are far smaller.
 MAX_README_BYTES = 64 * 1024
-#: README images kept as previews.
 MAX_IMAGES = 6
-#: Pages of a repo's file list read at most (Hugging Face pages its tree).
 MAX_TREE_PAGES = 5
-#: Levels of the version's images: PG for a repo without the tag, X with it.
 SAFE_IMAGE_LEVEL = 1
 NSFW_IMAGE_LEVEL = 8
 
-#: Our sort ids -> Hugging Face `sort` values, with labels, in the order the page lists them.
 SORTS: Tuple[Tuple[str, str, str], ...] = (
     ("trending", "trendingScore", "Trending"),
     ("downloads", "downloads", "Most downloaded"),
@@ -105,7 +58,6 @@ SORTS: Tuple[Tuple[str, str, str], ...] = (
 DEFAULT_SORT = "trending"
 _SORT_VALUES = {key: value for key, value, _ in SORTS}
 
-#: Type filters sent as `pipeline_tag=` (one at a time).
 PIPELINE_TYPES: Tuple[Tuple[str, str], ...] = (
     ("text-to-image", "Text to image"),
     ("image-to-image", "Image to image"),
@@ -115,7 +67,6 @@ PIPELINE_TYPES: Tuple[Tuple[str, str], ...] = (
     ("text-to-3d", "Text to 3D"),
     ("image-to-3d", "Image to 3D"),
 )
-#: Type filters sent as `filter=` (each one required).
 TAG_TYPES: Tuple[Tuple[str, str], ...] = (
     ("lora", "LoRA"),
     ("controlnet", "ControlNet"),
@@ -125,9 +76,7 @@ TAG_TYPES: Tuple[Tuple[str, str], ...] = (
 )
 _PIPELINES = frozenset(value for value, _ in PIPELINE_TYPES)
 _TAG_FILTERS = frozenset(value for value, _ in TAG_TYPES)
-#: Tags that name a repo's kind when it has no pipeline tag, in order.
 _KIND_TAGS = ("lora", "controlnet", "vae", "gguf")
-#: Tags left out of `tags`: their values are the licence and the base models, or noise.
 _HIDDEN_TAG_PREFIXES = ("license:", "base_model:", "region:")
 
 SEARCH_HELP = "org/repo, @author, #tag, free text, or a pasted huggingface.co link"
@@ -143,10 +92,8 @@ _FORMATS = {
     ".onnx": "ONNX",
 }
 _IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif")
-#: Never part of a README image URL the page is given.
 _ODD_URL_CHARACTERS = frozenset("\\\"'<>`")
 _LICENSE_FILES = ("LICENSE", "LICENSE.md", "LICENSE.txt")
-#: Hosts of a pasted link, and first path segments of huggingface.co pages that are not an account.
 _HF_HOSTS = frozenset({"huggingface.co", "hf.co"})
 _RESERVED_SEGMENTS = frozenset({
     "api", "avatars", "blog", "changelog", "chat", "collections", "datasets", "docs", "enterprise",
@@ -156,7 +103,6 @@ _RESERVED_SEGMENTS = frozenset({
     "terms-of-service", "welcome",
 })
 
-# A repo or account name: letters, digits, `_`, `.` and `-`, not starting or ending with `.` or `-`.
 _NAME = r"[A-Za-z0-9_](?:[A-Za-z0-9_.-]{0,94}[A-Za-z0-9_])?"
 _REPO_ID = re.compile(rf"(?:{_NAME}/)?{_NAME}")
 _NAMESPACED_REPO_ID = re.compile(rf"{_NAME}/{_NAME}")
@@ -166,7 +112,6 @@ _SHA256 = re.compile(r"[0-9a-fA-F]{64}")
 _URL_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
 _LINK_ENTRY = re.compile(r"<([^>]*)>((?:\s*;\s*[^;,]*)*)")
 _LINK_REL = re.compile(r'rel\s*=\s*"?([^";,]*)"?', re.I)
-#: A YAML header: `---` on the first line (after an optional BOM) to the next `---` or `...` line.
 _FRONTMATTER = re.compile(
     r"\A(?:\N{ZERO WIDTH NO-BREAK SPACE})?---[ \t]*\r?\n(?:.*?\r?\n)?(?:---|\.\.\.)[ \t]*(?:\r?\n|\Z)", re.S
 )
@@ -182,27 +127,19 @@ _PRECISION_ALIASES = {"f32": "fp32", "f16": "fp16"}
 _TEXT_ENCODER_TOKENS = frozenset({"clip", "t5", "t5xxl", "umt5"})
 
 
-# Search box ---------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class ParsedQuery:
-    """What the search box asks Hugging Face for."""
-
-    #: "all" (no text), "text", "author", "tag" or "repo" (an exact repo id).
     kind: str = "all"
     value: str = ""
 
 
 def is_repo_id(value: Any, *, namespaced: bool = False) -> bool:
-    """`org/repo` (or a legacy `repo`, unless `namespaced`) within Hugging Face's naming rules."""
     if not isinstance(value, str) or ".." in value:
         return False
     return bool((_NAMESPACED_REPO_ID if namespaced else _REPO_ID).fullmatch(value))
 
 
 def parse_hf_url(text: str) -> Optional[ParsedQuery]:
-    """A pasted huggingface.co / hf.co link: a model page (`repo`) or an account page (`author`); else None."""
     text = (text or "").strip()
     if not text or any(char.isspace() for char in text):
         return None
@@ -228,7 +165,6 @@ def parse_hf_url(text: str) -> Optional[ParsedQuery]:
 
 
 def parse_query(q: Optional[str]) -> ParsedQuery:
-    """The search box text as Hugging Face parameters: a link, `@author`, `#tag`, `org/repo` or free text."""
     text = (q or "").strip()
     if not text:
         return ParsedQuery()
@@ -247,7 +183,6 @@ def parse_query(q: Optional[str]) -> ParsedQuery:
 
 
 def next_cursor_from_link(link: Optional[str]) -> Optional[str]:
-    """The `cursor` parameter of the `rel="next"` URL of a `Link` header, decoded; None without one."""
     if not isinstance(link, str) or not link:
         return None
     for match in _LINK_ENTRY.finditer(link):
@@ -263,7 +198,6 @@ def next_cursor_from_link(link: Optional[str]) -> Optional[str]:
 
 
 def _clean_list(values: Iterable[Any]) -> List[str]:
-    """Stripped, non-empty, distinct and sorted: the same selection always gives the same request."""
     return sorted({str(value).strip() for value in values or () if str(value).strip()})
 
 
@@ -276,7 +210,6 @@ def _sort_value(sort: Optional[str]) -> str:
 
 
 def type_params(types: Iterable[str]) -> List[Tuple[str, str]]:
-    """Our type ids as Hugging Face parameters: one `pipeline_tag`, the kind tags as `filter`s."""
     chosen = _clean_list(str(value).lower() for value in types or ())
     for value in chosen:
         if value not in _PIPELINES and value not in _TAG_FILTERS:
@@ -290,7 +223,6 @@ def type_params(types: Iterable[str]) -> List[Tuple[str, str]]:
 
 
 def base_model_params(base_models: Iterable[str]) -> List[Tuple[str, str]]:
-    """Base model repo ids as `filter=base_model:<id>`."""
     params = []
     for name in _clean_list(base_models):
         if name.lower().startswith("base_model:"):
@@ -299,9 +231,6 @@ def base_model_params(base_models: Iterable[str]) -> List[Tuple[str, str]]:
             raise SourceInvalidRequest(f"Invalid Hugging Face base model {name[:40]!r}")
         params.append(("filter", f"base_model:{name}"))
     return params
-
-
-# Normalisation --------------------------------------------------------------------
 
 
 def _int(value: Any) -> Optional[int]:
@@ -339,7 +268,6 @@ def _repo_id(raw: Dict[str, Any]) -> str:
 
 
 def is_gated(value: Any) -> bool:
-    """`gated` is `false`, `"auto"` or `"manual"` (or `true`): the latter need a token to download."""
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
@@ -352,7 +280,6 @@ def is_nsfw(tags: Iterable[Any]) -> bool:
 
 
 def base_models_from_tags(tags: Iterable[Any]) -> List[str]:
-    """X from the `base_model:X` and `base_model:<relation>:X` tags (adapter, finetune, quantized, merge), once each."""
     names: Dict[str, None] = {}
     for tag in tags:
         if isinstance(tag, str) and tag.lower().startswith("base_model:"):
@@ -363,12 +290,10 @@ def base_models_from_tags(tags: Iterable[Any]) -> List[str]:
 
 
 def display_tags(tags: Iterable[Any]) -> List[str]:
-    """The tags without `license:` and `base_model:` (their values are the licence and the base models) and `region:`."""
     return [tag for tag in tags if isinstance(tag, str) and not tag.lower().startswith(_HIDDEN_TAG_PREFIXES)]
 
 
 def card_base_model(card: Dict[str, Any]) -> Optional[str]:
-    """`cardData.base_model`: a string, or the first of a list."""
     value = card.get("base_model")
     if isinstance(value, list):
         value = next((item for item in value if isinstance(item, str) and item.strip()), None)
@@ -376,14 +301,12 @@ def card_base_model(card: Dict[str, Any]) -> Optional[str]:
 
 
 def trigger_words(card: Dict[str, Any]) -> List[str]:
-    """`cardData.instance_prompt` (the DreamBooth / LoRA training prompt), when there is one."""
     value = card.get("instance_prompt")
     values = value if isinstance(value, list) else [value]
     return list(dict.fromkeys(item.strip() for item in values if isinstance(item, str) and item.strip()))
 
 
 def source_type(tags: Sequence[str], pipeline_tag: Optional[str], library_name: Optional[str]) -> str:
-    """The repo's own type: its pipeline tag, else its kind tag, else its library, else "model"."""
     if pipeline_tag:
         return pipeline_tag
     folded = {tag.lower() for tag in tags}
@@ -417,7 +340,6 @@ def _quote_path(path: str) -> str:
 
 
 def resolve_url(repo: str, path: str) -> str:
-    """The download URL of a file of `repo` on `main`, each path segment quoted (as the core's provider does)."""
     return f"{SITE}/{repo}/resolve/{REVISION}/{_quote_path(path)}"
 
 
@@ -426,7 +348,6 @@ def blob_url(repo: str, path: str) -> str:
 
 
 def normalize_item(raw: Dict[str, Any]) -> SearchItem:
-    """A `GET /api/models` item (or a `GET /api/models/{repo}` answer) as a search result."""
     repo = _repo_id(raw)
     tags = _strings(raw.get("tags"))
     pipeline = _text(raw.get("pipeline_tag"))
@@ -452,11 +373,7 @@ def normalize_item(raw: Dict[str, Any]) -> SearchItem:
     )
 
 
-# Files ------------------------------------------------------------------------------
-
-
 def _entry_path(entry: Dict[str, Any]) -> Optional[str]:
-    """A tree entry's path when it is a plain relative path (no empty, `.` or `..` segment, no control character)."""
     path = entry.get("path")
     if not isinstance(path, str) or not path or "\\" in path:
         return None
@@ -476,7 +393,6 @@ def _entry_size(entry: Dict[str, Any]) -> Optional[int]:
 
 
 def tree_files(entries: Iterable[Any]) -> Dict[str, Dict[str, Any]]:
-    """The file entries of a tree by path, in tree order (directories and odd paths left out)."""
     files: Dict[str, Dict[str, Any]] = {}
     for entry in entries or ():
         if isinstance(entry, dict) and entry.get("type") == "file":
@@ -492,7 +408,6 @@ def weight_extension(path: str) -> Optional[str]:
 
 
 def file_precision(path: str) -> Optional[str]:
-    """fp16, fp8, bf16, fp32, int8 ... or a GGUF quantisation (`q4_k_m`), read from the file name."""
     name = posixpath.basename(path).lower()
     extension = weight_extension(name)
     stem = name[: -len(extension)] if extension else name
@@ -508,7 +423,6 @@ def file_precision(path: str) -> Optional[str]:
 
 
 def file_type_from_path(path: str) -> str:
-    """VAE, Text Encoder, UNet or LoRA from the folders and the words of the file name; Model otherwise."""
     lowered = path.lower()
     folders = lowered.split("/")[:-1]
     name = posixpath.basename(lowered)
@@ -527,7 +441,6 @@ def file_type_from_path(path: str) -> str:
 
 
 def weight_files(repo: str, entries: Iterable[Any]) -> List[File]:
-    """The weight files of a tree, `primary` being the largest at the root: primary first, root files, then the rest."""
     candidates: List[Tuple[int, str, Dict[str, Any], str]] = []
     for index, (path, entry) in enumerate(tree_files(entries).items()):
         extension = weight_extension(path)
@@ -564,11 +477,7 @@ def weight_files(repo: str, entries: Iterable[Any]) -> List[File]:
     return files
 
 
-# Licence ------------------------------------------------------------------------------
-
-
 def _http_link(value: str) -> Optional[str]:
-    """`value` when it is an http(s) URL with a host and nothing odd in it."""
     if any(char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in value):
         return None
     try:
@@ -582,7 +491,6 @@ def _http_link(value: str) -> Optional[str]:
 
 
 def license_url(repo: str, link: Any, file_paths: Iterable[str] = ()) -> Optional[str]:
-    """`cardData.license_link` (relative to the repo's files on `main`), else a LICENSE file at the repo's root."""
     link = _text(link)
     if link is not None:
         if _URL_SCHEME.match(link):
@@ -596,7 +504,6 @@ def license_url(repo: str, link: Any, file_paths: Iterable[str] = ()) -> Optiona
 
 
 def license_from(raw: Dict[str, Any], repo: str, file_paths: Iterable[str] = ()) -> Optional[License]:
-    """The `license:<id>` tag (else `cardData.license`); `cardData.license_name` names an `other` licence."""
     card = _card(raw)
     license_id = next(
         (tag[len("license:"):].strip() for tag in _strings(raw.get("tags")) if tag.lower().startswith("license:")),
@@ -615,10 +522,6 @@ def license_from(raw: Dict[str, Any], repo: str, file_paths: Iterable[str] = ())
     return License(summary=summary, url=license_url(repo, card.get("license_link"), file_paths))
 
 
-# README ---------------------------------------------------------------------------------
-
-#: markdown2 extras for GitHub-style READMEs: `highlightjs-lang` keeps Pygments out of it,
-#: `middle-word-em` off keeps `load_image_grid` from turning into emphasis.
 MARKDOWN_EXTRAS: Dict[str, Any] = {
     "fenced-code-blocks": None,
     "highlightjs-lang": None,
@@ -627,23 +530,18 @@ MARKDOWN_EXTRAS: Dict[str, Any] = {
     "cuddled-lists": None,
     "middle-word-em": False,
 }
-#: Rendered READMEs kept in memory (keyed by a hash of the text): a README that markdown2
-#: is slow on is converted once, not on every view.
 _RENDER_MEMO_SIZE = 16
 _render_memo: "OrderedDict[str, Tuple[str, Tuple[str, ...]]]" = OrderedDict()
 _render_lock = threading.Lock()
 
 
 def strip_frontmatter(text: str) -> str:
-    """The README without its YAML header (`---` ... `---`), which the API already gives as `cardData`."""
     text = text or ""
     match = _FRONTMATTER.match(text)
     return text[match.end():] if match else text
 
 
 class _ImageCollector(HTMLParser):
-    """The `src` of every `<img>`, in document order."""
-
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.srcs: List[str] = []
@@ -663,7 +561,6 @@ def _img_srcs(markup: str) -> List[str]:
 
 
 def _plain_render(text: str) -> Tuple[str, List[str]]:
-    """Without markdown2: escaped paragraphs, and the image sources found in the raw text."""
     paragraphs = [part.strip() for part in _PARAGRAPH_BREAK.split(text) if part.strip()]
     markup = "".join(f"<p>{html.escape(part)}</p>" for part in paragraphs)
     return markup, [match.group(1) for match in _MARKDOWN_IMAGE.finditer(text)] + _img_srcs(text)
@@ -676,14 +573,13 @@ def _render(text: str) -> Tuple[str, List[str]]:
         return _plain_render(text)
     try:
         rendered = str(markdown2.markdown(text, extras=dict(MARKDOWN_EXTRAS)))
-    except Exception:  # noqa: BLE001 - a README must never break a model page
+    except Exception:  # noqa: BLE001
         logger.warning("[MODEL-BROWSER] Hugging Face: could not convert a README; showing it as text", exc_info=True)
         return _plain_render(text)
     return sanitize_html(rendered), _img_srcs(rendered)
 
 
 def render_markdown(text: str) -> Tuple[str, List[str]]:
-    """A README body as sanitised HTML, and the `src` of its images (markdown and `<img>`) in order."""
     key = hashlib.md5(text.encode("utf-8", "replace"), usedforsecurity=False).hexdigest()
     with _render_lock:
         hit = _render_memo.get(key)
@@ -699,14 +595,6 @@ def render_markdown(text: str) -> Tuple[str, List[str]]:
 
 
 def readme_image_url(repo: str, src: Any, known_paths: Optional[Set[str]] = None) -> Optional[str]:
-    """An image of the README as an https huggingface.co URL, or None.
-
-    Kept: png, jpg, gif, webp and avif images on huggingface.co or one of its subdomains
-    (`cdn-uploads.huggingface.co`), a `/blob/` link rewritten to `/resolve/`; a relative
-    path is a file of the repo on `main`, dropped when `known_paths` (the complete file
-    list) does not have it. Badges (svg), other hosts, `data:` and anything odd (control
-    characters, backslashes, quotes, angle brackets) are dropped.
-    """
     if not isinstance(src, str):
         return None
     src = src.strip()
@@ -745,7 +633,6 @@ def readme_image_url(repo: str, src: Any, known_paths: Optional[Set[str]] = None
 
 
 def readme_images(repo: str, srcs: Iterable[Any], nsfw: bool, known_paths: Optional[Set[str]] = None) -> List[Image]:
-    """At most `MAX_IMAGES` previews from the README's images, NSFW like the repo (level 8, else 1)."""
     images: List[Image] = []
     seen: Set[str] = set()
     for src in srcs:
@@ -773,11 +660,6 @@ def normalize_detail(
     *,
     tree_complete: bool = True,
 ) -> ModelDetail:
-    """`GET /api/models/{repo}`, its tree and its README as a model detail with one version, `main`.
-
-    `tree` None means the file list is unknown (no files); `tree_complete` False means
-    some of its pages were not read (README images are then not checked against it).
-    """
     repo = _repo_id(raw)
     tags = _strings(raw.get("tags"))
     card = _card(raw)
@@ -823,12 +705,7 @@ def normalize_detail(
     )
 
 
-# The source ---------------------------------------------------------------------------
-
-
 class HuggingFaceSource:
-    """Hugging Face behind the `Source` interface. `http_client` / `cache_store` default to the shared instances."""
-
     id = SOURCE_ID
     label = LABEL
 
@@ -842,12 +719,10 @@ class HuggingFaceSource:
     def _store(self) -> Any:
         return self._cache_store if self._cache_store is not None else cache_module.cache
 
-    # Requests ---------------------------------------------------------------------
-
     def _cache_get(self, request: Dict[str, Any]) -> Any:
         try:
             return self._store().get(SOURCE_ID, request)
-        except Exception:  # noqa: BLE001 - the cache is an optimisation
+        except Exception:  # noqa: BLE001
             logger.warning("[MODEL-BROWSER] Could not read the cache; asking Hugging Face", exc_info=True)
             return None
 
@@ -860,11 +735,6 @@ class HuggingFaceSource:
     async def _get_json(
         self, url: str, params: Sequence[Tuple[str, Any]] = (), *, repo: Optional[str] = None
     ) -> Tuple[Any, Optional[str]]:
-        """GET JSON through the cache: (body, `Link` header). With `repo`, a 401 is `SourceNotFound`.
-
-        The cache key holds the URL and every parameter (sorted, as sent); the payload is
-        the raw body and the raw `Link` header.
-        """
         pairs = sorted(http_module.normalise_params(list(params)))
         request = {"url": url, "params": [list(pair) for pair in pairs]}
         cached = self._cache_get(request)
@@ -890,7 +760,6 @@ class HuggingFaceSource:
         return body
 
     async def _tree(self, repo: str) -> Tuple[List[Dict[str, Any]], bool]:
-        """The repo's file list on `main`, following its pages: (entries, complete)."""
         url = f"{API_BASE}/models/{repo}/tree/{REVISION}"
         entries: List[Dict[str, Any]] = []
         cursor: Optional[str] = None
@@ -913,7 +782,6 @@ class HuggingFaceSource:
         return entries, False
 
     async def _readme(self, repo: str, files: Dict[str, Dict[str, Any]], tree_complete: bool) -> Optional[str]:
-        """The README text, or None: not in the tree, over `MAX_README_BYTES`, gated (401), missing or unreachable."""
         entry = files.get("README.md")
         if entry is None and tree_complete:
             return None
@@ -933,17 +801,14 @@ class HuggingFaceSource:
             if exc.status not in (401, 403):
                 logger.warning("[MODEL-BROWSER] Hugging Face: no README for %s: %s", repo, exc.message)
                 return None
-            text = None  # a gated repo: its files need a token
+            text = None
         except SourceError as exc:
             logger.warning("[MODEL-BROWSER] Hugging Face: no README for %s: %s", repo, exc.message)
             return None
         self._cache_set(request, {"text": text})
         return text
 
-    # Source interface ----------------------------------------------------------------
-
     async def info(self) -> SourceInfo:
-        """Fixed filters: Hugging Face has no type or base model enum, and no periods."""
         return SourceInfo(
             id=SOURCE_ID,
             label=LABEL,
@@ -956,10 +821,6 @@ class HuggingFaceSource:
         )
 
     async def search(self, query: SearchQuery, *, max_level: Optional[int] = None) -> SearchPage:
-        """One upstream page for `query`, normalised; NSFW is marked, and dropped only when `query.safe`.
-
-        `max_level` is accepted for the interface: Hugging Face has no NSFW levels.
-        """
         parsed = parse_query(query.q)
         sort = _sort_value(query.sort)
         filters = type_params(query.types) + base_model_params(query.base_models)
@@ -969,7 +830,6 @@ class HuggingFaceSource:
                 if item is not None:
                     items = [] if query.safe and item.nsfw else [item]
                     return SearchPage(source=SOURCE_ID, items=items, next_cursor=None)
-            # No such repo (or a later page of the text search it fell back to).
             parsed = ParsedQuery(kind="text", value=parsed.value)
         params: List[Tuple[str, Any]] = [
             ("limit", query.limit),
@@ -995,7 +855,6 @@ class HuggingFaceSource:
         return SearchPage(source=SOURCE_ID, items=items, next_cursor=next_cursor_from_link(link))
 
     async def detail(self, model_id: str, *, max_level: Optional[int] = None) -> ModelDetail:
-        """The repo, its files on `main` and its README; `SourceNotFound` for an unknown, private or disabled repo."""
         repo = str(model_id).strip()
         if not is_repo_id(repo):
             raise SourceNotFound("Hugging Face model ids look like org/repo")
@@ -1020,10 +879,7 @@ class HuggingFaceSource:
                 f"Hugging Face sent a model this browser cannot read ({exc.__class__.__name__})"
             ) from None
 
-    # Search steps ---------------------------------------------------------------------
-
     async def _exact_item(self, repo: str) -> Optional[SearchItem]:
-        """The repo as one search result; None when it does not exist, is private or is disabled."""
         try:
             raw = await self._model(repo)
         except SourceNotFound:

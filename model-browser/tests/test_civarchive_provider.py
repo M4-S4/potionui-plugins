@@ -1,11 +1,3 @@
-"""`provider.civarchive_provider`: the `civarchive` marketplace provider (PLAN.md §8.5).
-
-`get_model_by_hash` reads civarchive.com's page of a SHA256 through the `civarchive` source (the
-recorded fixtures, served by the fake transport) and answers what the core stores: the provider
-row, the description, the trigger words, the previews. It stays silent, without any request,
-while the admin has not turned CivArchive on. `get_model_page_url` is string work only.
-"""
-
 import copy
 import json
 import logging
@@ -43,7 +35,6 @@ TWEAKER_SHA = "0d9bd1b873a7863e128b4672e3e245838858f71469a3cec58123c16c06f83bd7"
 
 @pytest.fixture
 def settings_values(monkeypatch):
-    """The plugin settings, CivArchive turned on."""
     return fake_settings(monkeypatch, enable_civarchive=True)
 
 
@@ -58,13 +49,9 @@ def provider(settings_values, transport):
 
 
 def _hash_page(transport, sha256, *models, files=()):
-    """Serve `sha256/<hash>.json` with these models (each with the version that has the file)."""
     page = {"id": sha256, "files": list(files), "models": list(models), "meta": {}, "isNsfw": False}
     transport.add(f"sha256/{sha256}.json", (200, JSON_HEADERS, data_body(page)))
     return page
-
-
-# Metadata and lifecycle ----------------------------------------------------------------------
 
 
 def test_metadata_declares_a_hash_lookup_provider_without_credentials(provider):
@@ -106,11 +93,8 @@ async def test_the_connection_test_reads_the_build_id_while_the_source_is_on(set
     assert off.calls == []
 
 
-# The setting --------------------------------------------------------------------------------------
-
-
 async def test_while_the_source_is_off_a_hash_is_none_without_any_request(monkeypatch, transport):
-    fake_settings(monkeypatch)  # enable_civarchive defaults to off
+    fake_settings(monkeypatch)
 
     assert await CivArchiveProvider(source=make_source(transport)).get_model_by_hash(SHA_78291) is None
     assert transport.calls == []
@@ -134,9 +118,6 @@ async def test_the_setting_is_read_on_every_lookup(settings_values, provider, tr
 
     assert await provider.get_model_by_hash(SHA_78291) is None
     assert transport.paths() == ["/", f"sha256/{SHA_78291}.json"]
-
-
-# get_model_by_hash ----------------------------------------------------------------------------------
 
 
 async def test_a_known_file_gives_the_expected_provider_model_info(provider, transport):
@@ -165,7 +146,7 @@ async def test_a_known_file_gives_the_expected_provider_model_info(provider, tra
         },
     )
     assert info.description.startswith("这是一个LoRA") and "<" not in info.description
-    json.dumps(info.to_dict())  # what the providers API sends
+    json.dumps(info.to_dict())
     assert transport.paths() == ["/", f"sha256/{SHA_78291}.json"]
 
 
@@ -175,7 +156,6 @@ async def test_an_unknown_hash_is_none(provider, transport):
 
 
 async def test_a_hash_page_that_is_gone_is_none(provider, transport):
-    """A 404 twice (the build id renewed in between): no such page."""
     assert await provider.get_model_by_hash("ab" * 32) is None
     assert transport.paths() == ["/", "sha256/" + "ab" * 32 + ".json", "/", "sha256/" + "ab" * 32 + ".json"]
 
@@ -233,7 +213,6 @@ def test_the_civitai_model_of_a_page_comes_first():
 
 
 async def test_nsfw_by_the_model_bitmask_and_at_most_six_previews(provider, transport):
-    """Detail Tweaker XL: model level 5 (PG | R), 15 images at PG."""
     _hash_page(transport, TWEAKER_SHA, model("model_122359_v135867"))
 
     info = await provider.get_model_by_hash(TWEAKER_SHA)
@@ -267,7 +246,6 @@ async def test_previews_leave_out_nsfw_images_and_real_people_when_the_admin_hid
 
 
 async def test_a_model_deleted_from_civitai_is_found_with_its_hugging_face_mirror(provider, transport):
-    """LowRA: deleted, its images without a level (never previews), a trigger word."""
     _hash_page(transport, LOWRA_SHA, model("model_48139_v52753"))
 
     info = await provider.get_model_by_hash(LOWRA_SHA)
@@ -287,7 +265,6 @@ async def test_a_file_only_torrents_have_is_found_without_a_download_url(provide
 
     info = await provider.get_model_by_hash(sha256)
 
-    # Known (its details are right), but nothing to download it from: no URL; still a LoRA on disk.
     assert (info.provider_model_id, info.download_url, info.model_type) == ("civarchive:298188", None, "lora")
 
 
@@ -311,7 +288,7 @@ async def test_the_provider_shares_the_registry_source(settings_values, monkeypa
     monkeypatch.setattr(sources_module, "_instances", {})
     monkeypatch.setattr(http_module, "http", SourceHttp(fetch=transport, limits={"civarchive": (0.0, 4)}))
     monkeypatch.setattr(cache_module, "cache", MemoryCache())
-    provider = CivArchiveProvider()  # as the core creates it
+    provider = CivArchiveProvider()
 
     info = await provider.get_model_by_hash(SHA_78291)
     detail = await sources_module.get_source("civarchive").detail("78291:83095")
@@ -321,8 +298,6 @@ async def test_the_provider_shares_the_registry_source(settings_values, monkeypa
 
 
 async def test_the_core_fetcher_enriches_a_model_already_on_disk(provider, monkeypatch):
-    """`ProviderInfoFetcher.run_provider_fetch("civarchive", [model_id])`, as the Models page runs it,
-    with the core's repositories, metadata editor and preview download replaced by fakes."""
     import src.features.providers.registry as provider_registry
     from src.features.models.provider_info import ProviderInfoFetcher
     from src.plugin_api import HookContext
@@ -377,9 +352,6 @@ async def test_the_core_fetcher_enriches_a_model_already_on_disk(provider, monke
     assert stored["description"].startswith("这是一个LoRA")
     assert fetched == [image["url"] for image in model("model_78291_v83095")["version"]["images"]]
     assert len(editor.previews) == 3
-
-
-# get_model_page_url -------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

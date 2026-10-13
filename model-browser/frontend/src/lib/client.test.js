@@ -19,7 +19,6 @@ import {
 	unwrap
 } from './client.js';
 
-/** Fake host `api`: records the requested paths and answers (or throws) from `handler`. */
 function fakeApi(handler) {
 	const calls = [];
 	return {
@@ -32,7 +31,6 @@ function fakeApi(handler) {
 }
 
 test('fetchHealth reads status and version from the success envelope', async () => {
-	// Same shape as backend/api.py's GET /health.
 	const api = fakeApi(() => ({ success: true, data: { status: 'ok', plugin: 'model-browser', version: '0.1.0' } }));
 	assert.deepEqual(await fetchHealth(api), { ok: true, version: '0.1.0' });
 	assert.deepEqual(api.calls, ['/health']);
@@ -130,9 +128,6 @@ test('healthLabel does not double the v of a version that already has one', () =
 	assert.equal(healthLabel({ ok: true, version: 'v0.1.0' }), 'Backend: ok (v0.1.0)');
 });
 
-// Calls of the page ----------------------------------------------------------------------------
-
-/** Fake host `api` with get/post: records `[method, path, body]` and answers from `handler`. */
 function fakeHostApi(handler, token = 'secret-token') {
 	const calls = [];
 	return {
@@ -281,7 +276,6 @@ test('unwrap accepts the envelope and refuses everything else', () => {
 	assert.equal(unwrap({ success: true, data: 1 }, 500).ok, false);
 });
 
-/** Fake `fetch`: records `[url, init]` and answers `reply` (a Response-like object, or a function making one). */
 function fakeFetch(reply) {
 	const calls = [];
 	const impl = async (url, init) => {

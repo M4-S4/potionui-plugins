@@ -1,10 +1,4 @@
 <script>
-	// The "Filters" button and its popover, in the host's FilterPopoverFrame: the source's types
-	// (several at once), its base model (one, with a search box; when the source has any) and its
-	// period (when it has periods); a group the source does not offer is not drawn. The first two
-	// are titled with the source's own words (`types_label`, `base_models_label`: "Architecture"
-	// and "Scale" for OpenModelDB). Every change applies at once, as the frame says. The sort is the
-	// select of the page header (LibraryPage's own sort select).
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
 	import {
@@ -32,16 +26,12 @@
 	const periods = $derived(info?.periods ?? []);
 	const typesLabel = $derived(info?.types_label || DEFAULT_TYPES_LABEL);
 	const baseLabel = $derived(info?.base_models_label || DEFAULT_BASE_MODELS_LABEL);
-	// The base model label is a singular noun ("Base model", "Scale"): in the sentences of the
-	// group it is lower case, and plural with an "s" ("Search 12 scales").
 	const baseNoun = $derived(baseLabel.toLowerCase());
 	const offered = $derived(types.length > 0 || baseModels.length > 0 || periods.length > 0);
 	const baseMatches = $derived(matchOptions(baseModels, baseQuery));
 	const period = $derived(filters.period || sourceDefaults(info).period);
 
 	function show() {
-		// Open towards the left when the button is far enough right, else towards the right; never
-		// taller than the room left below the button (the panel scrolls then).
 		const rect = toggle?.getBoundingClientRect();
 		const width = Math.min(480, window.innerWidth * 0.9);
 		alignRight = !rect || rect.right >= width + 8;

@@ -1,29 +1,3 @@
-"""Routes that download and tell what is installed: `POST /downloads`, `GET /downloads`,
-`POST /installed` (PLAN.md §7.3, §7.4).
-
-Included by `backend/api.py` under `/api/plugins/model-browser`.
-- `POST /downloads` (`download`): checks the request for the caller and puts the file on
-  the core download queue (`downloads.start_download`). The download watcher
-  (`watcher.py`) then follows it to the indexed, assigned and enriched model.
-- `GET /downloads` (`download` or `request`): the caller's downloads, newest first; every
-  user's for an admin or an `approve` holder (`?all=false`: their own only). `?limit=`
-  1 to 200, 50 by default.
-- `POST /installed` (`browse`): which of up to 200 SHA256 are installed; for a non-admin,
-  installed **and** visible to them (assigned directly or through a group). Answered by
-  `installed.installed_map`, the rule `GET /{source}/search` also uses for its `installed` badge.
-
-Pending rows are sent with their `info` filtered for the viewer's NSFW context and without
-the model's description (`downloads.row_for_viewer`), and the core's download record with
-only its public fields to a non-admin (`downloads.PUBLIC_DOWNLOAD_FIELDS`).
-
-Success: `{"success": true, "data": ...}`. Errors: `HTTPException` with
-`{"success": false, "error": <code>, "message": ...}`: `invalid_request` and `invalid` (400),
-`forbidden` (403), `limit_exceeded` (403, a plan quota of the plugin, with `kind`, `label`,
-`used`, `limit`, `incoming` and `resets_at` too), `not_found` and `unknown_source` (404),
-`blocked` (409, the core or another plugin refused to queue the file), the sources' errors as
-in `routes_sources.py` (429, 502), `internal_error` (500).
-"""
-
 import logging
 import re
 from typing import Any, Dict, List, Mapping, Optional
@@ -42,7 +16,6 @@ logger = logging.getLogger("plugins.model-browser")
 
 router = APIRouter()
 
-#: `GET /downloads`: whoever may download or request a model.
 require_downloads_access = require_any("download", "request")
 
 MAX_INSTALLED_HASHES = 200
@@ -58,7 +31,6 @@ def _error(status: int, code: str, message: str, extra: Optional[Mapping[str, An
 
 
 def download_http_error(exc: DownloadError) -> HTTPException:
-    """A refused download as the HTTP error the page gets (the request routes answer the same way)."""
     return _error(exc.status, exc.code, exc.message, exc.extra)
 
 
@@ -67,12 +39,6 @@ async def post_download(
     body: Any = Body(...),
     principal: Principal = Depends(require_download),
 ) -> Dict[str, Any]:
-    """Queue one file for the caller, or reuse what is already there.
-
-    Body: `{source, model_id, version_id, file_id, model_type?, subdir?, filename?,
-    destination_backend_id?, assign_group_id?}`. Data: `{"pending", "download",
-    "already_installed", "already_queued"}`.
-    """
     try:
         request = DownloadRequest.model_validate(body)
     except ValidationError as error:
@@ -95,10 +61,6 @@ def list_downloads(
     limit: int = Query(DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     principal: Principal = Depends(require_downloads_access),
 ) -> Dict[str, Any]:
-    """The caller's downloads (every user's for an admin or an `approve` holder unless `all=false`), newest first.
-
-    Data: a list of `{"pending": <row>, "download": <core download or None>}`.
-    """
     user = principal.user
     everyone = (principal.is_admin or principal.grant.has("approve")) and all_users is not False
     rows = pending.list_rows(requested_by=None if everyone else user.id, limit=limit)
@@ -126,8 +88,6 @@ def _download(row: pending.PendingRow) -> Optional[Dict[str, Any]]:
 
 
 class InstalledRequest(BaseModel):
-    """The body of `POST /installed`."""
-
     sha256s: List[str] = Field(max_length=MAX_INSTALLED_HASHES)
 
     @field_validator("sha256s")
@@ -147,11 +107,6 @@ async def installed(
     body: Any = Body(...),
     principal: Principal = Depends(require_browse),
 ) -> Dict[str, Any]:
-    """Which of these SHA256 are installed: for a non-admin, installed and visible to them.
-
-    Body: `{"sha256s": [...]}` (at most 200; any case). Data: `{"installed": {<lower-case
-    sha256>: bool}}`. A model whose file has gone from the disk does not count.
-    """
     try:
         request = InstalledRequest.model_validate(body)
     except ValidationError as error:

@@ -1,16 +1,3 @@
-"""Admin setup steps of the model-browser plugin (manifest `setup:`, PLAN.md §2, §8.1, §8.3).
-
-Browsing needs no credential, but downloads that need a login are authenticated by the
-CivitAI and Hugging Face provider plugins, which own the API key / token (`provider_id` on
-the core download queue). Each check is done when that provider is initialised in the
-core's provider registry.
-
-The core loads these classes from the manifest reference `backend.setup_checks:<Class>`
-with `PluginLoader.load_class`, i.e. as `model_browser.backend.setup_checks`, and calls
-`evaluate` on every visit to Admin -> Plugins: one in-memory read of the registry, no
-network, no database.
-"""
-
 import logging
 
 from src.plugin_api import SetupCheck, SetupCheckContext, SetupCheckResult
@@ -19,12 +6,9 @@ logger = logging.getLogger("plugins.model-browser")
 
 
 class _ProviderReady(SetupCheck):
-    """Done when the provider `provider_id`, contributed by the plugin `plugin_id`, is initialised."""
-
     provider_id = ""
     plugin_id = ""
     name = ""
-    #: What the provider plugin's settings hold: "API key", "token".
     credential = ""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:

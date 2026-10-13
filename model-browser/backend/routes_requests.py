@@ -1,55 +1,3 @@
-"""Model requests (PLAN.md §4.4, §7.3): `POST /requests`, `GET /requests`,
-`POST /requests/{id}/approve`, `POST /requests/{id}/reject`, `DELETE /requests/{id}`.
-
-Included by `backend/api.py` under `/api/plugins/model-browser`.
-- `POST /requests` (`request`): body `{source, model_id, version_id, file_id, model_type?,
-  note?}` (a note of at most 1000 characters). The file is checked for the requester as a
-  download would be, against the request view of their grant
-  (`downloads.prepare_download(..., purpose="request")`: source allowed and enabled, model
-  visible to them, version and file found, type allowed, size within `max_file_gb`, download
-  URL), without being queued. A file already installed and visible to them is a 409
-  `already_available`; one installed but not visible to them is asked for all the same (its
-  snapshot says `already_installed`: approving it only assigns it). Their open request for
-  the same file is answered again (`already_requested: true`) rather than doubled. A new
-  request notifies every approver but the requester (`model-browser.request_received`).
-  Data: `{"request", "already_requested"}`.
-- `GET /requests?status=&all=&limit=` (`request` or `approve`): the caller's requests, newest
-  first; every user's for an approver (an admin, or a holder of `approve`) unless `all=false`.
-  `status`: one or more statuses, repeated or comma-separated. `limit`: 1 to 200, 50 by
-  default. Data: `{"requests": [...], "open_count": <the open requests the caller may decide
-  on: all of them for an admin, the other users' for an `approve` holder, 0 otherwise>,
-  "can_approve": bool}`.
-- `POST /requests/{id}/approve` (`approve`): body `{note?, model_type?, assign_group_id?}`, an
-  `open` request only (409 `not_open`), never one's own unless one is an admin (403
-  `forbidden`). The request is checked again for the requester, with the request view of
-  their own grant and their own NSFW context (`prepare_download(..., purpose="request",
-  on_behalf=True)`: a model they may no longer see is a 403 `not_visible_to_requester`), and
-  against their plan quota, then the file is queued for them (`downloads.queue_prepared`):
-  the pending row is theirs (`requested_by`; `assign_to` from their request view, or
-  `group:<id>` for one of their groups the approver picked when that view allows it), the
-  core download is created by the approver. A file already
-  on its way for someone else is not queued twice (`already_queued`: the download watcher
-  assigns the requester when it arrives), an installed file is only assigned
-  (`already_installed`). The request becomes `approved`, linked to the row by `sha256`, and
-  the requester is notified (`model-browser.request_approved`). Data: `{"request", "pending",
-  "download", "already_installed", "already_queued"}`. A refusal leaves the request `open`.
-- `POST /requests/{id}/reject` (`approve`): body `{note?}`; an `open` request, not one's own
-  unless one is an admin (403 `forbidden`), becomes `rejected`, and the requester is notified
-  (`model-browser.request_rejected`). Data: `{"request"}`.
-- `DELETE /requests/{id}` (any signed-in user): the author cancels their own `open` request
-  (403 for anyone else, 409 `not_open`). Data: `{"request"}`.
-
-Requests are sent with the usernames of their author and approver, and their snapshot as the
-viewer may see it (`requests.for_viewer`). The download watcher (`watcher.py`) moves an
-approved request on to `done` or `failed`.
-
-Success: `{"success": true, "data": ...}`. Errors: `HTTPException` with `{"success": false,
-"error": <code>, "message": ...}`: those of `POST /downloads` (`routes_downloads.py`:
-`invalid_request`, `forbidden`, `limit_exceeded`, `not_found`, `unknown_source`, `blocked`, the
-sources' errors, `internal_error`), and `already_available` (409), `not_open` (409),
-`not_visible_to_requester` (403), `requester_gone` (409: the requester's account was deleted).
-"""
-
 import asyncio
 import logging
 from typing import Annotated, Any, Dict, List, Optional, Tuple
@@ -72,7 +20,6 @@ logger = logging.getLogger("plugins.model-browser")
 
 router = APIRouter()
 
-#: `GET /requests`: whoever may ask for a model or decide on requests.
 require_requests_access = require_any("request", "approve")
 
 DEFAULT_LIST_LIMIT = 50
@@ -87,11 +34,7 @@ def _ok(data: Any) -> Dict[str, Any]:
     return {"success": True, "data": data}
 
 
-# Bodies ---------------------------------------------------------------------------
-
-
 def _blank_is_none(value: Any) -> Any:
-    """A string trimmed, a blank one meaning "not given"; other values go on to validation."""
     if isinstance(value, str):
         value = value.strip()
         return value or None
@@ -102,24 +45,15 @@ Note = Annotated[Optional[str], BeforeValidator(_blank_is_none)]
 
 
 class RequestCreate(FileRef):
-    """The body of `POST /requests`."""
-
-    #: Why the requester wants the file, for the approvers.
     note: Note = Field(None, max_length=MAX_NOTE_LENGTH)
 
 
 class Decision(BaseModel):
-    """The body of `POST /requests/{id}/reject`: the approver's note to the requester."""
-
     note: Note = Field(None, max_length=MAX_NOTE_LENGTH)
 
 
 class Approval(Decision):
-    """The body of `POST /requests/{id}/approve`."""
-
-    #: The PotionUI type to download the file as, instead of the one asked for.
     model_type: Annotated[Optional[str], BeforeValidator(_blank_is_none)] = None
-    #: One of the requester's groups to assign the model to (their parameters must allow it).
     assign_group_id: Annotated[Optional[str], BeforeValidator(_blank_is_none)] = Field(None, max_length=MAX_ID_LENGTH)
 
     @field_validator("model_type")
@@ -145,7 +79,6 @@ def _validate(model: Any, body: Any, what: str) -> Any:
 
 
 def _statuses(values: Optional[List[str]]) -> Optional[List[str]]:
-    """`?status=` values, repeated or comma-separated; None when none is given."""
     wanted = [part.strip() for value in values or [] for part in value.split(",") if part.strip()]
     unknown = [status for status in wanted if status not in requests.STATUSES]
     if unknown:
@@ -170,21 +103,15 @@ def _not_open(request_id: str) -> HTTPException:
     return _error(409, "not_open", f"This request is no longer open (it is {status})")
 
 
-#: The refusal of a non-admin approver deciding on their own request.
 OWN_REQUEST_MESSAGE = "You cannot decide on your own request: cancel it instead"
 
 
 def _refuse_own_request(request: Request, principal: Principal) -> None:
-    """Only an admin decides on their own request; an `approve` holder cancels theirs."""
     if request.user_id == principal.user.id and not principal.is_admin:
         raise _error(403, "forbidden", OWN_REQUEST_MESSAGE)
 
 
-# POST /requests -------------------------------------------------------------------
-
-
 def _installed_for(prepared: Prepared) -> Tuple[bool, bool]:
-    """`(installed, visible to the requester)` for the checked file; unknown without a SHA256."""
     sha256 = prepared.file.sha256
     if not sha256:
         return False, False
@@ -210,11 +137,6 @@ async def create_request(
     body: Any = Body(...),
     principal: Principal = Depends(require_request),
 ) -> Dict[str, Any]:
-    """Ask the approvers for one file; their own open request for it is answered again.
-
-    Body: `{source, model_id, version_id, file_id, model_type?, note?}`. Data: `{"request",
-    "already_requested"}`.
-    """
     asked = _validate(RequestCreate, body, "request")
     user = principal.user
     try:
@@ -254,9 +176,6 @@ async def create_request(
     return _ok({"request": requests.for_viewer(created, prepared.ctx), "already_requested": False})
 
 
-# GET /requests --------------------------------------------------------------------
-
-
 @router.get("/requests")
 def list_requests(
     status: Optional[List[str]] = Query(None),
@@ -264,10 +183,6 @@ def list_requests(
     limit: int = Query(DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     principal: Principal = Depends(require_requests_access),
 ) -> Dict[str, Any]:
-    """The caller's requests (every user's for an approver unless `all=false`), newest first.
-
-    Data: `{"requests": [...], "open_count", "can_approve"}`.
-    """
     statuses = _statuses(status)
     can_approve = permissions.can_approve(principal)
     everyone = can_approve and all_users is not False
@@ -283,14 +198,9 @@ def list_requests(
     )
 
 
-# POST /requests/{id}/approve ------------------------------------------------------
-
-
 async def _queue_for_requester(
     request: Request, approval: Approval, principal: Principal
 ) -> Tuple[Dict[str, Any], str, NsfwContext]:
-    """Check the request again for its requester and queue it for them; `(answer, assign_to,
-    the approver's NSFW context)`. Raises the `HTTPException` the route answers."""
     approver = principal.user
     requester = await asyncio.to_thread(permissions.user_by_id, request.user_id)
     if requester is None:
@@ -331,7 +241,6 @@ async def _queue_for_requester(
 
 
 def _reopen(request_id: str) -> None:
-    """Undo a claimed approval that could not go through: the request is `open` again."""
     try:
         requests.update(
             request_id, only_from=(requests.APPROVED,), status=requests.OPEN, decided_by=None, decision_note=None
@@ -346,19 +255,12 @@ async def approve_request(
     body: Any = Body(None),
     principal: Principal = Depends(require_approve),
 ) -> Dict[str, Any]:
-    """Queue the requested file for its requester (see the module docstring).
-
-    Body: `{note?, model_type?, assign_group_id?}`. Data: `{"request", "pending", "download",
-    "already_installed", "already_queued"}`.
-    """
     approval = _validate(Approval, body, "approval")
     approver = principal.user
     request = await asyncio.to_thread(_get_request, request_id)
     _refuse_own_request(request, principal)
     if not request.is_open:
         raise await asyncio.to_thread(_not_open, request.id)
-    # Claimed first, in one statement: a second approver, a rejection or a cancellation
-    # arriving meanwhile finds the request no longer open.
     claimed = await asyncio.to_thread(
         lambda: requests.set_status(
             request.id,
@@ -399,16 +301,12 @@ async def approve_request(
     return _ok({"request": requests.for_viewer(approved, viewer_ctx), **answer})
 
 
-# POST /requests/{id}/reject -------------------------------------------------------
-
-
 @router.post("/requests/{request_id}/reject")
 def reject_request(
     request_id: str,
     body: Any = Body(None),
     principal: Principal = Depends(require_approve),
 ) -> Dict[str, Any]:
-    """Decline an open request. Body: `{note?}`. Data: `{"request"}`."""
     decision = _validate(Decision, body, "decision")
     approver = principal.user
     request = _get_request(request_id)
@@ -427,12 +325,8 @@ def reject_request(
     return _ok({"request": requests.for_viewer(rejected, nsfw.resolve_nsfw(approver))})
 
 
-# DELETE /requests/{id} ------------------------------------------------------------
-
-
 @router.delete("/requests/{request_id}")
 def cancel_request(request_id: str, principal: Principal = Depends(current_principal)) -> Dict[str, Any]:
-    """The author cancels their own open request. Data: `{"request"}`."""
     user = principal.user
     request = _get_request(request_id)
     if request.user_id != user.id:

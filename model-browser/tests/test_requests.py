@@ -1,6 +1,3 @@
-"""`backend.requests`: the `model_browser_requests` table, the snapshot of a requested file, and
-how a request is shown to a viewer. On a scratch database; users are faked on `permissions.get_user`."""
-
 import pytest
 
 from backend import permissions, requests
@@ -44,14 +41,11 @@ def _age(db, request_id, stamp):
         cursor.execute(f"UPDATE {requests.TABLE} SET created_at = ? WHERE id = ?", (stamp, request_id))
 
 
-# The table ----------------------------------------------------------------------------
-
-
 def test_a_new_request_is_open_and_reads_back_whole(table):
     created = _create(note="For the SDXL workflow")
 
     assert created.status == "open" and created.is_open
-    assert len(created.id) == 26  # a ULID
+    assert len(created.id) == 26
     again = requests.get(created.id)
     assert again == created
     assert (again.user_id, again.source, again.source_model_id, again.source_version_id, again.file_id) == (
@@ -166,9 +160,8 @@ def test_open_count_counts_the_open_requests_each_approver_may_decide_on(table):
 
     assert requests.open_count() == 3
     assert requests.open_count(exclude_user_id="user-1") == 2
-    assert requests.open_count_for(admin()) == 3  # an admin decides on their own requests too
+    assert requests.open_count_for(admin()) == 3
     assert requests.open_count_for(principal("approver-9", capabilities=frozenset({"browse", "approve"}))) == 3
-    # An `approve` holder may not decide on their own requests: they are left out.
     assert requests.open_count_for(principal("user-1", capabilities=frozenset({"browse", "approve"}))) == 2
     assert requests.open_count_for(principal(capabilities=frozenset({"browse", "request"}))) == 0
     requests.set_status(first.id, "rejected", decided_by="admin-1")
@@ -181,9 +174,6 @@ def test_a_snapshot_that_is_not_json_reads_as_empty(table, plugin_db):
         cursor.execute(f"UPDATE {requests.TABLE} SET snapshot = 'not json' WHERE id = ?", (created.id,))
 
     assert requests.get(created.id).snapshot == {}
-
-
-# What the routes send ---------------------------------------------------------------------
 
 
 def test_to_json_has_the_columns_and_the_usernames(table):
@@ -220,9 +210,6 @@ def test_usernames_are_looked_up_once_each(table):
 
     assert sorted(table) == ["user-1", "user-2"]
     assert names(None) is None
-
-
-# The snapshot -----------------------------------------------------------------------------
 
 
 def test_the_snapshot_describes_the_file_with_a_safe_thumbnail():
@@ -309,7 +296,7 @@ def test_a_viewer_who_does_not_see_the_model_gets_no_thumbnail(ctx, nsfw, poi, h
     assert shown["name"] == "X"
     assert (shown["thumbnail_url"] is None) is hidden
     assert shown.get("hidden", False) is hidden
-    assert snapshot["thumbnail_url"] == SAFE_IMAGE  # the stored snapshot is untouched
+    assert snapshot["thumbnail_url"] == SAFE_IMAGE
 
 
 def test_for_viewer_applies_the_viewers_context_to_the_snapshot(table):

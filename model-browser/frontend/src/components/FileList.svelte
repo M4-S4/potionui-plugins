@@ -1,11 +1,4 @@
 <script>
-	// The files of one version: name (a star for the primary file), size, format, precision and
-	// type, an "Installed" badge (from `POST /installed` on their SHA256), "Needs login" for a gated
-	// repo, and the action the user's capabilities allow for that file (`actionFor(file)`, from
-	// lib/capabilities.fileActionInfo): Download (the download parameters decide on the source),
-	// Request when the request parameters allow the file (source, suggested type, size; none for
-	// a file already in their models), a disabled button with its reason otherwise, nothing for
-	// browse-only users.
 	import Icon from './Icon.svelte';
 	import Pill from './Pill.svelte';
 	import { formatBytes } from '../lib/format.js';

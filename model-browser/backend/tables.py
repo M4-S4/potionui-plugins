@@ -1,13 +1,3 @@
-"""The plugin's own tables in PotionUI's database (PLAN.md §4.3, §4.4, §7.3).
-
-Created by `plugin.lifecycle.boot` on every process start; `CREATE TABLE IF NOT
-EXISTS` makes that idempotent. A column added to a table after its first release is
-declared last (where `ALTER TABLE ... ADD COLUMN` puts it) and listed in `_ADDED_COLUMNS`,
-so a table created by an older version gets it at the next start. JSON columns hold
-`json.dumps` text. None of the tables has a foreign key on a core table: rows pointing at
-a deleted group, user or model are cleaned up by the plugin when it reads them.
-"""
-
 _COLUMNS = {
     "model_browser_group_permissions": """
         group_id TEXT PRIMARY KEY,      -- user_groups.id
@@ -59,11 +49,8 @@ _COLUMNS = {
     """,
 }
 
-#: Every table this plugin owns, all prefixed with `model_browser_`.
 TABLE_NAMES = tuple(_COLUMNS)
 
-#: Columns declared after their table was first released, as `(table, column, type)`: a
-#: table created by an older version of the plugin gets them at the next start.
 _ADDED_COLUMNS = (
     ("model_browser_requests", "assign_to", "TEXT"),
     ("model_browser_group_permissions", "updated_by", "TEXT"),
@@ -71,8 +58,6 @@ _ADDED_COLUMNS = (
 
 
 def create_tables() -> None:
-    """Create the plugin's tables if they are missing, and add the columns an older table lacks;
-    existing rows are left as they are."""
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:

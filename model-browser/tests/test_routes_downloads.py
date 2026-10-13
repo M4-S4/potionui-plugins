@@ -1,10 +1,3 @@
-"""`POST /downloads`, `GET /downloads` and `POST /installed` through the plugin's real router.
-
-The capability dependencies are overridden with the principal each test picks (one test
-runs the real ones), the sources are fakes serving normalised details, the core is
-`FakeCore` in place of `core_bridge`, and the pending rows live in a scratch database.
-"""
-
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -73,7 +66,6 @@ def app():
 
 @pytest.fixture
 def client_as(app):
-    """`client_as(principal)`: a client whose capability checks all yield `principal`."""
     clients = []
 
     def make(who):
@@ -107,9 +99,6 @@ def _insert(key, requested_by, **fields):
     )
     values.update(fields)
     return pending.insert(PendingRow(**values))
-
-
-# POST /downloads --------------------------------------------------------------------------
 
 
 def test_post_downloads_queues_the_file_and_answers_the_row_and_the_download(client_as, core, civitai):
@@ -259,12 +248,8 @@ def test_post_downloads_answers_an_unexpected_failure_with_the_envelope(client_a
     assert pending.list_rows() == []
 
 
-# The real capability checks ---------------------------------------------------------------
-
-
 @pytest.fixture
 def real_checks(app, monkeypatch, core, civitai):
-    """The real `require_*` dependencies, for a signed-in user whose grant the test sets."""
     state = SimpleNamespace(capabilities=frozenset())
     app.dependency_overrides[get_current_active_user] = lambda: user("user-1")
     monkeypatch.setattr(permissions, "resolve_grant", lambda who: replace(USER_GRANT, capabilities=state.capabilities))
@@ -300,9 +285,6 @@ def test_the_routes_need_a_signed_in_user(app, core):
         assert anonymous.post(f"{BASE}/downloads", json=body()).status_code in (401, 403)
         assert anonymous.get(f"{BASE}/downloads").status_code in (401, 403)
         assert anonymous.post(f"{BASE}/installed", json={"sha256s": []}).status_code in (401, 403)
-
-
-# GET /downloads ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -341,7 +323,7 @@ def test_an_admin_lists_every_download_unless_asking_for_their_own(client_as, ro
     response = client.get(f"{BASE}/downloads")
     assert _keys(response) == ["c", "b", "a"]
     entries = response.json()["data"]
-    assert entries[0]["download"] is None  # an installed file: nothing was queued
+    assert entries[0]["download"] is None
     assert entries[2]["download"]["destination_path"] == "/app/models/loras/x.safetensors"
     assert _keys(client.get(f"{BASE}/downloads?all=false")) == ["c"]
     assert _keys(client.get(f"{BASE}/downloads?limit=1")) == ["c"]
@@ -376,9 +358,6 @@ def test_a_download_that_cannot_be_read_is_listed_without_it(client_as, rows, vi
     entries = client_as(principal()).get(f"{BASE}/downloads").json()["data"]
 
     assert [entry["download"] for entry in entries] == [None]
-
-
-# POST /installed --------------------------------------------------------------------------
 
 
 def test_installed_for_an_admin_is_every_indexed_file_with_its_file_present(client_as, core):
@@ -437,14 +416,14 @@ def test_installed_is_answered_by_the_helper_the_search_badge_uses(client_as, co
     response = client_as(who).post(f"{BASE}/installed", json={"sha256s": [SHA.upper(), OTHER_SHA, " " + SHA]})
 
     assert response.json() == {"success": True, "data": {"installed": {SHA: True, OTHER_SHA: True}}}
-    assert asked == [([SHA, OTHER_SHA], who)]  # validated, lower-case, once each
+    assert asked == [([SHA, OTHER_SHA], who)]
     assert core.calls == []
 
 
 def test_installed_fails_rather_than_claim_that_nothing_is_installed_when_the_core_cannot_answer(
     app, client_as, core, monkeypatch
 ):
-    client_as(principal())  # puts the principal in place on `app`
+    client_as(principal())
 
     def moved(sha256):
         raise RuntimeError("PotionUI AppContainer no longer provides model_repository.get_by_sha256")

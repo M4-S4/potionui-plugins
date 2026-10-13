@@ -1,9 +1,3 @@
-"""`backend.http.SourceHttp`: rate limiting and typed errors, through the injectable transport.
-
-No test opens a socket: the transport is a fake, and the one test of the real session
-only creates and closes it.
-"""
-
 import asyncio
 import json
 import ssl
@@ -67,9 +61,6 @@ def _client(fetch, **kwargs):
     return SourceHttp(fetch=fetch, **kwargs)
 
 
-# Answers -------------------------------------------------------------------------
-
-
 async def test_a_2xx_answer_is_decoded_json():
     client = _client(_fixture_answer("models_ids"))
 
@@ -102,9 +93,6 @@ def test_normalise_params():
 
 def test_the_user_agent_names_the_plugin_and_its_version():
     assert USER_AGENT == f"PotionUI-ModelBrowser/{PLUGIN_VERSION} (+https://github.com/PotionUI/PotionUI)"
-
-
-# Errors ---------------------------------------------------------------------------
 
 
 async def test_429_is_rate_limited_with_the_retry_after_seconds():
@@ -237,9 +225,6 @@ def test_upstream_message_shapes():
     assert upstream_message(b'{"error": "' + b"x" * 400 + b'"}', limit=50).endswith("…")
 
 
-# Rate limiting ---------------------------------------------------------------------
-
-
 async def test_sequential_requests_are_spaced_by_the_source_interval():
     now = [100.0]
     sleeps = []
@@ -346,9 +331,6 @@ def test_the_limiter_follows_a_new_event_loop():
     asyncio.run(client.get_json("civitai", URL))
 
 
-# The real session ------------------------------------------------------------------
-
-
 async def test_the_session_is_created_lazily_with_the_user_agent_and_closed():
     client = SourceHttp()
     assert client._session is None
@@ -382,8 +364,6 @@ def test_shutdown_without_a_session_does_nothing(monkeypatch):
 
     http_module.shutdown()
 
-
-# Headers and text (Hugging Face) ------------------------------------------------------------
 
 HF_URL = "https://huggingface.co/api/models"
 README_URL = "https://huggingface.co/latent-consistency/lcm-lora-sdxl/raw/main/README.md"
@@ -524,8 +504,6 @@ async def test_hugging_face_requests_are_spaced_by_its_interval():
 
     assert sleeps == [pytest.approx(0.2), pytest.approx(0.2)]
 
-
-# CivArchive ------------------------------------------------------------------------------
 
 CIVARCHIVE_URL = "https://civarchive.com/_next/data/build/models/1.json"
 NOT_FOUND_PAGE = b"<!DOCTYPE html><title>Error 500: Model not found:1</title>"

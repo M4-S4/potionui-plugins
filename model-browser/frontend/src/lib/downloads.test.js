@@ -15,7 +15,6 @@ import {
 	transitionToast
 } from './downloads.js';
 
-// The shape of backend/routes_downloads.py's GET /downloads rows.
 function row(status, download = null, extra = {}) {
 	return {
 		pending: {
@@ -129,10 +128,8 @@ test('detectTransitions reports rows that finish during the session only', () =>
 	const a = 'a'.repeat(64);
 	const b = 'b'.repeat(64);
 	const c = 'c'.repeat(64);
-	// First poll: b was already done before the page opened.
 	let state = detectTransitions(new Map(), [row('queued', core('downloading'), { sha256: a }), row('enriched', null, { sha256: b })]);
 	assert.deepEqual(state.events, []);
-	// Second poll: a is done, c is new and already failed (never seen unfinished).
 	state = detectTransitions(state.seen, [
 		row('enriched', core('completed'), { sha256: a }),
 		row('enriched', null, { sha256: b }),
@@ -142,7 +139,6 @@ test('detectTransitions reports rows that finish during the session only', () =>
 		state.events.map((event) => [event.kind, event.key]),
 		[['done', a]]
 	);
-	// Third poll: nothing new.
 	state = detectTransitions(state.seen, [row('enriched', core('completed'), { sha256: a })]);
 	assert.deepEqual(state.events, []);
 	assert.equal(state.seen.get(c), 'failed');

@@ -1,10 +1,3 @@
-"""Test doubles for the download flow: normalised details, principals, a fake source, and
-`FakeCore`, the core as `backend.core_bridge` shows it (download queue, model index,
-assignment, provider fetch, attributes, notifications, group members, plan limits), plus the
-users `src.plugin_api.get_user` / `list_user_ids` know and the `LimitEvents` ledger,
-installed with `monkeypatch`.
-"""
-
 import copy
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -26,7 +19,6 @@ GIB = 1024 ** 3
 SAFE_IMAGE = "https://image.civitai.com/safe.jpeg"
 NSFW_IMAGE = "https://image.civitai.com/nsfw.jpeg"
 
-#: The request view of `USER_GRANT`: the same two sources, every type, no size limit.
 REQUEST_PARAMS = Params(sources=frozenset({"civitai", "huggingface"}))
 
 USER_GRANT = Grant(
@@ -42,7 +34,6 @@ USER_GRANT = Grant(
 
 
 def requesting(**params: Any) -> Params:
-    """`REQUEST_PARAMS` with some values changed, for `principal(request_params=...)`."""
     return replace(REQUEST_PARAMS, **params)
 
 
@@ -57,8 +48,6 @@ def user(user_id: str = "user-1", *, admin: bool = False) -> User:
 
 
 def principal(user_id: str = "user-1", **grant: Any) -> Principal:
-    """A non-admin with `download` and `request` on CivitAI and Hugging Face; `grant` overrides
-    `USER_GRANT` fields (`request_params=requesting(...)` for the request view)."""
     return Principal(user=user(user_id), grant=replace(USER_GRANT, **grant))
 
 
@@ -67,7 +56,6 @@ def admin(user_id: str = "admin-1") -> Principal:
 
 
 def civitai_detail(*, nsfw: bool = False, version_nsfw: bool = False, poi: bool = False) -> ModelDetail:
-    """A CivitAI LoRA with one version, a safe and an NSFW preview, and two files."""
     return ModelDetail(
         source="civitai",
         id="122359",
@@ -117,7 +105,6 @@ def civitai_detail(*, nsfw: bool = False, version_nsfw: bool = False, poi: bool 
 
 
 def hf_detail() -> ModelDetail:
-    """A gated Hugging Face repo read anonymously: nested file paths, no hashes."""
     return ModelDetail(
         source="huggingface",
         id="black-forest-labs/FLUX.1-dev",
@@ -153,7 +140,6 @@ def hf_detail() -> ModelDetail:
 
 
 def body(**overrides: Any) -> Dict[str, Any]:
-    """A `POST /downloads` body for the primary file of `civitai_detail()`."""
     values: Dict[str, Any] = {"source": "civitai", "model_id": "122359", "version_id": "135867", "file_id": "1001"}
     values.update(overrides)
     return values
@@ -175,7 +161,6 @@ class FakeSource:
 
 
 def install_sources(monkeypatch, *fakes: FakeSource) -> Dict[str, FakeSource]:
-    """`sources.get_source` answering these fakes; any other id is unknown."""
     by_id = {fake.id: fake for fake in fakes}
 
     def get_source(source_id: str):
@@ -192,8 +177,6 @@ def iso(moment: datetime) -> str:
 
 
 def model(model_id: str = "model-1", sha256: Optional[str] = SHA, *, created: str = "later", **fields: Any) -> Dict[str, Any]:
-    """An indexed model as `core_bridge.find_model_by_*` returns it (`core_bridge.MODEL_KEYS`).
-    `created`: "later" (after any row written now), "long_ago", or an ISO timestamp."""
     if created == "later":
         created = iso(datetime.now(timezone.utc) + timedelta(minutes=5))
     elif created == "long_ago":
@@ -211,12 +194,10 @@ def model(model_id: str = "model-1", sha256: Optional[str] = SHA, *, created: st
 
 
 def unlimited(kind: str) -> Dict[str, Any]:
-    """`core_bridge.limit_status` for a user without a limit of this kind."""
     return {"kind": kind, "limit": None, "used": None, "exempt": False, "resets_at": None, "contact_line": ""}
 
 
 def limited(kind: str, limit: float, used: float, **fields: Any) -> Dict[str, Any]:
-    """`core_bridge.limit_status` for a user with this limit and usage, resetting on Nov 1."""
     values = {
         "kind": kind,
         "limit": limit,
@@ -230,9 +211,6 @@ def limited(kind: str, limit: float, used: float, **fields: Any) -> Dict[str, An
 
 
 class FakeCore:
-    """What `backend.core_bridge` would get from PotionUI, in memory. `install()` puts it in place,
-    with the users `permissions` looks up and the `LimitEvents` ledger `limits` writes to."""
-
     PATCHED = (
         "queue_model_download",
         "get_download",
@@ -268,13 +246,9 @@ class FakeCore:
         self.fetch_errors: Dict[str, BaseException] = {}
         self.attributes_error: Optional[BaseException] = None
         self.notifications: List[Dict[str, Any]] = []
-        #: Users by id, for `get_user` and `list_user_ids`.
         self.users: Dict[str, User] = {}
-        #: The acting admin's id (or None) of each `assign_to_group` call, in order.
         self.group_admins: List[Optional[str]] = []
-        #: `(user_id, kind)` -> what `limit_status` answers; unlimited otherwise.
         self.limits: Dict[Tuple[str, str], Dict[str, Any]] = {}
-        #: `LimitEvents.record` calls, as `(user_id, kind, units, ref_id)`, and `refund` ref ids.
         self.limit_events: List[Tuple[str, str, float, Optional[str]]] = []
         self.refunds: List[str] = []
         self._downloads_made = 0
@@ -292,7 +266,6 @@ class FakeCore:
         return self
 
     def add_user(self, user_id: str, *, admin: bool = False, groups: Sequence[str] = ()) -> User:
-        """A user `get_user` knows, member of `groups` (for `user_groups` and `group_member_ids`)."""
         account = user(user_id, admin=admin)
         self.users[user_id] = account
         if groups:
@@ -304,8 +277,6 @@ class FakeCore:
 
     def calls_to(self, name: str) -> List[Tuple[Any, ...]]:
         return [call[1:] for call in self.calls if call[0] == name]
-
-    # Download queue
 
     async def queue_model_download(self, url: str, **kwargs: Any) -> Dict[str, Any]:
         self.calls.append(("queue_model_download", url))
@@ -357,11 +328,8 @@ class FakeCore:
         download = self.downloads.get(download_id)
         return copy.deepcopy(download) if download is not None else None
 
-    # Model index
-
     @staticmethod
     def _answer(found: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """A model as the bridge hands it on: its `core_bridge.MODEL_KEYS` and nothing else."""
         if found is None:
             return None
         return {key: copy.deepcopy(found[key]) for key in core_bridge.MODEL_KEYS if key in found}
@@ -375,8 +343,6 @@ class FakeCore:
         return self._answer(self.models_by_path.get(path))
 
     def find_model_by_id(self, model_id: str) -> Optional[Dict[str, Any]]:
-        """The model with this id among `models_by_sha` and `models_by_path`; None when its
-        file has gone (`is_available: False`), as the bridge answers for a model without a file."""
         self.calls.append(("find_model_by_id", model_id))
         for found in [*self.models_by_sha.values(), *self.models_by_path.values()]:
             if found.get("id") == model_id and found.get("is_available", True) is not False:
@@ -386,8 +352,6 @@ class FakeCore:
     def visible_model_ids(self, user_id: str) -> List[str]:
         self.calls.append(("visible_model_ids", user_id))
         return list(self.visible.get(user_id, []))
-
-    # Groups and assignment
 
     def _group(self, group_id: str) -> Dict[str, Any]:
         return {"id": group_id, "name": group_id.title(), "is_system": group_id.startswith("all_"), "content_policy": None}
@@ -411,8 +375,6 @@ class FakeCore:
         return True
 
     def assign_to_group(self, group_id: str, model_ids: Sequence[str], acting_user: User) -> List[str]:
-        """Like the bridge: `assign_group_error` first (a group that is gone), then a refusal
-        without an acting `User`."""
         self.calls.append(("assign_to_group", group_id, list(model_ids)))
         self.group_admins.append(getattr(acting_user, "id", None))
         if self.assign_group_error is not None:
@@ -421,15 +383,11 @@ class FakeCore:
             raise core_bridge.CoreBridgeError("refused", f"Assigning models to the group '{group_id}' needs an acting admin")
         return list(model_ids)
 
-    # Users
-
     def get_user(self, user_id: str) -> Optional[User]:
         return self.users.get(user_id)
 
     def list_user_ids(self) -> List[str]:
         return list(self.users)
-
-    # Plan limits
 
     def limit_status(self, user_id: str, kind: str) -> Dict[str, Any]:
         self.calls.append(("limit_status", user_id, kind))
@@ -442,8 +400,6 @@ class FakeCore:
     def refund_limit_events(self, ref_id: str) -> int:
         self.refunds.append(ref_id)
         return sum(1 for event in self.limit_events if event[3] == ref_id)
-
-    # Enrichment
 
     async def run_provider_fetch(self, provider: str, model_ids: Sequence[str]) -> Dict[str, Any]:
         self.calls.append(("run_provider_fetch", provider, list(model_ids)))

@@ -1,13 +1,3 @@
-"""OpenModelDB through the plugin's real router: `GET /openmodeldb/search`,
-`GET /openmodeldb/models/{id}` (and `nsfw-media`), and `POST /downloads` of an OpenModelDB file.
-
-The capability dependencies are overridden with the principal each test sets (a non-admin
-whose grant allows OpenModelDB), `nsfw.resolve_nsfw` with the context each test sets, the
-settings are faked, the catalogue is the recorded fixture behind the shared `SourceHttp`,
-the core is `FakeCore`, the raw cache and the pending rows live in a scratch database, and
-every test starts with new source instances.
-"""
-
 from types import SimpleNamespace
 
 import pytest
@@ -57,7 +47,6 @@ def core(plugin_db, monkeypatch):
 
 @pytest.fixture
 def omdb(monkeypatch, state, core):
-    """The OpenModelDB fake behind the shared client (CivitAI and Hugging Face are never asked here)."""
     fake_settings(monkeypatch)
     monkeypatch.setattr(nsfw, "resolve_nsfw", lambda user: state.ctx)
     monkeypatch.setattr(cache_module, "cache", Cache())
@@ -89,9 +78,6 @@ def _error(response):
     return response.json()["detail"]
 
 
-# Search ------------------------------------------------------------------------------------
-
-
 def test_search_pages_through_the_catalogue(client, omdb):
     first = client.get(f"{BASE}/openmodeldb/search")
     second = client.get(f"{BASE}/openmodeldb/search", params={"cursor": first.json()["data"]["next_cursor"]})
@@ -101,7 +87,6 @@ def test_search_pages_through_the_catalogue(client, omdb):
     assert (page["source"], len(page["items"]), page["next_cursor"]) == ("openmodeldb", 24, "24")
     assert (len(_ids(second)), second.json()["data"]["next_cursor"]) == (3, None)
     assert omdb.count(MODELS) == 1
-    # The default sort lists the models this browser can download first.
     kinds = [found["mb_type"] for found in page["items"] + second.json()["data"]["items"]]
     assert kinds == ["upscaler"] * 17 + [None] * 10
     item = next(found for found in page["items"] if found["id"] == GITHUB_RAW)
@@ -141,7 +126,6 @@ def test_search_marks_an_installed_upscaler(client, core, state):
 
     assert (items[GITHUB_RAW]["primary_sha256"], items[GITHUB_RAW]["installed"]) == (NOMOS_SHA, True)
     assert items["16x-ESRGAN"]["installed"] is False
-    # A model OpenModelDB only links to has no file here, so no badge.
     assert (items[MEGA_ONLY]["primary_sha256"], items[MEGA_ONLY]["installed"], items[MEGA_ONLY]["mb_type"]) == (None, None, None)
 
 
@@ -164,9 +148,6 @@ def test_search_when_openmodeldb_is_down_is_a_502(client, omdb):
     assert _error(response)["error"] == "source_unavailable"
 
 
-# Detail --------------------------------------------------------------------------------------
-
-
 def test_detail_of_a_downloadable_upscaler(client):
     response = client.get(f"{BASE}/openmodeldb/models/{ONNX_FIRST}")
 
@@ -178,11 +159,9 @@ def test_detail_of_a_downloadable_upscaler(client):
     assert (version["id"], version["name"], version["base_model"], version["partial"]) == (
         ONNX_FIRST, "Release", "HAT 4x", False,
     )
-    # The onnx is not offered: PotionUI can neither index nor load it.
     assert [(file["name"], file["primary"], file["auth_provider_id"]) for file in version["files"]] == [
         ("4xNomos8kSCHAT-S.pth", True, None),
     ]
-    # The model's own thumbnail, then its six gallery images.
     assert len(version["images"]) == 7 and all(image["nsfw"] is False for image in version["images"])
     assert version["images"][0]["url"] == "https://openmodeldb.info/thumbs/124f13989b3543fa9edfa35e.jpg"
     assert data["description_html"].startswith("<p>Architecture: HAT · Scale: 4x")
@@ -194,7 +173,6 @@ def test_detail_of_a_downloadable_upscaler(client):
 
 
 def test_a_model_whose_gallery_links_are_dead_shows_its_own_thumbnail(client):
-    """1x-Archiver-AntiLines: its one gallery image is on imgsli.com (404)."""
     detail = client.get(f"{BASE}/openmodeldb/models/1x-Archiver-AntiLines").json()["data"]
     found = client.get(f"{BASE}/openmodeldb/search", params={"q": "https://openmodeldb.info/models/1x-Archiver-AntiLines"})
 
@@ -222,9 +200,6 @@ def test_nsfw_media_is_empty_and_404_under_a_blocked_ceiling(client, state):
 
     state.ctx = context("blocked", "hide")
     assert client.get(f"{BASE}/openmodeldb/models/{GITHUB_RAW}/nsfw-media").status_code == 404
-
-
-# POST /downloads -------------------------------------------------------------------------------
 
 
 def _body(model_id, file_id, **extra):
@@ -280,7 +255,7 @@ def test_a_model_only_the_openmodeldb_page_offers_has_no_file_to_download(client
 
 
 def test_a_grant_without_openmodeldb_refuses_its_files(client, core, state):
-    state.principal = principal()  # CivitAI and Hugging Face only
+    state.principal = principal()
 
     response = client.post(f"{BASE}/downloads", json=_body(GITHUB_RAW, NOMOS_SHA))
 

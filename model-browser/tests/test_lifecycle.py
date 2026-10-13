@@ -1,10 +1,3 @@
-"""`hooks.lifecycle_hooks`: boot creates the tables, ready starts the watcher, disable stops it.
-
-`run_on_app_loop` / `get_app_loop` are replaced on `src.plugin_api.hooks`, where
-the handlers import them from: either by fakes, or by a real event loop running
-on its own thread like PotionUI's application loop (`app_loop`).
-"""
-
 import asyncio
 import concurrent.futures
 import inspect
@@ -22,12 +15,10 @@ from src.plugin_api import HookContext
 
 @pytest.fixture(autouse=True)
 def _no_settings_rewrite(monkeypatch):
-    """`on_boot` rewrites the stored yes/no settings: keep it off the database in these tests."""
     monkeypatch.setattr(settings, "normalise_stored_booleans", lambda: [])
 
 
 def _context(hook, subject="model-browser"):
-    """What the hook chain hands this plugin's handler: `data["plugin_id"]` is the plugin the event is about."""
     return HookContext(hook_name=hook, plugin_id="model-browser", data={"plugin_id": subject})
 
 
@@ -54,11 +45,6 @@ def _install(monkeypatch, watcher, future):
 
 @pytest.fixture(autouse=True)
 def _no_watcher(monkeypatch):
-    """Every test starts without a watcher, and whatever it starts is forgotten afterwards.
-
-    A watcher these tests start runs empty passes: they test the lifecycle, and must never
-    read a database.
-    """
     _install(monkeypatch, None, None)
 
     async def run_pass(self, *, reconcile=False):
@@ -69,7 +55,6 @@ def _no_watcher(monkeypatch):
 
 @pytest.fixture
 def process_start(monkeypatch):
-    """PotionUI during the boot of a process start: no container, no event loop yet."""
     scheduled = []
 
     def get_app_loop():
@@ -94,7 +79,6 @@ async def _cancel_remaining_tasks():
 
 @pytest.fixture
 def app_loop(monkeypatch):
-    """A running event loop on its own thread, standing in for PotionUI's application loop."""
     loop = asyncio.new_event_loop()
     thread = threading.Thread(target=loop.run_forever, name="fake-app-loop", daemon=True)
     thread.start()
@@ -117,7 +101,7 @@ def test_on_boot_creates_the_tables_and_returns_its_context(monkeypatch, process
 
     assert lifecycle_hooks.on_boot(context) is context
     assert calls == ["create_tables"]
-    assert process_start == []  # at process start the watcher waits for `ready`
+    assert process_start == []
     assert lifecycle_hooks._watcher_future is None
 
 
@@ -163,7 +147,7 @@ def test_on_ready_schedules_the_watcher_on_the_app_loop(monkeypatch):
 
     def run_on_app_loop(coro):
         scheduled.append(coro)
-        coro.close()  # this fake loop never runs it
+        coro.close()
         return future
 
     monkeypatch.setattr(plugin_hooks, "run_on_app_loop", run_on_app_loop)
@@ -178,7 +162,7 @@ def test_on_ready_schedules_the_watcher_on_the_app_loop(monkeypatch):
 
     lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
 
-    assert len(scheduled) == 1  # the first watcher still runs: no second one
+    assert len(scheduled) == 1
 
 
 def test_on_ready_logs_and_swallows_an_unavailable_loop(process_start, caplog):
@@ -219,12 +203,12 @@ def test_disable_stops_a_running_watcher_from_another_thread(app_loop):
 
     lifecycle_hooks.on_disable(_context("plugin.lifecycle.disable"))
 
-    assert future.result(timeout=2) is None  # returned on its own, not cancelled
+    assert future.result(timeout=2) is None
     assert not watcher.running
 
 
 def test_disable_cancels_a_watcher_that_does_not_return(app_loop, monkeypatch):
-    monkeypatch.setattr(Watcher, "request_stop", lambda self: None)  # a watcher stuck in a step
+    monkeypatch.setattr(Watcher, "request_stop", lambda self: None)
     monkeypatch.setattr(lifecycle_hooks, "STOP_GRACE_SECONDS", 0.05)
     lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
     watcher, future = lifecycle_hooks._watcher, lifecycle_hooks._watcher_future
@@ -238,7 +222,6 @@ def test_disable_cancels_a_watcher_that_does_not_return(app_loop, monkeypatch):
 
 
 def test_on_boot_starts_the_watcher_when_the_plugin_is_enabled_at_runtime(app_loop, monkeypatch):
-    """The core fires `ready` once per process, so a plugin enabled again only gets `boot`."""
     monkeypatch.setattr(tables, "create_tables", lambda: None)
 
     lifecycle_hooks.on_boot(_context("plugin.lifecycle.boot"))
@@ -247,7 +230,7 @@ def test_on_boot_starts_the_watcher_when_the_plugin_is_enabled_at_runtime(app_lo
     assert future is not None
     _wait_until(lambda: watcher.running)
 
-    lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))  # a first enable fires both hooks
+    lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
 
     assert lifecycle_hooks._watcher_future is future
     lifecycle_hooks.on_disable(_context("plugin.lifecycle.disable"))

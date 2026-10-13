@@ -1,8 +1,3 @@
-"""`backend.limits` and `backend.limit_handlers`: the plugin's plan quotas on downloads.
-
-`core_bridge.limit_status` and `LimitEvents` are faked by `FakeCore`.
-"""
-
 from types import SimpleNamespace
 
 import pytest
@@ -22,9 +17,6 @@ def _refused(user_id="user-1", size_bytes=GIB, **kwargs):
     with pytest.raises(QuotaExceeded) as raised:
         check_quota(user_id, size_bytes, **kwargs)
     return raised.value
-
-
-# check_quota ------------------------------------------------------------------------------
 
 
 def test_a_user_without_a_plan_limit_is_never_refused(core):
@@ -164,9 +156,6 @@ def test_amounts_are_shown_as_counts_or_sizes(kind, value, text):
     assert limits.format_amount(kind, value) == text
 
 
-# Recording and refunding ------------------------------------------------------------------
-
-
 def test_record_counts_one_download_and_its_size(core):
     limits.record("user-1", 228_000_000, "model-browser:ref-1")
 
@@ -208,9 +197,6 @@ def test_ref_ids_are_unique_and_name_the_plugin():
 
     assert first != second
     assert first.startswith("model-browser:") and len(first) == len("model-browser:") + 26
-
-
-# The handlers the core calls ----------------------------------------------------------------
 
 
 def test_the_core_is_never_asked_to_apply_the_kinds():

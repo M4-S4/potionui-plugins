@@ -1,5 +1,3 @@
-"""`backend.permissions_store`: the group permission rows, against a scratch sqlite database."""
-
 import json
 from dataclasses import replace
 from typing import get_args
@@ -150,7 +148,7 @@ def test_a_malformed_saving_admin_reads_as_none(updated_by):
 
 
 def test_a_table_created_before_the_saving_admin_was_recorded_gets_the_column_and_keeps_its_rows(plugin_db):
-    with plugin_db.get_cursor() as cursor:  # the table as the plugin created it before phase 9
+    with plugin_db.get_cursor() as cursor:
         cursor.execute(
             f"CREATE TABLE {TABLE} (group_id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, params TEXT NOT NULL, "
             "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
@@ -270,7 +268,6 @@ def test_unknown_capabilities_and_sources_are_dropped_but_model_types_are_kept()
 
     assert row.capabilities == {"browse"}
     assert row.sources == {"civitai"}
-    # Dropping it would leave an empty set, which allows every type.
     assert row.model_types == {"no_such_type"}
 
 

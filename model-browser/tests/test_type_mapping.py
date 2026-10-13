@@ -1,6 +1,3 @@
-"""`backend.type_mapping`: CivitAI types and Hugging Face repos to PotionUI model types, checked
-against the core's list."""
-
 import pytest
 
 from backend.type_mapping import (
@@ -56,9 +53,6 @@ def test_every_mapped_type_is_a_live_civitai_type():
     assert set(CIVITAI_TYPES) <= set(body("enums")["ModelType"])
 
 
-# Hugging Face ------------------------------------------------------------------------------
-
-
 def test_every_hugging_face_type_is_a_potionui_model_type():
     assert HUGGINGFACE_MB_TYPES <= set(MODEL_TYPES)
 
@@ -80,7 +74,6 @@ def test_every_hugging_face_type_is_a_potionui_model_type():
         (["diffusers"], "text-to-image", ["model.onnx", "model.gguf", "README.md"], None, None),
         (["diffusers"], "image-to-image", ["model.safetensors"], None, None),
         ([], None, ["model.safetensors"], None, None),
-        # Language models: their LoRA adapters and GGUF quantisations are not PotionUI assets.
         (["lora", "transformers"], "text-generation", ["adapter_model.safetensors"], None, None),
         (["lora"], "image-text-to-text", [], None, None),
         (["gguf"], "text-generation", ["llama-Q4_K_M.gguf"], None, None),

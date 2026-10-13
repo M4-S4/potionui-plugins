@@ -1,27 +1,3 @@
-"""Plan quotas on downloads (PLAN.md §4.5): checked before a file is queued, recorded once it
-is queued, refunded when it fails.
-
-Two kinds (manifest `limit_kinds:`), each counted per month, which an admin adds to the
-core's plans like any other limit:
-- `model-browser.downloads` (count): one per file queued for a user;
-- `model-browser.download_bytes` (bytes): the size of that file, when the source gives it.
-
-The core never enforces them (`limit_handlers.never_applies`): it only checks limits when a
-user submits or uploads. Before queueing a file for a user (a direct download, or an approved
-request, for the requester), `check_quota` asks `core_bridge.limit_status` where that user
-stands for both kinds, and raises `QuotaExceeded` (403 `limit_exceeded`) when one more file
-would go over: one more download over the count, or the file's size over the volume (a file
-of unknown size only once the volume is used up). `limit_status` answers "unlimited" when the
-plans cannot be read: a broken quota never blocks a download.
-
-Once the file is on the core queue, `record` adds one event per kind to the core's limit
-ledger (`LimitEvents.record(user_id, kind, units, ref_id)`). Their `ref_id` (`new_ref_id`,
-unique per queued file, kept as the pending row's `limit_ref_id`) lets `refund` cancel both
-when the download fails or is cancelled. A file already installed is only assigned, and a
-file already on its way is not queued twice: neither counts. Recording and refunding never
-raise.
-"""
-
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -34,17 +10,13 @@ logger = logging.getLogger("plugins.model-browser")
 
 DOWNLOADS = "model-browser.downloads"
 DOWNLOAD_BYTES = "model-browser.download_bytes"
-#: The plugin's kinds, in the order they are checked.
 KINDS = (DOWNLOADS, DOWNLOAD_BYTES)
-#: Same as `label:` in manifest.yml (tests/test_manifest.py checks it).
 LABELS = {DOWNLOADS: "Model downloads per month", DOWNLOAD_BYTES: "Downloaded model bytes per month"}
 
 _BYTE_UNITS = ("B", "KB", "MB", "GB", "TB")
 
 
 class QuotaExceeded(Exception):
-    """Queueing one more file would take the user over one of the plugin's plan limits."""
-
     def __init__(
         self,
         kind: str,
@@ -63,7 +35,6 @@ class QuotaExceeded(Exception):
         self.message = message
 
     def payload(self) -> Dict[str, Any]:
-        """The fields the routes add to their `limit_exceeded` error."""
         return {
             "kind": self.kind,
             "label": LABELS.get(self.kind, self.kind),
@@ -85,7 +56,6 @@ def _trim(value: float) -> str:
 
 
 def format_amount(kind: str, value: float) -> str:
-    """`3`, or `4.2 GB` for the volume."""
     if kind != DOWNLOAD_BYTES:
         return _trim(float(value))
     value = float(value)
@@ -96,14 +66,12 @@ def format_amount(kind: str, value: float) -> str:
 
 
 def exceeded(limit: float, used: float, incoming: Optional[float]) -> bool:
-    """The core's rule: without a known amount, refuse once the limit is reached; with one, when it would go over."""
     if incoming is None:
         return used >= limit
     return used + incoming > limit
 
 
 def _resets(resets_at: Optional[str]) -> str:
-    """` It resets on Nov 1 at 00:00 UTC.` for an ISO 8601 instant; empty when unknown."""
     if not resets_at:
         return ""
     try:
@@ -124,7 +92,6 @@ def refusal_message(
     contact_line: str = "",
     requester_name: Optional[str] = None,
 ) -> str:
-    """The refusal, to the user themselves, or to an approver when `requester_name` is given."""
     label = LABELS.get(kind, kind).lower()
     usage = f"{format_amount(kind, used)} of {format_amount(kind, limit)}"
     file_goes_over = kind == DOWNLOAD_BYTES and incoming is not None and used < limit
@@ -145,13 +112,6 @@ def refusal_message(
 
 
 def check_quota(user_id: str, size_bytes: Optional[int], *, requester_name: Optional[str] = None) -> None:
-    """Raise `QuotaExceeded` when one more file of `size_bytes` (None: unknown) queued for
-    `user_id` would go over one of the plugin's plan limits.
-
-    `requester_name`: an approver is queueing the file on that user's request; the message
-    then speaks of the requester. An exempt admin, a user without a plan or without these
-    limits, and plans that cannot be read all pass.
-    """
     for kind in KINDS:
         try:
             status = core_bridge.limit_status(user_id, kind)
@@ -179,13 +139,10 @@ def check_quota(user_id: str, size_bytes: Optional[int], *, requester_name: Opti
 
 
 def new_ref_id() -> str:
-    """A `ref_id` for the events of one queued file: unique, so refunding a failed download
-    never refunds an earlier download of the same file."""
     return f"{PLUGIN_ID}:{generate_ulid()}"
 
 
 def record(user_id: str, size_bytes: Optional[int], ref_id: str) -> None:
-    """Count one file queued for `user_id`: one download, and its size when known. Never raises."""
     events = [(DOWNLOADS, 1)]
     if isinstance(size_bytes, int) and size_bytes > 0:
         events.append((DOWNLOAD_BYTES, size_bytes))
@@ -197,7 +154,6 @@ def record(user_id: str, size_bytes: Optional[int], ref_id: str) -> None:
 
 
 def refund(ref_id: Optional[str]) -> int:
-    """Cancel the events recorded under `ref_id` (a download that failed); how many. Never raises."""
     if not ref_id:
         return 0
     try:

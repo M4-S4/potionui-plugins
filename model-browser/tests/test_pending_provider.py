@@ -1,12 +1,3 @@
-"""`provider.pending_provider`: the `model-browser` marketplace provider (PLAN.md §7.3).
-
-`get_model_by_hash` turns the `model_browser_pending` row the download pipeline wrote
-(`backend/pending.py`; `info` = the model detail cut down to the chosen version and file)
-into what the core stores and shows: the provider row, the description, the trigger words
-and the previews. Previews are visible to everyone the model is assigned to, so no NSFW
-image ever reaches `media_urls`. `get_model_page_url` is string work only.
-"""
-
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -41,7 +32,6 @@ def table(plugin_db):
 
 @pytest.fixture(autouse=True)
 def admin_settings(monkeypatch):
-    """The plugin's settings as the admin left them: the defaults (PG-13, real people shown)."""
     values = {"nsfw_max_level": 2, "hide_poi": False}
     monkeypatch.setattr(pending_provider.plugin_settings, "get_setting", lambda key: values[key])
     return values
@@ -53,7 +43,6 @@ def provider():
 
 
 def lora(**changes) -> ModelDetail:
-    """A CivitAI LoRA cut down to the version and file that were downloaded, as the pipeline stores it."""
     version = Version(
         id="135867",
         name="v1.0",
@@ -97,7 +86,6 @@ def lora(**changes) -> ModelDetail:
 
 
 def info_of(model: ModelDetail, *, version_id="135867", file_id="99264", mb_type="lora") -> dict:
-    """`PendingRow.info` as the pipeline writes it."""
     return {"model": model.model_dump(mode="json"), "version_id": version_id, "file_id": file_id, "mb_type": mb_type}
 
 
@@ -121,9 +109,6 @@ def store(info, *, key=SHA, status="assigned", source="civitai", source_model_id
 def with_images(*images: Image) -> ModelDetail:
     model = lora()
     return model.model_copy(update={"versions": [model.versions[0].model_copy(update={"images": list(images)})]})
-
-
-# Metadata and lifecycle ----------------------------------------------------------
 
 
 def test_metadata_declares_a_hash_lookup_provider_without_credentials(provider):
@@ -151,19 +136,15 @@ async def test_it_is_ready_without_settings_and_never_handles_a_download(provide
     assert await provider.test_connection() is True
     assert await provider.shutdown() is None
     assert provider.get_settings_schema() == {"type": "object", "properties": {}, "required": []}
-    # Downloads are authenticated by the civitai / huggingface providers (queue `provider_id`).
     assert provider.get_download_headers() == {}
     assert provider.matches_download_url(DOWNLOAD_URL) is False
     assert provider.matches_download_url("https://huggingface.co/a/b/resolve/main/c.safetensors") is False
 
 
-# get_model_by_hash ----------------------------------------------------------------
-
-
 async def test_a_downloaded_file_gives_the_expected_provider_model_info(table, provider):
     store(info_of(lora()))
 
-    info = await provider.get_model_by_hash(f" {SHA.upper()} ")  # any case: the row key is lower-case
+    info = await provider.get_model_by_hash(f" {SHA.upper()} ")
 
     assert info == ProviderModelInfo(
         provider_id="model-browser",
@@ -189,14 +170,14 @@ async def test_a_downloaded_file_gives_the_expected_provider_model_info(table, p
             "mb_license": "Commercial use allowed, credit required",
         },
     )
-    json.dumps(info.to_dict())  # what the providers API sends
+    json.dumps(info.to_dict())
 
 
 async def test_nsfw_images_never_become_previews(table, provider):
     store(info_of(with_images(
-        Image(url=NSFW_IMAGE, nsfw=True, nsfw_level=8),            # flagged by the source normalisation
-        Image(url=NSFW_IMAGE + "x", nsfw=True, nsfw_level=None),   # unrated CivitAI image: NSFW
-        Image(url=NSFW_IMAGE + "y", nsfw=True, nsfw_level=1),      # flagged whatever its level
+        Image(url=NSFW_IMAGE, nsfw=True, nsfw_level=8),
+        Image(url=NSFW_IMAGE + "x", nsfw=True, nsfw_level=None),
+        Image(url=NSFW_IMAGE + "y", nsfw=True, nsfw_level=1),
         Image(url=None, blurhash="UBF$", nsfw=True, nsfw_level=4),
         Image(url=SAFE_IMAGE, nsfw=False, nsfw_level=1),
     )))
@@ -207,7 +188,6 @@ async def test_nsfw_images_never_become_previews(table, provider):
 
 
 async def test_an_image_above_the_admins_current_level_is_left_out(table, provider, admin_settings):
-    # Normalised when the admin allowed R (4), then the admin went back to PG-13 (2).
     store(info_of(with_images(
         Image(url=SAFE_IMAGE, nsfw=False, nsfw_level=1),
         Image(url=SAFE_VIDEO, nsfw=False, nsfw_level=4),
@@ -496,7 +476,6 @@ async def test_a_model_without_licence_has_no_licence_values(table, provider):
 
 
 async def test_a_real_civitai_detail_round_trips(table, provider):
-    """The CivitAI source's own normalisation of a recorded answer, cut down the way the pipeline does it."""
     detail = normalize_detail(body("model_122359"), 2)
     version = next(version for version in detail.versions if version.id == "135867")
     file = next(file for file in version.files if file.primary)
@@ -509,7 +488,6 @@ async def test_a_real_civitai_detail_round_trips(table, provider):
     assert safe and info.media_urls == safe
     assert (info.provider_model_id, info.provider_version_id, info.name) == ("civitai:122359", "135867", "Detail Tweaker XL")
     assert (info.download_url, info.base_model, info.model_type) == (file.download_url, "SDXL 1.0", "lora")
-    # nsfwLevel 5 (PG | R) on the model: NSFW by the strict rule of PLAN.md §5.2, its safe images stay previews.
     assert info.nsfw is True
     assert info.created_at == datetime(2023, 8, 7, 14, 55, 2, 627000, tzinfo=timezone.utc)
     assert info.description and "<" not in info.description
@@ -521,8 +499,6 @@ async def test_a_real_civitai_detail_round_trips(table, provider):
 
 
 async def test_the_core_fetcher_stores_the_answer_and_fetches_only_the_safe_previews(table, provider, monkeypatch):
-    """`ProviderInfoFetcher.run_provider_fetch("model-browser", [model_id])`, the call the pipeline makes,
-    with the core's repositories, metadata editor and preview download replaced by fakes."""
     import src.features.providers.registry as provider_registry
     from src.features.models.provider_info import ProviderInfoFetcher
     from src.plugin_api import HookContext
@@ -577,7 +553,7 @@ async def test_the_core_fetcher_stores_the_answer_and_fetches_only_the_safe_prev
     assert (row.name, row.tags, row.nsfw, row.download_url) == ("Detail Tweaker XL", ["concept", "detailed"], False, DOWNLOAD_URL)
     assert stored["description"] == "Adds detail. Weight 0.5 to 1.5"
     assert editor.metadata == {"triggers": ["add detail", "detailed"]}
-    assert fetched == [SAFE_IMAGE, SAFE_VIDEO]  # never NSFW_IMAGE
+    assert fetched == [SAFE_IMAGE, SAFE_VIDEO]
     assert [preview["type"] for preview in editor.previews] == ["image", "image"]
 
 
@@ -589,13 +565,10 @@ def test_build_model_info_is_usable_on_its_own():
 
     info = build_model_info(row, max_level=1, hide_poi=False)
 
-    assert info.media_urls == [SAFE_IMAGE]  # level 2 is above PG
+    assert info.media_urls == [SAFE_IMAGE]
     assert (info.extra_data["mb_base_model"], info.extra_data["mb_license"]) == (
         "SDXL 1.0", "Commercial use allowed, credit required",
     )
-
-
-# get_model_page_url ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

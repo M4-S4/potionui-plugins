@@ -1,15 +1,3 @@
-"""`GET /sources`, `/{source}/search`, `/{source}/models/{id}` and `.../nsfw-media` through the
-plugin's real router.
-
-`require_browse` is overridden with the principal each test sets (a signed-in user unless it
-says otherwise), `nsfw.resolve_nsfw` is replaced by the context each test sets, the settings are
-faked, CivitAI, Hugging Face and OpenModelDB are fake transports serving the recorded fixtures
-(behind one shared `SourceHttp`), the core is `FakeCore` in place of `core_bridge` (the installed
-badge of the search results asks it), the raw cache lives in a scratch database, and every test
-starts with new source instances (OpenModelDB keeps its catalogue in memory).
-OpenModelDB's own routes are in `test_routes_openmodeldb.py`.
-"""
-
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -43,13 +31,11 @@ PAGE_2_CURSOR = "287938|23768|12597"
 
 @pytest.fixture
 def state():
-    """What the next request sees: the caller's NSFW context and who they are (a non-admin, user-1)."""
     return SimpleNamespace(ctx=context("allowed", "show"), principal=principal())
 
 
 @pytest.fixture
 def core(monkeypatch):
-    """The core as `core_bridge` shows it: nothing indexed, nothing visible until a test says so."""
     return FakeCore().install(monkeypatch)
 
 
@@ -65,7 +51,6 @@ def omdb_transport():
 
 @pytest.fixture
 def transport(plugin_db, monkeypatch, state, hf_transport, omdb_transport, core):
-    """The CivitAI fake; Hugging Face and OpenModelDB URLs go to their fakes through the same `SourceHttp`."""
     create_tables()
     fake_settings(monkeypatch)
     monkeypatch.setattr(nsfw, "resolve_nsfw", lambda user: state.ctx)
@@ -104,9 +89,6 @@ def _error(response):
     return response.json()["detail"]
 
 
-# /sources ------------------------------------------------------------------------------
-
-
 def test_sources_lists_civitai_hugging_face_and_openmodeldb_with_their_filters(client, hf_transport, omdb_transport):
     response = client.get(f"{BASE}/sources")
 
@@ -122,7 +104,6 @@ def test_sources_lists_civitai_hugging_face_and_openmodeldb_with_their_filters(c
     assert (huggingface["base_models"], huggingface["periods"]) == ([], [])
     assert [option["value"] for option in huggingface["sorts"]] == ["trending", "downloads", "likes", "updated", "newest"]
     assert hf_transport.calls == []
-    # The filter headings and the base model line: CivitAI and Hugging Face keep the defaults.
     for source in (civitai, huggingface):
         assert (source["types_label"], source["base_models_label"], source["base_model_label"]) == (
             "Types", "Base model", "Base model",
@@ -142,7 +123,6 @@ def test_sources_lists_civitai_hugging_face_and_openmodeldb_with_their_filters(c
     assert [option["value"] for option in openmodeldb["sorts"]] == ["downloadable", "newest", "oldest", "name"]
     assert openmodeldb["periods"] == []
     assert "@author" in openmodeldb["search_help"]
-    # The catalogue is read once, and a second call answers from memory.
     assert sorted(omdb_transport.calls) == ["/api/v1/architectures.json", "/api/v1/models.json", "/api/v1/tags.json"]
     assert client.get(f"{BASE}/sources").json()["data"][2] == openmodeldb
     assert len(omdb_transport.calls) == 3
@@ -166,9 +146,6 @@ def test_the_routes_need_a_signed_in_user(transport):
     assert transport.calls == []
 
 
-# Search --------------------------------------------------------------------------------
-
-
 def test_search_for_a_blocked_user_asks_for_safe_content_and_fills_the_page(client, transport, state):
     _lora_pages(transport)
     state.ctx = context("blocked", "hide")
@@ -177,7 +154,6 @@ def test_search_for_a_blocked_user_asks_for_safe_content_and_fills_the_page(clie
 
     assert response.status_code == 200
     data = response.json()["data"]
-    # Page 1 brings 58390 (264290 is NSFW), page 2 brings 82098 (200255 is NSFW).
     assert _ids(response) == ["58390", "82098"]
     assert all(found["nsfw"] is False for found in data["items"])
     assert data["next_cursor"] == PAGE_2_CURSOR
@@ -329,15 +305,11 @@ def test_two_users_share_one_cached_upstream_page(client, transport, state):
     assert _ids(blurred) == _ids(shown) == ["122359", "58390"]
 
 
-# The installed badge -------------------------------------------------------------------
-
-#: 122359 and 58390 are the two models of the `models_query` answer.
 SHA_122359 = "0d9bd1b873a7863e128b4672e3e245838858f71469a3cec58123c16c06f83bd7"
 SHA_58390 = "47aaaf0d2945ca937151d61304946dd229b3f072140b85484bc93e38f2a6e2f7"
 
 
 def _sha(name, model_id):
-    """The lower-case SHA256 of the first file of the first version of a recorded model."""
     return item(name, model_id)["modelVersions"][0]["files"][0]["hashes"]["SHA256"].lower()
 
 
@@ -390,7 +362,7 @@ def test_a_model_whose_file_has_gone_from_the_disk_is_not_installed(client, tran
 
 
 def test_the_badge_is_resolved_once_for_the_page_and_only_for_the_items_the_user_may_see(client, transport, core, state):
-    _lora_pages(transport)  # page 1: 264290 (NSFW) and 58390; page 2: 82098 and 200255 (NSFW)
+    _lora_pages(transport)
     state.ctx = context("blocked", "hide")
     sha_82098 = _sha("models_lora_page2", 82098)
     core.models_by_sha[sha_82098] = model("model-82098", sha_82098)
@@ -400,7 +372,7 @@ def test_the_badge_is_resolved_once_for_the_page_and_only_for_the_items_the_user
 
     assert _ids(response) == ["58390", "82098"]
     assert _marks(response) == {"58390": False, "82098": True}
-    assert len(transport.calls_to("/models")) == 2  # two upstream pages, one lookup
+    assert len(transport.calls_to("/models")) == 2
     assert core.names().count("visible_model_ids") == 1
     assert core.calls_to("find_model_by_sha256") == [(_sha("models_lora_page1", 58390),), (sha_82098,)]
 
@@ -489,9 +461,6 @@ def test_a_core_failure_does_not_fail_the_search_and_leaves_the_badges_unset(
     assert [found["primary_sha256"] for found in items] == [SHA_122359, SHA_58390]
 
 
-# Errors --------------------------------------------------------------------------------
-
-
 def test_an_unknown_source_is_404(client, transport):
     for path in ("/nope/search", "/nope/models/1", "/nope/models/1/nsfw-media", "/civarchive/search"):
         response = client.get(f"{BASE}{path}")
@@ -556,9 +525,6 @@ def test_the_limit_is_bounded(client, limit):
     assert client.get(f"{BASE}/civitai/search", params={"limit": limit}).status_code == 422
 
 
-# Detail --------------------------------------------------------------------------------
-
-
 def test_detail_for_a_user_who_may_see_it(client, transport, state):
     transport.add("/models/122359", "model_122359")
     state.ctx = context("allowed", "show", max_level=4)
@@ -576,7 +542,7 @@ def test_detail_for_a_user_who_may_see_it(client, transport, state):
 
 
 def test_detail_of_an_nsfw_model_is_404_for_a_blocked_user(client, transport, state):
-    transport.add("/models/122359", "model_122359")  # nsfwLevel 5: NSFW at PG-13
+    transport.add("/models/122359", "model_122359")
     state.ctx = context("blocked", "hide", max_level=2)
 
     response = client.get(f"{BASE}/civitai/models/122359")
@@ -618,9 +584,6 @@ def test_detail_hides_a_real_person_model_when_the_admin_says_so(client, transpo
     assert client.get(f"{BASE}/civitai/models/122359").status_code == 404
 
 
-# nsfw-media ------------------------------------------------------------------------------
-
-
 def test_nsfw_media_is_404_for_a_blocked_user_without_asking_civitai(client, transport, state):
     transport.add("/models/122359", "model_122359")
     state.ctx = context("blocked", "hide", max_level=8)
@@ -655,8 +618,6 @@ def test_nsfw_media_is_404_when_the_model_itself_is_hidden(client, transport, st
     assert client.get(f"{BASE}/civitai/models/122359/nsfw-media").status_code == 404
 
 
-# Hugging Face ------------------------------------------------------------------------------
-
 LCM = REPOS["lcm_lora_sdxl"]
 LORA_IDS = [
     "ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA",
@@ -666,7 +627,6 @@ LORA_IDS = [
 
 
 def _nsfw_demo_repo(hf_transport):
-    """org/demo: an NSFW-tagged repo whose README shows one image of the repo; returns that image's url."""
     raw = hf_body("model_lcm_lora_sdxl")
     raw["id"] = raw["modelId"] = "org/demo"
     raw["tags"].append("not-for-all-audiences")
@@ -725,7 +685,6 @@ def test_hugging_face_cursors_go_back_upstream_whole(client, hf_transport):
     assert page2.status_code == 200
     assert _ids(page2)[0] == "RunningHubAI/rh-qwen-image-2.1-lora-2104918997757157378"
     assert page2.json()["data"]["next_cursor"] == cursor_of("models_search_lora_page2")
-    # A cursor longer than CivitAI's goes upstream untouched (the fake knows no such page: 404).
     assert long.status_code == 404
     assert hf_transport.calls_to("/api/models")[-1]["cursor"] == long_cursor
     assert too_long.status_code == 422
@@ -740,7 +699,6 @@ def test_a_blocked_user_gets_the_page_refilled_from_the_link_cursor(client, hf_t
     response = client.get(f"{BASE}/huggingface/search", params={"limit": 2})
 
     assert response.status_code == 200
-    # The first page is all NSFW; the second one is kept whole (its cursor cannot point inside it).
     assert _ids(response) == LORA_IDS
     assert response.json()["data"]["next_cursor"] == cursor_of("models_search_lora")
     assert [call.get("cursor") for call in hf_transport.calls_to("/api/models")] == [None, nsfw_cursor]
@@ -822,7 +780,6 @@ def test_an_nsfw_hugging_face_repo_is_404_for_a_user_who_hides_nsfw(client, hf_t
     media = client.get(f"{BASE}/huggingface/models/org/demo/nsfw-media")
 
     assert (detail.status_code, media.status_code) == (404, 404)
-    # The detail asked once; nsfw-media either did not ask (blocked) or read the raw cache.
     assert _hf_paths(hf_transport).count("/api/models/org/demo") == 1
 
 
@@ -852,7 +809,7 @@ def test_model_ids_that_could_escape_are_refused(client, transport, hf_transport
 def test_a_200_character_id_reaches_the_source(client, hf_transport):
     response = client.get(f"{BASE}/huggingface/models/" + "a" * 200)
 
-    assert response.status_code == 404  # longer than a Hugging Face name: not found, without asking
+    assert response.status_code == 404
     assert _error(response)["error"] == "not_found"
     assert hf_transport.calls == []
 

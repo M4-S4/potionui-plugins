@@ -1,11 +1,3 @@
-"""`backend.setup_checks`: the Admin -> Plugins setup steps of the plugin (manifest `setup:`).
-
-Each check is done when its provider (`civitai`, `huggingface`) is initialised in the
-core's provider registry, read through `src.plugin_api.get_provider_registry`, which the
-tests replace with a fake. How the core loads and runs these classes from the manifest is
-covered in `test_manifest.py`.
-"""
-
 from types import SimpleNamespace
 
 import pytest
@@ -18,14 +10,11 @@ CONTEXT = SetupCheckContext(plugin_id="model-browser", settings={"nsfw_ceiling":
 
 
 class _Ids(set):
-    """A set that also records the ids the fake registry was asked about."""
-
     asked: list
 
 
 @pytest.fixture
 def ready(monkeypatch):
-    """The provider ids the fake registry reports as initialised; `ready.asked` lists the ids it was asked about."""
     ids = _Ids()
     ids.asked = []
 
@@ -62,7 +51,7 @@ def test_done_when_the_hugging_face_provider_is_initialised(ready):
 
 
 def test_civitai_not_initialised_points_at_its_provider_plugin(ready):
-    ready.add("huggingface")  # another provider being ready does not count
+    ready.add("huggingface")
 
     assert CivitaiProviderReady().evaluate(CONTEXT) == SetupCheckResult(
         done=False,

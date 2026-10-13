@@ -1,6 +1,3 @@
-"""`backend.notifications`: the plugin's notification types and the helpers that send them,
-through `core_bridge.notify` (faked here)."""
-
 from types import SimpleNamespace
 
 import pytest

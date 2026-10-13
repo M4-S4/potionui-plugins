@@ -1,7 +1,4 @@
 <script>
-	// The licence of a model in the download and request dialogs: the source's summary, its flags
-	// on one line (lib/downloadForm.licenseFlags) and the link to the full text, or a reminder to
-	// check the model page when the source states none.
 	import Icon from './Icon.svelte';
 	import { licenseFlags } from '../lib/downloadForm.js';
 

@@ -1,70 +1,3 @@
-"""CivArchive as a model-browser source (PLAN.md §8.5), off unless the admin turns on `enable_civarchive`.
-
-civarchive.com is a community index of CivitAI (and of other sites) with no API: the source
-reads the data routes of its Next.js pages, as Stability Matrix's client does
-(`StabilityMatrix.Core/Api/CivArchiveApiClient.cs`). Checked live on 2026-10-11; `robots.txt`
-allows everything but `/api`, which is never asked for, and download links always point at the
-sources (CivitAI, Hugging Face), never at civarchive.com.
-
-The build id. Every data URL holds the id of the deployment, `/_next/data/<build id>/...json`;
-it is read from the home page (`"buildId":"..."` in its `__NEXT_DATA__`, about 200 KB of HTML,
-never cached) and kept in memory and in the plugin cache (`{"build_id": True}`) for
-`BUILD_ID_TTL_SECONDS`, so a restart does not fetch the page again. An `asyncio.Lock` makes
-concurrent first requests resolve it once. A data URL under a stale id answers 404 (an HTML
-page): `_data` then resolves the id again (once for every request that saw the same stale id)
-and repeats the request once; a second 404 is the answer itself (a model or hash detail not
-found; an empty search page). A home page without a build id is `SourceUnavailable`.
-
-What the data routes answer (raw answers cached without their `comments` / `faqSections`):
-- `search.json` (`SEARCH_TTL_SECONDS`): `platform=civitai` always (without it CivitAI is a few
-  results among PixAI, TensorArt ...), `kind=version`, `rating=safe` when the query asks for
-  safe content (`rating=all` otherwise; `nsfw` is not a value), `sort`, `period`, `page`
-  (1-based, 50 results, `total_hits` capped at 1000), `q`, `tags`, `username`, repeated `type`
-  and `base_model`. `kind=model` answers no result at all for CivitAI (2026-10-11: the index
-  holds versions, files and articles), so the source asks for versions and keeps one item per
-  model on a page: the newest version, at the place of the model's first result.
-- `models/<id>.json?platform=civitai&modelVersionId=<vid>` (`DETAIL_TTL_SECONDS`): the model
-  with that version in full (files, mirrors, images); without a version, a `__N_REDIRECT` to the
-  latest one, which is followed. An unknown model or version answers HTTP 500 with "Model not
-  found" (`SourceNotFound`); a version of another model is answered with that other model's
-  version, so the answer is checked.
-- `sha256/<hash>.json` (`HASH_TTL_SECONDS`): the models using a file, and its mirrors; an
-  unknown hash answers 200 with no model (the `civarchive` provider reads it).
-
-Search box: `#tag`, `@user`, a pasted civarchive.com, civitai.com or civitai.red model link
-(that model through its detail: one item, whose id names the link's version when it has one),
-anything else is CivArchive's full-text search. Sorts `top` (default), `newest`, `downloads`,
-`likes`, `updated`; periods as the CivitAI source's (`all_time` ...), so the page's URL state is
-shared. The cursor is the next page number.
-
-Ids: a model is its CivitAI id ("78291"). A detail id may name the version: "78291:83095" (or
-"78291?modelVersionId=83095", or a pasted link); without one the latest version is shown.
-Only that version comes in full: the model's other versions are listed as `partial` versions,
-without files or images (the page loads "<model id>:<version id>" for them), and
-`version_detail` loads the one a download names.
-
-Normalisation, with CivitAI's vocabulary (`type_mapping.civitai_mb_type`, the bitmask helpers of
-`sources/civitai.py`):
-- NSFW (PLAN.md §5.3): a model or version is NSFW when its `nsfw_level` bitmask has a level above
-  `max_level` (`is_nsfw` when it has no level), or, for the version shown and the model, when
-  none of the version's images is safe (CivitAI's strict rule; images without a level are not
-  safe). Images: their `nsfwLevel`, `hash` (blurhash) and `poi`; an image flagged `minor` is
-  dropped; a model is `poi` when one of its images is. A list result has `is_nsfw` only: it is
-  NSFW when `is_nsfw` is set or when the model was deleted from CivitAI (CivArchive does not
-  keep `is_nsfw` up to date on deleted models: on 2026-10-11, 7 of the 50 deleted LoRAs a
-  `rating=safe` search listed carried explicit tags), and its thumbnail with it. Conservative:
-  the detail decides from the levels.
-- Downloads (`download_for`): the file's CivitAI URL (`https://civitai.com/api/download/...`,
-  provider `civitai`) while a `civitai` mirror of it is not deleted (it may be the same file
-  under another version), or, without any `civitai` mirror, its own `download_url` while
-  neither it, its version nor its model is deleted; otherwise the first Hugging Face mirror
-  that is a `/resolve/` URL (not gated first; provider `huggingface`, percent-encoded); otherwise
-  the file is left out (torrents, tensordrive.app, other sites). A version without a file has
-  no `mb_type`: the page shows "Not downloadable". A model deleted from CivitAI says so in its
-  description.
-- No licence (CivArchive has none), no early access except a paid CivitAI mirror.
-"""
-
 import asyncio
 import hashlib
 import html
@@ -94,27 +27,19 @@ logger = logging.getLogger("plugins.model-browser")
 SOURCE_ID = "civarchive"
 LABEL = "CivArchive"
 SITE = "https://civarchive.com"
-#: The only platform asked for: the source is CivArchive's copy of CivitAI.
 PLATFORM = "civitai"
-#: Search results come as versions (`kind=model` answers nothing for CivitAI).
 KIND = "version"
-#: Results per search page (CivArchive's, not ours to choose).
 PAGE_SIZE = 50
 
 BUILD_ID_TTL_SECONDS = 3600
-#: A 404 under a build id renewed this recently reuses the renewed one rather than reading the home page again.
 RENEW_HOLD_SECONDS = 30
 SEARCH_TTL_SECONDS = 120
 DETAIL_TTL_SECONDS = 300
 HASH_TTL_SECONDS = 300
 FILTERS_TTL_SECONDS = 3600
-#: After the filter lists failed, `info()` answers without them this long rather than asking again.
 FILTERS_RETRY_SECONDS = 60
-#: The home page is about 200 KB.
 HOME_MAX_BYTES = 4 * 1024 * 1024
-#: The cache key of the build id.
 BUILD_ID_REQUEST = {"build_id": True}
-#: What the data answers hold that the source never reads (large: the comments of a model).
 UNUSED_KEYS = frozenset({"comments", "faqSections", "footerLinks"})
 
 NOTICE = (
@@ -123,7 +48,6 @@ NOTICE = (
 )
 SEARCH_HELP = "Text, #tag, @user, or a civarchive.com / civitai.com model link"
 
-#: Our sort ids (CivArchive's values) with their labels, in the order the page lists them.
 SORTS: Tuple[Tuple[str, str], ...] = (
     ("top", "Top"),
     ("newest", "Newest"),
@@ -132,7 +56,6 @@ SORTS: Tuple[Tuple[str, str], ...] = (
     ("updated", "Recently updated"),
 )
 DEFAULT_SORT = "top"
-#: Our period ids (the CivitAI source's) -> CivArchive `period` values, with labels.
 PERIODS: Tuple[Tuple[str, str, str], ...] = (
     ("all_time", "all", "All time"),
     ("year", "year", "Past year"),
@@ -143,7 +66,6 @@ PERIODS: Tuple[Tuple[str, str, str], ...] = (
 _SORT_KEYS = frozenset(key for key, _ in SORTS)
 _PERIOD_VALUES = {key: value for key, value, _ in PERIODS}
 
-#: A file name's extension -> `File.format`.
 _FORMATS = {
     ".safetensors": "SafeTensor",
     ".ckpt": "PickleTensor",
@@ -154,9 +76,7 @@ _FORMATS = {
 }
 
 _BUILD_ID = re.compile(r'"buildId":"([^"]+)"')
-#: What a build id may hold before it goes into a URL path.
 _BUILD_ID_TEXT = re.compile(r"[A-Za-z0-9_-]{1,128}")
-#: The title of the 500 page CivArchive answers for an unknown model or version.
 _NOT_FOUND_PAGE = re.compile(r"Model (?:version )?not found", re.I)
 _DIGITS = re.compile(r"[0-9]{1,12}")
 _MODEL_REF = re.compile(r"([0-9]{1,12})(?::([0-9]{1,12}))?")
@@ -165,13 +85,8 @@ _SHA256 = re.compile(r"[0-9a-fA-F]{64}")
 _CURSOR = re.compile(r"[0-9]{1,4}")
 _IMAGE_ID_IN_URL = re.compile(r"/([0-9]{1,15})(?:\.[A-Za-z0-9]{2,5})?$")
 _VIDEO_PATH = re.compile(r"\.(?:mp4|webm|mov)$", re.I)
-#: Never part of an image URL the page is given.
 _ODD_URL_CHARACTERS = frozenset("\\\"'<>`")
-#: Characters a URL path or query keeps as they are (RFC 3986 `pchar`, `/`, `?` and `%`).
 _URL_SAFE = "/%!$&'()*+,;=:@-._~?"
-
-
-# Values ---------------------------------------------------------------------------
 
 
 def _text(value: Any) -> Optional[str]:
@@ -199,7 +114,6 @@ def _float(value: Any) -> Optional[float]:
 
 
 def _id(value: Any) -> Optional[int]:
-    """A positive CivitAI id, given as a number or as digits."""
     if isinstance(value, int) and not isinstance(value, bool):
         return value if value > 0 else None
     if isinstance(value, str) and _DIGITS.fullmatch(value.strip()):
@@ -212,7 +126,6 @@ def _is_true(value: Any) -> bool:
 
 
 def _list(value: Any) -> List[Any]:
-    """`value` when it is a list, else an empty one (a string is never iterated)."""
     return value if isinstance(value, list) else []
 
 
@@ -221,7 +134,6 @@ def _dicts(value: Any) -> List[Dict[str, Any]]:
 
 
 def _strings(values: Any) -> List[str]:
-    """The non-empty strings of a list, stripped, once each, in order."""
     return list(dict.fromkeys(value.strip() for value in _list(values) if isinstance(value, str) and value.strip()))
 
 
@@ -230,7 +142,6 @@ def _sha256(value: Any) -> Optional[str]:
 
 
 def _epoch_text(value: Any) -> Optional[str]:
-    """Epoch seconds (a list result's `created_at`) as "2023-02-10T12:56:41Z"; None when unusable."""
     seconds = _float(value)
     if seconds is None or seconds <= 0:
         return None
@@ -241,12 +152,10 @@ def _epoch_text(value: Any) -> Optional[str]:
 
 
 def _deleted(value: Any) -> bool:
-    """A `deleted_at` (ISO text or epoch seconds) is set."""
     return _text(value) is not None or (_float(value) is not None and _float(value) > 0)
 
 
 def _day(value: Any) -> Optional[str]:
-    """The date part ("2025-08-07") of a `deleted_at`, ISO text or epoch seconds."""
     text = _text(value)
     if text is not None:
         return text[:10] if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text[:10]) else None
@@ -255,25 +164,18 @@ def _day(value: Any) -> Optional[str]:
 
 
 def model_page_url(model_id: Any, version_id: Any = None) -> str:
-    """`https://civarchive.com/models/<id>`, with `?modelVersionId=<vid>` when a version is given."""
     url = f"{SITE}/models/{model_id}"
     return f"{url}?modelVersionId={version_id}" if version_id not in (None, "") else url
 
 
 def level_nsfw(level: Any, is_nsfw: Any, max_level: int) -> bool:
-    """A model, version or file `nsfw_level` bitmask has a level above `max_level`; without a
-    level (missing or 0), CivArchive's own `is_nsfw` decides."""
     mask = _int(level)
     if mask is not None and mask > 0:
         return civitai.mask_exceeds(mask, max_level)
     return _is_true(is_nsfw)
 
 
-# Ids and the search box -----------------------------------------------------------
-
-
 def parse_model_link(text: str) -> Optional[Tuple[int, Optional[int]]]:
-    """(model id, version id or None) from a civarchive.com, civitai.com or civitai.red model link."""
     text = (text or "").strip()
     if not text or any(char.isspace() for char in text):
         return None
@@ -297,8 +199,6 @@ def parse_model_link(text: str) -> Optional[Tuple[int, Optional[int]]]:
 
 
 def parse_model_ref(value: Any) -> Optional[Tuple[int, Optional[int]]]:
-    """(model id, version id or None) from a detail id: "78291", "78291:83095",
-    "78291?modelVersionId=83095" or a model link; None for anything else."""
     text = str(value or "").strip()
     match = _MODEL_REF.fullmatch(text)
     if match:
@@ -315,13 +215,10 @@ def parse_model_ref(value: Any) -> Optional[Tuple[int, Optional[int]]]:
 
 
 def model_ref(model_id: int, version_id: Optional[int] = None) -> str:
-    """A detail id: "78291", or "78291:83095" with a version."""
     return f"{model_id}:{version_id}" if version_id is not None else str(model_id)
 
 
 def page_url_for(model_id: Any, version_id: Any = None) -> Optional[str]:
-    """The civarchive.com page of a model id ("78291", or "78291:83095" naming its version), with
-    `version_id` when the id names none; None for anything that is not such an id. No request."""
     if not isinstance(model_id, str) or not _MODEL_REF.fullmatch(model_id.strip()):
         return None
     ref = parse_model_ref(model_id)
@@ -335,9 +232,6 @@ def page_url_for(model_id: Any, version_id: Any = None) -> Optional[str]:
 
 @dataclass(frozen=True)
 class ParsedQuery:
-    """What the search box asks CivArchive for."""
-
-    #: "all" (no text), "text", "tag", "username" or "model" (a pasted link).
     kind: str = "all"
     value: str = ""
     model_id: Optional[int] = None
@@ -345,7 +239,6 @@ class ParsedQuery:
 
 
 def parse_query(q: Optional[str]) -> ParsedQuery:
-    """The search box text: a model link, `#tag`, `@user` or free text."""
     text = (q or "").strip()
     if not text:
         return ParsedQuery()
@@ -362,7 +255,6 @@ def parse_query(q: Optional[str]) -> ParsedQuery:
 
 
 def parse_cursor(cursor: Optional[str]) -> int:
-    """The page a cursor names; 1 without one. `SourceInvalidRequest` for anything but a page number."""
     if cursor is None or cursor == "":
         return 1
     if not _CURSOR.fullmatch(cursor) or int(cursor) < 1:
@@ -392,12 +284,10 @@ def _period(value: Optional[str]) -> str:
 
 
 def _clean_list(values: Iterable[str]) -> List[str]:
-    """Stripped, non-empty, distinct and sorted: the same selection always gives the same request."""
     return sorted({str(value).strip() for value in values or () if str(value).strip()})
 
 
 def search_params(parsed: ParsedQuery, query: SearchQuery, page: int) -> List[Tuple[str, str]]:
-    """The `search.json` parameters of one page (`parsed` is not a model link)."""
     params = [
         ("platform", PLATFORM),
         ("kind", KIND),
@@ -418,7 +308,6 @@ def search_params(parsed: ParsedQuery, query: SearchQuery, page: int) -> List[Tu
 
 
 def parse_redirect(value: Any) -> Optional[Tuple[int, Optional[int]]]:
-    """(model id, version id) of a `__N_REDIRECT` such as "/models/78291?modelVersionId=83095"."""
     text = _text(value)
     if text is None:
         return None
@@ -435,15 +324,11 @@ def parse_redirect(value: Any) -> Optional[Tuple[int, Optional[int]]]:
     return int(match.group(1)), _id(version)
 
 
-# Images -----------------------------------------------------------------------------
-
-
 def _odd(char: str) -> bool:
     return char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F or char in _ODD_URL_CHARACTERS
 
 
 def https_url(value: Any) -> Optional[str]:
-    """`value` when it is an https URL with a host and nothing odd in it."""
     if not isinstance(value, str):
         return None
     value = value.strip()
@@ -459,8 +344,6 @@ def https_url(value: Any) -> Optional[str]:
 
 
 def image_id(url: str) -> str:
-    """The CivitAI image id at the end of a URL path ("…/width=450/88246.jpeg" -> "88246"),
-    else a short hash of the URL: what lets `nsfw-media` answer for this image."""
     try:
         match = _IMAGE_ID_IN_URL.search(urlsplit(url).path)
     except ValueError:
@@ -478,12 +361,6 @@ def _is_video(url: Optional[str]) -> bool:
 
 
 def normalize_image(raw: Any, max_level: int) -> Optional[Image]:
-    """One preview of a version (CivitAI's shape: `url`, `nsfwLevel`, `hash`, `type`, `poi`); None
-    for an image flagged `minor`, or one with neither an https url nor a blurhash.
-
-    An image without a level is NSFW (CivitAI's rule). An `.mp4` without a `type` is a video;
-    an image without an id gets one from its URL.
-    """
     if not isinstance(raw, dict) or _is_true(raw.get("minor")):
         return None
     image = civitai.normalize_image(raw, max_level)
@@ -498,7 +375,6 @@ def normalize_image(raw: Any, max_level: int) -> Optional[Image]:
 
 
 def list_thumbnail(raw: Mapping[str, Any], nsfw: bool) -> Optional[Image]:
-    """A list result's image (`image_url`, else `video_url`): no level, no blurhash, NSFW with its model."""
     url, kind = https_url(raw.get("image_url")), "image"
     if url is None:
         url, kind = https_url(raw.get("video_url")), "video"
@@ -509,24 +385,15 @@ def list_thumbnail(raw: Mapping[str, Any], nsfw: bool) -> Optional[Image]:
     return Image(url=url, blurhash=None, nsfw=nsfw, nsfw_level=None, kind=kind, poi=False, id=image_id(url))
 
 
-# Downloads --------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class Download:
-    """Where a file is downloaded from, and who authenticates it."""
-
     url: str
-    #: The marketplace provider of the queue: "civitai" or "huggingface".
     auth_provider_id: str
-    #: A gated Hugging Face repository: the user's token must have access.
     gated: bool = False
-    #: A paid (early access) CivitAI version.
     paid: bool = False
 
 
 def _encoded(url: str) -> Optional[str]:
-    """`url` with its path and query percent-encoded where needed (spaces, non-ASCII), existing escapes kept."""
     try:
         parts = urlsplit(url.strip())
     except ValueError:
@@ -537,8 +404,6 @@ def _encoded(url: str) -> Optional[str]:
 
 
 def civitai_download_url(value: Any) -> Optional[str]:
-    """A CivitAI download URL as the queue gets it: absolute, on civitai.com (a civitai.red one is
-    moved), under `/api/download/`, and accepted by the allowlist; None otherwise."""
     text = _text(value)
     if text is None:
         return None
@@ -554,8 +419,6 @@ def civitai_download_url(value: Any) -> Optional[str]:
 
 
 def huggingface_download_url(value: Any) -> Optional[str]:
-    """A Hugging Face mirror as a download URL: on huggingface.co, a `/resolve/` path, percent-encoded,
-    accepted by the allowlist; None otherwise (a `/blob/` page, another host)."""
     text = _text(value)
     if text is None:
         return None
@@ -573,11 +436,6 @@ def mirrors(raw_file: Mapping[str, Any]) -> List[Dict[str, Any]]:
 
 
 def download_for(raw_file: Mapping[str, Any], *, served_by_civitai: bool) -> Optional[Download]:
-    """The download policy of one file (see the module docstring); None when no URL is offered.
-
-    `served_by_civitai`: neither the file, its version nor its model is deleted, so the file's own
-    `download_url` works when no `civitai` mirror says otherwise.
-    """
     entries = mirrors(raw_file)
     civitai_entries = [mirror for mirror in entries if mirror.get("source") == "civitai"]
     for mirror in civitai_entries:
@@ -602,13 +460,11 @@ def download_for(raw_file: Mapping[str, Any], *, served_by_civitai: bool) -> Opt
 
 
 def file_format(name: str) -> Optional[str]:
-    """"SafeTensor", "PickleTensor" or "GGUF" from the file name's extension; None for anything else."""
     lowered = name.lower()
     return next((label for extension, label in _FORMATS.items() if lowered.endswith(extension)), None)
 
 
 def normalize_file(raw: Any, *, served_by_civitai: bool) -> Optional[Tuple[File, Download]]:
-    """One file and where it downloads from; None without an id or a download URL (`download_for`)."""
     if not isinstance(raw, dict):
         return None
     file_id = _id(raw.get("id"))
@@ -635,14 +491,10 @@ def normalize_file(raw: Any, *, served_by_civitai: bool) -> Optional[Tuple[File,
 
 
 def _with_primary(files: List[File]) -> List[File]:
-    """The files, one of them primary: the one CivArchive flags, else the first `Model` file, else the first."""
     if not files or any(file.primary for file in files):
         return files
     chosen = next((index for index, file in enumerate(files) if (file.file_type or "").lower() == "model"), 0)
     return [file.model_copy(update={"primary": True}) if index == chosen else file for index, file in enumerate(files)]
-
-
-# Models and versions ---------------------------------------------------------------------
 
 
 def _trigger_words(raw_version: Mapping[str, Any]) -> List[str]:
@@ -661,15 +513,11 @@ def _creator(raw: Mapping[str, Any]) -> Optional[str]:
 
 @dataclass(frozen=True)
 class VersionParts:
-    """A version shown in full, with where each of its files downloads from."""
-
     version: Version
     downloads: Tuple[Download, ...]
 
 
 def normalize_version(raw_model: Mapping[str, Any], raw_version: Mapping[str, Any], max_level: int) -> VersionParts:
-    """The version shown in full: its downloadable files, its images, NSFW by its level or when
-    none of its images is safe."""
     version_id = _id(raw_version.get("id"))
     if version_id is None:
         raise ValueError("version without an id")
@@ -700,8 +548,6 @@ def normalize_version(raw_model: Mapping[str, Any], raw_version: Mapping[str, An
 
 
 def version_shells(raw_model: Mapping[str, Any], shown: str, nsfw: bool) -> List[Version]:
-    """The model's other versions, as CivArchive lists them: `partial`, a name and a date, no
-    file, no image. `nsfw` is the model's level rule: a version's level is never above its model's."""
     shells: List[Version] = []
     seen = {shown}
     for entry in _dicts(raw_model.get("versions")):
@@ -724,7 +570,6 @@ def version_shells(raw_model: Mapping[str, Any], shown: str, nsfw: bool) -> List
 def deleted_note(
     raw_model: Mapping[str, Any], raw_version: Mapping[str, Any], downloads: Sequence[Download]
 ) -> Optional[str]:
-    """One line for a model (or version) deleted from CivitAI: when, and where its files come from."""
     if _deleted(raw_model.get("deleted_at")):
         day = _day(raw_model.get("deleted_at"))
         line = "Deleted from CivitAI" + (f" on {day}" if day else "")
@@ -749,8 +594,6 @@ def _model_id(raw: Mapping[str, Any]) -> str:
 
 
 def normalize_detail(raw: Mapping[str, Any], max_level: int) -> ModelDetail:
-    """A model answer (its `version` in full) as a model detail: that version first, then the
-    others as `partial` shells (`version_shells`); NSFW marked, description sanitised, nothing filtered."""
     model_id = _model_id(raw)
     raw_version = raw.get("version")
     if not isinstance(raw_version, dict):
@@ -784,7 +627,6 @@ def normalize_detail(raw: Mapping[str, Any], max_level: int) -> ModelDetail:
 
 
 def item_from_detail(detail: ModelDetail, item_id: str) -> SearchItem:
-    """A search result made from a detail (a pasted link): the version shown, its primary file's hash."""
     version = detail.versions[0] if detail.versions else None
     primary = next((file for file in version.files if file.primary), None) if version else None
     base_model = version.base_model if version else None
@@ -811,7 +653,6 @@ def item_from_detail(detail: ModelDetail, item_id: str) -> SearchItem:
 
 
 def is_listed(raw: Any) -> bool:
-    """A search result the source shows: a CivitAI version with a model id."""
     return (
         isinstance(raw, dict)
         and raw.get("platform", PLATFORM) == PLATFORM
@@ -821,8 +662,6 @@ def is_listed(raw: Any) -> bool:
 
 
 def newest_per_model(results: Sequence[Mapping[str, Any]]) -> List[Mapping[str, Any]]:
-    """One result per model: its newest version (`created_at`, then the version id), at the
-    place of the model's first result."""
     chosen: Dict[int, Mapping[str, Any]] = {}
 
     def age(raw: Mapping[str, Any]) -> Tuple[float, int]:
@@ -837,8 +676,6 @@ def newest_per_model(results: Sequence[Mapping[str, Any]]) -> List[Mapping[str, 
 
 
 def normalize_item(raw: Mapping[str, Any]) -> SearchItem:
-    """A search result (a version of a model). NSFW when `is_nsfw` is set or the model was deleted
-    from CivitAI (see the module docstring); no hash, so no `primary_sha256`."""
     model_id = _id(raw.get("model_id"))
     if model_id is None:
         raise ValueError("result without a model id")
@@ -869,16 +706,10 @@ def normalize_item(raw: Mapping[str, Any]) -> SearchItem:
 
 
 class ModelNotOnCivArchive(SourceNotFound):
-    """CivArchive answered that the model or version does not exist (a 500 page): the build id is fine."""
-
-
-# The source ---------------------------------------------------------------------------
+    pass
 
 
 class CivArchiveSource:
-    """CivArchive behind the `Source` interface. `http_client` / `cache_store` default to the shared
-    instances; `clock` gives epoch seconds (tests move it)."""
-
     id = SOURCE_ID
     label = LABEL
 
@@ -888,9 +719,7 @@ class CivArchiveSource:
         self._http_client = http_client
         self._cache_store = cache_store
         self._clock = clock
-        #: (build id, epoch seconds it was read from the home page).
         self._build: Optional[Tuple[str, float]] = None
-        #: (the stale build id, when it was replaced): later 404s under that id reuse the new one.
         self._renewed: Optional[Tuple[str, float]] = None
         self._lock: Optional[asyncio.Lock] = None
         self._lock_loop: Optional[asyncio.AbstractEventLoop] = None
@@ -907,18 +736,15 @@ class CivArchiveSource:
         return int(settings.get_setting("nsfw_max_level") if max_level is None else max_level)
 
     def _loop_lock(self) -> asyncio.Lock:
-        """The build id lock of the running event loop (an asyncio lock belongs to one loop)."""
         loop = asyncio.get_running_loop()
         if self._lock is None or self._lock_loop is not loop:
             self._lock, self._lock_loop = asyncio.Lock(), loop
         return self._lock
 
-    # Cache ----------------------------------------------------------------------------
-
     def _cache_get(self, request: Any, ttl_seconds: float) -> Any:
         try:
             return self._store().get(SOURCE_ID, request, ttl_seconds=ttl_seconds)
-        except Exception:  # noqa: BLE001 - the cache is an optimisation
+        except Exception:  # noqa: BLE001
             logger.warning("[MODEL-BROWSER] Could not read the cache; asking CivArchive", exc_info=True)
             return None
 
@@ -928,8 +754,6 @@ class CivArchiveSource:
         except Exception:  # noqa: BLE001
             logger.warning("[MODEL-BROWSER] Could not write the cache", exc_info=True)
 
-    # The build id ---------------------------------------------------------------------
-
     def _fresh_build(self) -> Optional[str]:
         if self._build is None:
             return None
@@ -937,8 +761,6 @@ class CivArchiveSource:
         return build_id if 0 <= self._clock() - resolved_at < BUILD_ID_TTL_SECONDS else None
 
     async def build_id(self) -> str:
-        """The deployment's build id: from memory, else the cache, else the home page (one request
-        for concurrent callers). Raises `SourceUnavailable` when the page has none."""
         current = self._fresh_build()
         if current is not None:
             return current
@@ -956,8 +778,6 @@ class CivArchiveSource:
             return await self._resolve()
 
     async def renew_build_id(self, stale: str) -> str:
-        """A new build id after `stale` answered 404: the home page is read once for every caller
-        that saw the same stale id (within `RENEW_HOLD_SECONDS`, even when it gave that id again)."""
         async with self._loop_lock():
             current = self._fresh_build()
             renewed = self._renewed
@@ -974,7 +794,6 @@ class CivArchiveSource:
             return build_id
 
     async def _resolve(self) -> str:
-        """Read the build id from the home page; store it in memory and in the cache. Call under the lock."""
         page = await self._client().get_text(SOURCE_ID, SITE + "/", max_bytes=HOME_MAX_BYTES)
         match = _BUILD_ID.search(page)
         if match is None or not _BUILD_ID_TEXT.fullmatch(match.group(1)):
@@ -984,14 +803,7 @@ class CivArchiveSource:
         self._cache_set(BUILD_ID_REQUEST, {"build_id": build_id, "resolved_at": now}, BUILD_ID_TTL_SECONDS)
         return build_id
 
-    # Data routes ----------------------------------------------------------------------
-
     async def _data(self, path: str, params: Sequence[Tuple[str, Any]], *, ttl_seconds: float) -> Dict[str, Any]:
-        """The `pageProps` of `/_next/data/<build id>/<path>` with `params`, through the cache.
-
-        A 404 is read as a stale build id: renewed, then the request is made once more, whose
-        404 is raised (`SourceNotFound`).
-        """
         pairs = http_module.normalise_params(list(params))
         request = {"path": path, "params": [list(pair) for pair in sorted(pairs)]}
         cached = self._cache_get(request, ttl_seconds)
@@ -1022,10 +834,6 @@ class CivArchiveSource:
         return {key: value for key, value in props.items() if key not in UNUSED_KEYS}
 
     async def raw_model(self, model_id: int, version_id: Optional[int] = None) -> Dict[str, Any]:
-        """The model with `version_id` (else its latest version, through CivArchive's redirect) in full.
-
-        `SourceNotFound` for an unknown model or version, and for a version of another model.
-        """
         params: List[Tuple[str, Any]] = [("platform", PLATFORM)]
         path = f"models/{int(model_id)}.json"
         if version_id is None:
@@ -1042,7 +850,6 @@ class CivArchiveSource:
 
     @staticmethod
     def _checked(raw: Any, model_id: int, version_id: Optional[int]) -> Dict[str, Any]:
-        """`raw` when it is model `model_id` with version `version_id` of that model."""
         if not isinstance(raw, dict) or not isinstance(raw.get("version"), dict):
             raise SourceUnavailable("CivArchive sent an unexpected answer for a model")
         version = raw["version"]
@@ -1056,17 +863,12 @@ class CivArchiveSource:
         return raw
 
     async def hash_page(self, sha256: str) -> Dict[str, Any]:
-        """`sha256/<hash>.json`: `files` (its mirrors) and `models` (each with the version that has it, in full)."""
         key = _sha256(str(sha256).strip())
         if key is None:
             raise SourceInvalidRequest("A SHA256 is 64 hexadecimal characters")
         return await self._data(f"sha256/{key}.json", [], ttl_seconds=HASH_TTL_SECONDS)
 
-    # Source interface ------------------------------------------------------------------
-
     async def info(self) -> SourceInfo:
-        """Types and base models from a search's `filterOptions` (cached an hour); empty lists when
-        CivArchive is unreachable (not asked again for `FILTERS_RETRY_SECONDS`)."""
         types: List[FilterOption] = []
         base_models: List[FilterOption] = []
         failed_at = self._filters_failed_at
@@ -1094,11 +896,9 @@ class CivArchiveSource:
         )
 
     async def search(self, query: SearchQuery, *, max_level: Optional[int] = None) -> SearchPage:
-        """One CivArchive page (50 versions, one item per model) for `query`; NSFW is marked, not filtered."""
         level = self._max_level(max_level)
         page = parse_cursor(query.cursor)
         parsed = parse_query(query.q)
-        # A bad sort or period is a 400 whatever the search box holds.
         _sort(query.sort)
         _period(query.period)
         if parsed.kind == "model":
@@ -1119,7 +919,6 @@ class CivArchiveSource:
         )
 
     async def detail(self, model_id: str, *, max_level: Optional[int] = None) -> ModelDetail:
-        """A model with one version in full: the one `model_id` names ("78291:83095"), else the latest."""
         level = self._max_level(max_level)
         ref = parse_model_ref(model_id)
         if ref is None:
@@ -1133,18 +932,13 @@ class CivArchiveSource:
             ) from None
 
     async def version_detail(self, model_id: str, version_id: Any, *, max_level: Optional[int] = None) -> ModelDetail:
-        """The model with `version_id` in full, whatever version `model_id` names: what a download
-        checks its file against (`downloads.prepare_download`)."""
         ref = parse_model_ref(model_id)
         if ref is None:
             raise SourceNotFound("CivArchive model ids are CivitAI model numbers, such as 78291 or 78291:83095")
         wanted = _id(version_id)
         return await self.detail(model_ref(ref[0], wanted if wanted is not None else ref[1]), max_level=max_level)
 
-    # Steps ------------------------------------------------------------------------------
-
     async def _search_model(self, parsed: ParsedQuery, page: int, level: int) -> SearchPage:
-        """A pasted link: that model, as one item (none past the first page, or when CivArchive has no such model)."""
         if page != 1 or parsed.model_id is None:
             return SearchPage(source=SOURCE_ID, items=[], next_cursor=None)
         item_id = model_ref(parsed.model_id, parsed.version_id)

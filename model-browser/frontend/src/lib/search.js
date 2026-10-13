@@ -1,15 +1,5 @@
-// The search state of the Model Browser page: what the URL query string holds (so a reload
-// restores it), the query of `GET /{source}/search`, the filter chips, and how pages of results
-// are merged. No Svelte in here: tested with `node --test` (see search.test.js).
-//
-// State: { source, q, types: string[], baseModel, sort, period, model }
-//   - `sort` / `period` '' mean the source's default (its first option);
-//   - `model` is the id of the model whose detail panel is open ('' when none).
-
-/** Results asked per page (the API takes 1 to 50; a page may hold more). */
 export const DEFAULT_LIMIT = 24;
 
-/** The query string keys of the page URL. Other keys in the URL are left alone. */
 export const URL_KEYS = {
 	source: 'source',
 	q: 'q',
@@ -20,7 +10,6 @@ export const URL_KEYS = {
 	model: 'model'
 };
 
-/** Rail icons (names of the app's icon library) for the known sources. */
 const SOURCE_ICONS = {
 	civitai: 'palette',
 	huggingface: 'smile',
@@ -28,13 +17,6 @@ const SOURCE_ICONS = {
 	civarchive: 'library'
 };
 
-/**
- * How the UI names things when `GET /sources` does not say (OpenModelDB sends its own):
- * - `types_label` and `base_models_label` name the two groups of the filter popover ("Architecture"
- *   and "Scale"), which filter by `types` and `base_models`;
- * - `base_model_label` names the base model line of a version in the detail panel ("Architecture":
- *   its `base_model` is like "ESRGAN 4x"). It is not `base_models_label`.
- */
 export const DEFAULT_TYPES_LABEL = 'Types';
 export const DEFAULT_BASE_MODELS_LABEL = 'Base model';
 export const DEFAULT_BASE_MODEL_LABEL = 'Base model';
@@ -49,23 +31,10 @@ function text(value) {
 	return typeof value === 'string' ? value : '';
 }
 
-/** A state with nothing chosen. */
 export function emptyState(source = '') {
 	return { source, q: '', types: [], baseModel: '', sort: '', period: '', model: '' };
 }
 
-/**
- * The sources of `GET /sources` that are on, each with its option lists present, the names it
- * gives things (`types_label`, `base_models_label` for the two filter groups, `base_model_label`
- * for the base model of a version: the defaults when missing or blank) and its `notice`, a
- * warning the page shows under the search help (CivArchive is an unofficial index): trimmed,
- * '' when the source sends none (missing, blank or not a string).
- *
- * @param {unknown} sources
- * @returns {{ id: string, label: string, types: {value: string, label: string}[], base_models: {value: string, label: string}[],
- *             sorts: {value: string, label: string}[], periods: {value: string, label: string}[], search_help: string,
- *             notice: string, types_label: string, base_models_label: string, base_model_label: string }[]}
- */
 export function enabledSources(sources) {
 	if (!Array.isArray(sources)) return [];
 	const options = (list) =>
@@ -89,21 +58,14 @@ export function enabledSources(sources) {
 		}));
 }
 
-/** The rail sections of `LibraryPage` for these sources. */
 export function sourceSections(sources) {
 	return sources.map((source) => ({ id: source.id, label: source.label, icon: SOURCE_ICONS[source.id] ?? 'globe' }));
 }
 
-/** The source's default sort and period: their first option ('' when it has none). */
 export function sourceDefaults(info) {
 	return { sort: info?.sorts?.[0]?.value ?? '', period: info?.periods?.[0]?.value ?? '' };
 }
 
-/**
- * The state written in a query string, unchecked (see `normalizeState`).
- *
- * @param {string | URLSearchParams} search  `location.search`, with or without '?'.
- */
 export function decodeState(search) {
 	const params = search instanceof URLSearchParams ? search : new URLSearchParams(String(search ?? ''));
 	return {
@@ -121,13 +83,6 @@ function hasOption(list, value) {
 	return Array.isArray(list) && list.some((option) => option.value === value);
 }
 
-/**
- * A state the current sources accept: an unknown source becomes the first one, filters the
- * source does not offer are dropped, a sort or period equal to the default becomes ''.
- *
- * @param {ReturnType<typeof emptyState>} state
- * @param {ReturnType<typeof enabledSources>} sources
- */
 export function normalizeState(state, sources) {
 	const info = sources.find((source) => source.id === state.source) ?? sources[0];
 	if (!info) return { ...emptyState(''), q: text(state.q) };
@@ -145,28 +100,17 @@ export function normalizeState(state, sources) {
 	};
 }
 
-/**
- * The state after picking another source: the text stays, the filters (which belong to a source)
- * and the open model go.
- */
 export function switchSource(state, sourceId) {
 	return { ...emptyState(sourceId), q: state.q };
 }
 
-/**
- * The query string key and value that open the requests drawer: the link of the request
- * notifications (`/plugins/model-browser?tab=requests`, backend notifications.py). The page acts
- * on it once and takes it out of the URL, so a reload does not open the drawer again.
- */
 export const REQUESTS_LINK = { key: 'tab', value: 'requests' };
 
-/** Whether a query string (with or without '?', or URLSearchParams) asks for the requests drawer. */
 export function wantsRequestsTab(search) {
 	const params = search instanceof URLSearchParams ? search : new URLSearchParams(String(search ?? ''));
 	return params.getAll(REQUESTS_LINK.key).includes(REQUESTS_LINK.value);
 }
 
-/** A query string (no '?') without `tab=requests`; every other key and value kept, in order. */
 export function withoutRequestsTab(search) {
 	const params = search instanceof URLSearchParams ? search : new URLSearchParams(String(search ?? ''));
 	const kept = new URLSearchParams();
@@ -176,14 +120,6 @@ export function withoutRequestsTab(search) {
 	return kept.toString();
 }
 
-/**
- * The page's query string for a state (no '?'), defaults left out, any key the page does not
- * own kept from `currentSearch` (but never `tab=requests`, which is acted on once).
- *
- * @param {ReturnType<typeof emptyState>} state
- * @param {string} [currentSearch]
- * @returns {string}
- */
 export function encodeState(state, currentSearch = '') {
 	const params = new URLSearchParams(withoutRequestsTab(currentSearch));
 	for (const key of Object.values(URL_KEYS)) params.delete(key);
@@ -197,15 +133,6 @@ export function encodeState(state, currentSearch = '') {
 	return params.toString();
 }
 
-/**
- * The query string of `GET /{source}/search` for a state (no '?'): `types` repeated, the base
- * model as `base_models`, sort and period always explicit (the default when '').
- *
- * @param {ReturnType<typeof emptyState>} state
- * @param {ReturnType<typeof enabledSources>[number] | undefined} info
- * @param {{ cursor?: string | null, limit?: number }} [page]
- * @returns {string}
- */
 export function searchRequest(state, info, { cursor = null, limit = DEFAULT_LIMIT } = {}) {
 	const params = new URLSearchParams();
 	const q = text(state.q).trim();
@@ -222,11 +149,6 @@ export function searchRequest(state, info, { cursor = null, limit = DEFAULT_LIMI
 	return params.toString();
 }
 
-/**
- * What identifies the results of a state (not the open model): two states with the same key
- * show the same results, so the page does not search again, and an answer for an older key is
- * dropped.
- */
 export function searchKey(state) {
 	return JSON.stringify([
 		state.source,
@@ -238,7 +160,6 @@ export function searchKey(state) {
 	]);
 }
 
-/** `items` followed by the items of `next` whose id is not there yet (a new array). */
 export function mergeItems(items, next) {
 	const seen = new Set(items.map((item) => `${item.source}\u0000${item.id}`));
 	const merged = [...items];
@@ -256,14 +177,6 @@ function labelOf(list, value) {
 	return list?.find((option) => option.value === value)?.label ?? value;
 }
 
-/**
- * The active filters as chips (`LibraryFilterChipRow`): each type, the base model, a period other
- * than the default. A chip is the value alone, with no group name in front of it (so the source's
- * `types_label` / `base_models_label` have no place here). The sort is not a filter (it has its
- * own select).
- *
- * @returns {{ key: string, label: string }[]}
- */
 export function filterChips(state, info) {
 	const chips = (state.types ?? []).map((type) => ({ key: `type:${type}`, label: labelOf(info?.types, type) }));
 	if (state.baseModel) chips.push({ key: 'base', label: labelOf(info?.base_models, state.baseModel) });
@@ -271,7 +184,6 @@ export function filterChips(state, info) {
 	return chips;
 }
 
-/** The state without the filter a chip stands for. */
 export function removeChip(state, key) {
 	if (key.startsWith('type:')) {
 		const type = key.slice('type:'.length);
@@ -282,23 +194,15 @@ export function removeChip(state, key) {
 	return state;
 }
 
-/** The state without any filter (text and sort stay). */
 export function clearFilters(state) {
 	return { ...state, types: [], baseModel: '', period: '' };
 }
 
-/** The state with a type added (`on`) or removed. */
 export function toggleType(state, value, on) {
 	const rest = (state.types ?? []).filter((type) => type !== value);
 	return { ...state, types: on ? [...rest, value] : rest };
 }
 
-/**
- * The options whose label or value contains `query` (any case), in their order.
- *
- * @param {{ value: string, label: string }[]} options
- * @param {string} query
- */
 export function matchOptions(options, query) {
 	const needle = text(query).trim().toLowerCase();
 	if (!needle) return [...(options ?? [])];
@@ -307,7 +211,6 @@ export function matchOptions(options, query) {
 	);
 }
 
-/** The SHA256 of the items whose installed state is not known yet (for `POST /installed`). */
 export function unknownInstalledHashes(items) {
 	const hashes = new Set();
 	for (const item of items) {
@@ -318,7 +221,6 @@ export function unknownInstalledHashes(items) {
 	return [...hashes];
 }
 
-/** The items with `installed` filled from a `POST /installed` answer (`{sha256: bool}`). */
 export function applyInstalled(items, installed) {
 	if (!isObject(installed)) return items;
 	let changed = false;

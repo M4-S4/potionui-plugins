@@ -1,8 +1,4 @@
 <script>
-	// The active filters as removable chips. The markup and classes are those of the host's
-	// LibraryFilterChipRow; it is drawn here because that component ends the row with
-	// "<loaded> of <total>", and a search that pages by cursor has no total: the end of the row
-	// says how many results are shown and whether more are coming instead.
 	import Icon from './Icon.svelte';
 
 	let { chips = [], shown = 0, hasMore = false, onRemove, onClear } = $props();

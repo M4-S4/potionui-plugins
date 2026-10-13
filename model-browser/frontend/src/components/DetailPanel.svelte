@@ -1,14 +1,4 @@
 <script>
-	// A model's detail, in a drawer over the results (the page route stays; Escape, the close
-	// button or a click beside the drawer closes it). Built from the host's detail components:
-	// DetailHeader (name, chips, source link and close button), DetailTabs for the versions (a
-	// select past 8), DetailBody, and DetailLayout with the main column (DetailMain) and the side
-	// column (DetailAside). `GET /{source}/models/{id}` answers 404 for a model the user may not
-	// see; `POST /installed` marks the files already installed.
-	//
-	// Some sources send one version in full and the others as shells (`partial: true`, CivArchive):
-	// a shell is fetched when it comes on screen, `GET /{source}/models/<model id>:<version id>`,
-	// and replaces itself in the detail (lib/versions.js). Nothing is kept once the drawer closes.
 	import { onMount, untrack } from 'svelte';
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
@@ -49,22 +39,14 @@
 	let mainEl = $state();
 	let asideEl = $state();
 	let seq = 0;
-	// Versions the source sent as shells: the ids being fetched, and the errors by id (a failed
-	// version is fetched again by its Retry button only). `byVersion`: some version of this detail
-	// was a shell, so the NSFW previews of every version are revealed through its own
-	// `<model id>:<version id>` (the server holds the images of the version it was asked for).
 	let loadingIds = new Set();
 	let failedIds = $state.raw(new Map());
 	let byVersion = $state(false);
-	// The drawer is moved under <body> (use:portal). Svelte removes a block by walking from its
-	// first node to its last, so a moved node must be the only node of its block: hence its own
-	// `{#if mounted}`.
 	let mounted = $state(false);
 	onMount(() => {
 		mounted = true;
 	});
 
-	// Built once: DetailLayout then keeps its two slots for good.
 	const layoutProps = { main: slotOf(() => mainEl), aside: slotOf(() => asideEl) };
 
 	const versions = $derived(detail?.versions ?? []);
@@ -94,7 +76,6 @@
 	const versionError = $derived(version ? (failedIds.get(version.id) ?? null) : null);
 
 	$effect(() => {
-		// Reload when the model changes, or when the page asks (the NSFW mode changed).
 		void source;
 		void modelId;
 		void reloadToken;
@@ -102,14 +83,12 @@
 	});
 
 	$effect(() => {
-		// A download answered "already installed": the badges may have changed.
 		void installedToken;
 		untrack(() => {
 			if (detail) loadInstalled(seq, detail);
 		});
 	});
 
-	// A shell version that comes on screen (picked in the tabs, or kept across a reload) is fetched.
 	$effect(() => {
 		const current = version;
 		if (phase !== 'ready' || !isPartial(current)) return;
@@ -117,7 +96,6 @@
 		untrack(() => loadVersion(id));
 	});
 
-	// The image preview closes before the drawer on Escape.
 	$effect(() => {
 		if (!preview) return;
 		return onEscape(() => (preview = null));
@@ -185,12 +163,6 @@
 		installed = new Map(Object.entries(result.data?.installed ?? {}));
 	}
 
-	/**
-	 * A shell version in full: `GET /{source}/models/<model id>:<version id>`, whose answer replaces
-	 * the shell in the detail as it is when the answer comes (the other versions and the selection
-	 * stay). A failure is kept for the version, shown in its panel with a Retry button: it is not
-	 * fetched again unless `retry`. An answer of a detail that was reloaded meanwhile is dropped.
-	 */
 	async function loadVersion(id, { retry = false } = {}) {
 		if (!detail || loadingIds.has(id)) return;
 		if (failedIds.has(id)) {
@@ -262,11 +234,9 @@
 			{/if}
 		</HostUi>
 
-		<!-- What the host components show in their slots (moved there once they mount). -->
 		<div hidden>
 			<div bind:this={actionsEl} class="flex items-center gap-2">
 				{#if sourceUrl}
-					<!-- Short on a phone ("civitai.red"), whole from `sm` up; the full text is the link's name. -->
 					<a
 						class="inline-flex items-center gap-1.5 whitespace-nowrap rounded bg-surface-3 px-2.5 py-1 text-xs font-medium text-fg transition-colors duration-100 hover:bg-line-hover"
 						href={sourceUrl}

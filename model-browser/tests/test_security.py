@@ -1,12 +1,8 @@
-"""`backend.security`: the download URL allowlist and the description sanitiser."""
-
 import re
 
 import pytest
 
 from backend.security import DOWNLOAD_HOSTS, html_to_text, is_allowed_download_url, sanitize_html
-
-# Download URLs ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -36,13 +32,11 @@ def test_allowed_download_urls(source, url):
 @pytest.mark.parametrize(
     "source, url",
     [
-        # https only, default port only
         ("civitai", "http://civitai.com/api/download/models/1"),
         ("civitai", "ftp://civitai.com/api/download/models/1"),
         ("civitai", "https://civitai.com:8443/api/download/models/1"),
         ("civitai", "//civitai.com/api/download/models/1"),
         ("civitai", "civitai.com/api/download/models/1"),
-        # host not on the source's list
         ("civitai", "https://civitai.red/api/download/models/1"),
         ("civitai", "https://www.civitai.com/api/download/models/1"),
         ("civitai", "https://civitai.com.evil.example/api/download/models/1"),
@@ -59,7 +53,6 @@ def test_allowed_download_urls(source, url):
         ("openmodeldb", "https://user-images.githubusercontent.com/x.png"),
         ("openmodeldb", "https://www.dropbox.com/s/x/model.pth"),
         ("openmodeldb", "https://u.pcloud.link/publink/show?code=x"),
-        # CivArchive hosts nothing: only the sources it indexes (CivitAI, Hugging Face mirrors).
         ("civarchive", "https://civarchive.com/files/model.safetensors"),
         ("civarchive", "https://www.civarchive.com/x"),
         ("civarchive", "https://civarchive.com/api/download/models/1"),
@@ -69,7 +62,6 @@ def test_allowed_download_urls(source, url):
         ("civarchive", "https://tensordrive.app/files/fc6defee-4bb2-432f-9a4d-7f6fbeb9daef"),
         ("civarchive", "https://huggingface.co/tim9292654/lora/resolve/main/细化/x.safetensors"),
         ("civarchive", "https://huggingface.co/QEEWDFHGFH/052723/resolve/main/x (1).safetensors"),
-        # IP literals, local names, numeric hosts
         ("civitai", "https://127.0.0.1/api/download/models/1"),
         ("civitai", "https://10.0.0.5/api/download/models/1"),
         ("civitai", "https://[::1]/api/download/models/1"),
@@ -78,7 +70,6 @@ def test_allowed_download_urls(source, url):
         ("civitai", "https://127.1/x"),
         ("civitai", "https://localhost/x"),
         ("huggingface", "https://huggingface.localhost/x"),
-        # credentials, odd characters, trailing dot
         ("civitai", "https://user:pass@civitai.com/api/download/models/1"),
         ("civitai", "https://civitai.com@evil.example/x"),
         ("civitai", "https://evil.example\\@civitai.com/x"),
@@ -87,7 +78,6 @@ def test_allowed_download_urls(source, url):
         ("civitai", "https://civitai.com./api/download/models/1"),
         ("civitai", "https://civitаi.com/api/download/models/1"),
         ("civitai", "https://civit%61i.com/api/download/models/1"),
-        # unknown source, not a string, nothing
         ("unknown", "https://civitai.com/api/download/models/1"),
         ("civitai", None),
         ("civitai", ""),
@@ -123,8 +113,6 @@ def test_hugging_face_resolve_urls_are_allowed(repo, path):
     assert not is_allowed_download_url("civitai", url)
 
 
-# HTML sanitiser ----------------------------------------------------------------
-
 _KEPT_TAGS = {"p", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "h3", "h4", "blockquote", "code", "pre", "hr", "a"}
 
 
@@ -133,7 +121,6 @@ def _tags(output):
 
 
 def _assert_safe(output):
-    """Only the kept tags, only href/rel/target attributes, no script anywhere."""
     assert set(_tags(output)) <= _KEPT_TAGS, output
     for attributes in re.findall(r"<[a-zA-Z0-9]+(\s[^>]*)>", output):
         names = set(re.findall(r'\s([a-zA-Z-]+)="', attributes))
@@ -291,9 +278,6 @@ def test_nothing_gives_an_empty_string():
     assert sanitize_html(None) == ""
     assert sanitize_html("") == ""
     assert sanitize_html("<script>only</script>") == ""
-
-
-# Text summary -------------------------------------------------------------------
 
 
 def test_html_to_text_flattens_and_drops_scripts():

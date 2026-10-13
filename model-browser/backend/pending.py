@@ -1,22 +1,3 @@
-"""The `model_browser_pending` table (PLAN.md §7.3, §7.4): one row per file the plugin
-downloads, from the moment it is queued until it is assigned and enriched.
-
-The key is the file's SHA256 (lower-case hex) when the source gives one: that is what
-the core indexer computes and what the `model-browser` provider is asked for
-(`get_model_by_hash`). A file without a known hash (some Hugging Face files, every file of
-a gated repo read anonymously) is keyed `nohash:<download url>` until its indexed model is
-known (`backend/watcher.py`) and the row is `rekey()`ed to the real hash.
-
-Statuses: `queued` (on the core queue) -> `indexed` (model id known) -> `assigned` ->
-`enriched` (done); `failed` at any point, with `error`. `info` holds the normalised
-detail cut down to the chosen version and file (`backend/schema.py` shapes, as JSON), which
-is what the provider turns into a `ProviderModelInfo`.
-
-The `download.after_complete` handler, the steps it schedules and the watcher's sweep may
-reach the same row at once: each moves it on with `update(..., only_from=...)`, so one of
-them changes its status and the others find it changed and stop.
-"""
-
 import json
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -35,7 +16,6 @@ _UPDATABLE = frozenset({"download_id", "limit_ref_id", "model_id", "status", "er
 
 
 def key_for(sha256: Optional[str], download_url: str) -> str:
-    """The row key: the lower-case hash, or `nohash:<url>` while the hash is unknown."""
     if sha256:
         return sha256.strip().lower()
     return NOHASH_PREFIX + download_url
@@ -52,7 +32,6 @@ class PendingRow:
     source_model_id: str
     file_name: str
     requested_by: str
-    #: "user:<id>" | "group:<id>" | "none" (an admin downloading for the whole instance).
     assign_to: str
     info: Dict[str, Any] = field(default_factory=dict)
     source_version_id: Optional[str] = None
@@ -74,7 +53,6 @@ class PendingRow:
         return self.status not in UNFINISHED
 
     def to_json(self) -> Dict[str, Any]:
-        """The row as the `GET /downloads` route sends it (the `info` JSON included)."""
         return {column: getattr(self, column) for column in _COLUMNS}
 
 
@@ -100,7 +78,6 @@ def get(key: str) -> Optional[PendingRow]:
 
 
 def get_by_download_id(download_id: Optional[str]) -> Optional[PendingRow]:
-    """The row of the core download `download_id`, or None (no id, or a download the plugin did not queue)."""
     from src.plugin_api import db
 
     if not download_id:
@@ -115,7 +92,6 @@ def get_by_download_id(download_id: Optional[str]) -> Optional[PendingRow]:
 
 
 def insert(row: PendingRow) -> PendingRow:
-    """Insert a new row; raises `sqlite3.IntegrityError` when the key already exists."""
     from src.plugin_api import db
 
     if row.status not in STATUSES:
@@ -135,13 +111,6 @@ def insert(row: PendingRow) -> PendingRow:
 
 
 def update(key: str, *, only_from: Optional[Iterable[str]] = None, **fields: Any) -> Optional[PendingRow]:
-    """Set some of `download_id`, `limit_ref_id`, `model_id`, `status`, `error`, `assign_to`, `request_id`.
-
-    Returns the row as stored after the change, or None when there is no such row. With
-    `only_from`, only while the row is in one of those statuses: the change and the check are
-    one statement, so of two callers moving the same row on, one wins; None when the row was
-    not in `only_from`.
-    """
     from src.plugin_api import db
 
     unknown = set(fields) - _UPDATABLE
@@ -167,11 +136,6 @@ def update(key: str, *, only_from: Optional[Iterable[str]] = None, **fields: Any
 
 
 def rekey(old_key: str, sha256: str) -> Optional[PendingRow]:
-    """Move a `nohash:` row to the real hash once the indexed model revealed it.
-
-    When a row with the real hash already exists (the same file was queued twice), the
-    old row is dropped and the existing one is returned.
-    """
     from src.plugin_api import db
 
     new_key = sha256.strip().lower()
@@ -201,7 +165,6 @@ def list_rows(
     statuses: Optional[Iterable[str]] = None,
     limit: int = 200,
 ) -> List[PendingRow]:
-    """Rows newest first, optionally for one requester and/or some statuses."""
     from src.plugin_api import db
 
     clauses, params = [], []
@@ -225,11 +188,9 @@ def list_rows(
 
 
 def list_unfinished() -> List[PendingRow]:
-    """Every row still on its way (oldest first): what the watcher's sweep goes over."""
     rows = list_rows(statuses=UNFINISHED, limit=1000)
     return list(reversed(rows))
 
 
 def with_status(row: PendingRow, status: str, error: Optional[str] = None) -> PendingRow:
-    """A copy of `row` with a new status, for callers that keep the row in memory."""
     return replace(row, status=status, error=error)

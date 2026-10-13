@@ -1,13 +1,3 @@
-"""manifest.yml, read and loaded by PotionUI's own `PluginLoader`, the way the app does it.
-
-Catches what would otherwise only show up as a plugin in the ERROR state in
-Admin -> Plugins: a manifest key the schema rejects, a handler path that does
-not resolve, or a relative import that only works in the test layout. The
-`provider.register` handler, the `setup:` checks and the `model_metadata_fields`
-also go through the core code that consumes them (provider registry, setup
-report, attribute definitions), with fakes for the core's other services.
-"""
-
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,7 +8,6 @@ from backend import PLUGIN_ID, PLUGIN_VERSION
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 
-#: Module each backend hook handler must load as inside the app.
 HANDLER_MODULES = {
     "plugin.lifecycle.boot": "model_browser.hooks.lifecycle_hooks",
     "plugin.lifecycle.ready": "model_browser.hooks.lifecycle_hooks",
@@ -27,7 +16,6 @@ HANDLER_MODULES = {
     "provider.register": "model_browser.hooks.provider_hooks",
     "notification_type.register": "model_browser.hooks.notification_hooks",
 }
-#: `setup:` check references, in order, and the provider each one waits for.
 SETUP_CHECKS = {
     "backend.setup_checks:CivitaiProviderReady": "civitai",
     "backend.setup_checks:HuggingFaceProviderReady": "huggingface",
@@ -68,7 +56,6 @@ def test_every_backend_hook_handler_loads_inside_the_plugin_package(loader, mani
         assert callable(handler), f"{hook}: {handler_path} did not load (see the log above)"
         assert handler.__module__ == HANDLER_MODULES[hook]
 
-    # The handlers reach the backend through the plugin's package, never a top-level `backend`.
     lifecycle = sys.modules["model_browser.hooks.lifecycle_hooks"]
     assert lifecycle.tables.__name__ == "model_browser.backend.tables"
     download = sys.modules["model_browser.hooks.download_hooks"]
@@ -96,9 +83,6 @@ def test_docs_files_exist(manifest):
         assert (PLUGIN_ROOT / doc["path"]).is_file(), doc["path"]
 
 
-# provider.register --------------------------------------------------------------
-
-
 def test_provider_register_adds_the_three_providers_next_to_the_others(loader, manifest):
     from src.plugin_api import HookContext, MarketplaceProviderBase
 
@@ -121,7 +105,6 @@ def test_provider_register_adds_the_three_providers_next_to_the_others(loader, m
         assert issubclass(provider_class, MarketplaceProviderBase)
         assert provider_class.__module__ == f"model_browser.provider.{module}"
         assert provider_class().get_metadata().id == provider_id
-    # The providers reach the backend through the plugin's package, never a top-level `backend`.
     assert sys.modules["model_browser.provider.pending_provider"].pending.__name__ == "model_browser.backend.pending"
     openmodeldb_module = sys.modules["model_browser.provider.openmodeldb_provider"]
     assert openmodeldb_module.openmodeldb.__name__ == "model_browser.backend.sources.openmodeldb"
@@ -149,7 +132,6 @@ def test_provider_register_creates_the_providers_map_and_never_raises(loader, ma
 
 
 def test_a_broken_openmodeldb_provider_does_not_keep_the_others_out(monkeypatch, caplog):
-    """The handler as the tests import it (top-level `hooks`), with the OpenModelDB provider module broken."""
     import importlib
     import logging
 
@@ -185,8 +167,6 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
     chain.register("provider.register", PLUGIN_ID, _handler(loader, manifest, "provider.register"))
 
     class Plugins:
-        """The part of PluginRegistry that ProviderRegistry.discover_providers uses."""
-
         def get_enabled_plugins(self):
             return []
 
@@ -198,7 +178,6 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
             return final, all(result.success for result in results)
 
     registry = ProviderRegistry(registry=Plugins())
-    # Settings would be read from the providers' own plugins, which do not exist.
     monkeypatch.setattr(registry, "_get_provider_settings", lambda provider_id: {})
 
     assert [metadata.id for metadata in await registry.discover_providers()] == ["model-browser", "openmodeldb", "civarchive"]
@@ -207,7 +186,6 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
     provider, openmodeldb = registry.get_provider("model-browser"), registry.get_provider("openmodeldb")
     civarchive = registry.get_provider("civarchive")
     assert registry.get_providers_with_capability(ProviderCapability.HASH_LOOKUP) == [provider, openmodeldb, civarchive]
-    # What the model page's "Mirrors" section and run_provider_fetch call.
     assert (provider.provider_name, openmodeldb.provider_name, civarchive.provider_name) == (
         "Model Browser", "OpenModelDB", "CivArchive",
     )
@@ -220,13 +198,8 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
     assert openmodeldb.get_model_page_url("openmodeldb:4x-UltraSharp") == "https://openmodeldb.info/models/4x-UltraSharp"
     create_tables()
     assert await registry.get_model_by_hash("model-browser", "0" * 64, raise_errors=True) is None
-    # A value that is not a SHA256 answers None before any catalogue is loaded.
     assert await registry.get_model_by_hash("openmodeldb", "not-a-hash", raise_errors=True) is None
-    # CivArchive is off by default: None without a request (the tests block the network).
     assert await registry.get_model_by_hash("civarchive", "0" * 64, raise_errors=True) is None
-
-
-# notification_type.register ---------------------------------------------------------
 
 
 def test_notification_type_register_declares_the_plugins_types_on_the_cores_registry(loader, manifest):
@@ -239,7 +212,7 @@ def test_notification_type_register_declares_the_plugins_types_on_the_cores_regi
     context = HookContext(hook_name="notification_type.register", plugin_id="system", data={"registry": registry})
 
     assert register(context) is context
-    assert register(context) is context  # a second run is harmless
+    assert register(context) is context
 
     assert [spec.key for spec in registry.all()] == [
         "model-browser.request_received",
@@ -252,7 +225,6 @@ def test_notification_type_register_declares_the_plugins_types_on_the_cores_regi
     for spec in registry.all():
         assert spec.label.startswith("Model Browser: ") and spec.description
         assert (spec.category, spec.default_enabled, spec.admin_only) == ("plugin", True, False)
-    # The handler reaches the backend through the plugin's package, never a top-level `backend`.
     hooks_module = sys.modules["model_browser.hooks.notification_hooks"]
     assert hooks_module.core_bridge.__name__ == "model_browser.backend.core_bridge"
 
@@ -268,12 +240,8 @@ def test_notification_type_register_never_raises(loader, manifest):
     assert register(broken) is broken
 
 
-# limit_kinds: --------------------------------------------------------------------------
-
-
 @pytest.fixture
 def limit_kinds(manifest, tmp_path):
-    """The plugin's limit kinds as the core registers them when it enables the plugin."""
     from src.platform.plugins.limit_kinds import LimitKindRegistry
     from src.platform.plugins.registry import PluginRegistry
 
@@ -300,7 +268,6 @@ def test_the_limit_kinds_load_through_the_cores_registration(limit_kinds):
 
 
 def test_the_core_never_enforces_nor_records_the_plugin_limit_kinds(limit_kinds):
-    """A plan limit of 0 never refuses a submit, and admitting one records nothing for these kinds."""
     from src.features.plans.guard import LimitGuard, PlanSettings
     from src.features.plans.records import Plan, PlanLimit, PlanSubject
     from src.platform.plugins.limit_kinds import AdmissionRequest
@@ -324,8 +291,7 @@ def test_the_core_never_enforces_nor_records_the_plugin_limit_kinds(limit_kinds)
     guard.admit(AdmissionRequest(point="submit", user_id="user-1", ref_id="generation-1"))
 
     assert events.recorded == []
-    assert guard.resolution("user-1").value("model-browser.downloads") == 0  # the plan does carry the limit
-    # The plugin's own check measures the usage through the kind's measure_handler: the ledger total.
+    assert guard.resolution("user-1").value("model-browser.downloads") == 0
     measured = guard.measure(limit_kinds.get("model-browser.downloads"), "user-1", "UTC")
     assert measured.used == 3.0
     assert measured.resets_at is not None and measured.resets_at.day == 1
@@ -333,8 +299,6 @@ def test_the_core_never_enforces_nor_records_the_plugin_limit_kinds(limit_kinds)
 
 
 class _Ledger:
-    """The core's `LimitEventRepository`, in memory."""
-
     def __init__(self, totals):
         self.totals = totals
         self.totals_asked = []
@@ -353,9 +317,6 @@ class _Ledger:
 
     def prune(self, before):
         return 0
-
-
-# setup: ---------------------------------------------------------------------------
 
 
 def test_setup_checks_load_the_way_the_core_loads_them(loader, manifest):
@@ -401,9 +362,6 @@ def test_the_core_setup_report_runs_the_checks(loader, manifest, monkeypatch):
         "link", "Open the Hugging Face provider", "/admin?tab=plugins&id=huggingface-provider",
     )
     assert report.guide.title == "Model Browser"
-
-
-# model_metadata_fields --------------------------------------------------------------
 
 
 def test_model_metadata_fields_are_text_attributes_for_every_model_type(manifest):

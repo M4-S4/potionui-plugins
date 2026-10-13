@@ -1,9 +1,3 @@
-"""`backend.sources.civarchive`: the build id (resolution, memory and cache, renewal after a
-deployment, concurrency), the data routes and their errors, the search (parameters, search box,
-cursor, one item per model, NSFW of list results), the filters, and the normalisation of the
-recorded models (NSFW bitmask, images, versions, files and the download policy).
-"""
-
 import asyncio
 import copy
 import json
@@ -49,7 +43,6 @@ from .civitai_fakes import MemoryCache, fake_settings
 
 NEW_BUILD_ID = "newDeployment_2"
 LOWRA_MIRROR = "https://huggingface.co/baycon/for_Colab/resolve/main/lowra_v10.safetensors"
-#: The model ids of `search_civitai_top.json`, in order.
 TOP_IDS = ["4384", "257749", "6424", "4201", "7808"]
 
 
@@ -74,7 +67,6 @@ def source(transport, cache):
 
 
 def _with_model(transport, model_id, version_id, change):
-    """Serve `models/<id>.json?modelVersionId=<vid>` as its fixture after `change(raw_model)`."""
     page = props(f"model_{model_id}_v{version_id}")
     change(page["model"])
     transport.add(f"models/{model_id}.json", (200, JSON_HEADERS, data_body(page)), platform="civitai", modelVersionId=version_id)
@@ -82,11 +74,7 @@ def _with_model(transport, model_id, version_id, change):
 
 
 def _search_route(transport, entries, total_hits=1000, **params):
-    """Answer the searches (those with `params`) with these results, instead of the recorded pages."""
     transport.clear("search.json").add("search.json", (200, JSON_HEADERS, search_body(entries, total_hits)), **params)
-
-
-# The build id ------------------------------------------------------------------------------
 
 
 async def test_the_build_id_is_read_from_the_home_page_before_the_first_data_request(transport, source):
@@ -131,7 +119,6 @@ async def test_the_build_id_is_read_again_after_an_hour(transport, cache):
     now[0] += 2
     await source.hash_page(SHA_78291)
     assert transport.home_fetches == 2
-    # A restart now finds the cache row as old as the one in memory was: it is read again too.
     restarted = make_source(transport, cache, clock=lambda: now[0] + BUILD_ID_TTL_SECONDS)
     await restarted.detail("122359:135867")
     assert transport.home_fetches == 3
@@ -148,7 +135,6 @@ async def test_a_new_deployment_renews_the_build_id_and_repeats_the_request_once
     assert transport.build_ids == [CAPTURED_BUILD_ID, CAPTURED_BUILD_ID, NEW_BUILD_ID]
     assert await source.build_id() == NEW_BUILD_ID
     assert cache.entries[cache_key("civarchive", {"build_id": True})]["build_id"] == NEW_BUILD_ID
-    # The next requests use the new id at once.
     await source.detail("122359:135867")
     assert transport.build_ids[-1] == NEW_BUILD_ID and transport.home_fetches == 2
 
@@ -169,7 +155,6 @@ async def test_a_second_404_is_not_found_for_a_detail(transport, source):
     with pytest.raises(SourceNotFound):
         await source.detail("42:43")
 
-    # Asked once, the build id renewed, asked once more: no other attempt.
     assert transport.paths() == ["/", "models/42.json", "/", "models/42.json"]
 
 
@@ -227,7 +212,6 @@ async def test_concurrent_requests_under_a_stale_build_id_renew_it_once(transpor
 
 
 async def test_a_home_page_still_giving_the_stale_id_is_read_once_for_the_requests_that_saw_it(transport, source):
-    """The site answered 404 under its own id (a route went away): renewing finds the same id again."""
     answers = await asyncio.gather(source.detail("41:1"), source.detail("42:1"), return_exceptions=True)
 
     assert all(isinstance(answer, SourceNotFound) for answer in answers)
@@ -244,11 +228,7 @@ async def test_html_answers_are_never_cached(transport, cache, source):
     assert cache.entries[cache_key("civarchive", {"build_id": True})].keys() == {"build_id", "resolved_at"}
 
 
-# Data routes --------------------------------------------------------------------------------
-
-
 async def test_an_unknown_model_is_not_found_without_renewing_the_build_id(transport, source):
-    """CivArchive answers an unknown model with a 500 page saying "Model not found:<id>"."""
     with pytest.raises(SourceNotFound):
         await source.detail("999999999:1")
     with pytest.raises(SourceNotFound):
@@ -276,7 +256,6 @@ async def test_an_answer_without_page_props_is_unavailable(transport, source):
 
 
 async def test_a_version_of_another_model_is_not_found(transport, source):
-    """CivArchive answers model 78291 with version 1, which is model 1's."""
     assert model("model_78291_v1")["version"]["model_id"] == 1
 
     with pytest.raises(SourceNotFound, match="no version 1 of model 78291"):
@@ -335,9 +314,6 @@ async def test_requests_are_a_second_apart_one_at_a_time_by_default(transport):
     assert starts == [100.0, 101.0, 102.0]
 
 
-# Search -------------------------------------------------------------------------------------
-
-
 async def test_the_default_search_asks_for_civitai_versions_of_any_rating(transport, source):
     page = await source.search(SearchQuery())
 
@@ -346,7 +322,6 @@ async def test_the_default_search_asks_for_civitai_versions_of_any_rating(transp
     ]
     assert page.source == "civarchive"
     assert [item.id for item in page.items] == TOP_IDS
-    # Five results (the fixture is trimmed): fewer than a page, so no next page.
     assert page.next_cursor is None
 
 
@@ -518,12 +493,10 @@ def test_a_list_result_is_nsfw_by_is_nsfw_and_its_thumbnail_with_it():
 
     assert dreamshaper.nsfw is True and dreamshaper.thumbnail.nsfw is True
     assert (dreamshaper.type, dreamshaper.mb_type) == ("Checkpoint", "checkpoint")
-    # No level, no blurhash: the list has neither.
     assert (dreamshaper.thumbnail.nsfw_level, dreamshaper.thumbnail.blurhash) == (None, None)
 
 
 def test_a_model_deleted_from_civitai_is_nsfw_in_a_list_whatever_is_nsfw_says():
-    """`rating=safe` lists deleted models with `is_nsfw` false: CivArchive does not maintain it on them."""
     entries = results("search_deleted")
     assert all(raw["is_nsfw"] is False and raw["is_deleted"] is True for raw in entries)
 
@@ -544,9 +517,6 @@ def test_a_list_result_with_a_video_or_without_media():
     assert normalize_item(video).thumbnail.url == "https://c.genur.art/0b1c-video.mp4"
     assert normalize_item(nothing).thumbnail is None
     assert normalize_item(odd).thumbnail is None
-
-
-# The search box -------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -605,7 +575,6 @@ async def test_a_pasted_civarchive_link_is_that_model_and_version(transport, sou
     assert item.thumbnail.id == "936343" and item.thumbnail.blurhash
     assert item.updated_at == "2023-05-27T20:28:45.027Z"
     assert item.source_url == "https://civarchive.com/models/78291?modelVersionId=83095"
-    # Through the detail only: no search request, the filters are not sent.
     assert transport.paths() == ["/", "models/78291.json"]
 
 
@@ -627,9 +596,6 @@ async def test_a_pasted_link_has_no_second_page(transport, source):
 
     assert (page.items, page.next_cursor) == ([], None)
     assert transport.calls == []
-
-
-# Filters --------------------------------------------------------------------------------------
 
 
 async def test_info_lists_the_civitai_types_and_base_models_and_the_notice(transport, cache, source):
@@ -683,9 +649,6 @@ async def test_info_without_civarchive_still_lists_the_source_and_waits_before_a
     assert transport.home_fetches == 2
 
 
-# Detail ---------------------------------------------------------------------------------------
-
-
 async def test_a_detail_with_its_version(transport, source):
     detail = await source.detail("78291:83095")
 
@@ -693,7 +656,6 @@ async def test_a_detail_with_its_version(transport, source):
     assert (detail.source, detail.id, detail.name, detail.type, detail.mb_type) == ("civarchive", "78291", raw["name"], "LORA", "lora")
     assert (detail.creator, detail.tags, detail.license) == ("TangBohu", ["style"], None)
     assert detail.source_url == "https://civarchive.com/models/78291?modelVersionId=83095"
-    # Level 3 (PG | PG-13): safe at the default PG-13, whatever `is_nsfw` says.
     assert (raw["nsfw_level"], raw["is_nsfw"]) == (3, True)
     assert (detail.nsfw, detail.poi, detail.gated) == (False, False, False)
     assert detail.stats == Stats(downloads=raw["download_count"])
@@ -753,7 +715,7 @@ async def test_a_detail_id_may_name_its_version_in_every_form(transport, source)
     for model_id in ("78291:83095", "78291?modelVersionId=83095", "https://civarchive.com/models/78291?modelVersionId=83095"):
         assert (await source.detail(model_id)).versions[0].id == "83095"
 
-    assert [call["modelVersionId"] for call in transport.data_calls("models/78291.json")] == ["83095"]  # then cached
+    assert [call["modelVersionId"] for call in transport.data_calls("models/78291.json")] == ["83095"]
 
 
 async def test_a_redirect_elsewhere_is_not_found(transport, source):
@@ -773,7 +735,6 @@ async def test_the_shown_version_comes_first_and_the_others_have_no_files_or_ima
         id="133241", name="v0.3", created_at=listed["created_at"], nsfw=True, partial=True
     )
     assert tweaker.versions[0].partial is False
-    # CivArchive's order for the others; the version asked for first.
     assert [version.id for version in lcm.versions] == ["225222", "424720", "424706", "219782"]
     assert all(version.partial and version.files == [] and version.images == [] for version in lcm.versions[1:])
     assert [version.name for version in lcm.versions] == [
@@ -806,7 +767,6 @@ def test_a_partial_version_never_carries_files_or_images():
 
 
 async def test_nsfw_by_the_model_bitmask(transport, source):
-    """Detail Tweaker XL: model level 5 (PG | R), its version and its 15 images PG."""
     raw = model("model_122359_v135867")
     assert (raw["nsfw_level"], raw["version"]["nsfw_level"]) == (5, 1)
 
@@ -819,7 +779,6 @@ async def test_nsfw_by_the_model_bitmask(transport, source):
 
 
 async def test_nsfw_images_by_their_level(transport, source):
-    """Cute 3D Cartoon: level 7, one image at PG-13 and one at R among 18 at PG."""
     at_pg13 = await source.detail("298188:334947", max_level=2)
     at_r = await source.detail("298188:334947", max_level=4)
 
@@ -833,7 +792,6 @@ async def test_nsfw_images_by_their_level(transport, source):
 
 
 async def test_images_without_a_level_are_nsfw_and_so_is_a_model_with_no_safe_image(transport, source):
-    """LowRA (deleted): level 0, `is_nsfw` false, ten images without a level."""
     for max_level in (2, 8):
         detail = await source.detail("48139:52753", max_level=max_level)
 
@@ -858,7 +816,6 @@ async def test_an_image_flagged_minor_is_dropped_and_one_of_a_real_person_makes_
 
 
 async def test_previews_without_an_id_type_or_level(transport, source):
-    """HeartArt (deleted, 2022): .mp4 previews without `id`, `type` or `nsfwLevel`."""
     detail = await source.detail("1879:2026")
     again = await make_source(CivArchiveTransport()).detail("1879:2026")
 
@@ -880,11 +837,7 @@ def test_an_image_id_comes_from_the_civitai_url_when_the_answer_has_none():
     assert civarchive.normalize_image("not an image", 2) is None
 
 
-# Files and the download policy -----------------------------------------------------------------
-
-
 async def test_a_file_on_civitai_under_another_version_keeps_its_civitai_url(transport, source):
-    """LCM-LoRA's version 225222 was deleted, but CivitAI still serves the same file as version 424706."""
     detail = await source.detail("195519:225222")
 
     (file,) = detail.versions[0].files
@@ -908,7 +861,6 @@ async def test_a_model_deleted_from_civitai_downloads_from_its_first_hugging_fac
 
 
 async def test_a_model_whose_files_are_only_on_other_sites_is_not_downloadable(transport, source):
-    """Cute 3D Cartoon: its model file on a deleted CivitAI version and tensordrive.app, its training data on CivitAI only."""
     detail = await source.detail("298188:334947")
 
     assert (detail.versions[0].files, detail.mb_type) == ([], None)
@@ -1046,16 +998,12 @@ def test_a_model_without_a_version_cannot_be_read():
         normalize_detail({"id": 1, "name": "x"}, 2)
 
 
-# version_detail (downloads) ----------------------------------------------------------------------
-
-
 async def test_version_detail_loads_the_version_a_download_names(transport, source):
     direct = await source.version_detail("78291", "83095")
     named = await source.version_detail("78291:1", "83095")
     latest = await source.version_detail("78291", "")
 
     assert [detail.versions[0].id for detail in (direct, named, latest)] == ["83095"] * 3
-    # The first two ask for the version itself; the last one follows the redirect.
     assert [call.get("modelVersionId") for call in transport.data_calls("models/78291.json")] == ["83095", None]
 
 
@@ -1064,9 +1012,6 @@ async def test_version_detail_of_a_malformed_id_is_not_found(transport, source):
         await source.version_detail("abc", "1")
 
     assert transport.calls == []
-
-
-# Hash pages ----------------------------------------------------------------------------------------
 
 
 async def test_a_hash_page_lists_the_models_using_the_file(transport, source):

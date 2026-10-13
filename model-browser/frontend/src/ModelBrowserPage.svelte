@@ -1,24 +1,5 @@
 <script>
-	// The Model Browser page (PLAN.md section 9, phase 4), mounted by the host at
-	// /plugins/model-browser with `{ api, setHeaderHidden, ... }` (see index.js).
-	//
-	// - `GET /me` first: without `browse`, an EmptyState and nothing else; the capabilities decide
-	//   which buttons exist (lib/capabilities.js), the NSFW part feeds the mode control.
-	// - `GET /sources`: one rail section of the host's LibraryPage per enabled source; the `notice`
-	//   of the selected source (CivArchive: an unofficial index) is a warning line under the search
-	//   help.
-	// - The search state (source, text, types, base model, sort, period, open model) lives in the
-	//   URL query string (`history.replaceState`), so a reload restores it (lib/search.js).
-	// - Results page by cursor (infinite scroll in ResultGrid); `POST /installed` fills the
-	//   "Installed" badges when the server sends `primary_sha256` without `installed`.
-	// - A card opens DetailPanel over the results; a file opens DownloadDialog, or RequestDialog
-	//   for users who may only ask (phase 5); DownloadTray follows the downloads, RequestsButton
-	//   the requests (RequestsPanel: follow-up, and the decisions of `approve` holders).
-	// - `?tab=requests` (the link of the request notifications) opens the requests drawer once and
-	//   leaves the URL at once (lib/search.wantsRequestsTab / withoutRequestsTab).
 	import { onMount } from 'svelte';
-	// Host wrapper from the PotionUI plugin SDK: resolves only when the plugin sits at
-	// content/plugins/<tree>/model-browser (scripts/build-plugins.ps1 mirrors it there).
 	import HostUi from '../../../../sdk/HostUi.svelte';
 	import DetailPanel from './components/DetailPanel.svelte';
 	import DownloadDialog from './components/DownloadDialog.svelte';
@@ -56,20 +37,16 @@
 	} from './lib/search.js';
 	import { scrollParent, toast } from './lib/dom.js';
 
-	// `api` and `setHeaderHidden` come from the host's plugin page (see index.js).
 	let { api, setHeaderHidden } = $props();
 
 	const SEARCH_DELAY_MS = 400;
-	// Pages in a row that bring no new result before the list stops asking for more.
 	const MAX_EMPTY_PAGES = 3;
 
-	/** 'loading' | 'error' | 'denied' | 'empty' | 'ready' */
 	let phase = $state('loading');
 	let bootError = $state.raw(null);
 	let me = $state.raw(null);
 	let sources = $state.raw([]);
 	let query = $state.raw(emptyState());
-	/** The results of `results.key`, searched with `results.request` (its state and source info). */
 	let results = $state.raw({ key: '', request: null, items: [], cursor: null, status: 'loading', error: null });
 	let loadingMore = $state(false);
 	let moreError = $state.raw(null);
@@ -81,7 +58,6 @@
 	let installedToken = $state(0);
 	let tray = $state();
 	let requestsButton = $state();
-	/** `?tab=requests` was in the URL: the requests drawer opens once the page is ready. */
 	let requestsAsked = $state(false);
 	let content = $state();
 
@@ -123,14 +99,11 @@
 	});
 
 	onMount(() => {
-		// LibraryPage draws its own header (title, search, sort), so hide the host's header row.
 		setHeaderHidden?.(true);
 		pagePath = location.pathname;
 		takeRequestsLink();
 		boot();
-		// On the page already, the link of a notification only changes the URL (the host keeps the
-		// page mounted): follow such changes where the browser has the Navigation API.
-		const navigation = /** @type {any} */ (window).navigation;
+		const navigation = window.navigation;
 		const onEntryChange = () => setTimeout(takeRequestsLink, 0);
 		navigation?.addEventListener?.('currententrychange', onEntryChange);
 		return () => {
@@ -141,8 +114,6 @@
 		};
 	});
 
-	// `?tab=requests` opens the requests drawer as a click on its button would, once the page is
-	// ready and the button is there; users without the button just stay on the page.
 	$effect(() => {
 		if (!requestsAsked || phase !== 'ready') return;
 		if (!showRequests) {
@@ -187,12 +158,6 @@
 		runSearch(true);
 	}
 
-	// The URL ---------------------------------------------------------------------------------
-
-	/**
-	 * `tab=requests` in the URL (the link of the request notifications): take it out at once, so
-	 * that neither a reload nor the page's own URL writes act on it again, and ask for the drawer.
-	 */
 	function takeRequestsLink() {
 		if (!alive || location.pathname !== pagePath || !wantsRequestsTab(location.search)) return;
 		const search = withoutRequestsTab(location.search);
@@ -200,7 +165,6 @@
 		requestsAsked = true;
 	}
 
-	/** Write the state in the query string, keeping the router's own `history.state`. */
 	function writeUrl() {
 		const search = encodeState(query, location.search);
 		const url = `${location.pathname}${search ? `?${search}` : ''}${location.hash}`;
@@ -208,8 +172,6 @@
 			history.replaceState(history.state, '', url);
 		}
 	}
-
-	// Searching -------------------------------------------------------------------------------
 
 	async function runSearch(force = false) {
 		clearTimeout(searchTimer);
@@ -259,7 +221,6 @@
 		fillInstalled(mine, items.slice(before));
 	}
 
-	/** Ask which of these results are installed when the server did not say. */
 	async function fillInstalled(mine, items) {
 		const hashes = unknownInstalledHashes(items);
 		if (hashes.length === 0) return;
@@ -274,7 +235,6 @@
 		searchTimer = setTimeout(() => runSearch(), SEARCH_DELAY_MS);
 	}
 
-	/** Enter in the search box searches at once. */
 	function onPageKeydown(event) {
 		const target = event.target;
 		if (event.key === 'Enter' && target instanceof HTMLInputElement && target.type === 'search') {
@@ -300,15 +260,11 @@
 		runSearch();
 	}
 
-	// NSFW ------------------------------------------------------------------------------------
-
-	/** A thumbnail's "click to reveal", when it has one. */
 	function revealFor(item) {
 		if (!isRevealable(item?.thumbnail, me)) return null;
 		return () => revealCache.urlFor(item.source, item.id, item.thumbnail.id);
 	}
 
-	/** Save the app-wide display mode, then reload what depends on it. */
 	async function changeMode(mode) {
 		if (modeBusy || !me || mode === me.nsfw.mode) return;
 		modeBusy = true;
@@ -328,8 +284,6 @@
 		reloadToken += 1;
 		runSearch(true);
 	}
-
-	// Detail and downloads ----------------------------------------------------------------------
 
 	function openDetail(item, opener) {
 		detailOpener = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -363,7 +317,6 @@
 		return sources.find((source) => source.id === id)?.label ?? id;
 	}
 
-	/** What the source calls the base model of a version in the detail panel ('' for the default). */
 	function baseModelLabel(id) {
 		return sources.find((source) => source.id === id)?.base_model_label ?? '';
 	}
@@ -408,8 +361,6 @@
 	<div class="contents" role="presentation" onkeydown={onPageKeydown}>
 		<HostUi name="LibraryPage" props={pageProps}>
 			<div class="flex min-h-full flex-col" bind:this={content}>
-				<!-- The search syntax of the source, under the search box; the controls move to their own
-				     line when the row is too narrow for both. -->
 				<div class="sticky top-0 z-20 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-canvas px-4 py-2 sm:px-6">
 					<p class="min-w-[12rem] flex-1 truncate text-xs text-fg-subtle" title={info?.search_help || undefined}>
 						{#if info?.search_help}
@@ -429,9 +380,6 @@
 					</div>
 				</div>
 
-				<!-- The warning of the source (CivArchive is an unofficial index), under its search help. It
-				     is not part of the sticky bar: it scrolls away with the results instead of taking room for
-				     good. No dismiss button; nothing is drawn when the source sends no notice. -->
 				{#if info?.notice}
 					<div class="px-4 pt-3 sm:px-6">
 						<p class="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning" role="note">

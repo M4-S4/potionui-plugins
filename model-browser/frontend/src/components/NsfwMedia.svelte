@@ -1,13 +1,4 @@
 <script>
-	// One preview (image or video) filling its box. What it draws comes from the server's NSFW
-	// filtering (PLAN.md section 5.2):
-	// - an image with a `url`: the image (a smaller CivitAI rendition when `width` is set), or the
-	//   video, muted, playing on hover unless the user prefers reduced motion;
-	// - an NSFW image without a url (blur mode): its blurhash on a 32x32 canvas scaled up, under an
-	//   "NSFW" label; with `reveal`, the label is a button that asks for the real url
-	//   (`reveal()` resolves to `{ url }` or `{ error }`) and then shows the media;
-	// - nothing usable: a tinted placeholder.
-	// A user in `hide` mode never gets NSFW images at all: the server removed them.
 	import { onMount } from 'svelte';
 	import Icon from './Icon.svelte';
 	import { BLURHASH_SIZE, decodeCached } from '../lib/blurhash.js';
@@ -38,7 +29,6 @@
 	let canvas = $state();
 	let video = $state();
 
-	// A different image in the same box (results reloaded after a mode change): start over.
 	const imageKey = $derived(`${image?.id ?? ''}|${image?.url ?? ''}|${image?.blurhash ?? ''}`);
 	let seenKey = '';
 	$effect.pre(() => {
@@ -139,7 +129,6 @@
 		{/if}
 	{:else if state === 'blurred'}
 		{#if pixels}
-			<!-- 32x32 pixels scaled to the box by CSS; the browser smooths it, which suits a blurhash. -->
 			<canvas bind:this={canvas} width={BLURHASH_SIZE} height={BLURHASH_SIZE} class="absolute inset-0 h-full w-full" aria-hidden="true"></canvas>
 		{/if}
 		{#if reveal}

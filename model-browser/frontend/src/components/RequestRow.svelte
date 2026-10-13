@@ -1,11 +1,4 @@
 <script>
-	// One request in RequestsPanel: the model's thumbnail and name (and a link to its source page),
-	// its version, file, size, type and source, its status, the NSFW / Real person / Installed
-	// flags, who asked and when, the requester's note, who decided and their note.
-	// Actions: Cancel on the user's own open request; for those who decide (`canAct`; never on
-	// their own request unless an admin, lib/requests.canDecideOn), Approve (with a type override
-	// and a note) and Reject (with a note) in a small form under the row (Escape closes it). The
-	// panel runs the calls: `onApprove`, `onReject` and `onCancel` resolve to `{ ok, message }`.
 	import { tick } from 'svelte';
 	import ActionButton from './ActionButton.svelte';
 	import Icon from './Icon.svelte';
@@ -44,7 +37,6 @@
 	} = $props();
 
 	const uid = $props.id();
-	/** '' | 'approve' | 'reject': the form open under the row. */
 	let mode = $state('');
 	let approval = $state({ modelType: '', note: '' });
 	let rejectNote = $state('');
@@ -56,8 +48,6 @@
 
 	let thumbFailed = $state(false);
 
-	// The server only sends an image anyone may see (never NSFW), and none to a viewer who does
-	// not see the model.
 	const thumb = $derived(thumbUrl(request.snapshot.thumbnail_url, 80));
 	const title = $derived(requestTitle(request));
 	const meta = $derived(requestMeta(request, sourceLabel).join(' · '));
@@ -66,7 +56,6 @@
 	const byline = $derived(requestByline(request, { showUser }));
 	const decision = $derived(decisionLine(request));
 	const who = $derived(request.username || 'the requester');
-	// Not on one's own request, unless an admin (the server refuses it otherwise).
 	const deciding = $derived(canAct && canDecideOn(me, request));
 	const ownOpen = $derived(canAct && isOpen(request) && canDecide(me) && !canDecideOn(me, request));
 	const cancellable = $derived(canCancel(me, request));
@@ -82,12 +71,10 @@
 				: 'The type asked for'
 	);
 
-	// A request decided elsewhere (another admin, a poll) closes its form.
 	$effect(() => {
 		if (!deciding && mode) mode = '';
 	});
 
-	// Escape closes the form before the drawer.
 	$effect(() => {
 		if (!mode) return;
 		return onEscape(() => closeForm());

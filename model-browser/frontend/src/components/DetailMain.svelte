@@ -1,11 +1,4 @@
 <script>
-	// The main column of the detail (DetailLayout `main`): the previews and the files of the version
-	// on screen, then the model's description. `description_html` was sanitised by the server
-	// (backend/security.py keeps text tags and https links only), so it is inserted as is.
-	// A version the source sent as a shell (lib/versions.js) has neither yet: its panel says that it
-	// is loading (DetailPanel fetches it), or why it could not be, with a Retry button. The previews
-	// of a version are revealed through `mediaModelId`: its own composite id when the versions of
-	// the detail come one by one (`byVersion`), else the id of the model.
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import FileList from './FileList.svelte';
 	import MediaGallery from './MediaGallery.svelte';
@@ -28,7 +21,6 @@
 		onPreview
 	} = $props();
 
-	// Per file: a request depends on the file's size too (and on the model's suggested type).
 	const actionFor = $derived((file) =>
 		fileActionInfo(me, detail.source, { type: detail.mb_type ?? null, sizeBytes: file.size_bytes ?? null }, sourceLabel)
 	);
@@ -75,8 +67,6 @@
 {/if}
 
 <style>
-	/* The description is the source's own HTML (paragraphs, lists, links, headings shrunk to h3/h4);
-	   the app's reset strips their spacing, so give them a little back, with the app's tokens. */
 	.description-html :global(p),
 	.description-html :global(ul),
 	.description-html :global(ol),

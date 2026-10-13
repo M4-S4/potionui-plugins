@@ -1,8 +1,3 @@
-"""`backend.sources.openmodeldb`: the catalogue (loading, cache, snapshot, failures), the
-direct download rule, normalisation of the recorded catalogue (files, images, licence,
-description), the search box, filters, sorts and cursor, and the detail.
-"""
-
 import asyncio
 import logging
 import sys
@@ -73,11 +68,8 @@ from .openmodeldb_fakes import (
     models,
 )
 
-#: What `security.sanitize_html` lets through.
 _SANITISED_TAGS = {"p", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "hr", "a", "h3", "h4"}
-#: The newest models of the fixture, by date (all downloadable).
 NEWEST = ["1x-Archiver-AntiLines", "1x-Book-Compact", "4x-UltraSharpV2", "2x-LiveActionV1-SPAN", "2x-GameUp-TSCUNet"]
-#: How many fixture models have a file to offer.
 DOWNLOADABLE = 17
 NOTE = (
     "Note: PotionUI's built-in upscaler currently loads ESRGAN (.pth) models only; "
@@ -100,8 +92,6 @@ def _fresh_render_memo():
 
 @pytest.fixture
 def clock():
-    """Epoch seconds the sources read; tests move `clock.now`."""
-
     class Clock:
         now = T0
 
@@ -122,15 +112,11 @@ def _item(model_id, cat=None):
 
 
 def _alone(model_id, raw):
-    """A catalogue of one (possibly changed) model, with the real tags and architectures."""
     return catalog({model_id: raw})
 
 
 def _ids(page):
     return [found.id for found in page.items]
-
-
-# Direct downloads ------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -153,7 +139,6 @@ def test_direct_urls(url):
 @pytest.mark.parametrize(
     "url",
     [
-        # Pages, not files
         "https://huggingface.co/Kim2091/UltraSharpV2/blob/main/4x-UltraSharpV2_fp32_op17.onnx",
         "https://huggingface.co/Kim2091/UltraSharpV2",
         "https://github.com/renarchi/Re-SISR/releases/tag/Adore",
@@ -171,7 +156,6 @@ def test_direct_urls(url):
         "https://icedrive.net/1/43GNBihZyi",
         "https://1fichier.com/?abc",
         "https://www.dropbox.com/s/52hsqa7ymt5pgga/KDM003_scans_1x.pth",
-        # Not https, not the host itself, odd URLs
         "http://mufunyo.net/esrgan/4x_AnalogFrames_1.0_G.pth",
         "http://objectstorage.us-phoenix-1.oraclecloud.com/n/a/b/c/o/x.pth",
         "https://oraclecloud.com/x.pth",
@@ -203,12 +187,11 @@ def test_the_allowlist_takes_every_direct_host_and_nothing_else():
 
 
 def test_archives_are_not_the_file_they_contain():
-    # A .zip of several models, and a .pth.tar: their bytes never match the resource's SHA256.
     for model_id in (ZIP_ONLY, PTH_TAR):
         detail = _detail(model_id)
         assert (detail.mb_type, detail.versions[0].files) == (None, []), model_id
     assert other_downloads(model(PTH_TAR)) == ["GitHub"]
-    assert other_downloads(model(ZIP_ONLY)) == ["ONNX"]  # an ONNX export, whatever its URL
+    assert other_downloads(model(ZIP_ONLY)) == ["ONNX"]
 
 
 def test_file_names():
@@ -219,9 +202,6 @@ def test_file_names():
     assert file_name("4x-X", "https://h.example/o/c%3A.pth", "pth") == "4x-X.pth"
     assert file_name("4x-X", "https://h.example/o/model", None) == "model"
     assert file_name("4x-X", "https://h.example/o/", "../weird") == "4x-X"
-
-
-# Normalisation: items ---------------------------------------------------------------
 
 
 def test_an_oracle_model_is_an_upscaler_with_its_primary_hash():
@@ -273,7 +253,6 @@ def test_authors_tags_and_scales():
     assert _item(TWO_AUTHORS).creator == "skr, zarxrax"
     assert _item(ONE_NAME_LIST).creator == "jingyunliang"
     assert (_item(ONE_NAME_LIST).base_model, _item(VIDEO).base_model) == ("SwinIR 8x", "CAIN 2x")
-    # Tag names come from tags.json: the `photo` key is called "Realistic".
     assert _item(GITHUB_RAW).tags == ["Compression Removal", "JPEG", "Realistic", "Restoration"]
 
 
@@ -295,9 +274,6 @@ def test_an_entry_missing_its_architecture_and_scale_still_normalises():
 
     assert (item.type, item.base_model, item.base_models, item.updated_at) == ("Upscaler", None, [], None)
     assert (item.name, item.creator) == (ORACLE, None)
-
-
-# Normalisation: files ----------------------------------------------------------------
 
 
 def test_detail_of_an_oracle_model():
@@ -344,7 +320,6 @@ def test_detail_of_an_oracle_model():
         (GITHUB_RAW, "4xNomos8kSC.pth", "https://github.com/Phhofm/models/raw/main/4xNomos8kSC/4xNomos8kSC.pth"),
         (RAW_GITHUB, "2xLiveActionV1_SPAN_490000.pth",
          "https://raw.githubusercontent.com/jcj83429/upscaling/f73a3a02874360ec6ced18f8bdd8e43b5d7bba57/2xLiveActionV1_SPAN/2xLiveActionV1_SPAN_490000.pth"),
-        # The query stays in the URL, not in the name.
         (HUGGING_FACE, "4x_foolhardy_Remacri.pth",
          "https://huggingface.co/FacehugmanIII/4x_foolhardy_Remacri/resolve/main/4x_foolhardy_Remacri.pth?download=true"),
         (MIXED, "4x-UltraSharpV2.safetensors",
@@ -372,7 +347,6 @@ def test_onnx_exports_are_never_files():
     three = _detail(THREE_FORMATS).versions[0].files
     onnx_first = _detail(ONNX_FIRST).versions[0].files
 
-    # PotionUI can neither index nor load an .onnx: only the PyTorch files are offered.
     assert [(file.format, file.file_type, file.primary) for file in three] == [
         ("PickleTensor", "PyTorch", True), ("SafeTensor", "PyTorch", False),
     ]
@@ -426,7 +400,6 @@ def test_odd_resource_values_are_ignored():
 
     (file,) = _detail(ORACLE, _alone(ORACLE, raw)).versions[0].files
 
-    # Without a type there is no extension to check: the URL's name is kept as it is.
     assert (file.size_bytes, file.sha256, file.file_type, file.format, file.id) == (None, None, "tensorflow", None, "0")
     assert file.name == "16x-ESRGAN.pth"
 
@@ -438,9 +411,6 @@ def test_a_resource_whose_url_lacks_its_extension_is_not_a_file():
     assert _detail(ORACLE, _alone(ORACLE, raw)).versions[0].files == []
 
 
-# Normalisation: images ------------------------------------------------------------------
-
-
 GRAYSCALE_THUMB = "https://openmodeldb.info/thumbs/c5b8354a01bb32171fab493f.jpg"
 GRAYSCALE_SMALL = "https://openmodeldb.info/thumbs/small/fcbcdea19d949942313714fd.jpg"
 
@@ -448,13 +418,11 @@ GRAYSCALE_SMALL = "https://openmodeldb.info/thumbs/small/fcbcdea19d949942313714f
 def test_the_card_shows_the_models_own_thumbnail_resolved_on_openmodeldb():
     item = _item(GITHUB_RAW)
 
-    # A pair: its upscaled side, a path of openmodeldb.info, with its size.
     assert (item.thumbnail.url, item.thumbnail.width, item.thumbnail.height) == (
         "https://openmodeldb.info/thumbs/79385d8f832b948a9ce1d339.jpg", 368, 296,
     )
     assert (item.thumbnail.nsfw, item.thumbnail.nsfw_level, item.thumbnail.kind) == (False, 1, "image")
     assert item.thumbnail.id and len(item.thumbnail.id) == 16
-    # A standalone one on openmodeldb.info, an i.slow.pics pair without sizes, a standalone i.slow.pics one.
     assert _item(THREE_FORMATS).thumbnail.url == "https://openmodeldb.info/thumbs/32f56319a7a8f9fb411fc9f3.jpg"
     assert (_item(PAIR_WITHOUT_SIZES).thumbnail.url, _item(PAIR_WITHOUT_SIZES).thumbnail.width) == (
         "https://i.slow.pics/k1sDOhPk.webp", None,
@@ -469,7 +437,6 @@ def test_without_its_own_thumbnail_the_card_shows_the_first_small_one():
     del standalone["thumbnail"], standalone["images"][0]["thumbnail"]
 
     assert _item(GRAYSCALE, _alone(GRAYSCALE, raw)).thumbnail.url == GRAYSCALE_SMALL
-    # The first gallery image that has a small thumbnail.
     assert _item(STANDALONE_IMAGES, _alone(STANDALONE_IMAGES, standalone)).thumbnail.url == (
         "https://openmodeldb.info" + standalone["images"][1]["thumbnail"]
     )
@@ -486,7 +453,6 @@ def test_without_any_thumbnail_the_card_has_no_image():
     raw = model(GRAYSCALE)
     del raw["thumbnail"], raw["images"][0]["thumbnail"]
 
-    # A full-size gallery image is never the card's image.
     assert _item(GRAYSCALE, _alone(GRAYSCALE, raw)).thumbnail is None
     assert _item(ORACLE).thumbnail is None
 
@@ -501,11 +467,9 @@ def test_previews_start_with_the_models_thumbnail_then_the_gallery():
         "https://images2.imgbox.com/cf/bd/lq4EWYPp_o.png",
         "https://images2.imgbox.com/ba/81/OepEK0UZ_o.png",
     ]
-    # The model's thumbnail is also the first pair's upscaled side: listed once.
     assert [image.url for image in pairs] == [
         "https://i.slow.pics/k1sDOhPk.webp", "https://i.slow.pics/BIRBcKK9.webp", "https://i.slow.pics/h9VzPczR.webp",
     ]
-    # A pair shows its upscaled side only.
     assert [(image.url, image.width, image.height) for image in grayscale] == [
         (GRAYSCALE_THUMB, 366, 296), ("https://images2.imgbox.com/28/04/wus0QURa_o.png", None, None),
     ]
@@ -533,24 +497,22 @@ def test_images_on_dead_hosts_are_dropped():
         "https://user-images.githubusercontent.com/1/kept.png",
         "https://raw.githubusercontent.com/o/r/main/kept.png",
     ]
-    # 4x-Nomos8kSC's gallery is on imgsli.com only: its own thumbnail is its one preview.
     assert [image.url for image in _detail(GITHUB_RAW).versions[0].images] == [
         "https://openmodeldb.info/thumbs/79385d8f832b948a9ce1d339.jpg"
     ]
 
 
 def test_a_model_with_nothing_left_has_no_preview_but_its_card_keeps_a_small_thumbnail():
-    raw = model(GITHUB_RAW)  # gallery on imgsli.com only
+    raw = model(GITHUB_RAW)
     del raw["thumbnail"]
     cat = _alone(GITHUB_RAW, raw)
 
     assert _detail(GITHUB_RAW, cat).versions[0].images == []
-    # The small thumbnails are OpenModelDB's own copies, on openmodeldb.info.
     assert _item(GITHUB_RAW, cat).thumbnail.url == "https://openmodeldb.info/thumbs/small/ab132cce7f26a2210ac16912.jpg"
 
 
 def test_images_that_are_not_https_are_dropped_and_duplicates_listed_once():
-    raw = model(ORACLE)  # no thumbnail, no gallery
+    raw = model(ORACLE)
     good = "https://i.slow.pics/good.webp"
     raw["images"] = [
         {"type": "paired", "LR": "https://i.slow.pics/lr.webp", "SR": "http://i.slow.pics/plain.webp"},
@@ -578,9 +540,6 @@ def test_the_previews_are_capped_thumbnail_included():
     assert (images[0].url, images[-1].url) == (GRAYSCALE_THUMB, "https://i.slow.pics/10.webp")
 
 
-# Licence ------------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "value, summary, url",
     [
@@ -604,9 +563,6 @@ def test_a_model_without_a_license():
     assert _detail(NO_LICENSE).license.summary == "No license stated"
 
 
-# Description -----------------------------------------------------------------------------
-
-
 def test_the_description_starts_with_the_facts():
     detail = _detail(GITHUB_RAW)
 
@@ -623,7 +579,6 @@ def test_facts_name_only_what_the_model_gives():
     assert facts_line(cat.models[VIDEO], cat).startswith("Architecture: CAIN · Scale: 2x · Input: video")
     assert "Channels: 1 → 1" in facts_line(cat.models[GRAYSCALE], cat)
     assert facts_line(cat.models[GRAYSCALE], cat).endswith("Training: 23 epochs")
-    # `Training epochs` and `Training iterations` (misspelt keys) are not read.
     assert "Training" not in facts_line(cat.models[MISSPELT_KEYS], cat)
     assert facts_line({}, cat) is None
 
@@ -633,7 +588,6 @@ def test_other_downloads_are_named_after_the_description():
 
     assert _text(drive).endswith("Other downloads on the OpenModelDB page: Google Drive")
     assert _text(mega).endswith("Other downloads on the OpenModelDB page: Mega")
-    # UltraSharpV2's onnx (a Hugging Face /blob/ page), like any ONNX export, is named "ONNX".
     assert "Other downloads on the OpenModelDB page: ONNX" in _text(mixed)
     assert (
         '<p>Other downloads on the <a href="https://openmodeldb.info/models/3x-OmniSR-DF2K" '
@@ -665,17 +619,14 @@ def test_other_downloads_are_named_once_in_order():
     ]
 
 
-# Compatibility note --------------------------------------------------------------------
-
-
 def test_an_esrgan_pth_model_has_no_compatibility_note():
     for model_id in (GITHUB_RAW, ORACLE, HUGGING_FACE, "1x-Debandurh-FS-Ultra-lite"):
         assert "Note: PotionUI" not in _detail(model_id).description_html, model_id
 
 
 def test_a_model_of_another_architecture_gets_the_note_last():
-    span = _detail(RAW_GITHUB)  # SPAN, a .pth
-    hat = _detail(ONNX_FIRST)  # HAT: the note comes after the other downloads
+    span = _detail(RAW_GITHUB)
+    hat = _detail(ONNX_FIRST)
 
     assert span.description_html.endswith("<p>" + NOTE.format("SPAN ") + "</p>")
     assert _text(hat).endswith("Other downloads on the OpenModelDB page: ONNX " + NOTE.format("HAT "))
@@ -777,9 +728,6 @@ def _tags_in(markup):
     return [name.lower() for name in re.findall(r"</?([a-zA-Z0-9]+)", markup)]
 
 
-# The catalogue ------------------------------------------------------------------------------
-
-
 async def test_the_first_load_reads_the_three_files_once_and_caches_them(clock):
     transport, cache = OpenModelDBTransport(), MemoryCache()
     source = make_source(transport, cache, clock)
@@ -836,7 +784,6 @@ async def test_after_a_restart_a_fresh_cache_row_is_used_without_asking(clock):
     loaded = await restarted.catalog()
 
     assert transport.count(MODELS) == 1
-    # The snapshot is as old as the download: it expires with the cache row.
     assert loaded.fetched_at == T0
     clock.now = T0 + CATALOG_TTL_SECONDS
     await restarted.catalog()
@@ -850,7 +797,7 @@ async def test_the_real_cache_keeps_the_catalogue_six_hours(plugin_db, clock):
     await make_source(transport, cache, clock).catalog()
 
     clock.now += CATALOG_TTL_SECONDS - 60
-    assert cache.purge() == 0  # the default 10-minute TTL does not apply to these rows
+    assert cache.purge() == 0
     assert len((await make_source(transport, cache, clock).catalog()).models) == 27
     assert transport.count(MODELS) == 1
 
@@ -863,10 +810,10 @@ async def test_a_cache_row_from_the_future_or_without_a_time_is_not_trusted(cloc
     transport, cache = OpenModelDBTransport(), MemoryCache()
     await make_source(transport, cache, clock).catalog()
     for key, value in cache.entries.items():
-        cache.entries[key] = {"body": value["body"]}  # no fetched_at
+        cache.entries[key] = {"body": value["body"]}
 
     await make_source(transport, cache, clock).catalog()
-    clock.now -= 3600  # the clock went back: the rows look an hour old in the future
+    clock.now -= 3600
     await make_source(transport, cache, clock).catalog()
 
     assert transport.count(MODELS) == 3
@@ -885,7 +832,6 @@ async def test_a_failed_refresh_keeps_serving_the_previous_catalogue(clock, capl
     assert stale is first
     assert "could not refresh the catalogue" in caplog.text
     assert transport.count(MODELS) == 2
-    # Not asked again before RETRY_SECONDS, searches still answer.
     clock.now += RETRY_SECONDS - 1
     assert _ids(await source.search(SearchQuery(limit=2))) == NEWEST[:2]
     assert transport.count(MODELS) == 2
@@ -983,7 +929,6 @@ def test_the_sha256_index_prefers_a_model_that_can_be_downloaded():
     cat = build_catalog(first)
 
     assert cat.by_sha256[oracle_sha][0] == ORACLE
-    # Without a downloadable twin, the first model listing the file keeps it.
     mega_sha = body[MEGA_ONLY]["resources"][0]["sha256"]
     assert cat.by_sha256[mega_sha][0] == MEGA_ONLY
     assert all(len(sha) == 64 and sha == sha.lower() for sha in cat.by_sha256)
@@ -998,9 +943,6 @@ async def test_find_sha256_ignores_case_and_answers_none_for_an_unknown_file(clo
     assert (found[0], found[2]["sha256"]) == (GITHUB_RAW, sha)
     assert found[1]["name"] == "Nomos8kSC" and found[3] is source.snapshot
     assert await source.find_sha256("0" * 64) is None
-
-
-# info ----------------------------------------------------------------------------------------
 
 
 async def test_info_lists_the_architectures_and_scales_with_their_labels(clock):
@@ -1043,7 +985,6 @@ async def test_info_lists_the_architectures_and_scales_with_their_labels(clock):
         "types_label": "Architecture",
         "base_models_label": "Scale",
         "base_model_label": "Architecture",
-        # The page's warning line: only CivArchive (an unofficial index) has one.
         "notice": None,
     }
 
@@ -1061,9 +1002,6 @@ async def test_info_without_openmodeldb_still_lists_the_source(clock, caplog):
     assert "filter lists unavailable" in caplog.text
 
 
-# Search ----------------------------------------------------------------------------------------
-
-
 @pytest.fixture
 def source(clock):
     return make_source(OpenModelDBTransport(), clock=clock)
@@ -1077,7 +1015,6 @@ async def test_the_default_search_lists_the_downloadable_models_first_by_pages_o
     assert (len(second.items), second.next_cursor) == (3, None)
     items = first.items + second.items
     assert [found.mb_type for found in items] == ["upscaler"] * DOWNLOADABLE + [None] * (27 - DOWNLOADABLE)
-    # Each group newest first.
     for group in (items[:DOWNLOADABLE], items[DOWNLOADABLE:]):
         dates = [found.updated_at for found in group]
         assert dates == sorted(dates, reverse=True)
@@ -1094,7 +1031,6 @@ async def test_sorts(source):
     by_name = await source.search(SearchQuery(sort="name", limit=50))
 
     assert _ids(default) == _ids(downloadable)
-    # Newest ignores what can be downloaded: 1x-BW-Denoise (Mega only) is newer than 1x-DeNoise.
     dates = [found.updated_at for found in newest.items]
     assert dates == sorted(dates, reverse=True) and _ids(newest)[-1] == ORACLE
     assert _ids(newest).index(MISSPELT_KEYS) < _ids(newest).index(THREE_FORMATS)
@@ -1278,9 +1214,6 @@ async def test_a_model_that_cannot_be_normalised_is_skipped(source, monkeypatch,
     assert "Skipping an OpenModelDB model" in caplog.text
 
 
-# detail --------------------------------------------------------------------------------------
-
-
 async def test_detail_by_id_link_or_another_case(source):
     plain = await source.detail(GITHUB_RAW)
     folded = await source.detail("4X-NOMOS8KSC")
@@ -1318,9 +1251,6 @@ async def test_detail_when_openmodeldb_is_down_is_unavailable(clock):
 
     with pytest.raises(SourceUnavailable):
         await make_source(transport, clock=clock).detail(GITHUB_RAW)
-
-
-# Search box parsing ------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

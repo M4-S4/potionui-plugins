@@ -1,41 +1,3 @@
-"""CivitAI as a model-browser source (PLAN.md §8.1, §8.2).
-
-civitai.com and civitai.red are one catalogue behind one API (`civitai_api_base`,
-`https://civitai.com/api/v1` by default). Model pages link to civitai.red for an NSFW
-model and to civitai.com otherwise; pasted links from either host are understood. The
-API on civitai.red gives its download URLs on civitai.red: files keep them on civitai.com
-(same path and query), the host the download allowlist and the core's `civitai` provider
-know.
-
-Search is `GET /models`:
-- `limit` = page size + 20 (at most 100), so one upstream page usually still fills a
-  page once NSFW, unknown and removed models are filtered out; the routes follow
-  `metadata.nextCursor` for more;
-- `nsfw=false` when the query asks for safe content (a hint: CivitAI still returns
-  `nsfw: false` models of level 29 or 31), `nsfw=true` otherwise;
-- special syntax in the search box: `#tag` -> `tag`, `@user` -> `username`,
-  `$#1,2,3` -> `ids` (100 per upstream call, period `AllTime`, the other filters
-  dropped, our own `ids:<n>` cursor), a civitai.com / civitai.red model link -> `ids`;
-  anything else -> `query` (CivitAI's full-text search);
-- `baseModels` is only sent when the selection does not cover every active base model;
-- a model the `ids` answer left out, or a model listed without versions, is fetched again
-  by id (`GET /models/{id}`, at most 10 per page);
-- models whose `mode` is `Archived` (no files) or `TakenDown` (no images) are dropped;
-- an item carries the SHA256 of the primary file of its first version (`primary_sha256`,
-  lower-case): list answers include the hashes, and the search route uses it for the
-  `installed` badge.
-
-Detail is `GET /models/{id}`, filters come from `GET /enums` (cached 24 h). Every raw
-answer goes through the cache; normalisation runs on every request.
-
-NSFW (PLAN.md §5.2, §5.3): `nsfwLevel` is a bitmask (PG 1, PG-13 2, R 4, X 8, XXX 16,
-Blocked 32). With `max_level` the admin's highest safe level:
-- an image is NSFW when its level is above `max_level`, or unknown (missing or 0);
-- a model (or version) is NSFW when its `nsfw` flag is set, when its `nsfwLevel`
-  bitmask includes a level above `max_level` (the creator's flag is not reliable, the
-  bitmask covers the images the API did not return), or when none of its images is safe.
-"""
-
 import logging
 import math
 import re
@@ -70,22 +32,17 @@ logger = logging.getLogger("plugins.model-browser")
 
 SOURCE_ID = "civitai"
 LABEL = "CivitAI"
-#: Where a model's page is: the SFW site, or the full catalogue for an NSFW model (PLAN.md §8.2).
 SITE_SFW = "https://civitai.com"
 SITE_FULL = "https://civitai.red"
 
-#: Models asked for beyond the page size (Stability Matrix does the same).
 OVERFETCH = 20
 UPSTREAM_MAX_LIMIT = 100
-#: Model ids per `ids=` call, and per search box.
 IDS_CHUNK = 100
 MAX_IDS = 1000
-#: Models fetched again one by one, at most, for one page.
 MAX_REFETCHES = 10
 ENUMS_TTL_SECONDS = 24 * 3600
 IDS_CURSOR_PREFIX = "ids:"
 
-#: Our sort ids -> CivitAI `sort` values, with labels, in the order the page lists them.
 SORTS: Tuple[Tuple[str, str, str], ...] = (
     ("highest_rated", "Highest Rated", "Highest rated"),
     ("most_downloaded", "Most Downloaded", "Most downloaded"),
@@ -96,7 +53,6 @@ SORTS: Tuple[Tuple[str, str, str], ...] = (
     ("newest", "Newest", "Newest"),
     ("oldest", "Oldest", "Oldest"),
 )
-#: Our period ids -> CivitAI `period` values, with labels.
 PERIODS: Tuple[Tuple[str, str, str], ...] = (
     ("all_time", "AllTime", "All time"),
     ("year", "Year", "Past year"),
@@ -107,9 +63,7 @@ PERIODS: Tuple[Tuple[str, str, str], ...] = (
 _SORT_VALUES = {key: value for key, value, _ in SORTS}
 _PERIOD_VALUES = {key: value for key, value, _ in PERIODS}
 
-#: `mode` values whose models are left out: archived models have no files, taken-down ones no images.
 REMOVED_MODES = frozenset({"Archived", "TakenDown"})
-#: `availability` values anyone can download (`Unsearchable` is only hidden from CivitAI's search).
 _OPEN_AVAILABILITY = frozenset({"Public", "Unsearchable"})
 
 SEARCH_HELP = "Text, #tag, @creator, $#id1,id2 or a civitai.com / civitai.red model link"
@@ -127,7 +81,6 @@ _TYPE_LABELS = {
     "LLM": "LLM",
 }
 
-#: `allowCommercialUse` values in CivitAI's order, with how the licence summary words them.
 _COMMERCIAL_USES: Tuple[Tuple[str, str], ...] = (
     ("Image", "selling generated images"),
     ("RentCivit", "generation on CivitAI"),
@@ -144,23 +97,15 @@ _SHA256 = re.compile(r"[0-9a-fA-F]{64}")
 _IMAGE_ID_IN_URL = re.compile(r"/([0-9]{1,15})\.[A-Za-z0-9]{2,5}$")
 
 
-# Search box -------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class ParsedQuery:
-    """What the search box asks CivitAI for."""
-
-    #: "all" (no text), "text", "tag", "username" or "ids".
     kind: str = "all"
     value: str = ""
     ids: Tuple[int, ...] = ()
-    #: `modelVersionId` of a pasted link, when it had one.
     version_id: Optional[int] = None
 
 
 def parse_model_url(text: str) -> Optional[Tuple[int, Optional[int]]]:
-    """(model id, version id or None) from a civitai.com / civitai.red model link, else None."""
     text = (text or "").strip()
     if not text or any(char.isspace() for char in text):
         return None
@@ -184,7 +129,6 @@ def parse_model_url(text: str) -> Optional[Tuple[int, Optional[int]]]:
 
 
 def parse_ids(text: str) -> Tuple[int, ...]:
-    """The positive model ids in `text` (separated by commas, semicolons or spaces), once each, in order."""
     ids: Dict[int, None] = {}
     for token in _ID_SEPARATORS.split(text or ""):
         if _DIGITS.fullmatch(token) and int(token) > 0:
@@ -193,10 +137,6 @@ def parse_ids(text: str) -> Tuple[int, ...]:
 
 
 def parse_query(q: Optional[str]) -> ParsedQuery:
-    """The search box text as CivitAI parameters: link, `$#ids`, `#tag`, `@user` or free text.
-
-    Raises `SourceInvalidRequest` for `$#` without a valid id, or with more than `MAX_IDS`.
-    """
     text = (q or "").strip()
     if not text:
         return ParsedQuery()
@@ -220,7 +160,6 @@ def parse_query(q: Optional[str]) -> ParsedQuery:
 
 
 def ids_chunk_index(cursor: Optional[str]) -> int:
-    """Which chunk of 100 ids an `ids:<n>` cursor points at; 0 for anything else."""
     if cursor and cursor.startswith(IDS_CURSOR_PREFIX):
         rest = cursor[len(IDS_CURSOR_PREFIX):]
         if _DIGITS.fullmatch(rest):
@@ -240,11 +179,7 @@ def _choice(value: Optional[str], choices: Dict[str, str], what: str) -> Optiona
 
 
 def _clean_list(values: Iterable[str]) -> List[str]:
-    """Stripped, non-empty, distinct and sorted: the same selection always gives the same request."""
     return sorted({str(value).strip() for value in values or () if str(value).strip()})
-
-
-# Normalisation ------------------------------------------------------------------
 
 
 def _int(value: Any) -> Optional[int]:
@@ -266,7 +201,6 @@ def _float(value: Any) -> Optional[float]:
 
 
 def _id(value: Any) -> Optional[int]:
-    """A CivitAI id given as a number or as digits."""
     if isinstance(value, int) and not isinstance(value, bool):
         return value if value > 0 else None
     if isinstance(value, str) and _DIGITS.fullmatch(value.strip()):
@@ -289,7 +223,6 @@ def _bool_or_none(value: Any) -> Optional[bool]:
 
 
 def _list(value: Any) -> List[Any]:
-    """`value` when it is a list, else an empty one (a string is never iterated)."""
     return value if isinstance(value, list) else []
 
 
@@ -310,12 +243,10 @@ def _parse_date(value: Any) -> Optional[datetime]:
 
 
 def safe_mask(max_level: int) -> int:
-    """The bits of every level at or below `max_level` (PG-13 = 2 -> PG | PG-13 = 3)."""
     return (1 << max(1, int(max_level)).bit_length()) - 1
 
 
 def level_is_safe(level: Any, max_level: int) -> bool:
-    """An image's `nsfwLevel` is within the safe range; a missing or unrated (0) level is not."""
     level = _int(level)
     if level is None or level <= 0:
         return False
@@ -323,7 +254,6 @@ def level_is_safe(level: Any, max_level: int) -> bool:
 
 
 def mask_exceeds(mask: Any, max_level: int) -> bool:
-    """A model or version `nsfwLevel` bitmask includes a level above `max_level`."""
     mask = _int(mask)
     if mask is None or mask <= 0:
         return False
@@ -335,7 +265,6 @@ def model_page_url(model_id: str, nsfw: bool) -> str:
 
 
 def type_label(model_type: str) -> str:
-    """A readable label for a CivitAI model type ("AestheticGradient" -> "Aesthetic gradient")."""
     if model_type in _TYPE_LABELS:
         return _TYPE_LABELS[model_type]
     words = re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+", model_type) or [model_type]
@@ -354,7 +283,6 @@ def _image_id(raw: Dict[str, Any], url: Optional[str]) -> Optional[str]:
 
 
 def normalize_image(raw: Any, max_level: int) -> Optional[Image]:
-    """One preview; None when it has neither an https url nor a blurhash."""
     if not isinstance(raw, dict):
         return None
     url = raw.get("url")
@@ -384,7 +312,6 @@ def _images(raw_version: Dict[str, Any], max_level: int) -> List[Image]:
 
 
 def pick_thumbnail(images: Sequence[Image]) -> Optional[Image]:
-    """The first safe image, preferring stills and images without a real person; the first image when none is safe."""
     if not images:
         return None
     best = min(
@@ -401,22 +328,15 @@ def pick_thumbnail(images: Sequence[Image]) -> Optional[Image]:
 
 
 def _file_sha256(raw: Any) -> Optional[str]:
-    """The lower-case `hashes.SHA256` of a raw file; None when it has none or not 64 hexadecimal characters."""
     hashes = raw.get("hashes") if isinstance(raw, dict) else None
     sha256 = hashes.get("SHA256") if isinstance(hashes, dict) else None
     return sha256.lower() if isinstance(sha256, str) and _SHA256.fullmatch(sha256) else None
 
 
 def primary_file_sha256(raw_version: Optional[Dict[str, Any]]) -> Optional[str]:
-    """The SHA256 of a raw version's primary file, else of its first file that has one; None without any.
-
-    Same hash rule as `normalize_file`, but read from the raw files: a list answer's
-    `modelVersions[].files[]` is enough to tell whether the file is installed, with no download URL needed.
-    """
     if raw_version is None:
         return None
     files = [raw for raw in _list(raw_version.get("files")) if isinstance(raw, dict)]
-    # The primary file first, then every file in order.
     for raw in [raw for raw in files if _is_true(raw.get("primary"))] + files:
         sha256 = _file_sha256(raw)
         if sha256:
@@ -424,17 +344,10 @@ def primary_file_sha256(raw_version: Optional[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
-#: Hosts of CivitAI download URLs that are the same files on civitai.com.
 _RED_HOSTS = frozenset({"civitai.red", "www.civitai.red"})
 
 
 def com_download_url(url: str) -> str:
-    """A civitai.red download URL moved to civitai.com, same path and query (PLAN.md §8.2).
-
-    `https://civitai.red/api/v1` answers like civitai.com, but its `downloadUrl`s are on
-    civitai.red: on civitai.com they pass the allowlist (`security.DOWNLOAD_HOSTS`) and the
-    core's `civitai` provider authenticates them. Any other URL is returned as it is.
-    """
     try:
         parts = urlsplit(url)
         port = parts.port
@@ -446,7 +359,6 @@ def com_download_url(url: str) -> str:
 
 
 def normalize_file(raw: Any) -> Optional[File]:
-    """One file of a version; None without an id or a download URL (a civitai.red one is moved to civitai.com)."""
     if not isinstance(raw, dict):
         return None
     file_id = _id(raw.get("id"))
@@ -488,7 +400,6 @@ def _version_date(raw_version: Dict[str, Any]) -> Optional[str]:
 
 
 def version_early_access(raw_version: Dict[str, Any], now: Optional[datetime] = None) -> bool:
-    """The version needs early access or payment: download fails with 401/403 without it."""
     availability = raw_version.get("availability")
     if isinstance(availability, str) and availability not in _OPEN_AVAILABILITY:
         return True
@@ -503,7 +414,6 @@ def version_early_access(raw_version: Dict[str, Any], now: Optional[datetime] = 
 
 
 def model_early_access(raw: Dict[str, Any], first_version: Optional[Dict[str, Any]]) -> bool:
-    """The model, or its latest version, is in early access."""
     availability = raw.get("availability")
     if isinstance(availability, str) and availability not in _OPEN_AVAILABILITY:
         return True
@@ -520,7 +430,6 @@ def _raw_versions(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def normalize_version(raw: Dict[str, Any], max_level: int, model_flagged: bool = False) -> Optional[Version]:
-    """One version; None without an id. NSFW when the model is flagged, by its bitmask, or with no safe image."""
     version_id = _id(raw.get("id"))
     if version_id is None:
         return None
@@ -541,7 +450,6 @@ def normalize_version(raw: Dict[str, Any], max_level: int, model_flagged: bool =
 
 
 def model_is_nsfw(raw: Dict[str, Any], images: Sequence[Image], max_level: int) -> bool:
-    """The `nsfw` flag, a level above `max_level` in the `nsfwLevel` bitmask, or no safe image."""
     return (
         _is_true(raw.get("nsfw"))
         or mask_exceeds(raw.get("nsfwLevel"), max_level)
@@ -555,7 +463,6 @@ def license_summary(
     derivatives: Optional[bool],
     different_license: Optional[bool],
 ) -> str:
-    """One line from CivitAI's permission flags, e.g. "Credit required; No commercial use; No merges"."""
     parts = []
     if no_credit is True:
         parts.append("No credit required")
@@ -580,7 +487,6 @@ def license_summary(
 
 
 def _commercial_uses(value: Any) -> Optional[List[str]]:
-    """`allowCommercialUse` (a list, or a single value in older answers) in CivitAI's order; None when absent."""
     if isinstance(value, str):
         values = [value]
     elif isinstance(value, list):
@@ -593,7 +499,6 @@ def _commercial_uses(value: Any) -> Optional[List[str]]:
 
 
 def license_from(raw: Dict[str, Any]) -> Optional[License]:
-    """CivitAI has no licence text: compose one from the four permission flags; None without them."""
     flags = ("allowCommercialUse", "allowNoCredit", "allowDerivatives", "allowDifferentLicense")
     if not any(flag in raw for flag in flags):
         return None
@@ -648,7 +553,6 @@ def _model_id(raw: Dict[str, Any]) -> str:
 
 
 def normalize_item(raw: Dict[str, Any], max_level: int) -> SearchItem:
-    """A `GET /models` item as a search result (NSFW marked, thumbnail picked, nothing filtered)."""
     model_id = _model_id(raw)
     versions = _raw_versions(raw)
     images = [image for version in versions for image in _images(version, max_level)]
@@ -677,7 +581,6 @@ def normalize_item(raw: Dict[str, Any], max_level: int) -> SearchItem:
 
 
 def normalize_detail(raw: Dict[str, Any], max_level: int) -> ModelDetail:
-    """A `GET /models/{id}` answer as a model detail (NSFW marked, description sanitised, nothing filtered)."""
     model_id = _model_id(raw)
     flagged = _is_true(raw.get("nsfw"))
     versions = [
@@ -708,16 +611,10 @@ def normalize_detail(raw: Dict[str, Any], max_level: int) -> ModelDetail:
 
 
 def is_removed(raw: Dict[str, Any]) -> bool:
-    """Archived (no files) or taken down (no images): left out of the results."""
     return raw.get("mode") in REMOVED_MODES
 
 
-# The source ---------------------------------------------------------------------
-
-
 class CivitaiSource:
-    """CivitAI behind the `Source` interface. `http_client` / `cache_store` default to the shared instances."""
-
     id = SOURCE_ID
     label = LABEL
 
@@ -740,7 +637,6 @@ class CivitaiSource:
         return int(settings.get_setting("nsfw_max_level") if max_level is None else max_level)
 
     async def _get(self, path: str, params: Sequence[Tuple[str, Any]] = (), *, ttl_seconds: Optional[float] = None) -> Any:
-        """GET through the cache; the key holds the URL and every parameter (sorted), `nsfw` included."""
         url = self.api_base() + path
         pairs = sorted(http_module.normalise_params(list(params)))
         request = {"url": url, "params": [list(pair) for pair in pairs]}
@@ -771,10 +667,7 @@ class CivitaiSource:
             raise SourceUnavailable("CivitAI sent an unexpected answer for a model")
         return body
 
-    # Source interface ------------------------------------------------------------
-
     async def info(self) -> SourceInfo:
-        """Filters from `GET /enums` (`ModelType`, `ActiveBaseModel`); empty lists when CivitAI is unreachable."""
         types: List[FilterOption] = []
         base_models: List[FilterOption] = []
         try:
@@ -797,7 +690,6 @@ class CivitaiSource:
         )
 
     async def search(self, query: SearchQuery, *, max_level: Optional[int] = None) -> SearchPage:
-        """One upstream page for `query`, normalised; NSFW is marked, not filtered."""
         level = self._max_level(max_level)
         parsed = parse_query(query.q)
         sort = _choice(query.sort, _SORT_VALUES, "sort")
@@ -810,7 +702,6 @@ class CivitaiSource:
         return SearchPage(source=SOURCE_ID, items=self._normalise_items(raw_items, level), next_cursor=next_cursor)
 
     async def detail(self, model_id: str, *, max_level: Optional[int] = None) -> ModelDetail:
-        """`GET /models/{id}`, normalised. Archived and taken-down models are not found."""
         level = self._max_level(max_level)
         text = str(model_id).strip()
         if not _DIGITS.fullmatch(text) or int(text) <= 0:
@@ -825,8 +716,6 @@ class CivitaiSource:
             return normalize_detail(raw, level)
         except (KeyError, TypeError, ValueError, ValidationError) as exc:
             raise SourceUnavailable(f"CivitAI sent a model this browser cannot read ({exc.__class__.__name__})") from None
-
-    # Search steps ------------------------------------------------------------------
 
     async def _search_list(
         self, parsed: ParsedQuery, query: SearchQuery, sort: Optional[str], period: Optional[str]
@@ -887,7 +776,6 @@ class CivitaiSource:
         return ordered, (f"{IDS_CURSOR_PREFIX}{index + 1}" if more else None)
 
     async def _models_by_id(self, model_ids: Sequence[int]) -> Dict[int, Dict[str, Any]]:
-        """`GET /models/{id}` for the first `MAX_REFETCHES` ids; unknown ones are skipped, an outage stops the round."""
         found: Dict[int, Dict[str, Any]] = {}
         for model_id in list(model_ids)[:MAX_REFETCHES]:
             try:
@@ -900,7 +788,6 @@ class CivitaiSource:
         return found
 
     async def _complete_versions(self, raw_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Replace the models listed without versions by their full `GET /models/{id}` answer."""
         empty = [_id(item.get("id")) for item in raw_items if not _raw_versions(item) and _id(item.get("id"))]
         if not empty:
             return raw_items
@@ -912,7 +799,6 @@ class CivitaiSource:
         return completed
 
     async def _partial_base_models(self, selected: Iterable[str]) -> List[str]:
-        """The selected base models, or none when the selection covers every active one (a shorter URL, same answer)."""
         chosen = _clean_list(selected)
         if not chosen:
             return []

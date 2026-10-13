@@ -1,28 +1,9 @@
-"""What the plugin accepts from the sources: download URLs and description HTML (PLAN.md §6, §12).
-
-- `is_allowed_download_url` is checked before any download is queued (phase 3): `https`
-  only, a host in the source's allowlist, never an IP literal or a local name. The check
-  is on the URL text alone; it never resolves a name.
-- `sanitize_html` turns a source's description into HTML the page can render as is:
-  a small set of formatting tags, links that open in a new tab, everything else dropped
-  (scripts, media, frames, styles, event handlers, `javascript:` URLs). Built on the
-  standard library's `html.parser`; text is always re-escaped.
-- `html_to_text` gives a plain-text summary of the same HTML.
-"""
-
 import html
 import ipaddress
 from html.parser import HTMLParser
 from typing import Dict, FrozenSet, List, Optional, Tuple
 from urllib.parse import urlsplit
 
-#: Hosts each source may hand out as a download URL. "*.example.com" allows the
-#: subdomains of example.com, not example.com itself. OpenModelDB's are the hosts of the
-#: direct file URLs `sources/openmodeldb.py::is_direct_url` accepts (Hugging Face, GitHub
-#: releases and raw files, Oracle and Backblaze object storage); its Google Drive, Mega ...
-#: links are pages, never downloads. CivArchive's are the sources it indexes, CivitAI and
-#: the Hugging Face mirrors (`sources/civarchive.py::download_for`), never civarchive.com
-#: itself: it hosts no file, and its `robots.txt` disallows `/api`.
 DOWNLOAD_HOSTS: Dict[str, FrozenSet[str]] = {
     "civitai": frozenset({"civitai.com"}),
     "huggingface": frozenset({"huggingface.co", "*.huggingface.co"}),
@@ -49,7 +30,6 @@ def _host_allowed(host: str, patterns: FrozenSet[str]) -> bool:
 
 
 def _is_local_or_numeric(host: str) -> bool:
-    """An IP literal, a name that always stays local, or a numeric last label (`127.1`, `2130706433`)."""
     try:
         ipaddress.ip_address(host)
         return True
@@ -61,11 +41,6 @@ def _is_local_or_numeric(host: str) -> bool:
 
 
 def is_allowed_download_url(source_id: str, url: str) -> bool:
-    """True when `url` may be queued as a download from `source_id`.
-
-    Requires `https`, the default port, no credentials in the URL, plain ASCII, and a host
-    in `DOWNLOAD_HOSTS[source_id]`; an unknown source allows nothing.
-    """
     patterns = DOWNLOAD_HOSTS.get(source_id)
     if not patterns or not isinstance(url, str) or not url.isascii():
         return False
@@ -86,24 +61,17 @@ def is_allowed_download_url(source_id: str, url: str) -> bool:
     return _host_allowed(host, patterns)
 
 
-# HTML ------------------------------------------------------------------------
-
-#: Tags kept as they are.
 _KEPT = frozenset({
     "p", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li",
     "blockquote", "code", "pre", "hr", "a", "h3", "h4",
 })
-#: Tags kept under another name: headings shrink to h3/h4 so a description never
-#: outranks the page's own headings.
 _RENAMED = {"h1": "h3", "h2": "h3", "h3": "h4", "h4": "h4", "h5": "h4", "h6": "h4", "strike": "s", "del": "s"}
 _VOID_KEPT = frozenset({"br", "hr"})
-#: Dropped together with everything inside them.
 _DROPPED_WITH_CONTENT = frozenset({
     "script", "style", "iframe", "object", "video", "audio", "svg", "math", "template",
     "noscript", "noembed", "noframes", "textarea", "select", "title", "head", "canvas",
     "frameset", "applet", "picture", "xmp", "plaintext", "button", "map",
 })
-#: Block containers that are unwrapped: their content stays, followed by a line break.
 _BLOCKS = frozenset({
     "div", "section", "article", "header", "footer", "main", "aside", "nav", "table",
     "thead", "tbody", "tfoot", "tr", "figure", "figcaption", "dl", "dt", "dd", "details",
@@ -113,7 +81,6 @@ _CELLS = frozenset({"td", "th"})
 
 
 def _safe_href(value: Optional[str]) -> Optional[str]:
-    """`value` when it is an absolute http(s) URL with a host, else None."""
     if not value:
         return None
     value = value.strip()
@@ -132,9 +99,7 @@ class _Sanitizer(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self._out: List[str] = []
-        #: Open elements as (source tag, emitted tag, or "" when only the tag itself was dropped).
         self._open: List[Tuple[str, str]] = []
-        #: Open elements whose whole content is being dropped.
         self._skipping: List[str] = []
 
     def handle_starttag(self, tag, attrs):
@@ -149,7 +114,7 @@ class _Sanitizer(HTMLParser):
             self._out.append(f"<{name}>")
             return
         if name not in _KEPT:
-            return  # unknown, block or dropped void element: its content (if any) stays
+            return
         if name == "a":
             href = _safe_href(dict(attrs).get("href"))
             if href is None:
@@ -180,7 +145,6 @@ class _Sanitizer(HTMLParser):
                     if name:
                         self._out.append(f"</{name}>")
                 return
-        # A stray end tag: ignored.
 
     def handle_data(self, data):
         if not self._skipping:
@@ -200,14 +164,6 @@ class _Sanitizer(HTMLParser):
 
 
 def sanitize_html(value: Optional[str]) -> str:
-    """`value` reduced to the formatting tags the page renders as is; "" for nothing.
-
-    Kept: p, br, b, strong, i, em, u, s, ul, ol, li, blockquote, code, pre, hr, and `a`
-    with an http(s) `href` (given `rel="noopener noreferrer" target="_blank"`); h1-h2
-    become h3 and h3-h6 become h4. Every other attribute is dropped. Scripts, styles,
-    frames, media and form controls are removed with their content; images and other
-    tags are dropped, the text inside them is kept.
-    """
     if not value:
         return ""
     sanitizer = _Sanitizer()
@@ -248,7 +204,6 @@ class _TextExtractor(HTMLParser):
 
 
 def html_to_text(value: Optional[str], limit: int = 300) -> str:
-    """The text of an HTML fragment on one line, cut at a word to at most `limit` characters (ellipsis included)."""
     if not value or limit <= 0:
         return ""
     extractor = _TextExtractor()

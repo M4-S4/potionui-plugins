@@ -13,7 +13,6 @@ import {
 	validateBlurhash
 } from './blurhash.js';
 
-// The example hash of the BlurHash README (a 4x3 hash, 28 characters).
 const SAMPLE = 'LEHV6nWB2yk8pyo0adR*.7kCMdnj';
 
 function pixel(pixels, width, x, y) {
@@ -21,7 +20,6 @@ function pixel(pixels, width, x, y) {
 	return [...pixels.slice(offset, offset + 4)];
 }
 
-/** A hash with only an average colour (1x1 components). */
 function flatHash(r, g, b) {
 	return `00${encode83((r << 16) + (g << 8) + b, 4)}`;
 }
@@ -82,7 +80,6 @@ test('decodeBlurhash fills every pixel of the sample, opaque, with a picture tha
 	}
 	assert.equal(nonBlack, BLURHASH_SIZE * BLURHASH_SIZE);
 	assert.ok(distinct.size > 50, `a varied picture (${distinct.size} colours)`);
-	// The AC components roughly cancel out over the picture: the mean stays near the average colour.
 	const mean = sum.map((total) => total / (BLURHASH_SIZE * BLURHASH_SIZE));
 	for (const [index, channel] of [151, 150, 149].entries()) {
 		assert.ok(Math.abs(mean[index] - channel) < 40, `channel ${index}: ${mean[index]} vs ${channel}`);
@@ -106,15 +103,11 @@ test('a hash with only an average colour decodes to that exact colour everywhere
 });
 
 test('a horizontal AC component brightens the left edge and leaves the middle at the average colour', () => {
-	// Size flag 1: 2x1 components. Maximum value digit 82 (max = 83 / 166 = 0.5). AC with
-	// red at quantum 18 (+1 * max), green and blue at 9 (0).
 	const ac = 18 * 19 * 19 + 9 * 19 + 9;
 	const hash = `1~${encode83((64 << 16) + (64 << 8) + 64, 4)}${encode83(ac, 2)}`;
 	assert.deepEqual(validateBlurhash(hash), { ok: true, numX: 2, numY: 1 });
 	const pixels = decodeBlurhash(hash, 2, 1);
-	// x = 1 of 2: cos(pi / 2) = 0, only the DC component is left.
 	assert.deepEqual(pixel(pixels, 2, 1, 0), [64, 64, 64, 255]);
-	// x = 0: DC + AC, the red channel only.
 	const left = pixel(pixels, 2, 0, 0);
 	assert.equal(left[0], linearToSRGB(sRGBToLinear(64) + 0.5));
 	assert.equal(left[1], 64);

@@ -1,12 +1,3 @@
-"""The `/requests` routes through the plugin's real router: create, list, approve, reject, cancel.
-
-The capability dependencies are overridden with the principal each call picks (one test runs
-the real ones); the requester's own grant, which approval resolves again, comes from the
-plugin's rows and `FakeCore`'s memberships. The sources are fakes serving normalised details,
-the core is `FakeCore` (queue, model index, users, groups, plan limits, notifications), each
-user's NSFW context is set per test, and the tables live in a scratch database.
-"""
-
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -76,7 +67,6 @@ def core(plugin_db, monkeypatch):
 
 @pytest.fixture
 def viewers(monkeypatch):
-    """Each user's NSFW context by id; `allowed` + `show` unless a test sets one."""
     contexts = {}
     monkeypatch.setattr(nsfw, "resolve_nsfw", lambda who: contexts.get(who.id, context("allowed", "show")))
     return contexts
@@ -99,7 +89,6 @@ def app():
 
 @pytest.fixture
 def api(app):
-    """`api(principal, method, path, **kwargs)`: one call with every capability check yielding `principal`."""
     client = TestClient(app)
 
     def call(who, method, path, **kwargs):
@@ -135,9 +124,6 @@ def _types(core):
     return [notification["notification_type"] for notification in core.notifications]
 
 
-# POST /requests ---------------------------------------------------------------------------
-
-
 def test_a_request_is_created_open_with_a_snapshot_of_the_file(api, core, civitai):
     response = api(REQUESTER, "POST", "/requests", json=_body(note="  For the SDXL workflow  "))
 
@@ -169,13 +155,13 @@ def test_a_request_is_created_open_with_a_snapshot_of_the_file(api, core, civita
         "sha256": SHA,
         "already_installed": False,
     }
-    assert core.queued == [] and pending.list_rows() == []  # nothing is downloaded for a request
+    assert core.queued == [] and pending.list_rows() == []
     assert requests.get(request["id"]).status == "open"
 
 
 def test_a_new_request_notifies_the_admins_and_approve_holders_but_never_the_requester(api, core, civitai):
     save_rows([Row(group_id="reviewers", capabilities=frozenset({"browse", "approve"}))])
-    core.add_user("admin-2", admin=True)  # an admin in no group still approves
+    core.add_user("admin-2", admin=True)
 
     request = _create(api)
 
@@ -203,7 +189,7 @@ def test_asking_twice_for_the_same_file_answers_the_same_request(api, core, civi
     assert again.status_code == 200
     assert again.json()["data"]["already_requested"] is True
     assert again.json()["data"]["request"]["id"] == first["id"]
-    assert len(core.notifications) == sent  # no second notification
+    assert len(core.notifications) == sent
     assert len(requests.list_rows()) == 1
 
 
@@ -267,7 +253,6 @@ def test_a_model_the_requester_may_not_see_is_not_found(api, core, civitai, view
 
 
 def _requester_with(**view):
-    """`REQUESTER` with these values in the request view of their grant."""
     return replace(REQUESTER, grant=replace(REQUESTER.grant, request_params=requesting(**view)))
 
 
@@ -350,12 +335,8 @@ def test_a_source_failure_is_answered_like_the_browsing_routes(api, core, civita
     assert (response.status_code, _error(response)["error"]) == (502, "source_unavailable")
 
 
-# GET /requests ----------------------------------------------------------------------------
-
-
 @pytest.fixture
 def listed(api, core, civitai, plugin_db):
-    """Three requests: user-1's open one (oldest), user-2's open one, user-1's declined one (newest)."""
     first = _create(api)
     second = _create(api, who=OTHER)
     third = _create(api, file_id="1002")
@@ -414,9 +395,6 @@ def test_the_snapshot_is_listed_as_each_viewer_may_see_it(api, core, civitai, vi
     assert own["snapshot"]["thumbnail_url"] == SAFE_IMAGE and "hidden" not in own["snapshot"]
 
 
-# POST /requests/{id}/approve ---------------------------------------------------------------
-
-
 def test_approving_queues_the_file_for_the_requester_in_the_approvers_name(api, core, civitai):
     request = _create(api)
 
@@ -433,8 +411,7 @@ def test_approving_queues_the_file_for_the_requester_in_the_approvers_name(api, 
     row = pending.get(SHA)
     assert (row.requested_by, row.assign_to, row.request_id, row.status) == ("user-1", "user:user-1", request["id"], "queued")
     assert data["pending"]["sha256"] == SHA and data["download"]["id"] == "dl-1"
-    assert data["download"]["destination_path"]  # an admin approver sees the whole download
-    # The quota is the requester's.
+    assert data["download"]["destination_path"]
     assert [(event[0], event[1]) for event in core.limit_events] == [
         ("user-1", "model-browser.downloads"),
         ("user-1", "model-browser.download_bytes"),
@@ -466,7 +443,7 @@ def test_the_approver_sees_the_row_as_their_own_context_allows(api, core, civita
     images = data["pending"]["info"]["model"]["versions"][0]["images"]
     assert [image["url"] for image in images] == [SAFE_IMAGE]
     stored = pending.get(SHA).info["model"]["versions"][0]["images"]
-    assert [image["url"] for image in stored] == [SAFE_IMAGE, NSFW_IMAGE]  # stored for the requester
+    assert [image["url"] for image in stored] == [SAFE_IMAGE, NSFW_IMAGE]
 
 
 def test_approving_with_one_of_the_requesters_groups(api, core, civitai):
@@ -516,7 +493,7 @@ def test_approving_an_installed_file_only_assigns_it(api, core, civitai):
 
 
 def test_approving_a_file_already_on_its_way_for_someone_else_links_the_request(api, core, civitai):
-    api(ADMIN, "POST", "/downloads", json=_body()).raise_for_status()  # the admin downloads it first
+    api(ADMIN, "POST", "/downloads", json=_body()).raise_for_status()
     request = _create(api)
 
     data = _approve(api, request["id"]).json()["data"]
@@ -533,7 +510,6 @@ def test_approving_a_file_already_on_its_way_for_someone_else_links_the_request(
 
 def test_approval_checks_the_requesters_rules_again(api, core, civitai):
     request = _create(api)
-    # Since the request, the admin narrowed what all_users may request.
     save_rows([Row(group_id="all_users", capabilities=frozenset({"browse", "request"}), model_types=frozenset({"embedding"}))])
 
     response = _approve(api, request["id"])
@@ -554,7 +530,7 @@ def test_approval_ignores_the_requesters_download_view(api, core, civitai):
     save_rows(
         [
             Row(group_id="all_users", capabilities=frozenset({"browse", "request"}), model_types=frozenset({"embedding"})),
-            Row(group_id="artists", capabilities=frozenset({"browse", "download"})),  # every type, to download
+            Row(group_id="artists", capabilities=frozenset({"browse", "download"})),
         ]
     )
 
@@ -581,7 +557,7 @@ def test_approval_follows_the_requesters_context_not_the_approvers(api, core, ci
     civitai.detail_value = civitai_detail(nsfw=True)
     viewers["user-1"] = context("blur", "blur")
     request = _create(api)
-    viewers["admin-1"] = context("blocked", "hide")  # the approver may not see it themselves
+    viewers["admin-1"] = context("blocked", "hide")
 
     response = _approve(api, request["id"])
 
@@ -672,7 +648,7 @@ def test_an_approver_cannot_decide_on_their_own_request(api, core, civitai):
     stored = requests.get(request["id"])
     assert (stored.status, stored.decided_by, stored.decision_note) == ("open", None, None)
     assert core.queued == []
-    assert api(SELF_APPROVER, "DELETE", f"/requests/{request['id']}").status_code == 200  # they cancel it
+    assert api(SELF_APPROVER, "DELETE", f"/requests/{request['id']}").status_code == 200
 
 
 def test_an_approver_decides_on_other_users_requests(api, core, civitai):
@@ -732,9 +708,6 @@ def test_an_approval_without_a_body_is_accepted(api, core, civitai):
     assert response.json()["data"]["request"]["decision_note"] is None
 
 
-# POST /requests/{id}/reject ----------------------------------------------------------------
-
-
 def test_rejecting_closes_the_request_and_tells_the_requester(api, core, civitai):
     request = _create(api)
 
@@ -765,9 +738,6 @@ def test_rejecting_an_unknown_request_is_not_found(api, core, civitai):
     response = api(ADMIN, "POST", "/requests/nope/reject", json={})
 
     assert (response.status_code, _error(response)["error"]) == (404, "not_found")
-
-
-# DELETE /requests/{id} ---------------------------------------------------------------------
 
 
 def test_the_author_cancels_their_open_request(api, core, civitai):
@@ -808,12 +778,8 @@ def test_cancelling_an_unknown_request_is_not_found(api, core, civitai):
     assert api(REQUESTER, "DELETE", "/requests/nope").status_code == 404
 
 
-# The real capability checks --------------------------------------------------------------
-
-
 @pytest.fixture
 def real_checks(app, monkeypatch, core, civitai):
-    """The real `require_*` dependencies, for user-1 with the capabilities the test sets."""
     state = SimpleNamespace(capabilities=frozenset())
     app.dependency_overrides[get_current_active_user] = lambda: user("user-1")
     monkeypatch.setattr(permissions, "resolve_grant", lambda who: replace(USER_GRANT, capabilities=state.capabilities))
@@ -839,7 +805,7 @@ def test_the_request_routes_check_their_capabilities(real_checks):
         refused = client.post(f"{BASE}/requests/{request_id}/{action}", json={})
         assert (refused.status_code, refused.json()["detail"]["message"]) == (403, "This action needs the 'approve' permission")
 
-    state.capabilities = frozenset()  # cancelling one's own request needs no capability
+    state.capabilities = frozenset()
     assert client.delete(f"{BASE}/requests/{request_id}").status_code == 200
 
 
@@ -850,9 +816,6 @@ def test_the_request_routes_need_a_signed_in_user(app, core):
         assert anonymous.post(f"{BASE}/requests/x/approve", json={}).status_code in (401, 403)
         assert anonymous.post(f"{BASE}/requests/x/reject", json={}).status_code in (401, 403)
         assert anonymous.delete(f"{BASE}/requests/x").status_code in (401, 403)
-
-
-# Through to the end of the download ---------------------------------------------------------
 
 
 async def test_an_approved_request_is_done_once_the_watcher_has_the_model_ready(core, civitai, monkeypatch):

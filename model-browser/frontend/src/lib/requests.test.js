@@ -50,7 +50,6 @@ import {
 	tabRequests
 } from './requests.js';
 
-// The shape of GET /me (backend routes_permissions.py) with the phase 5 `requests` part.
 function meData(overrides = {}) {
 	return {
 		user: { id: 'u1', username: 'alice', is_admin: false },
@@ -78,7 +77,6 @@ const ADMIN = normalizeMe(
 );
 const BROWSER = normalizeMe(meData({ capabilities: ['browse'] }));
 
-// A request as GET /requests lists it (backend requests.py: build_snapshot, for_viewer).
 function request(id, status, overrides = {}) {
 	return {
 		id,
@@ -116,7 +114,6 @@ function request(id, status, overrides = {}) {
 	};
 }
 
-/** Fake host `api`: records `[method, path, body]` and answers from `handler`. */
 function fakeApi(handler) {
 	const calls = [];
 	const call = (method) => async (path, body) => {
@@ -128,8 +125,6 @@ function fakeApi(handler) {
 
 const ok = (data) => ({ success: true, data });
 const fail = (error, message) => ({ detail: { success: false, error, message } });
-
-// Statuses ------------------------------------------------------------------------------------
 
 test('statusInfo gives every status a label, a tone and a hint', () => {
 	for (const status of STATUSES) {
@@ -154,8 +149,6 @@ test('isOpen and isFinal read a request or a status', () => {
 	assert.equal(isFinal(request('r1', 'approved')), false);
 	assert.equal(isFinal({}), false);
 });
-
-// Normalising -----------------------------------------------------------------------------------
 
 test('normalizeRequest keeps a well formed request', () => {
 	const normal = normalizeRequest(request('r1', 'open', { decision_note: null }));
@@ -185,7 +178,6 @@ test('normalizeRequest fills in what is missing or malformed', () => {
 	assert.equal(normal.snapshot.nsfw, false);
 	assert.equal(normal.snapshot.poi, false);
 	assert.equal(normal.snapshot.source_url, '');
-	// Images are https only.
 	assert.equal(normal.snapshot.thumbnail_url, '');
 	assert.equal(normal.snapshot.hidden, true);
 	assert.equal(normal.snapshot.license, '');
@@ -215,8 +207,6 @@ test('parseTime reads ISO text, and server text without a zone as UTC', () => {
 	assert.equal(parseTime(42), null);
 });
 
-// Order and tabs ----------------------------------------------------------------------------------
-
 test('sortRequests puts open requests first, then the newest, without mutating', () => {
 	const list = [
 		normalizeRequest(request('r1', 'done', { created_at: '2026-10-11 10:00:00' })),
@@ -242,7 +232,6 @@ test('groupRequests splits own, to review and all', () => {
 	const forRequester = groupRequests(list, REQUESTER);
 	assert.deepEqual(forRequester.mine.map((entry) => entry.id), ['r1']);
 	assert.deepEqual(forRequester.review, []);
-	// Without a user id, the list is taken as the user's own (GET /requests only sends theirs).
 	assert.equal(groupRequests(list, null).mine.length, 3);
 });
 
@@ -276,8 +265,6 @@ test('tabRequests filters again whatever the server sent', () => {
 	assert.deepEqual(tabRequests('review', list, REQUESTER), []);
 });
 
-// Rights and the count ------------------------------------------------------------------------------
-
 test('canDecideOn: approvers decide on open requests of others; admins on their own too', () => {
 	const fromAlice = normalizeRequest(request('r1', 'open'));
 	const fromBob = normalizeRequest(request('r2', 'open', { user_id: 'u9', username: 'bob' }));
@@ -292,7 +279,6 @@ test('canDecideOn: approvers decide on open requests of others; admins on their 
 });
 
 test('the request form reads the request parameters, not the download ones', () => {
-	// May download LoRA up to 1 GB; may ask for embeddings and checkpoints up to 10 GB.
 	const me = normalizeMe(
 		meData({
 			capabilities: ['browse', 'download', 'request'],
@@ -374,8 +360,6 @@ test('fetchBadgeCount counts a requester own open requests, and says null on fai
 	assert.equal(await fetchBadgeCount(broken, APPROVER), null);
 });
 
-// Calls ---------------------------------------------------------------------------------------------
-
 test('createRequest posts the body and returns the envelope data', async () => {
 	const body = { source: 'civitai', model_id: '58390', version_id: '135867', file_id: '89277', note: 'please' };
 	const api = fakeApi(() => ok({ request: request('r1', 'open'), already_requested: false }));
@@ -446,8 +430,6 @@ test('rejectRequest and cancelRequest', async () => {
 	assert.equal((await cancelRequest({}, 'r1')).error.code, 'no_api');
 });
 
-// The request dialog -----------------------------------------------------------------------------------
-
 const DETAIL = { source: 'civitai', id: 58390, name: 'Detail Tweaker', mb_type: 'lora', nsfw: false, license: null };
 const VERSION = { id: 135867, name: 'v1.0', early_access: false };
 const FILE = { id: 89277, name: 'add_detail.safetensors', size_bytes: 37_861_176 };
@@ -466,7 +448,6 @@ test('requestFormProblems checks the type, the note and the size', () => {
 		requestFormProblems({ modelType: 'checkpoint', note: '' }, { me: LIMITED, detail: DETAIL, file: FILE }).modelType,
 		'Your permissions do not allow requesting this model type'
 	);
-	// The server needs a type, even when the source suggests none.
 	assert.equal(
 		requestFormProblems({ modelType: '', note: '' }, { me: LIMITED, detail: { ...DETAIL, mb_type: null }, file: FILE }).modelType,
 		'Choose what to file this model as'
@@ -518,8 +499,6 @@ test('requestWarnings adds NSFW to the download warnings', () => {
 	assert.equal(requestWarnings({ detail: DETAIL, version: { ...VERSION, nsfw: true }, file: FILE })[0].title, 'NSFW');
 });
 
-// Showing and deciding ------------------------------------------------------------------------------------
-
 test('requestTitle, requestMeta, requestedType and sourceHost', () => {
 	const normal = normalizeRequest(request('r1', 'open'));
 	assert.equal(requestTitle(normal), 'Detail Tweaker LoRA');
@@ -570,8 +549,6 @@ test('the approve form: requested type first, a type needed when none, type sent
 	assert.deepEqual(approvalOptions(normal, { modelType: 'embedding', note: '' }), { note: '', modelType: 'embedding' });
 	assert.deepEqual(approvalOptions(untyped, { modelType: 'vae' }), { note: '', modelType: 'vae' });
 });
-
-// Toasts ------------------------------------------------------------------------------------------------------
 
 test('createToast for each answer of POST /requests', () => {
 	assert.deepEqual(createToast({ ok: true, data: { request: {}, already_requested: false } }, FILE), {

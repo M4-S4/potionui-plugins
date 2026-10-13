@@ -1,11 +1,3 @@
-"""`provider.openmodeldb_provider`: the `openmodeldb` marketplace provider (PLAN.md §8.4).
-
-`get_model_by_hash` looks a SHA256 up in the catalogue the `openmodeldb` source keeps (the
-recorded fixtures, served by the fake transport) and answers what the core stores: the
-provider row, the description, the previews. It works for any upscaler on disk, not only
-the plugin's downloads. `get_model_page_url` is string work only.
-"""
-
 import json
 import logging
 from datetime import datetime, timezone
@@ -38,7 +30,6 @@ from .openmodeldb_fakes import (
 
 NOMOS_SHA = model(GITHUB_RAW)["resources"][0]["sha256"]
 NOMOS_URL = "https://github.com/Phhofm/models/raw/main/4xNomos8kSC/4xNomos8kSC.pth"
-#: 4x-Nomos8kSC's previews: its own thumbnail (its gallery is on imgsli.com, whose links are dead).
 NOMOS_IMAGES = ["https://openmodeldb.info/thumbs/79385d8f832b948a9ce1d339.jpg"]
 
 
@@ -55,9 +46,6 @@ def transport():
 @pytest.fixture
 def provider(transport):
     return OpenModelDBProvider(source=make_source(transport))
-
-
-# Metadata and lifecycle ----------------------------------------------------------------
 
 
 def test_metadata_declares_a_hash_lookup_provider_without_credentials(provider):
@@ -83,7 +71,7 @@ async def test_it_is_ready_without_settings_and_never_handles_a_download(provide
     assert provider.get_download_headers() == {}
     assert provider.matches_download_url(NOMOS_URL) is False
     assert provider.matches_download_url("https://openmodeldb.info/models/4x-Nomos8kSC") is False
-    assert transport.calls == []  # nothing is loaded before it is needed
+    assert transport.calls == []
 
 
 async def test_the_connection_test_loads_the_catalogue(transport):
@@ -92,9 +80,6 @@ async def test_the_connection_test_loads_the_catalogue(transport):
     down = OpenModelDBTransport()
     down.responses[MODELS] = (503, {}, b"")
     assert await OpenModelDBProvider(source=make_source(down)).test_connection() is False
-
-
-# get_model_by_hash ---------------------------------------------------------------------
 
 
 async def test_a_known_file_gives_the_expected_provider_model_info(provider):
@@ -130,7 +115,7 @@ async def test_a_known_file_gives_the_expected_provider_model_info(provider):
             "mb_license": "CC-BY-4.0",
         },
     )
-    json.dumps(info.to_dict())  # what the providers API sends
+    json.dumps(info.to_dict())
 
 
 async def test_each_file_of_a_model_answers_with_its_own_url_but_an_onnx_with_none(provider):
@@ -138,13 +123,12 @@ async def test_each_file_of_a_model_answers_with_its_own_url_but_an_onnx_with_no
 
     found = [await provider.get_model_by_hash(resource["sha256"]) for resource in (pth, safetensors, onnx)]
 
-    # The onnx is still recognised (its details are right), but PotionUI cannot load it: no URL.
     assert [info.download_url for info in found] == [pth["urls"][0], safetensors["urls"][0], None]
     assert {info.provider_model_id for info in found} == {"openmodeldb:1x-DeNoise-realplksr-otf"}
 
 
 async def test_the_description_has_no_closing_notes(provider):
-    info = await provider.get_model_by_hash(model(RAW_GITHUB)["resources"][0]["sha256"])  # SPAN, onnx not offered
+    info = await provider.get_model_by_hash(model(RAW_GITHUB)["resources"][0]["sha256"])
 
     assert info.description.startswith("Architecture: SPAN · Scale: 2x")
     assert "Note: PotionUI" not in info.description and "Other downloads" not in info.description
@@ -154,7 +138,6 @@ async def test_a_file_only_the_openmodeldb_page_offers_is_found_without_a_downlo
     info = await provider.get_model_by_hash(model(MEGA_ONLY)["resources"][0]["sha256"])
 
     assert (info.provider_model_id, info.download_url, info.model_type) == ("openmodeldb:4x-UltraSharp", None, "upscaler")
-    # Enrichment never mentions downloads: the file is already on disk.
     assert "Other downloads" not in info.description
 
 
@@ -182,7 +165,6 @@ async def test_previews_are_the_versions_at_most_six_https_images_on_public_host
 
     info = await provider.get_model_by_hash(body[TWO_AUTHORS]["resources"][0]["sha256"])
 
-    # The model's own thumbnail first, then the gallery.
     assert info.media_urls == ["https://openmodeldb.info/thumbs/12c55df0bf2bdbcda120944a.jpg"] + [
         image["url"] for image in gallery[:5]
     ]
@@ -236,7 +218,7 @@ async def test_the_provider_shares_the_registry_source_and_its_catalogue(monkeyp
     monkeypatch.setattr(sources_module, "_instances", {})
     monkeypatch.setattr(http_module, "http", SourceHttp(fetch=transport, limits={"openmodeldb": (0.0, 2)}))
     monkeypatch.setattr(cache_module, "cache", MemoryCache())
-    provider = OpenModelDBProvider()  # as the core creates it
+    provider = OpenModelDBProvider()
 
     info = await provider.get_model_by_hash(NOMOS_SHA)
     page = await sources_module.get_source("openmodeldb").search(sources_module.SearchQuery(q="nomos8k"))
@@ -246,8 +228,6 @@ async def test_the_provider_shares_the_registry_source_and_its_catalogue(monkeyp
 
 
 async def test_the_core_fetcher_enriches_an_upscaler_already_on_disk(provider, monkeypatch):
-    """`ProviderInfoFetcher.run_provider_fetch("openmodeldb", [model_id])`, as the Models page runs it,
-    with the core's repositories, metadata editor and preview download replaced by fakes."""
     import src.features.providers.registry as provider_registry
     from src.features.models.provider_info import ProviderInfoFetcher
     from src.plugin_api import HookContext
@@ -300,12 +280,9 @@ async def test_the_core_fetcher_enriches_an_upscaler_already_on_disk(provider, m
     )
     assert (row.name, row.nsfw, row.download_url) == ("Nomos8kSC", False, NOMOS_URL)
     assert stored["description"].startswith("Architecture: ESRGAN · Scale: 4x")
-    assert editor.metadata == {}  # no trigger words
+    assert editor.metadata == {}
     assert fetched == NOMOS_IMAGES
     assert [preview["type"] for preview in editor.previews] == ["image"]
-
-
-# get_model_page_url ------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

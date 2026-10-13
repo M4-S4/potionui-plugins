@@ -19,7 +19,6 @@ import {
 	sizeLimitBytes
 } from './capabilities.js';
 
-// The shape of backend/routes_permissions.py's GET /me.
 function meData(overrides = {}) {
 	return {
 		user: { id: 'u1', username: 'alice', is_admin: false },
@@ -55,7 +54,6 @@ const DOWNLOADER = normalizeMe(
 );
 
 const BROWSER = normalizeMe(meData({ capabilities: ['browse'] }));
-// The default parameters of `all_users` (browse + request).
 const REQUESTER = normalizeMe(meData({ params: { sources: ['civitai', 'huggingface', 'openmodeldb'], model_types: [], max_file_gb: null } }));
 
 test('normalizeMe keeps a well formed answer', () => {
@@ -189,9 +187,6 @@ test('fileAction and canRequestFrom: requests are bounded by the sources of the 
 	assert.equal(canRequestFrom(null, 'civitai'), false);
 });
 
-// A downloader of LoRA from CivitAI up to 2 GB who may also ask for embeddings and checkpoints
-// from CivitAI and Hugging Face up to 10 GB (the phase 5 /me: `params` for downloads,
-// `request_params` for requests).
 const SPLIT = normalizeMe(
 	meData({
 		capabilities: ['browse', 'download', 'request'],
@@ -266,7 +261,6 @@ test('requestBlock and canRequestFrom read the request parameters: source, sugge
 	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'lora', sizeBytes: 500 * 1024 ** 2 }), '');
 	assert.equal(requestBlock(ASKER, { source: 'huggingface', type: 'lora' }), 'source');
 	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'checkpoint' }), 'type');
-	// No suggestion: the type is chosen in the dialog.
 	assert.equal(requestBlock(ASKER, { source: 'civitai', type: null }), '');
 	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'lora', sizeBytes: 2 * 1024 ** 3 }), 'size');
 	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'lora', sizeBytes: null }), '');
@@ -280,7 +274,6 @@ test('requestBlock and canRequestFrom read the request parameters: source, sugge
 
 test('fileAction: downloads by params, requests by request_params', () => {
 	assert.equal(fileAction(SPLIT, 'civitai', { type: 'lora' }), 'download');
-	// Not a download source, but one they may ask for: Request.
 	assert.equal(fileAction(SPLIT, 'huggingface', { type: 'checkpoint', sizeBytes: 6 * 1024 ** 3 }), 'request');
 	assert.equal(fileAction(SPLIT, 'huggingface', { type: 'lora' }), 'source-blocked');
 	assert.equal(fileAction(SPLIT, 'openmodeldb'), 'source-blocked');

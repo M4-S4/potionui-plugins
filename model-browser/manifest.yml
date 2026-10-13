@@ -13,36 +13,34 @@ api:
 hooks:
   backend:
     - hook: "plugin.lifecycle.boot"
-      handler: "hooks.lifecycle_hooks.on_boot"        # tables (idempotent); watcher on a runtime enable
+      handler: "hooks.lifecycle_hooks.on_boot"
     - hook: "plugin.lifecycle.ready"
-      handler: "hooks.lifecycle_hooks.on_ready"       # run_on_app_loop(watcher.run())
+      handler: "hooks.lifecycle_hooks.on_ready"
     - hook: "plugin.lifecycle.disable"
-      handler: "hooks.lifecycle_hooks.on_disable"     # stops the watcher
+      handler: "hooks.lifecycle_hooks.on_disable"
     - hook: "download.after_complete"
-      handler: "hooks.download_hooks.on_download_complete"   # records a finished download's model, schedules assign + enrich
+      handler: "hooks.download_hooks.on_download_complete"
     - hook: "provider.register"
-      handler: "hooks.provider_hooks.register_providers"   # the `model-browser` and `openmodeldb` providers (PLAN.md §7.3, §8.4)
+      handler: "hooks.provider_hooks.register_providers"
     - hook: "notification_type.register"
-      handler: "hooks.notification_hooks.register_types"   # request / download notification types (PLAN.md §4.4)
+      handler: "hooks.notification_hooks.register_types"
 
 pages:
-  - route: "model-browser"           # page URL: /plugins/model-browser
+  - route: "model-browser"
     component: "ModelBrowserPage.js"
     label: "Model Browser"
 sidebar:
   - label: "Model Browser"
-    route: "model-browser"           # must be the same as pages[].route
-    icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"   # `d` attribute of a 24x24 SVG path
-    order: 75                        # no require_role: access is decided by the plugin's RBAC (PLAN.md §4)
+    route: "model-browser"
+    icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+    order: 75
 
 admin_tabs:
   - id: "permissions"
     label: "Permissions"
-    component: "PermissionsTab.js"      # frontend/src/PermissionsTab.svelte, built standalone
+    component: "PermissionsTab.js"
     order: 10
 
-# Admin -> Plugins "Setup": downloads that need a login use these providers' credentials.
-# `check` is "module.path:Class" from the plugin root, loaded by PluginLoader.load_class.
 setup:
   - kind: "check"
     check: "backend.setup_checks:CivitaiProviderReady"
@@ -56,8 +54,6 @@ docs:
     title: "Model Browser"
     audience: "admin"
 
-# Model attributes filled after a download (PLAN.md §7.4 step 7). No source-URL attribute:
-# the model page's "Mirrors" section links the source through get_model_page_url().
 model_metadata_fields:
   - key: "mb_base_model"
     label: "Base model"
@@ -68,12 +64,6 @@ model_metadata_fields:
     field_type: "text"
     description: "License as the source states it (filled by Model Browser)"
 
-# Plan limits an admin can add to the core's plans (PLAN.md §4.5). The core only enforces
-# limits on submits and uploads, so the plugin enforces these itself before it queues a
-# download (backend/limits.py): `applies_handler` keeps the core from ever applying them,
-# and the usage is the ledger the plugin records into (one event per queued file, refunded
-# when the download fails). `measure_handler` reads that ledger back: without `ledger: true`
-# the core requires one. Handlers are "module.path.function" from the plugin root.
 limit_kinds:
   - key: "model-browser.downloads"
     label: "Model downloads per month"
@@ -97,8 +87,6 @@ limit_kinds:
     measure_handler: "backend.limit_handlers.ledger_total"
     applies_handler: "backend.limit_handlers.never_applies"
 
-# Defaults are applied by backend/settings.py (the core stores values as strings and does
-# not seed them); keep the two in step.
 settings:
   - name: "nsfw_ceiling"
     type: "select"
@@ -119,11 +107,6 @@ settings:
       - { value: "2", label: "PG-13" }
       - { value: "4", label: "R" }
       - { value: "8", label: "X" }
-  # The two yes/no settings are two-option selects, not `boolean`: PotionUI's admin form
-  # (0.0.15, PluginsTab.svelte) stores a boolean as `str(value)` ("False") and shows any
-  # non-empty stored string as checked, so a `boolean` switched off came back on after each
-  # save. A select is stored and shown as the string it was given; backend/settings.py
-  # parses "true" / "false" and rewrites older "True" / "False" rows at boot.
   - name: "hide_poi"
     type: "select"
     label: "Hide CivitAI models depicting real people"

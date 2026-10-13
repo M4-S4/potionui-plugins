@@ -1,8 +1,3 @@
-// The download dialog's form: its starting values, the checks it runs before sending (the same
-// rules as backend/downloads.py, so most mistakes are caught before the request), its warnings,
-// and the body of `POST /downloads`. No Svelte in here: tested with `node --test`
-// (see downloadForm.test.js).
-
 import { allowedTypes, exceedsSizeLimit, sizeLimitBytes } from './capabilities.js';
 import { formatBytes } from './format.js';
 
@@ -12,25 +7,18 @@ export const MAX_FILENAME_LENGTH = 255;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
-/** The last segment of a source file name (Hugging Face names hold folders: `unet/x.safetensors`). */
 export function baseName(name) {
 	const text = typeof name === 'string' ? name : '';
 	const parts = text.split(/[\\/]/).filter(Boolean);
 	return parts.length ? parts[parts.length - 1] : '';
 }
 
-/** The extension of a file name, lower case with its dot ('.safetensors'), or ''. */
 export function extensionOf(name) {
 	const base = baseName(name);
 	const dot = base.lastIndexOf('.');
 	return dot > 0 ? base.slice(dot).toLowerCase() : '';
 }
 
-/**
- * Check a subfolder (relative to the type's folder). '' when it is fine, else why not.
- *
- * @param {string} text
- */
 export function validateSubdir(text) {
 	const value = typeof text === 'string' ? text.trim() : '';
 	if (!value) return '';
@@ -46,17 +34,10 @@ export function validateSubdir(text) {
 	return '';
 }
 
-/** The subfolder as sent: trimmed, without trailing slashes. */
 export function cleanSubdir(text) {
 	return (typeof text === 'string' ? text.trim() : '').replace(/\/+$/, '');
 }
 
-/**
- * Check a file name typed in the dialog against the source file's name. '' when fine.
- *
- * @param {string} text
- * @param {string} original  The source file name (may hold folders).
- */
 export function validateFilename(text, original) {
 	const value = typeof text === 'string' ? text.trim() : '';
 	if (!value || value === '.' || value === '..') return 'Enter a file name';
@@ -69,12 +50,10 @@ export function validateFilename(text, original) {
 	return '';
 }
 
-/** Whether the user changed the file name (it is only sent then). */
 export function filenameEdited(text, original) {
 	return (typeof text === 'string' ? text.trim() : '') !== baseName(original);
 }
 
-/** Why the file is too large for the user to download (or to ask for, `purpose: 'request'`), or ''. */
 export function sizeProblem(me, sizeBytes, { purpose = 'download' } = {}) {
 	if (!exceedsSizeLimit(me, sizeBytes, { purpose })) return '';
 	const limitGb = sizeLimitBytes(me, { purpose }) / 1024 ** 3;
@@ -83,11 +62,6 @@ export function sizeProblem(me, sizeBytes, { purpose = 'download' } = {}) {
 		: `This file is ${formatBytes(sizeBytes)}: your permissions allow files of at most ${limitGb} GB`;
 }
 
-/**
- * The form's starting values.
- *
- * @returns {{ modelType: string, subdir: string, filename: string, destination: string, group: string }}
- */
 export function initialForm(me, detail, file) {
 	return {
 		modelType: allowedTypes(me, detail?.mb_type).selected,
@@ -98,10 +72,6 @@ export function initialForm(me, detail, file) {
 	};
 }
 
-/**
- * What stops the form from being sent, per field ('' when nothing): the model type, the
- * subfolder, the file name and the size.
- */
 export function formProblems(form, { me, detail, file }) {
 	const { types } = allowedTypes(me, detail?.mb_type);
 	let modelType = '';
@@ -115,15 +85,10 @@ export function formProblems(form, { me, detail, file }) {
 	};
 }
 
-/** Whether `formProblems` found nothing. */
 export function canSubmit(problems) {
 	return Object.values(problems).every((problem) => !problem);
 }
 
-/**
- * The body of `POST /downloads`: the ids, and only what the user chose (the file name only when
- * edited, no empty field).
- */
 export function buildDownloadBody({ detail, version, file, form }) {
 	const body = {
 		source: detail.source,
@@ -140,12 +105,6 @@ export function buildDownloadBody({ detail, version, file, form }) {
 	return body;
 }
 
-/**
- * Warnings shown before confirming: early access, a login the source needs, a licence that
- * restricts use.
- *
- * @returns {{ tone: 'warning' | 'info', title: string, text: string }[]}
- */
 export function downloadWarnings({ detail, version, file }) {
 	const warnings = [];
 	if (version?.early_access) {
@@ -169,12 +128,6 @@ export function downloadWarnings({ detail, version, file }) {
 	return warnings;
 }
 
-/**
- * The licence flags as short lines ('Commercial use: Image, Rent', 'Credit required', ...).
- *
- * @param {any} license  `{summary, commercial_use, no_credit, derivatives, different_license, url}` or null.
- * @returns {string[]}
- */
 export function licenseFlags(license) {
 	if (!license || typeof license !== 'object') return [];
 	const flags = [];

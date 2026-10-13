@@ -1,5 +1,3 @@
-"""`backend.api`: the real router in a bare FastAPI app, the auth dependency overridden."""
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

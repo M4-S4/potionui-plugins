@@ -1,7 +1,4 @@
 <script>
-	// A status pill with the classes of the host `Badge` (size sm), drawn locally because cards and
-	// table rows show several: one host component per pill would be heavy. `tone` picks the
-	// semantic colour; the class strings are written out whole so the app's Tailwind build has them.
 	let { tone = 'neutral', title = undefined, class: className = '', children } = $props();
 
 	const TONES = {

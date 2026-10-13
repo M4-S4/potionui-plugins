@@ -1,9 +1,4 @@
 <script>
-	// The user's downloads: a toolbar button with the number of unfinished ones, and a panel at the
-	// bottom right listing `GET /downloads?all=false` (status, progress, size and speed, error). It
-	// polls every 5 s while a row is unfinished and stops otherwise; a row that reaches `enriched`
-	// or `failed` during the session gets a toast. The page calls `noteStarted(pending)` after a
-	// download is queued, which also polls again at once.
 	import { onMount } from 'svelte';
 	import Icon from './Icon.svelte';
 	import Pill from './Pill.svelte';
@@ -51,7 +46,6 @@
 		};
 	});
 
-	/** Ask for the rows now (and keep polling while one is unfinished). */
 	export async function refresh() {
 		clearTimeout(timer);
 		timer = null;
@@ -80,16 +74,13 @@
 			error = result.error;
 		}
 		if (again) {
-			// Asked again while this poll was running (a download was just queued): at once.
 			again = false;
 			timer = setTimeout(refresh, 0);
 		} else if (shouldPoll(rows)) {
-			// Keep following unfinished rows; after a failed poll, a little more slowly.
 			timer = setTimeout(refresh, result.ok ? POLL_INTERVAL_MS : POLL_INTERVAL_MS * 2);
 		}
 	}
 
-	/** A download was just queued (the `pending` row of `POST /downloads`): follow it. */
 	export function noteStarted(pending) {
 		seen = noteRowStarted(seen, pending);
 		refresh();
@@ -106,7 +97,6 @@
 	}
 </script>
 
-<!-- The app's `.input` is full width: the wrapper sizes it, as LibraryFilterBar does. -->
 <div class="relative flex-shrink-0">
 	<button
 		bind:this={button}

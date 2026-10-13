@@ -1,7 +1,3 @@
-"""`backend.sources.civitai`: normalisation of recorded answers, the search syntax, and the
-request flow (cursors, `ids` chunks, refetches, removed models) through the fake transport.
-"""
-
 import json
 import re
 
@@ -32,9 +28,6 @@ def _settings(monkeypatch):
 
 def _items(name, max_level=2):
     return {raw["id"]: normalize_item(raw, max_level) for raw in body(name)["items"]}
-
-
-# Normalisation of a search page ------------------------------------------------------
 
 
 def test_lora_page_items_are_normalised():
@@ -68,7 +61,6 @@ def test_lora_page_items_are_normalised():
 
 
 def test_the_bitmask_makes_a_model_nsfw_despite_its_flag():
-    # 264290 is `nsfw: false` with nsfwLevel 23 (PG | PG-13 | R | XXX), 58390 is 3 (PG | PG-13).
     items = _items("models_lora_page1")
 
     assert items[264290].nsfw is True
@@ -82,10 +74,10 @@ def test_flux_items_at_level_29_and_31_are_nsfw_at_pg13():
     page2 = _items("models_lora_page2", max_level=2)
 
     assert body("models_flux_nsfwlevel")["items"][0]["nsfw"] is False
-    assert flux[667086].nsfw is True  # nsfwLevel 29
-    assert page2[200255].nsfw is True  # nsfwLevel 31
-    assert flux[796382].nsfw is True  # nsfwLevel 7: R is above PG-13
-    assert page2[82098].nsfw is False  # nsfwLevel 3
+    assert flux[667086].nsfw is True
+    assert page2[200255].nsfw is True
+    assert flux[796382].nsfw is True
+    assert page2[82098].nsfw is False
 
 
 @pytest.mark.parametrize(
@@ -101,7 +93,6 @@ def test_which_models_flip_with_the_safe_level(max_level, expected):
     items = {**_items("models_flux_nsfwlevel", max_level), **_items("models_lora_page2", max_level)}
 
     assert {model_id: items[model_id].nsfw for model_id in expected} == expected
-    # The XXX bit (16) of 29 and 31 stays above X (8): those two never flip.
 
 
 def test_thumbnails_are_safe_images():
@@ -153,14 +144,10 @@ def test_videos_and_poi_are_marked():
     normalised = normalize_item(raw, 2)
 
     assert normalised.poi is True
-    assert normalised.thumbnail.id == "692332"  # stills without a real person first
-
-
-# The hash of the listed file ------------------------------------------------------------
+    assert normalised.thumbnail.id == "692332"
 
 
 def _file(file_id, sha256, primary=False):
-    """A raw CivitAI file; `sha256=None` has no `hashes` entry for it."""
     return {
         "id": file_id,
         "name": f"file-{file_id}.safetensors",
@@ -173,10 +160,9 @@ def _file(file_id, sha256, primary=False):
 def test_primary_sha256_is_the_lower_cased_hash_of_the_first_versions_primary_file():
     items = _items("models_lora_page1")
 
-    # The recorded hashes are upper case. 264290 lists its newest version (the first), not the older one.
     assert items[264290].primary_sha256 == "df7c757437ef3696e76ee5cc18c063681478639132547b6292b0b4d773814ba5"
     assert items[58390].primary_sha256 == "47aaaf0d2945ca937151d61304946dd229b3f072140b85484bc93e38f2a6e2f7"
-    assert items[264290].installed is None  # set per request by the search route, never by a source
+    assert items[264290].installed is None
 
 
 @pytest.mark.parametrize(
@@ -200,7 +186,7 @@ def test_the_primary_file_is_preferred_to_a_file_listed_before_it():
 def test_without_a_usable_primary_hash_the_first_file_with_one_is_used():
     raw = item("models_lora_page1", 58390)
     files = raw["modelVersions"][0]["files"]
-    files[0]["hashes"]["SHA256"] = "not-a-hash"  # the primary file's hash is unusable
+    files[0]["hashes"]["SHA256"] = "not-a-hash"
     files.extend([_file(2, None), _file(3, "AB" * 32), _file(4, "cd" * 32)])
 
     assert normalize_item(raw, 2).primary_sha256 == "ab" * 32
@@ -218,7 +204,7 @@ def test_without_a_primary_file_the_first_file_with_a_hash_is_used():
 def test_only_the_listed_first_version_is_read():
     raw = item("models_lora_page1", 264290)
     for file in raw["modelVersions"][0]["files"]:
-        file.pop("hashes")  # the listed version has no hash, its older version has one
+        file.pop("hashes")
 
     assert raw["modelVersions"][1]["files"][0]["hashes"]["SHA256"]
     assert normalize_item(raw, 2).primary_sha256 is None
@@ -280,9 +266,6 @@ def test_an_item_without_versions_has_no_primary_sha256(versions):
     assert normalize_item(raw, 2).primary_sha256 is None
 
 
-# Normalisation of a detail -------------------------------------------------------------
-
-
 def test_detail_is_normalised():
     detail = normalize_detail(body("model_122359"), 4)
 
@@ -294,7 +277,6 @@ def test_detail_is_normalised():
     assert detail.source_url == "https://civitai.com/models/122359"
     assert detail.stats.downloads == 457351
     assert [version.id for version in detail.versions] == ["135867", "133241"]
-    # CivitAI answers every version whole: none is partial.
     assert [version.partial for version in detail.versions] == [False, False]
 
     latest = detail.versions[0]
@@ -317,7 +299,6 @@ def test_detail_is_normalised():
 
 
 def test_detail_nsfw_at_pg13_follows_the_bitmask_of_the_model_and_each_version():
-    # 122359 is nsfwLevel 5 (PG | R); its v0.3 is 5 too, its v1.0 is 1.
     detail = normalize_detail(body("model_122359"), 2)
 
     assert detail.nsfw is True
@@ -345,7 +326,7 @@ def test_the_description_is_sanitised():
 
 
 def test_a_model_without_creator_or_description_still_normalises():
-    raw = body("error_404_model")  # GET /models/1: a real checkpoint without a `creator`
+    raw = body("error_404_model")
 
     detail = normalize_detail(raw, 2)
 
@@ -365,9 +346,6 @@ def test_files_without_a_download_url_are_left_out_and_bad_hashes_dropped():
 
     assert [file.id for file in version.files] == ["99264"]
     assert version.files[0].sha256 is None
-
-
-# Licence ---------------------------------------------------------------------------------
 
 
 def test_license_from_the_four_flags():
@@ -412,9 +390,6 @@ def test_license_edge_cases():
     assert license_summary(["Custom"], True, True, None) == "No credit required; Commercial use: Custom; Merges allowed"
 
 
-# Early access ---------------------------------------------------------------------------
-
-
 def test_early_access_from_availability_and_paid_access():
     raw = item("models_lora_page1", 58390)
     assert normalize_item(raw, 2).early_access is False
@@ -448,9 +423,6 @@ def test_only_the_latest_version_decides_the_item_badge():
 
     assert normalize_item(raw, 2).early_access is False
     assert [version.early_access for version in normalize_detail(raw, 2).versions] == [False, True]
-
-
-# Search syntax ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -510,9 +482,6 @@ def test_type_labels():
         "Checkpoint",
         "Motion module",
     ]
-
-
-# Requests -------------------------------------------------------------------------------
 
 
 def _source(transport=None, cache=None):
@@ -649,9 +618,6 @@ async def test_upstream_errors_propagate():
         await source.search(SearchQuery(), max_level=2)
 
 
-# ids ----------------------------------------------------------------------------------------
-
-
 async def test_ids_are_sent_in_chunks_of_100_with_our_own_cursor():
     ids = list(range(1, 251))
     transport = FakeTransport()
@@ -678,7 +644,6 @@ async def test_ids_are_sent_in_chunks_of_100_with_our_own_cursor():
         assert call["period"] == "AllTime"
         assert call["sort"] == "Newest"
         assert "types" not in call and "baseModels" not in call and "query" not in call
-    # Each chunk came back empty: at most 10 of its ids were asked for one by one.
     singles = [path for path, _ in transport.calls if path.startswith("/models/")]
     assert len(singles) == 30
 
@@ -731,10 +696,7 @@ async def test_a_refetch_outage_keeps_the_list_as_it_is():
     page = await source.search(SearchQuery(), max_level=2)
 
     assert [normalised.id for normalised in page.items] == ["122359"]
-    assert page.items[0].nsfw is True  # no image at all: nothing proves it safe
-
-
-# Removed and unreadable models ---------------------------------------------------------------
+    assert page.items[0].nsfw is True
 
 
 async def test_archived_and_taken_down_models_are_dropped():
@@ -787,9 +749,6 @@ async def test_an_unexpected_answer_is_unavailable():
     assert [path for path, _ in transport.calls if path != "/enums"] == ["/models", "/models"]
 
 
-# Detail ------------------------------------------------------------------------------------
-
-
 async def test_detail_fetches_the_model():
     source, transport = _source(FakeTransport().add("/models/122359", "model_122359"))
 
@@ -827,9 +786,6 @@ async def test_detail_of_a_removed_model_is_not_found(mode):
         await source.detail("122359", max_level=2)
 
 
-# Filters ------------------------------------------------------------------------------------
-
-
 async def test_info_lists_the_enums_and_caches_them_for_a_day():
     cache = MemoryCache()
     source, transport = _source(cache=cache)
@@ -863,9 +819,6 @@ async def test_info_without_civitai_still_lists_the_source():
     assert info.sorts
 
 
-# Registry ------------------------------------------------------------------------------------
-
-
 def test_the_registry_has_civarchive_only_while_its_setting_is_on(_settings):
     assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb"]
     assert get_source("civitai") is get_source("civitai")
@@ -882,9 +835,6 @@ def test_the_registry_has_civarchive_only_while_its_setting_is_on(_settings):
         get_source("nope")
 
 
-# civitai.red -----------------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "url, expected",
     [
@@ -892,7 +842,6 @@ def test_the_registry_has_civarchive_only_while_its_setting_is_on(_settings):
          "https://civitai.com/api/download/models/135867?type=Model&format=SafeTensor"),
         ("https://www.civitai.red/api/download/models/1", "https://civitai.com/api/download/models/1"),
         ("https://CIVITAI.RED/api/download/models/1", "https://civitai.com/api/download/models/1"),
-        # Anything else is left alone (the allowlist refuses what it must).
         ("https://civitai.com/api/download/models/1", "https://civitai.com/api/download/models/1"),
         ("https://civitai.red:8443/api/download/models/1", "https://civitai.red:8443/api/download/models/1"),
         ("https://user@civitai.red/api/download/models/1", "https://user@civitai.red/api/download/models/1"),
@@ -907,7 +856,6 @@ def test_civitai_red_download_urls_move_to_civitai_com(url, expected):
 
 
 async def test_a_red_api_base_still_gives_downloads_the_allowlist_and_the_provider_accept(_settings):
-    """`civitai_api_base` = https://civitai.red/api/v1: the same answers, download URLs on civitai.red."""
     from backend.http import SourceHttp
     from backend.security import is_allowed_download_url
 

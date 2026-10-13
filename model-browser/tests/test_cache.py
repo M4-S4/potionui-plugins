@@ -1,9 +1,3 @@
-"""`backend.cache.Cache` on a scratch database, with a frozen clock.
-
-The cache holds raw answers only: the last test shows one entry serving two users whose
-NSFW contexts differ, each getting their own filtered view, the entry left untouched.
-"""
-
 import json
 
 import pytest
@@ -15,7 +9,7 @@ from backend.tables import create_tables
 
 from .civitai_fakes import FakeTransport, body, context, fake_settings, image_urls, make_source
 
-T0 = 1_791_720_000.0  # 2026-10-11 12:00:00 UTC
+T0 = 1_791_720_000.0
 
 
 class Clock:
@@ -47,9 +41,6 @@ def _rows(db):
 REQUEST = {"url": "https://civitai.com/api/v1/models", "params": [["limit", "44"], ["nsfw", "true"]]}
 
 
-# Keys -------------------------------------------------------------------------------
-
-
 def test_the_key_is_the_md5_of_the_source_and_the_canonical_request():
     import hashlib
 
@@ -67,9 +58,6 @@ def test_key_order_does_not_matter_but_every_parameter_does():
     assert cache_key("civitai", reordered) == cache_key("civitai", REQUEST)
     assert cache_key("civitai", safe) != cache_key("civitai", REQUEST)
     assert cache_key("huggingface", REQUEST) != cache_key("civitai", REQUEST)
-
-
-# Hit, miss, expiry ---------------------------------------------------------------------
 
 
 def test_miss_then_hit(db, clock):
@@ -141,9 +129,6 @@ def test_clear(db, clock):
     assert _rows(db) == []
 
 
-# Purge -----------------------------------------------------------------------------------
-
-
 def _request(n):
     return {"url": "https://civitai.com/api/v1/models", "params": [["cursor", str(n)]]}
 
@@ -187,10 +172,10 @@ def test_writes_purge_lazily_on_the_first_write_then_every_n(db, clock):
 
 def test_a_lazy_purge_removes_expired_rows_while_writing(db, clock):
     cache = Cache(clock=clock, purge_every=2)
-    cache.set("civitai", _request(1), "a")  # write 1: purge (nothing to do)
+    cache.set("civitai", _request(1), "a")
     clock.now = T0 + 700
-    cache.set("civitai", _request(2), "b")  # write 2: no purge
-    cache.set("civitai", _request(3), "c")  # write 3: purge drops "a"
+    cache.set("civitai", _request(2), "b")
+    cache.set("civitai", _request(3), "c")
 
     assert [json.loads(row["payload"]) for row in _rows(db)] == ["b", "c"]
 
@@ -207,13 +192,10 @@ def test_a_failing_purge_does_not_fail_the_write(db, clock):
     assert cache.get("civitai", REQUEST) == {"ok": True}
 
 
-# One raw entry, two users ---------------------------------------------------------------
-
-
 async def test_one_raw_entry_serves_two_users_without_leaks(db, clock):
     raw = body("models_flux_nsfwlevel")
     nsfw_image = raw["items"][0]["modelVersions"][0]["images"][0]
-    nsfw_image["nsfwLevel"] = 16  # the only image of "NSFW MASTER" is now XXX
+    nsfw_image["nsfwLevel"] = 16
     transport = FakeTransport().add("/models", (200, {}, raw))
     source = make_source(transport, cache=Cache(clock=clock))
     query = SearchQuery(limit=2, safe=False)
@@ -228,7 +210,7 @@ async def test_one_raw_entry_serves_two_users_without_leaks(db, clock):
     assert blurred.items[0].thumbnail.url is None
     assert blurred.items[0].thumbnail.blurhash == nsfw_image["hash"]
     assert nsfw_image["url"] not in image_urls(blurred.model_dump())
-    assert blurred.items[1].thumbnail.url is not None  # a safe image keeps its url in blur mode
+    assert blurred.items[1].thumbnail.url is not None
 
 
 async def test_blocked_and_hiding_users_share_the_safe_entry(db, clock):

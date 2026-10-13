@@ -1,19 +1,5 @@
 <script>
-	// The "Permissions" tab of Admin -> Plugins -> Model Browser (`admin_tabs[]` in manifest.yml),
-	// built standalone to frontend/dist/PermissionsTab.js. The host mounts it with `{ pluginId,
-	// plugin }`; only `pluginId` is needed.
-	//
-	// An admin tab gets no `api` object (that is for plugin pages), so lib/permissions.js talks to
-	// GET/PUT /api/plugins/<pluginId>/permissions with `fetch`: the token is read from
-	// localStorage ('auth_token') and goes in an `Authorization: Bearer` header, never in the
-	// markup or the URL. Both routes are admin-only (PLAN.md section 4.3).
-	//
-	// Minimal screen: one card per user group (its four rights, and its parameters while Download or
-	// Request is on: they bound its downloads and its requests), saved in one PUT that replaces the
-	// whole table. All the logic that can be tested without a browser lives in lib/permissions.js.
 	import { onMount } from 'svelte';
-	// Host wrapper from the PotionUI plugin SDK: resolves only when the plugin sits at
-	// content/plugins/<tree>/model-browser (scripts/build-plugins.ps1 mirrors it there).
 	import HostUi from '../../../../sdk/HostUi.svelte';
 	import {
 		cloneState,
@@ -47,17 +33,13 @@
 		{ id: 'group', label: "One of the user's groups" }
 	];
 
-	/** 'loading' | 'error' | 'ready' */
 	let phase = $state('loading');
 	let loadError = $state('');
-	/** What the server holds (the last GET or PUT answer); replaced as a whole, never edited. */
 	let initial = $state.raw(null);
-	/** The copy the admin edits. */
 	let form = $state(null);
 	let saving = $state(false);
 	let saveError = $state('');
 
-	// Bumped by every load and when the tab goes away, so a late answer is dropped.
 	let latestLoad = 0;
 
 	const groups = $derived(form?.groups ?? []);
@@ -87,7 +69,6 @@
 		phase = 'ready';
 	}
 
-	/** Make an API answer both the saved state and the state being edited. */
 	function accept(data) {
 		initial = toFormState(data);
 		form = toFormState(data);

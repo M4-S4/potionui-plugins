@@ -1,11 +1,3 @@
-"""`GET /me` and `GET/PUT /permissions` through the plugin's real router.
-
-The sign-in dependency is overridden with fake users; `get_current_admin_user` keeps its
-real check on top of it, so the core's own dependency refuses a non-admin. The core's
-groups are faked on `core_bridge`, the NSFW context on `nsfw.resolve_nsfw`, and the
-plugin's rows live in a scratch database.
-"""
-
 from types import SimpleNamespace
 
 import pytest
@@ -94,7 +86,6 @@ ARTIST = _user("artist-1")
 
 @pytest.fixture
 def core(monkeypatch):
-    """The core as the routes see it through core_bridge and nsfw; returns what the fakes recorded."""
     nsfw_users = []
 
     def user_groups(user_id):
@@ -127,9 +118,6 @@ def client(app):
 
 def _sign_in(app, user):
     app.dependency_overrides[get_current_active_user] = lambda: user
-
-
-# GET /me ----------------------------------------------------------------------------
 
 
 def test_me_for_an_admin(app, client, core):
@@ -171,7 +159,6 @@ def test_me_for_a_user_with_the_default_rights(app, client, core):
         "data": {
             "user": {"id": "user-1", "username": "user-1-name", "is_admin": False},
             "capabilities": ["browse", "request"],
-            # No group grants `download`: nothing may be downloaded directly.
             "params": {
                 "sources": [],
                 "model_types": [],
@@ -180,7 +167,6 @@ def test_me_for_a_user_with_the_default_rights(app, client, core):
                 "allow_remote": False,
                 "unrestricted": False,
             },
-            # `all_users` grants `request`: its default parameters bind what the user requests.
             "request_params": {
                 "sources": ["civitai", "huggingface", "openmodeldb"],
                 "model_types": [],
@@ -278,8 +264,7 @@ def test_me_follows_what_the_admin_saved(app, client):
 
     data = client.get(ME_URL).json()["data"]
 
-    assert data["capabilities"] == ["browse", "download", "request"]  # `request` from all_users' default
-    # Downloads: the artists' parameters only (the only group granting `download`).
+    assert data["capabilities"] == ["browse", "download", "request"]
     assert data["params"] == {
         "sources": ["civitai"],
         "model_types": ["lora"],
@@ -288,7 +273,6 @@ def test_me_follows_what_the_admin_saved(app, client):
         "allow_remote": False,
         "unrestricted": False,
     }
-    # Requests: all_users' default parameters (the only group granting `request`).
     assert data["request_params"] == {
         "sources": ["civitai", "huggingface", "openmodeldb"],
         "model_types": [],
@@ -344,7 +328,6 @@ def test_me_counts_the_open_requests_for_an_approver_only(app, client):
     assert client.get(ME_URL).json()["data"]["requests"] == {"open_count": 2}
     _sign_in(app, USER)
     assert client.get(ME_URL).json()["data"]["requests"] == {"open_count": 0}
-    # An `approve` holder who is not an admin does not decide on their own request.
     save_rows([Row(group_id="artists", capabilities=frozenset({"browse", "approve"}))])
     _sign_in(app, ARTIST)
     assert client.get(ME_URL).json()["data"]["requests"] == {"open_count": 1}
@@ -389,9 +372,6 @@ def test_me_needs_a_signed_in_user(client):
     assert client.get(ME_URL).status_code == 401
 
 
-# GET /permissions -------------------------------------------------------------------
-
-
 def test_get_permissions_lists_every_core_group_with_its_default(app, client):
     _sign_in(app, ADMIN)
 
@@ -428,8 +408,6 @@ def test_get_permissions_shows_stored_rows_and_deletes_those_of_deleted_groups(a
     assert set(load_rows()) == {"artists"}
 
 
-# PUT /permissions -------------------------------------------------------------------
-
 _ARTISTS_UPDATE = {
     "group_id": "artists",
     "capabilities": ["download", "browse", "request"],
@@ -454,8 +432,8 @@ def test_put_permissions_round_trip(app, client):
     assert put.status_code == 200
     assert put.json()["success"] is True
     assert put.json()["data"]["groups"] == [
-        _DEFAULT_GROUPS[0],  # left out: its default
-        {**_DEFAULT_GROUPS[1], "capabilities": ["browse"]},  # params left out: the defaults
+        _DEFAULT_GROUPS[0],
+        {**_DEFAULT_GROUPS[1], "capabilities": ["browse"]},
         {
             "group_id": "artists",
             "name": "Artists",
@@ -606,16 +584,12 @@ def test_put_refuses_an_invalid_body_with_the_envelope(app, client, body, hint):
 def test_put_refuses_an_infinite_size(app, client):
     _sign_in(app, ADMIN)
 
-    # Python's json module, which reads the body, accepts this non-standard literal.
     body = '{"groups": [{"group_id": "artists", "capabilities": ["download"], "params": {"max_file_gb": Infinity}}]}'
 
     response = client.put(PERMISSIONS_URL, content=body, headers={"Content-Type": "application/json"})
 
     assert response.status_code == 400
     assert "finite" in response.json()["detail"]["message"]
-
-
-# Access -----------------------------------------------------------------------------
 
 
 def test_permissions_refuse_a_non_admin_and_change_nothing(app, client):

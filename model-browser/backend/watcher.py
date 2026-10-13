@@ -1,76 +1,3 @@
-"""Following the plugin's downloads to an assigned, enriched model (PLAN.md §3, §7.4).
-
-Each file the plugin downloads has a row in `model_browser_pending` (`backend/pending.py`),
-moved on step by step:
-
-- `queued`: the core download. Normally the `download.after_complete` hook ends this step
-  (`hooks/download_hooks.py`): the core fires it once the file has landed and been indexed,
-  and the handler records the model (`record_indexed`), then hands the rest over to the
-  application loop (`schedule_step`, `carry_on`). Otherwise the sweep (below) follows the
-  core download (`core_bridge.get_download`): `pending`, `downloading`, `paused`: wait.
-  `failed`, `cancelled`, or the record gone (unless the file is indexed already): `failed`.
-  `completed`: find the indexed model (below), then `indexed`. A row that never got a
-  download id (the server stopped while queuing it) fails after `UNQUEUED_GRACE_PASSES`
-  passes.
-- `indexed`: assign per `assign_to`: `user:<id>` to that user, `group:<id>` to the group,
-  `none` to nobody (an admin's download, every admin sees every model). A group is assigned
-  through the core's group operation, in the name of an admin (`permissions.acting_admin`:
-  the requester, else the approver of the request the row comes from, else the admin who
-  last saved the group's permissions); without one, or when the group is gone, the model
-  is assigned to the requester instead, with a note. Then `assigned`; a refusal from the
-  core is `failed`. The other approved requests for the same file
-  (`requests.list_approved_for_sha256`: users who asked for it while it was on its way for
-  someone else) are assigned at the same step, each to its own `assign_to`, the same way.
-- `assigned`: enrich: the `model-browser` provider fetch (`provider/pending_provider.py`,
-  which answers from this row: description, trigger words, tags, safe previews, the source
-  page as the model's mirror), then the `mb_base_model` / `mb_license` attributes from the
-  row's `info`. Then `enriched`: a step that failed is noted in `error`, the row still ends
-  `enriched` (the model is downloaded and visible). The core's own `civitai` provider is
-  never asked: it hands every image of the version to the core as previews, NSFW ones
-  included, and previews are shown to everyone the model is assigned to.
-When a row ends, its requester is notified (`model-browser.download_done` or
-`model-browser.download_failed`), and the approved requests linked to it (its own
-`request_id`, and every approved request with its `sha256`) are closed: `done` (a requester
-approved after the assignment step is assigned then), or `failed`; each of their requesters
-is notified too, once. A failed row refunds its quota events (`limits.refund(limit_ref_id)`),
-whatever the cause: the user got no model.
-
-The hook handler, the steps it schedules and the sweep may reach the same row at once: each
-status change is made only from the status it moves on from (`pending.update(...,
-only_from=...)`). A step that finds the row moved on stops there, and only the step that
-ended a row notifies, refunds and closes its requests.
-
-The sweep (`Watcher`) is the plugin's background task on PotionUI's event loop: every
-`POLL_INTERVAL_SECONDS` it goes over the unfinished rows and moves each on as far as it can
-go. It covers what the hook does not: failed and cancelled downloads (the core fires no hook
-for them), records that vanished, downloads sent to a remote backend (the hook carries no
-model id for them), completions missed while the plugin was disabled or whose handler did
-not finish, rows a restart left `indexed` or `assigned`, rows that never got a download id.
-
-Finding the model once the download is `completed`, in the sweep: the worker marks a
-download completed *before* indexing it, so the lookup is retried on each pass:
-- a row keyed by SHA256 looks the hash up (`find_model_by_sha256`); a file identical to a
-  model already indexed (`duplicate_of`) is found the same way. After
-  `PATH_FALLBACK_AFTER` lookups, the download's `destination_path` is tried as well
-  (`find_model_by_path`), for a file whose content did not match the expected hash;
-- a `nohash:` row looks the path up, and moves to the model's real hash (`pending.rekey`)
-  once found. After `HASH_FALLBACK_AFTER` lookups, the downloaded file (local
-  destinations only) is hashed once, and the hash looked up: this finds the model when
-  the file was the duplicate of one already indexed, which the indexer leaves unindexed.
-A model found by path only counts when it was indexed after the row was written: for an
-unknown path, the core answers the one model with the same file name, which may be
-another file. After `MAX_INDEX_LOOKUPS` lookups (about 30 minutes) the row fails.
-
-The first pass after a start is the reconciliation (PLAN.md §7.4 step 8): rows left
-unfinished by a restart are simply taken up where they were, and approved requests whose
-row ended while the server was stopping are closed. One row's error never stops the pass:
-it is logged and retried on the next pass, and a row that fails `MAX_ROW_ERRORS` passes in
-a row is given up (`failed`).
-
-`plugin.lifecycle.ready` starts the sweep with `run_on_app_loop(watcher.run())`;
-`plugin.lifecycle.disable` stops it.
-"""
-
 import asyncio
 import concurrent.futures
 import hashlib
@@ -87,40 +14,26 @@ from .requests import Request
 
 logger = logging.getLogger("plugins.model-browser")
 
-#: Seconds between two passes of the sweep over the plugin's pending downloads.
 POLL_INTERVAL_SECONDS = 60
-#: Lookups by hash, after `completed`, before the download's path is tried as well (the
-#: second lookup, a pass after the first: ~1 min).
 PATH_FALLBACK_AFTER = 2
-#: Lookups by path of a `nohash:` row before the downloaded file is hashed (~5 min: the
-#: indexer, which hashes it too, has normally indexed a new file by then).
 HASH_FALLBACK_AFTER = 6
-#: Lookups after which a completed download that never showed up in the index fails (~30 min).
 MAX_INDEX_LOOKUPS = 30
-#: Passes a `queued` row may spend without a download id (being queued) before it fails (~5 min).
 UNQUEUED_GRACE_PASSES = 5
-#: Passes in a row one row may raise on before it is given up (~10 min).
 MAX_ROW_ERRORS = 10
-#: Longest `error` stored on a row.
 MAX_ERROR_LENGTH = 2000
 
-#: Core download statuses that mean "not finished yet".
 WAITING_STATUSES = frozenset({"pending", "downloading", "paused"})
-#: Row statuses `finish` takes a row on from: its model is known.
 FINISHING_STATUSES = ("indexed", "assigned")
 
-#: The plugin's own provider (`provider/pending_provider.py`), which answers from the pending rows.
 PENDING_PROVIDER_ID = PLUGIN_ID
 NOTIFY_DOWNLOAD_DONE = notifications.DOWNLOAD_DONE
 NOTIFY_DOWNLOAD_FAILED = notifications.DOWNLOAD_FAILED
-#: Why a requester whose request was linked to a finished download did not get its model.
 NOT_ASSIGNED_TO_REQUESTER = "The model was downloaded but could not be made visible to you"
 
 _HASH_CHUNK_BYTES = 8 * 1024 * 1024
 
 
 def model_attributes(info: Mapping[str, Any]) -> Dict[str, str]:
-    """The `mb_base_model` and `mb_license` attribute values a row's `info` gives, empty ones left out."""
     model = info.get("model") if isinstance(info.get("model"), Mapping) else {}
     versions = [version for version in model.get("versions") or [] if isinstance(version, Mapping)]
     version = next((version for version in versions if str(version.get("id")) == str(info.get("version_id"))), None)
@@ -132,7 +45,6 @@ def model_attributes(info: Mapping[str, Any]) -> Dict[str, str]:
 
 
 def _timestamp(value: Any) -> Optional[datetime]:
-    """A stored timestamp as an aware UTC datetime (SQLite's `CURRENT_TIMESTAMP` text, or the core's ISO strings)."""
     if not value:
         return None
     if isinstance(value, datetime):
@@ -146,13 +58,11 @@ def _timestamp(value: Any) -> Optional[datetime]:
 
 
 def indexed_since(model: Mapping[str, Any], row: PendingRow) -> bool:
-    """Whether `model` was first indexed after `row` was written: a model found by path is ours only then."""
     created, written = _timestamp(model.get("created_at")), _timestamp(row.created_at)
     return created is not None and written is not None and created >= written
 
 
 def sha256_of_file(path: str) -> Optional[str]:
-    """The SHA256 of a local file, or None when it cannot be read."""
     digest = hashlib.sha256()
     try:
         with open(path, "rb") as handle:
@@ -172,7 +82,6 @@ def _label(row: PendingRow) -> str:
 
 
 def _where(assign_to: str) -> str:
-    """Where a finished download put the model, for the notification of a user it was assigned to as `assign_to`."""
     if assign_to.startswith("group:"):
         return "it is now available to your group"
     if assign_to == "none":
@@ -181,7 +90,6 @@ def _where(assign_to: str) -> str:
 
 
 def _metadata(row: PendingRow) -> Dict[str, Any]:
-    """What a download notification carries."""
     return {
         "source": row.source,
         "source_model_id": row.source_model_id,
@@ -192,17 +100,7 @@ def _metadata(row: PendingRow) -> Dict[str, Any]:
     }
 
 
-# Handing a row over to the application loop ---------------------------------------------
-
-
 def schedule_step(step: Coroutine[Any, Any, Any], key: str) -> bool:
-    """Run `step`, a step of the row `key` (`carry_on(key)`, `fail(...)`), on the application
-    loop without waiting for it: how the `download.after_complete` handler and a file found
-    installed hand a row over. An error in the step is logged and left to the sweep.
-
-    Returns False, logged, when there is no loop to run it on (`run_on_app_loop` raises before
-    the application has started): the sweep takes the row up instead. Never raises.
-    """
     try:
         from src.plugin_api.hooks import run_on_app_loop
 
@@ -226,8 +124,6 @@ def _log_step_error(future: concurrent.futures.Future, key: str) -> None:
 
 
 async def carry_on(key: str) -> Optional[PendingRow]:
-    """Take the row `key`, read afresh, from `indexed` or `assigned` to its end (`finish`); a row
-    in another status is left as it is. Returns the row as stored (None when it is gone)."""
     row = await asyncio.to_thread(pending.get, key)
     if row is None or row.status not in FINISHING_STATUSES:
         return row
@@ -235,11 +131,6 @@ async def carry_on(key: str) -> Optional[PendingRow]:
 
 
 async def finish(row: PendingRow) -> Optional[PendingRow]:
-    """`indexed` -> `assigned` -> `enriched`, as far as `row` goes now. The requests the
-    assignment step assigns are carried on to the settlement at the end of this chain.
-
-    Returns the row as stored; None when it is gone or another step moved it on first.
-    """
     assigned: Dict[str, str] = {}
     if row.status == "indexed":
         row, assigned = await assign(row)
@@ -248,31 +139,18 @@ async def finish(row: PendingRow) -> Optional[PendingRow]:
     return row
 
 
-# queued -> indexed --------------------------------------------------------------------------
-
-
 def record_indexed(row: PendingRow, model: Mapping[str, Any]) -> Optional[PendingRow]:
-    """Record the model found for the `queued` row `row`: `indexed`, with the model's id, under
-    the model's real hash (`model["sha256"]`, when known) when the row had another key.
-
-    Synchronous: the hook handler calls it on its thread, the sweep through `asyncio.to_thread`.
-    Returns the row as stored: the row it merged into when one with that hash was written
-    meanwhile, None when it is gone or was no longer `queued` (another step recorded it first).
-    """
     key = row.sha256
     model_sha = str(model.get("sha256") or "").strip().lower()
     if model_sha and model_sha != key:
         if pending.get(model_sha) is None:
             moved = pending.rekey(key, model_sha)
-            # The requests linked to the old key follow the row (or the row it merged into).
             requests.relink(key, model_sha)
             if moved is None or moved.download_id != row.download_id:
                 logger.warning("[MODEL-BROWSER] %s merged into the row of %s meanwhile", key, model_sha)
                 return moved
             key = model_sha
         else:
-            # The same file is on its way under its hash too: that row describes it to the
-            # providers, this one keeps its own key and still gets its model assigned.
             logger.info("[MODEL-BROWSER] %s is the model of another row (%s); keeping its key", key, model_sha)
     updated = pending.update(key, only_from=("queued",), model_id=model.get("id"), status="indexed", error=None)
     if updated is None:
@@ -282,24 +160,14 @@ def record_indexed(row: PendingRow, model: Mapping[str, Any]) -> Optional[Pendin
     return updated
 
 
-# indexed -> assigned ------------------------------------------------------------------------
-
-
 async def assign(row: PendingRow) -> Tuple[Optional[PendingRow], Dict[str, str]]:
-    """`indexed` -> `assigned`: make the model visible per `assign_to`, then to the requesters of
-    the other approved requests linked to the row.
-
-    Returns the row as stored (None when it is gone or another step assigned it first) and the
-    requests assigned, as `{request id: where the model went}`. A refusal from the core fails
-    the row.
-    """
     if not row.model_id:
         return await fail(row, "No model to assign"), {}
     kind, _, target = row.assign_to.partition(":")
     assign_to, note = row.assign_to, None
     try:
         if row.assign_to == "none":
-            pass  # an admin's download: admins see every model
+            pass
         elif kind == "group" and target:
             admin = await asyncio.to_thread(_acting_admin, row, target)
             if admin is None:
@@ -334,17 +202,11 @@ async def assign(row: PendingRow) -> Tuple[Optional[PendingRow], Dict[str, str]]
 
 
 def _acting_admin(row: PendingRow, group_id: str) -> Optional[User]:
-    """The admin in whose name `row`'s model is assigned to `group_id`: `permissions.acting_admin`
-    of its requester and of the approver of the request it comes from, if any."""
     request = requests.get(row.request_id) if row.request_id else None
     return permissions.acting_admin(row.requested_by, request.decided_by if request is not None else None, group_id)
 
 
-# Requests linked to a row -------------------------------------------------------------------
-
-
 def _linked_requests(row: PendingRow) -> List[Request]:
-    """The approved requests waiting for `row`: its own (`request_id`) and every one linked by `sha256`."""
     linked = {request.id: request for request in requests.list_approved_for_sha256(row.sha256)}
     if row.request_id and row.request_id not in linked:
         own = requests.get(row.request_id)
@@ -354,8 +216,6 @@ def _linked_requests(row: PendingRow) -> List[Request]:
 
 
 async def _assign_requests(row: PendingRow) -> Dict[str, str]:
-    """Assign `row`'s model to the requesters of the other approved requests linked to it;
-    returns where it went for each, `{request id: assign_to}`, refusals left out. Never raises."""
     assigned: Dict[str, str] = {}
     try:
         linked = await asyncio.to_thread(_linked_requests, row)
@@ -372,19 +232,11 @@ async def _assign_requests(row: PendingRow) -> Dict[str, str]:
 
 
 async def _assign_request(row: PendingRow, request: Request) -> Optional[str]:
-    """Make `row`'s model visible as `request.assign_to` says (to its requester by default);
-    returns where it went (`user:<id>`, `group:<id>`, `none`), None when the core refused.
-    Never raises.
-
-    A group is assigned in the name of an admin (`permissions.acting_admin` of the requester
-    and the approver), through the core's group operation and its hooks; without one, or when
-    the group no longer exists, the model goes to the requester.
-    """
     target = request.assign_to or f"user:{request.user_id}"
     kind, _, target_id = target.partition(":")
     try:
         if target == "none":
-            return target  # an admin's request: admins see every model
+            return target
         if kind == "group" and target_id:
             admin = await asyncio.to_thread(permissions.acting_admin, request.user_id, request.decided_by, target_id)
             if admin is None:
@@ -417,10 +269,6 @@ async def _assign_request(row: PendingRow, request: Request) -> Optional[str]:
 
 
 async def settle_requests(row: PendingRow, *, done: bool, assigned: Optional[Mapping[str, str]] = None) -> None:
-    """Close the approved requests linked to `row`, which just ended: `done` with where the
-    model went (`assigned`: what the assignment step of this chain assigned; any other request
-    is assigned now), or `failed`. Each of their requesters is notified, but the row's own, who
-    already was. Never raises."""
     try:
         linked = await asyncio.to_thread(_linked_requests, row)
     except Exception:
@@ -445,7 +293,7 @@ async def settle_requests(row: PendingRow, *, done: bool, assigned: Optional[Map
             logger.warning("[MODEL-BROWSER] Could not close request %s", request.id, exc_info=True)
             continue
         if closed is None:
-            continue  # closed meanwhile
+            continue
         logger.info("[MODEL-BROWSER] Request %s %s", closed.id, status)
         if closed.user_id != row.requested_by:
             await _notify_requester(row, closed, served=target is not None)
@@ -461,16 +309,7 @@ async def _notify_requester(row: PendingRow, request: Request, *, served: bool) 
         await asyncio.to_thread(notifications.download_failed, request.user_id, _label(row), reason, metadata)
 
 
-# assigned -> enriched -----------------------------------------------------------------------
-
-
 async def enrich(row: PendingRow, assigned: Optional[Mapping[str, str]] = None) -> Optional[PendingRow]:
-    """`assigned` -> `enriched`: the provider fetch and the attributes, then the requester is
-    notified and the linked requests closed (`assigned`: see `settle_requests`).
-
-    Returns the row as stored; None, with nobody notified, when it is gone or another step
-    ended it first.
-    """
     notes: List[str] = [row.error] if row.error else []
     notes += await _fetch(PENDING_PROVIDER_ID, row.model_id)
     attributes = model_attributes(row.info)
@@ -493,7 +332,6 @@ async def enrich(row: PendingRow, assigned: Optional[Mapping[str, str]] = None) 
 
 
 async def _fetch(provider: str, model_id: Optional[str]) -> List[str]:
-    """One provider fetch for the model; the reasons it failed, if it did."""
     try:
         summary = await core_bridge.run_provider_fetch(provider, [model_id] if model_id else [])
     except Exception as exc:
@@ -511,16 +349,7 @@ async def _fetch(provider: str, model_id: Optional[str]) -> List[str]:
     return [f"{provider}: no information found"] if summary.get("failed") else []
 
 
-# Endings ------------------------------------------------------------------------------------
-
-
 async def fail(row: PendingRow, message: str) -> Optional[PendingRow]:
-    """End `row` as `failed` with `message`: its quota events are refunded, its requester is
-    notified and its linked requests are closed `failed`.
-
-    Returns the row as stored; None, with nothing else done, when it is gone or had ended
-    already (another step ended it first).
-    """
     updated = await asyncio.to_thread(
         pending.update, row.sha256, only_from=pending.UNFINISHED, status="failed", error=message[:MAX_ERROR_LENGTH]
     )
@@ -538,7 +367,6 @@ async def fail(row: PendingRow, message: str) -> Optional[PendingRow]:
 
 
 async def _notify(row: PendingRow, *, done: bool) -> None:
-    """Tell the row's requester how it ended (`notifications.download_done` / `download_failed`)."""
     if done:
         await asyncio.to_thread(
             notifications.download_done, row.requested_by, _label(row), _where(row.assign_to), _metadata(row)
@@ -547,22 +375,11 @@ async def _notify(row: PendingRow, *, done: bool) -> None:
         await asyncio.to_thread(notifications.download_failed, row.requested_by, _label(row), row.error, _metadata(row))
 
 
-# The sweep ----------------------------------------------------------------------------------
-
-
 class Watcher:
-    """One run of the sweep: `run()` is awaited on the app loop, once.
-
-    `request_stop()` may be called from any thread, before or during the run. The sweep's
-    retry counters live in memory: a restart gives every row a fresh budget.
-    """
-
     def __init__(self) -> None:
         self._stop_requested = False
         self._stop_event: Optional[asyncio.Event] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
-        #: Per row key: lookups since the download completed, passes without a download id,
-        #: the hash of a downloaded `nohash:` file, passes that raised.
         self._lookups: Dict[str, int] = {}
         self._unqueued: Dict[str, int] = {}
         self._digests: Dict[str, Optional[str]] = {}
@@ -571,7 +388,6 @@ class Watcher:
 
     @property
     def loop(self) -> Optional[asyncio.AbstractEventLoop]:
-        """The loop `run()` is running on, or None before it starts and after it returns."""
         return self._loop
 
     @property
@@ -579,8 +395,6 @@ class Watcher:
         return self._loop is not None
 
     async def run(self) -> None:
-        # Created here, not in __init__, so the event belongs to the loop this runs on.
-        # Event first, loop second: request_stop() reads them in the other order.
         self._stop_event = asyncio.Event()
         self._loop = asyncio.get_running_loop()
         logger.info("[MODEL-BROWSER] Download watcher started (a sweep every %ss)", POLL_INTERVAL_SECONDS)
@@ -598,12 +412,6 @@ class Watcher:
             logger.info("[MODEL-BROWSER] Download watcher stopped")
 
     async def _release_resources(self) -> None:
-        """Close the sources' shared aiohttp session on this loop.
-
-        The core fires no shutdown hook for plugins; this task is cancelled when the
-        application loop stops, so this is the last chance to close the session before
-        `ClientSession.__del__` complains about it during interpreter teardown.
-        """
         try:
             from .http import http as source_http
 
@@ -612,28 +420,22 @@ class Watcher:
             logger.debug("[MODEL-BROWSER] Could not close the sources' HTTP session", exc_info=True)
 
     def request_stop(self) -> None:
-        """Make `run()` return at its next await, without waiting for it. Safe from any thread."""
         self._stop_requested = True
         loop, event = self._loop, self._stop_event
         if loop is None or event is None:
-            return  # not started (run() checks the flag first) or already returned
+            return
         try:
             loop.call_soon_threadsafe(event.set)
         except RuntimeError:
-            pass  # the loop is closed: nothing will run this task again
+            pass
 
     async def _sleep(self, seconds: float) -> None:
-        """`asyncio.sleep(seconds)` that ends early when a stop is requested."""
         try:
             await asyncio.wait_for(self._stop_event.wait(), timeout=seconds)
         except asyncio.TimeoutError:
             pass
 
-    # One pass ---------------------------------------------------------------
-
     async def run_pass(self, *, reconcile: bool = False) -> None:
-        """Move every unfinished row on, oldest first; with `reconcile`, close the approved
-        requests of rows that ended meanwhile too. Never raises (but for a cancellation)."""
         try:
             rows = await asyncio.to_thread(pending.list_unfinished)
         except Exception:
@@ -653,8 +455,6 @@ class Watcher:
             await self._settle_orphans()
 
     def _prune(self, rows: Iterable[PendingRow]) -> None:
-        """Drop the counters of rows that are no longer where they were counted: the hook handler
-        and the steps it schedules move rows on without the sweep."""
         rows = list(rows)
         queued = {row.sha256 for row in rows if row.status == "queued"}
         unfinished = {row.sha256 for row in rows}
@@ -668,7 +468,6 @@ class Watcher:
                 del counters[key]
 
     async def _settle_orphans(self) -> None:
-        """Close the approved requests whose row already ended (the server stopped in between)."""
         try:
             approved = await asyncio.to_thread(lambda: requests.list_rows(statuses=[requests.APPROVED], limit=1000))
             ended: Dict[str, PendingRow] = {}
@@ -702,15 +501,11 @@ class Watcher:
             self._errors.pop(row.sha256, None)
 
     async def advance(self, row: PendingRow) -> Optional[PendingRow]:
-        """Take one row as far as it can go now; returns it as stored (None when it is gone, or
-        another step moved it on meanwhile)."""
         if row.status == "queued":
             row = await self._follow_download(row)
         if row is not None and row.status in FINISHING_STATUSES:
             row = await finish(row)
         return row
-
-    # queued -> indexed, from the core download ------------------------------------
 
     async def _follow_download(self, row: PendingRow) -> Optional[PendingRow]:
         key = row.sha256
@@ -743,7 +538,6 @@ class Watcher:
         return await self._locate(row, download)
 
     async def _locate(self, row: PendingRow, download: Mapping[str, Any]) -> Optional[PendingRow]:
-        """The completed download's model, looked up once more; `indexed` when found."""
         key = row.sha256
         attempts = self._lookups.get(key, 0) + 1
         self._lookups[key] = attempts
@@ -756,7 +550,7 @@ class Watcher:
             if candidate is not None and indexed_since(candidate, row):
                 model = candidate
         if model is None and row.nohash and attempts >= HASH_FALLBACK_AFTER and path:
-            if not download.get("destination_backend_id"):  # a remote download has no local file
+            if not download.get("destination_backend_id"):
                 digest = await self._digest(key, path)
                 if digest:
                     model = await asyncio.to_thread(core_bridge.find_model_by_sha256, digest)

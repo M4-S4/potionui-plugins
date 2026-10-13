@@ -1,12 +1,4 @@
 <script>
-	// The requests drawer, opened by RequestsButton (modal, on the right; Escape, the close button
-	// or a click beside it closes it, and the focus goes back to the button). Those who decide get
-	// tabs: "To review" (every open request), "Mine" (their own, when they may ask for models) and
-	// "All" (with a status filter); the others see their own requests only. Each tab asks
-	// `GET /requests` for its own list (lib/requests.tabQuery) and filters it again; the list is
-	// read again every 15 s while the drawer is open, by the refresh button, and after each
-	// answer. Approve, Reject and Cancel run here, with a toast; `onChanged` then lets the button
-	// read its count again.
 	import { onMount, tick } from 'svelte';
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
@@ -34,12 +26,10 @@
 	let { api, me, count = null, sourceLabel = (id) => id, opener = null, onClose, onChanged } = $props();
 
 	const uid = $props.id();
-	// Moved under <body>: alone in its block (see DetailPanel).
 	let mounted = $state(false);
 	const startingTab = () => defaultTab(me);
 	let tab = $state(startingTab());
 	let status = $state('');
-	/** The rows of `view.key` (`<tab>:<status>`): 'loading' | 'error' | 'ready'. */
 	let view = $state.raw({ key: '', requests: [], phase: 'loading', error: null });
 	let refreshing = $state(false);
 	let busyId = $state('');
@@ -71,7 +61,6 @@
 		};
 	});
 
-	/** Ask for the tab's requests (again); the rows stay on screen while the same list refreshes. */
 	async function load() {
 		clearTimeout(timer);
 		timer = null;
@@ -91,7 +80,6 @@
 		}
 		onChanged?.();
 		timer = setTimeout(load, POLL_INTERVAL_MS);
-		// A row that had the focus may be gone: keep the focus in the drawer.
 		await tick();
 		if (dialog?.isConnected && (!document.activeElement || document.activeElement === document.body)) {
 			dialog.focus({ preventScroll: true });
@@ -104,7 +92,6 @@
 		load();
 	}
 
-	/** Approve, reject or cancel one request, then a toast and a fresh list. */
 	async function act(request, kind, options) {
 		if (busyId) return { ok: false, message: '' };
 		busyId = request.id;
@@ -116,7 +103,6 @@
 		const message = (kind === 'approve' ? approveToast : kind === 'reject' ? rejectToast : cancelToast)(result, request);
 		toast(message.level, message.message);
 		if (destroyed) {
-			// Closed meanwhile: the button still reads its count again.
 			if (message.refresh) onChanged?.();
 			return { ok: result.ok, message: '' };
 		}

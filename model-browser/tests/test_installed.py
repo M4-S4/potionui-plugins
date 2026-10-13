@@ -1,9 +1,3 @@
-"""`backend.installed`: whether a file is installed for a user, the one rule behind `POST /installed`
-and the `installed` badge of the search results.
-
-The core is `FakeCore` in place of `core_bridge`; the core calls are made in a worker thread.
-"""
-
 import asyncio
 import logging
 import threading
@@ -37,9 +31,6 @@ def _item(item_id, sha256=None):
 
 def _core_moved(*args):
     raise RuntimeError("The AppContainer no longer provides model_repository.get_by_sha256")
-
-
-# installed_map ------------------------------------------------------------------------------
 
 
 async def test_an_admin_sees_every_indexed_file_whose_file_is_present(core):
@@ -143,9 +134,6 @@ async def test_installed_map_raises_what_the_core_raises(core, monkeypatch, fail
 
     with pytest.raises(RuntimeError, match="no longer provides"):
         await installed_map([SHA], principal())
-
-
-# mark_installed -----------------------------------------------------------------------------
 
 
 async def test_items_are_marked_installed_not_installed_or_left_unknown(core):

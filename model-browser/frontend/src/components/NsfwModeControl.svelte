@@ -1,8 +1,4 @@
 <script>
-	// The user's NSFW display mode, in the toolbar: a host SegmentedControl (Blur / Show / Hide)
-	// with only the modes the content policy allows enabled. It is the core's app-wide
-	// `media_nsfw_filter_mode` setting, not a Model Browser one: `onChange(mode)` saves it there.
-	// Under a `blocked` ceiling there is nothing to choose: "Hidden by policy".
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
 	import { effectiveModes, nsfwInfo } from '../lib/nsfw.js';
@@ -44,7 +40,6 @@
 				/>
 			</span>
 		</HostUi>
-		<!-- The host tooltip is mouse-only (aria-hidden): the same text for screen readers. -->
 		<span class="sr-only">{hint}</span>
 	{/if}
 </div>

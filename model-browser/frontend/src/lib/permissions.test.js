@@ -14,7 +14,6 @@ import {
 	validateState
 } from './permissions.js';
 
-// The shape of backend/routes_permissions.py's GET /permissions (see tests/test_routes_permissions.py).
 const DEFAULT_PARAMS = {
 	sources: ['civitai', 'huggingface', 'openmodeldb'],
 	model_types: [],
@@ -66,8 +65,6 @@ function payload() {
 function group(state, id) {
 	return state.groups.find((entry) => entry.group_id === id);
 }
-
-// toFormState ------------------------------------------------------------------------------
 
 test('toFormState turns the API answer into editable rows', () => {
 	const state = toFormState(payload());
@@ -151,7 +148,6 @@ test('toFormState copes with answers it cannot interpret', () => {
 		assert.deepEqual(state.groups, [], JSON.stringify(body));
 		assert.ok(Array.isArray(state.allowed.capabilities));
 	}
-	// Entries without an id are not groups.
 	const state = toFormState({ data: { groups: [null, 'x', {}, { group_id: null }, { group_id: 'ok' }] } });
 	assert.deepEqual(
 		state.groups.map((entry) => entry.group_id),
@@ -166,8 +162,6 @@ test('toFormState ignores a size that is not a positive number', () => {
 		assert.equal(group(toFormState(body), 'artists').params.max_file_gb, '', String(size));
 	}
 });
-
-// toPutBody --------------------------------------------------------------------------------
 
 test('toPutBody builds the request body: numbers parsed, lists sorted, name and flags left out', () => {
 	const state = toFormState(payload());
@@ -209,7 +203,6 @@ test('toPutBody lists every group, keeping the parameters of a group without dow
 		body.groups.map((entry) => entry.group_id),
 		['all_admins', 'all_users', 'artists']
 	);
-	// all_users cannot download, yet its parameters go back as they were.
 	assert.deepEqual(body.groups[1].params, DEFAULT_PARAMS);
 });
 
@@ -235,8 +228,6 @@ test('toPutBody gives the same body when called twice and does not touch the for
 	assert.deepEqual(state, before);
 });
 
-// parseMaxFileGb ---------------------------------------------------------------------------
-
 test('parseMaxFileGb reads positive numbers written with a dot', () => {
 	assert.deepEqual(parseMaxFileGb('4'), { ok: true, value: 4 });
 	assert.deepEqual(parseMaxFileGb('4.5'), { ok: true, value: 4.5 });
@@ -261,8 +252,6 @@ test('parseMaxFileGb rejects everything else', () => {
 		assert.deepEqual(parseMaxFileGb(value), { ok: false }, String(value));
 	}
 });
-
-// validateState ----------------------------------------------------------------------------
 
 test('validateState has nothing to say about a form the API produced', () => {
 	assert.deepEqual(validateState(toFormState(payload())), []);
@@ -321,7 +310,6 @@ test('validateState reports every problem, each with the name of its group', () 
 
 test('validateState falls back to the group id for a group without a name', () => {
 	const state = toFormState({ data: { capabilities: ['browse'], sources: [], model_types: [], groups: [{ group_id: 'g1', capabilities: ['x'] }] } });
-	// The fallback sources of an unnamed, parameterless row are not in the (empty) list either.
 	const problems = validateState(state);
 	assert.ok(problems.every((message) => message.startsWith('g1:')));
 	assert.ok(problems.includes("g1: unknown permission 'x'"));
@@ -331,8 +319,6 @@ test('validateState copes with a missing state', () => {
 	assert.deepEqual(validateState(null), []);
 	assert.deepEqual(validateState({}), []);
 });
-
-// isDirty ----------------------------------------------------------------------------------
 
 test('isDirty is false for an untouched copy', () => {
 	const initial = toFormState(payload());
@@ -390,8 +376,6 @@ test('isDirty compares a missing form with a form', () => {
 	assert.equal(isDirty(state, null), true);
 });
 
-// list helpers -----------------------------------------------------------------------------
-
 test('toggleItem adds and removes an id, sorted, without touching the list it was given', () => {
 	const list = ['lora', 'checkpoint'];
 	assert.deepEqual(toggleItem(list, 'embedding', true), ['checkpoint', 'embedding', 'lora']);
@@ -415,9 +399,6 @@ test('cloneState copies deeply', () => {
 	assert.deepEqual(state, toFormState(payload()));
 });
 
-// readToken --------------------------------------------------------------------------------
-
-/** Run `fn` with `globalThis.localStorage` set to `value` (Node's own getter would print a warning). */
 function withGlobalStorage(value, fn) {
 	const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 	Object.defineProperty(globalThis, 'localStorage', { configurable: true, writable: true, value });
@@ -452,14 +433,10 @@ test('readToken returns null without a token, with a storage that throws, or wit
 		}),
 		null
 	);
-	// A storage object without getItem, and a page where localStorage does not exist.
 	assert.equal(readToken({}), null);
 	withGlobalStorage(undefined, () => assert.equal(readToken(), null));
 });
 
-// fetchPermissions / savePermissions -------------------------------------------------------
-
-/** A stand-in for `fetch` that records its calls and answers with `reply(url, init)`. */
 function fakeFetch(reply) {
 	const calls = [];
 	const fn = async (url, init) => {

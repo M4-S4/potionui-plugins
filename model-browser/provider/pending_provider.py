@@ -1,28 +1,3 @@
-"""The `model-browser` marketplace provider (PLAN.md §7.3, §7.4 step 7).
-
-It answers `get_model_by_hash` only for the files this plugin downloaded: the
-`model_browser_pending` row of that SHA256 (`backend/pending.py`) holds the normalised
-detail of the model cut down to the chosen version and file, which `build_model_info`
-turns into a `ProviderModelInfo`. Any other hash, a failed download and an unreadable
-row answer None, so the core records "not found" and moves on.
-
-The core's `ProviderInfoFetcher.run_provider_fetch("model-browser", ...)` then stores the
-provider row (name, description, tags, nsfw, download URL), fills the model's description
-and trigger words when they are empty, and downloads `media_urls` as its previews when it
-has none. Those previews are shown to everyone the model is assigned to, so `media_urls`
-never holds an NSFW image: an image is left out when the source normalisation flagged it,
-when its level is above the admin's current `nsfw_max_level` (PLAN.md §5.2), or, with
-`hide_poi`, when it depicts a real person. The core fetches those URLs from the server, so
-only https URLs on a named public host are kept.
-
-`get_model_page_url` backs the "Mirrors" section of a model's admin page: a string built
-from `"<source>:<id>"`, with no database read and no network call.
-
-No credentials: downloads are authenticated by the `civitai` / `huggingface` providers
-through the queue's `provider_id`, so this provider claims no download URL and adds no
-header.
-"""
-
 import ipaddress
 import logging
 import re
@@ -40,9 +15,6 @@ from src.plugin_api import (
     ProviderModelInfo,
 )
 
-# PotionUI's loader imports this module as `model_browser.provider.pending_provider`
-# (through `hooks/provider_hooks.py`); the tests import it as the top-level
-# `provider.pending_provider`. Never a bare `import backend` inside the app.
 if __name__.count(".") >= 2:
     from ..backend import PLUGIN_VERSION, pending
     from ..backend import settings as plugin_settings
@@ -59,12 +31,10 @@ else:
 logger = logging.getLogger("plugins.model-browser")
 
 PROVIDER_ID = "model-browser"
-#: Longest plain-text description handed to the core, ellipsis included.
 DESCRIPTION_LIMIT = 4000
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _CIVITAI_ID = re.compile(r"[0-9]{1,18}")
-# A Hugging Face repo id, as `backend/sources/huggingface.py::is_repo_id` accepts it.
 _HF_NAME = r"[A-Za-z0-9_](?:[A-Za-z0-9_.-]{0,94}[A-Za-z0-9_])?"
 _HF_REPO_ID = re.compile(rf"(?:{_HF_NAME}/)?{_HF_NAME}")
 
@@ -72,8 +42,6 @@ _T = TypeVar("_T")
 
 
 class PendingProvider(MarketplaceProviderBase):
-    """Metadata for the models the plugin downloaded, read from its `model_browser_pending` table."""
-
     def get_metadata(self) -> ProviderMetadata:
         return ProviderMetadata(
             id=PROVIDER_ID,
@@ -92,7 +60,6 @@ class PendingProvider(MarketplaceProviderBase):
         )
 
     async def initialize(self, settings: Dict[str, Any]) -> bool:
-        """Nothing to set up: no key, no session. Always ready."""
         return True
 
     async def shutdown(self) -> None:
@@ -108,15 +75,9 @@ class PendingProvider(MarketplaceProviderBase):
         return {}
 
     def matches_download_url(self, url: str) -> bool:
-        # The queue's `provider_id` (civitai / huggingface) authenticates the plugin's downloads.
         return False
 
     async def get_model_by_hash(self, sha256: str) -> Optional[ProviderModelInfo]:
-        """What the plugin recorded for this file when it queued it; None for any other file.
-
-        A database failure raises `ProviderConnectionError`, so the core retries and reports
-        it instead of recording "not found".
-        """
         key = sha256.strip().lower() if isinstance(sha256, str) else ""
         if not _SHA256.fullmatch(key):
             return None
@@ -146,14 +107,6 @@ def build_model_info(
     max_level: int = plugin_settings.DEFAULTS["nsfw_max_level"],
     hide_poi: bool = plugin_settings.DEFAULTS["hide_poi"],
 ) -> Optional[ProviderModelInfo]:
-    """The `ProviderModelInfo` of one pending row; None when its `info` has no valid `model`.
-
-    `info` is `{"model": ModelDetail as JSON, "version_id", "file_id", "mb_type"}`, the model's
-    `versions` holding the chosen version and its `files` the chosen file. The version and the
-    file are picked by id, falling back to the first one. A model without a version still
-    gives its model-level fields. `max_level` and `hide_poi` are the admin's settings that
-    decide which previews may be shown to everyone (`preview_policy()`).
-    """
     info = row.info if isinstance(row.info, dict) else {}
     raw_model = info.get("model")
     if not isinstance(raw_model, dict):
@@ -196,7 +149,6 @@ def build_model_info(
             "source_url": model.source_url,
             "license": license_summary,
             "license_url": license_url,
-            # The values of the plugin's model attributes (manifest `model_metadata_fields`).
             "mb_base_model": base_model,
             "mb_license": license_summary,
         },
@@ -204,13 +156,6 @@ def build_model_info(
 
 
 def preview_urls(images: Sequence[Image], *, max_level: int, hide_poi: bool) -> List[str]:
-    """The urls of the images anyone may see as previews, in order, without duplicates.
-
-    Left out: an image the source normalisation marked NSFW, one whose level is above
-    `max_level` (the admin may have made it stricter since the download), one depicting a
-    real person when `hide_poi` is on, one without a url, and any url that is not https on a
-    named public host (the core fetches these from the server).
-    """
     urls: List[str] = []
     for image in images:
         if image.nsfw or not image.url:
@@ -226,7 +171,6 @@ def preview_urls(images: Sequence[Image], *, max_level: int, hide_poi: bool) -> 
 
 
 def preview_policy() -> Tuple[int, bool]:
-    """The admin's current `nsfw_max_level` and `hide_poi`; their defaults when they cannot be read."""
     try:
         return int(plugin_settings.get_setting("nsfw_max_level")), bool(plugin_settings.get_setting("hide_poi"))
     except Exception as exc:
@@ -235,13 +179,6 @@ def preview_policy() -> Tuple[int, bool]:
 
 
 def model_page_url(provider_model_id: Any, provider_version_id: Any = None) -> Optional[str]:
-    """The source's web page for `"<source>:<id>"`, or None for an unknown source or a malformed id.
-
-    CivitAI: `https://civitai.com/models/{id}`, with `?modelVersionId={version}` when a
-    numeric version is given. Hugging Face: `https://huggingface.co/{repo id}`. OpenModelDB:
-    `https://openmodeldb.info/models/{id}`. CivArchive: `https://civarchive.com/models/{id}`,
-    with `?modelVersionId={version}` like CivitAI. Never raises.
-    """
     if not isinstance(provider_model_id, str):
         return None
     source, separator, model_id = provider_model_id.partition(":")
@@ -267,7 +204,6 @@ def model_page_url(provider_model_id: Any, provider_version_id: Any = None) -> O
 
 
 def _pick(items: Sequence[_T], wanted: Any) -> Optional[_T]:
-    """The item whose `id` is `wanted`, else the first one; None for an empty list."""
     if wanted is not None:
         for item in items:
             if item.id == str(wanted):
@@ -286,7 +222,6 @@ def _id_text(value: Any) -> Optional[str]:
 
 
 def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
-    """An ISO 8601 date (`Z` accepted) as an aware datetime, UTC when it has no offset; None otherwise."""
     if not isinstance(value, str) or not value.strip():
         return None
     try:
@@ -297,7 +232,6 @@ def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
 
 
 def _is_public_https_url(url: str) -> bool:
-    """https on the default port, no credentials, and a host that is a public name (no IP, no local name)."""
     if any(ord(char) <= 0x20 or ord(char) == 0x7F or char == "\\" for char in url):
         return False
     try:

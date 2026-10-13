@@ -1,10 +1,4 @@
 <script>
-	// Confirms the download of one file: what to file it as (the source's suggestion when the user
-	// may, else they choose), an optional subfolder, the file name (sent only when edited), the
-	// destination (this server or an enabled `native.remote` backend, when allowed), the group to
-	// assign it to (when allowed), with the licence and the early-access / login warnings before
-	// the button, and the size checked against `max_file_gb`. `POST /downloads`, then a toast.
-	// Checks mirror backend/downloads.py (lib/downloadForm.js); the server checks again.
 	import { onMount } from 'svelte';
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
@@ -27,9 +21,7 @@
 	let { api, me, target, onClose, onStarted } = $props();
 
 	const uid = $props.id();
-	// Moved under <body>: alone in its block (see DetailPanel).
 	let mounted = $state(false);
-	// The dialog is created for one file (the page keys it by target): start from its values once.
 	const startingForm = () => initialForm(me, target.detail, target.file);
 	let form = $state(startingForm());
 	let busy = $state(false);
@@ -50,7 +42,6 @@
 	const groupNote = $derived(!me.params?.unrestricted && me.params?.assign_to === 'group' && (me.groups?.length ?? 0) === 0);
 	const extension = $derived(extensionOf(file.name));
 	const sizeText = $derived(formatBytes(file.size_bytes));
-	// "File as": an error only for a type the user may not use; otherwise a hint.
 	const typeError = $derived(form.modelType && problems.modelType ? problems.modelType : null);
 	const typeHelp = $derived(
 		detail.mb_type

@@ -1,10 +1,4 @@
 <script>
-	// The side column of the detail (DetailLayout `aside`): the version on screen (base model,
-	// date, trigger words with copy buttons), the model (type, creator, stats, source link), its
-	// licence and its tags, in host DetailSection / KVGrid / KVItem. The base model line takes the
-	// source's own name for it (`baseModelLabel`: "Architecture" for OpenModelDB). A version the source
-	// sent as a shell (lib/versions.js) shows its name and date only: its base model and trigger
-	// words are not known before it is loaded, and "None" would be wrong.
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Pill from './Pill.svelte';
 	import Icon from './Icon.svelte';

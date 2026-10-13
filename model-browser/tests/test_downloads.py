@@ -1,12 +1,3 @@
-"""`backend.downloads.start_download`: the checks, the pending row and the call to the core queue;
-the plan quota; and the same two steps run on behalf of a requester (`prepare_download(...,
-on_behalf=True)`, `queue_prepared`).
-
-The sources are fakes serving normalised details, the core is `FakeCore` (in place of
-`core_bridge`, with the plan limits and the `LimitEvents` ledger), the requester's NSFW
-context is set per test, and the pending table lives in a scratch database.
-"""
-
 import sqlite3
 from types import SimpleNamespace
 
@@ -55,7 +46,6 @@ def core(plugin_db, monkeypatch):
 
 @pytest.fixture
 def viewer(monkeypatch):
-    """The requester's NSFW context, `allowed` + `show` unless a test changes it."""
     state = SimpleNamespace(ctx=context("allowed", "show"))
     monkeypatch.setattr(nsfw, "resolve_nsfw", lambda user: state.ctx)
     return state
@@ -82,9 +72,6 @@ async def _refused(who, **overrides):
     with pytest.raises(DownloadError) as raised:
         await _start(who, **overrides)
     return raised.value
-
-
-# Queuing ------------------------------------------------------------------------------
 
 
 async def test_a_download_is_queued_with_exactly_these_arguments(core, civitai):
@@ -166,9 +153,6 @@ async def test_a_request_id_is_kept_on_the_row(core, civitai):
     await downloads.start_download(principal(), DownloadRequest.model_validate(body()), request_id="req-1")
 
     assert pending.get(SHA).request_id == "req-1"
-
-
-# Checks -------------------------------------------------------------------------------
 
 
 async def test_a_source_the_grant_does_not_allow_is_refused_before_reading_it(core, civitai):
@@ -300,9 +284,6 @@ async def test_the_source_error_is_raised_for_the_route(core, civitai):
         await _start(principal())
 
 
-# Groups -------------------------------------------------------------------------------
-
-
 async def test_a_user_picks_one_of_their_groups_when_their_grant_assigns_to_a_group(core, civitai):
     core.memberships["user-1"] = ["all_users", "artists"]
 
@@ -340,9 +321,6 @@ async def test_an_admin_may_pick_any_existing_group(core, civitai):
 
     error = await _refused(admin(), file_id="1002", assign_group_id="ghosts")
     assert (error.status, error.code) == (400, "invalid_request")
-
-
-# Where the file lands -----------------------------------------------------------------
 
 
 def _request(**overrides):
@@ -402,9 +380,6 @@ async def test_a_nested_hugging_face_file_is_queued_without_a_hash(core, hugging
     assert "find_model_by_sha256" not in core.names()
 
 
-# Validation of the body ---------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -434,9 +409,6 @@ def test_the_body_accepts_numbers_for_ids_and_reads_blank_options_as_absent():
 
     assert (request.model_id, request.version_id, request.file_id) == ("122359", "135867", "1001")
     assert (request.subdir, request.filename, request.model_type, request.assign_group_id) == (None, None, None, None)
-
-
-# One row per file ---------------------------------------------------------------------
 
 
 async def test_an_installed_file_is_assigned_rather_than_downloaded_again(core, civitai):
@@ -483,7 +455,7 @@ async def test_an_installed_file_is_answered_even_without_an_application_loop(co
     answer = await _start(principal())
 
     assert answer["already_installed"] is True
-    assert pending.get(SHA).status == "indexed"  # the watcher's sweep takes it up
+    assert pending.get(SHA).status == "indexed"
     assert "the sweep will take it up" in caplog.text
 
 
@@ -534,7 +506,7 @@ async def test_a_row_written_meanwhile_by_another_request_is_answered_as_already
     )
     looks = []
 
-    def get(key):  # the first look misses the row the other request is writing
+    def get(key):
         looks.append(key)
         return None if len(looks) == 1 else real_get(key)
 
@@ -575,9 +547,6 @@ async def test_an_unexpected_queue_failure_deletes_the_row_and_is_raised(core, c
     assert pending.get(SHA) is None
 
 
-# What viewers receive -----------------------------------------------------------------
-
-
 def _stored_info(detail=None):
     detail = detail or civitai_detail()
     version = detail.versions[0]
@@ -597,7 +566,7 @@ def test_info_for_a_blurring_viewer_has_no_nsfw_url_and_a_hiding_viewer_no_nsfw_
     assert [(image["url"], image["blurhash"]) for image in blurred] == [(SAFE_IMAGE, None), (None, "LKO2?U%2Tw=w")]
     hidden = info_for_viewer(info, context("blocked", "hide"))["model"]["versions"][0]["images"]
     assert [image["url"] for image in hidden] == [SAFE_IMAGE]
-    assert info["model"]["versions"][0]["images"][1]["url"] == NSFW_IMAGE  # the stored info is untouched
+    assert info["model"]["versions"][0]["images"][1]["url"] == NSFW_IMAGE
 
 
 def test_an_nsfw_model_is_hidden_from_a_viewer_who_hides_nsfw_but_keeps_its_name_and_file():
@@ -637,13 +606,10 @@ def test_row_for_viewer_filters_the_info_of_the_row():
 
     assert data["sha256"] == SHA
     assert data["info"]["model"]["versions"][0]["images"][1]["url"] is None
-    assert data["info"]["model"]["description_html"] is None  # left out of the answers
+    assert data["info"]["model"]["description_html"] is None
     assert data["info"]["model"]["name"] == "Detail Tweaker XL"
     assert row.info["model"]["description_html"] == "<p>Adds detail.</p>"
-    assert row.info["model"]["versions"][0]["images"][1]["url"] == NSFW_IMAGE  # the row is untouched
-
-
-# The plan quota ---------------------------------------------------------------------------
+    assert row.info["model"]["versions"][0]["images"][1]["url"] == NSFW_IMAGE
 
 
 async def test_a_queued_file_counts_one_download_and_its_size_for_the_requester(core, civitai):
@@ -686,8 +652,8 @@ async def test_a_download_over_the_count_is_refused_before_anything_is_written(c
 async def test_a_file_over_the_volume_is_refused(core, civitai):
     core.limits[("user-1", BYTES_KIND)] = limited(BYTES_KIND, 3 * 1024 ** 3, 2.5 * 1024 ** 3)
 
-    await _start(principal())  # 228 MB still fits
-    error = await _refused(principal(), file_id="1002")  # 3 GB does not
+    await _start(principal())
+    error = await _refused(principal(), file_id="1002")
 
     assert (error.code, error.extra["kind"], error.extra["incoming"]) == ("limit_exceeded", BYTES_KIND, 3 * 1024 ** 3)
     assert len(core.queued) == 1
@@ -716,9 +682,6 @@ async def test_a_download_the_core_refuses_records_nothing(core, civitai):
     assert core.limit_events == []
 
 
-# A request: the request view of the grant ------------------------------------------------
-
-
 async def test_a_request_is_checked_against_the_request_view_only(core, civitai):
     may_only_request = principal(sources=frozenset(), request_params=requesting())
 
@@ -726,7 +689,7 @@ async def test_a_request_is_checked_against_the_request_view_only(core, civitai)
 
     assert (prepared.purpose, prepared.on_behalf, prepared.assign_to) == ("request", False, "user:user-1")
     with pytest.raises(DownloadError) as raised:
-        await downloads.prepare_download(may_only_request, _request())  # the download view is empty
+        await downloads.prepare_download(may_only_request, _request())
     assert raised.value.message == "Your permissions do not allow downloads from 'civitai'"
 
     may_only_download = principal(request_params=requesting(sources=frozenset()))
@@ -776,9 +739,6 @@ async def test_an_unknown_purpose_is_a_programming_error(core, civitai):
         await downloads.prepare_download(principal(), _request(), purpose="upload")
 
 
-# On behalf of a requester -----------------------------------------------------------------
-
-
 async def _prepare_for(who, **overrides):
     return await downloads.prepare_download(who, _request(**overrides), purpose="request", on_behalf=True)
 
@@ -799,10 +759,10 @@ async def test_a_file_queued_for_a_requester_is_theirs_created_by_the_approver_a
     assert core.queued[0]["created_by"] == "admin-1"
     row = pending.get(SHA)
     assert (row.requested_by, row.assign_to, row.request_id) == ("user-1", "user:user-1", "req-1")
-    assert answer["download"]["destination_path"]  # the admin approver sees the whole download
+    assert answer["download"]["destination_path"]
     images = answer["pending"]["info"]["model"]["versions"][0]["images"]
-    assert [image["url"] for image in images] == [SAFE_IMAGE]  # filtered for the approver
-    assert {event[0] for event in core.limit_events} == {"user-1"}  # the quota is the requester's
+    assert [image["url"] for image in images] == [SAFE_IMAGE]
+    assert {event[0] for event in core.limit_events} == {"user-1"}
 
 
 async def test_without_a_viewer_the_answer_is_for_the_requester(core, civitai):
@@ -852,7 +812,6 @@ async def test_on_behalf_refusals_speak_of_the_requester(core, civitai, view, ov
 
 
 async def test_on_behalf_the_requesters_download_view_does_not_count(core, civitai):
-    """A requester who may not download anything is still served by an approval."""
     prepared = await _prepare_for(principal(sources=frozenset(), max_file_gb=0.01))
 
     assert prepared.on_behalf and prepared.purpose == "request"

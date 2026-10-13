@@ -1,8 +1,4 @@
 <script>
-	// One search result, drawn like the app's own model cards (lib/components/ModelCard.svelte):
-	// the 3:4 preview first, name / creator / type over a gradient, flags on the image, stats
-	// below. A click on the preview or the name opens the detail; the name is the keyboard
-	// control. A blurred NSFW preview has its own "click to reveal" button.
 	import Icon from './Icon.svelte';
 	import NsfwMedia from './NsfwMedia.svelte';
 	import Pill from './Pill.svelte';
@@ -16,7 +12,6 @@
 	const baseModel = $derived(item.base_model || item.base_models?.[0] || '');
 	const downloads = $derived(formatCount(item.stats?.downloads));
 	const likes = $derived(formatCount(item.stats?.likes));
-	// Flags on the image: dot colour, label, explanation.
 	const flags = $derived(
 		[
 			item.nsfw && { key: 'nsfw', dot: 'bg-danger', label: 'NSFW', title: 'Marked NSFW by the source or by its images' },
@@ -32,7 +27,6 @@
 </script>
 
 <article class="group isolate flex min-w-0 flex-col overflow-hidden rounded-lg border border-line-strong bg-surface-1 transition-colors duration-100 hover:border-line-hover">
-	<!-- The preview is a mouse shortcut; the name button below is the keyboard control. -->
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="media-zoom relative aspect-[3/4] cursor-pointer overflow-hidden bg-surface-2" onclick={open}>
 		<NsfwMedia

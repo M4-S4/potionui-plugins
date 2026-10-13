@@ -1,10 +1,4 @@
 <script>
-	// Asks an admin for one file, for users who may request but not download (`POST /requests`):
-	// what the file is (model, version, file, size), the warnings (NSFW, early access, login,
-	// licence), what to file it as (the user's types, the source's suggestion first; a type is
-	// needed, the admin may change it), an optional note for the admin and the licence. Then a
-	// toast: sent, already asked for, already in the user's models, or the server's refusal
-	// (lib/requests.js). The server checks everything again.
 	import { onMount } from 'svelte';
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import Icon from './Icon.svelte';
@@ -26,9 +20,7 @@
 	let { api, me, target, onClose, onCreated } = $props();
 
 	const uid = $props.id();
-	// Moved under <body>: alone in its block (see DetailPanel).
 	let mounted = $state(false);
-	// The dialog is created for one file (the page keys it by target): start from its values once.
 	const startingForm = () => initialRequestForm(me, target.detail);
 	let form = $state(startingForm());
 	let busy = $state(false);
@@ -37,14 +29,12 @@
 	const detail = $derived(target.detail);
 	const version = $derived(target.version);
 	const file = $derived(target.file);
-	// The request parameters (`request_params`), not the download ones.
 	const choice = $derived(allowedTypes(me, detail.mb_type, { purpose: 'request' }));
 	const problems = $derived(requestFormProblems(form, { me, detail, file }));
 	const ready = $derived(canSubmit(problems) && !busy);
 	const warnings = $derived(requestWarnings({ detail, version, file }));
 	const sizeText = $derived(formatBytes(file.size_bytes));
 	const fileMeta = $derived([file.format, file.precision].filter(Boolean).join(' · '));
-	// "File as": an error only for a type the user may not use; otherwise a hint.
 	const typeError = $derived(form.modelType && problems.modelType ? problems.modelType : null);
 	const typeHelp = $derived(
 		detail.mb_type

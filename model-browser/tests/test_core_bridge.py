@@ -1,11 +1,3 @@
-"""`backend.core_bridge`: what it asks of the `src.plugin_api` exports and how it translates their answers.
-
-The exports are replaced, one function at a time, by stand-ins that bind their arguments to
-the real export's signature (a keyword the core does not take fails here as it would in the
-core) and answer with the core's own records and exceptions. `ModelFileUnavailable`, what
-`resolve_model_file` raises, is the core's own class: `src.plugin_api` does not export it.
-"""
-
 import ast
 import inspect
 from datetime import datetime, timezone
@@ -42,9 +34,6 @@ _MODEL_KEYS = {"id", "sha256", "is_available", "created_at", "filename", "model_
 
 
 def _stand_in(real, answer=None):
-    """A stand-in for the export `real`. Its arguments are bound to `real`'s signature and
-    recorded in `.calls`; it answers `answer(**arguments)` when `answer` is callable (which
-    may raise), else `answer`. Async when `real` is."""
     signature = inspect.signature(real)
     calls = []
 
@@ -54,12 +43,10 @@ def _stand_in(real, answer=None):
         return answer(**arguments) if callable(answer) else answer
 
     if inspect.iscoroutinefunction(real):
-
         async def stand_in(*args, **kwargs):
             return respond(args, kwargs)
 
     else:
-
         def stand_in(*args, **kwargs):
             return respond(args, kwargs)
 
@@ -68,7 +55,6 @@ def _stand_in(real, answer=None):
 
 
 def _replace(monkeypatch, module, name, answer=None):
-    """Replace the export `module.name` (a module the bridge aliases) with a `_stand_in`; returns it."""
     stand_in = _stand_in(getattr(module, name), answer)
     monkeypatch.setattr(module, name, stand_in)
     return stand_in
@@ -92,9 +78,6 @@ def test_the_bridge_imports_nothing_of_the_core_but_src_plugin_api():
 
     core_modules = sorted(name for name in imported if name == "src" or name.startswith("src."))
     assert core_modules and all(name.split(".")[:2] == ["src", "plugin_api"] for name in core_modules), core_modules
-
-
-# Downloads --------------------------------------------------------------------------------
 
 
 def _download(**fields):
@@ -186,11 +169,7 @@ def test_get_download_is_the_exports_answer_and_asks_nothing_without_an_id(monke
     assert get.calls == [{"download_id": "dl-1"}, {"download_id": "dl-404"}]
 
 
-# Model lookups ----------------------------------------------------------------------------
-
-
 def _admin_payload(**fields):
-    """What the core's lookups answer with `admin=True`: a real `Model.to_dict`, operational fields included."""
     values = dict(
         id="model-1",
         filename="add-detail-xl.safetensors",
@@ -209,7 +188,6 @@ def _admin_payload(**fields):
 
 
 def _assert_trimmed(found, payload):
-    """`found` holds exactly the model keys, with the payload's values, and none of its operational fields."""
     assert set(found) == _MODEL_KEYS
     assert found == {key: payload[key] for key in _MODEL_KEYS}
     assert {"location", "copies", "file_size", "prompting_guidance", "model_metadata"} <= set(payload)
@@ -292,9 +270,6 @@ def test_visible_model_ids_are_the_exports(monkeypatch):
     assert visible.calls == [{"user_id": "user-1"}]
 
 
-# Assignment, enrichment, attributes -------------------------------------------------------
-
-
 def test_assign_to_user_says_whether_the_model_was_newly_assigned(monkeypatch):
     assigned = set()
 
@@ -315,7 +290,6 @@ def test_assign_to_user_says_whether_the_model_was_newly_assigned(monkeypatch):
 
 
 def _groups(monkeypatch, answer=lambda group_id, model_ids, acting_user: list(model_ids)):
-    """The core's groups ("artists" and "all_users") and its group operation, answered by `answer`; returns the operation."""
     _replace(
         monkeypatch,
         core_bridge.api_groups,
@@ -422,9 +396,6 @@ def test_write_attributes_turns_the_cores_refusals_into_codes(monkeypatch, refus
     assert (raised.value.code, raised.value.message) == (code, str(refusal))
 
 
-# Users, groups and content policy ---------------------------------------------------------
-
-
 @pytest.mark.parametrize("mode", ["allowed", "blur", "blocked"])
 def test_effective_policy_is_the_policy_the_core_enforces_for_the_user(monkeypatch, mode):
     policy = _replace(monkeypatch, core_bridge.api_groups, "effective_content_policy", mode)
@@ -456,9 +427,6 @@ def test_user_groups_list_groups_and_members_are_the_exports(monkeypatch):
     assert core_bridge.group_member_ids("approvers") == ["user-2", "user-1"]
     assert mine.calls == [{"user_id": "user-1"}]
     assert members.calls == [{"group_id": "approvers"}]
-
-
-# Notifications ----------------------------------------------------------------------------
 
 
 def test_notify_sends_one_users_notification_from_the_plugin(monkeypatch):
@@ -525,8 +493,6 @@ def test_register_notification_types_declares_each_type_once_on_the_cores_regist
     )
     assert registry.get("model-browser.download_done").label == "Already there"
 
-
-# Plan limits ------------------------------------------------------------------------------
 
 _KIND = "model-browser.downloads"
 

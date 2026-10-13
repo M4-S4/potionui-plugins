@@ -1,8 +1,4 @@
 <script>
-	// The results: a responsive grid of ModelCard, the next page loaded when the end of the list
-	// comes near (an IntersectionObserver on a sentinel, with a "Load more" button as fallback),
-	// and the loading, empty and error states. A rate limit (429) counts down the seconds the
-	// server asked to wait.
 	import { onDestroy } from 'svelte';
 	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import ModelCard from './ModelCard.svelte';
@@ -28,7 +24,6 @@
 	let sentinel = $state();
 	let observer = null;
 
-	// Rate limit countdown.
 	let deadline = $state(0);
 	let now = $state(Date.now());
 	let timer = null;
@@ -43,7 +38,6 @@
 			deadline = 0;
 			return;
 		}
-		// Locals only: reading `now` here would restart the countdown on every tick.
 		const start = Date.now();
 		const end = start + seconds * 1000;
 		now = start;
@@ -85,7 +79,6 @@
 		};
 	});
 
-	// After each page the sentinel may still be in view: observing it again reports where it is.
 	$effect(() => {
 		const count = items.length;
 		if (!observer || !sentinel || loadingMore || !hasMore || count === 0) return;

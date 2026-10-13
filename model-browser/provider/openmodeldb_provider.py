@@ -1,31 +1,3 @@
-"""The `openmodeldb` marketplace provider (PLAN.md §8.4).
-
-It answers `get_model_by_hash` from OpenModelDB's catalogue, so the core can enrich the
-upscalers already on disk whoever downloaded them: Models page -> fetch info with the
-`openmodeldb` provider (`run_provider_fetch`), or a recipe looking a checksum up
-(`get_model_by_hash_any`). The catalogue is the one the `openmodeldb` source keeps
-(`backend/sources/openmodeldb.py`): downloaded at most every 6 hours, shared with the Model
-Browser page, its sha256 index answers without any other request. The plugin's own
-downloads are still enriched by the `model-browser` provider, from what was recorded when
-they were queued (`provider/pending_provider.py`).
-
-For a known SHA256, `ProviderModelInfo` holds what `pending_provider.build_model_info`
-fills: the name, the description (plain text: the facts line, then the description, at
-most 4000 characters), the tag names, no trigger words, never NSFW, the download URL of
-that file when the worker can fetch it as it is (never for an ONNX export, which PotionUI
-cannot load), the version's previews (the model's own thumbnail, then the gallery's `SR` /
-`url` images, dead hosts left out; https on a public host, at most 6), `model_type`
-"upscaler", the base model ("ESRGAN 4x"), `provider_model_id` "openmodeldb:<id>" and
-`extra_data` (licence, source page, architecture, scale, and the values of the plugin's
-`mb_base_model` / `mb_license` attributes). An unknown hash answers
-None; a catalogue that cannot be loaded raises `ProviderConnectionError`, so the core
-retries and reports it rather than recording "not found".
-
-`get_model_page_url("openmodeldb:<id>")` is the model's OpenModelDB page, for the
-"Mirrors" section: string work only. No credentials: OpenModelDB's files are public, so
-this provider claims no download URL and adds no header.
-"""
-
 import asyncio
 import logging
 import re
@@ -42,9 +14,6 @@ from src.plugin_api import (
 
 from .pending_provider import DESCRIPTION_LIMIT, preview_urls
 
-# PotionUI's loader imports this module as `model_browser.provider.openmodeldb_provider`
-# (through `hooks/provider_hooks.py`); the tests import it as the top-level
-# `provider.openmodeldb_provider`. Never a bare `import backend` inside the app.
 if __name__.count(".") >= 2:
     from ..backend import PLUGIN_VERSION, sources
     from ..backend.http import SourceError
@@ -59,19 +28,12 @@ else:
 logger = logging.getLogger("plugins.model-browser")
 
 PROVIDER_ID = "openmodeldb"
-#: Previews handed to the core at most.
 MAX_MEDIA_URLS = 6
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 class OpenModelDBProvider(MarketplaceProviderBase):
-    """Upscaler details from OpenModelDB's catalogue, by file hash.
-
-    `source` is the `OpenModelDBSource` to read; the registry's one (shared with the page)
-    when left out, as when the core creates the provider.
-    """
-
     def __init__(self, source: Any = None) -> None:
         self._source = source
 
@@ -101,17 +63,15 @@ class OpenModelDBProvider(MarketplaceProviderBase):
         )
 
     async def initialize(self, settings: Dict[str, Any]) -> bool:
-        """Nothing to set up: no key, no session (the catalogue loads on first use). Always ready."""
         return True
 
     async def shutdown(self) -> None:
         return None
 
     async def test_connection(self) -> bool:
-        """Whether the catalogue can be loaded (from memory, the cache or openmodeldb.info)."""
         try:
             await self._catalog_source().catalog()
-        except Exception as exc:  # noqa: BLE001 - a test answers, it never raises
+        except Exception as exc:  # noqa: BLE001
             logger.info("[MODEL-BROWSER] OpenModelDB connection test failed: %s", exc)
             return False
         return True
@@ -123,14 +83,9 @@ class OpenModelDBProvider(MarketplaceProviderBase):
         return {}
 
     def matches_download_url(self, url: str) -> bool:
-        # OpenModelDB's files are public: no download needs this provider.
         return False
 
     async def get_model_by_hash(self, sha256: str) -> Optional[ProviderModelInfo]:
-        """The catalogue's model with a file of this SHA256; None when no model has one.
-
-        Raises `ProviderConnectionError` when the catalogue cannot be loaded.
-        """
         key = sha256.strip().lower() if isinstance(sha256, str) else ""
         if not _SHA256.fullmatch(key):
             return None
@@ -157,13 +112,11 @@ class OpenModelDBProvider(MarketplaceProviderBase):
 def build_model_info(
     model_id: str, raw: Mapping[str, Any], resource: Mapping[str, Any], catalog: "openmodeldb.Catalog"
 ) -> ProviderModelInfo:
-    """The `ProviderModelInfo` of the catalogue model `model_id`, for its file `resource`."""
     name = raw.get("name")
     license = openmodeldb.license_from(raw)
     license_id = None if license.summary == openmodeldb.NO_LICENSE else license.summary
     base_model = openmodeldb.base_model_of(raw, catalog)
     architecture = raw.get("architecture") if isinstance(raw.get("architecture"), str) else None
-    # Without the closing notes (other downloads, compatibility): the file is already on disk.
     description = openmodeldb.description_html(model_id, raw, catalog, notes=False)
     images = openmodeldb.version_images(raw)
     return ProviderModelInfo(
@@ -176,7 +129,6 @@ def build_model_info(
         trigger_words=[],
         nsfw=False,
         download_url=openmodeldb.file_url(resource),
-        # Every OpenModelDB image is level 1: the admin's level never leaves one out.
         media_urls=preview_urls(images, max_level=openmodeldb.IMAGE_LEVEL, hide_poi=False)[:MAX_MEDIA_URLS],
         model_type=openmodeldb.MB_TYPE,
         base_model=base_model,
@@ -188,7 +140,6 @@ def build_model_info(
             "license_url": license.url,
             "architecture": catalog.architecture_label(architecture.strip() if architecture else None),
             "scale": openmodeldb.scale_of(raw),
-            # The values of the plugin's model attributes (manifest `model_metadata_fields`).
             "mb_base_model": base_model,
             "mb_license": license_id,
         },
@@ -196,7 +147,6 @@ def build_model_info(
 
 
 def model_page_url(provider_model_id: Any, provider_version_id: Any = None) -> Optional[str]:
-    """`https://openmodeldb.info/models/<id>` for `"openmodeldb:<id>"`; None for anything else. Never raises."""
     if not isinstance(provider_model_id, str):
         return None
     source, separator, model_id = provider_model_id.partition(":")
@@ -206,7 +156,6 @@ def model_page_url(provider_model_id: Any, provider_version_id: Any = None) -> O
 
 
 def _date(value: Optional[str]) -> Optional[datetime]:
-    """A catalogue date ("2023-05-10") as midnight UTC; None when there is none."""
     if not value:
         return None
     try:

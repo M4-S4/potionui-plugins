@@ -11,7 +11,6 @@ import {
 	nsfwInfo
 } from './nsfw.js';
 
-// PLAN.md section 5.1: ceiling x display mode, as GET /me reports them.
 const ALLOWED_MODES = { allowed: ['blur', 'show', 'hide'], blur: ['blur', 'hide'], blocked: ['hide'] };
 
 function me(ceiling, mode) {

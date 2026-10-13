@@ -1,22 +1,3 @@
-"""The plugin's notification types, and the helpers that send them (PLAN.md §4.4).
-
-Five types, declared on the core's notification registry by the `notification_type.register`
-hook (`hooks/notification_hooks.py`), so each one appears in every user's notification
-preferences and can be turned off there:
-- `model-browser.request_received`: someone asked for a model; sent to every user who may
-  approve it (admins and holders of `approve`), never to the requester;
-- `model-browser.request_approved`, `model-browser.request_rejected`: to the requester, when
-  an approver decides;
-- `model-browser.download_done`, `model-browser.download_failed`: to the user a download was
-  for (a direct download, or an approved request), when it ends.
-
-Every notification goes to one user through `core_bridge.notify` (never a broadcast), with
-category "plugin" and source "model-browser". Sending never raises: a notification that
-cannot be sent is logged, and whatever triggered it goes on. The request notifications carry
-a `link` to the page's requests in their metadata, which the core's notification panel shows
-as an "Open" link.
-"""
-
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Mapping, Optional
@@ -31,19 +12,15 @@ REQUEST_REJECTED = "model-browser.request_rejected"
 DOWNLOAD_DONE = "model-browser.download_done"
 DOWNLOAD_FAILED = "model-browser.download_failed"
 
-#: The Model Browser page, and its requests (the core's notification panel opens `metadata.link`).
 PAGE_LINK = "/plugins/model-browser"
 REQUESTS_LINK = PAGE_LINK + "?tab=requests"
 REQUESTS_LINK_LABEL = "Open requests"
 
-#: Longest part of a note quoted in a notification.
 NOTE_EXCERPT_LENGTH = 200
 
 
 @dataclass(frozen=True)
 class NotificationType:
-    """What the core's `NotificationTypeSpec` needs to list a type in the preferences."""
-
     key: str
     label: str
     description: str
@@ -78,7 +55,6 @@ TYPES = (
     ),
 )
 
-#: Every key the plugin sends.
 KEYS = tuple(item.key for item in TYPES)
 
 
@@ -91,7 +67,6 @@ def send(
     level: str = "info",
     metadata: Optional[Mapping[str, Any]] = None,
 ) -> bool:
-    """One notification of type `kind` to one user; False when it could not be sent. Never raises."""
     try:
         core_bridge.notify(
             user_id=user_id,
@@ -107,11 +82,7 @@ def send(
     return True
 
 
-# Requests -------------------------------------------------------------------------
-
-
 def _excerpt(text: Optional[str]) -> Optional[str]:
-    """`text` on one line, cut to `NOTE_EXCERPT_LENGTH`; None when blank."""
     if not text or not text.strip():
         return None
     line = " ".join(text.split())
@@ -121,7 +92,6 @@ def _excerpt(text: Optional[str]) -> Optional[str]:
 
 
 def request_label(snapshot: Mapping[str, Any]) -> str:
-    """How a request names its file: `Model name (file name)`, or whichever of the two is known."""
     name = snapshot.get("name") if isinstance(snapshot.get("name"), str) else None
     file_name = snapshot.get("file_name") if isinstance(snapshot.get("file_name"), str) else None
     name, file_name = (name or "").strip(), (file_name or "").strip()
@@ -131,7 +101,6 @@ def request_label(snapshot: Mapping[str, Any]) -> str:
 
 
 def request_metadata(request: Any) -> Dict[str, Any]:
-    """What every request notification carries: the request and the file it names, and the link."""
     return {
         "request_id": request.id,
         "source": request.source,
@@ -144,8 +113,6 @@ def request_metadata(request: Any) -> Dict[str, Any]:
 
 
 def request_received(recipient_ids: Iterable[str], request: Any, requester_name: str) -> int:
-    """Tell everyone in `recipient_ids` but the requester that `request` waits for a decision;
-    returns how many notifications were sent."""
     message = f"{requester_name} asked for {request_label(request.snapshot)}."
     note = _excerpt(request.note)
     if note:
@@ -168,7 +135,6 @@ def request_received(recipient_ids: Iterable[str], request: Any, requester_name:
 def request_approved(
     request: Any, approver_name: str, *, already_installed: bool = False, already_queued: bool = False
 ) -> bool:
-    """Tell the requester their request was approved, and what happens next."""
     if already_installed:
         outcome = "the model is already installed and is being added to your models"
     elif already_queued:
@@ -184,7 +150,6 @@ def request_approved(
 
 
 def request_rejected(request: Any, approver_name: str) -> bool:
-    """Tell the requester their request was declined, with the approver's note."""
     message = f"{approver_name} declined your request for {request_label(request.snapshot)}."
     note = _excerpt(request.decision_note)
     if note:
@@ -199,18 +164,13 @@ def request_rejected(request: Any, approver_name: str) -> bool:
     )
 
 
-# Downloads ------------------------------------------------------------------------
-
-
 def download_done(user_id: str, label: str, where: str, metadata: Mapping[str, Any]) -> bool:
-    """`<label>: <where>.`, e.g. "Detail Tweaker XL (x.safetensors): it is now in your models."."""
     return send(
         user_id, DOWNLOAD_DONE, title="Model downloaded", message=f"{label}: {where}.", level="success", metadata=metadata
     )
 
 
 def download_failed(user_id: str, label: str, reason: Optional[str], metadata: Mapping[str, Any]) -> bool:
-    """`<label>: <reason>`."""
     return send(
         user_id,
         DOWNLOAD_FAILED,

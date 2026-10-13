@@ -1,8 +1,3 @@
-"""`backend.sources.huggingface`: normalisation of recorded answers, the search syntax, the
-request flow (cursor from the `Link` header, exact repo ids, tree pages, README) through the
-fake transport, and the pure helpers (files, licence, README images).
-"""
-
 import re
 import sys
 import types
@@ -36,7 +31,6 @@ from .civitai_fakes import ABSENT, MemoryCache, fake_settings
 from .huggingface_fakes import REPOS, HuggingFaceTransport, body, item, link_header, load, make_source
 from .huggingface_fakes import cursor_of as _cursor
 
-#: What `security.sanitize_html` lets through.
 _SANITISED_TAGS = {"p", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "hr", "a", "h3", "h4"}
 
 LCM = REPOS["lcm_lora_sdxl"]
@@ -56,7 +50,6 @@ def _fresh_render_memo():
     hf._render_memo.clear()
     yield
     hf._render_memo.clear()
-
 
 
 def _items(name):
@@ -79,7 +72,6 @@ def _source(transport=None, cache=None):
 
 
 def _demo_repo(transport, *, tags=(), tree=(), readme=None, repo="org/demo"):
-    """A made-up repo on the fake transport: lcm-lora-sdxl's model answer under another id."""
     raw = body("model_lcm_lora_sdxl")
     raw["id"] = raw["modelId"] = repo
     raw["tags"] = raw["tags"] + list(tags)
@@ -95,9 +87,6 @@ def _file(path, size=10, lfs_oid=None):
     if lfs_oid:
         entry["lfs"] = {"oid": lfs_oid, "size": size, "pointerSize": 134}
     return entry
-
-
-# Normalisation of a search page ------------------------------------------------------
 
 
 def test_search_items_are_normalised():
@@ -146,7 +135,6 @@ def test_search_items_are_normalised():
 
 
 def test_list_answers_carry_no_file_hash():
-    # The Hugging Face list API has no hashes: the installed badge stays unknown for these items.
     for name in ("models_search_lora", "models_search_lora_page2", "models_text_to_image_top", "models_author"):
         for normalised in _items(name).values():
             assert normalised.primary_sha256 is None
@@ -183,7 +171,6 @@ def test_the_not_for_all_audiences_tag_marks_nsfw():
         "Heartsync/Flux-NSFW-uncensored": True,
     }
     assert all(not found.nsfw for found in _items("models_search_lora").values())
-    # Merge and finetune relations give the base model too.
     assert items["Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1"].base_models == ["Qwen/Qwen-Image-2.1"]
     assert items["Heartsync/Flux-NSFW-uncensored"].base_models == ["black-forest-labs/FLUX.1-dev"]
 
@@ -192,10 +179,8 @@ def test_types_proposed_for_the_text_to_image_top():
     items = _items("models_text_to_image_top")
 
     assert {repo: (found.type, found.mb_type) for repo, found in items.items()} == {
-        # A root `.safetensors` next to the diffusers folders: a checkpoint.
         "stabilityai/stable-diffusion-xl-base-1.0": ("text-to-image", "checkpoint"),
         "abenzerps/Qwen-Image-2.1-Uncensored-GGUF": ("text-to-image", "diffusion_model"),
-        # The trimmed sibling list has no root weight file: nothing to download as one file.
         "stable-diffusion-v1-5/stable-diffusion-v1-5": ("text-to-image", None),
     }
 
@@ -257,9 +242,6 @@ def test_base_models_and_display_tags():
     assert display_tags(tags) == ["lora", "arxiv:1234"]
 
 
-# Search box ------------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "q, expected",
     [
@@ -302,7 +284,7 @@ def test_next_cursor_from_the_link_header():
     cursor = next_cursor_from_link(link_header("models_search_lora"))
 
     assert cursor == _cursor("models_search_lora")
-    assert cursor.startswith("eyIkb3IiOlt7") and cursor.endswith("=")  # %3D decoded
+    assert cursor.startswith("eyIkb3IiOlt7") and cursor.endswith("=")
     assert next_cursor_from_link('<https://huggingface.co/api/models?cursor=a%2Bb%2Fc>; rel="next"') == "a+b/c"
     assert next_cursor_from_link(
         '<https://huggingface.co/api/models?cursor=p>; rel="prev", <https://huggingface.co/api/models?limit=2&cursor=n>; rel=next'
@@ -312,9 +294,6 @@ def test_next_cursor_from_the_link_header():
     assert next_cursor_from_link("garbage") is None
     assert next_cursor_from_link("") is None
     assert next_cursor_from_link(None) is None
-
-
-# Requests -------------------------------------------------------------------------------
 
 
 async def test_a_plain_search_asks_for_full_answers_sorted_by_trend():
@@ -438,9 +417,8 @@ async def test_safe_searches_drop_the_not_for_all_audiences_repos():
     unsafe = await source.search(SearchQuery(q="#not-for-all-audiences", limit=2))
 
     assert safe.items == []
-    assert safe.next_cursor == _cursor("models_filter_nsfw_tag")  # the routes refill the page from it
+    assert safe.next_cursor == _cursor("models_filter_nsfw_tag")
     assert [found.nsfw for found in unsafe.items] == [True, True]
-    # Hugging Face has no negative filter: both requests are the same, and one was enough.
     assert transport.calls_to("/api/models") == [
         {"direction": "-1", "filter": "not-for-all-audiences", "full": "true", "limit": "2", "sort": "trendingScore"}
     ]
@@ -495,7 +473,7 @@ async def test_sorts(sort, value):
 
     sent = transport.calls_to("/api/models")[0]
     assert (sent["sort"], sent["direction"]) == (value, "-1")
-    assert "period" not in sent  # Hugging Face has no periods: one given is ignored
+    assert "period" not in sent
 
 
 @pytest.mark.parametrize(
@@ -571,9 +549,6 @@ async def test_upstream_errors_on_search(response, error):
         await source.search(SearchQuery())
 
 
-# Detail ---------------------------------------------------------------------------------
-
-
 async def test_detail_of_a_public_lora():
     transport = HuggingFaceTransport()
     transport.add_repo("lcm_lora_sdxl")
@@ -607,7 +582,6 @@ async def test_detail_of_a_public_lora():
     assert (version.trigger_words, version.created_at, version.early_access, version.nsfw) == (
         [], "2023-11-09T00:34:02.000Z", False, False,
     )
-    # The README's `./image.png` is not in the repo: no broken preview.
     assert version.images == []
     assert [file.model_dump() for file in version.files] == [
         {
@@ -642,7 +616,6 @@ async def test_the_readme_becomes_sanitised_html_without_its_frontmatter():
     for needle in ("<img", "<script", "<table", "<div", "<span", "class="):
         assert needle not in lowered
     assert set(re.findall(r"</?([a-z0-9]+)", description)) <= _SANITISED_TAGS
-    # Underscores inside words stay underscores (the trimmed README ends inside a code fence).
     assert "load_image, make_image_grid" in description
 
 
@@ -656,7 +629,6 @@ async def test_detail_of_a_gated_repo():
 
     assert detail == again
     assert detail.gated is True
-    # Without a token the README answers 401: no description; the 401 is remembered.
     assert detail.description_html is None
     assert transport.paths().count(f"/{FLUX}/raw/main/README.md") == 1
     assert detail.license.summary == "flux-1-dev-non-commercial-license"
@@ -676,7 +648,6 @@ async def test_detail_of_a_gated_repo():
     assert [file.name for file in version.files if file.primary] == ["flux1-dev.safetensors"]
     assert files["flux1-dev.safetensors"].size_bytes == 23802932552
     assert files["ae.safetensors"].size_bytes == 335304388
-    # Hugging Face masks the LFS SHA256 of a gated repo for anonymous callers.
     assert body("tree_flux_dev_gated")[9]["lfs"]["oid"] == "*" * 64
     assert all(file.sha256 is None for file in version.files)
     assert {name: file.file_type for name, file in files.items()} == {
@@ -713,7 +684,6 @@ async def test_detail_of_a_diffusers_folder_repo():
                      "text_encoder/flax_model.msgpack", "scheduler", "text_encoder", "tokenizer"):
         assert left_out not in names
     assert [name for name in names if "/" not in name and name.endswith(".safetensors")] == names[:3]
-    # The two largest root files weigh the same: the first of the tree is primary.
     primary = version.files[0]
     assert (primary.name, primary.primary, primary.size_bytes) == ("sd_xl_base_1.0.safetensors", True, 6938078334)
     assert primary.sha256 == "31e35c80fc4829d14f90153f4c74cd59c90b779f6afe05a74cd6120b893f7e5b"
@@ -724,12 +694,10 @@ async def test_detail_of_a_diffusers_folder_repo():
     assert files["sd_xl_offset_example-lora_1.0.safetensors"].file_type == "LoRA"
     assert files["sd_xl_base_1.0_0.9vae.safetensors"].file_type == "Model"
     assert detail.mb_type == "checkpoint"
-    # No license_link: the LICENSE file at the root is the licence's page.
     assert detail.license.model_dump(include={"summary", "url"}) == {
         "summary": "openrail++",
         "url": f"https://huggingface.co/{SDXL}/blob/main/LICENSE.md",
     }
-    # No README fixture: the fake answers 404, the detail has no description.
     assert detail.description_html is None
 
 
@@ -817,7 +785,6 @@ async def test_a_disabled_repo_is_not_found():
 
     with pytest.raises(SourceNotFound, match="disabled"):
         await source.detail(LCM)
-    # Searching for it falls back to a text search, which does not list it either.
     assert (await source.search(SearchQuery(q=LCM))).items == []
     assert transport.calls_to("/api/models")[0]["search"] == LCM
 
@@ -855,7 +822,7 @@ async def test_a_tree_failure_fails_the_detail_but_a_missing_revision_does_not()
     detail = await source.detail(LCM)
 
     assert detail.versions[0].files == []
-    assert detail.description_html.startswith("<h3>")  # the README is still read
+    assert detail.description_html.startswith("<h3>")
     assert detail.mb_type == "lora"
 
 
@@ -895,13 +862,9 @@ async def test_the_tree_stops_after_five_pages():
 
     assert counter["n"] == hf.MAX_TREE_PAGES
     assert len(detail.versions[0].files) == hf.MAX_TREE_PAGES
-    # The file list is incomplete: a README image is not checked against it.
     assert [image.url for image in detail.versions[0].images] == [
         "https://huggingface.co/org/demo/resolve/main/images/not-listed.png"
     ]
-
-
-# README ---------------------------------------------------------------------------------
 
 
 _IMAGES_README = """---
@@ -949,7 +912,6 @@ async def test_readme_images_on_huggingface_co_become_previews():
     assert len({image.id for image in images}) == len(images)
     assert detail.description_html.startswith("<h3>Title </h3>")
     assert "alert" not in detail.description_html and "<img" not in detail.description_html
-    # An image inside a code block is text, not a preview.
     assert '<pre><code>&lt;img src="images/in-code.png"&gt;' in detail.description_html
 
 
@@ -1011,7 +973,7 @@ async def test_a_readme_outage_leaves_the_description_out_without_failing():
     await source.detail(LCM)
 
     assert detail.description_html is None
-    assert transport.paths().count(f"/{LCM}/raw/main/README.md") == 2  # not remembered: tried again
+    assert transport.paths().count(f"/{LCM}/raw/main/README.md") == 2
     assert detail.versions[0].files
 
 
@@ -1120,9 +1082,6 @@ def test_readme_image_url_checks_relative_paths_against_the_files():
     assert readme_image_url("org/demo", "https://huggingface.co/org/demo/resolve/main/b.png", {"a.png"}) is not None
 
 
-# Files ------------------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "path, expected",
     [
@@ -1225,9 +1184,6 @@ def test_every_download_url_passes_the_allowlist():
     assert urls["été.gguf"] == "https://huggingface.co/org/demo/resolve/main/%C3%A9t%C3%A9.gguf"
 
 
-# Licence ----------------------------------------------------------------------------------
-
-
 def test_license_variants():
     raw = body("model_flux_dev_gated")
     assert license_from(raw, FLUX).model_dump(include={"summary", "url"}) == {
@@ -1278,9 +1234,6 @@ def test_normalize_detail_without_a_tree_has_no_files():
     assert detail.description_html is None
 
 
-# Filters and registry ----------------------------------------------------------------------
-
-
 async def test_info_lists_fixed_filters_without_asking():
     source, transport = _source()
 
@@ -1306,7 +1259,6 @@ def test_the_registry_serves_hugging_face():
 
 
 def test_the_fixtures_are_the_recorded_shapes():
-    # Guards the assumptions above against a fixture refresh.
     assert load("error_401_unknown_repo")["_status"] == 401
     assert load("readme_flux_dev_gated")["_status"] == 401
     assert body("model_flux_dev_gated")["gated"] == "auto"

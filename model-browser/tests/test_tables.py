@@ -1,17 +1,14 @@
-"""`backend.tables.create_tables` against a scratch sqlite database."""
-
 from backend.tables import TABLE_NAMES, create_tables
 
-# Column lists of PLAN.md §4.3, §4.4 and §7.3, in order.
 _EXPECTED_COLUMNS = {
     "model_browser_group_permissions": [
         "group_id", "capabilities", "params", "updated_at",
-        "updated_by",  # phase 9: added last, where ALTER TABLE puts it on an older table
+        "updated_by",
     ],
     "model_browser_requests": [
         "id", "user_id", "source", "source_model_id", "source_version_id", "file_id", "snapshot",
         "note", "status", "decided_by", "decision_note", "sha256", "created_at", "updated_at",
-        "assign_to",  # phase 5: added last, where ALTER TABLE puts it on an older table
+        "assign_to",
     ],
     "model_browser_cache": ["key", "source", "payload", "fetched_at"],
     "model_browser_pending": [
@@ -52,7 +49,7 @@ def test_tables_have_the_planned_columns(plugin_db):
 
 
 def test_a_requests_table_from_phase_3_gets_the_new_column_and_keeps_its_rows(plugin_db):
-    with plugin_db.get_cursor() as cursor:  # the table as phase 3 created it
+    with plugin_db.get_cursor() as cursor:
         cursor.execute(
             "CREATE TABLE model_browser_requests (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, source TEXT NOT NULL, "
             "source_model_id TEXT NOT NULL, source_version_id TEXT, file_id TEXT NOT NULL, snapshot TEXT NOT NULL, "

@@ -1,30 +1,3 @@
-"""The `civarchive` marketplace provider (PLAN.md §8.5).
-
-It answers `get_model_by_hash` from civarchive.com's page of a SHA256 (`sha256/<hash>.json`,
-read through the `civarchive` source, `backend/sources/civarchive.py`: same build id, same rate
-limit, same cache), so the core can enrich models already on disk, deleted CivitAI models
-included: Models page -> fetch info with the `civarchive` provider, or a recipe looking a
-checksum up (`get_model_by_hash_any`). While the admin has not turned the CivArchive source on
-(`enable_civarchive`), it answers None without any request.
-
-For a known SHA256, `ProviderModelInfo` holds what `pending_provider.build_model_info` fills,
-from the first model of the page on CivitAI (else the first model), as the source normalises it
-(`civarchive.normalize_detail`, for the admin's `nsfw_max_level`): the name, the description
-(plain text, at most 4000 characters), the tags, the trigger words, NSFW when the model, the
-version or the file is (bitmask rule of PLAN.md §5.3), the version's safe previews on public https
-hosts (at most 6, `pending_provider.preview_urls`), the CivitAI type as a PotionUI type, the base
-model, `provider_model_id` "civarchive:<model id>", the version id, the download URL of that file
-by the source's policy (CivitAI while it serves it, else a Hugging Face mirror; None for a file
-only torrents or other sites have), and `extra_data` (source, page, `mb_base_model`). An unknown
-hash answers None; CivArchive unreachable raises `ProviderConnectionError`, so the core retries
-and reports it rather than recording "not found".
-
-`get_model_page_url("civarchive:<id>", version)` is the model's civarchive.com page, for the
-"Mirrors" section: string work only. No credentials: downloads are authenticated by the
-`civitai` / `huggingface` providers (the queue's `provider_id`), so this provider claims no
-download URL and adds no header.
-"""
-
 import logging
 import re
 from datetime import datetime, timezone
@@ -40,9 +13,6 @@ from src.plugin_api import (
 
 from .pending_provider import DESCRIPTION_LIMIT, preview_policy, preview_urls
 
-# PotionUI's loader imports this module as `model_browser.provider.civarchive_provider`
-# (through `hooks/provider_hooks.py`); the tests import it as the top-level
-# `provider.civarchive_provider`. Never a bare `import backend` inside the app.
 if __name__.count(".") >= 2:
     from ..backend import PLUGIN_VERSION, sources
     from ..backend import settings as plugin_settings
@@ -61,30 +31,21 @@ else:
 logger = logging.getLogger("plugins.model-browser")
 
 PROVIDER_ID = "civarchive"
-#: The admin setting that turns the CivArchive source, and this provider, on.
 SETTING = "enable_civarchive"
-#: Previews handed to the core at most.
 MAX_MEDIA_URLS = 6
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 class CivArchiveProvider(MarketplaceProviderBase):
-    """Model details from civarchive.com, by file hash, while the CivArchive source is on.
-
-    `source` is the `CivArchiveSource` to read; the registry's one (shared with the page) when
-    left out, as when the core creates the provider.
-    """
-
     def __init__(self, source: Any = None) -> None:
         self._source = source
 
     @staticmethod
     def enabled() -> bool:
-        """Whether the admin turned CivArchive on; False when the setting cannot be read."""
         try:
             return bool(plugin_settings.get_setting(SETTING))
-        except Exception as exc:  # noqa: BLE001 - an unreadable setting keeps the provider off
+        except Exception as exc:  # noqa: BLE001
             logger.debug("[MODEL-BROWSER] Could not read %s: %s", SETTING, exc)
             return False
 
@@ -116,19 +77,17 @@ class CivArchiveProvider(MarketplaceProviderBase):
         )
 
     async def initialize(self, settings: Dict[str, Any]) -> bool:
-        """Nothing to set up: no key; the build id is read on first use. Always ready (and idle while off)."""
         return True
 
     async def shutdown(self) -> None:
         return None
 
     async def test_connection(self) -> bool:
-        """Whether civarchive.com answers (its build id can be read); False while the source is off."""
         if not self.enabled():
             return False
         try:
             await self._archive().build_id()
-        except Exception as exc:  # noqa: BLE001 - a test answers, it never raises
+        except Exception as exc:  # noqa: BLE001
             logger.info("[MODEL-BROWSER] CivArchive connection test failed: %s", exc)
             return False
         return True
@@ -140,14 +99,9 @@ class CivArchiveProvider(MarketplaceProviderBase):
         return {}
 
     def matches_download_url(self, url: str) -> bool:
-        # The queue's `provider_id` (civitai / huggingface) authenticates the downloads.
         return False
 
     async def get_model_by_hash(self, sha256: str) -> Optional[ProviderModelInfo]:
-        """The model CivArchive lists for a file of this SHA256; None when it has none, or while the source is off.
-
-        Raises `ProviderConnectionError` when CivArchive cannot be read.
-        """
         key = sha256.strip().lower() if isinstance(sha256, str) else ""
         if not _SHA256.fullmatch(key) or not self.enabled():
             return None
@@ -175,7 +129,6 @@ class CivArchiveProvider(MarketplaceProviderBase):
 
 
 def pick_model(page: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-    """The first model of a hash page on CivitAI, else the first model; None without one."""
     listed = page.get("models") if isinstance(page.get("models"), list) else []
     models = [model for model in listed if isinstance(model, dict) and isinstance(model.get("version"), dict)]
     on_civitai = [model for model in models if model.get("platform") == civarchive.PLATFORM]
@@ -185,7 +138,6 @@ def pick_model(page: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
 def build_model_info(
     sha256: str, raw: Mapping[str, Any], page: Mapping[str, Any], *, max_level: int, hide_poi: bool
 ) -> ProviderModelInfo:
-    """The `ProviderModelInfo` of the model `raw` (with the version that has the file), for the file `sha256`."""
     detail = civarchive.normalize_detail(raw, max_level)
     version = detail.versions[0]
     raw_version = raw["version"]
@@ -197,7 +149,6 @@ def build_model_info(
     if file is not None:
         download_url: Optional[str] = file.download_url
     else:
-        # The file is not one of the version's (or has no URL there): the page's own mirrors.
         found = civarchive.download_for({"mirrors": page.get("files") or []}, served_by_civitai=False)
         download_url = found.url if found is not None else None
     file_nsfw = raw_file is not None and civarchive.level_nsfw(
@@ -220,15 +171,12 @@ def build_model_info(
         extra_data={
             "source": civarchive.SOURCE_ID,
             "source_url": detail.source_url,
-            # The value of the plugin's `mb_base_model` model attribute (manifest `model_metadata_fields`).
             "mb_base_model": version.base_model,
         },
     )
 
 
 def model_page_url(provider_model_id: Any, provider_version_id: Any = None) -> Optional[str]:
-    """`https://civarchive.com/models/<id>[?modelVersionId=<version>]` for `"civarchive:<id>"`;
-    None for anything else. Never raises."""
     if not isinstance(provider_model_id, str):
         return None
     source, separator, model_id = provider_model_id.partition(":")
@@ -238,7 +186,6 @@ def model_page_url(provider_model_id: Any, provider_version_id: Any = None) -> O
 
 
 def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
-    """An ISO 8601 date (`Z` accepted) as an aware datetime, UTC when it has no offset; None otherwise."""
     if not isinstance(value, str) or not value.strip():
         return None
     try:
@@ -246,4 +193,3 @@ def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
     except ValueError:
         return None
     return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
-

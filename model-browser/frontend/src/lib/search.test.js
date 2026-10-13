@@ -24,7 +24,6 @@ import {
 	withoutRequestsTab
 } from './search.js';
 
-// The shape of backend/routes_sources.py's GET /sources (trimmed lists).
 const SOURCES = enabledSources([
 	{
 		id: 'civitai',
@@ -65,9 +64,6 @@ const SOURCES = enabledSources([
 const CIVITAI = SOURCES[0];
 const HF = SOURCES[1];
 
-// An OpenModelDB-shaped entry (illustrative values): its filters are architectures and scales and
-// the base model of a version is an architecture, all named by labels the other entries leave out;
-// it has no periods.
 const OPENMODELDB = enabledSources([
 	{
 		id: 'openmodeldb',
@@ -118,14 +114,9 @@ test('enabledSources keeps the enabled sources with their option lists', () => {
 
 test('enabledSources names the filter groups and the base model line, with defaults', () => {
 	const names = (source) => [source.types_label, source.base_models_label, source.base_model_label];
-	// CivitAI and Hugging Face send no label: "Types", "Base model" and "Base model".
 	assert.deepEqual(names(CIVITAI), ['Types', 'Base model', 'Base model']);
 	assert.deepEqual(names(HF), ['Types', 'Base model', 'Base model']);
-	// OpenModelDB sends its own: architectures and scales to filter by, and the architecture as the
-	// base model of a version ("ESRGAN 4x").
 	assert.deepEqual(names(OPENMODELDB), ['Architecture', 'Scale', 'Architecture']);
-	// Only a non-blank string counts, it is trimmed, and the three labels are independent (the
-	// singular base_model_label is not the plural base_models_label).
 	const odd = enabledSources([
 		{ id: 'a', types_label: '', base_models_label: '   ', base_model_label: '' },
 		{ id: 'b', types_label: 7, base_models_label: null, base_model_label: false },
@@ -148,7 +139,6 @@ test('enabledSources names the filter groups and the base model line, with defau
 
 test('enabledSources keeps the notice of a source, trimmed, and gives "" when it is missing or not a string', () => {
 	const notices = (list) => enabledSources(list).map((source) => source.notice);
-	// The CivArchive entry of GET /sources: kept as sent. The other sources send none (null or absent).
 	const CIVARCHIVE_NOTICE =
 		'Unofficial source: civarchive.com is a community index of CivitAI, not an official API. Deleted models may be unavailable, or come from third-party mirrors.';
 	assert.deepEqual(
@@ -159,10 +149,8 @@ test('enabledSources keeps the notice of a source, trimmed, and gives "" when it
 		]),
 		[CIVARCHIVE_NOTICE, '', '']
 	);
-	// The fixtures above send no notice at all.
 	assert.deepEqual(SOURCES.map((source) => source.notice), ['', '']);
 	assert.equal(OPENMODELDB.notice, '');
-	// Only a string with text in it counts, and it is trimmed; anything else gives ''.
 	assert.deepEqual(
 		notices([
 			{ id: 'a', notice: '  Careful, unofficial.  ' },
@@ -247,12 +235,9 @@ test('normalizeState checks the state against the sources', () => {
 	);
 	assert.deepEqual(state, { source: 'civitai', q: 'x', types: ['LORA'], baseModel: '', sort: '', period: '', model: '' });
 
-	// The default sort and period are written ''.
 	assert.equal(normalizeState({ ...emptyState('civitai'), sort: 'highest_rated', period: 'all_time' }, SOURCES).sort, '');
-	// Hugging Face has no base models and no periods.
 	const hf = normalizeState({ ...emptyState('huggingface'), baseModel: 'SD 1.5', period: 'month', types: ['lora'] }, SOURCES);
 	assert.deepEqual(hf, { ...emptyState('huggingface'), types: ['lora'] });
-	// No source at all.
 	assert.deepEqual(normalizeState({ ...emptyState('civitai'), q: 'kept' }, []), { ...emptyState(''), q: 'kept' });
 });
 
@@ -319,15 +304,12 @@ test('filterChips lists types, base model and a period other than the default', 
 test('a source without periods and with its own group names filters like the others', () => {
 	assert.deepEqual(OPENMODELDB.periods, []);
 	assert.deepEqual(sourceDefaults(OPENMODELDB), { sort: 'newest', period: '' });
-	// A period left in the URL is dropped, and none is sent.
 	const stale = { ...emptyState('openmodeldb'), period: 'month' };
 	assert.equal(normalizeState(stale, [OPENMODELDB]).period, '');
 	assert.equal(searchRequest(stale, OPENMODELDB), `sort=newest&limit=${DEFAULT_LIMIT}`);
-	// Types and base models (the scales) travel as for the other sources.
 	const state = { ...emptyState('openmodeldb'), types: ['esrgan'], baseModel: '4' };
 	assert.deepEqual(normalizeState(state, [OPENMODELDB]), state);
 	assert.equal(searchRequest(state, OPENMODELDB), `types=esrgan&base_models=4&sort=newest&limit=${DEFAULT_LIMIT}`);
-	// A chip is the value alone: the group names do not appear in it.
 	assert.deepEqual(filterChips(state, OPENMODELDB), [
 		{ key: 'type:esrgan', label: 'ESRGAN' },
 		{ key: 'base', label: '4x' }

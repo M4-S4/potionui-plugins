@@ -1,15 +1,3 @@
-"""CivArchive through the plugin's real router: `GET /sources` (only while `enable_civarchive` is
-on), `GET /civarchive/search`, `GET /civarchive/models/{id}` (and `nsfw-media`), and
-`POST /downloads` of a CivArchive file (a CivitAI URL, a Hugging Face mirror, nothing for a file
-only other sites have).
-
-The capability dependencies are overridden with the principal each test sets (a non-admin
-whose grant allows CivArchive), `nsfw.resolve_nsfw` with the context each test sets, the settings
-are faked (CivArchive on), civarchive.com is the recorded fixtures behind the shared `SourceHttp`
-(CivitAI, Hugging Face and OpenModelDB fakes beside it), the core is `FakeCore`, the raw cache and
-the pending rows live in a scratch database, and every test starts with new source instances.
-"""
-
 from types import SimpleNamespace
 
 import pytest
@@ -74,7 +62,6 @@ def settings_values(monkeypatch):
 
 @pytest.fixture
 def archive(monkeypatch, state, core, settings_values):
-    """The civarchive.com fake behind the shared client, next to the CivitAI, Hugging Face and OpenModelDB fakes."""
     monkeypatch.setattr(nsfw, "resolve_nsfw", lambda user: state.ctx)
     monkeypatch.setattr(cache_module, "cache", Cache())
     monkeypatch.setattr(sources_module, "_instances", {})
@@ -108,9 +95,6 @@ def _error(response):
 
 def _serve_search(archive, entries, total_hits=1000, **params):
     archive.clear("search.json").add("search.json", (200, JSON_HEADERS, search_body(entries, total_hits)), **params)
-
-
-# /sources ------------------------------------------------------------------------------------
 
 
 def test_sources_list_civarchive_last_with_its_filters_and_notice(client, archive):
@@ -151,9 +135,6 @@ def test_sources_still_list_civarchive_when_it_is_down(client, archive):
     civarchive = client.get(f"{BASE}/sources").json()["data"][-1]
 
     assert (civarchive["id"], civarchive["types"], civarchive["base_models"], civarchive["notice"]) == ("civarchive", [], [], NOTICE)
-
-
-# Search ----------------------------------------------------------------------------------------
 
 
 def test_search_through_the_route(client, archive):
@@ -199,7 +180,6 @@ def test_search_pages_by_page_number(client, archive):
     one = client.get(f"{BASE}/civarchive/search", params={"limit": 24})
     two = client.get(f"{BASE}/civarchive/search", params={"cursor": one.json()["data"]["next_cursor"]})
 
-    # A whole CivArchive page is kept: its cursor cannot point inside it.
     assert (len(_ids(one)), one.json()["data"]["next_cursor"]) == (50, "2")
     assert (_ids(two)[0], two.json()["data"]["next_cursor"]) == ("2000", "3")
     assert [call["page"] for call in archive.data_calls("search.json")] == ["1", "2"]
@@ -224,7 +204,6 @@ def test_a_pasted_link_is_one_model_with_its_installed_badge(client, archive, co
     (item,) = response.json()["data"]["items"]
     assert (item["id"], item["primary_sha256"], item["installed"]) == ("78291:83095", SHA_78291, True)
     assert response.json()["data"]["next_cursor"] is None
-    # The item opens that version.
     assert client.get(f"{BASE}/civarchive/models/{item['id']}").json()["data"]["versions"][0]["id"] == "83095"
 
 
@@ -245,9 +224,6 @@ def test_search_when_civarchive_is_down_is_a_502(client, archive):
     assert _error(response)["error"] == "source_unavailable"
 
 
-# Detail ---------------------------------------------------------------------------------------------
-
-
 def test_detail_through_the_route(client, archive):
     latest = client.get(f"{BASE}/civarchive/models/78291")
     named = client.get(f"{BASE}/civarchive/models/78291:83095")
@@ -265,7 +241,6 @@ def test_detail_through_the_route(client, archive):
 
 
 def test_the_other_versions_are_partial_until_the_page_loads_them(client, archive):
-    """Detail Tweaker XL: v1.0 shown, v0.3 partial; "<model id>:<version id>" loads v0.3 whole."""
     page = props("model_122359_v135867")
     older = page["model"]["version"]
     older.update(id="133241", name="v0.3", created_at=page["model"]["versions"][1]["created_at"])
@@ -307,7 +282,6 @@ def test_an_nsfw_model_is_404_for_a_blocked_user_and_flagged_for_the_others(clie
 
     assert hidden.status_code == 404
     assert (shown.status_code, shown.json()["data"]["nsfw"]) == (200, True)
-    # Its version and images are PG: nothing to blur.
     assert all(image["url"] for image in shown.json()["data"]["versions"][0]["images"])
 
 
@@ -324,9 +298,6 @@ def test_an_nsfw_image_is_blurred_then_revealed(client, state):
     ]
     state.ctx = context("blocked", "hide")
     assert client.get(f"{BASE}/civarchive/models/298188:334947/nsfw-media").status_code == 404
-
-
-# POST /downloads ---------------------------------------------------------------------------------------
 
 
 def _body(model_id, version_id, file_id, **extra):
@@ -359,7 +330,6 @@ def test_a_deleted_model_is_queued_from_its_hugging_face_mirror(client, core):
 
 
 def test_a_file_only_other_sites_have_is_refused(client, core):
-    """Cute 3D Cartoon: its file is on a deleted CivitAI version and tensordrive.app only."""
     response = client.post(f"{BASE}/downloads", json=_body("298188", "334947", "266806"))
 
     assert response.status_code == 404
@@ -368,7 +338,6 @@ def test_a_file_only_other_sites_have_is_refused(client, core):
 
 
 def test_a_file_of_an_older_version_is_checked_against_that_version(client, archive, core):
-    """LCM-LoRA's version 225222 is not the latest: the download loads it, and gets its file's CivitAI URL."""
     response = client.post(f"{BASE}/downloads", json=_body("195519", "225222", "173660"))
 
     assert response.status_code == 200, response.text
@@ -377,7 +346,7 @@ def test_a_file_of_an_older_version_is_checked_against_that_version(client, arch
 
 
 def test_a_grant_without_civarchive_refuses_its_files(client, core, state):
-    state.principal = principal()  # CivitAI and Hugging Face only
+    state.principal = principal()
 
     response = client.post(f"{BASE}/downloads", json=_body("78291", "83095", "56837"))
 
@@ -396,7 +365,6 @@ def test_downloads_from_civarchive_need_its_setting(client, core, settings_value
 
 
 def test_a_model_id_naming_its_version_is_recorded_as_the_model(client, core):
-    """The id of a pasted link's item ("78291:83095") downloads like the model's own id."""
     response = client.post(f"{BASE}/downloads", json=_body("78291:83095", "83095", "56837"))
 
     assert response.status_code == 200, response.text

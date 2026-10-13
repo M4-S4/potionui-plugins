@@ -1,9 +1,3 @@
-"""`backend.nsfw_filter`: the per-user matrix over a synthetic page and detail.
-
-The invariant under test: an NSFW image url never reaches a user whose ceiling is
-`blocked` or whose mode is `hide`, nor a user in `blur` mode (until `nsfw_media`).
-"""
-
 import pytest
 
 from backend.nsfw_filter import (
@@ -82,9 +76,6 @@ def _ids(page):
     return [item.id for item in page.items]
 
 
-# The mode actually applied -----------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "ceiling, mode, expected",
     [
@@ -103,9 +94,6 @@ def test_display_mode_never_exceeds_the_ceiling(ceiling, mode, expected):
     ctx = context(ceiling, "hide").model_copy(update={"mode": mode})
 
     assert display_mode(ctx) == expected
-
-
-# Pages ---------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("ctx", [BLOCKED, HIDE], ids=["blocked", "hide"])
@@ -178,9 +166,6 @@ def test_a_defensive_nsfw_thumbnail_on_a_safe_item_is_dropped_when_hiding():
     assert item is not None and item.thumbnail is None
 
 
-# Details --------------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize("ctx", [BLOCKED, HIDE], ids=["blocked", "hide"])
 def test_blocked_and_hide_drop_nsfw_images_and_versions(ctx):
     detail = filter_detail(_detail(), ctx)
@@ -216,9 +201,6 @@ def test_hide_poi_hides_a_real_person_model_and_its_images(ctx):
     assert SAFE_POI.url not in image_urls(filter_detail(_detail(), ctx).model_dump())
 
 
-# nsfw-media ------------------------------------------------------------------------------
-
-
 def test_nsfw_media_is_forbidden_under_a_blocked_ceiling():
     with pytest.raises(NsfwForbidden):
         nsfw_media(_detail(), BLOCKED)
@@ -238,14 +220,10 @@ def test_nsfw_media_leaves_real_people_out_with_hide_poi():
     assert nsfw_media(detail, BLUR.model_copy(update={"hide_poi": True})) == [NSFW_XXX]
 
 
-# On real answers --------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize("fixture", ["models_lora_page1", "models_lora_page2", "models_flux_nsfwlevel", "models_query"])
 @pytest.mark.parametrize("ctx", [BLOCKED, HIDE, BLUR], ids=["blocked", "hide", "blur"])
 def test_no_nsfw_url_reaches_a_user_who_does_not_show_nsfw(fixture, ctx):
     raw = body(fixture)
-    # Make every other image explicit so there is something to leak.
     for model in raw["items"]:
         for version in model["modelVersions"]:
             for index, image in enumerate(version["images"]):

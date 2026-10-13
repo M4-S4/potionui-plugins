@@ -1,8 +1,4 @@
 <script>
-	// A small button with the classes of the host `Button` (size xs), drawn locally because each
-	// request row has a few: one host component per button would be heavy. `variant` is primary,
-	// secondary, ghost or danger; `loading` shows the host's spinner and disables the button;
-	// `bind:element` gives the button itself (to move the focus to it).
 	import Icon from './Icon.svelte';
 
 	let {

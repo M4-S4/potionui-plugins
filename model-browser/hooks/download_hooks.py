@@ -1,32 +1,8 @@
-"""`download.after_complete` handler of the model-browser plugin (PLAN.md §7.4): the normal
-path from a finished download to its model.
-
-PotionUI's download worker fires the hook for every download of the instance once the file
-has landed and, for a local model download, once the catalog has indexed it: `model_id`, or
-`duplicate_of` for a byte-for-byte copy of a model already indexed. The handler looks for
-the plugin's row of the download (`pending.get_by_download_id`, else the row keyed by the
-payload's checksum and URL while its download id is not stored yet) and leaves every other
-download alone. A `queued` row is recorded `indexed` with its model (`watcher.record_indexed`;
-a `nohash:` row moves to the model's real hash, read by the file's path, or by the model's id
-for a copy), then the rest of the pipeline (assignment, enrichment, notifications) is handed
-over to the application loop (`watcher.schedule_step`). A file the catalog did not index
-fails the row there, with the indexer's warning when it gave one. A row that is not `queued`
-any more is left as it is: a late completion of a download the plugin gave up on revives
-nothing and records no quota again.
-
-The handler runs on a thread of the worker, which gives it 30 seconds: it does database
-work only and never raises. What it leaves (no application loop yet, an error, a download
-sent to a remote backend, which the hook reports without a model id) is taken up by the
-watcher's sweep (`backend/watcher.py`) on its next pass.
-"""
-
 import logging
 from typing import Any, Dict, Optional
 
 from src.plugin_api import HookContext
 
-# Imported as `model_browser.hooks.download_hooks` by PotionUI's loader and as the
-# top-level `hooks.download_hooks` by the tests (see lifecycle_hooks.py).
 if __name__.count(".") >= 2:
     from ..backend import core_bridge, pending, watcher
     from ..backend.pending import PendingRow
@@ -36,12 +12,10 @@ else:
 
 logger = logging.getLogger("plugins.model-browser")
 
-#: Why a row fails when the core indexed none of its file.
 NOT_INDEXED = "The file was downloaded but not indexed"
 
 
 def on_download_complete(context: HookContext) -> HookContext:
-    """Record the model of one of the plugin's downloads and schedule the rest; ignore any other download."""
     try:
         _complete(context)
     except Exception:
@@ -83,9 +57,6 @@ def _complete(context: HookContext) -> None:
 
 
 def _row_of(download_id: Optional[str], checksum: Optional[str], url: Optional[str]) -> Optional[PendingRow]:
-    """The plugin's row of this download: by its id, else by the key of its file while the
-    row has no download id yet (it is stored once the queue call returns); None when the
-    download is not the plugin's."""
     row = pending.get_by_download_id(download_id)
     if row is not None or not url:
         return row
@@ -96,8 +67,6 @@ def _row_of(download_id: Optional[str], checksum: Optional[str], url: Optional[s
 
 
 def _model(row: PendingRow, model_id: str, *, copy: bool, path: Optional[str]) -> Dict[str, Any]:
-    """The model to record for `row`: its id, and for a `nohash:` row the hash the catalog
-    computed (the model at the file's path, or the model it is a copy of)."""
     if not row.nohash:
         return {"id": model_id}
     found = core_bridge.find_model_by_path(path) if path and not copy else None

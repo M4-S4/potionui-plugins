@@ -1,28 +1,3 @@
-"""Routes that browse the sources: `GET /sources`, `GET /{source}/search`,
-`GET /{source}/models/{id}`, `GET /{source}/models/{id}/nsfw-media` (PLAN.md §7.3).
-
-Included by `backend/api.py` under `/api/plugins/model-browser`. Every route needs the
-`browse` capability; what the user sees then depends on their NSFW context (`nsfw.py`),
-applied by `nsfw_filter.py` to every answer:
-- search asks the source for safe content when the user cannot see NSFW at all
-  (`blocked` ceiling or `hide` mode), then filters, following the source's cursor
-  (up to `MAX_UPSTREAM_PAGES` pages) until the page has `limit` items, then marks each item
-  whose source gave the SHA256 of its primary file as installed or not for the caller
-  (`installed.mark_installed`, one lookup for the page; the core failing leaves `installed`
-  unset rather than failing the search);
-- a detail the user may not see is a 404, like `nsfw-media` under a `blocked` ceiling.
-
-Model ids may contain `/` (Hugging Face `org/repo`): the detail routes take the rest of
-the path (`{model_id:path}`), `nsfw-media` being declared first so that its suffix is not
-read as part of an id. An id that is empty, longer than `MAX_MODEL_ID_LENGTH`, starts
-with `/`, holds `..`, a backslash or a control character is refused (400).
-
-Success: `{"success": true, "data": ...}`. Errors: `HTTPException` with
-`{"success": false, "error": <code>, "message": ...}`: `unknown_source` and `not_found`
-(404), `invalid_request` (400), `rate_limited` (429, with `Retry-After`),
-`source_unavailable` (502).
-"""
-
 import logging
 import math
 from typing import Any, Dict, List, Optional
@@ -41,23 +16,17 @@ logger = logging.getLogger("plugins.model-browser")
 
 router = APIRouter()
 
-#: Upstream pages one search may read to fill a page after filtering (PLAN.md §8.1).
 MAX_UPSTREAM_PAGES = 10
-#: `Retry-After` sent when the source rate-limited us without saying for how long.
 DEFAULT_RETRY_AFTER_SECONDS = 60
-#: Longest model id accepted in a path (Hugging Face: two names of at most 96 characters).
 MAX_MODEL_ID_LENGTH = 200
-#: Longest cursor accepted (Hugging Face cursors are base64 JSON of a few hundred characters).
 MAX_CURSOR_LENGTH = 2048
 
 
 def nsfw_context(principal: Principal = Depends(require_browse)) -> NsfwContext:
-    """The caller's NSFW ceiling and display mode. Synchronous: FastAPI runs its database reads in a worker thread."""
     return nsfw.resolve_nsfw(principal.user)
 
 
 def wants_safe_results(ctx: NsfwContext) -> bool:
-    """Ask the sources for safe content only: the user never sees NSFW (`blocked` ceiling or `hide` mode)."""
     return ctx.ceiling == "blocked" or ctx.mode == "hide"
 
 
@@ -70,7 +39,6 @@ def _error(status: int, code: str, message: str, headers: Optional[Dict[str, str
 
 
 def source_http_error(exc: SourceError) -> HTTPException:
-    """A source failure as the HTTP error the page gets."""
     if isinstance(exc, SourceNotFound):
         return _error(404, "not_found", exc.message)
     if isinstance(exc, SourceRateLimited):
@@ -92,7 +60,6 @@ def _get_source(source_id: str) -> Source:
 
 
 def _model_id(model_id: str) -> str:
-    """The id of a detail route as given, or a 400 for one that could reach outside a source's id space."""
     if (
         not model_id
         or len(model_id) > MAX_MODEL_ID_LENGTH
@@ -106,19 +73,10 @@ def _model_id(model_id: str) -> str:
 
 
 def _values(values: Optional[List[str]]) -> List[str]:
-    """Repeated query parameters, each of which may also be a comma-separated list."""
     return [part.strip() for value in values or [] for part in value.split(",") if part.strip()]
 
 
 async def fill_page(source: Source, query: SearchQuery, ctx: NsfwContext) -> SearchPage:
-    """Read upstream pages from `query.cursor` on, filter each for `ctx`, until `query.limit` items are collected.
-
-    Stops after `MAX_UPSTREAM_PAGES` pages, at the last page, or when the cursor stops
-    moving; `next_cursor` is the one after the last page read. A page may hold more than
-    `limit` items: what an upstream page brings is kept, as its cursor cannot point inside it.
-    An upstream failure after the first page ends the page early (its cursor is returned
-    so the next request retries); on the first page it is raised.
-    """
     items: List[SearchItem] = []
     seen = set()
     cursor = query.cursor
@@ -138,7 +96,7 @@ async def fill_page(source: Source, query: SearchQuery, ctx: NsfwContext) -> Sea
                 items.append(item)
         next_cursor = page.next_cursor
         if next_cursor == cursor:
-            next_cursor = None  # the source did not move on: do not let the page ask for it again
+            next_cursor = None
         if len(items) >= query.limit or not next_cursor:
             break
         cursor = next_cursor
@@ -147,7 +105,6 @@ async def fill_page(source: Source, query: SearchQuery, ctx: NsfwContext) -> Sea
 
 @router.get("/sources")
 async def list_sources(principal: Principal = Depends(require_browse)) -> Dict[str, Any]:
-    """The enabled sources and their filters."""
     infos = [(await source.info()).model_dump(mode="json") for source in sources.enabled_sources()]
     return {"success": True, "data": infos}
 
@@ -165,11 +122,6 @@ async def search(
     principal: Principal = Depends(require_browse),
     ctx: NsfwContext = Depends(nsfw_context),
 ) -> Dict[str, Any]:
-    """One page of results for this user: `SearchPage` filtered for their NSFW context.
-
-    Each item with a `primary_sha256` also carries `installed`: True when that file is indexed
-    and visible to the caller (an admin sees every model), False when not, None without a hash.
-    """
     source = _get_source(source_id)
     try:
         query = SearchQuery(
@@ -192,11 +144,8 @@ async def search(
     return {"success": True, "data": page.model_dump(mode="json")}
 
 
-# `nsfw-media` comes first: the `path` convertor of the detail route would also match
-# `<id>/nsfw-media`. A model id ending in `/nsfw-media` is therefore always read as this route.
 @router.get("/{source_id}/models/{model_id:path}/nsfw-media")
 async def model_nsfw_media(source_id: str, model_id: str, ctx: NsfwContext = Depends(nsfw_context)) -> Dict[str, Any]:
-    """The urls of a model's NSFW images, for the "reveal" click in blur mode; 404 under a `blocked` ceiling."""
     source = _get_source(source_id)
     model_id = _model_id(model_id)
     if ctx.ceiling == "blocked":
@@ -216,7 +165,6 @@ async def model_nsfw_media(source_id: str, model_id: str, ctx: NsfwContext = Dep
 
 @router.get("/{source_id}/models/{model_id:path}")
 async def model_detail(source_id: str, model_id: str, ctx: NsfwContext = Depends(nsfw_context)) -> Dict[str, Any]:
-    """One model filtered for this user; 404 when they may not see it at all."""
     source = _get_source(source_id)
     model_id = _model_id(model_id)
     try:

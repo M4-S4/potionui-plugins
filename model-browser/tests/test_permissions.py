@@ -1,10 +1,3 @@
-"""`backend.permissions`: a user's groups merged into their grant (a download view and a
-request view), and the FastAPI dependencies.
-
-The core's group membership is faked on `core_bridge.user_groups`; the plugin's rows
-live in a scratch database.
-"""
-
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -49,7 +42,6 @@ def _user(user_id="user-1", account_type=AccountType.USER):
 
 @pytest.fixture
 def membership(plugin_db, monkeypatch):
-    """The core's group membership by user id, for the test to fill; the plugin's table starts empty."""
     create_tables()
     members = {}
 
@@ -77,7 +69,6 @@ def _request_row(group_id, **params):
 
 
 def _view(params):
-    """A view as a comparable tuple: sources, model types, size, assign_to, allow_remote."""
     return (params.sources, params.model_types, params.max_file_gb, params.assign_to, params.allow_remote)
 
 
@@ -86,9 +77,6 @@ def test_the_public_names_stay_importable_from_permissions():
     assert permissions.DEFAULT_CAPABILITIES["all_users"] == {"browse", "request"}
     assert permissions.DEFAULT_CAPABILITIES["all_admins"] == set(CAPABILITIES)
     assert permissions.DEFAULT_SOURCES == {"civitai", "huggingface", "openmodeldb"}
-
-
-# Resolution ---------------------------------------------------------------------
 
 
 def test_an_admin_gets_the_admin_grant_without_a_group_lookup(monkeypatch):
@@ -102,7 +90,7 @@ def test_an_admin_gets_the_admin_grant_without_a_group_lookup(monkeypatch):
     assert grant is ADMIN_GRANT
     assert grant.unrestricted
     assert all(grant.has(capability) for capability in CAPABILITIES)
-    for purpose in ("download", "request"):  # both views unrestricted
+    for purpose in ("download", "request"):
         assert grant.allows_source("civarchive", purpose) and grant.allows_type("checkpoint", purpose)
 
 
@@ -114,7 +102,6 @@ def test_a_user_in_all_users_only_may_browse_and_request_by_default(membership):
     assert grant.capabilities == {"browse", "request"}
     assert not grant.has("download") and not grant.has("approve")
     assert not grant.unrestricted
-    # No group grants `download`: the download view is empty.
     assert (grant.sources, grant.model_types, grant.max_file_gb, grant.assign_to, grant.allow_remote) == (
         frozenset(),
         frozenset(),
@@ -123,7 +110,6 @@ def test_a_user_in_all_users_only_may_browse_and_request_by_default(membership):
         False,
     )
     assert not grant.allows_source("civitai")
-    # `all_users` grants `request`: its default parameters are the request view.
     assert _view(grant.request_params) == (DEFAULT_SOURCES, frozenset(), None, "user", False)
     assert grant.allows_source("civitai", "request") and not grant.allows_source("civarchive", "request")
 
@@ -170,7 +156,7 @@ def test_two_downloading_groups_merge_their_parameters(membership):
 
     assert grant.capabilities == {"browse", "request", "download"}
     assert grant.sources == {"civitai", "huggingface"}
-    assert grant.model_types == frozenset()  # hf-users lists no type: every type
+    assert grant.model_types == frozenset()
     assert grant.allows_type("checkpoint")
     assert grant.max_file_gb == 10.0
     assert grant.assign_to == "group"
@@ -178,8 +164,6 @@ def test_two_downloading_groups_merge_their_parameters(membership):
 
 
 def test_the_default_all_users_row_does_not_widen_a_stricter_download_group(membership):
-    """mb-test-open's case: `all_users` (browse + request, default parameters) and a group that
-    may download LoRAs and embeddings of at most 2 GB from CivitAI."""
     membership["user-1"] = ["all_users", "lora-makers"]
     save_rows(
         [_download_row("lora-makers", sources={"civitai"}, model_types={"lora", "embedding"}, max_file_gb=2.0)]
@@ -190,7 +174,6 @@ def test_the_default_all_users_row_does_not_widen_a_stricter_download_group(memb
     assert grant.capabilities == {"browse", "request", "download"}
     assert _view(grant.download_params) == ({"civitai"}, {"lora", "embedding"}, 2.0, "user", False)
     assert not grant.allows_type("checkpoint") and not grant.allows_source("huggingface")
-    # ...while the request view is all_users' wide default: approval is the control there.
     assert _view(grant.request_params) == (DEFAULT_SOURCES, frozenset(), None, "user", False)
     assert grant.allows_type("checkpoint", "request") and grant.allows_source("huggingface", "request")
 
@@ -215,7 +198,6 @@ def test_a_user_with_request_only_has_an_empty_download_view_and_the_request_vie
 
     assert grant.download_params == NO_PARAMS
     assert not grant.allows_source("huggingface")
-    # A request names no destination: `allow_remote` never reaches the request view.
     assert _view(grant.request_params) == ({"huggingface"}, {"embedding"}, 0.5, "group", False)
 
 
@@ -252,9 +234,6 @@ def test_the_row_of_a_deleted_group_is_ignored_and_left_for_the_admin_routes(mem
 
     assert not resolve_grant(_user()).has("download")
     assert "deleted-group" in load_rows()
-
-
-# Merge rules ------------------------------------------------------------------------
 
 
 def test_capabilities_are_united_across_groups():
@@ -328,8 +307,8 @@ def test_the_request_view_merges_the_groups_that_grant_request_by_the_same_rules
     rows = [
         _request_row("a", sources={"civitai"}, model_types={"lora"}, max_file_gb=1.0),
         _request_row("b", sources={"huggingface"}, model_types={"embedding"}, max_file_gb=4.0, assign_to="group"),
-        _download_row("c", sources={"civarchive"}, model_types={"vae"}, max_file_gb=None),  # not a request group
-        Row(group_id="d", capabilities=frozenset({"browse"}), model_types=frozenset()),  # nor this one
+        _download_row("c", sources={"civarchive"}, model_types={"vae"}, max_file_gb=None),
+        Row(group_id="d", capabilities=frozenset({"browse"}), model_types=frozenset()),
     ]
 
     view = merge_rows(rows).request_params
@@ -359,9 +338,6 @@ def test_merging_no_row_grants_nothing():
     assert merge_rows([]) == merge_rows([default_row("artists")])
     assert merge_rows([]).capabilities == frozenset()
     assert merge_rows([]).request_params == NO_PARAMS
-
-
-# Grant checks -----------------------------------------------------------------------
 
 
 def _grant(**changes):
@@ -417,10 +393,7 @@ def test_a_grant_without_a_request_view_allows_no_request():
 
     assert grant.request_params == NO_PARAMS
     assert not grant.allows_source("civitai", "request")
-    assert grant.allows_type("lora", "request")  # no type listed: every type, but no source
-
-
-# Dependencies -----------------------------------------------------------------------
+    assert grant.allows_type("lora", "request")
 
 
 def test_require_download_refuses_a_browse_only_user_with_the_envelope(membership):
@@ -450,7 +423,7 @@ def test_require_rejects_an_unknown_capability():
 
 
 def test_require_any_yields_the_principal_when_one_of_the_capabilities_is_granted(membership):
-    membership["user-1"] = ["all_users"]  # browse + request by default
+    membership["user-1"] = ["all_users"]
     either = require_any("download", "request")
 
     principal = either(user=_user())
@@ -507,12 +480,8 @@ def test_a_route_behind_require_download_answers_403_then_200(membership):
     assert allowed.json() == {"user": "user-1"}
 
 
-# Users who are not the caller ----------------------------------------------------------
-
-
 @pytest.fixture
 def directory(membership, monkeypatch):
-    """The users `get_user` / `list_user_ids` know, and every group's members from `membership`."""
     users = {
         "admin-1": _user("admin-1", AccountType.ADMIN),
         "admin-2": _user("admin-2", AccountType.ADMIN),
@@ -551,11 +520,10 @@ def test_approvers_are_every_admin_and_the_members_of_groups_granting_approve(di
 
 
 def test_without_a_group_granting_approve_only_admins_approve(directory):
-    # `all_admins` grants every capability by default; admin-2 is an admin outside it.
     assert permissions.approver_ids() == {"admin-1", "admin-2"}
 
     save_rows([Row(group_id="all_admins", capabilities=frozenset({"browse"}))])
-    assert permissions.approver_ids() == {"admin-1", "admin-2"}  # admins approve whatever their groups say
+    assert permissions.approver_ids() == {"admin-1", "admin-2"}
 
 
 def test_user_by_id_never_raises_and_admin_by_id_answers_admins_only(directory, monkeypatch, caplog):
@@ -573,8 +541,6 @@ def test_user_by_id_never_raises_and_admin_by_id_answers_admins_only(directory, 
     assert permissions.user_by_id("user-1") is None
     assert "Could not look user user-1 up" in caplog.text
 
-
-# The acting admin of a group assignment ---------------------------------------------------
 
 _REVIEWERS = Row(group_id="reviewers", capabilities=frozenset({"browse", "approve"}))
 

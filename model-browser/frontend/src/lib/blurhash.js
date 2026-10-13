@@ -1,23 +1,8 @@
-// A BlurHash decoder (https://blurha.sh, algorithm by Wolt), written from the published format so
-// the page needs no extra package. The server sends a blurhash *instead of* the url of an NSFW
-// image to a user in blur mode (PLAN.md section 5.2); NsfwMedia.svelte paints it on a small
-// canvas scaled up by CSS. No DOM in here: tested with `node --test` (see blurhash.test.js).
-//
-// Format: base 83 digits.
-//   hash[0]      size flag: numX = flag % 9 + 1, numY = floor(flag / 9) + 1 (1 to 9 components each way)
-//   hash[1]      quantised maximum AC value: max = (q + 1) / 166
-//   hash[2..5]   DC component, the average colour, as 0xRRGGBB in sRGB
-//   then 2 digits for each AC component (numX * numY - 1 of them), each colour channel
-//   quantised to 19 levels: v = sign(q - 9) * ((q - 9) / 9)^2 * max
-// The picture is sum(component * cos(pi * x * i / width) * cos(pi * y * j / height)) in linear RGB.
-
 const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~';
 const DIGIT_VALUES = new Map([...DIGITS].map((char, index) => [char, index]));
 
-/** Size of the canvas NsfwMedia decodes to before CSS scales it up. */
 export const BLURHASH_SIZE = 32;
 
-/** A hash that cannot be decoded; `message` says why. */
 export class BlurhashError extends Error {
 	constructor(message) {
 		super(message);
@@ -25,12 +10,6 @@ export class BlurhashError extends Error {
 	}
 }
 
-/**
- * The value of base 83 digits.
- *
- * @param {string} text
- * @returns {number}
- */
 export function decode83(text) {
 	let value = 0;
 	for (const char of text) {
@@ -41,13 +20,6 @@ export function decode83(text) {
 	return value;
 }
 
-/**
- * `value` as `length` base 83 digits (the encoder's half, used by the tests to build hashes).
- *
- * @param {number} value
- * @param {number} length
- * @returns {string}
- */
 export function encode83(value, length) {
 	let result = '';
 	for (let i = 1; i <= length; i += 1) {
@@ -57,13 +29,11 @@ export function encode83(value, length) {
 	return result;
 }
 
-/** One sRGB channel (0 to 255) in linear light (0 to 1). */
 export function sRGBToLinear(value) {
 	const v = value / 255;
 	return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 }
 
-/** One linear channel (clamped to 0 to 1) in sRGB (0 to 255, rounded). */
 export function linearToSRGB(value) {
 	const v = Math.max(0, Math.min(1, value));
 	return v <= 0.0031308 ? Math.trunc(v * 12.92 * 255 + 0.5) : Math.trunc((1.055 * v ** (1 / 2.4) - 0.055) * 255 + 0.5);
@@ -73,12 +43,6 @@ function signPow(value, exponent) {
 	return Math.sign(value) * Math.abs(value) ** exponent;
 }
 
-/**
- * Check a hash without decoding the picture.
- *
- * @param {unknown} hash
- * @returns {{ ok: true, numX: number, numY: number } | { ok: false, error: string }}
- */
 export function validateBlurhash(hash) {
 	if (typeof hash !== 'string') return { ok: false, error: 'A blurhash is a string' };
 	if (hash.length < 6) return { ok: false, error: 'A blurhash has at least 6 characters' };
@@ -95,12 +59,6 @@ export function validateBlurhash(hash) {
 	return { ok: true, numX, numY };
 }
 
-/**
- * The average colour of a hash (its DC component), as sRGB `[r, g, b]`.
- *
- * @param {string} hash
- * @returns {[number, number, number]}
- */
 export function averageColor(hash) {
 	const check = validateBlurhash(hash);
 	if (!check.ok) throw new BlurhashError(check.error);
@@ -108,16 +66,6 @@ export function averageColor(hash) {
 	return [value >> 16, (value >> 8) & 255, value & 255];
 }
 
-/**
- * Decode a hash to RGBA pixels, ready for `new ImageData(pixels, width, height)`.
- *
- * @param {string} hash
- * @param {number} width   Pixels across (a small size such as 32: the picture is a blur anyway).
- * @param {number} height
- * @param {number} [punch] Contrast boost of the AC components (1: as encoded).
- * @returns {Uint8ClampedArray}  `width * height * 4` bytes, alpha always 255.
- * @throws {BlurhashError} for a malformed hash or a size that is not a positive whole number.
- */
 export function decodeBlurhash(hash, width, height, punch = 1) {
 	const check = validateBlurhash(hash);
 	if (!check.ok) throw new BlurhashError(check.error);
@@ -128,7 +76,6 @@ export function decodeBlurhash(hash, width, height, punch = 1) {
 	const maximumValue = (decode83(hash[1]) + 1) / 166;
 	const contrast = Number.isFinite(punch) && punch > 0 ? punch : 1;
 
-	/** @type {number[][]} linear RGB of each component, DC first */
 	const colors = new Array(numX * numY);
 	const dc = decode83(hash.slice(2, 6));
 	colors[0] = [sRGBToLinear(dc >> 16), sRGBToLinear((dc >> 8) & 255), sRGBToLinear(dc & 255)];
@@ -144,7 +91,6 @@ export function decodeBlurhash(hash, width, height, punch = 1) {
 		];
 	}
 
-	// The cosines only depend on x and i (or y and j): compute them once.
 	const cosX = new Float64Array(width * numX);
 	for (let x = 0; x < width; x += 1) {
 		for (let i = 0; i < numX; i += 1) cosX[x * numX + i] = Math.cos((Math.PI * x * i) / width);
@@ -183,13 +129,6 @@ export function decodeBlurhash(hash, width, height, punch = 1) {
 const cache = new Map();
 const CACHE_LIMIT = 256;
 
-/**
- * `decodeBlurhash` at `BLURHASH_SIZE`, remembered per hash (a grid repaints the same hashes), or
- * null for a hash that cannot be decoded. The oldest entries are dropped past 256 hashes.
- *
- * @param {unknown} hash
- * @returns {Uint8ClampedArray | null}
- */
 export function decodeCached(hash) {
 	if (typeof hash !== 'string') return null;
 	if (cache.has(hash)) return cache.get(hash);

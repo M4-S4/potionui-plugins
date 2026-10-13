@@ -96,7 +96,6 @@ test('sizeProblem with purpose request reads the request parameters', () => {
 		sizeProblem(me, 9 * 1024 ** 3, { purpose: 'request' }),
 		'This file is 9.0 GB: your permissions let you ask for files of at most 8 GB'
 	);
-	// Without request_params, the download parameters bound requests too.
 	assert.equal(sizeProblem(LIMITED, 5 * 1024 ** 3, { purpose: 'request' }), 'This file is 5.0 GB: your permissions let you ask for files of at most 1 GB');
 });
 

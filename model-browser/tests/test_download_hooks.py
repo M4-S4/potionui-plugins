@@ -1,13 +1,3 @@
-"""`hooks.download_hooks.on_download_complete`: the `download.after_complete` handler, which
-records the model of one of the plugin's finished downloads and hands the rest of the pipeline
-over to the application loop.
-
-The handler gets the context the core builds (`HookContext`, with the payload of
-`src/features/downloads/worker.py::_execute_after_complete`) and runs on another thread, as
-the worker runs it. The core is `FakeCore`; the pending rows live in a scratch database;
-`run_on_app_loop` is the `scheduled` recorder, whose jobs the tests await.
-"""
-
 import asyncio
 import logging
 
@@ -57,8 +47,6 @@ def _row(key=SHA):
 
 
 def _completed(**fields):
-    """The context the core hands this plugin's handler once a download has completed: by
-    default the plugin's file `dl-1`, indexed as `model-1`."""
     data = {
         "download_id": "dl-1",
         "url": URL,
@@ -77,16 +65,11 @@ def _completed(**fields):
 
 
 def _hf_completed(**fields):
-    """The completion of the gated Hugging Face file, queued without a hash."""
     return _completed(url=HF_URL, checksum_sha256=None, destination_path=HF_PATH, filename="flux1-dev.safetensors", **fields)
 
 
 async def _handle(context):
-    """The handler as the download worker runs it: on another thread."""
     return await asyncio.to_thread(on_download_complete, context)
-
-
-# The plugin's downloads ------------------------------------------------------------------
 
 
 async def test_a_download_of_the_plugin_is_indexed_and_the_rest_handed_over(core, scheduled):
@@ -99,7 +82,7 @@ async def test_a_download_of_the_plugin_is_indexed_and_the_rest_handed_over(core
     assert context.data == payload
     row = _row()
     assert (row.status, row.model_id, row.download_id) == ("indexed", "model-1", "dl-1")
-    assert core.calls == []  # a row keyed by its hash reads nothing more
+    assert core.calls == []
     assert len(scheduled) == 1
     await scheduled[0]
     assert (_row().status, _row().error) == ("enriched", None)
@@ -146,7 +129,7 @@ async def test_a_file_the_catalog_did_not_index_fails_its_row(core, scheduled, w
 
     await _handle(_completed(model_id=None, duplicate_of=None, warning=warning))
 
-    assert _row().status == "queued"  # the failure runs on the application loop
+    assert _row().status == "queued"
     assert len(scheduled) == 1
     await scheduled[0]
     row = _row()
@@ -156,9 +139,6 @@ async def test_a_file_the_catalog_did_not_index_fails_its_row(core, scheduled, w
     assert (notification["user_id"], notification["notification_type"]) == ("user-1", "model-browser.download_failed")
     assert notification["message"].endswith(error)
     assert "assign_to_user" not in core.names()
-
-
-# Rows keyed without a hash ---------------------------------------------------------------
 
 
 def _approved_request(user_id, sha256):
@@ -222,9 +202,6 @@ async def test_a_nohash_row_keeps_its_key_when_the_model_at_its_path_is_another(
     assert core.calls == [("find_model_by_path", HF_PATH), ("find_model_by_id", "model-2")]
 
 
-# Downloads the handler leaves alone ------------------------------------------------------
-
-
 async def test_without_a_row_of_its_own_the_handler_writes_nothing(core, scheduled):
     context = _completed()
     payload = dict(context.data)
@@ -269,10 +246,10 @@ async def test_a_row_that_is_no_longer_queued_is_left_as_it_is(core, scheduled, 
 async def test_a_late_completion_of_a_download_the_plugin_gave_up_on_revives_nothing(core, scheduled):
     core.add_download("dl-1", "failed", error_message="HTTP 500")
     _insert(limit_ref_id="model-browser:ref-1")
-    await Watcher().run_pass()  # the sweep fails the row, refunds the quota, tells the requester
+    await Watcher().run_pass()
     failed = _row()
 
-    await _handle(_completed())  # an admin retried the download in the core, and it completed
+    await _handle(_completed())
 
     assert _row() == failed and failed.status == "failed"
     assert core.refunds == ["model-browser:ref-1"] and core.limit_events == []
@@ -281,7 +258,6 @@ async def test_a_late_completion_of_a_download_the_plugin_gave_up_on_revives_not
 
 
 async def test_a_download_sent_to_a_remote_backend_is_left_to_the_sweep(core, scheduled):
-    """The core indexes a remote backend as a whole, and fires the hook without a model id."""
     _insert(limit_ref_id="model-browser:ref-1")
 
     await _handle(_completed(model_id=None, destination_backend_id="worker-1"))
@@ -293,11 +269,8 @@ async def test_a_download_sent_to_a_remote_backend_is_left_to_the_sweep(core, sc
     assert _row().status == "enriched"
 
 
-# The sweep as the fallback ---------------------------------------------------------------
-
-
 async def test_without_an_application_loop_the_row_is_indexed_and_the_sweep_finishes_it(core, monkeypatch, caplog):
-    def run_on_app_loop(coro):  # what the core does before the application has started
+    def run_on_app_loop(coro):
         coro.close()
         raise RuntimeError("AppContainer not initialized yet")
 

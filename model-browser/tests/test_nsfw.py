@@ -1,10 +1,3 @@
-"""`backend.nsfw`: the NSFW ceiling and display mode that apply to one user (PLAN.md §5.1).
-
-The expected values are written out rather than computed, so the tables below are the
-specification: the stricter of the core policy and the plugin ceiling wins, and the
-user's preference is pulled down to what that ceiling allows.
-"""
-
 import pytest
 
 from backend import core_bridge, settings
@@ -16,7 +9,6 @@ POLICIES = ("allowed", "blur", "blocked")
 CEILING_SETTINGS = ("inherit", "blur", "blocked")
 USER_MODES = ("show", "blur", "hide")
 
-#: (core policy, plugin `nsfw_ceiling`) -> effective ceiling.
 CEILING = {
     ("allowed", "inherit"): "allowed",
     ("allowed", "blur"): "blur",
@@ -29,7 +21,6 @@ CEILING = {
     ("blocked", "blocked"): "blocked",
 }
 
-#: (effective ceiling, user's `media_nsfw_filter_mode`) -> display mode.
 MODE = {
     ("allowed", "show"): "show",
     ("allowed", "blur"): "blur",
@@ -42,7 +33,6 @@ MODE = {
     ("blocked", "hide"): "hide",
 }
 
-#: Effective ceiling -> modes the user may pick.
 ALLOWED = {
     "allowed": ("blur", "show", "hide"),
     "blur": ("blur", "hide"),

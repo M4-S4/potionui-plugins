@@ -1,11 +1,3 @@
-"""Test doubles for the sources layer: recorded CivitAI answers served through
-`SourceHttp`'s injectable transport (no socket is ever opened), an in-memory cache,
-fake settings and NSFW contexts.
-
-The fixtures under `fixtures/civitai/` are real public answers, trimmed:
-`{"_status": int, "_headers": {...}, "body": <json>}`.
-"""
-
 import copy
 import json
 from pathlib import Path
@@ -15,24 +7,20 @@ from urllib.parse import urlsplit
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "civitai"
 API_BASE = "https://civitai.com/api/v1"
 
-#: Request parameter value meaning "this parameter must be absent".
 ABSENT = object()
 
 Response = Union[str, Tuple[int, Dict[str, str], Any], Callable[[str, List[Tuple[str, str]]], Any]]
 
 
 def load(name: str) -> Dict[str, Any]:
-    """A whole fixture file: `_status`, `_headers` and `body`."""
     return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
 
 
 def body(name: str) -> Any:
-    """A fresh copy of a fixture's JSON body."""
     return copy.deepcopy(load(name)["body"])
 
 
 def item(name: str, model_id: int) -> Dict[str, Any]:
-    """One model of a list fixture, by id."""
     for raw in body(name)["items"]:
         if raw["id"] == model_id:
             return raw
@@ -45,24 +33,15 @@ def page_body(items: List[Dict[str, Any]], next_cursor: Optional[str] = None) ->
 
 
 class FakeTransport:
-    """`fetch(url, params)` for `SourceHttp`, answering from routes registered with `add`.
-
-    A route matches a request when the path is the same and every parameter it names has
-    that value (`ABSENT`: is missing); the route naming the most parameters wins. A request
-    no route matches gets a 404. Every request is recorded in `calls` as (path, params).
-    """
-
     def __init__(self) -> None:
         self.calls: List[Tuple[str, List[Tuple[str, str]]]] = []
         self._routes: List[Tuple[str, Dict[str, Any], Response]] = []
 
     def add(self, path: str, response: Response, **params: Any) -> "FakeTransport":
-        """`response`: a fixture name, a `(status, headers, body)` tuple, or a callable(path, params) giving one."""
         self._routes.append((path, params, response))
         return self
 
     def calls_to(self, path: str) -> List[Dict[str, Any]]:
-        """The parameters of each call to `path`, as dicts (repeated names give lists)."""
         return [_as_dict(params) for called, params in self.calls if called == path]
 
     async def __call__(self, url: str, params):
@@ -113,8 +92,6 @@ def _as_dict(params: List[Tuple[str, str]]) -> Dict[str, Any]:
 
 
 class MemoryCache:
-    """The `Cache` interface over a dict, for tests of a source alone. Stores deep copies, like the real one stores text."""
-
     def __init__(self) -> None:
         self.entries: Dict[str, Any] = {}
         self.ttls: Dict[str, Optional[float]] = {}
@@ -134,7 +111,6 @@ class MemoryCache:
 
 
 def fake_settings(monkeypatch, **overrides: Any) -> Dict[str, Any]:
-    """Replace `settings.get_setting` with the defaults plus `overrides`; returns the live dict to change later."""
     from backend import settings
 
     values = dict(settings.DEFAULTS)
@@ -144,7 +120,6 @@ def fake_settings(monkeypatch, **overrides: Any) -> Dict[str, Any]:
 
 
 def make_source(transport: FakeTransport, cache: Any = None):
-    """A `CivitaiSource` on the fake transport, no rate-limit delay, an in-memory cache unless one is given."""
     from backend.http import SourceHttp
     from backend.sources.civitai import CivitaiSource
 
@@ -156,7 +131,6 @@ _ALLOWED_MODES = {"allowed": ("blur", "show", "hide"), "blur": ("blur", "hide"),
 
 
 def context(ceiling: str = "allowed", mode: str = "show", max_level: int = 2, hide_poi: bool = False):
-    """An `NsfwContext` as `nsfw.resolve_nsfw` would build it."""
     from backend.schema import NsfwContext
 
     return NsfwContext(
@@ -165,7 +139,6 @@ def context(ceiling: str = "allowed", mode: str = "show", max_level: int = 2, hi
 
 
 def image_urls(value: Any) -> List[str]:
-    """Every image url anywhere in a dumped page or detail."""
     urls: List[str] = []
 
     def walk(node: Any) -> None:

@@ -1,16 +1,7 @@
-// The downloads tray: what each row of `GET /downloads` looks like, when to poll, and which rows
-// finished during the session (for a toast). Rows are `{ pending, download }`: `pending` is the
-// plugin's row (backend pending.py: status queued -> indexed -> assigned -> enriched, or failed),
-// `download` the core's download record or null (status pending, downloading, paused, completed,
-// failed, cancelled; progress 0 to 1). No Svelte in here: tested with `node --test`
-// (see downloads.test.js).
-
 import { formatBytes, formatSpeed, percent } from './format.js';
 
-/** How often the tray asks again while a row is unfinished. */
 export const POLL_INTERVAL_MS = 5000;
 
-/** Rows the tray asks for. */
 export const LIST_LIMIT = 30;
 
 const PENDING_UNFINISHED = new Set(['queued', 'indexed', 'assigned']);
@@ -21,46 +12,35 @@ function isObject(value) {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** The rows of a `GET /downloads` answer that have a pending row. */
 export function normalizeRows(data) {
 	return (Array.isArray(data) ? data : []).filter((row) => isObject(row) && isObject(row.pending) && rowKey(row));
 }
 
-/** A row's identity: the pending row's key (a SHA256, or `nohash:<url>`). */
 export function rowKey(row) {
 	const key = row?.pending?.sha256;
 	return typeof key === 'string' ? key : '';
 }
 
-/**
- * Whether a row is still moving: its pending row is queued, indexed or assigned, or the core
- * download is pending, downloading or paused. A pending row that is enriched or failed is done,
- * whatever the core download says.
- */
 export function isUnfinished(row) {
 	const pending = row?.pending?.status;
 	if (PENDING_FINAL.has(pending)) return false;
 	return PENDING_UNFINISHED.has(pending) || DOWNLOAD_UNFINISHED.has(row?.download?.status);
 }
 
-/** Whether the tray should poll again. */
 export function shouldPoll(rows) {
 	return rows.some(isUnfinished);
 }
 
-/** How many rows are unfinished (the count on the tray button). */
 export function activeCount(rows) {
 	return rows.filter(isUnfinished).length;
 }
 
-/** The model name of a row (or its file name). */
 export function rowTitle(row) {
 	const name = row?.pending?.info?.model?.name;
 	if (typeof name === 'string' && name) return name;
 	return row?.pending?.file_name || row?.download?.filename || 'Download';
 }
 
-/** The file of a row, with the version when known: 'detailTweaker.safetensors · v1.0'. */
 export function rowSubtitle(row) {
 	const file = row?.pending?.file_name || row?.download?.filename || '';
 	const versions = row?.pending?.info?.model?.versions;
@@ -68,12 +48,6 @@ export function rowSubtitle(row) {
 	return [file, version].filter(Boolean).join(' · ');
 }
 
-/**
- * What the tray shows for a row.
- *
- * @returns {{ label: string, tone: 'neutral' | 'info' | 'signal' | 'warning' | 'success' | 'danger',
- *             progress: number | null, sizeText: string, speedText: string, error: string }}
- */
 export function rowStatus(row) {
 	const pending = row?.pending ?? {};
 	const download = isObject(row?.download) ? row.download : null;
@@ -123,14 +97,6 @@ export function rowStatus(row) {
 	}
 }
 
-/**
- * Note a download just started (the `pending` row of a `POST /downloads` answer), so that its
- * end is reported even when it finishes before the next poll sees it unfinished.
- *
- * @param {Map<string, string>} seen
- * @param {any} pending
- * @returns {Map<string, string>}  A new map.
- */
 export function noteStarted(seen, pending) {
 	const next = new Map(seen);
 	if (isObject(pending) && typeof pending.sha256 === 'string' && pending.sha256) {
@@ -139,14 +105,6 @@ export function noteStarted(seen, pending) {
 	return next;
 }
 
-/**
- * The rows that reached `enriched` or `failed` since the last poll. A row first seen already
- * finished (before the session, or before the page loaded) is not reported.
- *
- * @param {Map<string, string>} seen  Last known pending status per row key.
- * @param {any[]} rows
- * @returns {{ events: { kind: 'done' | 'failed', key: string, row: any }[], seen: Map<string, string> }}
- */
 export function detectTransitions(seen, rows) {
 	const next = new Map(seen);
 	const events = [];
@@ -163,7 +121,6 @@ export function detectTransitions(seen, rows) {
 	return { events, seen: next };
 }
 
-/** The toast for a finished row. */
 export function transitionToast(event) {
 	const name = rowTitle(event.row);
 	if (event.kind === 'done') return { level: 'success', message: `${name} is ready in your models` };
@@ -171,13 +128,6 @@ export function transitionToast(event) {
 	return { level: 'error', message: error ? `${name}: download failed (${error})` : `${name}: download failed` };
 }
 
-/**
- * The toast for the answer of `POST /downloads`.
- *
- * @param {any} data  `{ pending, download, already_installed, already_queued }`
- * @param {{ id: string, name: string }[]} [groups]  To name a target group.
- * @returns {{ level: 'success' | 'info', message: string }}
- */
 export function startToast(data, groups = []) {
 	const pending = isObject(data?.pending) ? data.pending : {};
 	const file = pending.file_name || 'The file';

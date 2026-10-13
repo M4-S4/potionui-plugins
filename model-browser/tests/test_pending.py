@@ -1,5 +1,3 @@
-"""`backend.pending`: the `model_browser_pending` table, on a scratch database."""
-
 import sqlite3
 
 import pytest
@@ -45,9 +43,6 @@ def _set_created_at(db, key, stamp):
         cursor.execute(f"UPDATE {pending.TABLE} SET created_at = ? WHERE sha256 = ?", (stamp, key))
 
 
-# Keys -----------------------------------------------------------------------------------
-
-
 def test_the_key_is_the_lower_case_hash_or_the_url_behind_the_nohash_prefix():
     assert pending.key_for("  " + "AB" * 32 + " ", URL) == "ab" * 32
     assert pending.key_for(None, URL) == NOHASH_PREFIX + URL
@@ -69,9 +64,6 @@ def test_with_status_is_a_copy_with_a_new_status_and_error():
     assert (row.status, row.error) == ("queued", None)
 
 
-# Insert and read ------------------------------------------------------------------------
-
-
 def test_insert_then_get_round_trips_every_column(table):
     stored = pending.insert(_row(request_id="req-1", limit_ref_id="ref-1"))
 
@@ -91,7 +83,7 @@ def test_get_of_an_unknown_key_is_none(table):
 def test_get_by_download_id_finds_the_row_of_a_core_download(table):
     pending.insert(_row(download_id="dl-1"))
     pending.insert(_row(key=OTHER_SHA, download_id="dl-2"))
-    pending.insert(_row(key=NOHASH_PREFIX + URL))  # not on the queue yet
+    pending.insert(_row(key=NOHASH_PREFIX + URL))
 
     assert pending.get_by_download_id("dl-2") == pending.get(OTHER_SHA)
     assert pending.get_by_download_id("dl-1").sha256 == SHA
@@ -122,9 +114,6 @@ def test_an_unreadable_info_column_reads_as_an_empty_dict(table):
     with table.get_cursor() as cursor:
         cursor.execute(f"UPDATE {pending.TABLE} SET info = ? WHERE sha256 = ?", ("[1, 2]", SHA))
     assert pending.get(SHA).info == {}
-
-
-# Update ---------------------------------------------------------------------------------
 
 
 def test_update_sets_the_given_fields_only(table):
@@ -167,11 +156,8 @@ def test_update_only_from_some_statuses_changes_nothing_on_a_row_in_another(tabl
     assert pending.update(SHA, only_from=pending.UNFINISHED, status="failed") is not None
     assert pending.update(SHA, only_from=pending.UNFINISHED, status="failed", error="again") is None
     assert pending.get(SHA).error == "a note"
-    assert pending.update(SHA, only_from=("done",), status="enriched") is None  # no known status: nothing
+    assert pending.update(SHA, only_from=("done",), status="enriched") is None
     assert pending.update(OTHER_SHA, only_from=("queued",), status="failed") is None
-
-
-# Rekey and delete -----------------------------------------------------------------------
 
 
 def test_rekey_moves_a_nohash_row_to_its_real_hash(table):
@@ -203,9 +189,6 @@ def test_delete_says_whether_a_row_was_removed(table):
     assert pending.delete(SHA) is True
     assert pending.delete(SHA) is False
     assert pending.get(SHA) is None
-
-
-# Listing --------------------------------------------------------------------------------
 
 
 def _three_rows(db):

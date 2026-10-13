@@ -1,9 +1,3 @@
-"""`backend.settings`: the plugin's settings parsed from what the core stores, and the user's NSFW mode.
-
-The core stores a plugin setting as `str(value)` of what the admin form sent (`"True"`,
-`"10"`, ...) and never seeds the manifest defaults, so every value goes through a parser.
-"""
-
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -31,14 +25,11 @@ def test_the_defaults_and_options_match_the_manifest():
     assert set(specs) == set(DEFAULTS)
     for key, spec in specs.items():
         assert parse_setting(key, spec["default"]) == DEFAULTS[key], key
-        for option in spec.get("options", []):  # every choice the admin form offers is accepted as is
+        for option in spec.get("options", []):
             assert str(parse_setting(key, option["value"])).lower() == option["value"], (key, option)
 
 
 def test_the_yes_no_settings_are_two_option_selects_not_booleans():
-    """PotionUI 0.0.15's admin form stores a `boolean` as `str(value)` ("False") and shows any
-    non-empty stored string as checked (`!!"False"`), so a switch turned off came back on after
-    every save. A select is stored and shown as the string it was given."""
     manifest = yaml.safe_load((PLUGIN_ROOT / "manifest.yml").read_text(encoding="utf-8"))
     specs = {spec["name"]: spec for spec in manifest["settings"]}
 
@@ -59,14 +50,12 @@ def test_an_unset_setting_is_its_default(key, raw):
 @pytest.mark.parametrize(
     "key, raw, value",
     [
-        # nsfw_ceiling: one of three words, in any case.
         ("nsfw_ceiling", "inherit", "inherit"),
         ("nsfw_ceiling", "blur", "blur"),
         ("nsfw_ceiling", "blocked", "blocked"),
         ("nsfw_ceiling", " Blocked ", "blocked"),
         ("nsfw_ceiling", "allowed", "inherit"),
         ("nsfw_ceiling", "hide", "inherit"),
-        # nsfw_max_level: a CivitAI level, 1 2 4 or 8.
         ("nsfw_max_level", "1", 1),
         ("nsfw_max_level", "4", 4),
         ("nsfw_max_level", " 8 ", 8),
@@ -77,7 +66,6 @@ def test_an_unset_setting_is_its_default(key, raw):
         ("nsfw_max_level", "-1", 2),
         ("nsfw_max_level", "R", 2),
         ("nsfw_max_level", "4.0", 2),
-        # hide_poi / enable_civarchive: booleans, as `str()` of what the form sent.
         ("hide_poi", "True", True),
         ("hide_poi", "true", True),
         ("hide_poi", "1", True),
@@ -92,7 +80,6 @@ def test_an_unset_setting_is_its_default(key, raw):
         ("enable_civarchive", "True", True),
         ("enable_civarchive", "false", False),
         ("enable_civarchive", "maybe", False),
-        # civitai_api_base: an https URL with a host, without its trailing slash.
         ("civitai_api_base", "https://civitai.red/api/v1", "https://civitai.red/api/v1"),
         ("civitai_api_base", "https://civitai.red/api/v1/", "https://civitai.red/api/v1"),
         ("civitai_api_base", "  https://civitai.com/api/v1//  ", "https://civitai.com/api/v1"),
@@ -102,7 +89,6 @@ def test_an_unset_setting_is_its_default(key, raw):
         ("civitai_api_base", "https://", DEFAULT_BASE),
         ("civitai_api_base", "https:///api/v1", DEFAULT_BASE),
         ("civitai_api_base", "https://[::1/api/v1", DEFAULT_BASE),
-        # cache_ttl_minutes: whole minutes, clamped to 1..1440.
         ("cache_ttl_minutes", "30", 30),
         ("cache_ttl_minutes", 45, 45),
         ("cache_ttl_minutes", "1", 1),
@@ -124,8 +110,6 @@ def test_parse_setting_refuses_a_key_the_plugin_does_not_have():
 
 
 class _Repository:
-    """A core repository class stand-in: "instantiating" it returns the one instance, which records the calls."""
-
     def __init__(self, answer):
         self.answer = answer
         self.asked = []
@@ -164,9 +148,6 @@ def test_user_nsfw_mode_reads_the_cores_user_setting(monkeypatch, stored, mode):
 
 
 class _SettingsRepository:
-    """A `PluginRepository` stand-in holding the plugin's rows: `rows[key]` is the stored value, a
-    missing key is a missing row. Records every write."""
-
     def __init__(self, rows):
         self.rows = dict(rows)
         self.written = []
@@ -190,26 +171,26 @@ def test_normalise_stored_booleans_rewrites_the_cores_str_of_a_python_bool(monke
 
     assert normalise_stored_booleans() == ["hide_poi", "enable_civarchive"]
     assert repository.written == [("hide_poi", "false"), ("enable_civarchive", "true")]
-    assert repository.rows["nsfw_ceiling"] == "Blur"  # not a yes/no setting: untouched
+    assert repository.rows["nsfw_ceiling"] == "Blur"
 
-    assert normalise_stored_booleans() == []  # idempotent
+    assert normalise_stored_booleans() == []
     assert len(repository.written) == 2
 
 
 @pytest.mark.parametrize(
     "stored, expected",
     [
-        ("true", None),  # already an option value: no write
+        ("true", None),
         ("false", None),
         ("1", "true"),
         ("off", "false"),
-        ("", "false"),  # a row without a value: the default, spelled out
+        ("", "false"),
         (None, "false"),
         ("maybe", "false"),
     ],
 )
 def test_normalise_stored_booleans_writes_an_option_value_or_nothing(monkeypatch, stored, expected):
-    repository = _SettingsRepository({"hide_poi": stored})  # no enable_civarchive row: left to the manifest default
+    repository = _SettingsRepository({"hide_poi": stored})
     monkeypatch.setattr("src.plugin_api.PluginRepository", repository)
 
     rewritten = normalise_stored_booleans()
@@ -232,8 +213,8 @@ def test_get_setting_parses_what_the_core_stored_for_the_plugin(monkeypatch):
     assert get_setting("nsfw_ceiling") == "blocked"
     assert get_setting("cache_ttl_minutes") == 1440
     assert get_setting("hide_poi") is True
-    assert get_setting("nsfw_max_level") == 2  # a row without a value
-    assert get_setting("civitai_api_base") == DEFAULT_BASE  # never saved: no row
+    assert get_setting("nsfw_max_level") == 2
+    assert get_setting("civitai_api_base") == DEFAULT_BASE
     assert repository.asked == [
         ("model-browser", "nsfw_ceiling"),
         ("model-browser", "cache_ttl_minutes"),
