@@ -1,61 +1,45 @@
-"""The one module of this plugin that reaches into PotionUI's internals (PLAN.md §3).
+"""The plugin's single seam to PotionUI's operations (PLAN.md §3): the download queue, the
+model catalog, user groups and the content policy, notifications and plan limits.
 
-`src.plugin_api` exports `get_container()` but not the managers this plugin
-drives: the download queue, model assignment, the provider fetch, the content
-policy, user groups, notifications and plan limits. Until the phase 8 PR exports
-them, every `AppContainer` attribute the plugin uses is read here and nowhere
-else, so a core refactor breaks one file, and `check_container()` and
-tests/test_core_bridge.py name the attribute that moved.
+It only uses what `src.plugin_api` exports, never the core's internals: `.downloads`,
+`.models` (lookups, assignment to a user, attributes, the provider fetch), `.groups`,
+`.notifications` and `.limits`, all exported since PotionUI 0.0.16 (an older core fails at
+import). The rest of the plugin calls the functions below for these operations, not the
+exports, so the tests replace a function here (`tests/download_fakes.py::FakeCore`) and a
+change of the exports is absorbed in one file. Other exports (users, storage, `LimitEvents`,
+providers) are imported where they are used.
 
-The functions take and return plain values (str, dict, list), never a core class,
-so the rest of the plugin never depends on one. Each reaches the container through
-`_container_attribute`, which names the attribute when the core moved it: a moved
-attribute only breaks the features that use it.
+The functions take and return plain values (str, dict, list; `assign_to_group` also takes
+the exported `User` it acts as), never a core record, so the rest of the plugin never depends
+on one. The core's refusals come out as `CoreBridgeError(code, message)`.
 
-This is also the only module allowed to import the core's internal exception
-classes and operation modules (`src.features...`): each such import sits inside the
-function that needs it, with a comment naming the core file. The core's refusals
-come out as `CoreBridgeError(code, message)`.
+The model lookups ask the core for its admin payload, the one that carries the hash and the
+availability flag, and hand on only `MODEL_KEYS`: nothing else of that payload (location,
+file size, copies, prompting guidance ...) leaves this module, so none of it can reach a user.
 
-Plan limits are read here (`limit_status`, through `plans.guard`); the events behind them
-are recorded and refunded with `LimitEvents`, which `src.plugin_api` exports
-(`backend/limits.py`).
+Plan limits are read here (`limit_status`); the events behind them are recorded and refunded
+with `LimitEvents` (`backend/limits.py`).
 """
 
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, get_args
 
-from src.plugin_api import User, get_container, model_for_path
+from src.plugin_api import (
+    DownloadQueueException,
+    InvalidModelMetadataException,
+    ModelAssignmentException,
+    ModelNotFoundException,
+    UnsafeFilenameException,
+    User,
+)
+from src.plugin_api import downloads as api_downloads
+from src.plugin_api import groups as api_groups
+from src.plugin_api import limits as api_limits
+from src.plugin_api import models as api_models
+from src.plugin_api import notifications as api_notifications
 
 logger = logging.getLogger("plugins.model-browser")
-
-#: Every container attribute this module relies on, as a dotted path from the
-#: `AppContainer` (`src/bootstrap/container.py`), down to the method called.
-REQUIRED_ATTRIBUTES = (
-    "download_queue.queue_model_download",
-    "download_queue.get_download",
-    "content_policy_resolver.resolve",
-    "user_group_repository.get_user_groups",
-    "user_group_repository.get_all_groups",
-    "user_group_repository.get_group_by_id",
-    "user_group_repository.get_group_members",
-    "user_group_repository.assign_model_to_group",
-    "model_repository.get_by_sha256",
-    "model_repository.get_by_id",
-    "model_repository.get_available_model_ids_for_user",
-    "model_index_manager.assignments.assign_model_to_user",
-    "model_index_manager.provider_info.run_provider_fetch",
-    "model_index_manager.metadata.update_model_metadata",
-    "plugin_registry",
-    "notification_manager",
-    # Plan limits (`limit_status`).
-    "plans.guard.resolution",
-    "plans.guard.is_exempt",
-    "plans.guard.measure",
-    "plans.guard.settings.read",
-    "limit_kind_registry.get",
-)
 
 #: The core's content policy modes, as `effective_policy()` returns them.
 ContentPolicy = Literal["allowed", "blur", "blocked"]
@@ -63,6 +47,14 @@ CONTENT_POLICIES = get_args(ContentPolicy)
 
 #: `source` of the notifications this plugin raises.
 NOTIFICATION_SOURCE = "model-browser"
+
+#: The keys of the model dicts the `find_model_by_*` functions return, and the only ones.
+MODEL_KEYS = ("id", "sha256", "is_available", "created_at", "filename", "model_type")
+
+#: The class name of what `resolve_model_file` raises for a model without a present file, or
+#: one it does not know (`src/features/models/locator.py`); docs/plugin-api.md says to catch
+#: it by name, since `src.plugin_api` does not export it.
+_FILE_UNAVAILABLE = "ModelFileUnavailable"
 
 #: Parts of the core's own `DownloadQueueException` messages that refuse a parameter
 #: (`src/features/downloads/queue.py`): a sub-folder or destination outside the depot,
@@ -87,75 +79,14 @@ class CoreBridgeError(Exception):
     - "invalid": the core refused a parameter (unsafe file name, sub-folder, remote backend,
       a model attribute the core does not declare for the model's type);
     - "not_found": the model or the user group does not exist (any more);
-    - "refused": the core declined an assignment (a hook, an unknown user).
+    - "refused": the core declined an assignment (a hook, an unknown user, an acting user
+      who is missing or not an admin).
     """
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
-
-
-def _walk(node: Any, path: str) -> Any:
-    """The object at dotted `path` from `node`, or None when a segment is absent or None."""
-    for name in path.split("."):
-        node = getattr(node, name, None)
-        if node is None:
-            return None
-    return node
-
-
-def _moved(paths: Sequence[str]) -> RuntimeError:
-    return RuntimeError(
-        "model-browser: PotionUI's AppContainer no longer provides "
-        + ", ".join(paths)
-        + ". The core renamed or removed attributes this plugin relies on: update "
-        "REQUIRED_ATTRIBUTES and the functions that use them in backend/core_bridge.py."
-    )
-
-
-def missing_attributes(container: Any) -> List[str]:
-    """The `REQUIRED_ATTRIBUTES` paths `container` does not provide, in declaration order.
-
-    Works on any object, so tests can pass a stand-in. A path is missing when one
-    of its segments is absent or None, and is reported in full: with `plans` gone,
-    both "plans.guard" and "plans.events" are listed.
-    """
-    return [path for path in REQUIRED_ATTRIBUTES if _walk(container, path) is None]
-
-
-def check_container() -> Any:
-    """The live `AppContainer`, once checked against `REQUIRED_ATTRIBUTES`.
-
-    Raises RuntimeError naming every missing path when the core renamed or removed
-    an attribute this plugin relies on (and, before the application is composed,
-    the RuntimeError of `get_container()` itself).
-    """
-    container = get_container()
-    missing = missing_attributes(container)
-    if missing:
-        raise _moved(missing)
-    return container
-
-
-def _container_attribute(path: str) -> Any:
-    """The object at `path`, one of `REQUIRED_ATTRIBUTES`, on the live container.
-
-    Raises RuntimeError naming `path` when the core renamed or removed it (and,
-    before the application is composed, the RuntimeError of `get_container()`).
-    """
-    if path not in REQUIRED_ATTRIBUTES:
-        raise ValueError(f"{path!r} is missing from REQUIRED_ATTRIBUTES")
-    node = _walk(get_container(), path)
-    if node is None:
-        raise _moved([path])
-    return node
-
-
-def _container_owner(path: str) -> Any:
-    """The object holding the last segment of `path` (a repository, for a method path), checked like `_container_attribute`."""
-    _container_attribute(path)
-    return _walk(get_container(), path.rsplit(".", 1)[0])
 
 
 # Downloads ------------------------------------------------------------------
@@ -179,203 +110,152 @@ async def queue_model_download(
 ) -> Dict[str, Any]:
     """Queue one model file on the core download queue; returns the queued download (`Download.to_dict()`).
 
-    Uses `download_queue.queue_model_download(...)` (async). `model_type` picks the
-    type's write folder, `subdir` a folder under it; `provider_id` ("civitai",
-    "huggingface") makes the core add that provider's credentials; `checksum_sha256`
-    makes the worker verify the file. Raises `CoreBridgeError`: "invalid" when the core
-    refuses the file name, the sub-folder or the remote backend, "blocked" when a
-    `download.before_queue` hook refuses the download (its `block_reason` is the
-    message) or the depot cannot be written to.
+    `model_type` picks the type's write folder, `subdir` a folder under it; `provider_id`
+    ("civitai", "huggingface") makes the core add that provider's credentials;
+    `checksum_sha256` makes the worker verify the file. Raises `CoreBridgeError`: "invalid"
+    when the core refuses the file name, the sub-folder or the remote backend, "blocked" when
+    a `download.before_queue` hook refuses the download (its `block_reason` is the message) or
+    the depot cannot be written to.
     """
-    # Internal exceptions, src/features/downloads/exceptions.py (`UnsafeFilenameException`
-    # is a `DownloadQueueException`).
-    from src.features.downloads.exceptions import DownloadQueueException, UnsafeFilenameException
-
-    queue = _container_attribute("download_queue.queue_model_download")
     try:
-        download = await queue(
+        return await api_downloads.queue_model_download(
             url,
             filename=filename,
+            model_type=model_type,
+            subdir=subdir,
             tags=list(tags) if tags is not None else None,
             checksum_sha256=checksum_sha256,
             provider_id=provider_id,
             created_by=created_by,
-            model_type=model_type,
-            subdir=subdir,
             destination_backend_id=destination_backend_id,
         )
     except UnsafeFilenameException as exc:
         raise CoreBridgeError("invalid", str(exc)) from exc
     except DownloadQueueException as exc:
         raise CoreBridgeError(_queue_refusal_code(str(exc)), str(exc)) from exc
-    return download.to_dict()
 
 
 def get_download(download_id: Optional[str]) -> Optional[Dict[str, Any]]:
     """A queued download's current state (`Download.to_dict()`: status, progress, destination path,
-    error message ...), or None once the core no longer has it.
-
-    Uses `download_queue.get_download(download_id)`, which raises for an unknown id.
-    """
-    # Internal exception, src/features/downloads/exceptions.py.
-    from src.features.downloads.exceptions import DownloadNotFoundException
-
+    error message ...), or None once the core no longer has it."""
     if not download_id:
         return None
-    try:
-        download = _container_attribute("download_queue.get_download")(download_id)
-    except DownloadNotFoundException:
-        return None
-    return download.to_dict()
+    return api_downloads.get_download(download_id)
 
 
 # Models ---------------------------------------------------------------------
 
 
-def _model_dict(model: Any) -> Dict[str, Any]:
-    """A core `Model` as the plain dict `model_for_path` also returns (`id`, `sha256`,
-    `model_type`, `filename`, `model_metadata`, `is_available` ...)."""
-    return model.to_dict(include_providers=False, include_tags=False)
+def _trimmed(model: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The `MODEL_KEYS` of a core model dict, or None."""
+    if model is None:
+        return None
+    return {key: model.get(key) for key in MODEL_KEYS}
 
 
 def find_model_by_sha256(sha256: str) -> Optional[Dict[str, Any]]:
-    """The indexed model with this SHA256 (any case), or None.
+    """The indexed model with this SHA256 (any case), as `MODEL_KEYS`, or None.
 
-    Uses `model_repository.get_by_sha256(sha256)`. No visibility filter: check
-    `visible_model_ids()` before showing the model to a non-admin. A model whose file
-    has gone has `is_available: False`.
+    No visibility filter: check `visible_model_ids()` before showing the model to a
+    non-admin. A model whose file has gone has `is_available: False`.
     """
     if not sha256:
         return None
-    model = _container_attribute("model_repository.get_by_sha256")(sha256.strip().lower(), include_providers=False)
-    return _model_dict(model) if model is not None else None
+    return _trimmed(api_models.model_for_sha256(sha256, admin=True))
 
 
 def find_model_by_path(path: str) -> Optional[Dict[str, Any]]:
-    """The model indexed at this file path (a download's `destination_path`), or None.
+    """The model indexed at this file path (a download's `destination_path`), as `MODEL_KEYS`, or None.
 
-    Uses `model_for_path`, exported by `src.plugin_api`: the same dict as
-    `find_model_by_sha256`. A file the indexer refused as the duplicate of another
-    model is not indexed at its own path.
+    A file the indexer refused as the duplicate of another model is not indexed at its own path.
     """
     if not path:
         return None
-    return model_for_path(path)
+    return _trimmed(api_models.model_for_path(path, admin=True))
+
+
+def find_model_by_id(model_id: str) -> Optional[Dict[str, Any]]:
+    """The catalog model `model_id`, as `MODEL_KEYS`, or None for a model the core does not
+    know or whose file is not present on an online root.
+
+    Resolves the model's file (`resolve_model_file`), then reads the model at that path.
+    """
+    if not model_id:
+        return None
+    try:
+        path = api_models.resolve_model_file(model_id)
+    except Exception as exc:
+        if type(exc).__name__ != _FILE_UNAVAILABLE:
+            raise
+        return None
+    return _trimmed(api_models.model_for_path(str(path), admin=True))
 
 
 def visible_model_ids(user_id: str) -> List[str]:
-    """Ids of the models `user_id` can see: assigned to them directly or through one of their groups.
-
-    Uses `model_repository.get_available_model_ids_for_user(user_id)`.
-    """
-    return list(_container_attribute("model_repository.get_available_model_ids_for_user")(user_id))
+    """Ids of the models `user_id` can see: assigned to them directly or through one of their groups."""
+    return api_models.visible_model_ids(user_id)
 
 
 def assign_to_user(model_id: str, user_id: str) -> bool:
     """Make a model visible to one user; True when newly assigned, False when it already was.
 
-    Uses `model_index_manager.assignments.assign_model_to_user(model_id, user_id)`, which
-    fires `model_index.before_assign` / `model_index.after_assign`. Raises
+    The core fires `model_index.before_assign` / `model_index.after_assign`. Raises
     `CoreBridgeError("refused")` when a hook blocks it or the model or the user is unknown.
     """
-    # Internal exceptions, src/features/models/exceptions.py.
-    from src.features.models.exceptions import ModelAlreadyAssignedException, ModelAssignmentException
-
-    assign = _container_attribute("model_index_manager.assignments.assign_model_to_user")
     try:
-        assign(model_id, user_id)
-    except ModelAlreadyAssignedException:
-        return False
+        return api_models.assign_model_to_user(model_id, user_id)
     except ModelAssignmentException as exc:
         raise CoreBridgeError("refused", str(exc)) from exc
-    return True
 
 
-def assign_to_group(group_id: str, model_ids: Sequence[str], acting_admin: Optional[User] = None) -> List[str]:
-    """Make models visible to every member of a group; returns the ids newly assigned.
+def assign_to_group(group_id: str, model_ids: Sequence[str], acting_user: User) -> List[str]:
+    """Make models visible to every member of a group, in `acting_user`'s name; returns the ids newly assigned.
 
-    Two paths, which differ in the hooks they fire:
-    - with `acting_admin` (an admin `User` acting through the plugin, e.g. approving a
-      request): the core's own group operation,
-      `user_groups/operations/resources.py::assign_models(repository, plugin_registry,
-      group_id, model_ids, acting_admin)`, which fires `user_groups.before_assign_resource`
-      (a hook may skip a model) and `after_assign_resource` with that admin's id;
-    - without (the plugin's own automated assignment, from the download watcher):
-      `user_group_repository.assign_model_to_group(group_id, model_id)` for each id,
-      which fires no hook, since there is no admin to name.
-    A model already in the group is skipped on both paths. Raises
-    `CoreBridgeError("not_found")` when the group does not exist,
-    `CoreBridgeError("refused")` when the core declines `acting_admin`.
+    Goes through the core's group operation, which requires an admin and fires
+    `user_groups.before_assign_resource` (a hook may skip a model) and `after_assign_resource`
+    with that admin's id; a model already in the group is skipped. Raises
+    `CoreBridgeError("not_found")` when the group does not exist (checked first), and
+    `CoreBridgeError("refused")` without an acting `User`, or when the core declines them
+    (not an admin) or the group vanished in between. Without a model id, nothing is asked of
+    the core.
     """
-    if _container_attribute("user_group_repository.get_group_by_id")(group_id) is None:
+    if group_id not in {group["id"] for group in api_groups.list_groups()}:
         raise CoreBridgeError("not_found", f"There is no user group with the id '{group_id}'")
+    if not isinstance(acting_user, User):
+        raise CoreBridgeError("refused", f"Assigning models to the group '{group_id}' needs an acting admin")
     model_ids = [model_id for model_id in model_ids if model_id]
     if not model_ids:
         return []
-    if acting_admin is not None:
-        # Internal operation module, src/features/user_groups/operations/resources.py.
-        from src.features.user_groups.operations.resources import assign_models
-
-        repository = _container_owner("user_group_repository.assign_model_to_group")
-        try:
-            assigned = assign_models(
-                repository, _container_attribute("plugin_registry"), group_id, list(model_ids), acting_admin
-            )
-        except ValueError as exc:  # not an admin, or the group vanished in between
-            raise CoreBridgeError("refused", str(exc)) from exc
-        return [assignment.model_id for assignment in assigned]
-    assign = _container_attribute("user_group_repository.assign_model_to_group")
-    # None: already in the group, or a model id the core does not know.
-    return [model_id for model_id in model_ids if assign(group_id, model_id) is not None]
+    try:
+        return api_groups.assign_models_to_group(group_id, model_ids, acting_user)
+    except ValueError as exc:
+        raise CoreBridgeError("refused", str(exc)) from exc
 
 
 async def run_provider_fetch(provider: str, model_ids: Sequence[str]) -> Dict[str, Any]:
     """Fill models' description, trigger words, tags and previews from a provider; returns the core's
     summary, `{"successful": n, "failed": n, "errors"?: [{"model_id", "reason"}]}`.
 
-    Uses `model_index_manager.provider_info.run_provider_fetch(provider, model_ids)` (async),
-    which never raises and only fills fields that are empty. An empty `model_ids` fetches
-    nothing (the core would read it as "every model without provider info").
+    Only fields that are empty are filled. An empty `model_ids` fetches nothing. The core's
+    `ProviderFetchException` (a provider it does not know or has not initialised, or a
+    `model_index.before_fetch_info` veto) is not translated: it reaches the caller.
     """
     model_ids = [model_id for model_id in model_ids if model_id]
     if not model_ids:
         return {"successful": 0, "failed": 0}
-    fetch = _container_attribute("model_index_manager.provider_info.run_provider_fetch")
-    summary = await fetch(provider, model_ids=model_ids)
-    return dict(summary) if isinstance(summary, Mapping) else {"successful": 0, "failed": len(model_ids)}
-
-
-def read_attributes(model_id: str) -> Dict[str, Any]:
-    """A model's shared attribute values (`model_metadata`); `CoreBridgeError("not_found")` for an unknown model.
-
-    Uses `model_repository.get_by_id(model_id)`.
-    """
-    model = _container_attribute("model_repository.get_by_id")(model_id, include_providers=False, include_tags=False)
-    if model is None:
-        raise CoreBridgeError("not_found", f"No model with id '{model_id}'")
-    return dict(model.model_metadata or {})
+    return await api_models.run_provider_fetch(provider, model_ids)
 
 
 def write_attributes(model_id: str, values: Mapping[str, Any]) -> None:
     """Set some model attributes (`mb_base_model`, `mb_license`), keeping the model's other values.
 
-    Uses `model_index_manager.metadata.update_model_metadata(model_id, values)`, which
-    replaces the whole map and validates every key against the attribute definitions of
-    the model's type: the current values are merged first. Raises
-    `CoreBridgeError("invalid")` when the core refuses a key (an attribute it does not
-    declare for this type, e.g. the plugin's definitions not registered yet), and
-    `CoreBridgeError("not_found")` for an unknown model.
+    The core merges `values` into the model's current values and validates every key against
+    the attribute definitions of the model's type. Raises `CoreBridgeError("invalid")` when the
+    core refuses a key (an attribute it does not declare for this type, e.g. the plugin's
+    definitions not registered yet), and `CoreBridgeError("not_found")` for an unknown model.
     """
-    # Internal exceptions, src/features/models/exceptions.py.
-    from src.features.models.exceptions import InvalidModelMetadataException, ModelNotFoundException
-
-    current = read_attributes(model_id)
-    merged = {**current, **dict(values)}
-    if merged == current:
-        return
-    update = _container_attribute("model_index_manager.metadata.update_model_metadata")
     try:
-        update(model_id, merged)
+        api_models.update_model_metadata(model_id, dict(values))
     except InvalidModelMetadataException as exc:
         logger.warning("[MODEL-BROWSER] The core refused the attributes of model %s: %s", model_id, exc)
         raise CoreBridgeError("invalid", str(exc)) from exc
@@ -389,47 +269,25 @@ def write_attributes(model_id: str, values: Mapping[str, Any]) -> None:
 def effective_policy(user_id: str) -> ContentPolicy:
     """The content policy that applies to `user_id`: the instance setting, made stricter by their groups.
 
-    Uses `content_policy_resolver.resolve(user_id).mode`; a mode this plugin does not
-    know counts as "blocked".
+    A mode this plugin does not know counts as "blocked".
     """
-    policy = _container_attribute("content_policy_resolver.resolve")(user_id)
-    mode = getattr(policy, "mode", None)
+    mode = api_groups.effective_content_policy(user_id)
     return mode if mode in CONTENT_POLICIES else "blocked"
 
 
 def user_groups(user_id: str) -> List[Dict[str, Any]]:
-    """The groups `user_id` belongs to, as `{"id", "name", "is_system", "content_policy"}` dicts.
-
-    Uses `user_group_repository.get_user_groups(user_id)`.
-    """
-    return [_group(group) for group in _container_attribute("user_group_repository.get_user_groups")(user_id)]
+    """The groups `user_id` belongs to, as `{"id", "name", "is_system", "content_policy"}` dicts."""
+    return api_groups.get_user_groups(user_id)
 
 
 def list_groups() -> List[Dict[str, Any]]:
-    """Every user group, as `{"id", "name", "is_system", "content_policy"}` dicts, in the core's order (by name).
-
-    Uses `user_group_repository.get_all_groups()`.
-    """
-    return [_group(group) for group in _container_attribute("user_group_repository.get_all_groups")()]
+    """Every user group, as `{"id", "name", "is_system", "content_policy"}` dicts, in the core's order (by name)."""
+    return api_groups.list_groups()
 
 
 def group_member_ids(group_id: str) -> List[str]:
-    """Ids of the members of a user group, without duplicates; none for a group that does not exist.
-
-    Uses `user_group_repository.get_group_members(group_id)`.
-    """
-    members = _container_attribute("user_group_repository.get_group_members")(group_id)
-    return list(dict.fromkeys(member.user_id for member in members if getattr(member, "user_id", None)))
-
-
-def _group(group: Any) -> Dict[str, Any]:
-    """A core `UserGroup` record as a plain dict."""
-    return {
-        "id": group.id,
-        "name": group.name,
-        "is_system": bool(getattr(group, "is_system", False)),
-        "content_policy": getattr(group, "content_policy", None),
-    }
+    """Ids of the members of a user group, without duplicates; none for a group that does not exist."""
+    return api_groups.group_member_ids(group_id)
 
 
 # Notifications and plan limits ---------------------------------------------
@@ -446,24 +304,23 @@ def notify(
 ) -> None:
     """Notify one user; `notification_type` is one the plugin registers ("model-browser.download_done", ...).
 
-    Uses `notification_manager(...)`, the core's `notify` already bound to its
-    collaborators, with `source="model-browser"` and `category="plugin"`; `level` is
-    "info", "success", "warning" or "error". Never raises: a notification that cannot be
-    sent is logged. Never broadcasts: without a `user_id` nothing is sent.
+    Sent with `source="model-browser"` and `category="plugin"`; `level` is "info", "success",
+    "warning" or "error". Never raises: a notification that cannot be sent is logged. Never
+    broadcasts: without a `user_id` nothing is sent (the core would send it to everyone).
     """
     if not user_id:
         logger.warning("[MODEL-BROWSER] Not sending %r: no user to notify", notification_type)
         return
     try:
-        _container_attribute("notification_manager")(
-            level=level,
+        api_notifications.notify(
+            source=NOTIFICATION_SOURCE,
             title=title,
             message=message,
-            category="plugin",
             user_id=user_id,
-            source=NOTIFICATION_SOURCE,
-            metadata=dict(metadata) if metadata else None,
             type=notification_type,
+            level=level,
+            category="plugin",
+            metadata=dict(metadata) if metadata else None,
         )
     except Exception:
         logger.warning("[MODEL-BROWSER] Could not send the %r notification to %s", notification_type, user_id, exc_info=True)
@@ -473,47 +330,26 @@ def register_notification_types(registry: Any, types: Sequence[Any]) -> List[str
     """Declare notification types on the registry `notification_type.register` hands its
     handlers (`context.data["registry"]`); returns the keys it added.
 
-    Each item has `key`, `label`, `description` and `category`, and becomes the core's
-    `NotificationTypeSpec` (src/features/notifications/types.py, not exported by
-    `src.plugin_api`), which shows it in every user's notification preferences. A key
+    Each item has `key`, `label`, `description` and `category`, and becomes a
+    `NotificationTypeSpec`, which shows it in every user's notification preferences. A key
     already registered is left as it is, so registering twice is harmless.
     """
-    # Internal record and exception, src/features/notifications/types.py.
-    from src.features.notifications.types import DuplicateNotificationTypeError, NotificationTypeSpec
-
-    added: List[str] = []
-    for item in types:
-        if registry.has(item.key):
-            continue
-        try:
-            registry.register(
-                NotificationTypeSpec(
-                    key=item.key, label=item.label, description=item.description, category=item.category
-                )
-            )
-        except DuplicateNotificationTypeError:
-            continue
-        added.append(item.key)
-    return added
+    specs = [
+        api_notifications.NotificationTypeSpec(
+            key=item.key, label=item.label, description=item.description, category=item.category
+        )
+        for item in types
+    ]
+    return api_notifications.register_notification_types(registry, specs)
 
 
 def _unlimited(kind: str) -> Dict[str, Any]:
     return {"kind": kind, "limit": None, "used": None, "exempt": False, "resets_at": None, "contact_line": ""}
 
 
-def _local_iso(moment: Optional[datetime], tz_name: Optional[str]) -> Optional[str]:
-    """`moment` as ISO 8601 in the plans' day time zone (UTC when that zone is unknown here)."""
-    if moment is None:
-        return None
-    zone: Any = timezone.utc
-    if tz_name:
-        try:
-            from zoneinfo import ZoneInfo
-
-            zone = ZoneInfo(tz_name)
-        except Exception:
-            zone = timezone.utc
-    return moment.astimezone(zone).isoformat()
+def _utc_iso(moment: Optional[datetime]) -> Optional[str]:
+    """`moment` as ISO 8601 in UTC."""
+    return moment.astimezone(timezone.utc).isoformat() if moment is not None else None
 
 
 def limit_status(user_id: str, kind: str) -> Dict[str, Any]:
@@ -525,40 +361,20 @@ def limit_status(user_id: str, kind: str) -> Dict[str, Any]:
     - `exempt` True: an admin while the plan settings exempt admins (`limit` is kept, `used`
       is not measured);
     - otherwise `used` is the usage measured in the current window, `resets_at` the end of
-      that window (ISO 8601 in the plans' day time zone), `contact_line` the admin's line for
-      refusals.
+      that window (ISO 8601 in UTC: the plans' day time zone is not exported), `contact_line`
+      the admin's line for refusals.
     Never raises: when the plans cannot be read, the failure is logged and the answer is
     "unlimited", so a broken quota never blocks a download.
-
-    Uses `plans.guard.resolution(user_id)` (`Resolution.value(kind)`: the limit after the core
-    merged the plans that apply to the user), `plans.guard.settings.read()` (exempt admins,
-    day time zone, contact line), `plans.guard.is_exempt(subject, settings)`,
-    `limit_kind_registry.get(kind)` (`measure` takes the `LimitKind`, not its key) and
-    `plans.guard.measure(kind, user_id, tz_name)`.
     """
     try:
-        resolution = _container_attribute("plans.guard.resolution")(user_id)
-        if resolution is None:
-            return _unlimited(kind)
-        limit = resolution.value(kind)
-        if limit is None:
-            return _unlimited(kind)
-        settings = _container_attribute("plans.guard.settings.read")()
-        contact_line = str(getattr(settings, "contact_line", "") or "")
-        if _container_attribute("plans.guard.is_exempt")(resolution.subject, settings):
-            return {**_unlimited(kind), "limit": limit, "exempt": True, "contact_line": contact_line}
-        limit_kind = _container_attribute("limit_kind_registry.get")(kind)
-        if limit_kind is None:
-            return _unlimited(kind)
-        tz_name = getattr(settings, "day_timezone", None)
-        measured = _container_attribute("plans.guard.measure")(limit_kind, user_id, tz_name)
+        status = api_limits.limit_status(user_id, kind)
         return {
-            "kind": kind,
-            "limit": limit,
-            "used": measured.used,
-            "exempt": False,
-            "resets_at": _local_iso(measured.resets_at, tz_name),
-            "contact_line": contact_line,
+            "kind": status.kind,
+            "limit": status.limit,
+            "used": status.used,
+            "exempt": status.exempt,
+            "resets_at": _utc_iso(status.resets_at),
+            "contact_line": status.contact_line,
         }
     except Exception:
         logger.warning(

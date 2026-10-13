@@ -192,8 +192,8 @@ def iso(moment: datetime) -> str:
 
 
 def model(model_id: str = "model-1", sha256: Optional[str] = SHA, *, created: str = "later", **fields: Any) -> Dict[str, Any]:
-    """An indexed model as `core_bridge.find_model_by_*` returns it. `created`: "later" (after any
-    row written now), "long_ago", or an ISO timestamp."""
+    """An indexed model as `core_bridge.find_model_by_*` returns it (`core_bridge.MODEL_KEYS`).
+    `created`: "later" (after any row written now), "long_ago", or an ISO timestamp."""
     if created == "later":
         created = iso(datetime.now(timezone.utc) + timedelta(minutes=5))
     elif created == "long_ago":
@@ -203,7 +203,6 @@ def model(model_id: str = "model-1", sha256: Optional[str] = SHA, *, created: st
         "sha256": sha256,
         "filename": "add-detail-xl.safetensors",
         "model_type": "lora",
-        "model_metadata": {},
         "created_at": created,
         "is_available": True,
     }
@@ -239,6 +238,7 @@ class FakeCore:
         "get_download",
         "find_model_by_sha256",
         "find_model_by_path",
+        "find_model_by_id",
         "visible_model_ids",
         "user_groups",
         "list_groups",
@@ -359,15 +359,29 @@ class FakeCore:
 
     # Model index
 
+    @staticmethod
+    def _answer(found: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """A model as the bridge hands it on: its `core_bridge.MODEL_KEYS` and nothing else."""
+        if found is None:
+            return None
+        return {key: copy.deepcopy(found[key]) for key in core_bridge.MODEL_KEYS if key in found}
+
     def find_model_by_sha256(self, sha256: str) -> Optional[Dict[str, Any]]:
         self.calls.append(("find_model_by_sha256", sha256))
-        found = self.models_by_sha.get(sha256.lower())
-        return dict(found) if found is not None else None
+        return self._answer(self.models_by_sha.get(sha256.lower()))
 
     def find_model_by_path(self, path: str) -> Optional[Dict[str, Any]]:
         self.calls.append(("find_model_by_path", path))
-        found = self.models_by_path.get(path)
-        return dict(found) if found is not None else None
+        return self._answer(self.models_by_path.get(path))
+
+    def find_model_by_id(self, model_id: str) -> Optional[Dict[str, Any]]:
+        """The model with this id among `models_by_sha` and `models_by_path`; None when its
+        file has gone (`is_available: False`), as the bridge answers for a model without a file."""
+        self.calls.append(("find_model_by_id", model_id))
+        for found in [*self.models_by_sha.values(), *self.models_by_path.values()]:
+            if found.get("id") == model_id and found.get("is_available", True) is not False:
+                return self._answer(found)
+        return None
 
     def visible_model_ids(self, user_id: str) -> List[str]:
         self.calls.append(("visible_model_ids", user_id))
@@ -396,11 +410,15 @@ class FakeCore:
             raise self.assign_user_error
         return True
 
-    def assign_to_group(self, group_id: str, model_ids: Sequence[str], acting_admin: Any = None) -> List[str]:
+    def assign_to_group(self, group_id: str, model_ids: Sequence[str], acting_user: User) -> List[str]:
+        """Like the bridge: `assign_group_error` first (a group that is gone), then a refusal
+        without an acting `User`."""
         self.calls.append(("assign_to_group", group_id, list(model_ids)))
-        self.group_admins.append(getattr(acting_admin, "id", None))
+        self.group_admins.append(getattr(acting_user, "id", None))
         if self.assign_group_error is not None:
             raise self.assign_group_error
+        if not isinstance(acting_user, User):
+            raise core_bridge.CoreBridgeError("refused", f"Assigning models to the group '{group_id}' needs an acting admin")
         return list(model_ids)
 
     # Users

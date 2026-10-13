@@ -1,10 +1,12 @@
 """The `model_browser_group_permissions` table (PLAN.md §4.3): what each user group may do.
 
 One row per group the admin edited: `capabilities` holds a JSON list, `params` a JSON
-object (`sources`, `model_types`, `max_file_gb`, `assign_to`, `allow_remote`). A group
-without a row gets its install-time default (`default_row`). `permissions.py` merges the
-rows of a user's groups into their grant; `routes_permissions.py` lists and replaces
-them for the admin, and deletes the rows of groups the core no longer has.
+object (`sources`, `model_types`, `max_file_gb`, `assign_to`, `allow_remote`), and
+`updated_by` the id of the admin who last saved the table. A group without a row gets its
+install-time default (`default_row`). `permissions.py` merges the rows of a user's groups
+into their grant, and names `updated_by` as the acting admin of a group assignment when
+nobody else can be (`permissions.acting_admin`); `routes_permissions.py` lists and replaces
+the rows for the admin, and deletes the rows of groups the core no longer has.
 
 Reading is tolerant: a missing or malformed value takes its default, so a row written by
 another version of the plugin, or edited by hand, never breaks a request.
@@ -54,6 +56,9 @@ class Row:
     max_file_gb: Optional[float] = None
     assign_to: str = "user"
     allow_remote: bool = False
+    #: Id of the admin who last saved this row (`save_rows`); None for a default row, or one
+    #: stored before the plugin recorded it. Not a parameter: kept out of `params`.
+    updated_by: Optional[str] = None
 
     def __post_init__(self) -> None:
         for name in ("capabilities", "sources", "model_types"):
@@ -70,8 +75,13 @@ class Row:
         }
 
     def to_json(self) -> Dict[str, Any]:
-        """`{"group_id", "capabilities", "params"}`: the shape stored, sent by the routes and accepted back."""
-        return {"group_id": self.group_id, "capabilities": sorted(self.capabilities), "params": self.params_json()}
+        """`{"group_id", "capabilities", "params", "updated_by"}`: the shape stored, sent by the routes and accepted back."""
+        return {
+            "group_id": self.group_id,
+            "capabilities": sorted(self.capabilities),
+            "params": self.params_json(),
+            "updated_by": self.updated_by,
+        }
 
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> "Row":
@@ -85,6 +95,7 @@ class Row:
         if not isinstance(params, Mapping):
             params = {}
         assign_to = params.get("assign_to")
+        updated_by = data.get("updated_by")
         return cls(
             group_id=str(data["group_id"]),
             capabilities=_strings(data.get("capabilities"), frozenset()) & frozenset(CAPABILITIES),
@@ -93,6 +104,7 @@ class Row:
             max_file_gb=_size_gb(params.get("max_file_gb")),
             assign_to=assign_to if assign_to in ASSIGN_TO else "user",
             allow_remote=params.get("allow_remote") is True,
+            updated_by=updated_by if isinstance(updated_by, str) and updated_by else None,
         )
 
 
@@ -112,7 +124,7 @@ def load_rows() -> Dict[str, Row]:
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:
-        cursor.execute(f"SELECT group_id, capabilities, params FROM {TABLE}")
+        cursor.execute(f"SELECT group_id, capabilities, params, updated_by FROM {TABLE}")
         records = cursor.fetchall()
     return {
         record["group_id"]: Row.from_json(
@@ -120,16 +132,18 @@ def load_rows() -> Dict[str, Row]:
                 "group_id": record["group_id"],
                 "capabilities": _loads(record["capabilities"]),
                 "params": _loads(record["params"]),
+                "updated_by": record["updated_by"],
             }
         )
         for record in records
     }
 
 
-def save_rows(rows: Iterable[Row]) -> None:
+def save_rows(rows: Iterable[Row], updated_by: Optional[str] = None) -> None:
     """Make the table hold exactly `rows`, in one transaction: every other group's row is deleted.
 
-    A group listed twice keeps its last row.
+    Every row stored gets `updated_by`, the id of the admin saving them (whatever the rows'
+    own `updated_by`). A group listed twice keeps its last row.
     """
     from src.plugin_api import db
 
@@ -137,9 +151,10 @@ def save_rows(rows: Iterable[Row]) -> None:
     with db.get_cursor() as cursor:
         cursor.execute(f"DELETE FROM {TABLE}")
         cursor.executemany(
-            f"INSERT INTO {TABLE} (group_id, capabilities, params, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            f"INSERT INTO {TABLE} (group_id, capabilities, params, updated_by, updated_at) "
+            "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
             [
-                (row.group_id, json.dumps(sorted(row.capabilities)), json.dumps(row.params_json()))
+                (row.group_id, json.dumps(sorted(row.capabilities)), json.dumps(row.params_json()), updated_by)
                 for row in by_group.values()
             ],
         )

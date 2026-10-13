@@ -12,8 +12,9 @@ Included by `backend/api.py` under `/api/plugins/model-browser`.
   every route still checks.
 - `GET /permissions` (admin): one entry per core user group, with its stored row or its
   default, and the values each field accepts.
-- `PUT /permissions` (admin): replaces the whole table; a group left out of the body
-  goes back to its default. Answers like `GET`.
+- `PUT /permissions` (admin): replaces the whole table, recording the saving admin on
+  every row (`updated_by`); a group left out of the body goes back to its default.
+  Answers like `GET`.
 Both `/permissions` routes delete the rows of groups the core no longer has.
 
 Answers are `{"success": true, "data": ...}`; errors raise an `HTTPException` whose
@@ -160,7 +161,7 @@ def put_permissions(
             _fail(400, "invalid_request", f"The user group '{entry.group_id}' is listed more than once")
         rows[entry.group_id] = Row.from_json(entry.model_dump())
 
-    permissions_store.save_rows(rows.values())
+    permissions_store.save_rows(rows.values(), admin.id)
     logger.info(
         "[MODEL-BROWSER] %s saved the permissions of %d user group(s); the other groups use their defaults",
         admin.username,

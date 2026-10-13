@@ -206,7 +206,7 @@ def test_post_downloads_over_a_plan_quota_answers_limit_exceeded_with_its_figure
     assert _error(response) == {
         "success": False,
         "error": "limit_exceeded",
-        "message": "You have reached your model downloads per month limit: 2 of 2 used. It resets on Nov 1. "
+        "message": "You have reached your model downloads per month limit: 2 of 2 used. It resets on Nov 1 at 00:00 UTC. "
         "Ask your admin for more.",
         "kind": "model-browser.downloads",
         "label": "Model downloads per month",

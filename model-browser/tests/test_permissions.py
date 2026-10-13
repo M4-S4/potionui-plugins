@@ -574,6 +574,57 @@ def test_user_by_id_never_raises_and_admin_by_id_answers_admins_only(directory, 
     assert "Could not look user user-1 up" in caplog.text
 
 
+# The acting admin of a group assignment ---------------------------------------------------
+
+_REVIEWERS = Row(group_id="reviewers", capabilities=frozenset({"browse", "approve"}))
+
+
+def test_the_acting_admin_is_the_requester_when_they_are_an_admin(directory):
+    save_rows([_REVIEWERS], "admin-2")
+
+    assert permissions.acting_admin("admin-1", "admin-2", "reviewers") is directory["admin-1"]
+
+
+def test_otherwise_the_acting_admin_is_the_decider_when_they_are_an_admin(directory):
+    save_rows([_REVIEWERS], "admin-1")
+
+    assert permissions.acting_admin("user-1", "admin-2", "reviewers") is directory["admin-2"]
+
+
+def test_otherwise_the_acting_admin_is_the_admin_who_last_saved_the_groups_row(directory):
+    save_rows([_REVIEWERS, Row(group_id="all_users", capabilities=frozenset({"browse"}))], "admin-2")
+
+    assert permissions.acting_admin("user-1", "approver-1", "reviewers") is directory["admin-2"]
+    assert permissions.acting_admin("user-1", None, "all_users") is directory["admin-2"]
+
+
+@pytest.mark.parametrize(
+    "row, saved_by",
+    [
+        (_REVIEWERS, None),
+        (_REVIEWERS, "user-2"),
+        (_REVIEWERS, "ghost"),
+        (Row(group_id="all_users", capabilities=frozenset({"browse"})), "admin-1"),
+    ],
+    ids=["row-stored-before-it-was-recorded", "saved-by-a-non-admin", "saved-by-a-deleted-user", "default-row"],
+)
+def test_without_an_admin_to_name_there_is_no_acting_admin(directory, row, saved_by):
+    save_rows([row], saved_by)
+
+    assert permissions.acting_admin("user-1", "approver-1", "reviewers") is None
+
+
+def test_acting_admin_never_raises(directory, monkeypatch, caplog):
+    def broken():
+        raise RuntimeError("no such table: model_browser_group_permissions")
+
+    monkeypatch.setattr(permissions.permissions_store, "load_rows", broken)
+
+    assert permissions.acting_admin("user-1", "approver-1", "reviewers") is None
+    assert "Could not read the permissions of user group reviewers" in caplog.text
+    assert permissions.acting_admin(None, "admin-1", "reviewers") is directory["admin-1"]
+
+
 def test_principal_for_resolves_another_users_grant(directory):
     save_rows([Row(group_id="reviewers", capabilities=frozenset({"browse", "approve"}))])
 

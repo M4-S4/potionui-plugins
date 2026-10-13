@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+import src.plugin_api.hooks as plugin_hooks
 from backend import downloads, nsfw, pending
 from backend.core_bridge import CoreBridgeError
 from backend.downloads import DownloadError, DownloadRequest, destination, info_for_viewer, public_download
@@ -450,6 +451,42 @@ async def test_an_installed_file_is_assigned_rather_than_downloaded_again(core, 
     assert answer["pending"]["status"] == "indexed"
 
 
+async def test_an_installed_file_is_handed_over_to_the_application_loop_at_once(core, civitai, scheduled):
+    core.models_by_sha[SHA] = model("model-9")
+
+    await _start(principal())
+
+    assert len(scheduled) == 1
+    assert (pending.get(SHA).status, core.calls_to("assign_to_user")) == ("indexed", [])
+    await scheduled[0]
+    row = pending.get(SHA)
+    assert (row.status, row.model_id) == ("enriched", "model-9")
+    assert core.calls_to("assign_to_user") == [("model-9", "user-1")]
+    assert core.notifications[0]["notification_type"] == "model-browser.download_done"
+
+
+async def test_a_file_queued_or_already_on_its_way_hands_nothing_over(core, civitai, scheduled):
+    await _start(principal())
+    await _start(principal("user-2"))
+
+    assert scheduled == []
+
+
+async def test_an_installed_file_is_answered_even_without_an_application_loop(core, civitai, monkeypatch, caplog):
+    def run_on_app_loop(coro):
+        coro.close()
+        raise RuntimeError("AppContainer not initialized yet")
+
+    monkeypatch.setattr(plugin_hooks, "run_on_app_loop", run_on_app_loop)
+    core.models_by_sha[SHA] = model("model-9")
+
+    answer = await _start(principal())
+
+    assert answer["already_installed"] is True
+    assert pending.get(SHA).status == "indexed"  # the watcher's sweep takes it up
+    assert "the sweep will take it up" in caplog.text
+
+
 async def test_an_installed_model_whose_file_is_gone_is_downloaded_again(core, civitai):
     core.models_by_sha[SHA] = model("model-9", is_available=False)
 
@@ -857,5 +894,5 @@ async def test_the_quota_refusal_on_behalf_names_the_requester(core, civitai):
 
     assert raised.value.code == "limit_exceeded"
     assert raised.value.message == (
-        "user-1 has reached their model downloads per month limit: 1 of 1 used. It resets on Nov 1."
+        "user-1 has reached their model downloads per month limit: 1 of 1 used. It resets on Nov 1 at 00:00 UTC."
     )

@@ -14,7 +14,6 @@ bind mount, a junction or a symlink, and `resolve()` follows a link.
 import importlib
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -58,15 +57,20 @@ def plugin_db(scratch_db, monkeypatch):
 
 
 @pytest.fixture
-def fake_container():
-    """A stand-in for PotionUI's AppContainer with every `core_bridge.REQUIRED_ATTRIBUTES` path, and nothing else."""
-    from backend.core_bridge import REQUIRED_ATTRIBUTES
+def scheduled(monkeypatch):
+    """`run_on_app_loop` replaced by a recorder: the coroutines handed over to the application
+    loop (`watcher.schedule_step`), for the test to await. Those left unawaited are closed."""
+    import concurrent.futures
 
-    container = SimpleNamespace()
-    for path in REQUIRED_ATTRIBUTES:
-        node = container
-        for name in path.split("."):
-            if not hasattr(node, name):
-                setattr(node, name, SimpleNamespace())
-            node = getattr(node, name)
-    return container
+    import src.plugin_api.hooks as plugin_hooks
+
+    jobs = []
+
+    def run_on_app_loop(coro):
+        jobs.append(coro)
+        return concurrent.futures.Future()
+
+    monkeypatch.setattr(plugin_hooks, "run_on_app_loop", run_on_app_loop)
+    yield jobs
+    for job in jobs:
+        job.close()

@@ -25,8 +25,11 @@ core); the `/permissions` routes delete them.
 
 Routes hang on the `require_*` dependencies, or on `current_principal` for `GET /me`, and
 receive a `Principal`. `approver_ids` lists who holds `approve` (the recipients of a new
-request's notification), and `principal_for` builds the principal of a user who is not the
-caller (the requester, when an approver acts on their request).
+request's notification), `principal_for` builds the principal of a user who is not the
+caller (the requester, when an approver acts on their request), and `acting_admin` names
+the admin in whose name a model is assigned to a group, since the core's group operation
+needs one: the requester or the request's decider when they are admins, else the admin who
+last saved the group's permissions.
 """
 
 import logging
@@ -302,6 +305,24 @@ def admin_by_id(user_id: Optional[str]) -> Optional[User]:
     operations), else None. Never raises."""
     user = user_by_id(user_id)
     return user if user is not None and is_admin(user) else None
+
+
+def acting_admin(requested_by: Optional[str], decided_by: Optional[str], group_id: str) -> Optional[User]:
+    """The admin in whose name a model is assigned to the group `group_id`: the requester when
+    they are an admin, else the decider when they are one, else the admin who last saved that
+    group's stored permission row (`Row.updated_by`; nobody for a group on its default row),
+    else None. Never raises.
+    """
+    for user_id in (requested_by, decided_by):
+        admin = admin_by_id(user_id)
+        if admin is not None:
+            return admin
+    try:
+        row = permissions_store.load_rows().get(group_id)
+    except Exception:
+        logger.warning("[MODEL-BROWSER] Could not read the permissions of user group %s", group_id, exc_info=True)
+        return None
+    return admin_by_id(row.updated_by) if row is not None else None
 
 
 def approver_ids() -> Set[str]:

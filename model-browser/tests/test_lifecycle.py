@@ -14,7 +14,7 @@ import time
 import pytest
 
 import src.plugin_api.hooks as plugin_hooks
-from backend import core_bridge, settings, tables
+from backend import settings, tables
 from backend.watcher import Watcher
 from hooks import lifecycle_hooks
 from src.plugin_api import HookContext
@@ -252,45 +252,3 @@ def test_on_boot_starts_the_watcher_when_the_plugin_is_enabled_at_runtime(app_lo
     assert lifecycle_hooks._watcher_future is future
     lifecycle_hooks.on_disable(_context("plugin.lifecycle.disable"))
     assert future.result(timeout=2) is None
-
-
-def test_on_ready_checks_the_container_and_names_what_is_missing(monkeypatch, caplog):
-    scheduled = []
-
-    def check_container():
-        raise RuntimeError(
-            "model-browser: PotionUI's AppContainer no longer provides download_queue.get_download. "
-            "The core renamed or removed attributes this plugin relies on"
-        )
-
-    monkeypatch.setattr(core_bridge, "check_container", check_container)
-    monkeypatch.setattr(plugin_hooks, "run_on_app_loop", lambda coro: scheduled.append(coro) or coro.close() or concurrent.futures.Future())
-    context = _context("plugin.lifecycle.ready")
-
-    assert lifecycle_hooks.on_ready(context) is context
-    assert "download_queue.get_download" in caplog.text
-    assert [record.levelname for record in caplog.records if "AppContainer" in record.getMessage()] == ["WARNING"]
-    assert len(scheduled) == 1  # the watcher starts anyway
-
-
-def test_on_ready_checks_the_container_quietly_when_it_is_complete(monkeypatch, caplog):
-    checked = []
-    monkeypatch.setattr(core_bridge, "check_container", lambda: checked.append(True))
-    monkeypatch.setattr(plugin_hooks, "run_on_app_loop", lambda coro: coro.close() or concurrent.futures.Future())
-
-    lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
-
-    assert checked == [True]
-    assert "AppContainer" not in caplog.text
-
-
-def test_on_ready_survives_an_unexpected_error_from_the_check(monkeypatch, caplog):
-    def check_container():
-        raise KeyError("boom")
-
-    monkeypatch.setattr(core_bridge, "check_container", check_container)
-    monkeypatch.setattr(plugin_hooks, "run_on_app_loop", lambda coro: coro.close() or concurrent.futures.Future())
-    context = _context("plugin.lifecycle.ready")
-
-    assert lifecycle_hooks.on_ready(context) is context
-    assert "Could not check PotionUI's container" in caplog.text

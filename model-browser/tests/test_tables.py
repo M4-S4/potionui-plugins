@@ -4,7 +4,10 @@ from backend.tables import TABLE_NAMES, create_tables
 
 # Column lists of PLAN.md §4.3, §4.4 and §7.3, in order.
 _EXPECTED_COLUMNS = {
-    "model_browser_group_permissions": ["group_id", "capabilities", "params", "updated_at"],
+    "model_browser_group_permissions": [
+        "group_id", "capabilities", "params", "updated_at",
+        "updated_by",  # phase 9: added last, where ALTER TABLE puts it on an older table
+    ],
     "model_browser_requests": [
         "id", "user_id", "source", "source_model_id", "source_version_id", "file_id", "snapshot",
         "note", "status", "decided_by", "decision_note", "sha256", "created_at", "updated_at",

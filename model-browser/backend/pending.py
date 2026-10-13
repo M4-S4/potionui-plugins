@@ -4,13 +4,17 @@ downloads, from the moment it is queued until it is assigned and enriched.
 The key is the file's SHA256 (lower-case hex) when the source gives one: that is what
 the core indexer computes and what the `model-browser` provider is asked for
 (`get_model_by_hash`). A file without a known hash (some Hugging Face files, every file of
-a gated repo read anonymously) is keyed `nohash:<download url>` until the watcher finds the
-indexed model and `rekey()`s the row to the real hash.
+a gated repo read anonymously) is keyed `nohash:<download url>` until its indexed model is
+known (`backend/watcher.py`) and the row is `rekey()`ed to the real hash.
 
 Statuses: `queued` (on the core queue) -> `indexed` (model id known) -> `assigned` ->
 `enriched` (done); `failed` at any point, with `error`. `info` holds the normalised
 detail cut down to the chosen version and file (`backend/schema.py` shapes, as JSON), which
 is what the provider turns into a `ProviderModelInfo`.
+
+The `download.after_complete` handler, the steps it schedules and the watcher's sweep may
+reach the same row at once: each moves it on with `update(..., only_from=...)`, so one of
+them changes its status and the others find it changed and stop.
 """
 
 import json
@@ -95,6 +99,21 @@ def get(key: str) -> Optional[PendingRow]:
     return _row_from_record(record) if record else None
 
 
+def get_by_download_id(download_id: Optional[str]) -> Optional[PendingRow]:
+    """The row of the core download `download_id`, or None (no id, or a download the plugin did not queue)."""
+    from src.plugin_api import db
+
+    if not download_id:
+        return None
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            f"SELECT {', '.join(_COLUMNS)} FROM {TABLE} WHERE download_id = ? ORDER BY created_at DESC LIMIT 1",
+            (download_id,),
+        )
+        record = cursor.fetchone()
+    return _row_from_record(record) if record else None
+
+
 def insert(row: PendingRow) -> PendingRow:
     """Insert a new row; raises `sqlite3.IntegrityError` when the key already exists."""
     from src.plugin_api import db
@@ -115,8 +134,14 @@ def insert(row: PendingRow) -> PendingRow:
     return get(row.sha256) or row
 
 
-def update(key: str, **fields: Any) -> Optional[PendingRow]:
-    """Set some of `download_id`, `limit_ref_id`, `model_id`, `status`, `error`, `assign_to`, `request_id`."""
+def update(key: str, *, only_from: Optional[Iterable[str]] = None, **fields: Any) -> Optional[PendingRow]:
+    """Set some of `download_id`, `limit_ref_id`, `model_id`, `status`, `error`, `assign_to`, `request_id`.
+
+    Returns the row as stored after the change, or None when there is no such row. With
+    `only_from`, only while the row is in one of those statuses: the change and the check are
+    one statement, so of two callers moving the same row on, one wins; None when the row was
+    not in `only_from`.
+    """
     from src.plugin_api import db
 
     unknown = set(fields) - _UPDATABLE
@@ -127,12 +152,18 @@ def update(key: str, **fields: Any) -> Optional[PendingRow]:
     if not fields:
         return get(key)
     assignments = ", ".join(f"{name} = ?" for name in fields)
+    query = f"UPDATE {TABLE} SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE sha256 = ?"
+    params: List[Any] = [*fields.values(), key]
+    if only_from is not None:
+        allowed = [status for status in only_from if status in STATUSES]
+        if not allowed:
+            return None
+        query += f" AND status IN ({', '.join('?' * len(allowed))})"
+        params.extend(allowed)
     with db.get_cursor() as cursor:
-        cursor.execute(
-            f"UPDATE {TABLE} SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE sha256 = ?",
-            (*fields.values(), key),
-        )
-    return get(key)
+        cursor.execute(query, params)
+        changed = cursor.rowcount > 0
+    return get(key) if changed or only_from is None else None
 
 
 def rekey(old_key: str, sha256: str) -> Optional[PendingRow]:
@@ -194,7 +225,7 @@ def list_rows(
 
 
 def list_unfinished() -> List[PendingRow]:
-    """Every row the watcher still has to move on (oldest first)."""
+    """Every row still on its way (oldest first): what the watcher's sweep goes over."""
     rows = list_rows(statuses=UNFINISHED, limit=1000)
     return list(reversed(rows))
 

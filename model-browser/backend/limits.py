@@ -23,7 +23,7 @@ raise.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src.plugin_api import LimitEvents, generate_ulid
@@ -103,14 +103,16 @@ def exceeded(limit: float, used: float, incoming: Optional[float]) -> bool:
 
 
 def _resets(resets_at: Optional[str]) -> str:
-    """` It resets on Nov 1.` for an ISO date in the plans' time zone; empty when unknown."""
+    """` It resets on Nov 1 at 00:00 UTC.` for an ISO 8601 instant; empty when unknown."""
     if not resets_at:
         return ""
     try:
         moment = datetime.fromisoformat(resets_at)
     except ValueError:
         return ""
-    return f" It resets on {moment.strftime('%b')} {moment.day}."
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(timezone.utc)
+    return f" It resets on {moment.strftime('%b')} {moment.day} at {moment.strftime('%H:%M')} UTC."
 
 
 def refusal_message(

@@ -1,6 +1,7 @@
 """`backend.permissions_store`: the group permission rows, against a scratch sqlite database."""
 
 import json
+from dataclasses import replace
 from typing import get_args
 
 import pytest
@@ -100,10 +101,22 @@ def test_to_json_is_the_shape_the_routes_send_with_sorted_lists():
             "assign_to": "group",
             "allow_remote": True,
         },
+        "updated_by": None,
     }
 
 
-@pytest.mark.parametrize("row", [_ARTISTS, _VIEWERS, default_row("all_users")], ids=["full", "browse", "default"])
+def test_the_saving_admin_is_carried_beside_the_params_not_in_them():
+    row = replace(_VIEWERS, updated_by="admin-1")
+
+    assert row.to_json()["updated_by"] == "admin-1"
+    assert "updated_by" not in row.params_json()
+
+
+@pytest.mark.parametrize(
+    "row",
+    [_ARTISTS, _VIEWERS, default_row("all_users"), replace(_ARTISTS, updated_by="admin-1")],
+    ids=["full", "browse", "default", "saved-by-an-admin"],
+)
 def test_from_json_reads_back_what_to_json_wrote(row):
     assert Row.from_json(row.to_json()) == row
     assert Row.from_json(json.loads(json.dumps(row.to_json()))) == row
@@ -113,6 +126,46 @@ def test_save_then_load_round_trips_every_field(table):
     save_rows([_ARTISTS, _VIEWERS])
 
     assert load_rows() == {"artists": _ARTISTS, "viewers": _VIEWERS}
+
+
+def test_save_rows_records_the_saving_admin_on_every_row_it_stores(table):
+    save_rows([_ARTISTS, replace(_VIEWERS, updated_by="someone-else")], "admin-1")
+
+    assert load_rows() == {
+        "artists": replace(_ARTISTS, updated_by="admin-1"),
+        "viewers": replace(_VIEWERS, updated_by="admin-1"),
+    }
+    with table.get_cursor() as cursor:
+        cursor.execute(f"SELECT group_id, updated_by FROM {TABLE} ORDER BY group_id")
+        assert [tuple(record) for record in cursor.fetchall()] == [("artists", "admin-1"), ("viewers", "admin-1")]
+
+    save_rows([_VIEWERS], "admin-2")
+
+    assert load_rows() == {"viewers": replace(_VIEWERS, updated_by="admin-2")}
+
+
+@pytest.mark.parametrize("updated_by", [7, "", ["admin-1"]], ids=["number", "empty", "list"])
+def test_a_malformed_saving_admin_reads_as_none(updated_by):
+    assert Row.from_json({"group_id": "g", "updated_by": updated_by}).updated_by is None
+
+
+def test_a_table_created_before_the_saving_admin_was_recorded_gets_the_column_and_keeps_its_rows(plugin_db):
+    with plugin_db.get_cursor() as cursor:  # the table as the plugin created it before phase 9
+        cursor.execute(
+            f"CREATE TABLE {TABLE} (group_id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, params TEXT NOT NULL, "
+            "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+    _insert(plugin_db, "viewers", '["browse"]', "{}")
+
+    create_tables()
+    create_tables()
+
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute(f"PRAGMA table_info({TABLE})")
+        assert [record["name"] for record in cursor.fetchall()][-1] == "updated_by"
+    assert load_rows() == {"viewers": _VIEWERS}
+    save_rows([_VIEWERS], "admin-1")
+    assert load_rows()["viewers"].updated_by == "admin-1"
 
 
 def test_rows_are_stored_as_json_text(table):

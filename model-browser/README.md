@@ -9,10 +9,13 @@ follows the instance's NSFW content policy.
 
 ## Getting started
 
+The plugin needs PotionUI 0.0.16 or newer.
+
 Once the plugin is enabled, a **Model Browser** entry appears in the sidebar; it opens the
 page `/plugins/model-browser`. The plugin keeps its own database tables (`model_browser_*`,
-created when the application starts) and runs a background task that follows the downloads
-it queued; disabling the plugin stops that task.
+created when the application starts). It is told by PotionUI when one of its downloads has
+landed, and a background task sweeps once a minute for the rest (failures, cancellations,
+downloads finished while the plugin was disabled); disabling the plugin stops that task.
 
 Browsing needs no credential. Downloads that need a login are authenticated by the CivitAI
 and Hugging Face provider plugins, which hold the API key and the token. Admin → Plugins

@@ -9,7 +9,7 @@ plugin checks them itself before it queues a download (`backend/limits.py`).
 The usage is what the plugin recorded in the core's limit ledger with `LimitEvents.record`
 (one event per kind for each file queued for the user, refunded when the download fails):
 `ledger_total` reads it back for the current window, for the plan editor, the users list and
-the user's usage view, as for the plugin's own check (`plans.guard.measure`).
+the user's usage view, as for the plugin's own check (`core_bridge.limit_status`).
 
 No import: the core loads this module on its own (`model_browser.backend.limit_handlers`).
 """

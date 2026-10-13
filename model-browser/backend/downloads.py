@@ -14,8 +14,10 @@ the request routes also use on their own (`routes_requests.py`): `prepare_downlo
    be one of the requester's groups (any group for an admin);
 2. one row per file (`pending.key_for`): a file already on its way answers that row
    (`already_queued`, nothing queued twice); a finished row (`failed`, `enriched`) is replaced;
-   a file whose SHA256 is already indexed is not downloaded again: its row starts at
-   `indexed` and the watcher assigns and enriches it (`already_installed`);
+   a file whose SHA256 is already indexed is not downloaded again (`already_installed`): its
+   row starts at `indexed`, and its assignment and enrichment are handed over to the
+   application loop at once (`watcher.schedule_step`; the watcher's sweep takes the row up
+   otherwise);
 3. otherwise the requester's plan quota is checked (`limits.check_quota`: 403
    `limit_exceeded`), the row is written (`queued`, with a fresh `limit_ref_id`), then the
    file is put on the core queue, and once it is there one event per quota kind is recorded
@@ -48,7 +50,7 @@ from pydantic import BaseModel, BeforeValidator, Field, ValidationError, field_v
 
 from src.plugin_api.models import MODEL_TYPES
 
-from . import core_bridge, limits, nsfw, nsfw_filter, pending, security, sources
+from . import core_bridge, limits, nsfw, nsfw_filter, pending, security, sources, watcher
 from .core_bridge import CoreBridgeError
 from .pending import PendingRow
 from .permissions import PURPOSES, Principal
@@ -566,6 +568,7 @@ async def queue_prepared(
             if raced:
                 return _answer(inserted, await _existing_download(inserted), ctx, admin=admin, already_queued=True)
             logger.info("[MODEL-BROWSER] %s is already installed (model %s): assigning it only", filename, model["id"])
+            watcher.schedule_step(watcher.carry_on(inserted.sha256), inserted.sha256)
             return _answer(inserted, None, ctx, admin=admin, already_installed=True)
 
     # 3. Quota, then queue.

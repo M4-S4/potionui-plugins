@@ -474,6 +474,25 @@ def test_put_permissions_round_trip(app, client):
     assert set(load_rows()) == {"all_users", "artists"}
 
 
+def test_put_records_the_saving_admin_on_every_row(app, client):
+    other_admin = _user("admin-2", AccountType.ADMIN)
+    _sign_in(app, ADMIN)
+    client.put(
+        PERMISSIONS_URL,
+        json={"groups": [{"group_id": "all_users", "capabilities": ["browse"], "updated_by": "user-1"}, _ARTISTS_UPDATE]},
+    ).raise_for_status()
+
+    assert {group_id: row.updated_by for group_id, row in load_rows().items()} == {
+        "all_users": "admin-1",
+        "artists": "admin-1",
+    }
+
+    _sign_in(app, other_admin)
+    client.put(PERMISSIONS_URL, json={"groups": [_ARTISTS_UPDATE]}).raise_for_status()
+
+    assert {group_id: row.updated_by for group_id, row in load_rows().items()} == {"artists": "admin-2"}
+
+
 def test_put_accepts_the_groups_get_answered(app, client):
     _sign_in(app, ADMIN)
     data = client.get(PERMISSIONS_URL).json()["data"]

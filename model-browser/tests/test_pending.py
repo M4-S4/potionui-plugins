@@ -88,6 +88,18 @@ def test_get_of_an_unknown_key_is_none(table):
     assert pending.get(SHA) is None
 
 
+def test_get_by_download_id_finds_the_row_of_a_core_download(table):
+    pending.insert(_row(download_id="dl-1"))
+    pending.insert(_row(key=OTHER_SHA, download_id="dl-2"))
+    pending.insert(_row(key=NOHASH_PREFIX + URL))  # not on the queue yet
+
+    assert pending.get_by_download_id("dl-2") == pending.get(OTHER_SHA)
+    assert pending.get_by_download_id("dl-1").sha256 == SHA
+    assert pending.get_by_download_id("dl-9") is None
+    assert pending.get_by_download_id(None) is None
+    assert pending.get_by_download_id("") is None
+
+
 def test_a_second_row_for_the_same_key_is_refused(table):
     pending.insert(_row())
 
@@ -141,6 +153,22 @@ def test_update_without_fields_returns_the_row_and_an_unknown_key_none(table):
 
     assert pending.update(SHA) == pending.get(SHA)
     assert pending.update(OTHER_SHA, status="failed") is None
+
+
+def test_update_only_from_some_statuses_changes_nothing_on_a_row_in_another(table):
+    pending.insert(_row(status="indexed", model_id="model-1"))
+
+    assert pending.update(SHA, only_from=("queued",), status="indexed", model_id="model-2") is None
+    assert (pending.get(SHA).status, pending.get(SHA).model_id) == ("indexed", "model-1")
+
+    moved = pending.update(SHA, only_from=("indexed",), status="assigned", error="a note")
+    assert moved == pending.get(SHA)
+    assert (moved.status, moved.error) == ("assigned", "a note")
+    assert pending.update(SHA, only_from=pending.UNFINISHED, status="failed") is not None
+    assert pending.update(SHA, only_from=pending.UNFINISHED, status="failed", error="again") is None
+    assert pending.get(SHA).error == "a note"
+    assert pending.update(SHA, only_from=("done",), status="enriched") is None  # no known status: nothing
+    assert pending.update(OTHER_SHA, only_from=("queued",), status="failed") is None
 
 
 # Rekey and delete -----------------------------------------------------------------------

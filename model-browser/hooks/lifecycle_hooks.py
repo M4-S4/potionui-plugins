@@ -3,9 +3,8 @@
 - `plugin.lifecycle.boot`, on every process start and right after a runtime
   enable: create the plugin's tables, then rewrite the yes/no settings the core
   stored as "True" / "False" (`settings.normalise_stored_booleans`).
-- `plugin.lifecycle.ready`, once the application's event loop runs: check the
-  core's container (`core_bridge.check_container`, a warning names what is missing),
-  then start the download watcher with `run_on_app_loop`.
+- `plugin.lifecycle.ready`, once the application's event loop runs: start the
+  download watcher with `run_on_app_loop`.
 - `plugin.lifecycle.disable`, broadcast to every enabled plugin: stop the
   watcher when the plugin being disabled is this one.
 
@@ -25,10 +24,10 @@ from src.plugin_api import HookContext
 # app it must never be a bare `import backend`: every plugin that ships a `backend`
 # package competes for that top-level name.
 if __name__.count(".") >= 2:
-    from ..backend import PLUGIN_ID, core_bridge, settings, tables
+    from ..backend import PLUGIN_ID, settings, tables
     from ..backend.watcher import Watcher
 else:
-    from backend import PLUGIN_ID, core_bridge, settings, tables
+    from backend import PLUGIN_ID, settings, tables
     from backend.watcher import Watcher
 
 logger = logging.getLogger("plugins.model-browser")
@@ -70,28 +69,12 @@ def on_boot(context: HookContext) -> HookContext:
 
 
 def on_ready(context: HookContext) -> HookContext:
-    """Check the core's container, then start the download watcher on the application's event loop.
-
-    A container that lacks attributes the plugin relies on (`core_bridge.REQUIRED_ATTRIBUTES`)
-    is logged as a warning naming them, and the watcher starts anyway: only the features
-    using a missing attribute fail.
-    """
-    _check_container()
+    """Start the download watcher on the application's event loop."""
     try:
         _start_watcher()
     except Exception:
         logger.exception("[MODEL-BROWSER] Could not start the download watcher")
     return context
-
-
-def _check_container() -> None:
-    """Log, without raising, the container attributes this plugin relies on that the core no longer has."""
-    try:
-        core_bridge.check_container()
-    except RuntimeError as exc:
-        logger.warning("[MODEL-BROWSER] %s", exc)
-    except Exception:
-        logger.exception("[MODEL-BROWSER] Could not check PotionUI's container")
 
 
 def on_disable(context: HookContext) -> HookContext:

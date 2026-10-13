@@ -18,6 +18,8 @@ hooks:
       handler: "hooks.lifecycle_hooks.on_ready"       # run_on_app_loop(watcher.run())
     - hook: "plugin.lifecycle.disable"
       handler: "hooks.lifecycle_hooks.on_disable"     # stops the watcher
+    - hook: "download.after_complete"
+      handler: "hooks.download_hooks.on_download_complete"   # records a finished download's model, schedules assign + enrich
     - hook: "provider.register"
       handler: "hooks.provider_hooks.register_providers"   # the `model-browser` and `openmodeldb` providers (PLAN.md §7.3, §8.4)
     - hook: "notification_type.register"

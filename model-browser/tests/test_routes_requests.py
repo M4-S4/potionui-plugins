@@ -600,7 +600,7 @@ def test_approval_over_the_requesters_quota_is_refused(api, core, civitai):
     assert (error["error"], error["kind"], error["used"], error["limit"]) == (
         "limit_exceeded", "model-browser.downloads", 1, 1,
     )
-    assert error["message"] == "user-1 has reached their model downloads per month limit: 1 of 1 used. It resets on Nov 1."
+    assert error["message"] == "user-1 has reached their model downloads per month limit: 1 of 1 used. It resets on Nov 1 at 00:00 UTC."
     assert requests.get(request["id"]).status == "open"
     assert core.queued == []
 

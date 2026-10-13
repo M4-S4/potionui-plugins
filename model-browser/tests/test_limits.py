@@ -49,7 +49,8 @@ def test_downloads_within_the_count_pass_and_the_last_one_is_refused(core):
 
     assert (error.kind, error.used, error.limit, error.incoming) == (DOWNLOADS, 3, 3, 1)
     assert error.message == (
-        "You have reached your model downloads per month limit: 3 of 3 used. It resets on Nov 1. Ask your admin for more."
+        "You have reached your model downloads per month limit: 3 of 3 used. "
+        "It resets on Nov 1 at 00:00 UTC. Ask your admin for more."
     )
     assert error.payload() == {
         "kind": DOWNLOADS,
@@ -76,7 +77,7 @@ def test_a_file_that_fits_the_volume_passes_and_one_that_does_not_is_refused(cor
     assert (error.kind, error.used, error.limit, error.incoming) == (DOWNLOAD_BYTES, 3 * GIB, 5 * GIB, 2 * GIB + 1)
     assert error.message == (
         "This file (2 GB) would go over your downloaded model bytes per month limit: you have used 3 GB of 5 GB. "
-        "It resets on Nov 1. Ask your admin for more."
+        "It resets on Nov 1 at 00:00 UTC. Ask your admin for more."
     )
 
 
@@ -101,14 +102,14 @@ def test_the_count_is_checked_before_the_volume(core):
 def test_for_an_approver_the_message_speaks_of_the_requester(core):
     core.limits[("user-1", DOWNLOADS)] = limited(DOWNLOADS, 1, 1)
     assert _refused(requester_name="mb-test-blocked").message == (
-        "mb-test-blocked has reached their model downloads per month limit: 1 of 1 used. It resets on Nov 1."
+        "mb-test-blocked has reached their model downloads per month limit: 1 of 1 used. It resets on Nov 1 at 00:00 UTC."
     )
 
     core.limits[("user-1", DOWNLOADS)] = unlimited(DOWNLOADS)
     core.limits[("user-1", DOWNLOAD_BYTES)] = limited(DOWNLOAD_BYTES, GIB, 512 * 1024 ** 2)
     assert _refused(size_bytes=GIB, requester_name="mb-test-blocked").message == (
         "This file (1 GB) would go over the downloaded model bytes per month limit of mb-test-blocked: "
-        "they have used 512 MB of 1 GB. It resets on Nov 1."
+        "they have used 512 MB of 1 GB. It resets on Nov 1 at 00:00 UTC."
     )
 
 
@@ -123,19 +124,29 @@ def test_a_status_that_cannot_be_read_does_not_block(core, monkeypatch, caplog):
     assert "not enforcing it" in caplog.text
 
 
-def test_broken_plans_read_as_unlimited_through_the_real_limit_status(monkeypatch):
-    def no_container():
+def test_broken_plans_read_as_unlimited_through_the_real_limit_status(monkeypatch, caplog):
+    def no_container(user_id, kind):
         raise RuntimeError("AppContainer not initialized yet")
 
-    monkeypatch.setattr(core_bridge, "get_container", no_container)
+    monkeypatch.setattr(core_bridge, "api_limits", SimpleNamespace(limit_status=no_container))
 
     check_quota("user-1", 100 * GIB)
+
+    assert "treating it as unlimited" in caplog.text
 
 
 def test_the_reset_is_left_out_when_unknown(core):
     core.limits[("user-1", DOWNLOADS)] = limited(DOWNLOADS, 1, 1, resets_at=None, contact_line="")
 
     assert _refused().message == "You have reached your model downloads per month limit: 1 of 1 used."
+
+
+def test_the_reset_is_told_in_utc_whatever_the_offset_it_comes_with(core):
+    core.limits[("user-1", DOWNLOADS)] = limited(DOWNLOADS, 1, 1, resets_at="2026-11-01T00:00:00+01:00", contact_line="")
+
+    assert _refused().message == (
+        "You have reached your model downloads per month limit: 1 of 1 used. It resets on Oct 31 at 23:00 UTC."
+    )
 
 
 @pytest.mark.parametrize(

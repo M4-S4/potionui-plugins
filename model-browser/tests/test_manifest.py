@@ -23,6 +23,7 @@ HANDLER_MODULES = {
     "plugin.lifecycle.boot": "model_browser.hooks.lifecycle_hooks",
     "plugin.lifecycle.ready": "model_browser.hooks.lifecycle_hooks",
     "plugin.lifecycle.disable": "model_browser.hooks.lifecycle_hooks",
+    "download.after_complete": "model_browser.hooks.download_hooks",
     "provider.register": "model_browser.hooks.provider_hooks",
     "notification_type.register": "model_browser.hooks.notification_hooks",
 }
@@ -70,6 +71,10 @@ def test_every_backend_hook_handler_loads_inside_the_plugin_package(loader, mani
     # The handlers reach the backend through the plugin's package, never a top-level `backend`.
     lifecycle = sys.modules["model_browser.hooks.lifecycle_hooks"]
     assert lifecycle.tables.__name__ == "model_browser.backend.tables"
+    download = sys.modules["model_browser.hooks.download_hooks"]
+    assert download.watcher.__name__ == "model_browser.backend.watcher"
+    assert download.pending.__name__ == "model_browser.backend.pending"
+    assert manifest.hooks["download.after_complete"] == "hooks.download_hooks.on_download_complete"
 
 
 def test_api_module_loads_and_exposes_the_router(loader, manifest):
