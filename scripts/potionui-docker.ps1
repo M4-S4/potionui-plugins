@@ -2,8 +2,10 @@
 .SYNOPSIS
   Day-to-day helper for a PotionUI instance running in Docker.
 .DESCRIPTION
-  Reads POTIONUI_URL, POTIONUI_USER, POTIONUI_PASSWORD and POTIONUI_CONTAINER from the environment
-  or .env.local (see .env.example). Actions:
+  Reads POTIONUI_URL, POTIONUI_USER, POTIONUI_PASSWORD, POTIONUI_CONTAINER and POTIONUI_APP_DIR (the
+  directory the backend runs from inside the container: /app for the published image, /work for a
+  container serving a PotionUI checkout mounted there) from the environment or .env.local (see
+  .env.example). Actions:
     status            container state and health
     restart           docker restart, then wait until the health check passes
     logs [-Tail n]    container logs (default: last 80 lines)
@@ -36,6 +38,10 @@ if (-not $container) { throw 'Set POTIONUI_CONTAINER in .env.local (container na
 $baseUrl = (Get-DotEnvValue 'POTIONUI_URL')
 if (-not $baseUrl) { $baseUrl = 'http://localhost:26730' }
 $baseUrl = $baseUrl.TrimEnd('/')
+$appDir = Get-DotEnvValue 'POTIONUI_APP_DIR'
+if (-not $appDir) { $appDir = '/app' }
+# The image's virtualenv, whatever directory the backend runs from.
+$python = '/app/venv/bin/python'
 # `$null | Where-Object` still emits one `$null`, which `@Rest` would splat as an empty argument
 # (pytest then reads '' as "the current folder" and collects the whole of /app).
 $Rest = @($Rest | Where-Object { $null -ne $_ -and $_ -ne '--' })
@@ -79,6 +85,11 @@ switch ($Action) {
     'status' {
         docker ps -a --filter "name=$container" --format '{{.ID}}  {{.Names}}  {{.Status}}  {{.Image}}  {{.Ports}}'
         docker inspect -f 'image revision: {{index .Config.Labels "org.opencontainers.image.revision"}} (v{{index .Config.Labels "org.opencontainers.image.version"}})' $container
+        Write-Host "app dir: $appDir"
+        if ($appDir -ne '/app') {
+            $src = Get-DotEnvValue 'POTIONUI_SRC'
+            if ($src) { Write-Host ("checkout served: {0} {1}" -f (git -C $src rev-parse --short HEAD), (git -C $src branch --show-current)) }
+        }
     }
     'restart' {
         docker restart $container | Out-Null
@@ -102,25 +113,25 @@ switch ($Action) {
         Write-Host ("{0}: {1}" -f $verb, ($resp | ConvertTo-Json -Compress -Depth 3))
     }
     'pytest' {
-        docker exec $container venv/bin/python -c 'import pytest, pytest_asyncio, pytest_timeout' 2>$null
+        docker exec $container $python -c 'import pytest, pytest_asyncio, pytest_timeout' 2>$null
         if ($LASTEXITCODE -ne 0) {
             Write-Host 'installing pytest into the container venv...'
-            docker exec $container venv/bin/pip install --quiet 'pytest>=7.4.0' 'pytest-asyncio>=0.23.0' 'pytest-timeout>=2.2.0' 'httpx>=0.27.0'
+            docker exec $container /app/venv/bin/pip install --quiet 'pytest>=7.4.0' 'pytest-asyncio>=0.23.0' 'pytest-timeout>=2.2.0' 'httpx>=0.27.0'
             if ($LASTEXITCODE -ne 0) { throw 'pip install failed' }
         }
         $failed = @()
         foreach ($p in Select-Plugins) {
             Write-Host "=== $($p.Name) ==="
-            docker exec -w /app $container venv/bin/python -m pytest "content/plugins/local/$($p.Name)/tests" -q @Rest
+            docker exec -w $appDir $container $python -m pytest "content/plugins/local/$($p.Name)/tests" -q @Rest
             if ($LASTEXITCODE -ne 0) { $failed += $p.Name }
         }
         if ($failed) { Write-Host "FAILED: $($failed -join ', ')"; exit 1 }
     }
     'copy' {
-        docker exec $container mkdir -p /app/content/plugins/local
+        docker exec $container mkdir -p "$appDir/content/plugins/local"
         foreach ($p in Select-Plugins) {
-            docker cp "$($p.FullName)" "${container}:/app/content/plugins/local/"
-            Write-Host "copied  $($p.Name) -> ${container}:/app/content/plugins/local/$($p.Name)"
+            docker cp "$($p.FullName)" "${container}:$appDir/content/plugins/local/"
+            Write-Host "copied  $($p.Name) -> ${container}:$appDir/content/plugins/local/$($p.Name)"
         }
         Write-Host 'run `scan` to discover it, `restart` after backend code changes'
     }
