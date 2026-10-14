@@ -1,12 +1,26 @@
+import importlib
+import importlib.util
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from backend import PLUGIN_ID, PLUGIN_VERSION
+from src.features.models.attributes.editor import FIELD_TYPES, KEY_PATTERN, ModelAttributeDefinitionsEditor
+from src.features.notifications.types import NotificationTypeRegistry
+from src.features.plans.guard import LimitGuard, PlanSettings
+from src.features.plans.records import Plan, PlanLimit, PlanSubject
+from src.features.plugins.setup import PluginSetup
+from src.features.providers.registry import ProviderRegistry
+from src.platform.plugins.hooks import HookChain
+from src.platform.plugins.limit_kinds import AdmissionRequest, LimitKindRegistry
+from src.platform.plugins.loader import EXTRA_PLUGIN_DIRS_ENV, PluginLoader
+from src.platform.plugins.registry import PluginRegistry
+from src.plugin_api import HookContext, MarketplaceProviderBase, ProviderCapability, SetupCheck
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+PLUGIN_ID = "model-browser"
+PLUGIN_ROOT = Path(__file__).resolve().parents[3] / "content" / "plugins" / "marketplace" / PLUGIN_ID
+PACKAGE = "model_browser"
 
 HANDLER_MODULES = {
     "plugin.lifecycle.boot": "model_browser.hooks.lifecycle_hooks",
@@ -22,12 +36,33 @@ SETUP_CHECKS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def plugin_modules_removed_afterwards():
+    modules, path = set(sys.modules), list(sys.path)
+    try:
+        yield
+    finally:
+        for name in set(sys.modules) - modules:
+            if name.split(".")[0] == PACKAGE:
+                del sys.modules[name]
+        sys.path[:] = path
+
+
+def _load(name):
+    if PACKAGE not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            PACKAGE, PLUGIN_ROOT / "__init__.py", submodule_search_locations=[str(PLUGIN_ROOT)]
+        )
+        package = importlib.util.module_from_spec(spec)
+        sys.modules[PACKAGE] = package
+        spec.loader.exec_module(package)
+    return importlib.import_module(f"{PACKAGE}.{name}")
+
+
 @pytest.fixture
 def loader(monkeypatch, tmp_path):
-    from src.platform.plugins.loader import EXTRA_PLUGIN_DIRS_ENV, PluginLoader
-
     monkeypatch.delenv(EXTRA_PLUGIN_DIRS_ENV, raising=False)
-    return PluginLoader(marketplace_dir=str(tmp_path / "marketplace"), local_dir=str(PLUGIN_ROOT.parent))
+    return PluginLoader(marketplace_dir=str(PLUGIN_ROOT.parent), local_dir=str(tmp_path / "local"))
 
 
 @pytest.fixture
@@ -39,7 +74,9 @@ def manifest(loader):
 
 
 def test_manifest_identity_matches_the_backend(manifest):
-    assert (manifest.id, manifest.version) == (PLUGIN_ID, PLUGIN_VERSION)
+    backend = _load("backend")
+
+    assert (manifest.id, manifest.version) == (backend.PLUGIN_ID, backend.PLUGIN_VERSION)
 
 
 def _handler(loader, manifest, hook):
@@ -84,8 +121,6 @@ def test_docs_files_exist(manifest):
 
 
 def test_provider_register_adds_the_two_providers_next_to_the_others(loader, manifest):
-    from src.plugin_api import HookContext, MarketplaceProviderBase
-
     register = _handler(loader, manifest, "provider.register")
     other = type("CivitaiProvider", (), {})
     context = HookContext(hook_name="provider.register", plugin_id=PLUGIN_ID, data={"providers": {"civitai": other}})
@@ -111,8 +146,6 @@ def test_provider_register_adds_the_two_providers_next_to_the_others(loader, man
 
 
 def test_provider_register_creates_the_providers_map_and_never_raises(loader, manifest):
-    from src.plugin_api import HookContext
-
     register = _handler(loader, manifest, "provider.register")
     empty = HookContext(hook_name="provider.register", plugin_id=PLUGIN_ID, data={})
     broken = HookContext(hook_name="provider.register", plugin_id=PLUGIN_ID, data={"providers": "not a map"})
@@ -126,38 +159,9 @@ def test_provider_register_creates_the_providers_map_and_never_raises(loader, ma
     assert broken.data["providers"] == "not a map"
 
 
-def test_a_broken_openmodeldb_provider_does_not_keep_the_pending_provider_out(monkeypatch, caplog):
-    import importlib
-    import logging
-
-    from hooks import provider_hooks
-    from src.plugin_api import HookContext
-
-    real = importlib.import_module
-
-    def failing(name, package=None):
-        if name.endswith("openmodeldb_provider"):
-            raise ImportError("broken")
-        return real(name, package)
-
-    monkeypatch.setattr(provider_hooks.importlib, "import_module", failing)
-    context = HookContext(hook_name="provider.register", plugin_id=PLUGIN_ID, data={"providers": {}})
-
-    with caplog.at_level(logging.ERROR, logger="plugins.model-browser"):
-        assert provider_hooks.register_providers(context) is context
-
-    assert list(context.data["providers"]) == ["model-browser"]
-    assert "Could not register the OpenModelDBProvider marketplace provider" in caplog.text
-
-
 async def test_the_core_provider_registry_discovers_and_initializes_the_provider(
-    loader, manifest, plugin_db, monkeypatch
+    loader, manifest, mock_db, monkeypatch
 ):
-    from backend.tables import create_tables
-    from src.features.providers.registry import ProviderRegistry
-    from src.platform.plugins.hooks import HookChain
-    from src.plugin_api import ProviderCapability
-
     chain = HookChain()
     chain.register("provider.register", PLUGIN_ID, _handler(loader, manifest, "provider.register"))
 
@@ -185,16 +189,12 @@ async def test_the_core_provider_registry_discovers_and_initializes_the_provider
         "https://civitai.com/models/122359?modelVersionId=135867"
     )
     assert openmodeldb.get_model_page_url("openmodeldb:4x-UltraSharp") == "https://openmodeldb.info/models/4x-UltraSharp"
-    create_tables()
+    _load("backend.tables").create_tables()
     assert await registry.get_model_by_hash("model-browser", "0" * 64, raise_errors=True) is None
     assert await registry.get_model_by_hash("openmodeldb", "not-a-hash", raise_errors=True) is None
 
 
 def test_notification_type_register_declares_the_plugins_types_on_the_cores_registry(loader, manifest):
-    from backend import notifications
-    from src.features.notifications.types import NotificationTypeRegistry
-    from src.plugin_api import HookContext
-
     register = _handler(loader, manifest, "notification_type.register")
     registry = NotificationTypeRegistry()
     context = HookContext(hook_name="notification_type.register", plugin_id="system", data={"registry": registry})
@@ -209,7 +209,7 @@ def test_notification_type_register_declares_the_plugins_types_on_the_cores_regi
         "model-browser.download_done",
         "model-browser.download_failed",
     ]
-    assert list(notifications.KEYS) == [spec.key for spec in registry.all()]
+    assert list(_load("backend.notifications").KEYS) == [spec.key for spec in registry.all()]
     for spec in registry.all():
         assert spec.label.startswith("Model Browser: ") and spec.description
         assert (spec.category, spec.default_enabled, spec.admin_only) == ("plugin", True, False)
@@ -218,8 +218,6 @@ def test_notification_type_register_declares_the_plugins_types_on_the_cores_regi
 
 
 def test_notification_type_register_never_raises(loader, manifest):
-    from src.plugin_api import HookContext
-
     register = _handler(loader, manifest, "notification_type.register")
     empty = HookContext(hook_name="notification_type.register", plugin_id="system", data={})
     broken = HookContext(hook_name="notification_type.register", plugin_id="system", data={"registry": "not one"})
@@ -230,19 +228,16 @@ def test_notification_type_register_never_raises(loader, manifest):
 
 @pytest.fixture
 def limit_kinds(manifest, tmp_path):
-    from src.platform.plugins.limit_kinds import LimitKindRegistry
-    from src.platform.plugins.registry import PluginRegistry
-
     kinds = LimitKindRegistry()
     plugins = PluginRegistry(
-        marketplace_dir=str(tmp_path / "marketplace"), local_dir=str(PLUGIN_ROOT.parent), limit_kind_registry=kinds
+        marketplace_dir=str(PLUGIN_ROOT.parent), local_dir=str(tmp_path / "local"), limit_kind_registry=kinds
     )
     assert plugins._register_plugin_limit_kinds(manifest) is None
     return kinds
 
 
 def test_the_limit_kinds_load_through_the_cores_registration(limit_kinds):
-    from backend import limits
+    limits = _load("backend.limits")
 
     downloads, volume = limit_kinds.get(limits.DOWNLOADS), limit_kinds.get(limits.DOWNLOAD_BYTES)
     assert [kind.key for kind in limit_kinds.all()] == list(limits.KINDS)
@@ -256,10 +251,6 @@ def test_the_limit_kinds_load_through_the_cores_registration(limit_kinds):
 
 
 def test_the_core_never_enforces_nor_records_the_plugin_limit_kinds(limit_kinds):
-    from src.features.plans.guard import LimitGuard, PlanSettings
-    from src.features.plans.records import Plan, PlanLimit, PlanSubject
-    from src.platform.plugins.limit_kinds import AdmissionRequest
-
     plan = Plan(
         id="tiny", name="Tiny", limits=(PlanLimit("model-browser.downloads", 0), PlanLimit("model-browser.download_bytes", 0))
     )
@@ -308,8 +299,6 @@ class _Ledger:
 
 
 def test_setup_checks_load_the_way_the_core_loads_them(loader, manifest):
-    from src.plugin_api import SetupCheck
-
     assert [(step["kind"], step["check"]) for step in manifest.setup] == [("check", ref) for ref in SETUP_CHECKS]
     for step in manifest.setup:
         check_class = loader.load_class(manifest, step["check"])
@@ -323,7 +312,6 @@ def test_setup_checks_load_the_way_the_core_loads_them(loader, manifest):
 
 def test_the_core_setup_report_runs_the_checks(loader, manifest, monkeypatch):
     import src.plugin_api
-    from src.features.plugins.setup import PluginSetup
 
     registry = SimpleNamespace(is_provider_initialized=lambda provider_id: provider_id == "civitai")
     monkeypatch.setattr(src.plugin_api, "get_provider_registry", lambda: registry)
@@ -353,8 +341,6 @@ def test_the_core_setup_report_runs_the_checks(loader, manifest, monkeypatch):
 
 
 def test_model_metadata_fields_are_text_attributes_for_every_model_type(manifest):
-    from src.features.models.attributes.editor import FIELD_TYPES, KEY_PATTERN, ModelAttributeDefinitionsEditor
-
     fields = manifest.model_metadata_fields
     assert [field["key"] for field in fields] == ["mb_base_model", "mb_license"]
     for field in fields:
@@ -375,32 +361,29 @@ def test_model_metadata_fields_are_text_attributes_for_every_model_type(manifest
 
 
 def test_the_provider_gives_a_value_for_every_model_metadata_field(manifest):
-    from backend.pending import PendingRow
-    from backend.schema import File, License, ModelDetail, Version
-    from provider.pending_provider import build_model_info
-
-    model = ModelDetail(
+    schema = _load("backend.schema")
+    model = schema.ModelDetail(
         source="civitai",
         id="1",
         name="A LoRA",
         type="LORA",
-        license=License(summary="CreativeML OpenRAIL-M"),
+        license=schema.License(summary="CreativeML OpenRAIL-M"),
         source_url="https://civitai.com/models/1",
         versions=[
-            Version(
+            schema.Version(
                 id="2",
                 name="v1",
                 base_model="Illustrious",
-                files=[File(id="3", name="a.safetensors", download_url="https://civitai.com/api/download/models/2")],
+                files=[schema.File(id="3", name="a.safetensors", download_url="https://civitai.com/api/download/models/2")],
             )
         ],
     )
-    row = PendingRow(
+    row = _load("backend.pending").PendingRow(
         sha256="0" * 64, source="civitai", source_model_id="1", file_name="a.safetensors", requested_by="u",
         assign_to="none", info={"model": model.model_dump(mode="json"), "version_id": "2", "file_id": "3", "mb_type": "lora"},
     )
 
-    extra = build_model_info(row).extra_data
+    extra = _load("provider.pending_provider").build_model_info(row).extra_data
 
     assert {field["key"]: extra.get(field["key"]) for field in manifest.model_metadata_fields} == {
         "mb_base_model": "Illustrious",

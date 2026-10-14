@@ -91,22 +91,22 @@ def _file(path, size=10, lfs_oid=None):
 
 def test_search_items_are_normalised():
     items = _items("models_search_lora")
-    swap = items["ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA"]
+    outfit = items["sample-lab/Qwen-Image-2.1-Outfit-Sample-Consistency-LoRA"]
 
     assert list(items) == [
-        "ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA",
-        "akatz-ai/MiniMax-H3-Character-Swap-LoRA",
+        "sample-lab/Qwen-Image-2.1-Outfit-Sample-Consistency-LoRA",
+        "sample-lab/MiniMax-H3-Character-Sample-LoRA",
         "pablodawson/MiniMax-H3-360-Orbit-LoRA",
     ]
-    assert swap.model_dump() == {
+    assert outfit.model_dump() == {
         "source": "huggingface",
-        "id": "ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA",
-        "name": "ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA",
+        "id": "sample-lab/Qwen-Image-2.1-Outfit-Sample-Consistency-LoRA",
+        "name": "sample-lab/Qwen-Image-2.1-Outfit-Sample-Consistency-LoRA",
         "type": "image-to-image",
         "mb_type": "lora",
         "base_model": "Qwen/Qwen-Image-2.1",
         "base_models": ["Qwen/Qwen-Image-2.1"],
-        "creator": "ausboss",
+        "creator": "sample-lab",
         "nsfw": False,
         "poi": False,
         "early_access": False,
@@ -114,11 +114,11 @@ def test_search_items_are_normalised():
         "thumbnail": None,
         "stats": {"downloads": 0, "likes": 116, "rating": None},
         "tags": [
-            "lora", "image-editing", "outfit-swap", "consistency", "virtual-try-on", "qwen-image",
+            "lora", "image-editing", "outfit-sample", "consistency", "virtual-try-on", "qwen-image",
             "qwen-image-2.1", "comfyui", "ai-toolkit", "image-to-image",
         ],
         "updated_at": "2026-10-05T13:49:00.000Z",
-        "source_url": "https://huggingface.co/ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA",
+        "source_url": "https://huggingface.co/sample-lab/Qwen-Image-2.1-Outfit-Sample-Consistency-LoRA",
         "primary_sha256": None,
         "installed": None,
     }
@@ -127,11 +127,11 @@ def test_search_items_are_normalised():
         ("video-to-video", "lora"),
         ("image-text-to-video", "lora"),
     ]
-    character = items["akatz-ai/MiniMax-H3-Character-Swap-LoRA"]
+    character = items["sample-lab/MiniMax-H3-Character-Sample-LoRA"]
     assert (character.creator, character.stats.downloads, character.base_models) == (
-        "akatz-ai", 40640, ["Comfy-Org/MiniMax-H3"],
+        "sample-lab", 40640, ["Comfy-Org/MiniMax-H3"],
     )
-    assert "dataset:akatz-ai/H3-Character-Swap-v1" in character.tags
+    assert "dataset:sample-lab/H3-Character-Sample-v1" in character.tags
 
 
 def test_list_answers_carry_no_file_hash():
@@ -167,12 +167,12 @@ def test_the_not_for_all_audiences_tag_marks_nsfw():
     items = _items("models_filter_nsfw_tag")
 
     assert {repo: found.nsfw for repo, found in items.items()} == {
-        "Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1": True,
-        "Heartsync/Flux-NSFW-uncensored": True,
+        "sample-org/Sample-Q-Mature-Qwen-Image-2.1": True,
+        "sample-labs/Flux-Sample-Mature": True,
     }
     assert all(not found.nsfw for found in _items("models_search_lora").values())
-    assert items["Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1"].base_models == ["Qwen/Qwen-Image-2.1"]
-    assert items["Heartsync/Flux-NSFW-uncensored"].base_models == ["black-forest-labs/FLUX.1-dev"]
+    assert items["sample-org/Sample-Q-Mature-Qwen-Image-2.1"].base_models == ["Qwen/Qwen-Image-2.1"]
+    assert items["sample-labs/Flux-Sample-Mature"].base_models == ["black-forest-labs/FLUX.1-dev"]
 
 
 def test_types_proposed_for_the_text_to_image_top():
@@ -180,7 +180,7 @@ def test_types_proposed_for_the_text_to_image_top():
 
     assert {repo: (found.type, found.mb_type) for repo, found in items.items()} == {
         "stabilityai/stable-diffusion-xl-base-1.0": ("text-to-image", "checkpoint"),
-        "abenzerps/Qwen-Image-2.1-Uncensored-GGUF": ("text-to-image", "diffusion_model"),
+        "sample-quant/Qwen-Image-2.1-Sample-GGUF": ("text-to-image", "diffusion_model"),
         "stable-diffusion-v1-5/stable-diffusion-v1-5": ("text-to-image", None),
     }
 
@@ -207,7 +207,7 @@ def test_author_listing():
 
 
 def test_the_type_falls_back_to_kind_tags_then_the_library():
-    raw = item("models_search_lora", "akatz-ai/MiniMax-H3-Character-Swap-LoRA")
+    raw = item("models_search_lora", "sample-lab/MiniMax-H3-Character-Sample-LoRA")
     raw.pop("pipeline_tag")
     assert normalize_item(raw).type == "lora"
 
@@ -1095,7 +1095,7 @@ def test_readme_image_url_checks_relative_paths_against_the_files():
         ("flux1-dev_fp8_e4m3fn.safetensors", "fp8"),
         ("t5xxl_fp32.safetensors", "fp32"),
         ("qwen3vl_8b_bf16.safetensors", "bf16"),
-        ("NoctQ_V4_int8_convrot.safetensors", "int8"),
+        ("SampleQ_V4_int8_convrot.safetensors", "int8"),
         ("qwen-image-2.1-UC-NVFP4.safetensors", "nvfp4"),
         ("sd_xl_base_1.0.safetensors", None),
         ("qwen_q4_k_m.safetensors", None),

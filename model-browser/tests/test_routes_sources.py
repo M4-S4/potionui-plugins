@@ -619,8 +619,8 @@ def test_nsfw_media_is_404_when_the_model_itself_is_hidden(client, transport, st
 
 LCM = REPOS["lcm_lora_sdxl"]
 LORA_IDS = [
-    "ausboss/Qwen-Image-2.1-Outfit-Swap-Consistency-LoRA",
-    "akatz-ai/MiniMax-H3-Character-Swap-LoRA",
+    "sample-lab/Qwen-Image-2.1-Outfit-Sample-Consistency-LoRA",
+    "sample-lab/MiniMax-H3-Character-Sample-LoRA",
     "pablodawson/MiniMax-H3-360-Orbit-LoRA",
 ]
 

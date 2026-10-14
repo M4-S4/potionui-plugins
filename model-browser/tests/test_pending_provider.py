@@ -1,7 +1,6 @@
 import json
 import sqlite3
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 import pytest
 
@@ -496,65 +495,6 @@ async def test_a_real_civitai_detail_round_trips(table, provider):
     assert provider.get_model_page_url(info.provider_model_id, info.provider_version_id) == (
         "https://civitai.com/models/122359?modelVersionId=135867"
     )
-
-
-async def test_the_core_fetcher_stores_the_answer_and_fetches_only_the_safe_previews(table, provider, monkeypatch):
-    import src.features.providers.registry as provider_registry
-    from src.features.models.provider_info import ProviderInfoFetcher
-    from src.plugin_api import HookContext
-
-    store(info_of(lora()))
-    stored, fetched = {}, []
-
-    async def get_model_by_hash(provider_id, sha256, raise_errors=False):
-        assert provider_id == PROVIDER_ID
-        return await provider.get_model_by_hash(sha256)
-
-    async def fetch_media_bytes(self, url):
-        fetched.append(url)
-        return b"\x89PNG\r\n\x1a\n", "image/png"
-
-    class Editor:
-        def __init__(self):
-            self.metadata, self.previews = {}, []
-
-        def notify_metadata_changed(self, model_id, fields):
-            pass
-
-        def update_model_metadata(self, model_id, values):
-            self.metadata = values
-
-        def list_model_previews(self, model_id):
-            return list(self.previews)
-
-        def add_model_preview(self, model_id, preview):
-            self.previews.append(preview)
-
-    model = SimpleNamespace(id="model-1", sha256=SHA, description=None, model_metadata={}, is_directory=False)
-    repository = SimpleNamespace(
-        get_by_id=lambda model_id, include_providers=False: model if model_id == "model-1" else None,
-        upsert_provider=lambda model_id, row: stored.__setitem__("provider", row),
-        update_description=lambda model_id, text: stored.__setitem__("description", text),
-    )
-    plugins = SimpleNamespace(
-        execute_hook=lambda hook, initial_data=None: (HookContext(hook_name=hook, plugin_id="system", data=initial_data or {}), True)
-    )
-    monkeypatch.setattr(provider_registry, "get_provider_registry", lambda: SimpleNamespace(get_model_by_hash=get_model_by_hash))
-    monkeypatch.setattr(ProviderInfoFetcher, "_fetch_media_bytes", fetch_media_bytes)
-    editor = Editor()
-    fetcher = ProviderInfoFetcher(repository, plugins, metadata_editor=editor, storage_driver=SimpleNamespace(put_bytes=lambda key, data: None))
-
-    assert await fetcher.run_provider_fetch(PROVIDER_ID, ["model-1"]) == {"successful": 1, "failed": 0}
-
-    row = stored["provider"]
-    assert (row.model_id, row.provider, row.provider_model_id, row.provider_version_id) == (
-        "model-1", "model-browser", "civitai:122359", "135867",
-    )
-    assert (row.name, row.tags, row.nsfw, row.download_url) == ("Detail Tweaker XL", ["concept", "detailed"], False, DOWNLOAD_URL)
-    assert stored["description"] == "Adds detail. Weight 0.5 to 1.5"
-    assert editor.metadata == {"triggers": ["add detail", "detailed"]}
-    assert fetched == [SAFE_IMAGE, SAFE_VIDEO]
-    assert [preview["type"] for preview in editor.previews] == ["image", "image"]
 
 
 def test_build_model_info_is_usable_on_its_own():

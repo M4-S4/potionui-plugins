@@ -103,8 +103,8 @@
   },
   {
    "_id": "6ab000f1a587030ee97d13cf",
-   "id": "abenzerps/Qwen-Image-2.1-Uncensored-GGUF",
-   "author": "abenzerps",
+   "id": "sample-quant/Qwen-Image-2.1-Sample-GGUF",
+   "author": "sample-quant",
    "gated": false,
    "lastModified": "2026-10-11T12:04:13.000Z",
    "likes": 3940,
@@ -126,7 +126,7 @@
    "pipeline_tag": "text-to-image",
    "library_name": "gguf",
    "createdAt": "2026-09-20T15:51:13.000Z",
-   "modelId": "abenzerps/Qwen-Image-2.1-Uncensored-GGUF",
+   "modelId": "sample-quant/Qwen-Image-2.1-Sample-GGUF",
    "siblings": [
     {
      "rfilename": ".gitattributes"
@@ -177,7 +177,7 @@
      "rfilename": "qwen-image-2.1-UC-int8_convrot.safetensors"
     },
     {
-     "rfilename": "qwen-image-2.1-uncensored-lora.safetensors"
+     "rfilename": "qwen-image-2.1-sample-lora.safetensors"
     },
     {
      "rfilename": "text_encoders/qwen3vl_8b_bf16.safetensors"

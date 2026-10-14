@@ -8,8 +8,8 @@
   "items": [
    {
     "id": 667086,
-    "name": "NSFW MASTER",
-    "description": "<p><span style=\"color:rgb(250, 176, 5)\">Update&gt;&gt;</span></p><h1 id=\"z-image-turbo-v1\">Z-image turbo V1 </h1><p>This model is trained on the same dataset as flux version. Use it and let me know what can be improved. <br /><br /><br /><strong>FLUX [NSFW] MASTER</strong></p><p>Very happy to share my new lora model! this model is all you need when comes to generate thing using Flux although is has some small problems but it will be fixed soon in the next update!! <br />As of now try it out and let me know your thoughts about it.. <br />Recomanded weight is 0.8 <br /><br />have fun 😀</p><p></p…",
+    "name": "Sample Mature LoRA",
+    "description": "<p><span style=\"color:rgb(250, 176, 5)\">Update&gt;&gt;</span></p><h1 id=\"z-image-turbo-v1\">Z-image turbo V1 </h1><p>This model is trained on the same dataset as flux version. Use it and let me know what can be improved. <br /><br /><br /><strong>FLUX SAMPLE MATURE LORA</strong></p><p>Very happy to share my new lora model! this model is all you need when comes to generate thing using Flux although is has some small problems but it will be fixed soon in the next update!! <br />As of now try it out and let me know your thoughts about it.. <br />Recomanded weight is 0.8 <br /><br />have fun 😀</p><p></p…",
     "allowNoCredit": true,
     "allowCommercialUse": [
      "Image",
@@ -43,20 +43,20 @@
      "tippedAmountCount": 573
     },
     "creator": {
-     "username": "Shopon_Skp",
-     "image": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/3fbcd03e-cd45-4be9-82cf-2b80fa562551/width=96/Shopon_Skp.jpeg"
+     "username": "sample_creator",
+     "image": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/00000000-0000-4000-8000-000000000001/width=96/sample_creator.jpeg"
     },
     "tags": [
-     "boobs",
-     "flux nsfw master",
+     "concept",
+     "flux sample lora",
      "flux pony",
-     "nude",
-     "nsfw",
+     "style",
+     "lighting",
      "realistic",
-     "nude girl",
-     "naked",
+     "portrait",
+     "photo",
      "character",
-     "vagina",
+     "detail",
      "flux.1",
      "flux",
      "pony flux",
@@ -88,7 +88,7 @@
        {
         "id": 660169,
         "sizeKB": 167938.8125,
-        "name": "NSFW_master.safetensors",
+        "name": "sample_mature.safetensors",
         "overrideName": null,
         "type": "Model",
         "pickleScanResult": "Success",
@@ -179,7 +179,7 @@
     "tags": [
      "woman",
      "girls",
-     "sexy",
+     "portrait",
      "photorealistic",
      "style",
      "aesthetic",

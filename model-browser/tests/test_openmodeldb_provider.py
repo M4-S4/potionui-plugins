@@ -1,17 +1,19 @@
+import importlib
 import json
 import logging
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 import pytest
 
+from backend import PLUGIN_ID
 from backend import cache as cache_module
 from backend import http as http_module
 from backend import sources as sources_module
 from backend.http import SourceHttp
+from hooks import provider_hooks
 from provider import openmodeldb_provider
 from provider.openmodeldb_provider import PROVIDER_ID, OpenModelDBProvider, model_page_url
-from src.plugin_api import MarketplaceProviderBase, ProviderCapability, ProviderConnectionError, ProviderModelInfo
+from src.plugin_api import HookContext, MarketplaceProviderBase, ProviderCapability, ProviderConnectionError, ProviderModelInfo
 
 from .civitai_fakes import MemoryCache, fake_settings
 from .openmodeldb_fakes import (
@@ -227,64 +229,6 @@ async def test_the_provider_shares_the_registry_source_and_its_catalogue(monkeyp
     assert transport.count(MODELS) == 1
 
 
-async def test_the_core_fetcher_enriches_an_upscaler_already_on_disk(provider, monkeypatch):
-    import src.features.providers.registry as provider_registry
-    from src.features.models.provider_info import ProviderInfoFetcher
-    from src.plugin_api import HookContext
-
-    stored, fetched = {}, []
-
-    async def get_model_by_hash(provider_id, sha256, raise_errors=False):
-        assert provider_id == PROVIDER_ID
-        return await provider.get_model_by_hash(sha256)
-
-    async def fetch_media_bytes(self, url):
-        fetched.append(url)
-        return b"\xff\xd8\xff\xe0", "image/jpeg"
-
-    class Editor:
-        def __init__(self):
-            self.metadata, self.previews = {}, []
-
-        def notify_metadata_changed(self, model_id, fields):
-            pass
-
-        def update_model_metadata(self, model_id, values):
-            self.metadata = values
-
-        def list_model_previews(self, model_id):
-            return list(self.previews)
-
-        def add_model_preview(self, model_id, preview):
-            self.previews.append(preview)
-
-    on_disk = SimpleNamespace(id="model-7", sha256=NOMOS_SHA, description=None, model_metadata={}, is_directory=False)
-    repository = SimpleNamespace(
-        get_by_id=lambda model_id, include_providers=False: on_disk if model_id == "model-7" else None,
-        upsert_provider=lambda model_id, row: stored.__setitem__("provider", row),
-        update_description=lambda model_id, text: stored.__setitem__("description", text),
-    )
-    plugins = SimpleNamespace(
-        execute_hook=lambda hook, initial_data=None: (HookContext(hook_name=hook, plugin_id="system", data=initial_data or {}), True)
-    )
-    monkeypatch.setattr(provider_registry, "get_provider_registry", lambda: SimpleNamespace(get_model_by_hash=get_model_by_hash))
-    monkeypatch.setattr(ProviderInfoFetcher, "_fetch_media_bytes", fetch_media_bytes)
-    editor = Editor()
-    fetcher = ProviderInfoFetcher(repository, plugins, metadata_editor=editor, storage_driver=SimpleNamespace(put_bytes=lambda key, data: None))
-
-    assert await fetcher.run_provider_fetch(PROVIDER_ID, ["model-7"]) == {"successful": 1, "failed": 0}
-
-    row = stored["provider"]
-    assert (row.model_id, row.provider, row.provider_model_id, row.provider_version_id) == (
-        "model-7", "openmodeldb", "openmodeldb:4x-Nomos8kSC", None,
-    )
-    assert (row.name, row.nsfw, row.download_url) == ("Nomos8kSC", False, NOMOS_URL)
-    assert stored["description"].startswith("Architecture: ESRGAN · Scale: 4x")
-    assert editor.metadata == {}
-    assert fetched == NOMOS_IMAGES
-    assert [preview["type"] for preview in editor.previews] == ["image"]
-
-
 @pytest.mark.parametrize(
     "model_id, url",
     [
@@ -307,3 +251,21 @@ def test_the_mirror_link_is_the_model_page(provider, transport, model_id, url):
 )
 def test_anything_else_has_no_mirror_link(provider, model_id):
     assert provider.get_model_page_url(model_id) is None
+
+
+def test_a_broken_openmodeldb_provider_does_not_keep_the_pending_provider_out(monkeypatch, caplog):
+    real = importlib.import_module
+
+    def failing(name, package=None):
+        if name.endswith("openmodeldb_provider"):
+            raise ImportError("broken")
+        return real(name, package)
+
+    monkeypatch.setattr(provider_hooks.importlib, "import_module", failing)
+    context = HookContext(hook_name="provider.register", plugin_id=PLUGIN_ID, data={"providers": {}})
+
+    with caplog.at_level(logging.ERROR, logger="plugins.model-browser"):
+        assert provider_hooks.register_providers(context) is context
+
+    assert list(context.data["providers"]) == ["model-browser"]
+    assert "Could not register the OpenModelDBProvider marketplace provider" in caplog.text

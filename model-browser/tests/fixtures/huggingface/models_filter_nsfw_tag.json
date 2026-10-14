@@ -9,8 +9,8 @@
  "body": [
   {
    "_id": "6aba7e15cf9c7d4948694775",
-   "id": "Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1",
-   "author": "Noctaluna",
+   "id": "sample-org/Sample-Q-Mature-Qwen-Image-2.1",
+   "author": "sample-org",
    "gated": false,
    "lastModified": "2026-09-30T15:08:43.000Z",
    "likes": 514,
@@ -25,7 +25,7 @@
     "comfyui",
     "int8",
     "photorealistic",
-    "uncensored",
+    "concept",
     "nsfw",
     "not-for-all-audiences",
     "base_model:Qwen/Qwen-Image-2.1",
@@ -36,7 +36,7 @@
    "pipeline_tag": "text-to-image",
    "library_name": "diffusion-single-file",
    "createdAt": "2026-09-28T14:47:49.000Z",
-   "modelId": "Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1",
+   "modelId": "sample-org/Sample-Q-Mature-Qwen-Image-2.1",
    "siblings": [
     {
      "rfilename": ".gitattributes"
@@ -48,16 +48,16 @@
      "rfilename": "NOTICE"
     },
     {
-     "rfilename": "NoctQ_V3_base_int8_convrot.safetensors"
+     "rfilename": "SampleQ_V3_base_int8_convrot.safetensors"
     },
     {
-     "rfilename": "NoctQ_V3_base_workflow.json"
+     "rfilename": "SampleQ_V3_base_workflow.json"
     },
     {
-     "rfilename": "NoctQ_V4_int8_convrot.safetensors"
+     "rfilename": "SampleQ_V4_int8_convrot.safetensors"
     },
     {
-     "rfilename": "NoctQ_V4_workflow.json"
+     "rfilename": "SampleQ_V4_workflow.json"
     },
     {
      "rfilename": "README.md"
@@ -75,8 +75,8 @@
   },
   {
    "_id": "6818c6da872c5000a5968bd8",
-   "id": "Heartsync/Flux-NSFW-uncensored",
-   "author": "Heartsync",
+   "id": "sample-labs/Flux-Sample-Mature",
+   "author": "sample-labs",
    "gated": false,
    "lastModified": "2025-05-05T14:21:20.000Z",
    "likes": 641,
@@ -95,7 +95,7 @@
    ],
    "pipeline_tag": "text-to-image",
    "createdAt": "2025-05-05T14:10:34.000Z",
-   "modelId": "Heartsync/Flux-NSFW-uncensored",
+   "modelId": "sample-labs/Flux-Sample-Mature",
    "siblings": [
     {
      "rfilename": ".gitattributes"

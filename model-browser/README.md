@@ -9,8 +9,6 @@ follows the instance's NSFW content policy.
 
 ## Getting started
 
-The plugin needs PotionUI 0.0.16 or newer.
-
 Once the plugin is enabled, a **Model Browser** entry appears in the sidebar; it opens the
 page `/plugins/model-browser`. The plugin keeps its own database tables (`model_browser_*`,
 created when the application starts). It is told by PotionUI when one of its downloads has
