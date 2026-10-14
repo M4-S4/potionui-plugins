@@ -108,12 +108,9 @@ settings:
       - { value: "4", label: "R" }
       - { value: "8", label: "X" }
   - name: "hide_poi"
-    type: "select"
+    type: "boolean"
     label: "Hide CivitAI models depicting real people"
-    default: "false"
-    options:
-      - { value: "false", label: "Show" }
-      - { value: "true",  label: "Hide" }
+    default: false
   - name: "civitai_api_base"
     type: "string"
     label: "CivitAI API base URL"
