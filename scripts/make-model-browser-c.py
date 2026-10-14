@@ -57,7 +57,7 @@ RULES = [
     ("backend/api.py", r'prefix="/api/plugins/model-browser"', f'prefix="/api/plugins/{NEW_ID}"', 1),
     ("backend/settings.py", r'"model-browser has no setting', f'"{NEW_ID} has no setting', 1),
     ("backend/watcher.py", r"^PENDING_PROVIDER_ID = PLUGIN_ID$", 'PENDING_PROVIDER_ID = "model-browser"', 1),
-    ("tests/test_settings.py", r'"model-browser"', f'"{NEW_ID}"', 7),
+    ("tests/test_settings.py", r'"model-browser"', f'"{NEW_ID}"', 5),
     ("tests/test_lifecycle.py", r'subject="model-browser"\):\n    return HookContext\(hook_name=hook, plugin_id="model-browser"',
      f'subject="{NEW_ID}"):\n    return HookContext(hook_name=hook, plugin_id="{NEW_ID}"', 1),
     ("tests/test_limits.py", r'"model-browser:"\) and len\(first\) == len\("model-browser:"\)',
