@@ -25,8 +25,7 @@
 	const SOURCE_LABELS = {
 		civitai: 'CivitAI',
 		huggingface: 'Hugging Face',
-		openmodeldb: 'OpenModelDB',
-		civarchive: 'CivArchive (experimental)'
+		openmodeldb: 'OpenModelDB'
 	};
 	const ASSIGN_TO_ITEMS = [
 		{ id: 'user', label: 'The user' },

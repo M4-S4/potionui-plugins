@@ -59,7 +59,7 @@ const SOURCES = enabledSources([
 		periods: [],
 		search_help: 'org/repo, @author'
 	},
-	{ id: 'civarchive', label: 'CivArchive', enabled: false }
+	{ id: 'openmodeldb', label: 'OpenModelDB', enabled: false }
 ]);
 const CIVITAI = SOURCES[0];
 const HF = SOURCES[1];
@@ -105,7 +105,6 @@ test('enabledSources keeps the enabled sources with their option lists', () => {
 		sorts: [],
 		periods: [],
 		search_help: '',
-		notice: '',
 		types_label: 'Types',
 		base_models_label: 'Base model',
 		base_model_label: 'Base model'
@@ -135,35 +134,6 @@ test('enabledSources names the filter groups and the base model line, with defau
 		['Types', 'Scale', 'Base model'],
 		['Types', 'Base model', 'Architecture']
 	]);
-});
-
-test('enabledSources keeps the notice of a source, trimmed, and gives "" when it is missing or not a string', () => {
-	const notices = (list) => enabledSources(list).map((source) => source.notice);
-	const CIVARCHIVE_NOTICE =
-		'Unofficial source: civarchive.com is a community index of CivitAI, not an official API. Deleted models may be unavailable, or come from third-party mirrors.';
-	assert.deepEqual(
-		notices([
-			{ id: 'civarchive', label: 'CivArchive', enabled: true, notice: CIVARCHIVE_NOTICE },
-			{ id: 'civitai', label: 'CivitAI', enabled: true, notice: null },
-			{ id: 'huggingface', label: 'Hugging Face', enabled: true }
-		]),
-		[CIVARCHIVE_NOTICE, '', '']
-	);
-	assert.deepEqual(SOURCES.map((source) => source.notice), ['', '']);
-	assert.equal(OPENMODELDB.notice, '');
-	assert.deepEqual(
-		notices([
-			{ id: 'a', notice: '  Careful, unofficial.  ' },
-			{ id: 'b', notice: '' },
-			{ id: 'c', notice: '   ' },
-			{ id: 'd', notice: 7 },
-			{ id: 'e', notice: true },
-			{ id: 'f', notice: ['Careful'] },
-			{ id: 'g', notice: { text: 'Careful' } },
-			{ id: 'h', notice: undefined }
-		]),
-		['Careful, unofficial.', '', '', '', '', '', '', '']
-	);
 });
 
 test('sourceSections gives each source a rail icon', () => {

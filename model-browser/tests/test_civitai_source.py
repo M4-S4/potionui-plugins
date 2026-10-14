@@ -1,10 +1,12 @@
 import json
 import re
+from types import SimpleNamespace
 
 import pytest
 
+from backend import sources as sources_module
 from backend.http import SourceInvalidRequest, SourceNotFound, SourceUnavailable
-from backend.sources import SearchQuery, enabled_sources, get_source, UnknownSource
+from backend.sources import SearchQuery, UnknownSource, enabled_sources, get_source, is_enabled, register_source
 from backend.sources.civitai import (
     CivitaiSource,
     ParsedQuery,
@@ -277,7 +279,6 @@ def test_detail_is_normalised():
     assert detail.source_url == "https://civitai.com/models/122359"
     assert detail.stats.downloads == 457351
     assert [version.id for version in detail.versions] == ["135867", "133241"]
-    assert [version.partial for version in detail.versions] == [False, False]
 
     latest = detail.versions[0]
     assert (latest.name, latest.base_model, latest.created_at) == ("v1.0", "SDXL 1.0", "2023-08-07T14:55:02.627Z")
@@ -819,18 +820,25 @@ async def test_info_without_civitai_still_lists_the_source():
     assert info.sorts
 
 
-def test_the_registry_has_civarchive_only_while_its_setting_is_on(_settings):
+def test_the_registry_lists_civitai_huggingface_and_openmodeldb_and_register_source_adds_one(monkeypatch):
+    monkeypatch.setattr(sources_module, "_FACTORIES", dict(sources_module._FACTORIES))
+    monkeypatch.setattr(sources_module, "_instances", {})
+
     assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb"]
     assert get_source("civitai") is get_source("civitai")
     assert get_source("openmodeldb") is get_source("openmodeldb")
-    for unknown in ("civarchive", "nope"):
-        with pytest.raises(UnknownSource):
-            get_source(unknown)
+    assert not is_enabled("extra")
+    with pytest.raises(UnknownSource):
+        get_source("extra")
 
-    _settings["enable_civarchive"] = True
+    register_source("extra", lambda: SimpleNamespace(id="extra"))
 
-    assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb", "civarchive"]
-    assert get_source("civarchive") is get_source("civarchive")
+    assert is_enabled("extra")
+    assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb", "extra"]
+    first = get_source("extra")
+    assert get_source("extra") is first
+    register_source("extra", lambda: SimpleNamespace(id="extra"))
+    assert get_source("extra") is not first
     with pytest.raises(UnknownSource):
         get_source("nope")
 

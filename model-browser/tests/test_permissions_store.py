@@ -22,7 +22,7 @@ from backend.tables import create_tables
 _ARTISTS = Row(
     group_id="artists",
     capabilities=frozenset({"browse", "download"}),
-    sources=frozenset({"civitai", "civarchive"}),
+    sources=frozenset({"civitai", "openmodeldb"}),
     model_types=frozenset({"lora", "embedding"}),
     max_file_gb=2.5,
     assign_to="group",
@@ -93,7 +93,7 @@ def test_to_json_is_the_shape_the_routes_send_with_sorted_lists():
         "group_id": "artists",
         "capabilities": ["browse", "download"],
         "params": {
-            "sources": ["civarchive", "civitai"],
+            "sources": ["civitai", "openmodeldb"],
             "model_types": ["embedding", "lora"],
             "max_file_gb": 2.5,
             "assign_to": "group",

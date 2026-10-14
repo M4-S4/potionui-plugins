@@ -277,10 +277,10 @@ def _requester_with(**view):
         ({}, {"version_id": "999"}, 404, "not_found", "Version not found"),
         (
             {},
-            {"source": "civarchive"},
+            {"source": "openmodeldb"},
             403,
             "forbidden",
-            "Your permissions do not allow requesting models from 'civarchive'",
+            "Your permissions do not allow requesting models from 'openmodeldb'",
         ),
     ],
     ids=["source", "type", "size", "version", "source-not-allowed"],

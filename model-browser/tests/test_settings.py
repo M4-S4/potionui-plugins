@@ -77,9 +77,6 @@ def test_an_unset_setting_is_its_default(key, raw):
         ("hide_poi", "off", False),
         ("hide_poi", False, False),
         ("hide_poi", "maybe", False),
-        ("enable_civarchive", "True", True),
-        ("enable_civarchive", "false", False),
-        ("enable_civarchive", "maybe", False),
         ("civitai_api_base", "https://civitai.red/api/v1", "https://civitai.red/api/v1"),
         ("civitai_api_base", "https://civitai.red/api/v1/", "https://civitai.red/api/v1"),
         ("civitai_api_base", "  https://civitai.com/api/v1//  ", "https://civitai.com/api/v1"),
@@ -166,15 +163,24 @@ class _SettingsRepository:
 
 
 def test_normalise_stored_booleans_rewrites_the_cores_str_of_a_python_bool(monkeypatch):
-    repository = _SettingsRepository({"hide_poi": "False", "enable_civarchive": "True", "nsfw_ceiling": "Blur"})
+    repository = _SettingsRepository({"hide_poi": "True", "nsfw_ceiling": "Blur"})
     monkeypatch.setattr("src.plugin_api.PluginRepository", repository)
 
-    assert normalise_stored_booleans() == ["hide_poi", "enable_civarchive"]
-    assert repository.written == [("hide_poi", "false"), ("enable_civarchive", "true")]
-    assert repository.rows["nsfw_ceiling"] == "Blur"
+    assert normalise_stored_booleans() == ["hide_poi"]
+    assert repository.written == [("hide_poi", "true")]
+    assert repository.rows == {"hide_poi": "true", "nsfw_ceiling": "Blur"}
 
     assert normalise_stored_booleans() == []
-    assert len(repository.written) == 2
+    assert len(repository.written) == 1
+
+
+def test_normalise_stored_booleans_leaves_a_setting_that_was_never_stored_unwritten(monkeypatch):
+    repository = _SettingsRepository({"nsfw_ceiling": "Blur"})
+    monkeypatch.setattr("src.plugin_api.PluginRepository", repository)
+
+    assert normalise_stored_booleans() == []
+    assert repository.written == []
+    assert repository.rows == {"nsfw_ceiling": "Blur"}
 
 
 @pytest.mark.parametrize(
@@ -197,7 +203,6 @@ def test_normalise_stored_booleans_writes_an_option_value_or_nothing(monkeypatch
 
     assert repository.written == ([] if expected is None else [("hide_poi", expected)])
     assert rewritten == ([] if expected is None else ["hide_poi"])
-    assert "enable_civarchive" not in repository.rows
 
 
 def test_get_setting_parses_what_the_core_stored_for_the_plugin(monkeypatch):

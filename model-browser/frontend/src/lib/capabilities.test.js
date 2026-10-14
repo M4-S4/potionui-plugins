@@ -165,7 +165,7 @@ test('canChooseGroup and canChooseRemote', () => {
 });
 
 test('fileAction depends on the capabilities and the sources allowed', () => {
-	assert.equal(fileAction(ADMIN, 'civarchive'), 'download');
+	assert.equal(fileAction(ADMIN, 'openmodeldb'), 'download');
 	assert.equal(fileAction(DOWNLOADER, 'civitai'), 'download');
 	assert.equal(fileAction(DOWNLOADER, 'openmodeldb'), 'source-blocked');
 	assert.equal(fileAction(REQUESTER, 'civitai'), 'request');
@@ -180,9 +180,9 @@ test('fileAction and canRequestFrom: requests are bounded by the sources of the 
 	assert.equal(fileAction(civitaiOnly, 'huggingface'), 'request-blocked');
 	assert.equal(canRequestFrom(civitaiOnly, 'huggingface'), false);
 	assert.equal(canRequestFrom(REQUESTER, 'huggingface'), true);
-	assert.equal(canRequestFrom(REQUESTER, 'civarchive'), false);
+	assert.equal(canRequestFrom(REQUESTER, 'unknown-source'), false);
 	assert.equal(fileAction(normalizeMe(meData()), 'civitai'), 'request-blocked');
-	assert.equal(canRequestFrom(ADMIN, 'civarchive'), true);
+	assert.equal(canRequestFrom(ADMIN, 'unknown-source'), true);
 	assert.equal(canRequestFrom(BROWSER, 'civitai'), false);
 	assert.equal(canRequestFrom(null, 'civitai'), false);
 });
@@ -265,7 +265,7 @@ test('requestBlock and canRequestFrom read the request parameters: source, sugge
 	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'lora', sizeBytes: 2 * 1024 ** 3 }), 'size');
 	assert.equal(requestBlock(ASKER, { source: 'civitai', type: 'lora', sizeBytes: null }), '');
 	assert.equal(requestBlock(BROWSER, { source: 'civitai' }), 'capability');
-	assert.equal(requestBlock(ADMIN, { source: 'civarchive', type: 'vae', sizeBytes: 10 ** 12 }), '');
+	assert.equal(requestBlock(ADMIN, { source: 'openmodeldb', type: 'vae', sizeBytes: 10 ** 12 }), '');
 	assert.equal(requestBlockReason(ASKER, { source: 'huggingface' }, 'Hugging Face'), 'Not allowed from Hugging Face');
 	assert.equal(requestBlockReason(ASKER, { source: 'civitai', type: 'checkpoint' }), 'Checkpoint models not allowed');
 	assert.equal(requestBlockReason(ASKER, { source: 'civitai', type: 'lora', sizeBytes: 2 * 1024 ** 3 }), 'Over your 1 GB limit');

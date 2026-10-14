@@ -6,7 +6,6 @@
 	import DownloadTray from './components/DownloadTray.svelte';
 	import FilterChips from './components/FilterChips.svelte';
 	import FilterPopover from './components/FilterPopover.svelte';
-	import Icon from './components/Icon.svelte';
 	import NsfwModeControl from './components/NsfwModeControl.svelte';
 	import RequestDialog from './components/RequestDialog.svelte';
 	import RequestsButton from './components/RequestsButton.svelte';
@@ -379,15 +378,6 @@
 						{/if}
 					</div>
 				</div>
-
-				{#if info?.notice}
-					<div class="px-4 pt-3 sm:px-6">
-						<p class="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning" role="note">
-							<Icon name="warning" class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-							<span class="min-w-0">{info.notice}</span>
-						</p>
-					</div>
-				{/if}
 
 				{#if chips.length > 0}
 					<div class="px-4 pt-3 sm:px-6">

@@ -161,7 +161,7 @@ def test_post_downloads_refuses_an_invalid_body(client_as, core, civitai, payloa
         (principal(), body(destination_backend_id="worker-1"), 403, "forbidden"),
         (principal(), body(assign_group_id="artists"), 403, "forbidden"),
         (principal(), body(version_id="1"), 404, "not_found"),
-        (admin(), body(source="civarchive"), 404, "unknown_source"),
+        (admin(), body(source="unknown-source"), 404, "unknown_source"),
     ],
     ids=["source", "type", "size", "remote", "group", "version", "unknown-source"],
 )

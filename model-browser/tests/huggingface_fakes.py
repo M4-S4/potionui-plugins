@@ -139,10 +139,9 @@ def make_source(transport: HuggingFaceTransport, cache: Any = None):
 
 
 OPENMODELDB_SITE = "https://openmodeldb.info"
-CIVARCHIVE_SITE = "https://civarchive.com"
 
 
-def combined_fetch(civitai, huggingface, openmodeldb=None, civarchive=None):
+def combined_fetch(civitai, huggingface, openmodeldb=None):
     async def fetch(url: str, params):
         if url.startswith(SITE + "/"):
             return await huggingface(url, params)
@@ -150,10 +149,6 @@ def combined_fetch(civitai, huggingface, openmodeldb=None, civarchive=None):
             if openmodeldb is None:
                 return 503, {"Content-Type": "text/plain"}, b"OpenModelDB is not faked in this test"
             return await openmodeldb(url, params)
-        if url.startswith(CIVARCHIVE_SITE + "/"):
-            if civarchive is None:
-                return 503, {"Content-Type": "text/plain"}, b"CivArchive is not faked in this test"
-            return await civarchive(url, params)
         return await civitai(url, params)
 
     return fetch

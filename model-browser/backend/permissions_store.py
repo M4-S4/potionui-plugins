@@ -7,7 +7,7 @@ TABLE = "model_browser_group_permissions"
 
 CAPABILITIES = ("browse", "request", "download", "approve")
 
-SOURCE_IDS = ("civitai", "huggingface", "openmodeldb", "civarchive")
+SOURCE_IDS = ("civitai", "huggingface", "openmodeldb")
 
 ASSIGN_TO = ("user", "group")
 

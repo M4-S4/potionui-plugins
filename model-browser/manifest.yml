@@ -1,7 +1,7 @@
 id: "model-browser"
 name: "Model Browser"
 version: "0.1.0"
-description: "Browse and download models from CivitAI, Hugging Face, OpenModelDB and CivArchive"
+description: "Browse and download models from CivitAI, Hugging Face and OpenModelDB"
 author: "Masa"
 license: "GPL-3.0"
 type: "full-stack"
@@ -119,13 +119,6 @@ settings:
     label: "CivitAI API base URL"
     description: "Switch to https://civitai.red/api/v1 if civitai.com starts filtering the API to SFW content"
     default: "https://civitai.com/api/v1"
-  - name: "enable_civarchive"
-    type: "select"
-    label: "Enable CivArchive (experimental, unofficial)"
-    default: "false"
-    options:
-      - { value: "false", label: "Off" }
-      - { value: "true",  label: "On" }
   - name: "cache_ttl_minutes"
     type: "number"
     label: "Search cache TTL (minutes)"

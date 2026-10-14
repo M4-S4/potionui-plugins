@@ -1,8 +1,8 @@
 from typing import List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-SourceId = Literal["civitai", "huggingface", "openmodeldb", "civarchive"]
+SourceId = Literal["civitai", "huggingface", "openmodeldb"]
 NsfwCeiling = Literal["allowed", "blur", "blocked"]
 NsfwMode = Literal["show", "blur", "hide"]
 
@@ -56,13 +56,6 @@ class Version(BaseModel):
     nsfw: bool = False
     images: List[Image] = Field(default_factory=list)
     files: List[File] = Field(default_factory=list)
-    partial: bool = False
-
-    @model_validator(mode="after")
-    def _partial_has_no_files_or_images(self) -> "Version":
-        if self.partial and (self.files or self.images):
-            raise ValueError("a partial version carries no files or images")
-        return self
 
 
 class License(BaseModel):
@@ -143,4 +136,3 @@ class SourceInfo(BaseModel):
     types_label: str = "Types"
     base_models_label: str = "Base model"
     base_model_label: str = "Base model"
-    notice: Optional[str] = None

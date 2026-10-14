@@ -1,8 +1,8 @@
 # Model Browser
 
-Browse models on CivitAI (civitai.com and civitai.red), Hugging Face, OpenModelDB and
-CivArchive from inside PotionUI, and download the file you pick into the right model folder
-through PotionUI's own download queue. The model then shows up on the Models page with its
+Browse models on CivitAI (civitai.com and civitai.red), Hugging Face and OpenModelDB from
+inside PotionUI, and download the file you pick into the right model folder through
+PotionUI's own download queue. The model then shows up on the Models page with its
 description, previews, tags, base model and license filled in. Admins and users can both use
 it: an admin decides per user group who may browse, request or download, and what users see
 follows the instance's NSFW content policy.
@@ -38,8 +38,6 @@ In Admin → Plugins → Model Browser → Settings:
 - **Hide CivitAI models depicting real people** (Show / Hide; Show by default).
 - **CivitAI API base URL** (default `https://civitai.com/api/v1`): switch to
   `https://civitai.red/api/v1` if civitai.com starts filtering the API to SFW content.
-- **Enable CivArchive (experimental, unofficial)** (Off / On; Off by default); read the CivArchive
-  section below before turning it on.
 - **Search cache TTL (minutes)** (default 10, from 1 to 1440): raw answers from the sources
   are cached in the database and filtered per user on every request.
 
@@ -72,7 +70,7 @@ Administrators may do everything, with no parameter limiting them.
 
 Defaults, for a group whose rights were never edited: all users may browse and request,
 admins have every right, other groups have none. The default sources are CivitAI, Hugging
-Face and OpenModelDB: CivArchive has to be added to a group's sources explicitly.
+Face and OpenModelDB.
 
 ## Browsing and downloading
 
@@ -167,24 +165,6 @@ The request notifications link to the page's Requests drawer.
 - An upscaler already on disk also gets its name, description, previews and licence from
   the catalogue.
 
-### CivArchive (experimental, opt-in)
-
-CivArchive is off by default; turn on **Enable CivArchive (experimental, unofficial)** to
-use it. Before you do, know that:
-
-- civarchive.com is an unofficial community index of CivitAI, not an official API. The page
-  shows this notice to users: deleted models may be unavailable, or come from third-party
-  mirrors.
-- Models deleted from CivitAI are served from their Hugging Face mirrors when they have one;
-  torrent-only models show "Not downloadable".
-- The plugin sends at most one request per second to the site.
-- Turning the setting on does not let users other than admins download from it: CivArchive
-  is not in the default sources, so add it to the sources of each group that should use it.
-
-Search: text, `#tag`, `@user`, a civarchive.com / civitai.com model link, CivitAI type and
-base model filters, sort and period. A model's other versions load when their tab is opened.
-While the setting is on, models already on disk can also be identified through CivArchive.
-
 ## Troubleshooting
 
 - **A download fails with 401**: the model needs a login. Configure the CivitAI provider
@@ -196,13 +176,11 @@ While the setting is on, models already on disk can also be identified through C
 - **A download or an approval is refused for a limit**: the user (for an approval, the
   requester) has reached a monthly limit set in Admin → Plans.
 - **A model shows "Not downloadable"**: PotionUI has no model type for this kind of file, or
-  the source offers no file the plugin can fetch (see OpenModelDB and CivArchive above).
+  the source offers no file the plugin can fetch (see OpenModelDB above).
 - **NSFW models are missing**: the user's sensitive content setting is Hide, or the content
   policy or the **NSFW in the browser** setting does not allow them.
 - **CivitAI only returns SFW results**: set the **CivitAI API base URL** to
   `https://civitai.red/api/v1`.
-- **CivArchive is missing from the sources**: turn on **Enable CivArchive (experimental,
-  unofficial)**.
 - **Checking that the plugin is up**: `GET /api/plugins/model-browser/health` answers with
   its status and version to any signed-in user. The plugin's lines in the server log start
   with `[MODEL-BROWSER]`.

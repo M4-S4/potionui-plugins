@@ -11,7 +11,6 @@ DEFAULTS: Dict[str, Any] = {
     "nsfw_max_level": 2,
     "hide_poi": False,
     "civitai_api_base": "https://civitai.com/api/v1",
-    "enable_civarchive": False,
     "cache_ttl_minutes": 10,
 }
 
@@ -47,14 +46,13 @@ def _parse_api_base(value: str) -> str:
     return value
 
 
-BOOLEAN_SETTINGS = ("hide_poi", "enable_civarchive")
+BOOLEAN_SETTINGS = ("hide_poi",)
 
 _PARSERS: Dict[str, Callable[[str], Any]] = {
     "nsfw_ceiling": _parse_choice("inherit", "blur", "blocked"),
     "nsfw_max_level": _parse_int(1, 8, allowed=(1, 2, 4, 8)),
     "hide_poi": _parse_bool,
     "civitai_api_base": _parse_api_base,
-    "enable_civarchive": _parse_bool,
     "cache_ttl_minutes": _parse_int(1, 1440),
 }
 

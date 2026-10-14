@@ -6,7 +6,7 @@ import math
 import ssl
 import time
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
 import aiohttp
 
@@ -22,7 +22,6 @@ DEFAULT_LIMITS: Dict[str, Tuple[float, int]] = {
     "civitai": (0.25, 4),
     "huggingface": (0.2, 4),
     "openmodeldb": (0.5, 2),
-    "civarchive": (1.0, 1),
 }
 _FALLBACK_LIMIT = (0.5, 2)
 
@@ -30,7 +29,6 @@ SOURCE_LABELS = {
     "civitai": "CivitAI",
     "huggingface": "Hugging Face",
     "openmodeldb": "OpenModelDB",
-    "civarchive": "CivArchive",
 }
 
 Params = List[Tuple[str, str]]
@@ -230,7 +228,6 @@ class SourceHttp:
         params: ParamsInput = None,
         *,
         max_bytes: Optional[int] = None,
-        accept_statuses: Collection[int] = (),
     ) -> Tuple[int, Dict[str, str], bytes]:
         pairs = normalise_params(params)
         label = source_label(source_id)
@@ -261,8 +258,7 @@ class SourceHttp:
         )
         if len(body) > cap:
             raise SourceAnswerTooLarge(f"{label} sent an answer larger than {cap} bytes", status)
-        if status not in accept_statuses:
-            self._raise_for_status(source_id, status, headers, body)
+        self._raise_for_status(source_id, status, headers, body)
         return status, headers, body
 
     async def get_json(self, source_id: str, url: str, params: ParamsInput = None) -> Any:

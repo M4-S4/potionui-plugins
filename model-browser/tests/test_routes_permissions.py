@@ -382,7 +382,7 @@ def test_get_permissions_lists_every_core_group_with_its_default(app, client):
         "success": True,
         "data": {
             "capabilities": ["browse", "request", "download", "approve"],
-            "sources": ["civitai", "huggingface", "openmodeldb", "civarchive"],
+            "sources": ["civitai", "huggingface", "openmodeldb"],
             "model_types": list(MODEL_TYPES),
             "groups": _DEFAULT_GROUPS,
         },

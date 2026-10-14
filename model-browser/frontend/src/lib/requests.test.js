@@ -375,7 +375,7 @@ test('createRequest reports the error codes of the server', async () => {
 		ok: false,
 		error: { status: 409, code: 'already_available', message: 'This file is already in your models', retryAfter: null }
 	});
-	const forbidden = await createRequest(fakeApi(() => fail('forbidden', "Your permissions do not allow requests from 'civarchive'")), {});
+	const forbidden = await createRequest(fakeApi(() => fail('forbidden', "Your permissions do not allow requests from 'openmodeldb'")), {});
 	assert.equal(forbidden.error.status, 403);
 	const thrown = await createRequest(
 		fakeApi(() => {
@@ -566,9 +566,9 @@ test('createToast for each answer of POST /requests', () => {
 		message: 'add_detail.safetensors is already in your models',
 		close: true
 	});
-	assert.deepEqual(createToast({ ok: false, error: { code: 'forbidden', message: 'No requests from CivArchive' } }, null), {
+	assert.deepEqual(createToast({ ok: false, error: { code: 'forbidden', message: 'No requests from OpenModelDB' } }, null), {
 		level: 'error',
-		message: 'Request refused: No requests from CivArchive',
+		message: 'Request refused: No requests from OpenModelDB',
 		close: false
 	});
 });

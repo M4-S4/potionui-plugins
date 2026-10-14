@@ -8,7 +8,6 @@ logger = logging.getLogger("plugins.model-browser")
 PROVIDERS = (
     ("pending_provider", "PendingProvider"),
     ("openmodeldb_provider", "OpenModelDBProvider"),
-    ("civarchive_provider", "CivArchiveProvider"),
 )
 
 

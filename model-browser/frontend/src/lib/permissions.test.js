@@ -27,7 +27,7 @@ function payload() {
 		success: true,
 		data: {
 			capabilities: ['browse', 'request', 'download', 'approve'],
-			sources: ['civitai', 'huggingface', 'openmodeldb', 'civarchive'],
+			sources: ['civitai', 'huggingface', 'openmodeldb'],
 			model_types: ['checkpoint', 'lora', 'embedding'],
 			groups: [
 				{
@@ -71,7 +71,7 @@ test('toFormState turns the API answer into editable rows', () => {
 
 	assert.deepEqual(state.allowed, {
 		capabilities: ['browse', 'request', 'download', 'approve'],
-		sources: ['civitai', 'huggingface', 'openmodeldb', 'civarchive'],
+		sources: ['civitai', 'huggingface', 'openmodeldb'],
 		model_types: ['checkpoint', 'lora', 'embedding']
 	});
 	assert.deepEqual(
@@ -330,7 +330,7 @@ test('isDirty sees every kind of edit', () => {
 	const edits = {
 		'a capability on': (state) => state.groups[1].capabilities.push('download'),
 		'a capability off': (state) => state.groups[1].capabilities.pop(),
-		'a source': (state) => state.groups[1].params.sources.push('civarchive'),
+		'a source': (state) => state.groups[1].params.sources.pop(),
 		'a model type': (state) => state.groups[1].params.model_types.push('lora'),
 		'the size': (state) => (state.groups[1].params.max_file_gb = '2'),
 		'assign_to': (state) => (state.groups[1].params.assign_to = 'group'),

@@ -15,7 +15,6 @@ DOWNLOAD_HOSTS: Dict[str, FrozenSet[str]] = {
         "*.oraclecloud.com",
         "*.backblazeb2.com",
     }),
-    "civarchive": frozenset({"civitai.com", "huggingface.co"}),
 }
 
 

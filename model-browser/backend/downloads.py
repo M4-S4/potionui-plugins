@@ -294,9 +294,6 @@ def _not_visible() -> DownloadError:
 
 
 async def source_detail(source: Any, request: FileRef, max_level: int) -> ModelDetail:
-    version_detail = getattr(source, "version_detail", None)
-    if callable(version_detail):
-        return await version_detail(request.model_id, request.version_id, max_level=max_level)
     return await source.detail(request.model_id, max_level=max_level)
 
 

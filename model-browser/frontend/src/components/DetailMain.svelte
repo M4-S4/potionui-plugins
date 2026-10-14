@@ -4,7 +4,6 @@
 	import MediaGallery from './MediaGallery.svelte';
 	import { fileActionInfo } from '../lib/capabilities.js';
 	import { plural } from '../lib/format.js';
-	import { isPartial, mediaModelId } from '../lib/versions.js';
 
 	let {
 		detail,
@@ -13,9 +12,6 @@
 		installed,
 		sourceLabel,
 		revealCache,
-		byVersion = false,
-		versionError = null,
-		onRetryVersion,
 		onDownload,
 		onRequest,
 		onPreview
@@ -26,37 +22,22 @@
 	);
 	const files = $derived(version?.files ?? []);
 	const images = $derived(version?.images ?? []);
-	const shell = $derived(isPartial(version));
-	const shellTitle = $derived(
-		versionError?.status === 404 ? 'Version not found' : versionError?.status === 429 ? 'Rate limited' : "Couldn't load this version"
-	);
 </script>
 
-{#if shell}
-	{#if versionError}
-		<HostUi name="LoadErrorState" props={{ title: shellTitle, message: versionError.message, onRetry: onRetryVersion }} />
-	{:else}
-		<div class="flex items-center justify-center gap-3 py-16 text-sm text-fg-muted">
-			<HostUi name="Spinner" props={{ size: 'md' }} />
-			<span>Loading version…</span>
-		</div>
-	{/if}
-{:else}
-	<HostUi name="DetailSection" props={{ label: images.length ? `Previews (${images.length})` : 'Previews', icon: 'image' }}>
-		<MediaGallery {images} name={detail.name} source={detail.source} modelId={mediaModelId(detail, version, byVersion)} {me} {revealCache} {onPreview} />
-	</HostUi>
+<HostUi name="DetailSection" props={{ label: images.length ? `Previews (${images.length})` : 'Previews', icon: 'image' }}>
+	<MediaGallery {images} name={detail.name} source={detail.source} modelId={detail.id} {me} {revealCache} {onPreview} />
+</HostUi>
 
-	<HostUi name="DetailSection" props={{ label: files.length ? plural(files.length, 'File') : 'Files', icon: 'document', padded: false }}>
-		<FileList
-			{files}
-			{installed}
-			gated={detail.gated}
-			{actionFor}
-			onDownload={(file, opener) => onDownload?.({ detail, version, file, opener })}
-			onRequest={(file, opener) => onRequest?.({ detail, version, file, opener })}
-		/>
-	</HostUi>
-{/if}
+<HostUi name="DetailSection" props={{ label: files.length ? plural(files.length, 'File') : 'Files', icon: 'document', padded: false }}>
+	<FileList
+		{files}
+		{installed}
+		gated={detail.gated}
+		{actionFor}
+		onDownload={(file, opener) => onDownload?.({ detail, version, file, opener })}
+		onRequest={(file, opener) => onRequest?.({ detail, version, file, opener })}
+	/>
+</HostUi>
 
 {#if detail.description_html}
 	<HostUi name="DetailSection" props={{ label: 'Description', icon: 'document' }}>

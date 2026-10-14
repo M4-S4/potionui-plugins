@@ -91,7 +91,7 @@ def test_an_admin_gets_the_admin_grant_without_a_group_lookup(monkeypatch):
     assert grant.unrestricted
     assert all(grant.has(capability) for capability in CAPABILITIES)
     for purpose in ("download", "request"):
-        assert grant.allows_source("civarchive", purpose) and grant.allows_type("checkpoint", purpose)
+        assert grant.allows_source("openmodeldb", purpose) and grant.allows_type("checkpoint", purpose)
 
 
 def test_a_user_in_all_users_only_may_browse_and_request_by_default(membership):
@@ -111,7 +111,7 @@ def test_a_user_in_all_users_only_may_browse_and_request_by_default(membership):
     )
     assert not grant.allows_source("civitai")
     assert _view(grant.request_params) == (DEFAULT_SOURCES, frozenset(), None, "user", False)
-    assert grant.allows_source("civitai", "request") and not grant.allows_source("civarchive", "request")
+    assert grant.allows_source("civitai", "request") and not grant.allows_source("unknown-source", "request")
 
 
 def test_a_non_admin_account_in_all_admins_gets_every_capability_with_the_default_parameters(membership):
@@ -122,7 +122,7 @@ def test_a_non_admin_account_in_all_admins_gets_every_capability_with_the_defaul
     assert grant.capabilities == set(CAPABILITIES)
     assert not grant.unrestricted
     assert grant.sources == DEFAULT_SOURCES
-    assert not grant.allows_source("civarchive")
+    assert not grant.allows_source("unknown-source")
     assert grant.model_types == frozenset()
     assert (grant.max_file_gb, grant.assign_to, grant.allow_remote) == (None, "user", False)
     assert _view(grant.request_params) == (DEFAULT_SOURCES, frozenset(), None, "user", False)
@@ -284,7 +284,7 @@ def test_parameters_come_only_from_the_groups_that_grant_download():
     browse_only = Row(
         group_id="browsers",
         capabilities=frozenset({"browse", "request"}),
-        sources=frozenset({"civarchive"}),
+        sources=frozenset({"openmodeldb"}),
         model_types=frozenset(),
         max_file_gb=None,
         assign_to="group",
@@ -300,14 +300,14 @@ def test_parameters_come_only_from_the_groups_that_grant_download():
     assert grant.max_file_gb == 1.5
     assert grant.assign_to == "user"
     assert grant.allow_remote is False
-    assert _view(grant.request_params) == ({"civarchive"}, frozenset(), None, "group", False)
+    assert _view(grant.request_params) == ({"openmodeldb"}, frozenset(), None, "group", False)
 
 
 def test_the_request_view_merges_the_groups_that_grant_request_by_the_same_rules():
     rows = [
         _request_row("a", sources={"civitai"}, model_types={"lora"}, max_file_gb=1.0),
         _request_row("b", sources={"huggingface"}, model_types={"embedding"}, max_file_gb=4.0, assign_to="group"),
-        _download_row("c", sources={"civarchive"}, model_types={"vae"}, max_file_gb=None),
+        _download_row("c", sources={"openmodeldb"}, model_types={"vae"}, max_file_gb=None),
         Row(group_id="d", capabilities=frozenset({"browse"}), model_types=frozenset()),
     ]
 
@@ -367,9 +367,9 @@ def test_allows_type_is_membership_and_no_type_allows_every_type():
 
 
 def test_an_unrestricted_grant_allows_everything():
-    assert ADMIN_GRANT.allows_source("civarchive")
+    assert ADMIN_GRANT.allows_source("openmodeldb")
     assert ADMIN_GRANT.allows_type("checkpoint")
-    assert ADMIN_GRANT.allows_source("civarchive", "request")
+    assert ADMIN_GRANT.allows_source("openmodeldb", "request")
     assert ADMIN_GRANT.allows_type("checkpoint", "request")
     assert _grant(sources=frozenset(), unrestricted=True).allows_source("huggingface")
     assert _grant(capabilities=frozenset(), unrestricted=True).has("approve")

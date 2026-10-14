@@ -13,8 +13,7 @@ export const URL_KEYS = {
 const SOURCE_ICONS = {
 	civitai: 'palette',
 	huggingface: 'smile',
-	openmodeldb: 'database',
-	civarchive: 'library'
+	openmodeldb: 'database'
 };
 
 export const DEFAULT_TYPES_LABEL = 'Types';
@@ -51,7 +50,6 @@ export function enabledSources(sources) {
 			sorts: options(source.sorts),
 			periods: options(source.periods),
 			search_help: text(source.search_help),
-			notice: text(source.notice).trim(),
 			types_label: text(source.types_label).trim() || DEFAULT_TYPES_LABEL,
 			base_models_label: text(source.base_models_label).trim() || DEFAULT_BASE_MODELS_LABEL,
 			base_model_label: text(source.base_model_label).trim() || DEFAULT_BASE_MODEL_LABEL

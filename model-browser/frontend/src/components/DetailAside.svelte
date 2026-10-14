@@ -6,7 +6,6 @@
 	import { licenseFlags } from '../lib/downloadForm.js';
 	import { copyText, toast } from '../lib/dom.js';
 	import { DEFAULT_BASE_MODEL_LABEL } from '../lib/search.js';
-	import { isPartial } from '../lib/versions.js';
 
 	let { detail, version, sourceUrl = '', sourceHost = '', baseModelLabel = '' } = $props();
 
@@ -33,9 +32,7 @@
 			<HostUi name="KVItem" props={{ label: 'Name', full: true }}>
 				<span class="break-words">{version.name}</span>
 			</HostUi>
-			{#if !isPartial(version)}
-				<HostUi name="KVItem" props={{ label: baseModelLabel || DEFAULT_BASE_MODEL_LABEL }}>{version.base_model || '—'}</HostUi>
-			{/if}
+			<HostUi name="KVItem" props={{ label: baseModelLabel || DEFAULT_BASE_MODEL_LABEL }}>{version.base_model || '—'}</HostUi>
 			<HostUi name="KVItem" props={{ label: 'Published' }}>{formatDate(version.created_at) || '—'}</HostUi>
 			{#if version.early_access || version.nsfw}
 				<HostUi name="KVItem" props={{ label: 'Flags', full: true }}>
@@ -45,30 +42,28 @@
 					</span>
 				</HostUi>
 			{/if}
-			{#if !isPartial(version)}
-				<HostUi name="KVItem" props={{ label: 'Trigger words', full: true }}>
-					{#if triggers.length === 0}
-						<span class="text-fg-subtle">None</span>
-					{:else}
-						<span class="flex flex-wrap items-center gap-1.5">
-							{#each triggers as word, index (`${index}:${word}`)}
-								<button
-									type="button"
-									class="inline-flex max-w-full items-center gap-1 rounded border border-line-strong bg-surface-2 px-1.5 py-0.5 text-left font-mono text-xs text-fg transition-colors hover:bg-surface-3"
-									title="Copy this trigger word"
-									onclick={() => copyWord(word)}
-								>
-									<span class="break-words">{word}</span>
-									<Icon name="copy" class="h-3 w-3 flex-shrink-0 text-fg-subtle" />
-								</button>
-							{/each}
-							{#if triggers.length > 1}
-								<HostUi name="CopyButton" props={{ text: triggers.join(', '), label: 'Copy all', size: 'xs', variant: 'secondary' }} />
-							{/if}
-						</span>
-					{/if}
-				</HostUi>
-			{/if}
+			<HostUi name="KVItem" props={{ label: 'Trigger words', full: true }}>
+				{#if triggers.length === 0}
+					<span class="text-fg-subtle">None</span>
+				{:else}
+					<span class="flex flex-wrap items-center gap-1.5">
+						{#each triggers as word, index (`${index}:${word}`)}
+							<button
+								type="button"
+								class="inline-flex max-w-full items-center gap-1 rounded border border-line-strong bg-surface-2 px-1.5 py-0.5 text-left font-mono text-xs text-fg transition-colors hover:bg-surface-3"
+								title="Copy this trigger word"
+								onclick={() => copyWord(word)}
+							>
+								<span class="break-words">{word}</span>
+								<Icon name="copy" class="h-3 w-3 flex-shrink-0 text-fg-subtle" />
+							</button>
+						{/each}
+						{#if triggers.length > 1}
+							<HostUi name="CopyButton" props={{ text: triggers.join(', '), label: 'Copy all', size: 'xs', variant: 'secondary' }} />
+						{/if}
+					</span>
+				{/if}
+			</HostUi>
 		</HostUi>
 	</HostUi>
 {/if}

@@ -1,8 +1,6 @@
 from typing import Callable, Dict, List
 
-from .. import settings
 from .base import DEFAULT_LIMIT, MAX_LIMIT, MAX_QUERY_LENGTH, SearchQuery, Source, UnknownSource
-from .civarchive import CivArchiveSource
 from .civitai import CivitaiSource
 from .huggingface import HuggingFaceSource
 from .openmodeldb import OpenModelDBSource
@@ -24,9 +22,7 @@ _FACTORIES: Dict[str, Callable[[], Source]] = {
     "civitai": CivitaiSource,
     "huggingface": HuggingFaceSource,
     "openmodeldb": OpenModelDBSource,
-    "civarchive": CivArchiveSource,
 }
-_OPT_IN_SETTINGS = {"civarchive": "enable_civarchive"}
 
 _instances: Dict[str, Source] = {}
 
@@ -37,10 +33,7 @@ def register_source(source_id: str, factory: Callable[[], Source]) -> None:
 
 
 def is_enabled(source_id: str) -> bool:
-    if source_id not in _FACTORIES:
-        return False
-    setting = _OPT_IN_SETTINGS.get(source_id)
-    return setting is None or bool(settings.get_setting(setting))
+    return source_id in _FACTORIES
 
 
 def get_source(source_id: str) -> Source:

@@ -20,13 +20,13 @@ if __name__.count(".") >= 2:
     from ..backend import settings as plugin_settings
     from ..backend.schema import Image, ModelDetail
     from ..backend.security import html_to_text
-    from ..backend.sources import civarchive, openmodeldb
+    from ..backend.sources import openmodeldb
 else:
     from backend import PLUGIN_VERSION, pending
     from backend import settings as plugin_settings
     from backend.schema import Image, ModelDetail
     from backend.security import html_to_text
-    from backend.sources import civarchive, openmodeldb
+    from backend.sources import openmodeldb
 
 logger = logging.getLogger("plugins.model-browser")
 
@@ -198,8 +198,6 @@ def model_page_url(provider_model_id: Any, provider_version_id: Any = None) -> O
         return f"https://huggingface.co/{model_id}"
     if source == openmodeldb.SOURCE_ID:
         return openmodeldb.model_page_url(model_id) if openmodeldb.is_model_id(model_id) else None
-    if source == civarchive.SOURCE_ID:
-        return civarchive.page_url_for(model_id, _id_text(provider_version_id))
     return None
 
 

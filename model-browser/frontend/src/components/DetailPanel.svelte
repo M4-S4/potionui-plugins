@@ -7,7 +7,6 @@
 	import { getInstalled, getModel } from '../lib/client.js';
 	import { escapeCloses, hostLayer, onEscape, portal, slotOf, trapFocus } from '../lib/dom.js';
 	import { modelTypeLabel } from '../lib/format.js';
-	import { hasPartialVersions, isPartial, mergeVersion, versionRef } from '../lib/versions.js';
 
 	let {
 		api,
@@ -39,9 +38,6 @@
 	let mainEl = $state();
 	let asideEl = $state();
 	let seq = 0;
-	let loadingIds = new Set();
-	let failedIds = $state.raw(new Map());
-	let byVersion = $state(false);
 	let mounted = $state(false);
 	onMount(() => {
 		mounted = true;
@@ -73,7 +69,6 @@
 			: (error?.message ?? 'Something went wrong')
 	);
 	const redLink = $derived(sourceHost === 'civitai.red');
-	const versionError = $derived(version ? (failedIds.get(version.id) ?? null) : null);
 
 	$effect(() => {
 		void source;
@@ -87,13 +82,6 @@
 		untrack(() => {
 			if (detail) loadInstalled(seq, detail);
 		});
-	});
-
-	$effect(() => {
-		const current = version;
-		if (phase !== 'ready' || !isPartial(current)) return;
-		const id = current.id;
-		untrack(() => loadVersion(id));
 	});
 
 	$effect(() => {
@@ -131,8 +119,6 @@
 		const mine = ++seq;
 		phase = 'loading';
 		error = null;
-		loadingIds = new Set();
-		failedIds = new Map();
 		const result = await getModel(api, source, modelId);
 		if (mine !== seq) return;
 		if (!result.ok || !result.data || typeof result.data !== 'object') {
@@ -142,7 +128,6 @@
 		}
 		const data = { ...result.data, versions: Array.isArray(result.data.versions) ? result.data.versions : [] };
 		detail = data;
-		byVersion = hasPartialVersions(data);
 		if (!data.versions.some((entry) => entry.id === versionId)) versionId = data.versions[0]?.id ?? '';
 		phase = 'ready';
 		loadInstalled(mine, data);
@@ -161,26 +146,6 @@
 		const result = await getInstalled(api, hashes);
 		if (mine !== seq || !result.ok) return;
 		installed = new Map(Object.entries(result.data?.installed ?? {}));
-	}
-
-	async function loadVersion(id, { retry = false } = {}) {
-		if (!detail || loadingIds.has(id)) return;
-		if (failedIds.has(id)) {
-			if (!retry) return;
-			failedIds = new Map([...failedIds].filter(([key]) => key !== id));
-		}
-		const mine = seq;
-		loadingIds.add(id);
-		const result = await getModel(api, source, versionRef(detail.id, id));
-		if (mine !== seq) return;
-		loadingIds.delete(id);
-		const merged = result.ok ? mergeVersion(detail, id, result.data) : result;
-		if (!merged.ok) {
-			failedIds = new Map(failedIds).set(id, merged.error);
-			return;
-		}
-		detail = merged.detail;
-		loadInstalled(mine, merged.detail);
 	}
 
 	function onBackdrop(event) {
@@ -273,9 +238,6 @@
 						{installed}
 						{sourceLabel}
 						{revealCache}
-						{byVersion}
-						{versionError}
-						onRetryVersion={() => version && loadVersion(version.id, { retry: true })}
 						{onDownload}
 						{onRequest}
 						onPreview={(media) => (preview = media)}
