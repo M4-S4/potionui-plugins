@@ -13,7 +13,11 @@ branch of this repo (main + one commit that brings CivArchive back); this script
     the other without losing rights, requests or plan limits;
   * README with a short "variant" paragraph and the minimum PotionUI version (it is
     installed in content/plugins/local/, so it does not ship with the core);
-  * no PLAN.md (development notes), PotionUI's LICENSE (GPL-3.0) added.
+  * no PLAN.md (development notes), PotionUI's LICENSE (GPL-3.0) added;
+  * variants/model-browser-c/ of the ref becomes .github/: README.github.md is the page GitHub
+    shows for the repository (.github/README.md wins over the root README.md, which stays the
+    plugin's help page inside PotionUI, where relative images would not load), next to its
+    screenshots/.
 
 Usage (from the repo root):
   python -I scripts/make-model-browser-c.py [--ref civarchive] [--out <home>/Dev/model-browser-c]
@@ -33,6 +37,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 SOURCE_DIR = "model-browser"
+VARIANT_DIR = "variants/model-browser-c"
+GITHUB_PAGES = {"README.github.md": ".github/README.md"}
 NEW_ID = "model-browser-c"
 NEW_NAME = "Model Browser C"
 EXCLUDED = {"PLAN.md"}
@@ -79,20 +85,23 @@ TEST_RULES = [
 ]
 
 
-def export_tree(ref: str) -> dict:
+def _archive(ref: str, prefix: str) -> dict:
     archive = subprocess.run(
-        ["git", "-C", str(REPO), "archive", "--format=tar", ref, SOURCE_DIR],
+        ["git", "-C", str(REPO), "archive", "--format=tar", ref, prefix],
         check=True, capture_output=True,
     ).stdout
     files = {}
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         for member in tar.getmembers():
-            if not member.isfile():
-                continue
-            relative = member.name[len(SOURCE_DIR) + 1:]
-            if relative in EXCLUDED:
-                continue
-            files[relative] = tar.extractfile(member).read()
+            if member.isfile():
+                files[member.name[len(prefix) + 1:]] = tar.extractfile(member).read()
+    return files
+
+
+def export_tree(ref: str) -> dict:
+    files = {path: data for path, data in _archive(ref, SOURCE_DIR).items() if path not in EXCLUDED}
+    for path, data in _archive(ref, VARIANT_DIR).items():
+        files[GITHUB_PAGES.get(path, f".github/{path}")] = data
     return files
 
 
