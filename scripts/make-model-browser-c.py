@@ -17,7 +17,7 @@ branch of this repo (main + one commit that brings CivArchive back); this script
 
 Usage (from the repo root):
   python -I scripts/make-model-browser-c.py [--ref civarchive] [--out <home>/Dev/model-browser-c]
-The output folder keeps its .git; everything else in it is replaced, then the frontend dist
+The output folder keeps its .git and .gitignore; everything else in it is replaced, then the frontend dist
 is rebuilt (the plugin id changes the Permissions tab's default) from
 content/plugins/local/model-browser-c of the marketplace worktree (git-ignored there).
 """
@@ -120,7 +120,7 @@ def apply_rules(files: dict) -> None:
 def write_out(files: dict, out: Path, license_file: Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     for child in out.iterdir():
-        if child.name == ".git":
+        if child.name in (".git", ".gitignore"):
             continue
         if child.is_dir():
             shutil.rmtree(child)
