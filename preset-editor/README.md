@@ -5,10 +5,10 @@ copy of an existing one (a skeleton comes later), lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: in development (phase 3).** Drafts from a copy or from a blank skeleton, a text
+**Status: in development (phase 4).** Drafts from a copy or from a blank skeleton, a text
 editor for every YAML and Markdown file of a draft, a form for `preset.yml`, the cover and
-gallery media, publishing, the version history and deleting work; the form and pipeline
-builders come with the next phases.
+gallery media, a builder for forms, publishing, the version history and deleting work; the
+pipeline builder comes with the next phase.
 
 ## What you can do
 
@@ -35,6 +35,14 @@ builders come with the next phases.
   them in `media:` with a caption, a mode, a seed and a prompt, reorders the gallery, picks a
   cover among the files already there and deletes files. `description.md` has a Markdown
   preview that shows the images under `public/`.
+- `form.yml` and `tabs/*.yml` open in a builder: the field tree (drag and drop, containers,
+  tabs backed by files), a palette of every field type this instance knows, an inspector for
+  the attributes PotionUI's schema defines (typed default, width, audience, flags, the type's
+  own configuration keys, option lists, `_shared` option files) and raw YAML for the rest
+  (`when`, `reactions`, …). What the core would refuse shows before saving. Form settings
+  (label, description, examples, default variant, order, `negative_prompt`) and new variants
+  (`variants/<name>/form.yml`) are edited there too. Saving rewrites the whole file, so its
+  comments go away; the YAML view keeps them.
 - A draft shows its lint report; **Publish** needs a report without errors, writes the preset
   atomically, reloads the catalogue and checks that PotionUI loads it. When the loader
   refuses the preset (the linter does not check everything, field types for one), the

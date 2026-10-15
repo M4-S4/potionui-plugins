@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import ActionButton from './ActionButton.svelte';
 	import FileTree from './FileTree.svelte';
+	import FormBuilder from './FormBuilder.svelte';
 	import Icon from './Icon.svelte';
 	import LintPanel from './LintPanel.svelte';
 	import ManifestEditor from './ManifestEditor.svelte';
@@ -10,9 +11,9 @@
 	import PreviewPanel from './PreviewPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import { adminPresetUrl } from '../lib/catalog.js';
-	import { addMode, deleteDraft, getDraft, lintDraft, publishDraft, removeMode, sharedReference } from '../lib/client.js';
+	import { addMode, deleteDraft, fieldTypes, getDraft, lintDraft, publishDraft, removeMode, sharedReference } from '../lib/client.js';
 	import { MODE_RE, canPublish, describeSource, formatTimestamp } from '../lib/drafts.js';
-	import { isEditable, isMedia, modeOf } from '../lib/files.js';
+	import { fileKind, isEditable, isMedia, modeOf } from '../lib/files.js';
 	import { confirm, toast } from '../lib/dom.js';
 
 	let { api, draft, onChange, onBack, onPublished, onDiscarded } = $props();
@@ -25,6 +26,8 @@
 
 	let selected = $state('preset.yml');
 	let manifestView = $state('form');
+	let fileView = $state('builder');
+	let types = $state.raw([]);
 	let busy = $state('');
 	let install = $state(true);
 	let published = $state.raw(null);
@@ -36,12 +39,15 @@
 	const files = $derived(Array.isArray(draft.files) ? draft.files : []);
 	const modes = $derived([...new Set(files.map((file) => modeOf(file.path)).filter(Boolean))]);
 	const mediaFiles = $derived(files.filter((file) => isMedia(file.path)));
+	const selectedKind = $derived(selected ? fileKind(selected) : '');
+	const buildable = $derived(selectedKind === 'form' || selectedKind === 'tab');
 	const ready = $derived(canPublish(draft.last_lint) && !busy && !dirty);
 	const modeProblem = $derived(newMode && !MODE_RE.test(newMode.trim()) ? 'lowercase letters, digits and _' : modes.includes(newMode.trim()) ? 'already there' : '');
 
 	onMount(async () => {
-		const result = await sharedReference(api);
-		if (result.ok) sharedFiles = result.data.files ?? [];
+		const [shared, fields] = await Promise.all([sharedReference(api), fieldTypes(api)]);
+		if (shared.ok) sharedFiles = shared.data.files ?? [];
+		if (fields.ok && Array.isArray(fields.data)) types = fields.data;
 	});
 
 	$effect(() => {
@@ -74,6 +80,12 @@
 		if (id === manifestView) return;
 		if (!(await leaveEdits())) return;
 		manifestView = id;
+	}
+
+	async function showFileView(id) {
+		if (id === fileView) return;
+		if (!(await leaveEdits())) return;
+		fileView = id;
 	}
 
 	async function openMedia() {
@@ -214,6 +226,19 @@
 				{/if}
 			{:else if selected && isMedia(selected)}
 				<MediaEditor {api} draftId={draft.draft_id} {modes} focus={selected} onDirty={(value) => (dirty = value)} onChange={(data) => updated({ files: data.files, lint: data.lint })} />
+			{:else if selected && buildable}
+				<div class="mb-2 inline-flex rounded border border-line bg-surface-2 p-0.5 text-xs" role="tablist" aria-label="{selectedKind} views">
+					{#each [{ id: 'builder', label: 'Builder' }, { id: 'yaml', label: 'YAML' }] as view (view.id)}
+						<button type="button" role="tab" aria-selected={fileView === view.id} class="rounded px-2.5 py-0.5 transition-colors {fileView === view.id ? 'bg-surface-1 text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}" onclick={() => showFileView(view.id)}>{view.label}</button>
+					{/each}
+				</div>
+				{#key selected}
+					{#if fileView === 'builder'}
+						<FormBuilder {api} draftId={draft.draft_id} path={selected} {types} {sharedFiles} {mediaFiles} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onOpenYaml={() => showFileView('yaml')} onOpenFile={select} onFilesChanged={refresh} />
+					{:else}
+						<TextEditor {api} draftId={draft.draft_id} path={selected} {sharedFiles} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onDeleted={(data) => updated({ files: data.files, lint: data.lint })} />
+					{/if}
+				{/key}
 			{:else if selected}
 				{#key selected}
 					<TextEditor {api} draftId={draft.draft_id} path={selected} {sharedFiles} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onDeleted={(data) => updated({ files: data.files, lint: data.lint })} />

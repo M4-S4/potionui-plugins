@@ -239,6 +239,10 @@ export function pipesReference(api) {
 	return callCore(api, '/api/docs/live/pipes');
 }
 
+export function fieldTypes(api) {
+	return callCore(api, '/api/fields/types');
+}
+
 export function deleteDraft(api, draftId) {
 	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}`);
 }

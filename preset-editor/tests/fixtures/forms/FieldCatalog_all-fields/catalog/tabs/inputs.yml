@@ -1,0 +1,143 @@
+fields:
+  - type: "header"
+    label: "Text and numeric inputs"
+
+  - type: "row"
+    children:
+      - name: "string_input"
+        type: "string"
+        formula: "basics"
+        label: "String"
+        description: "The canonical one-line text input."
+        default: "A short value"
+      - name: "textbox_input"
+        type: "textbox"
+        formula: "basics"
+        label: "Textbox alias"
+        description: "The textbox alias uses the same frontend text component."
+        default: "A longer sample value"
+
+  - type: "row"
+    children:
+      - name: "number_input"
+        type: "number"
+        formula: "basics"
+        label: "Number"
+        default: 2.5
+      - name: "integer_input"
+        type: "integer"
+        formula: "basics"
+        label: "Integer"
+        default: 7
+      - name: "stepper_input"
+        type: "stepper"
+        formula: "basics"
+        label: "Stepper"
+        configuration:
+          min: 1
+          max: 8
+          step: 1
+          tooltip: "Compact numeric controls share NumberInput."
+        default: 3
+
+  - name: "slider_input"
+    type: "slider"
+    formula: "basics"
+    label: "Slider"
+    description: "A fractional slider with an explicit range and tooltip."
+    configuration:
+      min: 0
+      max: 10
+      step: 0.5
+      tooltip: "Fractional range example"
+    default: 4.5
+
+  - name: "seed_input"
+    type: "seed"
+    label: "Seed"
+    default: -1
+
+  - type: "row"
+    children:
+      - name: "boolean_input"
+        type: "boolean"
+        formula: "basics"
+        label: "Boolean alias"
+        default: true
+      - name: "checkbox_input"
+        type: "checkbox"
+        formula: "basics"
+        label: "Checkbox"
+        default: false
+
+  - name: "select_input"
+    type: "select"
+    formula: "basics"
+    label: "Select"
+    configuration:
+      allow_empty: true
+      options:
+        - label: "Balanced"
+          value: "balanced"
+        - label: "Quality"
+          value: "quality"
+          sub_label: "Slower, more detailed"
+        - label: "Fast"
+          value: "fast"
+    default: "balanced"
+
+  - name: "checkbox_group_input"
+    type: "checkbox_group"
+    formula: "basics"
+    label: "Checkbox group"
+    configuration:
+      layout: "horizontal"
+      options:
+        - label: "PNG"
+          value: "png"
+        - label: "JPG"
+          value: "jpg"
+        - label: "WEBP"
+          value: "webp"
+    default: ["png", "webp"]
+
+  - type: "header"
+    label: "Reactions"
+
+  - name: "reaction_switch"
+    type: "select"
+    label: "Reaction switch"
+    description: "Shows the next field only while it is set to Reveal."
+    default: "hide"
+    configuration:
+      options:
+        - label: "Hide"
+          value: "hide"
+        - label: "Reveal"
+          value: "reveal"
+
+  - name: "reaction_revealed"
+    type: "string"
+    label: "Revealed by the switch"
+    default: "Visible while the switch is set to Reveal"
+    reactions:
+      - when: { field: "reaction_switch", equals: "reveal" }
+        then: { set_visibility: true }
+      - when: { field: "reaction_switch", not_equals: "reveal" }
+        then: { set_visibility: false }
+
+  - name: "reaction_toggle"
+    type: "checkbox"
+    label: "Reaction toggle"
+    description: "Shows the next field only while ticked."
+    default: false
+
+  - name: "reaction_ticked"
+    type: "string"
+    label: "Revealed by the toggle"
+    default: "Visible while the toggle is ticked"
+    reactions:
+      - when: { field: "reaction_toggle", equals: true }
+        then: { set_visibility: true }
+      - when: { field: "reaction_toggle", not_equals: true }
+        then: { set_visibility: false }
