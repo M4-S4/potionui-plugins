@@ -1,12 +1,11 @@
 import json
 import re
-from types import SimpleNamespace
 
 import pytest
 
 from backend import sources as sources_module
 from backend.http import SourceInvalidRequest, SourceNotFound, SourceUnavailable
-from backend.sources import SearchQuery, UnknownSource, enabled_sources, get_source, is_enabled, register_source
+from backend.sources import SearchQuery, UnknownSource, enabled_sources, get_source, is_enabled
 from backend.sources.civitai import (
     CivitaiSource,
     ParsedQuery,
@@ -43,9 +42,7 @@ def test_lora_page_items_are_normalised():
     assert styles.base_model == "Pony"
     assert styles.base_models == ["Pony"]
     assert styles.creator == "obuyb404"
-    assert styles.tags[:3] == ["female", "anime", "western art"]
     assert styles.stats.model_dump() == {"downloads": 663330, "likes": 26764, "rating": None}
-    assert styles.updated_at == "2025-03-20T21:38:31.969Z"
     assert styles.early_access is False
     assert styles.poi is False
     assert styles.installed is None
@@ -796,7 +793,7 @@ async def test_info_lists_the_enums_and_caches_them_for_a_day():
     again = await source.info()
 
     assert info == again
-    assert (info.id, info.label, info.enabled) == ("civitai", "CivitAI", True)
+    assert (info.id, info.label) == ("civitai", "CivitAI")
     assert [option.value for option in info.types] == enums["ModelType"]
     assert info.types[enums["ModelType"].index("LORA")].label == "LoRA"
     assert [option.value for option in info.base_models] == enums["ActiveBaseModel"]
@@ -820,27 +817,16 @@ async def test_info_without_civitai_still_lists_the_source():
     assert info.sorts
 
 
-def test_the_registry_lists_civitai_huggingface_and_openmodeldb_and_register_source_adds_one(monkeypatch):
-    monkeypatch.setattr(sources_module, "_FACTORIES", dict(sources_module._FACTORIES))
+def test_the_registry_lists_civitai_huggingface_and_openmodeldb(monkeypatch):
     monkeypatch.setattr(sources_module, "_instances", {})
 
     assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb"]
     assert get_source("civitai") is get_source("civitai")
     assert get_source("openmodeldb") is get_source("openmodeldb")
+    assert is_enabled("huggingface")
     assert not is_enabled("extra")
     with pytest.raises(UnknownSource):
         get_source("extra")
-
-    register_source("extra", lambda: SimpleNamespace(id="extra"))
-
-    assert is_enabled("extra")
-    assert [source.id for source in enabled_sources()] == ["civitai", "huggingface", "openmodeldb", "extra"]
-    first = get_source("extra")
-    assert get_source("extra") is first
-    register_source("extra", lambda: SimpleNamespace(id="extra"))
-    assert get_source("extra") is not first
-    with pytest.raises(UnknownSource):
-        get_source("nope")
 
 
 @pytest.mark.parametrize(

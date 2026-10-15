@@ -67,10 +67,12 @@ if (Test-Path (Join-Path $source 'frontend\src')) {
     Write-Host '--- release build and dist drift check'
     $committed = Join-Path $source 'frontend\dist'
     Push-Location (Join-Path $Worktree 'content\plugins')
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
-        node ../../scripts/build-plugins.mjs $Plugin 2>&1 | Select-String -Pattern 'built successfully|ERROR|FAILED' | ForEach-Object { $_.Line }
+        node ../../scripts/build-plugins.mjs $Plugin 2>&1 | ForEach-Object { "$_" } | Select-String -Pattern 'built successfully|ERROR|FAILED' | ForEach-Object { $_.Line }
         if ($LASTEXITCODE -ne 0) { $failures += 'build' }
-    } finally { Pop-Location }
+    } finally { $ErrorActionPreference = $previous; Pop-Location }
     $built = Join-Path $target 'frontend\dist'
     $a = Get-ChildItem $built -File | ForEach-Object { "$($_.Name) $((Get-FileHash $_.FullName).Hash)" }
     $b = Get-ChildItem $committed -File | ForEach-Object { "$($_.Name) $((Get-FileHash $_.FullName).Hash)" }

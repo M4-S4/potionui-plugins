@@ -1,12 +1,11 @@
 from typing import Callable, Dict, List
 
-from .base import DEFAULT_LIMIT, MAX_LIMIT, MAX_QUERY_LENGTH, SearchQuery, Source, UnknownSource
+from .base import MAX_LIMIT, MAX_QUERY_LENGTH, SearchQuery, Source, UnknownSource
 from .civitai import CivitaiSource
 from .huggingface import HuggingFaceSource
 from .openmodeldb import OpenModelDBSource
 
 __all__ = [
-    "DEFAULT_LIMIT",
     "MAX_LIMIT",
     "MAX_QUERY_LENGTH",
     "SearchQuery",
@@ -14,8 +13,6 @@ __all__ = [
     "UnknownSource",
     "enabled_sources",
     "get_source",
-    "is_enabled",
-    "register_source",
 ]
 
 _FACTORIES: Dict[str, Callable[[], Source]] = {
@@ -25,11 +22,6 @@ _FACTORIES: Dict[str, Callable[[], Source]] = {
 }
 
 _instances: Dict[str, Source] = {}
-
-
-def register_source(source_id: str, factory: Callable[[], Source]) -> None:
-    _FACTORIES[source_id] = factory
-    _instances.pop(source_id, None)
 
 
 def is_enabled(source_id: str) -> bool:
@@ -46,4 +38,4 @@ def get_source(source_id: str) -> Source:
 
 
 def enabled_sources() -> List[Source]:
-    return [get_source(source_id) for source_id in _FACTORIES if is_enabled(source_id)]
+    return [get_source(source_id) for source_id in _FACTORIES]

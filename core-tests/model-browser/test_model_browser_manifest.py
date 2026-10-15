@@ -209,7 +209,7 @@ def test_notification_type_register_declares_the_plugins_types_on_the_cores_regi
         "model-browser.download_done",
         "model-browser.download_failed",
     ]
-    assert list(_load("backend.notifications").KEYS) == [spec.key for spec in registry.all()]
+    assert [item.key for item in _load("backend.notifications").TYPES] == [spec.key for spec in registry.all()]
     for spec in registry.all():
         assert spec.label.startswith("Model Browser: ") and spec.description
         assert (spec.category, spec.default_enabled, spec.admin_only) == ("plugin", True, False)

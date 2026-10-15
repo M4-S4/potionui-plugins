@@ -310,7 +310,6 @@ class Prepared:
     subdir: Optional[str]
     filename: str
     on_behalf: bool = False
-    purpose: str = "download"
 
 
 async def prepare_download(
@@ -374,7 +373,6 @@ async def prepare_download(
         subdir=subdir,
         filename=filename,
         on_behalf=on_behalf,
-        purpose=purpose,
     )
 
 
@@ -469,10 +467,8 @@ async def queue_prepared(
     return _answer(updated or inserted, download, ctx, admin=admin)
 
 
-async def start_download(
-    principal: Principal, request: DownloadRequest, *, request_id: Optional[str] = None
-) -> Dict[str, Any]:
-    return await queue_prepared(await prepare_download(principal, request), request_id=request_id)
+async def start_download(principal: Principal, request: DownloadRequest) -> Dict[str, Any]:
+    return await queue_prepared(await prepare_download(principal, request))
 
 
 async def _insert(row: PendingRow) -> Tuple[PendingRow, bool]:
