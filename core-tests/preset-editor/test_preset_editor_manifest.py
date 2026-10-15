@@ -89,7 +89,20 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
 
     assert api is not None, f"{manifest.api_routes['module']} did not load (see the log above)"
     assert api.router.prefix == f"/api/plugins/{PLUGIN_ID}"
-    assert [route.path for route in api.router.routes] == [f"/api/plugins/{PLUGIN_ID}/me"]
+    assert sorted({route.path for route in api.router.routes}) == [
+        f"/api/plugins/{PLUGIN_ID}/{suffix}"
+        for suffix in (
+            "drafts",
+            "drafts/{draft_id}",
+            "drafts/{draft_id}/lint",
+            "drafts/{draft_id}/publish",
+            "me",
+            "presets/{preset_id}",
+            "presets/{preset_id}/edit",
+            "presets/{preset_id}/history",
+            "presets/{preset_id}/history/{stamp}/restore",
+        )
+    ]
 
 
 def test_the_page_is_reached_through_an_admin_only_sidebar_entry(manifest):

@@ -1,9 +1,9 @@
 import asyncio
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 
-from src.plugin_api import get_container
-from src.plugin_api.presets import lint_preset_dir
+from src.plugin_api import User, get_container
+from src.plugin_api.presets import lint_preset_dir, preset_operations
 
 
 def preset_loader():
@@ -24,6 +24,22 @@ def preset_roots() -> List[Path]:
 
 def find_preset(preset_id: str):
     return file_repository().find_preset_by_id(preset_id)
+
+
+def catalog() -> List[Dict[str, Any]]:
+    return file_repository().list_all_presets()
+
+
+def is_installed(preset_id: str) -> bool:
+    return bool(collaborators().db_repo.is_preset_installed(preset_id))
+
+
+def install_preset(preset_id: str, user: User) -> Dict[str, Any]:
+    return preset_operations.install_preset(collaborators(), preset_id, user)
+
+
+def uninstall_preset(preset_id: str, user: User) -> str:
+    return preset_operations.uninstall_preset(collaborators(), preset_id, user)
 
 
 def reload_presets() -> None:

@@ -12,8 +12,15 @@ const STATUS_BY_CODE = {
 	forbidden: 403,
 	not_found: 404,
 	conflict: 409,
+	not_local: 409,
+	id_in_use: 409,
+	target_in_use: 409,
+	lint_errors: 409,
+	swap_failed: 409,
 	precondition_failed: 412,
-	internal_error: 500
+	internal_error: 500,
+	publish_unverified: 500,
+	copy_failed: 500
 };
 
 const CODE_BY_STATUS = {
@@ -42,6 +49,7 @@ function defaultMessage(status) {
 export function normalizeError(body, status = 0) {
 	let code = '';
 	let message = '';
+	let lint = null;
 	let httpStatus = Number.isInteger(status) && status > 0 ? status : 0;
 	if (isObject(body)) {
 		const { detail } = body;
@@ -60,12 +68,15 @@ export function normalizeError(body, status = 0) {
 			const fields = isObject(detail) ? detail : body;
 			code = text(fields.error);
 			message = text(fields.message);
+			if (isObject(fields.lint)) lint = fields.lint;
 		}
 	}
 	if (!httpStatus) httpStatus = STATUS_BY_CODE[code] ?? 0;
 	if (!code) code = CODE_BY_STATUS[httpStatus] ?? 'error';
 	if (!message) message = defaultMessage(httpStatus);
-	return { status: httpStatus, code, message };
+	const error = { status: httpStatus, code, message };
+	if (lint) error.lint = lint;
+	return error;
 }
 
 function thrownError(err) {
@@ -99,6 +110,78 @@ export async function callPlugin(api, method, path, body) {
 	return unwrap(payload);
 }
 
+export async function callCore(api, path, { method = 'GET', body } = {}) {
+	const token = typeof api?.getToken === 'function' ? api.getToken() : null;
+	const headers = { Accept: 'application/json' };
+	if (token) headers.Authorization = `Bearer ${token}`;
+	const init = { method, headers, credentials: 'include', cache: 'no-store' };
+	if (body !== undefined) {
+		headers['Content-Type'] = 'application/json';
+		init.body = JSON.stringify(body);
+	}
+	let response;
+	try {
+		response = await fetch(path, init);
+	} catch (err) {
+		return { ok: false, error: thrownError(err) };
+	}
+	let payload = null;
+	try {
+		payload = await response.json();
+	} catch {
+	}
+	if (!response.ok) return { ok: false, error: normalizeError(payload, response.status || 0) };
+	return unwrap(payload);
+}
+
+function segment(value) {
+	return encodeURIComponent(String(value));
+}
+
 export function getMe(api) {
 	return callPlugin(api, 'get', '/me');
+}
+
+export function listCatalog(api) {
+	return callCore(api, '/api/presets?include_uninstalled=true');
+}
+
+export function listDrafts(api) {
+	return callPlugin(api, 'get', '/drafts');
+}
+
+export function getDraft(api, draftId) {
+	return callPlugin(api, 'get', `/drafts/${segment(draftId)}`);
+}
+
+export function createCopyDraft(api, body) {
+	return callPlugin(api, 'post', '/drafts', { mode: 'copy', ...body });
+}
+
+export function deleteDraft(api, draftId) {
+	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}`);
+}
+
+export function lintDraft(api, draftId) {
+	return callPlugin(api, 'post', `/drafts/${segment(draftId)}/lint`, {});
+}
+
+export function publishDraft(api, draftId, { install } = {}) {
+	return callPlugin(api, 'post', `/drafts/${segment(draftId)}/publish`, install === undefined ? {} : { install });
+}
+
+export function editPreset(api, presetId) {
+	return callPlugin(api, 'post', `/presets/${segment(presetId)}/edit`, {});
+}
+
+export function deletePreset(api, presetId) {
+	return callPlugin(api, 'delete', `/presets/${segment(presetId)}`);
+}
+
+export function listHistory(api, presetId) {
+	return callPlugin(api, 'get', `/presets/${segment(presetId)}/history`);
+}
+
+export function restoreVersion(api, presetId, stamp) {
+	return callPlugin(api, 'post', `/presets/${segment(presetId)}/history/${segment(stamp)}/restore`, {});
 }

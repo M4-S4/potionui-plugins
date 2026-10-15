@@ -6,7 +6,10 @@ from types import SimpleNamespace
 import pytest
 
 from backend import core_bridge
+from src.plugin_api import AccountType, User
 from tests.conftest import FIXTURES
+
+ADMIN = User(id="admin-1", username="admin", email="admin@test.com", password_hash="x", account_type=AccountType.ADMIN)
 
 
 class _Loader:
@@ -23,12 +26,16 @@ class _Loader:
 @pytest.fixture
 def container(monkeypatch):
     loader = _Loader()
-    repository = SimpleNamespace(find_preset_by_id=lambda preset_id: {"id": preset_id})
-    collaborators = object()
+    repository = SimpleNamespace(
+        find_preset_by_id=lambda preset_id: {"id": preset_id}, list_all_presets=lambda: [{"id": "a"}, {"id": "b"}]
+    )
+    installed = set()
+    collaborators = SimpleNamespace(db_repo=SimpleNamespace(is_preset_installed=lambda preset_id: preset_id in installed))
     container = SimpleNamespace(
         preset_template_loader=loader, file_preset_repository=repository, preset_collaborators=collaborators
     )
     monkeypatch.setattr(core_bridge, "get_container", lambda: container)
+    container.installed = installed
     return container
 
 
@@ -42,8 +49,27 @@ def test_preset_roots_are_paths(container):
     assert core_bridge.preset_roots() == [Path("content/presets/marketplace"), Path("content/presets/local")]
 
 
-def test_find_preset_asks_the_file_repository(container):
+def test_find_preset_and_catalog_ask_the_file_repository(container):
     assert core_bridge.find_preset("abc") == {"id": "abc"}
+    assert [item["id"] for item in core_bridge.catalog()] == ["a", "b"]
+
+
+def test_is_installed_asks_the_database_repository(container):
+    assert core_bridge.is_installed("x") is False
+    container.installed.add("x")
+    assert core_bridge.is_installed("x") is True
+
+
+def test_install_and_uninstall_go_through_the_exported_operations(container, monkeypatch):
+    calls = []
+    monkeypatch.setattr(core_bridge.preset_operations, "install_preset", lambda collaborators, preset_id, user: calls.append(("install", collaborators, preset_id, user.id)) or {"id": preset_id})
+    monkeypatch.setattr(core_bridge.preset_operations, "uninstall_preset", lambda collaborators, preset_id, user: calls.append(("uninstall", collaborators, preset_id, user.id)) or "done")
+
+    assert core_bridge.install_preset("x", ADMIN) == {"id": "x"}
+    assert core_bridge.uninstall_preset("x", ADMIN) == "done"
+    assert calls == [
+        ("install", container.preset_collaborators, "x", "admin-1"), ("uninstall", container.preset_collaborators, "x", "admin-1"),
+    ]
 
 
 def test_reload_presets_reloads_the_loader(container):

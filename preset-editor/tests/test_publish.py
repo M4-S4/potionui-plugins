@@ -1,0 +1,207 @@
+import os
+import shutil
+from pathlib import Path
+
+import pytest
+
+from backend import drafts, history, paths, publish
+from tests.conftest import FIXTURES, read_id
+
+NATIVE = FIXTURES / "minimal-native"
+
+
+def _draft(roots, preset_id="copy-one", target="MyModel/v1", name="Copy one"):
+    return drafts.create_copy(
+        roots, source_dir=NATIVE, preset_id=preset_id, name=name, target_dir=target, created_by="u", source="copy_of:x"
+    )
+
+
+def _catalog_entry(preset_id, kind, path, plugin_id=None):
+    return {"id": preset_id, "origin": {"kind": kind, "plugin_id": plugin_id, "path": path}}
+
+
+def test_ids_on_disk_scans_every_root_and_skips_broken_manifests(roots, marketplace, tmp_path):
+    roots.ensure()
+    shutil.copytree(NATIVE, roots.local_presets / "Local" / "v1")
+    broken = roots.local_presets / "Broken"
+    broken.mkdir()
+    (broken / "preset.yml").write_text("- not: [a mapping", encoding="utf-8")
+
+    found = publish.ids_on_disk([marketplace, roots.local_presets, tmp_path / "missing"])
+
+    assert found == {
+        "fixture-minimal-native": [
+            (marketplace / "Fixture" / "native").resolve(), (roots.local_presets / "Local" / "v1").resolve(),
+        ]
+    }
+
+
+def test_an_id_used_by_another_root_is_refused_before_writing(roots, marketplace):
+    with pytest.raises(publish.PublishError) as failure:
+        publish.check_collisions(
+            roots, preset_id="fixture-minimal-native", target_dir="MyModel/v1",
+            catalog=[_catalog_entry("fixture-minimal-native", "marketplace", "Fixture/native")], disk_roots=[marketplace],
+        )
+    assert failure.value.code == "id_in_use" and "marketplace" in failure.value.message
+
+
+def test_an_id_of_a_plugin_preset_names_the_plugin(roots):
+    with pytest.raises(publish.PublishError) as failure:
+        publish.check_collisions(
+            roots, preset_id="rtx", target_dir="M/v", catalog=[_catalog_entry("rtx", "plugin", "RTX", "nvidia-rtx-upscale")], disk_roots=[],
+        )
+    assert "plugin 'nvidia-rtx-upscale'" in failure.value.message
+
+
+def test_an_id_only_present_on_disk_in_an_unloaded_preset_is_refused(roots, marketplace):
+    with pytest.raises(publish.PublishError) as failure:
+        publish.check_collisions(roots, preset_id="fixture-minimal-native", target_dir="MyModel/v1", catalog=[], disk_roots=[marketplace])
+    assert failure.value.code == "id_in_use" and "Fixture" in failure.value.message
+
+
+def test_republishing_the_same_local_preset_is_allowed(roots):
+    roots.ensure()
+    shutil.copytree(NATIVE, roots.local_presets / "MyModel" / "v1")
+
+    publish.check_collisions(
+        roots, preset_id="fixture-minimal-native", target_dir="MyModel/v1",
+        catalog=[_catalog_entry("fixture-minimal-native", "local", "MyModel/v1")], disk_roots=[roots.local_presets],
+    )
+
+
+def test_a_folder_holding_another_preset_is_refused(roots):
+    roots.ensure()
+    shutil.copytree(NATIVE, roots.local_presets / "MyModel" / "v1")
+
+    with pytest.raises(publish.PublishError) as failure:
+        publish.check_collisions(roots, preset_id="other-id", target_dir="MyModel/v1", catalog=[], disk_roots=[])
+    assert failure.value.code == "target_in_use"
+
+
+def test_swap_puts_a_new_preset_in_place_without_a_backup(roots):
+    roots.ensure()
+    staging = publish.stage(roots, NATIVE)
+    target = roots.local_presets / "MyModel" / "v1"
+
+    assert publish.swap(target, staging, roots.staging) is None
+    assert read_id(target) == "fixture-minimal-native"
+    assert not staging.exists()
+
+
+def test_swap_moves_the_previous_version_aside(roots):
+    roots.ensure()
+    target = roots.local_presets / "MyModel" / "v1"
+    shutil.copytree(NATIVE, target)
+    (target / "marker.txt").write_text("old", encoding="utf-8")
+    staging = publish.stage(roots, NATIVE)
+
+    backup = publish.swap(target, staging, roots.staging)
+
+    assert backup.parent == roots.staging and (backup / "marker.txt").read_text(encoding="utf-8") == "old"
+    assert not (target / "marker.txt").exists() and read_id(target) == "fixture-minimal-native"
+
+
+def test_a_failed_second_rename_restores_the_previous_version(roots, monkeypatch):
+    roots.ensure()
+    target = roots.local_presets / "MyModel" / "v1"
+    shutil.copytree(NATIVE, target)
+    (target / "marker.txt").write_text("old", encoding="utf-8")
+    staging = publish.stage(roots, NATIVE)
+    real_replace, calls = os.replace, []
+
+    def replace(src, dst):
+        calls.append((src, dst))
+        if len(calls) == 2:
+            raise OSError("disk full")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(publish.os, "replace", replace)
+
+    with pytest.raises(publish.PublishError) as failure:
+        publish.swap(target, staging, roots.staging)
+
+    assert failure.value.code == "swap_failed" and "disk full" in failure.value.message
+    assert (target / "marker.txt").read_text(encoding="utf-8") == "old"
+    assert not staging.exists()
+    assert list(roots.staging.iterdir()) == []
+
+
+def test_a_failed_restore_keeps_the_backup_and_names_it(roots, monkeypatch):
+    roots.ensure()
+    target = roots.local_presets / "MyModel" / "v1"
+    shutil.copytree(NATIVE, target)
+    staging = publish.stage(roots, NATIVE)
+    real_replace, calls = os.replace, []
+
+    def replace(src, dst):
+        calls.append((src, dst))
+        if len(calls) >= 2:
+            raise OSError("gone")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(publish.os, "replace", replace)
+
+    with pytest.raises(publish.PublishError) as failure:
+        publish.swap(target, staging, roots.staging)
+
+    backups = [entry for entry in roots.staging.iterdir() if entry.name.startswith("backup-")]
+    assert len(backups) == 1 and str(backups[0]) in failure.value.message
+    assert (backups[0] / "preset.yml").is_file() and not target.exists()
+
+
+def test_publish_draft_archives_the_previous_version_and_rotates(roots, monkeypatch):
+    stamps = iter(["20261015T100000.000001", "20261015T100000.000002", "20261015T100000.000003"])
+    monkeypatch.setattr(history, "stamp_now", lambda: next(stamps))
+    first = _draft(roots, name="First")
+
+    assert publish.publish_draft(roots, first, history_depth=2) == {"preset_id": "copy-one", "target_dir": "MyModel/v1", "archived": None}
+    assert history.list_entries(roots, "copy-one") == []
+
+    for name, expected in (("Second", "20261015T100000.000001"), ("Third", "20261015T100000.000002"), ("Fourth", "20261015T100000.000003")):
+        result = publish.publish_draft(roots, _draft(roots, name=name), history_depth=2)
+        assert result["archived"] == expected
+
+    target = roots.local_presets / "MyModel" / "v1"
+    assert '"Fourth"' in (target / "preset.yml").read_text(encoding="utf-8")
+    assert [(e["stamp"], e["name"]) for e in history.list_entries(roots, "copy-one")] == [
+        ("20261015T100000.000003", "Third"), ("20261015T100000.000002", "Second"),
+    ]
+    assert [entry.name for entry in roots.staging.iterdir()] == []
+
+
+def test_delete_local_preset_archives_removes_and_prunes_the_empty_model_folder(roots, monkeypatch):
+    monkeypatch.setattr(history, "stamp_now", lambda: "20261015T100000.000009")
+    roots.ensure()
+    target = roots.local_presets / "MyModel" / "v1"
+    shutil.copytree(NATIVE, target)
+
+    stamp = publish.delete_local_preset(roots, preset_dir=target, preset_id="fixture-minimal-native", target_dir="MyModel/v1", history_depth=5)
+
+    assert stamp == "20261015T100000.000009"
+    assert not (roots.local_presets / "MyModel").exists() and roots.local_presets.is_dir()
+    assert [e["reason"] for e in history.list_entries(roots, "fixture-minimal-native")] == ["delete"]
+
+
+def test_delete_with_a_relative_preset_path_never_removes_the_local_root(roots, tmp_path, monkeypatch):
+    roots.ensure()
+    shutil.copytree(NATIVE, roots.local_presets / "MyModel" / "v1")
+    monkeypatch.chdir(tmp_path)
+    relative_preset = Path("content") / "presets" / "local" / "MyModel" / "v1"
+    relative_roots = paths.Roots(
+        drafts=roots.drafts, history=roots.history, staging=roots.staging, local_presets=Path("content") / "presets" / "local"
+    )
+
+    publish.delete_local_preset(relative_roots, preset_dir=relative_preset, preset_id="fixture-minimal-native", target_dir="MyModel/v1", history_depth=5)
+
+    assert roots.local_presets.is_dir()
+    assert not (roots.local_presets / "MyModel").exists()
+
+
+def test_delete_keeps_a_model_folder_that_still_holds_another_variant(roots):
+    roots.ensure()
+    shutil.copytree(NATIVE, roots.local_presets / "MyModel" / "v1")
+    shutil.copytree(NATIVE, roots.local_presets / "MyModel" / "v2")
+
+    publish.delete_local_preset(roots, preset_dir=roots.local_presets / "MyModel" / "v1", preset_id="fixture-minimal-native", target_dir="MyModel/v1", history_depth=5)
+
+    assert (roots.local_presets / "MyModel" / "v2" / "preset.yml").is_file()
