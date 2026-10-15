@@ -50,9 +50,10 @@ VARIANT_NOTE = (
     "refuses to enable the second one. Switching from one to the other keeps group rights,\n"
     "requests and plan limits; plugin settings are per plugin and have to be set again.\n"
     "\n"
-    "The plugin needs PotionUI 0.0.16 or newer. Install it by placing this folder in\n"
-    "`content/plugins/local/model-browser-c`, then Admin → Plugins → Scan for Plugins, and\n"
-    "enable it.\n"
+    "The plugin needs PotionUI 0.0.16 or newer, or PotionUI's `master` branch from commit\n"
+    "`3b3b78a2` (2026-10-14) on; it does not load on 0.0.15 or older. Install it by placing this\n"
+    "folder in `content/plugins/local/model-browser-c`, then Admin → Plugins → Scan for Plugins,\n"
+    "and enable it.\n"
 )
 
 RULES = [
