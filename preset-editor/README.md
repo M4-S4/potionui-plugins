@@ -5,10 +5,10 @@ copy of an existing one (a skeleton comes later), lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: in development (phase 6).** Drafts from a copy, a blank skeleton or a zip
-archive, a text editor for every YAML and Markdown file of a draft, a form for
-`preset.yml`, the cover and gallery media, builders for forms and pipelines, publishing, zip
-export, the version history and deleting work; the last phase finishes the documentation.
+**Status: feature-complete, not yet on the marketplace.** Drafts from a copy, a blank
+skeleton or a zip archive, a text editor for every YAML and Markdown file of a draft, a form
+for `preset.yml`, the cover and gallery media, builders for forms and pipelines, publishing,
+zip export, the version history and deleting all work on PotionUI `master` at `6903cc19`.
 
 ## Getting started
 
