@@ -50,6 +50,14 @@ test('a plugin error envelope keeps its code and message', () => {
 	});
 });
 
+test('a refusal carries the loader errors, and a stale write carries the current etag and content', () => {
+	const refused = normalizeError({ detail: { success: false, error: 'load_failed', message: 'refused', errors: ["field 'note': unregistered field type 'text'", 3] } });
+	assert.deepEqual(refused, { status: 409, code: 'load_failed', message: 'refused', errors: ["field 'note': unregistered field type 'text'"] });
+	const stale = normalizeError({ detail: { success: false, error: 'precondition_failed', message: 'changed', etag: 'abc', content: 'schema: 1\n' } }, 412);
+	assert.deepEqual(stale, { status: 412, code: 'precondition_failed', message: 'changed', etag: 'abc', content: 'schema: 1\n' });
+	assert.equal('errors' in normalizeError({ error: 'conflict', message: 'x' }), false);
+});
+
 test('a validation error from FastAPI lists the field messages', () => {
 	const error = normalizeError({ detail: [{ msg: 'field required' }, { msg: 'value is not a valid integer' }, 'junk'] });
 

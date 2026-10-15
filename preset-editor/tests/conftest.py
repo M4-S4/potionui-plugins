@@ -75,6 +75,7 @@ def core(monkeypatch, roots, marketplace):
         lint_calls=[],
         reloads=0,
         reload_registers=True,
+        load_errors={},
         installed=set(),
         installs=[],
         uninstalls=[],
@@ -95,6 +96,8 @@ def core(monkeypatch, roots, marketplace):
 
     def rescan_local():
         state.templates = {k: v for k, v in state.templates.items() if v.origin["kind"] != "local"}
+        if not state.reload_registers:
+            return
         for manifest in sorted(roots.local_presets.rglob("preset.yml")):
             relative = manifest.parent.relative_to(roots.local_presets).as_posix()
             header = read_header(manifest.parent)
@@ -108,8 +111,7 @@ def core(monkeypatch, roots, marketplace):
 
     async def reload_presets_async():
         state.reloads += 1
-        if state.reload_registers:
-            rescan_local()
+        rescan_local()
 
     def install_preset(preset_id, user):
         state.installs.append((preset_id, user.id))
@@ -126,6 +128,7 @@ def core(monkeypatch, roots, marketplace):
     monkeypatch.setattr(core_bridge, "preset_roots", lambda: [marketplace, roots.local_presets])
     monkeypatch.setattr(core_bridge, "lint_async", lint_async)
     monkeypatch.setattr(core_bridge, "reload_presets_async", reload_presets_async)
+    monkeypatch.setattr(core_bridge, "load_errors", lambda: {Path(key).resolve(): list(value) for key, value in state.load_errors.items()})
     monkeypatch.setattr(core_bridge, "is_installed", lambda preset_id: preset_id in state.installed)
     monkeypatch.setattr(core_bridge, "install_preset", install_preset)
     monkeypatch.setattr(core_bridge, "uninstall_preset", uninstall_preset)

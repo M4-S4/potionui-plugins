@@ -8,6 +8,8 @@ function text(value) {
 
 const STATUS_BY_CODE = {
 	invalid_request: 400,
+	invalid_path: 400,
+	not_text: 400,
 	unauthorized: 401,
 	forbidden: 403,
 	not_found: 404,
@@ -16,10 +18,12 @@ const STATUS_BY_CODE = {
 	id_in_use: 409,
 	target_in_use: 409,
 	lint_errors: 409,
+	load_failed: 409,
 	swap_failed: 409,
 	precondition_failed: 412,
+	too_large: 413,
+	precondition_required: 428,
 	internal_error: 500,
-	publish_unverified: 500,
 	copy_failed: 500
 };
 
@@ -50,6 +54,7 @@ export function normalizeError(body, status = 0) {
 	let code = '';
 	let message = '';
 	let lint = null;
+	let errors = null;
 	let httpStatus = Number.isInteger(status) && status > 0 ? status : 0;
 	if (isObject(body)) {
 		const { detail } = body;
@@ -69,6 +74,7 @@ export function normalizeError(body, status = 0) {
 			code = text(fields.error);
 			message = text(fields.message);
 			if (isObject(fields.lint)) lint = fields.lint;
+			if (Array.isArray(fields.errors)) errors = fields.errors.filter((item) => typeof item === 'string');
 		}
 	}
 	if (!httpStatus) httpStatus = STATUS_BY_CODE[code] ?? 0;
@@ -76,6 +82,12 @@ export function normalizeError(body, status = 0) {
 	if (!message) message = defaultMessage(httpStatus);
 	const error = { status: httpStatus, code, message };
 	if (lint) error.lint = lint;
+	if (errors) error.errors = errors;
+	if (isObject(body)) {
+		const fields = isObject(body.detail) ? body.detail : body;
+		if (typeof fields.etag === 'string') error.etag = fields.etag;
+		if (typeof fields.content === 'string') error.content = fields.content;
+	}
 	return error;
 }
 
@@ -110,9 +122,9 @@ export async function callPlugin(api, method, path, body) {
 	return unwrap(payload);
 }
 
-export async function callCore(api, path, { method = 'GET', body } = {}) {
+export async function callCore(api, path, { method = 'GET', body, headers: extra = {} } = {}) {
 	const token = typeof api?.getToken === 'function' ? api.getToken() : null;
-	const headers = { Accept: 'application/json' };
+	const headers = { Accept: 'application/json', ...extra };
 	if (token) headers.Authorization = `Bearer ${token}`;
 	const init = { method, headers, credentials: 'include', cache: 'no-store' };
 	if (body !== undefined) {
@@ -134,8 +146,14 @@ export async function callCore(api, path, { method = 'GET', body } = {}) {
 	return unwrap(payload);
 }
 
+const PLUGIN_PREFIX = '/api/plugins/preset-editor';
+
 function segment(value) {
 	return encodeURIComponent(String(value));
+}
+
+function filePath(value) {
+	return String(value).split('/').map(segment).join('/');
 }
 
 export function getMe(api) {
@@ -156,6 +174,42 @@ export function getDraft(api, draftId) {
 
 export function createCopyDraft(api, body) {
 	return callPlugin(api, 'post', '/drafts', { mode: 'copy', ...body });
+}
+
+export function createDraft(api, body) {
+	return callPlugin(api, 'post', '/drafts', body);
+}
+
+export function readFile(api, draftId, path) {
+	return callPlugin(api, 'get', `/drafts/${segment(draftId)}/files/${filePath(path)}`);
+}
+
+export function writeFile(api, draftId, path, content, etag) {
+	return callCore(api, `${PLUGIN_PREFIX}/drafts/${segment(draftId)}/files/${filePath(path)}`, {
+		method: 'PUT',
+		body: { content },
+		headers: etag ? { 'If-Match': etag } : {}
+	});
+}
+
+export function deleteFile(api, draftId, path) {
+	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/files/${filePath(path)}`);
+}
+
+export function addMode(api, draftId, body) {
+	return callPlugin(api, 'post', `/drafts/${segment(draftId)}/modes`, body);
+}
+
+export function removeMode(api, draftId, mode) {
+	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/modes/${segment(mode)}`);
+}
+
+export function sharedReference(api) {
+	return callPlugin(api, 'get', '/reference/shared');
+}
+
+export function pipesReference(api) {
+	return callCore(api, '/api/docs/live/pipes');
 }
 
 export function deleteDraft(api, draftId) {

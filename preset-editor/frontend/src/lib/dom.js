@@ -28,6 +28,20 @@ export function onEscape(callback) {
 	return () => window.removeEventListener('keydown', onKeydown);
 }
 
+export function navigateTo(href) {
+	if (typeof document === 'undefined') return;
+	const before = window.location.href;
+	const anchor = document.createElement('a');
+	anchor.href = href;
+	anchor.style.display = 'none';
+	document.body.appendChild(anchor);
+	anchor.click();
+	anchor.remove();
+	setTimeout(() => {
+		if (window.location.href === before) window.location.assign(href);
+	}, 300);
+}
+
 export function replaceQuery(params) {
 	if (typeof window === 'undefined') return;
 	const url = new URL(window.location.href);

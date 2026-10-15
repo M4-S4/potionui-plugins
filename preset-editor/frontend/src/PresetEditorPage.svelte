@@ -1,14 +1,15 @@
 <script>
 	import { onMount } from 'svelte';
 	import HostUi from '../../../../sdk/HostUi.svelte';
-	import CopyPresetForm from './components/CopyPresetForm.svelte';
-	import DraftPanel from './components/DraftPanel.svelte';
 	import HistoryPanel from './components/HistoryPanel.svelte';
+	import NewPresetForm from './components/NewPresetForm.svelte';
 	import PresetList from './components/PresetList.svelte';
+	import Workbench from './components/Workbench.svelte';
 	import { isAdmin, pageIntent } from './lib/access.js';
 	import { normalizeCatalog, sortPresets } from './lib/catalog.js';
-	import { createCopyDraft, deleteDraft, deletePreset, editPreset, getDraft, getMe, listCatalog, listDrafts } from './lib/client.js';
-	import { copyRequestBody, initialCopyForm } from './lib/drafts.js';
+	import { createDraft, deleteDraft, deletePreset, editPreset, getDraft, getMe, listCatalog, listDrafts, pipesReference } from './lib/client.js';
+	import { initialCopyForm } from './lib/drafts.js';
+	import { familiesFrom } from './lib/families.js';
 	import { confirm, replaceQuery, toast } from './lib/dom.js';
 	import { openPluginModal } from './lib/modal.js';
 
@@ -21,6 +22,7 @@
 	let view = $state.raw({ kind: 'list' });
 	let busyId = $state(null);
 	let catalogError = $state('');
+	let pipes = $state.raw(null);
 
 	const intent = pageIntent(typeof location === 'undefined' ? '' : location.search);
 
@@ -55,9 +57,16 @@
 		if (result.ok) drafts = Array.isArray(result.data) ? result.data : [];
 	}
 
+	async function loadPipes() {
+		if (pipes) return pipes;
+		const result = await pipesReference(api);
+		if (result.ok) pipes = result.data;
+		return pipes;
+	}
+
 	async function followIntent() {
 		if (intent.kind === 'new') {
-			openCopyDialog(null);
+			openNewDialog(null);
 		} else if (intent.kind === 'draft') {
 			const result = await getDraft(api, intent.id);
 			if (result.ok) openDraft(result.data);
@@ -101,24 +110,31 @@
 		drafts = [draft, ...drafts.filter((item) => item.draft_id !== draft.draft_id)];
 	}
 
-	function openCopyDialog(source) {
-		let latest = { form: initialCopyForm(source), problems: {} };
-		const handle = openPluginModal({
+	function openNewDialog(source) {
+		let latest = { kind: 'copy', body: null, problems: {}, publishNow: false };
+		let handle = null;
+		const props = $state({
+			sources: catalog,
+			families: [],
+			pipes: null,
+			initial: initialCopyForm(source),
+			kind: 'copy',
+			onChange: (next) => {
+				latest = next;
+				handle?.update({ confirmDisabled: !next.body });
+			}
+		});
+		handle = openPluginModal({
 			title: source ? `Duplicate ${source.name}` : 'New preset',
-			subtitle: 'A local copy you can edit and publish',
+			subtitle: 'A local preset you can edit and publish',
 			confirmLabel: 'Create draft',
-			body: CopyPresetForm,
-			props: {
-				sources: catalog,
-				initial: latest.form,
-				onChange: (next) => {
-					latest = next;
-					handle?.update({ confirmDisabled: Object.keys(next.problems).length > 0 });
-				}
-			},
+			size: 'lg',
+			body: NewPresetForm,
+			props,
 			onConfirm: async (modal) => {
+				if (!latest.body) return;
 				modal.update({ busy: true });
-				const result = await createCopyDraft(api, copyRequestBody(latest.form));
+				const result = await createDraft(api, latest.body);
 				if (!result.ok) {
 					modal.update({ busy: false });
 					toast('error', result.error.message);
@@ -134,7 +150,13 @@
 			toast('error', 'The host has no dialog component: update PotionUI');
 			return;
 		}
-		handle.update({ confirmDisabled: Object.keys(latest.problems).length > 0 });
+		handle.update({ confirmDisabled: !latest.body });
+		loadPipes().then((reference) => {
+			if (reference) {
+				props.pipes = reference;
+				props.families = familiesFrom(reference);
+			}
+		});
 	}
 
 	async function edit(entry) {
@@ -204,14 +226,14 @@
 			<HostUi name="Spinner" props={{ size: 'lg' }} />
 		</div>
 	{:else if view.kind === 'draft'}
-		<DraftPanel {api} draft={view.draft} onChange={draftChanged} onBack={showList} onPublished={() => refreshCatalog()} onDiscarded={() => { drafts = drafts.filter((item) => item.draft_id !== view.draft.draft_id); showList(); }} />
+		<Workbench {api} draft={view.draft} onChange={draftChanged} onBack={showList} onPublished={() => refreshCatalog()} onDiscarded={() => { drafts = drafts.filter((item) => item.draft_id !== view.draft.draft_id); showList(); }} />
 	{:else if view.kind === 'history'}
 		<HistoryPanel {api} preset={view.preset} onBack={showList} onRestored={(draft) => { rememberDraft(draft); openDraft(draft); }} />
 	{:else}
 		<div class="mb-4 flex flex-wrap items-center gap-2">
-			<p class="text-sm text-fg-muted">Duplicate a preset into <span class="font-mono">content/presets/local</span>, or edit, delete and restore the local ones.</p>
+			<p class="text-sm text-fg-muted">Start from a copy of a preset or from a blank skeleton, then edit, lint and publish into <span class="font-mono">content/presets/local</span>.</p>
 			<span class="flex-1"></span>
-			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: 'plus', onclick: () => openCopyDialog(null) }}>New Preset</HostUi>
+			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: 'plus', onclick: () => openNewDialog(null) }}>New Preset</HostUi>
 		</div>
 		{#if catalogError}
 			<div class="mb-4 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">{catalogError}</div>
@@ -220,7 +242,7 @@
 			entries={catalog}
 			{drafts}
 			{busyId}
-			onDuplicate={openCopyDialog}
+			onDuplicate={openNewDialog}
 			onEdit={edit}
 			onDelete={remove}
 			onHistory={(entry) => (view = { kind: 'history', preset: entry })}

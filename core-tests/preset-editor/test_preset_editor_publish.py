@@ -93,9 +93,10 @@ def _publish_copy(core, roots, *, preset_id="copy-one", name="Copy one", target=
     publish.check_collisions(
         roots, preset_id=preset_id, target_dir=target, catalog=core.bridge.catalog(), disk_roots=core.bridge.preset_roots()
     )
-    result = publish.publish_draft(roots, draft, history_depth=3)
+    swapped = publish.publish_draft(roots, draft)
+    archived = publish.commit_publish(roots, draft, swapped["backup"], history_depth=3)
     core.bridge.reload_presets()
-    return draft, result
+    return draft, {"preset_id": swapped["preset_id"], "target_dir": swapped["target_dir"], "archived": archived}
 
 
 def test_the_plugin_preset_id_rule_is_the_cores():
@@ -154,10 +155,11 @@ def test_republishing_keeps_the_installation_and_the_assignments(core, roots):
     publish.check_collisions(
         roots, preset_id="copy-one", target_dir="MyModel/v1", catalog=core.bridge.catalog(), disk_roots=core.bridge.preset_roots()
     )
-    result = publish.publish_draft(roots, edit, history_depth=3)
+    swapped = publish.publish_draft(roots, edit)
+    archived = publish.commit_publish(roots, edit, swapped["backup"], history_depth=3)
     core.bridge.reload_presets()
 
-    assert result["archived"] is not None
+    assert archived is not None
     assert core.bridge.find_preset("copy-one").name == "Copy one, edited"
     assert core.bridge.is_installed("copy-one") is True
     assert core.db_repo.get_preset_assignment_summary("copy-one")["total_assignments"] == 1

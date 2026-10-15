@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from src.plugin_api import User, get_current_admin_user
 from src.plugin_api.storage import generate_ulid
 
-from . import catalog, core_bridge, drafts, paths, publish, settings
+from . import catalog, core_bridge, drafts, paths, publish, scaffold, settings
 from .drafts import DraftError
 from .publish import PublishError
 from .routes_common import draft_payload, error, ok
@@ -16,6 +16,8 @@ from .schema import DraftCreate, PublishRequest
 logger = logging.getLogger("plugins.preset-editor")
 
 router = APIRouter(dependencies=[Depends(get_current_admin_user)])
+
+_publishing = asyncio.Lock()
 
 
 def _load(draft_id: str) -> drafts.Draft:
@@ -38,26 +40,46 @@ async def list_drafts():
 
 @router.post("/drafts", status_code=201)
 async def create_draft(body: DraftCreate, current_user: User = Depends(get_current_admin_user)):
-    template = core_bridge.find_preset(body.from_id)
-    if template is None:
-        raise error(404, "not_found", f"no preset '{body.from_id}' in the catalogue")
     preset_id = body.preset_id or generate_ulid()
     try:
-        draft = await asyncio.to_thread(
-            drafts.create_copy,
-            paths.roots(),
-            source_dir=Path(template.path),
-            preset_id=preset_id,
-            name=body.name,
-            target_dir=body.target_dir,
-            created_by=current_user.id,
-            source=f"copy_of:{template.id}",
-        )
+        if body.mode == "copy":
+            template = core_bridge.find_preset(body.from_id)
+            if template is None:
+                raise error(404, "not_found", f"no preset '{body.from_id}' in the catalogue")
+            draft = await asyncio.to_thread(
+                drafts.create_copy,
+                paths.roots(),
+                source_dir=Path(template.path),
+                preset_id=preset_id,
+                name=body.name,
+                target_dir=body.target_dir,
+                created_by=current_user.id,
+                source=f"copy_of:{template.id}",
+            )
+        else:
+            produced = scaffold.preset_files(
+                preset_id=preset_id,
+                name=body.name,
+                category=body.resolved_category,
+                engine=body.engine,
+                modes=body.modes,
+                driver=body.driver,
+                family=body.family.to_pipes() if body.family is not None else None,
+            )
+            draft = await asyncio.to_thread(
+                drafts.create_blank,
+                paths.roots(),
+                files=produced,
+                preset_id=preset_id,
+                name=body.name,
+                target_dir=body.target_dir,
+                created_by=current_user.id,
+            )
     except DraftError as failure:
         raise error(409, failure.code, failure.message)
     except OSError as failure:
-        logger.exception("[PRESET-EDITOR] Could not copy %s", template.path)
-        raise error(500, "copy_failed", f"could not copy the preset: {failure}")
+        logger.exception("[PRESET-EDITOR] Could not write the draft of %s", body.name)
+        raise error(500, "copy_failed", f"could not write the draft: {failure}")
     await _lint(draft)
     return ok(draft_payload(draft))
 
@@ -88,25 +110,34 @@ async def publish_draft(draft_id: str, body: PublishRequest, current_user: User 
     errors, warnings = await _lint(draft)
     if errors:
         raise error(409, "lint_errors", "the preset has lint errors", lint={"errors": errors, "warnings": warnings})
-    try:
-        await asyncio.to_thread(
-            publish.check_collisions,
-            roots,
-            preset_id=draft.preset_id,
-            target_dir=draft.target_dir,
-            catalog=core_bridge.catalog(),
-            disk_roots=core_bridge.preset_roots(),
+    async with _publishing:
+        try:
+            await asyncio.to_thread(
+                publish.check_collisions,
+                roots,
+                preset_id=draft.preset_id,
+                target_dir=draft.target_dir,
+                catalog=core_bridge.catalog(),
+                disk_roots=core_bridge.preset_roots(),
+            )
+            swapped = await asyncio.to_thread(publish.publish_draft, roots, draft)
+        except PublishError as failure:
+            raise error(409, failure.code, failure.message)
+        await core_bridge.reload_presets_async()
+        template = core_bridge.find_preset(draft.preset_id)
+        expected = paths.local_preset_dir(roots, draft.target_dir).resolve()
+        if template is None or Path(template.path).resolve() != expected:
+            refused = core_bridge.load_errors().get(expected / "preset.yml", [])
+            await asyncio.to_thread(publish.rollback_publish, roots, swapped["target"], swapped["backup"])
+            await core_bridge.reload_presets_async()
+            raise error(
+                409, "load_failed",
+                "PotionUI refused to load the published preset, so the previous state was put back",
+                errors=refused,
+            )
+        archived = await asyncio.to_thread(
+            publish.commit_publish, roots, draft, swapped["backup"], history_depth=settings.get_setting("history_depth")
         )
-        result = await asyncio.to_thread(
-            publish.publish_draft, roots, draft, history_depth=settings.get_setting("history_depth")
-        )
-    except PublishError as failure:
-        raise error(409, failure.code, failure.message)
-    await core_bridge.reload_presets_async()
-    template = core_bridge.find_preset(draft.preset_id)
-    expected = paths.local_preset_dir(roots, draft.target_dir).resolve()
-    if template is None or Path(template.path).resolve() != expected:
-        raise error(500, "publish_unverified", "the preset was written but the catalogue does not show it at its folder")
     install = body.install if body.install is not None else settings.get_setting("install_after_publish")
     installed = await asyncio.to_thread(core_bridge.is_installed, draft.preset_id)
     if install and not installed:
@@ -115,7 +146,9 @@ async def publish_draft(draft_id: str, body: PublishRequest, current_user: User 
     drafts.mark_published(draft)
     return ok(
         {
-            **result,
+            "preset_id": draft.preset_id,
+            "target_dir": draft.target_dir,
+            "archived": archived,
             "installed": installed,
             "lint": {"errors": errors, "warnings": warnings},
             "preset": catalog.summary(template),

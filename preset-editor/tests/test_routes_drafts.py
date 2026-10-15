@@ -47,7 +47,7 @@ def test_a_custom_id_is_kept(client):
 
 @pytest.mark.parametrize(
     "overrides",
-    [{"preset_id": "no"}, {"model_dir": "../x"}, {"variant_dir": "a/b"}, {"name": "   "}, {"mode": "blank"}, {"from_id": "x"}],
+    [{"preset_id": "no"}, {"model_dir": "../x"}, {"variant_dir": "a/b"}, {"name": "   "}, {"mode": "other"}, {"from_id": "x"}],
 )
 def test_a_bad_request_is_refused_by_validation(client, overrides):
     assert _copy(client, **overrides).status_code == 422
@@ -161,14 +161,37 @@ def test_a_folder_collision_blocks_publication(client, core):
     assert response.status_code == 409 and response.json()["detail"]["error"] == "target_in_use"
 
 
-def test_a_catalogue_that_does_not_show_the_preset_is_reported(client, core):
+def test_a_preset_the_loader_refuses_is_rolled_back_on_its_first_publication(client, core, roots):
     core.reload_registers = False
+    core.load_errors = {str(roots.local_presets / "MyModel" / "v1" / "preset.yml"): ["modes/txt2img/form.yml: unregistered field type 'text'"]}
     draft_id = _copy(client).json()["data"]["draft_id"]
 
     response = client.post(f"{DRAFTS_URL}/{draft_id}/publish", json={})
 
-    assert response.status_code == 500 and response.json()["detail"]["error"] == "publish_unverified"
-    assert core.installs == []
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "success": False, "error": "load_failed",
+        "message": "PotionUI refused to load the published preset, so the previous state was put back",
+        "errors": ["modes/txt2img/form.yml: unregistered field type 'text'"],
+    }
+    assert not (roots.local_presets / "MyModel").exists() and roots.local_presets.is_dir()
+    assert list(roots.staging.iterdir()) == []
+    assert core.reloads == 2 and core.installs == []
+    assert drafts.load(roots, draft_id).published_at is None
+
+
+def test_a_refused_republication_puts_the_previous_version_back(client, core, roots):
+    first = _copy(client, name="First").json()["data"]
+    client.post(f"{DRAFTS_URL}/{first['draft_id']}/publish", json={})
+    second = _copy(client, name="Second", preset_id=first["preset_id"]).json()["data"]
+    core.reload_registers = False
+
+    response = client.post(f"{DRAFTS_URL}/{second['draft_id']}/publish", json={})
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "load_failed"
+    assert '"First"' in (roots.local_presets / "MyModel" / "v1" / "preset.yml").read_text(encoding="utf-8")
+    assert history.list_entries(roots, first["preset_id"]) == []
+    assert list(roots.staging.iterdir()) == []
 
 
 def test_every_draft_route_needs_an_admin(core):

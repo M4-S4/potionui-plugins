@@ -46,6 +46,11 @@ def reload_presets() -> None:
     preset_loader().reload()
 
 
+def load_errors() -> Dict[Path, List[str]]:
+    recorded = getattr(preset_loader(), "load_errors", None) or {}
+    return {Path(key).resolve(): list(messages) for key, messages in recorded.items()}
+
+
 def lint(path: Path) -> Tuple[List[str], List[str]]:
     return lint_preset_dir(str(path))
 

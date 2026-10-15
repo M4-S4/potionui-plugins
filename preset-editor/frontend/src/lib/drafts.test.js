@@ -1,8 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+	blankFormProblems,
+	blankModes,
+	blankRequestBody,
 	canPublish,
 	copyFormProblems,
+	initialBlankForm,
 	copyRequestBody,
 	describeSource,
 	formatStamp,
@@ -80,11 +84,44 @@ test('copyFormProblems mirrors the backend rules', () => {
 
 test('copyRequestBody and targetDirOf trim and drop the blanks', () => {
 	const form = { from_id: 'krea', name: ' Copy ', preset_id: ' ', model_dir: ' Krea2 ', variant_dir: ' ' };
-	assert.deepEqual(copyRequestBody(form), { from_id: 'krea', name: 'Copy', model_dir: 'Krea2' });
+	assert.deepEqual(copyRequestBody(form), { mode: 'copy', from_id: 'krea', name: 'Copy', model_dir: 'Krea2' });
 	assert.equal(targetDirOf(form), 'Krea2');
 	const full = { ...form, preset_id: 'my-id', variant_dir: 'v1' };
-	assert.deepEqual(copyRequestBody(full), { from_id: 'krea', name: 'Copy', model_dir: 'Krea2', preset_id: 'my-id', variant_dir: 'v1' });
+	assert.deepEqual(copyRequestBody(full), { mode: 'copy', from_id: 'krea', name: 'Copy', model_dir: 'Krea2', preset_id: 'my-id', variant_dir: 'v1' });
 	assert.equal(targetDirOf(full), 'Krea2/v1');
+});
+
+test('a blank form starts native with txt2img and lists its modes from text or from the cloud choices', () => {
+	const form = initialBlankForm();
+	assert.deepEqual(blankModes(form), ['txt2img']);
+	assert.deepEqual(blankModes({ ...form, modes: 'txt2img, img2img txt2img\nedit' }), ['txt2img', 'img2img', 'edit']);
+	assert.deepEqual(blankModes({ ...form, engine: 'cloud', cloudModes: ['edit', 'nope', 'edit'] }), ['edit']);
+});
+
+test('blankFormProblems mirrors the backend rules for a skeleton', () => {
+	const good = { ...initialBlankForm(), name: 'Fresh', model_dir: 'Fresh' };
+	assert.deepEqual(blankFormProblems(good), {});
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, name: '' })), ['name']);
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, engine: 'Native' })), ['engine']);
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, engine: 'cloud', cloudModes: ['txt2img'] })), ['driver']);
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, engine: 'cloud', driver: 'native.x', cloudModes: ['txt2img'] })), ['driver']);
+	assert.deepEqual(blankFormProblems({ ...good, engine: 'cloud', driver: 'cloud.openrouter', cloudModes: ['txt2video'] }), {});
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, engine: 'cloud', driver: 'cloud.x', cloudModes: [] })), ['modes']);
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, modes: 'Bad Mode' })), ['modes']);
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, modes: '' })), ['modes']);
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, category: 'weird' })), ['category']);
+	assert.deepEqual(Object.keys(blankFormProblems({ ...good, driver: 'native.x' })), []);
+});
+
+test('blankRequestBody sends only what is filled and the family for the native chain', () => {
+	const form = { ...initialBlankForm(), name: ' Fresh ', model_dir: 'Fresh', variant_dir: '', preset_id: '', category: 'video', modes: 'txt2img img2img' };
+	const family = { family: 'z_image', loader_name: 'model_loader/z_image', generator_name: 'generator/z_image', model_slots: ['m'] };
+	assert.deepEqual(blankRequestBody(form, family), { mode: 'blank', name: 'Fresh', model_dir: 'Fresh', engine: 'native', modes: ['txt2img', 'img2img'], category: 'video', family });
+	const cloud = { ...form, engine: 'cloud', driver: 'cloud.openrouter', cloudModes: ['edit'], variant_dir: 'v1', preset_id: 'my-id' };
+	assert.deepEqual(blankRequestBody(cloud, family), {
+		mode: 'blank', name: 'Fresh', model_dir: 'Fresh', engine: 'cloud', modes: ['edit'], preset_id: 'my-id', variant_dir: 'v1', category: 'video', driver: 'cloud.openrouter'
+	});
+	assert.equal('family' in blankRequestBody({ ...form, engine: 'comfyui' }, family), false);
 });
 
 test('describeSource and formatStamp read the draft provenance', () => {

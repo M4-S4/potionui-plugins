@@ -140,6 +140,26 @@ def create_copy(roots: Roots, *, source_dir: Path, preset_id: str, name: str, ta
     )
 
 
+def create_blank(roots: Roots, *, files: Dict[str, str], preset_id: str, name: str, target_dir: str,
+                 created_by: str) -> Draft:
+    paths.check_preset_id(preset_id)
+    target_dir = paths.check_target_dir(target_dir)
+    roots.drafts.mkdir(parents=True, exist_ok=True)
+    draft_id = generate_ulid()
+    directory = roots.drafts / draft_id
+    directory.mkdir()
+    for relative, content in files.items():
+        path = directory / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    stamp = now()
+    draft = Draft(
+        draft_id=draft_id, preset_id=preset_id, name=name, source="blank", target_dir=target_dir,
+        created_by=created_by, created_at=stamp, updated_at=stamp, dir=directory,
+    )
+    return save(draft)
+
+
 def create_edit(roots: Roots, *, source_dir: Path, preset_id: str, name: str, target_dir: str,
                 created_by: str) -> Draft:
     return _create(

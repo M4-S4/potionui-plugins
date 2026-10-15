@@ -10,6 +10,7 @@ from . import PLUGIN_ID
 
 LOCAL_PRESETS_DIR = Path("content/presets/local")
 STAGING_DIR = Path("content/presets/.preset-editor/staging")
+SHARED_DIR = Path("content/presets/_shared")
 
 PRESET_ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,64}$")
 DRAFT_ID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")

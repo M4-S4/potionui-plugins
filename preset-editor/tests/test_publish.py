@@ -149,17 +149,24 @@ def test_a_failed_restore_keeps_the_backup_and_names_it(roots, monkeypatch):
     assert (backups[0] / "preset.yml").is_file() and not target.exists()
 
 
-def test_publish_draft_archives_the_previous_version_and_rotates(roots, monkeypatch):
+def _publish(roots, draft, depth=2):
+    swapped = publish.publish_draft(roots, draft)
+    return publish.commit_publish(roots, draft, swapped["backup"], history_depth=depth)
+
+
+def test_publish_and_commit_archive_the_previous_version_and_rotate(roots, monkeypatch):
     stamps = iter(["20261015T100000.000001", "20261015T100000.000002", "20261015T100000.000003"])
     monkeypatch.setattr(history, "stamp_now", lambda: next(stamps))
     first = _draft(roots, name="First")
 
-    assert publish.publish_draft(roots, first, history_depth=2) == {"preset_id": "copy-one", "target_dir": "MyModel/v1", "archived": None}
+    swapped = publish.publish_draft(roots, first)
+    assert (swapped["preset_id"], swapped["target_dir"], swapped["backup"]) == ("copy-one", "MyModel/v1", None)
+    assert swapped["target"] == roots.local_presets / "MyModel" / "v1"
+    assert publish.commit_publish(roots, first, None, history_depth=2) is None
     assert history.list_entries(roots, "copy-one") == []
 
     for name, expected in (("Second", "20261015T100000.000001"), ("Third", "20261015T100000.000002"), ("Fourth", "20261015T100000.000003")):
-        result = publish.publish_draft(roots, _draft(roots, name=name), history_depth=2)
-        assert result["archived"] == expected
+        assert _publish(roots, _draft(roots, name=name)) == expected
 
     target = roots.local_presets / "MyModel" / "v1"
     assert '"Fourth"' in (target / "preset.yml").read_text(encoding="utf-8")
@@ -167,6 +174,27 @@ def test_publish_draft_archives_the_previous_version_and_rotates(roots, monkeypa
         ("20261015T100000.000003", "Third"), ("20261015T100000.000002", "Second"),
     ]
     assert [entry.name for entry in roots.staging.iterdir()] == []
+
+
+def test_rollback_of_a_first_publication_removes_the_folder_and_its_empty_parent(roots):
+    swapped = publish.publish_draft(roots, _draft(roots))
+
+    publish.rollback_publish(roots, swapped["target"], swapped["backup"])
+
+    assert not (roots.local_presets / "MyModel").exists() and roots.local_presets.is_dir()
+    assert list(roots.staging.iterdir()) == []
+
+
+def test_rollback_of_a_republication_puts_the_backup_back(roots):
+    _publish(roots, _draft(roots, name="First"))
+    swapped = publish.publish_draft(roots, _draft(roots, name="Second"))
+    assert '"Second"' in (swapped["target"] / "preset.yml").read_text(encoding="utf-8")
+
+    publish.rollback_publish(roots, swapped["target"], swapped["backup"])
+
+    assert '"First"' in (roots.local_presets / "MyModel" / "v1" / "preset.yml").read_text(encoding="utf-8")
+    assert list(roots.staging.iterdir()) == []
+    assert history.list_entries(roots, "copy-one") == []
 
 
 def test_delete_local_preset_archives_removes_and_prunes_the_empty_model_folder(roots, monkeypatch):

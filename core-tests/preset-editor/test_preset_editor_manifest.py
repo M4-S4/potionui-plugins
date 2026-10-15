@@ -94,13 +94,17 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         for suffix in (
             "drafts",
             "drafts/{draft_id}",
+            "drafts/{draft_id}/files/{path:path}",
             "drafts/{draft_id}/lint",
+            "drafts/{draft_id}/modes",
+            "drafts/{draft_id}/modes/{mode}",
             "drafts/{draft_id}/publish",
             "me",
             "presets/{preset_id}",
             "presets/{preset_id}/edit",
             "presets/{preset_id}/history",
             "presets/{preset_id}/history/{stamp}/restore",
+            "reference/shared",
         )
     ]
 

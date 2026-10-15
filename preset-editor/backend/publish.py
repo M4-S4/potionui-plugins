@@ -87,17 +87,32 @@ def swap(target: Path, staging: Path, backup_root: Path) -> Optional[Path]:
     return backup
 
 
-def publish_draft(roots: Roots, draft: Draft, *, history_depth: int) -> Dict[str, Any]:
+def publish_draft(roots: Roots, draft: Draft) -> Dict[str, Any]:
     with _lock:
         target = paths.local_preset_dir(roots, draft.target_dir)
         staging = stage(roots, draft.dir)
         backup = swap(target, staging, roots.staging)
-        archived = None
-        if backup is not None:
-            archived = history.archive(roots, backup, preset_id=draft.preset_id, target_dir=draft.target_dir, reason="publish")
-            shutil.rmtree(backup, ignore_errors=True)
-            history.rotate(roots, draft.preset_id, history_depth)
-    return {"preset_id": draft.preset_id, "target_dir": draft.target_dir, "archived": archived}
+    return {"preset_id": draft.preset_id, "target_dir": draft.target_dir, "target": target, "backup": backup}
+
+
+def commit_publish(roots: Roots, draft: Draft, backup: Optional[Path], *, history_depth: int) -> Optional[str]:
+    if backup is None:
+        return None
+    with _lock:
+        archived = history.archive(roots, backup, preset_id=draft.preset_id, target_dir=draft.target_dir, reason="publish")
+        shutil.rmtree(backup, ignore_errors=True)
+        history.rotate(roots, draft.preset_id, history_depth)
+    return archived
+
+
+def rollback_publish(roots: Roots, target: Path, backup: Optional[Path]) -> None:
+    with _lock:
+        if target.exists():
+            shutil.rmtree(target)
+        if backup is not None and backup.exists():
+            os.replace(backup, target)
+        else:
+            _prune_empty_parents(target, roots.local_presets)
 
 
 def _prune_empty_parents(path: Path, stop: Path) -> None:

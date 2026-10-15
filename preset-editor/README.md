@@ -5,20 +5,32 @@ copy of an existing one (a skeleton comes later), lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: in development (phase 1).** Duplicating, editing in place, publishing, the version
-history and deleting work; the file editor and the structured editors come with the next
-phases.
+**Status: in development (phase 2).** Drafts from a copy or from a blank skeleton, a text
+editor for every YAML and Markdown file of a draft, publishing, the version history and
+deleting work; the structured editors (manifest, media, form and pipeline builders) come
+with the next phases.
 
 ## What you can do
 
-- **New Preset** (header of Admin → Presets, or the Preset Editor page): pick a preset of the
-  catalogue, a name, the folder `content/presets/local/<Model>/<variant>` and optionally an id,
-  and get a draft copy. The id is generated like the ids of the presets PotionUI ships.
+- **New Preset** (header of Admin → Presets, or the Preset Editor page): either copy a
+  preset of the catalogue, or start from a blank skeleton (engine, category, modes, a cloud
+  driver, or a native model family whose standard chain is wired from the pipe catalogue).
+  Give it a name, the folder `content/presets/local/<Model>/<variant>` and optionally an id;
+  the id is otherwise generated like the ids of the presets PotionUI ships. From the Admin
+  header, "Publish right away" publishes the copy as it is and opens it there.
 - **Edit…** (same header) lists the local presets and opens one as a draft; publishing writes
   it back over its folder, and the previous version goes to the history.
+- The draft workbench lists the files, opens any YAML, Markdown, JSON or text file in a text
+  editor with line numbers, insertable fragments (a `_shared` options file, the standard
+  native chain, a `@loop` block, the cloud chain, a field) and a save that refuses to
+  overwrite a file changed elsewhere. Modes are added from the skeleton or removed.
 - A draft shows its lint report; **Publish** needs a report without errors, writes the preset
-  atomically, reloads the catalogue and, by default, installs the preset on the instance.
-  Assigning it to users and groups stays in Admin → Presets, as for any preset.
+  atomically, reloads the catalogue and checks that PotionUI loads it. When the loader
+  refuses the preset (the linter does not check everything, field types for one), the
+  previous state is put back and the loader's messages are shown. By default a published
+  preset is installed on the instance; assigning it to users and groups stays in
+  Admin → Presets, as for any preset. Once published, the form of each mode can be previewed
+  in the workbench with PotionUI's own form renderer.
 - **History** lists the versions kept when a local preset was published over or deleted;
   **Restore** opens one as a draft. **Delete** uninstalls a local preset and moves its folder
   to the history.
