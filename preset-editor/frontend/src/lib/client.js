@@ -231,6 +231,18 @@ export function deleteMedia(api, draftId, path) {
 	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/media/${filePath(path)}`);
 }
 
+export function exportDraftUrl(draftId) {
+	return `${PLUGIN_PREFIX}/drafts/${segment(draftId)}/export`;
+}
+
+export function exportPresetUrl(presetId) {
+	return `${PLUGIN_PREFIX}/presets/${segment(presetId)}/export`;
+}
+
+export function importDraft(api, form) {
+	return callCore(api, `${PLUGIN_PREFIX}/drafts/import`, { method: 'POST', form });
+}
+
 export function sharedReference(api) {
 	return callPlugin(api, 'get', '/reference/shared');
 }

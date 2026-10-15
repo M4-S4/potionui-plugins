@@ -1,5 +1,6 @@
 <script>
 	import ActionButton from './ActionButton.svelte';
+	import { exportPresetUrl } from '../lib/client.js';
 	import { clickOutside, onEscape } from '../lib/dom.js';
 
 	let { entries = [], phase = 'ready', error = '', pageRoute = '/plugins/preset-editor' } = $props();
@@ -27,16 +28,17 @@
 			{:else}
 				<ul class="max-h-72 overflow-y-auto py-1">
 					{#each entries as entry (entry.id)}
-						<li>
+						<li class="flex items-stretch">
 							<a
 								href="{pageRoute}?preset={encodeURIComponent(entry.id)}"
-								class="block px-3 py-1.5 text-xs text-fg hover:bg-surface-3"
+								class="block min-w-0 flex-1 px-3 py-1.5 text-xs text-fg hover:bg-surface-3"
 								role="menuitem"
 								onclick={() => (open = false)}
 							>
 								<span class="block truncate font-medium">{entry.name}</span>
 								<span class="block truncate font-mono text-2xs text-fg-subtle">{entry.path}</span>
 							</a>
+							<a href={exportPresetUrl(entry.id)} download class="flex items-center px-2 text-2xs text-fg-subtle hover:bg-surface-3 hover:text-fg" role="menuitem" title="Download {entry.name} as a zip archive" onclick={() => (open = false)}>zip</a>
 						</li>
 					{/each}
 				</ul>

@@ -93,7 +93,9 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         f"/api/plugins/{PLUGIN_ID}/{suffix}"
         for suffix in (
             "drafts",
+            "drafts/import",
             "drafts/{draft_id}",
+            "drafts/{draft_id}/export",
             "drafts/{draft_id}/files/{path:path}",
             "drafts/{draft_id}/lint",
             "drafts/{draft_id}/media",
@@ -105,6 +107,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
             "me",
             "presets/{preset_id}",
             "presets/{preset_id}/edit",
+            "presets/{preset_id}/export",
             "presets/{preset_id}/history",
             "presets/{preset_id}/history/{stamp}/restore",
             "reference/shared",

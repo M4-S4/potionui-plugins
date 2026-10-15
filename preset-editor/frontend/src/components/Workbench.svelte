@@ -12,7 +12,7 @@
 	import PreviewPanel from './PreviewPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import { adminPresetUrl } from '../lib/catalog.js';
-	import { addMode, deleteDraft, fieldTypes, getDraft, lintDraft, pipesReference, publishDraft, removeMode, sharedReference } from '../lib/client.js';
+	import { addMode, deleteDraft, exportDraftUrl, fieldTypes, getDraft, lintDraft, pipesReference, publishDraft, removeMode, sharedReference } from '../lib/client.js';
 	import { MODE_RE, canPublish, describeSource, formatTimestamp } from '../lib/drafts.js';
 	import { fileKind, isEditable, isMedia, modeOf } from '../lib/files.js';
 	import { confirm, toast } from '../lib/dom.js';
@@ -289,6 +289,7 @@
 			Install on this instance
 		</label>
 		<ActionButton variant="primary" icon="publish" loading={busy === 'publish'} disabled={!ready} title={dirty ? 'Save the open editor first' : canPublish(draft.last_lint) ? 'Write the preset into content/presets/local' : 'Fix the lint errors first'} onclick={publish}>Publish</ActionButton>
+		<a class="inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-3/50 hover:text-fg" href={exportDraftUrl(draft.draft_id)} download title="Download the draft folder as a zip archive"><Icon name="folder" class="h-3.5 w-3.5" />Download zip</a>
 		<span class="flex-1"></span>
 		<ActionButton variant="ghost" icon="trash" loading={busy === 'discard'} disabled={!!busy} onclick={discard}>Discard draft</ActionButton>
 	</div>

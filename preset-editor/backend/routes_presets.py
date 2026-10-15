@@ -19,7 +19,7 @@ def _preset_id(value: str) -> str:
         raise error(400, "invalid_request", str(failure))
 
 
-def _local_template(preset_id: str):
+def local_template(preset_id: str):
     template = core_bridge.find_preset(_preset_id(preset_id))
     if template is None:
         raise error(404, "not_found", f"no preset '{preset_id}' in the catalogue")
@@ -69,7 +69,7 @@ async def restore_version(preset_id: str, stamp: str, current_user: User = Depen
 
 @router.post("/presets/{preset_id}/edit", status_code=201)
 async def edit_preset(preset_id: str, current_user: User = Depends(get_current_admin_user)):
-    template = _local_template(preset_id)
+    template = local_template(preset_id)
     try:
         draft = await asyncio.to_thread(
             drafts.create_edit,
@@ -89,7 +89,7 @@ async def edit_preset(preset_id: str, current_user: User = Depends(get_current_a
 
 @router.delete("/presets/{preset_id}")
 async def delete_preset(preset_id: str, current_user: User = Depends(get_current_admin_user)):
-    template = _local_template(preset_id)
+    template = local_template(preset_id)
     uninstalled = False
     if await asyncio.to_thread(core_bridge.is_installed, template.id):
         await asyncio.to_thread(core_bridge.uninstall_preset, template.id, current_user)

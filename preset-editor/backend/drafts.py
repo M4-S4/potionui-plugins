@@ -160,6 +160,14 @@ def create_blank(roots: Roots, *, files: Dict[str, str], preset_id: str, name: s
     return save(draft)
 
 
+def create_import(roots: Roots, *, source_dir: Path, preset_id: str, name: str, target_dir: str,
+                  created_by: str, source: str, rewrite: bool) -> Draft:
+    return _create(
+        roots, source_dir=source_dir, preset_id=preset_id, name=name, target_dir=target_dir, created_by=created_by,
+        source=source, rewrite=rewrite,
+    )
+
+
 def create_edit(roots: Roots, *, source_dir: Path, preset_id: str, name: str, target_dir: str,
                 created_by: str) -> Draft:
     return _create(

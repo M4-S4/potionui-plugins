@@ -2,12 +2,13 @@
 	import { onMount } from 'svelte';
 	import HostUi from '../../../../sdk/HostUi.svelte';
 	import HistoryPanel from './components/HistoryPanel.svelte';
+	import ImportForm from './components/ImportForm.svelte';
 	import NewPresetForm from './components/NewPresetForm.svelte';
 	import PresetList from './components/PresetList.svelte';
 	import Workbench from './components/Workbench.svelte';
 	import { isAdmin, pageIntent } from './lib/access.js';
 	import { normalizeCatalog, sortPresets } from './lib/catalog.js';
-	import { createDraft, deleteDraft, deletePreset, editPreset, getDraft, getMe, listCatalog, listDrafts, pipesReference } from './lib/client.js';
+	import { createDraft, deleteDraft, deletePreset, editPreset, getDraft, getMe, importDraft, listCatalog, listDrafts, pipesReference } from './lib/client.js';
 	import { initialCopyForm } from './lib/drafts.js';
 	import { familiesFrom } from './lib/families.js';
 	import { confirm, replaceQuery, toast } from './lib/dom.js';
@@ -108,6 +109,39 @@
 
 	function rememberDraft(draft) {
 		drafts = [draft, ...drafts.filter((item) => item.draft_id !== draft.draft_id)];
+	}
+
+	function openImportDialog() {
+		let latest = { body: null, problems: {} };
+		let handle = null;
+		handle = openPluginModal({
+			title: 'Import a preset archive',
+			subtitle: 'A zip of a preset folder becomes a draft',
+			confirmLabel: 'Import',
+			size: 'md',
+			body: ImportForm,
+			props: {
+				onChange: (next) => {
+					latest = next;
+					handle?.update({ confirmDisabled: !next.body });
+				}
+			},
+			onConfirm: async (modal) => {
+				if (!latest.body) return;
+				modal.update({ busy: true });
+				const result = await importDraft(api, latest.body);
+				if (!result.ok) {
+					modal.update({ busy: false });
+					toast('error', result.error.message);
+					return;
+				}
+				modal.close();
+				toast('success', `Draft created from the archive: ${result.data.name}`);
+				rememberDraft(result.data);
+				openDraft(result.data);
+			}
+		});
+		if (!handle) toast('error', 'The host has no dialog component: update PotionUI');
 	}
 
 	function openNewDialog(source) {
@@ -233,6 +267,7 @@
 		<div class="mb-4 flex flex-wrap items-center gap-2">
 			<p class="text-sm text-fg-muted">Start from a copy of a preset or from a blank skeleton, then edit, lint and publish into <span class="font-mono">content/presets/local</span>.</p>
 			<span class="flex-1"></span>
+			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', onclick: openImportDialog }}>Import zip</HostUi>
 			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: 'plus', onclick: () => openNewDialog(null) }}>New Preset</HostUi>
 		</div>
 		{#if catalogError}

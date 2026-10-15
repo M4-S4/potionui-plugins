@@ -5,10 +5,19 @@ copy of an existing one (a skeleton comes later), lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: in development (phase 5).** Drafts from a copy or from a blank skeleton, a text
-editor for every YAML and Markdown file of a draft, a form for `preset.yml`, the cover and
-gallery media, builders for forms and pipelines, publishing, the version history and
-deleting work; zip export and import come with the next phase.
+**Status: in development (phase 6).** Drafts from a copy, a blank skeleton or a zip
+archive, a text editor for every YAML and Markdown file of a draft, a form for
+`preset.yml`, the cover and gallery media, builders for forms and pipelines, publishing, zip
+export, the version history and deleting work; the last phase finishes the documentation.
+
+## Getting started
+
+Put the plugin folder under `content/plugins/local/preset-editor/` (or install it from the
+marketplace), then Admin → Plugins → Scan and Enable. Two things appear for admins only: a
+**Preset Editor** entry in the sidebar (the page `/plugins/preset-editor`) and, in the header
+of Admin → Presets, the buttons **New Preset** and **Edit…**. The plugin needs no setting to
+work and keeps no database table: drafts and the history are folders under
+`storage/plugins/preset-editor/`.
 
 ## What you can do
 
@@ -50,6 +59,11 @@ deleting work; zip export and import come with the next phase.
   text, and two start chains (a native family, cloud). Once the preset is published, the
   form preview can render the pipeline with the form's current values through PotionUI's
   own pipeline builder, which needs every value the pipeline reads, models included.
+- **Download zip** on a draft, and the `zip` link of each local preset in the Edit… menu,
+  give the folder as an archive. **Import zip** turns such an archive, or any zipped preset
+  folder with `preset.yml` at its root, into a draft: every entry is checked before
+  anything is written (no path escape, no link, caps on size and count, allowed extensions
+  only), then the draft is linted.
 - A draft shows its lint report; **Publish** needs a report without errors, writes the preset
   atomically, reloads the catalogue and checks that PotionUI loads it. When the loader
   refuses the preset (the linter does not check everything, field types for one), the
@@ -60,6 +74,23 @@ deleting work; zip export and import come with the next phase.
 - **History** lists the versions kept when a local preset was published over or deleted;
   **Restore** opens one as a draft. **Delete** uninstalls a local preset and moves its folder
   to the history.
+
+## Limits worth knowing
+
+- The form and pipeline builders rewrite the whole file they save: comments and the
+  original formatting go away (the YAML view keeps them, and the `preset.yml` form rewrites
+  only the sections you change). Every attribute a builder does not show is kept as raw YAML.
+- The form preview and the rendered pipeline exist only for a published version, and the
+  pipeline renders only when every form value it reads is filled in, models included.
+- Media uploads are capped at 20 MB and limited to PotionUI's own extensions (`.jpg`,
+  `.jpeg`, `.png`, `.webp`, `.gif`, `.mp4`, `.webm`; no SVG). Images become 1024 px WebP.
+- A zip import is unpacked only after every entry passed the checks (64 MB archive, 256 MB
+  unpacked, 2000 entries, no link, no path escape, text and media files only).
+- The linter does not check field types: a preset that lints clean but uses a `type:` the
+  loader refuses is rolled back at publish time, with the loader's messages.
+- Preset ids are generated like PotionUI's own (ULID) unless you set one; a published id
+  must be free across every scanned root, marketplace included, because the loader keeps
+  the first preset it finds for an id.
 
 ## Where things live
 
