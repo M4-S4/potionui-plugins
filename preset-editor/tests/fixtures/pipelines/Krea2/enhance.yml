@@ -1,0 +1,114 @@
+pipeline:
+  - name: "model_loader/krea2"
+    enabled: true
+    configuration:
+      diffusion_model:
+        file_path: "{{ form.diffusion_model }}"
+        name: "{{ form.diffusion_model }}"
+      text_encoder:
+        file_path: "{{ form.text_encoder }}"
+        name: "{{ form.text_encoder }}"
+      vae:
+        file_path: "{{ form.vae }}"
+        name: "{{ form.vae }}"
+      loras:
+        "@loop":
+          items: "{{ form.loras }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+            step_start: "{{ item.step_start | default(none) }}"
+            step_end: "{{ item.step_end | default(none) }}"
+
+  - name: "media_loader"
+    id: "media_loader"
+    enabled: true
+    configuration:
+      media:
+        - type: "image"
+          path: "{{ form.source_image }}"
+
+  - name: "prompt_encoder"
+    input:
+      - ["text_encoder", "model_loader/krea2", "text_encoder"]
+    enabled: true
+    configuration:
+      p_prompt:
+        input: "{{ generation.prompts.first.positive }}"
+        output: "{{ generation.prompts.first.positive }}"
+      n_prompt:
+        input: "{{ generation.prompts.first.negative }}"
+        output: "{{ generation.prompts.first.negative }}"
+      pairs: "{{ generation.prompts.pairs }}"
+      quantity: "{{ form.quantity }}"
+      guidance_scale: "{{ form.cfg }}"
+      nag_scale: "{{ form.nag_scale if form.nag_enabled else 1.0 }}"
+      negative_applied: "{{ generation.negative_applied }}"
+
+  - name: "seed_generator"
+    enabled: true
+    configuration:
+      seed: "{{ form.seed }}"
+      quantity: "{{ form.quantity }}"
+
+  - name: "dynamic_prompts_renderer"
+    id: "dynamic_prompts_renderer"
+    enabled: true
+    configuration:
+      pairs: "{{ generation.prompts.pairs }}"
+      quantity: "{{ form.quantity }}"
+
+  - name: "from_iotype"
+    id: "from_iotype"
+    enabled: true
+    input:
+      - ["seed", "seed_generator", "seed"]
+    configuration:
+      from: "seed"
+
+  - name: "param_emitter"
+    id: "param_emitter"
+    enabled: true
+    input:
+      - ["seed", "from_iotype", "seed"]
+    configuration:
+      quantity: "{{ form.quantity }}"
+      parameters:
+        - ["model", "{{ form.diffusion_model }}"]
+        - ["model", "{{ form.text_encoder }}"]
+        - ["model", "{{ form.vae }}"]
+        - "@loop":
+            items: "{{ form.loras | active_loras }}"
+            template: ["model", "{{ item.model }}"]
+        - ["positive_prompt", "{{ generation.prompts.positives }}"]
+        - ["negative_prompt", "{{ generation.prompts.negatives }}"]
+        - ["cfg", "{{ form.cfg }}"]
+        - ["upscale_by", "{{ form.upscale_by }}"]
+        - ["detail_change", "{{ form.detail_change | default('balanced') }}"]
+        - ["denoise", 1.0]
+
+  - name: "generator/krea2"
+    input:
+      - ["model", "model_loader/krea2", "model"]
+      - ["conditioning", "prompt_encoder", "conditioning"]
+      - ["seed", "seed_generator", "seed"]
+      - ["image", "media_loader", "image"]
+    enabled: true
+    configuration:
+      mode: "img2img"
+      refine_tail: "{{ form.detail_change | default('balanced') }}"
+      denoise: 1.0
+      steps: 8
+      guidance: "{{ form.cfg }}"
+      sampler: "euler"
+      img2img_scale: "{{ 1.5 if (form.upscale_by) == '1_5x' else (4.0 if (form.upscale_by) == '4x' else 2.0) }}"
+      quantity: "{{ form.quantity }}"
+      nag_scale: "{{ form.nag_scale if form.nag_enabled else 1.0 }}"
+      nag_tau: "{{ form.nag_tau }}"
+      nag_alpha: "{{ form.nag_alpha }}"
+
+  - name: "gallery"
+    input:
+      - ["image", "generator/krea2", "image"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: true

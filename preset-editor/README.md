@@ -5,10 +5,10 @@ copy of an existing one (a skeleton comes later), lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: in development (phase 4).** Drafts from a copy or from a blank skeleton, a text
+**Status: in development (phase 5).** Drafts from a copy or from a blank skeleton, a text
 editor for every YAML and Markdown file of a draft, a form for `preset.yml`, the cover and
-gallery media, a builder for forms, publishing, the version history and deleting work; the
-pipeline builder comes with the next phase.
+gallery media, builders for forms and pipelines, publishing, the version history and
+deleting work; zip export and import come with the next phase.
 
 ## What you can do
 
@@ -43,6 +43,13 @@ pipeline builder comes with the next phase.
   (label, description, examples, default variant, order, `negative_prompt`) and new variants
   (`variants/<name>/form.yml`) are edited there too. Saving rewrites the whole file, so its
   comments go away; the YAML view keeps them.
+- `pipeline.yml` opens in a builder too: the ordered pipe list, the pipe catalogue of this
+  instance, inputs as `[input, source pipe, output]` triples checked against the catalogue
+  (a source must come earlier in the list, its output must exist and match the input's
+  type), each pipe's declared configuration keys with their choices, Jinja values kept as
+  text, and two start chains (a native family, cloud). Once the preset is published, the
+  form preview can render the pipeline with the form's current values through PotionUI's
+  own pipeline builder, which needs every value the pipeline reads, models included.
 - A draft shows its lint report; **Publish** needs a report without errors, writes the preset
   atomically, reloads the catalogue and checks that PotionUI loads it. When the loader
   refuses the preset (the linter does not check everything, field types for one), the

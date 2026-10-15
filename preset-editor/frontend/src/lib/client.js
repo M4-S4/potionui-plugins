@@ -243,6 +243,10 @@ export function fieldTypes(api) {
 	return callCore(api, '/api/fields/types');
 }
 
+export function renderPipes(api, presetId, mode, formData) {
+	return callCore(api, `/api/presets/${segment(presetId)}/pipes?mode=${segment(mode)}`, { method: 'POST', body: { form_data: formData ?? {} } });
+}
+
 export function deleteDraft(api, draftId) {
 	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}`);
 }

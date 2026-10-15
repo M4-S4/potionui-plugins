@@ -1,0 +1,4 @@
+pipeline:
+  - name: "gallery"
+    id: "gallery"
+    enabled: true

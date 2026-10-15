@@ -1,0 +1,223 @@
+pipeline:
+  - name: "model_loader/krea2"
+    enabled: true
+    configuration:
+      diffusion_model:
+        file_path: "{{ form.diffusion_model }}"
+        name: "{{ form.diffusion_model }}"
+      text_encoder:
+        file_path: "{{ form.text_encoder }}"
+        name: "{{ form.text_encoder }}"
+      vae:
+        file_path: "{{ form.vae }}"
+        name: "{{ form.vae }}"
+      loras:
+        "@loop":
+          items: "{{ form.loras }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+            step_start: "{{ item.step_start | default(none) }}"
+            step_end: "{{ item.step_end | default(none) }}"
+
+  - name: "prompt_encoder"
+    input:
+      - ["text_encoder", "model_loader/krea2", "text_encoder"]
+    enabled: true
+    configuration:
+      p_prompt:
+        input: "{{ generation.prompts.first.positive }}"
+        output: "{{ generation.prompts.first.positive }}"
+      n_prompt:
+        input: "{{ generation.prompts.first.negative }}"
+        output: "{{ generation.prompts.first.negative }}"
+      pairs: "{{ generation.prompts.pairs }}"
+      quantity: "{{ form.quantity }}"
+      guidance_scale: "{{ form.cfg | default(generation.profile.guidance) }}"
+      nag_scale: "{{ form.nag_scale if form.nag_enabled else 1.0 }}"
+      negative_applied: "{{ generation.negative_applied }}"
+
+  - name: "seed_generator"
+    enabled: true
+    configuration:
+      seed: "{{ form.seed }}"
+      quantity: "{{ form.quantity }}"
+
+  - name: "dynamic_prompts_renderer"
+    id: "dynamic_prompts_renderer"
+    enabled: true
+    configuration:
+      pairs: "{{ generation.prompts.pairs }}"
+      quantity: "{{ form.quantity }}"
+
+  - name: "from_iotype"
+    id: "from_iotype"
+    enabled: true
+    input:
+      - ["seed", "seed_generator", "seed"]
+    configuration:
+      from: "seed"
+
+  - name: "param_emitter"
+    id: "param_emitter"
+    enabled: true
+    input:
+      - ["seed", "from_iotype", "seed"]
+    configuration:
+      quantity: "{{ form.quantity }}"
+      passes: "{{ 1 + (1 if form.enhance_enabled and form.enhance_keep_base else 0) + (1 if form.face_detailer_enabled and form.face_detailer_keep_base else 0) }}"
+      parameters:
+        - ["model", "{{ form.diffusion_model }}"]
+        - ["model", "{{ form.text_encoder }}"]
+        - ["model", "{{ form.vae }}"]
+        - "@loop":
+            items: "{{ form.loras | active_loras }}"
+            template: ["model", "{{ item.model }}"]
+        - ["positive_prompt", "{{ generation.prompts.positives }}"]
+        - ["negative_prompt", "{{ generation.prompts.negatives }}"]
+        - ["cfg", "{{ form.cfg | default(generation.profile.guidance) }}"]
+        - ["steps", "{{ form.steps | default(generation.profile.steps) }}"]
+        - ["sampler", "{{ form.sampler | default(generation.profile.sampler) }}"]
+        - ["schedule", "{{ form.schedule }}"]
+        - ["resolution", "{{ form.resolution }}"]
+        - ["enhance", "{{ form.enhance_enabled }}"]
+        - "@loop":
+            items: ["{{ form.enhance_detail }}"]
+            when: "{{ form.enhance_enabled }}"
+            template: ["enhance_detail", "{{ item }}"]
+        - "@loop":
+            items: ["{{ form.upscale_by }}"]
+            when: "{{ form.enhance_enabled }}"
+            template: ["upscale_by", "{{ item }}"]
+
+  - name: "generator/krea2"
+    id: "generator"
+    input:
+      - ["model", "model_loader/krea2", "model"]
+      - ["conditioning", "prompt_encoder", "conditioning"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: true
+    configuration:
+      steps: "{{ form.steps | default(generation.profile.steps) }}"
+      guidance: "{{ form.cfg | default(generation.profile.guidance) }}"
+      mu_schedule: "{{ 'dynamic' if (form.speed_profile) == 'base' else 'fixed' }}"
+      sampler: "{{ form.sampler | default(generation.profile.sampler) }}"
+      schedule: "{{ form.schedule }}"
+      resolution: "{{ form.resolution }}"
+      quantity: "{{ form.quantity }}"
+      nag_scale: "{{ form.nag_scale if form.nag_enabled else 1.0 }}"
+      nag_tau: "{{ form.nag_tau }}"
+      nag_alpha: "{{ form.nag_alpha }}"
+      step_cache:
+        rel_threshold: "{{ form.step_cache_threshold }}"
+        warmup_steps: "{{ form.step_cache_warmup_steps }}"
+        max_consecutive_skips: "{{ form.step_cache_max_skips }}"
+
+  - name: "generator/krea2"
+    id: "enhancer"
+    enabled: "{{ form.enhance_enabled }}"
+    input:
+      - ["model", "model_loader/krea2", "model"]
+      - ["conditioning", "prompt_encoder", "conditioning"]
+      - ["seed", "seed_generator", "seed"]
+      - ["image", "generator", "image"]
+    configuration:
+      mode: "img2img"
+      refine_tail: "{{ form.enhance_detail }}"
+      denoise: 1.0
+      steps: 8
+      guidance: "{{ form.cfg | default(generation.profile.guidance) }}"
+      sampler: "euler"
+      img2img_scale: "{{ 1.5 if (form.upscale_by) == '1_5x' else (4.0 if (form.upscale_by) == '4x' else 2.0) }}"
+      quantity: "{{ form.quantity }}"
+      nag_scale: "{{ form.nag_scale if form.nag_enabled else 1.0 }}"
+      nag_tau: "{{ form.nag_tau }}"
+      nag_alpha: "{{ form.nag_alpha }}"
+
+  - name: "artifact"
+    id: "compare_enhance"
+    enabled: "{{ form.enhance_enabled }}"
+    input:
+      - ["before_image", "generator", "image"]
+      - ["after_image", "enhancer", "image"]
+    configuration:
+      mode: "compare"
+      left: "Base"
+      right: "Enhanced"
+      output: "right"
+
+  - name: "detailer/native"
+    id: "face_detailer"
+    enabled: "{{ form.face_detailer_enabled }}"
+    input:
+      - ["model", "model_loader/krea2", "model"]
+      - ["conditioning", "prompt_encoder", "conditioning"]
+      - ["seed", "seed_generator", "seed"]
+      - ["image", "{% if form.enhance_enabled %}compare_enhance{% else %}generator{% endif %}", "image"]
+    configuration:
+      denoise: "{{ form.face_detailer_denoise }}"
+      steps: "{{ form.face_detailer_steps }}"
+      guidance: "{{ form.cfg | default(generation.profile.guidance) }}"
+      sampler: "{{ form.sampler | default(generation.profile.sampler) }}"
+      crop_padding: "{{ form.face_detailer_crop_padding }}"
+      crop_size: "{{ form.face_detailer_crop_size }}"
+      max_faces: "{{ form.face_detailer_max_faces }}"
+      min_face_ratio: "{{ form.face_detailer_min_face_ratio }}"
+      max_face_ratio: "{{ form.face_detailer_max_face_ratio }}"
+      feather: "{{ form.face_detailer_feather }}"
+      mask_mode: "{{ form.face_detailer_mask_mode }}"
+      mask_dilate: "{{ form.face_detailer_mask_dilate }}"
+      latent_mask: "{{ form.face_detailer_latent_mask }}"
+      colour_match: "{{ form.face_detailer_colour_match }}"
+      overlay: "{{ form.face_detailer_overlay }}"
+      loras_mode: "{{ form.face_detailer_loras }}"
+      loras:
+        "@loop":
+          items: "{{ form.face_detailer_lora_picker }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+      run_loras:
+        "@loop":
+          items: "{{ form.loras }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+            step_start: "{{ item.step_start | default(none) }}"
+            step_end: "{{ item.step_end | default(none) }}"
+      detection_backend: "{{ form.face_detailer_backend }}"
+      face_model: "{{ form.face_detailer_mediapipe_model }}"
+      yolo_model: "{{ form.face_detailer_yolo_model }}"
+
+  - name: "artifact"
+    id: "compare_faces"
+    enabled: "{{ form.face_detailer_enabled }}"
+    input:
+      - ["before_image", "{% if form.enhance_enabled %}compare_enhance{% else %}generator{% endif %}", "image"]
+      - ["after_image", "face_detailer", "image"]
+    configuration:
+      mode: "compare"
+      left: "Base"
+      right: "Faces"
+      output: "right"
+
+  - name: "gallery"
+    id: "gallery"
+    input:
+      - ["image", "{% if form.face_detailer_enabled %}compare_faces{% elif form.enhance_enabled %}compare_enhance{% else %}generator{% endif %}", "image"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: true
+
+  - name: "gallery"
+    id: "gallery_before_enhance"
+    input:
+      - ["image", "generator", "image"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: "{{ form.enhance_enabled and form.enhance_keep_base }}"
+
+  - name: "gallery"
+    id: "gallery_before_faces"
+    input:
+      - ["image", "{% if form.enhance_enabled %}compare_enhance{% else %}generator{% endif %}", "image"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: "{{ form.face_detailer_enabled and form.face_detailer_keep_base }}"

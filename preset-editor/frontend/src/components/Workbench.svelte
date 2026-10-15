@@ -8,10 +8,11 @@
 	import ManifestEditor from './ManifestEditor.svelte';
 	import MediaEditor from './MediaEditor.svelte';
 	import Pill from './Pill.svelte';
+	import PipelineBuilder from './PipelineBuilder.svelte';
 	import PreviewPanel from './PreviewPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import { adminPresetUrl } from '../lib/catalog.js';
-	import { addMode, deleteDraft, fieldTypes, getDraft, lintDraft, publishDraft, removeMode, sharedReference } from '../lib/client.js';
+	import { addMode, deleteDraft, fieldTypes, getDraft, lintDraft, pipesReference, publishDraft, removeMode, sharedReference } from '../lib/client.js';
 	import { MODE_RE, canPublish, describeSource, formatTimestamp } from '../lib/drafts.js';
 	import { fileKind, isEditable, isMedia, modeOf } from '../lib/files.js';
 	import { confirm, toast } from '../lib/dom.js';
@@ -28,6 +29,7 @@
 	let manifestView = $state('form');
 	let fileView = $state('builder');
 	let types = $state.raw([]);
+	let pipes = $state.raw([]);
 	let busy = $state('');
 	let install = $state(true);
 	let published = $state.raw(null);
@@ -40,14 +42,15 @@
 	const modes = $derived([...new Set(files.map((file) => modeOf(file.path)).filter(Boolean))]);
 	const mediaFiles = $derived(files.filter((file) => isMedia(file.path)));
 	const selectedKind = $derived(selected ? fileKind(selected) : '');
-	const buildable = $derived(selectedKind === 'form' || selectedKind === 'tab');
+	const buildable = $derived(selectedKind === 'form' || selectedKind === 'tab' || selectedKind === 'pipeline');
 	const ready = $derived(canPublish(draft.last_lint) && !busy && !dirty);
 	const modeProblem = $derived(newMode && !MODE_RE.test(newMode.trim()) ? 'lowercase letters, digits and _' : modes.includes(newMode.trim()) ? 'already there' : '');
 
 	onMount(async () => {
-		const [shared, fields] = await Promise.all([sharedReference(api), fieldTypes(api)]);
+		const [shared, fields, reference] = await Promise.all([sharedReference(api), fieldTypes(api), pipesReference(api)]);
 		if (shared.ok) sharedFiles = shared.data.files ?? [];
 		if (fields.ok && Array.isArray(fields.data)) types = fields.data;
+		if (reference.ok && Array.isArray(reference.data?.pipes)) pipes = reference.data.pipes;
 	});
 
 	$effect(() => {
@@ -233,7 +236,9 @@
 					{/each}
 				</div>
 				{#key selected}
-					{#if fileView === 'builder'}
+					{#if fileView === 'builder' && selectedKind === 'pipeline'}
+						<PipelineBuilder {api} draftId={draft.draft_id} path={selected} reference={pipes} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onOpenYaml={() => showFileView('yaml')} />
+					{:else if fileView === 'builder'}
 						<FormBuilder {api} draftId={draft.draft_id} path={selected} {types} {sharedFiles} {mediaFiles} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onOpenYaml={() => showFileView('yaml')} onOpenFile={select} onFilesChanged={refresh} />
 					{:else}
 						<TextEditor {api} draftId={draft.draft_id} path={selected} {sharedFiles} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onDeleted={(data) => updated({ files: data.files, lint: data.lint })} />
@@ -288,5 +293,5 @@
 		<ActionButton variant="ghost" icon="trash" loading={busy === 'discard'} disabled={!!busy} onclick={discard}>Discard draft</ActionButton>
 	</div>
 
-	<PreviewPanel presetId={draft.preset_id} {modes} publishedAt={draft.published_at} />
+	<PreviewPanel {api} presetId={draft.preset_id} {modes} publishedAt={draft.published_at} />
 </div>
