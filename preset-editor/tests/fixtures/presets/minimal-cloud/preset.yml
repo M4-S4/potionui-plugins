@@ -1,0 +1,21 @@
+schema: 1
+id: "fixture-minimal-cloud"
+name: "Minimal cloud"
+category: "image"
+version: "1.0.0"
+engine: "cloud"
+driver: "cloud.openrouter"
+tags: []
+
+vars:
+  default_steps: 30
+
+formulas:
+  groups:
+    size:     { label: "Size" }
+    output:   { label: "Output format" }
+    provider: { label: "Provider options" }
+    models:   { label: "Models", preselect: false }
+
+modes:
+  - txt2img

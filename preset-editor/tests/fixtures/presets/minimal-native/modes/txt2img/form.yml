@@ -1,0 +1,8 @@
+name: "default"
+short_description: "Generate an image from a text prompt."
+fields:
+  - type: "tabs"
+    children:
+      - type: "tab"
+        label: "Main"
+        children: "{{ paths.preset }}/modes/txt2img/tabs/main.yml"

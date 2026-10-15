@@ -1,0 +1,54 @@
+id: "preset-editor"
+name: "Preset Editor"
+version: "0.1.0"
+description: "Create, edit, validate and publish presets without leaving PotionUI"
+author: "M4-S4"
+license: "GPL-3.0"
+type: "full-stack"
+category: "tools"
+
+api:
+  module: "backend/api.py"
+
+hooks:
+  backend:
+    - hook: "plugin.lifecycle.boot"
+      handler: "hooks.lifecycle_hooks.on_boot"
+
+pages:
+  - route: "preset-editor"
+    component: "PresetEditorPage.js"
+    label: "Preset Editor"
+sidebar:
+  - label: "Preset Editor"
+    route: "preset-editor"
+    icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+    order: 80
+    require_role: "ADMIN"
+
+contributions:
+  - slot: "admin.presets.header-actions"
+    component: "PresetsHeaderActions.js"
+    label: "Preset Editor"
+    order: 10
+    require_role: "ADMIN"
+
+docs:
+  - path: "README.md"
+    title: "Preset Editor"
+    audience: "admin"
+
+settings:
+  - name: "history_depth"
+    type: "number"
+    label: "Versions kept per preset"
+    description: "Previous versions of a published preset kept under storage/plugins/preset-editor/history"
+    default: 10
+  - name: "install_after_publish"
+    type: "boolean"
+    label: "Install a published preset on this instance"
+    default: true
+  - name: "storage_notice"
+    type: "info"
+    label: "Published presets live in content/presets/local"
+    description: "Mount that folder as a volume in Docker; the core backup includes it. Drafts and history live under storage/plugins/preset-editor and are not backed up."

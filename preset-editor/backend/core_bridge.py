@@ -1,0 +1,42 @@
+import asyncio
+from pathlib import Path
+from typing import List, Tuple
+
+from src.plugin_api import get_container
+from src.plugin_api.presets import lint_preset_dir
+
+
+def preset_loader():
+    return get_container().preset_template_loader
+
+
+def file_repository():
+    return get_container().file_preset_repository
+
+
+def collaborators():
+    return get_container().preset_collaborators
+
+
+def preset_roots() -> List[Path]:
+    return [Path(root) for root in preset_loader().all_preset_roots()]
+
+
+def find_preset(preset_id: str):
+    return file_repository().find_preset_by_id(preset_id)
+
+
+def reload_presets() -> None:
+    preset_loader().reload()
+
+
+def lint(path: Path) -> Tuple[List[str], List[str]]:
+    return lint_preset_dir(str(path))
+
+
+async def reload_presets_async() -> None:
+    await asyncio.to_thread(reload_presets)
+
+
+async def lint_async(path: Path) -> Tuple[List[str], List[str]]:
+    return await asyncio.to_thread(lint, path)

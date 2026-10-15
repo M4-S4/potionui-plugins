@@ -1,0 +1,16 @@
+schema: 1
+id: "fixture-minimal-native"
+name: "Minimal native"
+category: "image"
+version: "1.0.0"
+engine: "native"
+tags: []
+
+vars:
+  default_steps: 30
+
+formulas:
+  groups: {}
+
+modes:
+  - txt2img
