@@ -201,16 +201,17 @@ def test_find_model_by_path_asks_for_the_admin_payload_and_hands_on_only_the_mod
 
 def test_find_model_by_id_reads_the_model_at_its_file(monkeypatch, core_bridge):
     payload = _admin_payload()
-    resolve = _replace(monkeypatch, core_bridge.api_models, "resolve_model_file", lambda model_id: Path(_PATH))
+    file = Path(_PATH)
+    resolve = _replace(monkeypatch, core_bridge.api_models, "resolve_model_file", lambda model_id: file)
     lookup = _replace(
-        monkeypatch, core_bridge.api_models, "model_for_path", lambda path, admin=False: payload if path == _PATH else None
+        monkeypatch, core_bridge.api_models, "model_for_path", lambda path, admin=False: payload if path == str(file) else None
     )
 
     found = core_bridge.find_model_by_id("model-1")
 
     _assert_trimmed(found, payload)
     assert resolve.calls == [{"model_id": "model-1"}]
-    assert lookup.calls == [{"path": _PATH, "admin": True}]
+    assert lookup.calls == [{"path": str(file), "admin": True}]
 
 
 @pytest.mark.parametrize(
