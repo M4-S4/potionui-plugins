@@ -71,7 +71,6 @@ RULES = [
      f'"{NEW_ID}:") and len(first) == len("{NEW_ID}:")', 1),
     ("tests/test_downloads.py", r'limit_ref_id\.startswith\("model-browser:"\)', f'limit_ref_id.startswith("{NEW_ID}:")', 1),
     ("frontend/src/PermissionsTab.svelte", r"pluginId = 'model-browser'", f"pluginId = '{NEW_ID}'", 1),
-    ("frontend/src/lib/permissions.js", r"pluginId = 'model-browser'", f"pluginId = '{NEW_ID}'", 1),
     ("README.md", r"\A# Model Browser\n", f"# {NEW_NAME}\n", 1),
     ("README.md", r"/plugins/model-browser(?![-\w])", f"/plugins/{NEW_ID}", 2),
     ("manifest.yml", r'route: "model-browser"$', f'route: "{NEW_ID}"', 2),
