@@ -113,6 +113,43 @@ def delete_file(draft_dir: Path, value: str) -> Dict[str, Any]:
     return {"path": str(relative)}
 
 
+def top_level_block_span(text: str, key: str):
+    match = re.search(rf"^{re.escape(key)}:(?:[ \t][^\n]*)?$", text, re.MULTILINE)
+    if not match:
+        return None
+    end = len(text)
+    following = re.compile(r"^(?=[^\s#-])", re.MULTILINE)
+    for candidate in following.finditer(text, match.end()):
+        end = candidate.start()
+        break
+    floor = match.end()
+    while end > floor:
+        previous = text.rfind("\n", 0, end - 1) + 1
+        line = text[previous:end].rstrip("\n")
+        if line.strip() and not line.startswith("#"):
+            break
+        end = previous
+    return match.start(), end
+
+
+def replace_top_level_block(text: str, key: str, block: Optional[str]) -> str:
+    span = top_level_block_span(text, key)
+    if span is None:
+        if block is None:
+            return text
+        if text and not text.endswith("\n"):
+            text += "\n"
+        return text + block + "\n"
+    start, end = span
+    before = text[:start]
+    after = text[end:]
+    if block is None:
+        if after.startswith("\n") and before.endswith("\n"):
+            after = after[1:]
+        return before + after
+    return before + block + "\n" + after
+
+
 def check_mode_name(value: str) -> str:
     if not isinstance(value, str) or not MODE_NAME_RE.match(value):
         raise FilesError("invalid_request", "a mode name is lowercase letters, digits and '_', starting with a letter")

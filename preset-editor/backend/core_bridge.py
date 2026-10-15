@@ -1,9 +1,13 @@
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from src.plugin_api import User, get_container
+from fastapi import Request
+
+from src.plugin_api import User, authenticate_websocket_token, get_container
 from src.plugin_api.presets import lint_preset_dir, preset_operations
+
+MEDIA_COOKIE = "potionui_media"
 
 
 def preset_loader():
@@ -61,3 +65,21 @@ async def reload_presets_async() -> None:
 
 async def lint_async(path: Path) -> Tuple[List[str], List[str]]:
     return await asyncio.to_thread(lint, path)
+
+
+def media_token(request: Request) -> Optional[str]:
+    header = request.headers.get("authorization", "")
+    if header.lower().startswith("bearer ") and header[7:].strip():
+        return header[7:].strip()
+    for name, value in request.cookies.items():
+        if value and (name == MEDIA_COOKIE or name.startswith(f"{MEDIA_COOKIE}_")):
+            return value
+    return None
+
+
+async def media_viewer(request: Request) -> Optional[User]:
+    token = media_token(request)
+    if not token:
+        return None
+    user, _error = await asyncio.to_thread(authenticate_websocket_token, token)
+    return user

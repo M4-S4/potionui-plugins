@@ -4,6 +4,7 @@ from typing import Annotated, Any, List, Literal, Optional
 from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_validator
 
 from . import files, paths
+from .media import MAX_CAPTION_LENGTH, MAX_GALLERY_ITEMS
 from .scaffold import CATEGORIES, CLOUD_MODES, FamilyPipes
 
 MAX_NAME_LENGTH = 120
@@ -164,3 +165,26 @@ class FileWrite(BaseModel):
 
 class PublishRequest(BaseModel):
     install: Optional[bool] = None
+
+
+class GalleryItemIn(BaseModel):
+    src: Stripped = Field(min_length=1, max_length=256)
+    caption: OptionalStripped = Field(None, max_length=MAX_CAPTION_LENGTH)
+    prompt: OptionalStripped = Field(None, max_length=4000)
+    seed: Optional[int] = Field(None, ge=0)
+    mode: OptionalStripped = Field(None, max_length=40)
+
+    @field_validator("mode")
+    @classmethod
+    def _mode(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            try:
+                files.check_mode_name(value)
+            except files.FilesError as failure:
+                raise ValueError(failure.message) from failure
+        return value
+
+
+class MediaUpdate(BaseModel):
+    cover: OptionalStripped = Field(None, max_length=256)
+    gallery: Optional[List[GalleryItemIn]] = Field(None, max_length=MAX_GALLERY_ITEMS)

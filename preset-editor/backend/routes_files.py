@@ -19,6 +19,7 @@ STATUS_BY_CODE = {
     "invalid_path": 400,
     "invalid_request": 400,
     "not_text": 400,
+    "not_media": 400,
     "too_large": 413,
     "not_found": 404,
     "precondition_required": 428,

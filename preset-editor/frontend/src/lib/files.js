@@ -49,7 +49,7 @@ export function buildTree(files) {
 			let child = node.children.find((entry) => entry.name === part);
 			if (!child) {
 				child = index === parts.length - 1
-					? { name: part, path, kind: 'file', size: file.size ?? 0, fileKind: fileKind(path), editable: isEditable(path) }
+					? { name: part, path, kind: 'file', size: file.size ?? 0, fileKind: fileKind(path), editable: isEditable(path), media: isMedia(path) }
 					: { name: part, path, kind: 'dir', children: [] };
 				node.children.push(child);
 			}

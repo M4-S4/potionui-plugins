@@ -2,7 +2,7 @@ export function toast(level, message) {
 	window.__potionui?.notifications?.toast?.(level, message);
 }
 
-export async function confirm({ title, message, variant = 'primary' }) {
+export async function confirm({ title, message, variant = 'warning' }) {
 	const hostConfirm = window.__potionui?.confirm;
 	if (typeof hostConfirm === 'function') return !!(await hostConfirm({ title, message, variant }));
 	return window.confirm(title ? `${title}\n\n${message}` : message);

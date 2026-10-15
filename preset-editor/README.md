@@ -5,10 +5,10 @@ copy of an existing one (a skeleton comes later), lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: in development (phase 2).** Drafts from a copy or from a blank skeleton, a text
-editor for every YAML and Markdown file of a draft, publishing, the version history and
-deleting work; the structured editors (manifest, media, form and pipeline builders) come
-with the next phases.
+**Status: in development (phase 3).** Drafts from a copy or from a blank skeleton, a text
+editor for every YAML and Markdown file of a draft, a form for `preset.yml`, the cover and
+gallery media, publishing, the version history and deleting work; the form and pipeline
+builders come with the next phases.
 
 ## What you can do
 
@@ -24,6 +24,17 @@ with the next phases.
   editor with line numbers, insertable fragments (a `_shared` options file, the standard
   native chain, a `@loop` block, the cloud chain, a field) and a save that refuses to
   overwrite a file changed elsewhere. Modes are added from the skeleton or removed.
+- `preset.yml` opens as a form: name, version, category, engine, driver and tags as fields,
+  the advanced sections (`vars`, `configuration`, `llm`, `speed_profiles`, `formulas`,
+  `requires`, `requirements`, `prompt_resources`, `prompt_syntax`, `negative_prompt`) as
+  YAML, `id` and `schema` read-only. Saving rewrites only the keys you changed, keeps the
+  rest of the file as it is, and asks before dropping a comment inside a rewritten section.
+  The YAML view edits the whole file.
+- The Media view uploads the cover and the gallery examples (images are downscaled to
+  1024 px WebP as PotionUI does for style previews, videos are stored as they are), declares
+  them in `media:` with a caption, a mode, a seed and a prompt, reorders the gallery, picks a
+  cover among the files already there and deletes files. `description.md` has a Markdown
+  preview that shows the images under `public/`.
 - A draft shows its lint report; **Publish** needs a report without errors, writes the preset
   atomically, reloads the catalogue and checks that PotionUI loads it. When the loader
   refuses the preset (the linter does not check everything, field types for one), the

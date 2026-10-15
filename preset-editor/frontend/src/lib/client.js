@@ -122,12 +122,14 @@ export async function callPlugin(api, method, path, body) {
 	return unwrap(payload);
 }
 
-export async function callCore(api, path, { method = 'GET', body, headers: extra = {} } = {}) {
+export async function callCore(api, path, { method = 'GET', body, form, headers: extra = {} } = {}) {
 	const token = typeof api?.getToken === 'function' ? api.getToken() : null;
 	const headers = { Accept: 'application/json', ...extra };
 	if (token) headers.Authorization = `Bearer ${token}`;
 	const init = { method, headers, credentials: 'include', cache: 'no-store' };
-	if (body !== undefined) {
+	if (form !== undefined) {
+		init.body = form;
+	} else if (body !== undefined) {
 		headers['Content-Type'] = 'application/json';
 		init.body = JSON.stringify(body);
 	}
@@ -202,6 +204,31 @@ export function addMode(api, draftId, body) {
 
 export function removeMode(api, draftId, mode) {
 	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/modes/${segment(mode)}`);
+}
+
+export function mediaUrl(draftId, path) {
+	return `${PLUGIN_PREFIX}/drafts/${segment(draftId)}/public/${filePath(path)}`;
+}
+
+export function listMedia(api, draftId) {
+	return callPlugin(api, 'get', `/drafts/${segment(draftId)}/media`);
+}
+
+export function uploadMedia(api, draftId, file, { role = 'gallery', caption = '', mode = '' } = {}) {
+	const form = new FormData();
+	form.append('file', file, file.name);
+	form.append('role', role);
+	if (caption) form.append('caption', caption);
+	if (mode) form.append('mode', mode);
+	return callCore(api, `${PLUGIN_PREFIX}/drafts/${segment(draftId)}/media`, { method: 'POST', form });
+}
+
+export function updateMedia(api, draftId, body) {
+	return callCore(api, `${PLUGIN_PREFIX}/drafts/${segment(draftId)}/media`, { method: 'PUT', body });
+}
+
+export function deleteMedia(api, draftId, path) {
+	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/media/${filePath(path)}`);
 }
 
 export function sharedReference(api) {

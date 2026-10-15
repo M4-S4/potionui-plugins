@@ -6,8 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.plugin_api import AccountType, User
+
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = PLUGIN_ROOT / "tests" / "fixtures" / "presets"
+ADMIN_VIEWER = User(id="admin-1", username="admin", email="admin@test.com", password_hash="x", account_type=AccountType.ADMIN)
 
 for _key in list(sys.modules):
     if _key.split(".", 1)[0] in ("backend", "hooks"):
@@ -80,6 +83,7 @@ def core(monkeypatch, roots, marketplace):
         installs=[],
         uninstalls=[],
         settings={"history_depth": 10, "install_after_publish": True},
+        viewer=ADMIN_VIEWER,
     )
 
     def catalog():
@@ -113,6 +117,9 @@ def core(monkeypatch, roots, marketplace):
         state.reloads += 1
         rescan_local()
 
+    async def media_viewer(request):
+        return state.viewer
+
     def install_preset(preset_id, user):
         state.installs.append((preset_id, user.id))
         state.installed.add(preset_id)
@@ -128,6 +135,7 @@ def core(monkeypatch, roots, marketplace):
     monkeypatch.setattr(core_bridge, "preset_roots", lambda: [marketplace, roots.local_presets])
     monkeypatch.setattr(core_bridge, "lint_async", lint_async)
     monkeypatch.setattr(core_bridge, "reload_presets_async", reload_presets_async)
+    monkeypatch.setattr(core_bridge, "media_viewer", media_viewer)
     monkeypatch.setattr(core_bridge, "load_errors", lambda: {Path(key).resolve(): list(value) for key, value in state.load_errors.items()})
     monkeypatch.setattr(core_bridge, "is_installed", lambda preset_id: preset_id in state.installed)
     monkeypatch.setattr(core_bridge, "install_preset", install_preset)

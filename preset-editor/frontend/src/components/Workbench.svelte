@@ -4,18 +4,27 @@
 	import FileTree from './FileTree.svelte';
 	import Icon from './Icon.svelte';
 	import LintPanel from './LintPanel.svelte';
+	import ManifestEditor from './ManifestEditor.svelte';
+	import MediaEditor from './MediaEditor.svelte';
 	import Pill from './Pill.svelte';
 	import PreviewPanel from './PreviewPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import { adminPresetUrl } from '../lib/catalog.js';
 	import { addMode, deleteDraft, getDraft, lintDraft, publishDraft, removeMode, sharedReference } from '../lib/client.js';
 	import { MODE_RE, canPublish, describeSource, formatTimestamp } from '../lib/drafts.js';
-	import { isEditable, modeOf } from '../lib/files.js';
+	import { isEditable, isMedia, modeOf } from '../lib/files.js';
 	import { confirm, toast } from '../lib/dom.js';
 
 	let { api, draft, onChange, onBack, onPublished, onDiscarded } = $props();
 
+	const VIEWS = [
+		{ id: 'form', label: 'Fields' },
+		{ id: 'media', label: 'Media' },
+		{ id: 'yaml', label: 'YAML' }
+	];
+
 	let selected = $state('preset.yml');
+	let manifestView = $state('form');
 	let busy = $state('');
 	let install = $state(true);
 	let published = $state.raw(null);
@@ -26,6 +35,7 @@
 
 	const files = $derived(Array.isArray(draft.files) ? draft.files : []);
 	const modes = $derived([...new Set(files.map((file) => modeOf(file.path)).filter(Boolean))]);
+	const mediaFiles = $derived(files.filter((file) => isMedia(file.path)));
 	const ready = $derived(canPublish(draft.last_lint) && !busy && !dirty);
 	const modeProblem = $derived(newMode && !MODE_RE.test(newMode.trim()) ? 'lowercase letters, digits and _' : modes.includes(newMode.trim()) ? 'already there' : '');
 
@@ -45,6 +55,32 @@
 	async function refresh() {
 		const result = await getDraft(api, draft.draft_id);
 		if (result.ok) onChange?.(result.data);
+	}
+
+	async function leaveEdits() {
+		if (!dirty) return true;
+		const ok = await confirm({ title: 'Discard unsaved changes?', message: 'The open editor has changes that are not saved yet.', variant: 'danger' });
+		if (ok) dirty = false;
+		return ok;
+	}
+
+	async function select(path) {
+		if (path === selected) return;
+		if (!(await leaveEdits())) return;
+		selected = path;
+	}
+
+	async function showView(id) {
+		if (id === manifestView) return;
+		if (!(await leaveEdits())) return;
+		manifestView = id;
+	}
+
+	async function openMedia() {
+		if (selected === 'preset.yml' && manifestView === 'media') return;
+		if (!(await leaveEdits())) return;
+		selected = 'preset.yml';
+		manifestView = 'media';
 	}
 
 	async function lint() {
@@ -137,7 +173,7 @@
 		<aside class="space-y-3">
 			<div class="rounded-lg border border-line bg-surface-1 px-3 py-2">
 				<h3 class="mb-1 text-xs font-semibold text-fg">Files</h3>
-				<FileTree {files} {selected} onSelect={(path) => (selected = path)} />
+				<FileTree {files} {selected} onSelect={select} />
 			</div>
 			<div class="rounded-lg border border-line bg-surface-1 px-3 py-2">
 				<h3 class="mb-1 text-xs font-semibold text-fg">Modes</h3>
@@ -156,9 +192,29 @@
 					<ActionButton type="submit" icon="plus" loading={busy === 'mode'} disabled={!newMode.trim() || !!modeProblem || !!busy} title={modeProblem || 'Add a mode from the skeleton'}>Add</ActionButton>
 				</form>
 			</div>
+			<div class="rounded-lg border border-line bg-surface-1 px-3 py-2">
+				<h3 class="mb-1 text-xs font-semibold text-fg">Media</h3>
+				<p class="text-xs text-fg-subtle">{mediaFiles.length} file{mediaFiles.length === 1 ? '' : 's'} under public/</p>
+				<ActionButton class="mt-1" icon="folder" onclick={openMedia}>Cover and gallery</ActionButton>
+			</div>
 		</aside>
 		<div class="min-w-0">
-			{#if selected}
+			{#if selected === 'preset.yml'}
+				<div class="mb-2 inline-flex rounded border border-line bg-surface-2 p-0.5 text-xs" role="tablist" aria-label="preset.yml views">
+					{#each VIEWS as view (view.id)}
+						<button type="button" role="tab" aria-selected={manifestView === view.id} class="rounded px-2.5 py-0.5 transition-colors {manifestView === view.id ? 'bg-surface-1 text-fg shadow-sm' : 'text-fg-muted hover:text-fg'}" onclick={() => showView(view.id)}>{view.label}</button>
+					{/each}
+				</div>
+				{#if manifestView === 'form'}
+					<ManifestEditor {api} draftId={draft.draft_id} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onOpenYaml={() => showView('yaml')} />
+				{:else if manifestView === 'media'}
+					<MediaEditor {api} draftId={draft.draft_id} {modes} onDirty={(value) => (dirty = value)} onChange={(data) => updated({ files: data.files, lint: data.lint })} />
+				{:else}
+					<TextEditor {api} draftId={draft.draft_id} path="preset.yml" {sharedFiles} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} />
+				{/if}
+			{:else if selected && isMedia(selected)}
+				<MediaEditor {api} draftId={draft.draft_id} {modes} focus={selected} onDirty={(value) => (dirty = value)} onChange={(data) => updated({ files: data.files, lint: data.lint })} />
+			{:else if selected}
 				{#key selected}
 					<TextEditor {api} draftId={draft.draft_id} path={selected} {sharedFiles} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onDeleted={(data) => updated({ files: data.files, lint: data.lint })} />
 				{/key}
@@ -202,7 +258,7 @@
 			<input type="checkbox" bind:checked={install} disabled={!!busy} />
 			Install on this instance
 		</label>
-		<ActionButton variant="primary" icon="publish" loading={busy === 'publish'} disabled={!ready} title={dirty ? 'Save the open file first' : canPublish(draft.last_lint) ? 'Write the preset into content/presets/local' : 'Fix the lint errors first'} onclick={publish}>Publish</ActionButton>
+		<ActionButton variant="primary" icon="publish" loading={busy === 'publish'} disabled={!ready} title={dirty ? 'Save the open editor first' : canPublish(draft.last_lint) ? 'Write the preset into content/presets/local' : 'Fix the lint errors first'} onclick={publish}>Publish</ActionButton>
 		<span class="flex-1"></span>
 		<ActionButton variant="ghost" icon="trash" loading={busy === 'discard'} disabled={!!busy} onclick={discard}>Discard draft</ActionButton>
 	</div>
