@@ -184,7 +184,7 @@
 		<span class="font-mono text-fg-muted">content/presets/local/{draft.target_dir}</span> · {files.length} file{files.length === 1 ? '' : 's'}
 	</p>
 
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+	<div class="workbench-grid grid grid-cols-1 gap-4">
 		<aside class="space-y-3">
 			<div class="rounded-lg border border-line bg-surface-1 px-3 py-2">
 				<h3 class="mb-1 text-xs font-semibold text-fg">Files</h3>
@@ -270,7 +270,7 @@
 	{/if}
 
 	{#if published}
-		<div class="rounded-lg border border-success/40 bg-success/10 px-4 py-3 text-sm text-fg" role="status">
+		<div class="rounded-lg border border-success/50 bg-success/10 px-4 py-3 text-sm text-fg" role="status">
 			<p class="font-medium">{published.preset.name} is in the catalogue{published.installed ? ' and installed on this instance' : ''}.</p>
 			<p class="mt-1 text-xs text-fg-muted">
 				{#if published.archived}The previous version is kept in the history ({published.archived}).{:else}First publication of this preset.{/if}
@@ -296,3 +296,9 @@
 
 	<PreviewPanel {api} presetId={draft.preset_id} {modes} publishedAt={draft.published_at} />
 </div>
+
+<style>
+	@media (min-width: 1024px) {
+		.workbench-grid { grid-template-columns: 16rem minmax(0, 1fr); }
+	}
+</style>

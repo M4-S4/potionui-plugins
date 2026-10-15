@@ -82,7 +82,7 @@
 		{#each KIND_FILTERS as filter (filter)}
 			<button
 				type="button"
-				class="rounded px-2 py-0.5 text-xs transition-colors {kind === filter ? 'bg-accent/15 text-accent' : 'text-fg-muted hover:bg-surface-3/60 hover:text-fg'}"
+				class="rounded px-2 py-0.5 text-xs transition-colors {kind === filter ? 'bg-accent/10 text-accent' : 'text-fg-muted hover:bg-surface-3/60 hover:text-fg'}"
 				aria-pressed={kind === filter}
 				onclick={() => (kind = filter)}
 			>

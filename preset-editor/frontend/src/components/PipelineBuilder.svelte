@@ -268,7 +268,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="flex min-h-[24rem] flex-col rounded-lg border border-line bg-surface-1" onkeydown={onKeydown}>
+<div class="editor-frame flex flex-col rounded-lg border border-line bg-surface-1" onkeydown={onKeydown}>
 	<div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
 		<span class="truncate font-mono text-xs text-fg" title={path}>{path}</span>
 		<Pill tone="info">pipeline{mode ? ` · ${mode}` : ''}</Pill>
@@ -297,13 +297,13 @@
 			<ActionButton icon="edit" onclick={onOpenYaml}>Open the YAML</ActionButton>
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 gap-3 px-3 py-3 lg:grid-cols-[18rem_minmax(0,1fr)]">
+		<div class="builder-grid grid grid-cols-1 gap-3 px-3 py-3">
 			<aside class="space-y-3 text-xs">
 				<div class="rounded border border-line bg-surface-2/40 px-2 py-2">
 					<ol class="space-y-0.5">
 						{#each doc.pipes as pipe, position (pipe.id)}
 							<li>
-								<button type="button" class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left transition-colors {pipe.id === selectedId ? 'bg-accent/15 text-accent' : 'text-fg hover:bg-surface-3/60'}" onclick={() => (selectedId = pipe.id)}>
+								<button type="button" class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left transition-colors {pipe.id === selectedId ? 'bg-accent/10 text-accent' : 'text-fg hover:bg-surface-3/60'}" onclick={() => (selectedId = pipe.id)}>
 									<span class="w-4 text-right text-fg-subtle">{position + 1}</span>
 									<span class="truncate font-mono {pipe.attrs.enabled === false ? 'line-through opacity-60' : ''}">{pipeTitle(pipe)}</span>
 									{#if typeof pipe.attrs.enabled === 'string'}<Pill tone="info" title={pipe.attrs.enabled}>when</Pill>{/if}
@@ -368,7 +368,7 @@
 							</select>
 						</label>
 						{#if enabledMode === 'expression'}
-							<label class="block sm:col-span-3">
+							<label class="block col-span-full">
 								<span class="mb-0.5 block text-fg-muted">Expression</span>
 								<input type="text" class="input w-full font-mono" value={selected.attrs.enabled} onchange={(event) => set('enabled', event.currentTarget.value)} />
 							</label>
@@ -379,7 +379,7 @@
 					<div class="space-y-1">
 						<h4 class="font-semibold text-fg">Inputs <span class="font-normal text-fg-subtle">· [this pipe's input, source pipe, its output]</span></h4>
 						{#each inputs as entry, row (row)}
-							<div class="grid grid-cols-1 items-center gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+							<div class="input-row grid grid-cols-1 items-center gap-1">
 								<input type="text" class="input w-full font-mono" list="preset-editor-pipe-inputs" value={Array.isArray(entry) ? entry[0] ?? '' : ''} placeholder="input" onchange={(event) => setInput(row, 0, event.currentTarget.value.trim())} />
 								<input type="text" class="input w-full font-mono" list="preset-editor-pipe-sources" value={Array.isArray(entry) ? entry[1] ?? '' : ''} placeholder="source pipe" onchange={(event) => setInput(row, 1, event.currentTarget.value.trim())} />
 								<input type="text" class="input w-full font-mono" list="preset-editor-pipe-outputs-{row}" value={Array.isArray(entry) ? entry[2] ?? '' : ''} placeholder="output" onchange={(event) => setInput(row, 2, event.currentTarget.value.trim())} />
@@ -442,3 +442,13 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.editor-frame { min-height: 24rem; }
+	@media (min-width: 640px) {
+		.input-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; }
+	}
+	@media (min-width: 1024px) {
+		.builder-grid { grid-template-columns: 18rem minmax(0, 1fr); }
+	}
+</style>

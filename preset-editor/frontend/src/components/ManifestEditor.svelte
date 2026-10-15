@@ -126,7 +126,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="flex min-h-[24rem] flex-col rounded-lg border border-line bg-surface-1" onkeydown={onKeydown}>
+<div class="editor-frame flex flex-col rounded-lg border border-line bg-surface-1" onkeydown={onKeydown}>
 	<div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
 		<span class="font-mono text-xs text-fg">preset.yml</span>
 		{#if dirty}<Pill tone="warning">unsaved</Pill>{/if}
@@ -155,7 +155,7 @@
 		</div>
 	{:else}
 		<div class="space-y-4 px-3 py-3 text-xs">
-			<div class="flex flex-wrap gap-x-5 gap-y-1 text-fg-subtle">
+			<div class="flex flex-wrap gap-x-4 gap-y-1 text-fg-subtle">
 				<span>id <span class="font-mono text-fg-muted">{form.readOnly.id}</span></span>
 				<span>schema <span class="font-mono text-fg-muted">{form.readOnly.schema}</span></span>
 				<span>modes <span class="font-mono text-fg-muted">{form.modes.join(', ') || '—'}</span> (sidebar)</span>
@@ -229,3 +229,7 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.editor-frame { min-height: 24rem; }
+</style>

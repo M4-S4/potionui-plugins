@@ -267,10 +267,10 @@
 </script>
 
 {#snippet tree(nodes, parentId, depth)}
-	<ul class="min-h-[1.25rem] space-y-0.5" use:dndzone={{ items: nodes, flipDurationMs: 120, type: 'fields', dropTargetStyle: {}, dropTargetClasses: ['bg-accent/10'] }} onconsider={(event) => replaceChildren(parentId, event.detail.items)} onfinalize={(event) => replaceChildren(parentId, event.detail.items)}>
+	<ul class="drop-zone space-y-0.5" use:dndzone={{ items: nodes, flipDurationMs: 120, type: 'fields', dropTargetStyle: {}, dropTargetClasses: ['bg-accent/10'] }} onconsider={(event) => replaceChildren(parentId, event.detail.items)} onfinalize={(event) => replaceChildren(parentId, event.detail.items)}>
 		{#each nodes as node (node.id)}
 			<li>
-				<button type="button" class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs transition-colors {node.id === selectedId ? 'bg-accent/15 text-accent' : 'text-fg hover:bg-surface-3/60'}" style="padding-left: {depth * 12 + 4}px" onclick={() => { selectedId = node.id; view = 'field'; }}>
+				<button type="button" class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs transition-colors {node.id === selectedId ? 'bg-accent/10 text-accent' : 'text-fg hover:bg-surface-3/60'}" style="padding-left: {depth * 12 + 4}px" onclick={() => { selectedId = node.id; view = 'field'; }}>
 					<Icon name={Array.isArray(node.children) ? 'folder' : typeof node.children === 'string' ? 'external-link' : 'document'} class="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
 					<span class="truncate">{nodeTitle(node)}</span>
 					{#if problemCount(node)}<Pill tone="danger">{problemCount(node)}</Pill>{/if}
@@ -285,7 +285,7 @@
 {/snippet}
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="flex min-h-[24rem] flex-col rounded-lg border border-line bg-surface-1" onkeydown={onKeydown}>
+<div class="editor-frame flex flex-col rounded-lg border border-line bg-surface-1" onkeydown={onKeydown}>
 	<div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
 		<span class="truncate font-mono text-xs text-fg" title={path}>{path}</span>
 		<Pill tone="info">{kind === 'form' ? (variant ? `variant ${variant}` : 'default form') : 'tab'}</Pill>
@@ -321,10 +321,10 @@
 				{/each}
 			</ul>
 		{/if}
-		<div class="grid grid-cols-1 gap-3 px-3 py-3 lg:grid-cols-[18rem_minmax(0,1fr)]">
+		<div class="builder-grid grid grid-cols-1 gap-3 px-3 py-3">
 			<aside class="space-y-3">
 				<div class="rounded border border-line bg-surface-2/40 px-2 py-2">
-					<button type="button" class="mb-1 flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs font-semibold {view === 'form' ? 'bg-accent/15 text-accent' : 'text-fg hover:bg-surface-3/60'}" onclick={() => (view = 'form')}>
+					<button type="button" class="mb-1 flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs font-semibold {view === 'form' ? 'bg-accent/10 text-accent' : 'text-fg hover:bg-surface-3/60'}" onclick={() => (view = 'form')}>
 						<Icon name="document" class="h-3.5 w-3.5" />{kind === 'form' ? 'Form settings' : 'Tab file'}
 					</button>
 					{@render tree(doc.fields, null, 0)}
@@ -441,3 +441,11 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.editor-frame { min-height: 24rem; }
+	.drop-zone { min-height: 1.25rem; }
+	@media (min-width: 1024px) {
+		.builder-grid { grid-template-columns: 18rem minmax(0, 1fr); }
+	}
+</style>

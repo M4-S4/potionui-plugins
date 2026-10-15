@@ -170,7 +170,7 @@
 								<div class="flex flex-wrap items-center gap-2">
 									{@render fileLine(byPath.get(row.src) ?? { path: row.src, size: 0, roles: ['gallery'], missing: true })}
 								</div>
-								<div class="grid grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_8rem_6rem]">
+								<div class="gallery-row grid grid-cols-1 gap-1">
 									<input type="text" class="input w-full" placeholder="Caption" bind:value={row.caption} aria-label="Caption" />
 									<select class="input w-full" bind:value={row.mode} aria-label="Mode">
 										<option value="">any mode</option>
@@ -198,7 +198,7 @@
 				{#if galleryDirty}<ActionButton variant="ghost" disabled={!!busy} onclick={() => (rows = galleryRows(listing.gallery))}>Revert</ActionButton>{/if}
 			</div>
 			<div class="flex flex-wrap items-end gap-2 rounded border border-dashed border-line px-2 py-2">
-				<label class="block min-w-[10rem] flex-1">
+				<label class="caption-field block flex-1">
 					<span class="mb-0.5 block text-fg-muted">Caption for the new files</span>
 					<input type="text" class="input w-full" bind:value={caption} />
 				</label>
@@ -251,3 +251,10 @@
 		<p class="text-fg-subtle">Accepted: {MEDIA_ACCEPT.replaceAll(',', ' ')}. Uploads are capped at 20 MB; the core linter has its own budget per file. Paths under public/ can also be referenced from description.md and as examples in a form.yml.</p>
 	{/if}
 </div>
+
+<style>
+	.caption-field { min-width: 10rem; }
+	@media (min-width: 640px) {
+		.gallery-row { grid-template-columns: minmax(0, 1fr) 8rem 6rem; }
+	}
+</style>

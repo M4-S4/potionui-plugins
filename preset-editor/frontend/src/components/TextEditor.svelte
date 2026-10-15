@@ -130,7 +130,7 @@
 	}
 </script>
 
-<div class="flex h-full min-h-[24rem] flex-col rounded-lg border border-line bg-surface-1">
+<div class="editor-frame flex h-full flex-col rounded-lg border border-line bg-surface-1">
 	<div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
 		<span class="truncate font-mono text-xs text-fg" title={path}>{path}</span>
 		{#if dirty}<Pill tone="warning">unsaved</Pill>{/if}
@@ -175,7 +175,7 @@
 	{:else if phase === 'error'}
 		<p class="px-3 py-6 text-center text-xs text-danger">{error}</p>
 	{:else if isMarkdown && preview}
-		<div class="markdown min-h-[22rem] flex-1 overflow-auto px-4 py-3 text-sm text-fg">{@html rendered}</div>
+		<div class="markdown editor-body flex-1 overflow-auto px-4 py-3 text-sm text-fg">{@html rendered}</div>
 	{:else}
 		<div class="flex min-h-0 flex-1 font-mono text-xs leading-5">
 			<div bind:this={gutter} class="w-10 flex-shrink-0 select-none overflow-hidden border-r border-line bg-surface-2 py-2 text-right text-fg-subtle" aria-hidden="true">
@@ -186,7 +186,7 @@
 			<textarea
 				bind:this={textarea}
 				bind:value={content}
-				class="min-h-[22rem] flex-1 resize-y bg-transparent px-3 py-2 text-fg outline-none"
+				class="editor-body flex-1 resize-y bg-transparent px-3 py-2 text-fg outline-none"
 				spellcheck="false"
 				wrap="off"
 				aria-label="File content"
@@ -211,4 +211,6 @@
 	.markdown :global(a) { text-decoration: underline; }
 	.markdown :global(img) { max-width: 100%; border-radius: 0.375rem; }
 	.markdown :global(hr) { border: 0; border-top: 1px solid currentColor; opacity: 0.3; margin: 0.75rem 0; }
+	.editor-frame { min-height: 24rem; }
+	.editor-body { min-height: 22rem; }
 </style>
