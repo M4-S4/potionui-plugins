@@ -6,13 +6,17 @@
 	import { overlayLayer } from '../../lib/host.js';
 	import { ui } from '../../lib/state.svelte.js';
 	import { menus } from '../../lib/commands.js';
+	import { setReturnFocus } from '../../lib/focus.js';
 	import Icon from '../Icon.svelte';
 
 	function open(id) {
 		ui.menuOpen = ui.menuOpen === id ? null : id;
 	}
 
-	function run(item) {
+	let triggers = {};
+
+	function run(item, menuId) {
+		setReturnFocus(triggers[menuId]);
 		ui.menuOpen = null;
 		item.run();
 	}
@@ -28,6 +32,7 @@
 	{#each menus as m, i (m.id)}
 		<div class="relative">
 			<button
+				bind:this={triggers[m.id]}
 				type="button"
 				class="vp-menubar-item"
 				class:vp-menubar-app={i === 0}
@@ -43,7 +48,7 @@
 					{#each m.groups as group, gi}
 						{#if gi > 0}<div class="vp-menu-sep" role="separator"></div>{/if}
 						{#each group as item (item.id)}
-							<button type="button" role="menuitem" onclick={() => run(item)}>
+							<button type="button" role="menuitem" onclick={() => run(item, m.id)}>
 								<span class="w-3.5 shrink-0 text-signal">
 									{#if item.check?.()}<Icon name="check" class="h-3.5 w-3.5" />{/if}
 								</span>

@@ -127,14 +127,40 @@ function strip(lane) {
 	return s;
 }
 
+function mediaVoice(clip, src) {
+	const out = ctx.createGain();
+	out.gain.value = 0;
+	const el = new Audio();
+	el.preload = 'auto';
+	el.src = src;
+	ctx.createMediaElementSource(el).connect(out);
+	const stop = () => {
+		el.pause();
+		el.removeAttribute('src');
+		el.load();
+	};
+	const v = { out, stop, lane: null, el, src };
+	voices.set(clip.id, v);
+	return v;
+}
+
+const SYNTH_BY_ROLE = { Dialogue: 'voice', Musique: 'pad', Ambiance: 'wind', SFX: 'steps' };
+
 function voice(clip) {
 	let v = voices.get(clip.id);
-	if (v) return v;
 	const a = asset(clip.assetId);
+	const src = a?.src ?? null;
+	if (v && (v.src ?? null) === src) return v;
+	if (v) {
+		v.stop();
+		v.out.disconnect();
+		voices.delete(clip.id);
+	}
+	if (src) return mediaVoice(clip, src);
 	const out = ctx.createGain();
 	out.gain.value = 0;
 	const stops = [];
-	const synth = a?.synth ?? 'pad';
+	const synth = a?.synth ?? SYNTH_BY_ROLE[a?.role] ?? 'pad';
 	if (synth === 'pad') {
 		const f = ctx.createBiquadFilter();
 		f.type = 'lowpass';
@@ -213,7 +239,7 @@ function voice(clip) {
 		src.start();
 		stops.push(src);
 	}
-	v = { out, stop: () => stops.forEach((s) => s.stop()), lane: null };
+	v = { out, stop: () => stops.forEach((s) => s.stop()), lane: null, el: null, src: null };
 	voices.set(clip.id, v);
 	return v;
 }
@@ -263,7 +289,8 @@ function updateAudio() {
 			v.out.connect(strip(lane).input);
 			v.lane = lane.id;
 		}
-		v.out.gain.setTargetAtTime(envelope(c, t) * 0.5, now, 0.02);
+		if (v.el) follow(v.el, c, t);
+		v.out.gain.setTargetAtTime(envelope(c, t) * (v.el ? 1 : 0.5), now, 0.02);
 	}
 	for (const [id, v] of voices)
 		if (!live.has(id)) {
@@ -272,6 +299,19 @@ function updateAudio() {
 			voices.delete(id);
 		}
 	readMeters();
+}
+
+function follow(el, c, t) {
+	const inside = ui.playing && t >= c.start && t < c.start + c.dur;
+	if (!inside) {
+		if (!el.paused) el.pause();
+		return;
+	}
+	const target = t - c.start + c.srcIn;
+	if (el.paused) {
+		el.currentTime = target;
+		el.play().catch(() => {});
+	} else if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
 }
 
 const buf = new Float32Array(512);
@@ -298,7 +338,10 @@ function resetMeters() {
 }
 function silence() {
 	if (!ctx) return;
-	for (const v of voices.values()) v.out.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+	for (const v of voices.values()) {
+		v.out.gain.setTargetAtTime(0, ctx.currentTime, 0.02);
+		v.el?.pause();
+	}
 	clearTimeout(silenceTimer);
 	silenceTimer = setTimeout(resetMeters, 120);
 }

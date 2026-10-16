@@ -1,5 +1,6 @@
 import importlib
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
 
 from src.features.notifications.types import NotificationTypeRegistry
 from src.features.plans.guard import LimitGuard, PlanSettings
@@ -140,7 +142,19 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
     assert api.router.prefix == f"/api/plugins/{PLUGIN_ID}"
     routes = {(method, route.path) for route in api.router.routes for method in route.methods}
     base = f"/api/plugins/{PLUGIN_ID}"
-    assert routes == {("GET", f"{base}/health"), ("GET", f"{base}/me"), ("PUT", f"{base}/me")}
+    assert routes == {
+        ("GET", f"{base}/health"),
+        ("GET", f"{base}/me"),
+        ("PUT", f"{base}/me"),
+        ("GET", f"{base}/projects"),
+        ("POST", f"{base}/projects"),
+        ("GET", f"{base}/projects/{{project_id}}"),
+        ("PUT", f"{base}/projects/{{project_id}}"),
+        ("DELETE", f"{base}/projects/{{project_id}}"),
+        ("GET", f"{base}/projects/{{project_id}}/versions"),
+        ("POST", f"{base}/projects/{{project_id}}/versions/{{version}}/restore"),
+        ("POST", f"{base}/media/resolve"),
+    }
 
 
 def test_the_router_loaded_by_the_core_answers_a_signed_in_user(loader, manifest):
@@ -157,6 +171,62 @@ def test_the_router_loaded_by_the_core_answers_a_signed_in_user(loader, manifest
         "success": True,
         "data": {"status": "ok", "plugin": PLUGIN_ID, "version": manifest.version},
     }
+
+
+def test_the_project_modules_load_inside_the_plugin_package(loader, manifest):
+    loader.load_plugin_module(manifest, "backend.api")
+
+    for name in ("projects", "routes_projects", "routes_media"):
+        assert sys.modules[f"{PACKAGE}.backend.{name}"].__name__ == f"{PACKAGE}.backend.{name}"
+    projects = sys.modules[f"{PACKAGE}.backend.projects"]
+    Draft202012Validator.check_schema(projects.DOC_SCHEMA)
+    assert projects.settings is sys.modules[f"{PACKAGE}.backend.settings"]
+    assert projects.generate_ulid is sys.modules[f"{PACKAGE}.backend.core_bridge"].generate_ulid
+    assert sys.modules[f"{PACKAGE}.backend.routes_media"].MediaRefError is sys.modules[f"{PACKAGE}.backend.core_bridge"].MediaRefError
+
+
+def test_on_boot_loaded_by_the_core_adds_the_source_version_column(loader, manifest, mock_db):
+    on_boot = _handler(loader, manifest, "plugin.lifecycle.boot")
+
+    on_boot(HookContext(hook_name="plugin.lifecycle.boot", plugin_id=PLUGIN_ID, data={}))
+    on_boot(HookContext(hook_name="plugin.lifecycle.boot", plugin_id=PLUGIN_ID, data={}))
+
+    with mock_db.get_cursor() as cursor:
+        cursor.execute("PRAGMA table_info(video_producer_versions)")
+        columns = [row["name"] for row in cursor.fetchall()]
+    assert columns.count("source_version") == 1
+
+
+def test_the_router_loaded_by_the_core_stores_versions_and_restores_a_project(loader, manifest, mock_db):
+    _handler(loader, manifest, "plugin.lifecycle.boot")(
+        HookContext(hook_name="plugin.lifecycle.boot", plugin_id=PLUGIN_ID, data={})
+    )
+    api = loader.load_plugin_module(manifest, "backend.api")
+    app = FastAPI(redirect_slashes=False)
+    app.include_router(api.router)
+    app.dependency_overrides[get_current_active_user] = lambda: SimpleNamespace(id="user-1", account_type="USER")
+    starter = json.loads((PLUGIN_ROOT / "tests" / "fixtures" / "starter_doc.json").read_text(encoding="utf-8"))
+    base = f"/api/plugins/{PLUGIN_ID}/projects"
+
+    with TestClient(app) as client:
+        created = client.post(base, json={"doc": starter})
+        project_id = created.json()["data"]["project"]["id"]
+        saved = client.put(f"{base}/{project_id}", json={"doc": {**starter, "name": "Edited"}, "version": 1})
+        restored = client.post(f"{base}/{project_id}/versions/1/restore")
+        versions = client.get(f"{base}/{project_id}/versions")
+        listed = client.get(base)
+
+    assert created.status_code == 201
+    assert saved.json()["data"]["project"]["version"] == 2
+    assert restored.json()["data"]["project"]["version"] == 3
+    assert [(item["version"], item["source_version"]) for item in versions.json()["data"]["versions"]] == [
+        (3, 1),
+        (2, None),
+        (1, None),
+    ]
+    assert [(item["id"], item["version"], item["shots"]) for item in listed.json()["data"]["projects"]] == [
+        (project_id, 3, 5)
+    ]
 
 
 def test_sidebar_entry_opens_the_page_for_every_user(manifest):
@@ -190,12 +260,13 @@ def test_the_admin_settings_match_what_the_backend_parses(manifest):
     backend_settings = _load("backend.settings")
     specs = {spec["name"]: spec for spec in manifest.settings}
 
-    assert list(specs) == ["draft_resolution", "max_parallel_jobs", "export_dir_quota_mb"]
-    assert [specs[name]["type"] for name in specs] == ["select", "number", "number"]
+    assert list(specs) == ["draft_resolution", "max_parallel_jobs", "export_dir_quota_mb", "versions_kept"]
+    assert [specs[name]["type"] for name in specs] == ["select", "number", "number", "number"]
     assert {name: spec["default"] for name, spec in specs.items()} == {
         "draft_resolution": "832x480",
         "max_parallel_jobs": 2,
         "export_dir_quota_mb": 2048,
+        "versions_kept": 50,
     }
     assert {name: backend_settings.parse_setting(name, spec["default"]) for name, spec in specs.items()} == (
         backend_settings.DEFAULTS

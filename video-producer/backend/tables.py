@@ -64,7 +64,7 @@ _COLUMNS = {
 
 TABLE_NAMES = tuple(_COLUMNS)
 
-_ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = ()
+_ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (("video_producer_versions", "source_version", "INTEGER"),)
 
 _INDEXES = (
     ("idx_video_producer_projects_user", "video_producer_projects", "user_id, updated_at"),

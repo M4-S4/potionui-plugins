@@ -40,6 +40,30 @@ def plugin_db(scratch_db, monkeypatch):
 
 
 @pytest.fixture
+def project_db(plugin_db):
+    from backend.tables import create_tables
+
+    create_tables()
+    return plugin_db
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from backend import projects
+
+    ticks = []
+
+    def now():
+        ticks.append(datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc) + timedelta(seconds=len(ticks)))
+        return ticks[-1].isoformat()
+
+    monkeypatch.setattr(projects, "_now", now)
+    return ticks
+
+
+@pytest.fixture
 def scheduled(monkeypatch):
     import concurrent.futures
 

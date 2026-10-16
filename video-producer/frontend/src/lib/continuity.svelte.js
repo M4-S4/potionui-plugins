@@ -1,6 +1,7 @@
 import { t } from '../i18n/index.svelte.js';
 import { doc, asset, act, toast, clamp, round, clipLabel } from './state.svelte.js';
 import { clipFilter } from './look.js';
+import { realThumb } from './media.js';
 
 const stats = $state({});
 const pending = new Set();
@@ -40,8 +41,9 @@ function measure(key, src, filter) {
 export function colorOf(clip) {
 	const a = asset(clip.assetId);
 	const filter = clipFilter(clip);
-	const key = `${a?.id}|${filter}`;
-	return stats[key] ?? measure(key, a?.src, filter);
+	const src = realThumb(a);
+	const key = `${a?.id}|${src}|${filter}`;
+	return stats[key] ?? measure(key, src, filter);
 }
 
 const takeOf = (clip) => {

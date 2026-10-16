@@ -1,15 +1,17 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
-	import { formatTime, getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, assets, toast, globalPrompt, itemsIn, productionRange, secs, select, clipLabel } from '../../lib/state.svelte.js';
+	import { getLocale, t } from '../../i18n/index.svelte.js';
+	import { ui, doc, act, toast, globalPrompt, itemsIn, productionRange, secs, select, clipLabel } from '../../lib/state.svelte.js';
+	import { promptLanguageOf } from '../../lib/starter.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { allCommands } from '../../lib/commands.js';
 	import { frameRoleLabel, modeLabel } from '../../lib/catalog.js';
 	import { openReferences, refRoleLabel } from '../../lib/references.js';
 	import { addFileScene } from '../../lib/scene.js';
 	import { takeThumb } from '../../lib/media.js';
-	import { ulid } from '../../lib/ulid.js';
 	import Modal from './Modal.svelte';
+	import OpenProject from './OpenProject.svelte';
+	import VersionHistory from './VersionHistory.svelte';
 	import PromptEditor from './PromptEditor.svelte';
 	import PromptLibrary from './PromptLibrary.svelte';
 	import AdvancedWorkshop from './AdvancedWorkshop.svelte';
@@ -37,19 +39,6 @@
 	const shortcutList = $derived(allCommands.filter((c) => c.keys));
 	const introParts = $derived(t('shell.simulations.intro').split('{badge}'));
 
-	function fakeImport() {
-		const kind = m.kind === 'audio' ? 'audio' : 'video';
-		const a =
-			kind === 'audio'
-				? { id: ulid(), name: t('shell.import.asset', { file: `import_${String(assets.length + 1).padStart(3, '0')}.wav` }), kind: 'audio', synth: 'wind', srcDur: 20, role: 'Ambiance' }
-				: { id: ulid(), name: t('shell.import.asset', { file: `import_${String(assets.length + 1).padStart(3, '0')}.mov` }), kind: 'video', srcDur: 12, res: '1920×1080', fps: doc.fps };
-		assets.push(a);
-		ui.dirty = true;
-		toast(t('shell.import.added', { name: a.name }), 'sim');
-		ui.mediaCollection = 'all';
-		close();
-	}
-
 	const tour = $derived([
 		[t('shell.tour.project.title'), t('shell.tour.project.text'), () => (ui.modal = { type: 'project' })],
 		[t('shell.tour.direction.title'), t('shell.tour.direction.text'), () => ((ui.workspace = 'director'), (ui.dockTab = 'direction'), close())],
@@ -66,14 +55,11 @@
 		[t('shell.simulations.synopsis.title'), t('shell.simulations.synopsis.text')],
 		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')],
 		[t('shell.simulations.render.title'), t('shell.simulations.render.text')],
-		[t('shell.simulations.import.title'), t('shell.simulations.import.text')],
 		[t('shell.simulations.splat.title'), t('shell.simulations.splat.text')],
 		[t('shell.simulations.guide.title'), t('shell.simulations.guide.text')],
 		[t('shell.simulations.sound.title'), t('shell.simulations.sound.text')],
 		[t('shell.simulations.audio.title'), t('shell.simulations.audio.text')]
 	]);
-
-	const openDetail = $derived(ui.savedAt && !ui.dirty ? t('shell.project.savedAt', { time: formatTime(ui.savedAt) }) : t('shell.project.unsaved'));
 
 	const timelineIndex = $derived(
 		[
@@ -88,6 +74,12 @@
 		{ id: 'en', label: t('shell.locale.en') },
 		{ id: 'fr', label: t('shell.locale.fr') }
 	]);
+
+	const promptLanguage = $derived(promptLanguageOf(doc.promptLanguage));
+
+	function setPromptLanguage(id) {
+		if (id !== promptLanguage) act(() => (doc.promptLanguage = id));
+	}
 
 	function referenceSplat() {
 		const file = splatInput?.value.trim() ?? '';
@@ -195,6 +187,10 @@
 					<span>{t('shell.prefs.language')}</span>
 					<HostUi name="SegmentedControl" props={{ items: languages, selected: getLocale(), onSelect: setLanguage, ariaLabel: t('shell.prefs.language'), variant: 'toggle' }} />
 				</div>
+				<div class="flex items-center justify-between gap-3 text-sm">
+					<span class="min-w-0"><span class="block">{t('project.promptLanguage.label')}</span><span class="block text-xs text-fg-subtle">{t('project.promptLanguage.hint')}</span></span>
+					<HostUi name="SegmentedControl" props={{ items: languages, selected: promptLanguage, onSelect: setPromptLanguage, ariaLabel: t('project.promptLanguage.label'), variant: 'toggle' }} />
+				</div>
 				<label class="flex items-center justify-between text-sm">
 					{t('shell.prefs.quality')}
 					<select class="input vp-dense w-40" bind:value={ui.previewQuality}>
@@ -234,28 +230,19 @@
 						></label
 					>
 				</div>
+				<div class="space-y-1">
+					<div class="flex items-center justify-between gap-3">
+						<span class="vp-label">{t('project.promptLanguage.label')}</span>
+						<HostUi name="SegmentedControl" props={{ items: languages, selected: promptLanguage, onSelect: setPromptLanguage, ariaLabel: t('project.promptLanguage.label'), variant: 'toggle' }} />
+					</div>
+					<p class="text-xs text-fg-subtle">{t('project.promptLanguage.help')}</p>
+				</div>
 			</div>
 		</Modal>
 	{:else if m?.type === 'open'}
-		<Modal title={t('shell.open.title')} icon="folder" width={520} sim>
-			<div class="space-y-3 p-4">
-				<button type="button" class="flex w-full items-center gap-3 rounded-lg border border-line-strong p-2.5 text-left hover:border-line-hover" onclick={close}>
-					<Icon name="film" class="h-4 w-4 text-fg-muted" />
-					<span class="flex-1"><span class="block text-sm">{doc.name}</span><span class="block text-xs text-fg-subtle">{openDetail}</span></span>
-					<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('shell.open.current')}</HostUi>
-				</button>
-				<p class="text-xs text-fg-subtle">{t('shell.open.later')}</p>
-			</div>
-		</Modal>
-	{:else if m?.type === 'import'}
-		<Modal title={m.kind === 'audio' ? t('shell.import.titleAudio') : t('shell.import.titleMedia')} icon="upload" width={520} sim>
-			<div class="p-4">
-				<button type="button" class="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-line-hover p-8 text-center text-sm text-fg-muted hover:border-signal hover:text-fg" onclick={fakeImport}>
-					<Icon name="upload" class="h-6 w-6" />{t('shell.import.drop')}
-					<span class="text-xs text-fg-subtle">{m.kind === 'audio' ? t('shell.import.hintAudio') : t('shell.import.hintMedia')}</span>
-				</button>
-			</div>
-		</Modal>
+		<OpenProject />
+	{:else if m?.type === 'versions'}
+		<VersionHistory />
 	{:else if m?.type === 'splat'}
 		<Modal title={t('shell.splat.title')} icon="link" width={520} sim>
 			<div class="space-y-3 p-4">

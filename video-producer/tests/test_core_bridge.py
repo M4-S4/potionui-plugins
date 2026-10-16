@@ -414,3 +414,40 @@ def test_any_other_error_resolving_a_model_file_is_not_hidden(monkeypatch):
 
     with pytest.raises(RuntimeError, match="disk error"):
         core_bridge.model_file_present("a" * 64)
+
+
+def test_resolve_media_relays_the_reference_to_the_core_as_the_user(monkeypatch):
+    asked = []
+    answer = {"value": "uploads/a.png", "media_type": "image", "original_filename": "a.png", "origin": None}
+
+    def resolve_media_ref(user, ref):
+        asked.append((user, ref))
+        return answer
+
+    monkeypatch.setattr(core_bridge, "api_generation", SimpleNamespace(resolve_media_ref=resolve_media_ref))
+    user = SimpleNamespace(id="user-1")
+    ref = {"kind": "library", "item_id": "i-1"}
+
+    resolved = core_bridge.resolve_media(user, ref)
+
+    assert resolved == answer and resolved is not answer
+    assert asked == [(user, ref)]
+
+
+def test_resolve_media_lets_the_core_refusal_through(monkeypatch):
+    def resolve_media_ref(user, ref):
+        raise core_bridge.MediaRefError("not_found", "The referenced media is not available")
+
+    monkeypatch.setattr(core_bridge, "api_generation", SimpleNamespace(resolve_media_ref=resolve_media_ref))
+
+    with pytest.raises(core_bridge.MediaRefError) as caught:
+        core_bridge.resolve_media(SimpleNamespace(id="user-1"), {"kind": "library", "item_id": "i-1"})
+
+    assert caught.value.code == "not_found"
+
+
+def test_the_media_ref_error_is_the_one_the_core_raises():
+    from src.plugin_api.generation import MediaRefError
+
+    assert core_bridge.MediaRefError is MediaRefError
+    assert "MediaRefError" in core_bridge.__all__ and "resolve_media" in core_bridge.__all__

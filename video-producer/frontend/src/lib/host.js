@@ -64,3 +64,23 @@ export function overlayLayer(node, tier = 'overlay') {
 	node.style.zIndex = String(FLOORS[tier] ?? FLOORS.overlay);
 	return { destroy: noop };
 }
+
+export function openHostModal(name, { onClosed, ...props } = {}) {
+	const entry = api()?.components?.[name];
+	if (!entry || typeof document === 'undefined') return null;
+	const target = document.body.appendChild(document.createElement('div'));
+	let handle = null;
+	let closed = false;
+	const close = () => {
+		if (closed) return;
+		closed = true;
+		entry.update?.(handle, { isOpen: false });
+		setTimeout(() => {
+			entry.unmount(handle);
+			target.remove();
+		}, 300);
+		onClosed?.();
+	};
+	handle = entry.mount(target, { ...props, isOpen: true, onClose: close });
+	return close;
+}

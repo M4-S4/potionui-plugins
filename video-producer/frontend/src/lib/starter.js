@@ -1,9 +1,37 @@
 import { ulid } from './ulid.js';
 
 const SHOT_DURATION = 5;
+export const PROMPT_LANGUAGES = ['en', 'fr'];
+export const DEFAULT_PROMPT_LANGUAGE = 'en';
+
+export const promptLanguageOf = (value) => (PROMPT_LANGUAGES.includes(value) ? value : DEFAULT_PROMPT_LANGUAGE);
 
 export function newClip(extra = {}) {
 	return { id: ulid(), assetId: null, start: 0, dur: 4, srcIn: 0, label: '', stage: 'todo', take: null, fadeIn: 0, fadeOut: 0, exposure: 0, contrast: 100, saturation: 100, temperature: 0, preset: 'Original', flag: null, ...extra };
+}
+
+export function newAsset(extra = {}) {
+	return {
+		id: ulid(),
+		kind: 'video',
+		name: '',
+		src: null,
+		origin: null,
+		srcDur: null,
+		width: null,
+		height: null,
+		fps: null,
+		res: null,
+		generated: false,
+		quality: null,
+		resultId: null,
+		role: null,
+		synth: null,
+		transcript: null,
+		character: null,
+		lipSync: null,
+		...extra
+	};
 }
 
 function lane(id, name, role, vol, pan) {
@@ -24,9 +52,10 @@ function lane(id, name, role, vol, pan) {
 	};
 }
 
-function baseDoc(t, name) {
+function baseDoc(t, name, promptLanguage) {
 	return {
 		name,
+		promptLanguage: promptLanguageOf(promptLanguage),
 		fps: 25,
 		aspect: '16:9',
 		resolution: '1080p',
@@ -42,6 +71,7 @@ function baseDoc(t, name) {
 		markers: [],
 		references: [],
 		scenes: [],
+		assets: [],
 		lanes: [
 			lane('A1', t('starter.lane.dialogue'), 'Dialogue', 0, 0),
 			lane('A2', t('starter.lane.music'), 'Musique', -2, 0),
@@ -81,14 +111,12 @@ function baseDoc(t, name) {
 	};
 }
 
-export function emptyDoc(t) {
-	return baseDoc(t, t('lib.default.project'));
+export function emptyDoc(t, promptLanguage = DEFAULT_PROMPT_LANGUAGE) {
+	return baseDoc(t, t('lib.default.project'), promptLanguage);
 }
 
-export function starterDoc(t) {
-	const doc = baseDoc(t, t('starter.name'));
-	doc.synopsis = t('starter.synopsis');
-	doc.direction = {
+function starterDirection(t) {
+	return {
 		univers: t('starter.direction.univers'),
 		personnages: t('starter.direction.personnages'),
 		photographie: t('starter.direction.photographie'),
@@ -96,13 +124,18 @@ export function starterDoc(t) {
 		rythme: t('starter.direction.rythme'),
 		mode: 'FL2VA'
 	};
-	const shots = [
-		[t('starter.shot.1.label'), t('starter.shot.1.prompt')],
-		[t('starter.shot.2.label'), t('starter.shot.2.prompt')],
-		[t('starter.shot.3.label'), t('starter.shot.3.prompt')],
-		[t('starter.shot.4.label'), t('starter.shot.4.prompt')],
-		[t('starter.shot.5.label'), t('starter.shot.5.prompt')]
-	];
+}
+
+function starterPrompts(t) {
+	return [t('starter.shot.1.prompt'), t('starter.shot.2.prompt'), t('starter.shot.3.prompt'), t('starter.shot.4.prompt'), t('starter.shot.5.prompt')];
+}
+
+export function starterDoc(t, promptT = t, promptLanguage = DEFAULT_PROMPT_LANGUAGE) {
+	const doc = baseDoc(t, t('starter.name'), promptLanguage);
+	doc.synopsis = t('starter.synopsis');
+	doc.direction = starterDirection(promptT);
+	const texts = starterPrompts(promptT);
+	const shots = [t('starter.shot.1.label'), t('starter.shot.2.label'), t('starter.shot.3.label'), t('starter.shot.4.label'), t('starter.shot.5.label')].map((label, i) => [label, texts[i]]);
 	shots.forEach(([label, text], i) => {
 		const clip = newClip({ label, start: i * SHOT_DURATION, dur: SHOT_DURATION });
 		doc.clips.push(clip);

@@ -7,6 +7,7 @@ from src.plugin_api import (
     AccountType,
     HookContext,
     LimitEvents,
+    MediaRefError,
     NotificationTypeSpec,
     PluginRepository,
     SetupCheck,
@@ -17,6 +18,7 @@ from src.plugin_api import (
     get_current_active_user,
 )
 from src.plugin_api import backends as api_backends
+from src.plugin_api import generation as api_generation
 from src.plugin_api import hooks as api_hooks
 from src.plugin_api import limits as api_limits
 from src.plugin_api import media as api_media
@@ -32,6 +34,7 @@ __all__ = [
     "CLOUD_ENGINE",
     "HookContext",
     "LimitEvents",
+    "MediaRefError",
     "NATIVE_DRIVERS",
     "NotificationTypeSpec",
     "PresetState",
@@ -52,6 +55,7 @@ __all__ = [
     "preset_model_hashes",
     "preset_state",
     "register_notification_types",
+    "resolve_media",
     "run_on_app_loop",
     "set_plugin_setting",
 ]
@@ -78,7 +82,7 @@ def get_plugin_setting(key: str, user_id: Optional[str] = None) -> Optional[str]
     return None if row is None else row.setting_value
 
 
-def set_plugin_setting(key: str, value: str, user_id: Optional[str] = None) -> None:
+def set_plugin_setting(key: str, value: Optional[str], user_id: Optional[str] = None) -> None:
     """Store a plugin setting, global or for one user."""
     PluginRepository().set_plugin_setting(PLUGIN_ID, key, value, user_id=user_id)
 
@@ -143,6 +147,11 @@ def register_notification_types(registry: Any, specs: Iterable[NotificationTypeS
 def run_on_app_loop(coro: Any) -> Any:
     """Schedule a coroutine on the application's event loop."""
     return api_hooks.run_on_app_loop(coro)
+
+
+def resolve_media(user: User, ref: Mapping[str, Any]) -> Dict[str, Any]:
+    """Resolve a history or library media reference the user may read; raises MediaRefError."""
+    return dict(api_generation.resolve_media_ref(user, dict(ref)))
 
 
 def find_ffmpeg() -> Optional[str]:

@@ -1,5 +1,6 @@
 import { t } from '../i18n/index.svelte.js';
 import { doc, asset, clipLabel } from './state.svelte.js';
+import { videoThumb } from './sources.svelte.js';
 
 const WIDTH = 480;
 const HEIGHT = 270;
@@ -89,10 +90,17 @@ export function placeholderThumb(shotIndex, label = '') {
 	return url;
 }
 
+export function realThumb(a) {
+	if (!a?.src) return null;
+	if (a.kind === 'image') return a.src;
+	if (a.kind === 'video') return videoThumb(a);
+	return null;
+}
+
 export function takeThumb(r) {
 	if (!r) return null;
 	const own = asset(`gen-${r.id}`);
-	if (own?.src) return own.src;
+	if (own?.src) return realThumb(own);
 	const c = doc.clips.find((x) => x.id === r.clipId);
 	return placeholderThumb(c ? doc.clips.indexOf(c) : 0, c ? clipLabel(c) : '');
 }
@@ -100,13 +108,13 @@ export function takeThumb(r) {
 export function clipThumb(c) {
 	const a = asset(c?.assetId);
 	if (!a || a.kind === 'audio') return null;
-	if (a.src) return a.src;
+	if (a.src) return realThumb(a);
 	return placeholderThumb(doc.clips.indexOf(c), clipLabel(c));
 }
 
 export function assetThumb(a) {
 	if (!a) return null;
-	if (a.src) return a.src;
+	if (a.src) return realThumb(a);
 	if (!a.generated || !a.resultId) return null;
 	return takeThumb(doc.results.find((r) => r.id === a.resultId));
 }

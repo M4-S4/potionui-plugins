@@ -1,5 +1,8 @@
-import { getLocale, t } from '../i18n/index.svelte.js';
+import { t } from '../i18n/index.svelte.js';
 import { doc } from './state.svelte.js';
+import { PROMPT_LANGUAGES, promptLanguageOf } from './starter.js';
+
+export const promptLocale = () => promptLanguageOf(doc.promptLanguage);
 
 export const libraries = ['Intégrée', 'Personnelle', 'Projet', 'Favoris', 'Historique'];
 export const categories = ['Cinéma', 'Caméra', 'Éclairage', 'Styles cinématographiques', 'Dialogue', 'Photographie', 'Son', 'Continuité', 'À éviter'];
@@ -28,30 +31,30 @@ export function categoryLabel(cat) {
 }
 
 const builtin = {
-	t1: () => [t('library.tpl.t1.name'), t('library.tpl.t1.description'), t('library.tpl.t1.keywords'), t('library.tpl.t1.text')],
-	t2: () => [t('library.tpl.t2.name'), t('library.tpl.t2.description'), t('library.tpl.t2.keywords'), t('library.tpl.t2.text')],
-	t3: () => [t('library.tpl.t3.name'), t('library.tpl.t3.description'), t('library.tpl.t3.keywords'), t('library.tpl.t3.text')],
-	t4: () => [t('library.tpl.t4.name'), t('library.tpl.t4.description'), t('library.tpl.t4.keywords'), t('library.tpl.t4.text')],
-	t5: () => [t('library.tpl.t5.name'), t('library.tpl.t5.description'), t('library.tpl.t5.keywords'), t('library.tpl.t5.text')],
-	t6: () => [t('library.tpl.t6.name'), t('library.tpl.t6.description'), t('library.tpl.t6.keywords'), t('library.tpl.t6.text')],
-	t7: () => [t('library.tpl.t7.name'), t('library.tpl.t7.description'), t('library.tpl.t7.keywords'), t('library.tpl.t7.text')],
-	t8: () => [t('library.tpl.t8.name'), t('library.tpl.t8.description'), t('library.tpl.t8.keywords'), t('library.tpl.t8.text')],
-	t9: () => [t('library.tpl.t9.name'), t('library.tpl.t9.description'), t('library.tpl.t9.keywords'), t('library.tpl.t9.text')],
-	t10: () => [t('library.tpl.t10.name'), t('library.tpl.t10.description'), t('library.tpl.t10.keywords'), t('library.tpl.t10.text')],
-	t11: () => [t('library.tpl.t11.name'), t('library.tpl.t11.description'), t('library.tpl.t11.keywords'), t('library.tpl.t11.text')],
-	t12: () => [t('library.tpl.t12.name'), t('library.tpl.t12.description'), t('library.tpl.t12.keywords'), t('library.tpl.t12.text')],
-	t13: () => [t('library.tpl.t13.name'), t('library.tpl.t13.description'), t('library.tpl.t13.keywords'), t('library.tpl.t13.text')],
-	t14: () => [t('library.tpl.t14.name'), t('library.tpl.t14.description'), t('library.tpl.t14.keywords'), t('library.tpl.t14.text')],
-	t15: () => [t('library.tpl.t15.name'), t('library.tpl.t15.description'), t('library.tpl.t15.keywords'), t('library.tpl.t15.text')],
-	t16: () => [t('library.tpl.t16.name'), t('library.tpl.t16.description'), t('library.tpl.t16.keywords'), t('library.tpl.t16.text')],
-	t17: () => [t('library.tpl.t17.name'), t('library.tpl.t17.description'), t('library.tpl.t17.keywords'), t('library.tpl.t17.text')],
-	t18: () => [t('library.tpl.t18.name'), t('library.tpl.t18.description'), t('library.tpl.t18.keywords'), t('library.tpl.t18.text')],
-	t19: () => [t('library.tpl.t19.name'), t('library.tpl.t19.description'), t('library.tpl.t19.keywords'), t('library.tpl.t19.text')],
-	t20: () => [t('library.tpl.t20.name'), t('library.tpl.t20.description'), t('library.tpl.t20.keywords'), t('library.tpl.t20.text')],
-	t21: () => [t('library.tpl.t21.name'), t('library.tpl.t21.description'), t('library.tpl.t21.keywords'), t('library.tpl.t21.text')],
-	t22: () => [t('library.tpl.t22.name'), t('library.tpl.t22.description'), t('library.tpl.t22.keywords'), t('library.tpl.t22.text')],
-	t23: () => [t('library.tpl.t23.name'), t('library.tpl.t23.description'), t('library.tpl.t23.keywords'), t('library.tpl.t23.text')],
-	p1: () => [t('library.tpl.p1.name'), t('library.tpl.p1.description'), t('library.tpl.p1.keywords'), t('library.tpl.p1.text')]
+	t1: () => [t('library.tpl.t1.name'), t('library.tpl.t1.description'), t('library.tpl.t1.keywords'), t('library.tpl.t1.text', null, promptLocale())],
+	t2: () => [t('library.tpl.t2.name'), t('library.tpl.t2.description'), t('library.tpl.t2.keywords'), t('library.tpl.t2.text', null, promptLocale())],
+	t3: () => [t('library.tpl.t3.name'), t('library.tpl.t3.description'), t('library.tpl.t3.keywords'), t('library.tpl.t3.text', null, promptLocale())],
+	t4: () => [t('library.tpl.t4.name'), t('library.tpl.t4.description'), t('library.tpl.t4.keywords'), t('library.tpl.t4.text', null, promptLocale())],
+	t5: () => [t('library.tpl.t5.name'), t('library.tpl.t5.description'), t('library.tpl.t5.keywords'), t('library.tpl.t5.text', null, promptLocale())],
+	t6: () => [t('library.tpl.t6.name'), t('library.tpl.t6.description'), t('library.tpl.t6.keywords'), t('library.tpl.t6.text', null, promptLocale())],
+	t7: () => [t('library.tpl.t7.name'), t('library.tpl.t7.description'), t('library.tpl.t7.keywords'), t('library.tpl.t7.text', null, promptLocale())],
+	t8: () => [t('library.tpl.t8.name'), t('library.tpl.t8.description'), t('library.tpl.t8.keywords'), t('library.tpl.t8.text', null, promptLocale())],
+	t9: () => [t('library.tpl.t9.name'), t('library.tpl.t9.description'), t('library.tpl.t9.keywords'), t('library.tpl.t9.text', null, promptLocale())],
+	t10: () => [t('library.tpl.t10.name'), t('library.tpl.t10.description'), t('library.tpl.t10.keywords'), t('library.tpl.t10.text', null, promptLocale())],
+	t11: () => [t('library.tpl.t11.name'), t('library.tpl.t11.description'), t('library.tpl.t11.keywords'), t('library.tpl.t11.text', null, promptLocale())],
+	t12: () => [t('library.tpl.t12.name'), t('library.tpl.t12.description'), t('library.tpl.t12.keywords'), t('library.tpl.t12.text', null, promptLocale())],
+	t13: () => [t('library.tpl.t13.name'), t('library.tpl.t13.description'), t('library.tpl.t13.keywords'), t('library.tpl.t13.text', null, promptLocale())],
+	t14: () => [t('library.tpl.t14.name'), t('library.tpl.t14.description'), t('library.tpl.t14.keywords'), t('library.tpl.t14.text', null, promptLocale())],
+	t15: () => [t('library.tpl.t15.name'), t('library.tpl.t15.description'), t('library.tpl.t15.keywords'), t('library.tpl.t15.text', null, promptLocale())],
+	t16: () => [t('library.tpl.t16.name'), t('library.tpl.t16.description'), t('library.tpl.t16.keywords'), t('library.tpl.t16.text', null, promptLocale())],
+	t17: () => [t('library.tpl.t17.name'), t('library.tpl.t17.description'), t('library.tpl.t17.keywords'), t('library.tpl.t17.text', null, promptLocale())],
+	t18: () => [t('library.tpl.t18.name'), t('library.tpl.t18.description'), t('library.tpl.t18.keywords'), t('library.tpl.t18.text', null, promptLocale())],
+	t19: () => [t('library.tpl.t19.name'), t('library.tpl.t19.description'), t('library.tpl.t19.keywords'), t('library.tpl.t19.text', null, promptLocale())],
+	t20: () => [t('library.tpl.t20.name'), t('library.tpl.t20.description'), t('library.tpl.t20.keywords'), t('library.tpl.t20.text', null, promptLocale())],
+	t21: () => [t('library.tpl.t21.name'), t('library.tpl.t21.description'), t('library.tpl.t21.keywords'), t('library.tpl.t21.text', null, promptLocale())],
+	t22: () => [t('library.tpl.t22.name'), t('library.tpl.t22.description'), t('library.tpl.t22.keywords'), t('library.tpl.t22.text', null, promptLocale())],
+	t23: () => [t('library.tpl.t23.name'), t('library.tpl.t23.description'), t('library.tpl.t23.keywords'), t('library.tpl.t23.text', null, promptLocale())],
+	p1: () => [t('library.tpl.p1.name'), t('library.tpl.p1.description'), t('library.tpl.p1.keywords'), t('library.tpl.p1.text', null, promptLocale())]
 };
 
 const T = (id, lib, cat, profiles, extra = {}) => ({ id, lib, cat, profiles, fav: false, ...extra });
@@ -98,14 +101,14 @@ export const materialize = (tpl) => fields(tpl);
 
 export const variablesList = ['subject', 'action', 'place', 'emotion', 'lens', 'light', 'duration'];
 
-export function varToken(id) {
-	if (id === 'subject') return t('library.varToken.subject');
-	if (id === 'action') return t('library.varToken.action');
-	if (id === 'place') return t('library.varToken.place');
-	if (id === 'emotion') return t('library.varToken.emotion');
-	if (id === 'lens') return t('library.varToken.lens');
-	if (id === 'light') return t('library.varToken.light');
-	if (id === 'duration') return t('library.varToken.duration');
+export function varToken(id, locale = promptLocale()) {
+	if (id === 'subject') return t('library.varToken.subject', null, locale);
+	if (id === 'action') return t('library.varToken.action', null, locale);
+	if (id === 'place') return t('library.varToken.place', null, locale);
+	if (id === 'emotion') return t('library.varToken.emotion', null, locale);
+	if (id === 'lens') return t('library.varToken.lens', null, locale);
+	if (id === 'light') return t('library.varToken.light', null, locale);
+	if (id === 'duration') return t('library.varToken.duration', null, locale);
 	return id;
 }
 
@@ -124,7 +127,7 @@ const VAR = /\{([^{}]+)\}/g;
 
 function canonical(name) {
 	if (variablesList.includes(name)) return name;
-	return variablesList.find((id) => varToken(id) === name) ?? name;
+	return variablesList.find((id) => PROMPT_LANGUAGES.some((locale) => varToken(id, locale) === name)) ?? name;
 }
 
 export const varName = (id) => (variablesList.includes(id) ? varToken(id) : id);
@@ -139,7 +142,8 @@ export const missingVars = (text) => [...new Set([...text.matchAll(VAR)].map((m)
 export function defaultVars() {
 	const ref = doc.references.find((r) => r.role === 'Identité' && r.type === 'Personnage');
 	const subject = ref?.name ? ref.name.split(/\s+[—–-]\s+/)[0].trim() : '';
-	return { subject, place: t('library.default.place'), action: '', emotion: '', lens: t('library.default.lens'), light: t('library.default.light'), duration: t('library.default.duration') };
+	const locale = promptLocale();
+	return { subject, place: t('library.default.place', null, locale), action: '', emotion: '', lens: t('library.default.lens', null, locale), light: t('library.default.light', null, locale), duration: t('library.default.duration', null, locale) };
 }
 
 export const assistantParts = {
@@ -156,27 +160,27 @@ export function partLabel(part) {
 	return t('library.part.acting');
 }
 
-export function optionLabel(id) {
-	if (id === 'dolly') return t('library.option.dolly');
-	if (id === 'lateral') return t('library.option.lateral');
-	if (id === 'arc') return t('library.option.arc');
-	if (id === 'static') return t('library.option.static');
-	if (id === 'rise') return t('library.option.rise');
-	if (id === 'window') return t('library.option.window');
-	if (id === 'backlight') return t('library.option.backlight');
-	if (id === 'neon') return t('library.option.neon');
-	if (id === 'overcast') return t('library.option.overcast');
-	if (id === 'morning') return t('library.option.morning');
-	if (id === 'noir') return t('library.option.noir');
-	if (id === 'naturalism') return t('library.option.naturalism');
-	if (id === 'adventure') return t('library.option.adventure');
-	if (id === 'film35') return t('library.option.film35');
-	if (id === 'contemplative') return t('library.option.contemplative');
-	if (id === 'confidence') return t('library.option.confidence');
-	if (id === 'tension') return t('library.option.tension');
-	if (id === 'decision') return t('library.option.decision');
-	if (id === 'deadpan') return t('library.option.deadpan');
-	if (id === 'silence') return t('library.option.silence');
+export function optionLabel(id, locale) {
+	if (id === 'dolly') return t('library.option.dolly', null, locale);
+	if (id === 'lateral') return t('library.option.lateral', null, locale);
+	if (id === 'arc') return t('library.option.arc', null, locale);
+	if (id === 'static') return t('library.option.static', null, locale);
+	if (id === 'rise') return t('library.option.rise', null, locale);
+	if (id === 'window') return t('library.option.window', null, locale);
+	if (id === 'backlight') return t('library.option.backlight', null, locale);
+	if (id === 'neon') return t('library.option.neon', null, locale);
+	if (id === 'overcast') return t('library.option.overcast', null, locale);
+	if (id === 'morning') return t('library.option.morning', null, locale);
+	if (id === 'noir') return t('library.option.noir', null, locale);
+	if (id === 'naturalism') return t('library.option.naturalism', null, locale);
+	if (id === 'adventure') return t('library.option.adventure', null, locale);
+	if (id === 'film35') return t('library.option.film35', null, locale);
+	if (id === 'contemplative') return t('library.option.contemplative', null, locale);
+	if (id === 'confidence') return t('library.option.confidence', null, locale);
+	if (id === 'tension') return t('library.option.tension', null, locale);
+	if (id === 'decision') return t('library.option.decision', null, locale);
+	if (id === 'deadpan') return t('library.option.deadpan', null, locale);
+	if (id === 'silence') return t('library.option.silence', null, locale);
 	return id ?? '';
 }
 
@@ -186,26 +190,26 @@ const PREPOSITIONS = {
 };
 
 export function composePrompt(parts, vars, profile, cameraLocked) {
-	const locale = getLocale();
+	const locale = promptLocale();
 	const lower = (s) => s.toLocaleLowerCase(locale);
 	const subject = vars.subject || `{${varToken('subject')}}`;
 	const place = vars.place || `{${varToken('place')}}`;
-	const where = (PREPOSITIONS[locale] ?? PREPOSITIONS.en).test(place) ? place : t('library.compose.inPlace', { place });
+	const where = (PREPOSITIONS[locale] ?? PREPOSITIONS.en).test(place) ? place : t('library.compose.inPlace', { place }, locale);
 	const bits = {
-		camera: parts.camera && !cameraLocked ? t('library.compose.cameraOn', { camera: lower(parts.camera), subject }) : '',
+		camera: parts.camera && !cameraLocked ? t('library.compose.cameraOn', { camera: lower(parts.camera), subject }, locale) : '',
 		light: parts.light ? lower(parts.light) : '',
-		style: parts.style ? t('library.compose.style', { style: lower(parts.style) }) : '',
+		style: parts.style ? t('library.compose.style', { style: lower(parts.style) }, locale) : '',
 		acting: parts.acting
 			? vars.emotion
-				? t('library.compose.actingEmotion', { acting: lower(parts.acting), emotion: vars.emotion })
-				: t('library.compose.acting', { acting: lower(parts.acting) })
+				? t('library.compose.actingEmotion', { acting: lower(parts.acting), emotion: vars.emotion }, locale)
+				: t('library.compose.acting', { acting: lower(parts.acting) }, locale)
 			: ''
 	};
-	const action = t('library.compose.action', { subject, action: vars.action || `{${varToken('action')}}` });
+	const action = t('library.compose.action', { subject, action: vars.action || `{${varToken('action')}}` }, locale);
 	let order;
-	if (profile === 'FL2VA') order = [t('library.compose.fl2va', { action, where }), bits.camera, bits.light, bits.style, bits.acting, t('library.compose.fl2vaEnd')];
-	else if (profile === 'Ref2VA') order = [t('library.compose.ref2va', { action, where }), t('library.compose.ref2vaIdentity'), bits.light, bits.style, bits.camera, bits.acting];
-	else order = [t('library.compose.hybrid', { action }), bits.acting, t('library.compose.hybridSync'), bits.camera, bits.light, bits.style];
+	if (profile === 'FL2VA') order = [t('library.compose.fl2va', { action, where }, locale), bits.camera, bits.light, bits.style, bits.acting, t('library.compose.fl2vaEnd', null, locale)];
+	else if (profile === 'Ref2VA') order = [t('library.compose.ref2va', { action, where }, locale), t('library.compose.ref2vaIdentity', null, locale), bits.light, bits.style, bits.camera, bits.acting];
+	else order = [t('library.compose.hybrid', { action }, locale), bits.acting, t('library.compose.hybridSync', null, locale), bits.camera, bits.light, bits.style];
 	const s = order.filter(Boolean).join(', ');
 	return s.charAt(0).toLocaleUpperCase(locale) + s.slice(1) + '.';
 }

@@ -32,7 +32,8 @@
 		sourceLength
 	} from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform } from '../../lib/timeline.js';
+	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
+	import { audioPeaks } from '../../lib/sources.svelte.js';
 	import { roleColor, stages, frameRoleLabel } from '../../lib/catalog.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
@@ -292,7 +293,7 @@
 		const at = round(timeAt(e.clientX), 0.04);
 		if (row.id === 'frames' && a.kind !== 'audio') return addFrame(id, at);
 		if (row.lane && a.kind === 'audio') {
-			act(() => doc.audio.push({ id: ulid(), assetId: id, lane: row.id, start: at, dur: Math.min(8, a.srcDur), srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 }));
+			act(() => doc.audio.push({ id: ulid(), assetId: id, lane: row.id, start: at, dur: Math.min(8, a.srcDur ?? 8), srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 }));
 			return toast(t('timeline.toast.dropped', { name: a.name, lane: row.id }));
 		}
 		if (row.id === 'v1' && a.kind !== 'audio') return addAssetToTimeline(id, at);
@@ -599,6 +600,7 @@
 {#snippet audioClip(a, row)}
 	{@const src = asset(a.assetId)}
 	{@const w = x(a.dur)}
+	{@const peaks = audioPeaks(src)}
 	{@const sel = isSel('audio', a.id)}
 	<div
 		class="group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/30'} {row.lane.mute ? 'opacity-40' : ''}"
@@ -612,7 +614,7 @@
 		onkeydown={(e) => e.key === 'Enter' && select('audio', a.id)}
 	>
 		<svg class="absolute inset-x-0 bottom-0" width={w} height="22" aria-hidden="true">
-			<polygon points={waveform(a.assetId, w, 22, a.srcIn, pps, src?.synth)} fill="rgb(var(--{row.color}))" opacity="0.85" />
+			<polygon points={src?.src ? (peaks ? peakWaveform(peaks, w, 22, a.srcIn, pps) : '') : waveform(a.assetId, w, 22, a.srcIn, pps, src?.synth)} fill="rgb(var(--{row.color}))" opacity="0.85" />
 		</svg>
 		<div class="absolute left-1.5 top-0.5 truncate text-xs font-medium text-fg">{src?.name}</div>
 		{@render fades(a, 'audio', w, 30, true)}

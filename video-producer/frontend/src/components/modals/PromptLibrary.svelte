@@ -22,7 +22,8 @@
 		missingVars,
 		varLabel,
 		varName,
-		defaultVars
+		defaultVars,
+		promptLocale
 	} from '../../lib/library.svelte.js';
 	import { directionFields } from '../../lib/catalog.js';
 	import { chat } from '../../lib/host.js';
@@ -132,10 +133,10 @@
 	const composed = $derived(
 		composePrompt(
 			{
-				camera: custom.camera || optionLabel(parts.camera),
-				light: custom.light || optionLabel(parts.light),
-				style: custom.style || optionLabel(parts.style),
-				acting: custom.acting || optionLabel(parts.acting)
+				camera: custom.camera || optionLabel(parts.camera, promptLocale()),
+				light: custom.light || optionLabel(parts.light, promptLocale()),
+				style: custom.style || optionLabel(parts.style, promptLocale()),
+				acting: custom.acting || optionLabel(parts.acting, promptLocale())
 			},
 			vars,
 			profile,

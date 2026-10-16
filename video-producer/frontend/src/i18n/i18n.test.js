@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DOMAINS, LOCALES, detectLocale, formatBytes, formatDuration, formatTimecode, hasKey, mergeDomains, normalizeLocale, translate } from './core.js';
+import { DOMAINS, LOCALES, detectLocale, formatBytes, formatDuration, formatRelative, formatTimecode, hasKey, mergeDomains, normalizeLocale, translate } from './core.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, '..');
@@ -177,7 +177,7 @@ test('every key is used', () => {
 });
 
 test('every command and menu of lib/commands.js has a label, and every label has a command', () => {
-	assert.equal(commandIds.length, 96, 'the source editor has 97 commands, minus the theme switch');
+	assert.equal(commandIds.length, 97, 'the source editor has 97 commands, minus the theme switch, plus the version history');
 	assert.equal(new Set(commandIds).size, commandIds.length, 'duplicate command id');
 	assert.equal(menuIds.length, 10);
 	assert.ok(!commandIds.includes('theme'), 'the theme command belongs to the host');
@@ -238,4 +238,16 @@ test('formats follow the locale', () => {
 	assert.match(formatDuration('en', 3725), /^1\shr 2\smin$/);
 	assert.match(formatBytes('fr', 1.5 * 1024 ** 3), /^1,5\s?Go$/);
 	assert.match(formatBytes('en', 1.5 * 1024 ** 2), /^1\.5\s?MB$/);
+});
+
+test('relative times count back from now in the locale, and never into the future', () => {
+	const now = Date.parse('2026-10-16T12:00:00Z');
+	assert.equal(formatRelative('en', '2026-10-16T11:55:00Z', now), '5 minutes ago');
+	assert.equal(formatRelative('fr', '2026-10-16T11:55:00Z', now), 'il y a 5 minutes');
+	assert.equal(formatRelative('en', '2026-10-15T11:00:00Z', now), 'yesterday');
+	assert.equal(formatRelative('fr', '2026-10-15T11:00:00Z', now), 'hier');
+	assert.equal(formatRelative('en', '2026-10-02T12:00:00Z', now), '2 weeks ago');
+	assert.equal(formatRelative('en', '2026-10-16T12:00:30Z', now), 'now');
+	assert.equal(formatRelative('en', 'not a date', now), '');
+	assert.equal(formatRelative('en', null, now), '');
 });

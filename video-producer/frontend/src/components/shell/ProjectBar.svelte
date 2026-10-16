@@ -4,6 +4,8 @@
 	import { ui, doc } from '../../lib/state.svelte.js';
 	import { commandById, save, shortcutLabel } from '../../lib/commands.js';
 	import { chat } from '../../lib/host.js';
+	import { openImport } from '../../lib/importer.js';
+	import { project } from '../../lib/project.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 
@@ -24,7 +26,8 @@
 	}
 
 	const tip = (id) => ({ text: commandById(id)?.label ?? '', kbd: commandById(id)?.key || undefined });
-	const savedTime = $derived(ui.savedAt ? formatTime(ui.savedAt) : null);
+	const savedTime = $derived(project.savedAt ? formatTime(project.savedAt) : null);
+	const saveState = $derived(project.status === 'saving' ? 'saving' : project.status === 'error' ? 'error' : ui.dirty ? 'dirty' : 'saved');
 
 	function nameChanged() {
 		if (!doc.name.trim()) doc.name = t('lib.default.project');
@@ -50,7 +53,11 @@
 			<input class="vp-projectbar-name" bind:value={doc.name} onchange={nameChanged} aria-label={t('shell.project.name')} />
 			<HostUi name="Tooltip" props={tip('save')}>
 				<button type="button" class="flex h-6 items-center gap-1.5 self-start text-xs leading-none text-fg-muted hover:text-fg" onclick={save} aria-live="polite">
-					{#if ui.dirty}
+					{#if saveState === 'saving'}
+						<span class="h-1.5 w-1.5 rounded-full bg-signal"></span>{t('project.status.saving')}
+					{:else if saveState === 'error'}
+						<span class="h-1.5 w-1.5 rounded-full bg-danger"></span>{t('project.status.error')}
+					{:else if saveState === 'dirty'}
 						<span class="h-1.5 w-1.5 rounded-full bg-warning"></span>{t('shell.project.dirty')}
 					{:else if savedTime}
 						{t('shell.project.savedAt', { time: savedTime })}
@@ -74,7 +81,7 @@
 
 	<div class="flex min-w-0 items-center justify-end gap-0.5">
 		<HostUi name="Tooltip" props={{ text: t('shell.project.importTip'), kbd: commandById('import')?.key }}>
-			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: 'upload', onclick: () => (ui.modal = { type: 'import' }) }}>{t('shell.project.import')}</HostUi>
+			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: 'upload', onclick: () => openImport() }}>{t('shell.project.import')}</HostUi>
 		</HostUi>
 		<HostUi name="Tooltip" props={{ text: t('shell.project.exportTip'), kbd: commandById('export')?.key }}>
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: hostIconName('export'), onclick: () => (ui.modal = { type: 'export' }) }}>{t('shell.project.export')}</HostUi>

@@ -1,23 +1,25 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, assets, addAssetToTimeline, addFrame, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, addAssetToTimeline, addFrame, secs } from '../../lib/state.svelte.js';
 	import { audioRoleLabel } from '../../lib/catalog.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { mountHostSlot } from '../../lib/host.js';
+	import { openImport } from '../../lib/importer.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import Icon from '../Icon.svelte';
 
 	const collections = ['all', 'image', 'video', 'audio', 'generated'];
 	let picked = $state(null);
 	const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-	const media = $derived(assets);
+	const media = $derived(doc.assets);
 	const categoryOf = (a) => (a.kind === 'audio' ? 'audio' : a.generated ? 'generated' : a.kind === 'image' ? 'image' : 'video');
 	const inCollection = (a, c) => c === 'all' || categoryOf(a) === c;
 	const list = $derived(media.filter((a) => inCollection(a, ui.mediaCollection) && (!ui.mediaQuery || norm(a.name).includes(norm(ui.mediaQuery)))));
-	const cur = $derived(assets.find((a) => a.id === picked) ?? null);
+	const cur = $derived(doc.assets.find((a) => a.id === picked) ?? null);
+	const originLabel = (a) => (a.origin?.kind === 'library' ? t('project.origin.library') : t('project.origin.history'));
 
 	function collectionLabel(c) {
 		if (c === 'all') return t('panels.media.collection.all');
@@ -49,14 +51,14 @@
 		icon: 'image',
 		title: t('panels.media.none'),
 		description: t('panels.media.noneHint'),
-		actions: { slot: (el) => mountHostSlot(el, 'Button', { variant: 'secondary', size: 'xs', icon: 'upload', onclick: () => (ui.modal = { type: 'import' }), children: t('panels.media.import') }) }
+		actions: { slot: (el) => mountHostSlot(el, 'Button', { variant: 'secondary', size: 'xs', icon: 'upload', onclick: () => openImport(), children: t('panels.media.import') }) }
 	});
 </script>
 
 <PanelHeader icon="image" title={t('panels.media.title')} subtitle={t('panels.media.count', { count: media.length })}>
 	<HostUi
 		name="IconButton"
-		props={{ icon: 'upload', label: t('panels.media.import'), size: 'sm', class: 'vp-h7', tooltip: t('panels.media.importTip'), kbd: commandById('import')?.key, onclick: () => (ui.modal = { type: 'import' }) }}
+		props={{ icon: 'upload', label: t('panels.media.import'), size: 'sm', class: 'vp-h7', tooltip: t('panels.media.importTip'), kbd: commandById('import')?.key, onclick: () => openImport() }}
 	/>
 </PanelHeader>
 
@@ -93,11 +95,11 @@
 							{:else}
 								<div class="flex h-full items-center justify-center text-fg-muted"><Icon name={a.kind !== 'audio' ? 'film' : a.role === 'Dialogue' ? 'mic' : 'music'} class="h-6 w-6" /></div>
 							{/if}
-							<span class="vp-tc absolute bottom-1 right-1 rounded-sm bg-black/60 px-1 text-2xs text-white">{secs(a.srcDur)}</span>
+							{#if a.srcDur !== null}<span class="vp-tc absolute bottom-1 right-1 rounded-sm bg-black/60 px-1 text-2xs text-white">{secs(a.srcDur)}</span>{/if}
 							{#if a.generated}
 								<span class="absolute left-1 top-1 flex items-center gap-1 rounded-sm bg-black/60 px-1 text-2xs text-white"><span class="h-1.5 w-1.5 rounded-full {a.quality === 'final' ? 'bg-success-solid' : 'bg-signal-solid'}"></span>{a.quality === 'final' ? t('panels.media.final') : t('panels.media.draft')}</span>
 							{:else if a.origin}
-								<span class="absolute left-1 top-1 rounded-sm bg-black/60 px-1 text-2xs text-white">{t('panels.media.origin')}</span>
+								<span class="absolute left-1 top-1 rounded-sm bg-black/60 px-1 text-2xs text-white">{originLabel(a)}</span>
 							{/if}
 						</div>
 						<div class="truncate px-1.5 py-1 text-xs text-fg">{a.name}</div>
@@ -119,14 +121,20 @@
 			<span class="ml-auto shrink-0"><HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{kindLabel(cur.kind)}</HostUi></span>
 		</div>
 		<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-			<dt class="text-fg-subtle">{t('panels.media.duration')}</dt>
-			<dd class="vp-tc text-fg-muted">{secs(cur.srcDur)}</dd>
+			{#if cur.srcDur !== null}
+				<dt class="text-fg-subtle">{t('panels.media.duration')}</dt>
+				<dd class="vp-tc text-fg-muted">{secs(cur.srcDur)}</dd>
+			{/if}
 			{#if cur.res}
 				<dt class="text-fg-subtle">{t('panels.media.format')}</dt>
 				<dd class="text-fg-muted">{cur.fps ? t('panels.media.formatFps', { res: cur.res, fps: cur.fps }) : cur.res}</dd>
 			{/if}
 			<dt class="text-fg-subtle">{t('panels.media.collection')}</dt>
 			<dd class="text-fg-muted">{cur.role ? t('panels.media.collectionRole', { collection: collectionLabel(categoryOf(cur)), role: audioRoleLabel(cur.role) }) : collectionLabel(categoryOf(cur))}</dd>
+			{#if cur.origin}
+				<dt class="text-fg-subtle">{t('project.origin.label')}</dt>
+				<dd class="text-fg-muted">{originLabel(cur)}</dd>
+			{/if}
 		</dl>
 		<div class="flex gap-1.5">
 			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('eye'), class: 'flex-1', onclick: () => (ui.preview = { kind: 'asset', id: cur.id }) }}>{t('panels.media.preview')}</HostUi>

@@ -8,6 +8,9 @@ def ok(data: Any) -> Dict[str, Any]:
     return {"success": True, "data": data}
 
 
-def fail(status_code: int, error: str, message: str) -> NoReturn:
-    """Raise an HTTP error carrying a stable error code."""
-    raise HTTPException(status_code=status_code, detail={"success": False, "error": error, "message": message})
+def fail(status_code: int, error: str, message: str, **data: Any) -> NoReturn:
+    """Raise an HTTP error carrying a stable error code and, when given, its data."""
+    detail: Dict[str, Any] = {"success": False, "error": error, "message": message}
+    if data:
+        detail["data"] = data
+    raise HTTPException(status_code=status_code, detail=detail)

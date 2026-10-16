@@ -1,0 +1,205 @@
+{
+  "name": "[lib.default.project]",
+  "fps": 25,
+  "aspect": "16:9",
+  "resolution": "1080p",
+  "promptLanguage": "en",
+  "direction": {
+    "univers": "",
+    "personnages": "",
+    "photographie": "",
+    "palette": "",
+    "rythme": "",
+    "mode": "FL2VA"
+  },
+  "synopsis": "",
+  "clips": [],
+  "audio": [],
+  "titles": [],
+  "prompts": [],
+  "frames": [],
+  "controls": [],
+  "plans3d": [],
+  "markers": [],
+  "references": [],
+  "scenes": [],
+  "lanes": [
+    {
+      "id": "A1",
+      "name": "[starter.lane.dialogue]",
+      "role": "Dialogue",
+      "vol": 0,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "automation": "off",
+      "sends": {
+        "R1": -18,
+        "D1": -60
+      },
+      "inserts": [
+        {
+          "type": "eq",
+          "on": true,
+          "low": 0,
+          "mid": 0,
+          "high": 2
+        },
+        {
+          "type": "comp",
+          "on": true,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 120
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "name": "[starter.lane.music]",
+      "role": "Musique",
+      "vol": -2,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "automation": "off",
+      "sends": {
+        "R1": -12,
+        "D1": -60
+      },
+      "inserts": [
+        {
+          "type": "eq",
+          "on": true,
+          "low": 0,
+          "mid": 0,
+          "high": 0
+        },
+        {
+          "type": "comp",
+          "on": false,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 120
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "name": "[starter.lane.ambience]",
+      "role": "Ambiance",
+      "vol": -6,
+      "pan": -0.2,
+      "mute": false,
+      "solo": false,
+      "automation": "off",
+      "sends": {
+        "R1": -12,
+        "D1": -60
+      },
+      "inserts": [
+        {
+          "type": "eq",
+          "on": true,
+          "low": 0,
+          "mid": 0,
+          "high": 0
+        },
+        {
+          "type": "comp",
+          "on": false,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 120
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "name": "[starter.lane.foley]",
+      "role": "SFX",
+      "vol": -4,
+      "pan": 0.3,
+      "mute": false,
+      "solo": false,
+      "automation": "off",
+      "sends": {
+        "R1": -12,
+        "D1": -60
+      },
+      "inserts": [
+        {
+          "type": "eq",
+          "on": true,
+          "low": 0,
+          "mid": 0,
+          "high": 0
+        },
+        {
+          "type": "comp",
+          "on": false,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 120
+        }
+      ]
+    }
+  ],
+  "aux": [
+    {
+      "id": "R1",
+      "name": "[starter.lane.reverb]",
+      "vol": -6,
+      "mute": false
+    },
+    {
+      "id": "D1",
+      "name": "[starter.lane.delay]",
+      "vol": -10,
+      "mute": false
+    }
+  ],
+  "master": {
+    "vol": 0
+  },
+  "results": [],
+  "profiles": [],
+  "engine": {
+    "seed": 48121,
+    "quality": "Standard",
+    "resolution": "1080p",
+    "steps": 30,
+    "guidance": 6.5,
+    "overlap": 1,
+    "windowLen": 5,
+    "loras": [],
+    "post": {
+      "upscale": false,
+      "interpolation": true,
+      "denoise": true
+    },
+    "variants": 2,
+    "backend": "local",
+    "consistency": 70,
+    "lockIdentity": true,
+    "motionPriority": true,
+    "audioDriver": "A1",
+    "lipSync": true,
+    "offset": 0,
+    "followCut": true,
+    "naming": "{projet}_{fenêtre}_{variante}",
+    "autoInsert": false
+  },
+  "hybrid": {
+    "continuite": 80,
+    "identite": 55,
+    "audio": 10,
+    "mouvement": 40,
+    "style": 50
+  },
+  "assets": []
+}

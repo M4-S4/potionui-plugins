@@ -7,6 +7,7 @@
 	import { ms } from '../../lib/motion.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { focusables } from '../../lib/keyboard.js';
+	import { restoreFocus, takeReturnFocus } from '../../lib/focus.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { ui } from '../../lib/state.svelte.js';
 	import Icon from '../Icon.svelte';
@@ -47,10 +48,11 @@
 
 	onMount(() => {
 		const previous = document.activeElement;
+		const fallback = takeReturnFocus();
 		const frame = requestAnimationFrame(initialFocus);
 		return () => {
 			cancelAnimationFrame(frame);
-			if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+			restoreFocus(previous, fallback);
 		};
 	});
 </script>

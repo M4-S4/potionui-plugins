@@ -30,6 +30,22 @@
 	const previewThumb = $derived(previewAsset ? assetThumb(previewAsset) : null);
 	const busy = $derived(ui.production.state === 'running' || ui.production.state === 'paused');
 	const key = (id) => commandById(id)?.key || undefined;
+	const liveVideo = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'video' ? a.src : null);
+	const liveImage = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'image' ? a.src : null);
+	let video = $state();
+
+	$effect(() => {
+		const el = video;
+		if (!el || !liveVideo || !clip) return;
+		const target = Math.max(0, ui.playhead - clip.start + clip.srcIn);
+		if (ui.playing) {
+			if (el.paused) el.play().catch(() => {});
+			if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
+		} else {
+			if (!el.paused) el.pause();
+			if (Math.abs(el.currentTime - target) > 0.02) el.currentTime = target;
+		}
+	});
 
 	function modeLabel(m) {
 		if (m === 'compare') return t('viewer.mode.compare');
@@ -77,12 +93,19 @@
 						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => insertResult(previewResult.id) }}>{t('viewer.useTake')}</HostUi>
 					</div>
 				{:else if previewAsset}
-					{#if previewThumb}
+					{#if previewAsset.src && previewAsset.kind === 'video'}
+						<video src={previewAsset.src} class="h-full w-full object-contain" controls muted playsinline preload="metadata" aria-label={previewAsset.name}></video>
+					{:else if previewAsset.src && previewAsset.kind === 'audio'}
+						<div class="flex h-full flex-col items-center justify-center gap-4 text-white/60">
+							<Icon name="music" class="h-10 w-10" />
+							<audio src={previewAsset.src} controls preload="metadata" aria-label={previewAsset.name}></audio>
+						</div>
+					{:else if previewThumb}
 						<img src={previewThumb} alt={previewAsset.name} class="h-full w-full object-contain" />
 					{:else}
 						<div class="flex h-full items-center justify-center text-white/60"><Icon name={previewAsset.kind === 'audio' ? 'music' : 'film'} class="h-10 w-10" /></div>
 					{/if}
-					<div class="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/80 to-transparent px-3 pb-2.5 pt-8 text-sm text-white">
+					<div class="absolute inset-x-0 flex items-center gap-2 px-3 text-sm text-white {previewAsset.src && previewAsset.kind !== 'image' ? 'top-0 bg-gradient-to-b from-black/80 to-transparent pb-8 pt-12' : 'bottom-0 bg-gradient-to-t from-black/80 to-transparent pb-2.5 pt-8'}">
 						<span class="flex-1">{previewAsset.name} <span class="text-white/60">{t('viewer.sourceMedia')}</span></span>
 						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: addPreviewToCut }}>{t('viewer.addToCut')}</HostUi>
 					</div>
@@ -99,6 +122,22 @@
 							</HostUi>
 						</div>
 					</div>
+				{:else if liveVideo}
+					{#key liveVideo}
+						<video
+							bind:this={video}
+							src={liveVideo}
+							class="h-full w-full object-contain"
+							muted
+							playsinline
+							preload="auto"
+							aria-label={a.name}
+							style:opacity={fadeOpacity(clip, time)}
+							style:filter={clipFilter(clip)}
+						></video>
+					{/key}
+				{:else if liveImage}
+					<img src={liveImage} alt={a.name} class="h-full w-full object-contain" style:opacity={fadeOpacity(clip, time)} style:filter={clipFilter(clip)} />
 				{:else if clip && a}
 					<img
 						src={clipThumb(clip)}

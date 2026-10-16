@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
 import { isUlid, ulid, ulidTime } from './ulid.js';
-import { emptyDoc, starterDoc } from './starter.js';
+import { emptyDoc, newAsset, promptLanguageOf, starterDoc } from './starter.js';
 import { detectMac, eventKey, formatShortcut, isActivationTarget, isTypingTarget, parseShortcut } from './keyboard.js';
 import { HOST_ALIASES, HOST_MISSING, HOST_VARIANTS, hostIconName, hostIcons, paths } from './icons.js';
 
@@ -139,7 +139,7 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 			['D1', 'Délai']
 		]
 	);
-	for (const key of ['audio', 'frames', 'controls', 'plans3d', 'references', 'results', 'scenes', 'profiles']) assert.deepEqual(fr[key], [], key);
+	for (const key of ['audio', 'frames', 'controls', 'plans3d', 'references', 'results', 'scenes', 'profiles', 'assets']) assert.deepEqual(fr[key], [], key);
 	assert.deepEqual([fr.engine.seed, fr.engine.variants, fr.engine.backend, fr.engine.loras], [48121, 2, 'local', []]);
 	const ids = [...fr.clips, ...fr.prompts, ...fr.titles, ...fr.markers].map((x) => x.id);
 	assert.ok(ids.every(isUlid));
@@ -156,7 +156,7 @@ test('emptyDoc: an untitled project with no shot and the four empty lanes', () =
 	assert.equal(fr.name, 'Projet sans titre');
 	assert.equal(en.name, 'Untitled project');
 	assert.equal(fr.synopsis, '');
-	for (const key of ['clips', 'prompts', 'titles', 'markers', 'audio', 'frames', 'results', 'scenes']) assert.deepEqual(fr[key], [], key);
+	for (const key of ['clips', 'prompts', 'titles', 'markers', 'audio', 'frames', 'results', 'scenes', 'assets']) assert.deepEqual(fr[key], [], key);
 	assert.deepEqual(
 		en.lanes.map((l) => [l.id, l.name, l.role]),
 		[
@@ -182,4 +182,35 @@ test('readiness: an FL2VA range without a frame warns instead of blocking, so th
 	assert.equal(doc.direction.mode, 'FL2VA');
 	assert.equal(doc.frames.length, 0);
 	assert.ok(doc.prompts.every((p) => p.text.trim()));
+});
+
+test('newAsset: every field of the persisted asset contract, null when it does not apply', () => {
+	const a = newAsset({ kind: 'image', name: 'still.png', src: '/api/media/uploads/still.png', origin: { kind: 'library', itemId: 'i1' } });
+	assert.deepEqual(Object.keys(a), ['id', 'kind', 'name', 'src', 'origin', 'srcDur', 'width', 'height', 'fps', 'res', 'generated', 'quality', 'resultId', 'role', 'synth', 'transcript', 'character', 'lipSync']);
+	assert.ok(isUlid(a.id));
+	assert.deepEqual([a.srcDur, a.width, a.height, a.fps, a.res, a.quality, a.resultId, a.role, a.synth, a.transcript, a.character, a.lipSync], Array(12).fill(null));
+	assert.equal(a.generated, false);
+	assert.equal(newAsset().kind, 'video');
+	assert.notEqual(newAsset().id, newAsset().id);
+});
+
+test('prompt language: a project setting, English by default, that only decides the language of the starter direction and prompts', () => {
+	const missing = [];
+	const fr = translator('fr', missing);
+	const en = translator('en', missing);
+	const doc = starterDoc(fr, en, 'en');
+	assert.deepEqual(missing, []);
+	assert.equal(doc.promptLanguage, 'en');
+	assert.equal(doc.name, 'Aube sur le port');
+	assert.match(doc.synopsis, /^Un petit port de pêche au lever du jour\./);
+	assert.equal(doc.clips[0].label, 'Le port endormi');
+	assert.equal(doc.titles[0].text, 'Aube sur le port');
+	assert.match(doc.prompts[0].text, /^Wide shot of a small fishing harbour at dawn/);
+	assert.deepEqual(doc.direction, starterDoc(en, en, 'en').direction);
+	assert.match(starterDoc(fr, fr, 'fr').prompts[0].text, /^Plan large d’un petit port de pêche à l’aube/);
+	assert.equal(starterDoc(fr, fr, 'fr').promptLanguage, 'fr');
+	assert.equal(starterDoc(fr).promptLanguage, 'en');
+	assert.equal(emptyDoc(fr).promptLanguage, 'en');
+	assert.equal(emptyDoc(fr, 'fr').promptLanguage, 'fr');
+	assert.deepEqual(['en', 'fr', 'de', undefined, null].map(promptLanguageOf), ['en', 'fr', 'en', 'en', 'en']);
 });

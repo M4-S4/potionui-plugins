@@ -15,7 +15,8 @@ export const DOMAINS = [
 	'mixer',
 	'modals',
 	'library',
-	'starter'
+	'starter',
+	'project'
 ];
 
 export function mergeDomains(domains) {
@@ -100,6 +101,24 @@ export function formatDate(locale, value, options = { dateStyle: 'medium', timeS
 	const date = value instanceof Date ? value : new Date(value);
 	if (Number.isNaN(date.getTime())) return '';
 	return cached('date', locale, options, () => new Intl.DateTimeFormat(locale, options)).format(date);
+}
+
+const RELATIVE_UNITS = [
+	['year', 31536000],
+	['month', 2592000],
+	['week', 604800],
+	['day', 86400],
+	['hour', 3600],
+	['minute', 60],
+	['second', 1]
+];
+
+export function formatRelative(locale, value, now = Date.now()) {
+	const date = value instanceof Date ? value : new Date(value ?? NaN);
+	if (Number.isNaN(date.getTime())) return '';
+	const diff = Math.min(0, (date.getTime() - now) / 1000);
+	const [name, size] = RELATIVE_UNITS.find(([, seconds]) => -diff >= seconds) ?? RELATIVE_UNITS[RELATIVE_UNITS.length - 1];
+	return cached('relative', locale, null, () => new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })).format(Math.round(diff / size), name);
 }
 
 function unit(locale, value, name, display = 'short') {

@@ -5,6 +5,7 @@
 	import { seek } from '../../lib/playback.svelte.js';
 	import { families, addReference, refTypeLabel, refRoleLabel } from '../../lib/references.js';
 	import { mountHostSlot } from '../../lib/host.js';
+	import { realThumb } from '../../lib/media.js';
 	import Icon from '../Icon.svelte';
 
 	let q = $state('');
@@ -76,6 +77,7 @@
 					<ul class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
 						{#each g.refs as r (r.id)}
 							{@const a = r.assetId ? asset(r.assetId) : null}
+							{@const thumb = realThumb(a)}
 							{@const f = fam(r.space)}
 							{@const shot = shotOf(r)}
 							<li>
@@ -89,8 +91,8 @@
 									title={a?.src ? t('references.dragHint') : f?.hint}
 								>
 									<div class="relative aspect-video overflow-hidden rounded-lg bg-surface-3">
-										{#if a?.src}
-											<img src={a.src} alt="" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100" draggable="false" />
+										{#if thumb}
+											<img src={thumb} alt="" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100" draggable="false" />
 										{:else}
 											<div class="flex h-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgb(var(--viz-8)/0.25),transparent_60%)]">
 												<Icon name={f?.icon ?? 'bookmark'} class="h-7 w-7 text-fg-muted" />

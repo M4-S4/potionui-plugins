@@ -6,6 +6,7 @@
 	"cmd.new-project": "New project…",
 	"cmd.open": "Open…",
 	"cmd.save": "Save",
+	"cmd.versions": "Version history…",
 	"cmd.import": "Import files…",
 	"cmd.import-gallery": "From the PotionUI gallery",
 	"cmd.project-props": "Project properties…",

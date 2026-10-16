@@ -91,6 +91,10 @@ export function waveform(seed, width, height, srcIn, pps, kind) {
 		else amp = 0.45 + 0.25 * n;
 		pts.push([x, Math.max(0.5, amp * (mid - 2))]);
 	}
+	return polygon(pts, mid);
+}
+
+function polygon(pts, mid) {
 	const top = pts.map(([x, a]) => `${x},${mid - a}`).join(' ');
 	const bottom = pts
 		.slice()
@@ -98,4 +102,19 @@ export function waveform(seed, width, height, srcIn, pps, kind) {
 		.map(([x, a]) => `${x},${mid + a}`)
 		.join(' ');
 	return `${top} ${bottom}`;
+}
+
+export function peakWaveform(peaks, width, height, srcIn, pps) {
+	const pts = [];
+	const step = 3;
+	const mid = height / 2;
+	const { rate, values } = peaks;
+	for (let x = 0; x <= width; x += step) {
+		const from = Math.max(0, Math.floor((srcIn + x / pps) * rate));
+		const to = Math.max(from + 1, Math.floor((srcIn + (x + step) / pps) * rate));
+		let amp = 0;
+		for (let i = from; i < to && i < values.length; i++) amp = Math.max(amp, values[i]);
+		pts.push([x, Math.max(0.5, amp * (mid - 2))]);
+	}
+	return polygon(pts, mid);
 }

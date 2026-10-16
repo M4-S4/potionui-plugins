@@ -24,7 +24,7 @@ export function fcpxml() {
 	const res = { '720p': [1280, 720], '1080p': [1920, 1080], '4K': [3840, 2160] }[doc.resolution] ?? [1920, 1080];
 	const assets = media.map(
 		(c, i) =>
-			`\t\t<asset id="r${i + 2}" name="${esc(clipLabel(c))}" start="0s" duration="${rt(asset(c.assetId).srcDur)}" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/${encodeURI(fileOf(c))}"/></asset>`
+			`\t\t<asset id="r${i + 2}" name="${esc(clipLabel(c))}" start="0s" duration="${rt(asset(c.assetId).srcDur ?? c.srcIn + c.dur)}" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/${encodeURI(fileOf(c))}"/></asset>`
 	);
 	const spine = doc.clips.map((c) =>
 		fileOf(c)

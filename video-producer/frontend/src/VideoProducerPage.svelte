@@ -1,11 +1,14 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import HostUi from '../../../../sdk/HostUi.svelte';
 	import { createClient } from './lib/api.js';
 	import { detectLocale, getLocale, has, setLocale, t } from './i18n/index.svelte.js';
 	import { ms } from './lib/motion.js';
-	import { ui, applyMe, bottomKey, contextSnapshot, dispose as disposeState, startProject, toast } from './lib/state.svelte.js';
+	import { ui, doc, applyMe, bottomKey, contextSnapshot, dispose as disposeState, toast } from './lib/state.svelte.js';
+	import { project, bindClient, disposeProject, flushSave, noteChange, openLatestOrStarter } from './lib/project.svelte.js';
+	import { setPluginRoot } from './lib/focus.js';
+	import { needsProbe, probeAsset } from './lib/importer.js';
 	import { dispose as disposePlayback } from './lib/playback.svelte.js';
 	import { handleKeydown } from './lib/commands.js';
 	import { chat, keyboard, mountHostSlot, registerIcons } from './lib/host.js';
@@ -53,6 +56,31 @@
 		ui.bottomView = ui.workspace === 'mixer' ? 'console' : 'timeline';
 	});
 
+	$effect(() => {
+		bindClient(client);
+	});
+
+	$effect(() => {
+		setPluginRoot(root);
+	});
+
+	$effect(() => {
+		if (!project.fatal || phase !== 'ready') return;
+		loadError = project.fatal;
+		phase = 'error';
+	});
+
+	$effect(() => {
+		if (phase !== 'ready') return;
+		const json = JSON.stringify($state.snapshot(doc));
+		untrack(() => noteChange(json));
+	});
+
+	$effect(() => {
+		if (phase !== 'ready') return;
+		for (const a of doc.assets) if (needsProbe(a)) untrack(() => probeAsset(a.id));
+	});
+
 	onMount(() => {
 		setHeaderHidden?.(true);
 		registerIcons();
@@ -60,11 +88,16 @@
 		const onkeydown = (e) => phase === 'ready' && handleKeydown(e, root);
 		window.addEventListener('keydown', onkeydown);
 		const unregister = chat.provideContext('video_producer', contextSnapshot);
+		const onvisibility = () => document.visibilityState === 'hidden' && flushSave();
+		document.addEventListener('visibilitychange', onvisibility);
 		load();
 		return () => {
 			alive = false;
 			loadSeq += 1;
 			saveSeq += 1;
+			document.removeEventListener('visibilitychange', onvisibility);
+			flushSave();
+			disposeProject();
 			window.removeEventListener('keydown', onkeydown);
 			unregister();
 			release();
@@ -77,6 +110,7 @@
 		const seq = ++loadSeq;
 		phase = 'loading';
 		loadError = null;
+		project.fatal = null;
 		const result = await client.me();
 		if (!alive || seq !== loadSeq) return;
 		if (!result.ok) {
@@ -86,7 +120,14 @@
 		}
 		applyMe(result.data);
 		if (ui.me.locale && !localePicked) setLocale(ui.me.locale);
-		startProject();
+		bindClient(client);
+		const opened = await openLatestOrStarter().catch(() => ({ ok: false, error: { status: 0, code: 'invalid_response', message: '', data: null } }));
+		if (!alive || seq !== loadSeq) return;
+		if (!opened.ok) {
+			loadError = opened.error;
+			phase = 'error';
+			return;
+		}
 		phase = 'ready';
 	}
 
@@ -104,7 +145,7 @@
 	}
 </script>
 
-<div bind:this={root} class="vp-root bg-canvas font-sans text-base text-fg antialiased" lang={locale}>
+<div bind:this={root} tabindex="-1" class="vp-root bg-canvas font-sans text-base text-fg antialiased" lang={locale}>
 	{#if phase === 'loading'}
 		<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6">
 			<HostUi name="Spinner" props={{ size: 'lg' }} />
@@ -179,6 +220,9 @@
 			height: 100%;
 			min-height: 0;
 			overflow: hidden;
+		}
+		.vp-root:focus {
+			outline: none;
 		}
 		.vp-root button:not(:disabled) {
 			cursor: pointer;
@@ -725,6 +769,27 @@
 			gap: 0.625rem;
 			border-bottom: 1px solid rgb(var(--line));
 			padding: 0.75rem 1rem;
+		}
+		.vp-root .vp-pickrow {
+			display: flex;
+			min-height: 3rem;
+			align-items: center;
+			gap: 0.75rem;
+			border-radius: 8px;
+			border: 1px solid rgb(var(--line-strong));
+			padding: 0 0.5rem 0 0.75rem;
+			transition: border-color 120ms, background-color 120ms;
+		}
+		.vp-root .vp-pickrow:hover {
+			border-color: rgb(var(--line-hover));
+		}
+		.vp-root .vp-pickrow:has(input:checked) {
+			border-color: rgb(var(--signal));
+			box-shadow: inset 0 0 0 1px rgb(var(--signal));
+		}
+		.vp-root .vp-pickrow:has(input:focus-visible) {
+			outline: 2px solid rgb(var(--signal));
+			outline-offset: 2px;
 		}
 		.vp-root .vp-modal-foot {
 			display: flex;

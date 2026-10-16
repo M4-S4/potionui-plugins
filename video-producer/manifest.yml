@@ -61,6 +61,10 @@ settings:
     type: "number"
     label: "Export cache per user (MB)"
     default: 2048
+  - name: "versions_kept"
+    type: "number"
+    label: "Versions kept per project"
+    default: 50
 
 setup:
   - kind: "check"

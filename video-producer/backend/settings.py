@@ -9,10 +9,13 @@ LOCALES = ("en", "fr")
 
 LOCALE_KEY = "locale"
 
+LAST_PROJECT_KEY = "last_project_id"
+
 DEFAULTS: Dict[str, Any] = {
     "draft_resolution": "832x480",
     "max_parallel_jobs": 2,
     "export_dir_quota_mb": 2048,
+    "versions_kept": 50,
 }
 
 
@@ -40,6 +43,7 @@ _PARSERS: Dict[str, Callable[[Any], Any]] = {
     "draft_resolution": _parse_choice(*DRAFT_RESOLUTIONS),
     "max_parallel_jobs": _parse_int(1, 16),
     "export_dir_quota_mb": _parse_int(1, 1048576),
+    "versions_kept": _parse_int(5, 500),
 }
 
 
@@ -82,3 +86,13 @@ def set_user_locale(user_id: str, locale: Any) -> str:
         raise ValueError(locale)
     core_bridge.set_plugin_setting(LOCALE_KEY, locale, user_id=user_id)
     return locale
+
+
+def last_project_id(user_id: str) -> Optional[str]:
+    """The project the user last opened, as stored, or None."""
+    return core_bridge.get_plugin_setting(LAST_PROJECT_KEY, user_id=user_id) or None
+
+
+def set_last_project_id(user_id: str, project_id: Optional[str]) -> None:
+    """Remember the project the user last opened; None forgets it."""
+    core_bridge.set_plugin_setting(LAST_PROJECT_KEY, project_id, user_id=user_id)

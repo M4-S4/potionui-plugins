@@ -1,12 +1,14 @@
+import json
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 import src.plugin_api.limits as api_limits
-from backend import core_bridge, presets
+from backend import core_bridge, presets, projects
 from src.plugin_api import AccountType, FieldDescription, ModeDescription, PresetDescription, get_current_active_user
 from src.plugin_api.cloud import CLOUD_ENGINE
 from src.plugin_api.limits import LimitStatus
@@ -14,7 +16,7 @@ from src.plugin_api.limits import LimitStatus
 ME_URL = "/api/plugins/video-producer/me"
 LOGGER = "plugins.video-producer"
 
-DEFAULT_SETTINGS = {"draft_resolution": "832x480", "max_parallel_jobs": 2, "export_dir_quota_mb": 2048}
+DEFAULT_SETTINGS = {"draft_resolution": "832x480", "max_parallel_jobs": 2, "export_dir_quota_mb": 2048, "versions_kept": 50}
 UNLIMITED = {"limit": None, "used": None, "remaining": None, "exempt": False, "resets_at": None}
 
 WAN_DIRECTOR = {
@@ -164,6 +166,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
         "success": True,
         "data": {
             "locale": None,
+            "last_project_id": None,
             "is_admin": False,
             "limits": {"gpu_minutes": UNLIMITED},
             "settings": DEFAULT_SETTINGS,
@@ -244,6 +247,7 @@ def test_me_types_the_admin_settings_from_their_stored_strings(client, store, no
             ("draft_resolution", None): "1280x720",
             ("max_parallel_jobs", None): "4",
             ("export_dir_quota_mb", None): "512",
+            ("versions_kept", None): "12",
         }
     )
 
@@ -251,6 +255,7 @@ def test_me_types_the_admin_settings_from_their_stored_strings(client, store, no
         "draft_resolution": "1280x720",
         "max_parallel_jobs": 4,
         "export_dir_quota_mb": 512,
+        "versions_kept": 12,
     }
 
 
@@ -260,6 +265,7 @@ def test_me_falls_back_to_the_default_of_a_setting_that_cannot_be_read(client, s
             ("draft_resolution", None): "640x480",
             ("max_parallel_jobs", None): "many",
             ("export_dir_quota_mb", None): "not a number",
+            ("versions_kept", None): "forever",
         }
     )
 
@@ -286,7 +292,7 @@ def test_put_me_saves_the_locale_for_the_user_only(client, store, no_container, 
     response = client.put(ME_URL, json={"locale": locale})
 
     assert response.status_code == 200
-    assert response.json() == {"success": True, "data": {"locale": locale}}
+    assert response.json() == {"success": True, "data": {"locale": locale, "last_project_id": None}}
     assert store == {("locale", "user-1"): locale}
     assert client.get(ME_URL).json()["data"]["locale"] == locale
 
@@ -295,7 +301,7 @@ def test_put_me_keeps_the_last_locale_and_ignores_other_keys(client, store, no_c
     client.put(ME_URL, json={"locale": "fr"})
     response = client.put(ME_URL, json={"locale": "en", "theme": "dark"})
 
-    assert response.json() == {"success": True, "data": {"locale": "en"}}
+    assert response.json() == {"success": True, "data": {"locale": "en", "last_project_id": None}}
     assert store == {("locale", "user-1"): "en"}
 
 
@@ -321,6 +327,7 @@ def test_the_locale_of_a_user_is_not_seen_by_another_one(app, client, make_user,
         {"locale": True},
         {"locale": ["fr"]},
         {"locale": {"code": "fr"}},
+        {"locale": "de", "last_project_id": None},
         {},
         {"language": "fr"},
         ["fr"],
@@ -590,3 +597,128 @@ def test_me_gives_the_fields_of_the_default_form_or_else_of_the_first_one(client
     }
     assert modes["refs"] == {"default_form": None, "fields": modes["video"]["fields"]}
     assert modes["empty"] == {"default_form": None, "fields": {}}
+
+
+def _doc():
+    return json.loads((Path(__file__).resolve().parent / "fixtures" / "empty_doc.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def owned(project_db, store):
+    return projects.create_project("user-1", _doc())["id"]
+
+
+def test_the_last_project_goes_there_and_back(client, store, no_container, owned):
+    response = client.put(ME_URL, json={"last_project_id": owned})
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "data": {"locale": None, "last_project_id": owned}}
+    assert store == {("last_project_id", "user-1"): owned}
+    assert client.get(ME_URL).json()["data"]["last_project_id"] == owned
+
+
+def test_the_locale_and_the_last_project_are_saved_together(client, store, no_container, owned):
+    response = client.put(ME_URL, json={"locale": "fr", "last_project_id": owned})
+
+    assert response.json()["data"] == {"locale": "fr", "last_project_id": owned}
+    assert store == {("locale", "user-1"): "fr", ("last_project_id", "user-1"): owned}
+
+
+def test_saving_the_locale_alone_keeps_the_last_project(client, store, no_container, owned):
+    client.put(ME_URL, json={"last_project_id": owned})
+
+    response = client.put(ME_URL, json={"locale": "en"})
+
+    assert response.json()["data"] == {"locale": "en", "last_project_id": owned}
+    assert store[("last_project_id", "user-1")] == owned
+
+
+def test_saving_the_last_project_alone_keeps_the_locale(client, store, no_container, owned):
+    client.put(ME_URL, json={"locale": "fr"})
+
+    response = client.put(ME_URL, json={"last_project_id": owned})
+
+    assert response.json()["data"] == {"locale": "fr", "last_project_id": owned}
+    assert store[("locale", "user-1")] == "fr"
+
+
+def test_null_forgets_the_last_project(client, store, no_container, owned):
+    client.put(ME_URL, json={"last_project_id": owned})
+
+    response = client.put(ME_URL, json={"last_project_id": None})
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"locale": None, "last_project_id": None}
+    assert store[("last_project_id", "user-1")] is None
+    assert client.get(ME_URL).json()["data"]["last_project_id"] is None
+
+
+def test_the_project_of_another_user_cannot_be_the_last_one(client, store, no_container, project_db):
+    theirs = projects.create_project("user-2", _doc())["id"]
+
+    response = client.put(ME_URL, json={"last_project_id": theirs})
+
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert (detail["success"], detail["error"]) == (False, "project_not_found")
+    assert store == {}
+
+
+def test_even_an_admin_keeps_only_their_own_project_as_the_last_one(app, client, make_user, store, no_container, owned):
+    _as(app, make_user(AccountType.ADMIN, user_id="admin-1"))
+
+    assert client.put(ME_URL, json={"last_project_id": owned}).status_code == 404
+    assert store == {}
+
+
+@pytest.mark.parametrize("project_id", ["01UNKNOWNPROJECT0000000000", ""])
+def test_an_unknown_project_cannot_be_the_last_one(client, store, no_container, project_db, project_id):
+    response = client.put(ME_URL, json={"last_project_id": project_id})
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["error"] == "project_not_found"
+    assert store == {}
+
+
+@pytest.mark.parametrize("project_id", [3, True, ["p"], {"id": "p"}], ids=repr)
+def test_a_last_project_id_that_is_not_text_or_null_is_refused(client, store, no_container, project_id):
+    response = client.put(ME_URL, json={"last_project_id": project_id})
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["error"] == "invalid_request"
+    assert store == {}
+
+
+def test_a_refused_last_project_leaves_the_locale_unsaved(client, store, no_container, project_db):
+    response = client.put(ME_URL, json={"locale": "fr", "last_project_id": "01UNKNOWNPROJECT0000000000"})
+
+    assert response.status_code == 404
+    assert store == {}
+
+
+def test_a_refused_locale_leaves_the_last_project_unsaved(client, store, no_container, owned):
+    response = client.put(ME_URL, json={"locale": "de", "last_project_id": owned})
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["error"] == "invalid_locale"
+    assert store == {}
+
+
+def test_me_forgets_a_last_project_that_was_deleted(client, store, no_container, owned):
+    client.put(ME_URL, json={"last_project_id": owned})
+    projects.delete_project(owned)
+
+    assert client.get(ME_URL).json()["data"]["last_project_id"] is None
+
+
+def test_me_reports_no_last_project_stored_for_another_user(client, store, no_container, project_db):
+    store[("last_project_id", "user-1")] = projects.create_project("user-2", _doc())["id"]
+
+    assert client.get(ME_URL).json()["data"]["last_project_id"] is None
+
+
+def test_the_last_project_of_a_user_is_not_seen_by_another_one(app, client, make_user, store, no_container, owned):
+    client.put(ME_URL, json={"last_project_id": owned})
+    _as(app, make_user(user_id="user-2"))
+
+    assert client.get(ME_URL).json()["data"]["last_project_id"] is None

@@ -22,9 +22,10 @@ import {
 	clipAt,
 	addShot,
 	proposeShots,
-	promoteToFinal,
-	newProject
+	promoteToFinal
 } from './state.svelte.js';
+import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
+import { openGallery, openImport } from './importer.js';
 import { ulid } from './ulid.js';
 import { matchToPrevious } from './continuity.svelte.js';
 import { openReferences } from './references.js';
@@ -117,7 +118,7 @@ const newShot = () => {
 const gallery = () => {
 	ui.workspace = 'media';
 	ui.mediaCollection = 'all';
-	ui.modal = { type: 'import' };
+	openGallery();
 };
 const director = () => {
 	ui.workspace = 'director';
@@ -141,10 +142,11 @@ export const menus = [
 	menu('file', [
 		[
 			command('new-project', () => createProject(), { keys: 'mod+n' }),
-			command('open', modal('open'), { keys: 'mod+o', sim: true }),
-			command('save', () => save(), { keys: 'mod+s' })
+			command('open', modal('open'), { keys: 'mod+o' }),
+			command('save', () => save(), { keys: 'mod+s' }),
+			command('versions', modal('versions'))
 		],
-		[command('import', modal('import'), { keys: 'mod+i' }), command('import-gallery', gallery), command('project-props', modal('project'), { keys: 'alt+mod+j' })],
+		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-gallery', gallery), command('project-props', modal('project'), { keys: 'alt+mod+j' })],
 		[
 			command('export', modal('export', { tab: 'video' }), { keys: 'mod+e' }),
 			command('export-xml', modal('export', { tab: 'exchange' }), { keys: 'shift+mod+e' }),
@@ -203,7 +205,7 @@ export const menus = [
 		]
 	]),
 	menu('audio', [
-		[command('audio-add', addAudioLane, { keys: 'alt+mod+n' }), command('audio-import', modal('import', { kind: 'audio' })), command('audio-mixer', mixer, { keys: 'mod+8' })],
+		[command('audio-add', addAudioLane, { keys: 'alt+mod+n' }), command('audio-import', () => openImport('audio')), command('audio-mixer', mixer, { keys: 'mod+8' })],
 		[
 			command('voice', modal('sound', { kind: 'Voix' }), { keys: 'shift+mod+v' }),
 			command('sd-ambience', modal('sound', { kind: 'Ambiance' })),
@@ -272,18 +274,17 @@ export function runCommand(id) {
 }
 
 export async function createProject() {
-	if (ui.dirty) {
+	if (ui.playing) togglePlay();
+	const saved = await flushSave();
+	if (!saved) {
 		const ok = await confirm({ title: t('lib.newProject.title'), message: t('lib.newProject.message', { name: doc.name }), variant: 'warning', confirmLabel: t('lib.newProject.confirm') });
 		if (!ok) return;
 	}
-	if (ui.playing) togglePlay();
-	newProject();
+	await createProjectOnServer();
 }
 
-export function save() {
-	ui.dirty = false;
-	ui.savedAt = new Date().toISOString();
-	toast(t('lib.toast.saved'));
+export async function save() {
+	if (await flushSave()) toast(t('lib.toast.saved'));
 }
 
 export function setInOut(edge) {
@@ -336,7 +337,7 @@ function stepShot(forward) {
 export function handleKeydown(e, root) {
 	const target = e.target;
 	if (target && target !== document.body && root && !root.contains(target)) return;
-	if (hostOverlayOpen()) return;
+	if (ui.hostModal || hostOverlayOpen()) return;
 	if (e.key === 'Escape') return escape();
 	const mod = e.metaKey || e.ctrlKey;
 	const k = eventKey(e);
@@ -355,7 +356,8 @@ export function handleKeydown(e, root) {
 		g: () => (e.shiftKey ? promote() : e.altKey ? queueWindow() : startGeneration()),
 		e: () => (ui.modal = { type: 'export', tab: e.shiftKey ? 'exchange' : 'video' }),
 		j: () => (e.altKey ? (ui.modal = { type: 'project' }) : chat.toggle()),
-		i: () => (ui.modal = { type: 'import' }),
+		i: () => openImport(),
+		o: () => (ui.modal = { type: 'open' }),
 		',': () => (ui.modal = { type: 'prefs' })
 	};
 	if (mod) {

@@ -2,7 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, assets, act, toast, productionRange, secs, round } from '../../lib/state.svelte.js';
+	import { ui, doc, act, newAsset, toast, productionRange, secs, round } from '../../lib/state.svelte.js';
 	import { audition } from '../../lib/playback.svelte.js';
 	import { audioRoleLabel } from '../../lib/catalog.js';
 	import { chat } from '../../lib/host.js';
@@ -130,26 +130,27 @@
 			const srcDur = Math.max(1, end - start) + 2;
 			const lower = (s) => s.toLocaleLowerCase(getLocale());
 			made = isVoice
-				? {
-						id: ulid(),
-						name: t('modals.sound.voiceAsset', { character: voice.character, line: voice.script.slice(0, 28) + (voice.script.length > 28 ? '…' : '') }),
+				? newAsset({
 						kind: 'audio',
-						synth: 'voice',
+						name: t('modals.sound.voiceAsset', { character: voice.character, line: voice.script.slice(0, 28) + (voice.script.length > 28 ? '…' : '') }),
 						srcDur,
-						role: 'Dialogue',
 						generated: true,
+						role: 'Dialogue',
+						synth: 'voice',
 						transcript: voice.script,
 						character: voice.character,
 						lipSync: voice.lipSync
-					}
-				: { id: ulid(), name: t('modals.sound.assetName', { preset: presetLabel(preset), type: lower(typeLabel(type)) }), kind: 'audio', synth: synthFor[type], srcDur, role: roleFor[type], generated: true };
+					})
+				: newAsset({ kind: 'audio', name: t('modals.sound.assetName', { preset: presetLabel(preset), type: lower(typeLabel(type)) }), srcDur, generated: true, role: roleFor[type], synth: synthFor[type] });
 		}, 110);
 	}
 
 	function addToTimeline() {
-		assets.push(made);
 		const lane = doc.lanes.find((l) => l.role === made.role) ?? doc.lanes[0];
-		act(() => doc.audio.push({ id: ulid(), assetId: made.id, lane: lane.id, start: +start, dur: +end - +start, srcIn: 0, fadeIn: 0.5, fadeOut: 0.8, gain: -6 }));
+		act(() => {
+			doc.assets.push($state.snapshot(made));
+			doc.audio.push({ id: ulid(), assetId: made.id, lane: lane.id, start: +start, dur: +end - +start, srcIn: 0, fadeIn: 0.5, fadeOut: 0.8, gain: -6 });
+		});
 		toast(t('modals.sound.added', { name: made.name, lane: lane.id }), 'success', { label: t('modals.sound.console'), run: () => ((ui.workspace = 'mixer'), (ui.bottomView = 'console')) });
 		ui.modal = null;
 	}

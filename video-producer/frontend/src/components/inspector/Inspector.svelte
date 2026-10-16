@@ -4,7 +4,6 @@
 	import {
 		ui,
 		doc,
-		assets,
 		asset,
 		selected,
 		select,
@@ -86,7 +85,7 @@
 		relayout();
 	};
 	const headThumb = $derived(!item ? null : s.kind === 'clip' ? clipThumb(item) : s.kind === 'frame' ? assetThumb(asset(item.assetId)) : null);
-	const frameImages = $derived(assets.filter((x) => x.kind !== 'audio' && assetThumb(x)));
+	const frameImages = $derived(doc.assets.filter((x) => x.kind !== 'audio' && assetThumb(x)));
 	const fadeMax = $derived(item?.dur ? item.dur / 2 : 0);
 	const issues = $derived(s?.kind === 'prompt' ? promptIssues(item) : []);
 	const plan = $derived(ui.workspace === 'scene' && (!s || s.kind === 'plan3d') ? currentPlan() : null);
@@ -239,17 +238,19 @@
 						<NumField label={t('inspector.field.duration')} value={item.dur} min={0.4} step={0.04} unit="s" onchange={setClipDur} />
 						{#if a}
 							<NumField label={t('inspector.field.sourceIn')} value={item.srcIn} min={0} step={0.04} unit="s" onchange={setClipIn} hint={t('inspector.field.sourceInHint')} />
-							<div class="flex items-center gap-2 text-xs text-fg-subtle">
-								<div class="relative h-1.5 flex-1 rounded-full bg-surface-3">
-									<div class="absolute inset-y-0 rounded-full bg-viz-1" style:left="{(item.srcIn / a.srcDur) * 100}%" style:width="{(item.dur / a.srcDur) * 100}%"></div>
+							{#if a.srcDur}
+								<div class="flex items-center gap-2 text-xs text-fg-subtle">
+									<div class="relative h-1.5 flex-1 rounded-full bg-surface-3">
+										<div class="absolute inset-y-0 rounded-full bg-viz-1" style:left="{(item.srcIn / a.srcDur) * 100}%" style:width="{(item.dur / a.srcDur) * 100}%"></div>
+									</div>
+									<span>{t('inspector.sourceLength', { duration: secs(a.srcDur) })}</span>
 								</div>
-								<span>{t('inspector.sourceLength', { duration: secs(a.srcDur) })}</span>
-							</div>
+							{/if}
 							<div class="text-xs text-fg-subtle">
 								{#if a.generated}
 									{take?.quality === 'final' ? t('inspector.takeInfoFinal', { variant: take?.variant ?? '', res: a.res }) : t('inspector.takeInfoDraft', { variant: take?.variant ?? '', res: a.res })}
 								{:else}
-									{t('inspector.mediaInfo', { res: a.res, fps: a.fps || '—' })}
+									{t('inspector.mediaInfo', { res: a.res ?? '—', fps: a.fps || '—' })}
 								{/if}
 							</div>
 						{/if}

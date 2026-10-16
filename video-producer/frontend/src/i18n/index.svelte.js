@@ -28,6 +28,8 @@ import frMixer from './fr/mixer.json';
 import frModals from './fr/modals.json';
 import frLibrary from './fr/library.json';
 import frStarter from './fr/starter.json';
+import enProject from './en/project.json';
+import frProject from './fr/project.json';
 import {
 	DEFAULT_LOCALE,
 	LOCALES,
@@ -36,6 +38,7 @@ import {
 	formatDate as dateIn,
 	formatDuration as durationIn,
 	formatNumber as numberIn,
+	formatRelative as relativeIn,
 	formatTimecode,
 	hasKey,
 	mergeDomains,
@@ -59,7 +62,8 @@ const DICTIONARIES = {
 		mixer: enMixer,
 		modals: enModals,
 		library: enLibrary,
-		starter: enStarter
+		starter: enStarter,
+		project: enProject
 	}),
 	fr: mergeDomains({
 		shell: frShell,
@@ -76,7 +80,8 @@ const DICTIONARIES = {
 		mixer: frMixer,
 		modals: frModals,
 		library: frLibrary,
-		starter: frStarter
+		starter: frStarter,
+		project: frProject
 	})
 };
 const reported = new Set();
@@ -107,8 +112,14 @@ export function setLocale(value) {
 	return current;
 }
 
-export function t(key, params) {
-	return translate(DICTIONARIES, current, key, params, reportMissing);
+const resolve = (locale) => (locale && normalizeLocale(locale)) || current;
+
+export function t(key, params, locale) {
+	return translate(DICTIONARIES, resolve(locale), key, params ?? undefined, reportMissing);
+}
+
+export function tFor(locale) {
+	return (key, params) => translate(DICTIONARIES, resolve(locale), key, params ?? undefined, reportMissing);
 }
 
 export function has(key) {
@@ -125,6 +136,10 @@ export function formatDate(value, options) {
 
 export function formatTime(value) {
 	return dateIn(current, value, { timeStyle: 'short' });
+}
+
+export function formatRelative(value, now) {
+	return relativeIn(current, value, now);
 }
 
 export function formatDuration(seconds) {

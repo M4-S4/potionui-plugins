@@ -2,7 +2,7 @@
 
 Français : [Video Producer : guide utilisateur](/docs?doc=plugin/video-producer/user-guide.fr) (fichier `docs/user-guide.fr.md`).
 
-This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. Video Producer is delivered in steps. This version has the complete interface, in English and in French, but some functions are still simulated (chapter 15). A chapter about something that does not exist yet ends with "Available from step N". The administrator guide is a separate page that only admins see.
+This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. Video Producer is delivered in steps. This version has the complete interface, in English and in French, saves your projects and imports your media, but some functions are still simulated (chapter 17). A chapter about something that does not exist yet ends with "Available from step N". The administrator guide is a separate page that only admins see.
 
 ## 1. What Video Producer is
 
@@ -10,13 +10,13 @@ Video Producer is a PotionUI plugin for audiovisual editing, AI sequence generat
 
 Before you start:
 
-- An admin has to prepare at least one engine (this machine, a studio server or a cloud model) and at least one video preset assigned to you. If the Production bar shows no engine, see chapter 16.
+- An admin has to prepare at least one engine (this machine, a studio server or a cloud model) and at least one video preset assigned to you. If the Production bar shows no engine, see chapter 18.
 - Your admin also sets the draft resolution and may limit the GPU minutes you can use per month.
 - The model MiniMax-H3 comes with a license that excludes use, and anything generated with it, in the European Union, the United Kingdom, the United States and South Korea without an individual authorization from MiniMax, and that asks a commercial product to display "MiniMax H3" prominently. Ask your admin before you use it.
 
-The interface is in English by default and also exists in French (chapter 13).
+The interface is in English by default and also exists in French (chapter 15).
 
-The page opens on a starter project, "Dawn at the harbour" ("Aube sur le port" in French), built in the language of the interface. It holds a synopsis, the global direction in five fields, five shots of 5 seconds still to generate, each with its shot prompt (the sleeping harbour, the fisherman's hands, the departure, the gulls, out to sea), a title, a marker named "Cast off" and four empty audio tracks. It has no media, no take, no reference and no 3D scene. Try the whole path on it, or start an empty project with **File › New project…**.
+The first time you open the page, it creates a starter project, "Dawn at the harbour" ("Aube sur le port" in French), and opens it. It holds a synopsis, the global direction in five fields, five shots of 5 seconds still to generate, each with its shot prompt (the sleeping harbour, the fisherman's hands, the departure, the gulls, out to sea), a title, a marker named "Cast off" and four empty audio tracks. It has no media, no take, no reference and no 3D scene. Its name, synopsis, shot names, title and marker are written in the language of the interface; its global direction and shot prompts are written in the prompt language of the project, English by default (chapter 15). Try the whole path on it, or start an empty project with **File › New project…**. On your next visits the page opens the project you used last (chapter 5).
 
 ## 2. The path in eight steps
 
@@ -31,15 +31,15 @@ The page opens on a starter project, "Dawn at the harbour" ("Aube sur le port" i
 7. **Edit, match and mix.** Fades on the clips, color match in the Inspector tab **Color**, the console in **Mix**. Result: a finished sequence.
 8. **Prepare delivery.** **File › Export video…**, **Export to other software…** or **Export subtitles…**. Result: files you can download.
 
-The interface of all eight steps is in place. In this version the page opens on the starter project (chapter 1) and the project lives in the page only: reloading the page loses your changes. **New project…** really starts an empty project, "Untitled project", and asks for confirmation first if the current project has unsaved changes. **Open…** is simulated (chapter 15). Available from step 3: saved projects. From step 4: drafts and finals. From step 6: delivery as video files.
+The interface of all eight steps is in place, and your projects are saved as you work (chapter 5). The page opens the project you used last, or the starter project the first time (chapter 1). **New project…** starts an empty project, "Untitled project", and adds it to your projects. Available from step 4: drafts and finals. From step 6: delivery as video files.
 
 ## 3. The screen
 
 The page has five levels of controls, from the widest to the most local, around a left panel, a center area, the Inspector and the timeline:
 
-- **Menu bar.** Ten menus, in this order: **Video Producer**, **File**, **Edit**, **Cut**, **Shot**, **Production**, **Audio**, **View**, **Window**, **Help**. The **Video Producer** menu holds **About Video Producer**, **Preferences…**, **Keyboard shortcuts** and **Search commands…**. A menu shows "…" only when the command opens a window that asks for something, and a check mark in front of a state that is on. A gray flask icon marks a command that is simulated for now (**Open…**).
-- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Not saved" at first, "Modified · click to save" after a change, then "Saved at" and the time). In the middle, the workspace selector: **Media**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import**, **Export**, **Assistant**, a search button for the commands and the button that shows or hides the Inspector.
-- **Production bar.** It targets what to generate and holds the only main button of the page, **Generate selection** (chapter 6).
+- **Menu bar.** Ten menus, in this order: **Video Producer**, **File**, **Edit**, **Cut**, **Shot**, **Production**, **Audio**, **View**, **Window**, **Help**. The **Video Producer** menu holds **About Video Producer**, **Preferences…**, **Keyboard shortcuts** and **Search commands…**. A menu shows "…" only when the command opens a window that asks for something, and a check mark in front of a state that is on.
+- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import**, **Export**, **Assistant**, a search button for the commands and the button that shows or hides the Inspector.
+- **Production bar.** It targets what to generate and holds the only main button of the page, **Generate selection** (chapter 8).
 - **Area headers and the timeline toolbar.** A title and counters on the left, small icons on the right.
 - **Content.** Small buttons that appear when you hover or select.
 
@@ -50,7 +50,7 @@ The ten menus group all the commands of the page. The command search (**Search c
 | Menu | What it holds |
 |---|---|
 | **Video Producer** | About, Preferences, Keyboard shortcuts, command search. |
-| **File** | New project, Open, Save, Import files, From the PotionUI gallery, Project properties, the three exports. |
+| **File** | New project, Open, Save, Version history, Import files, From the PotionUI gallery, Project properties, the three exports. |
 | **Edit** | Undo, Redo, Copy, Paste, Duplicate, Delete, Search media. |
 | **Cut** | The three tools, Split at playhead, trims, Change duration, in and out points, Clear range, Add marker, Add title, Fade in and out. |
 | **Shot** | New shot, Info, Show source, Shot takes, Make take final, Shot color, Match color to previous shot, Camera keyframes, Favorite, Reject, Remove flag. |
@@ -64,7 +64,7 @@ The ten menus group all the commands of the page. The command search (**Search c
 
 - **Left panel.** It changes with the workspace (chapter 4). Show or hide it with the first button of the project bar or with Ctrl+Alt+1.
 - **Center.** The viewer, the storyboard cards, the board of references or the 3D view, depending on the workspace.
-- **Inspector.** On the right. It follows the selection (chapter 5). It starts hidden when the window is narrower than 1360 pixels: open it with the last button of the project bar, or select something, which opens it.
+- **Inspector.** On the right. It follows the selection (chapter 7). It starts hidden when the window is narrower than 1360 pixels: open it with the last button of the project bar, or select something, which opens it.
 - **Timeline.** At the bottom. In **Mix**, the mixing console takes its place and a button brings the timeline back. Drag the thin line above the Production bar to give it more or less height.
 - **Status bar.** At the very bottom, from left to right: the language reminder (`EN` or `FR`; click it to open the Preferences), the number of shots with the duration, the resolution and the aspect ratio, the active tool, the selection, the range. On the right: the number of direction points to check (click it to open the **Direction** tab), the generation queue, snapping and, when your admin has set a limit for you, your **GPU quota**, the minutes used this month out of that limit (cloud providers are billed separately).
 
@@ -78,13 +78,13 @@ Each workspace changes the left panel and the center. The Inspector on the right
 
 ### Media
 
-The media of the project in one panel. A new project has none: the panel says "No media in this project." and offers **Import media**, like the import button of its header and **Import** in the project bar. Import is simulated for now: it adds a placeholder media with no image. Importing from your PotionUI gallery and your files comes with step 3. Filter with the collection pills (**All**, **Images**, **Videos**, **Audio**, **Generated**), search by name without worrying about accents, double-click to preview, drag to the timeline. For a selected item the panel shows its duration, format and collection, and the buttons **Preview**, **Add to cut** and, for images and videos, **Use as frame at the playhead**. The center is the viewer.
+The media of the project in one panel. A new project has none: the panel says "No media in this project." and offers **Import media**, like the import button of its header and **Import** in the project bar; chapter 6 explains how to bring in your images, videos and audio files. Filter with the collection pills (**All**, **Images**, **Videos**, **Audio**, **Generated**), search by name without worrying about accents, double-click to preview, drag to the timeline. For a selected item the panel shows its duration, format, collection and origin, and the buttons **Preview**, **Add to cut** and, for images and videos, **Use as frame at the playhead**. The center is the viewer.
 
 ### Director IA
 
 The left panel has three tabs. A dot on **Direction** warns that there are points to check, and **Results** shows the number of takes.
 
-- **Direction.** Shows what guides the generation for the current range: the global direction, the shot prompt, the references and Control videos, with **View the generation summary**. Below, **To check**, the list of direction conflicts and color matches to fix, the **Project H3 profile** (FL2VA, Ref2VA or Hybrid AV, chapter 9) and the **Global direction** itself, in five fields (world and intent, characters and identity, photography, palette and lighting, pacing and continuity), with a counter out of 4000 characters. Each field has a **Library & assistant** link. The gear button, **H3 settings**, opens the **Advanced workshop**.
+- **Direction.** Shows what guides the generation for the current range: the global direction, the shot prompt, the references and Control videos, with **View the generation summary**. Below, **To check**, the list of direction conflicts and color matches to fix, the **Project H3 profile** (FL2VA, Ref2VA or Hybrid AV, chapter 11) and the **Global direction** itself, in five fields (world and intent, characters and identity, photography, palette and lighting, pacing and continuity), with a counter out of 4000 characters. Each field has a **Library & assistant** link. The gear button, **H3 settings**, opens the **Advanced workshop**.
 - **References.** Three families, **Images and identity**, **3D sets** and **Motion guides**. A reference is global (it goes with every generation) or applies to a range only; **Attach to range** sets the second. **Reference** adds one. The center shows the board of references, in two groups, **Global direction** and **On the timeline**, with a search field. Drag a thumbnail onto the Frames track to anchor it to a precise moment. A new project has no reference: the board says so, and **Reference** adds the first one.
 - **Results.** The takes of each shot, **Compare**, **Retake**, **Use**, the **Generation queue** and **Assemble chosen takes**.
 
@@ -96,21 +96,103 @@ In the center: one card per shot, in order, with its number, its duration, its n
 
 ### 3D scene
 
-A new project has no 3D scene. In the left panel the **Scenes** list is empty: **Sample scene** creates a procedural point cloud, marked **Simulated**, and **Reference a Gaussian Splat file…** asks for the path of a file and adds it as a scene. Then come the **3D shots on the timeline** (**New 3D shot at the playhead**), the **Preset trajectories** (**Orbit**, **Dolly in**, **Rise**), the camera and its keyframes in the Inspector, and the **Outputs for generation**: **Capture a frame** and **Generate the Control video**. The center is the 3D view (before any scene it says "No 3D scene" and offers **Sample scene**): drag to orbit, scroll to change the distance, play to preview the trajectory. This workspace is partly simulated: see chapter 15.
+A new project has no 3D scene. In the left panel the **Scenes** list is empty: **Sample scene** creates a procedural point cloud, marked **Simulated**, and **Reference a Gaussian Splat file…** asks for the path of a file and adds it as a scene. Then come the **3D shots on the timeline** (**New 3D shot at the playhead**), the **Preset trajectories** (**Orbit**, **Dolly in**, **Rise**), the camera and its keyframes in the Inspector, and the **Outputs for generation**: **Capture a frame** and **Generate the Control video**. The center is the 3D view (before any scene it says "No 3D scene" and offers **Sample scene**): drag to orbit, scroll to change the distance, play to preview the trajectory. This workspace is partly simulated: see chapter 17.
 
 ### Mix
 
-The **Sound design workshop**, the **Project sounds** (drag one to a track, or use its plus button to add it at the playhead), the **Roles** (**Dialogue**, **Music**, **Ambience**, **SFX**) with their number of tracks, and the mixing console, which takes the place of the timeline: faders, **M** and **S**, pan, equalizer, compressor, filter, reverb and delay sends, meters and an automation mode. The center is the viewer. The four tracks of a new project are empty, and **Project sounds** says "No sounds in this project." until you import one. In this version an imported sound is a placeholder that the console plays as a synthetic sound made in your browser; with your own audio files it plays them (chapter 11). The workshop and the automation curves are simulated: see chapter 15.
+The **Sound design workshop**, the **Project sounds** (drag one to a track, or use its plus button to add it at the playhead), the **Roles** (**Dialogue**, **Music**, **Ambience**, **SFX**) with their number of tracks, and the mixing console, which takes the place of the timeline: faders, **M** and **S**, pan, equalizer, compressor, filter, reverb and delay sends, meters and an automation mode. The center is the viewer. The four tracks of a new project are empty, and **Project sounds** says "No sounds in this project." until you import one (chapter 6). The console plays the audio files you import (chapter 13); the sounds that the workshop prepares are synthesized by your browser. The workshop and the automation curves are simulated: see chapter 17.
 
-Your own media and saved projects: available from step 3.
+## 5. Projects
 
-## 5. Inspector
+Your projects are saved on the PotionUI server, in your account, as you work. There is no file to keep and nothing to export to avoid losing them. The page lists only your own projects.
+
+### Opening the page
+
+The page opens the project you used last. If it no longer exists, it opens your most recently modified project. If you have none (your first visit, or you deleted them all), it creates the starter project (chapter 1) and opens it.
+
+### Saving
+
+The page saves by itself, less than a second after your last change. The project bar shows the state under the project name:
+
+| State | Meaning |
+|---|---|
+| "Saved at" and the time | What you see is what is saved. |
+| "Modified · click to save" | You made a change that is not saved yet. It is saved a moment later; click the state to save at once. |
+| "Saving…" | The save is under way. |
+| "Not saved — retry" | The save failed. A message tells why, with a **Retry** button; click the state to try again. The next change tries again too, and your changes stay in the page. |
+
+**File › Save** (Ctrl+S) saves at once and shows "Project saved". The page also tries to save when you switch to another browser tab and when you leave it. To rename the project, click its name in the project bar: the name is saved with the project and shows in the list.
+
+A failed save shows one of three messages: "Could not save the project." (a network or server error), "The project could not be saved: its content was refused." or "The project is too large to be saved." (the data of a project, without the media files, is limited to 4 MiB). A retry does not fix the last two: ask your admin.
+
+### Open
+
+**File › Open…** (Ctrl+O) opens the window **Open a project**. It lists your projects, the most recently modified first. Each row shows the project name, then when it was modified, its number of shots and its duration. The project that is open carries the badge **Current**. A capture of this window, in the dark and light themes of the English interface, is in `docs/screenshots/open-window.png`.
+
+- Select a row, then click **Open**. Double-clicking a row or pressing Enter on it does the same. **Open** is disabled while the selected row is the project that is already open. The page saves the current project before it opens another one. If that save failed and changes are waiting, a window titled "Unsaved changes" says that the changes could not be saved and will be lost: **Discard changes** goes on, and cancelling keeps the project that is open.
+- **New project** (bottom left) creates an empty project, like **File › New project…**.
+- The trash icon at the end of a row deletes that project, after a confirmation that tells you that the project and its versions will be deleted and that this cannot be undone. The project that is open has no trash icon. Deleting a project does not delete the media in your library or gallery.
+- The window says "Loading projects…" while it loads, "No saved project" when you have none, and "Could not load your projects." with a **Retry** button when the server did not answer.
+
+**File › New project…** saves the current project, then creates an empty project, "Untitled project", opens it and shows "New empty project created". It asks for a confirmation (**Create an empty project**) only when the current project could not be saved.
+
+### Version history
+
+**File › Version history…** opens the window **Version history** ("Each save creates a version"). It lists the versions of the open project, the newest first. Each row shows the number ("Version 7"), the date and time, seconds included, and the number of shots. A capture of this window, in the dark and light themes of the English interface, is in `docs/screenshots/version-history.png`. A version made by a restore adds "Restored from version N". The version you are working on carries the badge **Current** and cannot be selected.
+
+To go back, select an older version and click **Restore**. A window asks you to confirm ("Restore version N": the project goes back to that version and the current state stays in the history). If the last save failed and changes are waiting, a second window, "Unsaved changes", asks you to confirm that they are lost (**Discard changes**). Then the project becomes that version and the page shows "Version N restored". The restore is itself a new version at the top of the list, so nothing is lost and you can restore the state you came from. **Cancel** closes the window.
+
+Your admin limits how many versions are kept per project (50 by default) and the oldest are deleted first. Every save that changes the project creates a version and the page saves often, so the limit can be reached quickly: ask your admin for a higher one if you need a longer history.
+
+### When the project changed elsewhere
+
+If you open the same project in two tabs, windows or devices, the page that saves second started from an out-of-date version, and the server refuses its save. That page then loads the saved version of the project and shows "Project reloaded: it changed elsewhere". The changes you had not saved in this page are lost, and nothing is merged. Work on a project in one place at a time. **File › Version history…** brings back an earlier state if you need it.
+
+### When the project was deleted elsewhere
+
+If you delete the project from another tab or device while it is open here, the next save is refused because the project no longer exists. The page stops saving it, shows "This project was deleted elsewhere", then opens your most recently modified project, or creates the starter project if you have none. If that fails, the page shows "Could not open Video Producer" with a **Retry** button. The changes you had not saved are lost.
+
+### Undo and redo
+
+**Edit › Undo** and **Redo** (Ctrl+Z, Ctrl+Shift+Z) work on the changes you made in the page, up to 100 steps. The history is kept in the page, not in the project: loading the page again, opening another project, creating a project, restoring a version and a reload after a conflict all empty it. An undo is a change like any other, and it is saved too.
+
+## 6. Media
+
+The media of a project are the images, videos and audio files you imported, and the takes of the project (chapter 9). The **Media** workspace lists them (chapter 4).
+
+### Importing
+
+- **Images and videos.** **File › Import files…** (Ctrl+I), **Import** in the project bar, the import button in the header of the Media panel and **Import media** in an empty panel open the window **Import images and videos**. It is the PotionUI picker of your library: the files you uploaded to PotionUI and the generations you copied there.
+- **From the gallery.** **File › From the PotionUI gallery** opens **Import from the gallery**, with your past generations. Every file of a generation can be picked on its own. Only images and videos can be picked.
+- **Audio.** **Audio › Import audio file…**, the **Sound** button of **Project sounds** in the **Mix** workspace and the **Import** button of the console open **Import audio files**, the picker of your library with audio only.
+
+In each picker you tick several files and confirm them together. The files then appear in the Media panel and the page shows, for example, "2 files imported". A media that is already in the project (same origin) is not imported again: the page counts it apart, for example "2 files imported · 1 file already in the project", or "1 file already in the project" when nothing is new. When some cannot be imported it adds, for example, "1 file could not be imported": the file is no longer available, or its kind is not accepted by the window. If your server has no picker, the page says "The media picker is not available on this server."
+
+An import copies nothing: the project keeps a reference to the library item or the gallery file, and the address the page uses to show it. If you delete the file from PotionUI, the project can no longer show or play it.
+
+### In the Media panel
+
+After the import, your browser reads the duration and the size of each file. The duration shows at the bottom right of the thumbnail. For the selected item the panel shows **Duration**, **Format**, **Collection** and **Origin**: **Gallery** or **Library**; the thumbnail carries the same word. The frame rate of an imported video comes from the library when the library knows it, and shows after the size (for example "1280×720 · 25 fps"); otherwise, and for a gallery file, **Format** shows the size only. The collection pills sort images under **Images**, videos under **Videos** and audio files under **Audio**. **Generated** holds the takes of the project, which are simulated for now. A capture of the panel after an import is in `docs/screenshots/media-import.png`.
+
+### Thumbnails
+
+An image is its own thumbnail. For a video, the page uses the thumbnail that PotionUI made for it when there is one, and otherwise a frame that your browser captures from the file. Thumbnails are not saved in the project: they are made again when the project opens. They show wherever a media or a shot shows its picture: the Media panel, the Inspector, the timeline and the viewer.
+
+### Playback
+
+- **Video and images.** Put the media in the cut (**Add to cut**, or drag it to the timeline). The viewer then plays the real video in step with the playhead, or shows the image, with the fades and the color settings of the shot. To look at a media on its own, double-click it or click **Preview**: the viewer shows it, a video with the controls of your browser and an audio file with an audio player, and **Back to the sequence** brings you back.
+- **Sound of a video.** The viewer does not play the sound of a video. Sound comes from the audio tracks (chapter 13).
+- **Audio.** An audio file placed on a track plays through its strip of the console. The faders, mute and solo, pan, equalizer, compressor, filter and sends act on the real sound, the meters show it, and the clip draws the waveform of the file in the timeline (chapter 13).
+
+What is still simulated: generation and the takes, which show a procedural thumbnail marked Simulated, and the sounds of the Sound design workshop, which your browser synthesizes (chapter 17).
+
+## 7. Inspector
 
 The Inspector follows the selection and its title tells what is selected: **Video shot**, **Audio clip**, **Title**, **Shot prompt**, **Reference frame**, **Control video**, **3D shot**, **Marker**, **Reference** or **Console strip**. For a shot it starts with a thumbnail, the name (click it to rename the shot), the stage and the times, and has three tabs:
 
 - **Shot.** A shortcut to the next action (**Generate drafts**, or **Make take A final**), **Duration and source** (the duration, where the shot starts in its source and the length of the source), **Fades** (**In** and **Out**), the **Flag** (**None**, **Favorite** or **Rejected**) and three icons to split the shot in the middle, duplicate it and delete it.
-- **Takes.** The takes of the shot, as **Final** and **Drafts** (chapter 7).
-- **Color.** The luminance scope, the match with the previous shot, presets and fine settings (chapter 10).
+- **Takes.** The takes of the shot, as **Final** and **Drafts** (chapter 9).
+- **Color.** The luminance scope, the match with the previous shot, presets and fine settings (chapter 12).
 
 The other items have their own panel:
 
@@ -126,11 +208,11 @@ The other items have their own panel:
 
 In the **3D scene** workspace, with a 3D shot selected or nothing selected, the Inspector shows the **Camera**: focal length, pan, tilt, distance and target height, **Keyframe**, **Follow the path** and the list of keyframes. With nothing selected in the other workspaces, it shows the project (format, H3 profile, content), a reminder of the main shortcuts and a **Project properties…** button.
 
-## 6. Production bar and estimate
+## 8. Production bar and estimate
 
 The Production bar reads like a sentence: a target (**Shot**, **Range** or **Sequence**), the range with the number of shots and prompts it holds, a quality (**Draft** or **Final**), an output mode, an engine, the **Advanced workshop**, then the estimate, **Add to queue** and **Generate selection**. A number with a warning icon after the counters is the number of direction conflicts in the range; click it to see them.
 
-- The output mode **AI generation** is the real one. **3D render** and **3D render + AI** are simulated (chapter 15); with **3D render** the main button reads **Prepare the render**.
+- The output mode **AI generation** is the real one. **3D render** and **3D render + AI** are simulated (chapter 17); with **3D render** the main button reads **Prepare the render**.
 - The engine pop-up lists what your admin enabled: this machine, a studio server and cloud models. In this version it shows three placeholder engines: **This machine · RTX 4090**, **Studio server · 2 × RTX A6000** and **Cloud provider · H100 on demand**. On a narrow window the pop-up is hidden: choose the engine in the **Advanced workshop** instead.
 - The **Advanced workshop** has three steps: **Sources and guides**, **Engine and Hybrid builder** and **Sound and delivery**. It opens from the bar, from **Production › Advanced workshop…** and, for the engine, from **H3 settings** in Director IA.
 
@@ -152,11 +234,11 @@ What only warns, without blocking: a memory estimate above what the engine has. 
 
 While a generation runs the bar shows the step and the progress, with **Pause** (then **Resume**) and **Cancel**. When it ends, a button tells how many takes are ready and opens the results. **Add to queue** keeps the current range for later: the queued windows are listed under **Generation queue** in Director IA, tab **Results**, and counted in the status bar.
 
-In this version the engines are placeholder engines and the generation is simulated: the figures of the estimate are indicative, the progress is a simulation and no GPU is used (chapter 15).
+In this version the engines are placeholder engines and the generation is simulated: the figures of the estimate are indicative, the progress is a simulation and no GPU is used (chapter 17).
 
 Available from step 4: real generation, the engines your admin enabled, the time measured on your own generations, your real monthly quota and, for admins only, the cloud cost. The warning for a memory estimate above the engine's then reads "will stream through host RAM, slower".
 
-## 7. Takes and final
+## 9. Takes and final
 
 A take is one generated video for one shot.
 
@@ -166,11 +248,11 @@ A take is one generated video for one shot.
 - **Final** on a draft take makes it final. By default the take is upscaled with SeedVR2, to 720p, 1080p, 1440p or 2160p. **Re-render**, the secondary action, generates the shot again at the highest resolution of the preset, with the same seed. The new take says which one it comes from ("from A").
 - **Assemble chosen takes** (Results tab) puts the takes you chose into the cut.
 
-In this version the takes are simulated: each take shows a procedural thumbnail, the number of the shot on a gradient, marked **Simulated** (chapter 15).
+In this version the takes are simulated: each take shows a procedural thumbnail, the number of the shot on a gradient, marked **Simulated** (chapter 17).
 
 Available from step 4.
 
-## 8. Assistant
+## 10. Assistant
 
 The **Assistant** button, **Window › PotionUI assistant** and Ctrl+J open the PotionUI chat, in the **Video Producer** mode. The assistant can:
 
@@ -185,9 +267,9 @@ In this version the button, the menu and the shortcut already open the PotionUI 
 
 Available from step 5.
 
-## 9. Prompts: library and composer
+## 11. Prompts: library and composer
 
-The window **Prompt library & assistant** opens from **Window › Prompt library**, or from the **Library & assistant** links placed near a text (in the fields of the global direction, in the Inspector for a shot prompt and in the window that edits a shot prompt). It writes into a target, shown under its title: one of the five fields of the global direction, or a shot prompt. Opened from the menu it has no target and copies the prompt to the clipboard (**Copy the prompt**). The window has two tabs, **Library** and **Composer**, and a link, **Ask the PotionUI assistant**, that closes the window and opens the PotionUI chat. The templates, the categories and the composer choices exist in English and in French and follow the language you chose (chapter 13).
+The window **Prompt library & assistant** opens from **Window › Prompt library**, or from the **Library & assistant** links placed near a text (in the fields of the global direction, in the Inspector for a shot prompt and in the window that edits a shot prompt). It writes into a target, shown under its title: one of the five fields of the global direction, or a shot prompt. Opened from the menu it has no target and copies the prompt to the clipboard (**Copy the prompt**). The window has two tabs, **Library** and **Composer**, and a link, **Ask the PotionUI assistant**, that closes the window and opens the PotionUI chat. The names, descriptions and categories of the templates and the choices of the composer exist in English and in French and follow the language of the interface; the texts they insert follow the prompt language of the project (chapter 15).
 
 - **Library.** Five libraries, **Built-in**, **Personal**, **Project**, **Favorites** and **History**, and nine categories (Cinema, Camera, Lighting, Film styles, Dialogue, Photography, Sound, Continuity, To avoid). Search by name, description or keyword; the star marks a favorite. Each template says which H3 profiles it suits. A template can have variables, such as the subject or the place, that you fill in before inserting it. The **Editable preview** can also be edited by hand. **Save to Personal** keeps your version, and every inserted text goes to **History**. A new project starts with the built-in templates and one personal template; **Project**, **Favorites** and **History** are empty until you star a template or insert a text.
 - **Composer.** Builds a prompt from four parts, **Camera movement**, **Lighting**, **Film style** and **Dialogue or acting intent**, for the H3 profile you pick (it starts from the profile of the project). Choose one option per part, or type your own in **Other…**, and fill in the subject, the action, the place and the emotion. The **Final prompt** stays editable, and **Recompose from the choices** brings it back. **Required references** tells whether the range has what the profile needs. When a Control video covers the range, the camera part is **Set by the Control video** and locked.
@@ -203,23 +285,21 @@ The three H3 profiles and what each one asks for on the range:
 
 When a Control video is present, the motion comes from the guide.
 
-## 10. Color and continuity
+## 12. Color and continuity
 
 An alert appears only when two neighbor shots do not match: "“Shot” is brighter, darker, warmer or cooler than the previous shot". It shows in Director IA (tab **Direction**, under **To check**), in the Storyboard (under **Continuity**, and as a warning icon on the card of the shot) and in the Inspector. **Match** fixes it in one click by adjusting exposure and temperature to the previous shot. The measure is made on the real thumbnails of the takes. The **Color** tab also has the luminance scope, six presets (Original, Golden light, Cold morning, 35 mm film, Blue night, Soft) and fine settings (**Exposure**, **Contrast**, **Saturation**, **Temperature**), with **Reset** and **To all shots**. Before a shot has an image, the tab says that color can be adjusted once the shot is generated.
 
-In this version the measure is already made, on the image of each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A similarity percentage between two generated shots can also appear in the alerts ("Check the identity between … and … (similarity 78 %)"): it is simulated (chapter 15). Color is real.
+In this version the measure is already made, on the image of each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A similarity percentage between two generated shots can also appear in the alerts ("Check the identity between … and … (similarity 78 %)"): it is simulated (chapter 17). Color is real.
 
 Available from step 6.
 
-## 11. Audio and subtitles
+## 13. Audio and subtitles
 
-Audio lives in tracks, each with a role: Dialogue, Music, Ambience or SFX. **Audio › Add audio track** and **Audio › Import audio file…** bring sounds in; **Audio › Mixing console** shows the console. In the console each strip has a role, effects (**Equalizer**, **Compressor**, **Filter**; **+ effect** adds one), sends to the reverb and delay buses (R and D), pan, a fader (double-click it to go back to 0 dB), a meter, **M** and **S** and an automation button; the auxiliary buses and the **Master** follow. The pills at the top show one role only. **Voice and dialogue…** and the sound design commands (**Ambience…**, **Foley…**, **Texture…**, **Impact…**, **Musical intent…**) open the **Sound design workshop**, which is simulated (chapter 15). The text of a dialogue is real: it feeds the subtitles, together with the titles of the timeline.
+Audio lives in tracks, each with a role: Dialogue, Music, Ambience or SFX. **Audio › Add audio track** and **Audio › Import audio file…** bring sounds in; **Audio › Mixing console** shows the console. In the console each strip has a role, effects (**Equalizer**, **Compressor**, **Filter**; **+ effect** adds one), sends to the reverb and delay buses (R and D), pan, a fader (double-click it to go back to 0 dB), a meter, **M** and **S** and an automation button; the auxiliary buses and the **Master** follow. The pills at the top show one role only. **Voice and dialogue…** and the sound design commands (**Ambience…**, **Foley…**, **Texture…**, **Impact…**, **Musical intent…**) open the **Sound design workshop**, which is simulated (chapter 17). The text of a dialogue is real: it feeds the subtitles, together with the titles of the timeline.
 
-In this version the four tracks of a new project are empty and the sounds you import are placeholders. The console plays them as synthetic sounds made by your browser, so that you can try the faders, mute and solo, pan, equalizer, compressor, filter and sends and watch the meters.
+The four tracks of a new project are empty. **Audio › Import audio file…** brings in your own audio files (chapter 6). The console plays them for real: the faders, mute and solo, pan, equalizer, compressor, filter and sends act on the sound you hear, the meters show it, and the clips of the timeline draw the waveform of the file. The sounds that the Sound design workshop prepares are still synthesized by your browser (WebAudio).
 
-Available from step 3.
-
-## 12. Exports
+## 14. Exports
 
 **File › Export video…** opens **Export and share**, with three tabs:
 
@@ -233,15 +313,31 @@ In this version only the last two tabs produce files. Their button (the word "Do
 
 Available from step 6.
 
-## 13. Language
+## 15. Language
 
 Video Producer exists in English and in French. Choose **English** or **Français** in **Video Producer › Preferences…**, setting **Language**, or click the `EN` or `FR` reminder at the left of the status bar, which opens the same window. The change is immediate and is saved for you alone, on the server; if the saving fails, a message says that the language changed for this session only. Until you choose, the page follows the language of your browser (French if it is French, English otherwise).
 
-The **Preferences** window has four other settings: **Preview quality** (**Best performance**, **Balanced** or **Best quality**, without effect yet), **Snapping by default**, **Framing guides** and **Single-key shortcuts** (chapter 14). They apply to the current session and are not saved.
+The **Preferences** window has five other settings: **Prompt language** (see below), **Preview quality** (**Best performance**, **Balanced** or **Best quality**, without effect yet), **Snapping by default**, **Framing guides** and **Single-key shortcuts** (chapter 16). Except **Prompt language**, which is saved with the project, they apply to the current session and are not saved.
 
-What is translated: the menus, the windows, the buttons, the tooltips, the messages, the names given to new items (for example a new shot or a new track), the prompt library with its templates, categories and composer choices, and the way numbers and durations are written. What is never translated is the content of your project: your own texts (the synopsis, the global direction, the shot prompts, the names and titles you typed, the project name) and the starter project, which is built in the language of the interface when the page opens and is not translated afterwards. Product terms such as Director IA, Storyboard, Control video or FL2VA are the same in both languages.
+What is translated: the menus, the windows, the buttons, the tooltips, the messages, the names given to new items (for example a new shot or a new track), the prompt library with its templates, categories and composer choices, and the way numbers and durations are written. What is never translated is the content of your project: your own texts (the synopsis, the global direction, the shot prompts, the names and titles you typed, the project name) and the starter project, which is created once and is not translated afterwards. Product terms such as Director IA, Storyboard, Control video or FL2VA are the same in both languages.
 
-## 14. Keyboard shortcuts
+### Prompt language
+
+Each project has its own **Prompt language**, English or French. It is the language of the texts that are sent to the models, the global direction and the shot prompts, and it does not depend on the language of the interface. It is English by default.
+
+Change it in **Project properties…** (the setting says "Language of the direction and prompts sent to the models. Changing it does not rewrite existing text.") or in **Preferences…** (the setting says "Applies to the current project"). It is saved with the project. A new project always starts in English, whatever the language of the interface or of the project that is open.
+
+What it changes:
+
+- **The starter project.** Its global direction and its shot prompts are written in English, even when the interface is in French. Its name, synopsis, shot names, title and marker follow the language of the interface.
+- **The prompt library.** The text that the built-in templates insert, their placeholders (the subject, the place and so on) and the default values of those placeholders are written in the prompt language. The names, descriptions and categories of the templates follow the language of the interface.
+- **The composer.** The **Final prompt** is composed in the prompt language. The choices you click keep the language of the interface.
+- **The direction checks.** The checks that read your texts use the rules of the prompt language: the contradictions between the global direction and a shot prompt (for example a direction that excludes neon and a prompt that asks for it), and the camera instructions in a prompt that a Control video covers. A text written in the other language is not checked.
+- **The assistant.** Available from step 5: it writes shot prompts in the prompt language.
+
+What it never changes: nothing you typed is translated, and changing the setting rewrites no existing text. Set the language before you write, or rewrite the texts yourself.
+
+## 16. Keyboard shortcuts
 
 The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl, ⌥ for Alt and ⇧ for Shift; the menus and the tooltips show the notation of your system, and the side panel is ⌃⌘1 (Control and Command). **Search commands…** (Ctrl+K) finds any command, and **Keyboard shortcuts** (Ctrl+Alt+K) lists those that have a shortcut.
 
@@ -253,6 +349,7 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Esc | Close, in this order: the command search, the open window, the open menu, a take preview or comparison; otherwise clear the selection |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, Redo |
 | Ctrl+S | Save |
+| Ctrl+O | Open… |
 | Ctrl+I | Import files… |
 | Ctrl+Alt+J | Project properties… |
 | Ctrl+E, Ctrl+Shift+E | Export video…, Export to other software… |
@@ -277,18 +374,18 @@ The single-letter shortcuts (A, R, B, I, O, M and N) can be turned off in **Vide
 
 When the shortcuts work:
 
-- Only while the focus is on the page and not in a text field. With a text field focused, a window open or the command search open, the other shortcuts are off; Esc, Ctrl+K and Ctrl+Alt+K always act. While the PotionUI chat is open, the shortcuts of the page are off.
-- The menus and the **Keyboard shortcuts** window also show other combinations, for example Ctrl+N, Ctrl+O, Ctrl+C, Ctrl+V, Ctrl+F or Ctrl+1 to Ctrl+5 for the workspaces. They are not active in this version: use the menu, the buttons or the workspace selector.
+- Only while the focus is on the page and not in a text field. With a text field focused, a window open (a PotionUI picker or confirmation included) or the command search open, the other shortcuts are off; Esc, Ctrl+K and Ctrl+Alt+K always act. While the PotionUI chat is open, the shortcuts of the page are off.
+- The menus and the **Keyboard shortcuts** window also show other combinations, for example Ctrl+N, Ctrl+C, Ctrl+V, Ctrl+F or Ctrl+1 to Ctrl+5 for the workspaces. They are not active in this version: use the menu, the buttons or the workspace selector.
 
-## 15. What is simulated
+## 17. What is simulated
 
 Some parts keep their interface but do not do the real thing yet. They carry a gray dashed badge, **Simulated**, never a yellow one: yellow is kept for real points to check. **Help › Simulated features** opens the list.
 
-The badge appears in the header of the windows **Open a project**, **Import media**, **Import an audio file**, **Reference a Gaussian Splat file** and **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265**, next to the audio stems and in the footer of the **Video** tab of the export window; on the automation button of the console strips; on the **Sample scene** and on the preview of a Gaussian Splat file in the 3D scene; and on a generated take, in the viewer ("Final take · simulated AI", "720p draft · simulated AI") and on its thumbnail. A gray flask icon marks the command **Open…**, and a few notifications are flagged the same way.
+The badge appears in the header of the windows **Reference a Gaussian Splat file** and **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265**, next to the audio stems and in the footer of the **Video** tab of the export window; on the automation button of the console strips; on the **Sample scene** and on the preview of a Gaussian Splat file in the 3D scene; and on a generated take, in the viewer ("Final take · simulated AI", "720p draft · simulated AI") and on its thumbnail. A few notifications are flagged the same way.
 
-Already working in this version: editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard, the prompt library and the composer, the direction conflict checks, the color match, **File › New project…**, the camera, the trajectories and the keyframes of the 3D scene, the mixing console, and the Final Cut Pro, OpenTimelineIO, EDL and SRT files, which are real files.
+Already working in this version: saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard, the prompt library and the composer, the direction conflict checks, the color match, the camera, the trajectories and the keyframes of the 3D scene, the mixing console playing your audio files, and the Final Cut Pro, OpenTimelineIO, EDL and SRT files, which are real files.
 
-The window **Simulated features** lists nine items. For each one, the table says what it does in this version and what it becomes once all the steps are delivered.
+The window **Simulated features** lists eight items. For each one, the table says what it does in this version and what it becomes once all the steps are delivered.
 
 | Item in the window | In this version | Once all the steps are delivered |
 |---|---|---|
@@ -296,17 +393,16 @@ The window **Simulated features** lists nine items. For each one, the table says
 | **Synopsis breakdown** | One sentence becomes one shot. | The assistant proposes the breakdown. Available from step 5. |
 | **Identity check** | The similarity between shots is simulated. The color check really analyzes the images. | Color matching is measured on the real thumbnails of the takes (from step 6). The similarity percentage stays simulated, because no identity measure is available to plugins. |
 | **Video render** | No video file is written. The Final Cut, OTIO, EDL and SRT exports produce real files. | H.264 MP4 or VP9 WebM videos assembled with ffmpeg and written to your storage. ProRes 422, H.265 and audio stems stay simulated: PotionUI's video converter writes H.264 MP4 or VP9 WebM only, and no per-role audio render exists. Available from step 6. |
-| **Import, opening a project** | Import adds a placeholder media with no image; opening a saved project comes in a later step. | Import goes through PotionUI's pickers, the gallery shows your own media, projects are saved. Available from step 3. |
 | **Gaussian Splat** | The referenced file is not loaded; the sample scene is a generated point cloud. | Stays simulated: the scene stays a 2D point preview and Gaussian Splat files are referenced, not loaded. |
 | **Control video** | Computing the guide from the 3D scene is simulated. | Stays simulated: the guide video is not rendered from the scene, an imported Control video is not sent to an engine and the 3D capture is not rendered from the scene. The production modes **3D render** and **3D render + AI** depend on that guide and stay simulated. |
 | **Voice and sound design** | Preparation is simulated; the preview is a simple synthesis. | Stays simulated: voice, character and timbre settings do not produce speech, lip sync has no separate step (MiniMax-H3 makes picture and sound in one pass) and no preset prepares ambience, foley, texture, impact or music for the workshop. The text of the dialogues does feed the subtitles for real. |
-| **Edit audio** | Real-time synthesis (WebAudio): faders, mute and solo, pan, equalizer, compressor, sends and meters really work, on synthetic sounds. | The console plays your real audio files. Available from step 3. The automation curves stay simulated: the automation button only switches a mode, no curve is recorded. |
+| **Edit audio** | The audio files you import play for real through the console: faders, mute and solo, pan, equalizer, compressor, sends and meters work on them. The sounds prepared by the Sound design workshop are synthesized in real time (WebAudio). | Stays simulated for the workshop sounds, because no preset prepares them, and for the automation curves: the automation button only switches a mode, no curve is recorded. |
 
 The window does not list the controls of the **Advanced workshop** that a preset does not declare: consistency between windows, lock character identity, motion guide first, the Hybrid builder and its saved profiles, audio / picture offset, follow the rhythm of the cut, guidance, overlap, window length, LoRAs, post-processing, the track that drives the performance, lip sync, result naming and insert variant A automatically. They are visible but do not drive any generation: a preset only exposes the controls it declares, and MiniMax-H3, for example, has no guidance and no negative prompt. With real engines they stay visible, grayed and marked simulated.
 
 The assistant, for its part, is not simulated: it is the PotionUI chat in Video Producer mode, which writes shot prompts, fixes conflicts with the global direction, splits a synopsis into shots and checks continuity, and you approve each change before it touches the project (available from step 5).
 
-## 16. Troubleshooting
+## 18. Troubleshooting
 
 - **The Production bar shows no engine.** Your admin has not finished the setup: an engine, a video preset assigned to you. Ask them to open Admin → Plugins → Video Producer.
 - **The estimate shows "—" for the time.** Nothing has been measured yet for this preset, engine and resolution on this machine. It fills in after a few generations.
@@ -317,10 +413,15 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in Video 
 - **References are ignored with MiniMax-H3.** Ask your admin to check the model file picked for the References mode.
 - **A take failed.** The message and its code are shown on the take. If PotionUI was restarted during the generation, the take is marked failed and the generation cannot resume: start it again.
 - **An export fails.** Ask your admin about ffmpeg, or free some of your exports: the folder has a size budget.
+- **The project bar says "Not saved — retry".** The last save failed: the connection dropped, or the server refused the project. A message tells which. Click the save state or the **Retry** button of the message to try again. Your changes stay in the page and the next change tries again too. Until a save works, opening another project or restoring a version asks you to confirm before it drops those changes. If the message says that the content was refused or that the project is too large, ask your admin: reloading the page would lose the changes that are not saved.
+- **"Project reloaded: it changed elsewhere".** The project was saved from another tab, window or device after you opened it, so the page loaded the saved version. The changes you had not saved in this page are lost. Work on a project in one place at a time; **File › Version history…** brings back an earlier state.
+- **"This project was deleted elsewhere".** The project was deleted from another tab or device while it was open here. The page opened your most recently modified project, or created the starter project. The changes you had not saved are lost.
+- **A media does not show or play.** Its file is no longer available in your PotionUI library or gallery. Import it again.
+- **"1 file could not be imported" (or "N files could not be imported").** The file is no longer available in the library or the gallery, or its kind is not accepted by the window: images and videos for **Import files…** and **From the PotionUI gallery**, audio for **Import audio file…**.
 
 Available from step 4. Exports from step 6.
 
-## 17. Glossary
+## 19. Glossary
 
 | English | Français | Meaning |
 |---|---|---|
@@ -333,6 +434,8 @@ Available from step 4. Exports from step 6.
 | playhead | tête de lecture | The current position on the timeline. |
 | range | plage | A part of the timeline between an in point and an out point. |
 | global direction | direction globale | The text that guides every generation. |
+| prompt language | langue des prompts | The language of the global direction and of the shot prompts of a project, English or French. |
+| version | version | A saved state of the project; **Version history…** lists them and restores one. |
 | shot prompt | instruction locale | The text for one shot; it completes the global direction. |
 | Control video | Control video | A guide video that sets the motion. |
 | H3 profile | profil H3 | FL2VA, Ref2VA or Hybrid AV: what guides the generation. |

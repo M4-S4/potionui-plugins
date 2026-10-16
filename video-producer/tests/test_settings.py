@@ -9,8 +9,10 @@ from backend.settings import (
     LOCALES,
     all_settings,
     get_setting,
+    last_project_id,
     parse_locale,
     parse_setting,
+    set_last_project_id,
     set_user_locale,
     user_locale,
 )
@@ -35,7 +37,12 @@ def test_the_defaults_and_options_match_the_manifest():
 
 
 def test_the_defaults_are_the_documented_ones():
-    assert DEFAULTS == {"draft_resolution": "832x480", "max_parallel_jobs": 2, "export_dir_quota_mb": 2048}
+    assert DEFAULTS == {
+        "draft_resolution": "832x480",
+        "max_parallel_jobs": 2,
+        "export_dir_quota_mb": 2048,
+        "versions_kept": 50,
+    }
 
 
 @pytest.mark.parametrize("raw", [None, "", "   ", "\n"])
@@ -88,6 +95,19 @@ def test_an_unset_setting_is_its_default(key, raw):
         ("export_dir_quota_mb", "2 GB", 2048),
         ("export_dir_quota_mb", "nan", 2048),
         ("export_dir_quota_mb", {"mb": 5}, 2048),
+        ("versions_kept", "5", 5),
+        ("versions_kept", "50", 50),
+        ("versions_kept", " 120 ", 120),
+        ("versions_kept", "500", 500),
+        ("versions_kept", 7, 7),
+        ("versions_kept", "4", 5),
+        ("versions_kept", "0", 5),
+        ("versions_kept", "-3", 5),
+        ("versions_kept", "501", 500),
+        ("versions_kept", "1e6", 500),
+        ("versions_kept", "7.5", 50),
+        ("versions_kept", "all", 50),
+        ("versions_kept", "nan", 50),
     ],
 )
 def test_a_stored_setting_is_parsed_clamped_or_replaced_by_its_default(key, raw, value):
@@ -137,16 +157,27 @@ def test_all_settings_type_each_stored_value(store):
             ("draft_resolution", None): "960x544",
             ("max_parallel_jobs", None): "3",
             ("export_dir_quota_mb", None): "100",
+            ("versions_kept", None): "20",
         }
     )
 
-    assert all_settings() == {"draft_resolution": "960x544", "max_parallel_jobs": 3, "export_dir_quota_mb": 100}
+    assert all_settings() == {
+        "draft_resolution": "960x544",
+        "max_parallel_jobs": 3,
+        "export_dir_quota_mb": 100,
+        "versions_kept": 20,
+    }
 
 
 def test_all_settings_replace_only_the_invalid_values(store):
     store.update({("draft_resolution", None): "bad", ("max_parallel_jobs", None): "5", ("export_dir_quota_mb", None): "x"})
 
-    assert all_settings() == {"draft_resolution": "832x480", "max_parallel_jobs": 5, "export_dir_quota_mb": 2048}
+    assert all_settings() == {
+        "draft_resolution": "832x480",
+        "max_parallel_jobs": 5,
+        "export_dir_quota_mb": 2048,
+        "versions_kept": 50,
+    }
 
 
 def test_all_settings_read_every_key_once_for_the_admin(store):
@@ -220,3 +251,42 @@ def test_set_user_locale_refuses_an_unsupported_one_and_saves_nothing(store, loc
     assert store == {}
     assert store.calls == []
 
+
+def test_all_settings_never_include_the_last_project(store):
+    store[("last_project_id", None)] = "01PROJECT"
+
+    assert "last_project_id" not in all_settings()
+
+
+def test_last_project_id_is_none_when_the_user_never_opened_one(store):
+    assert last_project_id("user-1") is None
+    assert store.calls == [("get", "last_project_id", "user-1")]
+
+
+@pytest.mark.parametrize("stored", [None, ""])
+def test_an_empty_stored_last_project_id_is_none(store, stored):
+    store[("last_project_id", "user-1")] = stored
+
+    assert last_project_id("user-1") is None
+
+
+def test_last_project_id_is_kept_per_user(store):
+    set_last_project_id("user-1", "01PROJECTA")
+    set_last_project_id("user-2", "01PROJECTB")
+
+    assert last_project_id("user-1") == "01PROJECTA"
+    assert last_project_id("user-2") == "01PROJECTB"
+    assert last_project_id("user-3") is None
+    assert store.calls[:2] == [
+        ("set", "last_project_id", "01PROJECTA", "user-1"),
+        ("set", "last_project_id", "01PROJECTB", "user-2"),
+    ]
+
+
+def test_set_last_project_id_to_none_forgets_it(store):
+    set_last_project_id("user-1", "01PROJECTA")
+
+    set_last_project_id("user-1", None)
+
+    assert last_project_id("user-1") is None
+    assert store == {("last_project_id", "user-1"): None}

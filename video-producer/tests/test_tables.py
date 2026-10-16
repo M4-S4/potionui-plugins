@@ -5,7 +5,7 @@ from backend.tables import TABLE_NAMES, create_tables
 
 _EXPECTED_COLUMNS = {
     "video_producer_projects": ["id", "user_id", "name", "doc", "version", "created_at", "updated_at"],
-    "video_producer_versions": ["id", "project_id", "version", "doc", "label", "created_at"],
+    "video_producer_versions": ["id", "project_id", "version", "doc", "label", "created_at", "source_version"],
     "video_producer_takes": [
         "id", "project_id", "shot_id", "generation_id", "quality", "kind", "parent_take_id", "preset_id", "mode",
         "backend_id", "seed", "resolution", "status", "file_path", "thumb_path", "width", "height", "duration_s",
@@ -195,3 +195,26 @@ def test_a_takes_table_from_an_older_version_gets_the_new_column_and_keeps_its_r
         cursor.execute("SELECT id, status, seed FROM video_producer_takes")
         assert [tuple(row) for row in cursor.fetchall()] == [("t-1", "done", None)]
     assert set(_indexes(plugin_db)) == set(_EXPECTED_INDEXES)
+
+
+def test_the_versions_table_adds_the_source_version_column():
+    assert ("video_producer_versions", "source_version", "INTEGER") in tables._ADDED_COLUMNS
+
+
+def test_a_versions_table_from_an_older_version_gets_the_source_version_and_keeps_its_rows(plugin_db):
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute(
+            "CREATE TABLE video_producer_versions (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, "
+            "version INTEGER NOT NULL, doc TEXT NOT NULL, label TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+        )
+        cursor.execute(
+            "INSERT INTO video_producer_versions (id, project_id, version, doc, label) VALUES ('v-1', 'p-1', 1, '{}', 'First')"
+        )
+
+    create_tables()
+    create_tables()
+
+    assert _columns(plugin_db, "video_producer_versions") == _EXPECTED_COLUMNS["video_producer_versions"]
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute("SELECT id, version, label, source_version FROM video_producer_versions")
+        assert [tuple(row) for row in cursor.fetchall()] == [("v-1", 1, "First", None)]
