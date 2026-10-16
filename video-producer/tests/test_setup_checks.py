@@ -25,7 +25,19 @@ ALL_CHECKS = (VideoEngineReady, VideoPresetsReady, UpscalerReady, FfmpegReady, M
 
 
 def _backend(backend_id, name, engine="native", driver="native.local"):
-    return {"id": backend_id, "name": name, "engine": engine, "driver": driver}
+    return {
+        "id": backend_id,
+        "name": name,
+        "engine": engine,
+        "driver": driver,
+        "enabled": True,
+        "is_default": False,
+        "quick_actions": [],
+        "execution_device": "unestablished",
+        "max_concurrent_runs": None,
+        "vram_total_gb": None,
+        "vram_free_gb": None,
+    }
 
 
 def _cloud(backend_id, name):

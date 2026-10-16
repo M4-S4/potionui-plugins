@@ -3,19 +3,21 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { detectLocale, formatBytes, formatDuration, formatTimecode, hasKey, normalizeLocale, translate } from './core.js';
+import { DOMAINS, LOCALES, detectLocale, formatBytes, formatDuration, formatTimecode, hasKey, mergeDomains, normalizeLocale, translate } from './core.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, '..');
-const DYNAMIC_PREFIXES = ['error.'];
+const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.'];
 const PLURAL_SUFFIX = /\.(zero|one|two|few|many|other)$/;
 const SKIPPED_DIRS = new Set(['dist', 'node_modules']);
 
-function load(name) {
-	return JSON.parse(readFileSync(join(here, name), 'utf-8'));
+function readDomain(locale, domain) {
+	return readFileSync(join(here, locale, `${domain}.json`), 'utf-8');
 }
 
-const dictionaries = { en: load('en.json'), fr: load('fr.json') };
+const raw = Object.fromEntries(LOCALES.map((locale) => [locale, Object.fromEntries(DOMAINS.map((domain) => [domain, readDomain(locale, domain)]))]));
+const domains = Object.fromEntries(LOCALES.map((locale) => [locale, Object.fromEntries(DOMAINS.map((domain) => [domain, JSON.parse(raw[locale][domain])]))]));
+const dictionaries = Object.fromEntries(LOCALES.map((locale) => [locale, mergeDomains(domains[locale])]));
 
 function params(value) {
 	return [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
@@ -61,34 +63,86 @@ function scanCalls() {
 }
 
 const scan = scanCalls();
+const commandsSource = readFileSync(join(srcRoot, 'lib', 'commands.js'), 'utf-8');
+const commandIds = [...commandsSource.matchAll(/(?<![\w$.])command\(\s*'([a-z0-9-]+)'/g)].map((match) => match[1]);
+const menuIds = [...commandsSource.matchAll(/(?<![\w$.])menu\(\s*'([a-z0-9-]+)'/g)].map((match) => match[1]);
 
-test('en and fr declare exactly the same keys', () => {
-	const en = Object.keys(dictionaries.en).sort();
-	const fr = Object.keys(dictionaries.fr).sort();
-	assert.deepEqual(
-		en.filter((key) => !fr.includes(key)),
-		[],
-		'keys missing from fr.json'
-	);
-	assert.deepEqual(
-		fr.filter((key) => !en.includes(key)),
-		[],
-		'keys missing from en.json'
-	);
+test('each locale has one JSON file per domain, and nothing else', () => {
+	for (const locale of LOCALES) {
+		const files = readdirSync(join(here, locale)).sort();
+		assert.deepEqual(files, DOMAINS.map((domain) => `${domain}.json`).sort(), `${locale}/ does not match DOMAINS`);
+	}
 });
 
-test('every value is a non-empty string', () => {
-	for (const [locale, dictionary] of Object.entries(dictionaries)) {
-		for (const [key, value] of Object.entries(dictionary)) {
-			assert.equal(typeof value, 'string', `${locale}.json ${key} is not a string`);
-			assert.ok(value.trim(), `${locale}.json ${key} is empty`);
+test('index.svelte.js imports every domain file of every locale', () => {
+	const source = readFileSync(join(here, 'index.svelte.js'), 'utf-8');
+	for (const locale of LOCALES) {
+		for (const domain of DOMAINS) assert.ok(source.includes(`'./${locale}/${domain}.json'`), `index.svelte.js does not import ${locale}/${domain}.json`);
+	}
+});
+
+test('a global key is "<domain>.<key of the domain file>", so a domain file never repeats its own prefix', () => {
+	assert.deepEqual(mergeDomains({ shell: { 'menu.file': 'File' }, panels: {} }), { 'shell.menu.file': 'File' });
+	for (const locale of LOCALES) {
+		for (const domain of DOMAINS) {
+			const repeated = Object.keys(domains[locale][domain]).filter((key) => key.startsWith(`${domain}.`));
+			assert.deepEqual(repeated, [], `${locale}/${domain}.json repeats its prefix`);
 		}
 	}
 });
 
-test('each key has the same {params} in en and fr', () => {
-	for (const [key, value] of Object.entries(dictionaries.en)) {
-		assert.deepEqual(params(dictionaries.fr[key] ?? ''), params(value), `params differ for ${key}`);
+test('no domain file declares the same key twice', () => {
+	for (const locale of LOCALES) {
+		for (const domain of DOMAINS) {
+			const seen = new Set();
+			const twice = [];
+			for (const match of raw[locale][domain].matchAll(/^\s*"((?:[^"\\]|\\.)*)"\s*:/gm)) {
+				if (seen.has(match[1])) twice.push(match[1]);
+				seen.add(match[1]);
+			}
+			assert.deepEqual(twice, [], `${locale}/${domain}.json declares keys twice`);
+		}
+	}
+});
+
+test('global keys are unique across domains', () => {
+	for (const locale of LOCALES) {
+		const total = DOMAINS.reduce((sum, domain) => sum + Object.keys(domains[locale][domain]).length, 0);
+		assert.equal(Object.keys(dictionaries[locale]).length, total, `${locale}: keys collide after merging`);
+	}
+});
+
+test('en and fr declare the same keys, domain by domain, empty domains included', () => {
+	for (const domain of DOMAINS) {
+		const en = Object.keys(domains.en[domain]).sort();
+		const fr = Object.keys(domains.fr[domain]).sort();
+		assert.deepEqual(
+			en.filter((key) => !fr.includes(key)),
+			[],
+			`keys missing from fr/${domain}.json`
+		);
+		assert.deepEqual(
+			fr.filter((key) => !en.includes(key)),
+			[],
+			`keys missing from en/${domain}.json`
+		);
+	}
+});
+
+test('every value is a non-empty string', () => {
+	for (const locale of LOCALES) {
+		for (const [key, value] of Object.entries(dictionaries[locale])) {
+			assert.equal(typeof value, 'string', `${locale} ${key} is not a string`);
+			assert.ok(value.trim(), `${locale} ${key} is empty`);
+		}
+	}
+});
+
+test('each key has the same {params} in en and fr, domain by domain', () => {
+	for (const domain of DOMAINS) {
+		for (const [key, value] of Object.entries(domains.en[domain])) {
+			assert.deepEqual(params(domains.fr[domain][key] ?? ''), params(value), `params differ for ${domain}.${key}`);
+		}
 	}
 });
 
@@ -106,20 +160,33 @@ test('every t() call uses a literal key or a declared dynamic prefix', () => {
 	}
 });
 
-test('every t() key exists in en.json', () => {
+test('every t() key exists in en', () => {
 	const unknown = [...scan.keys]
 		.filter(([key]) => !(key in dictionaries.en) && !(`${key}.other` in dictionaries.en))
 		.map(([key, files]) => `${key} (${files.join(', ')})`);
 	assert.deepEqual(unknown, [], 'unknown translation keys');
 });
 
-test('every key of en.json is used', () => {
+test('every key is used', () => {
 	const prefixes = scan.dynamic.map(({ prefix }) => prefix).filter(Boolean);
 	const unused = Object.keys(dictionaries.en).filter((key) => {
 		if (scan.keys.has(key) || scan.keys.has(key.replace(PLURAL_SUFFIX, ''))) return false;
 		return !prefixes.some((prefix) => key.startsWith(prefix));
 	});
 	assert.deepEqual(unused, [], 'unused translation keys');
+});
+
+test('every command and menu of lib/commands.js has a label, and every label has a command', () => {
+	assert.equal(commandIds.length, 96, 'the source editor has 97 commands, minus the theme switch');
+	assert.equal(new Set(commandIds).size, commandIds.length, 'duplicate command id');
+	assert.equal(menuIds.length, 10);
+	assert.ok(!commandIds.includes('theme'), 'the theme command belongs to the host');
+	const labels = Object.keys(dictionaries.en).filter((key) => key.startsWith('commands.cmd.')).map((key) => key.slice('commands.cmd.'.length));
+	assert.deepEqual(labels.sort(), [...commandIds].sort());
+	const menus = Object.keys(dictionaries.en).filter((key) => key.startsWith('shell.menu.')).map((key) => key.slice('shell.menu.'.length));
+	assert.deepEqual(menus.sort(), [...menuIds].sort());
+	const errors = Object.keys(dictionaries.en).filter((key) => key.startsWith('shell.error.'));
+	assert.ok(errors.includes('shell.error.unknown') && errors.includes('shell.error.server_error'));
 });
 
 test('translate interpolates, pluralises and falls back to en then to the key', () => {
@@ -129,7 +196,7 @@ test('translate interpolates, pluralises and falls back to en then to the key', 
 	};
 	const missing = [];
 	const report = (key, locale, fellBack) => missing.push([key, locale, fellBack]);
-	assert.equal(translate(dicts, 'fr', 'hello', { name: 'Léa' }, report), 'Bonjour Léa');
+	assert.equal(translate(dicts, 'fr', 'hello', { name: 'Yann' }, report), 'Bonjour Yann');
 	assert.equal(translate(dicts, 'fr', 'take', { count: 0 }, report), '0 prise');
 	assert.equal(translate(dicts, 'en', 'take', { count: 0 }, report), '0 takes');
 	assert.equal(translate(dicts, 'en', 'take', { count: 1 }, report), '1 take');
@@ -144,6 +211,13 @@ test('translate interpolates, pluralises and falls back to en then to the key', 
 	assert.ok(hasKey(dicts, 'fr', 'take'));
 	assert.ok(hasKey(dicts, 'fr', 'only'));
 	assert.ok(!hasKey(dicts, 'fr', 'nope'));
+});
+
+test('the merged dictionaries translate real keys in both locales', () => {
+	assert.equal(translate(dictionaries, 'fr', 'commands.cmd.dir-global'), 'Direction globale');
+	assert.equal(translate(dictionaries, 'en', 'shell.menu.edit-timeline'), 'Cut');
+	assert.equal(translate(dictionaries, 'fr', 'shell.status.issues', { count: 1 }), '1 point de direction à vérifier');
+	assert.equal(translate(dictionaries, 'en', 'lib.toast.takesDraft', { count: 2 }), '2 draft takes ready');
 });
 
 test('locale detection prefers the saved value, then a French browser, then en', () => {

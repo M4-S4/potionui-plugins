@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -5,14 +6,139 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.plugin_api.limits as api_limits
-from backend import core_bridge
-from src.plugin_api import AccountType, get_current_active_user
+from backend import core_bridge, presets
+from src.plugin_api import AccountType, FieldDescription, ModeDescription, PresetDescription, get_current_active_user
+from src.plugin_api.cloud import CLOUD_ENGINE
 from src.plugin_api.limits import LimitStatus
 
 ME_URL = "/api/plugins/video-producer/me"
+LOGGER = "plugins.video-producer"
 
 DEFAULT_SETTINGS = {"draft_resolution": "832x480", "max_parallel_jobs": 2, "export_dir_quota_mb": 2048}
 UNLIMITED = {"limit": None, "used": None, "remaining": None, "exempt": False, "resets_at": None}
+
+WAN_DIRECTOR = {
+    "family": "wan",
+    "preset_modes": ["video"],
+    "segment_routing": True,
+    "modes": {"t2v": {}, "i2v": {}, "flf": {}, "director": {"max_segments": 8, "max_frames_per_segment": 81}},
+    "limits": {"default_duration": 5, "default_fps": 16, "max_duration": 60},
+}
+OPENROUTER_DIRECTOR = {"family": "cloud", "preset_modes": ["txt2video", "img2video"], "model_field": "model"}
+
+
+class Catalog:
+    def __init__(self, monkeypatch):
+        self.backends = []
+        self.presets = []
+        self.asked = []
+        self.broken = set()
+        monkeypatch.setattr(core_bridge, "api_backends", SimpleNamespace(list_backends=self._backends))
+        monkeypatch.setattr(core_bridge, "api_presets", SimpleNamespace(list_presets=self._presets))
+
+    def _backends(self):
+        if "backends" in self.broken:
+            raise RuntimeError("AppContainer not initialized yet")
+        return list(self.backends)
+
+    def _presets(self, user):
+        self.asked.append(user.id)
+        if "presets" in self.broken:
+            raise RuntimeError("AppContainer not initialized yet")
+        return list(self.presets)
+
+
+@pytest.fixture(autouse=True)
+def catalog(monkeypatch):
+    return Catalog(monkeypatch)
+
+
+def _backend(backend_id, name, engine="native", driver="native.local", **reported):
+    return {
+        "id": backend_id,
+        "name": name,
+        "engine": engine,
+        "driver": driver,
+        "enabled": True,
+        "priority": 0,
+        "timeout_seconds": 300,
+        "configured": True,
+        "is_default": False,
+        "quick_actions": [],
+        "has_api_key": True,
+        "execution_device": "unestablished",
+        "max_concurrent_runs": None,
+        "vram_total_gb": None,
+        "vram_free_gb": None,
+        **reported,
+    }
+
+
+def _field(type, required=False, multi=False):
+    return FieldDescription(type=type, required=required, multi=multi)
+
+
+def _mode(default_form="custom", **forms):
+    return ModeDescription(default_form=default_form, forms=forms or {"custom": {}})
+
+
+def _description(preset_id, name, engine="native", category="video", vars=None, modes=None, requires=None):
+    return PresetDescription(
+        id=preset_id,
+        name=name,
+        vars=vars or {},
+        modes=modes or {},
+        engine=engine,
+        category=category,
+        requires=requires,
+    )
+
+
+def _wan():
+    fields = {"resolution": _field("resolution"), "text_encoder": _field("model", required=True), "fps": _field("slider")}
+    return _description(
+        presets.WAN,
+        "Wan 2.1 / 2.2",
+        vars={"default_frames": 81, "default_fps": 16, "video_director": WAN_DIRECTOR},
+        modes={"video": _mode(custom=fields)},
+        requires={"min_vram_gb": 12.0, "recommended_vram_gb": 16.0},
+    )
+
+
+def _openrouter_video():
+    fields = {"aspect_ratio": _field("select"), "resolution": _field("select"), "model": _field("model", required=True)}
+    return _description(
+        presets.OPENROUTER_VIDEO,
+        "OpenRouter Video",
+        engine=CLOUD_ENGINE,
+        vars={"video_director": OPENROUTER_DIRECTOR},
+        modes={"txt2video": _mode(custom=fields), "img2video": _mode(custom=fields)},
+    )
+
+
+def _seedvr2():
+    return _description(
+        presets.SEEDVR2,
+        "SeedVR2",
+        category="utility",
+        vars={"default_scale": 2, "promptless_modes": ["upscale", "video_upscale"]},
+        modes={
+            "upscale": _mode(custom={"input_image": _field("image", required=True)}),
+            "video_upscale": _mode(custom={"input_video": _field("video", required=True), "scale": _field("slider")}),
+        },
+    )
+
+
+def _flux():
+    return _description(
+        "01M0J6CPKRJZW0SVEXMZ90CM7K", "Flux1", category="image", modes={"txt2img": _mode(), "img2img": _mode()}
+    )
+
+
+def _video_tools():
+    return _description(
+        "01KXVIDEOTOOLS0000000000VT", "Video Tools", category="utility", modes={"interpolate": _mode()}
+    )
 
 
 def _quota(monkeypatch, **status):
@@ -42,6 +168,8 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "limits": {"gpu_minutes": UNLIMITED},
             "settings": DEFAULT_SETTINGS,
             "plugin": {"id": "video-producer", "version": "0.1.0"},
+            "engines": [],
+            "presets": [],
         },
     }
 
@@ -258,3 +386,207 @@ def test_the_locale_goes_through_the_plugin_repository_with_the_user_id(client, 
     assert calls[0] == ("set", "video-producer", "locale", "en", "user-1")
     assert ("get", "video-producer", "locale", "user-1") in calls
     assert ("get", "video-producer", "draft_resolution", None) in calls
+
+
+def test_me_lists_the_native_and_cloud_engines_with_their_kind_in_priority_order(client, store, no_container, catalog):
+    catalog.backends = [
+        _backend(
+            "b-local",
+            "This machine",
+            is_default=True,
+            execution_device="this_host_gpu",
+            max_concurrent_runs=1,
+            vram_total_gb=24.0,
+            vram_free_gb=20.5,
+        ),
+        _backend("b-remote", "Render box", driver="native.remote", execution_device="remote", max_concurrent_runs=2),
+        _backend("b-cloud", "OpenRouter", engine=CLOUD_ENGINE, driver="cloud.openrouter", is_default=True),
+    ]
+
+    assert client.get(ME_URL).json()["data"]["engines"] == [
+        {
+            "id": "b-local",
+            "name": "This machine",
+            "engine": "native",
+            "driver": "native.local",
+            "execution_device": "this_host_gpu",
+            "max_concurrent_runs": 1,
+            "vram_total_gb": 24.0,
+            "vram_free_gb": 20.5,
+            "is_default": True,
+            "kind": "local",
+        },
+        {
+            "id": "b-remote",
+            "name": "Render box",
+            "engine": "native",
+            "driver": "native.remote",
+            "execution_device": "remote",
+            "max_concurrent_runs": 2,
+            "vram_total_gb": None,
+            "vram_free_gb": None,
+            "is_default": False,
+            "kind": "remote",
+        },
+        {
+            "id": "b-cloud",
+            "name": "OpenRouter",
+            "engine": "cloud",
+            "driver": "cloud.openrouter",
+            "execution_device": "unestablished",
+            "max_concurrent_runs": None,
+            "vram_total_gb": None,
+            "vram_free_gb": None,
+            "is_default": True,
+            "kind": "cloud",
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "engine, driver",
+    [("comfyui", "comfyui"), ("comfyui", "comfyui.remote"), ("native", "native.experimental"), ("acme", "acme.local")],
+)
+def test_me_never_lists_comfyui_or_an_engine_takes_cannot_run_on(client, store, no_container, catalog, engine, driver):
+    catalog.backends = [_backend("b-other", "Other", engine=engine, driver=driver), _backend("b-local", "This machine")]
+
+    assert [listed["id"] for listed in client.get(ME_URL).json()["data"]["engines"]] == ["b-local"]
+
+
+def test_me_lists_no_engine_and_logs_when_the_backends_cannot_be_read(client, store, no_container, catalog, caplog):
+    catalog.broken.add("backends")
+    catalog.presets = [_wan()]
+
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        data = client.get(ME_URL).json()["data"]
+
+    assert data["engines"] == []
+    assert [preset["id"] for preset in data["presets"]] == [presets.WAN]
+    assert "Could not list the backends" in caplog.text
+
+
+def test_me_describes_a_video_director_preset_with_its_modes_fields_and_director(client, store, no_container, catalog):
+    catalog.presets = [_wan()]
+
+    assert client.get(ME_URL).json()["data"]["presets"] == [
+        {
+            "id": presets.WAN,
+            "name": "Wan 2.1 / 2.2",
+            "engine": "native",
+            "category": "video",
+            "requires": {"min_vram_gb": 12.0, "recommended_vram_gb": 16.0},
+            "modes": {
+                "video": {
+                    "default_form": "custom",
+                    "fields": {
+                        "resolution": {"type": "resolution", "required": False, "multi": False},
+                        "text_encoder": {"type": "model", "required": True, "multi": False},
+                        "fps": {"type": "slider", "required": False, "multi": False},
+                    },
+                }
+            },
+            "video_director": WAN_DIRECTOR,
+            "upscaler": False,
+        }
+    ]
+
+
+def test_me_lists_the_cloud_video_presets_too(client, store, no_container, catalog):
+    catalog.presets = [_openrouter_video()]
+
+    (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert (preset["engine"], preset["requires"], preset["upscaler"]) == ("cloud", None, False)
+    assert list(preset["modes"]) == ["txt2video", "img2video"]
+    assert preset["video_director"] == OPENROUTER_DIRECTOR
+
+
+def test_me_marks_seedvr2_as_the_upscaler_without_a_director(client, store, no_container, catalog):
+    catalog.presets = [_seedvr2()]
+
+    assert client.get(ME_URL).json()["data"]["presets"] == [
+        {
+            "id": presets.SEEDVR2,
+            "name": "SeedVR2",
+            "engine": "native",
+            "category": "utility",
+            "requires": None,
+            "modes": {
+                "upscale": {
+                    "default_form": "custom",
+                    "fields": {"input_image": {"type": "image", "required": True, "multi": False}},
+                },
+                "video_upscale": {
+                    "default_form": "custom",
+                    "fields": {
+                        "input_video": {"type": "video", "required": True, "multi": False},
+                        "scale": {"type": "slider", "required": False, "multi": False},
+                    },
+                },
+            },
+            "video_director": None,
+            "upscaler": True,
+        }
+    ]
+
+
+def test_me_leaves_out_the_presets_the_video_director_does_not_drive(client, store, no_container, catalog):
+    named_video = _description("01VIDEOMODEONLY00000000000", "Video modes only", modes={"video": _mode(), "txt2video": _mode()})
+    catalog.presets = [_flux(), _wan(), _video_tools(), named_video, _seedvr2(), _openrouter_video()]
+
+    listed = client.get(ME_URL).json()["data"]["presets"]
+
+    assert [(preset["id"], preset["upscaler"]) for preset in listed] == [
+        (presets.WAN, False),
+        (presets.SEEDVR2, True),
+        (presets.OPENROUTER_VIDEO, False),
+    ]
+
+
+def test_me_lists_the_presets_of_the_signed_in_user(app, client, make_user, store, no_container, catalog):
+    _as(app, make_user(user_id="user-9"))
+
+    client.get(ME_URL)
+
+    assert catalog.asked == ["user-9"]
+
+
+def test_me_lists_no_preset_and_logs_when_the_presets_cannot_be_read(client, store, no_container, catalog, caplog):
+    catalog.broken.add("presets")
+    catalog.backends = [_backend("b-local", "This machine")]
+
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        data = client.get(ME_URL).json()["data"]
+
+    assert data["presets"] == []
+    assert [engine["id"] for engine in data["engines"]] == ["b-local"]
+    assert "Could not list the presets of user user-1" in caplog.text
+
+
+def test_me_gives_the_fields_of_the_default_form_or_else_of_the_first_one(client, store, no_container, catalog):
+    quick = {"prompt_strength": _field("slider")}
+    full = {"resolution": _field("resolution"), "references": _field("media", multi=True)}
+    catalog.presets = [
+        _description(
+            "01FORMS0000000000000000000",
+            "Forms",
+            vars={"video_director": {}},
+            modes={
+                "video": _mode(default_form="full", quick=quick, full=full),
+                "refs": _mode(default_form=None, full=full, quick=quick),
+                "empty": ModeDescription(default_form=None, forms={}),
+            },
+        )
+    ]
+
+    modes = client.get(ME_URL).json()["data"]["presets"][0]["modes"]
+
+    assert modes["video"] == {
+        "default_form": "full",
+        "fields": {
+            "resolution": {"type": "resolution", "required": False, "multi": False},
+            "references": {"type": "media", "required": False, "multi": True},
+        },
+    }
+    assert modes["refs"] == {"default_form": None, "fields": modes["video"]["fields"]}
+    assert modes["empty"] == {"default_form": None, "fields": {}}

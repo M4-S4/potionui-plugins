@@ -107,8 +107,10 @@ function quotaOf(limits) {
 export function normalizeMe(data) {
 	const me = isObject(data) ? data : {};
 	const user = isObject(me.user) ? me.user : {};
+	const plugin = isObject(me.plugin) ? me.plugin : {};
 	return {
 		locale: text(me.locale) || null,
+		version: text(plugin.version) || null,
 		username: text(user.username) || text(me.username),
 		isAdmin: me.is_admin === true || user.is_admin === true,
 		quota: quotaOf(me.limits)

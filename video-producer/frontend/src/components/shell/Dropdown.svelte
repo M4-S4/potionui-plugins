@@ -1,0 +1,42 @@
+<script>
+	import { fly } from 'svelte/transition';
+	import HostUi from '../../../../../../sdk/HostUi.svelte';
+	import { ms } from '../../lib/motion.js';
+	import { overlayLayer } from '../../lib/host.js';
+	import { hostIconName } from '../../lib/icons.js';
+	import { ui } from '../../lib/state.svelte.js';
+	import { ulid } from '../../lib/ulid.js';
+	import Icon from '../Icon.svelte';
+
+	let { label, icon = 'plus', items, title = '', variant = 'ghost', size = 'xs', class: className = '', align = 'left' } = $props();
+
+	const id = `dropdown:${ulid()}`;
+	const open = $derived(ui.menuOpen === id);
+	const button = $derived({ variant, size, icon: hostIconName(icon), class: className, ariaExpanded: open, ariaHaspopup: 'menu', onclick: () => (ui.menuOpen = open ? null : id) });
+
+	function run(item) {
+		ui.menuOpen = null;
+		item.run();
+	}
+</script>
+
+<div class="relative" data-vp-menu>
+	{#if title}
+		<HostUi name="Tooltip" props={{ text: title }}>
+			<HostUi name="Button" props={button}>{label}<Icon name="chevron-down" class="h-3 w-3 opacity-60" /></HostUi>
+		</HostUi>
+	{:else}
+		<HostUi name="Button" props={button}>{label}<Icon name="chevron-down" class="h-3 w-3 opacity-60" /></HostUi>
+	{/if}
+	{#if open}
+		<div class="vp-menu top-8 {align === 'right' ? 'right-0' : 'left-0'}" role="menu" use:overlayLayer in:fly={{ y: -4, duration: ms(120) }}>
+			{#each items as item}
+				<button type="button" role="menuitem" onclick={() => run(item)}>
+					{#if item.icon}<Icon name={item.icon} class="h-3.5 w-3.5 text-fg-muted" />{/if}
+					<span class="flex-1">{item.label}</span>
+					{#if item.key}<span class="vp-menu-key">{item.key}</span>{/if}
+				</button>
+			{/each}
+		</div>
+	{/if}
+</div>

@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Body, Depends
 
-from . import PLUGIN_ID, PLUGIN_VERSION, limits, settings
+from . import PLUGIN_ID, PLUGIN_VERSION, catalog, limits, settings
 from .core_bridge import AccountType, User, get_current_active_user
 from .responses import fail, ok
 
@@ -11,7 +11,7 @@ router = APIRouter()
 
 @router.get("/me")
 def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The signed-in user's locale, role, GPU-minute quota and the plugin settings the page needs."""
+    """The signed-in user's locale, role, quota, engines and video presets, and the plugin settings the page needs."""
     return ok(
         {
             "locale": settings.user_locale(user.id),
@@ -19,6 +19,8 @@ def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
             "limits": {"gpu_minutes": limits.gpu_minutes_status(user.id)},
             "settings": settings.all_settings(),
             "plugin": {"id": PLUGIN_ID, "version": PLUGIN_VERSION},
+            "engines": catalog.video_engines(),
+            "presets": catalog.video_presets(user),
         }
     )
 

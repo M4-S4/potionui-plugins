@@ -1,5 +1,30 @@
 export const LOCALES = ['en', 'fr'];
 export const DEFAULT_LOCALE = 'en';
+export const DOMAINS = [
+	'shell',
+	'commands',
+	'lib',
+	'panels',
+	'storyboard',
+	'viewer',
+	'timeline',
+	'references',
+	'scene',
+	'inspector',
+	'production',
+	'mixer',
+	'modals',
+	'library',
+	'starter'
+];
+
+export function mergeDomains(domains) {
+	const merged = {};
+	for (const [domain, entries] of Object.entries(domains)) {
+		for (const [key, value] of Object.entries(entries ?? {})) merged[`${domain}.${key}`] = value;
+	}
+	return merged;
+}
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 const formatters = new Map();

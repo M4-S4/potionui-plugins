@@ -16,6 +16,7 @@ from src.plugin_api import (
     generate_ulid,
     get_current_active_user,
 )
+from src.plugin_api import backends as api_backends
 from src.plugin_api import hooks as api_hooks
 from src.plugin_api import limits as api_limits
 from src.plugin_api import media as api_media
@@ -45,6 +46,7 @@ __all__ = [
     "get_current_active_user",
     "get_plugin_setting",
     "limit_status",
+    "list_presets",
     "model_file_present",
     "notify",
     "preset_model_hashes",
@@ -148,13 +150,14 @@ def find_ffmpeg() -> Optional[str]:
     return api_media.find_ffmpeg()
 
 
-def enabled_backends() -> List[Dict[str, str]]:
-    """Enabled backends as {id, name, engine, driver}. Temporary: reads the container until plugin_api lists backends."""
-    store = api_hooks.get_container().backend_registry.backend_config_store
-    return [
-        {"id": config.id, "name": config.name, "engine": config.engine, "driver": config.effective_driver}
-        for config in store.get_enabled_backends()
-    ]
+def enabled_backends() -> List[Dict[str, Any]]:
+    """Every enabled backend as list_backends describes it, highest priority first."""
+    return api_backends.list_backends()
+
+
+def list_presets(user: User) -> List[api_presets.PresetDescription]:
+    """The installed presets the user may run, each described like describe_preset."""
+    return api_presets.list_presets(user)
 
 
 def enabled_cloud_video_models(backend_id: str) -> int:

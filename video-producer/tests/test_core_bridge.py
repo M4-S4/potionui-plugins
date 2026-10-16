@@ -180,18 +180,48 @@ def test_run_on_app_loop_hands_the_coroutine_to_the_core(monkeypatch):
     assert handed == ["coroutine"]
 
 
-def test_enabled_backends_lists_id_name_engine_and_effective_driver(monkeypatch):
-    configs = [
-        SimpleNamespace(id="b-1", name="This machine", engine="native", effective_driver="native.local", secret="x"),
-        SimpleNamespace(id="b-2", name="OpenRouter", engine="cloud", effective_driver="cloud.openrouter", secret="y"),
+def test_enabled_backends_are_the_entries_of_list_backends_as_they_come(monkeypatch):
+    entries = [
+        {
+            "id": "b-1",
+            "name": "This machine",
+            "engine": "native",
+            "driver": "native.local",
+            "is_default": True,
+            "execution_device": "this_host_gpu",
+            "max_concurrent_runs": 1,
+            "vram_total_gb": 24.0,
+            "vram_free_gb": 20.5,
+        },
+        {
+            "id": "b-2",
+            "name": "OpenRouter",
+            "engine": "cloud",
+            "driver": "cloud.openrouter",
+            "is_default": False,
+            "has_api_key": True,
+            "execution_device": "unestablished",
+            "max_concurrent_runs": None,
+            "vram_total_gb": None,
+            "vram_free_gb": None,
+        },
     ]
-    store = SimpleNamespace(get_enabled_backends=lambda: configs)
-    _container(monkeypatch, backend_registry=SimpleNamespace(backend_config_store=store))
+    monkeypatch.setattr(core_bridge, "api_backends", SimpleNamespace(list_backends=lambda: entries))
+    _container(monkeypatch)
 
-    assert core_bridge.enabled_backends() == [
-        {"id": "b-1", "name": "This machine", "engine": "native", "driver": "native.local"},
-        {"id": "b-2", "name": "OpenRouter", "engine": "cloud", "driver": "cloud.openrouter"},
-    ]
+    assert core_bridge.enabled_backends() == entries
+
+
+def test_list_presets_asks_the_core_for_the_presets_of_that_user(monkeypatch):
+    asked = []
+    described = [SimpleNamespace(id="01ABC")]
+    monkeypatch.setattr(
+        core_bridge, "api_presets", SimpleNamespace(list_presets=lambda user: asked.append(user) or described)
+    )
+    user = SimpleNamespace(id="user-1")
+
+    assert core_bridge.list_presets(user) is described
+    assert asked == [user]
 
 
 def test_enabled_cloud_video_models_counts_the_entries_with_a_video_output(monkeypatch):

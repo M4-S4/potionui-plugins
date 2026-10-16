@@ -22,6 +22,20 @@ Admin → Plugins shows a **Setup needed** badge on the plugin until its setup s
 
 Available from step 4: the background task that follows generations.
 
+## The editor
+
+The page is a complete editor with five workspaces: Media (the media of the project; importing from the PotionUI gallery comes with step 3), Director IA (direction, references and results), Storyboard (the synopsis and one card per shot), 3D scene and Mix. Around them are ten menus, the project bar, the Production bar, the Inspector, the timeline (the mixing console takes its place in Mix), the status bar and the windows: prompt library and composer, Advanced workshop, Sound design workshop, export, preferences, keyboard shortcuts and command search.
+
+The interface exists in English and in French. Each user picks the language in Video Producer › Preferences… or with the `EN` or `FR` reminder of the status bar; it is saved per user, and until a user chooses, the page follows the language of the browser (French for a French browser, English otherwise). Keyboard shortcuts show the notation of the user's system (⌘, ⌥ and ⇧ on a Mac, Ctrl, Alt and Shift elsewhere). The single-letter shortcuts (A, R, B, I, O, M and N) can be turned off in the Preferences.
+
+What you see on the page at this step, and what comes later:
+
+- The page opens on a starter project, "Dawn at the harbour" ("Aube sur le port" in French), built in the language of the interface: a synopsis, the global direction in five fields, five shots of 5 seconds to generate, each with its shot prompt, a title, a marker and four empty audio tracks. It has no media, no take, no reference and no 3D scene (a button creates a sample point cloud on demand, marked simulated). It lives in the browser: nothing is saved, and reloading the page loses the changes. File › New project… is real: it asks for confirmation if the project has unsaved changes, then starts an empty project. File › Open… is simulated, and saved projects come with step 3.
+- The engines are placeholder engines (This machine · RTX 4090, Studio server · 2 × RTX A6000 and Cloud provider · H100 on demand) and the generation is simulated: the estimate is indicative, no GPU is used, and each simulated take shows a numbered procedural thumbnail marked Simulated. Real generation comes with step 4. Cost figures are for admins only, and the status bar shows a GPU quota only when a plan sets a limit for the user. A shot with the FL2VA profile and no frame in its range is not blocked: the page warns that it will be generated from text only.
+- The Assistant button, the Window menu and Ctrl+J open the PotionUI chat. The four tools of the Video Producer mode come with step 5.
+- The Final Cut Pro, OpenTimelineIO, EDL and SRT files are real: the browser builds them and the user downloads them. Nothing is written to the export folder yet, and the video export is simulated. Video export comes with step 6.
+- The mixing console plays synthetic sounds made by the browser (WebAudio). It plays the user's own audio files from step 3.
+
 ## Setup checks
 
 Admin → Plugins → Video Producer → Overview lists five setup steps, each backed by a check. Each one reads the state of the instance as it is now, so the list updates as you work through it.
@@ -50,7 +64,7 @@ In Admin → Plugins → Video Producer → Settings:
 
 The first one is a choice between three values; the other two are numbers. Values are saved as text, and the form itself does not enforce a minimum or a maximum, so the plugin applies its own bounds: 1 to 16 parallel generations and 1 to 1,048,576 MB of export budget. An empty or invalid value falls back to the default.
 
-The language is not a setting here: each user chooses English or Français in the Preferences of the page, and it is stored for that user.
+The language is not a setting here: each user chooses English or Français in the Preferences of the page, and it is stored for that user. Until a user chooses, the page follows the language of the browser.
 
 Available from step 4: the effect of the draft resolution and of the number of parallel generations.
 
@@ -147,15 +161,27 @@ Available from step 4.
 
 ## The assistant mode
 
-The Assistant button, the Window menu and the keyboard shortcut open the PotionUI chat in a window over the page, in a chat mode named **Video Producer**. The mode has four tools: write the prompt of a shot, fix the contradictions with the global direction, split a synopsis into shots, and check the continuity between shots. The first three change the project, so each of them asks the user to approve the change before it is applied; the continuity check only reads.
+The Assistant button, the Window menu and the keyboard shortcut (Ctrl+J) open the PotionUI chat, in a chat mode named **Video Producer**. The mode has four tools: write the prompt of a shot, fix the contradictions with the global direction, split a synopsis into shots, and check the continuity between shots. The first three change the project, so each of them asks the user to approve the change before it is applied; the continuity check only reads.
 
 The chat needs a language model configured in Admin → LLM / Assistant, like any other chat mode.
 
 Available from step 5.
 
+## Simulated at this step
+
+The window Help › Simulated features lists nine items. Five of them change in a later step; the other four (identity check, Gaussian Splat, Control video, voice and sound design) stay simulated, as the next section explains.
+
+| Item in the window | At this step | Becomes real |
+|---|---|---|
+| AI generation and 3D render | Progress, steps and takes are simulated: each take shows a numbered procedural thumbnail marked Simulated, and the estimates of time, memory, quota and cost are indicative. | Step 4. The 3D render modes stay simulated. |
+| Synopsis breakdown | One sentence becomes one shot. | Step 5, with the assistant tool that splits a synopsis. |
+| Import, opening a project | Import adds a placeholder media with no image; opening a saved project comes in a later step. | Step 3. |
+| Video render | No video file is written. The Final Cut Pro, OpenTimelineIO, EDL and SRT files are real downloads. | Step 6, for H.264 MP4 and VP9 WebM. |
+| Edit audio | The console plays synthetic sounds (WebAudio); faders, mute and solo, pan, equalizer, compressor, sends and meters work. | Step 3, with the user's audio files. |
+
 ## What stays simulated
 
-These parts keep the interface of the prototype, are marked with a gray dashed badge (never yellow), and are listed for users in Help › Simulated features and in the user guide.
+These parts keep a simulated interface, are marked with a gray dashed badge (never yellow), and are listed for users in Help › Simulated features and in the user guide.
 
 | Item | Why it stays simulated |
 |---|---|
@@ -164,9 +190,9 @@ These parts keep the interface of the prototype, are marked with a gray dashed b
 | ProRes, H.265 and audio stems | PotionUI's video converter writes H.264 MP4 or VP9 WebM only, and nothing renders audio per role. |
 | Automation curves of the mixing console | The Auto button only switches a mode; no curve is recorded. |
 | 3D scene, Gaussian Splat, 3D capture, imported Control video, and the production modes 3D render and 3D render + AI | The scene stays a 2D point preview; Gaussian Splat files are referenced and not loaded; the control video is not rendered from the scene. |
-| Engine settings with no counterpart in the chosen preset | A preset exposes only the controls it declares; MiniMax-H3, for example, has no guidance and no negative prompt. The fields are `hybrid`, `profiles`, `consistency`, `lockIdentity`, `motionPriority`, `offset`, `followCut`, `guidance`, `overlap`, `windowLen`, `loras`, `post.*`, `audioDriver`, `lipSync`, `naming`, `autoInsert` and `quality`. They stay visible, grayed and marked simulated. |
+| Engine settings with no counterpart in the chosen preset | A preset exposes only the controls it declares; MiniMax-H3, for example, has no guidance and no negative prompt. The fields are `hybrid`, `profiles`, `consistency`, `lockIdentity`, `motionPriority`, `offset`, `followCut`, `guidance`, `overlap`, `windowLen`, `loras`, `post.*`, `audioDriver`, `lipSync`, `naming`, `autoInsert` and `quality`. At this step they drive nothing; with real engines (step 4) they stay visible, grayed and marked simulated. |
 
-Real in Video Producer: takes as real video files, finals by SeedVR2 upscale, the PotionUI chat assistant, saved projects, imports through the PotionUI pickers and the gallery, thumbnails and video playback, the mixing console playing real audio files, color analysis on the real thumbnails, FCPXML, OTIO, EDL and SRT exports, the assembled MP4 or WebM export, and dialogue text in the subtitles.
+Real once all the steps are delivered: takes as real video files, finals by SeedVR2 upscale, the PotionUI chat assistant, saved projects, imports through the PotionUI pickers and the gallery, thumbnails and video playback, the mixing console playing real audio files, color analysis on the real thumbnails, FCPXML, OTIO, EDL and SRT exports, the assembled MP4 or WebM export, and dialogue text in the subtitles.
 
 ## Troubleshooting
 
@@ -178,7 +204,7 @@ Real in Video Producer: takes as real video files, finals by SeedVR2 upscale, th
 - **References are ignored in a MiniMax-H3 run**: the `fl2va` DiT file was picked for the References mode (see the reminder above).
 - **A take failed after PotionUI restarted**: a generation that was running when the server stopped is marked failed and cannot resume. The user can start it again.
 - **Export fails, or no video file appears**: the fourth setup step (ffmpeg), or the export folder has reached its budget.
-- **A user sees the wrong language**: it is stored per user. Change it in Video Producer › Preferences… of the page.
+- **A user sees the wrong language**: it is stored per user. Change it in Video Producer › Preferences… of the page, or with the `EN` or `FR` reminder of the status bar. Until a user chooses, the page follows the language of the browser.
 
 Available from step 4: everything that concerns generation. Exports from step 6.
 
@@ -197,11 +223,20 @@ The backend imports only `src.plugin_api` and its submodules. The frontend is a 
 cd content/plugins && npm ci && node ../../scripts/build-plugins.mjs video-producer
 ```
 
-Two release builds in a row must produce the same bytes. The Tailwind classes of the plugin are compiled by the build of the PotionUI app, so rebuild the app after adding a class:
+Two release builds in a row must produce the same bytes. The plugin build does not compile the Tailwind classes of the page: the build of the PotionUI app does, because the `content` list of its `tailwind.config.js` scans `frontend/src` of every plugin. After adding or changing a class, run from the root of the PotionUI repository:
 
 ```bash
 cd frontend && npm run build
 ```
+
+The tests of the page run with Node, from the folder of the plugin (`content/plugins/marketplace/video-producer`):
+
+```bash
+node --test "frontend/src/i18n/*.test.js"
+node --test "frontend/src/lib/*.test.js"
+```
+
+The first command checks the two dictionaries: same keys and same parameters in English and in French, every key used by the page exists, and every command and menu of `lib/commands.js` has a label. The second one covers the shortcut notation per platform, the keyboard focus rules and the icons.
 
 This page and the two user guides are listed under `docs:` in the manifest, with this page first because the Setup section links to the first entry.
 
