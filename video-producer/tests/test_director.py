@@ -226,6 +226,45 @@ def test_a_draft_size_the_preset_does_not_offer_falls_back_to_the_closest_area(c
     assert plan.request["form_data"]["quantity"] == 1
 
 
+COMFY_DIT = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+WAN2GP_DIT = "MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors"
+
+
+def _h3_12gb(core, preset_id=presets.MINIMAX_H3_12GB, name="MiniMax-H3 (12 GB)"):
+    core.use_h3_variant(preset_id, name)
+    core.fields[(preset_id, "video")]["resolution"]["default"] = "832x480"
+    return preset_id
+
+
+@pytest.mark.parametrize("preset_id", [presets.MINIMAX_H3_12GB, presets.MINIMAX_H3_FAST_12GB])
+@pytest.mark.parametrize("aspect, draft_size, final_size", [("16:9", "832x480", "1344x768"), ("9:16", "480x832", "768x1344")])
+def test_a_12_gb_h3_preset_drafts_at_832x480_and_finishes_at_its_largest_canvas(core, make_doc, preset_id, aspect, draft_size, final_size):
+    _h3_12gb(core, preset_id, "MiniMax-H3 (12 GB)")
+    doc = make_doc(clips=[SHOT], aspect=aspect)
+
+    draft = _plans(core, doc, preset_id=preset_id).shots[0]
+    final = _plans(core, doc, preset_id=preset_id, quality="final").shots[0]
+
+    assert (draft.resolution, final.resolution) == (draft_size, final_size)
+    assert draft.request["form_data"]["resolution"] == draft_size
+    assert draft.request["form_data"]["video_director"]["settings"]["resolution"] == draft_size
+    assert (draft.preset_mode, draft.fps, draft.request["form_data"]["quantity"]) == ("video", 24, 1)
+
+
+def test_a_12_gb_h3_preset_runs_the_wan2gp_dit_found_by_its_file_name(core, make_doc):
+    preset_id = _h3_12gb(core)
+    core.fields[(preset_id, "video")]["model"]["recommendations"] = [
+        {"sha256": "comfy-sha", "filename": COMFY_DIT},
+        {"sha256": "wan2gp-sha", "filename": WAN2GP_DIT},
+    ]
+    core.missing = {"comfy-sha", COMFY_DIT, "wan2gp-sha"}
+
+    plans = _plans(core, make_doc(clips=[SHOT]), preset_id=preset_id)
+
+    assert plans.blocks == []
+    assert plans.shots[0].request["form_data"]["model"] == f"model:id-{WAN2GP_DIT}"
+
+
 def test_ref2va_runs_the_h3_refs_mode_with_the_shot_references_then_the_global_ones(core, make_doc):
     core.use_h3()
     core.add_media({"kind": "library", "item_id": "lib-1"}, "uploads/hero.png", "image")

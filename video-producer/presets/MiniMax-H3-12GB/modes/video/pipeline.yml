@@ -1,0 +1,222 @@
+# Copy of content/presets/marketplace/MiniMax-H3/modes/video/pipeline.yml, whose
+# comments explain every pipe. The loader reads a mode's pipeline.yml from the
+# preset's own directory; the plugin's tests keep this copy identical.
+pipeline:
+  - name: "model_loader/minimax_h3"
+    id: "model_loader"
+    enabled: true
+    configuration:
+      model:
+        file_path: "{{ form.model }}"
+        name: "{{ form.model }}"
+      text_encoder:
+        file_path: "{{ form.text_encoder }}"
+        name: "{{ form.text_encoder }}"
+      video_vae:
+        file_path: "{{ form.video_vae }}"
+        name: "{{ form.video_vae }}"
+      audio_vae:
+        file_path: "{{ form.audio_vae }}"
+        name: "{{ form.audio_vae }}"
+      upscale_model:
+        file_path: "{{ form.upscale_model | default('') }}"
+        name: "{{ form.upscale_model | default('') }}"
+      loras:
+        "@loop":
+          items: "{{ form.loras if (form.latent_upscale) == 'off' else [] }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+            audio: "{{ item.audio | default(true) }}"
+
+  - name: "media_loader"
+    id: "keyframes"
+    enabled: "{{ form.video_director is defined and form.video_director.mode != 'director' and (form.video_director.media | selectattr('role', 'in', ['first', 'last']) | list | length) > 0 }}"
+    configuration:
+      media:
+        "@loop":
+          items: "{{ (form.video_director.media | selectattr('role', 'in', ['first', 'last']) | sort(attribute='role') | list) if form.video_director is defined else [] }}"
+          template:
+            type: "image"
+            path: "{{ item.media.path }}"
+
+  - name: "media_loader"
+    id: "director_media"
+    enabled: "{{ form.video_director is defined and form.video_director.mode == 'director' and (form.video_director.media_images | length) > 0 }}"
+    configuration:
+      media:
+        "@loop":
+          items: "{{ form.video_director.media_images if form.video_director is defined else [] }}"
+          template:
+            type: "image"
+            path: "{{ item }}"
+
+  - name: "prompt_encoder"
+    input:
+      - ["text_encoder", "model_loader", "text_encoder"]
+      - ["image", "keyframes", "image"]
+    enabled: true
+    configuration:
+      p_prompt:
+        input: "{{ generation.prompts.first.positive }}"
+        output: "{{ generation.prompts.first.positive }}"
+      pairs: "{{ generation.prompts.pairs }}"
+      quantity: "{{ form.quantity }}"
+      guidance_scale: 1.0
+      image_pixel_budget: "{{ form.keyframe_pixel_budget }}"
+      output_resolution: "{{ form.resolution }}"
+
+  - name: "prompt_encoder"
+    id: "prompt_encoder_director"
+    input:
+      - ["text_encoder", "model_loader", "text_encoder"]
+    enabled: "{{ form.video_director is defined and form.video_director.mode == 'director' }}"
+    configuration:
+      p_prompt:
+        input: "{{ generation.prompts.first.positive }}"
+        output: "{{ generation.prompts.first.positive }}"
+      pairs:
+        "@loop":
+          items: "{{ form.video_director.segments if form.video_director is defined else [] }}"
+          template:
+            positive: "{{ item.prompt }}"
+            negative: ""
+      quantity: "{{ (form.video_director.segments | length) if form.video_director is defined else 1 }}"
+      guidance_scale: 1.0
+      output_resolution: "{{ form.resolution }}"
+
+  - name: "seed_generator"
+    enabled: true
+    configuration:
+      seed: "{{ form.seed }}"
+      quantity: "{{ form.quantity }}"
+
+  - name: "dynamic_prompts_renderer"
+    id: "dynamic_prompts_renderer"
+    enabled: true
+    configuration:
+      pairs: "{{ generation.prompts.pairs }}"
+      quantity: "{{ form.quantity }}"
+
+  - name: "from_iotype"
+    id: "from_iotype"
+    enabled: true
+    input:
+      - ["seed", "seed_generator", "seed"]
+    configuration:
+      from: "seed"
+
+  - name: "param_emitter"
+    id: "param_emitter"
+    enabled: true
+    input:
+      - ["seed", "from_iotype", "seed"]
+    configuration:
+      quantity: "{{ form.quantity }}"
+      parameters:
+        - ["model", "{{ form.model }}"]
+        - ["model", "{{ form.text_encoder }}"]
+        - ["model", "{{ form.video_vae }}"]
+        - ["model", "{{ form.audio_vae }}"]
+        - ["model", "{{ form.upscale_model | default('') }}"]
+        - "@loop":
+            items: "{{ form.loras | active_loras }}"
+            template: ["model", "{{ item.model }}"]
+        - ["positive_prompt", "{{ generation.prompts.positives }}"]
+        - ["steps", "{{ form.steps | default(generation.profile.steps) }}"]
+        - ["speed_profile", "{{ form.speed_profile }}"]
+        - ["resolution", "{{ form.resolution }}"]
+        - ["latent_upscale", "{{ form.latent_upscale | default('off') }}"]
+        - "@loop":
+            items: "{{ form.refine_loras | default([]) | active_loras }}"
+            template: ["model", "{{ item.model }}"]
+        - ["frames", "{{ ((form.video_director.settings.duration * preset.vars.fps) | round(0, 'floor') | int) if (form.video_director is defined and form.video_director.settings is defined and form.video_director.settings.duration is not none) else (form.frames | default(preset.vars.default_frames)) }}"]
+        - ["fps", "{{ preset.vars.fps }}"]
+
+  - name: "generator/video_minimax_h3"
+    id: "generator_stage1"
+    input:
+      - ["model", "model_loader", "model"]
+      - ["conditioning", "{% if form.video_director is defined and form.video_director.mode == 'director' %}prompt_encoder_director{% else %}prompt_encoder{% endif %}", "conditioning"]
+      - ["seed", "seed_generator", "seed"]
+      - ["image", "keyframes", "image"]
+      - ["director_image", "director_media", "image"]
+    enabled: true
+    configuration:
+      mode: "video"
+      document: "{{ form.video_director if form.video_director is defined else none }}"
+      steps: "{{ form.steps | default(generation.profile.steps) }}"
+      resolution: "{{ form.resolution }}"
+      frames: "{{ ((form.video_director.settings.duration * preset.vars.fps) | round(0, 'floor') | int) if (form.video_director is defined and form.video_director.settings is defined and form.video_director.settings.duration is not none) else (form.frames | default(preset.vars.default_frames)) }}"
+      quantity: "{{ form.quantity }}"
+      preview: "{{ form.preview }}"
+      keyframe_anchors: "{{ (form.video_director.media | selectattr('role', 'in', ['first', 'last']) | sort(attribute='role') | map(attribute='role') | list) if (form.video_director is defined and form.video_director.mode != 'director') else [] }}"
+      audio_source: "generate"
+      decode: "{{ (form.latent_upscale) == 'off' }}"
+      step_cache_threshold: "{{ form.step_cache_threshold }}"
+      step_cache_warmup_steps: "{{ form.step_cache_warmup_steps }}"
+      step_cache_max_skips: "{{ form.step_cache_max_skips }}"
+      sparse_attn: "{{ form.sparse_attn }}"
+      sol_attn_tau: "{{ form.sol_attn_tau }}"
+      sla_sparsity: "{{ form.sla_sparsity }}"
+      sla_block_size: "{{ form.sla_block_size | int }}"
+      sparse_attn_dense_last_steps: "{{ form.sparse_attn_dense_last_steps }}"
+      sampler: "{{ form.sampler }}"
+      scheduler: "{{ form.scheduler }}"
+      manual_sigmas: "{{ form.manual_sigmas }}"
+      manual_audio_sigmas: "{{ form.manual_audio_sigmas }}"
+      runtime_loras:
+        "@loop":
+          items: "{{ form.loras if (form.latent_upscale) != 'off' else [] }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+            audio: "{{ item.audio | default(true) }}"
+
+  - name: "latent_upscaler/minimax_h3"
+    id: "latent_upscaler"
+    input:
+      - ["latent", "generator_stage1", "latent"]
+      - ["model", "model_loader", "model"]
+    enabled: "{{ (form.latent_upscale) != 'off' }}"
+    configuration:
+      target_mode: "{{ 'scale' if (form.latent_upscale) in ['1.5x', '2x'] else 'megapixels' }}"
+      megapixels: "{{ 3.7 if (form.latent_upscale) == '2k' else 2.1 }}"
+      scale: "{{ 2.0 if (form.latent_upscale) == '2x' else 1.5 }}"
+
+  - name: "generator/video_minimax_h3"
+    id: "generator_stage2"
+    input:
+      - ["model", "model_loader", "model"]
+      - ["conditioning", "{% if form.video_director is defined and form.video_director.mode == 'director' %}prompt_encoder_director{% else %}prompt_encoder{% endif %}", "conditioning"]
+      - ["seed", "seed_generator", "seed"]
+      - ["initial_latent", "latent_upscaler", "latent"]
+      - ["initial_audio_latent", "generator_stage1", "audio_latent"]
+      - ["audio", "generator_stage1", "audio"]
+    enabled: "{{ (form.latent_upscale) != 'off' }}"
+    configuration:
+      mode: "video"
+      quantity: "{{ form.quantity }}"
+      preview: "{{ form.preview }}"
+      audio_source: "passthrough"
+      audio_refine: "{{ form.audio_refine | default('lock') }}"
+      decode: true
+      denoise: "{{ form.refine_denoise | default('0.45') | float }}"
+      video_sigma_shift: "{{ form.refine_video_sigma_shift | default(9.0) }}"
+      steps: "{{ form.refine_steps | default(4) }}"
+      sampler: "{{ form.refine_sampler }}"
+      scheduler: "{{ form.scheduler }}"
+      manual_sigmas: "{{ form.refine_manual_sigmas | default('') }}"
+      manual_audio_sigmas: "{{ form.refine_manual_audio_sigmas | default('') }}"
+      runtime_loras:
+        "@loop":
+          items: "{{ form.refine_loras }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+
+  - name: "gallery"
+    input:
+      - ["video", "{% set effective_upscale = (form.latent_upscale) %}{% if effective_upscale != 'off' %}generator_stage2{% else %}generator_stage1{% endif %}", "video"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: true

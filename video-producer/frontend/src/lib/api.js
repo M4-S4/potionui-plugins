@@ -199,6 +199,7 @@ export function normalizePreset(value) {
 		cloud: value.engine === 'cloud',
 		driver: text(value.driver) || null,
 		backendId: text(value.backend_id) || null,
+		profile: text(value.profile).trim() || null,
 		video: Boolean(value.video_director) || directorModes.length > 0,
 		upscaler: value.upscaler === true,
 		modes,

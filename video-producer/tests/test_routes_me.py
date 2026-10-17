@@ -506,6 +506,7 @@ def test_me_describes_a_video_director_preset_with_its_modes_fields_and_director
             "engine": "native",
             "category": "video",
             "requires": {"min_vram_gb": 12.0, "recommended_vram_gb": 16.0},
+            "profile": None,
             "modes": {
                 "video": {
                     "default_form": "custom",
@@ -550,6 +551,7 @@ def test_me_marks_seedvr2_as_the_upscaler_without_a_director(client, store, no_c
             "engine": "native",
             "category": "utility",
             "requires": None,
+            "profile": None,
             "modes": {
                 "upscale": {
                     "default_form": "custom",
@@ -965,3 +967,53 @@ def test_me_derives_the_profiles_and_modes_of_an_h3_variant_from_its_own_modes(c
     assert preset["profiles"] == ["FL2VA", "Hybrid AV"]
     assert list(preset["modes"]) == ["video"]
     assert preset["upscaler"] is False
+
+
+SIZES_12GB = ("1344x768", "768x1344", "960x544", "544x960", "832x480", "480x832")
+
+
+@pytest.mark.parametrize(
+    "preset_id, name, director",
+    [
+        (presets.MINIMAX_H3_12GB, "MiniMax-H3 (12 GB)", H3_DIRECTOR),
+        (presets.MINIMAX_H3_FAST_12GB, "MiniMax-H3-Fast (12 GB)", {**H3_DIRECTOR, "preset_modes": ["video"]}),
+    ],
+)
+def test_me_lists_a_12_gb_preset_with_its_memory_profile(client, store, no_container, catalog, preset_id, name, director):
+    catalog.presets = [
+        _description(
+            preset_id,
+            name,
+            vars={"fps": 24, "default_frames": 124, "video_director": director, "video_producer": {"profile": "12 GB"}},
+            modes={"video": _mode()},
+            requires={"min_vram_gb": 12, "recommended_vram_gb": 12},
+        )
+    ]
+    catalog.fields[(preset_id, "video")] = {
+        "resolution": {"type": "resolution", "default": "832x480", "options": [_option(value) for value in SIZES_12GB]}
+    }
+
+    (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert (preset["id"], preset["name"], preset["profile"]) == (preset_id, name, "12 GB")
+    assert preset["requires"] == {"min_vram_gb": 12, "recommended_vram_gb": 12}
+    assert preset["profiles"] == ["FL2VA", "Hybrid AV"]
+    assert (list(preset["modes"]), preset["fps"], preset["fps_locked"], preset["upscaler"]) == (["video"], 24, True, False)
+    assert [option["value"] for option in preset["resolutions"]] == list(SIZES_12GB)
+
+
+@pytest.mark.parametrize(
+    "variables, profile",
+    [
+        ({}, None),
+        ({"video_producer": None}, None),
+        ({"video_producer": "12 GB"}, None),
+        ({"video_producer": {"profile": 12}}, None),
+        ({"video_producer": {"profile": "   "}}, None),
+        ({"video_producer": {"profile": " 16 GB "}}, "16 GB"),
+    ],
+)
+def test_me_reads_the_memory_profile_only_from_a_text_video_producer_profile(client, store, no_container, catalog, variables, profile):
+    catalog.presets = [_description(presets.MINIMAX_H3, "MiniMax-H3", vars={"fps": 24, "video_director": H3_DIRECTOR, **variables}, modes={"video": _mode()})]
+
+    assert client.get(ME_URL).json()["data"]["presets"][0]["profile"] == profile

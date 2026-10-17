@@ -147,6 +147,26 @@ test('engine popup: one entry per native video preset on the first native backen
 	assert.deepEqual(presetProfiles(me.presets.find((p) => p.id === WAN)), ['FL2VA']);
 });
 
+test('engine popup: a memory profile preset keeps the MiniMax H3 name and shows its profile once', () => {
+	const profiled = normalizeMe({
+		...rawMe,
+		presets: [
+			...rawMe.presets,
+			{ id: '01M54HN72B0KY7H63BKQ16T253', name: 'MiniMax-H3 (12 GB)', engine: 'native', modes: { video: {} }, video_director: { family: 'h3' }, profile: '12 GB', profiles: ['FL2VA', 'Hybrid AV'] },
+			{ id: '01M54HN72PABVRE54YNQA2Q7ZT', name: 'MiniMax-H3-Fast', engine: 'native', modes: { video: {} }, video_director: { family: 'h3' }, profile: ' 12 GB ' },
+			{ id: 'wan-low', name: 'Wan 2.1 / 2.2', engine: 'native', modes: { video: {} }, video_director: { family: 'wan' }, profile: null }
+		]
+	});
+	assert.equal(profiled.presets.find((p) => p.id === '01M54HN72B0KY7H63BKQ16T253').profile, '12 GB');
+	assert.equal(profiled.presets.find((p) => p.id === WAN).profile, null);
+	const labels = Object.fromEntries(engineOptions(profiled).filter((o) => !o.model).map((o) => [o.preset, o.label]));
+	assert.equal(labels['01M54HN72B0KY7H63BKQ16T253'], 'MiniMax H3 (12 GB)');
+	assert.equal(labels['01M54HN72PABVRE54YNQA2Q7ZT'], 'MiniMax H3 Fast · 12 GB');
+	assert.equal(labels['wan-low'], 'Wan 2.1 / 2.2');
+	assert.equal(labels[H3], 'MiniMax H3');
+	assert.deepEqual(presetProfiles(profiled.presets.find((p) => p.id === '01M54HN72PABVRE54YNQA2Q7ZT')), ['FL2VA', 'Ref2VA', 'Hybrid AV']);
+});
+
 test('migrateEngine: legacy local / studio / cloud backends map to the first engine of that kind and get a default entry', () => {
 	assert.deepEqual(migrateEngine({ backend: 'local' }, me), { backend: 'native', preset: WAN, model: null });
 	assert.deepEqual(migrateEngine({ backend: 'studio' }, me), { backend: 'native', preset: WAN, model: null });

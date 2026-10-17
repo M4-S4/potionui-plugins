@@ -1,5 +1,5 @@
 export const PROFILES = ['FL2VA', 'Ref2VA', 'Hybrid AV'];
-export const MINIMAX_H3_IDS = ['01KX47H3MINIMAX000000000VA', '01KX47H3FASTH30000000000VA', '01KX47H3VDNMINIMAX000000VA'];
+export const MINIMAX_H3_IDS = ['01KX47H3MINIMAX000000000VA', '01KX47H3FASTH30000000000VA', '01KX47H3VDNMINIMAX000000VA', '01M54HN72B0KY7H63BKQ16T253', '01M54HN72PABVRE54YNQA2Q7ZT'];
 export const UPSCALE_TARGETS = ['hd720', 'fhd1080', 'qhd1440', 'uhd2160'];
 const CLOUD_DRIVERS = { '01M3SV8HJTGT3JPPH2BA5MP6PR': 'cloud.openrouter', '01M48T0Q8Q0V2WNW3WTX3FY1MW': 'cloud.google' };
 const LEGACY_BACKENDS = { local: 'local', studio: 'remote', cloud: 'cloud' };
@@ -11,6 +11,11 @@ export const isH3 = (presetOrId) => MINIMAX_H3_IDS.includes(typeof presetOrId ==
 export function presetLabel(preset) {
 	if (!preset) return '';
 	return isH3(preset) ? preset.name.replace(/^MiniMax-H3[-\s]?/, 'MiniMax H3 ').trim() : preset.name;
+}
+
+export function withProfile(label, profile) {
+	if (!profile || label.toLowerCase().includes(profile.toLowerCase())) return label;
+	return `${label} · ${profile}`;
 }
 
 export function presetProfiles(preset) {
@@ -38,7 +43,7 @@ export function engineOptions(me) {
 	const options = [];
 	if (native) {
 		for (const preset of presets.filter((p) => !p.cloud)) {
-			options.push({ key: optionKey(preset.id, null), preset: preset.id, model: null, backend: native.id, kind: native.kind, label: presetLabel(preset), group: native.name, info: preset, modelInfo: null });
+			options.push({ key: optionKey(preset.id, null), preset: preset.id, model: null, backend: native.id, kind: native.kind, label: withProfile(presetLabel(preset), preset.profile), group: native.name, info: preset, modelInfo: null });
 		}
 	}
 	for (const engine of engines.filter((e) => e.kind === 'cloud')) {

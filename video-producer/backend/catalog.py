@@ -8,6 +8,8 @@ logger = logging.getLogger("plugins.video-producer")
 
 VIDEO_DIRECTOR = "video_director"
 
+VIDEO_PRODUCER = "video_producer"
+
 NATIVE_KINDS = {"native.local": "local", "native.remote": "remote"}
 
 FL2VA = "FL2VA"
@@ -86,6 +88,13 @@ def main_mode(variables: Optional[Mapping[str, Any]], modes: List[str]) -> Optio
         if mode in modes:
             return mode
     return modes[0] if modes else None
+
+
+def memory_profile(variables: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """The memory profile a preset is set up for, such as "12 GB", read from its vars.video_producer.profile; None otherwise."""
+    own = (variables or {}).get(VIDEO_PRODUCER)
+    profile = own.get("profile") if isinstance(own, Mapping) else None
+    return profile.strip() if isinstance(profile, str) and profile.strip() else None
 
 
 def preset_limits(variables: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
@@ -184,6 +193,7 @@ def _preset(description: Any, upscaler: bool, cloud_backends: List[Dict[str, Any
         "engine": description.engine,
         "category": description.category,
         "requires": description.requires,
+        "profile": memory_profile(variables),
         "modes": {
             name: {"default_form": mode.default_form, "fields": _fields(mode)}
             for name, mode in (description.modes or {}).items()

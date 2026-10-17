@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Sequence, Set
+from typing import Dict, List, Optional, Sequence, Set
 from urllib.parse import urlencode
 
 from . import PLUGIN_ID, core_bridge, presets
@@ -192,8 +192,25 @@ class FfmpegReady(SetupCheck):
         )
 
 
+def _recommended_files(preset_id: str) -> Dict[str, List[str]]:
+    """The file names a MiniMax-H3 preset recommends for each model role: the four models in every mode, the latent upscaler in its Upscale mode."""
+    description = core_bridge.describe_preset(preset_id)
+    modes = list(description.modes) if description is not None else []
+    files: Dict[str, List[str]] = {}
+    for mode in modes:
+        fields = core_bridge.preset_form_fields(preset_id, mode) or {}
+        roles = [field for field, _ in H3_MODEL_ROLES] + ([H3_UPSCALER_ROLE[0]] if mode == H3_UPSCALE_MODE else [])
+        for role in roles:
+            names = files.setdefault(role, [])
+            for item in (fields.get(role) or {}).get("recommendations") or []:
+                name = item.get("filename")
+                if name and name not in names:
+                    names.append(name)
+    return files
+
+
 class MiniMaxH3Ready(SetupCheck):
-    """Every installed MiniMax-H3 preset has a recommended file on disk for each of its four models, and for the latent upscaler of its Upscale mode."""
+    """Every installed MiniMax-H3 preset has a recommended file on disk for each of its four models, and for the latent upscaler of its Upscale mode, found by SHA-256 or else by file name."""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
         try:
@@ -222,7 +239,7 @@ class MiniMaxH3Ready(SetupCheck):
             done=False,
             description=(
                 f"{details} Download one of the files its model pickers recommend; "
-                "the check recognises those files by their SHA-256, not other quantizations."
+                "the check recognises those files by their SHA-256 or their file name, not other quantizations."
             ),
             action_label=f"Open {first.name}",
             action_href=admin_href(tab="presets", id=first.id),
@@ -232,8 +249,14 @@ class MiniMaxH3Ready(SetupCheck):
     def _missing(state: PresetState) -> List[str]:
         hashes: Dict[str, Set[str]] = core_bridge.preset_model_hashes(state.id, [field for field, _ in H3_MODEL_ROLES])
         hashes.update(core_bridge.preset_model_hashes(state.id, [H3_UPSCALER_ROLE[0]], modes=[H3_UPSCALE_MODE]))
-        return [
-            label
-            for field, label in (*H3_MODEL_ROLES, H3_UPSCALER_ROLE)
-            if hashes.get(field) and not any(core_bridge.model_file_present(sha256) for sha256 in sorted(hashes[field]))
-        ]
+        files: Optional[Dict[str, List[str]]] = None
+        missing: List[str] = []
+        for field, label in (*H3_MODEL_ROLES, H3_UPSCALER_ROLE):
+            if any(core_bridge.model_file_present(sha256) for sha256 in sorted(hashes.get(field) or ())):
+                continue
+            if files is None:
+                files = _recommended_files(state.id)
+            names = files.get(field) or []
+            if (hashes.get(field) or names) and not any(core_bridge.installed_model_for_file(name) for name in names):
+                missing.append(label)
+        return missing

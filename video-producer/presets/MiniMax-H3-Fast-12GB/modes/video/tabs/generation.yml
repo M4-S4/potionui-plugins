@@ -1,0 +1,128 @@
+fields:
+  - name: "speed_profile"
+    type: "select"
+    formula: "speed"
+    label: "Speed"
+    default: "distilled"
+    ai_hint: >-
+      FastH3 8-Step V2 is DMD2-distilled for exactly 8 steps -- there is no
+      quality/turbo choice to make here the way the base MiniMax-H3 preset
+      offers. The Steps slider on the Advanced tab reflects this and stays
+      locked at 8.
+    configuration:
+      options:
+        - { label: "Distilled (8 steps, fixed)", value: "distilled" }
+
+  - type: "section"
+    label: "Video"
+    children:
+      - type: "row"
+        children:
+          - name: "seed"
+            type: "seed"
+            label: "Seed"
+            default: -1
+            width: "3/5"
+
+          - name: "quantity"
+            type: "stepper"
+            label: "Quantity"
+            default: 1
+            configuration: {min: 1, max: 4, step: 1}
+            width: "2/5"
+            full_width: true
+
+      - name: "resolution"
+        type: "resolution"
+        formula: "size"
+        label: "Resolution"
+        ai_hint: "Both axes must be multiples of 32, aspect ratio between 1:4 and 4:1 -- the same sizes as the base MiniMax-H3 preset. The native canvas (768 short edge, 768x1344 max) is what FastVideo trained and released the FastH3 8-Step V2 recipe on; the faster sizes trade quality for speed. Area is the dominant cost."
+        configuration:
+          files:
+            - { path: "{{ paths._shared }}/../marketplace/MiniMax-H3-Fast/files/form/resolutions_canvas.yml", group: "Native canvas (768 short edge)" }
+            - { path: "{{ paths._shared }}/../marketplace/MiniMax-H3-Fast/files/form/resolutions_fast.yml", group: "Faster (below native canvas)" }
+        default: "832x480"
+
+  - type: "section"
+    label: "Models"
+    formula: "models"
+    children:
+      - name: "model"
+        type: "model"
+        label: "MiniMax-H3-Fast DiT"
+        required: true
+        ai_hint: "Must be the FastVideo FastH3 8-Step V2 repack (filenames start `fastvideo_fasth3_8step_v2_`), NOT the base MiniMax-H3 checkpoint -- both are the same 50-block architecture and key set, so nothing here can detect a mismatch; a base checkpoint loads without complaint and simply isn't distilled for 8 steps. Tag your FastH3 files distinctly from the base preset's (e.g. a 'minimax-h3-fast' model tag) so this preset's Checkpoint tags configuration can scope the picker to just them."
+        configuration:
+          model_type: "diffusion_model"
+          placeholder: "fastvideo_fasth3_8step_v2_pruned_int8_convrot..."
+          filter_tags: "@config:checkpoint_tags"
+          recommendations:
+            - name: "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors"
+              link: "https://huggingface.co/FastVideo/FastVideo-FastH3-Comfy/resolve/main/diffusion_models/fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors"
+              size: "20.61 GB"
+              sha256: "0922785978dc9bfe1adf27d8b291b0ca763f9f165f882e6cb297c72fbb6deda8"
+              description: "FastH3 8-Step V2, pruned + int8 ConvRot - the 12 GB profile's DiT, no fp8 hardware needed."
+
+      - name: "text_encoder"
+        type: "model"
+        label: "Text Encoder (Qwen3-VL-32B)"
+        required: true
+        ai_hint: "Identical files to the base MiniMax-H3 preset's text encoder -- FastH3 reuses the same Qwen3-VL-32B conditioning stack unchanged."
+        configuration:
+          model_type: "text_encoder"
+          placeholder: "qwen3vl_32b_minimax_h3_nvfp4_awq..."
+          filter_tags: "@config:text_encoder_tags"
+          recommendations:
+            - name: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+              link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+              size: "14.61 GB"
+              sha256: "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"
+              description: "Qwen3-VL-32B encoder, nvfp4 AWQ - larger than a 12 GB card, so the 12 GB profile streams it from system RAM."
+
+      - name: "video_vae"
+        type: "model"
+        label: "Video VAE"
+        required: true
+        ai_hint: "The same int8 ConvRot file as the MiniMax-H3 (12 GB) preset's video VAE."
+        configuration:
+          model_type: "vae"
+          placeholder: "minimax_h3_video_vae_int8_convrot..."
+          filter_tags: "@config:vae_tags"
+          recommendations:
+            - name: "minimax_h3_video_vae_int8_convrot.safetensors"
+              link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_int8_convrot.safetensors"
+              size: "2.62 GB"
+              sha256: "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"
+              description: "MiniMax-H3 video VAE, int8 ConvRot - about half the fp16 file."
+
+      - name: "audio_vae"
+        type: "model"
+        label: "Audio VAE"
+        required: true
+        ai_hint: "Identical file to the base MiniMax-H3 preset's audio VAE - required for the audio track."
+        configuration:
+          model_type: "vae"
+          placeholder: "minimax_h3_audio_vae..."
+          filter_tags: "@config:vae_tags"
+          recommendations:
+            - name: "minimax_h3_audio_vae_fp32.safetensors"
+              link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors"
+              size: "577.2 MB"
+              sha256: "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48"
+              description: "MiniMax-H3 audio VAE, fp32 - required for the audio track."
+
+  - type: "section"
+    label: "Keyframe encoding"
+    audience: "advanced"
+    children:
+      - name: "keyframe_pixel_budget"
+        type: "select"
+        label: "Keyframe detail budget"
+        default: "1"
+        ai_hint: "Only has any effect when the Video Director attaches a first/last frame. The keyframe reaches the model twice -- as condition frames (always at the picked Resolution) and as a picture the text encoder reads for style/content; only the second read is capped here. Uncapped reads up to 16MP and is paid for by area. '0' (uncapped) is the safest answer when the user cares about keyframe fidelity. Suggest 2x as the speed/fidelity compromise, or 1x when keyframe encoding is slow and the keyframe is a large photo. Values are multiples of the output canvas AREA, not edge length."
+        configuration:
+          options:
+            - { label: "Uncapped (model default)", value: "0" }
+            - { label: "1x output area (fastest)", value: "1" }
+            - { label: "2x output area", value: "2" }
+            - { label: "4x output area", value: "4" }

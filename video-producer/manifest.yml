@@ -10,6 +10,9 @@ category: "tools"
 api:
   module: "backend/api.py"
 
+presets:
+  - path: "presets"
+
 hooks:
   backend:
     - hook: "plugin.lifecycle.boot"

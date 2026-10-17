@@ -47,7 +47,7 @@ Admin → Plugins → Video Producer → Overview lists five setup steps, each b
 | **Install and assign at least one Video Director preset (Wan, MiniMax-H3, LTX or a cloud video preset)** (`VideoPresetsReady`) | At least one installed preset that declares Video Director is assigned to a user or a group. | Install the preset, then assign it to the people who will generate. Download its model files. | Admin → Presets, Admin → Downloads, Admin → Models |
 | **Install SeedVR2 for final takes** (`UpscalerReady`) | The SeedVR2 preset is ready to upscale a take. | Install and assign the SeedVR2 preset and download its model files (a DiT and a VAE). | Admin → Presets, Admin → Downloads, Admin → Models |
 | **Install ffmpeg for video delivery** (`FfmpegReady`) | The PotionUI server process can find ffmpeg. | Install ffmpeg and ffprobe so that they are on the `PATH` of the PotionUI process. In Docker, check the image. | The server |
-| **If a MiniMax-H3 preset is installed, install its five model files (DiT, text encoder, video VAE, audio VAE, and the latent upscaler of its Upscale mode)** (`MiniMaxH3Ready`) | No MiniMax-H3 preset is installed, or every installed one has its four files, and, for a preset that has an Upscale mode (the base MiniMax-H3 preset, not Fast or VDN), the file of its latent upscaler (`upscale_model`). Each file is recognised by its SHA-256, among the files that the preset's model pickers recommend. | Download the files, and read the MiniMax-H3 reminder below before you do. | Admin → Downloads, Admin → Models |
+| **If a MiniMax-H3 preset is installed, install its five model files (DiT, text encoder, video VAE, audio VAE, and the latent upscaler of its Upscale mode)** (`MiniMaxH3Ready`) | No MiniMax-H3 preset is installed, or every installed one has its four files, and, for a preset that has an Upscale mode (the base MiniMax-H3 preset, not Fast or VDN), the file of its latent upscaler (`upscale_model`). Each file is recognised by its SHA-256, or else by its file name, among the files that the preset's model pickers recommend. | Download the files, and read the MiniMax-H3 reminder below before you do. | Admin → Downloads, Admin → Models |
 
 How the steps behave, as PotionUI defines them:
 
@@ -111,13 +111,13 @@ Cloud cost: PotionUI records the cost of every cloud job and shows it to admins 
 
 ## Models and presets
 
-Video Producer can generate with every installed preset that declares Video Director, once it is assigned to the user: Wan, LTX-2, LTX-2.5, MiniMax-H3 (and its Fast and VDN variants), OpenRouter Video and Gemini Video. The frame rate of a take is set by the preset, and a user sees only the presets assigned to them.
+Video Producer can generate with every installed preset that declares Video Director, once it is assigned to the user: Wan, LTX-2, LTX-2.5, MiniMax-H3 (and its Fast and VDN variants, and the two 12 GB presets the plugin ships, see Memory profiles), OpenRouter Video and Gemini Video. The frame rate of a take is set by the preset, and a user sees only the presets assigned to them.
 
 | Preset | Profiles | What Video Producer asks of it |
 |---|---|---|
 | Wan 2.1 / 2.2, LTX-2 / 2.3, LTX-2.5 | FL2VA | Mode `video` of the preset, with a text-only, first-frame or first-and-last-frame composition. Wan runs at 16 fps by default. |
 | MiniMax-H3 | FL2VA, Ref2VA, Hybrid AV | Mode `video` for FL2VA and Hybrid AV, mode `refs` for Ref2VA, mode `upscale` for a final. Fixed 24 fps, clips up to 15 seconds. |
-| MiniMax-H3 Fast and MiniMax-H3 VDN | FL2VA, Hybrid AV | Mode `video` only. They have no `refs` mode, so no Ref2VA, and no `upscale` mode, so their finals go through SeedVR2 like those of Wan. Fixed 24 fps. |
+| MiniMax-H3 Fast, MiniMax-H3 VDN, MiniMax-H3 (12 GB) and MiniMax-H3-Fast (12 GB) | FL2VA, Hybrid AV | Mode `video` only. They have no `refs` mode, so no Ref2VA, and no `upscale` mode, so their finals go through SeedVR2 like those of Wan. Fixed 24 fps. |
 | OpenRouter Video, Gemini Video | FL2VA | Mode `txt2video`, or `img2video` when the shot has a first frame and the model accepts one. |
 
 The profiles that a preset cannot generate are greyed in the page and marked "MiniMax H3 only" (Ref2VA and Hybrid AV need a MiniMax H3 preset, and Ref2VA the base one), and the server answers the block `profile_unsupported` if a client asks for one anyway.
@@ -143,11 +143,31 @@ Video Producer offers MiniMax-H3 as soon as its presets are installed and assign
 
 In Video Producer, the reference-guided profile (Ref2VA) uses the References mode of MiniMax-H3. If a user says that references are ignored, check the DiT file first. In Admin → Presets → Configuration, the MiniMax-H3 preset has tag filters for its DiT, text encoder and VAE pickers if you want to narrow the choices.
 
+### Memory profiles
+
+Video Producer ships two presets of its own for a card with **12 GB of VRAM**: **MiniMax-H3 (12 GB)** and **MiniMax-H3-Fast (12 GB)**. They live in the plugin's `presets` folder (declared by `presets:` in `manifest.yml`), so Admin → Presets lists them as soon as the plugin is enabled; install and assign them like any other preset. `GET /me` gives every preset a `profile`: `"12 GB"` for these two, read from `vars.video_producer.profile` of the preset, and `null` for the others.
+
+- **Why.** On a 12 GB card, MiniMax-H3 fails before sampling: its 32B text encoder (14.6 GB in nvfp4) is moved to the GPU in one piece and runs out of memory. These presets keep the model, its pipeline and its controls, and change what loads and where the form starts.
+- **What they reuse.** MiniMax-H3 (12 GB) is the Video mode of the core MiniMax-H3 preset, MiniMax-H3-Fast (12 GB) the core MiniMax-H3-Fast preset. The LoRA and Enhance tabs (and the Advanced tab of Fast) and the resolution lists are read from the core presets. The pipeline, the Generation tab (and the Advanced tab of the base model) are copies, because the loader reads them from the preset's own folder and a default cannot be overridden by reference; the copies only change defaults and recommendations, and the tests fail if a copy drifts from the core preset. Video Director capabilities, prompt templates and the assistant's prompt guide are the core ones. Neither preset has a References or an Upscale mode, so their finals go through SeedVR2.
+
+**Files.** Each model picker recommends one tier, recognised by SHA-256 or else by file name, so the Wan2GP name works before the catalog has hashed the file. The int4 `convrot_w4a4` DiT is not recommended: the native engine cannot read it.
+
+| Model | MiniMax-H3 (12 GB) | MiniMax-H3-Fast (12 GB) |
+|---|---|---|
+| DiT | `minimax_h3_fl2va_pruned_int8_convrot.safetensors` (Comfy-Org) or `MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors` (Wan2GP) | `fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors` |
+| Text encoder | `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors` | the same |
+| Video VAE | `minimax_h3_video_vae_int8_convrot.safetensors` | the same |
+| Audio VAE | `minimax_h3_audio_vae_fp32.safetensors` | the same |
+
+- **Settings.** 832×480 (480×832, 960×544 and 544×960 are offered, and 1344×768 stays in the list), 124 frames (5.17 s at 24 fps), one clip, sampler Res multistep with the Simple scheduler, a keyframe detail budget of 1× the output area, and the engine's automatic memory handling. The base model runs 20 steps (the Custom speed profile; Quality and Turbo are still there), Fast its fixed 8. In Video Producer a draft follows the `draft_resolution` setting (832×480 by default) and a re-rendered final of a 16:9 project takes 1344×768.
+- **Prerequisites.** The native backend option `text_encoder_placement`, delivered by the core branch `core/native-memory-profiles`: leave it on `auto`, which streams a text encoder that does not fit from system RAM, or set it to `stream`. Without that option the presets load but the text encoder still runs out of GPU memory. Plan on 64 GB of system RAM: the streamed encoder, the part of the 20 GB DiT that does not fit on the card and the rest of the process share it. `requires` declares 12 GB of VRAM (minimum and recommended) and no RAM figure.
+- **Speed.** Everything that does not fit on the card streams from system RAM, so expect the prompt encoding and every step to take noticeably longer than on a card that holds the model; the estimate warns `vram_stream`. These are the profile's starting values, not measured guarantees: check a first take on your card before planning a long session.
+
 ### SeedVR2 for finals
 
-- Making a take final upscales it. For a Wan, LTX, MiniMax-H3 Fast, MiniMax-H3 VDN or cloud take that is SeedVR2 (its `video_upscale` mode), to 720p, 1080p, 1440p or 2160p (shown as 4K); for a take of the base MiniMax-H3 preset, which has an `upscale` mode, it is the upscale mode of that preset itself, whose Target Size only has two values, so 720p and 1080p give HD and 1440p and 2160p give 2K. The other choice of the **Make final** window, **Re-render at full resolution**, generates the shot again at the highest resolution of the preset with the same seed. See Generation › Final takes.
+- Making a take final upscales it. For a Wan, LTX, MiniMax-H3 Fast, MiniMax-H3 VDN, 12 GB MiniMax-H3 or cloud take that is SeedVR2 (its `video_upscale` mode), to 720p, 1080p, 1440p or 2160p (shown as 4K); for a take of the base MiniMax-H3 preset, which has an `upscale` mode, it is the upscale mode of that preset itself, whose Target Size only has two values, so 720p and 1080p give HD and 1440p and 2160p give 2K. The other choice of the **Make final** window, **Re-render at full resolution**, generates the shot again at the highest resolution of the preset with the same seed. See Generation › Final takes.
 - The DiT comes in four sizes: 3B fp8 (3.39 GB), 3B fp16 (6.78 GB), 7B fp8 (8.24 GB) and 7B fp16 (16.48 GB), plus a VAE of about 501 MB. SeedVR2 also needs a prompt embedding file. PotionUI's hardware page says it scales down cleanly to small cards: the batch size follows about 72 % of the free VRAM and is halved on an out-of-memory error.
-- When no SeedVR2 preset is assigned to a user, the Upscale choice of the Make final window shows "Upscaler not available" and only the re-render is offered. A take of the base MiniMax-H3 preset still upscales, because its preset has an `upscale` mode. The Fast and VDN variants have none: without SeedVR2 their takes can only be re-rendered, and a client that asks for the upscale anyway gets 409 `blocked` with the block `upscale_unsupported`, whose message invites to install SeedVR2 or to render the take again.
+- When no SeedVR2 preset is assigned to a user, the Upscale choice of the Make final window shows "Upscaler not available" and only the re-render is offered. A take of the base MiniMax-H3 preset still upscales, because its preset has an `upscale` mode. The Fast and VDN variants and the 12 GB presets have none: without SeedVR2 their takes can only be re-rendered, and a client that asks for the upscale anyway gets 409 `blocked` with the block `upscale_unsupported`, whose message invites to install SeedVR2 or to render the take again.
 
 ### Cloud presets
 
@@ -173,7 +193,7 @@ From the project, a take uses the direction, the shot prompts, the frames, the r
 
 ### Required models
 
-For each `model` field that the chosen mode of the preset requires, Video Producer takes the first recommended file of the preset that is installed and reachable, and passes it as `model:<id>`. The recommendations are matched by SHA-256, and by file name when a preset gives no SHA-256 (the SeedVR2 case). A field with no installed recommendation blocks the generation with `missing_models`, and `data.fields` lists the fields. The fields are:
+For each `model` field that the chosen mode of the preset requires, Video Producer takes the first recommended file of the preset that is installed and reachable, and passes it as `model:<id>`. The recommendations are matched by SHA-256, and else by file name: when a preset gives no SHA-256 (the SeedVR2 case) or the catalog has not hashed the file (the Wan2GP DiT of MiniMax-H3 (12 GB)). A field with no installed recommendation blocks the generation with `missing_models`, and `data.fields` lists the fields. The fields are:
 
 - Wan: `text_encoder`, `vae`, then `t2v_high_noise_model` (and `t2v_low_noise_model` when it is installed) for text-only shots, `i2v_high_noise_model` (and `i2v_low_noise_model`) for first-frame and first-and-last-frame shots.
 - MiniMax H3: `model`, `text_encoder`, `video_vae`, `audio_vae`. The upscale mode of a final of the base MiniMax-H3 preset also needs `upscale_model`, which the fifth setup step checks too.
@@ -243,7 +263,7 @@ For an admin and a cloud model, the server asks PotionUI for the cost of the sho
 
 `POST /projects/{id}/takes/{take}/final` (202) starts a new take, of quality `final`, linked to the take it comes from (`parent_take_id`) and carrying the same variant letter. The source take must be finished (409 `take_not_done` otherwise). The body is `{method, target}`.
 
-- **`upscale`** enlarges the video of the source take as it is. For a Wan, LTX, MiniMax-H3 Fast, MiniMax-H3 VDN or cloud take: SeedVR2, mode `video_upscale`, with the source video as `input_video`, `resolution_target` set to the target, `restoration_intent` `faithful` and a random seed. For a take of the base MiniMax-H3 preset, whose preset has an `upscale` mode: that mode, with the source video and its Target Size (`hd720` and `fhd1080` give `hd`, `qhd1440` and `uhd2160` give `2k`, or the nearest value the mode offers). The take has `kind` `upscale`; its `resolution` is the size it is expected to produce and its real size is written when it ends.
+- **`upscale`** enlarges the video of the source take as it is. For a Wan, LTX, MiniMax-H3 Fast, MiniMax-H3 VDN, 12 GB MiniMax-H3 or cloud take: SeedVR2, mode `video_upscale`, with the source video as `input_video`, `resolution_target` set to the target, `restoration_intent` `faithful` and a random seed. For a take of the base MiniMax-H3 preset, whose preset has an `upscale` mode: that mode, with the source video and its Target Size (`hd720` and `fhd1080` give `hd`, `qhd1440` and `uhd2160` give `2k`, or the nearest value the mode offers). The take has `kind` `upscale`; its `resolution` is the size it is expected to produce and its real size is written when it ends.
 - **`render`** generates the shot again, with the same seed, preset, profile and model, at the largest resolution of the preset (for a cloud model, the largest the model declares). The request is rebuilt from the current project. The take has `kind` `render`.
 - `target` is one of `hd720`, `fhd1080`, `qhd1440`, `uhd2160`, shown as 720p, 1080p, 1440p and 4K. It is required but a render ignores it. The window proposes the resolution of the project as the default.
 - A final reserves GPU minutes like any native take and is checked against the quota. The page puts a finished final on the shot at once, in place of the draft (toast "Final version ready and applied to the shot").
@@ -289,7 +309,7 @@ Answers are `{success: true, data}`; errors are described under Projects and med
 | `POST /takes/{take}/cancel` | | `{take}`. Cancels the generation if it was handed over, refunds the reservation, and the take becomes `cancelled`. |
 | `POST /takes/{take}/retry` (202) | | `{take}`, a new take with the same shot, seed, quality, preset and profile (a render is rebuilt from the current project). Only for a failed or cancelled take (409 `take_not_retryable`); the old one stays. |
 
-`GET /me` is extended for generation. `engines` lists the enabled native and cloud backends (among others `id`, `name`, `kind` `local`, `remote` or `cloud`, `driver`, `execution_device`, `vram_total_gb`, `vram_free_gb` and `is_default`), and a cloud backend carries its enabled video models in `models` (`id`, `name`, `provider_model_id`, `tasks`, `typical_seconds`, `max_seconds`). `presets` lists the video presets and the upscaler preset that the user may run; a video preset carries `modes`, `video_director`, `resolutions` (the options of the resolution field of the main mode), `fps`, `fps_locked`, `limits` (`default_duration`, `max_duration`), `director_modes`, `profiles` (the ones it can generate), `upscaler`, `driver` and, for a cloud preset, `backend_id`. `features.upscaler` tells whether an upscaler preset is assigned to the user, and `upscale_targets` lists the four targets. `settings` carries the plugin settings, among them `draft_resolution` and `max_parallel_jobs`.
+`GET /me` is extended for generation. `engines` lists the enabled native and cloud backends (among others `id`, `name`, `kind` `local`, `remote` or `cloud`, `driver`, `execution_device`, `vram_total_gb`, `vram_free_gb` and `is_default`), and a cloud backend carries its enabled video models in `models` (`id`, `name`, `provider_model_id`, `tasks`, `typical_seconds`, `max_seconds`). `presets` lists the video presets and the upscaler preset that the user may run; a video preset carries `requires`, `profile` (the memory profile it is set up for, such as `"12 GB"`, or `null`), `modes`, `video_director`, `resolutions` (the options of the resolution field of the main mode), `fps`, `fps_locked`, `limits` (`default_duration`, `max_duration`), `director_modes`, `profiles` (the ones it can generate), `upscaler`, `driver` and, for a cloud preset, `backend_id`. `features.upscaler` tells whether an upscaler preset is assigned to the user, and `upscale_targets` lists the four targets. `settings` carries the plugin settings, among them `draft_resolution` and `max_parallel_jobs`.
 
 ### Take errors
 
@@ -492,6 +512,12 @@ Run the tests of the plugin from the root of the PotionUI repository, with the P
 ```bash
 python -m pytest content/plugins/marketplace/video-producer/tests -q -m "not requires_gpu and not requires_models and not gc_sensitive"
 python -m pytest tests/architecture tests/plugin_api tests/plugins/marketplace -q
+```
+
+The presets of the `presets` folder go through the linter of the PotionUI presets, which also renders their pipelines:
+
+```bash
+python scripts/preset_lint.py --render content/plugins/marketplace/video-producer/presets
 ```
 
 The backend imports only `src.plugin_api` and its submodules. The frontend is a Svelte 5 bundle that is built and committed; rebuild it after any change in `frontend/src`:

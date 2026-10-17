@@ -1,3 +1,4 @@
+import dataclasses
 import importlib
 import importlib.util
 import json
@@ -6,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
@@ -718,3 +720,195 @@ def test_the_estimate_and_generate_routes_loaded_by_the_core_block_without_a_pre
     assert estimated.json()["data"]["vram"]["unknown"] is True
     assert generated.status_code == 409 and generated.json()["detail"]["error"] == "blocked"
     assert malformed.status_code == 422
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+CORE_PRESETS = REPO_ROOT / "content" / "presets" / "marketplace"
+SHARED_PRESETS = REPO_ROOT / "content" / "presets" / "_shared"
+H3_12GB = "01M54HN72B0KY7H63BKQ16T253"
+H3_FAST_12GB = "01M54HN72PABVRE54YNQA2Q7ZT"
+COMFY_DIT = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+WAN2GP_DIT = "MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors"
+WAN2GP_SHA256 = "30ff400f974b11a1ef13d216c5d9f6439a9c10322a3988b0374a39672ce286f0"
+FASTH3_DIT = "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors"
+TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+VIDEO_VAE = "minimax_h3_video_vae_int8_convrot.safetensors"
+AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
+SHIPPED_PRESETS = {
+    H3_12GB: ("MiniMax-H3 (12 GB)", "MiniMax-H3-12GB", "01KX47H3MINIMAX000000000VA"),
+    H3_FAST_12GB: ("MiniMax-H3-Fast (12 GB)", "MiniMax-H3-Fast-12GB", "01KX47H3FASTH30000000000VA"),
+}
+CHANGED_FIELDS = {
+    H3_12GB: {
+        "speed_profile": {"default"},
+        "resolution": {"default", "configuration"},
+        "model": {"configuration"},
+        "text_encoder": {"configuration"},
+        "video_vae": {"configuration"},
+        "keyframe_pixel_budget": {"default"},
+        "steps": {"default"},
+        "sampler": {"default", "ai_hint"},
+    },
+    H3_FAST_12GB: {
+        "resolution": {"default", "configuration"},
+        "model": {"configuration"},
+        "text_encoder": {"configuration"},
+        "video_vae": {"configuration", "ai_hint"},
+        "keyframe_pixel_budget": {"default"},
+    },
+}
+PROFILE_DEFAULTS = {
+    H3_12GB: {"speed_profile": "custom", "steps": 20},
+    H3_FAST_12GB: {"speed_profile": "distilled", "steps": 8},
+}
+RECOMMENDED = {
+    H3_12GB: {"model": [COMFY_DIT, WAN2GP_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
+    H3_FAST_12GB: {"model": [FASTH3_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
+}
+
+
+def _preset_loader(roots, manifests=()):
+    from src.features.presets.loader import PresetTemplateLoader
+
+    registry = SimpleNamespace(get_enabled_plugins=lambda: list(manifests))
+    loader = PresetTemplateLoader([str(root) for root in roots], plugin_registry=registry, shared_path=str(SHARED_PRESETS))
+    return loader, {preset.id: preset for preset in loader.load_presets()}
+
+
+@pytest.fixture
+def shipped_presets(manifest):
+    loader, loaded = _preset_loader([], [manifest])
+    assert loader.load_errors == {}
+    return loaded
+
+
+@pytest.fixture(scope="module")
+def core_h3_presets():
+    loader, loaded = _preset_loader([CORE_PRESETS / "MiniMax-H3", CORE_PRESETS / "MiniMax-H3-Fast"])
+    assert loader.load_errors == {}
+    return loaded
+
+
+def _flatten(fields, named, skeleton):
+    for field in fields:
+        skeleton.append((field.type, field.name, field.label, field.audience))
+        if field.name:
+            named[field.name] = field
+        if isinstance(field.children, list):
+            _flatten(field.children, named, skeleton)
+    return named, skeleton
+
+
+def _video_form(preset):
+    [form] = preset.modes["video"].forms
+    return _flatten(form.fields, {}, [])
+
+
+def _option_files(preset, field):
+    from src.features.presets.children_paths import resolve_children_path
+
+    return [
+        (resolve_children_path(entry["path"], Path(preset.path), SHARED_PRESETS).resolve(), entry["group"])
+        for entry in field.configuration["files"]
+    ]
+
+
+def test_the_manifest_declares_the_presets_folder(manifest):
+    assert manifest.presets == [{"path": "presets"}]
+
+
+def test_the_shipped_presets_load_through_the_cores_loader(shipped_presets):
+    assert {preset_id: preset.name for preset_id, preset in shipped_presets.items()} == {
+        preset_id: name for preset_id, (name, _, _) in SHIPPED_PRESETS.items()
+    }
+    for preset_id, (_, folder, _) in SHIPPED_PRESETS.items():
+        preset = shipped_presets[preset_id]
+        assert preset.origin == {"kind": "plugin", "plugin_id": PLUGIN_ID, "path": folder}
+        assert (preset.engine, preset.category, list(preset.modes)) == ("native", "video", ["video"])
+        assert preset.requires == {"min_vram_gb": 12, "recommended_vram_gb": 12}
+        assert preset.tags[:2] == ["12gb", "low-vram"]
+        assert preset.vars["video_producer"] == {"profile": "12 GB"}
+        assert (preset.vars["fps"], preset.vars["default_frames"]) == (24, 124)
+        assert "12 GB" in preset.description and "64 GB" in preset.description
+
+
+def test_the_backend_knows_the_shipped_presets_and_reads_their_profile(shipped_presets):
+    presets = _load("backend.presets")
+    catalog = _load("backend.catalog")
+
+    for preset_id, preset in shipped_presets.items():
+        assert preset_id in presets.MINIMAX_H3_PRESETS and preset_id in presets.VIDEO_DIRECTOR_PRESETS
+        assert catalog.memory_profile(preset.vars) == "12 GB"
+        assert catalog.main_mode(preset.vars, list(preset.modes)) == "video"
+        assert catalog.profiles(preset_id, preset.vars, list(preset.modes)) == ["FL2VA", "Hybrid AV"]
+
+
+def test_the_shipped_presets_keep_the_director_and_prompt_help_of_the_core_presets(shipped_presets, core_h3_presets):
+    for preset_id, (_, _, source_id) in SHIPPED_PRESETS.items():
+        preset, source = shipped_presets[preset_id], core_h3_presets[source_id]
+        assert preset.vars["video_director"] == source.vars["video_director"]
+        assert preset.vars["prompt"]["segment_templates"] == source.vars["prompt"]["segment_templates"][:1]
+        assert preset.configuration == source.configuration
+        assert preset.llm == {key: value for key, value in source.llm.items() if key != "modes"}
+        assert preset.prompt_syntax == {"video": source.prompt_syntax["video"]}
+        assert preset.formulas["groups"] == {name: group for name, group in source.formulas["groups"].items() if name != "memory"}
+
+
+def test_the_shipped_presets_run_the_core_pipelines_unchanged(shipped_presets, core_h3_presets):
+    for preset_id, (_, folder, source_id) in SHIPPED_PRESETS.items():
+        preset, source = shipped_presets[preset_id], core_h3_presets[source_id]
+        assert preset.modes["video"].pipes == source.modes["video"].pipes
+        copy = yaml.safe_load((PLUGIN_ROOT / "presets" / folder / "modes" / "video" / "pipeline.yml").read_text(encoding="utf-8"))
+        original = yaml.safe_load((Path(source.path) / "modes" / "video" / "pipeline.yml").read_text(encoding="utf-8"))
+        assert copy == original
+
+
+def test_the_shipped_forms_change_only_the_12_gb_defaults_and_files_of_the_core_forms(shipped_presets, core_h3_presets):
+    for preset_id, (_, _, source_id) in SHIPPED_PRESETS.items():
+        preset, source = shipped_presets[preset_id], core_h3_presets[source_id]
+        named, skeleton = _video_form(preset)
+        source_named, source_skeleton = _video_form(source)
+        assert skeleton == source_skeleton
+        for name, field in named.items():
+            changed = CHANGED_FIELDS[preset_id].get(name, set())
+            assert field == dataclasses.replace(source_named[name], **{attr: getattr(field, attr) for attr in changed}), name
+        assert {name: named[name].default for name in ("resolution", "quantity", "sampler", "scheduler", "keyframe_pixel_budget")} == {
+            "resolution": "832x480",
+            "quantity": 1,
+            "sampler": "res_multistep",
+            "scheduler": "simple",
+            "keyframe_pixel_budget": "1",
+        }
+        assert {name: named[name].default for name in PROFILE_DEFAULTS[preset_id]} == PROFILE_DEFAULTS[preset_id]
+        assert preset.speed_profiles[named["speed_profile"].default]["steps"] == named["steps"].default
+        assert _option_files(preset, named["resolution"]) == _option_files(source, source_named["resolution"])
+        for name in RECOMMENDED[preset_id]:
+            mine = {key: value for key, value in named[name].configuration.items() if key not in ("recommendations", "placeholder")}
+            theirs = {key: value for key, value in source_named[name].configuration.items() if key not in ("recommendations", "placeholder")}
+            assert mine == theirs, name
+            assert all(len(item["sha256"]) == 64 for item in named[name].configuration["recommendations"]), name
+        assert {
+            name: [item["name"] for item in named[name].configuration["recommendations"]] for name in RECOMMENDED[preset_id]
+        } == RECOMMENDED[preset_id]
+
+
+@pytest.mark.parametrize("aspect, draft, final", [(16 / 9, "832x480", "1344x768"), (9 / 16, "480x832", "768x1344")])
+def test_the_plugin_drafts_the_shipped_presets_at_832x480_and_finishes_them_at_the_released_canvas(shipped_presets, aspect, draft, final):
+    bridge = _load("backend.core_bridge")
+    models = _load("backend.models")
+    director = _load("backend.director")
+
+    for preset in shipped_presets.values():
+        [form] = preset.modes["video"].forms
+        fields = {}
+        bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
+        options = models.resolution_options(fields)
+        values = [option["value"] for option in options]
+
+        assert {"832x480", "480x832", "960x544", "544x960", "1344x768"} <= set(values)
+        assert fields["resolution"]["default"] == "832x480"
+        assert director.draft_resolution(options, "832x480", aspect) == draft
+        assert director.final_resolution(options, aspect) == final
+        assert models.model_fields(fields) == (["model", "text_encoder", "video_vae", "audio_vae"], [])
+        if preset.id == H3_12GB:
+            assert {"sha256": WAN2GP_SHA256, "filename": WAN2GP_DIT} in fields["model"]["recommendations"]

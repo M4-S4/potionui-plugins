@@ -1,0 +1,30 @@
+########
+## MiniMax-H3 (12 GB): E2E test suite.
+## Authoring reference: docs/presets.md "Testing presets"
+########
+schema: 1
+
+cases:
+  - name: "minimax-h3-12gb-t2va"
+    mode: "video"
+    kind: "video"
+    seed: 12345
+    tags: ["12gb"]
+    form:
+      prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light, the sound of running water"
+      resolution: "832x480"
+      frames: 124
+      steps: 20
+    models:
+      model:
+        sha256: "30ff400f974b11a1ef13d216c5d9f6439a9c10322a3988b0374a39672ce286f0"
+      text_encoder:
+        sha256: "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"
+      video_vae:
+        sha256: "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"
+      audio_vae:
+        sha256: "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48"
+    checks:
+      min_outputs: 1
+      resolution: "832x480"
+      not_black: true

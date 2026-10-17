@@ -1,4 +1,5 @@
 import logging
+from types import SimpleNamespace
 
 import pytest
 
@@ -88,8 +89,14 @@ class Models:
         self.present = set()
         self.hash_requests = []
         self.file_requests = []
+        self.names = {}
+        self.installed = set()
+        self.name_requests = []
         monkeypatch.setattr(core_bridge, "preset_model_hashes", self._hashes)
         monkeypatch.setattr(core_bridge, "model_file_present", self._present)
+        monkeypatch.setattr(core_bridge, "describe_preset", self._describe)
+        monkeypatch.setattr(core_bridge, "preset_form_fields", self._fields)
+        monkeypatch.setattr(core_bridge, "installed_model_for_file", self._installed)
 
     def _hashes(self, preset_id, field_names, modes=None):
         self.hash_requests.append((preset_id, list(field_names)))
@@ -100,6 +107,25 @@ class Models:
     def _present(self, sha256):
         self.file_requests.append(sha256)
         return sha256 in self.present
+
+    def _describe(self, preset_id):
+        modes = [mode for owner, mode, _ in self.names if owner == preset_id]
+        return SimpleNamespace(modes=dict.fromkeys(modes)) if modes else None
+
+    def _fields(self, preset_id, mode):
+        return {
+            role: {"type": "model", "recommendations": [{"sha256": None, "filename": name} for name in names]}
+            for (owner, own_mode, role), names in self.names.items()
+            if (owner, own_mode) == (preset_id, mode)
+        }
+
+    def _installed(self, filename):
+        self.name_requests.append(filename)
+        return f"id-{filename}" if filename in self.installed else None
+
+    def name(self, preset_id, mode, **by_role):
+        for role, names in by_role.items():
+            self.names[(preset_id, mode, role)] = list(names)
 
     def recommend(self, preset_id, **by_role):
         for role, hashes in by_role.items():
@@ -430,11 +456,28 @@ def test_an_error_looking_for_ffmpeg_is_a_step_still_to_do(monkeypatch, caplog):
     assert "which failed" in caplog.text
 
 
-def test_the_h3_check_looks_at_the_three_minimax_presets(preset_states, models):
+def test_the_h3_check_looks_at_the_five_minimax_presets(preset_states, models):
     MiniMaxH3Ready().evaluate(CONTEXT)
 
     assert preset_states.asked == list(presets.MINIMAX_H3_PRESETS)
-    assert len(presets.MINIMAX_H3_PRESETS) == 3
+    assert len(presets.MINIMAX_H3_PRESETS) == 5
+
+
+def test_both_checks_cover_the_12_gb_presets_the_plugin_ships():
+    shipped = (presets.MINIMAX_H3_12GB, presets.MINIMAX_H3_FAST_12GB)
+
+    assert presets.MINIMAX_H3_PRESETS[-2:] == shipped
+    assert all(preset_id in presets.VIDEO_DIRECTOR_PRESETS for preset_id in shipped)
+    assert len(set(presets.VIDEO_DIRECTOR_PRESETS)) == len(presets.VIDEO_DIRECTOR_PRESETS)
+
+
+def test_installed_and_assigned_12_gb_presets_satisfy_the_presets_check(preset_states):
+    preset_states.set(presets.MINIMAX_H3_12GB, name="MiniMax-H3 (12 GB)", installed=True, assigned=True)
+
+    result = VideoPresetsReady().evaluate(CONTEXT)
+
+    assert result.done is True
+    assert result.description.startswith("Installed and assigned: MiniMax-H3 (12 GB). ")
 
 
 def test_without_an_installed_h3_preset_there_is_nothing_to_check(preset_states, models):
@@ -582,11 +625,70 @@ def test_the_files_of_a_role_are_looked_up_in_sorted_order_until_one_is_found(pr
     assert models.file_requests == ["a" * 64, "b" * 64]
 
 
-@pytest.mark.parametrize("where", ["state", "hashes", "file"])
+COMFY_DIT = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+WAN2GP_DIT = "MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors"
+
+
+def test_the_wan2gp_dit_found_by_its_file_name_passes_when_the_catalog_has_no_sha256_for_it(preset_states, models):
+    preset_states.set(presets.MINIMAX_H3_12GB, name="MiniMax-H3 (12 GB)", installed=True)
+    models.recommend(presets.MINIMAX_H3_12GB, model={"a" * 64, "b" * 64}, text_encoder={"c" * 64}, video_vae={"d" * 64}, audio_vae={"e" * 64})
+    models.name(presets.MINIMAX_H3_12GB, "video", model=[COMFY_DIT, WAN2GP_DIT], text_encoder=["te.safetensors"])
+    models.present = {"c" * 64, "d" * 64, "e" * 64}
+    models.installed = {WAN2GP_DIT}
+
+    result = MiniMaxH3Ready().evaluate(CONTEXT)
+
+    assert result.done is True
+    assert result.description.endswith("are on disk for MiniMax-H3 (12 GB).")
+    assert models.name_requests == [COMFY_DIT, WAN2GP_DIT]
+
+
+def test_a_role_recommended_by_file_name_only_is_missing_until_one_of_its_files_is_installed(preset_states, models):
+    preset_states.set(presets.MINIMAX_H3_FAST_12GB, name="MiniMax-H3-Fast (12 GB)", installed=True)
+    models.name(presets.MINIMAX_H3_FAST_12GB, "video", video_vae=["vae_int8.safetensors"])
+
+    assert MiniMaxH3Ready().evaluate(CONTEXT).description.startswith("MiniMax-H3-Fast (12 GB) is missing its video VAE. ")
+
+    models.installed = {"vae_int8.safetensors"}
+    assert MiniMaxH3Ready().evaluate(CONTEXT).done is True
+
+
+def test_the_latent_upscaler_is_looked_up_by_name_in_the_upscale_mode_only(preset_states, models):
+    preset_states.set(presets.MINIMAX_H3, name="MiniMax-H3", installed=True)
+    models.name(presets.MINIMAX_H3, "video", upscale_model=["video_upscaler.safetensors"])
+
+    assert MiniMaxH3Ready().evaluate(CONTEXT).done is True
+
+    models.name(presets.MINIMAX_H3, "upscale", upscale_model=["upscaler.safetensors"])
+    assert MiniMaxH3Ready().evaluate(CONTEXT).description.startswith("MiniMax-H3 is missing its latent upscaler. ")
+    assert "video_upscaler.safetensors" not in models.name_requests
+
+
+def test_the_file_names_are_not_read_when_every_role_is_found_by_its_sha256(preset_states, models, monkeypatch):
+    preset_states.set(presets.MINIMAX_H3, name="MiniMax-H3", installed=True)
+    roles = ("model", "text_encoder", "video_vae", "audio_vae")
+    models.recommend(presets.MINIMAX_H3, **{name: {f"{name}-hash"} for name in roles})
+    models.recommend_in(presets.MINIMAX_H3, "upscale", upscale_model={"upscale-hash"})
+    models.present = {f"{name}-hash" for name in (*roles, "upscale")}
+    monkeypatch.setattr(core_bridge, "describe_preset", _raise("not needed"))
+
+    assert MiniMaxH3Ready().evaluate(CONTEXT).done is True
+    assert models.name_requests == []
+
+
+@pytest.mark.parametrize("where", ["state", "hashes", "file", "describe", "fields", "name"])
 def test_an_error_reading_the_h3_files_is_a_step_still_to_do(preset_states, models, monkeypatch, caplog, where):
     preset_states.set(presets.MINIMAX_H3, name="MiniMax-H3", installed=True)
     models.recommend(presets.MINIMAX_H3, model={"a" * 64})
-    target = {"state": "preset_state", "hashes": "preset_model_hashes", "file": "model_file_present"}[where]
+    models.name(presets.MINIMAX_H3, "video", model=[COMFY_DIT])
+    target = {
+        "state": "preset_state",
+        "hashes": "preset_model_hashes",
+        "file": "model_file_present",
+        "describe": "describe_preset",
+        "fields": "preset_form_fields",
+        "name": "installed_model_for_file",
+    }[where]
     monkeypatch.setattr(core_bridge, target, _raise("models are down"))
 
     with caplog.at_level(logging.WARNING, logger="plugins.video-producer"):
