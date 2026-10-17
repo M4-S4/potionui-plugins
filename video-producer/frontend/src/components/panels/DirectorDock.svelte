@@ -1,6 +1,6 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
-	import { t } from '../../i18n/index.svelte.js';
+	import { formatTime, t } from '../../i18n/index.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { ui, doc, select, secs, globalPrompt, allIssues, itemsIn, productionRange, act, clipLabel } from '../../lib/state.svelte.js';
 	import { takesOf, assembleChosen, generateQueue, supportedProfiles, engineLabel } from '../../lib/production.svelte.js';
@@ -9,6 +9,9 @@
 	import { directionFields, stages } from '../../lib/catalog.js';
 	import { families, addReference, attachToRange } from '../../lib/references.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { project } from '../../lib/project.svelte.js';
+	import { review, reviewFix, reviewText, seamNames, suggest } from '../../lib/assistant.svelte.js';
+	import { reviewCount } from '../../lib/assistant.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import Tabs from '../shell/Tabs.svelte';
 	import TakeCard from '../takes/TakeCard.svelte';
@@ -23,12 +26,14 @@
 	const scope = $derived(itemsIn(range));
 	const local = $derived(scope.prompts[0]);
 	const seamIssues = $derived(seams().flatMap((s) => s.issues.map((x) => ({ ...x, clip: s.to }))));
+	const checked = $derived(review.current?.projectId === project.id ? review.current : null);
+	const checkedCount = $derived(reviewCount(checked));
 	const chosen = $derived(takeStore.list.filter((r) => r.chosen && r.status === 'done').length);
 	const takeCount = $derived(takeStore.list.length + (doc.results?.length ?? 0));
 	const supported = $derived(supportedProfiles());
 	const unsupported = $derived(modes.filter((m) => !supported.includes(m)));
 	const tabs = $derived([
-		{ id: 'direction', label: t('panels.dock.tab.direction'), dot: issues.length > 0 || seamIssues.length > 0 },
+		{ id: 'direction', label: t('panels.dock.tab.direction'), dot: issues.length > 0 || seamIssues.length > 0 || checkedCount > 0 },
 		{ id: 'references', label: t('panels.dock.tab.references') },
 		{ id: 'results', label: t('panels.dock.tab.results'), badge: takeCount || null }
 	]);
@@ -47,6 +52,22 @@
 		seek(p.start);
 		ui.modal = { type: 'prompt', id: p.id };
 	}
+
+	const clipById = (id) => doc.clips.find((c) => c.id === id) ?? null;
+
+	function seamLabel(s) {
+		const { from, to } = seamNames(s);
+		return from && to && s.fromShotId !== s.toShotId ? t('assistant.review.seam', { from, to }) : to || from;
+	}
+
+	function goToShot(s) {
+		const c = clipById(s.toShotId) ?? clipById(s.fromShotId);
+		if (!c) return;
+		select('clip', c.id);
+		seek(c.start);
+	}
+
+	const kindIcons = { identity: 'user', lum: 'palette', warm: 'palette', camera_change: 'camera', fl2va_no_frame: 'image', no_instruction: 'sparkles', conflict: 'sparkles', duration: 'range' };
 </script>
 
 <PanelHeader icon="sparkles" title={t('panels.dock.title')} border={false}>
@@ -131,6 +152,53 @@
 				</HostUi>
 			</div>
 		{/if}
+
+		{#if checked}
+			<section class="mx-3 mb-3 rounded-lg border border-line-strong p-2.5" aria-label={t('assistant.review.title')}>
+				<div class="mb-1.5 flex items-center justify-between gap-2">
+					<span class="vp-section-title">{t('assistant.review.title')}</span>
+					<span class="flex items-center gap-1">
+						<span class="vp-tc text-xs text-fg-subtle">{t('assistant.review.meta', { time: formatTime(new Date(checked.checkedAt)) })}</span>
+						<HostUi name="IconButton" props={{ icon: hostIconName('x'), label: t('assistant.review.dismiss'), tooltip: t('assistant.review.dismiss'), size: 'xs', onclick: () => (review.current = null) }} />
+					</span>
+				</div>
+				{#if checked.seams.length}
+					<ul class="space-y-2">
+						{#each checked.seams as s, n (n)}
+							<li class="text-xs">
+								<button type="button" class="vp-link-hit block max-w-full truncate text-left font-medium text-fg hover:underline" onclick={() => goToShot(s)}>{seamLabel(s)}</button>
+								<ul class="mt-1 space-y-1.5">
+									{#each s.issues as i, k (k)}
+										<li class="flex items-start gap-1.5 text-fg-muted">
+											<Icon name={kindIcons[i.kind] ?? 'link'} class="mt-px h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+											<div class="min-w-0 flex-1">
+												<p>{reviewText(s, i)}</p>
+												{#if reviewFix(s, i)}<p class="mt-0.5 text-fg-subtle">{reviewFix(s, i)}</p>{/if}
+											</div>
+											{#if i.measured}
+												<HostUi name="Tooltip" props={{ text: t('assistant.review.measuredTip'), wrapperClass: 'inline-flex shrink-0' }}>
+													<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('assistant.review.measured')}</HostUi>
+												</HostUi>
+											{:else if i.simulated}
+												<HostUi name="Tooltip" props={{ text: t('assistant.review.simulatedTip'), wrapperClass: 'inline-flex shrink-0' }}>
+													<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('assistant.review.simulated')}</span>
+												</HostUi>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="flex items-center gap-2 text-xs text-fg-subtle"><Icon name="check" class="h-3.5 w-3.5 text-success" />{t('assistant.review.clear')}</p>
+				{/if}
+			</section>
+		{/if}
+
+		<div class="mx-3 mb-3">
+			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'sparkles', class: 'w-full', onclick: () => suggest(t('assistant.suggest.continuity')) }}>{t('assistant.check')}</HostUi>
+		</div>
 
 		<div class="space-y-1 px-3">
 			<div class="vp-label mb-1">{t('panels.dock.profile')}</div>

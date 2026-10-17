@@ -88,7 +88,7 @@
 	"story.chars": "{chars} chars",
 	"story.placeholder": "Tell the film in a few sentences: each sentence becomes a shot.",
 	"story.propose": "Propose a breakdown",
-	"story.proposeTip": "Breakdown simulated at this stage",
+	"story.proposeTip": "Sentence split; ask the assistant for a real breakdown",
 	"story.proposal": "Proposed breakdown",
 	"story.closeProposal": "Close the proposal",
 	"story.keep": "Keep shot {n}",

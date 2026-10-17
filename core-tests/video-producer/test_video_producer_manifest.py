@@ -1,6 +1,7 @@
 import dataclasses
 import importlib
 import importlib.util
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -12,6 +13,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
+from src.features.chat.context_builder import ChatContextBuilder
+from src.features.chat.modes.registry import ChatModeRegistry
+from src.features.chat.tool_dispatcher import ToolCallDispatcher
+from src.features.llm.tools.base import serialize_approval_preview
+from src.features.llm.tools.executor import ToolExecutor
+from src.features.llm.tools.registry import ToolRegistry
 from src.features.notifications.types import NotificationTypeRegistry
 from src.features.plans.guard import LimitGuard, PlanSettings
 from src.features.plans.records import Plan, PlanLimit, PlanSubject
@@ -20,6 +27,7 @@ from src.platform.plugins.limit_kinds import AdmissionRequest, LimitKindRegistry
 from src.platform.plugins.loader import EXTRA_PLUGIN_DIRS_ENV, PluginLoader
 from src.platform.plugins.registry import PluginRegistry
 from src.plugin_api import HookContext, SetupCheck, get_current_active_user
+from src.plugin_api.chat import ToolContext
 
 PLUGIN_ID = "video-producer"
 PLUGIN_ROOT = Path(__file__).resolve().parents[3] / "content" / "plugins" / "marketplace" / PLUGIN_ID
@@ -331,9 +339,287 @@ def test_the_admin_settings_match_what_the_backend_parses(manifest):
     assert all(spec["label"] for spec in specs.values())
 
 
-def test_the_plugin_contributes_no_chat_mode_nor_tool_yet(manifest):
-    assert manifest.chat_modes == []
-    assert manifest.tools == []
+CHAT_MODE = "video-producer"
+CHAT_TOOLS = {
+    "vp_write_shot_prompt": ("WriteShotPromptTool", True),
+    "vp_fix_conflicts": ("FixConflictsTool", True),
+    "vp_split_synopsis": ("SplitSynopsisTool", True),
+    "vp_check_continuity": ("CheckContinuityTool", False),
+}
+
+
+@pytest.fixture
+def chat(manifest, tmp_path):
+    tools, modes = ToolRegistry(), ChatModeRegistry()
+    plugins = PluginRegistry(
+        marketplace_dir=str(PLUGIN_ROOT.parent),
+        local_dir=str(tmp_path / "local"),
+        tool_registry=tools,
+        chat_mode_registry=modes,
+    )
+    assert plugins._register_plugin_tools(manifest) is None
+    assert plugins._register_plugin_chat_modes(manifest) is None
+    return SimpleNamespace(tools=tools, modes=modes, plugins=plugins)
+
+
+def test_the_manifest_declares_the_assistant_mode_and_its_four_tools(manifest):
+    [mode] = manifest.chat_modes
+
+    assert (mode["id"], mode["name"], mode["icon"]) == (CHAT_MODE, "Video Producer assistant", "film")
+    assert mode["description"]
+    assert mode["default_route_prefixes"] == [f"/plugins/{PLUGIN_ID}"]
+    assert mode["tools"] == list(CHAT_TOOLS)
+    assert mode["context_contributor"] == "backend.chat.context.build_context"
+    assert mode["system_prompt_file"] is None and "{{TOOL_HINTS}}" in mode["system_prompt"]
+    assert mode["admin_only"] is False
+    assert [(tool["class"], tool["modes"]) for tool in manifest.tools] == [
+        (f"backend.chat.tools:{class_name}", [CHAT_MODE]) for class_name, _ in CHAT_TOOLS.values()
+    ]
+
+
+def test_the_cores_registration_loads_the_four_tools_inside_the_plugin_package(chat):
+    registered = {tool.name: tool for tool in chat.tools.get_all()}
+
+    assert list(registered) == list(CHAT_TOOLS)
+    assert all(name.startswith("vp_") for name in registered)
+    for name, (class_name, approval) in CHAT_TOOLS.items():
+        tool = registered[name]
+        assert (type(tool).__name__, type(tool).__module__) == (class_name, f"{PACKAGE}.backend.chat.tools")
+        assert tool.requires_approval is approval
+        assert tool.modes == [CHAT_MODE]
+        assert chat.tools.source_of(name) == PLUGIN_ID
+        assert tool.hint and tool.description and tool.to_schema()["function"]["name"] == name
+
+
+def test_the_tools_are_offered_only_in_the_assistant_mode(chat):
+    mode = chat.modes.require(CHAT_MODE)
+
+    assert [tool.name for tool in chat.tools.get_for_mode(mode)] == list(CHAT_TOOLS)
+    assert chat.tools.get_for_mode(SimpleNamespace(id="generation", tool_names=[])) == []
+
+
+def test_the_mode_loaded_by_the_core_resolves_its_prompt_and_its_context(chat):
+    mode = chat.modes.require(CHAT_MODE)
+    context = sys.modules[f"{PACKAGE}.backend.chat.context"]
+
+    assert (mode.source, mode.icon, mode.default_route_prefixes, mode.admin_only) == (
+        PLUGIN_ID,
+        "film",
+        [f"/plugins/{PLUGIN_ID}"],
+        False,
+    )
+    assert mode.tool_names == list(CHAT_TOOLS)
+    assert mode.context_contributor is context.build_context
+    hints = "\n".join(f"- {tool.name}: {tool.hint}" for tool in chat.tools.get_for_mode(mode))
+    prompt = chat.modes.resolve_system_prompt(mode, hints, list(CHAT_TOOLS))
+    assert "{{TOOL_HINTS}}" not in prompt
+    assert all(f"- {name}: " in prompt for name in CHAT_TOOLS)
+    assert "prompt language" in prompt and "the user approves" in prompt
+    assert mode.context_contributor({}, None, "user-1") == context.NOT_OPEN
+    block = mode.context_contributor(
+        {"video_producer": {"projectId": "p-1", "name": "Night ride", "projectVersion": 3, "promptLanguage": "fr"}}, None, "user-1"
+    )
+    assert block.splitlines()[:2] == [
+        'VIDEO PRODUCER: project "Night ride" [p-1], saved version 3.',
+        "Prompt language: fr. Write every shot instruction in French; never translate what the user wrote.",
+    ]
+
+
+async def test_the_tools_loaded_by_the_core_write_and_check_a_stored_project(loader, manifest, mock_db, chat):
+    _boot(loader, manifest)
+    projects = sys.modules[f"{PACKAGE}.backend.projects"]
+    starter = json.loads((PLUGIN_ROOT / "tests" / "fixtures" / "starter_doc.json").read_text(encoding="utf-8"))
+    created = projects.create_project("user-1", starter)
+    shot_id = created["doc"]["clips"][1]["id"]
+    owner = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={"video_producer": {"projectId": created["id"]}})
+    stranger = ToolContext(user_id="user-2", mode_id=CHAT_MODE, session_metadata={"video_producer": {"projectId": created["id"]}})
+    write, check = chat.tools.get("vp_write_shot_prompt"), chat.tools.get("vp_check_continuity")
+
+    preview = await write.execute(owner, shot_id=shot_id, text="Low angle on the gate")
+    confirmed = await write.execute_confirmed(owner, shot_id=shot_id, text="Low angle on the gate")
+    checked = await check.execute(owner)
+    refused = await write.execute_confirmed(stranger, shot_id=shot_id, text="Not mine")
+
+    assert preview.success and preview.preview.kind == "text_edit" and preview.preview.text_blocks[0]["text"] == "Low angle on the gate"
+    written = json.loads(confirmed.data)
+    stored = projects.get_project(created["id"])
+    assert (written["project_id"], written["shot_id"], written["version"]) == (created["id"], shot_id, 2)
+    assert next(prompt for prompt in stored["doc"]["prompts"] if prompt["id"] == written["prompt_id"])["text"] == "Low angle on the gate"
+    assert json.loads(checked.data)["project_id"] == created["id"]
+    assert (refused.success, refused.error.split(":")[0]) == (False, "project_not_found")
+    assert projects.get_project(created["id"])["version"] == 2
+
+
+def test_the_parameters_of_the_four_tools_are_valid_json_schemas_the_model_can_follow(chat):
+    for tool in chat.tools.get_all():
+        Draft202012Validator.check_schema(tool.parameters)
+        function = tool.to_schema()["function"]
+        assert function["name"] == tool.name and function["description"] == tool.description
+        assert function["parameters"] == tool.parameters
+        assert tool.parameters["type"] == "object" and set(tool.parameters["required"]) <= set(tool.parameters["properties"])
+    assert chat.tools.get("vp_check_continuity").parameters["properties"] == {}
+
+
+def test_every_tool_of_the_manifest_belongs_to_a_declared_mode_and_every_mode_tool_to_the_plugin(manifest, chat):
+    [mode] = manifest.chat_modes
+    owned = {tool.name for tool in chat.tools.get_all()}
+
+    assert {mode_id for tool in manifest.tools for mode_id in tool["modes"]} == {mode["id"]}
+    assert set(mode["tools"]) == owned
+    assert len(owned) == len(manifest.tools) == 4
+    assert all(chat.tools.source_of(name) == PLUGIN_ID for name in owned)
+
+
+def test_the_context_contributor_named_by_the_manifest_is_importable_and_is_the_one_the_core_calls(manifest, chat):
+    [mode] = manifest.chat_modes
+    module_name, function_name = mode["context_contributor"].rsplit(".", 1)
+    contributor = getattr(importlib.import_module(f"{PACKAGE}.{module_name}"), function_name)
+
+    assert callable(contributor) and chat.modes.require(CHAT_MODE).context_contributor is contributor
+    assert list(inspect.signature(contributor).parameters) == ["context_metadata", "session", "user_id"]
+    assert isinstance(contributor(None, None, "user-1"), str) and contributor(None, None, "user-1")
+    assert contributor({"video_producer": {"projectId": "p-1"}}, SimpleNamespace(mode=CHAT_MODE), "user-1").startswith("VIDEO PRODUCER: project")
+
+
+async def test_the_core_folds_the_contributors_block_into_the_users_turn_and_nothing_else(chat):
+    builder = ChatContextBuilder(SimpleNamespace(chat_mode_registry=chat.modes))
+    history = [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}, {"role": "user", "content": "Check the cuts"}]
+    page = {"projectId": "p-1", "name": "Night ride", "projectVersion": 4, "promptLanguage": "fr", "shots": [{"id": "s1", "label": "Arrival", "start": 0, "dur": 4}]}
+
+    await builder.inject_contributor_block(history, SimpleNamespace(mode=CHAT_MODE), {"video_producer": page}, "user-1")
+
+    assert history[:2] == [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}]
+    assert history[2]["content"].startswith('Check the cuts\n\n<context>\nVIDEO PRODUCER: project "Night ride" [p-1], saved version 4.')
+    assert history[2]["content"].endswith("</context>")
+    assert '1. [s1] "Arrival" 0–4 s' in history[2]["content"] and len(history) == 3
+
+
+async def test_a_turn_without_the_page_context_still_gets_a_block_that_says_so(chat):
+    builder = ChatContextBuilder(SimpleNamespace(chat_mode_registry=chat.modes))
+    history = [{"role": "user", "content": "Write the prompt of shot 1"}]
+
+    await builder.inject_contributor_block(history, SimpleNamespace(mode=CHAT_MODE), None, "user-1")
+
+    assert "the page is not open" in history[0]["content"]
+
+
+async def test_the_core_runs_the_three_writing_tools_for_approval_and_the_check_straight_away(loader, manifest, mock_db, chat):
+    _boot(loader, manifest)
+    projects = sys.modules[f"{PACKAGE}.backend.projects"]
+    starter = json.loads((PLUGIN_ROOT / "tests" / "fixtures" / "starter_doc.json").read_text(encoding="utf-8"))
+    created = projects.create_project("user-1", starter)
+    shot_id = created["doc"]["clips"][0]["id"]
+    owner = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={"video_producer": {"projectId": created["id"]}})
+    executor = ToolExecutor(chat.tools, SimpleNamespace())
+    calls = {
+        "vp_write_shot_prompt": {"shot_id": shot_id, "text": "Low angle on the gate"},
+        "vp_fix_conflicts": {"rewrites": [{"shot_id": shot_id, "text": "Low angle on the gate"}]},
+        "vp_split_synopsis": {"shots": [{"label": "Gate", "prompt": "Low angle on the gate", "duration_s": 4}]},
+        "vp_check_continuity": {},
+    }
+
+    outcome = {name: await executor._execute_tool(name, owner, arguments) for name, arguments in calls.items()}
+
+    assert {name: pending for name, (result, pending) in outcome.items()} == {name: approval for name, (_, approval) in CHAT_TOOLS.items()}
+    assert all(result.success for result, _ in outcome.values())
+    assert projects.get_project(created["id"])["version"] == 1
+    kinds = {name: result.preview.kind if result.preview else None for name, (result, _) in outcome.items()}
+    assert kinds == {"vp_write_shot_prompt": "text_edit", "vp_fix_conflicts": "text_edit", "vp_split_synopsis": "timeline", "vp_check_continuity": None}
+    for name in ("vp_write_shot_prompt", "vp_fix_conflicts", "vp_split_synopsis"):
+        card = serialize_approval_preview(outcome[name][0].preview)
+        assert json.loads(json.dumps(card)) == card
+        assert card["action"] and card["target"] and card["summary"] and (card["text_blocks"] or card["rows"])
+
+    refused = await executor.execute_tool_confirmed("vp_check_continuity", owner, {})
+    assert not refused.success and "does not require approval" in refused.error
+    applied = await executor.execute_tool_confirmed("vp_write_shot_prompt", owner, calls["vp_write_shot_prompt"])
+    assert applied.success and json.loads(applied.data)["version"] == 2
+    outside, _ = await executor._execute_tool("vp_write_shot_prompt", owner, calls["vp_write_shot_prompt"], allowed_tools=["vp_check_continuity"])
+    assert not outside.success and "not enabled for this session" in outside.error
+
+
+async def test_the_core_reports_the_plugins_error_codes_untouched_for_a_model_that_misuses_the_tools(loader, manifest, mock_db, chat):
+    _boot(loader, manifest)
+    projects = sys.modules[f"{PACKAGE}.backend.projects"]
+    starter = json.loads((PLUGIN_ROOT / "tests" / "fixtures" / "starter_doc.json").read_text(encoding="utf-8"))
+    created = projects.create_project("user-1", starter)
+    owner = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={"video_producer": {"projectId": created["id"]}})
+    nowhere = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={})
+    executor = ToolExecutor(chat.tools, SimpleNamespace())
+
+    misuse = {
+        ("vp_write_shot_prompt", "shot_id"): (owner, {"shot_id": 3, "text": "x"}, "invalid_arguments"),
+        ("vp_write_shot_prompt", "shot"): (owner, {"shot_id": "nope", "text": "x"}, "shot_not_found"),
+        ("vp_fix_conflicts", "empty"): (owner, {"rewrites": []}, "invalid_arguments"),
+        ("vp_split_synopsis", "duration"): (owner, {"shots": [{"label": "A", "prompt": "x", "duration_s": 99}]}, "invalid_arguments"),
+        ("vp_check_continuity", "page"): (nowhere, {}, "project_not_found"),
+        ("vp_split_synopsis", "page"): (nowhere, {"shots": [{"label": "A", "prompt": "x", "duration_s": 4}]}, "project_not_found"),
+    }
+
+    for (name, _), (context, arguments, code) in misuse.items():
+        result, pending = await executor._execute_tool(name, context, arguments)
+        assert (result.success, pending, result.data, result.error.split(":", 1)[0]) == (False, False, "", code)
+    confirmed = await executor.execute_tool_confirmed("vp_fix_conflicts", nowhere, {"rewrites": [{"shot_id": "a", "text": "x"}]})
+    assert (confirmed.success, confirmed.error.split(":", 1)[0]) == (False, "project_not_found")
+    assert projects.get_project(created["id"])["version"] == 1
+
+
+async def _stale_after_an_edit(chat, tool_name, arguments, edit):
+    projects = sys.modules[f"{PACKAGE}.backend.projects"]
+    starter = json.loads((PLUGIN_ROOT / "tests" / "fixtures" / "starter_doc.json").read_text(encoding="utf-8"))
+    created = projects.create_project("user-1", starter)
+    shot_id = created["doc"]["clips"][0]["id"]
+    owner = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={"video_producer": {"projectId": created["id"]}})
+    executor = ToolExecutor(chat.tools, SimpleNamespace())
+    dispatcher = ToolCallDispatcher(SimpleNamespace(tool_executor=executor))
+    arguments = arguments(shot_id)
+    result, _ = await executor._execute_tool(tool_name, owner, arguments)
+    execution = {"tool_name": tool_name, "arguments": arguments, "preview": serialize_approval_preview(result.preview)}
+
+    before = await dispatcher._is_stale(execution, owner)
+    doc = projects.get_project(created["id"])["doc"]
+    edit(doc, shot_id)
+    projects.save_project(created["id"], doc, 1)
+    return before, await dispatcher._is_stale(execution, owner)
+
+
+def _retype_prompt(doc, shot_id):
+    next(prompt for prompt in doc["prompts"] if prompt["shotId"] == shot_id)["text"] = "Typed by the user while the card was open"
+
+
+async def test_the_core_flags_a_fix_as_stale_when_a_prompt_changed_after_its_preview(loader, manifest, mock_db, chat):
+    _boot(loader, manifest)
+
+    before, after = await _stale_after_an_edit(
+        chat, "vp_fix_conflicts", lambda shot_id: {"rewrites": [{"shot_id": shot_id, "text": "Steady wide shot"}]}, _retype_prompt
+    )
+
+    assert (before, after) == (False, True)
+
+
+async def test_the_core_flags_a_write_as_stale_when_the_prompt_changed_after_its_preview(loader, manifest, mock_db, chat):
+    _boot(loader, manifest)
+
+    before, after = await _stale_after_an_edit(
+        chat, "vp_write_shot_prompt", lambda shot_id: {"shot_id": shot_id, "text": "Steady wide shot"}, _retype_prompt
+    )
+
+    assert (before, after) == (False, True)
+
+
+def test_disabling_the_plugin_takes_its_mode_and_its_tools_away_from_the_core(chat):
+    assert chat.modes.get(CHAT_MODE) is not None and len(chat.tools.get_all()) == 4
+
+    chat.plugins._unregister_chat_extensions(PLUGIN_ID)
+
+    assert chat.modes.get(CHAT_MODE) is None
+    assert chat.tools.get_all() == [] and chat.tools.get("vp_write_shot_prompt") is None
+
+
+def test_the_mode_cannot_be_registered_twice_and_leaves_the_first_one_in_place(manifest, chat):
+    assert "already registered" in (chat.plugins._register_plugin_chat_modes(manifest) or "")
+
+    assert chat.modes.require(CHAT_MODE).source == PLUGIN_ID and len(chat.modes.get_all()) == 1
 
 
 def test_notification_type_register_declares_the_plugins_types_on_the_cores_registry(loader, manifest):

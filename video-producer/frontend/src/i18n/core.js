@@ -17,7 +17,8 @@ export const DOMAINS = [
 	'library',
 	'starter',
 	'project',
-	'generation'
+	'generation',
+	'assistant'
 ];
 
 export function mergeDomains(domains) {

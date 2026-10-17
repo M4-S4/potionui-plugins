@@ -32,6 +32,8 @@ import enProject from './en/project.json';
 import frProject from './fr/project.json';
 import enGeneration from './en/generation.json';
 import frGeneration from './fr/generation.json';
+import enAssistant from './en/assistant.json';
+import frAssistant from './fr/assistant.json';
 import {
 	DEFAULT_LOCALE,
 	LOCALES,
@@ -66,7 +68,8 @@ const DICTIONARIES = {
 		library: enLibrary,
 		starter: enStarter,
 		project: enProject,
-		generation: enGeneration
+		generation: enGeneration,
+		assistant: enAssistant
 	}),
 	fr: mergeDomains({
 		shell: frShell,
@@ -85,7 +88,8 @@ const DICTIONARIES = {
 		library: frLibrary,
 		starter: frStarter,
 		project: frProject,
-		generation: frGeneration
+		generation: frGeneration,
+		assistant: frAssistant
 	})
 };
 const reported = new Set();

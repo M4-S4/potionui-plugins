@@ -2,7 +2,7 @@
 
 English: [Video Producer: user guide](/docs?doc=plugin/video-producer/user-guide) (file `docs/user-guide.md`).
 
-Ce guide explique comment réaliser un court film avec Video Producer. Les libellés de l’interface sont écrits en **gras**. Video Producer est livré par étapes. Cette version a l’interface complète, en anglais et en français, enregistre vos projets, importe vos médias et génère de vraies prises et de vrais finals (chapitres 8 et 9), mais certaines fonctions sont encore simulées (chapitre 17). Un chapitre qui décrit quelque chose qui n’existe pas encore se termine par « Disponible à partir de l’étape N ». Le guide d’administration est une page distincte que seuls les admins voient.
+Ce guide explique comment réaliser un court film avec Video Producer. Les libellés de l’interface sont écrits en **gras**. Video Producer est livré par étapes. Cette version a l’interface complète, en anglais et en français, enregistre vos projets, importe vos médias et génère de vraies prises et de vrais finals (chapitres 8 et 9) et a l’assistant PotionUI dans son propre mode (chapitre 10), mais certaines fonctions sont encore simulées (chapitre 17). Un chapitre qui décrit quelque chose qui n’existe pas encore se termine par « Disponible à partir de l’étape N ». Le guide d’administration est une page distincte que seuls les admins voient.
 
 ## 1. Ce qu’est Video Producer
 
@@ -13,6 +13,7 @@ Avant de commencer :
 - Un admin doit avoir préparé au moins un moteur (ce poste, un serveur d’atelier ou un modèle cloud) et au moins un preset vidéo qui vous est attribué. Si la barre Production n’affiche aucun moteur, voyez le chapitre 18.
 - Votre admin règle aussi la résolution des brouillons, le nombre de générations que vous pouvez avoir en cours en même temps, et peut limiter les minutes GPU que vous pouvez utiliser par mois.
 - La génération est réelle : les prises sont des vidéos produites par les machines ou le compte cloud de votre admin, et elles prennent du temps. L’estimation de la barre Production vous dit à quoi vous attendre avant de commencer (chapitre 8).
+- L’assistant a besoin d’un modèle de langage que votre admin a configuré dans PotionUI et qui vous est attribué (chapitre 10). Tout le reste fonctionne sans lui.
 - Le modèle MiniMax H3 (les entrées **MiniMax H3** du menu des moteurs) est sous une licence qui exclut son usage, et tout ce qu’il génère, dans l’Union européenne, au Royaume-Uni, aux États-Unis et en Corée du Sud sans autorisation individuelle de MiniMax, et qui demande qu’un produit commercial affiche « MiniMax H3 » de façon visible. Demandez à votre admin avant de l’utiliser. Video Producer ne vérifie rien de tout cela à votre place.
 
 L’interface est en anglais par défaut et existe aussi en français (chapitre 15).
@@ -26,7 +27,7 @@ La première fois que vous ouvrez la page, elle crée un projet de départ, « A
 1. **Créer un projet.** **Fichier › Nouveau projet…** (ou **Fichier › Ouvrir…** pour un projet existant). Dans **Propriétés du projet…** vous réglez le nom, le format (16:9, 2.39:1, 9:16, 1:1 ou 4:5), la résolution (720p, 1080p ou 4K) et la cadence (24, 25 ou 30 i/s). Résultat : un projet vide, enregistré au fil de votre travail.
 2. **Définir la direction globale.** Dans l’espace **Director IA**, onglet **Direction** : univers et intention, personnages et identité, direction photographique, palette et éclairage, rythme et continuité. Résultat : un texte qui guide toutes les générations.
 3. **Ajouter les références.** Dans **Director IA**, onglet **Références** : identités, décors 3D et guides de mouvement. Résultat : ce qui doit rester identique d’un plan à l’autre.
-4. **Découper le film en plans.** Dans l’espace **Storyboard** : écrivez le synopsis, cliquez sur **Proposer un découpage**, gardez les plans voulus et ajustez leurs instructions locales. Résultat : une rangée de cartes de plans.
+4. **Découper le film en plans.** Dans l’espace **Storyboard** : écrivez le synopsis, puis cliquez sur **Proposer un découpage** (une phrase devient un plan) ou demandez à l’assistant de le découper (chapitre 10), gardez les plans voulus et ajustez leurs instructions locales. Résultat : une rangée de cartes de plans.
 5. **Générer des brouillons.** Dans la barre Production, choisissez le **Moteur de génération**, qualité **Brouillon**, puis **Générer la sélection** (Ctrl+G). L’estimation indique le temps, la mémoire et le quota. Résultat : de vraies prises brouillon A, B, etc., produites par le moteur choisi.
 6. **Choisir et passer en final.** Dans l’inspecteur, onglet **Prises** : comparez les prises, cliquez sur **Choisir** pour celle que le plan doit jouer, puis sur **Passer en final** pour la meilleure prise brouillon. Résultat : le plan passe de Brouillon à Final.
 7. **Monter, raccorder et mixer.** Fondus sur les clips, raccord de couleur dans l’onglet **Couleur** de l’inspecteur, console dans **Mixage**. Résultat : une séquence terminée.
@@ -39,7 +40,7 @@ L’interface des huit étapes est en place, et vos projets sont enregistrés au
 La page compte cinq niveaux de commandes, du plus large au plus local, autour d’un panneau de gauche, d’une zone centrale, de l’inspecteur et de la timeline :
 
 - **Barre de menus.** Dix menus, dans cet ordre : **Video Producer**, **Fichier**, **Édition**, **Montage**, **Plan**, **Production**, **Audio**, **Présentation**, **Fenêtre**, **Aide**. Le menu **Video Producer** contient **À propos de Video Producer**, **Préférences…**, **Raccourcis clavier** et **Rechercher une commande…**. Un menu n’affiche « … » que si la commande ouvre une fenêtre qui demande une saisie, et une coche devant un état activé.
-- **Barre projet.** À gauche, le bouton qui affiche ou masque le panneau latéral, le nom du projet (cliquez dessus pour renommer le projet) et son état d’enregistrement (« Enregistrement… », « Enregistré à » et l’heure, « Modifié · cliquer pour enregistrer » ou « Non enregistré — réessayer » ; chapitre 5). Au milieu, le sélecteur d’espaces : **Médias**, **Director IA**, **Storyboard**, **Scène 3D**, **Mixage**. À droite, **Importer**, **Exporter**, **Assistant**, un bouton de recherche des commandes et le bouton qui affiche ou masque l’inspecteur.
+- **Barre projet.** À gauche, le bouton qui affiche ou masque le panneau latéral, le nom du projet (cliquez dessus pour renommer le projet) et son état d’enregistrement (« Enregistrement… », « Enregistré à » et l’heure, « Modifié · cliquer pour enregistrer » ou « Non enregistré — réessayer » ; chapitre 5). Au milieu, le sélecteur d’espaces : **Médias**, **Director IA**, **Storyboard**, **Scène 3D**, **Mixage**. À droite, **Importer**, **Exporter**, **Assistant** (il ouvre le chat PotionUI, chapitre 10), un bouton de recherche des commandes et le bouton qui affiche ou masque l’inspecteur.
 - **Barre Production.** Elle cible ce qu’il faut générer et porte le seul bouton principal de la page, **Générer la sélection** (chapitre 8).
 - **En-têtes de zone et barre d’outils de la timeline.** Un titre et des compteurs à gauche, de petites icônes à droite.
 - **Contenu.** De petits boutons qui apparaissent au survol ou à la sélection.
@@ -85,13 +86,13 @@ Les médias du projet dans un seul panneau. Un nouveau projet n’en a aucun : l
 
 Le panneau de gauche a trois onglets. Un point sur **Direction** signale qu’il y a des points à vérifier, et **Résultats** affiche le nombre de prises.
 
-- **Direction.** Montre ce qui guide la génération sur la plage courante : la direction globale, l’instruction locale, les références et Control video, avec **Voir le récapitulatif de génération**. En dessous : **Points à vérifier**, la liste des contradictions de direction et des raccords de couleur à corriger, le **Profil H3 du projet** (FL2VA, Ref2VA ou Hybrid AV, chapitres 8 et 11) et la **Direction globale** elle-même, en cinq champs (univers et intention, personnages et identité, direction photographique, palette et éclairage, rythme et continuité), avec un compteur sur 4000 caractères. Chaque champ a un lien **Bibliothèque & assistant**. Le bouton en forme d’engrenage, **Paramètres H3**, ouvre l’**Atelier avancé**.
+- **Direction.** Montre ce qui guide la génération sur la plage courante : la direction globale, l’instruction locale, les références et Control video, avec **Voir le récapitulatif de génération**. En dessous : **Points à vérifier**, la liste des contradictions de direction et des raccords de couleur à corriger, la section de la vérification de continuité de l’assistant (titrée **À vérifier**) avec son bouton **Demander à l’assistant de vérifier les raccords** (chapitre 10), le **Profil H3 du projet** (FL2VA, Ref2VA ou Hybrid AV, chapitres 8 et 11) et la **Direction globale** elle-même, en cinq champs (univers et intention, personnages et identité, direction photographique, palette et éclairage, rythme et continuité), avec un compteur sur 4000 caractères. Chaque champ a un lien **Bibliothèque & assistant**. Le bouton en forme d’engrenage, **Paramètres H3**, ouvre l’**Atelier avancé**.
 - **Références.** Trois familles : **Images et identité**, **Décors 3D** et **Guides de mouvement**. Une référence est globale (elle accompagne toutes les générations) ou ne s’applique qu’à une plage ; **Associer à la plage** règle le second cas. **Référence** en ajoute une. Le centre montre la planche de références, en deux groupes, **Direction globale** et **Sur la timeline**, avec un champ de recherche. Glissez une vignette sur la piste Frames pour l’ancrer à un moment précis. Un nouveau projet n’a aucune référence : la planche le dit, et **Référence** ajoute la première.
 - **Résultats.** Les cartes de prise de chaque plan (chapitre 9), la **File de génération** et **Assembler les prises choisies**.
 
 ### Storyboard
 
-À gauche : le **Synopsis** (une phrase devient un plan) et **Proposer un découpage**. Le **Découpage proposé** liste les plans : cochez ceux à garder, renommez-les et cliquez sur **Ajouter N plans à la fin**. Dans cette version, le découpage est simulé : il se contente de couper le synopsis en phrases. Puis **À produire**, avec **Brouillons restants** et **Passage en final** (le nombre de plans et la durée qu’il reste à faire pour chacun), et **Continuité**, qui liste les raccords de couleur à vérifier, chacun avec **Raccorder la couleur**.
+À gauche : le **Synopsis** (une phrase devient un plan) et **Proposer un découpage**. Le **Découpage proposé** liste les plans : cochez ceux à garder, renommez-les et cliquez sur **Ajouter N plans à la fin**. Le découpage de ce bouton est simple : il se contente de couper le synopsis en phrases (son infobulle dit « Coupe par phrases ; demandez le vrai découpage à l’assistant »). L’assistant fait un vrai découpage et remplit la même liste (chapitre 10). Puis **À produire**, avec **Brouillons restants** et **Passage en final** (le nombre de plans et la durée qu’il reste à faire pour chacun), et **Continuité**, qui liste les raccords de couleur à vérifier, chacun avec **Raccorder la couleur**.
 
 Au centre : une carte par plan, dans l’ordre, avec son numéro, sa durée, son nom, son étape (**Source**, **À générer**, **Brouillon** ou **Final**), son nombre de prises et son instruction locale ; cliquez sur l’instruction pour l’écrire. Glissez une carte pour la déplacer. Les boutons d’une carte apparaissent au survol ou quand la carte est sélectionnée : le bouton principal suit l’étape, **Générer**, **Passer en final**, **Voir les prises** ou **Régénérer**, et trois icônes montrent le plan dans le visualiseur, insèrent un plan après lui et le suppriment. Tant qu’une prise du plan est en cours, la carte montre son étape et sa progression, et le bouton est désactivé. L’en-tête compte les plans par étape, en ajoute un avec **Plan** et règle la taille des vignettes ; une tuile **Nouveau plan** à la fin fait la même chose. Dans cet espace, les flèches gauche et droite déplacent la sélection vers le plan précédent ou suivant.
 
@@ -139,7 +140,7 @@ Un enregistrement qui échoue affiche l’un de ces trois messages : « Impossib
 
 ### Historique des versions
 
-**Fichier › Historique des versions…** ouvre la fenêtre **Historique des versions** (« Chaque enregistrement crée une version »). Elle liste les versions du projet ouvert, la plus récente en premier. Chaque ligne montre le numéro (« Version 7 »), la date et l’heure, secondes comprises, et le nombre de plans. Une capture de cette fenêtre, dans les thèmes sombre et clair de l’interface en anglais, se trouve dans `docs/screenshots/version-history.png`. Une version issue d’une restauration ajoute « Restaurée depuis la version N ». La version sur laquelle vous travaillez porte le badge **Actuelle** et ne peut pas être sélectionnée.
+**Fichier › Historique des versions…** ouvre la fenêtre **Historique des versions** (« Chaque enregistrement crée une version »). Elle liste les versions du projet ouvert, la plus récente en premier. Chaque ligne montre le numéro (« Version 7 »), la date et l’heure, secondes comprises, et le nombre de plans. Une capture de cette fenêtre, dans les thèmes sombre et clair de l’interface en anglais, se trouve dans `docs/screenshots/version-history.png`. Une version issue d’une restauration ajoute « Restaurée depuis la version N ». Une version écrite par l’assistant ajoute « Assistant » (chapitre 10). La version sur laquelle vous travaillez porte le badge **Actuelle** et ne peut pas être sélectionnée.
 
 Pour revenir en arrière, sélectionnez une version plus ancienne et cliquez sur **Restaurer**. Une fenêtre demande de confirmer (« Restaurer la version N » : le projet revient à cette version et l’état actuel reste dans l’historique). Si le dernier enregistrement a échoué et que des modifications attendent, une seconde fenêtre, « Modifications non enregistrées », demande de confirmer qu’elles sont perdues (**Abandonner les modifications**). Ensuite le projet devient cette version et la page affiche « Version N restaurée ». La restauration est elle-même une nouvelle version en haut de la liste : rien n’est perdu et vous pouvez restaurer l’état d’où vous veniez. **Annuler** ferme la fenêtre.
 
@@ -321,22 +322,104 @@ La nouvelle prise est une prise **Final** (« Final » ou « Final · agrandi »
 
 ## 10. Assistant
 
-Le bouton **Assistant**, **Fenêtre › Assistant PotionUI** et Ctrl+J ouvrent le chat PotionUI, en mode **Video Producer**. L’assistant peut :
+L’assistant est le chat PotionUI, qui travaille dans son propre mode pour cette page, **Video Producer assistant**. Il lit votre projet et dispose de quatre outils, les actions qu’il peut lancer : écrire l’instruction d’un plan, corriger les contradictions entre la direction globale et les instructions locales, découper votre synopsis en plans, et vérifier la continuité entre les plans. Il propose et vous décidez : pour les trois outils qui écrivent ou proposent quelque chose, le chat affiche une carte d’approbation avec un aperçu, et rien ne se passe dans votre projet tant que vous n’avez pas cliqué sur **Approve**.
 
-- écrire l’instruction du plan sélectionné ;
-- corriger les contradictions entre la direction globale et les instructions locales ;
-- découper votre synopsis en plans ;
-- vérifier la continuité entre les plans.
+### Avant de commencer
 
-Chaque modification du projet demande votre approbation avant d’être appliquée. L’assistant connaît l’espace où vous êtes, votre sélection, la tête de lecture, la plage, la direction globale, le synopsis et l’état de la production. Il faut que votre admin ait configuré un modèle de langage.
+- Votre admin doit configurer un modèle de langage dans PotionUI (Admin › LLM / Assistant : par exemple Ollama, OpenAI ou un modèle natif) et vous l’attribuer. Sans lui, le chat indique qu’il est indisponible (voir « Si cela ne fonctionne pas » plus bas).
+- L’assistant lit votre projet tel que la page le montre, mais il écrit dans le projet tel qu’il est enregistré sur le serveur. Attendez « Enregistré à » dans la barre projet avant d’approuver une modification.
+- Gardez la page Video Producer ouverte pendant que vous discutez : l’assistant ne connaît votre projet que tant que la page est ouverte dessus.
 
-Dans cette version, le bouton, le menu et le raccourci ouvrent déjà le chat PotionUI, tout comme les liens **Demander à l’assistant PotionUI** (bibliothèque de prompts) et **Demander à l’assistant** (atelier Sound design). Les quatre actions ci-dessus arrivent à l’étape 5.
+### Ouvrir l’assistant
 
-Disponible à partir de l’étape 5.
+Cliquez sur **Assistant** dans la barre projet, choisissez **Fenêtre › Assistant PotionUI**, ou appuyez sur Ctrl+J (⌘J sur Mac). Le chat s’ouvre par-dessus la page. Pour une nouvelle conversation, la pastille de mode de son en-tête indique **Video Producer assistant** (le nom du mode n’est pas traduit). Une conversation garde son mode pour de bon (« Mode is fixed after the conversation starts ») : si le chat montre une conversation commencée ailleurs dans PotionUI, son en-tête dit « Started in … » et propose **start a new chat**.
+
+Le chat est une fenêtre de PotionUI : ses boutons (**Tools**, **New chat**, **Approve**, **Reject**, **Retry**) et ses états (**Needs approval**, **Applied**, **Rejected**, **Failed**) gardent les libellés anglais de PotionUI, quelle que soit la langue de Video Producer.
+
+### Ce que voit l’assistant
+
+À chaque message, la page envoie à l’assistant un résumé de votre projet :
+
+- le projet : son nom, sa version enregistrée et sa langue des prompts ;
+- l’endroit où vous êtes : l’espace, la tête de lecture (et le plan qu’elle survole), votre sélection et la plage ;
+- le synopsis et la direction globale : les cinq champs et le profil H3 ;
+- les plans dans l’ordre de la timeline : nom, début et fin, étape, présence d’une prise, présence d’une première et d’une dernière frame, et le début de leur instruction locale ;
+- les contradictions que la page signale entre une instruction locale et la direction, et les raccords de couleur et d’identité qu’elle a mesurés entre plans voisins ;
+- l’état de la production : cible, mode, qualité, progression et file.
+
+Le résumé est du texte et il reste court : 40 plans au maximum, 800 caractères du synopsis, 240 de chaque champ de la direction et 160 de chaque instruction locale, si bien qu’un texte plus long est coupé dans ce que lit l’assistant. Il ne contient ni vos images, ni vos vidéos, ni vos prises, références, pistes audio ou scènes 3D, et l’assistant ne voit aucune image. Si vous quittez la page Video Producer, le résumé s’arrête : l’assistant dit que la page n’est pas ouverte et vous demande d’ouvrir un projet.
+
+### Quatre demandes à essayer
+
+Vous écrivez à l’assistant dans votre langue. Les exemples ci-dessous n’en sont que des exemples ; sélectionnez d’abord un plan et l’assistant sait duquel vous parlez.
+
+#### Demande 1 : écrire l’instruction d’un plan
+
+Par exemple : « Écris le prompt du plan “Les goélands” : une contre-plongée sur l’eau, à contre-jour. »
+
+1. Le chat affiche une carte **Write shot prompt**, marquée **Needs approval**, montrant le prompt actuel et le nouveau texte (seulement le nouveau texte si le plan n’a pas encore de prompt).
+2. Cliquez sur **Approve**. Le nouveau texte devient l’instruction locale de ce plan (elle est créée si le plan n’en avait pas). La page se met à jour aussitôt et dit « Prompt de « Les goélands » mis à jour par l’assistant » ; la carte passe à **Applied**.
+3. Cliquez sur **Reject**, avec un motif si vous voulez, pour tout laisser comme avant.
+
+#### Demande 2 : corriger les contradictions avec la direction
+
+Quand l’onglet Direction de Director IA affiche **Points à vérifier · N** (par exemple « La direction globale exclut les néons. » sous une instruction qui demande du néon), demandez : « Corrige les contradictions entre ma direction et mes instructions locales. »
+
+1. La carte **Fix conflicts** montre un bloc par plan à réécrire, avec l’ancien texte et le nouveau.
+2. **Approve** applique toutes les réécritures en une seule modification, et la page dit « 2 prompts réécrits par l’assistant ». **Reject** n’en applique aucune : c’est tout ou rien.
+
+#### Demande 3 : découper le synopsis en plans
+
+Par exemple : « Découpe mon synopsis en plans d’environ 5 secondes. » Vous pouvez aussi raconter une histoire dans le chat et demander le découpage.
+
+1. La carte **Split synopsis** liste les plans proposés, chacun avec sa plage de temps et « nom : début de son prompt ». Elle propose de 1 à 24 plans de 2 à 15 secondes, avec des noms de 34 caractères au plus.
+2. **Approve** ne change pas encore votre projet. La page ouvre le **Storyboard** et dit « 3 plans proposés dans Storyboard ». La liste **Découpage proposé** (la même que pour **Proposer un découpage**) montre les plans : décochez ceux dont vous ne voulez pas (**Garder le plan 1**), renommez-les, puis cliquez sur **Ajouter 3 plans à la fin**. Les plans rejoignent la fin de votre film comme plans « À générer », chacun avec son instruction locale, et la page dit « 3 plans ajoutés au storyboard ».
+3. **Fermer la proposition** l’abandonne. Une nouvelle proposition remplace la précédente.
+
+#### Demande 4 : vérifier la continuité
+
+Par exemple : « Vérifie les raccords entre mes plans et dis-moi quoi corriger. » Le bouton **Demander à l’assistant de vérifier les raccords**, dans l’onglet Direction, saisit cette demande pour vous. Celle-ci ne fait que lire votre projet : il n’y a pas de carte.
+
+1. Quand l’assistant a répondu, la page dit « 2 raccords à vérifier » (ou « Raccords vérifiés : rien à corriger »), avec un bouton **Afficher** quand l’onglet Direction n’est pas à l’écran.
+2. Dans **Director IA**, onglet **Direction**, une section **À vérifier**, avec « Assistant · 14:32 » à côté de son titre (l’heure de la vérification), liste les paires de plans voisins à regarder, sous la forme « Plan 1 → Plan 2 ». Cliquez sur une paire pour aller au plan. Sous chaque paire, une ligne dit ce qui ne va pas et une seconde comment corriger. Un point sur l’onglet **Direction** signale qu’il y a quelque chose à vérifier.
+3. Ce qu’elle cherche : un plan sans prompt ; une instruction locale qui contredit la direction globale ; un plan de moins de 2 s ou de plus de 15 s ; un plan en profil FL2VA sans première image ; un mouvement de caméra qui change entre deux plans ; un saut de luminosité ou de température de couleur (la page les mesure sur les images, et la ligne porte le badge **Mesuré**) ; et un point de ressemblance entre deux prises. Ce dernier vient du score de ressemblance, qui reste simulé (chapitre 17), sa ligne porte donc le badge gris **Simulé** à la place. Les plans qui viennent d’une source sont ignorés.
+4. **Fermer la vérification** (la croix de la section) retire la liste. Redemandez pour la rafraîchir.
+
+### Les suggestions qui saisissent la demande à votre place
+
+Trois endroits de la page ouvrent le chat avec une demande déjà saisie. Vous pouvez la lire, la modifier, puis appuyer sur Entrée : rien n’est envoyé à votre place.
+
+- **Demander à l’assistant de vérifier les raccords** (Director IA, onglet Direction) : « Vérifie les raccords entre mes plans et dis-moi quoi corriger. »
+- **Demander à l’assistant PotionUI**, dans la fenêtre **Bibliothèque & assistant de prompts**. La fenêtre se ferme d’abord. La demande dépend de ce dans quoi la fenêtre écrivait : « Aide-moi à écrire le prompt du plan « Les goélands ». », « Aide-moi à écrire le prompt à 5,0 s. », « Aide-moi à écrire le champ « … » de la direction globale. » ou, sans cible, « Aide-moi à écrire un prompt pour ce projet. »
+- **Demander à l’assistant**, dans l’atelier Sound design, par exemple : « Aide-moi à écrire un brief sonore : Ambiance, de 0,0 s à 5,0 s. »
+
+Si vous aviez déjà saisi quelque chose dans la zone de saisie du chat, votre texte reste et la suggestion n’est pas ajoutée. Si votre PotionUI est trop ancien pour remplir la zone de saisie, le chat s’ouvre simplement avec une zone vide et vous saisissez la demande vous-même. Les suggestions sont écrites dans la langue de l’interface.
+
+### Ce qu’elle change, et ce qu’elle ne change pas
+
+- Elle écrit des instructions locales (demandes 1 et 2) et propose des plans (demande 3). Elle ne lance jamais de génération, ne choisit pas de prise, ne passe pas un plan en final, n’ajoute, ne déplace ni ne supprime de plan toute seule, et ne modifie ni le synopsis, ni la direction globale, ni les références, ni les titres, ni l’audio, ni la scène 3D. Pour un champ de la direction ou pour un brief sonore, elle répond en texte seulement : copiez vous-même ce qui vous plaît.
+- **Proposer un découpage** et **Production › Découper le synopsis en plans…** ne sont pas l’assistant : ils se contentent de couper le synopsis en phrases, un plan par phrase (chapitre 17). **Production › Contrôle de continuité** vous amène à l’onglet Direction et n’appelle pas l’assistant.
+- Chaque modification approuvée est une nouvelle version de votre projet : **Fichier › Historique des versions…** la montre avec le mot « Assistant ». Quand la page a appliqué la modification elle-même, **Édition › Annuler** agit dessus comme sur vos propres modifications.
+- Si vous aviez saisi dans la même instruction locale sans l’avoir encore enregistrée quand vous avez approuvé, la page recharge le projet pour montrer la version de l’assistant (« Projet rechargé avec les modifications de l’assistant ») : cette saisie et votre historique d’annulation sont perdus. Attendez « Enregistré à » avant d’approuver.
+- L’assistant écrit les instructions locales dans la langue des prompts du projet (chapitre 15) et vous répond dans votre langue. Il ne traduit jamais ce que vous avez écrit. Les contrôles de contradiction ne lisent que les textes écrits dans la langue des prompts.
+- La liste **À vérifier** et la proposition n’apparaissent qu’une fois, quand la réponse arrive. Elles disparaissent quand vous quittez la page ou ouvrez un autre projet, et rouvrir une ancienne conversation ne les ramène pas : redemandez.
+- Les messages de l’assistant disent « prompt » pour ce que ce guide appelle l’instruction locale.
+
+### Si cela ne fonctionne pas
+
+- **« Chat is currently unavailable ».** Aucun modèle de langage ne vous est attribué. Demandez à votre admin d’en ajouter un dans Admin › LLM / Assistant et de vous l’attribuer. (Un admin lit « No enabled LLM configurations » à la place.)
+- **L’assistant répond mais n’affiche jamais de carte, ou dit qu’il ne peut pas agir.** Le bouton **Tools** de la zone de saisie du chat est désactivé : survolez-le, il indique « Tools OFF » ; cliquez dessus pour activer les outils, et vérifiez que les quatre outils du groupe Video Producer sont cochés dans sa liste. Votre admin a aussi pu les désactiver pour le modèle, ou le modèle peut ne pas savoir appeler des outils : essayez-en un autre.
+- **L’assistant ne semble pas connaître votre projet, ou l’en-tête dit « Started in … ».** La conversation a été commencée dans un autre mode. Cliquez sur **start a new chat** depuis la page Video Producer.
+- **L’assistant dit que la page n’est pas ouverte sur un projet.** Ouvrez un projet dans Video Producer, gardez la page ouverte et redemandez.
+- **Une carte est Failed et cite `version_conflict`, `project_not_found` ou `shot_not_found`.** Le projet a été enregistré ailleurs au moment précis de l’enregistrement, a été supprimé, ou n’a plus ce plan. Laissez la page recharger le projet (**Fichier › Ouvrir…**), puis cliquez sur **Retry** sur la carte ou redemandez. L’assistant le dit lui-même dans le chat.
+- **Vous avez approuvé et le chat dit « L’assistant a modifié un autre projet que celui ouvert ici. »** La réponse concernait un autre projet que celui que vous avez ouvert maintenant. Ouvrez celui-là, ou redemandez ici.
+- **« Impossible de recharger le projet. Rouvrez-le pour voir les modifications de l’assistant. »** La modification de l’assistant est enregistrée, mais la page n’a pas pu la recharger : rouvrez le projet (**Fichier › Ouvrir…**).
+- **La suggestion n’est pas apparue dans la zone de saisie.** Vous aviez déjà saisi un brouillon, ou votre PotionUI ne sait pas remplir la zone (il l’ouvre alors vide). Saisissez ou collez la demande.
+- **Un prompt est sorti dans la mauvaise langue.** L’assistant suit la **Langue des prompts** du projet, dans **Propriétés du projet…** (chapitre 15). Changez-la, puis redemandez.
 
 ## 11. Prompts : bibliothèque et compositeur
 
-La fenêtre **Bibliothèque & assistant de prompts** s’ouvre par **Fenêtre › Bibliothèque de prompts**, ou par les liens **Bibliothèque & assistant** placés près d’un texte (dans les champs de la direction globale, dans l’inspecteur pour une instruction locale et dans la fenêtre qui l’édite). Elle écrit dans une cible, indiquée sous son titre : l’un des cinq champs de la direction globale, ou une instruction locale. Ouverte depuis le menu, elle n’a pas de cible et copie le prompt dans le presse-papiers (**Copier le prompt**). La fenêtre a deux onglets, **Bibliothèque** et **Compositeur**, et un lien, **Demander à l’assistant PotionUI**, qui ferme la fenêtre et ouvre le chat PotionUI. Les noms, descriptions et catégories des gabarits et les choix du compositeur existent en français et en anglais et suivent la langue de l’interface ; les textes qu’ils insèrent suivent la langue des prompts du projet (chapitre 15).
+La fenêtre **Bibliothèque & assistant de prompts** s’ouvre par **Fenêtre › Bibliothèque de prompts**, ou par les liens **Bibliothèque & assistant** placés près d’un texte (dans les champs de la direction globale, dans l’inspecteur pour une instruction locale et dans la fenêtre qui l’édite). Elle écrit dans une cible, indiquée sous son titre : l’un des cinq champs de la direction globale, ou une instruction locale. Ouverte depuis le menu, elle n’a pas de cible et copie le prompt dans le presse-papiers (**Copier le prompt**). La fenêtre a deux onglets, **Bibliothèque** et **Compositeur**, et un lien, **Demander à l’assistant PotionUI**, qui ferme la fenêtre et ouvre le chat PotionUI avec une demande déjà saisie (chapitre 10). Les noms, descriptions et catégories des gabarits et les choix du compositeur existent en français et en anglais et suivent la langue de l’interface ; les textes qu’ils insèrent suivent la langue des prompts du projet (chapitre 15).
 
 - **Bibliothèque.** Cinq bibliothèques, **Intégrée**, **Personnelle**, **Projet**, **Favoris** et **Historique**, et neuf catégories (Cinéma, Caméra, Éclairage, Styles cinématographiques, Dialogue, Photographie, Son, Continuité, À éviter). Cherchez par nom, description ou mot-clé ; l’étoile marque un favori. Chaque gabarit indique les profils H3 auxquels il convient. Un gabarit peut avoir des variables, comme le sujet ou le lieu, que vous remplissez avant de l’insérer. L’**Aperçu modifiable** peut aussi être modifié à la main. **Enregistrer dans Personnelle** garde votre version, et chaque texte inséré va dans **Historique**. Un nouveau projet démarre avec les gabarits intégrés et un gabarit personnel ; **Projet**, **Favoris** et **Historique** sont vides tant que vous n’avez pas mis un gabarit en favori ou inséré un texte.
 - **Compositeur.** Construit un prompt à partir de quatre parties, **Mouvement de caméra**, **Éclairage**, **Style cinématographique** et **Dialogue ou intention de jeu**, pour le profil H3 que vous choisissez (il part du profil du projet). Choisissez une option par partie, ou écrivez la vôtre dans **Autre…**, et renseignez le sujet, l’action, le lieu et l’émotion. Le **Prompt final** reste modifiable, et **Recomposer depuis les choix** le ramène à l’état d’origine. **Références nécessaires** indique si la plage a ce que le profil demande. Quand une Control video couvre la plage, la partie caméra est **Imposé par la Control video** et verrouillée.
@@ -359,6 +442,8 @@ Quand une Control video est présente, le mouvement vient du guide.
 Une alerte n’apparaît que lorsque deux plans voisins ne se raccordent pas : « “Plan” est plus clair, plus sombre, plus chaud ou plus froid que le plan précédent ». Elle s’affiche dans Director IA (onglet **Direction**, sous **Points à vérifier**), dans le Storyboard (sous **Continuité**, et par une icône d’alerte sur la carte du plan) et dans l’inspecteur. **Raccorder** corrige en un clic, en ajustant l’exposition et la température sur celles du plan précédent. La mesure est faite sur les vraies vignettes des prises. L’onglet **Couleur** contient aussi le scope de luminance, six préréglages (Original, Lumière dorée, Matin froid, Film 35 mm, Nuit bleue, Doux) et des réglages fins (**Exposition**, **Contraste**, **Saturation**, **Température**), avec **Réinitialiser** et **À tous les plans**. Tant qu’un plan n’a pas d’image, l’onglet indique que la couleur se règle une fois le plan généré.
 
 Dans cette version, la mesure est déjà faite, sur l’image de chaque plan qui en a une. Le projet de départ n’en a pas encore, et le Storyboard indique alors « Aucun raccord à calculer : les plans n’ont pas encore d’image. » Un pourcentage de ressemblance entre deux plans générés peut aussi apparaître dans les alertes (« Identité à vérifier entre … et … (similarité 78 %) ») : il est simulé (chapitre 17). La couleur, elle, est réelle.
+
+L’assistant peut lancer davantage de contrôles à la demande : plans sans prompt, contradictions avec la direction globale, durées hors de 2 à 15 s, plans FL2VA sans première image et mouvements de caméra qui changent entre deux plans, avec les points de couleur ci-dessus. Sa réponse est une seconde liste **À vérifier** dans l’onglet Direction (chapitre 10).
 
 Disponible à partir de l’étape 6.
 
@@ -402,7 +487,7 @@ Ce qu’elle change :
 - **La bibliothèque de prompts.** Le texte que les gabarits intégrés insèrent, leurs variables (le sujet, le lieu, etc.) et les valeurs par défaut de ces variables sont écrits dans la langue des prompts. Les noms, descriptions et catégories des gabarits suivent la langue de l’interface.
 - **Le compositeur.** Le **Prompt final** est composé dans la langue des prompts. Les choix sur lesquels vous cliquez gardent la langue de l’interface.
 - **Les contrôles de direction.** Les contrôles qui lisent vos textes utilisent les règles de la langue des prompts : les contradictions entre la direction globale et une instruction locale (par exemple une direction qui exclut le néon et une instruction qui en demande), et les instructions de caméra d’une instruction locale qu’une Control video couvre. Un texte écrit dans l’autre langue n’est pas contrôlé.
-- **L’assistant.** Disponible à partir de l’étape 5 : il écrit les instructions locales dans la langue des prompts.
+- **L’assistant.** Il écrit chaque instruction locale, réécriture et plan proposé dans la langue des prompts du projet, et vous répond dans votre propre langue. Les contrôles de contradiction qu’il lance utilisent les règles de cette langue.
 
 Ce qu’elle ne change jamais : rien de ce que vous avez saisi n’est traduit, et changer le réglage ne réécrit aucun texte existant. Réglez la langue avant d’écrire, ou réécrivez les textes vous-même.
 
@@ -425,7 +510,7 @@ Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pou
 | Ctrl+G | Générer la sélection |
 | Ctrl+Alt+G | Ajouter la sélection à la file |
 | Ctrl+Shift+G | Passer la prise en final |
-| Ctrl+J | Assistant PotionUI (ouvre le chat) |
+| Ctrl+J | Assistant PotionUI (ouvre le chat en mode Video Producer assistant) |
 | Ctrl+Alt+1 | Panneau latéral |
 | Espace | Lecture / pause |
 | Ctrl+B | Couper à la tête de lecture |
@@ -452,14 +537,14 @@ Certaines parties gardent leur interface mais ne font pas encore la vraie chose.
 
 Le badge **Simulé** apparaît dans l’en-tête des fenêtres **Référencer un fichier Gaussian Splat** et **Atelier Sound design** (intitulé **Voix et dialogues** pour une voix) ; à côté des formats **Fichier maître · ProRes 422** et **Archive · H.265**, à côté des stems audio et dans le pied de l’onglet **Vidéo** de la fenêtre d’export ; sur le bouton d’automation des tranches de la console ; sur la **Scène d’essai** et sur l’aperçu d’un fichier Gaussian Splat dans la scène 3D ; et sur une prise faite par une version antérieure du projet, sur sa carte (« Prise simulée d’une version antérieure du projet : lecture seule. ») et dans le visualiseur (« Prise finale · IA simulée », « Brouillon 720p · IA simulée »). Les prises de la génération réelle ne le portent jamais. Quelques notifications sont signalées de la même façon.
 
-Ce qui fonctionne déjà dans cette version : la génération elle-même (les moteurs activés par votre admin, l’estimation, les prises avec leur progression, l’annulation et la reprise, les finals par agrandissement ou nouveau rendu, le quota et les notifications), les projets enregistrés, **Fichier › Ouvrir…**, **Fichier › Historique des versions…** et **Fichier › Nouveau projet…**, l’import de vos images, vidéos et fichiers audio avec leurs vignettes et leur lecture, le montage sur la timeline (ajustement des plans, fondus, coupe, magnétisme, plage, marqueurs, annuler et rétablir), la sélection et l’inspecteur, le Storyboard, la bibliothèque de prompts et le compositeur, le contrôle des contradictions de direction, le raccord de couleur, la caméra, les trajectoires et les positions clés de la scène 3D, la console de mixage qui joue vos fichiers audio, et les fichiers Final Cut Pro, OpenTimelineIO, EDL et SRT, qui sont de vrais fichiers.
+Ce qui fonctionne déjà dans cette version : la génération elle-même (les moteurs activés par votre admin, l’estimation, les prises avec leur progression, l’annulation et la reprise, les finals par agrandissement ou nouveau rendu, le quota et les notifications), les projets enregistrés, **Fichier › Ouvrir…**, **Fichier › Historique des versions…** et **Fichier › Nouveau projet…**, l’import de vos images, vidéos et fichiers audio avec leurs vignettes et leur lecture, le montage sur la timeline (ajustement des plans, fondus, coupe, magnétisme, plage, marqueurs, annuler et rétablir), la sélection et l’inspecteur, le Storyboard, l’assistant PotionUI avec ses quatre outils (chapitre 10), la bibliothèque de prompts et le compositeur, le contrôle des contradictions de direction, le raccord de couleur, la caméra, les trajectoires et les positions clés de la scène 3D, la console de mixage qui joue vos fichiers audio, et les fichiers Final Cut Pro, OpenTimelineIO, EDL et SRT, qui sont de vrais fichiers.
 
 La fenêtre **Fonctions simulées** liste huit éléments. Pour chacun, le tableau dit ce qu’il fait dans cette version et ce qu’il devient quand toutes les étapes sont livrées.
 
 | Élément de la fenêtre | Dans cette version | Quand toutes les étapes sont livrées |
 |---|---|---|
 | **Modes de rendu 3D et réglages du moteur** | Les modes de sortie « Rendu 3D » et « Rendu 3D + IA » ne lancent rien. Les réglages grisés dans l’atelier avancé ne sont pas transmis au moteur : la graine (chaque prise tire la sienne), la résolution finale (le final prend la plus grande résolution du moteur), les étapes, le CFG, les LoRA, les fenêtres, la cohérence, les post-traitements et le pilote audio Hybrid AV ; pas plus que les Control video et les poids du Hybrid builder. Les prises faites par les versions antérieures gardent leur vignette numérotée. | Reste simulé. La génération IA elle-même est réelle : voyez les chapitres 8 et 9. |
-| **Découpage du synopsis** | Une phrase devient un plan. | L’assistant propose le découpage. Disponible à partir de l’étape 5. |
+| **Découpage du synopsis** | Le bouton **Proposer un découpage** et **Production › Découper le synopsis en plans…** coupent le synopsis en phrases : une phrase devient un plan. | L’assistant fait le vrai découpage (chapitre 10) et le montre dans la même liste **Découpage proposé**. Le bouton garde sa coupe par phrases. |
 | **Contrôle d’identité** | La similarité entre plans est simulée. Le contrôle de couleur, lui, analyse réellement les images. | Le raccord de couleur est mesuré sur les vraies vignettes des prises (à partir de l’étape 6). Le pourcentage de ressemblance reste simulé, car aucune mesure d’identité n’est offerte aux plugins. |
 | **Rendu vidéo** | Aucun fichier vidéo n’est écrit. Les exports Final Cut, OTIO, EDL et SRT produisent de vrais fichiers. | Des vidéos H.264 MP4 ou WebM VP9 assemblées avec ffmpeg et écrites dans votre stockage. ProRes 422, H.265 et stems audio restent simulés : le convertisseur vidéo de PotionUI n’écrit que du H.264 MP4 ou du WebM VP9, et aucun rendu audio par rôle n’existe. Disponible à partir de l’étape 6. |
 | **Gaussian Splat** | Le fichier référencé n’est pas chargé ; la scène d’essai est un nuage de points généré. | Reste simulé : la scène reste un aperçu de points en 2D et les fichiers Gaussian Splat sont référencés, pas chargés. |
@@ -469,7 +554,7 @@ La fenêtre **Fonctions simulées** liste huit éléments. Pour chacun, le table
 
 La fenêtre ne liste pas tous les réglages de l’**Atelier avancé** que le moteur n’utilise pas : cohérence entre fenêtres, verrouillage de l’identité des personnages, priorité au guide de mouvement, les fenêtres de génération avec leur longueur et leur chevauchement, la résolution finale, la graine, les étapes, le guidage (CFG), les LoRAs, la piste qui guide la performance, la synchronisation labiale, le rythme du montage, le décalage audio / image, le nommage des résultats, les post-traitements et l’insertion automatique de la variante A. Ils restent dans le projet, mais ils ne sont pas envoyés au moteur et ne pilotent aucune génération : un preset n’expose que les contrôles qu’il déclare ; MiniMax H3, par exemple, n’a ni guidage ni prompt négatif. L’atelier les grise et marque chacun du badge « Non transmis à ce moteur » (survolez-le : « Le Video Director construit la requête à partir des plans, de la direction, des frames et des références ; ce réglage reste dans le projet mais ne change pas les prises. »). Les **Variantes par fenêtre** restent actives. Les poids du Hybrid builder et ses profils enregistrés, et le guidage d’une Control video, ne sont pas envoyés non plus, mais ils ne sont pas grisés. Ce qui compte, c’est le moteur, la qualité, les variantes et ce qui est dans votre projet : la direction, les instructions locales, les frames et les références. La graine d’une prise est tirée par le serveur et affichée sur sa carte, et les résolutions suivent les règles du brouillon et du final du chapitre 8.
 
-L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video Producer, qui écrit les instructions de plan, corrige les contradictions avec la direction globale, découpe un synopsis en plans et vérifie la continuité, et vous approuvez chaque changement avant qu’il touche le projet (disponible à partir de l’étape 5).
+L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video Producer assistant, qui écrit les instructions de plan, corrige les contradictions avec la direction globale, découpe un synopsis en plans et vérifie la continuité, et vous approuvez chaque changement avant qu’il touche le projet (chapitre 10). Le seul point simulé de ce qu’il montre est la ressemblance d’identité entre deux prises.
 
 ## 18. Dépannage
 
@@ -491,6 +576,7 @@ L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video
 - **« Ce projet a été supprimé ailleurs ».** Le projet a été supprimé depuis un autre onglet ou un autre appareil pendant qu’il était ouvert ici. La page a ouvert votre projet modifié le plus récemment, ou créé le projet de départ. Les modifications que vous n’aviez pas enregistrées sont perdues.
 - **Un média ne s’affiche pas ou ne se lit pas.** Son fichier n’est plus disponible dans votre bibliothèque ou votre galerie PotionUI. Importez-le à nouveau. Une prise dont vous avez supprimé la génération de la galerie ne se lit plus non plus.
 - **« 1 fichier n’a pas pu être importé » (ou « N fichiers n’ont pas pu être importés »).** Le fichier n’est plus disponible dans la bibliothèque ou la galerie, ou son type n’est pas accepté par la fenêtre : images et vidéos pour **Importer des fichiers…** et **Depuis la galerie PotionUI**, audio pour **Importer un fichier audio…**.
+- **L’assistant ne répond pas, n’affiche aucune carte ou agit sur le mauvais projet.** Voyez le chapitre 10, « Si cela ne fonctionne pas ».
 
 Les exports à partir de l’étape 6.
 
@@ -516,3 +602,7 @@ Les exports à partir de l’étape 6.
 | instruction locale | shot prompt | Le texte d’un plan ; il complète la direction globale. |
 | Control video | Control video | Une vidéo de guide qui impose le mouvement. |
 | profil H3 | H3 profile | FL2VA, Ref2VA ou Hybrid AV : ce qui guide la génération. |
+| mode | mode | Une façon de travailler du chat PotionUI, avec ses propres instructions et outils. Cette page utilise **Video Producer assistant** ; une conversation garde son mode. |
+| outil | tool | Une action que l’assistant peut lancer dans votre projet : écrire une instruction de plan, corriger les contradictions, découper le synopsis, vérifier la continuité. |
+| approbation | approval | La carte où vous acceptez (**Approve**) ou refusez (**Reject**) ce que l’assistant propose. Rien ne change avant votre approbation. |
+| contexte | context | Le résumé de votre projet que la page envoie à l’assistant avec chaque message (chapitre 10). |

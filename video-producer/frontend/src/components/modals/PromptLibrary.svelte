@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatTime, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, toast, overlaps, itemsIn, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, act, toast, overlaps, itemsIn, secs, clipLabel } from '../../lib/state.svelte.js';
 	import {
 		templates,
 		libraries,
@@ -26,7 +26,7 @@
 		promptLocale
 	} from '../../lib/library.svelte.js';
 	import { directionFields } from '../../lib/catalog.js';
-	import { chat } from '../../lib/host.js';
+	import { suggest } from '../../lib/assistant.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { ulid } from '../../lib/ulid.js';
 	import Modal from './Modal.svelte';
@@ -66,9 +66,17 @@
 		ui.modal = target?.returnTo ?? null;
 	}
 
+	function suggestion() {
+		if (target?.kind === 'direction') return t('assistant.suggest.direction', { field: directionFields.find((f) => f.key === target.key)?.label ?? '' });
+		if (!targetPrompt) return t('assistant.suggest.library');
+		const shot = doc.clips.find((c) => c.id === targetPrompt.shotId);
+		return shot ? t('assistant.suggest.shot', { shot: clipLabel(shot) }) : t('assistant.suggest.promptAt', { time: secs(targetPrompt.start) });
+	}
+
 	function askAssistant() {
+		const text = suggestion();
 		ui.modal = null;
-		chat.open();
+		suggest(text);
 	}
 
 	function insert(text) {

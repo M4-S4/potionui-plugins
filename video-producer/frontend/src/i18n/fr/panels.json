@@ -88,7 +88,7 @@
 	"story.chars": "{chars} car.",
 	"story.placeholder": "Racontez le film en quelques phrases : une phrase devient un plan.",
 	"story.propose": "Proposer un découpage",
-	"story.proposeTip": "Découpage simulé à cette étape",
+	"story.proposeTip": "Coupe par phrases ; demandez le vrai découpage à l’assistant",
 	"story.proposal": "Découpage proposé",
 	"story.closeProposal": "Fermer la proposition",
 	"story.keep": "Garder le plan {n}",

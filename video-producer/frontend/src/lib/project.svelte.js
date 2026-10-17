@@ -57,6 +57,17 @@ export function noteChange(json) {
 	if (ui.dirty) scheduleSave();
 }
 
+export function savedSnapshot() {
+	return lastSavedJson === null ? null : JSON.parse(lastSavedJson);
+}
+
+export function markSaved(version, saved) {
+	lastSavedJson = JSON.stringify(saved);
+	Object.assign(project, { version, savedAt: new Date().toISOString() });
+	ui.dirty = currentJson() !== lastSavedJson;
+	if (ui.dirty) scheduleSave();
+}
+
 export function scheduleSave() {
 	clearTimeout(timer);
 	timer = setTimeout(() => {

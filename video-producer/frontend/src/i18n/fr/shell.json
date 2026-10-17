@@ -113,7 +113,7 @@
 	"simulations.render3d.title": "Modes de rendu 3D et réglages du moteur",
 	"simulations.render3d.text": "La génération IA est réelle. Les modes de sortie « Rendu 3D » et « Rendu 3D + IA » ne lancent encore rien. Les réglages grisés dans l’atelier avancé ne sont pas transmis au moteur : la graine (chaque prise tire la sienne), la résolution finale (le final prend la plus grande résolution du moteur), les étapes, le CFG, les LoRA, les fenêtres, la cohérence, les post-traitements et le pilote audio Hybrid AV ; pas plus que les Control videos et les poids du Hybrid builder. Les prises faites par les versions antérieures gardent leur vignette numérotée.",
 	"simulations.synopsis.title": "Découpage du synopsis",
-	"simulations.synopsis.text": "Une phrase devient un plan ; dans le produit, l’assistant proposera le découpage.",
+	"simulations.synopsis.text": "Le bouton Proposer un découpage transforme seulement chaque phrase en plan ; l’assistant propose le vrai découpage à partir du synopsis entier.",
 	"simulations.identity.title": "Contrôle d’identité",
 	"simulations.identity.text": "La similarité entre prises est simulée. Le contrôle de couleur, lui, analyse réellement les images.",
 	"simulations.render.title": "Rendu vidéo",

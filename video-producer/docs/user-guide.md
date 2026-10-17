@@ -2,7 +2,7 @@
 
 Français : [Video Producer : guide utilisateur](/docs?doc=plugin/video-producer/user-guide.fr) (fichier `docs/user-guide.fr.md`).
 
-This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. Video Producer is delivered in steps. This version has the complete interface, in English and in French, saves your projects, imports your media and generates real takes and finals (chapters 8 and 9), but some functions are still simulated (chapter 17). A chapter about something that does not exist yet ends with "Available from step N". The administrator guide is a separate page that only admins see.
+This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. Video Producer is delivered in steps. This version has the complete interface, in English and in French, saves your projects, imports your media and generates real takes and finals (chapters 8 and 9) and has the PotionUI assistant in its own mode (chapter 10), but some functions are still simulated (chapter 17). A chapter about something that does not exist yet ends with "Available from step N". The administrator guide is a separate page that only admins see.
 
 ## 1. What Video Producer is
 
@@ -13,6 +13,7 @@ Before you start:
 - An admin has to prepare at least one engine (this machine, a studio server or a cloud model) and at least one video preset assigned to you. If the Production bar shows no engine, see chapter 18.
 - Your admin also sets the draft resolution, how many generations you can have in progress at once, and may limit the GPU minutes you can use per month.
 - Generation is real: the takes are videos made by your admin's machines or cloud account, and they take time. The estimate in the Production bar tells you what to expect before you start (chapter 8).
+- The assistant needs a language model that your admin has configured in PotionUI and assigned to you (chapter 10). Everything else works without it.
 - The model MiniMax H3 (the **MiniMax H3** entries of the engine pop-up) comes with a license that excludes use, and anything generated with it, in the European Union, the United Kingdom, the United States and South Korea without an individual authorization from MiniMax, and that asks a commercial product to display "MiniMax H3" prominently. Ask your admin before you use it. Video Producer does not check any of this for you.
 
 The interface is in English by default and also exists in French (chapter 15).
@@ -26,7 +27,7 @@ The first time you open the page, it creates a starter project, "Dawn at the har
 1. **Create a project.** **File › New project…** (or **File › Open…** for an existing one). In **Project properties…** you set the name, the aspect ratio (16:9, 2.39:1, 9:16, 1:1 or 4:5), the resolution (720p, 1080p or 4K) and the frame rate (24, 25 or 30 fps). Result: an empty project that is saved as you work.
 2. **Set the global direction.** In the **Director IA** workspace, tab **Direction**: world and intent, characters and identity, photography, palette and lighting, pacing and continuity. Result: a text that guides every generation.
 3. **Add the references.** In **Director IA**, tab **References**: identities, 3D sets and motion guides. Result: what must stay the same from one shot to the next.
-4. **Split the film into shots.** In the **Storyboard** workspace: write the synopsis, click **Propose a breakdown**, keep the shots you want and adjust their shot prompts. Result: a row of shot cards.
+4. **Split the film into shots.** In the **Storyboard** workspace: write the synopsis, then click **Propose a breakdown** (one sentence becomes one shot) or ask the assistant to cut it (chapter 10), keep the shots you want and adjust their shot prompts. Result: a row of shot cards.
 5. **Generate drafts.** In the Production bar, pick the **Generation engine**, quality **Draft**, then **Generate selection** (Ctrl+G). The estimate shows time, memory and quota. Result: real draft takes A, B, and so on, made by the engine you picked.
 6. **Pick and make final.** In the Inspector, tab **Takes**: compare the takes, click **Choose** on the one the shot should play, then click **Make final** on the best draft take. Result: the shot moves from Draft to Final.
 7. **Edit, match and mix.** Fades on the clips, color match in the Inspector tab **Color**, the console in **Mix**. Result: a finished sequence.
@@ -39,7 +40,7 @@ The interface of all eight steps is in place, and your projects are saved as you
 The page has five levels of controls, from the widest to the most local, around a left panel, a center area, the Inspector and the timeline:
 
 - **Menu bar.** Ten menus, in this order: **Video Producer**, **File**, **Edit**, **Cut**, **Shot**, **Production**, **Audio**, **View**, **Window**, **Help**. The **Video Producer** menu holds **About Video Producer**, **Preferences…**, **Keyboard shortcuts** and **Search commands…**. A menu shows "…" only when the command opens a window that asks for something, and a check mark in front of a state that is on.
-- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import**, **Export**, **Assistant**, a search button for the commands and the button that shows or hides the Inspector.
+- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import**, **Export**, **Assistant** (it opens the PotionUI chat, chapter 10), a search button for the commands and the button that shows or hides the Inspector.
 - **Production bar.** It targets what to generate and holds the only main button of the page, **Generate selection** (chapter 8).
 - **Area headers and the timeline toolbar.** A title and counters on the left, small icons on the right.
 - **Content.** Small buttons that appear when you hover or select.
@@ -85,13 +86,13 @@ The media of the project in one panel. A new project has none: the panel says "N
 
 The left panel has three tabs. A dot on **Direction** warns that there are points to check, and **Results** shows the number of takes.
 
-- **Direction.** Shows what guides the generation for the current range: the global direction, the shot prompt, the references and Control videos, with **View the generation summary**. Below, **To check**, the list of direction conflicts and color matches to fix, the **Project H3 profile** (FL2VA, Ref2VA or Hybrid AV, chapters 8 and 11) and the **Global direction** itself, in five fields (world and intent, characters and identity, photography, palette and lighting, pacing and continuity), with a counter out of 4000 characters. Each field has a **Library & assistant** link. The gear button, **H3 settings**, opens the **Advanced workshop**.
+- **Direction.** Shows what guides the generation for the current range: the global direction, the shot prompt, the references and Control videos, with **View the generation summary**. Below, **To check**, the list of direction conflicts and color matches to fix, the section of the assistant's continuity check (also titled **To check**) with its button **Ask the assistant to check continuity** (chapter 10), the **Project H3 profile** (FL2VA, Ref2VA or Hybrid AV, chapters 8 and 11) and the **Global direction** itself, in five fields (world and intent, characters and identity, photography, palette and lighting, pacing and continuity), with a counter out of 4000 characters. Each field has a **Library & assistant** link. The gear button, **H3 settings**, opens the **Advanced workshop**.
 - **References.** Three families, **Images and identity**, **3D sets** and **Motion guides**. A reference is global (it goes with every generation) or applies to a range only; **Attach to range** sets the second. **Reference** adds one. The center shows the board of references, in two groups, **Global direction** and **On the timeline**, with a search field. Drag a thumbnail onto the Frames track to anchor it to a precise moment. A new project has no reference: the board says so, and **Reference** adds the first one.
 - **Results.** The take cards of each shot (chapter 9), the **Generation queue** and **Assemble chosen takes**.
 
 ### Storyboard
 
-On the left: the **Synopsis** (one sentence becomes one shot) and **Propose a breakdown**. The **Proposed breakdown** lists the shots: tick the ones to keep, rename them and click **Add N shots at the end**. In this version the breakdown is simulated: it only cuts the synopsis into sentences. Then **To produce**, with **Drafts left** and **Move to final** (the number of shots and the footage still to do for each), and **Continuity**, which lists the color matches to check, each with **Match color**.
+On the left: the **Synopsis** (one sentence becomes one shot) and **Propose a breakdown**. The **Proposed breakdown** lists the shots: tick the ones to keep, rename them and click **Add N shots at the end**. The breakdown of that button is simple: it only cuts the synopsis into sentences (its tooltip says "Sentence split; ask the assistant for a real breakdown"). The assistant makes a real breakdown and fills the same list (chapter 10). Then **To produce**, with **Drafts left** and **Move to final** (the number of shots and the footage still to do for each), and **Continuity**, which lists the color matches to check, each with **Match color**.
 
 In the center: one card per shot, in order, with its number, its duration, its name, its stage (**Source**, **To generate**, **Draft** or **Final**), its number of takes and its shot prompt; click the prompt to write it. Drag a card to move it. The buttons of a card appear when you hover it or select it: the main one follows the stage, **Generate**, **Make final**, **See takes** or **Regenerate**, and three icons show the shot in the viewer, insert a shot after it and delete it. While a take of the shot is in progress, the card shows its step and progress and the button is disabled. The header counts the shots per stage, adds one with **Shot** and sets the size of the thumbnails; a **New shot** tile at the end does the same. In this workspace, the Left and Right arrow keys move the selection to the previous or next shot.
 
@@ -139,7 +140,7 @@ A failed save shows one of three messages: "Could not save the project." (a netw
 
 ### Version history
 
-**File › Version history…** opens the window **Version history** ("Each save creates a version"). It lists the versions of the open project, the newest first. Each row shows the number ("Version 7"), the date and time, seconds included, and the number of shots. A capture of this window, in the dark and light themes of the English interface, is in `docs/screenshots/version-history.png`. A version made by a restore adds "Restored from version N". The version you are working on carries the badge **Current** and cannot be selected.
+**File › Version history…** opens the window **Version history** ("Each save creates a version"). It lists the versions of the open project, the newest first. Each row shows the number ("Version 7"), the date and time, seconds included, and the number of shots. A capture of this window, in the dark and light themes of the English interface, is in `docs/screenshots/version-history.png`. A version made by a restore adds "Restored from version N". A version written by the assistant adds "Assistant" (chapter 10). The version you are working on carries the badge **Current** and cannot be selected.
 
 To go back, select an older version and click **Restore**. A window asks you to confirm ("Restore version N": the project goes back to that version and the current state stays in the history). If the last save failed and changes are waiting, a second window, "Unsaved changes", asks you to confirm that they are lost (**Discard changes**). Then the project becomes that version and the page shows "Version N restored". The restore is itself a new version at the top of the list, so nothing is lost and you can restore the state you came from. **Cancel** closes the window.
 
@@ -321,22 +322,103 @@ The new take is a **Final** one ("Final" or "Final · upscale") that says which 
 
 ## 10. Assistant
 
-The **Assistant** button, **Window › PotionUI assistant** and Ctrl+J open the PotionUI chat, in the **Video Producer** mode. The assistant can:
+The assistant is the PotionUI chat, working in its own mode for this page, **Video Producer assistant**. It reads your project and has four tools, the actions it can run: write the prompt of a shot, fix the contradictions between the global direction and the shot prompts, cut your synopsis into shots, and check the continuity between shots. It proposes and you decide: for the three tools that write or propose something, the chat shows an approval card with a preview, and nothing happens in your project until you click **Approve**.
 
-- write the prompt of the selected shot;
-- fix the contradictions between the global direction and the shot prompts;
-- split your synopsis into shots;
-- check the continuity between shots.
+### Before you start
 
-Every change to the project asks for your approval before it is applied. The assistant knows the workspace you are in, your selection, the playhead, the range, the global direction, the synopsis and the state of the production. It needs your admin to have set up a language model.
+- Your admin has to configure a language model in PotionUI (Admin › LLM / Assistant: for example Ollama, OpenAI or a native model) and assign it to you. Without one the chat says that it is unavailable (see "If it does not work" below).
+- The assistant reads your project as the page shows it, but it writes into the project as saved on the server. Wait for "Saved at" in the project bar before you approve a change.
+- Keep the Video Producer page open while you chat: the assistant only knows your project while the page is open on it.
 
-In this version the button, the menu and the shortcut already open the PotionUI chat, and so do the links **Ask the PotionUI assistant** (prompt library) and **Ask the assistant** (sound design workshop). The four actions above arrive with step 5.
+### Open the assistant
 
-Available from step 5.
+Click **Assistant** in the project bar, choose **Window › PotionUI assistant**, or press Ctrl+J (⌘J on a Mac). The chat opens over the page. On a new conversation, the mode chip in its header reads **Video Producer assistant**. A conversation keeps its mode for good ("Mode is fixed after the conversation starts"): if the chat shows a conversation started elsewhere in PotionUI, its header says "Started in …" and offers **start a new chat**.
+
+### What the assistant sees
+
+With each message, the page sends the assistant a summary of your project:
+
+- the project: its name, its saved version and its prompt language;
+- where you are: the workspace, the playhead (and the shot under it), your selection and the range;
+- the synopsis and the global direction: the five fields and the H3 profile;
+- the shots in timeline order: name, start and end, stage, whether a take is on it, whether it has a first and a last frame, and the beginning of its shot prompt;
+- the conflicts that the page flags between a shot prompt and the direction, and the color and identity matches it measured between neighbor shots;
+- the state of the production: target, mode, quality, progress and queue.
+
+The summary is text and it is kept short: 40 shots at most, 800 characters of the synopsis, 240 of each field of the direction and 160 of each shot prompt, so a longer text is cut in what the assistant reads. It holds none of your images, videos, takes, references, audio or 3D scenes, and the assistant sees no picture. If you leave the Video Producer page, the summary stops: the assistant says the page is not open and asks you to open a project.
+
+### Four requests to try
+
+You write to the assistant in your own language. The examples below are only examples; select a shot first and the assistant knows which one you mean.
+
+#### Request 1: write the prompt of a shot
+
+For example: "Write the prompt of the shot “The gulls”: a low angle on the water, backlit."
+
+1. The chat shows a card **Write shot prompt**, marked **Needs approval**, showing the prompt now and the new text (only the new text when the shot has no prompt yet).
+2. Click **Approve**. The new text becomes the shot prompt of that shot (the prompt is created when the shot had none). The page updates at once and says "Prompt of “The gulls” updated by the assistant"; the card turns to **Applied**.
+3. Click **Reject**, with a reason if you like, to leave everything as it was.
+
+#### Request 2: fix the contradictions with the direction
+
+When the Direction tab of Director IA shows **To check · N** (for example "The global direction excludes neon lights." under a prompt that asks for neon), ask: "Fix the conflicts between my direction and my shot prompts."
+
+1. The card **Fix conflicts** shows one block per shot to rewrite, with the old text and the new text.
+2. **Approve** applies all the rewrites in one change, and the page says "2 prompts rewritten by the assistant". **Reject** applies none: it is all or nothing.
+
+#### Request 3: cut the synopsis into shots
+
+For example: "Cut my synopsis into shots of about 5 seconds." You can also tell a story in the chat and ask for the cut.
+
+1. The card **Split synopsis** lists the proposed shots, each with its time range and "name: beginning of its prompt". It proposes 1 to 24 shots of 2 to 15 seconds, with names of 34 characters at most.
+2. **Approve** does not change your project yet. The page opens the **Storyboard** and says "3 shots proposed in Storyboard". The **Proposed breakdown** list (the same one as **Propose a breakdown**) shows the shots: untick the ones you do not want (**Keep shot 1**), rename them, then click **Add 3 shots at the end**. The shots join the end of your film as shots "To generate", each with its shot prompt, and the page says "3 shots added to the storyboard".
+3. **Close the proposal** drops it. A new proposal replaces the previous one.
+
+#### Request 4: check the continuity
+
+For example: "Check the continuity between my shots and tell me what to fix." The button **Ask the assistant to check continuity**, in the Direction tab, types this request for you. This one only reads your project, so there is no card.
+
+1. When the assistant has answered, the page says "2 continuity points to check" (or "Continuity checked: nothing to fix"), with a **Show** button when the Direction tab is not on screen.
+2. In **Director IA**, tab **Direction**, a **To check** section, with "Assistant · 14:32" beside its title (the time of the check), lists the pairs of neighbor shots to look at, as "Shot 1 → Shot 2". Click a pair to go to the shot. Under each pair, a line says what is wrong and a second line how to fix it. A dot on the tab **Direction** says there is something to check.
+3. What it looks for: a shot without a prompt; a shot prompt that contradicts the global direction; a shot shorter than 2 s or longer than 15 s; a shot with the FL2VA profile and no first frame; a camera move that changes between two shots; a jump of brightness or color temperature (the page measures these on the images, and the line carries the badge **Measured**); and a similarity point between two takes. That last one comes from the similarity score, which stays simulated (chapter 17), so its line carries the gray badge **Simulated** instead. Shots that come from a source are skipped.
+4. **Dismiss the check** (the cross of the section) removes the list. Ask again to refresh it.
+
+### Suggestions that fill the request for you
+
+Three places of the page start the chat with a request already typed. You can read it, edit it, then press Enter: nothing is sent for you.
+
+- **Ask the assistant to check continuity** (Director IA, tab Direction): "Check the continuity between my shots and tell me what to fix."
+- **Ask the PotionUI assistant**, in the **Prompt library & assistant** window. The window closes first. The request depends on what the window was writing into: "Help me write the prompt of the shot “The gulls”.", "Help me write the prompt at 5.0 s.", "Help me write the “…” field of the global direction." or, with no target, "Help me write a prompt for this project."
+- **Ask the assistant**, in the Sound design workshop, for example: "Help me write a sound brief: Ambience, from 0.0 s to 5.0 s."
+
+If you had already typed something in the box of the chat, your text stays and the suggestion is not added. If your PotionUI is too old to fill the box, the chat just opens with an empty box and you type the request yourself. The suggestions are written in the language of the interface.
+
+### What it changes, and what it does not
+
+- It writes shot prompts (requests 1 and 2) and proposes shots (request 3). It never starts a generation, chooses a take, makes a shot final, adds, moves or deletes a shot by itself, nor edits the synopsis, the global direction, the references, the titles, the audio or the 3D scene. For a field of the direction or for a sound brief it answers in text only: copy what you like yourself.
+- **Propose a breakdown** and **Production › Split synopsis into shots…** are not the assistant: they only cut the synopsis into sentences, one shot per sentence (chapter 17). **Production › Continuity check** takes you to the Direction tab and does not call the assistant.
+- Each approved change is a new version of your project: **File › Version history…** shows it with the word "Assistant". When the page applied the change itself, **Edit › Undo** works on it like on your own changes.
+- If you had typed in the same shot prompt and not yet saved it when you approved, the page reloads the project to show the assistant's version ("Project reloaded with the assistant’s changes"): that typing and your undo history are lost. Wait for "Saved at" before you approve.
+- The assistant writes shot prompts in the prompt language of the project (chapter 15) and answers you in your language. It never translates what you wrote. The contradiction checks only read texts in the prompt language.
+- The list **To check** and the proposal appear once, when the answer arrives. They disappear when you leave the page or open another project, and reopening an old conversation does not bring them back: ask again.
+
+### If it does not work
+
+The chat itself is a PotionUI window: its buttons (**Tools**, **New chat**, **Approve**, **Reject**, **Retry**) keep PotionUI's labels.
+
+- **"Chat is currently unavailable".** No language model is assigned to you. Ask your admin to add one in Admin › LLM / Assistant and assign it to you. (An admin reads "No enabled LLM configurations" instead.)
+- **The assistant answers but never shows a card, or says it cannot act.** The **Tools** button of the chat box is off: hover it, it reads "Tools OFF"; click it to turn the tools on, and check that the four tools of the group Video Producer are ticked in its list. Your admin may also have turned them off for the model, or the model may not be able to call tools: try another one.
+- **The assistant does not seem to know your project, or the header says "Started in …".** The conversation was started in another mode. Click **start a new chat** from the Video Producer page.
+- **The assistant says the page is not open on a project.** Open a project in Video Producer, keep the page open and ask again.
+- **A card is Failed and quotes `version_conflict`, `project_not_found` or `shot_not_found`.** The project was saved from somewhere else at the very moment of the save, was deleted, or no longer has that shot. Let the page reload the project (**File › Open…**), then click **Retry** on the card or ask again. The assistant says so itself in the chat.
+- **You approved and the chat says "The assistant changed another project, not the one open here."** The answer was for another project than the one you have open now. Open that one, or ask again here.
+- **"The project could not be reloaded. Reopen it to see the assistant’s changes."** The assistant's change is saved, but the page could not reload it: open the project again (**File › Open…**).
+- **The suggestion did not appear in the box.** You had already typed a draft, or your PotionUI cannot fill the box (it then opens it empty). Type or paste the request.
+- **A prompt came out in the wrong language.** The assistant follows the **Prompt language** of the project, in **Project properties…** (chapter 15). Change it, then ask again.
 
 ## 11. Prompts: library and composer
 
-The window **Prompt library & assistant** opens from **Window › Prompt library**, or from the **Library & assistant** links placed near a text (in the fields of the global direction, in the Inspector for a shot prompt and in the window that edits a shot prompt). It writes into a target, shown under its title: one of the five fields of the global direction, or a shot prompt. Opened from the menu it has no target and copies the prompt to the clipboard (**Copy the prompt**). The window has two tabs, **Library** and **Composer**, and a link, **Ask the PotionUI assistant**, that closes the window and opens the PotionUI chat. The names, descriptions and categories of the templates and the choices of the composer exist in English and in French and follow the language of the interface; the texts they insert follow the prompt language of the project (chapter 15).
+The window **Prompt library & assistant** opens from **Window › Prompt library**, or from the **Library & assistant** links placed near a text (in the fields of the global direction, in the Inspector for a shot prompt and in the window that edits a shot prompt). It writes into a target, shown under its title: one of the five fields of the global direction, or a shot prompt. Opened from the menu it has no target and copies the prompt to the clipboard (**Copy the prompt**). The window has two tabs, **Library** and **Composer**, and a link, **Ask the PotionUI assistant**, that closes the window and opens the PotionUI chat with a request already typed (chapter 10). The names, descriptions and categories of the templates and the choices of the composer exist in English and in French and follow the language of the interface; the texts they insert follow the prompt language of the project (chapter 15).
 
 - **Library.** Five libraries, **Built-in**, **Personal**, **Project**, **Favorites** and **History**, and nine categories (Cinema, Camera, Lighting, Film styles, Dialogue, Photography, Sound, Continuity, To avoid). Search by name, description or keyword; the star marks a favorite. Each template says which H3 profiles it suits. A template can have variables, such as the subject or the place, that you fill in before inserting it. The **Editable preview** can also be edited by hand. **Save to Personal** keeps your version, and every inserted text goes to **History**. A new project starts with the built-in templates and one personal template; **Project**, **Favorites** and **History** are empty until you star a template or insert a text.
 - **Composer.** Builds a prompt from four parts, **Camera movement**, **Lighting**, **Film style** and **Dialogue or acting intent**, for the H3 profile you pick (it starts from the profile of the project). Choose one option per part, or type your own in **Other…**, and fill in the subject, the action, the place and the emotion. The **Final prompt** stays editable, and **Recompose from the choices** brings it back. **Required references** tells whether the range has what the profile needs. When a Control video covers the range, the camera part is **Set by the Control video** and locked.
@@ -359,6 +441,8 @@ When a Control video is present, the motion comes from the guide.
 An alert appears only when two neighbor shots do not match: "“Shot” is brighter, darker, warmer or cooler than the previous shot". It shows in Director IA (tab **Direction**, under **To check**), in the Storyboard (under **Continuity**, and as a warning icon on the card of the shot) and in the Inspector. **Match** fixes it in one click by adjusting exposure and temperature to the previous shot. The measure is made on the real thumbnails of the takes. The **Color** tab also has the luminance scope, six presets (Original, Golden light, Cold morning, 35 mm film, Blue night, Soft) and fine settings (**Exposure**, **Contrast**, **Saturation**, **Temperature**), with **Reset** and **To all shots**. Before a shot has an image, the tab says that color can be adjusted once the shot is generated.
 
 In this version the measure is already made, on the image of each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A similarity percentage between two generated shots can also appear in the alerts ("Check the identity between … and … (similarity 78 %)"): it is simulated (chapter 17). Color is real.
+
+The assistant can run more checks on request: shots without a prompt, contradictions with the global direction, durations outside 2 to 15 s, FL2VA shots without a first frame and camera moves that change between two shots, together with the color points above. Its answer is a second **To check** list in the Direction tab (chapter 10).
 
 Available from step 6.
 
@@ -402,7 +486,7 @@ What it changes:
 - **The prompt library.** The text that the built-in templates insert, their placeholders (the subject, the place and so on) and the default values of those placeholders are written in the prompt language. The names, descriptions and categories of the templates follow the language of the interface.
 - **The composer.** The **Final prompt** is composed in the prompt language. The choices you click keep the language of the interface.
 - **The direction checks.** The checks that read your texts use the rules of the prompt language: the contradictions between the global direction and a shot prompt (for example a direction that excludes neon and a prompt that asks for it), and the camera instructions in a prompt that a Control video covers. A text written in the other language is not checked.
-- **The assistant.** Available from step 5: it writes shot prompts in the prompt language.
+- **The assistant.** It writes every shot prompt, rewrite and proposed shot in the prompt language of the project, and answers you in your own language. The contradiction checks it runs use the rules of that language.
 
 What it never changes: nothing you typed is translated, and changing the setting rewrites no existing text. Set the language before you write, or rewrite the texts yourself.
 
@@ -425,7 +509,7 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Ctrl+G | Generate selection |
 | Ctrl+Alt+G | Add selection to queue |
 | Ctrl+Shift+G | Make take final |
-| Ctrl+J | PotionUI assistant (opens the chat) |
+| Ctrl+J | PotionUI assistant (opens the chat in the Video Producer assistant mode) |
 | Ctrl+Alt+1 | Side panel |
 | Space | Play / pause |
 | Ctrl+B | Split at playhead |
@@ -452,14 +536,14 @@ Some parts keep their interface but do not do the real thing yet. They carry a g
 
 The badge **Simulated** appears in the header of the windows **Reference a Gaussian Splat file** and **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265**, next to the audio stems and in the footer of the **Video** tab of the export window; on the automation button of the console strips; on the **Sample scene** and on the preview of a Gaussian Splat file in the 3D scene; and on a take made by an earlier version of the project, on its card ("Simulated take from an earlier version of the project: read only.") and in the viewer ("Final take · simulated AI", "720p draft · simulated AI"). The takes of the real generation never carry it. A few notifications are flagged the same way.
 
-Already working in this version: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard, the prompt library and the composer, the direction conflict checks, the color match, the camera, the trajectories and the keyframes of the 3D scene, the mixing console playing your audio files, and the Final Cut Pro, OpenTimelineIO, EDL and SRT files, which are real files.
+Already working in this version: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard, the PotionUI assistant with its four tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the camera, the trajectories and the keyframes of the 3D scene, the mixing console playing your audio files, and the Final Cut Pro, OpenTimelineIO, EDL and SRT files, which are real files.
 
 The window **Simulated features** lists eight items. For each one, the table says what it does in this version and what it becomes once all the steps are delivered.
 
 | Item in the window | In this version | Once all the steps are delivered |
 |---|---|---|
 | **3D render modes and engine settings** | The output modes "3D render" and "3D render + AI" start nothing. The settings greyed in the Advanced workshop are not sent to the engine: the seed (each take draws its own), the final resolution (the final uses the largest resolution of the engine), steps, CFG, LoRA, windows, consistency, post-processing and the Hybrid AV audio driver; nor are the Control videos and the Hybrid builder weights. Takes made by earlier versions keep their numbered thumbnail. | Stays simulated. AI generation itself is real: see chapters 8 and 9. |
-| **Synopsis breakdown** | One sentence becomes one shot. | The assistant proposes the breakdown. Available from step 5. |
+| **Synopsis breakdown** | The **Propose a breakdown** button and **Production › Split synopsis into shots…** cut the synopsis into sentences: one sentence becomes one shot. | The assistant makes the real breakdown (chapter 10) and shows it in the same **Proposed breakdown** list. The button keeps its sentence cut. |
 | **Identity check** | The similarity between shots is simulated. The color check really analyzes the images. | Color matching is measured on the real thumbnails of the takes (from step 6). The similarity percentage stays simulated, because no identity measure is available to plugins. |
 | **Video render** | No video file is written. The Final Cut, OTIO, EDL and SRT exports produce real files. | H.264 MP4 or VP9 WebM videos assembled with ffmpeg and written to your storage. ProRes 422, H.265 and audio stems stay simulated: PotionUI's video converter writes H.264 MP4 or VP9 WebM only, and no per-role audio render exists. Available from step 6. |
 | **Gaussian Splat** | The referenced file is not loaded; the sample scene is a generated point cloud. | Stays simulated: the scene stays a 2D point preview and Gaussian Splat files are referenced, not loaded. |
@@ -469,7 +553,7 @@ The window **Simulated features** lists eight items. For each one, the table say
 
 The window does not list every setting of the **Advanced workshop** that the engine does not use: consistency between windows, lock character identity, motion guide first, the generation windows with their length and overlap, the final resolution, the seed, the steps, the guidance (CFG), the LoRAs, the track that drives the performance, lip sync, follow the rhythm of the cut, audio / picture offset, result naming, post-processing and insert variant A automatically. They stay in the project, but they are not sent to the engine and drive no generation: a preset only exposes the controls it declares, and MiniMax H3, for example, has no guidance and no negative prompt. The workshop greys them and marks each one with the badge "Not sent with this engine" (hover it: "The Video Director builds the request from the shots, the direction, the frames and the references; this setting stays in the project but does not change the takes."). **Variants per window** stays active. The Hybrid builder weights and its saved profiles, and the guidance of a Control video, are not sent either, but they are not greyed. What counts is the engine, the quality, the variants and what is in your project: the direction, the shot prompts, the frames and the references. The seed of a take is drawn by the server and shown on its card, and the resolutions follow the draft and final rules of chapter 8.
 
-The assistant, for its part, is not simulated: it is the PotionUI chat in Video Producer mode, which writes shot prompts, fixes conflicts with the global direction, splits a synopsis into shots and checks continuity, and you approve each change before it touches the project (available from step 5).
+The assistant, for its part, is not simulated: it is the PotionUI chat in the Video Producer assistant mode, which writes shot prompts, fixes conflicts with the global direction, splits a synopsis into shots and checks continuity, and you approve each change before it touches the project (chapter 10). The one simulated point in what it shows is the identity similarity between two takes.
 
 ## 18. Troubleshooting
 
@@ -491,6 +575,7 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in Video 
 - **"This project was deleted elsewhere".** The project was deleted from another tab or device while it was open here. The page opened your most recently modified project, or created the starter project. The changes you had not saved are lost.
 - **A media does not show or play.** Its file is no longer available in your PotionUI library or gallery. Import it again. A take whose generation you deleted from the gallery no longer plays either.
 - **"1 file could not be imported" (or "N files could not be imported").** The file is no longer available in the library or the gallery, or its kind is not accepted by the window: images and videos for **Import files…** and **From the PotionUI gallery**, audio for **Import audio file…**.
+- **The assistant does not answer, shows no card or acts on the wrong project.** See chapter 10, "If it does not work".
 
 Exports from step 6.
 
@@ -516,3 +601,7 @@ Exports from step 6.
 | shot prompt | instruction locale | The text for one shot; it completes the global direction. |
 | Control video | Control video | A guide video that sets the motion. |
 | H3 profile | profil H3 | FL2VA, Ref2VA or Hybrid AV: what guides the generation. |
+| mode | mode | A way the PotionUI chat works, with its own instructions and tools. This page uses **Video Producer assistant**; a conversation keeps its mode. |
+| tool | outil | An action the assistant can run in your project: write a shot prompt, fix conflicts, split the synopsis, check continuity. |
+| approval | approbation | The card where you accept (**Approve**) or refuse (**Reject**) what the assistant proposes. Nothing changes before you approve. |
+| context | contexte | The summary of your project that the page sends to the assistant with each message (chapter 10). |

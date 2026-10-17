@@ -33,6 +33,20 @@ export const chat = {
 	provideContext(key, provider) {
 		const off = call(api()?.chat?.provideContext, key, provider);
 		return typeof off === 'function' ? off : noop;
+	},
+	onToolApplied(name, handler) {
+		const off = call(api()?.chat?.onToolApplied, name, handler);
+		return typeof off === 'function' ? off : noop;
+	},
+	prefill(text, options) {
+		const host = api()?.chat;
+		if (typeof host?.prefill !== 'function') return false;
+		host.prefill(text, options);
+		return true;
+	},
+	send(text) {
+		const host = api()?.chat;
+		return typeof host?.send === 'function' ? host.send(text) : false;
 	}
 };
 

@@ -5,14 +5,15 @@
 	import { createClient } from './lib/api.js';
 	import { detectLocale, getLocale, has, setLocale, t } from './i18n/index.svelte.js';
 	import { ms } from './lib/motion.js';
-	import { ui, doc, applyMe, bottomKey, contextSnapshot, dispose as disposeState, toast } from './lib/state.svelte.js';
+	import { ui, doc, applyMe, bottomKey, dispose as disposeState, toast } from './lib/state.svelte.js';
 	import { project, bindClient, disposeProject, flushSave, noteChange, openLatestOrStarter } from './lib/project.svelte.js';
 	import { startProduction } from './lib/production.svelte.js';
 	import { setPluginRoot } from './lib/focus.js';
 	import { needsProbe, probeAsset } from './lib/importer.js';
 	import { dispose as disposePlayback } from './lib/playback.svelte.js';
 	import { handleKeydown } from './lib/commands.js';
-	import { chat, keyboard, mountHostSlot, registerIcons } from './lib/host.js';
+	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
+	import { startAssistant } from './lib/assistant.svelte.js';
 	import MenuBar from './components/shell/MenuBar.svelte';
 	import ProjectBar from './components/shell/ProjectBar.svelte';
 	import StatusBar from './components/shell/StatusBar.svelte';
@@ -88,7 +89,7 @@
 		const release = keyboard.suppress();
 		const onkeydown = (e) => phase === 'ready' && handleKeydown(e, root);
 		window.addEventListener('keydown', onkeydown);
-		const unregister = chat.provideContext('video_producer', contextSnapshot);
+		const stopAssistant = startAssistant();
 		const onvisibility = () => document.visibilityState === 'hidden' && flushSave();
 		document.addEventListener('visibilitychange', onvisibility);
 		const stopProduction = startProduction();
@@ -102,7 +103,7 @@
 			flushSave();
 			disposeProject();
 			window.removeEventListener('keydown', onkeydown);
-			unregister();
+			stopAssistant();
 			release();
 			disposePlayback();
 			disposeState();

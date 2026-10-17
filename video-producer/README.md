@@ -2,7 +2,7 @@
 
 Video Producer brings a film workflow to AI video inside PotionUI: write a synopsis, split it into shots, generate draft takes for each shot, choose the best take, turn it into a final, then cut, match color, mix sound and deliver. It all happens in one page with five workspaces (Media, Director IA, Storyboard, 3D scene, Mix). Admins and users can both use it. An admin decides which engines and video presets exist (this machine, a studio server or a cloud model), sets a few plugin settings and, through plans, how many GPU minutes each user gets per month. The interface is in English by default and in French; each user picks the language and it is saved per user.
 
-This page is the administration guide. Every user can read the user guide, in English (`docs/user-guide.md`) and in French (`docs/user-guide.fr.md`). Video Producer is built step by step: a section about something that does not exist yet ends with "Available from step N". Generation (step 4) is delivered: takes are real PotionUI generations, with a real estimate, quota, finals and follow-up. The assistant (step 5) and the video export (step 6) are not.
+This page is the administration guide. Every user can read the user guide, in English (`docs/user-guide.md`) and in French (`docs/user-guide.fr.md`). Video Producer is built step by step: a section about something that does not exist yet ends with "Available from step N". Generation (step 4) is delivered: takes are real PotionUI generations, with a real estimate, quota, finals and follow-up. The assistant (step 5) is delivered too: a PotionUI chat mode with four tools (see The assistant mode). The video export (step 6) is not.
 
 ## Requirements
 
@@ -14,6 +14,7 @@ This page is the administration guide. Every user can read the user guide, in En
 - ffmpeg on the PotionUI server, to deliver a video file. See ffmpeg below.
 - For a local engine, a GPU that meets PotionUI's own Hardware Requirements page: a Turing or newer NVIDIA card, driver 580 or newer, 8 GB of VRAM and 16 GB of system RAM as the supported minimum, 16 to 24 GB of VRAM and 32 GB of RAM recommended. Video families need more than the floor; that page has a verdict per family.
 - For a cloud engine, an account and an API key with the provider (OpenRouter or Google AI Studio).
+- For the assistant, a language model configured in PotionUI (Admin → LLM / Assistant: Ollama, OpenAI or Native, for example) and assigned to the users. See The assistant mode.
 - The `jsonschema` Python package, which checks the project documents. The plugin relies on it; the PotionUI image already contains it, and its version is pinned in `constraints.txt`. There is nothing to install.
 
 ## Install and activate
@@ -33,7 +34,7 @@ What you see on the page at this step, and what comes later:
 - The page opens the project that the user opened last, otherwise their most recent project. On a first visit, or when the user has no project left, it creates the starter project "Dawn at the harbour" ("Aube sur le port" in French) and opens it: a synopsis, the global direction in five fields, five shots of 5 seconds to generate, each with its shot prompt, a title, a marker and four empty audio tracks. It has no media, no take, no reference and no 3D scene (a button creates a sample point cloud on demand, marked simulated). Its name, synopsis, shot names, title and marker follow the language of the interface; its global direction and shot prompts follow the prompt language of the project, English by default. Projects are saved on the server as the user works, with a history of versions: File › New project… saves the current project, then starts an empty one, and File › Open… and File › Version history… are real. See Projects and media.
 - The user imports images and videos from the PotionUI library (File › Import files…) and from the gallery (File › From the PotionUI gallery), and audio files from the library, with the multi-select pickers of PotionUI. The page resolves each pick with `POST /media/resolve`, shows real thumbnails and durations (and the frame rate when the library knows it), and plays the real video, images and audio. A media that is already in the project, with the same origin, is not imported twice.
 - The **Generation engine** pop-up of the Production bar is filled from `GET /me` with the engines and presets that the user may run (see Engines). **Generate selection** starts real takes: they are PotionUI generations, and their videos play in the viewer, the Inspector and the Results tab. The estimate shows the time (measured on previous takes of the same preset, engine and resolution), the memory, the quota and, for admins only, the cloud cost. The status bar shows a GPU quota only when a plan sets a limit for the user. A shot with the FL2VA profile and no frame is not blocked: the page warns that it will be generated from text only, and the take card says "text only".
-- The Assistant button, the Window menu and Ctrl+J open the PotionUI chat. The four tools of the Video Producer mode come with step 5.
+- The Assistant button, the Window menu (PotionUI assistant) and Ctrl+J open the PotionUI chat in the Video Producer assistant mode, which has four tools: write the prompt of a shot, fix the conflicts with the direction, split the synopsis into shots and check the continuity. Every change waits for the user's approval; the Direction tab lists what the continuity check found under To check. See The assistant mode.
 - The Final Cut Pro, OpenTimelineIO, EDL and SRT files are real: the browser builds them and the user downloads them. Nothing is written to the export folder yet, and the video export is simulated. Video export comes with step 6.
 - The mixing console plays the audio files that the user imported, for real. It synthesizes (WebAudio) the sounds that the Sound design workshop prepares.
 
@@ -424,7 +425,7 @@ An asset has `id`, `kind` (`video`, `image` or `audio`), `name`, `src` (the addr
 
 A refusal (422 `invalid_doc`) means that the document sent does not match the schema of the backend. The page and the backend ship in the same plugin, so it usually means a browser tab opened before the plugin was updated, or a client other than the page: a tab that still runs a page from before step 4 does not write `engine.preset` and `engine.model`, which is accepted, but a new page against an old backend is refused. The page then shows "The project could not be saved: its content was refused." and keeps the changes in memory; the message of the answer, visible in the network tools of the browser, gives the path of the offending value.
 
-The language of the prompts is the field `promptLanguage` (`en` or `fr`, required, `en` by default in the page). It is a choice per project, independent of the language of the interface, which stays a per-user setting. The backend only stores it: the page uses it for the text of the starter project, the templates and the composer of the prompt library, the contradiction rules, and, from step 5, the assistant. Changing it never rewrites existing text.
+The language of the prompts is the field `promptLanguage` (`en` or `fr`, required, `en` by default in the page). It is a choice per project, independent of the language of the interface, which stays a per-user setting. The backend stores it, and the assistant's tools read it to pick the contradiction rules; the page uses it for the text of the starter project, the templates and the composer of the prompt library, the contradiction rules, and the assistant, which writes shot prompts in it (see The assistant mode). Changing it never rewrites existing text.
 
 ### Media resolution
 
@@ -451,20 +452,112 @@ Video Producer sends a PotionUI notification to the owner of a take when it is r
 
 ## The assistant mode
 
-The Assistant button, the Window menu and the keyboard shortcut (Ctrl+J) open the PotionUI chat, in a chat mode named **Video Producer**. The mode has four tools: write the prompt of a shot, fix the contradictions with the global direction, split a synopsis into shots, and check the continuity between shots. The first three change the project, so each of them asks the user to approve the change before it is applied; the continuity check only reads.
+The assistant is the PotionUI chat, working in a chat mode that this plugin contributes. The **Assistant** button of the project bar, **Window › PotionUI assistant** and Ctrl+J (⌘J on a Mac) open the chat, and a conversation started from a page under `/plugins/video-producer` is in the mode **Video Producer assistant**. The assistant reads the project that is open on the page and has four tools: write the prompt of a shot, fix the contradictions with the global direction, cut a synopsis into shots and check the continuity between shots. It proposes and the user approves: the three tools that write or propose show a preview card in the chat, and nothing changes until the user approves it. The mode has no plugin setting: the model, the tool switches and the chat belong to PotionUI.
 
-The chat needs a language model configured in Admin → LLM / Assistant, like any other chat mode.
+### Requirements
 
-Available from step 5.
+- **A language model, configured and assigned.** In Admin → LLM / Assistant, click **Add configuration**, pick a type such as Ollama, OpenAI or Native, then assign the configuration to the users or groups who use Video Producer. The plugin calls no model itself: the chat uses the model that PotionUI gives the user, like for every other chat mode. Without an assigned configuration the chat is empty: an admin reads "No enabled LLM configurations", a user "Chat is currently unavailable".
+- **A model that can call tools.** The four actions are tools. A model that cannot call them only answers in text.
+- **Tools on.** In the composer of the chat, **Tools** must be on (its tooltip reads "Tools ON" or "Tools OFF"). An admin can also turn a tool off, or lock it on, for one configuration: Admin → LLM / Assistant, open the configuration, tab **Toolset**, group **Video Producer**.
+- **Where the text goes.** The context block described below is sent to the model with every message. With a hosted provider such as OpenAI it leaves your server for that provider; with a model that runs on your own machines (Native, or an Ollama that you host) it does not.
+
+### Mode and context
+
+The mode is declared in `manifest.yml` under `chat_modes`: `id` `video-producer`, `name` "Video Producer assistant", `icon` `film`, `default_route_prefixes` `/plugins/video-producer`, `context_contributor` `backend.chat.context.build_context`, and a `system_prompt` in English that ends with `{{TOOL_HINTS}}`. The four tools are declared under `tools:` with `modes: ["video-producer"]`, so they are visible in this mode only; disabling the plugin removes the mode and its tools.
+
+- **The mode follows the route.** The chat takes the mode whose route prefix is the longest match for the current page, so the page calls no `declareMode`. A conversation keeps the mode it was started in. When the chat holds a conversation started in another mode, its header says "Started in …" and offers **start a new chat**; until then the Video Producer tools and context are not in that conversation.
+- **The system prompt** tells the model to ground its answers in the context block and to name shots by their label; to ask the user to open a project when the block says the page is not open; to write every shot instruction, rewrite and proposed shot in the prompt language of the project and to answer the user in the user's own language, without translating what the user wrote; to keep an instruction to one to three sentences (subject and action, framing, camera movement, light) that does not repeat the global direction; to call the tool instead of writing the new text in its reply; to say nothing is done before the user approves; and, when a tool answers `project_not_found`, `shot_not_found` or `version_conflict`, to say so plainly and suggest reloading the project.
+- **The context.** The page registers the provider `video_producer` when it mounts (`startAssistant` in `frontend/src/lib/assistant.svelte.js`) and removes it when it unmounts. With each message, the host adds its result to the request and `build_context` (`backend/chat/context.py`) turns it into one system block. The provider returns fourteen keys: `projectId`, `projectVersion`, `name`, `promptLanguage`, `workspace`, `selection`, `playhead`, `range`, `synopsis`, `direction`, `production`, `shots` (per shot: `id`, `label`, `start`, `dur`, `stage`, `promptId`, `prompt` cut at 300 characters, `hasFirstFrame`, `hasLastFrame`, `take`), `issues` (the conflicts the page flags: `shotId`, `level`, `text`) and `seams` (the continuity the page measured: `fromShotId`, `toShotId`, `issues` with `kind` and `text`, `measured`).
+- **The block** holds, in this order: the project (name, id, saved version), the prompt language, where the user is (workspace, playhead and the shot under it, selection, range), the synopsis, the direction (generation profile and the five fields), the shots in timeline order (id, label, start and end, stage, take id, frames `none`, `first`, `last` or `first+last`, prompt), the conflicts of the page, the continuity it measured and the production state (state, progress, mode, quality, target, queue). It is bounded to 8,000 characters: the synopsis to 800, each direction field to 240, each shot prompt to 160, 40 shots, 20 conflicts and 20 continuity lines. When it is too long, the list of shots gives way first and ends with "… N more shots not shown." With no `projectId` the block is one fixed line, "Video Producer: the page is not open on a project this turn, so there is no project context."
+- **What is not sent.** Media files and thumbnails, take videos, references, audio tracks, titles, markers, 3D scenes, the engine and the other projects of the user. The model sees no image.
+
+### Tools
+
+Each tool is a class of `backend/chat/tools.py`, in the group **Video Producer**. The label is the one shown on the approval card and in the **Toolset** tab. A successful result is JSON in `ToolResult.data` and carries `project_id`. The project is read from the database with `projects.get_project`, from the `projectId` of the page context; the caller must own it or be an admin, the same rule as the routes (see Projects and media › Access).
+
+| Tool | Label | Approval | Arguments | What it does |
+|---|---|---|---|---|
+| `vp_write_shot_prompt` | Write shot prompt | Yes | `shot_id` (string, an id from the context), `text` (string, 1 to 4,000 characters, the complete new instruction) | Writes the instruction of one shot. Creates the prompt linked to the shot when it has none, otherwise replaces its `text`. The text is stored as given. Result: `project_id`, `shot_id`, `prompt_id`, `text`, `version`. |
+| `vp_fix_conflicts` | Fix conflicts | Yes | `rewrites`: a list of `{shot_id, text}`, 1 to 100 entries, one per shot (a repeated shot is refused) | Rewrites several instructions in one change, typically the conflicts listed in the context. Result: `project_id`, `changes` (each `shot_id`, `prompt_id`, `before`, `after`), `version`. |
+| `vp_split_synopsis` | Split synopsis | Yes | `shots`: a list of `{label, prompt, duration_s}`, 1 to 24 entries; `label` 1 to 34 characters, `prompt` not empty (at most 4,000 characters), `duration_s` from 2 to 15 | Proposes a cut of the synopsis (or of a story the user tells) into shots. Writes nothing. Result: `project_id`, `proposal` (the validated shots). |
+| `vp_check_continuity` | Check continuity | No | None | Reads the project and lists the seams to check. Writes nothing. Result: `project_id`, `seams`, `checked_at`. |
+
+What the user sees on the approval card (`ToolApprovalPreview`):
+
+- `vp_write_shot_prompt`: kind `text_edit`, action "Write shot prompt", target the label of the shot, one block labelled with the shot, carrying the new text and, as `old_text`, the instruction now in force (the shot's own prompt, else the sequence prompt that covers most of the shot), so that PotionUI shows the old and the new text and refuses a stale confirmation.
+- `vp_fix_conflicts`: kind `text_edit`, action "Fix conflicts", target "N shots", one block per shot, labelled with the shot, with `old_text` so that PotionUI shows the old and the new text.
+- `vp_split_synopsis`: kind `timeline`, action "Split synopsis", target "N shots, T s", one row per shot with its time range and "label: beginning of the prompt" (90 characters).
+
+`vp_check_continuity` returns, in timeline order, only the seams that have a problem, each as `from_shot_id`, `to_shot_id`, `from_label`, `to_label` and `issues` (`kind`, `text`, `fix`, and `shot_id` or `rule` when they apply). `text` and `fix` are English sentences. The page writes its own translated text from `kind` and keeps the English one as a fallback. Shots at the stage `source` are skipped. The kinds are:
+
+| `kind` | Made by | When |
+|---|---|---|
+| `no_instruction` | The server | A shot has no instruction: no prompt of its own and no sequence prompt covering it, or an empty one. |
+| `conflict` | The server | The instruction breaks a contradiction rule against the global direction (the issue carries `rule`, see Contradiction rules below). |
+| `duration` | The server | The shot lasts less than 2 s or more than 15 s. |
+| `fl2va_no_frame` | The server | The project profile is FL2VA and the shot has no first frame. |
+| `camera_change` | The server | Two consecutive shots each name a camera move and share none. |
+| `lum`, `warm` | The page | A brightness or color temperature jump between two shots, measured on their thumbnails and sent in `seams`. |
+| `identity` | The page | The similarity score between two takes, sent in `seams`. It stays simulated (see What stays simulated). |
+
+### Approvals and writes to the database
+
+- **Approval.** `vp_write_shot_prompt`, `vp_fix_conflicts` and `vp_split_synopsis` have `requires_approval`. Their `execute` builds the preview and writes nothing; `execute_confirmed` runs once, when the user clicks **Approve** on the card. **Reject**, with or without a reason, runs nothing. `vp_check_continuity` has no approval and runs as soon as the model calls it.
+- **What is written.** Only `vp_write_shot_prompt` and `vp_fix_conflicts` write. They change the `text` of the prompt linked to the shot in the `prompts` of the project document, or add a prompt to it (new ULID `id`, `shotId`, the `start` and `dur` of the shot, `strength` 75, `text`). `vp_fix_conflicts` does all its shots in the same document. Neither tool adds, moves or deletes a shot, nor touches the direction, the synopsis, the media, the takes or `engine`, and neither starts a generation.
+- **One version per approved call.** The document is saved through `projects.save_project`, with the version the tool has just read and the label `Assistant`, so it goes through the same schema check as a save from the page, adds one row to `video_producer_versions` (the **Version history** window shows "Assistant" in it) and counts toward **Versions kept per project**. Nothing is stored when the text did not change.
+- **Concurrent saves.** `execute_confirmed` reads the latest stored document, not the one of the preview, so a save made after the preview is kept and the change goes on top of it. If the project is saved elsewhere between that read and the tool's own save, the save is refused with a version conflict; the tool reads the document again, applies the change again, and fails with `version_conflict` only when that second attempt is refused too.
+- **No write for the other two.** `vp_split_synopsis` and `vp_check_continuity` write no row. The split is applied by the user, on the page, from the Storyboard.
+
+### What the page does with a result
+
+The page registers `onToolApplied` for each of the four tools (`frontend/src/lib/assistant.svelte.js`). A tool that needs approval reaches its handler when the user approves; `vp_check_continuity` reaches it when the assistant's reply is final. A result is delivered once: opening an earlier conversation does not replay it.
+
+- **`vp_write_shot_prompt`, `vp_fix_conflicts`.** A result whose `project_id` is not the open project is `stale`: the chat shows "The assistant changed another project, not the one open here." in place of the assistant's narration. A `version` older than the page's own is a `noop`. Otherwise the page applies the same text to its own document as one undoable change, takes the returned `version` as its saved version (no autosave, the server already has it), and shows "Prompt of “…” updated by the assistant" or "N prompts rewritten by the assistant". It reloads the project (`openProject`) instead when the `version` is more than one ahead of its own, when a shot is missing from its document, or when the user has unsaved edits on the same prompts, with "Project reloaded with the assistant’s changes"; a reload drops unsaved local changes and the undo history.
+- **`vp_split_synopsis`.** The proposal (kept, numbered, with ULID ids) fills `ui.storyProposal`, the page opens the Storyboard and shows "N shots proposed in Storyboard". The user ticks, renames and clicks **Add N shots at the end** in the **Proposed breakdown**, the same list as the **Propose a breakdown** button. For another project, `stale` with "This answer is about another project, so nothing was shown here."
+- **`vp_check_continuity`.** The seams fill the **To check** section of the Direction tab (a dot appears on the tab), and a toast says "N continuity points to check", with a **Show** button when the Direction tab is not on screen, or "Continuity checked: nothing to fix". The section stays until the user dismisses it, leaves the page or opens another project.
+- A host that predates the delivery of tools without approval to `onToolApplied` (see "When `onToolApplied` runs" in `docs/plugin-api.md`) passes the page only the approved calls. The chat still works, but the continuity check shows no **To check** list on the page.
+
+### Errors
+
+A failed call returns `ToolResult(success=False)` with `error` set to `<code>: <message>`, the code first and stable. A failure at the preview goes back to the model, which tells the user; a failure after **Approve** puts the card in the state **Failed** with this text, and the user can click **Retry**.
+
+| Code | When |
+|---|---|
+| `project_not_found` | The page context names no project (the page is not open on one), the project does not exist, or it belongs to another user and the caller is not an admin. |
+| `shot_not_found` | A `shot_id` is not a shot of the stored project: it was deleted, or not saved yet. |
+| `invalid_arguments` | An argument breaks the limits above: missing or empty `shot_id` or `text`, text over 4,000 characters, empty, repeated or more than 100 `rewrites`, more than 24 shots or a label over 34 characters or a duration outside 2 to 15 s in a split. |
+| `version_conflict` | The project was saved elsewhere between the moment the tool read it and the moment it saved, twice in a row (see Concurrent saves). |
+| `invalid_doc`, `doc_too_large` | The save was refused for the reasons of Projects and media › Errors. |
+
+### Contradiction rules and prompt language
+
+The tool and the page apply the same contradiction rules, in the same tables. The tables live in `backend/chat/rules.json`: `flags`, `conflicts` (for `en` and for `fr`, a list of `{id, global, local}` where `global` is a pattern for the direction and `local` a pattern for an instruction), `cameraWords` (one pattern per language, the camera moves) and `messages` (one English sentence per rule `id`). There are four rules, in both languages: `noNeon`, `noText`, `naturalColors` and `stableCamera`. A rule fires when the filled fields of the global direction, joined by spaces, match `global` and the instruction matches `local`.
+
+- **Two copies, one parity test per side.** The backend reads `backend/chat/rules.json` through `backend/chat/rules.py`. The page bundles an identical copy, `frontend/src/lib/rules.json`, through `lib/rules.js`. `tests/test_chat_rules.py` fails when the copies differ, and so does `frontend/src/lib/rules.test.js`. The patterns are JavaScript regular expression sources with the flag `i`; `rules.py` rewrites `\b` so that Python matches the same text as the browser.
+- **Which table applies.** The language of the prompts of the project (`promptLanguage`, `en` when the value is missing or unknown) picks the table, for the page and for the tools, which read it from the stored document. A text written in the other language is not checked.
+- **Where the text of a rule comes from.** The page shows its own translated sentence for a rule (the keys `lib.issue.*` of its dictionaries); the tool result carries the rule `id` and the English `messages` sentence.
+- **Camera moves.** `cameraWords` serves the page (a camera instruction under a Control video) and `camera_change`, which compares the first move named in two consecutive instructions.
+- **What the model writes.** The plugin translates nothing. The block tells the model the prompt language, the model writes in it, and a text is stored as given.
+
+### Suggestions and `chat.prefill`
+
+Three places of the page start the chat with a request already typed: the button **Ask the assistant to check continuity** (Director IA, tab Direction), the link **Ask the PotionUI assistant** of the prompt library and the link **Ask the assistant** of the Sound design workshop. Each calls `suggest(text)`, which calls `chat.prefill(text)` and then `chat.open()`. The texts are in the language of the interface, from the `assistant.suggest.*` keys. Nothing in the page sends a message for the user: `chat.send` is wired in `frontend/src/lib/host.js` and no button uses it.
+
+| Host | What a suggestion does |
+|---|---|
+| It offers `chat.prefill` (the second plugin API batch, pull request M4-S4/PotionUI#4: https://github.com/M4-S4/PotionUI/pull/4, not merged when this section was written) | The chat opens, focused on the composer, with the text in it and not sent. A draft that the user already typed is kept, and the suggestion is then not added. |
+| It does not | `prefill` returns false and `open()` alone runs: the chat opens with an empty composer and the user types the request. |
+
+There is nothing to configure for this: the page tests for `chat.prefill` itself before it calls it.
 
 ## Simulated in this version
 
-The window Help › Simulated features lists eight items. Two of them change in a later step; the other six (the 3D render modes and engine settings, identity check, Gaussian Splat, Control video, voice and sound design, and edit audio for the workshop sounds and the automation curves) stay simulated, as the next section explains. The generation, the takes, the estimate and the engines left the window with step 4.
+The window Help › Simulated features lists eight items. One of them changes in a later step, the video render (step 6). The synopsis breakdown has its real counterpart since step 5, the assistant's split, but the window keeps listing the button that cuts the synopsis into sentences. The other six (the 3D render modes and engine settings, identity check, Gaussian Splat, Control video, voice and sound design, and edit audio for the workshop sounds and the automation curves) stay simulated, as the next section explains. The generation, the takes, the estimate and the engines left the window with step 4.
 
 | Item in the window | In this version | Becomes real |
 |---|---|---|
 | 3D render modes and engine settings | The output modes "3D render" and "3D render + AI" start nothing. The settings greyed in the Advanced workshop are not sent to the engine: the seed (each take draws its own), the final resolution (the final uses the largest resolution of the engine), steps, CFG, LoRA, windows, consistency, post-processing and the Hybrid AV audio driver; nor are the Control videos and the Hybrid builder weights. Takes made by earlier versions keep their numbered thumbnail, marked Simulated, and are read only. | Stays simulated. |
-| Synopsis breakdown | One sentence becomes one shot. | Step 5, with the assistant tool that splits a synopsis. |
+| Synopsis breakdown | The Propose a breakdown button and Production › Split synopsis into shots… cut the synopsis into sentences: one sentence becomes one shot. The window still lists them. | Delivered with step 5 by the assistant tool `vp_split_synopsis`, whose proposal fills the same Proposed breakdown list. The button keeps its sentence cut. |
 | Video render | No video file is written. The Final Cut Pro, OpenTimelineIO, EDL and SRT files are real downloads. | Step 6, for H.264 MP4 and VP9 WebM. |
 
 ## What stays simulated
@@ -473,14 +566,14 @@ These parts keep a simulated interface, are marked with a gray dashed badge (nev
 
 | Item | Why it stays simulated |
 |---|---|
-| Identity score between shots | PotionUI offers no identity measure to plugins. Color matching is measured on the real frames, and reference-guided generation (Ref2VA) is real with MiniMax-H3. |
+| Identity score between shots | PotionUI offers no identity measure to plugins. Color matching is measured on the real frames, and reference-guided generation (Ref2VA) is real with MiniMax-H3. The assistant's continuity check passes on the identity points of the page (`identity`), which come from this score. |
 | Lip sync, generated voices and the rest of the Sound design workshop (Ambience, Foley, Texture, Impact, Music) | PotionUI's marketplace has no speech or sound-effect preset; the song preset (MiniMax-Music3) is not connected to the workshop. MiniMax-H3 makes picture and soundtrack in one pass, so there is no separate lip-sync step to drive. The text of the dialogue does feed the subtitles. The sounds that the workshop prepares are synthesized by the browser (WebAudio), and the mixing console plays them like that; the audio files that the user imports play for real. |
 | ProRes, H.265 and audio stems | PotionUI's video converter writes H.264 MP4 or VP9 WebM only, and nothing renders audio per role. |
 | Automation curves of the mixing console | The Auto button only switches a mode; no curve is recorded. |
 | 3D scene, Gaussian Splat, 3D capture, imported Control video, and the production modes 3D render and 3D render + AI | The scene stays a 2D point preview; Gaussian Splat files are referenced and not loaded; the control video is not rendered from the scene and not sent to an engine. The "3D render" and "3D render + AI" modes start nothing. |
 | Engine settings that are not sent | A preset exposes only the controls it declares; MiniMax-H3, for example, has no guidance and no negative prompt. What the server reads from the project to generate is the direction, the shot prompts, the frames, the references, the shots and the choice of engine, plus the quality and the number of variants. Everything else in `engine` stays in the project and drives nothing: `seed`, `quality`, `resolution`, `steps`, `guidance`, `overlap`, `windowLen`, `loras`, `post.*`, `consistency`, `lockIdentity`, `motionPriority`, `audioDriver`, `lipSync`, `offset`, `followCut`, `naming` and `autoInsert`, as well as `hybrid` and `profiles`. The Advanced workshop greys these controls, in its three steps and in the expert settings, and marks them with the badge "Not sent with this engine", whose tooltip says that the setting stays in the project but does not change the takes; **Variants per window** stays active. The Hybrid builder weights and the guidance of a Control video are not sent either, and carry no badge. The seed of a take is drawn by the server. |
 
-Real since step 3: saved projects with their versions, imports through the PotionUI pickers and the gallery, thumbnails, the playback of video, images and audio, and the mixing console playing the audio files that users import. Real since step 4: takes as real video files, finals by upscale (SeedVR2 or MiniMax H3) or by re-render, the estimate, the quota, the time calibration and the notifications. Real once the other steps are delivered: the PotionUI chat assistant, color analysis on the real thumbnails of every take, FCPXML, OTIO, EDL and SRT exports, the assembled MP4 or WebM export, and dialogue text in the subtitles.
+Real since step 3: saved projects with their versions, imports through the PotionUI pickers and the gallery, thumbnails, the playback of video, images and audio, and the mixing console playing the audio files that users import. Real since step 4: takes as real video files, finals by upscale (SeedVR2 or MiniMax H3) or by re-render, the estimate, the quota, the time calibration and the notifications. Real since step 5: the PotionUI chat assistant, in the Video Producer assistant mode with its four tools. Real once the other steps are delivered: color analysis on the real thumbnails of every take, FCPXML, OTIO, EDL and SRT exports, the assembled MP4 or WebM export, and dialogue text in the subtitles.
 
 ## Troubleshooting
 
@@ -502,6 +595,13 @@ Real since step 3: saved projects with their versions, imports through the Potio
 - **A user cannot find an earlier version**: the history keeps only the **Versions kept per project** latest versions (50 by default). Raise the setting; versions already pruned do not come back.
 - **Imported media do not show or play**: the library item or the generation was removed, so its URL no longer answers (and a new import of it answers 404 `media_not_found`). The user imports the media again. A take whose generation was deleted from the gallery no longer plays either.
 - **A user sees the wrong language**: it is stored per user. Change it in Video Producer › Preferences… of the page, or with the `EN` or `FR` reminder of the status bar. Until a user chooses, the page follows the language of the browser.
+- **The chat says "Chat is currently unavailable" (an admin reads "No enabled LLM configurations")**: no language model configuration is enabled and assigned to the user. Add one in Admin → LLM / Assistant and assign it to the user or to a group (see The assistant mode › Requirements).
+- **The assistant answers in text and never shows an approval card**: **Tools** is off in the composer of the chat (tooltip "Tools OFF"), or the tool is off for that configuration (Admin → LLM / Assistant, the configuration, tab **Toolset**, group **Video Producer**), or the model cannot call tools.
+- **The assistant knows nothing of the project, or the chat header says "Started in …"**: the conversation was started in another mode and keeps it. The user opens the chat from the Video Producer page and clicks **start a new chat**.
+- **The assistant says the page is not open on a project**: the page sends its context only while it is open on a project. The user opens a project in Video Producer and asks again; a tool called without a project answers `project_not_found`.
+- **A card shows Failed with `version_conflict`, `project_not_found` or `shot_not_found`**: the project was saved elsewhere at the very moment of the save, or was deleted, or the shot is no longer in the saved project. The user reloads the project and clicks **Retry** on the card, or asks again (see The assistant mode › Errors).
+- **A change is approved and the page shows nothing**: the result was for another project (the chat shows "The assistant changed another project, not the one open here."). Nothing else to fix: the user opens that project.
+- **A suggestion opens the chat with an empty box**: the host has no `chat.prefill` (see The assistant mode › Suggestions), or the composer already held a draft, which is kept.
 
 Exports come with step 6.
 
@@ -513,6 +613,8 @@ Run the tests of the plugin from the root of the PotionUI repository, with the P
 python -m pytest content/plugins/marketplace/video-producer/tests -q -m "not requires_gpu and not requires_models and not gc_sensitive"
 python -m pytest tests/architecture tests/plugin_api tests/plugins/marketplace -q
 ```
+
+The first command includes the assistant tests: `tests/test_chat_tools.py` (the four tools, their previews, writes and error codes), `tests/test_chat_context.py` (the context block and its bounds) and `tests/test_chat_rules.py` (the rule tables and their parity with the page copy). The second one runs `tests/plugins/marketplace/test_video_producer_manifest.py`, which loads the mode and the four tools through the plugin registry.
 
 The presets of the `presets` folder go through the linter of the PotionUI presets, which also renders their pipelines:
 
@@ -539,7 +641,9 @@ node --test "frontend/src/i18n/*.test.js"
 node --test "frontend/src/lib/*.test.js"
 ```
 
-The first command checks the two dictionaries: same keys and same parameters in English and in French, every key used by the page exists, and every command and menu of `lib/commands.js` has a label. The second one covers the shortcut notation per platform, the keyboard focus rules, the icons and the engine and take helpers of `lib/generation.js`.
+The first command checks the two dictionaries (the `assistant` domain included): same keys and same parameters in English and in French, every key used by the page exists, and every command and menu of `lib/commands.js` has a label. The second one covers the shortcut notation per platform, the keyboard focus rules, the icons, the engine and take helpers of `lib/generation.js`, the assistant helpers of `lib/assistant.js` (the context, how a tool result is applied, proposals and the check list) and the shared rules of `lib/rules.js`, with the parity of `lib/rules.json`.
+
+To change a contradiction rule, edit `backend/chat/rules.json`, copy the file to `frontend/src/lib/rules.json` and rebuild the page: the Python and node parity tests fail while the two copies differ.
 
 This page and the two user guides are listed under `docs:` in the manifest, with this page first because the Setup section links to the first entry.
 

@@ -113,7 +113,7 @@
 	"simulations.render3d.title": "3D render modes and engine settings",
 	"simulations.render3d.text": "AI generation is real. The “3D render” and “3D render + AI” output modes start nothing yet. The settings greyed in the Advanced workshop are not sent to the engine: the seed (each take draws its own), the final resolution (the final uses the largest resolution of the engine), steps, CFG, LoRA, windows, consistency, post-processing and the Hybrid AV audio driver; nor are the Control videos and the Hybrid builder weights. Takes made by earlier versions keep their numbered thumbnail.",
 	"simulations.synopsis.title": "Synopsis breakdown",
-	"simulations.synopsis.text": "One sentence becomes one shot; in the product, the assistant will propose the breakdown.",
+	"simulations.synopsis.text": "The Propose a breakdown button only turns each sentence into a shot; the assistant proposes the real breakdown from the whole synopsis.",
 	"simulations.identity.title": "Identity check",
 	"simulations.identity.text": "The similarity between takes is simulated. The color check really analyzes the images.",
 	"simulations.render.title": "Video render",

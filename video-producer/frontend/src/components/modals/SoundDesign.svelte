@@ -5,7 +5,7 @@
 	import { ui, doc, act, newAsset, toast, productionRange, secs, round } from '../../lib/state.svelte.js';
 	import { audition } from '../../lib/playback.svelte.js';
 	import { audioRoleLabel } from '../../lib/catalog.js';
-	import { chat } from '../../lib/host.js';
+	import { suggest } from '../../lib/assistant.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { ulid } from '../../lib/ulid.js';
 	import Modal from './Modal.svelte';
@@ -113,8 +113,9 @@
 	}
 
 	function askAssistant() {
+		const text = t('assistant.suggest.sound', { type: typeLabel(type), start: secs(start), end: secs(end) });
 		ui.modal = null;
-		chat.open();
+		suggest(text);
 	}
 
 	function prepare() {

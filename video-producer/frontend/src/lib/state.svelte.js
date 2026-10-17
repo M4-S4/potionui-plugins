@@ -3,6 +3,8 @@ import { emptyDoc, newAsset, newClip, promptLanguageOf } from './starter.js';
 import { toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
 import { resetTakes } from './takes.svelte.js';
+import { compileRules, conflictIds, namesCamera } from './rules.js';
+import sharedRules from './rules.json';
 
 export { newAsset, newClip };
 
@@ -425,24 +427,14 @@ export function globalPrompt() {
 		.join(' ');
 }
 
-const conflicts = {
-	fr: [
-		{ global: /aucun n[ée]on|pas de n[ée]on|sans n[ée]on/i, local: /n[ée]on/i, why: () => t('lib.issue.noNeon') },
-		{ global: /aucun texte|sans texte/i, local: /\btexte\b|sous-titre|logo/i, why: () => t('lib.issue.noText') },
-		{ global: /couleurs naturelles/i, local: /monochrome|noir et blanc|fluo/i, why: () => t('lib.issue.naturalColors') },
-		{ global: /cam[ée]ra stable|lente/i, local: /cam[ée]ra (à l’épaule|tremblée)|rapide|frénétique/i, why: () => t('lib.issue.stableCamera') }
-	],
-	en: [
-		{ global: /\bno neons?\b|without neons?/i, local: /\bneons?\b/i, why: () => t('lib.issue.noNeon') },
-		{ global: /\bno (on-screen )?text\b|without text/i, local: /\btext\b|subtitles?|\blogo/i, why: () => t('lib.issue.noText') },
-		{ global: /natural colou?rs/i, local: /monochrome|black and white|black-and-white|fluo|fluorescent/i, why: () => t('lib.issue.naturalColors') },
-		{ global: /(steady|stable) camera|\bslow\b/i, local: /handheld|shaky camera|\bfast\b|\brapid\b|frantic/i, why: () => t('lib.issue.stableCamera') }
-	]
+const rules = compileRules(sharedRules);
+const issueTexts = {
+	noNeon: () => t('lib.issue.noNeon'),
+	noText: () => t('lib.issue.noText'),
+	naturalColors: () => t('lib.issue.naturalColors'),
+	stableCamera: () => t('lib.issue.stableCamera')
 };
-const cameraWords = {
-	fr: /travelling|survol|panoramique|orbite|arc de cam|dolly|zoom|élévation|plan fixe|mouvement fluide|déplacement latéral/i,
-	en: /tracking shot|travelling|flyover|fly-over|\bpan\b|panning|orbit|camera arc|dolly|zoom|crane|static shot|fluid movement|lateral move/i
-};
+export const ruleText = (id) => issueTexts[id]?.() ?? null;
 
 function controlFor(p) {
 	return doc.controls.find((c) => (p.shotId && c.shotId ? c.shotId === p.shotId : overlaps(c.start, c.dur, [p.start, p.start + p.dur])));
@@ -453,9 +445,9 @@ export function promptIssues(p) {
 	const g = globalPrompt();
 	const language = promptLanguageOf(doc.promptLanguage);
 	const out = [];
-	for (const c of conflicts[language]) if (c.global.test(g) && c.local.test(p.text)) out.push({ level: 'conflict', text: c.why() });
+	for (const id of conflictIds(rules, language, g, p.text)) out.push({ level: 'conflict', text: ruleText(id) ?? id });
 	const ctrl = controlFor(p);
-	if (ctrl && cameraWords[language].test(p.text)) out.push({ level: 'control', text: t('lib.issue.controlCamera', { name: ctrl.name }) });
+	if (ctrl && namesCamera(rules, language, p.text)) out.push({ level: 'control', text: t('lib.issue.controlCamera', { name: ctrl.name }) });
 	if (!p.text.trim()) out.push({ level: 'missing', text: t('lib.issue.emptyPrompt') });
 	return out;
 }
@@ -529,20 +521,6 @@ export function acceptProposal() {
 	});
 	ui.storyProposal = null;
 	toast(t('lib.toast.shotsAdded', { count: list.length }), 'success');
-}
-
-export function contextSnapshot() {
-	const p = ui.production;
-	return {
-		workspace: ui.workspace,
-		selection: ui.selection ? { ...ui.selection } : null,
-		playhead: round(ui.playhead, 0.04),
-		range: ui.range ? { in: ui.range.in, out: ui.range.out } : null,
-		direction: $state.snapshot(doc.direction),
-		promptLanguage: promptLanguageOf(doc.promptLanguage),
-		synopsis: doc.synopsis,
-		production: { target: p.target, mode: p.mode, quality: p.quality, state: p.state, progress: Math.round(p.progress), queue: p.queue.length }
-	};
 }
 
 export function replaceDoc(next) {

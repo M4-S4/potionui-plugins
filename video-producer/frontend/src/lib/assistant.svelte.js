@@ -1,0 +1,156 @@
+import { t } from '../i18n/index.svelte.js';
+import { doc, ui, act, toast, round, secs, clipLabel, allIssues, ruleText } from './state.svelte.js';
+import { project, openProject, savedSnapshot, markSaved } from './project.svelte.js';
+import { promptLanguageOf } from './starter.js';
+import { seams } from './continuity.svelte.js';
+import { chat } from './host.js';
+import { ulid } from './ulid.js';
+import { applyPrompts, issuesContext, promptChanges, promptPlan, proposalFrom, reviewCount, reviewFrom, seamsContext, shotsContext } from './assistant.js';
+
+export const review = $state({ current: null });
+
+const MIN_SHOT_S = 2;
+const MAX_SHOT_S = 15;
+const clipOf = (id) => (id ? (doc.clips.find((c) => c.id === id) ?? null) : null);
+const nameOf = (id, fallback) => (clipOf(id) ? clipLabel(clipOf(id)) : fallback);
+
+export function seamNames(seam) {
+	return { from: nameOf(seam.fromShotId, seam.fromLabel), to: nameOf(seam.toShotId, seam.toLabel) };
+}
+
+function issueNames(seam, issue) {
+	const { from, to } = seamNames(seam);
+	const shot = issue.shotId ? nameOf(issue.shotId, issue.shotId === seam.fromShotId ? from : to) : to;
+	return { from, to, shot };
+}
+
+const durationOf = (issue) => (clipOf(issue.shotId) ? secs(clipOf(issue.shotId).dur) : '');
+
+const seamTexts = {
+	no_instruction: (n) => n.shot && t('assistant.seam.no_instruction', { shot: n.shot }),
+	conflict: (n, i) => n.shot && ruleText(i.rule) && t('assistant.seam.conflict', { shot: n.shot, rule: ruleText(i.rule) }),
+	duration: (n, i) => n.shot && durationOf(i) && t('assistant.seam.duration', { shot: n.shot, duration: durationOf(i), min: MIN_SHOT_S, max: MAX_SHOT_S }),
+	fl2va_no_frame: (n) => n.shot && t('assistant.seam.fl2va_no_frame', { shot: n.shot }),
+	camera_change: (n) => n.from && n.to && t('assistant.seam.camera_change', { from: n.from, to: n.to }),
+	lum: (n) => n.from && n.to && t('assistant.seam.lum', { from: n.from, to: n.to }),
+	warm: (n) => n.from && n.to && t('assistant.seam.warm', { from: n.from, to: n.to }),
+	identity: (n) => n.from && n.to && t('assistant.seam.identity', { from: n.from, to: n.to })
+};
+
+const fixTexts = {
+	no_instruction: () => t('assistant.fix.no_instruction'),
+	conflict: () => t('assistant.fix.conflict'),
+	duration: () => t('assistant.fix.duration', { min: MIN_SHOT_S, max: MAX_SHOT_S }),
+	fl2va_no_frame: () => t('assistant.fix.fl2va_no_frame'),
+	camera_change: (n) => n.to && t('assistant.fix.camera_change', { to: n.to }),
+	lum: () => t('assistant.fix.lum'),
+	warm: () => t('assistant.fix.warm'),
+	identity: () => t('assistant.fix.identity')
+};
+
+export function reviewText(seam, issue) {
+	return seamTexts[issue.kind]?.(issueNames(seam, issue), issue) || issue.text;
+}
+
+export function reviewFix(seam, issue) {
+	return fixTexts[issue.kind]?.(issueNames(seam, issue), issue) || issue.fix;
+}
+
+export function contextSnapshot() {
+	const p = ui.production;
+	return {
+		projectId: project.id,
+		projectVersion: project.version,
+		name: doc.name,
+		promptLanguage: promptLanguageOf(doc.promptLanguage),
+		workspace: ui.workspace,
+		selection: ui.selection ? { ...ui.selection } : null,
+		playhead: round(ui.playhead, 0.04),
+		range: ui.range ? { in: ui.range.in, out: ui.range.out } : null,
+		synopsis: doc.synopsis,
+		direction: $state.snapshot(doc.direction),
+		production: { target: p.target, mode: p.mode, quality: p.quality, state: p.state, progress: Math.round(p.progress), queue: p.queue.length },
+		shots: shotsContext(doc, clipLabel),
+		issues: issuesContext(allIssues()),
+		seams: seamsContext(seams())
+	};
+}
+
+export function suggest(text) {
+	chat.prefill(text);
+	chat.open();
+}
+
+export function showReview() {
+	ui.workspace = 'director';
+	ui.dockTab = 'direction';
+	ui.sidebarOpen = true;
+}
+
+function reload() {
+	openProject(project.id).then(
+		(result) => (result.ok ? toast(t('assistant.toast.reloaded'), 'warning') : toast(t('assistant.toast.reloadFailed'), 'error')),
+		() => toast(t('assistant.toast.reloadFailed'), 'error')
+	);
+}
+
+function appliedToast(tool, changes) {
+	if (tool === 'vp_fix_conflicts') return toast(t('assistant.toast.fixed', { count: changes.length }), 'success');
+	toast(t('assistant.toast.prompt', { shot: clipLabel(doc.clips.find((c) => c.id === changes[0].shotId)) }), 'success');
+}
+
+export function applyPromptResult(tool, result) {
+	if (result?.status === 'pending_approval') return { status: 'noop' };
+	const changes = promptChanges(tool, result);
+	const saved = savedSnapshot();
+	const plan = promptPlan({ result, changes, projectId: project.id, version: project.version, saved, current: doc });
+	if (plan === 'stale') return { status: 'stale', message: t('assistant.stale.write') };
+	if (plan === 'noop') return { status: 'noop' };
+	if (plan === 'reload') {
+		reload();
+		return { status: 'applied' };
+	}
+	act(() => applyPrompts(doc, changes));
+	markSaved(result.version, applyPrompts(saved, changes));
+	appliedToast(tool, changes);
+	return { status: 'applied' };
+}
+
+export function applyProposal(result) {
+	if (result?.status === 'pending_approval') return { status: 'noop' };
+	if (!project.id || result?.project_id !== project.id) return { status: 'stale', message: t('assistant.stale.read') };
+	const proposal = proposalFrom(result, ulid);
+	if (!proposal.length) return { status: 'noop' };
+	ui.storyProposal = proposal;
+	ui.workspace = 'storyboard';
+	ui.sidebarOpen = true;
+	toast(t('assistant.toast.proposal', { count: proposal.length }), 'success');
+	return { status: 'applied' };
+}
+
+export function applyReview(result) {
+	if (result?.status === 'pending_approval') return { status: 'noop' };
+	if (!project.id || result?.project_id !== project.id) return { status: 'stale', message: t('assistant.stale.read') };
+	const next = reviewFrom(result);
+	if (!next) return { status: 'noop' };
+	review.current = next;
+	const count = reviewCount(review.current);
+	const visible = ui.workspace === 'director' && ui.dockTab === 'direction' && ui.sidebarOpen;
+	const message = count ? t('assistant.toast.review', { count }) : t('assistant.toast.reviewClear');
+	toast(message, count ? 'warning' : 'success', visible ? undefined : { label: t('assistant.toast.show'), run: showReview });
+	return { status: 'applied' };
+}
+
+export function startAssistant() {
+	const offs = [
+		chat.provideContext('video_producer', contextSnapshot),
+		chat.onToolApplied('vp_write_shot_prompt', (result) => applyPromptResult('vp_write_shot_prompt', result)),
+		chat.onToolApplied('vp_fix_conflicts', (result) => applyPromptResult('vp_fix_conflicts', result)),
+		chat.onToolApplied('vp_split_synopsis', applyProposal),
+		chat.onToolApplied('vp_check_continuity', applyReview)
+	];
+	return () => {
+		for (const off of offs) off();
+		review.current = null;
+	};
+}
