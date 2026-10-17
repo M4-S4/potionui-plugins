@@ -117,7 +117,7 @@
 	"simulations.identity.title": "Contrôle d’identité",
 	"simulations.identity.text": "La similarité entre prises est simulée. Le contrôle de couleur, lui, analyse réellement les images.",
 	"simulations.render.title": "Rendu vidéo",
-	"simulations.render.text": "Aucun fichier vidéo n’est écrit. Les exports Final Cut, OTIO, EDL et SRT produisent de vrais fichiers.",
+	"simulations.render.text": "Les exports vidéo web et réseaux sociaux sont réels : ffmpeg assemble le montage sur le serveur et le MP4 arrive dans votre bibliothèque. Le fichier maître (ProRes), l’archive (H.265) et les stems audio restent simulés. Les exports Final Cut, OTIO, EDL et SRT produisent de vrais fichiers à partir du projet enregistré.",
 	"simulations.splat.title": "Gaussian Splat",
 	"simulations.splat.text": "Le fichier référencé n’est pas chargé ; la scène d’essai est un nuage de points généré.",
 	"simulations.guide.title": "Control video",

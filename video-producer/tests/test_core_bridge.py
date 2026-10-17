@@ -817,3 +817,101 @@ def test_the_driver_of_a_preset_is_read_from_its_template(monkeypatch):
     assert core_bridge.preset_driver("01CLOUD") == "cloud.openrouter"
     assert core_bridge.preset_driver("01NATIVE") is None
     assert core_bridge.preset_driver("01NONE") is None
+
+
+class _Driver:
+    def __init__(self, root=None, blobs=None):
+        self.root = root
+        self.blobs = blobs or {}
+
+    def local_path(self, key):
+        return None if self.root is None else self.root / key
+
+    def exists(self, key):
+        return key in self.blobs
+
+    def get_bytes(self, key):
+        return self.blobs[key]
+
+
+def _media_container(monkeypatch, history, library, uploads=None):
+    repository = SimpleNamespace(get_by_filename=lambda name, user_id: (uploads or {}).get((name, user_id)))
+    _container(
+        monkeypatch,
+        file_service=SimpleNamespace(storage_driver=history),
+        media_store=SimpleNamespace(storage_driver=library, upload_repo=repository),
+    )
+
+
+def test_media_file_path_is_the_absolute_local_path_of_a_key_or_none_on_object_storage(monkeypatch, tmp_path):
+    _media_container(monkeypatch, _Driver(tmp_path / "history"), _Driver())
+
+    assert core_bridge.media_file_path("history", "generations/d/g/1.mp4") == str((tmp_path / "history" / "generations/d/g/1.mp4").resolve())
+    assert core_bridge.media_file_path("library", "uploads/a.mp4") is None
+
+
+def test_local_media_file_uses_the_local_file_or_copies_the_bytes_into_the_folder(monkeypatch, tmp_path):
+    root = tmp_path / "storage"
+    (root / "generations").mkdir(parents=True)
+    (root / "generations" / "1.mp4").write_bytes(b"video")
+    _media_container(monkeypatch, _Driver(root), _Driver(blobs={"uploads/a.wav": b"sound"}))
+    folder = tmp_path / "job"
+    folder.mkdir()
+
+    assert core_bridge.local_media_file("history", "generations/1.mp4", folder) == root / "generations" / "1.mp4"
+    assert core_bridge.local_media_file("history", "generations/missing.mp4", folder) is None
+    copied = core_bridge.local_media_file("library", "uploads/a.wav", folder)
+    assert copied.parent == folder and copied.read_bytes() == b"sound"
+    assert core_bridge.local_media_file("library", "uploads/gone.wav", folder) is None
+
+
+def test_upload_item_reads_the_library_item_of_an_uploads_key_of_the_user(monkeypatch):
+    upload = SimpleNamespace(id="item-1", original_filename="cut.mp4", width=1920, height=1080)
+    _media_container(monkeypatch, _Driver(), _Driver(), uploads={("0f0e.mp4", "user-1"): upload})
+
+    assert core_bridge.upload_item("user-1", "uploads/0f0e.mp4") == {"item_id": "item-1", "filename": "cut.mp4", "width": 1920, "height": 1080}
+    assert core_bridge.upload_item("user-2", "uploads/0f0e.mp4") is None
+
+
+def test_storage_directory_is_the_applications_file_storage_directory_made_absolute(monkeypatch, tmp_path):
+    class FakeSettings:
+        def __init__(self, repository):
+            self.repository = repository
+
+        def get_file_storage_directory(self):
+            return str(tmp_path / "storage")
+
+    monkeypatch.setattr(core_bridge, "Settings", FakeSettings)
+    monkeypatch.setattr(core_bridge, "SettingRepository", lambda: "repository")
+
+    assert core_bridge.storage_directory() == (tmp_path / "storage").resolve()
+
+
+async def test_extract_frame_and_save_user_media_go_to_the_core_as_the_user(monkeypatch, tmp_path):
+    calls = []
+
+    async def extract_frame(user, ref, at="last"):
+        calls.append(("frame", user.id, ref, at))
+        return {"value": "uploads/f.png", "media_type": "image", "original_filename": "f.png", "origin": None}
+
+    async def save_user_media(user, path):
+        calls.append(("save", user.id, path))
+        return {"value": "uploads/v.mp4", "media_type": "video", "original_filename": "v.mp4", "origin": None}
+
+    monkeypatch.setattr(core_bridge, "api_media", SimpleNamespace(extract_frame=extract_frame, save_user_media=save_user_media))
+    user = SimpleNamespace(id="user-1")
+    ref = {"kind": "history", "generation_id": "g", "file_id": "f"}
+
+    frame = await core_bridge.extract_frame(user, ref, 2.5)
+    saved = await core_bridge.save_user_media(user, str(tmp_path / "v.mp4"))
+
+    assert frame["value"] == "uploads/f.png" and saved["value"] == "uploads/v.mp4"
+    assert calls == [("frame", "user-1", ref, 2.5), ("save", "user-1", tmp_path / "v.mp4")]
+
+
+def test_the_transcode_types_are_the_ones_the_core_exports():
+    from src.plugin_api import media
+
+    assert core_bridge.TranscodeSpec is media.TranscodeSpec
+    assert core_bridge.VideoTranscodeError is media.VideoTranscodeError
+    assert issubclass(core_bridge.FfmpegUnavailableError, core_bridge.VideoTranscodeError)

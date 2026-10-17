@@ -1,0 +1,541 @@
+{
+  "doc": {
+    "name": "Aube & marée",
+    "fps": 25,
+    "aspect": "16:9",
+    "resolution": "1080p",
+    "promptLanguage": "en",
+    "direction": {
+      "univers": "",
+      "personnages": "",
+      "photographie": "",
+      "palette": "",
+      "rythme": "",
+      "mode": "FL2VA"
+    },
+    "synopsis": "A fishing harbour wakes up before the tide.",
+    "clips": [
+      {
+        "assetId": "gen-01M5R2W7F6Z126TXG7H111YRDN",
+        "start": 0,
+        "dur": 5,
+        "srcIn": 0,
+        "label": "Le port endormi",
+        "stage": "final",
+        "take": "01M5R2W7F6Z126TXG7H111YRDN",
+        "fadeIn": 0.5,
+        "fadeOut": 0,
+        "exposure": 0,
+        "contrast": 100,
+        "saturation": 100,
+        "temperature": 0,
+        "preset": "Original",
+        "flag": null,
+        "id": "01M5R0CLIP0000000000000001"
+      },
+      {
+        "assetId": "gen-01M5R3P2RJX9DV882508WPJC3X",
+        "start": 5,
+        "dur": 4.2,
+        "srcIn": 0.4,
+        "label": "Les mains du pêcheur",
+        "stage": "draft",
+        "take": "01M5R3P2RJX9DV882508WPJC3X",
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "exposure": 0.2,
+        "contrast": 110,
+        "saturation": 90,
+        "temperature": 15,
+        "preset": "Original",
+        "flag": null,
+        "id": "01M5R0CLIP0000000000000002"
+      },
+      {
+        "assetId": null,
+        "start": 9.2,
+        "dur": 3,
+        "srcIn": 0,
+        "label": "Le départ <large>",
+        "stage": "todo",
+        "take": null,
+        "fadeIn": 0,
+        "fadeOut": 0,
+        "exposure": 0,
+        "contrast": 100,
+        "saturation": 100,
+        "temperature": 0,
+        "preset": "Original",
+        "flag": null,
+        "id": "01M5R0CLIP0000000000000003"
+      },
+      {
+        "assetId": "01M5R0SRCHARBOURWIDE00000V",
+        "start": 12.2,
+        "dur": 3.5,
+        "srcIn": 0.25,
+        "label": "",
+        "stage": "source",
+        "take": null,
+        "fadeIn": 0,
+        "fadeOut": 1,
+        "exposure": 0,
+        "contrast": 100,
+        "saturation": 100,
+        "temperature": 0,
+        "preset": "Original",
+        "flag": null,
+        "id": "01M5R0CLIP0000000000000004"
+      }
+    ],
+    "audio": [
+      {
+        "id": "01M5R0AUDI0000000000000002",
+        "assetId": "01M5R0SRCDAWNTHEME0000000A",
+        "lane": "A2",
+        "start": 0,
+        "dur": 15.7,
+        "srcIn": 2,
+        "fadeIn": 1,
+        "fadeOut": 2,
+        "gain": -6
+      },
+      {
+        "id": "01M5R0AUDI0000000000000001",
+        "assetId": "01M5R0SRCFISHERMANLINE000A",
+        "lane": "A1",
+        "start": 6,
+        "dur": 2.5,
+        "srcIn": 0,
+        "fadeIn": 0.1,
+        "fadeOut": 0.2,
+        "gain": -3
+      },
+      {
+        "id": "01M5R0AUDI0000000000000003",
+        "assetId": "01M5R0SRCGULLCRIES0000000A",
+        "lane": "A1",
+        "start": 10,
+        "dur": 1.5,
+        "srcIn": 0.5,
+        "fadeIn": 0,
+        "fadeOut": 0.5,
+        "gain": -1.5
+      }
+    ],
+    "titles": [
+      {
+        "id": "01M5R0TITL0000000000000001",
+        "text": "Aube & marée",
+        "sub": "un départ à l’aube",
+        "start": 0,
+        "dur": 4
+      },
+      {
+        "id": "01M5R0TITL0000000000000002",
+        "text": "Fin",
+        "sub": "",
+        "start": 13.5,
+        "dur": 2.2
+      }
+    ],
+    "prompts": [],
+    "frames": [],
+    "controls": [],
+    "plans3d": [],
+    "markers": [],
+    "references": [],
+    "scenes": [],
+    "lanes": [
+      {
+        "id": "A1",
+        "name": "Dialogue",
+        "role": "Dialogue",
+        "vol": 0,
+        "pan": 0,
+        "mute": false,
+        "solo": false,
+        "automation": "off",
+        "sends": {
+          "R1": -18,
+          "D1": -60
+        },
+        "inserts": [
+          {
+            "type": "eq",
+            "on": true,
+            "low": 0,
+            "mid": 0,
+            "high": 2
+          },
+          {
+            "type": "comp",
+            "on": true,
+            "threshold": -18,
+            "ratio": 3,
+            "attack": 10,
+            "release": 120
+          }
+        ]
+      },
+      {
+        "id": "A2",
+        "name": "Music",
+        "role": "Musique",
+        "vol": -2,
+        "pan": 0,
+        "mute": false,
+        "solo": false,
+        "automation": "off",
+        "sends": {
+          "R1": -12,
+          "D1": -60
+        },
+        "inserts": [
+          {
+            "type": "eq",
+            "on": true,
+            "low": 0,
+            "mid": 0,
+            "high": 0
+          },
+          {
+            "type": "comp",
+            "on": false,
+            "threshold": -18,
+            "ratio": 3,
+            "attack": 10,
+            "release": 120
+          }
+        ]
+      },
+      {
+        "id": "A3",
+        "name": "Ambience",
+        "role": "Ambiance",
+        "vol": -6,
+        "pan": -0.2,
+        "mute": false,
+        "solo": false,
+        "automation": "off",
+        "sends": {
+          "R1": -12,
+          "D1": -60
+        },
+        "inserts": [
+          {
+            "type": "eq",
+            "on": true,
+            "low": 0,
+            "mid": 0,
+            "high": 0
+          },
+          {
+            "type": "comp",
+            "on": false,
+            "threshold": -18,
+            "ratio": 3,
+            "attack": 10,
+            "release": 120
+          }
+        ]
+      },
+      {
+        "id": "A4",
+        "name": "SFX",
+        "role": "SFX",
+        "vol": -4,
+        "pan": 0.3,
+        "mute": false,
+        "solo": false,
+        "automation": "off",
+        "sends": {
+          "R1": -12,
+          "D1": -60
+        },
+        "inserts": [
+          {
+            "type": "eq",
+            "on": true,
+            "low": 0,
+            "mid": 0,
+            "high": 0
+          },
+          {
+            "type": "comp",
+            "on": false,
+            "threshold": -18,
+            "ratio": 3,
+            "attack": 10,
+            "release": 120
+          }
+        ]
+      }
+    ],
+    "aux": [
+      {
+        "id": "R1",
+        "name": "Reverb",
+        "vol": -6,
+        "mute": false
+      },
+      {
+        "id": "D1",
+        "name": "Delay",
+        "vol": -10,
+        "mute": false
+      }
+    ],
+    "master": {
+      "vol": 0
+    },
+    "results": [],
+    "profiles": [],
+    "engine": {
+      "seed": 48121,
+      "quality": "Standard",
+      "resolution": "1080p",
+      "steps": 30,
+      "guidance": 6.5,
+      "overlap": 1,
+      "windowLen": 5,
+      "loras": [],
+      "post": {
+        "upscale": false,
+        "interpolation": true,
+        "denoise": true
+      },
+      "variants": 2,
+      "backend": "local",
+      "consistency": 70,
+      "lockIdentity": true,
+      "motionPriority": true,
+      "audioDriver": "A1",
+      "lipSync": true,
+      "offset": 0,
+      "followCut": true,
+      "naming": "{projet}_{fenêtre}_{variante}",
+      "autoInsert": false
+    },
+    "hybrid": {
+      "continuite": 80,
+      "identite": 55,
+      "audio": 10,
+      "mouvement": 40,
+      "style": 50
+    },
+    "assets": [
+      {
+        "kind": "video",
+        "name": "Le port endormi · Final D",
+        "src": "/api/media/generations/01M5R2W7F92902CHR2CG3GKDBT/1.mp4",
+        "origin": {
+          "kind": "history",
+          "generationId": "01M5R2W7F92902CHR2CG3GKDBT",
+          "fileId": "01M5R2XPQ6390Q1GC3PASEXDJ0"
+        },
+        "srcDur": 5.0625,
+        "width": 1872,
+        "height": 1072,
+        "fps": 16,
+        "res": null,
+        "generated": true,
+        "quality": "final",
+        "resultId": "01M5R2W7F6Z126TXG7H111YRDN",
+        "role": null,
+        "synth": null,
+        "transcript": null,
+        "character": null,
+        "lipSync": null,
+        "id": "gen-01M5R2W7F6Z126TXG7H111YRDN"
+      },
+      {
+        "kind": "video",
+        "name": "Les mains du pêcheur · Draft C",
+        "src": "/api/media/generations/01M5R3P2RNEQW4ZDKNCMWMFD21/1.mp4",
+        "origin": {
+          "kind": "history",
+          "generationId": "01M5R3P2RNEQW4ZDKNCMWMFD21",
+          "fileId": "01M5R3PDJVH13V05BQJQFQYN1K"
+        },
+        "srcDur": 5.166667,
+        "width": 832,
+        "height": 480,
+        "fps": 24,
+        "res": null,
+        "generated": true,
+        "quality": "draft",
+        "resultId": "01M5R3P2RJX9DV882508WPJC3X",
+        "role": null,
+        "synth": null,
+        "transcript": null,
+        "character": null,
+        "lipSync": null,
+        "id": "gen-01M5R3P2RJX9DV882508WPJC3X"
+      },
+      {
+        "kind": "video",
+        "name": "harbour-wide.mp4",
+        "src": "/api/media/uploads/03927418-58f2-440f-9a15-456093037531.mp4",
+        "origin": {
+          "kind": "library",
+          "itemId": "01M5R0PFA056YVTNP17GH531KN"
+        },
+        "srcDur": 4,
+        "width": 1920,
+        "height": 1080,
+        "fps": 25,
+        "res": null,
+        "generated": false,
+        "quality": null,
+        "resultId": null,
+        "role": null,
+        "synth": null,
+        "transcript": null,
+        "character": null,
+        "lipSync": null,
+        "id": "01M5R0SRCHARBOURWIDE00000V"
+      },
+      {
+        "kind": "audio",
+        "name": "fisherman-line.wav",
+        "src": "/api/media/uploads/5b1c0e7a-9d3f-4c2b-8e61-7a0f2d9c4b13.wav",
+        "origin": {
+          "kind": "library",
+          "itemId": "01M5R0PEH3C4AT7M2TWE7EJ02P"
+        },
+        "srcDur": 3.2,
+        "width": null,
+        "height": null,
+        "fps": null,
+        "res": null,
+        "generated": false,
+        "quality": null,
+        "resultId": null,
+        "role": "Dialogue",
+        "synth": null,
+        "transcript": "On part avant la marée.",
+        "character": "Marin",
+        "lipSync": null,
+        "id": "01M5R0SRCFISHERMANLINE000A"
+      },
+      {
+        "kind": "audio",
+        "name": "dawn-theme.mp3",
+        "src": "/api/media/uploads/c4e8a2f1-6b7d-4e3a-9c05-1f2e3d4c5b6a.mp3",
+        "origin": {
+          "kind": "library",
+          "itemId": "01M5R0PG2W9H0J1T4Q8M6B3ZQS"
+        },
+        "srcDur": 60,
+        "width": null,
+        "height": null,
+        "fps": null,
+        "res": null,
+        "generated": false,
+        "quality": null,
+        "resultId": null,
+        "role": "Musique",
+        "synth": null,
+        "transcript": null,
+        "character": null,
+        "lipSync": null,
+        "id": "01M5R0SRCDAWNTHEME0000000A"
+      },
+      {
+        "kind": "audio",
+        "name": "gull-cries.wav",
+        "src": "/api/media/uploads/9f8e7d6c-5b4a-4321-8fed-cba987654321.wav",
+        "origin": {
+          "kind": "library",
+          "itemId": "01M5R0PH7K2D5F8N1R4V6X9C0A"
+        },
+        "srcDur": 2,
+        "width": null,
+        "height": null,
+        "fps": null,
+        "res": null,
+        "generated": false,
+        "quality": null,
+        "resultId": null,
+        "role": "SFX",
+        "synth": null,
+        "transcript": null,
+        "character": null,
+        "lipSync": null,
+        "id": "01M5R0SRCGULLCRIES0000000A"
+      }
+    ]
+  },
+  "takes": [
+    {
+      "id": "01M5R1HP4NP05HH3EEYQPRJZ7D",
+      "project_id": "01M5R2EXP0RTREFERENCE0000P",
+      "shot_id": "01M5R0CLIP0000000000000001",
+      "generation_id": "01M5R1HP7G65CRYF25JS31F57T",
+      "file_id": null,
+      "file_path": null,
+      "status": "cancelled",
+      "quality": "draft",
+      "kind": "render",
+      "chosen": false,
+      "created_at": "2026-10-17T07:00:00+00:00"
+    },
+    {
+      "id": "01M5R2W7F6Z126TXG7H111YRDN",
+      "project_id": "01M5R2EXP0RTREFERENCE0000P",
+      "shot_id": "01M5R0CLIP0000000000000001",
+      "generation_id": "01M5R2W7F92902CHR2CG3GKDBT",
+      "file_id": "01M5R2XPQ6390Q1GC3PASEXDJ0",
+      "file_path": "generations/2026-10-17/01M5R2W7F92902CHR2CG3GKDBT/1.mp4",
+      "status": "done",
+      "quality": "final",
+      "kind": "upscale",
+      "chosen": true,
+      "created_at": "2026-10-17T08:00:00+00:00"
+    },
+    {
+      "id": "01M5R3P2RJX9DV882508WPJC3X",
+      "project_id": "01M5R2EXP0RTREFERENCE0000P",
+      "shot_id": "01M5R0CLIP0000000000000002",
+      "generation_id": "01M5R3P2RNEQW4ZDKNCMWMFD21",
+      "file_id": "01M5R3PDJVH13V05BQJQFQYN1K",
+      "file_path": "generations/2026-10-17/01M5R3P2RNEQW4ZDKNCMWMFD21/1.mp4",
+      "status": "done",
+      "quality": "draft",
+      "kind": "render",
+      "chosen": true,
+      "created_at": "2026-10-17T09:00:00+00:00"
+    }
+  ],
+  "uploads": [
+    {
+      "item_id": "01M5R0PFA056YVTNP17GH531KN",
+      "value": "uploads/03927418-58f2-440f-9a15-456093037531.mp4",
+      "original_filename": "harbour-wide.mp4",
+      "media_type": "video",
+      "path": "/srv/potionui/storage/uploads/03927418-58f2-440f-9a15-456093037531.mp4"
+    },
+    {
+      "item_id": "01M5R0PEH3C4AT7M2TWE7EJ02P",
+      "value": "uploads/5b1c0e7a-9d3f-4c2b-8e61-7a0f2d9c4b13.wav",
+      "original_filename": "fisherman-line.wav",
+      "media_type": "audio",
+      "path": "/srv/potionui/storage/uploads/5b1c0e7a-9d3f-4c2b-8e61-7a0f2d9c4b13.wav"
+    },
+    {
+      "item_id": "01M5R0PG2W9H0J1T4Q8M6B3ZQS",
+      "value": "uploads/c4e8a2f1-6b7d-4e3a-9c05-1f2e3d4c5b6a.mp3",
+      "original_filename": "dawn-theme.mp3",
+      "media_type": "audio",
+      "path": "/srv/potionui/storage/uploads/c4e8a2f1-6b7d-4e3a-9c05-1f2e3d4c5b6a.mp3"
+    },
+    {
+      "item_id": "01M5R0PH7K2D5F8N1R4V6X9C0A",
+      "value": "uploads/9f8e7d6c-5b4a-4321-8fed-cba987654321.wav",
+      "original_filename": "gull-cries.wav",
+      "media_type": "audio",
+      "path": "/srv/potionui/storage/uploads/9f8e7d6c-5b4a-4321-8fed-cba987654321.wav"
+    }
+  ]
+}

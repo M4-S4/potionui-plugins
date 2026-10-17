@@ -3,6 +3,8 @@ import { doc, asset, act, toast, clamp, round, clipLabel } from './state.svelte.
 import { clipFilter } from './look.js';
 import { realThumb } from './media.js';
 import { findTake } from './production.svelte.js';
+import { takeStore } from './takes.svelte.js';
+import { seamPick, seamSourceOf } from './continuity.js';
 
 const stats = $state({});
 const pending = new Set();
@@ -39,12 +41,23 @@ function measure(key, src, filter) {
 	return null;
 }
 
-export function colorOf(clip) {
-	const a = asset(clip.assetId);
+function measured(clip, a, src) {
 	const filter = clipFilter(clip);
-	const src = realThumb(a);
 	const key = `${a?.id}|${src}|${filter}`;
 	return stats[key] ?? measure(key, src, filter);
+}
+
+export function colorOf(clip) {
+	const a = asset(clip.assetId);
+	return measured(clip, a, realThumb(a));
+}
+
+const sideColor = (clip, image) => (image ? measured(clip, image, image.src) : colorOf(clip));
+
+function seamSides(i) {
+	const pick = seamPick(doc, i, takeStore.list);
+	if (!pick) return null;
+	return { from: sideColor(doc.clips[i - 1], pick.last), to: sideColor(doc.clips[i], pick.first), source: seamSourceOf(pick) };
 }
 
 const takeOf = (clip) => {
@@ -63,9 +76,10 @@ export function seam(i) {
 	const a = doc.clips[i - 1];
 	const b = doc.clips[i];
 	if (!a || !b) return null;
-	const ca = colorOf(a);
-	const cb = colorOf(b);
-	const out = { from: a, to: b, issues: [], pending: !ca || !cb, measured: false };
+	const sides = seamSides(i);
+	const ca = sides.from;
+	const cb = sides.to;
+	const out = { from: a, to: b, issues: [], pending: !ca || !cb, measured: false, source: sides.source };
 	if (ca && cb) {
 		const dl = cb.lum - ca.lum;
 		const dw = cb.warm - ca.warm;
@@ -85,11 +99,25 @@ export function seams() {
 		.filter(Boolean);
 }
 
+function seamSource(shotId) {
+	const i = doc.clips.findIndex((c) => c.id === shotId);
+	return seamSourceOf(i > 0 ? seamPick(doc, i, takeStore.list) : null);
+}
+
+export function seamTip(shotId) {
+	const source = seamSource(shotId);
+	if (source === 'frames') return t('assistant.review.measuredFramesTip');
+	if (source === 'last') return t('assistant.review.measuredLastTip');
+	if (source === 'first') return t('assistant.review.measuredFirstTip');
+	return t('assistant.review.measuredThumbsTip');
+}
+
 export function matchToPrevious(clip) {
 	const i = doc.clips.indexOf(clip);
 	const prev = doc.clips[i - 1];
-	const ca = prev && colorOf(prev);
-	const cb = colorOf(clip);
+	const sides = i > 0 ? seamSides(i) : null;
+	const ca = sides?.from;
+	const cb = sides?.to;
 	if (!ca || !cb) return toast(t('lib.continuity.pending'), 'warning');
 	act(() => {
 		clip.exposure = round(clamp(clip.exposure + (ca.lum - cb.lum) * 5, -2, 2), 0.05);

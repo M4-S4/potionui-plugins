@@ -60,6 +60,25 @@ _COLUMNS = {
         duration_ms INTEGER NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     """,
+    "video_producer_export_jobs": """
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        format TEXT NOT NULL,
+        resolution TEXT NOT NULL,
+        status TEXT NOT NULL,
+        progress REAL NOT NULL DEFAULT 0,
+        step TEXT,
+        file_name TEXT,
+        file_size INTEGER,
+        media_item_id TEXT,
+        media_url TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        started_at TIMESTAMP,
+        finished_at TIMESTAMP
+    """,
 }
 
 TABLE_NAMES = tuple(_COLUMNS)
@@ -90,6 +109,8 @@ _INDEXES = (
     ("idx_video_producer_jobs_take", "video_producer_jobs", "take_id"),
     ("idx_video_producer_jobs_generation", "video_producer_jobs", "generation_id"),
     ("idx_video_producer_calibration_key", "video_producer_calibration", "preset_id, backend_id, resolution"),
+    ("idx_video_producer_export_jobs_project", "video_producer_export_jobs", "project_id, created_at"),
+    ("idx_video_producer_export_jobs_status", "video_producer_export_jobs", "status, created_at"),
 )
 
 

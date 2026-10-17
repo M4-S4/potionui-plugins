@@ -11,7 +11,7 @@ logger = logging.getLogger("plugins.video-producer")
 
 
 def register_types(context: HookContext) -> HookContext:
-    """Declare the take_done and take_failed notification types."""
+    """Declare the take and export notification types."""
     try:
         registry = context.data.get("registry") if isinstance(context.data, dict) else None
         if registry is None:

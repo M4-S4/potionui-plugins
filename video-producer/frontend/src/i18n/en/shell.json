@@ -117,7 +117,7 @@
 	"simulations.identity.title": "Identity check",
 	"simulations.identity.text": "The similarity between takes is simulated. The color check really analyzes the images.",
 	"simulations.render.title": "Video render",
-	"simulations.render.text": "No video file is written. The Final Cut, OTIO, EDL and SRT exports produce real files.",
+	"simulations.render.text": "Web and social video exports are real: ffmpeg assembles the cut on the server and the MP4 lands in your library. The master file (ProRes), the archive (H.265) and the audio stems are still simulated. The Final Cut, OTIO, EDL and SRT exports produce real files from the saved project.",
 	"simulations.splat.title": "Gaussian Splat",
 	"simulations.splat.text": "The referenced file is not loaded; the sample scene is a generated point cloud.",
 	"simulations.guide.title": "Control video",

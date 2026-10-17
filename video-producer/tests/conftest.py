@@ -18,6 +18,29 @@ importlib.invalidate_caches()
 import backend  # noqa: E402,F401
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "requires_ffmpeg: needs ffmpeg and ffprobe on the PATH; skipped without them")
+
+
+@pytest.fixture
+def export_storage(monkeypatch, tmp_path):
+    from backend import core_bridge
+
+    root = tmp_path / "storage"
+    root.mkdir()
+    monkeypatch.setattr(core_bridge, "storage_directory", lambda: root)
+    return root
+
+
+@pytest.fixture(autouse=True)
+def export_runner_reset():
+    yield
+    from backend.exports import jobs
+
+    jobs.RUNNER.stop()
+    jobs._PROCESSES.clear()
+
+
 @pytest.fixture
 def scratch_db(tmp_path):
     from src.plugin_api.storage import db

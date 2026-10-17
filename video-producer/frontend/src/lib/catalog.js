@@ -126,8 +126,8 @@ export function audioRoleLabel(role) {
 }
 
 export function frameRoleLabel(role) {
-	if (role === 'Début') return t('lib.frameRole.start');
-	if (role === 'Fin') return t('lib.frameRole.end');
+	if (role === 'Début' || role === 'first') return t('lib.frameRole.start');
+	if (role === 'Fin' || role === 'last') return t('lib.frameRole.end');
 	if (role === 'Transition') return t('lib.frameRole.transition');
 	if (role === 'Identité') return t('lib.frameRole.identity');
 	if (role === 'Style') return t('lib.frameRole.style');

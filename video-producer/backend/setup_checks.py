@@ -171,21 +171,23 @@ class UpscalerReady(SetupCheck):
 
 
 class FfmpegReady(SetupCheck):
-    """ffmpeg is on the server's PATH."""
+    """ffmpeg and ffprobe are on the server's PATH."""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
         try:
-            found = core_bridge.find_ffmpeg()
+            ffmpeg = core_bridge.find_ffmpeg()
+            ffprobe = core_bridge.find_ffprobe() if ffmpeg else None
         except Exception as exc:
             logger.warning("[VIDEO-PRODUCER] Setup check: could not look for ffmpeg: %s", exc)
             return _unchecked("ffmpeg", "Read the guide", README_HREF)
-        if found:
+        if ffmpeg and ffprobe:
             return SetupCheckResult(done=True, description="ffmpeg is available.")
+        missing = "ffprobe" if ffmpeg else "ffmpeg"
         return SetupCheckResult(
             done=False,
             description=(
-                "Video Producer joins takes and exports the cut with ffmpeg. "
-                "Install ffmpeg on the server so it is on the PATH, then restart PotionUI."
+                f"Video Producer joins takes and exports the cut with ffmpeg, and reads media with ffprobe; {missing} is missing. "
+                "Install ffmpeg with ffprobe on the server so both are on the PATH, then restart PotionUI."
             ),
             action_label="Read the guide",
             action_href=README_HREF,

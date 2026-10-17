@@ -170,23 +170,32 @@ def test_on_disable_ignores_another_plugin(caplog, data):
     assert context.data == data
 
 
-def test_the_notification_types_are_take_done_and_take_failed():
+TYPE_KEYS = [
+    "video-producer.take_done",
+    "video-producer.take_failed",
+    "video-producer.export_done",
+    "video-producer.export_failed",
+]
+
+
+def test_the_notification_types_are_take_and_export_done_and_failed():
     assert (notifications.TAKE_DONE, notifications.TAKE_FAILED) == ("video-producer.take_done", "video-producer.take_failed")
-    assert [item.key for item in notifications.TYPES] == ["video-producer.take_done", "video-producer.take_failed"]
+    assert (notifications.EXPORT_DONE, notifications.EXPORT_FAILED) == ("video-producer.export_done", "video-producer.export_failed")
+    assert [item.key for item in notifications.TYPES] == TYPE_KEYS
 
 
-def test_register_types_declares_both_types_on_the_registry():
+def test_register_types_declares_the_four_types_on_the_registry():
     registry = NotificationTypeRegistry()
     context = _context("notification_type.register", data={"registry": registry})
 
     assert notification_hooks.register_types(context) is context
 
-    assert [spec.key for spec in registry.all()] == ["video-producer.take_done", "video-producer.take_failed"]
+    assert [spec.key for spec in registry.all()] == TYPE_KEYS
     for spec in registry.all():
         assert isinstance(spec, NotificationTypeSpec)
         assert spec.label.startswith("Video Producer: ") and spec.description
         assert (spec.category, spec.default_enabled, spec.admin_only) == ("plugin", True, False)
-    assert len({spec.label for spec in registry.all()}) == 2
+    assert len({spec.label for spec in registry.all()}) == 4
 
 
 def test_register_types_twice_declares_each_type_once(caplog):
@@ -195,11 +204,11 @@ def test_register_types_twice_declares_each_type_once(caplog):
 
     with caplog.at_level(logging.INFO, logger=LOGGER):
         notification_hooks.register_types(context)
-        assert "Notification types declared: video-producer.take_done, video-producer.take_failed" in caplog.text
+        assert f"Notification types declared: {', '.join(TYPE_KEYS)}" in caplog.text
         caplog.clear()
         assert notification_hooks.register_types(context) is context
 
-    assert len(registry.all()) == 2
+    assert len(registry.all()) == 4
     assert "Notification types declared: none new" in caplog.text
 
 
@@ -226,3 +235,29 @@ def test_register_types_swallows_a_registry_that_is_not_one(caplog):
 
     assert notification_hooks.register_types(context) is context
     assert "Could not declare the plugin's notification types" in caplog.text
+
+
+def test_on_ready_fails_the_exports_a_stop_interrupted_and_resumes_the_queue(core, export_storage, caplog):
+    from backend.exports import jobs
+
+    left = jobs.create_job("p-1", "user-1", "web", "720p")
+    jobs.claim_next()
+    waiting = jobs.create_job("p-2", "user-1", "web", "720p")
+
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
+
+    assert (jobs.get_job(left["id"])["status"], jobs.get_job(waiting["id"])["status"]) == ("failed", "queued")
+    assert [coroutine.__qualname__ for coroutine in core.scheduled] == ["Tracker.run", "Runner.run"]
+    assert "1 export(s) interrupted by the last stop marked failed" in caplog.text
+
+
+def test_on_disable_stops_the_export_runner(core):
+    from backend.exports import jobs
+
+    assert jobs.RUNNER.start() is True
+    future = jobs.RUNNER._future
+
+    lifecycle_hooks.on_disable(_context("plugin.lifecycle.disable"))
+
+    assert future.cancelled() and jobs.RUNNER.active is False

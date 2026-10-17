@@ -2,7 +2,7 @@
 
 Français : [Video Producer : guide utilisateur](/docs?doc=plugin/video-producer/user-guide.fr) (fichier `docs/user-guide.fr.md`).
 
-This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. Video Producer is delivered in steps. This version has the complete interface, in English and in French, saves your projects, imports your media and generates real takes and finals (chapters 8 and 9) and has the PotionUI assistant in its own mode (chapter 10), but some functions are still simulated (chapter 17). A chapter about something that does not exist yet ends with "Available from step N". The administrator guide is a separate page that only admins see.
+This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. Video Producer is delivered in steps. This version has the complete interface, in English and in French, saves your projects, imports your media and generates real takes and finals (chapters 8 and 9), has the PotionUI assistant in its own mode (chapter 10), joins shots at their seams (chapter 12) and delivers real files, videos for the web and for social networks as well as files for other software and subtitles (chapter 14), but some functions are still simulated (chapter 17). The administrator guide is a separate page that only admins see.
 
 ## 1. What Video Producer is
 
@@ -13,6 +13,7 @@ Before you start:
 - An admin has to prepare at least one engine (this machine, a studio server or a cloud model) and at least one video preset assigned to you. If the Production bar shows no engine, see chapter 18.
 - Your admin also sets the draft resolution, how many generations you can have in progress at once, and may limit the GPU minutes you can use per month.
 - Generation is real: the takes are videos made by your admin's machines or cloud account, and they take time. The estimate in the Production bar tells you what to expect before you start (chapter 8).
+- Delivering a video file needs ffmpeg on your PotionUI server. If the export window says that ffmpeg is missing, ask your admin (chapters 14 and 18). The files for other software and the subtitles do not need it.
 - The assistant needs a language model that your admin has configured in PotionUI and assigned to you (chapter 10). Everything else works without it.
 - The model MiniMax H3 (the **MiniMax H3** entries of the engine pop-up) comes with a license that excludes use, and anything generated with it, in the European Union, the United Kingdom, the United States and South Korea without an individual authorization from MiniMax, and that asks a commercial product to display "MiniMax H3" prominently. Ask your admin before you use it. Video Producer does not check any of this for you.
 
@@ -30,10 +31,10 @@ The first time you open the page, it creates a starter project, "Dawn at the har
 4. **Split the film into shots.** In the **Storyboard** workspace: write the synopsis, then click **Propose a breakdown** (one sentence becomes one shot) or ask the assistant to cut it (chapter 10), keep the shots you want and adjust their shot prompts. Result: a row of shot cards.
 5. **Generate drafts.** In the Production bar, pick the **Generation engine**, quality **Draft**, then **Generate selection** (Ctrl+G). The estimate shows time, memory and quota. Result: real draft takes A, B, and so on, made by the engine you picked.
 6. **Pick and make final.** In the Inspector, tab **Takes**: compare the takes, click **Choose** on the one the shot should play, then click **Make final** on the best draft take. Result: the shot moves from Draft to Final.
-7. **Edit, match and mix.** Fades on the clips, color match in the Inspector tab **Color**, the console in **Mix**. Result: a finished sequence.
-8. **Prepare delivery.** **File › Export video…**, **Export to other software…** or **Export subtitles…**. Result: files you can download.
+7. **Edit, match and mix.** Fades on the clips, color match in the Inspector tab **Color**, seam frames between shots (chapter 12), the console in **Mix**. Result: a finished sequence.
+8. **Prepare delivery.** **File › Export video…**, **Export to other software…** or **Export subtitles…**. Result: a video in your library and files you can download.
 
-The interface of all eight steps is in place, and your projects are saved as you work (chapter 5). The page opens the project you used last, or the starter project the first time (chapter 1). **New project…** starts an empty project, "Untitled project", and adds it to your projects. Drafts and finals are real since step 4. From step 6: delivery as video files.
+The interface of all eight steps is in place, and your projects are saved as you work (chapter 5). The page opens the project you used last, or the starter project the first time (chapter 1). **New project…** starts an empty project, "Untitled project", and adds it to your projects. Drafts and finals are real since step 4. Delivery is real since step 6, for the web and social videos and for the files for other software (chapter 14); the master file, the archive and the audio stems stay simulated.
 
 ## 3. The screen
 
@@ -86,13 +87,13 @@ The media of the project in one panel. A new project has none: the panel says "N
 
 The left panel has three tabs. A dot on **Direction** warns that there are points to check, and **Results** shows the number of takes.
 
-- **Direction.** Shows what guides the generation for the current range: the global direction, the shot prompt, the references and Control videos, with **View the generation summary**. Below, **To check**, the list of direction conflicts and color matches to fix, the section of the assistant's continuity check (also titled **To check**) with its button **Ask the assistant to check continuity** (chapter 10), the **Project H3 profile** (FL2VA, Ref2VA or Hybrid AV, chapters 8 and 11) and the **Global direction** itself, in five fields (world and intent, characters and identity, photography, palette and lighting, pacing and continuity), with a counter out of 4000 characters. Each field has a **Library & assistant** link. The gear button, **H3 settings**, opens the **Advanced workshop**.
+- **Direction.** Shows what guides the generation for the current range: the global direction, the shot prompt, the references and Control videos, with **View the generation summary**. Below, **To check**, the list of direction conflicts and color matches to fix (each color match comes with **Match** and **Use the previous shot’s last frame**, chapter 12), the section of the assistant's continuity check (also titled **To check**) with its button **Ask the assistant to check continuity** (chapter 10), the **Project H3 profile** (FL2VA, Ref2VA or Hybrid AV, chapters 8 and 11) and the **Global direction** itself, in five fields (world and intent, characters and identity, photography, palette and lighting, pacing and continuity), with a counter out of 4000 characters. Each field has a **Library & assistant** link. The gear button, **H3 settings**, opens the **Advanced workshop**.
 - **References.** Three families, **Images and identity**, **3D sets** and **Motion guides**. A reference is global (it goes with every generation) or applies to a range only; **Attach to range** sets the second. **Reference** adds one. The center shows the board of references, in two groups, **Global direction** and **On the timeline**, with a search field. Drag a thumbnail onto the Frames track to anchor it to a precise moment. A new project has no reference: the board says so, and **Reference** adds the first one.
 - **Results.** The take cards of each shot (chapter 9), the **Generation queue** and **Assemble chosen takes**.
 
 ### Storyboard
 
-On the left: the **Synopsis** (one sentence becomes one shot) and **Propose a breakdown**. The **Proposed breakdown** lists the shots: tick the ones to keep, rename them and click **Add N shots at the end**. The breakdown of that button is simple: it only cuts the synopsis into sentences (its tooltip says "Sentence split; ask the assistant for a real breakdown"). The assistant makes a real breakdown and fills the same list (chapter 10). Then **To produce**, with **Drafts left** and **Move to final** (the number of shots and the footage still to do for each), and **Continuity**, which lists the color matches to check, each with **Match color**.
+On the left: the **Synopsis** (one sentence becomes one shot) and **Propose a breakdown**. The **Proposed breakdown** lists the shots: tick the ones to keep, rename them and click **Add N shots at the end**. The breakdown of that button is simple: it only cuts the synopsis into sentences (its tooltip says "Sentence split; ask the assistant for a real breakdown"). The assistant makes a real breakdown and fills the same list (chapter 10). Then **To produce**, with **Drafts left** and **Move to final** (the number of shots and the footage still to do for each), and **Continuity**, which lists the color matches to check, each with **Match color** and **Use the previous shot’s last frame** (chapter 12).
 
 In the center: one card per shot, in order, with its number, its duration, its name, its stage (**Source**, **To generate**, **Draft** or **Final**), its number of takes and its shot prompt; click the prompt to write it. Drag a card to move it. The buttons of a card appear when you hover it or select it: the main one follows the stage, **Generate**, **Make final**, **See takes** or **Regenerate**, and three icons show the shot in the viewer, insert a shot after it and delete it. While a take of the shot is in progress, the card shows its step and progress and the button is disabled. The header counts the shots per stage, adds one with **Shot** and sets the size of the thumbnails; a **New shot** tile at the end does the same. In this workspace, the Left and Right arrow keys move the selection to the previous or next shot.
 
@@ -192,7 +193,7 @@ What is still simulated: the takes made by earlier versions of a project, which 
 
 The Inspector follows the selection and its title tells what is selected: **Video shot**, **Audio clip**, **Title**, **Shot prompt**, **Reference frame**, **Control video**, **3D shot**, **Marker**, **Reference** or **Console strip**. For a shot it starts with a thumbnail, the name (click it to rename the shot), the stage and the times, and has three tabs:
 
-- **Shot.** A shortcut to the next action (**Generate drafts**, or **Make take A final**) with the engine it will use ("On" followed by the engine), **Duration and source** (the duration, where the shot starts in its source and the length of the source), **Fades** (**In** and **Out**), the **Flag** (**None**, **Favorite** or **Rejected**) and three icons to split the shot in the middle, duplicate it and delete it.
+- **Shot.** A shortcut to the next action (**Generate drafts**, or **Make take A final**) with the engine it will use ("On" followed by the engine), **Duration and source** (the duration, where the shot starts in its source and the length of the source), **Frames** (the **First frame** and the **Last frame** of the shot, and the button **Use the previous shot’s last frame**; chapter 12), **Fades** (**In** and **Out**), the **Flag** (**None**, **Favorite** or **Rejected**) and three icons to split the shot in the middle, duplicate it and delete it.
 - **Takes.** The take cards of the shot, as **Final** and **Drafts**, and a button that makes more drafts (for example "2 more drafts"; chapter 9).
 - **Color.** The luminance scope, the match with the previous shot, presets and fine settings (chapter 12).
 
@@ -253,7 +254,7 @@ The buttons of a single shot (on a Storyboard card, in the Inspector, in the vie
 What only warns, without blocking:
 
 - a memory estimate above what the GPU has: "Will stream through host RAM, slower." The weights pass through the server's memory. The generation goes on, more slowly, and fails if the server lacks the memory for it (chapter 18);
-- the FL2VA profile with no frame linked to a shot: "“Shot 2” has no linked frame: it will be generated from text only." The generation goes on from the text, and the card of the take says "text only";
+- the FL2VA profile with no frame linked to a shot: "“Shot 2” has no linked frame: it will be generated from text only." The generation goes on from the text, and the card of the take says "text only". When the shot has a previous shot with a finished take, an icon next to the warning in the Production bar, **Use the previous shot’s last frame**, gives it a first frame (chapter 12);
 - a shot longer than the engine allows: "“Shot 2” is longer than this engine allows: it will be cut to 15 s."
 
 Two notes appear only in the estimate tooltip: "Memory use could not be estimated." and "No time measured yet for this engine and resolution."
@@ -285,7 +286,7 @@ The **Project H3 profile** (Director IA, tab **Direction**) says what guides the
 | Hybrid AV | Greyed | Yes | Yes |
 
 - A greyed profile carries a badge such as "Ref2VA · Hybrid AV: MiniMax H3 only", with the explanation "Wan 2.1 / 2.2 cannot generate Ref2VA, Hybrid AV: reference images (Ref2VA) and generated sound (Hybrid AV) need MiniMax H3." In the **References** tab, "Not sent with this engine" tells you that the engine ignores the references ("References are sent only with the Ref2VA profile on MiniMax H3; Wan 2.1 / 2.2 ignores them.").
-- **FL2VA** uses the frames linked to the shot: a start and an end frame give a take "first and last frames", a start frame alone "first frame", and no frame "text only", with the warning above.
+- **FL2VA** uses the frames linked to the shot: a start and an end frame give a take "first and last frames", a start frame alone "first frame", and no frame "text only", with the warning above. Chapter 12 shows how to take the first frame from the previous shot.
 - **Ref2VA** sends the references of the shot, then the global ones, to MiniMax H3: up to 9 images, 3 videos and 3 audio files.
 - **Hybrid AV** works like FL2VA on MiniMax H3, whose model makes the picture and the sound together. The track that drives the performance (Advanced workshop) is not sent yet (chapter 17).
 
@@ -301,7 +302,7 @@ A take is one generated video for one shot. Its video is an ordinary PotionUI ge
 - The thumbnail carries the letter of the take. Click it to preview the take in the viewer ("Preview take A"); **Back to the sequence** brings you back.
 - The first line says "Draft", "Final" or "Final · upscale", then the state ("Queued", "Generating", "Failed", "Cancelled") or, once finished, the duration. The next lines give the profile and how the shot started ("FL2VA · first and last frames", "FL2VA · text only", "FL2VA · first frame", "Ref2VA · references"), the resolution and, for a final, the take it comes from ("from A"), the seed ("Seed 123456") and the engine that made it (the preset or the model, then the backend).
 - A queued take shows only its state ("Queued") above an empty line; a take that is generating shows the step, the percentage and a progress bar. When it fails, it shows the reason that PotionUI gives (in English) or, when it gives none, "The generation failed (cuda_oom)." with the code.
-- **Compare** puts the take beside a second one in the viewer, both playing in a loop ("Pick a second take to compare"). **Keep** (the star) and **Reject** (the thumb down) flag the take; click again to remove the flag. The export warns about a shot whose take is flagged Reject. **Generation details** opens PotionUI's window about the generation. **Delete** asks "Delete this take?" ("Take A of “Shot 2” leaves the list. The video stays in your generation history.").
+- **Compare** puts the take beside a second one in the viewer, both playing in a loop ("Pick a second take to compare"). **Keep** (the star) and **Reject** (the thumb down) flag the take; click again to remove the flag. The export warns about a shot whose take is flagged Reject. **Extract a frame at the playhead** (the image button of a finished take) saves one image of the take as a first or last frame of the shot (chapter 12). **Generation details** opens PotionUI's window about the generation. **Delete** asks "Delete this take?" ("Take A of “Shot 2” leaves the list. The video stays in your generation history.").
 - A capture of take cards, in the dark and light themes of the English interface, is in `docs/screenshots/takes-cards.png`.
 - On a take in progress, **Cancel** stops it. On a failed one, **Retry** starts a new take.
 
@@ -380,7 +381,7 @@ For example: "Check the continuity between my shots and tell me what to fix." Th
 
 1. When the assistant has answered, the page says "2 continuity points to check" (or "Continuity checked: nothing to fix"), with a **Show** button when the Direction tab is not on screen.
 2. In **Director IA**, tab **Direction**, a **To check** section, with "Assistant · 14:32" beside its title (the time of the check), lists the pairs of neighbor shots to look at, as "Shot 1 → Shot 2". Click a pair to go to the shot. Under each pair, a line says what is wrong and a second line how to fix it. A dot on the tab **Direction** says there is something to check.
-3. What it looks for: a shot without a prompt; a shot prompt that contradicts the global direction; a shot shorter than 2 s or longer than 15 s; a shot with the FL2VA profile and no first frame; a camera move that changes between two shots; a jump of brightness or color temperature (the page measures these on the images, and the line carries the badge **Measured**); and a similarity point between two takes. That last one comes from the similarity score, which stays simulated (chapter 17), so its line carries the gray badge **Simulated** instead. Shots that come from a source are skipped.
+3. What it looks for: a shot without a prompt; a shot prompt that contradicts the global direction; a shot shorter than 2 s or longer than 15 s; a shot with the FL2VA profile and no first frame; a camera move that changes between two shots; a jump of brightness or color temperature (the page measures these on the images, the seam frames of the shots when they have some and their thumbnails otherwise, and the line carries the badge **Measured**; chapter 12); and a similarity point between two takes. That last one comes from the similarity score, which stays simulated (chapter 17), so its line carries the gray badge **Simulated** instead. Shots that come from a source are skipped.
 4. **Dismiss the check** (the cross of the section) removes the list. Ask again to refresh it.
 
 ### Suggestions that fill the request for you
@@ -438,33 +439,127 @@ When a Control video is present, the motion comes from the guide.
 
 ## 12. Color and continuity
 
-An alert appears only when two neighbor shots do not match: "“Shot” is brighter, darker, warmer or cooler than the previous shot". It shows in Director IA (tab **Direction**, under **To check**), in the Storyboard (under **Continuity**, and as a warning icon on the card of the shot) and in the Inspector. **Match** fixes it in one click by adjusting exposure and temperature to the previous shot. The measure is made on the real thumbnails of the takes. The **Color** tab also has the luminance scope, six presets (Original, Golden light, Cold morning, 35 mm film, Blue night, Soft) and fine settings (**Exposure**, **Contrast**, **Saturation**, **Temperature**), with **Reset** and **To all shots**. Before a shot has an image, the tab says that color can be adjusted once the shot is generated.
+Continuity is about the seams, the cut from one shot to the next. Video Producer measures the color of every seam, warns when two neighbor shots do not match, fixes the color in one click, and can start a shot from the exact image where the previous one ended.
 
-In this version the measure is already made, on the image of each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A similarity percentage between two generated shots can also appear in the alerts ("Check the identity between … and … (similarity 78 %)"): it is simulated (chapter 17). Color is real.
+### Color match
+
+An alert appears only when two neighbor shots do not match: "“Shot” is brighter, darker, warmer or cooler than the previous shot". It shows in Director IA (tab **Direction**, under **To check**), in the Storyboard (under **Continuity**, and as a warning icon on the card of the shot) and in the Inspector. **Match** (**Match color** in the Storyboard) fixes it in one click by adjusting exposure and temperature to the previous shot. The **Color** tab also has the luminance scope, six presets (Original, Golden light, Cold morning, 35 mm film, Blue night, Soft) and fine settings (**Exposure**, **Contrast**, **Saturation**, **Temperature**), with **Reset** and **To all shots**. Before a shot has an image, the tab says that color can be adjusted once the shot is generated.
+
+The measure is made on real images, for each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A similarity percentage between two generated shots can also appear in the alerts ("Check the identity between … and … (similarity 78 %)"): it is simulated (chapter 17). Color is real.
+
+### What the measure looks at
+
+For each pair of neighbor shots the page compares the end of the first with the start of the second:
+
+- for the previous shot, its **Last frame** image if it has one, otherwise its thumbnail;
+- for the shot, its **First frame** image if it has one, otherwise its thumbnail.
+
+Any image that you placed as a first or last frame counts, not only the images made in this chapter. The assistant's continuity check (chapter 10) marks the points that the page measured with the badge **Measured**; hover it to see what was measured: "Measured by this page on the seam frames: last image of the previous shot, first image of this one", or "Measured by this page on the shots’ thumbnails". The similarity point keeps the gray badge **Simulated**.
+
+### Start a shot from the previous shot
+
+A **seam frame** is an image taken from a take and set as the first or last frame of a shot. With the FL2VA profile a take starts on its first frame (chapter 8), so giving a shot the last image of the previous shot makes the two shots join without a jump.
+
+**Use the previous shot’s last frame** is offered in five places:
+
+- under each alert of Director IA, tab **Direction**, section **To check**, next to **Match** or **See takes**;
+- under each alert of the Storyboard, section **Continuity**, next to **Match color**;
+- on the lines of the assistant's check that say that a shot has no first frame (chapter 10);
+- in the **Frames** section of the Inspector, tab **Shot**, which shows the **First frame** and the **Last frame** of the shot ("None" when empty) and a button of the same name;
+- as an icon next to the warning of the Production bar that says that the shot will be generated from text only (chapter 8).
+
+When you click it:
+
+1. The page saves the project and asks the server for the last image of a take of the previous shot: the take chosen for that shot or, if none is chosen, its most recent finished take. The button reads "Extracting the image…" meanwhile.
+2. The image is saved in your library as a PNG, added to the media of the project and set as the **First frame** of the shot, with full influence, at the start of the shot. You see it in the **Frames** row of the timeline and in the Inspector. The page says "Last image of “Shot 1” set as the first frame of “Shot 2”" with an **Undo** button.
+3. Nothing is generated and the takes you already have do not change: the next take you generate for the shot starts from that frame. The frame only guides the generation; it is not drawn into an exported video.
+
+If the shot already has a first frame, a window asks "Replace the first frame?" ("“Shot 2” already has a first frame. The new image replaces it; you can undo."). **Replace** swaps it and **Keep the current one** changes nothing. The replaced image stays in the media of the project. **Undo** in the message, or **Edit › Undo**, brings the previous frame back.
+
+The action is greyed, with the explanation "“Shot 1” has no finished take yet.", while the previous shot has no finished take with a file (the takes of earlier versions, which are simulated, have none), and it is not offered for the first shot of the film.
+
+### Extract a frame at the playhead
+
+For another moment than the last image, use **Extract a frame at the playhead**, the image button on the card of a finished take (Inspector, tab **Takes**; Director IA, tab **Results**). Its tooltip says "Saves the image of this take under the playhead as the first frame (first half of the shot) or the last frame (second half)". Put the playhead on the shot, at the moment you want, then click it:
+
+- the image is taken from that take at the position of the playhead in the shot (for the take that the shot plays, its in point is taken into account);
+- in the first half of the shot it becomes the **First frame**, in the second half the **Last frame**; a playhead outside the shot counts as its start or its end;
+- the page says "Image at 2.5 s set as the first frame of “Shot 2”" (or "last frame"), and asks "Replace the last frame?" first when there is one.
+
+### Other checks
 
 The assistant can run more checks on request: shots without a prompt, contradictions with the global direction, durations outside 2 to 15 s, FL2VA shots without a first frame and camera moves that change between two shots, together with the color points above. Its answer is a second **To check** list in the Direction tab (chapter 10).
 
-Available from step 6.
-
 ## 13. Audio and subtitles
 
-Audio lives in tracks, each with a role: Dialogue, Music, Ambience or SFX. **Audio › Add audio track** and **Audio › Import audio file…** bring sounds in; **Audio › Mixing console** shows the console. In the console each strip has a role, effects (**Equalizer**, **Compressor**, **Filter**; **+ effect** adds one), sends to the reverb and delay buses (R and D), pan, a fader (double-click it to go back to 0 dB), a meter, **M** and **S** and an automation button; the auxiliary buses and the **Master** follow. The pills at the top show one role only. **Voice and dialogue…** and the sound design commands (**Ambience…**, **Foley…**, **Texture…**, **Impact…**, **Musical intent…**) open the **Sound design workshop**, which is simulated (chapter 17). The text of a dialogue is real: it feeds the subtitles, together with the titles of the timeline.
+Audio lives in tracks, each with a role: Dialogue, Music, Ambience or SFX. **Audio › Add audio track** and **Audio › Import audio file…** bring sounds in; **Audio › Mixing console** shows the console. In the console each strip has a role, effects (**Equalizer**, **Compressor**, **Filter**; **+ effect** adds one), sends to the reverb and delay buses (R and D), pan, a fader (double-click it to go back to 0 dB), a meter, **M** and **S** and an automation button; the auxiliary buses and the **Master** follow. The pills at the top show one role only. **Voice and dialogue…** and the sound design commands (**Ambience…**, **Foley…**, **Texture…**, **Impact…**, **Musical intent…**) open the **Sound design workshop**, which is simulated (chapter 17). The text of a dialogue is real: it feeds the subtitles, together with the titles of the timeline (chapter 14).
 
 The four tracks of a new project are empty. **Audio › Import audio file…** brings in your own audio files (chapter 6). The console plays them for real: the faders, mute and solo, pan, equalizer, compressor, filter and sends act on the sound you hear, the meters show it, and the clips of the timeline draw the waveform of the file. The sounds that the Sound design workshop prepares are still synthesized by your browser (WebAudio).
 
 ## 14. Exports
 
-**File › Export video…** opens **Export and share**, with three tabs:
+**File › Export video…** (Ctrl+E) opens **Export and share**, with three tabs: **Video**, **To other software** and **Subtitles**. **File › Export to other software…** (Ctrl+Shift+E) and **File › Export subtitles…** open the other two. Before the export, the window warns about shots that are not final yet, shots that use a take you flagged **Reject** and direction conflicts that are not solved. Every export starts by saving the project; if that fails, the page says "The project could not be saved: nothing was exported." and exports nothing.
 
-- **Video.** Pick a format, a resolution and the extent (**Whole sequence** or **Range**), and say whether to add the audio stems. The formats are **Master file · ProRes 422**, **Web · H.264 MP4**, **Social media · vertical H.264** and **Archive · H.265**. The real export writes H.264 MP4 or VP9 WebM; ProRes 422, H.265 and the audio stems stay simulated and carry the badge.
-- **To other software.** Final Cut Pro (`.fcpxml`), OpenTimelineIO (`.otio`) and EDL CMX 3600 (`.edl`). They are real files.
-- **Subtitles.** An SRT file built from the dialogue text and the titles. **File › Export subtitles…** opens this tab.
+### Video
 
-Before the export, the window warns about shots that are not final yet, shots that use a take you flagged **Reject** and direction conflicts that are not solved. Exports are written to your PotionUI storage, in a `video_producer/exports/` folder, and you download them from the page. Your admin sets a size budget for that folder per user.
+Pick a format, a resolution and the extent, then click **Export**.
 
-In this version only the last two tabs produce files. Their button (the word "Download" followed by the file name, which comes from the project name) builds the file in your browser and saves it through the browser: nothing is written to your PotionUI storage. The media paths inside the Final Cut Pro, OpenTimelineIO and EDL files are made from the names of the media, not paths of real video files, and a shot without media becomes a gap. The **Video** tab shows a progress bar and ends with a note saying that no video file is written at this stage.
+- **Format.** Two formats are real. **Web · H.264 MP4** has the aspect ratio of your project. **Social media · vertical H.264** is always 9:16: the shots fill the frame and are cropped around their center. **Master file · ProRes 422** and **Archive · H.265** stay simulated and carry the badge **Simulated**.
+- **Resolution.** 720p, 1080p or 4K; the window starts on the resolution of your project. The short side of the picture is 720, 1080 or 2160 pixels. For a 16:9 project a web video is 1280×720, 1920×1080 or 3840×2160, and a social video is 720×1280, 1080×1920 or 2160×3840.
+- **Extent.** The web and social videos always render the **Whole sequence**. **Range** is greyed, and when you have drawn a range the window says "Web and social exports render the whole sequence."
+- **Audio stems by role.** The switch is simulated and does nothing for the web and social videos.
 
-Available from step 6.
+Under the choices the window shows the name of the file (the project name with spaces turned into underscores, then the resolution, for example `Dawn_at_the_harbour_1080p.mp4`), its frame rate and aspect ratio and the note "Rendered on the server with ffmpeg".
+
+What the video holds:
+
+- The shots in the order of the project, with the **Color** settings (exposure, contrast, saturation, temperature) and the fades of each shot. A shot with no file that the server can find, and every gap between shots, is black and silent. An image placed as a shot is held for the length of the shot.
+- The sound of each shot's own video (the viewer does not play it, but the export keeps it), and your audio tracks with their gain, the fader of their track, mute and solo, and their fades. The tracks are added together as they are, without automatic leveling.
+- Not in the video: the titles and markers, the subtitles (always a separate file, see below), and the pan, equalizer, compressor, filter, sends, automation and master fader of the console. What you hear in the console with those is not what the file holds.
+
+If your admin has not installed ffmpeg on the server, the Video tab says "ffmpeg is missing on the server: web and social exports need it." (with a **Read the guide** link for an admin, and "Ask an administrator to install it." for anyone else) and **Export** is disabled for the web and social formats.
+
+### Follow the export
+
+The export runs on the server, in the background. The window shows a card with the file name, its state (**Queued**, **Rendering**, **Ready**, **Failed** or **Cancelled**), the current step, a percentage and a progress bar:
+
+| Step | What happens |
+|---|---|
+| Waiting in the queue | Another export is running on the server, which makes one at a time. |
+| Assembling the shots | The shots are put end to end, with their color and fades. |
+| Mixing the audio | The sound is mixed. This is the same run as the assembly: the step changes at 50 %. |
+| Converting to MP4 | The final MP4 is made. The percentage stays at 70 % during this step. |
+| Saving to your library | The MP4 is copied into your library. |
+
+- **Cancel** stops a queued or running export ("The export was cancelled."). If you cancel during "Converting to MP4", the card says **Cancelled** at once, but the server finishes that step in the background, so your next export may wait a little.
+- You can close the window or leave the page: the export goes on. With the window closed the page keeps following it and shows a toast with **Download** when it is ready. PotionUI sends the notification "Video Producer: export ready" (or "Video Producer: export failed"), and when you open **Export and share** again the card is back.
+- A project has one export at a time ("An export of this project is already running.").
+- When it is ready the card says "Dawn_at_the_harbour_1080p.mp4 is ready" with its size, and offers **Download** and, when your PotionUI can show it, **Show in the library**, which opens your library on the videos. The MP4 is also in your library like any video, so you can import it into a project (chapter 6).
+- A failed export says what failed ("ffmpeg could not assemble the video.", "The video could not be converted." or "The video could not be saved to your library.") and, under it, the technical message of the server (chapter 18).
+
+### Previous exports
+
+Under the card, **Previous exports** lists the export in progress first, with its state, then the earlier exports of the project: format and resolution, state, when it ended and its size, with a download icon (**Download <file>**) and a trash icon (**Delete <file>**). Deleting asks "Delete this export?" ("<file> is removed from the export folder. The copy in your library stays."): **Delete** or **Keep it**. With none, the list says "No video exported for this project yet."
+
+The MP4 files are kept in your PotionUI storage, in a `video_producer/exports/` folder, until you delete them. Your admin sets a size budget for that folder, per user. When it is reached, your oldest finished exports are deleted to make room, and if that is not enough the export is refused: "The export folder is full: delete older exports and try again." The copy in your library does not count in this budget and stays when an export is deleted.
+
+### To other software
+
+Three files, built by the server from your saved project: **Final Cut Pro** (`.fcpxml`), **OpenTimelineIO** (`.otio`) and **EDL CMX 3600** (`.edl`). Click a card, read its note and the beginning of the file, then click **Download** followed by the file name, which comes from the project name (for example "Download Dawn_at_the_harbour.fcpxml"). The page says "<file> downloaded".
+
+- **Final Cut Pro.** "V1 sequence with the chosen takes, shot names and in points." One video row, with a shot without media as a gap. No audio.
+- **OpenTimelineIO.** "Video and audio tracks by role; opens in Resolve, Premiere (plugin) and Nuke Studio." The same video row, and one audio track per track of the console, with the position, role and gain of each clip. The audio clips carry no file.
+- **EDL.** "Universal edit list (V1 only), for grading or conforming." One event per shot, with its name and its media file; a shot without media is on a black reel (BL).
+
+These files carry the cut only: no fades, no color settings, no titles and no audio files.
+
+**Media paths.** The files point to the real media files of your shots, as the server stores them: "Media paths are the real files on the server, taken from the saved project." The preview shown in the window lists file names, but the file you download holds the full paths on the server. If your editing software runs on another computer, those paths do not exist there: put the videos of your takes (download them from your gallery) and your imported media on that computer and relink them in your software.
+
+**Importing.** In Final Cut Pro, use **File › Import › XML…** and pick the `.fcpxml`: the project appears in an event named "Video Producer". The `.otio` file opens in the software named above and in other software that supports OpenTimelineIO. The `.edl` is read by editing and grading software that support the CMX 3600 format. Menus differ between software and between versions: follow the import command of yours.
+
+### Subtitles
+
+An SRT file built from the dialogue text (the lines written for the audio clips, with the name of the character in front: "Mara: Hello") and from the titles of the timeline (the title, then its subtitle on a second line), in time order. The tab lists the cues with their times ("No dialogue or title to subtitle." when there is none) and offers **Download** followed by the file name, which ends in `.srt`. The subtitles are never burned into the video: load the SRT in your player or your editing software.
 
 ## 15. Language
 
@@ -534,9 +629,9 @@ When the shortcuts work:
 
 Some parts keep their interface but do not do the real thing yet. They carry a gray dashed badge, **Simulated**, never a yellow one: yellow is kept for real points to check. **Help › Simulated features** opens the list. The same gray badge also marks what the engine you picked cannot do (a greyed profile, "Not sent with this engine" on the references and on the workshop settings, "Upscaler not available"; chapters 8 and 9).
 
-The badge **Simulated** appears in the header of the windows **Reference a Gaussian Splat file** and **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265**, next to the audio stems and in the footer of the **Video** tab of the export window; on the automation button of the console strips; on the **Sample scene** and on the preview of a Gaussian Splat file in the 3D scene; and on a take made by an earlier version of the project, on its card ("Simulated take from an earlier version of the project: read only.") and in the viewer ("Final take · simulated AI", "720p draft · simulated AI"). The takes of the real generation never carry it. A few notifications are flagged the same way.
+The badge **Simulated** appears in the header of the windows **Reference a Gaussian Splat file** and **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265** when one of them is picked, next to the audio stems and, when a simulated format is picked, in the footer of the **Video** tab of the export window ("Simulated render: master and archive"); on the automation button of the console strips; on the **Sample scene** and on the preview of a Gaussian Splat file in the 3D scene; and on a take made by an earlier version of the project, on its card ("Simulated take from an earlier version of the project: read only.") and in the viewer ("Final take · simulated AI", "720p draft · simulated AI"). The takes of the real generation never carry it. A few notifications are flagged the same way.
 
-Already working in this version: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard, the PotionUI assistant with its four tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the camera, the trajectories and the keyframes of the 3D scene, the mixing console playing your audio files, and the Final Cut Pro, OpenTimelineIO, EDL and SRT files, which are real files.
+Already working in this version: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard, the PotionUI assistant with its four tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the camera, the trajectories and the keyframes of the 3D scene, the mixing console playing your audio files, the seam frames, the web and social videos (MP4 files that ffmpeg assembles on the server) and the Final Cut Pro, OpenTimelineIO, EDL and SRT files, which are real files.
 
 The window **Simulated features** lists eight items. For each one, the table says what it does in this version and what it becomes once all the steps are delivered.
 
@@ -544,8 +639,8 @@ The window **Simulated features** lists eight items. For each one, the table say
 |---|---|---|
 | **3D render modes and engine settings** | The output modes "3D render" and "3D render + AI" start nothing. The settings greyed in the Advanced workshop are not sent to the engine: the seed (each take draws its own), the final resolution (the final uses the largest resolution of the engine), steps, CFG, LoRA, windows, consistency, post-processing and the Hybrid AV audio driver; nor are the Control videos and the Hybrid builder weights. Takes made by earlier versions keep their numbered thumbnail. | Stays simulated. AI generation itself is real: see chapters 8 and 9. |
 | **Synopsis breakdown** | The **Propose a breakdown** button and **Production › Split synopsis into shots…** cut the synopsis into sentences: one sentence becomes one shot. | The assistant makes the real breakdown (chapter 10) and shows it in the same **Proposed breakdown** list. The button keeps its sentence cut. |
-| **Identity check** | The similarity between shots is simulated. The color check really analyzes the images. | Color matching is measured on the real thumbnails of the takes (from step 6). The similarity percentage stays simulated, because no identity measure is available to plugins. |
-| **Video render** | No video file is written. The Final Cut, OTIO, EDL and SRT exports produce real files. | H.264 MP4 or VP9 WebM videos assembled with ffmpeg and written to your storage. ProRes 422, H.265 and audio stems stay simulated: PotionUI's video converter writes H.264 MP4 or VP9 WebM only, and no per-role audio render exists. Available from step 6. |
+| **Identity check** | The similarity between shots is simulated. The color check really analyzes the images: the seam frames of the shots and their thumbnails (chapter 12). | The similarity percentage stays simulated, because no identity measure is available to plugins. |
+| **Video render** | Web and social videos are real: ffmpeg assembles your cut on the server and the MP4 lands in your library (chapter 14). The master file (ProRes), the archive (H.265) and the audio stems are simulated: the window ends with "Simulated render complete: no video file is written at this stage." The Final Cut, OTIO, EDL and SRT exports produce real files. | Delivered for web and social. ProRes 422, H.265 and audio stems stay simulated: PotionUI's video converter writes H.264 MP4 or VP9 WebM only, and no per-role audio render exists. |
 | **Gaussian Splat** | The referenced file is not loaded; the sample scene is a generated point cloud. | Stays simulated: the scene stays a 2D point preview and Gaussian Splat files are referenced, not loaded. |
 | **Control video** | Computing the guide from the 3D scene is simulated. | Stays simulated: the guide video is not rendered from the scene, an imported Control video is not sent to an engine and the 3D capture is not rendered from the scene. The production modes **3D render** and **3D render + AI** depend on that guide and stay simulated. |
 | **Voice and sound design** | Preparation is simulated; the preview is a simple synthesis. | Stays simulated: voice, character and timbre settings do not produce speech, lip sync has no separate step (MiniMax H3 makes picture and sound in one pass) and no preset prepares ambience, foley, texture, impact or music for the workshop. The text of the dialogues does feed the subtitles for real. |
@@ -563,13 +658,23 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **The quota is spent.** **Generate selection** says "GPU quota exceeded" until the next month or until your admin raises the limit of your plan. Running generations are not stopped, and a take that fails or is cancelled gives its minutes back. The first takes of a preset count 10 seconds of GPU for every second of video, which can look generous until the real durations are measured.
 - **Generate selection is disabled.** Read the message in the bar: no range, no direction and no shot prompt, an empty prompt, a 3D mode with no 3D shot, no engine, a preset that is not yours, a profile the engine cannot generate, models to install, a cloud model to pick, or the quota.
 - **"Models to install for this preset: …".** Your admin has not downloaded the model files that preset needs. Ask them.
-- **A warning says the shots will be generated from text only.** The FL2VA profile has no frame linked to the shot. Add a start or an end frame, or pick another H3 profile; the generation is not blocked.
+- **A warning says the shots will be generated from text only.** The FL2VA profile has no frame linked to the shot. Add a start or an end frame (**Use the previous shot’s last frame** takes the first one from the previous shot, chapter 12), or pick another H3 profile; the generation is not blocked.
 - **A take stays Queued.** Your admin limits how many generations you can have in progress at once: the take starts by itself when one of yours ends. If it stays Queued while nothing of yours is running, tell your admin.
 - **A take failed.** The card shows the reason that PotionUI gives (in English) or, when it gives none, "The generation failed" followed by a code. **Retry** starts a new take for the same shot with the same seed. Typical causes: the GPU ran out of memory (`cuda_oom`: try a draft, a shorter shot or another engine); a model file is missing on the server (`missing_model_file`: ask your admin to download it again); the server ran out of memory while streaming the model (`host_ram_oom`). If PotionUI was restarted during the generation, the take is marked failed and cannot resume: use **Retry**.
 - **"Upscaler not available" in Make final.** No upscaler is assigned to you: SeedVR2 enlarges the takes of Wan, LTX, MiniMax H3 Fast and VDN and of cloud models. Use **Re-render at full resolution**, or ask your admin about SeedVR2.
 - **References are ignored with MiniMax H3.** Ask your admin to check the model file picked for the References mode. The engine ignores the references of a profile other than Ref2VA, and of any other preset.
 - **I closed the page during a generation.** The takes go on; open the project again to find them. The notifications tell you when they end.
-- **An export fails.** Ask your admin about ffmpeg, or free some of your exports: the folder has a size budget.
+- **The export window says "ffmpeg is missing on the server: web and social exports need it."** The server cannot find ffmpeg, so the web and social videos cannot be made. Ask your admin to install it; once it is, reload the page. The files for other software and the subtitles still download.
+- **"No shot has a video file to export yet."** No shot of your saved project has a video or image file the server can find: every shot is still "To generate", only takes of earlier versions (simulated, with no file) are placed, or the media were removed from your library or gallery. Generate or import the shots, then export again. A single shot without a file does not stop the export: it is black and silent in the video.
+- **"An export of this project is already running."** A project has one export at a time. Wait for it, or click **Cancel** on its card.
+- **"The export folder is full: delete older exports and try again."** Your exports have used your size budget. Delete some in **Previous exports** (the copies in your library stay), or ask your admin for a bigger export budget.
+- **An export stays Queued.** The server makes one export at a time, for everybody, so yours waits its turn. If it never starts, tell your admin.
+- **The progress stays at 70 % ("Converting to MP4").** That step reports no progress. A long sequence at 4K can take several minutes, and the server gives up after 10 minutes: the export then fails with "The video could not be converted." Export again at 1080p or 720p.
+- **An export is Failed.** The card says what failed and, under it, the message of the server. "ffmpeg could not assemble the video." can come from a file ffmpeg cannot read, or from PotionUI restarting during the export ("The server stopped during the export."); start it again, and if it fails again give the message to your admin. "The video could not be saved to your library." means that your PotionUI storage is full: free some space and export again.
+- **A shot is black or silent in the video.** The server found no file for that shot (a take of an earlier version, or media removed from your library or gallery), or the file has no soundtrack. The sound of the console's pan, equalizer, compressor, filter, sends and automation is not in the file (chapter 14).
+- **A Final Cut Pro, OpenTimelineIO or EDL file does not find its media.** The paths in the file are paths on the PotionUI server. Copy the media to your editing computer and relink them in your software (chapter 14).
+- **"This export no longer exists." or "The video is not ready yet."** when you download: the export was deleted, or it is still running. Export again, or wait for the end of the card.
+- **A seam frame is refused.** "This shot has no previous shot." (the first shot cannot take one); "“Shot 1” has no finished take yet." or "The previous shot has no finished take with a file." (generate and choose a take for the previous shot first; the takes of earlier versions have no file); "The image could not be extracted from the take." or "The image could not be extracted: try again." (try again, and tell your admin if it persists); "The project could not be saved: no image extracted." (the project must be saved first: see the save state in the project bar).
 - **The project bar says "Not saved — retry".** The last save failed: the connection dropped, or the server refused the project. A message tells which. Click the save state or the **Retry** button of the message to try again. Your changes stay in the page and the next change tries again too. Until a save works, opening another project or restoring a version asks you to confirm before it drops those changes. If the message says that the content was refused or that the project is too large, ask your admin: reloading the page would lose the changes that are not saved.
 - **"Project reloaded: it changed elsewhere".** The project was saved from another tab, window or device after you opened it, so the page loaded the saved version. The changes you had not saved in this page are lost. Work on a project in one place at a time; **File › Version history…** brings back an earlier state.
 - **"This project was deleted elsewhere".** The project was deleted from another tab or device while it was open here. The page opened your most recently modified project, or created the starter project. The changes you had not saved are lost.
@@ -577,7 +682,6 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **"1 file could not be imported" (or "N files could not be imported").** The file is no longer available in the library or the gallery, or its kind is not accepted by the window: images and videos for **Import files…** and **From the PotionUI gallery**, audio for **Import audio file…**.
 - **The assistant does not answer, shows no card or acts on the wrong project.** See chapter 10, "If it does not work".
 
-Exports from step 6.
 
 ## 19. Glossary
 
@@ -592,6 +696,7 @@ Exports from step 6.
 | seed | graine | The number that fixes the randomness of a take; the same seed gives a similar take. |
 | calibration | calibration | The real durations of your past generations, kept per preset, engine and resolution, that the estimate uses for its time; it shows "—" until there is one. |
 | match | raccord | Making two neighbor shots look alike (color) or keep the same identity. |
+| seam frame | image de raccord | An image taken from a take and set as the first or last frame of a shot, usually the last image of the previous shot, so that a shot starts where the previous one ended (chapter 12). |
 | fade | fondu | A gradual start or end of a clip. |
 | playhead | tête de lecture | The current position on the timeline. |
 | range | plage | A part of the timeline between an in point and an out point. |
@@ -605,3 +710,5 @@ Exports from step 6.
 | tool | outil | An action the assistant can run in your project: write a shot prompt, fix conflicts, split the synopsis, check continuity. |
 | approval | approbation | The card where you accept (**Approve**) or refuse (**Reject**) what the assistant proposes. Nothing changes before you approve. |
 | context | contexte | The summary of your project that the page sends to the assistant with each message (chapter 10). |
+| export job | job d'export | A video export waiting or running on the server, with its state and its progress. Once it ends it stays in **Previous exports** (chapter 14). |
+| mezzanine | mezzanine | The high-quality intermediate video that the server assembles first and then converts into the MP4 you download. You never handle it (chapter 14). |

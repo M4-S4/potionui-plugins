@@ -75,6 +75,7 @@ export function applyMe(me) {
 		presets: me?.presets ?? [],
 		features: me?.features ?? { upscaler: false },
 		upscaleTargets: me?.upscaleTargets ?? [],
+		ffmpeg: me?.ffmpeg ?? null,
 		settings: me?.settings ?? { draftResolution: null, maxParallelJobs: null }
 	};
 	ui.isAdmin = ui.me.isAdmin;

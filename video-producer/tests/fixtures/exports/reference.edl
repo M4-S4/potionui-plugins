@@ -1,0 +1,17 @@
+TITLE: AUBE & MARÉE
+FCM: NON-DROP FRAME
+
+001  VP001    V     C        00:00:00:00 00:00:05:00 00:00:00:00 00:00:05:00
+* FROM CLIP NAME: Le port endormi
+* SOURCE FILE: 1.mp4
+
+002  VP002    V     C        00:00:00:10 00:00:04:15 00:00:05:00 00:00:09:05
+* FROM CLIP NAME: Les mains du pêcheur
+* SOURCE FILE: 1.mp4
+
+003  BL       V     C        00:00:00:00 00:00:03:00 00:00:09:05 00:00:12:05
+* FROM CLIP NAME: Le départ <large>
+
+004  VP004    V     C        00:00:00:06 00:00:03:19 00:00:12:05 00:00:15:18
+* FROM CLIP NAME: harbour-wide.mp4
+* SOURCE FILE: 03927418-58f2-440f-9a15-456093037531.mp4

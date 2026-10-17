@@ -27,6 +27,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 	import InfoTip from '../shell/InfoTip.svelte';
+	import SeamAction from '../takes/SeamAction.svelte';
 
 	const modes = ['Génération IA', 'Rendu 3D', 'Rendu 3D + IA'];
 
@@ -46,6 +47,7 @@
 	const busy = $derived(status === 'running');
 	const blocked = $derived(ready.missing.length > 0);
 	const notes = $derived(blocked ? ready.missing : ready.warnings);
+	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
 	const primary = $derived(p.mode === 'Rendu 3D' ? t('production.prepareRender') : t('production.generate'));
 	const targets = $derived([
 		{ id: 'clip', label: t('production.target.clip') },
@@ -185,6 +187,7 @@
 					<span class="vp-notice text-xs text-warning"><Icon name="alert" class="h-3.5 w-3.5 shrink-0" /><span class="vp-notice-text">{notes[0]}</span></span>
 				</InfoTip>
 			{/if}
+			{#if gapClip}<SeamAction clip={gapClip} variant="icon" />{/if}
 			{#if ready.noEngine && ui.isAdmin}
 				<a class="vp-link-hit shrink-0 whitespace-nowrap text-xs text-fg underline decoration-signal underline-offset-2 hover:decoration-2" href="/admin?tab=plugins">{t('generation.engine.settings')}</a>
 			{/if}

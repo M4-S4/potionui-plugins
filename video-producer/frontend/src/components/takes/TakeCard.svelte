@@ -5,6 +5,7 @@
 	import { useTake, promoteToFinal, retryTake, cancelTake, flagTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById } from '../../lib/production.svelte.js';
 	import { isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
+	import { extractable, extractAtPlayhead, seamState } from '../../lib/seam.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 
@@ -126,6 +127,12 @@
 				<HostUi
 					name="IconButton"
 					props={{ icon: hostIconName('thumb-down'), label: t('generation.card.reject', { variant: take.variant }), tooltip: t('generation.card.rejectTip'), size: 'xs', class: 'vp-toggle', ariaPressed: take.flag === 'reject', onclick: () => flagTake(take, 'reject') }}
+				/>
+			{/if}
+			{#if clip && extractable(take)}
+				<HostUi
+					name="IconButton"
+					props={{ icon: hostIconName('image'), label: t('lib.seam.extract'), tooltip: t('lib.seam.extractTip'), size: 'xs', disabled: Boolean(seamState.busy), onclick: () => extractAtPlayhead(take, clip) }}
 				/>
 			{/if}
 			{#if take.generationId}

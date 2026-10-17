@@ -179,7 +179,11 @@ def _as(app, user):
     app.dependency_overrides[get_current_active_user] = lambda: user
 
 
-def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, store, no_container):
+def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, store, no_container, monkeypatch):
+    from backend import core_bridge
+
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: None)
+
     response = client.get(ME_URL)
 
     assert response.status_code == 200
@@ -196,6 +200,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "presets": [],
             "features": {"upscaler": False},
             "upscale_targets": ["hd720", "fhd1080", "qhd1440", "uhd2160"],
+            "ffmpeg": False,
         },
     }
 

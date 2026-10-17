@@ -417,28 +417,38 @@ def test_an_error_reading_the_upscaler_is_a_step_still_to_do(monkeypatch, caplog
     assert "db is locked" in caplog.text
 
 
-def test_ffmpeg_on_the_path_is_done(monkeypatch):
+def test_ffmpeg_and_ffprobe_on_the_path_is_done(monkeypatch):
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe")
 
     result = FfmpegReady().evaluate(CONTEXT)
 
     assert result == SetupCheckResult(done=True, description="ffmpeg is available.")
-    assert "/usr/bin" not in result.description
 
 
 @pytest.mark.parametrize("found", [None, ""])
 def test_missing_ffmpeg_points_at_the_guide(monkeypatch, found):
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: found)
+    monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe")
 
     assert FfmpegReady().evaluate(CONTEXT) == SetupCheckResult(
         done=False,
         description=(
-            "Video Producer joins takes and exports the cut with ffmpeg. "
-            "Install ffmpeg on the server so it is on the PATH, then restart PotionUI."
+            "Video Producer joins takes and exports the cut with ffmpeg, and reads media with ffprobe; ffmpeg is missing. "
+            "Install ffmpeg with ffprobe on the server so both are on the PATH, then restart PotionUI."
         ),
         action_label="Read the guide",
         action_href=README_HREF,
     )
+
+
+def test_ffmpeg_without_ffprobe_is_still_a_step_to_do(monkeypatch):
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: None)
+
+    result = FfmpegReady().evaluate(CONTEXT)
+
+    assert result.done is False and "ffprobe is missing" in result.description
 
 
 def test_an_error_looking_for_ffmpeg_is_a_step_still_to_do(monkeypatch, caplog):

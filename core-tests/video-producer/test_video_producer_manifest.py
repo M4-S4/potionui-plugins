@@ -147,7 +147,7 @@ def test_on_boot_loaded_by_the_core_creates_the_plugin_tables(loader, manifest, 
         cursor.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'video_producer_%'")
         created = {row["name"] for row in cursor.fetchall()}
     assert created == set(_load("backend.tables").TABLE_NAMES)
-    assert len(created) == 5
+    assert len(created) == 6
 
 
 def test_api_module_loads_and_exposes_the_router(loader, manifest):
@@ -181,6 +181,13 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/projects/{{project_id}}/estimate"),
         ("POST", f"{base}/projects/{{project_id}}/generate"),
         ("GET", f"{base}/projects/{{project_id}}/queue"),
+        ("GET", f"{base}/projects/{{project_id}}/exports"),
+        ("GET", f"{base}/projects/{{project_id}}/exports/{{fmt}}"),
+        ("POST", f"{base}/projects/{{project_id}}/exports/video"),
+        ("GET", f"{base}/exports/{{job_id}}"),
+        ("GET", f"{base}/exports/{{job_id}}/file"),
+        ("DELETE", f"{base}/exports/{{job_id}}"),
+        ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/seam-frame"),
     }
 
 
@@ -630,11 +637,33 @@ def test_notification_type_register_declares_the_plugins_types_on_the_cores_regi
     assert register(context) is context
     assert register(context) is context
 
-    assert [spec.key for spec in registry.all()] == ["video-producer.take_done", "video-producer.take_failed"]
+    assert [spec.key for spec in registry.all()] == [
+        "video-producer.take_done",
+        "video-producer.take_failed",
+        "video-producer.export_done",
+        "video-producer.export_failed",
+    ]
     assert [item.key for item in _load("backend.notifications").TYPES] == [spec.key for spec in registry.all()]
     for spec in registry.all():
         assert spec.label.startswith("Video Producer: ") and spec.description
         assert (spec.category, spec.default_enabled, spec.admin_only) == ("plugin", True, False)
+
+
+def test_the_export_notification_types_reach_the_cores_registry(loader, manifest):
+    register = _handler(loader, manifest, "notification_type.register")
+    registry = NotificationTypeRegistry()
+
+    register(HookContext(hook_name="notification_type.register", plugin_id="system", data={"registry": registry}))
+
+    for key, label in (
+        ("video-producer.export_done", "Video Producer: export ready"),
+        ("video-producer.export_failed", "Video Producer: export failed"),
+    ):
+        spec = registry.get(key)
+        assert (spec.label, spec.category, spec.default_enabled, spec.admin_only) == (label, "plugin", True, False)
+        assert spec.description
+    notifications = _load("backend.notifications")
+    assert (notifications.EXPORT_DONE, notifications.EXPORT_FAILED) == ("video-producer.export_done", "video-producer.export_failed")
 
 
 def test_notification_type_register_never_raises(loader, manifest):
@@ -733,6 +762,20 @@ def test_setup_checks_load_the_way_the_core_loads_them(loader, manifest):
         assert check_class.__name__ == step["check"].split(":")[1]
         assert step["label"]
         assert isinstance(check_class(), SetupCheck)
+
+
+def test_the_ffmpeg_setup_check_loads_through_the_core_and_reads_the_hosts_ffmpeg(loader, manifest, monkeypatch):
+    step = next(step for step in manifest.setup if step["check"] == "backend.setup_checks:FfmpegReady")
+    check_class = loader.load_class(manifest, step["check"])
+    bridge = sys.modules["video_producer.backend.core_bridge"]
+
+    assert step["label"] == "Install ffmpeg for video delivery"
+    assert check_class.__module__ == "video_producer.backend.setup_checks" and issubclass(check_class, SetupCheck)
+    monkeypatch.setattr(bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
+    assert check_class().evaluate(SimpleNamespace()).done is True
+    monkeypatch.setattr(bridge, "find_ffmpeg", lambda: None)
+    missing = check_class().evaluate(SimpleNamespace())
+    assert missing.done is False and "ffmpeg" in missing.description and missing.action_label == "Read the guide"
 
 
 def _setup(loader, manifest):
@@ -988,6 +1031,29 @@ def test_the_takes_routes_loaded_by_the_core_list_choose_flag_and_delete_a_take(
     assert takes.get_take(take["id"]) is None
 
 
+def test_the_export_routes_loaded_by_the_core_answer_a_file_and_refuse_a_video_without_ffmpeg(loader, manifest, mock_db, monkeypatch):
+    _boot(loader, manifest)
+    app = _app(loader, manifest, {"user": _user("user-1")})
+    bridge = sys.modules[f"{PACKAGE}.backend.core_bridge"]
+    monkeypatch.setattr(bridge, "find_ffmpeg", lambda: None)
+    starter = json.loads((PLUGIN_ROOT / "tests" / "fixtures" / "starter_doc.json").read_text(encoding="utf-8"))
+    base = f"/api/plugins/{PLUGIN_ID}"
+
+    with TestClient(app) as client:
+        project_id = client.post(f"{base}/projects", json={"doc": {**starter, "name": "Aube sur le port"}}).json()["data"]["project"]["id"]
+        edl = client.get(f"{base}/projects/{project_id}/exports/edl", params={"media": "name"})
+        srt = client.get(f"{base}/projects/{project_id}/exports/srt")
+        refused = client.post(f"{base}/projects/{project_id}/exports/video", json={"format": "web"})
+        listed = client.get(f"{base}/projects/{project_id}/exports")
+
+    assert edl.status_code == 200 and edl.headers["content-type"] == "text/plain; charset=utf-8"
+    assert edl.headers["content-disposition"].startswith('attachment; filename="Aube_sur_le_port.edl"')
+    assert edl.text.startswith("TITLE: AUBE SUR LE PORT\r\nFCM: NON-DROP FRAME\r\n")
+    assert srt.status_code == 200 and srt.headers["content-type"] == "application/x-subrip"
+    assert refused.status_code == 409 and refused.json()["detail"]["error"] == "ffmpeg_unavailable"
+    assert listed.json() == {"success": True, "data": {"jobs": []}}
+
+
 def test_the_estimate_and_generate_routes_loaded_by_the_core_block_without_a_preset_instead_of_failing(loader, manifest, mock_db):
     _boot(loader, manifest)
     app = _app(loader, manifest, {"user": _user("user-1")})
@@ -1198,3 +1264,69 @@ def test_the_plugin_drafts_the_shipped_presets_at_832x480_and_finishes_them_at_t
         assert models.model_fields(fields) == (["model", "text_encoder", "video_vae", "audio_vae"], [])
         if preset.id == H3_12GB:
             assert {"sha256": WAN2GP_SHA256, "filename": WAN2GP_DIT} in fields["model"]["recommendations"]
+
+
+def test_every_export_and_seam_route_loaded_by_the_core_depends_on_the_signed_in_user(loader, manifest):
+    api = loader.load_plugin_module(manifest, "backend.api")
+
+    def depends_on_user(dependant):
+        return any(item.call is get_current_active_user or depends_on_user(item) for item in dependant.dependencies)
+
+    guarded = [route for route in api.router.routes if "/exports" in route.path or route.path.endswith("/seam-frame")]
+
+    assert len(guarded) == 7
+    assert all(depends_on_user(route.dependant) for route in guarded)
+
+
+def test_the_ready_hook_loaded_by_the_core_fails_the_export_a_stopped_server_left_running_and_resumes_the_queue(loader, manifest, mock_db, scheduled, monkeypatch):
+    _boot(loader, manifest)
+    on_ready = _handler(loader, manifest, "plugin.lifecycle.ready")
+    on_disable = _handler(loader, manifest, "plugin.lifecycle.disable")
+    jobs = _load("backend.exports.jobs")
+    bridge = sys.modules[f"{PACKAGE}.backend.core_bridge"]
+    notified = []
+    monkeypatch.setattr(bridge, "notify", lambda **fields: notified.append(fields))
+    monkeypatch.setattr(bridge, "storage_directory", lambda: Path("storage-that-does-not-exist"))
+    interrupted = jobs.create_job("p-1", "user-1", "web", "1080p")
+    jobs.claim_next()
+    waiting = jobs.create_job("p-2", "user-1", "social", "720p")
+
+    on_ready(HookContext(hook_name="plugin.lifecycle.ready", plugin_id=PLUGIN_ID, data={}))
+
+    assert (jobs.get_job(interrupted["id"])["status"], jobs.get_job(interrupted["id"])["error_code"]) == ("failed", "ffmpeg_failed")
+    assert jobs.get_job(waiting["id"])["status"] == "queued"
+    assert sorted(job.__qualname__ for job in scheduled) == ["Runner.run", "Tracker.run"]
+    assert [fields["notification_type"] for fields in notified] == ["video-producer.export_failed"]
+    assert jobs.RUNNER.active is True
+    on_disable(HookContext(hook_name="plugin.lifecycle.disable", plugin_id="system", data={"plugin_id": PLUGIN_ID}))
+    assert jobs.RUNNER.active is False
+
+
+def test_the_golden_exports_come_back_byte_for_byte_through_the_routes_loaded_by_the_core(loader, manifest, mock_db, monkeypatch):
+    _boot(loader, manifest)
+    caller = {"user": _user("user-1")}
+    app = _app(loader, manifest, caller)
+    bridge = sys.modules[f"{PACKAGE}.backend.core_bridge"]
+    takes = sys.modules[f"{PACKAGE}.backend.takes"]
+    folder = PLUGIN_ROOT / "tests" / "fixtures" / "exports"
+    reference = json.loads((folder / "reference-project.json").read_text(encoding="utf-8"))
+    uploads = {upload["item_id"]: upload for upload in reference["uploads"]}
+    base = f"/api/plugins/{PLUGIN_ID}"
+
+    def resolve_media(user, ref):
+        upload = uploads[ref["item_id"]]
+        return {"value": upload["value"], "media_type": upload["media_type"], "original_filename": upload["original_filename"], "origin": None}
+
+    monkeypatch.setattr(bridge, "resolve_media", resolve_media)
+    monkeypatch.setattr(bridge, "media_file_path", lambda kind, value: f"/srv/storage/{value}")
+    with TestClient(app) as client:
+        project_id = client.post(f"{base}/projects", json={"doc": reference["doc"]}).json()["data"]["project"]["id"]
+        for take in reference["takes"]:
+            takes.create_take({**{key: take[key] for key in ("shot_id", "generation_id", "file_id", "file_path", "status", "quality", "kind", "chosen")}, "project_id": project_id, "user_id": "user-1"})
+        answers = {fmt: client.get(f"{base}/projects/{project_id}/exports/{fmt}", params={"media": "name"}) for fmt in ("fcpxml", "otio", "edl", "srt")}
+        caller["user"] = _user("user-2")
+        foreign = {fmt: client.get(f"{base}/projects/{project_id}/exports/{fmt}") for fmt in ("fcpxml", "srt")}
+
+    for fmt, answer in answers.items():
+        assert answer.status_code == 200 and answer.content == (folder / f"reference.{fmt}").read_bytes(), fmt
+    assert {answer.status_code for answer in foreign.values()} == {404}

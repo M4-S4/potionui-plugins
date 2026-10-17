@@ -155,7 +155,7 @@
 	"export.noteEdl": "Liste de montage universelle (V1 seulement), pour l’étalonnage ou le conformage.",
 	"export.subtitlesNote": "Issus des dialogues générés (texte des répliques) et des titres.",
 	"export.noSubtitles": "Aucun dialogue ni titre à sous-titrer.",
-	"export.simulated": "Export vidéo simulé",
+	"export.simulated": "Rendu simulé : maître et archive",
 	"export.close": "Fermer",
 	"export.export": "Exporter",
 	"export.download": "Télécharger {file}",

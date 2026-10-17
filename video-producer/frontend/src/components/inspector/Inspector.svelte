@@ -30,7 +30,9 @@
 	import { commandById } from '../../lib/commands.js';
 	import { currentPlan, markGuidesStale, addKeyframe, renderGuide } from '../../lib/scene.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { framesOf, roleKind } from '../../lib/seam.js';
 	import Tabs from '../shell/Tabs.svelte';
+	import SeamAction from '../takes/SeamAction.svelte';
 	import Icon from '../Icon.svelte';
 	import TakesSection from './TakesSection.svelte';
 	import ColorSection from './ColorSection.svelte';
@@ -117,6 +119,9 @@
 			markGuidesStale();
 		} else if (ui.scene.keyframe == null) ui.scene.keyframe = 'free';
 	}
+
+	const seamFrame = (shotId, kind) => framesOf(doc, shotId, kind).find((f) => f.assetId) ?? null;
+	const roleOption = (role) => (roleKind(role) === 'first' ? 'Début' : roleKind(role) === 'last' ? 'Fin' : role);
 
 	function setScope(id) {
 		if (id === item.scope.type) return;
@@ -245,6 +250,30 @@
 							</div>
 						{/if}
 					</section>
+					<section class="space-y-2">
+						<div class="vp-section-title">{t('inspector.section.frames')}</div>
+						<div class="grid grid-cols-2 gap-2">
+							{#each [['first', t('inspector.frames.first')], ['last', t('inspector.frames.last')]] as [kind, title] (kind)}
+								{@const f = seamFrame(item.id, kind)}
+								{@const thumb = f ? assetThumb(asset(f.assetId)) : null}
+								<button
+									type="button"
+									class="overflow-hidden rounded-md border border-line-strong text-left transition-colors {f ? 'hover:border-line-hover' : ''} disabled:cursor-default"
+									disabled={!f}
+									onclick={() => f && select('frame', f.id)}
+								>
+									{#if thumb}
+										<img src={thumb} alt="" class="aspect-video w-full object-cover" />
+									{:else}
+										<span class="flex aspect-video w-full items-center justify-center bg-surface-3 text-2xs text-fg-subtle">{t('inspector.frames.none')}</span>
+									{/if}
+									<span class="block truncate px-1.5 py-0.5 text-2xs text-fg-muted">{title}</span>
+								</button>
+							{/each}
+						</div>
+						<SeamAction clip={item} variant="button" />
+						<p class="text-xs text-fg-subtle">{t('inspector.frames.hint')}</p>
+					</section>
 					{@render fadeFields(true)}
 					<section class="space-y-2">
 						<div class="vp-section-title">{t('inspector.section.flag')}</div>
@@ -326,7 +355,7 @@
 					<NumField label={t('inspector.field.position')} value={item.time} min={0} step={0.04} unit="s" onchange={(v) => set('time', v)} />
 					<label class="flex items-center gap-2">
 						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
-						<select class="input vp-dense min-w-0 flex-1" value={item.role} onchange={(e) => act(() => (item.role = e.currentTarget.value))}>
+						<select class="input vp-dense min-w-0 flex-1" value={roleOption(item.role)} onchange={(e) => act(() => (item.role = e.currentTarget.value))}>
 							{#each ['Début', 'Fin', 'Transition', 'Identité', 'Style', 'Capture 3D'] as r (r)}<option value={r}>{frameRoleLabel(r)}</option>{/each}
 						</select>
 					</label>

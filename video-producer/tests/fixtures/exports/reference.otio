@@ -1,0 +1,273 @@
+{
+  "OTIO_SCHEMA": "Timeline.1",
+  "name": "Aube & marée",
+  "global_start_time": null,
+  "tracks": {
+    "OTIO_SCHEMA": "Stack.1",
+    "name": "tracks",
+    "children": [
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "V1",
+        "kind": "Video",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "Le port endormi",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 125
+              }
+            },
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "target_url": "1.mp4"
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "metadata": {
+              "video_producer": {
+                "stage": "final",
+                "take": "01M5R2W7F6Z126TXG7H111YRDN"
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "Les mains du pêcheur",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 10
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 105
+              }
+            },
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "target_url": "1.mp4"
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "metadata": {
+              "video_producer": {
+                "stage": "draft",
+                "take": "01M5R3P2RJX9DV882508WPJC3X"
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Gap.1",
+            "name": "Le départ <large>",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 75
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "harbour-wide.mp4",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 6
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 88
+              }
+            },
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "target_url": "03927418-58f2-440f-9a15-456093037531.mp4"
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "metadata": {
+              "video_producer": {
+                "stage": "source",
+                "take": null
+              }
+            }
+          }
+        ]
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "A1 · Dialogue",
+        "kind": "Audio",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Gap.1",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 150
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "fisherman-line.wav",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 63
+              }
+            },
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "target_url": "5b1c0e7a-9d3f-4c2b-8e61-7a0f2d9c4b13.wav"
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "metadata": {
+              "video_producer": {
+                "role": "Dialogue",
+                "gain_db": -3
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Gap.1",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 38
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "gull-cries.wav",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 13
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 38
+              }
+            },
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "target_url": "9f8e7d6c-5b4a-4321-8fed-cba987654321.wav"
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "metadata": {
+              "video_producer": {
+                "role": "Dialogue",
+                "gain_db": -1.5
+              }
+            }
+          }
+        ]
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "A2 · Music",
+        "kind": "Audio",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "dawn-theme.mp3",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 50
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 393
+              }
+            },
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "target_url": "c4e8a2f1-6b7d-4e3a-9c05-1f2e3d4c5b6a.mp3"
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "metadata": {
+              "video_producer": {
+                "role": "Musique",
+                "gain_db": -6
+              }
+            }
+          }
+        ]
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "A3 · Ambience",
+        "kind": "Audio",
+        "children": []
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "A4 · SFX",
+        "kind": "Audio",
+        "children": []
+      }
+    ]
+  }
+}

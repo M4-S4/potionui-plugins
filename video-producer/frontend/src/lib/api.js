@@ -1,4 +1,6 @@
 import { progressText } from './generation.js';
+import { filenameFrom, lastSegment, normalizeJob, jobPath } from './exports.js';
+import { normalizeSeamMedia, requestBody } from './seam.js';
 
 const CODE_BY_STATUS = {
 	400: 'invalid_request',
@@ -77,6 +79,11 @@ function thrown(err) {
 	return failure(0, 'network_error', text(err?.message));
 }
 
+export function requestError(err) {
+	if (Number.isInteger(err?.status) && err.status > 0) return normalizeError(isObject(err.body) ? err.body : { detail: err.detail ?? err.message }, err.status);
+	return thrown(err).error;
+}
+
 export function unwrap(payload) {
 	if (!isObject(payload)) return failure(0, 'invalid_response');
 	if (payload.success === true) return { ok: true, data: payload.data };
@@ -113,8 +120,7 @@ async function call(api, method, path, body, signal) {
 		try {
 			return unwrap(await api.request(method.toUpperCase(), path, body));
 		} catch (err) {
-			if (Number.isInteger(err?.status) && err.status > 0) return { ok: false, error: normalizeError(isObject(err.body) ? err.body : { detail: err.detail ?? err.message }, err.status) };
-			return thrown(err);
+			return { ok: false, error: requestError(err) };
 		}
 	}
 	if (typeof api?.[method] !== 'function') return failure(0, 'no_api');
@@ -229,6 +235,7 @@ export function normalizeMe(data) {
 		presets: list(me.presets, normalizePreset) ?? [],
 		features: { upscaler: features.upscaler === true },
 		upscaleTargets: strings(me.upscale_targets),
+		ffmpeg: typeof me.ffmpeg === 'boolean' ? me.ffmpeg : null,
 		settings: { draftResolution: text(settings.draft_resolution) || null, maxParallelJobs: number(settings.max_parallel_jobs) }
 	};
 }
@@ -412,6 +419,40 @@ const projectPath = (id) => `/projects/${encodeURIComponent(id)}`;
 const takePath = (projectId, takeId) => `${projectPath(projectId)}/takes/${encodeURIComponent(takeId)}`;
 const pickTake = (data) => normalizeTake(data.take);
 
+export async function downloadFrom(api, path, filename, save) {
+	if (typeof api?.download === 'function') {
+		try {
+			await api.download(path, filename);
+			return { ok: true, data: { filename: filename || lastSegment(path) } };
+		} catch (err) {
+			return { ok: false, error: requestError(err) };
+		}
+	}
+	if (typeof api?.fetchRaw !== 'function') return failure(0, 'no_api');
+	let response;
+	try {
+		response = await api.fetchRaw(path, { method: 'GET' });
+	} catch (err) {
+		return thrown(err);
+	}
+	if (!response.ok) {
+		let body = null;
+		try {
+			body = await response.json();
+		} catch {
+			body = null;
+		}
+		return { ok: false, error: normalizeError(body, response.status) };
+	}
+	const name = filename || filenameFrom(response.headers?.get?.('Content-Disposition')) || lastSegment(path);
+	try {
+		save(name, await response.blob());
+	} catch (err) {
+		return thrown(err);
+	}
+	return { ok: true, data: { filename: name } };
+}
+
 export async function coreFetch(api, path, init = {}) {
 	const headers = new Headers(init.headers);
 	const token = typeof api?.getToken === 'function' ? api.getToken() : null;
@@ -432,7 +473,7 @@ export async function coreFetch(api, path, init = {}) {
 	return { ok: false, error: normalizeError(body, response.status) };
 }
 
-export function createClient(api) {
+export function createClient(api, save) {
 	return {
 		async me() {
 			const result = await call(api, 'get', '/me');
@@ -497,6 +538,25 @@ export function createClient(api) {
 		},
 		async queue(projectId) {
 			return mapped(await call(api, 'get', `${projectPath(projectId)}/queue`), normalizeQueue);
+		},
+		async exportVideo(projectId, body) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/exports/video`, body), (data) => normalizeJob(data.job));
+		},
+		async exportJob(jobId) {
+			return mapped(await call(api, 'get', jobPath(jobId)), (data) => normalizeJob(data.job));
+		},
+		async cancelExport(jobId) {
+			const result = await call(api, 'delete', jobPath(jobId));
+			return result.ok ? { ok: true, data: normalizeJob(result.data?.job) } : result;
+		},
+		async listExports(projectId) {
+			return mapped(await call(api, 'get', `${projectPath(projectId)}/exports`), (data) => list(data.jobs, normalizeJob));
+		},
+		async seamFrame(projectId, shotId, source) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/seam-frame`, requestBody(source)), (data) => normalizeSeamMedia(data.media));
+		},
+		download(path, filename) {
+			return downloadFrom(api, path, filename, save);
 		},
 		coreFetch(path, init) {
 			return coreFetch(api, path, init);

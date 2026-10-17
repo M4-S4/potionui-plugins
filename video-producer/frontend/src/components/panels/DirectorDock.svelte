@@ -5,7 +5,7 @@
 	import { ui, doc, select, secs, globalPrompt, allIssues, itemsIn, productionRange, act, clipLabel } from '../../lib/state.svelte.js';
 	import { takesOf, assembleChosen, generateQueue, supportedProfiles, engineLabel } from '../../lib/production.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
-	import { seams, matchToPrevious } from '../../lib/continuity.svelte.js';
+	import { seams, matchToPrevious, seamTip } from '../../lib/continuity.svelte.js';
 	import { directionFields, stages } from '../../lib/catalog.js';
 	import { families, addReference, attachToRange } from '../../lib/references.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -15,6 +15,7 @@
 	import PanelHeader from './PanelHeader.svelte';
 	import Tabs from '../shell/Tabs.svelte';
 	import TakeCard from '../takes/TakeCard.svelte';
+	import SeamAction from '../takes/SeamAction.svelte';
 	import Icon from '../Icon.svelte';
 
 	const modes = ['FL2VA', 'Ref2VA', 'Hybrid AV'];
@@ -138,14 +139,17 @@
 						{#each seamIssues as i, n (n)}
 							<li class="flex gap-1.5 text-xs text-fg-muted">
 								<Icon name={i.kind === 'identity' ? 'user' : 'palette'} class="mt-px h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-								<span>
-									{i.text}
-									{#if i.fix}
-										<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => matchToPrevious(i.clip)}>{t('panels.dock.match')}</button>
-									{:else}
-										<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => (select('clip', i.clip.id), (ui.inspectorTab = 'takes'))}>{t('panels.dock.seeTakes')}</button>
-									{/if}
-								</span>
+								<div class="min-w-0 flex-1">
+									<span>{i.text}</span>
+									<div class="mt-0.5 flex flex-wrap items-center gap-x-3">
+										{#if i.fix}
+											<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => matchToPrevious(i.clip)}>{t('panels.dock.match')}</button>
+										{:else}
+											<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => (select('clip', i.clip.id), (ui.inspectorTab = 'takes'))}>{t('panels.dock.seeTakes')}</button>
+										{/if}
+										<SeamAction clip={i.clip} />
+									</div>
+								</div>
 							</li>
 						{/each}
 					</ul>
@@ -174,9 +178,10 @@
 											<div class="min-w-0 flex-1">
 												<p>{reviewText(s, i)}</p>
 												{#if reviewFix(s, i)}<p class="mt-0.5 text-fg-subtle">{reviewFix(s, i)}</p>{/if}
+												{#if i.kind === 'fl2va_no_frame' && clipById(i.shotId ?? s.toShotId)}<div class="mt-0.5"><SeamAction clip={clipById(i.shotId ?? s.toShotId)} /></div>{/if}
 											</div>
 											{#if i.measured}
-												<HostUi name="Tooltip" props={{ text: t('assistant.review.measuredTip'), wrapperClass: 'inline-flex shrink-0' }}>
+												<HostUi name="Tooltip" props={{ text: seamTip(s.toShotId), wrapperClass: 'inline-flex shrink-0' }}>
 													<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('assistant.review.measured')}</HostUi>
 												</HostUi>
 											{:else if i.simulated}

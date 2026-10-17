@@ -3,6 +3,8 @@
 	import { fade } from 'svelte/transition';
 	import HostUi from '../../../../sdk/HostUi.svelte';
 	import { createClient } from './lib/api.js';
+	import { download } from './lib/exchange.js';
+	import { disposeExports, resumeExports } from './lib/exports.svelte.js';
 	import { detectLocale, getLocale, has, setLocale, t } from './i18n/index.svelte.js';
 	import { ms } from './lib/motion.js';
 	import { ui, doc, applyMe, bottomKey, dispose as disposeState, toast } from './lib/state.svelte.js';
@@ -44,7 +46,7 @@
 
 	setLocale(detectLocale(null, navigator.language));
 
-	const client = $derived(createClient(api));
+	const client = $derived(createClient(api, download));
 	const locale = $derived(getLocale());
 	const errorText = $derived.by(() => {
 		const code = loadError?.code;
@@ -100,6 +102,7 @@
 			saveSeq += 1;
 			document.removeEventListener('visibilitychange', onvisibility);
 			stopProduction();
+			disposeExports();
 			flushSave();
 			disposeProject();
 			window.removeEventListener('keydown', onkeydown);
@@ -133,6 +136,7 @@
 			return;
 		}
 		phase = 'ready';
+		resumeExports();
 	}
 
 	async function setLanguage(value) {

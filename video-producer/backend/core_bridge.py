@@ -1,5 +1,6 @@
 import logging
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,9 @@ from src.plugin_api import models as api_models
 from src.plugin_api import notifications as api_notifications
 from src.plugin_api import presets as api_presets
 from src.plugin_api.cloud import CLOUD_ENGINE
+from src.plugin_api.limits import LimitExceeded
+from src.plugin_api.media import FfmpegUnavailableError, TranscodeSpec, VideoProbe, VideoTranscodeError
+from src.plugin_api.storage import SettingRepository, Settings
 
 from . import PLUGIN_ID
 
@@ -42,10 +46,12 @@ __all__ = [
     "AccountType",
     "CLOUD_ENGINE",
     "DirectorBindingError",
+    "FfmpegUnavailableError",
     "GenerationNotFoundException",
     "HookContext",
     "IdempotencyKeyConflict",
     "LimitEvents",
+    "LimitExceeded",
     "MediaRefError",
     "NATIVE_DRIVERS",
     "NotificationTypeSpec",
@@ -53,7 +59,10 @@ __all__ = [
     "SetupCheck",
     "SetupCheckContext",
     "SetupCheckResult",
+    "TranscodeSpec",
     "User",
+    "VideoProbe",
+    "VideoTranscodeError",
     "bind_director_media",
     "cancel_generation",
     "cloud_model",
@@ -62,7 +71,9 @@ __all__ = [
     "enabled_backends",
     "enabled_cloud_video_models",
     "estimate_cloud_cost",
+    "extract_frame",
     "find_ffmpeg",
+    "find_ffprobe",
     "generate_ulid",
     "generation_state",
     "get_current_active_user",
@@ -73,6 +84,8 @@ __all__ = [
     "limit_status",
     "list_generation_files",
     "list_presets",
+    "local_media_file",
+    "media_file_path",
     "model_file_present",
     "notify",
     "preset_driver",
@@ -80,13 +93,18 @@ __all__ = [
     "preset_model_hashes",
     "preset_state",
     "preview_memory",
+    "probe_video",
     "record_limit_event",
     "refund_limit_event",
     "register_notification_types",
     "resolve_media",
     "run_on_app_loop",
+    "save_user_media",
     "set_plugin_setting",
+    "storage_directory",
     "submit_generation",
+    "transcode_video",
+    "upload_item",
 ]
 
 logger = logging.getLogger("plugins.video-producer")
@@ -190,6 +208,78 @@ def resolve_media(user: User, ref: Mapping[str, Any]) -> Dict[str, Any]:
 def find_ffmpeg() -> Optional[str]:
     """The ffmpeg executable the host would use, or None."""
     return api_media.find_ffmpeg()
+
+
+def find_ffprobe() -> Optional[str]:
+    """The ffprobe executable next to ffmpeg or on the PATH, or None."""
+    ffmpeg = find_ffmpeg()
+    sibling = Path(ffmpeg).with_name("ffprobe" + Path(ffmpeg).suffix) if ffmpeg else None
+    if sibling is not None and sibling.is_file():
+        return str(sibling)
+    return shutil.which("ffprobe")
+
+
+def probe_video(path: Path) -> Optional[VideoProbe]:
+    """What ffprobe reads of a video file, or None."""
+    return api_media.probe_video(Path(path))
+
+
+def transcode_video(src: Path, dest: Path, spec: TranscodeSpec) -> Any:
+    """Re-encode a video with the host's converter; raises VideoTranscodeError."""
+    return api_media.transcode_video(Path(src), Path(dest), spec)
+
+
+async def extract_frame(user: User, ref: Mapping[str, Any], at: Any = "last") -> Dict[str, Any]:
+    """Store one frame of a video the user may read as their PNG upload; raises MediaRefError."""
+    return dict(await api_media.extract_frame(user, dict(ref), at=at))
+
+
+async def save_user_media(user: User, path: Path) -> Dict[str, Any]:
+    """Store a file the plugin wrote as the user's upload; raises MediaRefError."""
+    return dict(await api_media.save_user_media(user, Path(path)))
+
+
+def storage_directory() -> Path:
+    """The application's file storage directory, absolute."""
+    return Path(Settings(SettingRepository()).get_file_storage_directory()).resolve()
+
+
+def _media_driver(kind: str) -> Any:
+    container = api_hooks.get_container()
+    return container.file_service.storage_driver if kind == "history" else container.media_store.storage_driver
+
+
+def media_file_path(kind: str, value: str) -> Optional[str]:
+    """The absolute path on this server of a history or library media key, or None on object storage. Temporary: reads the container."""
+    path = _media_driver(kind).local_path(value)
+    return None if path is None else str(Path(path).resolve())
+
+
+def local_media_file(kind: str, value: str, folder: Path) -> Optional[Path]:
+    """A local file holding a history or library media key, copied into the folder on object storage; None when missing. Temporary: reads the container."""
+    driver = _media_driver(kind)
+    path = driver.local_path(value)
+    if path is not None:
+        return Path(path) if Path(path).is_file() else None
+    if not driver.exists(value):
+        return None
+    target = Path(folder) / f"source-{value.replace('/', '_')}"
+    target.write_bytes(driver.get_bytes(value))
+    return target
+
+
+def upload_item(user_id: str, value: str) -> Optional[Dict[str, Any]]:
+    """The library item an uploads/ key of the user is: its id, file name and size, or None. Temporary: reads the container."""
+    filename = value.replace("\\", "/").rsplit("/", 1)[-1]
+    upload = api_hooks.get_container().media_store.upload_repo.get_by_filename(filename, user_id)
+    if upload is None:
+        return None
+    return {
+        "item_id": upload.id,
+        "filename": upload.original_filename or filename,
+        "width": upload.width,
+        "height": upload.height,
+    }
 
 
 def enabled_backends() -> List[Dict[str, Any]]:

@@ -155,7 +155,7 @@
 	"export.noteEdl": "Universal edit list (V1 only), for grading or conforming.",
 	"export.subtitlesNote": "Taken from the generated dialogue (the spoken lines) and the titles.",
 	"export.noSubtitles": "No dialogue or title to subtitle.",
-	"export.simulated": "Simulated video export",
+	"export.simulated": "Simulated render: master and archive",
 	"export.close": "Close",
 	"export.export": "Export",
 	"export.download": "Download {file}",

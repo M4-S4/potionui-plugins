@@ -34,6 +34,14 @@ export function openGallery() {
 	open('GenerationHistoryModal', { title: t('project.import.titleGallery') }, KINDS.media);
 }
 
+export function libraryAvailable() {
+	return typeof window !== 'undefined' && Boolean(window.__potionui?.components?.UploadLibraryModal);
+}
+
+export function openLibrary(title) {
+	open('UploadLibraryModal', { title, mediaType: 'video' }, ['video']);
+}
+
 const originKey = (o) => (o?.kind === 'history' ? `history:${o.generationId}:${o.fileId}` : o?.kind === 'library' ? `library:${o.itemId}` : null);
 
 function fpsOf(item) {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createClient, normalizeError, normalizeMe, normalizeMedia, normalizeOrigin, normalizeProject, normalizeProjectSummary, normalizeVersion } from './api.js';
+import { createClient, downloadFrom, normalizeError, normalizeMe, normalizeMedia, normalizeOrigin, normalizeProject, normalizeProjectSummary, normalizeVersion } from './api.js';
 
 test('normalizeError: the plugin error envelope keeps its code, message and data', () => {
 	const conflict = { detail: { success: false, error: 'version_conflict', message: 'stale', data: { version: 7 } } };
@@ -20,6 +20,13 @@ test('normalizeMe: last_project_id becomes lastProjectId, null when absent or em
 	assert.equal(normalizeMe({ last_project_id: '' }).lastProjectId, null);
 	assert.equal(normalizeMe({}).lastProjectId, null);
 	assert.equal(normalizeMe(null).lastProjectId, null);
+});
+
+test('normalizeMe: ffmpeg is true, false, or null when the server does not say', () => {
+	assert.equal(normalizeMe({ ffmpeg: true }).ffmpeg, true);
+	assert.equal(normalizeMe({ ffmpeg: false }).ffmpeg, false);
+	assert.equal(normalizeMe({ ffmpeg: 'yes' }).ffmpeg, null);
+	assert.equal(normalizeMe({}).ffmpeg, null);
 });
 
 test('project payloads: summaries, full projects and versions are camelCased and checked', () => {
@@ -150,4 +157,70 @@ test('client: hosts without request fall back to get/post/put/delete', async () 
 		['get', '/projects'],
 		['put', '/projects/p', { doc: {}, version: 1 }]
 	]);
+});
+
+test('client: export and seam frame routes, bodies and normalized payloads', async () => {
+	const job = { id: 'j1', project_id: 'p1', format: 'web', resolution: '720p', status: 'queued', progress: 0, step: null, file: null, media: null, error: null, created_at: 'c', finished_at: null };
+	const api = hostApi([
+		{ success: true, data: { job } },
+		{ success: true, data: { job: { ...job, status: 'running', progress: 42, step: 'mix' } } },
+		{ success: true, data: { jobs: [job, { nope: true }] } },
+		{ success: true, data: { job: { ...job, status: 'cancelled' } } },
+		{ success: true, data: { deleted: 'j1' } },
+		httpError(409, { detail: { success: false, error: 'ffmpeg_unavailable', message: 'no ffmpeg' } }),
+		{ success: true, data: { media: { kind: 'library', item_id: 'i5', url: '/api/media/uploads/s.png', filename: 's.png', width: 640, height: 360, media_type: 'image' } } },
+		httpError(409, { detail: { success: false, error: 'no_previous_take', message: 'none' } })
+	]);
+	const client = createClient(api);
+	assert.equal((await client.exportVideo('p1', { format: 'web', resolution: '720p' })).data.status, 'queued');
+	const polled = await client.exportJob('j1');
+	assert.deepEqual([polled.data.status, polled.data.progress, polled.data.step], ['running', 42, 'mix']);
+	assert.deepEqual((await client.listExports('p1')).data.map((j) => j.id), ['j1']);
+	assert.equal((await client.cancelExport('j1')).data.status, 'cancelled');
+	assert.deepEqual(await client.cancelExport('j1'), { ok: true, data: null });
+	const refused = await client.exportVideo('p1', { format: 'social', resolution: '1080p' });
+	assert.deepEqual([refused.ok, refused.error.status, refused.error.code], [false, 409, 'ffmpeg_unavailable']);
+	assert.deepEqual((await client.seamFrame('p1', 'c2', 'previous_last')).data, { itemId: 'i5', url: '/api/media/uploads/s.png', filename: 's.png', width: 640, height: 360 });
+	const none = await client.seamFrame('p1', 'c 2', { takeId: 't1', at: 1.5 });
+	assert.equal(none.error.code, 'no_previous_take');
+	assert.deepEqual(api.calls, [
+		['POST', '/projects/p1/exports/video', { format: 'web', resolution: '720p' }],
+		['GET', '/exports/j1', undefined],
+		['GET', '/projects/p1/exports', undefined],
+		['DELETE', '/exports/j1', undefined],
+		['DELETE', '/exports/j1', undefined],
+		['POST', '/projects/p1/exports/video', { format: 'social', resolution: '1080p' }],
+		['POST', '/projects/p1/shots/c2/seam-frame', { source: 'previous_last' }],
+		['POST', '/projects/p1/shots/c%202/seam-frame', { source: { take_id: 't1', at: 1.5 } }]
+	]);
+});
+
+test('downloadFrom: the host download first, its HTTP errors normalized', async () => {
+	const asked = [];
+	const ok = await downloadFrom({ download: async (path, name) => asked.push([path, name]) }, '/projects/p1/exports/edl', 'Aube.edl', () => assert.fail('no fallback'));
+	assert.deepEqual(ok, { ok: true, data: { filename: 'Aube.edl' } });
+	assert.deepEqual(asked, [['/projects/p1/exports/edl', 'Aube.edl']]);
+	const failed = await downloadFrom({ download: async () => Promise.reject(httpError(409, { detail: { success: false, error: 'not_ready', message: 'wait' } })) }, '/exports/j1/file', 'a.mp4');
+	assert.deepEqual([failed.ok, failed.error.status, failed.error.code], [false, 409, 'not_ready']);
+	const offline = await downloadFrom({ download: async () => Promise.reject(new TypeError('Failed to fetch')) }, '/x', 'x');
+	assert.equal(offline.error.code, 'network_error');
+	assert.equal((await downloadFrom({}, '/x', 'x')).error.code, 'no_api');
+});
+
+test('downloadFrom: without host download, fetchRaw and a Blob saved under the best name', async () => {
+	const saved = [];
+	const save = (name, blob) => saved.push([name, blob]);
+	const response = (body, init) => new Response(body, init);
+	const named = await downloadFrom({ fetchRaw: async () => response('EDL', { status: 200, headers: { 'Content-Disposition': `attachment; filename="Aube.edl"; filename*=UTF-8''Aube%20%C3%A9t%C3%A9.edl` } }) }, '/projects/p1/exports/edl', null, save);
+	assert.deepEqual(named, { ok: true, data: { filename: 'Aube été.edl' } });
+	assert.equal(await saved[0][1].text(), 'EDL');
+	const given = await downloadFrom({ fetchRaw: async () => response('X', { status: 200 }) }, '/exports/j1/file', 'Aube_720p.mp4', save);
+	assert.equal(given.data.filename, 'Aube_720p.mp4');
+	const bare = await downloadFrom({ fetchRaw: async () => response('Y', { status: 200 }) }, '/projects/p1/exports/srt?media=name', null, save);
+	assert.equal(bare.data.filename, 'srt');
+	const refused = await downloadFrom({ fetchRaw: async () => response(JSON.stringify({ detail: { success: false, error: 'project_not_found', message: 'gone' } }), { status: 404 }) }, '/projects/p9/exports/otio', 'x.otio', save);
+	assert.deepEqual([refused.ok, refused.error.status, refused.error.code], [false, 404, 'project_not_found']);
+	const broken = await downloadFrom({ fetchRaw: async () => Promise.reject(new TypeError('offline')) }, '/x', 'x', save);
+	assert.equal(broken.error.code, 'network_error');
+	assert.equal(saved.length, 3);
 });

@@ -9,6 +9,7 @@
 	import { seams, matchToPrevious } from '../../lib/continuity.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import PanelHeader from './PanelHeader.svelte';
+	import SeamAction from '../takes/SeamAction.svelte';
 	import Icon from '../Icon.svelte';
 
 	const open = $derived(doc.clips.filter((c) => c.stage === 'todo' || c.stage === 'draft'));
@@ -106,7 +107,10 @@
 					<li>
 						<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: i.kind === 'identity' ? 'user' : hostIconName('palette'), live: 'off' }}>
 							<div class="text-xs text-fg-muted">{i.text}</div>
-							{#if i.fix}<button type="button" class="vp-link-hit mt-1.5 text-xs text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => matchToPrevious(i.clip)}>{t('panels.story.matchColor')}</button>{/if}
+							<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+								{#if i.fix}<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => matchToPrevious(i.clip)}>{t('panels.story.matchColor')}</button>{/if}
+								<SeamAction clip={i.clip} />
+							</div>
 						</HostUi>
 					</li>
 				{/each}

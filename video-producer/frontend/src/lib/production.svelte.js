@@ -227,6 +227,7 @@ export function readiness(opts = {}) {
 	const missing = [];
 	const warnings = [];
 	const notes = [];
+	const gaps = [];
 	const mode = ui.production.mode;
 	if (range[1] - range[0] <= 0.05) missing.push(t('lib.block.noRange'));
 	if (mode !== 'Rendu 3D') {
@@ -242,9 +243,12 @@ export function readiness(opts = {}) {
 	const fresh = Boolean(request && (request.hold || request.key === estimateState.key));
 	if (est && fresh) {
 		for (const block of est.blocks) missing.push(noteText(block));
-		for (const warning of est.warnings) (INFO_WARNINGS.includes(warning.code) ? notes : warnings).push(noteText(warning));
+		for (const warning of est.warnings) {
+			(INFO_WARNINGS.includes(warning.code) ? notes : warnings).push(noteText(warning));
+			if (warning.code === 'fl2va_no_frame' && warning.data?.shot_id) gaps.push(warning.data.shot_id);
+		}
 	}
-	return { range, items, missing, warnings, notes, est, noEngine };
+	return { range, items, missing, warnings, notes, gaps, est, noEngine };
 }
 
 function blockedText(error) {
