@@ -4,10 +4,12 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOMAINS, LOCALES, detectLocale, formatBytes, formatDuration, formatRelative, formatTimecode, hasKey, mergeDomains, normalizeLocale, translate } from './core.js';
+import { FAILURE_CODES } from '../lib/generation.js';
+import { EXPORT_ERROR_CODES } from '../lib/exports.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, '..');
-const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.'];
+const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.', 'generation.failed.', 'exports.error.'];
 const PLURAL_SUFFIX = /\.(zero|one|two|few|many|other)$/;
 const SKIPPED_DIRS = new Set(['dist', 'node_modules']);
 
@@ -167,13 +169,41 @@ test('every t() key exists in en', () => {
 	assert.deepEqual(unknown, [], 'unknown translation keys');
 });
 
-test('every key is used', () => {
-	const prefixes = scan.dynamic.map(({ prefix }) => prefix).filter(Boolean);
+test('every declared key is used by a literal t() call or by a declared dynamic prefix', () => {
 	const unused = Object.keys(dictionaries.en).filter((key) => {
 		if (scan.keys.has(key) || scan.keys.has(key.replace(PLURAL_SUFFIX, ''))) return false;
-		return !prefixes.some((prefix) => key.startsWith(prefix));
+		return !DYNAMIC_PREFIXES.some((prefix) => key.startsWith(prefix));
 	});
 	assert.deepEqual(unused, [], 'unused translation keys');
+});
+
+test('every declared dynamic prefix is used by the page and declares keys', () => {
+	for (const prefix of DYNAMIC_PREFIXES) {
+		assert.ok(
+			scan.dynamic.some((call) => call.prefix.startsWith(prefix)),
+			`no t() call builds a key from "${prefix}"`
+		);
+		assert.ok(
+			Object.keys(dictionaries.en).some((key) => key.startsWith(prefix)),
+			`no key starts with "${prefix}"`
+		);
+	}
+});
+
+test('generation.failed.<code> matches the failure codes the take cards translate', () => {
+	const declared = Object.keys(dictionaries.en).filter((key) => key.startsWith('generation.failed.')).map((key) => key.slice('generation.failed.'.length));
+	assert.deepEqual(declared.sort(), [...FAILURE_CODES].sort());
+	assert.equal(new Set(FAILURE_CODES).size, FAILURE_CODES.length);
+	assert.equal(translate(dictionaries, 'fr', 'generation.failed.cuda_oom').startsWith('La mémoire du GPU'), true);
+	assert.match(translate(dictionaries, 'en', 'generation.failed.unclassified', { id: 'G1' }), /Error ID: G1$/);
+});
+
+test('exports.error.<code> matches the export error codes the export window translates', () => {
+	const declared = Object.keys(dictionaries.en).filter((key) => key.startsWith('exports.error.')).map((key) => key.slice('exports.error.'.length));
+	assert.deepEqual(declared.sort(), [...EXPORT_ERROR_CODES].sort());
+	assert.equal(new Set(EXPORT_ERROR_CODES).size, EXPORT_ERROR_CODES.length);
+	assert.equal(translate(dictionaries, 'fr', 'exports.error.ffmpeg_failed'), 'ffmpeg n’a pas pu assembler la vidéo.');
+	assert.equal(translate(dictionaries, 'en', 'exports.error.invalid_doc').startsWith('The saved project'), true);
 });
 
 test('every command and menu of lib/commands.js has a label, and every label has a command', () => {
@@ -187,6 +217,17 @@ test('every command and menu of lib/commands.js has a label, and every label has
 	assert.deepEqual(menus.sort(), [...menuIds].sort());
 	const errors = Object.keys(dictionaries.en).filter((key) => key.startsWith('shell.error.'));
 	assert.ok(errors.includes('shell.error.unknown') && errors.includes('shell.error.server_error'));
+});
+
+test('Help › Simulated features lists the seven simulated items, each with a title and a text', () => {
+	const items = ['identity', 'lipSync', 'scene', 'voice', 'console', 'formats', 'engine'];
+	const declared = Object.keys(dictionaries.en).filter((key) => /^shell\.simulations\.[^.]+\.title$/.test(key)).map((key) => key.split('.')[2]);
+	assert.deepEqual(declared, items);
+	const modals = readFileSync(join(srcRoot, 'components', 'modals', 'Modals.svelte'), 'utf-8');
+	for (const item of items) {
+		for (const locale of LOCALES) assert.ok(dictionaries[locale][`shell.simulations.${item}.text`], `${locale} shell.simulations.${item}.text`);
+		assert.ok(modals.includes(`t('shell.simulations.${item}.title'), t('shell.simulations.${item}.text')`), `Modals.svelte does not list ${item}`);
+	}
 });
 
 test('translate interpolates, pluralises and falls back to en then to the key', () => {

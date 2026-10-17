@@ -83,7 +83,6 @@ function baseDoc(t, name, promptLanguage) {
 			{ id: 'D1', name: t('starter.lane.delay'), vol: -10, mute: false }
 		],
 		master: { vol: 0 },
-		results: [],
 		profiles: [],
 		engine: {
 			seed: 48121,

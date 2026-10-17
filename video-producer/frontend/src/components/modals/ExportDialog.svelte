@@ -20,6 +20,7 @@
 		jobErrorText
 	} from '../../lib/exports.svelte.js';
 	import { findTake } from '../../lib/production.svelte.js';
+	import { announcer } from '../../lib/announce.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
 	import Tabs from '../shell/Tabs.svelte';
@@ -35,6 +36,8 @@
 	let simProgress = $state(0);
 	let exchange = $state('fcpxml');
 	let timer = null;
+	let spoken = $state('');
+	const voice = announcer();
 
 	function firstTab() {
 		return ['video', 'exchange', 'subtitles'].includes(initialTab) ? initialTab : 'video';
@@ -84,20 +87,30 @@
 		if (j.step === 'mix') return t('exports.step.mix');
 		if (j.step === 'transcode') return t('exports.step.transcode');
 		if (j.step === 'store') return t('exports.step.store');
-		return t('exports.step.running');
+		return t('exports.status.running');
 	}
 
 	function statusText(status) {
-		if (status === 'queued') return t('exports.status.queued');
+		if (status === 'queued') return t('lib.status.queued');
 		if (status === 'running') return t('exports.status.running');
 		if (status === 'done') return t('exports.status.done');
-		if (status === 'failed') return t('exports.status.failed');
-		return t('exports.status.cancelled');
+		if (status === 'failed') return t('lib.status.failed');
+		return t('lib.status.cancelled');
 	}
 
 	const tone = (status) => (status === 'done' ? 'text-success' : status === 'failed' ? 'text-danger' : status === 'cancelled' ? 'text-fg-subtle' : 'text-signal');
 	const dot = (status) => (status === 'done' ? 'bg-success' : status === 'failed' ? 'bg-danger' : status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
 	const nameOf = (j) => j.file?.name ?? videoFile(doc.name, j.resolution ?? res);
+
+	$effect(() => {
+		if (!running || !job) {
+			voice.reset();
+			spoken = '';
+			return;
+		}
+		const said = voice.next(stepText(job), job.progress);
+		if (said) spoken = `${said.label} · ${t('exports.percent', { value: said.value })}`;
+	});
 
 	function simulate() {
 		clearInterval(timer);
@@ -192,10 +205,11 @@
 							<span class="flex shrink-0 items-center gap-1 text-xs {tone(job.status)}"><span class="h-1.5 w-1.5 rounded-full {dot(job.status)}"></span>{statusText(job.status)}</span>
 						</div>
 						{#if running}
-							<div class="mt-2 flex justify-between gap-2 text-xs" aria-live="polite">
+							<div class="mt-2 flex justify-between gap-2 text-xs">
 								<span class="truncate text-fg-muted">{stepText(job)}</span>
 								<span class="vp-tc text-fg-subtle">{t('exports.percent', { value: Math.round(job.progress) })}</span>
 							</div>
+							<div class="sr-only" aria-live="polite">{spoken}</div>
 							<div class="mt-1 h-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-label={t('exports.progress')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(job.progress)}>
 								<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{job.progress}%"></div>
 							</div>
@@ -213,9 +227,8 @@
 							</div>
 						{:else if job.status === 'failed'}
 							<p class="mt-1.5 text-xs text-danger" role="alert">{jobErrorText(job)}</p>
-							{#if job.error?.message}<p class="mt-1 line-clamp-2 font-mono text-2xs text-fg-subtle">{job.error.message}</p>{/if}
 						{:else}
-							<p class="mt-1.5 text-xs text-fg-muted">{t('exports.failed.cancelled')}</p>
+							<p class="mt-1.5 text-xs text-fg-muted">{t('exports.error.cancelled')}</p>
 						{/if}
 					</section>
 				{/if}

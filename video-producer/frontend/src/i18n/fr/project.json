@@ -46,7 +46,6 @@
 	"versions.shots.one": "{count} plan",
 	"versions.shots.other": "{count} plans",
 	"versions.restoredFrom": "Restaurée depuis la version {n}",
-	"versions.current": "Actuelle",
 	"versions.cancel": "Annuler",
 	"versions.restore": "Restaurer",
 	"versions.confirmTitle": "Restaurer la version {n}",

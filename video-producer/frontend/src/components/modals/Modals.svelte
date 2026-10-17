@@ -48,14 +48,13 @@
 	]);
 
 	const simList = $derived([
-		[t('shell.simulations.render3d.title'), t('shell.simulations.render3d.text')],
-		[t('shell.simulations.synopsis.title'), t('shell.simulations.synopsis.text')],
 		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')],
-		[t('shell.simulations.render.title'), t('shell.simulations.render.text')],
-		[t('shell.simulations.splat.title'), t('shell.simulations.splat.text')],
-		[t('shell.simulations.guide.title'), t('shell.simulations.guide.text')],
-		[t('shell.simulations.sound.title'), t('shell.simulations.sound.text')],
-		[t('shell.simulations.audio.title'), t('shell.simulations.audio.text')]
+		[t('shell.simulations.lipSync.title'), t('shell.simulations.lipSync.text')],
+		[t('shell.simulations.scene.title'), t('shell.simulations.scene.text')],
+		[t('shell.simulations.voice.title'), t('shell.simulations.voice.text')],
+		[t('shell.simulations.console.title'), t('shell.simulations.console.text')],
+		[t('shell.simulations.formats.title'), t('shell.simulations.formats.text')],
+		[t('shell.simulations.engine.title'), t('shell.simulations.engine.text')]
 	]);
 
 	const timelineIndex = $derived(
@@ -257,7 +256,7 @@
 			<div class="space-y-2 p-4 text-sm">
 				{#if ui.production.state === 'running'}
 					<div class="rounded-lg border border-line-strong p-2.5">
-						<div>{t('shell.tasks.generation', { step: ui.production.step || t('generation.state.queued') })}</div>
+						<div>{t('shell.tasks.generation', { step: ui.production.step || t('lib.status.queued') })}</div>
 						<div class="mt-1 text-xs text-fg-subtle">{t('generation.tasks.takes', { count: flyingTakes().length })}</div>
 						<div class="mt-1 h-1 rounded-full bg-surface-3" role="progressbar" aria-label={t('production.progress')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={ui.production.running ? Math.round(ui.production.progress) : undefined}>
 							<div class="h-full bg-signal" style:width="{ui.production.progress}%"></div>

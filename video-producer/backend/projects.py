@@ -12,6 +12,8 @@ MAX_DOC_BYTES = 4 * 1024 * 1024
 
 _REASON_LIMIT = 300
 
+RETIRED_KEYS = ("results",)
+
 PROJECTS = "video_producer_projects"
 VERSIONS = "video_producer_versions"
 TAKES = "video_producer_takes"
@@ -21,7 +23,6 @@ ID = {"type": "string", "minLength": 1}
 REF = {"type": ["string", "null"], "minLength": 1}
 TEXT = {"type": "string"}
 NUMBER = {"type": "number"}
-INTEGER = {"type": "integer"}
 FLAG = {"type": "boolean"}
 NULLABLE_NUMBER = {"type": ["number", "null"]}
 NULLABLE_INTEGER = {"type": ["integer", "null"]}
@@ -176,26 +177,6 @@ LANE = _object(
 
 AUX = _object({"id": ID, "name": TEXT, "vol": NUMBER, "mute": FLAG})
 
-RESULT = _object(
-    {
-        "id": ID,
-        "clipId": ID,
-        "quality": _enum("draft", "final"),
-        "variant": TEXT,
-        "assetId": REF,
-        "look": TEXT,
-        "status": _enum("new", "chosen", "redo"),
-        "seed": INTEGER,
-        "created": TEXT,
-        "range": {"type": "array", "prefixItems": [NUMBER, NUMBER], "minItems": 2, "maxItems": 2},
-        "local": TEXT,
-        "parent": REF,
-        "profile": TEXT,
-        "mode": TEXT,
-        "backend": TEXT,
-    }
-)
-
 PROFILE = _object({"id": ID, "name": TEXT, "weights": HYBRID})
 
 ENGINE = _object(
@@ -284,7 +265,6 @@ DOC_SCHEMA: Dict[str, Any] = {
             "lanes": _array(LANE),
             "aux": _array(AUX),
             "master": _object({"vol": NUMBER}),
-            "results": _array(RESULT),
             "profiles": _array(PROFILE),
             "engine": ENGINE,
             "hybrid": HYBRID,
@@ -318,6 +298,13 @@ class VersionConflict(Exception):
     def __init__(self, current_version: int):
         super().__init__(f"The project is at version {current_version}")
         self.current_version = current_version
+
+
+def migrate(doc: Any) -> Any:
+    """A document without the keys earlier versions of the page wrote and the schema no longer has."""
+    if not isinstance(doc, dict) or not any(key in doc for key in RETIRED_KEYS):
+        return doc
+    return {key: value for key, value in doc.items() if key not in RETIRED_KEYS}
 
 
 def canonical(doc: Any) -> str:
@@ -360,7 +347,7 @@ def _project(row: Any) -> Dict[str, Any]:
         "user_id": row["user_id"],
         "name": row["name"],
         "version": row["version"],
-        "doc": json.loads(row["doc"]),
+        "doc": migrate(json.loads(row["doc"])),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -434,6 +421,7 @@ def create_project(user_id: str, doc: Any, name: Optional[str] = None) -> Dict[s
     """Store a new project at version 1, naming its document when a name is given."""
     from src.plugin_api import db
 
+    doc = migrate(doc)
     if name is not None and isinstance(doc, dict):
         doc = {**doc, "name": name}
     text = validate_doc(doc)
@@ -483,6 +471,7 @@ def save_project(project_id: str, doc: Any, expected_version: int, label: Option
     """Store a new version of a project, or nothing when the document did not change."""
     from src.plugin_api import db
 
+    doc = migrate(doc)
     text = validate_doc(doc)
     keep = _versions_kept()
     with db.get_cursor() as cursor:
@@ -560,7 +549,8 @@ def restore_version(project_id: str, version: int) -> Dict[str, Any]:
         stored = cursor.fetchone()
         if stored is None:
             raise VersionNotFound(version)
-        doc, current, at = json.loads(stored["doc"]), project["version"], _now()
-        _advance(cursor, project_id, current, stored["doc"], doc["name"], at)
-        _append_version(cursor, project_id, current + 1, stored["doc"], at, source_version=version, keep=keep)
+        doc, current, at = migrate(json.loads(stored["doc"])), project["version"], _now()
+        text = canonical(doc)
+        _advance(cursor, project_id, current, text, doc["name"], at)
+        _append_version(cursor, project_id, current + 1, text, at, source_version=version, keep=keep)
     return {"id": project_id, "name": doc["name"], "version": current + 1, "doc": doc, "updated_at": at}

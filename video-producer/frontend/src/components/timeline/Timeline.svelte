@@ -46,6 +46,8 @@
 	import Dropdown from '../shell/Dropdown.svelte';
 
 	const HEAD = 156;
+	const BLOCK_ROW = 31;
+	const KEY_BAND = 23;
 	let scroller = $state();
 	let viewW = $state(800);
 	let reorder = $state(null);
@@ -54,16 +56,19 @@
 	const total = $derived(seqDuration());
 	const contentW = $derived(Math.max(viewW - HEAD, (total + 8) * pps));
 	const x = (time) => time * pps;
+	const FADE_EDGE = 37;
+	const fadeX = (px, w) => (w - 2 < FADE_EDGE * 2 ? px : clamp(px, FADE_EDGE, w - 2 - FADE_EDGE));
 	const step = $derived(rulerStep(pps));
 	const ticks = $derived(Array.from({ length: Math.ceil(contentW / pps / step) + 1 }, (_, i) => i * step));
 	const key = (id) => commandById(id)?.key || undefined;
 
+	const keyed = $derived(doc.plans3d.some((p) => p.keyframes.length));
 	const rows = $derived([
-		{ id: 'titles', label: t('timeline.row.titles'), icon: 'type', h: 29, color: null },
-		{ id: 'prompts', label: t('timeline.row.prompts'), icon: 'sparkles', h: 30, color: roleColor.Prompts },
+		{ id: 'titles', label: t('timeline.row.titles'), icon: 'type', h: BLOCK_ROW, color: null },
+		{ id: 'prompts', label: t('timeline.row.prompts'), icon: 'sparkles', h: BLOCK_ROW, color: roleColor.Prompts },
 		{ id: 'frames', label: t('timeline.row.frames'), icon: 'image', h: 32, color: roleColor.Frames },
-		{ id: 'controls', label: t('timeline.row.controls'), icon: 'route', h: 29, color: roleColor.Guides },
-		{ id: 'plans3d', label: t('timeline.row.plans3d'), icon: 'cube', h: 29, color: roleColor.Guides },
+		{ id: 'controls', label: t('timeline.row.controls'), icon: 'route', h: BLOCK_ROW, color: roleColor.Guides },
+		{ id: 'plans3d', label: t('timeline.row.plans3d'), icon: 'cube', h: keyed ? BLOCK_ROW + KEY_BAND : BLOCK_ROW, color: roleColor.Guides },
 		{ id: 'v1', label: t('timeline.row.video'), icon: 'film', h: 60, color: roleColor.Vidéo },
 		...doc.lanes.map((l) => ({ id: l.id, lane: l, label: t('timeline.row.lane', { id: l.id, name: l.name }), icon: l.role === 'Dialogue' ? 'mic' : l.role === 'Musique' ? 'music' : 'wave', h: 38, color: roleColor[l.role] }))
 	]);
@@ -377,18 +382,20 @@
 						<div class="absolute inset-y-0 bg-signal/25" style:left="{x(ui.range.in)}px" style:width="{x(ui.range.out - ui.range.in)}px"></div>
 					{/if}
 					{#each doc.markers as m (m.id)}
-						<button
-							type="button"
-							class="vp-hit absolute top-0 -ml-1.5 h-4 w-3 {m.kind === 'favori' ? 'text-success' : m.kind === 'rejet' ? 'text-danger' : 'text-warning'}"
-							style:left="{x(m.time)}px"
-							title={t('timeline.marker.tip', { label: m.label, time: secs(m.time) })}
-							aria-label={t('timeline.marker.label', { label: m.label })}
-							onpointerdown={(e) => markerDown(e, m)}
-							ondblclick={() => select('marker', m.id)}
-							onkeydown={(e) => e.key === 'Enter' && (seek(m.time), select('marker', m.id))}
-						>
-							<svg viewBox="0 0 12 16" class="h-4 w-3" aria-hidden="true"><path d="M0 0h12v11l-6 5-6-5z" fill="currentColor" /></svg>
-						</button>
+						<div class="absolute top-0 -ml-3" style:left="{x(m.time)}px">
+							<HostUi name="Tooltip" props={{ text: t('timeline.marker.tip', { label: m.label, time: secs(m.time) }), position: 'bottom', wrapperClass: 'flex' }}>
+								<button
+									type="button"
+									class="flex h-6 w-6 justify-center {m.kind === 'favori' ? 'text-success' : m.kind === 'rejet' ? 'text-danger' : 'text-warning'}"
+									aria-label={t('timeline.marker.label', { label: m.label })}
+									onpointerdown={(e) => markerDown(e, m)}
+									ondblclick={() => select('marker', m.id)}
+									onkeydown={(e) => e.key === 'Enter' && (seek(m.time), select('marker', m.id))}
+								>
+									<svg viewBox="0 0 12 16" class="h-4 w-3" aria-hidden="true"><path d="M0 0h12v11l-6 5-6-5z" fill="currentColor" /></svg>
+								</button>
+							</HostUi>
+						</div>
 					{/each}
 					<div class="pointer-events-none absolute -top-px z-10 -ml-[6px]" style:left="{x(ui.playhead)}px">
 						<svg viewBox="0 0 12 14" class="h-3.5 w-3 text-fg" aria-hidden="true"><path d="M0 0h12v8l-6 6-6-6z" fill="currentColor" /></svg>
@@ -468,16 +475,17 @@
 							{/each}
 						{:else if row.id === 'plans3d'}
 							{#each doc.plans3d as s (s.id)}
-								{@render block('plan3d', s, s.name, row.color)}
+								{@render block('plan3d', s, s.name, row.color, [], keyed ? KEY_BAND + 2 : null)}
 								{#each s.keyframes as k (k.id)}
 									<button
 										type="button"
-										class="vp-hit absolute top-1/2 z-20 -ml-[6px] -mt-[6px] h-3 w-3 rotate-45 border {ui.scene.keyframe === k.id ? 'border-white bg-signal' : 'border-black/40 bg-fg'}"
+										tabindex="-1"
+										class="absolute top-0 z-20 -ml-3 flex h-6 w-6 items-center justify-center"
 										style:left="{x(s.start + k.t)}px"
 										title={t('timeline.keyframe.tip', { time: secs(s.start + k.t) })}
 										aria-label={t('timeline.keyframe.label', { time: secs(s.start + k.t) })}
 										onpointerdown={(e) => keyDown(e, s, k)}
-									></button>
+									><span class="h-3 w-3 rotate-45 border {ui.scene.keyframe === k.id ? 'border-white bg-signal' : 'border-black/40 bg-fg'}"></span></button>
 								{/each}
 							{/each}
 						{:else if row.id === 'v1'}
@@ -533,16 +541,18 @@
 	</svg>
 	<button
 		type="button"
-		class="vp-hit absolute top-0.5 z-[25] -ml-[5px] h-2.5 w-2.5 rounded-full border border-black/50 bg-white opacity-0 group-hover:opacity-100 {isSel(kind, item.id) ? 'opacity-100' : ''}"
-		style:left="{x(item.fadeIn)}px"
+		tabindex="-1"
+		class="vp-hit absolute top-1.5 z-[25] -ml-[5px] h-2.5 w-2.5 rounded-full border border-black/50 bg-white opacity-0 group-hover:opacity-100 {isSel(kind, item.id) ? 'opacity-100' : ''}"
+		style:left="{fadeX(x(item.fadeIn), w)}px"
 		aria-label={t('timeline.fade.in')}
 		title={t('timeline.fade.inTip', { dur: secs(item.fadeIn) })}
 		onpointerdown={(e) => fadeDrag(e, kind, item, 'in')}
 	></button>
 	<button
 		type="button"
-		class="vp-hit absolute top-0.5 z-[25] -ml-[5px] h-2.5 w-2.5 rounded-full border border-black/50 bg-white opacity-0 group-hover:opacity-100 {isSel(kind, item.id) ? 'opacity-100' : ''}"
-		style:left="{w - x(item.fadeOut)}px"
+		tabindex="-1"
+		class="vp-hit absolute top-1.5 z-[25] -ml-[5px] h-2.5 w-2.5 rounded-full border border-black/50 bg-white opacity-0 group-hover:opacity-100 {isSel(kind, item.id) ? 'opacity-100' : ''}"
+		style:left="{fadeX(w - x(item.fadeOut), w)}px"
 		aria-label={t('timeline.fade.out')}
 		title={t('timeline.fade.outTip', { dur: secs(item.fadeOut) })}
 		onpointerdown={(e) => fadeDrag(e, kind, item, 'out')}
@@ -551,6 +561,7 @@
 
 {#snippet clip(c)}
 	{@const thumb = clipThumb(c)}
+	{@const media = asset(c.assetId)}
 	{@const w = x(c.dur)}
 	{@const sel = isSel('clip', c.id)}
 	{@const takes = takesOf(c).length}
@@ -571,7 +582,7 @@
 			<div class="absolute inset-x-0 bottom-0 top-5 bg-repeat-x" style:background-image="url({thumb})" style:background-size="auto 100%" style:filter={clipFilter(c)}></div>
 		{:else}
 			<div class="absolute inset-x-0 bottom-0 top-5 bg-surface-2 bg-[repeating-linear-gradient(135deg,rgb(var(--viz-1)/0.35)_0_1px,transparent_1px_8px)]"></div>
-			<span class="absolute bottom-1.5 left-1.5 text-2xs text-fg-muted">{stages.todo.label}</span>
+			{#if !media?.src}<span class="absolute bottom-1.5 left-1.5 text-2xs text-fg-muted">{media ? t('lib.media.offline') : stages.todo.label}</span>{/if}
 		{/if}
 		<div class="vp-clip-head absolute inset-x-0 top-0 flex h-5 items-center gap-1 bg-viz-1 px-1.5 text-xs font-semibold">
 			<span class="h-1.5 w-1.5 shrink-0 rounded-full {stages[c.stage].dot}" title={stages[c.stage].label}></span>
@@ -582,6 +593,7 @@
 		{@render fades(c, 'clip', w, 52)}
 		<button
 			type="button"
+			tabindex="-1"
 			class="vp-hit vp-edge-start absolute inset-y-0 left-0 z-20 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
 			aria-label={t('timeline.trim.start')}
 			title={t('timeline.trim.start')}
@@ -589,6 +601,7 @@
 		></button>
 		<button
 			type="button"
+			tabindex="-1"
 			class="vp-hit vp-edge-end absolute inset-y-0 right-0 z-20 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
 			aria-label={t('timeline.trim.end')}
 			title={t('timeline.trim.end')}
@@ -620,6 +633,7 @@
 		{@render fades(a, 'audio', w, 30, true)}
 		<button
 			type="button"
+			tabindex="-1"
 			class="vp-hit vp-edge-start absolute inset-y-0 left-0 z-20 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
 			aria-label={t('timeline.trim.start')}
 			title={t('timeline.trim.start')}
@@ -627,6 +641,7 @@
 		></button>
 		<button
 			type="button"
+			tabindex="-1"
 			class="vp-hit vp-edge-end absolute inset-y-0 right-0 z-20 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
 			aria-label={t('timeline.trim.end')}
 			title={t('timeline.trim.end')}
@@ -635,12 +650,13 @@
 	</div>
 {/snippet}
 
-{#snippet block(kind, item, label, color, issues = [])}
+{#snippet block(kind, item, label, color, issues = [], top = null)}
 	{@const sel = isSel(kind, item.id)}
 	{@const warn = issues.filter((i) => i.level !== 'missing')}
 	<div
 		class="group absolute bottom-0.5 top-0.5 flex items-center gap-1 overflow-hidden rounded border px-2 text-xs {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-hover'} {color ? 'text-fg' : 'bg-surface-3 text-fg'}"
 		style:left="{x(item.start)}px"
+		style:top={top === null ? null : `${top}px`}
 		style:width="{Math.max(6, x(item.dur))}px"
 		style:background={color ? `rgb(var(--${color}) / ${kind === 'control' ? 0.22 : 0.3})` : null}
 		style:background-image={kind === 'control' ? `repeating-linear-gradient(135deg, transparent 0 6px, rgb(var(--${color}) / 0.25) 6px 8px)` : null}
@@ -658,12 +674,14 @@
 		{#if kind === 'control'}<span class="ml-auto shrink-0 text-fg">{t('timeline.block.percent', { value: item.guidance })}</span>{/if}
 		<button
 			type="button"
+			tabindex="-1"
 			class="vp-hit vp-edge-start absolute inset-y-0 left-0 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
 			aria-label={t('timeline.trim.start')}
 			onpointerdown={(e) => trimBlock(e, kind, item, 'start')}
 		></button>
 		<button
 			type="button"
+			tabindex="-1"
 			class="vp-hit vp-edge-end absolute inset-y-0 right-0 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
 			aria-label={t('timeline.trim.end')}
 			onpointerdown={(e) => trimBlock(e, kind, item, 'end')}

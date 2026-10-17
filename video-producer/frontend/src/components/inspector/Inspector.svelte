@@ -214,7 +214,7 @@
 					<ColorSection clip={item} />
 				{:else}
 					{#if item.stage !== 'final' && item.stage !== 'source'}
-						{@const promote = item.stage === 'draft' && take && !take.legacy}
+						{@const promote = item.stage === 'draft' && Boolean(take)}
 						<button
 							type="button"
 							class="flex w-full items-center gap-3 rounded-lg border border-line-strong bg-surface-2/60 p-2.5 text-left transition-colors hover:border-line-hover disabled:opacity-50"
@@ -331,7 +331,7 @@
 					<SliderField label={t('inspector.field.influence')} value={item.strength} unit=" %" onchange={(v) => set('strength', v)} />
 				</section>
 				<details class="rounded-lg border border-line-strong p-2 text-xs">
-					<summary class="cursor-pointer text-fg-muted">{t('inspector.prompt.global')}</summary>
+					<summary class="-mb-1 -mt-1 min-h-6 cursor-pointer py-1 text-fg-muted">{t('inspector.prompt.global')}</summary>
 					<p class="mt-1.5 text-fg-subtle">{globalPrompt()}</p>
 				</details>
 			{:else if s.kind === 'frame'}
@@ -509,9 +509,9 @@
 		<div class="flex items-center justify-between gap-2">
 			<span class="vp-section-title">{t('inspector.camera.title')}</span>
 			{#if ui.scene.keyframe && ui.scene.keyframe !== 'free'}
-				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md', class: '!text-signal' }}>{t('inspector.camera.keySelected')}</HostUi>
+				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md', class: '!border-signal !text-fg' }}>{t('inspector.camera.keySelected')}</HostUi>
 			{:else if ui.scene.keyframe === 'free'}
-				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('inspector.camera.free')}</HostUi>
+				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('scene.freeCamera')}</HostUi>
 			{:else}
 				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('inspector.camera.follow')}</HostUi>
 			{/if}

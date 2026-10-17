@@ -30,7 +30,7 @@
 	const checked = $derived(review.current?.projectId === project.id ? review.current : null);
 	const checkedCount = $derived(reviewCount(checked));
 	const chosen = $derived(takeStore.list.filter((r) => r.chosen && r.status === 'done').length);
-	const takeCount = $derived(takeStore.list.length + (doc.results?.length ?? 0));
+	const takeCount = $derived(takeStore.list.length);
 	const supported = $derived(supportedProfiles());
 	const unsupported = $derived(modes.filter((m) => !supported.includes(m)));
 	const tabs = $derived([
@@ -186,7 +186,7 @@
 												</HostUi>
 											{:else if i.simulated}
 												<HostUi name="Tooltip" props={{ text: t('assistant.review.simulatedTip'), wrapperClass: 'inline-flex shrink-0' }}>
-													<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('assistant.review.simulated')}</span>
+													<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>
 												</HostUi>
 											{/if}
 										</li>
@@ -221,7 +221,7 @@
 			<p class="pt-1 text-xs text-fg-subtle">{modeHint(doc.direction.mode)}</p>
 			{#if unsupported.length}
 				<HostUi name="Tooltip" props={{ text: t('generation.profile.why', { profiles: unsupported.join(', '), engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
-					<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('generation.profile.badge', { profiles: unsupported.join(' · ') })}</span>
+					<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.profile.badge', { profiles: unsupported.join(' · ') })}</HostUi>
 				</HostUi>
 			{/if}
 		</div>
@@ -254,7 +254,7 @@
 			<p class="text-xs text-fg-subtle">{t('panels.dock.refs.intro')}</p>
 			{#if !supported.includes('Ref2VA')}
 				<HostUi name="Tooltip" props={{ text: t('generation.refs.why', { engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
-					<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('generation.refs.badge')}</span>
+					<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.workshop.notSent')}</HostUi>
 				</HostUi>
 			{/if}
 			<ul class="space-y-0.5" role="tablist" aria-label={t('panels.dock.refs.families')}>
@@ -316,7 +316,7 @@
 					<ul class="space-y-1 text-xs text-fg-muted">
 						{#each ui.production.queue as w, i (w.id)}
 							<li class="flex items-center gap-2">
-								<span class="vp-tc">{i + 1}.</span>{w.label}<span class="ml-auto text-fg-subtle">{w.quality === 'final' ? t('panels.dock.final') : t('panels.dock.draft')}</span>
+								<span class="vp-tc">{i + 1}.</span>{w.label}<span class="ml-auto text-fg-subtle">{w.quality === 'final' ? t('lib.stage.final') : t('lib.stage.draft')}</span>
 							</li>
 						{/each}
 					</ul>

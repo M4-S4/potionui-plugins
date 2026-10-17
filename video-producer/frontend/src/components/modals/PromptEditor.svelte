@@ -70,7 +70,7 @@
 					{/if}
 				{/each}
 				<details class="rounded-lg border border-line-strong p-2.5 text-xs" open>
-					<summary class="cursor-pointer font-medium text-fg-muted">{t('modals.prompt.global')}</summary>
+					<summary class="-mb-1 -mt-1 min-h-6 cursor-pointer py-1 font-medium text-fg-muted">{t('modals.prompt.global')}</summary>
 					<p class="mt-1.5 leading-5 text-fg-subtle">{globalPrompt()}</p>
 				</details>
 			</div>

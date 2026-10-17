@@ -341,6 +341,24 @@ def test_the_versions_are_listed_latest_first_without_their_documents(api, start
     assert versions[0]["created_at"] > versions[1]["created_at"]
 
 
+def test_the_label_a_save_sends_is_the_label_its_version_is_listed_with(api, starter):
+    created = _create(api, starter)
+    _save(api, created["id"], _renamed(starter, "By the assistant"), 1, label="Assistant")
+    _save(api, created["id"], _renamed(starter, "Saved by hand"), 2, label="Saved from the History menu")
+    _save(api, created["id"], _renamed(starter, "Autosaved"), 3)
+    api.post(_url(created["id"], "versions", 2, "restore"))
+
+    versions = api.get(_url(created["id"], "versions")).json()["data"]["versions"]
+
+    assert [(item["version"], item["label"], item["source_version"]) for item in versions] == [
+        (5, None, 2),
+        (4, None, None),
+        (3, "Saved from the History menu", None),
+        (2, "Assistant", None),
+        (1, None, None),
+    ]
+
+
 def test_only_the_versions_kept_latest_versions_remain(api, project_db, store, starter):
     store[("versions_kept", None)] = "5"
     created = _create(api, starter)
@@ -414,6 +432,77 @@ def test_restoring_an_unknown_version_is_not_found(api, project_db, starter, ver
     assert response.status_code == 404
     assert _detail(response)["error"] == "version_not_found"
     assert len(_rows(project_db, "video_producer_versions", created["id"])) == 1
+
+
+LEGACY_RESULT = {"id": "r1", "clipId": "c1", "quality": "draft", "variant": "A", "status": "chosen", "range": [0, 4]}
+
+
+def _with_results(doc):
+    return {**copy.deepcopy(doc), "results": [LEGACY_RESULT]}
+
+
+def _store_legacy(db, project_id, doc, version=1):
+    text = json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    with db.get_cursor() as cursor:
+        cursor.execute("UPDATE video_producer_versions SET doc = ? WHERE project_id = ? AND version = ?", (text, project_id, version))
+        cursor.execute("UPDATE video_producer_projects SET doc = ? WHERE id = ? AND version = ?", (text, project_id, version))
+
+
+def _stored_doc(db, project_id):
+    return _count(db, "SELECT doc FROM video_producer_projects WHERE id = ?", project_id)
+
+
+def test_a_document_stored_with_simulated_takes_is_read_without_them(api, project_db, starter):
+    created = _create(api, starter)
+    _store_legacy(project_db, created["id"], _with_results(starter))
+
+    project = api.get(_url(created["id"])).json()["data"]["project"]
+    listed = api.get(PROJECTS_URL).json()["data"]["projects"]
+    versions = api.get(_url(created["id"], "versions")).json()["data"]["versions"]
+
+    assert project["doc"] == starter
+    assert [(item["id"], item["shots"]) for item in listed] == [(created["id"], 5)]
+    assert [(item["version"], item["shots"]) for item in versions] == [(1, 5)]
+
+
+def test_a_document_read_without_its_simulated_takes_is_saved_without_them(api, project_db, starter):
+    created = _create(api, starter)
+    _store_legacy(project_db, created["id"], _with_results(starter))
+    read = api.get(_url(created["id"])).json()["data"]["project"]
+
+    response = _save(api, created["id"], read["doc"], 1)
+
+    assert response.status_code == 200
+    assert (response.json()["data"]["project"]["version"], response.json()["data"]["project"]["unchanged"]) == (2, False)
+    assert _stored_doc(project_db, created["id"]) == projects.canonical(starter)
+    assert _rows(project_db, "video_producer_versions", created["id"])[-1]["doc"] == projects.canonical(starter)
+
+
+def test_a_page_that_still_sends_simulated_takes_is_saved_without_them(api, project_db, starter):
+    created = _create(api, _with_results(starter))
+    edited = _renamed(starter, "Edited")
+
+    unchanged = _save(api, created["id"], _with_results(starter), 1)
+    saved = _save(api, created["id"], _with_results(edited), 1)
+
+    assert created["doc"] == starter
+    assert unchanged.status_code == 200 and unchanged.json()["data"]["project"]["unchanged"] is True
+    assert saved.status_code == 200 and saved.json()["data"]["project"]["version"] == 2
+    assert [json.loads(row["doc"]) for row in _rows(project_db, "video_producer_versions", created["id"])] == [starter, edited]
+    assert api.get(_url(created["id"])).json()["data"]["project"]["doc"] == edited
+
+
+def test_restoring_a_version_stored_with_simulated_takes_restores_it_without_them(api, project_db, starter):
+    created = _create(api, starter)
+    _save(api, created["id"], _renamed(starter, "Second"), 1)
+    _store_legacy(project_db, created["id"], _with_results(starter), version=1)
+
+    response = api.post(_url(created["id"], "versions", 1, "restore"))
+
+    assert response.status_code == 200
+    assert response.json()["data"]["project"]["doc"] == starter
+    assert _stored_doc(project_db, created["id"]) == projects.canonical(starter)
+    assert _rows(project_db, "video_producer_versions", created["id"])[-1]["doc"] == projects.canonical(starter)
 
 
 def _seed_takes(db, project_id, prefix):

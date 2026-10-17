@@ -27,6 +27,7 @@ import { openReferences } from './references.js';
 import { togglePlay, seek } from './playback.svelte.js';
 import { chat, confirm } from './host.js';
 import { detectMac, eventKey, formatShortcut, hostOverlayOpen, isActivationTarget, isTypingTarget } from './keyboard.js';
+import { closeTopLayer } from './focus.js';
 
 export const IS_MAC = detectMac();
 
@@ -34,13 +35,12 @@ export function shortcutLabel(spec) {
 	return formatShortcut(spec, { mac: IS_MAC, names: { space: t('commands.kbd.space'), backspace: t('commands.kbd.backspace') } });
 }
 
-function command(id, run, { keys = null, check = null, sim = false } = {}) {
+function command(id, run, { keys = null, check = null } = {}) {
 	return {
 		id,
 		run,
 		keys,
 		check,
-		sim,
 		menuId: null,
 		get label() {
 			return t(`commands.cmd.${id}`);
@@ -312,7 +312,7 @@ function sidebarCombo(e) {
 
 function escape() {
 	if (ui.paletteOpen) ui.paletteOpen = false;
-	else if (ui.modal) ui.modal = null;
+	else if (ui.modal) closeTopLayer() || (ui.modal = null);
 	else if (ui.menuOpen) ui.menuOpen = null;
 	else if (ui.preview || ui.compare) {
 		ui.preview = null;

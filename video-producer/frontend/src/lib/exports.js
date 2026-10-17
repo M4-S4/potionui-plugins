@@ -5,6 +5,7 @@ export const REAL_FORMATS = ['web', 'social'];
 export const RESOLUTIONS = ['720p', '1080p', '4K'];
 export const JOB_STATES = ['queued', 'running', 'done', 'failed', 'cancelled'];
 export const JOB_STEPS = ['assemble', 'mix', 'transcode', 'store'];
+export const EXPORT_ERROR_CODES = ['ffmpeg_unavailable', 'nothing_to_export', 'export_running', 'export_quota', 'not_ready', 'invalid_request', 'invalid_doc', 'ffmpeg_failed', 'transcode_failed', 'store_failed', 'cancelled'];
 export const POLL_EVERY = 1000;
 export const BACKGROUND_POLL_EVERY = 3000;
 export const README_HREF = '/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME';

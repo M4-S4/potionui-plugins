@@ -458,18 +458,6 @@ export function allIssues() {
 
 export const sourceLength = (c) => asset(c?.assetId)?.srcDur ?? 60;
 export const clipLabel = (c) => c?.label || asset(c?.assetId)?.name || t('lib.default.clip');
-function ensureResultAsset(r) {
-	const id = `gen-${r.id}`;
-	if (asset(id)) return id;
-	const c = doc.clips.find((x) => x.id === r.clipId);
-	const name = r.quality === 'final' ? t('lib.default.takeFinal', { shot: clipLabel(c), variant: r.variant }) : t('lib.default.takeDraft', { shot: clipLabel(c), variant: r.variant });
-	const [width, height] = r.quality === 'final' ? [1920, 1080] : [1280, 720];
-	doc.assets.push(newAsset({ id, name, kind: 'video', srcDur: r.range[1] - r.range[0] + 2, width, height, fps: 25, res: `${width}×${height}`, generated: true, quality: r.quality, resultId: r.id }));
-	return id;
-}
-export function seedResultAssets() {
-	for (const r of doc.results ?? []) ensureResultAsset(r);
-}
 
 export function fmtDuration(sec) {
 	if (sec < 60) return `${Math.max(1, Math.round(sec))} s`;
@@ -526,6 +514,7 @@ export function acceptProposal() {
 
 export function replaceDoc(next) {
 	const incoming = { ...next, assets: Array.isArray(next?.assets) ? next.assets : [] };
+	delete incoming.results;
 	for (const k of Object.keys(doc)) if (!(k in incoming)) delete doc[k];
 	Object.assign(doc, incoming);
 	past.length = 0;
@@ -534,7 +523,6 @@ export function replaceDoc(next) {
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', queue: [], lastCount: 0 });
 	resetTakes();
 	Object.assign(ui.scene, { current: null, keyframe: null });
-	seedResultAssets();
 	if (ui.playhead > seqDuration()) ui.playhead = 0;
 }
 

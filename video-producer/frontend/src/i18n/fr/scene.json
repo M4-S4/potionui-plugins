@@ -10,7 +10,7 @@
 	"planCamera": "Caméra de « {plan} »",
 	"freeCamera": "Caméra libre",
 	"hint": "Glisser pour orbiter · molette pour la distance",
-	"fileNote": "Fichier référencé. Le Gaussian Splat n’est pas chargé à cette étape ; la caméra, les positions clés et les guides restent utilisables.",
+	"fileNote": "Fichier référencé. Le Gaussian Splat n’est pas chargé ; la caméra, les positions clés et les guides restent utilisables.",
 	"simPreview": "Aperçu simulé",
 	"topView": "Vue de dessus de la trajectoire",
 	"hud": "{focal} mm · az {az}° · él {el}° · {dist} m",

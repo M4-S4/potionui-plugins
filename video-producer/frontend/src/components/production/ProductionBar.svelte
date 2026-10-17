@@ -24,6 +24,7 @@
 	import { modeLabel } from '../../lib/catalog.js';
 	import { aspectOf, draftResolution, finalResolution } from '../../lib/generation.js';
 	import { commandById } from '../../lib/commands.js';
+	import { announcer } from '../../lib/announce.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 	import InfoTip from '../shell/InfoTip.svelte';
@@ -55,8 +56,8 @@
 		{ id: 'sequence', label: t('production.target.sequence') }
 	]);
 	const qualities = $derived([
-		{ id: 'draft', label: t('production.quality.draft') },
-		{ id: 'final', label: t('production.quality.final') }
+		{ id: 'draft', label: t('lib.stage.draft') },
+		{ id: 'final', label: t('lib.stage.final') }
 	]);
 	const one = (v) => formatNumber(v ?? 0, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 	const minutes = (v) => formatNumber(v ?? 0, { maximumFractionDigits: 1 });
@@ -105,9 +106,22 @@
 		return parts.join(' · ');
 	});
 
+	const voice = announcer();
+	let spoken = $state('');
+
 	$effect(() => {
 		const request = estimateRequest();
 		untrack(() => scheduleEstimate(request));
+	});
+
+	$effect(() => {
+		if (!busy) {
+			voice.reset();
+			spoken = '';
+			return;
+		}
+		const said = voice.next(p.step, p.progress);
+		if (said) spoken = `${said.label} · ${t('exports.percent', { value: said.value })}`;
 	});
 
 	function pick(id) {
@@ -164,12 +178,13 @@
 
 	<div class="flex-1"></div>
 
-	<div class="flex min-w-0 items-center gap-2" aria-live="polite">
+	<div class="sr-only" aria-live="polite">{spoken}</div>
+	<div class="flex min-w-0 items-center gap-2">
 		{#if busy}
 			<div class="w-44" in:fade={{ duration: ms(120) }}>
 				<div class="flex justify-between gap-2 text-xs">
 					<span class="truncate text-signal">{p.step}</span>
-					<span class="vp-tc text-fg-muted">{Math.round(p.progress)} %</span>
+					<span class="vp-tc text-fg-muted">{t('exports.percent', { value: Math.round(p.progress) })}</span>
 				</div>
 				<div class="mt-1 h-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-label={t('production.progress')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={p.running ? Math.round(p.progress) : undefined}>
 					<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{p.progress}%"></div>
@@ -201,8 +216,8 @@
 							<span class="vp-tc">{vramText}</span>
 						{/if}
 						{#if showCost || showQuota}
-							<span class="hidden text-fg-subtle min-[1500px]:inline">·</span>
-							<span class="vp-tc hidden min-[1500px]:inline">{showCost ? money(est.cost.totalUsd) : t('production.estimate.quotaShort', { value: minutes(quota.neededMinutes) })}</span>
+							<span class="vp-cost text-fg-subtle">·</span>
+							<span class="vp-tc vp-cost">{showCost ? money(est.cost.totalUsd) : t('production.estimate.quotaShort', { value: minutes(quota.neededMinutes) })}</span>
 						{/if}
 					</span>
 				</InfoTip>

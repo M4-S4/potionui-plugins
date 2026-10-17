@@ -1,6 +1,5 @@
 <script>
 	import { fly } from 'svelte/transition';
-	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
 	import { overlayLayer } from '../../lib/host.js';
@@ -53,11 +52,7 @@
 									{#if item.check?.()}<Icon name="check" class="h-3.5 w-3.5" />{/if}
 								</span>
 								<span class="flex-1">{item.label}</span>
-								{#if item.sim}
-									<HostUi name="Tooltip" props={{ text: t('shell.menubar.simulated') }}>
-										<Icon name="flask" class="h-3.5 w-3.5 text-fg-muted" />
-									</HostUi>
-								{/if}
+
 								{#if item.key}<span class="vp-menu-key">{item.key}</span>{/if}
 							</button>
 						{/each}

@@ -58,8 +58,8 @@
 	const current = $derived(currentEngine());
 	const one = (v) => formatNumber(v ?? 0, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 	const qualities = $derived([
-		{ id: 'draft', label: t('modals.advanced.draft') },
-		{ id: 'final', label: t('modals.advanced.final') }
+		{ id: 'draft', label: t('lib.stage.draft') },
+		{ id: 'final', label: t('lib.stage.final') }
 	]);
 
 	function word(v) {

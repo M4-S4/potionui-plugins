@@ -488,12 +488,12 @@ async def delete(owner: User, take: Mapping[str, Any]) -> bool:
     return takes.delete_take(take["id"])
 
 
-def _checked(plan: ShotPlan, preset_id: str, native: bool, owner: User) -> float:
+def _checked(plan: ShotPlan, preset_id: str, native: bool, owner: User, backend_id: Optional[str]) -> float:
     if plan.missing_models:
         raise Blocked([_missing_block(plan.missing_models)])
     if not native:
         return 0.0
-    minutes = estimate.plan_minutes(plan, preset_id)
+    minutes = estimate.plan_minutes(plan, preset_id, backend_id)
     return minutes if _require_quota(owner, minutes) else 0.0
 
 
@@ -523,7 +523,7 @@ async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, An
     plan, preset_id, native = (
         _upscale_plan(owner, source, target) if method == UPSCALE else _render_plan(owner, project, source, "final")
     )
-    minutes = _checked(plan, preset_id, native, owner)
+    minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     take = _create(
         owner,
         project["id"],
@@ -551,7 +551,7 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         plan, preset_id, native = _upscale_plan(owner, parent, director.upscale_target(source))
     else:
         plan, preset_id, native = _render_plan(owner, project, source, source["quality"])
-    minutes = _checked(plan, preset_id, native, owner)
+    minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     take = _create(
         owner,
         project["id"],

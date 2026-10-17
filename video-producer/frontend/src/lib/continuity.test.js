@@ -25,7 +25,7 @@ const takes = [
 	{ id: 't1b', shotId: 'c1', url: takeUrl('g3', 'wan_00003.mp4') },
 	{ id: 't2', shotId: 'c2', url: takeUrl('g2', 'wan_00002.mp4') },
 	{ id: 't2b', shotId: 'c2', url: takeUrl('g4', 'wan 00004.mp4') },
-	{ id: 'legacy', shotId: 'c2', url: null }
+	{ id: 't2c', shotId: 'c2', url: null }
 ];
 
 function withFrame(doc, shotId, role, image) {

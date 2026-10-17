@@ -9,7 +9,6 @@ import {
 	engineOptions,
 	finalResolution,
 	isInFlight,
-	legacyTake,
 	migrateEngine,
 	optionFor,
 	presetLabel,
@@ -364,7 +363,7 @@ test('progress text: core markers become readable labels, a marker-only message 
 	assert.equal(normalizeTake({ id: 't', step: '<<PIPE:Generating>>' }).step, 'Generating');
 });
 
-test('takes: a done take becomes a gen-<takeId> asset, legacy results stay read only, H3 upscales by itself', () => {
+test('takes: a done take becomes a gen-<takeId> asset, H3 upscales by itself', () => {
 	const take = normalizeTake({ id: 't1', shot_id: 's1', generation_id: 'g1', file_id: 'f1', quality: 'final', status: 'done', url: '/api/media/generations/g1/a.mp4', width: 1920, height: 1080, duration_s: 5, fps: 24 });
 	assert.deepEqual(takeAsset(take, 'Dawn · Final A'), {
 		id: 'gen-t1',
@@ -387,9 +386,7 @@ test('takes: a done take becomes a gen-<takeId> asset, legacy results stay read 
 		lipSync: null
 	});
 	assert.equal(takeAsset({ ...take, fileId: null }, 'x').origin, null);
-	const legacy = legacyTake({ id: 'r1', clipId: 's1', quality: 'draft', variant: 'A', status: 'redo', seed: 4, local: 'old', range: [0, 5], look: 'warm', parent: null });
-	assert.deepEqual([legacy.legacy, legacy.shotId, legacy.status, legacy.flag, legacy.promptText], [true, 's1', 'done', 'reject', 'old']);
-	assert.equal(canUpscale(legacy, me), false);
+	assert.equal(canUpscale(null, me), false);
 	assert.equal(canUpscale({ presetId: WAN }, me), true);
 	assert.equal(canUpscale({ presetId: WAN }, { ...me, features: { upscaler: false } }), false);
 	assert.equal(canUpscale({ presetId: H3 }, { ...me, features: { upscaler: false } }), true);

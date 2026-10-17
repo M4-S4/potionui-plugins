@@ -19,8 +19,6 @@
 	"conflicts.one": "{count} contradiction de direction à vérifier",
 	"conflicts.other": "{count} contradictions de direction à vérifier",
 	"quality.label": "Qualité",
-	"quality.draft": "Brouillon",
-	"quality.final": "Final",
 	"quality.draftTip": "Brouillon rapide en {resolution} : valider mouvement et cadrage",
 	"quality.finalTip": "Qualité finale en {resolution} : à réserver aux prises retenues",
 	"mode.label": "Mode de sortie",

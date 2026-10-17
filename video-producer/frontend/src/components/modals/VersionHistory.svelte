@@ -5,6 +5,7 @@
 	import { ui, toast } from '../../lib/state.svelte.js';
 	import { project, listVersions, restoreVersion } from '../../lib/project.svelte.js';
 	import { confirm, mountHostSlot } from '../../lib/host.js';
+	import { focusWithRing } from '../../lib/focus.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -35,7 +36,7 @@
 		versions = result.data;
 		phase = 'ready';
 		await tick();
-		list?.querySelector('input:not(:disabled)')?.focus();
+		focusWithRing(list?.querySelector('input:not(:disabled)'));
 	}
 
 	async function restore() {
@@ -85,7 +86,7 @@
 							<span class="block truncate text-xs text-fg-muted">{meta(v)}</span>
 							{#if v.sourceVersion !== null}<span class="block truncate text-xs text-fg-muted">{t('project.versions.restoredFrom', { n: v.sourceVersion })}</span>{/if}
 						</span>
-						{#if current}<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('project.versions.current')}</HostUi>{/if}
+						{#if current}<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('shell.open.current')}</HostUi>{/if}
 					</label>
 				{/each}
 			</div>

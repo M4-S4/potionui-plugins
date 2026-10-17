@@ -36,6 +36,8 @@ export function eventKey(e) {
 	if (e.altKey && typeof e.code === 'string') {
 		if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3).toLowerCase();
 		if (/^Digit[0-9]$/.test(e.code)) return e.code.slice(5);
+		if (e.code === 'BracketLeft') return '[';
+		if (e.code === 'BracketRight') return ']';
 	}
 	return String(e.key ?? '').toLowerCase();
 }

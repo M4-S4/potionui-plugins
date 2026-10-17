@@ -46,7 +46,6 @@
 	"versions.shots.one": "{count} shot",
 	"versions.shots.other": "{count} shots",
 	"versions.restoredFrom": "Restored from version {n}",
-	"versions.current": "Current",
 	"versions.cancel": "Cancel",
 	"versions.restore": "Restore",
 	"versions.confirmTitle": "Restore version {n}",

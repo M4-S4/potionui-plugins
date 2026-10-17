@@ -2,7 +2,7 @@ import { t } from '../i18n/index.svelte.js';
 import { doc, ui, toast, clipLabel } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone } from './project.svelte.js';
 import { MAKERS, srtCues } from './exchange.js';
-import { currentJob, exchangeFile, exchangePath, finishedNow, isJobActive, jobFilePath, mergeJob, pollDelay, sortJobs, videoFile } from './exports.js';
+import { EXPORT_ERROR_CODES, currentJob, exchangeFile, exchangePath, finishedNow, isJobActive, jobFilePath, mergeJob, pollDelay, sortJobs, videoFile } from './exports.js';
 import { confirm } from './host.js';
 import { libraryAvailable, openLibrary } from './importer.js';
 
@@ -21,25 +21,19 @@ export const exchangeText = (format) => MAKERS[format](doc, options());
 export const subtitleCues = () => srtCues(doc, options());
 export const canShowLibrary = () => libraryAvailable();
 
+const knownError = (code) => EXPORT_ERROR_CODES.includes(code);
+
 export function errorText(error) {
 	const code = error?.code;
-	if (code === 'ffmpeg_unavailable') return t('exports.error.ffmpeg');
-	if (code === 'nothing_to_export') return t('exports.error.nothing');
-	if (code === 'export_running') return t('exports.error.running');
-	if (code === 'export_quota') return t('exports.error.quota');
-	if (code === 'not_ready') return t('exports.error.notReady');
-	if (code === 'job_not_found' || code === 'not_found') return t('exports.error.gone');
-	if (code === 'invalid_request') return t('exports.error.invalid');
-	return t('exports.error.generic');
+	if (knownError(code)) return t(`exports.error.${code}`);
+	if (code === 'job_not_found' || code === 'not_found') return t('exports.failed.gone');
+	return t('exports.failed.retry');
 }
 
 export function jobErrorText(job) {
-	const code = job?.error?.code;
-	if (code === 'ffmpeg_failed') return t('exports.failed.ffmpeg');
-	if (code === 'transcode_failed') return t('exports.failed.transcode');
-	if (code === 'store_failed') return t('exports.failed.store');
-	if (code === 'cancelled') return t('exports.failed.cancelled');
-	return t('exports.failed.generic');
+	const error = job?.error;
+	if (knownError(error?.code)) return t(`exports.error.${error.code}`);
+	return error?.message || t('exports.failed.generic');
 }
 
 function failed(error) {

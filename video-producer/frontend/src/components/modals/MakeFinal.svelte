@@ -8,7 +8,6 @@
 	import { takeThumb } from '../../lib/media.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
-	import Icon from '../Icon.svelte';
 
 	let { takeId } = $props();
 
@@ -54,12 +53,10 @@
 				<div class="flex items-center gap-2">
 					<span class="text-sm font-medium {canUpscale ? 'text-fg' : 'text-fg-muted'}">{t('generation.final.upscale')}</span>
 					{#if !canUpscale}
-						<HostUi name="Tooltip" props={{ text: t('generation.final.unavailableWhy'), wrapperClass: 'inline-flex' }}>
-							<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('generation.final.unavailable')}</span>
-						</HostUi>
+						<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.final.unavailable')}</HostUi>
 					{/if}
 				</div>
-				<p class="text-xs text-fg-subtle">{h3 ? t('generation.final.upscaleH3') : t('generation.final.upscaleHint')}</p>
+				<p class="text-xs text-fg-subtle">{canUpscale ? (h3 ? t('generation.final.upscaleH3') : t('generation.final.upscaleHint')) : t('generation.block.upscaleUnsupported')}</p>
 				<HostUi
 					name="SegmentedControl"
 					props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.final.target'), items: targets.map((id) => ({ id, label: targetLabel(id), disabled: !canUpscale })), selected: target, onSelect: (id) => (target = id) }}

@@ -235,7 +235,8 @@
 		.vp-root button:not(:disabled) {
 			cursor: pointer;
 		}
-		.vp-root :focus-visible {
+		.vp-root :focus-visible,
+		.vp-root [data-focus-ring]:focus {
 			outline: 2px solid rgb(var(--signal));
 			outline-offset: 2px;
 		}
@@ -243,6 +244,12 @@
 		.vp-root .vp-modal:focus-visible,
 		.vp-root .vp-modal:focus {
 			outline: none;
+		}
+		.vp-root :has(> [role='switch']:focus-visible),
+		.vp-root :has(> [role='switch'][data-focus-ring]:focus) {
+			border-radius: 9999px;
+			outline: 2px solid rgb(var(--signal));
+			outline-offset: 2px;
 		}
 		.vp-root input[type='number']::-webkit-inner-spin-button {
 			opacity: 0.4;
@@ -512,6 +519,7 @@
 		}
 		.vp-root .vp-link-hit {
 			display: inline-block;
+			min-width: 1.5rem;
 			padding-block: 5px;
 			margin-block: -5px;
 		}
@@ -659,6 +667,14 @@
 			border-top: 1px solid rgb(var(--line));
 			background-color: rgb(var(--surface-1));
 		}
+		.vp-root .vp-splitter::before {
+			content: '';
+			position: absolute;
+			inset: -1px 0 -18px;
+		}
+		:where(.vp-root .vp-splitter + *) :where(button, select, input, a[href], [role='button'], [tabindex='0']) {
+			z-index: 1;
+		}
 		.vp-root .vp-splitter:hover {
 			background-color: rgb(var(--signal) / 0.3);
 		}
@@ -795,7 +811,8 @@
 			border-color: rgb(var(--signal));
 			box-shadow: inset 0 0 0 1px rgb(var(--signal));
 		}
-		.vp-root .vp-pickrow:has(input:focus-visible) {
+		.vp-root .vp-pickrow:has(input:focus-visible),
+		.vp-root .vp-pickrow:has(input[data-focus-ring]:focus) {
 			outline: 2px solid rgb(var(--signal));
 			outline-offset: 2px;
 		}
@@ -885,6 +902,14 @@
 			opacity: 0.7;
 		}
 
+		.vp-root .vp-cost {
+			display: none;
+		}
+		@media (min-width: 1280px) {
+			.vp-root .vp-cost {
+				display: inline;
+			}
+		}
 		.vp-root .vp-notice {
 			display: flex;
 			height: 1rem;

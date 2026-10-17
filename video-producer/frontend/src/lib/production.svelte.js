@@ -2,7 +2,7 @@ import { formatNumber, t } from '../i18n/index.svelte.js';
 import { ui, doc, act, toast, simulated, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
-import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, legacyTake, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
+import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
 import { modeLabel } from './catalog.js';
 import { confirm, openHostModal } from './host.js';
 import { ulid } from './ulid.js';
@@ -89,17 +89,11 @@ export function supportedProfiles() {
 }
 
 export function takesOf(clip) {
-	if (!clip) return [];
-	const legacy = (doc.results ?? []).filter((r) => r.clipId === clip.id).map(legacyTake);
-	return [...realTakesOf(clip.id), ...legacy];
+	return clip ? realTakesOf(clip.id) : [];
 }
 
 export function findTake(id) {
-	if (!id) return null;
-	const real = takeById(id);
-	if (real) return real;
-	const result = (doc.results ?? []).find((r) => r.id === id);
-	return result ? legacyTake(result) : null;
+	return id ? (takeById(id) ?? null) : null;
 }
 
 export function shotActivity(shotId) {
@@ -134,6 +128,7 @@ function noteText(note) {
 	if (code === 'no_model') return t('generation.block.noModel');
 	if (code === 'no_references') return t('generation.block.noReferences', { shot: shotName(data.shot_id) });
 	if (code === 'source_unavailable') return t('generation.block.sourceUnavailable');
+	if (code === 'upscale_unsupported') return t('generation.block.upscaleUnsupported');
 	if (code === 'vram_stream') return t('generation.warn.vramStream');
 	if (code === 'vram_unknown') return t('generation.warn.vramUnknown');
 	if (code === 'time_unknown') return t('generation.warn.timeUnknown');
@@ -295,7 +290,7 @@ export async function startGeneration(opts = {}) {
 
 export function promoteToFinal(takeId) {
 	const take = findTake(takeId);
-	if (!take || take.legacy || take.status !== 'done' || take.quality !== 'draft') return toast(t('lib.toast.chooseDraft'), 'warning');
+	if (!take || take.status !== 'done' || take.quality !== 'draft') return toast(t('lib.toast.chooseDraft'), 'warning');
 	ui.modal = { type: 'final', take: take.id };
 }
 
@@ -511,7 +506,7 @@ function updateProduction() {
 		p.state = 'running';
 		p.progress = agg.progress;
 		p.running = agg.running;
-		p.step = agg.step || (agg.running ? t('generation.state.running') : t('generation.state.queued'));
+		p.step = agg.step || (agg.running ? t('generation.state.running') : t('lib.status.queued'));
 		return;
 	}
 	if (p.state !== 'running') return;

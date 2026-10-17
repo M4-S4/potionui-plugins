@@ -6,6 +6,7 @@
 	import { project, listProjects, openProject, deleteProject } from '../../lib/project.svelte.js';
 	import { createProject } from '../../lib/commands.js';
 	import { confirm, mountHostSlot } from '../../lib/host.js';
+	import { focusWithRing } from '../../lib/focus.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -35,7 +36,7 @@
 		now = Date.now();
 		phase = 'ready';
 		await tick();
-		list?.querySelector('input:checked')?.focus();
+		focusWithRing(list?.querySelector('input:checked'));
 	}
 
 	async function open(id = picked) {

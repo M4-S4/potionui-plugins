@@ -81,7 +81,7 @@
 	});
 </script>
 
-<button type="button" bind:this={trigger} class="{wrapperClass} text-left" aria-describedby={id} onmouseenter={hoverIn} onmouseleave={hoverOut} onfocus={reveal} onblur={blur} onclick={toggle}>
+<button type="button" bind:this={trigger} class="{wrapperClass} min-h-6 items-center text-left" aria-describedby={id} onmouseenter={hoverIn} onmouseleave={hoverOut} onfocus={reveal} onblur={blur} onclick={toggle}>
 	{@render children()}
 </button>
 <div

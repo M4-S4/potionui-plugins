@@ -2,8 +2,8 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, secs } from '../../lib/state.svelte.js';
-	import { useTake, promoteToFinal, retryTake, cancelTake, flagTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById } from '../../lib/production.svelte.js';
-	import { isInFlight, presetLabel } from '../../lib/generation.js';
+	import { useTake, promoteToFinal, retryTake, cancelTake, flagTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable } from '../../lib/production.svelte.js';
+	import { FAILURE_CODES, isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { extractable, extractAtPlayhead, seamState } from '../../lib/seam.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -15,7 +15,7 @@
 	const inCompare = $derived(!!ui.compare?.includes(take.id));
 	const previewed = $derived(ui.preview?.kind === 'result' && ui.preview.id === take.id);
 	const flying = $derived(isInFlight(take));
-	const done = $derived(take.status === 'done' && (take.legacy || Boolean(take.url)));
+	const done = $derived(take.status === 'done' && Boolean(take.url));
 	const thumb = $derived(done ? takeThumb(take) : null);
 	const parent = $derived(take.parentTakeId ? findTake(take.parentTakeId) : null);
 	const progress = $derived(take.status === 'running' ? Math.round(Math.min(100, Math.max(0, take.progress ?? 0))) : 0);
@@ -28,14 +28,14 @@
 
 	function qualityText() {
 		if (take.kind === 'upscale') return t('generation.card.upscale');
-		return take.quality === 'final' ? t('generation.card.final') : t('generation.card.draft');
+		return take.quality === 'final' ? t('lib.stage.final') : t('lib.stage.draft');
 	}
 
 	function stateText(status) {
-		if (status === 'queued') return t('generation.state.queued');
+		if (status === 'queued') return t('lib.status.queued');
 		if (status === 'running') return t('generation.state.running');
-		if (status === 'failed') return t('generation.state.failed');
-		if (status === 'cancelled') return t('generation.state.cancelled');
+		if (status === 'failed') return t('lib.status.failed');
+		if (status === 'cancelled') return t('lib.status.cancelled');
 		return '';
 	}
 
@@ -48,7 +48,8 @@
 	const resolution = $derived(take.width && take.height ? `${take.width}×${take.height}` : (take.resolution ?? '').replace('x', '×') || '—');
 	const tone = $derived(take.status === 'failed' ? 'text-danger' : take.status === 'cancelled' ? 'text-fg-subtle' : 'text-signal');
 	const dot = $derived(take.status === 'failed' ? 'bg-danger' : take.status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
-	const errorText = $derived(take.errorMessage || t('generation.card.error', { code: take.errorCode ?? '—' }));
+	const errorText = $derived(FAILURE_CODES.includes(take.errorCode) ? t(`generation.failed.${take.errorCode}`, { id: take.generationId ?? '—' }) : take.errorMessage || t('generation.card.error', { code: take.errorCode ?? '—' }));
+	const finalTip = $derived(upscaleAvailable(take) ? t('generation.card.finalTip') : t('generation.block.upscaleUnsupported'));
 
 	function preview() {
 		ui.preview = { kind: 'result', id: take.id };
@@ -82,23 +83,17 @@
 					<span class="vp-tc ml-auto shrink-0 text-fg-subtle">{secs(take.durationS)}</span>
 				{/if}
 			</div>
-			{#if take.legacy}
-				<HostUi name="Tooltip" props={{ text: t('generation.card.legacy'), wrapperClass: 'inline-flex' }}>
-					<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>
-				</HostUi>
-			{:else}
-				<div class="truncate text-fg-muted">{modeText()}</div>
-				<div class="truncate text-fg-subtle"><span class="vp-tc">{resolution}</span>{#if parent}{' · ' + t('generation.card.from', { variant: parent.variant })}{/if}</div>
-				<div class="vp-tc truncate text-fg-subtle">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>
-				<div class="truncate text-fg-subtle" title={engineText}>{engineText}</div>
-			{/if}
+			<div class="truncate text-fg-muted">{modeText()}</div>
+			<div class="truncate text-fg-subtle"><span class="vp-tc">{resolution}</span>{#if parent}{' · ' + t('generation.card.from', { variant: parent.variant })}{/if}</div>
+			<div class="vp-tc truncate text-fg-subtle">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>
+			<div class="truncate text-fg-subtle" title={engineText}>{engineText}</div>
 		</div>
 	</div>
 	{#if flying}
 		<div class="px-2 pb-2">
 			<div class="mb-1 flex justify-between gap-2 text-xs">
 				<span class="truncate text-fg-muted">{take.step || stateText(take.status)}</span>
-				{#if take.status === 'running'}<span class="vp-tc text-fg-subtle">{progress} %</span>{/if}
+				{#if take.status === 'running'}<span class="vp-tc text-fg-subtle">{t('exports.percent', { value: progress })}</span>{/if}
 			</div>
 			{#if take.status === 'running'}
 				<div class="h-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-label={t('generation.card.progress', { variant: take.variant })} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}>
@@ -118,47 +113,45 @@
 				props={{ icon: hostIconName('compare'), label: t('generation.card.compare', { variant: take.variant }), tooltip: t('generation.card.compareTip'), size: 'xs', class: 'vp-toggle', ariaPressed: inCompare, onclick: () => toggleCompare(take.id) }}
 			/>
 		{/if}
-		{#if !take.legacy}
-			{#if take.status === 'done'}
-				<HostUi
-					name="IconButton"
-					props={{ icon: 'star', label: t('generation.card.keep', { variant: take.variant }), tooltip: t('generation.card.keepTip'), size: 'xs', class: 'vp-toggle', ariaPressed: take.flag === 'keep', onclick: () => flagTake(take, 'keep') }}
-				/>
-				<HostUi
-					name="IconButton"
-					props={{ icon: hostIconName('thumb-down'), label: t('generation.card.reject', { variant: take.variant }), tooltip: t('generation.card.rejectTip'), size: 'xs', class: 'vp-toggle', ariaPressed: take.flag === 'reject', onclick: () => flagTake(take, 'reject') }}
-				/>
-			{/if}
-			{#if clip && extractable(take)}
-				<HostUi
-					name="IconButton"
-					props={{ icon: hostIconName('image'), label: t('lib.seam.extract'), tooltip: t('lib.seam.extractTip'), size: 'xs', disabled: Boolean(seamState.busy), onclick: () => extractAtPlayhead(take, clip) }}
-				/>
-			{/if}
-			{#if take.generationId}
-				<HostUi name="IconButton" props={{ icon: 'info', label: t('generation.card.details', { variant: take.variant }), tooltip: t('generation.card.detailsTip'), size: 'xs', onclick: () => showDetails(take) }} />
-			{/if}
-			<HostUi name="IconButton" props={{ icon: 'trash', label: t('generation.card.delete', { variant: take.variant }), tooltip: t('generation.card.deleteTip'), size: 'xs', onclick: () => deleteTake(take) }} />
-			<span class="ml-auto flex shrink-0 items-center gap-0.5">
-				{#if flying}
-					<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => cancelTake(take) }}>{t('generation.card.cancel')}</HostUi>
-				{:else if take.status === 'failed'}
-					<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: () => retryTake(take) }}>{t('generation.card.retry')}</HostUi>
-				{:else if done}
-					{#if take.quality === 'draft'}
-						<HostUi name="Tooltip" props={{ text: t('generation.card.finalTip') }}>
-							<button type="button" class="h-6 whitespace-nowrap rounded px-1.5 text-xs font-medium text-signal hover:bg-surface-2" onclick={() => promoteToFinal(take.id)}>{t('generation.card.makeFinal')}</button>
-						</HostUi>
-					{/if}
-					{#if active}
-						<span class="flex items-center gap-1 whitespace-nowrap px-1.5 text-xs text-signal"><Icon name="check" class="h-3.5 w-3.5" />{t('generation.card.used')}</span>
-					{:else}
-						<HostUi name="Tooltip" props={{ text: t('generation.card.chooseTip') }}>
-							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', disabled: !clip, onclick: () => useTake(clip, take.id) }}>{t('generation.card.choose')}</HostUi>
-						</HostUi>
-					{/if}
-				{/if}
-			</span>
+		{#if take.status === 'done'}
+			<HostUi
+				name="IconButton"
+				props={{ icon: 'star', label: t('generation.card.keep', { variant: take.variant }), tooltip: t('generation.card.keepTip'), size: 'xs', class: 'vp-toggle', ariaPressed: take.flag === 'keep', onclick: () => flagTake(take, 'keep') }}
+			/>
+			<HostUi
+				name="IconButton"
+				props={{ icon: hostIconName('thumb-down'), label: t('generation.card.reject', { variant: take.variant }), tooltip: t('generation.card.rejectTip'), size: 'xs', class: 'vp-toggle', ariaPressed: take.flag === 'reject', onclick: () => flagTake(take, 'reject') }}
+			/>
 		{/if}
+		{#if clip && extractable(take)}
+			<HostUi
+				name="IconButton"
+				props={{ icon: hostIconName('image'), label: t('lib.seam.extract'), tooltip: t('lib.seam.extractTip'), size: 'xs', disabled: Boolean(seamState.busy), onclick: () => extractAtPlayhead(take, clip) }}
+			/>
+		{/if}
+		{#if take.generationId}
+			<HostUi name="IconButton" props={{ icon: 'info', label: t('generation.card.details', { variant: take.variant }), tooltip: t('generation.card.detailsTip'), size: 'xs', onclick: () => showDetails(take) }} />
+		{/if}
+		<HostUi name="IconButton" props={{ icon: 'trash', label: t('generation.card.delete', { variant: take.variant }), tooltip: t('generation.card.deleteTip'), size: 'xs', onclick: () => deleteTake(take) }} />
+		<span class="ml-auto flex shrink-0 items-center gap-0.5">
+			{#if flying}
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => cancelTake(take) }}>{t('generation.card.cancel')}</HostUi>
+			{:else if take.status === 'failed'}
+				<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: () => retryTake(take) }}>{t('generation.card.retry')}</HostUi>
+			{:else if done}
+				{#if take.quality === 'draft'}
+					<HostUi name="Tooltip" props={{ text: finalTip }}>
+						<button type="button" class="h-6 whitespace-nowrap rounded px-1.5 text-xs font-medium text-signal hover:bg-surface-2" onclick={() => promoteToFinal(take.id)}>{t('generation.card.makeFinal')}</button>
+					</HostUi>
+				{/if}
+				{#if active}
+					<span class="flex items-center gap-1 whitespace-nowrap px-1.5 text-xs text-signal"><Icon name="check" class="h-3.5 w-3.5" />{t('generation.card.used')}</span>
+				{:else}
+					<HostUi name="Tooltip" props={{ text: t('generation.card.chooseTip') }}>
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', disabled: !clip, onclick: () => useTake(clip, take.id) }}>{t('generation.card.choose')}</HostUi>
+					</HostUi>
+				{/if}
+			{/if}
+		</span>
 	</div>
 </li>

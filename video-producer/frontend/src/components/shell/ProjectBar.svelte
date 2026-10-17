@@ -52,7 +52,7 @@
 		<div class="flex min-w-0 flex-col">
 			<input class="vp-projectbar-name" bind:value={doc.name} onchange={nameChanged} aria-label={t('shell.project.name')} />
 			<HostUi name="Tooltip" props={tip('save')}>
-				<button type="button" class="flex h-6 items-center gap-1.5 self-start text-xs leading-none text-fg-muted hover:text-fg" onclick={save} aria-live="polite">
+				<button type="button" class="flex h-6 items-center gap-1.5 self-start text-xs leading-none text-fg-muted hover:text-fg" onclick={save}>
 					{#if saveState === 'saving'}
 						<span class="h-1.5 w-1.5 rounded-full bg-signal"></span>{t('project.status.saving')}
 					{:else if saveState === 'error'}
@@ -66,6 +66,7 @@
 					{/if}
 				</button>
 			</HostUi>
+			<span class="sr-only" aria-live="polite">{saveState === 'error' ? t('project.status.error') : ''}</span>
 		</div>
 	</div>
 

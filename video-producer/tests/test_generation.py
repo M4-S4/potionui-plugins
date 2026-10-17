@@ -536,6 +536,52 @@ def test_a_retry_is_a_new_take_with_the_same_shot_seed_quality_and_preset(core, 
     assert takes.get_take(failed["id"])["status"] == "failed"
 
 
+def test_a_retry_reserves_the_minutes_measured_on_the_backend_that_rendered_its_source(core, make_project):
+    core.use_wan()
+    project = make_project(clips=SHOTS[:1])
+    (take,) = _start(core, project, shots=["s1"], variants=1)
+    core.states["gen-1"] = {"id": "gen-1", "status": "running", "progress": 0.2, "backend_id": "b-studio"}
+    _tick()
+    core.fail("gen-1", backend_id="b-studio")
+    _tick()
+    for duration_ms in (60000, 60000, 60000):
+        takes.add_calibration(presets.WAN, "b-local", "832x480", 4.0, duration_ms)
+    takes.add_calibration(presets.WAN, "b-studio", "832x480", 4.0, 24000)
+    failed = takes.get_take(take["id"])
+
+    retried = asyncio.run(generation.retry(core.users["user-1"], project, failed))
+
+    assert failed["backend_id"] == "b-studio"
+    assert retried["units_reserved"] == round(4 * 6 / 60, 3)
+
+
+def test_a_retry_of_a_take_no_backend_rendered_reserves_the_default_minutes(core, make_project):
+    core.use_wan()
+    project = make_project(clips=SHOTS[:1])
+    (take,) = _start(core, project, shots=["s1"], variants=1)
+    core.fail("gen-1", backend_id=None)
+    _tick()
+    takes.add_calibration(presets.WAN, "b-local", "832x480", 4.0, 24000)
+    failed = takes.get_take(take["id"])
+
+    retried = asyncio.run(generation.retry(core.users["user-1"], project, failed))
+
+    assert failed["backend_id"] is None
+    assert retried["units_reserved"] == round(4 * 10 / 60, 3)
+
+
+def test_a_final_reserves_the_minutes_measured_on_the_backend_of_its_source(core, make_project):
+    core.use_wan()
+    project, source = _done_take(core, make_project)
+    takes.add_calibration(presets.WAN, "b-studio", "1280x720", 4.0, 400000)
+    takes.add_calibration(presets.WAN, "b-local", "1280x720", 4.0, 120000)
+
+    final = asyncio.run(generation.final(core.users["user-1"], project, source, "render", "fhd1080"))
+
+    assert source["backend_id"] == "b-local"
+    assert final["units_reserved"] == round(4 * 30 / 60, 3)
+
+
 def test_only_a_failed_or_cancelled_take_can_be_retried(core, make_project):
     core.use_wan()
     project, done = _done_take(core, make_project)

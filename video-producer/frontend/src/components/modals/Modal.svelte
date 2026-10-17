@@ -7,7 +7,7 @@
 	import { ms } from '../../lib/motion.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { focusables } from '../../lib/keyboard.js';
-	import { restoreFocus, takeReturnFocus } from '../../lib/focus.js';
+	import { closeLayer, closeTopLayer, focusWithRing, isTopLayer, leaveLayer, openLayer } from '../../lib/focus.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { ui } from '../../lib/state.svelte.js';
 	import Icon from '../Icon.svelte';
@@ -15,18 +15,21 @@
 	let { title, subtitle = '', icon = null, width = 560, sim = false, children, footer, onclose = null } = $props();
 
 	let dialog = $state();
+	let layer = null;
 	const close = () => (onclose ? onclose() : (ui.modal = null));
 
 	function initialFocus() {
 		const candidates = [...dialog.querySelectorAll('input, textarea, select, button')].filter((el) => !el.disabled && !el.closest('[data-close]'));
-		(dialog.querySelector('[autofocus]') ?? candidates[0] ?? dialog).focus();
+		const target = dialog.querySelector('[autofocus]') ?? candidates[0];
+		if (target) focusWithRing(target);
+		else dialog.focus();
 	}
 
 	function keydown(e) {
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			e.stopPropagation();
-			close();
+			closeTopLayer();
 			return;
 		}
 		if (e.key !== 'Tab') return;
@@ -47,17 +50,16 @@
 	}
 
 	onMount(() => {
-		const previous = document.activeElement;
-		const fallback = takeReturnFocus();
+		layer = openLayer(dialog, { refocus: initialFocus, close });
 		const frame = requestAnimationFrame(initialFocus);
 		return () => {
 			cancelAnimationFrame(frame);
-			restoreFocus(previous, fallback);
+			closeLayer(layer);
 		};
 	});
 </script>
 
-<div class="vp-modal-backdrop" role="presentation" use:overlayLayer transition:fade|global={{ duration: ms(140) }} onpointerdown={(e) => e.target === e.currentTarget && close()}>
+<div class="vp-modal-backdrop" role="presentation" use:overlayLayer transition:fade|global={{ duration: ms(140) }} onpointerdown={(e) => e.target === e.currentTarget && isTopLayer(layer) && close()}>
 	<div
 		bind:this={dialog}
 		class="vp-modal"
@@ -67,13 +69,14 @@
 		aria-label={title}
 		tabindex="-1"
 		onkeydown={keydown}
+		onoutrostart={() => leaveLayer(layer)}
 		transition:scale|global={{ start: 0.97, duration: ms(180), easing: cubicOut }}
 	>
 		<div class="vp-modal-head">
 			{#if icon}<Icon name={icon} class="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />{/if}
 			<div class="min-w-0 flex-1">
 				<h2 class="text-md font-semibold">{title}</h2>
-				{#if subtitle}<p class="text-xs text-fg-subtle">{subtitle}</p>{/if}
+				{#if subtitle}<p class="text-xs text-fg-muted">{subtitle}</p>{/if}
 			</div>
 			{#if sim}<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>{/if}
 			<span class="-mr-1.5 -mt-1 inline-flex" data-close>

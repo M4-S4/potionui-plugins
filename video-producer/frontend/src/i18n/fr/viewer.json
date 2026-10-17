@@ -12,8 +12,6 @@
 	"addToCut": "Ajouter au montage",
 	"placeholderHint": "Plan à générer : ajoutez une instruction locale dans la piste Prompts.",
 	"generateDrafts": "Générer des brouillons",
-	"simFinal": "Prise finale · IA simulée",
-	"simDraft": "Brouillon 720p · IA simulée",
 	"end": "Fin de la séquence",
 	"mute": "Couper le son",
 	"unmute": "Rétablir le son",
@@ -36,5 +34,6 @@
 	"resolution": "Résolution",
 	"resolutionTip": "Résolution · {fps} i/s",
 	"uhd": "4K UHD",
-	"fullscreen": "Plein écran"
+	"fullscreen": "Plein écran",
+	"offlineHint": "Le fichier source de « {name} » n’est plus disponible : importez-le à nouveau ou choisissez une prise."
 }

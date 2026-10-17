@@ -12,8 +12,6 @@
 	"addToCut": "Add to cut",
 	"placeholderHint": "Shot to generate: add a shot prompt on the Prompts track.",
 	"generateDrafts": "Generate drafts",
-	"simFinal": "Final take · simulated AI",
-	"simDraft": "720p draft · simulated AI",
 	"end": "End of the sequence",
 	"mute": "Mute",
 	"unmute": "Unmute",
@@ -36,5 +34,6 @@
 	"resolution": "Resolution",
 	"resolutionTip": "Resolution · {fps} fps",
 	"uhd": "4K UHD",
-	"fullscreen": "Full screen"
+	"fullscreen": "Full screen",
+	"offlineHint": "The source file of “{name}” is no longer available: import it again or choose a take."
 }

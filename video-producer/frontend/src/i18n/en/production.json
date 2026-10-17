@@ -19,8 +19,6 @@
 	"conflicts.one": "{count} direction conflict to check",
 	"conflicts.other": "{count} direction conflicts to check",
 	"quality.label": "Quality",
-	"quality.draft": "Draft",
-	"quality.final": "Final",
 	"quality.draftTip": "Quick draft in {resolution}: check motion and framing",
 	"quality.finalTip": "Final quality in {resolution}: keep it for the chosen takes",
 	"mode.label": "Output mode",

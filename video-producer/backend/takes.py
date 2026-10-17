@@ -333,14 +333,15 @@ def add_calibration(preset_id: str, backend_id: str, resolution: str, seconds: f
 def calibration(
     preset_id: str, backend_id: Optional[str], resolution: str, limit: int = CALIBRATION_ROWS
 ) -> List[Tuple[float, int]]:
-    """The latest measures of a preset at a resolution, on one backend or on any, newest first."""
+    """The latest measures of a preset at a resolution on the backend that rendered them, newest first; none without a backend."""
     from src.plugin_api import db
 
-    query = f"SELECT seconds, duration_ms FROM {CALIBRATION} WHERE preset_id = ? AND resolution = ?"
-    params: Tuple[Any, ...] = (preset_id, resolution)
-    if backend_id:
-        query += " AND backend_id = ?"
-        params += (backend_id,)
+    if not backend_id:
+        return []
     with db.get_cursor() as cursor:
-        cursor.execute(query + " ORDER BY created_at DESC, rowid DESC LIMIT ?", (*params, limit))
+        cursor.execute(
+            f"SELECT seconds, duration_ms FROM {CALIBRATION} WHERE preset_id = ? AND backend_id = ? AND resolution = ? "
+            "ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            (preset_id, backend_id, resolution, limit),
+        )
         return [(float(row["seconds"]), int(row["duration_ms"])) for row in cursor.fetchall()]

@@ -8,6 +8,7 @@ import { isUlid, ulid, ulidTime } from './ulid.js';
 import { emptyDoc, newAsset, promptLanguageOf, starterDoc } from './starter.js';
 import { detectMac, eventKey, formatShortcut, isActivationTarget, isTypingTarget, parseShortcut } from './keyboard.js';
 import { HOST_ALIASES, HOST_MISSING, HOST_VARIANTS, hostIconName, hostIcons, paths } from './icons.js';
+import { closeLayer, closeTopLayer, isTopLayer, leaveLayer, openLayer } from './focus.js';
 
 test('ulid: 26 Crockford base32 characters, time first, random tail', () => {
 	const id = ulid(1_700_000_000_000);
@@ -46,6 +47,8 @@ test('shortcuts: Mac glyphs in the source editor order, Ctrl/Alt/Shift elsewhere
 test('keys: Alt combinations read the physical key, focus rules recognise fields and buttons', () => {
 	assert.equal(eventKey({ key: '˚', code: 'KeyK', altKey: true }), 'k');
 	assert.equal(eventKey({ key: '¡', code: 'Digit1', altKey: true }), '1');
+	assert.equal(eventKey({ key: 'Dead', code: 'BracketLeft', altKey: true }), '[');
+	assert.equal(eventKey({ key: '}', code: 'BracketRight', altKey: true }), ']');
 	assert.equal(eventKey({ key: 'Z', code: 'KeyZ', altKey: false }), 'z');
 	assert.equal(eventKey({ key: ' ', code: 'Space' }), ' ');
 	assert.ok(isTypingTarget({ tagName: 'TEXTAREA' }));
@@ -139,7 +142,8 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 			['D1', 'Délai']
 		]
 	);
-	for (const key of ['audio', 'frames', 'controls', 'plans3d', 'references', 'results', 'scenes', 'profiles', 'assets']) assert.deepEqual(fr[key], [], key);
+	for (const key of ['audio', 'frames', 'controls', 'plans3d', 'references', 'scenes', 'profiles', 'assets']) assert.deepEqual(fr[key], [], key);
+	assert.ok(!('results' in fr), 'the document has no results field');
 	assert.deepEqual([fr.engine.seed, fr.engine.variants, fr.engine.backend, fr.engine.preset, fr.engine.model, fr.engine.loras], [48121, 2, '', null, null, []]);
 	const ids = [...fr.clips, ...fr.prompts, ...fr.titles, ...fr.markers].map((x) => x.id);
 	assert.ok(ids.every(isUlid));
@@ -156,7 +160,8 @@ test('emptyDoc: an untitled project with no shot and the four empty lanes', () =
 	assert.equal(fr.name, 'Projet sans titre');
 	assert.equal(en.name, 'Untitled project');
 	assert.equal(fr.synopsis, '');
-	for (const key of ['clips', 'prompts', 'titles', 'markers', 'audio', 'frames', 'results', 'scenes', 'assets']) assert.deepEqual(fr[key], [], key);
+	for (const key of ['clips', 'prompts', 'titles', 'markers', 'audio', 'frames', 'scenes', 'assets']) assert.deepEqual(fr[key], [], key);
+	assert.ok(!('results' in fr));
 	assert.deepEqual(
 		en.lanes.map((l) => [l.id, l.name, l.role]),
 		[
@@ -215,4 +220,34 @@ test('prompt language: a project setting, English by default, that only decides 
 	assert.equal(emptyDoc(fr).promptLanguage, 'en');
 	assert.equal(emptyDoc(fr, 'fr').promptLanguage, 'fr');
 	assert.deepEqual(['en', 'fr', 'de', undefined, null].map(promptLanguageOf), ['en', 'fr', 'en', 'en', 'en']);
+});
+
+test('window layers: Escape closes only the foreground window, a replaced window hands its return focus on', () => {
+	const saved = globalThis.document;
+	const calls = [];
+	const box = (name) => ({ contains: (node) => node?.inside === name });
+	const timeline = { inside: null };
+	globalThis.document = { activeElement: timeline };
+	try {
+		const editor = openLayer(box('editor'), { refocus: () => calls.push('refocus editor'), close: () => calls.push('close editor') });
+		assert.equal(editor.previous, timeline);
+		document.activeElement = { inside: 'editor' };
+		const library = openLayer(box('library'), { refocus: () => calls.push('refocus library'), close: () => calls.push('close library') });
+		assert.ok(isTopLayer(library) && !isTopLayer(editor));
+		leaveLayer(editor);
+		assert.equal(closeTopLayer(), true);
+		assert.deepEqual(calls, ['close library']);
+		document.activeElement = null;
+		closeLayer(editor);
+		assert.equal(library.previous, timeline);
+		assert.deepEqual(calls, ['close library', 'refocus library']);
+		document.activeElement = { inside: 'library' };
+		leaveLayer(library);
+		assert.equal(closeTopLayer(), false);
+		closeLayer(library);
+		closeLayer(library);
+		assert.deepEqual(calls, ['close library', 'refocus library']);
+	} finally {
+		globalThis.document = saved;
+	}
 });

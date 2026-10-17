@@ -59,6 +59,15 @@ SETUP_CHECKS = (
 )
 SEEDVR2 = "01KXB7C553THYMSMKY1QSYESFM"
 WAN = "01KX47WANVIDEO0000000000TV"
+MINIMAX_H3 = "01KX47H3MINIMAX000000000VA"
+SETUP_LABELS = (
+    "Enable a native backend or a cloud video model",
+    "Install and assign at least one Video Director preset (Wan, MiniMax-H3, LTX or a cloud video preset)",
+    "Install SeedVR2 for final takes",
+    "Install ffmpeg for video delivery",
+    "If a MiniMax-H3 preset is installed, install its five model files (DiT, text encoder, video VAE, audio VAE, "
+    "and the latent upscaler of its Upscale mode)",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -753,6 +762,7 @@ def test_the_core_never_enforces_nor_records_the_gpu_minutes_kind(limit_kinds):
 
 def test_setup_checks_load_the_way_the_core_loads_them(loader, manifest):
     assert [(step["kind"], step["check"]) for step in manifest.setup] == [("check", ref) for ref in SETUP_CHECKS]
+    assert tuple(step["label"] for step in manifest.setup) == SETUP_LABELS
     for step in manifest.setup:
         check_class = loader.load_class(manifest, step["check"])
 
@@ -863,6 +873,32 @@ def test_the_core_setup_report_shows_a_check_that_cannot_read_the_host_as_still_
     assert [step.status for step in report.steps] == ["todo"] * 5
     assert all(step.description.startswith("Could not check ") for step in report.steps)
     assert all(step.action.kind == "link" and step.action.href.startswith("/admin?tab=") for step in report.steps)
+
+
+def test_the_core_setup_report_shows_every_step_still_to_do_with_its_link(loader, manifest, monkeypatch):
+    bridge = _bridge(loader, manifest)
+    states = {
+        WAN: bridge.PresetState(id=WAN, name="Wan", loaded=True, installed=True, assigned=False),
+        SEEDVR2: bridge.PresetState(id=SEEDVR2, name="SeedVR2", loaded=True, installed=False, assigned=False),
+        MINIMAX_H3: bridge.PresetState(id=MINIMAX_H3, name="MiniMax-H3", loaded=True, installed=True, assigned=False),
+    }
+    _fake_host(monkeypatch, bridge, backends=[], states=states, ffmpeg=None)
+    monkeypatch.setattr(bridge, "preset_model_hashes", lambda preset_id, names, modes=None: {name: {f"{name}-sha"} for name in names})
+    monkeypatch.setattr(bridge, "describe_preset", lambda preset_id: None)
+
+    report = _setup(loader, manifest).report(manifest)
+
+    assert (report.complete, report.remaining) == (False, 5)
+    assert [step.label for step in report.steps] == list(SETUP_LABELS)
+    assert [step.status for step in report.steps] == ["todo"] * 5
+    assert [(step.action.kind, step.action.label, step.action.href) for step in report.steps] == [
+        ("link", "Open backends", "/admin?tab=backends"),
+        ("link", "Assign presets", f"/admin?tab=presets&id={WAN}"),
+        ("link", "Open SeedVR2", f"/admin?tab=presets&id={SEEDVR2}"),
+        ("link", "Read the guide", report.guide.href),
+        ("link", "Open MiniMax-H3", f"/admin?tab=presets&id={MINIMAX_H3}"),
+    ]
+    assert report.steps[4].description.startswith("MiniMax-H3 is missing its DiT, text encoder, video VAE, audio VAE and latent upscaler.")
 
 
 def test_the_setup_guide_points_at_the_admin_readme_the_ffmpeg_step_links_to(loader, manifest, monkeypatch):

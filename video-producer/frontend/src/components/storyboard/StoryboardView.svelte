@@ -180,7 +180,7 @@
 						<span class="vp-tc absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-white backdrop-blur-sm">{secs(c.dur)}</span>
 						{#if busy}
 							<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 backdrop-blur-[2px]" transition:fade={{ duration: ms(150) }}>
-								<span class="max-w-[90%] truncate text-xs text-white">{activity.step || (activity.running ? t('generation.state.running') : t('generation.state.queued'))}</span>
+								<span class="max-w-[90%] truncate text-xs text-white">{activity.step || (activity.running ? t('generation.state.running') : t('lib.status.queued'))}</span>
 								<div class="h-1 w-2/3 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label={t('generation.shotProgress', { shot: clipLabel(c) })} aria-valuemin="0" aria-valuemax="100" aria-valuenow={activity.running ? Math.round(activity.progress) : undefined}>
 									<div class="h-full bg-white transition-[width] duration-150" style:width="{activity.progress}%"></div>
 								</div>

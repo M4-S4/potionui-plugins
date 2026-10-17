@@ -1,6 +1,36 @@
 export const PROFILES = ['FL2VA', 'Ref2VA', 'Hybrid AV'];
 export const MINIMAX_H3_IDS = ['01KX47H3MINIMAX000000000VA', '01KX47H3FASTH30000000000VA', '01KX47H3VDNMINIMAX000000VA', '01M54HN72B0KY7H63BKQ16T253', '01M54HN72PABVRE54YNQA2Q7ZT'];
 export const UPSCALE_TARGETS = ['hd720', 'fhd1080', 'qhd1440', 'uhd2160'];
+export const FAILURE_CODES = [
+	'cuda_oom',
+	'host_ram_oom',
+	'missing_model_file',
+	'disk_full',
+	'corrupt_weights',
+	'auth_required',
+	'backend_unreachable',
+	'banned_prompt',
+	'content_blocked',
+	'content_check_unavailable',
+	'cloud_auth',
+	'cloud_credits',
+	'cloud_refused',
+	'cloud_rate_limited',
+	'cloud_invalid_request',
+	'cloud_unavailable',
+	'cloud_timeout',
+	'cloud_failed',
+	'cloud_expired',
+	'unclassified',
+	'generation_failed',
+	'preset_not_available',
+	'duplicate_submission',
+	'no_backend',
+	'submit_failed',
+	'generation_not_found',
+	'no_output',
+	'user_not_found'
+];
 const CLOUD_DRIVERS = { '01M3SV8HJTGT3JPPH2BA5MP6PR': 'cloud.openrouter', '01M48T0Q8Q0V2WNW3WTX3FY1MW': 'cloud.google' };
 const LEGACY_BACKENDS = { local: 'local', studio: 'remote', cloud: 'cloud' };
 const NATIVE_KINDS = ['local', 'remote'];
@@ -182,7 +212,7 @@ export function upscaleTargetFor(resolution, targets = UPSCALE_TARGETS) {
 export const upscalesItself = (presetId) => presetId === MINIMAX_H3_IDS[0];
 
 export function canUpscale(take, me) {
-	if (!take || take.legacy) return false;
+	if (!take) return false;
 	if (upscalesItself(take.presetId)) return (me?.presets ?? []).some((p) => p.id === take.presetId);
 	return me?.features?.upscaler === true;
 }
@@ -213,32 +243,6 @@ export function takeAsset(take, name) {
 	};
 }
 
-export function legacyTake(result) {
-	return {
-		id: result.id,
-		shotId: result.clipId,
-		legacy: true,
-		quality: result.quality === 'final' ? 'final' : 'draft',
-		kind: 'render',
-		variant: result.variant,
-		status: 'done',
-		seed: result.seed ?? null,
-		chosen: result.status === 'chosen',
-		flag: result.status === 'redo' ? 'reject' : null,
-		profile: result.profile ?? null,
-		promptText: result.local ?? '',
-		parentTakeId: result.parent ?? null,
-		directorMode: null,
-		resolution: null,
-		backendId: null,
-		generationId: null,
-		url: null,
-		thumbUrl: null,
-		created: result.created ?? null,
-		range: result.range,
-		look: result.look ?? null
-	};
-}
 
 export function sortTakes(takes) {
 	return [...takes].sort((a, b) => {

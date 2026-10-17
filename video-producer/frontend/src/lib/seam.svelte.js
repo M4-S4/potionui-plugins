@@ -8,7 +8,7 @@ import { PREVIOUS_LAST, framesOf, placeSeamFrame, playheadPick, previousShot, se
 
 export const seamState = $state({ busy: null });
 
-export const extractable = (take) => Boolean(take && !take.legacy && take.status === 'done' && take.generationId && take.fileId !== null && take.fileId !== undefined);
+export const extractable = (take) => Boolean(take && take.status === 'done' && take.generationId && take.fileId !== null && take.fileId !== undefined);
 
 export function previousTake(clip) {
 	const prev = clip ? previousShot(doc, clip.id) : null;

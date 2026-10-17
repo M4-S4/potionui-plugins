@@ -5,7 +5,7 @@
 	import { insertResult, startGeneration, findTake, shotActivity, engineLabel } from '../../lib/production.svelte.js';
 	import { togglePlay, seek } from '../../lib/playback.svelte.js';
 	import { clipFilter, fadeOpacity } from '../../lib/look.js';
-	import { assetThumb, clipThumb, takeThumb } from '../../lib/media.js';
+	import { assetThumb, takeThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
@@ -19,7 +19,7 @@
 	const time = $derived(ui.playhead);
 	const clip = $derived(clipAt(time));
 	const a = $derived(clip ? asset(clip.assetId) : null);
-	const local = $derived(clip ? (time - clip.start + clip.srcIn) / Math.max(1, a?.srcDur ?? 1) : 0);
+
 	const title = $derived(doc.titles.find((x) => time >= x.start && time < x.start + x.dur));
 
 	const previewAsset = $derived(ui.preview?.kind === 'asset' ? asset(ui.preview.id) : null);
@@ -30,7 +30,7 @@
 	const bare = $derived(mode === 'sequence' && !(clip && a));
 	const previewThumb = $derived(previewAsset ? assetThumb(previewAsset) : null);
 	const busy = $derived(clip ? shotActivity(clip.id).state === 'running' : false);
-	const playable = (res) => !res.legacy && res.status === 'done' && res.url;
+	const playable = (res) => res.status === 'done' && Boolean(res.url);
 	const key = (id) => commandById(id)?.key || undefined;
 	const liveVideo = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'video' ? a.src : null);
 	const liveImage = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'image' ? a.src : null);
@@ -85,7 +85,7 @@
 							<div class="relative overflow-hidden bg-black">
 								{#if playable(res)}
 									<video src={res.url} class="h-full w-full object-contain" autoplay loop muted playsinline preload="auto" aria-label={takeLabel(res)}></video>
-								{:else}
+								{:else if takeThumb(res)}
 									<img src={takeThumb(res)} alt="" class="h-full w-full object-cover" />
 								{/if}
 								<span class="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur-sm">{takeLabel(res)}</span>
@@ -95,7 +95,7 @@
 				{:else if previewResult}
 					{#if playable(previewResult)}
 						<video src={previewResult.url} class="h-full w-full object-contain" controls muted playsinline preload="metadata" aria-label={takeLabel(previewResult)}></video>
-					{:else}
+					{:else if takeThumb(previewResult)}
 						<img src={takeThumb(previewResult)} alt="" class="h-full w-full object-cover" />
 					{/if}
 					<div class="absolute inset-x-0 flex items-center gap-2 px-3 text-sm text-white {playable(previewResult) ? 'top-0 bg-gradient-to-b from-black/80 to-transparent pb-8 pt-12' : 'bottom-0 bg-gradient-to-t from-black/80 to-transparent pb-2.5 pt-8'}">
@@ -151,17 +151,11 @@
 				{:else if liveImage}
 					<img src={liveImage} alt={a.name} class="h-full w-full object-contain" style:opacity={fadeOpacity(clip, time)} style:filter={clipFilter(clip)} />
 				{:else if clip && a}
-					<img
-						src={clipThumb(clip)}
-						alt={a.name}
-						class="h-full w-full object-cover will-change-transform"
-						style:opacity={fadeOpacity(clip, time)}
-						style:filter={clipFilter(clip)}
-						style:transform="scale({1.04 + local * 0.08}) translateX({(local - 0.5) * -2}%)"
-					/>
-					{#if a.generated && !ui.playing}
-						<span class="vp-sim absolute right-2 top-2 !border-white/40 !bg-black/60 !text-white backdrop-blur-sm"><Icon name="flask" class="h-3 w-3" />{a.quality === 'final' ? t('viewer.simFinal') : t('viewer.simDraft')}</span>
-					{/if}
+					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center text-white/70">
+						<Icon name="film" class="h-7 w-7" />
+						<div class="text-md font-medium text-white">{t('lib.media.offline')}</div>
+						<p class="max-w-md text-sm">{t('viewer.offlineHint', { name: a.name || clipLabel(clip) })}</p>
+					</div>
 				{:else if !doc.clips.length && !title}
 					<div class="pointer-events-none absolute inset-0 flex items-center justify-center p-8 text-center text-fg">
 						<div class="font-light tracking-[0.12em]" style:font-size="{Math.max(10, box.h * 0.1)}px">{doc.name}</div>

@@ -117,6 +117,53 @@ def test_the_time_is_the_median_measured_ratio_times_the_seconds_asked(core, mak
     assert "time_unknown" not in _codes(payload["warnings"])
 
 
+def test_a_second_native_backend_does_not_inherit_the_measures_of_the_first(core, make_doc):
+    core.use_wan()
+    for _ in range(3):
+        takes.add_calibration(presets.WAN, "b-local", "832x480", 4.0, 60000)
+    core.memory = {**core.memory, "backend": {"id": "b-studio", "name": "Studio A6000", "engine": "native", "driver": "native.remote"}}
+
+    payload = _evaluate(core, make_doc(clips=SHOTS)).payload
+
+    assert payload["vram"]["backend_id"] == "b-studio"
+    assert payload["time"] == {"seconds": None, "samples": 0}
+    assert "time_unknown" in _codes(payload["warnings"])
+    assert payload["quota"]["needed_minutes"] == round((4 + 6) * 10 / 60 * 2, 2)
+
+
+def test_each_native_backend_reads_only_its_own_measures(core, make_doc):
+    core.use_wan()
+    takes.add_calibration(presets.WAN, "b-local", "832x480", 4.0, 60000)
+    takes.add_calibration(presets.WAN, "b-studio", "832x480", 4.0, 20000)
+    takes.add_calibration(presets.WAN, "b-studio", "832x480", 4.0, 20000)
+    studio = {**core.memory, "backend": {"id": "b-studio", "name": "Studio A6000", "engine": "native", "driver": "native.remote"}}
+
+    local = _evaluate(core, make_doc(clips=SHOTS), variants=1).payload
+    core.memory = studio
+    remote = _evaluate(core, make_doc(clips=SHOTS), variants=1).payload
+
+    assert local["time"] == {"seconds": 15.0 * (4 + 6), "samples": 1}
+    assert remote["time"] == {"seconds": 5.0 * (4 + 6), "samples": 2}
+
+
+@pytest.mark.parametrize("memory", [RuntimeError("no backend"), {"estimate": {"checkpoint_estimate_gb": 18.0}, "device": {"free_gb": 22.0}, "backend": {}}])
+def test_without_the_backend_that_would_render_the_time_is_unknown_whatever_was_measured(core, make_doc, memory):
+    core.use_wan()
+    takes.add_calibration(presets.WAN, "b-local", "832x480", 4.0, 60000)
+    core.memory = memory
+
+    payload = _evaluate(core, make_doc(clips=SHOTS)).payload
+
+    assert payload["vram"]["backend_id"] is None
+    assert payload["time"] == {"seconds": None, "samples": 0}
+    assert "time_unknown" in _codes(payload["warnings"])
+
+
+def test_the_measures_are_read_only_for_a_named_backend():
+    assert takes.calibration(presets.WAN, None, "832x480") == []
+    assert takes.calibration(presets.WAN, "", "832x480") == []
+
+
 def test_only_the_twenty_latest_measures_count(core, make_doc, monkeypatch):
     core.use_wan()
     moments = iter(f"2026-10-17T10:{minute:02d}:00+00:00" for minute in range(60))

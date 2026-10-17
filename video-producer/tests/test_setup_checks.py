@@ -1,7 +1,9 @@
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from backend import core_bridge, presets, setup_checks
 from backend.core_bridge import PresetState
@@ -719,3 +721,136 @@ def test_a_check_ignores_the_plugin_settings(check, engines, preset_states, mode
     other = SetupCheckContext(plugin_id="video-producer", settings={"draft_resolution": "1280x720"})
 
     assert check().evaluate(other) == check().evaluate(CONTEXT)
+
+
+MANIFEST = Path(__file__).resolve().parents[1] / "manifest.yml"
+
+SETUP = (
+    (VideoEngineReady, "Enable a native backend or a cloud video model"),
+    (
+        VideoPresetsReady,
+        "Install and assign at least one Video Director preset (Wan, MiniMax-H3, LTX or a cloud video preset)",
+    ),
+    (UpscalerReady, "Install SeedVR2 for final takes"),
+    (FfmpegReady, "Install ffmpeg for video delivery"),
+    (
+        MiniMaxH3Ready,
+        "If a MiniMax-H3 preset is installed, install its five model files (DiT, text encoder, video VAE, "
+        "audio VAE, and the latent upscaler of its Upscale mode)",
+    ),
+)
+
+H3_ROLES = ("model", "text_encoder", "video_vae", "audio_vae")
+
+
+def _manifest_setup():
+    return yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["setup"]
+
+
+def test_the_manifest_declares_exactly_the_five_checks_these_tests_cover():
+    assert [(step["kind"], step["check"], step["label"]) for step in _manifest_setup()] == [
+        ("check", f"backend.setup_checks:{check.__name__}", label) for check, label in SETUP
+    ]
+    assert tuple(check for check, _ in SETUP) == ALL_CHECKS
+
+
+def _h3_files(models, present):
+    models.recommend(presets.MINIMAX_H3, **{role: {f"{role}-sha"} for role in H3_ROLES})
+    models.recommend_in(presets.MINIMAX_H3, "upscale", upscale_model={"upscale_model-sha"})
+    models.present = {f"{role}-sha" for role in (*H3_ROLES, "upscale_model") if role in present}
+
+
+def _arrange(state, check, engines, preset_states, models, monkeypatch):
+    if state == "unchecked":
+        broken = {
+            VideoEngineReady: "enabled_backends",
+            VideoPresetsReady: "preset_state",
+            UpscalerReady: "preset_state",
+            FfmpegReady: "find_ffmpeg",
+            MiniMaxH3Ready: "preset_model_hashes",
+        }[check]
+        preset_states.set(presets.MINIMAX_H3, name="MiniMax-H3", installed=True)
+        monkeypatch.setattr(core_bridge, broken, _raise("the host is down"))
+        return
+    done = state == "done"
+    if check is VideoEngineReady:
+        engines.backends = [_backend("b-1", "This machine")] if done else []
+    elif check is VideoPresetsReady:
+        preset_states.set(presets.WAN, name="Wan 2.1 / 2.2", installed=True, assigned=done)
+    elif check is UpscalerReady:
+        preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=done, assigned=done)
+    elif check is FfmpegReady:
+        monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg" if state != "todo" else None)
+        monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe" if done else None)
+    else:
+        preset_states.set(presets.MINIMAX_H3, name="MiniMax-H3", installed=True)
+        _h3_files(models, H3_ROLES + (("upscale_model",) if done else ()))
+
+
+SETUP_STATES = [
+    (VideoEngineReady, "done", "Takes can run on This machine.", None, None),
+    (VideoEngineReady, "todo", "Enable the native backend of this machine", "Open backends", BACKENDS_HREF),
+    (VideoEngineReady, "unchecked", "Could not check the backends; see the server log.", "Open backends", BACKENDS_HREF),
+    (VideoPresetsReady, "done", "Installed and assigned: Wan 2.1 / 2.2.", None, None),
+    (
+        VideoPresetsReady,
+        "todo",
+        "Installed but assigned to no one: Wan 2.1 / 2.2.",
+        "Assign presets",
+        f"{PRESETS_HREF}&id={presets.WAN}",
+    ),
+    (VideoPresetsReady, "unchecked", "Could not check the presets; see the server log.", "Open presets", PRESETS_HREF),
+    (UpscalerReady, "done", "SeedVR2 is installed and assigned.", None, None),
+    (
+        UpscalerReady,
+        "todo",
+        "Final takes are upscaled with SeedVR2.",
+        "Open SeedVR2",
+        f"{PRESETS_HREF}&id={presets.SEEDVR2}",
+    ),
+    (UpscalerReady, "unchecked", "Could not check the SeedVR2 preset; see the server log.", "Open presets", PRESETS_HREF),
+    (FfmpegReady, "done", "ffmpeg is available.", None, None),
+    (FfmpegReady, "todo", "ffmpeg is missing.", "Read the guide", README_HREF),
+    (FfmpegReady, "todo-ffprobe", "ffprobe is missing.", "Read the guide", README_HREF),
+    (FfmpegReady, "unchecked", "Could not check ffmpeg; see the server log.", "Read the guide", README_HREF),
+    (MiniMaxH3Ready, "done", "are on disk for MiniMax-H3.", None, None),
+    (
+        MiniMaxH3Ready,
+        "todo",
+        "MiniMax-H3 is missing its latent upscaler.",
+        "Open MiniMax-H3",
+        f"{PRESETS_HREF}&id={presets.MINIMAX_H3}",
+    ),
+    (
+        MiniMaxH3Ready,
+        "unchecked",
+        "Could not check the MiniMax-H3 model files; see the server log.",
+        "Open presets",
+        PRESETS_HREF,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "check, state, text, action_label, action_href",
+    SETUP_STATES,
+    ids=[f"{check.__name__}-{state}" for check, state, *_ in SETUP_STATES],
+)
+def test_each_manifest_check_is_done_to_do_or_not_checkable_with_its_text_and_link(
+    check, state, text, action_label, action_href, engines, preset_states, models, monkeypatch, caplog
+):
+    _arrange(state, check, engines, preset_states, models, monkeypatch)
+
+    with caplog.at_level(logging.WARNING, logger="plugins.video-producer"):
+        result = check().evaluate(CONTEXT)
+
+    assert result.done is (state == "done")
+    assert text in result.description
+    assert (result.action_label, result.action_href) == (action_label, action_href)
+    assert ("the host is down" in caplog.text) is (state == "unchecked")
+
+
+def test_every_check_of_the_manifest_has_its_three_states_covered():
+    covered = {(check, state.split("-")[0]) for check, state, *_ in SETUP_STATES}
+
+    assert covered == {(check, state) for check in ALL_CHECKS for state in ("done", "todo", "unchecked")}

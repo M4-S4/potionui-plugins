@@ -97,7 +97,7 @@
 							{/if}
 							{#if a.srcDur !== null}<span class="vp-tc absolute bottom-1 right-1 rounded-sm bg-black/60 px-1 text-2xs text-white">{secs(a.srcDur)}</span>{/if}
 							{#if a.generated}
-								<span class="absolute left-1 top-1 flex items-center gap-1 rounded-sm bg-black/60 px-1 text-2xs text-white"><span class="h-1.5 w-1.5 rounded-full {a.quality === 'final' ? 'bg-success-solid' : 'bg-signal-solid'}"></span>{a.quality === 'final' ? t('panels.media.final') : t('panels.media.draft')}</span>
+								<span class="absolute left-1 top-1 flex items-center gap-1 rounded-sm bg-black/60 px-1 text-2xs text-white"><span class="h-1.5 w-1.5 rounded-full {a.quality === 'final' ? 'bg-success-solid' : 'bg-signal-solid'}"></span>{a.quality === 'final' ? t('lib.stage.final') : t('lib.stage.draft')}</span>
 							{:else if a.origin}
 								<span class="absolute left-1 top-1 rounded-sm bg-black/60 px-1 text-2xs text-white">{originLabel(a)}</span>
 							{/if}

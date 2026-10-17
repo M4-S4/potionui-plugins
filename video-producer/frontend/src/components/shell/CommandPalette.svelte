@@ -49,7 +49,7 @@
 					<li>
 						<button type="button" class="vp-palette-item" data-active={i === idx} onclick={() => run(c)} onmouseenter={() => (idx = i)}>
 							<span class="flex-1">{c.label}</span>
-							{#if c.sim}<Icon name="flask" class="h-3.5 w-3.5 text-fg-muted" />{/if}
+
 							<span class="text-xs text-fg-muted">{c.menu}</span>
 							{#if c.key}<span class="vp-menu-key w-24 text-right">{c.key}</span>{/if}
 						</button>

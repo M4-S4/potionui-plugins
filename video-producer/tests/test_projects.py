@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from backend.projects import DOC_SCHEMA, MAX_DOC_BYTES, DocError, canonical, summary, validate_doc
+from backend.projects import DOC_SCHEMA, MAX_DOC_BYTES, DocError, canonical, migrate, summary, validate_doc
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -148,25 +148,6 @@ def _rich(doc):
     ]
     doc["lanes"][0]["inserts"].append({"type": "filter", "on": True, "cutoff": 8000})
     doc["lanes"][1]["automation"] = "write"
-    doc["results"].append(
-        {
-            "id": "01M535B4GTRESULT00000000",
-            "clipId": doc["clips"][1]["id"],
-            "quality": "draft",
-            "variant": "A",
-            "assetId": None,
-            "look": "warm",
-            "status": "chosen",
-            "seed": 48121,
-            "created": "12:04",
-            "range": [5, 10],
-            "local": "A slow climb",
-            "parent": None,
-            "profile": "FL2VA",
-            "mode": "Génération IA",
-            "backend": "local",
-        }
-    )
     doc["profiles"].append({"id": "01M535B4GTPROFILE000000000", "name": "Profile 1", "weights": dict(doc["hybrid"])})
     doc["engine"]["loras"].append({"name": "Film grain", "weight": 0.55})
     doc["assets"] += [_audio_asset(), _video_asset()]
@@ -269,6 +250,50 @@ def test_the_engine_preset_and_model_are_text_or_null(starter, engine, path):
     starter["engine"].update(engine)
 
     assert str(_error(starter)).startswith(f"{path}: ")
+
+
+def test_the_schema_no_longer_holds_the_simulated_takes(starter):
+    starter["results"] = []
+
+    assert "results" not in DOC_SCHEMA["properties"]
+    assert str(_error(starter)) == "$: Additional properties are not allowed ('results' was unexpected)"
+
+
+LEGACY_RESULT = {
+    "id": "01M535B4GTRESULT00000000",
+    "clipId": "c1",
+    "quality": "draft",
+    "variant": "A",
+    "assetId": None,
+    "look": "warm",
+    "status": "chosen",
+    "seed": 48121,
+    "created": "12:04",
+    "range": [5, 10],
+    "local": "A slow climb",
+    "parent": None,
+    "profile": "FL2VA",
+    "mode": "Génération IA",
+    "backend": "local",
+}
+
+
+def test_migrating_a_document_drops_the_simulated_takes_and_keeps_the_rest(starter):
+    legacy = {**copy.deepcopy(starter), "results": [LEGACY_RESULT]}
+
+    migrated = migrate(legacy)
+
+    assert migrated == starter and "results" in legacy
+    assert validate_doc(migrated) == canonical(starter)
+
+
+@pytest.mark.parametrize("doc", [None, [], "doc", 3])
+def test_migrating_leaves_a_value_that_is_not_an_object_alone(doc):
+    assert migrate(doc) is doc
+
+
+def test_migrating_a_current_document_returns_it_as_it_is(starter):
+    assert migrate(starter) is starter
 
 
 def test_a_missing_assets_collection_is_refused_with_its_path(starter):
