@@ -2,6 +2,7 @@ import { t } from '../i18n/index.svelte.js';
 import { doc, asset, act, toast, clamp, round, clipLabel } from './state.svelte.js';
 import { clipFilter } from './look.js';
 import { realThumb } from './media.js';
+import { findTake } from './production.svelte.js';
 
 const stats = $state({});
 const pending = new Set();
@@ -48,13 +49,13 @@ export function colorOf(clip) {
 
 const takeOf = (clip) => {
 	const a = asset(clip.assetId);
-	return a?.generated ? (doc.results.find((r) => r.id === a.resultId) ?? null) : null;
+	return a?.generated ? findTake(a.resultId) : null;
 };
 
 const identityScore = (a, b) => {
 	const ra = takeOf(a);
 	const rb = takeOf(b);
-	if (!ra || !rb) return null;
+	if (!ra?.look || !rb?.look) return null;
 	return ra.look === rb.look ? 0.94 : 0.78;
 };
 

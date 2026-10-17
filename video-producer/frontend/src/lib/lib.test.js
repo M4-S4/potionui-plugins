@@ -140,7 +140,7 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 		]
 	);
 	for (const key of ['audio', 'frames', 'controls', 'plans3d', 'references', 'results', 'scenes', 'profiles', 'assets']) assert.deepEqual(fr[key], [], key);
-	assert.deepEqual([fr.engine.seed, fr.engine.variants, fr.engine.backend, fr.engine.loras], [48121, 2, 'local', []]);
+	assert.deepEqual([fr.engine.seed, fr.engine.variants, fr.engine.backend, fr.engine.preset, fr.engine.model, fr.engine.loras], [48121, 2, '', null, null, []]);
 	const ids = [...fr.clips, ...fr.prompts, ...fr.titles, ...fr.markers].map((x) => x.id);
 	assert.ok(ids.every(isUlid));
 	assert.equal(new Set(ids).size, ids.length);
@@ -169,14 +169,16 @@ test('emptyDoc: an untitled project with no shot and the four empty lanes', () =
 	assert.equal(fr.direction.mode, 'FL2VA');
 });
 
-test('readiness: an FL2VA range without a frame warns instead of blocking, so the starter project generates as is', () => {
-	const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'state.svelte.js'), 'utf-8');
-	const readiness = source.slice(source.indexOf('export function readiness'), source.indexOf('export function startGeneration'));
-	assert.match(readiness, /doc\.direction\.mode === 'FL2VA' && !items\.frames\.length\) warnings\.push\(t\('lib\.warn\.noFrame'\)\)/);
+test('readiness: an FL2VA shot without a frame warns instead of blocking, so the starter project generates as is', () => {
+	const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'production.svelte.js'), 'utf-8');
+	const readiness = source.slice(source.indexOf('export function readiness'), source.indexOf('function blockedText'));
+	assert.match(readiness, /for \(const block of est\.blocks\) missing\.push\(noteText\(block\)\)/);
+	assert.match(readiness, /for \(const warning of est\.warnings\)/);
 	assert.doesNotMatch(readiness, /missing\.push\([^)]*(needFrame|noFrame)/);
+	assert.match(source, /code === 'fl2va_no_frame'\) return t\('generation\.warn\.noFrame'/);
 	assert.ok(!('lib.block.needFrame' in dictionaries.en) && !('lib.block.needFrame' in dictionaries.fr));
-	assert.equal(dictionaries.en['lib.warn.noFrame'], 'No frame in the range: the shots will be generated from text only.');
-	assert.equal(dictionaries.fr['lib.warn.noFrame'], 'Aucune frame dans la plage : les plans seront générés à partir du texte seul.');
+	assert.equal(dictionaries.en['generation.warn.noFrame'], '“{shot}” has no linked frame: it will be generated from text only.');
+	assert.equal(dictionaries.fr['generation.warn.noFrame'], '« {shot} » n’a pas de frame liée : il sera généré à partir du texte seul.');
 	const missing = [];
 	const doc = starterDoc(translator('en', missing));
 	assert.equal(doc.direction.mode, 'FL2VA');

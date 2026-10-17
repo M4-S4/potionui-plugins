@@ -1,0 +1,665 @@
+import { formatNumber, t } from '../i18n/index.svelte.js';
+import { ui, doc, act, toast, simulated, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs } from './state.svelte.js';
+import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
+import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
+import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, legacyTake, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
+import { modeLabel } from './catalog.js';
+import { confirm, openHostModal } from './host.js';
+import { ulid } from './ulid.js';
+
+const AI_MODE = 'Génération IA';
+const ESTIMATE_DELAY = 500;
+const POLL_EVERY = 5000;
+const INFO_WARNINGS = ['time_unknown', 'vram_unknown'];
+
+export const estimateState = $state({ key: null, data: null, loading: false, error: null });
+const run = $state({ starting: false });
+
+let alive = false;
+let estimateTimer = null;
+let estimateController = null;
+let pendingKey = null;
+let flyingKey = null;
+let pollTimer = null;
+let polling = false;
+let refreshing = null;
+let refreshTimer = null;
+let closeDetails = null;
+const subscriptions = new Map();
+const session = new Set();
+
+const gone = (error) => error?.code === 'project_not_found';
+
+export function engineChoices() {
+	return engineOptions(ui.me);
+}
+
+export function engineGroups() {
+	const groups = [];
+	for (const option of engineChoices()) {
+		let group = groups.find((g) => g.label === option.group);
+		if (!group) {
+			group = { label: option.group, options: [] };
+			groups.push(group);
+		}
+		group.options.push(option);
+	}
+	return groups;
+}
+
+export function currentEngine() {
+	return optionFor(engineChoices(), doc.engine);
+}
+
+export function presetById(id) {
+	return (ui.me?.presets ?? []).find((p) => p.id === id) ?? null;
+}
+
+export function backendName(id) {
+	return (ui.me?.engines ?? []).find((e) => e.id === id)?.name ?? id ?? '—';
+}
+
+export function engineLabel() {
+	const option = currentEngine();
+	if (option) return option.label;
+	return doc.engine?.preset ? t('generation.engine.unavailable') : t('generation.engine.none');
+}
+
+export function selectEngine(key) {
+	const option = engineChoices().find((o) => o.key === key);
+	if (!option) return;
+	act(() => {
+		doc.engine.preset = option.preset;
+		doc.engine.model = option.model;
+		doc.engine.backend = option.backend;
+	});
+}
+
+function syncEngine() {
+	if (!doc.engine) return;
+	const next = migrateEngine(doc.engine, ui.me);
+	if (doc.engine.backend !== next.backend) doc.engine.backend = next.backend;
+	if (doc.engine.preset !== next.preset) doc.engine.preset = next.preset;
+	if (doc.engine.model !== next.model) doc.engine.model = next.model;
+}
+
+export function supportedProfiles() {
+	const option = currentEngine();
+	return option ? presetProfiles(option.info) : [...PROFILES];
+}
+
+export function takesOf(clip) {
+	if (!clip) return [];
+	const legacy = (doc.results ?? []).filter((r) => r.clipId === clip.id).map(legacyTake);
+	return [...realTakesOf(clip.id), ...legacy];
+}
+
+export function findTake(id) {
+	if (!id) return null;
+	const real = takeById(id);
+	if (real) return real;
+	const result = (doc.results ?? []).find((r) => r.id === id);
+	return result ? legacyTake(result) : null;
+}
+
+export function shotActivity(shotId) {
+	return aggregate(realTakesOf(shotId));
+}
+
+export const busy = () => run.starting || flyingTakes().length > 0;
+export const upscaleAvailable = (take) => canUpscale(take, ui.me);
+
+function shotName(shotId) {
+	const clip = doc.clips.find((c) => c.id === shotId);
+	return clip ? clipLabel(clip) : '—';
+}
+
+function fieldNames(fields) {
+	return (Array.isArray(fields) ? fields : []).map((f) => (typeof f === 'string' ? f : (f?.label ?? f?.name ?? ''))).filter(Boolean);
+}
+
+const minutes = (v) => formatNumber(v ?? 0, { maximumFractionDigits: 1 });
+
+function noteText(note) {
+	const data = note?.data ?? {};
+	const code = note?.code;
+	if (code === 'no_shots') return t('generation.block.noShots');
+	if (code === 'no_preset') return t('generation.block.noPreset');
+	if (code === 'profile_unsupported') return t('generation.block.profileUnsupported', { profile: doc.direction.mode, engine: engineLabel() });
+	if (code === 'missing_models') return t('generation.block.missingModels', { fields: fieldNames(data.fields).join(', ') || '—' });
+	if (code === 'quota_exceeded') {
+		const quota = estimateState.data?.quota;
+		return t('generation.block.quota', { need: minutes(data.needed_minutes ?? quota?.neededMinutes), remaining: minutes(data.remaining ?? quota?.remaining) });
+	}
+	if (code === 'no_model') return t('generation.block.noModel');
+	if (code === 'no_references') return t('generation.block.noReferences', { shot: shotName(data.shot_id) });
+	if (code === 'source_unavailable') return t('generation.block.sourceUnavailable');
+	if (code === 'vram_stream') return t('generation.warn.vramStream');
+	if (code === 'vram_unknown') return t('generation.warn.vramUnknown');
+	if (code === 'time_unknown') return t('generation.warn.timeUnknown');
+	if (code === 'fl2va_no_frame') return t('generation.warn.noFrame', { shot: shotName(data.shot_id) });
+	if (code === 'duration_clamped') return t('generation.warn.durationClamped', { shot: shotName(data.shot_id), max: secs(Number(data.max) || 0) });
+	return note?.message || code || '';
+}
+
+function clipsRange(clips) {
+	return [Math.min(...clips.map((c) => c.start)), Math.max(...clips.map((c) => c.start + c.dur))];
+}
+
+export function jobClips(range = productionRange()) {
+	const sel = ui.selection?.kind === 'clip' ? doc.clips.find((c) => c.id === ui.selection.id) : null;
+	if (ui.production.target === 'clip') return [sel ?? clipAt(ui.playhead) ?? doc.clips[0]].filter(Boolean);
+	const inRange = shotsIn(range);
+	const toMake = inRange.filter((c) => c.stage !== 'source');
+	return toMake.length ? toMake : inRange;
+}
+
+function requestBody(clips, quality, variants, option) {
+	return { shots: clips.map((c) => c.id), quality, variants, preset_id: option.preset, model_id: option.model };
+}
+
+export function estimateRequest() {
+	if (!project.id || ui.production.mode !== AI_MODE) return null;
+	const option = currentEngine();
+	const clips = jobClips();
+	if (!option || !clips.length) return null;
+	if (ui.dirty || project.status === 'saving') return { hold: true };
+	const body = requestBody(clips, ui.production.quality, Math.max(1, doc.engine.variants ?? 1), option);
+	return { key: JSON.stringify([project.id, project.version, body]), projectId: project.id, body };
+}
+
+function applyQuota(quota) {
+	if (!quota?.applies || quota.exempt || quota.limit === null || quota.limit <= 0) return;
+	ui.quota = { used: quota.used ?? Math.max(0, quota.limit - (quota.remaining ?? quota.limit)), limit: quota.limit };
+}
+
+async function fireEstimate(request) {
+	estimateController?.abort();
+	const controller = new AbortController();
+	estimateController = controller;
+	flyingKey = request.key;
+	estimateState.loading = true;
+	const result = await getClient().estimate(request.projectId, request.body, controller.signal);
+	if (estimateController !== controller) return;
+	estimateController = null;
+	flyingKey = null;
+	estimateState.loading = false;
+	if (!result.ok) {
+		if (result.error.code === 'aborted') return;
+		if (gone(result.error)) return projectGone(request.projectId);
+		Object.assign(estimateState, { key: request.key, data: null, error: result.error });
+		return;
+	}
+	Object.assign(estimateState, { key: request.key, data: result.data, error: null });
+	applyQuota(result.data.quota);
+}
+
+function clearPending() {
+	clearTimeout(estimateTimer);
+	estimateTimer = null;
+	pendingKey = null;
+}
+
+export function scheduleEstimate(request) {
+	if (request?.hold) return clearPending();
+	if (!request) {
+		clearPending();
+		estimateController?.abort();
+		estimateController = null;
+		flyingKey = null;
+		Object.assign(estimateState, { key: null, data: null, loading: false, error: null });
+		return;
+	}
+	if (request.key === pendingKey || request.key === flyingKey) return;
+	if (request.key === estimateState.key && !estimateController) return clearPending();
+	clearPending();
+	pendingKey = request.key;
+	estimateTimer = setTimeout(() => {
+		estimateTimer = null;
+		pendingKey = null;
+		fireEstimate(request);
+	}, ESTIMATE_DELAY);
+}
+
+export function readiness(opts = {}) {
+	const range = opts.clips?.length ? clipsRange(opts.clips) : productionRange();
+	const items = itemsIn(range);
+	const missing = [];
+	const warnings = [];
+	const notes = [];
+	const mode = ui.production.mode;
+	if (range[1] - range[0] <= 0.05) missing.push(t('lib.block.noRange'));
+	if (mode !== 'Rendu 3D') {
+		if (!globalPrompt() && !items.prompts.length) missing.push(t('lib.block.noDirection'));
+		const empty = items.prompts.filter((p) => !p.text.trim());
+		if (empty.length) missing.push(t('lib.block.emptyPrompts', { count: empty.length }));
+	}
+	if (mode !== AI_MODE && !items.plans3d.length) missing.push(t('lib.block.noPlan3d'));
+	const noEngine = mode === AI_MODE && !currentEngine();
+	if (noEngine) missing.push(doc.engine?.preset ? t('generation.block.unavailable') : t('generation.block.noEngine'));
+	const est = !opts.clips && !noEngine && mode === AI_MODE ? estimateState.data : null;
+	const request = est ? estimateRequest() : null;
+	const fresh = Boolean(request && (request.hold || request.key === estimateState.key));
+	if (est && fresh) {
+		for (const block of est.blocks) missing.push(noteText(block));
+		for (const warning of est.warnings) (INFO_WARNINGS.includes(warning.code) ? notes : warnings).push(noteText(warning));
+	}
+	return { range, items, missing, warnings, notes, est, noEngine };
+}
+
+function blockedText(error) {
+	const blocks = Array.isArray(error?.data?.blocks) ? error.data.blocks : [];
+	return blocks.length ? noteText(blocks[0]) : t('generation.block.generic');
+}
+
+function failed(error, fallback) {
+	if (gone(error)) {
+		projectGone(project.id);
+		return;
+	}
+	if (error?.code === 'blocked' || (error?.status === 409 && Array.isArray(error?.data?.blocks))) toast(blockedText(error), 'warning');
+	else toast(fallback, 'error');
+}
+
+export async function startGeneration(opts = {}) {
+	if (ui.production.mode !== AI_MODE) return simulated(modeLabel(ui.production.mode));
+	if (run.starting) return;
+	if (!opts.clips && busy()) return toast(t('lib.toast.jobRunning'), 'warning');
+	const { missing, warnings, range } = readiness(opts);
+	if (missing.length) return toast(missing[0], 'warning');
+	const option = currentEngine();
+	const clips = opts.clips ?? jobClips(range);
+	if (!option || !clips.length) return;
+	const quality = opts.quality ?? ui.production.quality;
+	const variants = Math.max(1, opts.variants ?? doc.engine.variants ?? 1);
+	run.starting = true;
+	updateProduction();
+	try {
+		const saved = await flushSave();
+		if (!saved || !project.id) return toast(t('generation.toast.saveFirst'), 'error');
+		const projectId = project.id;
+		const result = await getClient().generate(projectId, requestBody(clips, quality, variants, option));
+		if (projectId !== project.id) return;
+		if (!result.ok) return failed(result.error, t('generation.toast.startFailed'));
+		for (const take of result.data) upsertTake(take);
+		if (warnings.length) toast(warnings[0], 'warning');
+	} finally {
+		run.starting = false;
+		track();
+	}
+}
+
+export function promoteToFinal(takeId) {
+	const take = findTake(takeId);
+	if (!take || take.legacy || take.status !== 'done' || take.quality !== 'draft') return toast(t('lib.toast.chooseDraft'), 'warning');
+	ui.modal = { type: 'final', take: take.id };
+}
+
+export async function makeFinal(takeId, method, target) {
+	const take = takeById(takeId);
+	if (!take) return false;
+	const projectId = project.id;
+	const result = await getClient().finalTake(projectId, take.id, method, target);
+	if (projectId !== project.id) return false;
+	if (!result.ok) {
+		failed(result.error, t('generation.toast.finalFailed'));
+		return false;
+	}
+	upsertTake(result.data);
+	track();
+	return true;
+}
+
+export async function cancelTake(take) {
+	const result = await getClient().cancelTake(take.id);
+	if (!result.ok) {
+		if (result.error.status === 404 || result.error.status === 409) await refreshTakes();
+		else toast(t('generation.toast.actionFailed'), 'error');
+		return;
+	}
+	upsertTake(result.data);
+	track();
+}
+
+export async function cancelGeneration() {
+	const flying = flyingTakes();
+	if (!flying.length) return;
+	const results = await Promise.all(flying.map((take) => getClient().cancelTake(take.id)));
+	let failures = 0;
+	for (const result of results) {
+		if (result.ok) upsertTake(result.data);
+		else failures += 1;
+	}
+	if (failures) await refreshTakes();
+	track();
+	toast(failures ? t('generation.toast.actionFailed') : t('lib.toast.cancelled'), failures ? 'error' : 'info');
+}
+
+export async function retryTake(take) {
+	const result = await getClient().retryTake(take.id);
+	if (!result.ok) return failed(result.error, t('generation.toast.actionFailed'));
+	upsertTake(result.data);
+	track();
+}
+
+export async function flagTake(take, flag) {
+	const next = take.flag === flag ? null : flag;
+	const before = take.flag;
+	patchTake(take.id, { flag: next });
+	const result = await getClient().flagTake(project.id, take.id, next);
+	if (result.ok) upsertTake(result.data);
+	else {
+		patchTake(take.id, { flag: before });
+		toast(t('generation.toast.actionFailed'), 'error');
+	}
+}
+
+export async function deleteTake(take) {
+	const ok = await confirm({
+		title: t('generation.delete.title'),
+		message: t('generation.delete.message', { shot: shotName(take.shotId), variant: take.variant }),
+		variant: 'danger',
+		confirmLabel: t('generation.delete.confirm')
+	});
+	if (!ok) return;
+	const result = await getClient().deleteTake(project.id, take.id);
+	if (!result.ok && result.error.status !== 404) return toast(t('generation.toast.actionFailed'), 'error');
+	removeTake(take.id);
+	if (ui.preview?.id === take.id) ui.preview = null;
+	if (ui.compare?.includes(take.id)) ui.compare = ui.compare.filter((id) => id !== take.id);
+	track();
+	toast(t('generation.toast.deleted'));
+}
+
+export function showDetails(take) {
+	const generationId = typeof take?.generationId === 'string' ? take.generationId.trim() : '';
+	if (!generationId || ui.hostModal || closeDetails) return;
+	const close = openHostModal('GenerationDetailsModal', {
+		generationId,
+		initialFileIndex: 0,
+		onClosed: () => {
+			closeDetails = null;
+			ui.hostModal = false;
+		}
+	});
+	if (!close) return toast(t('generation.toast.detailsMissing'), 'warning');
+	closeDetails = close;
+	ui.hostModal = true;
+	ui.menuOpen = null;
+	ui.paletteOpen = false;
+}
+
+function ensureTakeAsset(take) {
+	const id = `gen-${take.id}`;
+	if (asset(id)) return id;
+	if (!take.url) return null;
+	const clip = doc.clips.find((c) => c.id === take.shotId);
+	const name = take.quality === 'final' ? t('lib.default.takeFinal', { shot: clipLabel(clip), variant: take.variant }) : t('lib.default.takeDraft', { shot: clipLabel(clip), variant: take.variant });
+	doc.assets.push(newAsset(takeAsset(take, name)));
+	return id;
+}
+
+function place(clip, take) {
+	const id = ensureTakeAsset(take);
+	if (!clip || !id) return false;
+	clip.assetId = id;
+	clip.take = take.id;
+	clip.srcIn = 0;
+	clip.stage = take.quality;
+	return true;
+}
+
+function markChosen(take) {
+	for (const other of realTakesOf(take.shotId)) if (other.id !== take.id && other.chosen) other.chosen = false;
+	take.chosen = true;
+	const projectId = project.id;
+	getClient()
+		.chooseTake(projectId, take.id, true)
+		.then((result) => {
+			if (projectId === project.id && result.ok) upsertTake(result.data);
+		});
+}
+
+function applyDone(take) {
+	if (take.status !== 'done' || !take.url || asset(`gen-${take.id}`)) return false;
+	const clip = doc.clips.find((c) => c.id === take.shotId);
+	if (clip && (clip.stage === 'todo' || take.quality === 'final')) {
+		place(clip, take);
+		markChosen(take);
+	} else ensureTakeAsset(take);
+	return true;
+}
+
+export function useTake(clip, takeId, silent = false) {
+	const take = takeById(takeId);
+	if (!clip || !take || take.status !== 'done' || !take.url) return;
+	const apply = () => place(clip, take);
+	if (silent) apply();
+	else act(apply);
+	markChosen(take);
+	ui.preview = null;
+	if (!silent) toast(take.quality === 'final' ? t('lib.toast.useTakeFinal', { shot: clipLabel(clip), variant: take.variant }) : t('lib.toast.useTakeDraft', { shot: clipLabel(clip), variant: take.variant }));
+}
+
+export function insertResult(id) {
+	const take = takeById(id);
+	if (!take) return;
+	useTake(doc.clips.find((c) => c.id === take.shotId), id);
+}
+
+export function assembleChosen() {
+	const chosen = takeStore.list.filter((x) => x.chosen && x.status === 'done' && x.url && doc.clips.some((c) => c.id === x.shotId));
+	if (!chosen.length) return toast(t('lib.toast.chooseFirst'), 'warning');
+	act(() => {
+		for (const take of chosen) place(doc.clips.find((c) => c.id === take.shotId), take);
+	});
+	toast(t('lib.toast.assembled', { count: chosen.length }), 'success');
+}
+
+export function toggleCompare(id) {
+	const list = ui.compare ? [...ui.compare] : [];
+	const i = list.indexOf(id);
+	if (i >= 0) list.splice(i, 1);
+	else list.push(id);
+	ui.compare = list.slice(-2);
+	ui.preview = null;
+	if (ui.compare.length === 1) toast(t('generation.card.pickSecond'));
+}
+
+export function openResults() {
+	ui.workspace = 'director';
+	ui.dockTab = 'results';
+	if (ui.production.state === 'done') ui.production.state = 'ready';
+}
+
+export function queueWindow() {
+	const { missing, range } = readiness();
+	if (missing.length) return toast(missing[0], 'warning');
+	ui.production.queue.push({ id: ulid(), range, mode: ui.production.mode, quality: ui.production.quality, label: `${secs(range[0])} → ${secs(range[1])}` });
+	toast(t('lib.toast.queued'));
+}
+
+export async function generateQueue() {
+	const windows = [...ui.production.queue];
+	ui.production.queue = [];
+	for (const quality of ['draft', 'final']) {
+		const ids = new Set();
+		for (const w of windows.filter((x) => x.quality === quality)) {
+			const inRange = shotsIn(w.range);
+			const toMake = inRange.filter((c) => c.stage !== 'source');
+			for (const c of toMake.length ? toMake : inRange) ids.add(c.id);
+		}
+		const clips = doc.clips.filter((c) => ids.has(c.id));
+		if (clips.length) await startGeneration({ clips, quality });
+	}
+}
+
+function doneMessage(done) {
+	if (done.every((x) => x.parentTakeId && x.quality === 'final')) return t('lib.toast.finalReady');
+	if (done.every((x) => x.quality === 'final')) return t('lib.toast.takesFinal', { count: done.length });
+	return t('lib.toast.takesDraft', { count: done.length });
+}
+
+function updateProduction() {
+	const p = ui.production;
+	const agg = aggregate(takeStore.list);
+	if (agg.state === 'running' || run.starting) {
+		p.state = 'running';
+		p.progress = agg.progress;
+		p.running = agg.running;
+		p.step = agg.step || (agg.running ? t('generation.state.running') : t('generation.state.queued'));
+		return;
+	}
+	if (p.state !== 'running') return;
+	const finished = [...session].map(takeById).filter(Boolean);
+	session.clear();
+	p.progress = 0;
+	p.running = 0;
+	p.step = '';
+	const done = finished.filter((x) => x.status === 'done');
+	const failedTakes = finished.filter((x) => x.status === 'failed');
+	p.lastCount = done.length;
+	p.state = done.length ? 'done' : 'ready';
+	if (done.length) toast(doneMessage(done), 'success', { label: t('shell.toast.view'), run: () => openResults() });
+	if (failedTakes.length) toast(t('generation.toast.failed', { count: failedTakes.length }), 'error', { label: t('shell.toast.view'), run: () => openResults() });
+}
+
+function onEvent(takeId, generationId, event) {
+	if (!alive) return;
+	if (event?.type === 'generation_status') {
+		const take = takeById(takeId);
+		if (!take || !isInFlight(take)) return;
+		const progress = event.progress === null || event.progress === undefined ? NaN : Number(event.progress);
+		patchTake(takeId, { status: 'running', progress: Number.isFinite(progress) ? progress : take.progress, step: progressText(event.message, event.current_step) || take.step });
+		updateProduction();
+		return;
+	}
+	subscriptions.get(generationId)?.();
+	subscriptions.delete(generationId);
+	clearTimeout(refreshTimer);
+	refreshTimer = setTimeout(() => refreshTakes(), 300);
+}
+
+function subscribe(take) {
+	const id = take.generationId;
+	const follow = typeof window === 'undefined' ? null : window.__potionui?.generation?.subscribe;
+	if (!id || subscriptions.has(id) || typeof follow !== 'function') return;
+	const off = follow(id, (event) => onEvent(take.id, id, event));
+	subscriptions.set(id, typeof off === 'function' ? off : () => {});
+}
+
+function unsubscribeAll() {
+	for (const off of subscriptions.values()) off();
+	subscriptions.clear();
+}
+
+function track() {
+	if (!alive) return updateProduction();
+	const flying = flyingTakes();
+	const followed = new Set(flying.map((x) => x.generationId).filter(Boolean));
+	for (const [id, off] of subscriptions) {
+		if (followed.has(id)) continue;
+		off();
+		subscriptions.delete(id);
+	}
+	for (const take of flying) {
+		session.add(take.id);
+		subscribe(take);
+	}
+	if (flying.length && !pollTimer) pollTimer = setInterval(poll, POLL_EVERY);
+	if (!flying.length && pollTimer) {
+		clearInterval(pollTimer);
+		pollTimer = null;
+	}
+	updateProduction();
+}
+
+function applyAll() {
+	let changed = false;
+	for (const take of takeStore.list) changed = applyDone(take) || changed;
+	return changed;
+}
+
+async function poll() {
+	if (polling || !alive || !project.id) return;
+	polling = true;
+	const projectId = project.id;
+	const result = await getClient().queue(projectId);
+	polling = false;
+	if (!alive || projectId !== project.id) return;
+	if (!result.ok) {
+		if (gone(result.error)) projectGone(projectId);
+		return;
+	}
+	const seen = new Set(result.data.takes.map((x) => x.id));
+	for (const take of result.data.takes) upsertTake(take);
+	if (flyingTakes().some((x) => !seen.has(x.id))) await refreshTakes();
+	else track();
+}
+
+async function refreshTakes() {
+	if (refreshing) return refreshing;
+	const projectId = project.id;
+	if (!projectId || !getClient()) return;
+	const known = new Set(takeStore.list.map((x) => x.id));
+	refreshing = (async () => {
+		const result = await getClient().listTakes(projectId);
+		if (!alive || projectId !== project.id) return;
+		if (!result.ok) {
+			if (gone(result.error)) projectGone(projectId);
+			return;
+		}
+		const ids = new Set(result.data.map((x) => x.id));
+		for (const take of [...takeStore.list]) if (known.has(take.id) && !ids.has(take.id)) removeTake(take.id);
+		for (const take of result.data) upsertTake(take);
+		applyAll();
+		track();
+	})();
+	try {
+		await refreshing;
+	} finally {
+		refreshing = null;
+	}
+}
+
+async function openTakes(projectId) {
+	stopTracking();
+	session.clear();
+	syncEngine();
+	setTakes(projectId, []);
+	takeStore.loaded = false;
+	const result = await getClient().listTakes(projectId);
+	if (!alive || projectId !== project.id) return;
+	if (!result.ok) {
+		takeStore.loaded = true;
+		if (gone(result.error)) return projectGone(projectId);
+		return toast(t('generation.toast.loadFailed'), 'warning');
+	}
+	setTakes(projectId, result.data);
+	applyAll();
+	track();
+}
+
+function stopTracking() {
+	clearInterval(pollTimer);
+	pollTimer = null;
+	clearTimeout(refreshTimer);
+	refreshTimer = null;
+	unsubscribeAll();
+}
+
+export function startProduction() {
+	alive = true;
+	const off = onLoaded((p) => openTakes(p.id));
+	return () => {
+		off();
+		alive = false;
+		closeDetails?.();
+		stopTracking();
+		clearPending();
+		estimateController?.abort();
+		estimateController = null;
+		flyingKey = null;
+		session.clear();
+	};
+}

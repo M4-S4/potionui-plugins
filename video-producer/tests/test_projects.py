@@ -244,6 +244,33 @@ def test_null_is_accepted_where_the_editor_leaves_a_value_out(starter, path, val
     validate_doc(starter)
 
 
+@pytest.mark.parametrize(
+    "engine",
+    [
+        {},
+        {"preset": "01KX47WANVIDEO0000000000TV"},
+        {"preset": "01M3SV8HJTGT3JPPH2BA5MP6PR", "model": "cm-veo"},
+        {"preset": None, "model": None},
+        {"backend": "b-local"},
+        {"backend": "cloud"},
+    ],
+)
+def test_the_engine_may_name_a_backend_a_preset_and_a_cloud_model(starter, engine):
+    starter["engine"].update(engine)
+
+    validate_doc(starter)
+
+
+@pytest.mark.parametrize(
+    "engine, path",
+    [({"preset": 3}, "$.engine.preset"), ({"model": ["cm-veo"]}, "$.engine.model"), ({"backend": None}, "$.engine.backend")],
+)
+def test_the_engine_preset_and_model_are_text_or_null(starter, engine, path):
+    starter["engine"].update(engine)
+
+    assert str(_error(starter)).startswith(f"{path}: ")
+
+
 def test_a_missing_assets_collection_is_refused_with_its_path(starter):
     del starter["assets"]
 

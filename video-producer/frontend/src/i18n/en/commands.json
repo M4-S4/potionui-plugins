@@ -51,7 +51,7 @@
 	"cmd.draft": "Draft quality",
 	"cmd.final": "Final quality",
 	"cmd.queue": "Add selection to queue",
-	"cmd.resume": "Resume generation",
+	"cmd.cancel-generation": "Cancel the generation",
 	"cmd.results": "Results and takes",
 	"cmd.assemble": "Assemble chosen takes",
 	"cmd.advanced": "Advanced workshop…",

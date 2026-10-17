@@ -1,10 +1,10 @@
 import logging
 
 if __name__.count(".") >= 2:
-    from ..backend import PLUGIN_ID, tables
+    from ..backend import PLUGIN_ID, tables, tracker
     from ..backend.core_bridge import HookContext
 else:
-    from backend import PLUGIN_ID, tables
+    from backend import PLUGIN_ID, tables, tracker
     from backend.core_bridge import HookContext
 
 logger = logging.getLogger("plugins.video-producer")
@@ -21,13 +21,19 @@ def on_boot(context: HookContext) -> HookContext:
 
 
 def on_ready(context: HookContext) -> HookContext:
-    """Runs once the application loop is up."""
+    """Start following the takes in flight once the application loop is up."""
+    try:
+        if tracker.TRACKER.start():
+            logger.info("[VIDEO-PRODUCER] Take tracker started")
+    except Exception:
+        logger.exception("[VIDEO-PRODUCER] Could not start the take tracker")
     return context
 
 
 def on_disable(context: HookContext) -> HookContext:
-    """React only when Video Producer itself is disabled."""
+    """Stop the take tracker when Video Producer itself is disabled."""
     if context.get("plugin_id") != PLUGIN_ID:
         return context
+    tracker.TRACKER.stop()
     logger.info("[VIDEO-PRODUCER] Disabled")
     return context

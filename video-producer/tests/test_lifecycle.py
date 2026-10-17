@@ -1,8 +1,10 @@
+import asyncio
 import logging
+import threading
 
 import pytest
 
-from backend import notifications, tables
+from backend import notifications, tables, tracker
 from hooks import lifecycle_hooks, notification_hooks
 from src.plugin_api import HookContext
 from src.plugin_api.notifications import NotificationTypeRegistry, NotificationTypeSpec
@@ -65,11 +67,87 @@ def test_on_boot_logs_and_swallows_a_table_error(monkeypatch, caplog):
     assert "Tables ready" not in caplog.text
 
 
-def test_on_ready_returns_its_context_untouched():
+def test_on_ready_starts_the_take_tracker_on_the_application_loop(scheduled, caplog):
     context = _context("plugin.lifecycle.ready", data={"started": True})
 
-    assert lifecycle_hooks.on_ready(context) is context
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        assert lifecycle_hooks.on_ready(context) is context
+
     assert context.data == {"started": True}
+    assert [job.__qualname__ for job in scheduled] == ["Tracker.run"]
+    assert tracker.TRACKER.running is True
+    assert "Take tracker started" in caplog.text
+
+
+def test_on_ready_twice_runs_one_tracker(scheduled):
+    lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
+    lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
+
+    assert len(scheduled) == 1
+
+
+def test_on_ready_logs_and_swallows_a_loop_it_cannot_reach(monkeypatch, caplog):
+    import src.plugin_api.hooks as plugin_hooks
+
+    def run_on_app_loop(coro):
+        raise RuntimeError("Application event loop is not available")
+
+    monkeypatch.setattr(plugin_hooks, "run_on_app_loop", run_on_app_loop)
+    context = _context("plugin.lifecycle.ready")
+
+    assert lifecycle_hooks.on_ready(context) is context
+    assert "Could not start the take tracker" in caplog.text
+    assert tracker.TRACKER.running is False
+
+
+def test_on_disable_stops_the_take_tracker(scheduled):
+    lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
+    future = tracker.TRACKER._future
+
+    lifecycle_hooks.on_disable(_context("plugin.lifecycle.disable"))
+
+    assert future.cancelled() and tracker.TRACKER.running is False
+
+
+def test_disabling_another_plugin_leaves_the_tracker_running(scheduled):
+    lifecycle_hooks.on_ready(_context("plugin.lifecycle.ready"))
+
+    lifecycle_hooks.on_disable(_context("plugin.lifecycle.disable", subject="civitai-provider"))
+
+    assert tracker.TRACKER.running is True
+
+
+def test_the_tracker_checks_every_two_seconds_while_takes_are_active_else_every_ten(monkeypatch, caplog):
+    rounds = iter([True, False, RuntimeError("database is locked")])
+    slept = []
+    stop = threading.Event()
+
+    async def tick(self):
+        value = next(rounds)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    async def sleep(seconds):
+        slept.append(seconds)
+        if len(slept) == 3:
+            stop.set()
+
+    monkeypatch.setattr(tracker.Tracker, "tick", tick)
+    monkeypatch.setattr(tracker.asyncio, "sleep", sleep)
+
+    asyncio.run(tracker.Tracker().run(stop))
+
+    assert slept == [2.0, 10.0, 10.0]
+    assert "The take tracker failed a round" in caplog.text
+
+
+def test_ensure_running_restarts_a_stopped_tracker(scheduled):
+    tracker.ensure_running()
+    tracker.TRACKER.stop()
+    tracker.ensure_running()
+
+    assert len(scheduled) == 2 and tracker.TRACKER.running is True
 
 
 def test_on_disable_accepts_its_own_plugin_id(caplog):

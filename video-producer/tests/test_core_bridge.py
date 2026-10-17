@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -331,6 +332,17 @@ def test_the_hashes_of_every_mode_and_form_are_merged_and_deduplicated(monkeypat
     assert core_bridge.preset_model_hashes("01ABC", ["model"]) == {"model": {"a" * 64, "b" * 64}}
 
 
+def test_the_hashes_can_be_read_from_the_named_modes_only(monkeypatch):
+    template = _template(
+        [[_field("upscale_model", recommendations=[{"sha256": "a" * 64}])]],
+        [[_field("upscale_model", recommendations=[{"sha256": "b" * 64}])]],
+    )
+    _hashes(monkeypatch, template)
+
+    assert core_bridge.preset_model_hashes("01ABC", ["upscale_model"], modes=["mode-1"]) == {"upscale_model": {"b" * 64}}
+    assert core_bridge.preset_model_hashes("01ABC", ["upscale_model"], modes=["upscale"]) == {"upscale_model": set()}
+
+
 def test_the_hashes_of_nested_fields_are_found(monkeypatch):
     inner = _field("text_encoder", recommendations=[{"sha256": "d" * 64}])
     group = _field("advanced", type="group", children=[_field("wrapper", type="group", children=[inner])])
@@ -451,3 +463,357 @@ def test_the_media_ref_error_is_the_one_the_core_raises():
 
     assert core_bridge.MediaRefError is MediaRefError
     assert "MediaRefError" in core_bridge.__all__ and "resolve_media" in core_bridge.__all__
+
+
+def test_every_name_the_bridge_exports_exists():
+    assert all(hasattr(core_bridge, name) for name in core_bridge.__all__)
+
+
+def test_get_user_asks_the_core_for_the_user_with_that_id(monkeypatch):
+    user = SimpleNamespace(id="user-1")
+    monkeypatch.setattr(core_bridge, "api_identity", SimpleNamespace(get_user=lambda user_id: user if user_id == "user-1" else None))
+
+    assert core_bridge.get_user("user-1") is user
+    assert core_bridge.get_user("user-9") is None
+
+
+def test_bind_director_media_promotes_a_text_document_to_image_to_video():
+    request = {
+        "preset_id": "p",
+        "form_data": {"video_director": {"schema_version": 1, "mode": "t2v", "settings": {}, "segments": [{"id": "seg-1"}], "media": []}},
+    }
+
+    bound = core_bridge.bind_director_media(request, "first", {"value": "uploads/a.png", "media_type": "image"}, promote=True)
+
+    assert bound["form_data"]["video_director"]["mode"] == "i2v"
+    assert bound["form_data"]["video_director"]["media"][0]["media"]["path"] == "uploads/a.png"
+    assert request["form_data"]["video_director"]["mode"] == "t2v"
+
+
+def test_the_generation_calls_go_to_the_core_as_the_user(monkeypatch):
+    calls = []
+
+    async def submit_generation(user, request):
+        calls.append(("submit", user.id, request))
+        return {"generation_id": "gen-1", "status": "pending", "queue_position": 2}
+
+    async def preview_memory(user, request):
+        calls.append(("preview", user.id, request))
+        return {"estimate": {}}
+
+    async def cancel_generation(user, generation_id):
+        calls.append(("cancel", user.id, generation_id))
+        return 1
+
+    def list_generation_files(user, generation_id):
+        calls.append(("files", user.id, generation_id))
+        return [{"id": "f-1"}]
+
+    monkeypatch.setattr(
+        core_bridge,
+        "api_generation",
+        SimpleNamespace(
+            submit_generation=submit_generation,
+            preview_memory=preview_memory,
+            cancel_generation=cancel_generation,
+            list_generation_files=list_generation_files,
+        ),
+    )
+    user = SimpleNamespace(id="user-1")
+    request = {"preset_id": "p"}
+
+    assert asyncio.run(core_bridge.submit_generation(user, request)) == {"generation_id": "gen-1", "status": "pending", "queue_position": 2}
+    assert asyncio.run(core_bridge.preview_memory(user, request)) == {"estimate": {}}
+    assert asyncio.run(core_bridge.cancel_generation(user, "gen-1")) is True
+    assert core_bridge.list_generation_files(user, "gen-1") == [{"id": "f-1"}]
+    assert [call[:2] for call in calls] == [("submit", "user-1"), ("preview", "user-1"), ("cancel", "user-1"), ("files", "user-1")]
+    assert calls[0][2] == request and calls[0][2] is not request
+
+
+class _Row:
+    def __init__(self, **values):
+        self.values = values
+
+    def to_dict(self):
+        return dict(self.values)
+
+
+def test_the_state_of_a_live_generation_is_completed_from_its_stored_row(monkeypatch):
+    monkeypatch.setattr(
+        core_bridge,
+        "api_generation",
+        SimpleNamespace(generation_state=lambda user, generation_id: {"id": generation_id, "status": "running", "progress": 0.5}),
+    )
+    row = _Row(
+        backend_id="b-local",
+        started_at="2026-10-17T10:00:00+00:00",
+        duration_ms=None,
+        error_code=None,
+        error_user_message=None,
+        error_message=None,
+    )
+    row.error_detail = "RuntimeError: boom"
+    _container(monkeypatch, generation_repository=SimpleNamespace(get_by_id={"gen-1": row}.get))
+
+    assert core_bridge.generation_state(SimpleNamespace(id="user-1"), "gen-1") == {
+        "id": "gen-1",
+        "status": "running",
+        "progress": 0.5,
+        "backend_id": "b-local",
+        "started_at": "2026-10-17T10:00:00+00:00",
+        "duration_ms": None,
+        "error_code": None,
+        "error_user_message": None,
+        "error_message": None,
+        "error_detail": "RuntimeError: boom",
+    }
+
+
+def test_the_state_of_a_stored_generation_needs_no_second_read(monkeypatch):
+    stored = {
+        "id": "gen-1",
+        "status": "completed",
+        "backend_id": "b",
+        "started_at": None,
+        "duration_ms": 61000,
+        "error_code": None,
+        "error_user_message": None,
+        "error_message": None,
+        "error_detail": None,
+    }
+    monkeypatch.setattr(core_bridge, "api_generation", SimpleNamespace(generation_state=lambda user, generation_id: stored))
+    _container(monkeypatch, generation_repository=SimpleNamespace(get_by_id=_raise("must not be asked")))
+
+    assert core_bridge.generation_state(SimpleNamespace(id="user-1"), "gen-1") == stored
+
+
+def test_a_stored_row_that_cannot_be_read_leaves_its_keys_empty(monkeypatch, caplog):
+    monkeypatch.setattr(core_bridge, "api_generation", SimpleNamespace(generation_state=lambda user, generation_id: {"status": "pending"}))
+    _container(monkeypatch, generation_repository=SimpleNamespace(get_by_id=_raise("database is locked")))
+
+    state = core_bridge.generation_state(SimpleNamespace(id="user-1"), "gen-1")
+
+    assert state == {
+        "status": "pending",
+        "backend_id": None,
+        "started_at": None,
+        "duration_ms": None,
+        "error_code": None,
+        "error_user_message": None,
+        "error_message": None,
+        "error_detail": None,
+    }
+    assert "Could not read the stored row of generation gen-1" in caplog.text
+
+
+def test_limit_events_are_recorded_and_refunded_without_ever_raising(monkeypatch, caplog):
+    calls = []
+
+    class Events:
+        @staticmethod
+        def record(user_id, kind, units=1, ref_id=None):
+            calls.append(("record", user_id, kind, units, ref_id))
+            return "event-1"
+
+        @staticmethod
+        def refund(ref_id):
+            calls.append(("refund", ref_id))
+            return 2
+
+    monkeypatch.setattr(core_bridge, "LimitEvents", Events)
+
+    assert core_bridge.record_limit_event("user-1", "video-producer.gpu_minutes", 1.5, "video-producer:t-1") is True
+    assert core_bridge.refund_limit_event("video-producer:t-1") == 2
+    assert calls == [("record", "user-1", "video-producer.gpu_minutes", 1.5, "video-producer:t-1"), ("refund", "video-producer:t-1")]
+
+    monkeypatch.setattr(core_bridge, "LimitEvents", SimpleNamespace(record=_raise("no container"), refund=_raise("no container")))
+    assert core_bridge.record_limit_event("user-1", "k", 1.0, "r") is False
+    assert core_bridge.refund_limit_event("r") == 0
+    assert "Could not record 1.0 units of k under r" in caplog.text
+    assert "Could not refund the usage recorded under r" in caplog.text
+
+
+def test_the_cost_of_a_cloud_run_is_asked_of_the_core(monkeypatch):
+    asked = []
+
+    def estimate_cloud_cost(user, model_id, shots):
+        asked.append((user.id, model_id, shots))
+        return {"known": True, "total_usd": "0.50"}
+
+    monkeypatch.setattr(core_bridge, "api_cloud", SimpleNamespace(estimate_cloud_cost=estimate_cloud_cost))
+    shots = ({"task": "txt2video", "params": {"duration_s": 4}},)
+
+    assert core_bridge.estimate_cloud_cost(SimpleNamespace(id="admin-1"), "cm-1", shots) == {"known": True, "total_usd": "0.50"}
+    assert asked == [("admin-1", "cm-1", [{"task": "txt2video", "params": {"duration_s": 4}}])]
+
+
+def _entry(slug, outputs=("video",), model_id="cm-1", **spec):
+    return SimpleNamespace(
+        slug=slug,
+        label=slug.title(),
+        provider_model_id=f"vendor/{slug}",
+        tasks=["txt2video", "img2video"],
+        outputs=list(outputs),
+        model_id=model_id,
+        spec=SimpleNamespace(
+            typical_seconds=spec.get("typical_seconds", 60),
+            max_seconds=spec.get("max_seconds", 300),
+            params=spec.get("params", ()),
+            inputs=spec.get("inputs", ()),
+        ),
+    )
+
+
+def test_the_cloud_video_models_of_a_backend_are_the_enabled_entries_with_a_catalog_model(monkeypatch):
+    entries = [_entry("veo"), _entry("flux", outputs=("image",)), _entry("orphan", model_id=None)]
+    _container(monkeypatch, cloud_catalog=SimpleNamespace(repository=SimpleNamespace(list_enabled=lambda backend_id: entries)))
+
+    assert core_bridge.cloud_video_models("b-cloud") == [
+        {
+            "id": "cm-1",
+            "name": "Veo",
+            "provider_model_id": "vendor/veo",
+            "tasks": ["img2video", "txt2video"],
+            "typical_seconds": 60,
+            "max_seconds": 300,
+        }
+    ]
+
+
+def test_a_cloud_model_comes_with_its_parameters_and_media_inputs(monkeypatch):
+    param = SimpleNamespace(
+        name="duration_s", kind="enum", values=(4, 8), minimum=None, maximum=None, step=None, default=8, tasks=frozenset({"txt2video"})
+    )
+    media = SimpleNamespace(role="first_frame", tasks=frozenset({"img2video"}))
+    entry = _entry("veo", params=(param,), inputs=(media,))
+    resolved = {"cm-1": SimpleNamespace(entry=entry, spec=entry.spec, backend_id="b-cloud")}
+    _container(monkeypatch, cloud_capabilities=SimpleNamespace(resolve=resolved.get))
+
+    model = core_bridge.cloud_model("cm-1")
+
+    assert model["backend_id"] == "b-cloud" and model["name"] == "Veo"
+    assert model["params"] == [
+        {"name": "duration_s", "kind": "enum", "values": [4, 8], "minimum": None, "maximum": None, "step": None, "default": 8, "tasks": ["txt2video"]}
+    ]
+    assert model["inputs"] == [{"role": "first_frame", "tasks": ["img2video"]}]
+    assert core_bridge.cloud_model("cm-9") is None
+
+
+def test_a_cloud_model_that_makes_no_video_is_none(monkeypatch):
+    entry = _entry("flux", outputs=("image",))
+    _container(monkeypatch, cloud_capabilities=SimpleNamespace(resolve=lambda model_id: SimpleNamespace(entry=entry, spec=entry.spec)))
+
+    assert core_bridge.cloud_model("cm-1") is None
+
+
+def _form_field(name, type="select", required=False, default=None, configuration=None, children=None):
+    return SimpleNamespace(name=name, type=type, required=required, default=default, configuration=configuration, children=children)
+
+
+def _form(name, fields, default=False, order=0):
+    return SimpleNamespace(name=name, fields=fields, default=default, order=order)
+
+
+def _templates(monkeypatch, template, shared):
+    repository = SimpleNamespace(
+        find_preset_by_id=lambda preset_id: template if preset_id == "01ABC" else None,
+        preset_loader=SimpleNamespace(shared_path=shared),
+    )
+    _container(monkeypatch, file_preset_repository=repository)
+
+
+def test_the_fields_of_a_mode_carry_their_options_and_recommended_files(monkeypatch, tmp_path):
+    (tmp_path / "preset" / "files").mkdir(parents=True)
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "preset" / "files" / "sizes.yml").write_text(
+        '- { value: "1344x768", description: "Widescreen" }\n- "768x768"\n', encoding="utf-8"
+    )
+    (tmp_path / "shared" / "more.yml").write_text('options:\n  - { value: "640x640" }\n  - { value: "768x768" }\n', encoding="utf-8")
+    resolution = _form_field(
+        "resolution",
+        type="resolution",
+        default="1344x768",
+        configuration={
+            "files": [
+                {"path": "{{ paths.preset }}/files/sizes.yml"},
+                {"path": "{{paths._shared}}/more.yml"},
+                {"path": "{{ paths.preset }}/files/missing.yml"},
+            ]
+        },
+    )
+    model = _form_field(
+        "model",
+        type="model",
+        required=True,
+        configuration={
+            "recommendations": [
+                {"name": "dit.safetensors", "sha256": " ABC ", "link": "https://hf.co/x/dit.safetensors?download=1"},
+                {"name": "Human label", "link": "https://hf.co/x/other_fp16.safetensors"},
+                {"name": "No file"},
+                "not a mapping",
+            ]
+        },
+    )
+    target = _form_field("target", configuration={"options": [{"label": "HD", "value": "hd"}, "2k", {"label": "none"}]})
+    section = _form_field(None, type="section", children=[resolution, _form_field(None, type="row", children=[model])])
+    quick = _form("quick", [_form_field("target", type="slider")], order=0)
+    full = _form("full", [section, target], default=True, order=1)
+    template = SimpleNamespace(path=str(tmp_path / "preset"), modes={"video": SimpleNamespace(forms=[quick, full])})
+    _templates(monkeypatch, template, tmp_path / "shared")
+
+    fields = core_bridge.preset_form_fields("01ABC", "video")
+
+    assert list(fields) == ["resolution", "model", "target"]
+    assert fields["resolution"] == {
+        "type": "resolution",
+        "required": False,
+        "default": "1344x768",
+        "options": [
+            {"value": "1344x768", "label": "Widescreen"},
+            {"value": "768x768", "label": "768x768"},
+            {"value": "640x640", "label": "640x640"},
+        ],
+        "recommendations": [],
+    }
+    assert fields["model"]["recommendations"] == [
+        {"sha256": "abc", "filename": "dit.safetensors"},
+        {"sha256": None, "filename": "other_fp16.safetensors"},
+    ]
+    assert fields["model"]["required"] is True
+    assert fields["target"]["type"] == "select"
+    assert fields["target"]["options"] == [{"value": "hd", "label": "HD"}, {"value": "2k", "label": "2k"}]
+
+
+def test_an_unknown_preset_or_mode_has_no_fields(monkeypatch, tmp_path):
+    template = SimpleNamespace(path=str(tmp_path), modes={"video": SimpleNamespace(forms=[])})
+    _templates(monkeypatch, template, tmp_path)
+
+    assert core_bridge.preset_form_fields("01ABC", "video") == {}
+    assert core_bridge.preset_form_fields("01ABC", "refs") is None
+    assert core_bridge.preset_form_fields("01XYZ", "video") is None
+
+
+def test_an_installed_model_is_found_by_file_name_too(monkeypatch):
+    monkeypatch.setattr(
+        core_bridge,
+        "api_models",
+        SimpleNamespace(
+            model_for_sha256=lambda sha256: {"id": "m-1"} if sha256 == "abc" else None,
+            model_for_path=lambda path: {"id": "m-2"} if path == "pos_emb.pt" else None,
+            resolve_model_file=lambda model_id: "file",
+        ),
+    )
+
+    assert core_bridge.installed_model_id("abc") == "m-1"
+    assert core_bridge.installed_model_id("def") is None
+    assert core_bridge.installed_model_for_file("pos_emb.pt") == "m-2"
+    assert core_bridge.installed_model_for_file("other.pt") is None
+
+
+def test_the_driver_of_a_preset_is_read_from_its_template(monkeypatch):
+    templates = {"01CLOUD": SimpleNamespace(driver="cloud.openrouter"), "01NATIVE": SimpleNamespace(driver=None)}
+    _container(monkeypatch, file_preset_repository=SimpleNamespace(find_preset_by_id=templates.get))
+
+    assert core_bridge.preset_driver("01CLOUD") == "cloud.openrouter"
+    assert core_bridge.preset_driver("01NATIVE") is None
+    assert core_bridge.preset_driver("01NONE") is None

@@ -9,7 +9,9 @@ _EXPECTED_COLUMNS = {
     "video_producer_takes": [
         "id", "project_id", "shot_id", "generation_id", "quality", "kind", "parent_take_id", "preset_id", "mode",
         "backend_id", "seed", "resolution", "status", "file_path", "thumb_path", "width", "height", "duration_s",
-        "fps", "error_code", "error_message", "created_at", "finished_at",
+        "fps", "error_code", "error_message", "created_at", "finished_at", "director_mode", "model_id", "progress", "step",
+        "variant", "chosen", "flag", "profile", "prompt_text", "file_id", "units_reserved", "started_at", "user_id",
+        "request",
     ],
     "video_producer_jobs": [
         "id", "take_id", "generation_id", "limit_ref_id", "units_reserved", "started_at", "finished_at",
@@ -199,6 +201,35 @@ def test_a_takes_table_from_an_older_version_gets_the_new_column_and_keeps_its_r
 
 def test_the_versions_table_adds_the_source_version_column():
     assert ("video_producer_versions", "source_version", "INTEGER") in tables._ADDED_COLUMNS
+
+
+def test_a_new_take_is_not_chosen_and_reserves_nothing_by_default(plugin_db):
+    create_tables()
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO video_producer_takes (id, project_id, shot_id, quality, kind, status) "
+            "VALUES ('t-1', 'p-1', 's-1', 'draft', 'render', 'queued')"
+        )
+        cursor.execute("SELECT chosen, units_reserved, progress, user_id, request FROM video_producer_takes")
+        assert tuple(cursor.fetchone()) == (0, 0, None, None, None)
+
+
+def test_a_takes_table_from_step_three_gets_every_take_column_and_keeps_its_rows(plugin_db):
+    create_tables()
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute("DROP TABLE video_producer_takes")
+        cursor.execute(f"CREATE TABLE video_producer_takes ({tables._COLUMNS['video_producer_takes']})")
+        cursor.execute(
+            "INSERT INTO video_producer_takes (id, project_id, shot_id, quality, kind, status, seed) "
+            "VALUES ('t-1', 'p-1', 's-1', 'draft', 'render', 'done', 7)"
+        )
+
+    create_tables()
+
+    assert _columns(plugin_db, "video_producer_takes") == _EXPECTED_COLUMNS["video_producer_takes"]
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute("SELECT id, seed, chosen, units_reserved, variant FROM video_producer_takes")
+        assert [tuple(row) for row in cursor.fetchall()] == [("t-1", 7, 0, 0, None)]
 
 
 def test_a_versions_table_from_an_older_version_gets_the_source_version_and_keeps_its_rows(plugin_db):

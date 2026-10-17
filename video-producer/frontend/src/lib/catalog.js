@@ -1,17 +1,5 @@
 import { t } from '../i18n/index.svelte.js';
 
-export const backends = [
-	{ id: 'local', vram: 24, speed: 1, cost: null },
-	{ id: 'studio', vram: 96, speed: 2.2, cost: null },
-	{ id: 'cloud', vram: 80, speed: 3.4, cost: 0.42 }
-];
-
-export function engineName(b) {
-	if (b?.id === 'local') return t('lib.backend.local');
-	if (b?.id === 'studio') return t('lib.backend.studio');
-	return t('lib.backend.cloud');
-}
-
 export const stages = {
 	source: {
 		get label() {

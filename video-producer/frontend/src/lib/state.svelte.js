@@ -1,8 +1,8 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { backends, engineName } from './catalog.js';
 import { emptyDoc, newAsset, newClip, promptLanguageOf } from './starter.js';
 import { toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
+import { resetTakes } from './takes.svelte.js';
 
 export { newAsset, newClip };
 
@@ -49,11 +49,11 @@ export const ui = $state({
 		mode: 'Génération IA',
 		state: 'ready',
 		progress: 0,
+		running: 0,
 		step: '',
 		queue: [],
 		lastCount: 0,
-		quality: 'draft',
-		job: null
+		quality: 'draft'
 	},
 	inspectorTab: 'video',
 	quota: null,
@@ -63,7 +63,18 @@ export const ui = $state({
 });
 
 export function applyMe(me) {
-	ui.me = { locale: me?.locale ?? null, isAdmin: me?.isAdmin === true, quota: me?.quota ?? null, version: me?.version ?? null, lastProjectId: me?.lastProjectId ?? null };
+	ui.me = {
+		locale: me?.locale ?? null,
+		isAdmin: me?.isAdmin === true,
+		quota: me?.quota ?? null,
+		version: me?.version ?? null,
+		lastProjectId: me?.lastProjectId ?? null,
+		engines: me?.engines ?? [],
+		presets: me?.presets ?? [],
+		features: me?.features ?? { upscaler: false },
+		upscaleTargets: me?.upscaleTargets ?? [],
+		settings: me?.settings ?? { draftResolution: null, maxParallelJobs: null }
+	};
 	ui.isAdmin = ui.me.isAdmin;
 	if (ui.me.quota?.limit > 0) ui.quota = { used: ui.me.quota.used, limit: ui.me.quota.limit };
 }
@@ -454,9 +465,7 @@ export function allIssues() {
 
 export const sourceLength = (c) => asset(c?.assetId)?.srcDur ?? 60;
 export const clipLabel = (c) => c?.label || asset(c?.assetId)?.name || t('lib.default.clip');
-export const backend = () => backends.find((b) => b.id === doc.engine.backend) ?? backends[0];
-
-export function ensureResultAsset(r) {
+function ensureResultAsset(r) {
 	const id = `gen-${r.id}`;
 	if (asset(id)) return id;
 	const c = doc.clips.find((x) => x.id === r.clipId);
@@ -466,217 +475,14 @@ export function ensureResultAsset(r) {
 	return id;
 }
 export function seedResultAssets() {
-	for (const r of doc.results) ensureResultAsset(r);
+	for (const r of doc.results ?? []) ensureResultAsset(r);
 }
 
-export function takesOf(clip) {
-	return doc.results
-		.filter((r) => r.clipId === clip?.id)
-		.sort((a, b) => (a.quality === b.quality ? a.variant.localeCompare(b.variant) : a.quality === 'draft' ? -1 : 1));
-}
-
-export function useTake(clip, resultId, silent = false) {
-	const r = doc.results.find((x) => x.id === resultId);
-	if (!clip || !r) return;
-	const apply = () => {
-		clip.assetId = ensureResultAsset(r);
-		clip.take = r.id;
-		clip.srcIn = 0;
-		clip.stage = r.quality;
-		for (const o of takesOf(clip)) if (o.status === 'chosen' && o.id !== r.id) o.status = 'new';
-		r.status = 'chosen';
-	};
-	silent ? apply() : act(apply);
-	ui.preview = null;
-	if (!silent) toast(r.quality === 'final' ? t('lib.toast.useTakeFinal', { shot: clipLabel(clip), variant: r.variant }) : t('lib.toast.useTakeDraft', { shot: clipLabel(clip), variant: r.variant }));
-}
-
-const factor = { '720p': 0.5, '1080p': 1, '4K': 2.6 };
-export function estimate({ seconds, quality = ui.production.quality, variants = doc.engine.variants, be = backend() }) {
-	const res = quality === 'final' ? doc.engine.resolution : '720p';
-	const perSec = (quality === 'final' ? 16 : 3.5) * factor[res] * (doc.engine.steps / 30);
-	const gpuSec = (seconds * variants * perSec) / be.speed;
-	const vram = Math.round((quality === 'final' ? 14 : 8) * factor[res] * (variants > 2 ? 1.25 : 1) + 2);
-	const quotaMin = (seconds * variants * perSec) / 60;
-	return {
-		gpuSec,
-		vram,
-		quotaMin,
-		res,
-		overVram: vram > be.vram,
-		overQuota: !be.cost && !!ui.quota && ui.quota.used + quotaMin > ui.quota.limit,
-		cost: be.cost ? (gpuSec / 60) * be.cost : 0
-	};
-}
 export function fmtDuration(sec) {
 	if (sec < 60) return `${Math.max(1, Math.round(sec))} s`;
 	const m = Math.floor(sec / 60);
 	const r = Math.round(sec % 60);
 	return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min${r ? ` ${String(r).padStart(2, '0')}` : ''}`;
-}
-
-export function jobClips(range = productionRange()) {
-	const sel = ui.selection?.kind === 'clip' ? doc.clips.find((c) => c.id === ui.selection.id) : null;
-	if (ui.production.target === 'clip') return [sel ?? clipAt(ui.playhead) ?? doc.clips[0]].filter(Boolean);
-	const inRange = shotsIn(range);
-	const toMake = inRange.filter((c) => c.stage !== 'source');
-	return toMake.length ? toMake : inRange;
-}
-export function jobEstimate(opts = {}) {
-	const clips = opts.clips ?? jobClips();
-	return { clips, ...estimate({ seconds: clips.reduce((sum, c) => sum + c.dur, 0), quality: opts.quality, variants: opts.variants }) };
-}
-
-function clipsRange(clips) {
-	return [Math.min(...clips.map((c) => c.start)), Math.max(...clips.map((c) => c.start + c.dur))];
-}
-
-let timer = null;
-export function readiness(opts = {}) {
-	const r = opts.clips?.length ? clipsRange(opts.clips) : productionRange();
-	const items = itemsIn(r);
-	const missing = [];
-	const warnings = [];
-	const mode = ui.production.mode;
-	if (r[1] - r[0] <= 0.05) missing.push(t('lib.block.noRange'));
-	if (mode !== 'Rendu 3D') {
-		if (!globalPrompt() && !items.prompts.length) missing.push(t('lib.block.noDirection'));
-		const empty = items.prompts.filter((p) => !p.text.trim());
-		if (empty.length) missing.push(t('lib.block.emptyPrompts', { count: empty.length }));
-	}
-	if (mode !== 'Génération IA' && !items.plans3d.length) missing.push(t('lib.block.noPlan3d'));
-	const est = jobEstimate({ clips: opts.clips, quality: opts.quality, variants: opts.variants });
-	if (est.overVram) warnings.push(t('lib.warn.vram', { need: est.vram, engine: engineName(backend()), have: backend().vram }));
-	if (mode !== 'Rendu 3D' && doc.direction.mode === 'FL2VA' && !items.frames.length) warnings.push(t('lib.warn.noFrame'));
-	if (est.overQuota) missing.push(t('lib.block.quota', { used: Math.round(ui.quota.used + est.quotaMin), limit: ui.quota.limit }));
-	return { range: r, items, missing, warnings, est };
-}
-
-export function startGeneration(opts = {}) {
-	const p = ui.production;
-	if (p.state === 'running' || p.state === 'paused') return toast(t('lib.toast.jobRunning'), 'warning');
-	const { missing, warnings, range } = readiness(opts);
-	if (missing.length) return toast(missing[0], 'warning');
-	if (warnings.length) toast(warnings[0], 'warning');
-	const quality = opts.quality ?? p.quality;
-	const variants = opts.variants ?? doc.engine.variants;
-	const clips = opts.clips ?? jobClips(range);
-	const est = jobEstimate({ clips, quality, variants });
-	p.job = { clips: clips.map((c) => c.id), quality, variants, parent: opts.parent ?? null, mode: p.mode, est };
-	p.state = 'running';
-	p.progress = 0;
-	tick();
-}
-export function promoteToFinal(resultId) {
-	const r = doc.results.find((x) => x.id === resultId);
-	const c = doc.clips.find((x) => x.id === r?.clipId);
-	if (c) startGeneration({ clips: [c], quality: 'final', variants: 1, parent: r.id });
-}
-
-function stepLabel(i) {
-	return [t('lib.step.assemble'), t('lib.step.encode'), t('lib.step.denoise'), t('lib.step.stitch'), t('lib.step.post')][i];
-}
-function tick() {
-	clearInterval(timer);
-	const speed = ui.production.job?.quality === 'final' ? 1.4 : 2.6;
-	timer = setInterval(() => {
-		const p = ui.production;
-		if (p.state !== 'running') return clearInterval(timer);
-		p.progress = Math.min(100, p.progress + speed + Math.random() * 2.5);
-		p.step = stepLabel(Math.min(4, Math.floor(p.progress / 20)));
-		if (p.progress >= 100) {
-			clearInterval(timer);
-			finishGeneration();
-		}
-	}, 120);
-}
-export function pauseGeneration() {
-	ui.production.state = 'paused';
-}
-export function resumeGeneration() {
-	ui.production.state = 'running';
-	tick();
-}
-export function cancelGeneration() {
-	clearInterval(timer);
-	ui.production.state = 'ready';
-	ui.production.progress = 0;
-	toast(t('lib.toast.cancelled'));
-}
-
-
-const lookKeys = ['warm', 'mist', 'cool', 'dusk', 'night'];
-function finishGeneration() {
-	const p = ui.production;
-	const job = p.job;
-	const parent = job.parent ? doc.results.find((r) => r.id === job.parent) : null;
-	const now = new Date().toTimeString().slice(0, 5);
-	let made = 0;
-	act(() => {
-		for (const id of job.clips) {
-			const c = doc.clips.find((x) => x.id === id);
-			if (!c) continue;
-			const lp = promptOf(c) ?? doc.prompts.find((x) => !x.shotId && overlaps(x.start, x.dur, [c.start, c.start + c.dur]));
-			const existing = takesOf(c).filter((r) => r.quality === job.quality).length;
-			const fresh = [];
-			for (let i = 0; i < job.variants; i++) {
-				const r = {
-					id: ulid(),
-					clipId: c.id,
-					quality: job.quality,
-					variant: String.fromCharCode(65 + existing + i),
-					assetId: null,
-					look: parent?.look ?? lookKeys[(doc.results.length + i) % lookKeys.length],
-					status: 'new',
-					seed: parent?.seed ?? doc.engine.seed + doc.results.length + i,
-					created: now,
-					range: [c.start, c.start + c.dur],
-					local: lp?.text ?? '—',
-					parent: parent?.id ?? null,
-					profile: doc.direction.mode,
-					mode: job.mode,
-					backend: doc.engine.backend
-				};
-				doc.results.push(r);
-				ensureResultAsset(r);
-				fresh.push(r);
-				made++;
-			}
-			if (c.stage === 'todo' || parent) useTake(c, fresh[0].id, true);
-		}
-	});
-	if (!backend().cost && ui.quota) ui.quota.used = Math.min(ui.quota.limit, ui.quota.used + job.est.quotaMin);
-	p.state = 'done';
-	p.lastCount = made;
-	const message = parent ? t('lib.toast.finalReady') : job.quality === 'final' ? t('lib.toast.takesFinal', { count: made }) : t('lib.toast.takesDraft', { count: made });
-	toast(message, 'success', { label: t('shell.toast.view'), run: () => openResults() });
-}
-export function openResults() {
-	ui.workspace = 'director';
-	ui.dockTab = 'results';
-	ui.production.state = ui.production.state === 'done' ? 'ready' : ui.production.state;
-}
-
-export function queueWindow() {
-	const { missing, range } = readiness();
-	if (missing.length) return toast(missing[0], 'warning');
-	ui.production.queue.push({ id: ulid(), range, mode: ui.production.mode, quality: ui.production.quality, label: `${secs(range[0])} → ${secs(range[1])}` });
-	toast(t('lib.toast.queued'));
-}
-
-export function insertResult(id) {
-	const r = doc.results.find((x) => x.id === id);
-	if (!r) return;
-	useTake(doc.clips.find((x) => x.id === r.clipId) ?? clipAt((r.range[0] + r.range[1]) / 2), id);
-}
-
-export function assembleChosen() {
-	const chosen = doc.results.filter((r) => r.status === 'chosen');
-	if (!chosen.length) return toast(t('lib.toast.chooseFirst'), 'warning');
-	act(() => {
-		for (const r of chosen) useTake(doc.clips.find((c) => c.id === r.clipId), r.id, true);
-	});
-	toast(t('lib.toast.assembled', { count: chosen.length }), 'success');
 }
 
 export function addShot(label = t('lib.default.shot'), prompt = '', dur = 4, after = null) {
@@ -740,24 +546,20 @@ export function contextSnapshot() {
 }
 
 export function replaceDoc(next) {
-	clearInterval(timer);
-	timer = null;
 	const incoming = { ...next, assets: Array.isArray(next?.assets) ? next.assets : [] };
 	for (const k of Object.keys(doc)) if (!(k in incoming)) delete doc[k];
 	Object.assign(doc, incoming);
 	past.length = 0;
 	future.length = 0;
 	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, dirty: false });
-	Object.assign(ui.production, { state: 'ready', progress: 0, step: '', queue: [], lastCount: 0, job: null });
+	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', queue: [], lastCount: 0 });
+	resetTakes();
 	Object.assign(ui.scene, { current: null, keyframe: null });
 	seedResultAssets();
 	if (ui.playhead > seqDuration()) ui.playhead = 0;
 }
 
 export function dispose() {
-	clearInterval(timer);
-	timer = null;
-	if (ui.production.state === 'running') ui.production.state = 'paused';
 	for (const id of toastTimers) clearTimeout(id);
 	toastTimers.clear();
 	ui.toasts.length = 0;

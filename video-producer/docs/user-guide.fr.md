@@ -2,7 +2,7 @@
 
 English: [Video Producer: user guide](/docs?doc=plugin/video-producer/user-guide) (file `docs/user-guide.md`).
 
-Ce guide explique comment réaliser un court film avec Video Producer. Les libellés de l’interface sont écrits en **gras**. Video Producer est livré par étapes. Cette version a l’interface complète, en anglais et en français, enregistre vos projets et importe vos médias, mais certaines fonctions sont encore simulées (chapitre 17). Un chapitre qui décrit quelque chose qui n’existe pas encore se termine par « Disponible à partir de l’étape N ». Le guide d’administration est une page distincte que seuls les admins voient.
+Ce guide explique comment réaliser un court film avec Video Producer. Les libellés de l’interface sont écrits en **gras**. Video Producer est livré par étapes. Cette version a l’interface complète, en anglais et en français, enregistre vos projets, importe vos médias et génère de vraies prises et de vrais finals (chapitres 8 et 9), mais certaines fonctions sont encore simulées (chapitre 17). Un chapitre qui décrit quelque chose qui n’existe pas encore se termine par « Disponible à partir de l’étape N ». Le guide d’administration est une page distincte que seuls les admins voient.
 
 ## 1. Ce qu’est Video Producer
 
@@ -11,8 +11,9 @@ Video Producer est un plugin PotionUI de montage audiovisuel, de génération de
 Avant de commencer :
 
 - Un admin doit avoir préparé au moins un moteur (ce poste, un serveur d’atelier ou un modèle cloud) et au moins un preset vidéo qui vous est attribué. Si la barre Production n’affiche aucun moteur, voyez le chapitre 18.
-- Votre admin règle aussi la résolution des brouillons et peut limiter les minutes GPU que vous pouvez utiliser par mois.
-- Le modèle MiniMax-H3 est sous une licence qui exclut son usage, et tout ce qu’il génère, dans l’Union européenne, au Royaume-Uni, aux États-Unis et en Corée du Sud sans autorisation individuelle de MiniMax, et qui demande qu’un produit commercial affiche « MiniMax H3 » de façon visible. Demandez à votre admin avant de l’utiliser.
+- Votre admin règle aussi la résolution des brouillons, le nombre de générations que vous pouvez avoir en cours en même temps, et peut limiter les minutes GPU que vous pouvez utiliser par mois.
+- La génération est réelle : les prises sont des vidéos produites par les machines ou le compte cloud de votre admin, et elles prennent du temps. L’estimation de la barre Production vous dit à quoi vous attendre avant de commencer (chapitre 8).
+- Le modèle MiniMax H3 (les entrées **MiniMax H3** du menu des moteurs) est sous une licence qui exclut son usage, et tout ce qu’il génère, dans l’Union européenne, au Royaume-Uni, aux États-Unis et en Corée du Sud sans autorisation individuelle de MiniMax, et qui demande qu’un produit commercial affiche « MiniMax H3 » de façon visible. Demandez à votre admin avant de l’utiliser. Video Producer ne vérifie rien de tout cela à votre place.
 
 L’interface est en anglais par défaut et existe aussi en français (chapitre 15).
 
@@ -26,12 +27,12 @@ La première fois que vous ouvrez la page, elle crée un projet de départ, « A
 2. **Définir la direction globale.** Dans l’espace **Director IA**, onglet **Direction** : univers et intention, personnages et identité, direction photographique, palette et éclairage, rythme et continuité. Résultat : un texte qui guide toutes les générations.
 3. **Ajouter les références.** Dans **Director IA**, onglet **Références** : identités, décors 3D et guides de mouvement. Résultat : ce qui doit rester identique d’un plan à l’autre.
 4. **Découper le film en plans.** Dans l’espace **Storyboard** : écrivez le synopsis, cliquez sur **Proposer un découpage**, gardez les plans voulus et ajustez leurs instructions locales. Résultat : une rangée de cartes de plans.
-5. **Générer des brouillons.** Dans la barre Production, qualité **Brouillon**, puis **Générer la sélection** (Ctrl+G). L’estimation indique le temps GPU et le quota. Résultat : des prises brouillon A, B, etc.
-6. **Choisir et passer en final.** Dans l’inspecteur, onglet **Prises** : comparez les prises, cliquez sur celle que le plan doit jouer, puis sur **Final** pour la meilleure prise brouillon. Résultat : le plan passe de Brouillon à Final.
+5. **Générer des brouillons.** Dans la barre Production, choisissez le **Moteur de génération**, qualité **Brouillon**, puis **Générer la sélection** (Ctrl+G). L’estimation indique le temps, la mémoire et le quota. Résultat : de vraies prises brouillon A, B, etc., produites par le moteur choisi.
+6. **Choisir et passer en final.** Dans l’inspecteur, onglet **Prises** : comparez les prises, cliquez sur **Choisir** pour celle que le plan doit jouer, puis sur **Passer en final** pour la meilleure prise brouillon. Résultat : le plan passe de Brouillon à Final.
 7. **Monter, raccorder et mixer.** Fondus sur les clips, raccord de couleur dans l’onglet **Couleur** de l’inspecteur, console dans **Mixage**. Résultat : une séquence terminée.
 8. **Préparer la livraison.** **Fichier › Exporter la vidéo…**, **Exporter vers un autre logiciel…** ou **Exporter les sous-titres…**. Résultat : des fichiers à télécharger.
 
-L’interface des huit étapes est en place, et vos projets sont enregistrés au fil de votre travail (chapitre 5). La page ouvre le projet que vous avez utilisé en dernier, ou le projet de départ la première fois (chapitre 1). **Nouveau projet…** démarre un projet vide, « Projet sans titre », et l’ajoute à vos projets. Disponible à partir de l’étape 4 : les brouillons et les finals. À partir de l’étape 6 : la livraison en fichiers vidéo.
+L’interface des huit étapes est en place, et vos projets sont enregistrés au fil de votre travail (chapitre 5). La page ouvre le projet que vous avez utilisé en dernier, ou le projet de départ la première fois (chapitre 1). **Nouveau projet…** démarre un projet vide, « Projet sans titre », et l’ajoute à vos projets. Les brouillons et les finals sont réels depuis l’étape 4. À partir de l’étape 6 : la livraison en fichiers vidéo.
 
 ## 3. L’écran
 
@@ -54,7 +55,7 @@ Les dix menus regroupent toutes les commandes de la page. La recherche de comman
 | **Édition** | Annuler, Rétablir, Copier, Coller, Dupliquer, Supprimer, Rechercher un média. |
 | **Montage** | Les trois outils, Couper à la tête de lecture, les ajustements du début et de la fin, Modifier la durée, points d’entrée et de sortie, Effacer la plage, Ajouter un marqueur, Ajouter un titre, Fondus d’entrée et de sortie. |
 | **Plan** | Nouveau plan, Informations, Afficher la source, Prises du plan, Passer la prise en final, Couleur du plan, Raccorder la couleur au plan précédent, Images clés de caméra, Favori, Rejeter, Retirer la marque. |
-| **Production** | Direction globale, Découper le synopsis en plans, Contrôle de continuité, Générer la sélection, Qualité brouillon et finale, la file, Résultats et prises, Assembler les prises choisies, Atelier avancé, le moteur, le Hybrid builder. |
+| **Production** | Direction globale, Découper le synopsis en plans, Contrôle de continuité, Générer la sélection, Qualité brouillon et finale, la file, Annuler la génération, Résultats et prises, Assembler les prises choisies, Atelier avancé, le moteur, le Hybrid builder. |
 | **Audio** | Ajouter une piste audio, Importer un fichier audio, Console de mixage, Voix et dialogues et l’atelier Sound design. |
 | **Présentation** | Lecture, boucle, plein écran, guides de cadrage, Comparer les prises, Scope de luminance, Indicateurs audio, zoom de la timeline, Magnétisme. |
 | **Fenêtre** | Les cinq espaces, les espaces de références, Panneau latéral, Inspecteur, Assistant PotionUI, Bibliothèque de prompts, Index de la timeline, Tâches en arrière-plan. |
@@ -84,15 +85,15 @@ Les médias du projet dans un seul panneau. Un nouveau projet n’en a aucun : l
 
 Le panneau de gauche a trois onglets. Un point sur **Direction** signale qu’il y a des points à vérifier, et **Résultats** affiche le nombre de prises.
 
-- **Direction.** Montre ce qui guide la génération sur la plage courante : la direction globale, l’instruction locale, les références et Control video, avec **Voir le récapitulatif de génération**. En dessous : **Points à vérifier**, la liste des contradictions de direction et des raccords de couleur à corriger, le **Profil H3 du projet** (FL2VA, Ref2VA ou Hybrid AV, chapitre 11) et la **Direction globale** elle-même, en cinq champs (univers et intention, personnages et identité, direction photographique, palette et éclairage, rythme et continuité), avec un compteur sur 4000 caractères. Chaque champ a un lien **Bibliothèque & assistant**. Le bouton en forme d’engrenage, **Paramètres H3**, ouvre l’**Atelier avancé**.
+- **Direction.** Montre ce qui guide la génération sur la plage courante : la direction globale, l’instruction locale, les références et Control video, avec **Voir le récapitulatif de génération**. En dessous : **Points à vérifier**, la liste des contradictions de direction et des raccords de couleur à corriger, le **Profil H3 du projet** (FL2VA, Ref2VA ou Hybrid AV, chapitres 8 et 11) et la **Direction globale** elle-même, en cinq champs (univers et intention, personnages et identité, direction photographique, palette et éclairage, rythme et continuité), avec un compteur sur 4000 caractères. Chaque champ a un lien **Bibliothèque & assistant**. Le bouton en forme d’engrenage, **Paramètres H3**, ouvre l’**Atelier avancé**.
 - **Références.** Trois familles : **Images et identité**, **Décors 3D** et **Guides de mouvement**. Une référence est globale (elle accompagne toutes les générations) ou ne s’applique qu’à une plage ; **Associer à la plage** règle le second cas. **Référence** en ajoute une. Le centre montre la planche de références, en deux groupes, **Direction globale** et **Sur la timeline**, avec un champ de recherche. Glissez une vignette sur la piste Frames pour l’ancrer à un moment précis. Un nouveau projet n’a aucune référence : la planche le dit, et **Référence** ajoute la première.
-- **Résultats.** Les prises de chaque plan, **Comparer**, **À reprendre**, **Utiliser**, la **File de génération** et **Assembler les prises choisies**.
+- **Résultats.** Les cartes de prise de chaque plan (chapitre 9), la **File de génération** et **Assembler les prises choisies**.
 
 ### Storyboard
 
-À gauche : le **Synopsis** (une phrase devient un plan) et **Proposer un découpage**. Le **Découpage proposé** liste les plans : cochez ceux à garder, renommez-les et cliquez sur **Ajouter N plans à la fin**. Dans cette version, le découpage est simulé : il se contente de couper le synopsis en phrases. Puis **À produire**, avec **Brouillons restants** et **Passage en final** (le temps qu’ils prendront), et **Continuité**, qui liste les raccords de couleur à vérifier, chacun avec **Raccorder la couleur**.
+À gauche : le **Synopsis** (une phrase devient un plan) et **Proposer un découpage**. Le **Découpage proposé** liste les plans : cochez ceux à garder, renommez-les et cliquez sur **Ajouter N plans à la fin**. Dans cette version, le découpage est simulé : il se contente de couper le synopsis en phrases. Puis **À produire**, avec **Brouillons restants** et **Passage en final** (le nombre de plans et la durée qu’il reste à faire pour chacun), et **Continuité**, qui liste les raccords de couleur à vérifier, chacun avec **Raccorder la couleur**.
 
-Au centre : une carte par plan, dans l’ordre, avec son numéro, sa durée, son nom, son étape (**Source**, **À générer**, **Brouillon** ou **Final**), son nombre de prises et son instruction locale ; cliquez sur l’instruction pour l’écrire. Glissez une carte pour la déplacer. Les boutons d’une carte apparaissent au survol ou quand la carte est sélectionnée : le bouton principal suit l’étape, **Générer**, **Passer en final**, **Voir les prises** ou **Régénérer**, et trois icônes montrent le plan dans le visualiseur, insèrent un plan après lui et le suppriment. L’en-tête compte les plans par étape, en ajoute un avec **Plan** et règle la taille des vignettes ; une tuile **Nouveau plan** à la fin fait la même chose. Dans cet espace, les flèches gauche et droite déplacent la sélection vers le plan précédent ou suivant.
+Au centre : une carte par plan, dans l’ordre, avec son numéro, sa durée, son nom, son étape (**Source**, **À générer**, **Brouillon** ou **Final**), son nombre de prises et son instruction locale ; cliquez sur l’instruction pour l’écrire. Glissez une carte pour la déplacer. Les boutons d’une carte apparaissent au survol ou quand la carte est sélectionnée : le bouton principal suit l’étape, **Générer**, **Passer en final**, **Voir les prises** ou **Régénérer**, et trois icônes montrent le plan dans le visualiseur, insèrent un plan après lui et le suppriment. Tant qu’une prise du plan est en cours, la carte montre son étape et sa progression, et le bouton est désactivé. L’en-tête compte les plans par étape, en ajoute un avec **Plan** et règle la taille des vignettes ; une tuile **Nouveau plan** à la fin fait la même chose. Dans cet espace, les flèches gauche et droite déplacent la sélection vers le plan précédent ou suivant.
 
 ### Scène 3D
 
@@ -131,7 +132,7 @@ Un enregistrement qui échoue affiche l’un de ces trois messages : « Impossib
 
 - Sélectionnez une ligne, puis cliquez sur **Ouvrir**. Un double-clic sur une ligne ou Entrée dessus font la même chose. **Ouvrir** est désactivé tant que la ligne sélectionnée est le projet déjà ouvert. La page enregistre le projet courant avant d’en ouvrir un autre. Si cet enregistrement a échoué et que des modifications attendent, une fenêtre « Modifications non enregistrées » dit que ces modifications n’ont pas pu être enregistrées et seront perdues : **Abandonner les modifications** continue, et annuler garde le projet ouvert.
 - **Nouveau projet** (en bas à gauche) crée un projet vide, comme **Fichier › Nouveau projet…**.
-- L’icône de corbeille au bout d’une ligne supprime ce projet, après une confirmation qui précise que le projet et ses versions seront supprimés et que cette action est irréversible. Le projet ouvert n’a pas de corbeille. Supprimer un projet ne supprime pas les médias de votre bibliothèque ou de votre galerie.
+- L’icône de corbeille au bout d’une ligne supprime ce projet, après une confirmation qui précise que le projet et ses versions seront supprimés et que cette action est irréversible. Le projet ouvert n’a pas de corbeille. Supprimer un projet annule les prises qu’il a encore en cours. Cela ne supprime ni les médias de votre bibliothèque ou de votre galerie, ni les vidéos de ses prises, qui restent dans votre historique de générations.
 - La fenêtre indique « Chargement des projets… » pendant le chargement, « Aucun projet enregistré » quand vous n’en avez pas, et « Impossible de charger vos projets. » avec un bouton **Réessayer** quand le serveur n’a pas répondu.
 
 **Fichier › Nouveau projet…** enregistre le projet courant, puis crée un projet vide, « Projet sans titre », l’ouvre et affiche « Nouveau projet vide créé ». Elle ne demande une confirmation (**Créer un projet vide**) que si le projet courant n’a pas pu être enregistré.
@@ -172,7 +173,7 @@ Un import ne copie rien : le projet garde une référence à l’élément de la
 
 ### Dans le panneau Médias
 
-Après l’import, votre navigateur lit la durée et la taille de chaque fichier. La durée s’affiche en bas à droite de la vignette. Pour l’élément sélectionné, le panneau montre **Durée**, **Format**, **Collection** et **Origine** : **Galerie** ou **Bibliothèque** ; la vignette porte le même mot. La cadence d’une vidéo importée vient de la bibliothèque quand elle la connaît, et s’affiche après la taille (par exemple « 1280×720 · 25 i/s ») ; sinon, et pour un fichier de la galerie, **Format** n’indique que la taille. Les pastilles de collections rangent les images sous **Images**, les vidéos sous **Vidéos** et les fichiers audio sous **Audio**. **Générés** contient les prises du projet, qui sont simulées pour l’instant. Une capture du panneau après un import se trouve dans `docs/screenshots/media-import.png`.
+Après l’import, votre navigateur lit la durée et la taille de chaque fichier. La durée s’affiche en bas à droite de la vignette. Pour l’élément sélectionné, le panneau montre **Durée**, **Format**, **Collection** et **Origine** : **Galerie** ou **Bibliothèque** ; la vignette porte le même mot. La cadence d’une vidéo importée vient de la bibliothèque quand elle la connaît, et s’affiche après la taille (par exemple « 1280×720 · 25 i/s ») ; sinon, et pour un fichier de la galerie, **Format** n’indique que la taille. Les pastilles de collections rangent les images sous **Images**, les vidéos sous **Vidéos** et les fichiers audio sous **Audio**. **Générés** contient les vidéos des prises terminées du projet (chapitre 9). Une capture du panneau après un import se trouve dans `docs/screenshots/media-import.png`.
 
 ### Vignettes
 
@@ -184,14 +185,14 @@ Une image est sa propre vignette. Pour une vidéo, la page utilise la vignette q
 - **Son d’une vidéo.** Le visualiseur ne lit pas le son d’une vidéo. Le son vient des pistes audio (chapitre 13).
 - **Audio.** Un fichier audio placé sur une piste passe par sa tranche de la console. Les faders, muet et solo, panoramique, égaliseur, compresseur, filtre et envois agissent sur le vrai son, les vumètres le montrent, et le clip dessine la forme d’onde du fichier dans la timeline (chapitre 13).
 
-Ce qui reste simulé : la génération et les prises, qui montrent une vignette procédurale marquée Simulé, et les sons de l’atelier Sound design, que votre navigateur synthétise (chapitre 17).
+Ce qui reste simulé : les prises faites par les versions antérieures d’un projet, qui montrent une vignette procédurale marquée Simulé, et les sons de l’atelier Sound design, que votre navigateur synthétise (chapitre 17). Les prises de la génération réelle sont des vidéos ordinaires et se lisent comme n’importe quelle vidéo (chapitre 9).
 
 ## 7. Inspecteur
 
 L’inspecteur suit la sélection et son titre dit ce qui est sélectionné : **Plan vidéo**, **Clip audio**, **Titre**, **Instruction locale**, **Frame de référence**, **Control video**, **Plan 3D**, **Marqueur**, **Référence** ou **Tranche de console**. Pour un plan, il commence par une vignette, le nom (cliquez dessus pour renommer le plan), l’étape et les temps, et il a trois onglets :
 
-- **Plan.** Un raccourci vers l’action suivante (**Générer des brouillons**, ou **Passer la prise A en final**), **Durée et source** (la durée, l’endroit où le plan commence dans sa source et la longueur de la source), **Fondus** (**Entrée** et **Sortie**), la **Marque** (**Aucune**, **Favori** ou **Rejeté**) et trois icônes pour couper le plan au milieu, le dupliquer et le supprimer.
-- **Prises.** Les prises du plan, en **Finales** et **Brouillons** (chapitre 9).
+- **Plan.** Un raccourci vers l’action suivante (**Générer des brouillons**, ou **Passer la prise A en final**) avec le moteur qu’il utilisera (« Sur » suivi du moteur), **Durée et source** (la durée, l’endroit où le plan commence dans sa source et la longueur de la source), **Fondus** (**Entrée** et **Sortie**), la **Marque** (**Aucune**, **Favori** ou **Rejeté**) et trois icônes pour couper le plan au milieu, le dupliquer et le supprimer.
+- **Prises.** Les cartes de prise du plan, en **Finales** et **Brouillons**, et un bouton qui fait des brouillons de plus (par exemple « 2 brouillons de plus » ; chapitre 9).
 - **Couleur.** Le scope de luminance, le raccord avec le plan précédent, les préréglages et les réglages fins (chapitre 12).
 
 Les autres éléments ont leur propre panneau :
@@ -208,19 +209,29 @@ Les autres éléments ont leur propre panneau :
 
 Dans l’espace **Scène 3D**, avec un plan 3D sélectionné ou sans sélection, l’inspecteur affiche la **Caméra** : focale, orientation, inclinaison, distance et hauteur cible, **Position clé**, **Suivre la trajectoire** et la liste des positions clés. Sans sélection dans les autres espaces, il montre le projet (format, profil H3, contenu), un rappel des principaux raccourcis et un bouton **Propriétés du projet…**.
 
-## 8. Barre Production et estimation
+## 8. Barre Production et génération
 
-La barre Production se lit comme une phrase : une cible (**Plan**, **Plage** ou **Séquence**), la plage avec le nombre de plans et de prompts qu’elle contient, une qualité (**Brouillon** ou **Final**), un mode de sortie, un moteur, l’**Atelier avancé**, puis l’estimation, **Ajouter à la file** et **Générer la sélection**. Un nombre accompagné d’une icône d’alerte après les compteurs est le nombre de contradictions de direction dans la plage ; cliquez dessus pour les voir.
+La barre Production se lit comme une phrase : une cible (**Plan**, **Plage** ou **Séquence**), la plage avec le nombre de plans et de prompts qu’elle contient, une qualité (**Brouillon** ou **Final**), un mode de sortie, le **Moteur de génération**, l’**Atelier avancé**, puis l’estimation, **Ajouter à la file** et **Générer la sélection**. Un nombre accompagné d’une icône d’alerte après les compteurs est le nombre de contradictions de direction dans la plage ; cliquez dessus pour les voir. La génération est réelle : une prise est une vidéo produite en arrière-plan par le moteur que vous choisissez.
 
-- Le mode de sortie **Génération IA** est le mode réel. **Rendu 3D** et **Rendu 3D + IA** sont simulés (chapitre 17) ; avec **Rendu 3D**, le bouton principal devient **Préparer le rendu**.
-- Le menu du moteur liste ce que votre admin a activé : ce poste, un serveur d’atelier et des modèles cloud. Dans cette version, il montre trois moteurs fictifs : **Ce poste · RTX 4090**, **Serveur atelier · 2 × RTX A6000** et **Fournisseur cloud · H100 à la demande**. Sur une fenêtre étroite, le menu est masqué : choisissez alors le moteur dans l’**Atelier avancé**.
-- L’**Atelier avancé** a trois étapes : **Sources et guides**, **Moteur et Hybrid builder** et **Son et livraison**. Il s’ouvre depuis la barre, depuis **Production › Atelier avancé…** et, pour le moteur, depuis **Paramètres H3** dans Director IA.
+### Choisir le moteur
 
-L’estimation donne le temps GPU, la mémoire et ce qu’il reste de votre quota. Elle se trouve à droite de la barre ; survolez-la pour le détail : le nombre de plans et de variantes, la résolution, le moteur, la mémoire face à celle du moteur et le quota ou le coût.
+- Le mode de sortie **Génération IA** est le mode réel. **Rendu 3D** et **Rendu 3D + IA** sont encore simulés (chapitre 17) ; avec **Rendu 3D**, le bouton principal devient **Préparer le rendu**.
+- Le menu **Moteur de génération** liste ce que votre admin a activé et vous a attribué, en groupes qui portent le nom des backends. Un groupe au nom du backend de votre admin contient les presets vidéo qui tournent sur son matériel, par exemple **Wan 2.1 / 2.2** ou **MiniMax H3**. Chaque fournisseur cloud a son groupe, avec ses modèles vidéo par leur nom. Votre choix est enregistré avec le projet. Que le preset tourne sur ce poste ou sur un serveur d’atelier, c’est PotionUI qui le décide, et la carte de la prise vous le dit ensuite. Survolez le menu pour voir le groupe et, pour un preset qui tourne sur le matériel de l’admin, la mémoire libre de son GPU (« 16,0 / 24,0 Go libres »). Sur une fenêtre de moins de 1400 pixels de large, le menu est masqué : utilisez **Production › Moteur de génération…**, qui ouvre l’**Atelier avancé** sur son étape du moteur. Une capture du menu et de la barre qui l’entoure, dans les thèmes sombre et clair de l’interface en anglais, se trouve dans `docs/screenshots/engine-popup.png`.
+- Sans moteur, le menu indique « Aucun moteur » et la barre dit « Aucun moteur de génération : un administrateur doit activer un preset vidéo ou un modèle cloud. » Un admin voit aussi le lien « Ouvrir les réglages du plugin ». Quand le moteur d’un projet n’est plus disponible, le menu indique « Moteur plus disponible » et la barre dit « Le moteur de ce projet n’est plus disponible : choisissez-en un autre. » Un projet d’une version antérieure qui nommait un moteur fictif est ramené au vrai moteur correspondant à son ouverture.
+- **Qualité.** **Brouillon** fait des prises rapides à la résolution choisie par votre admin, ou à la plus proche que le moteur propose ; survolez-le pour la voir (« Brouillon rapide en 832×480 : valider mouvement et cadrage »). **Final** fait des prises à la plus grande résolution du moteur (« Qualité finale en 1280×720 : à réserver aux prises retenues »). Pour améliorer un brouillon qui vous plaît, **Passer en final** (chapitre 9) est en général le meilleur moyen : il garde l’image que vous avez choisie.
+- L’**Atelier avancé** a trois étapes : **Sources et guides**, **Moteur et Hybrid builder** et **Son et livraison**. Il s’ouvre depuis la barre, depuis **Production › Atelier avancé…** et, pour le moteur, depuis **Paramètres H3** dans Director IA. Son champ **Variantes par fenêtre** (de 1 à 4) règle le nombre de prises, A, B, etc., que chaque plan reçoit à la génération. Les réglages que le moteur n’utilise pas y sont grisés et portent le badge « Non transmis à ce moteur » (chapitre 17).
 
-- Le temps vient de vos propres générations passées sur ce poste, avec le même preset, le même moteur et la même résolution. Il affiche « — » s’il n’y en a pas encore.
-- La mémoire est une estimation d’après la taille des fichiers de modèle, jamais une garantie.
-- Le quota est vos minutes GPU Video Producer mensuelles, affichées en **Quota GPU** dans la barre d’état quand votre admin vous a fixé une limite ; sans limite, il n’y a pas de chiffre de quota. Un moteur cloud n’en consomme pas. Seuls les admins voient le coût d’une génération cloud.
+### Lire l’estimation
+
+L’estimation se trouve à droite de la barre dès qu’un moteur est choisi : une ligne courte avec le temps, la mémoire (un modèle cloud n’en a pas) et, sur une fenêtre large, les minutes de quota ou, pour les admins, le coût. Survolez-la pour le détail. Elle suit vos modifications une demi-seconde après que vous vous êtes arrêté, une fois le projet enregistré : d’ici là elle indique « L’estimation se met à jour une fois le projet enregistré. » et, pendant le calcul, « Estimation… ». Le détail comporte ces lignes :
+
+- **Portée.** Les plans, les variantes et la résolution : « 2 plans × 2 variantes en 832×480 ».
+- **Temps.** « Temps ≈ 4 min sur MiniMax H3 (mesuré sur 3 prises) ». Il vient des prises déjà faites avec le même preset, le même moteur et la même résolution, dont la durée réelle a été mesurée : c’est la calibration. Tant qu’il n’y en a pas, on lit « Temps : — (pas encore de mesure sur MiniMax H3) » et la barre affiche « — ». Il se remplit après quelques générations.
+- **Mémoire.** « Mémoire ≈ 22,5 Go, 16,0 Go libres sur Local Generation ». C’est une estimation d’après la taille des fichiers de modèle, jamais une garantie. « Mémoire : inconnue » quand elle n’a pas pu être estimée.
+- **Quota.** Vos minutes GPU Video Producer mensuelles : « Quota : 5 min nécessaires, 40 min restantes sur 60 ce mois-ci », « Quota : exempté » si vous êtes exempté, et « Cloud : aucun quota GPU consommé » pour un modèle cloud, qui n’en consomme pas. Il s’affiche en **Quota GPU** dans la barre d’état quand votre admin vous a fixé une limite. Quand vos minutes sont limitées, les minutes d’une prise sont réservées à sa création et ajustées à sa durée réelle quand elle se termine ; une prise qui échoue ou qui est annulée les rend. Sans limite, ou si vous êtes exempté, aucune minute n’est réservée ni ajustée. Tant qu’un preset n’a pas été mesuré, chaque seconde de vidéo compte pour 10 secondes de GPU.
+- **Coût.** Pour les admins seulement, avec un modèle cloud : « Coût ≈ » suivi du montant, ou « Coût : inconnu pour ce modèle » quand le fournisseur ne publie pas de prix.
+
+### Blocages et avertissements
 
 Ce qui bloque **Générer la sélection** (le bouton est désactivé et la barre affiche la première raison ; survolez-la pour les voir toutes) :
 
@@ -228,29 +239,85 @@ Ce qui bloque **Générer la sélection** (le bouton est désactivé et la barre
 - ni direction globale ni instruction locale dans la plage ;
 - une instruction locale vide dans la plage ;
 - un mode de sortie 3D sans plan 3D dans la plage ;
-- un quota épuisé (« Quota GPU dépassé » : passez en brouillon ou utilisez le fournisseur cloud).
+- aucun moteur, ou un moteur qui n’est plus disponible ;
+- un preset absent ou qui ne vous est plus attribué (« Ce preset est absent ou ne vous est plus attribué. ») ;
+- un profil que le moteur ne sait pas générer (« Wan 2.1 / 2.2 ne sait pas générer le profil Ref2VA : passez en FL2VA ou sur MiniMax H3. ») ;
+- des fichiers de modèle que votre admin n’a pas installés (« Modèles à installer pour ce preset : … ») : demandez-les-lui ;
+- un moteur cloud sans modèle (« Choisissez un modèle cloud pour ce moteur. ») ;
+- un plan en Ref2VA sans aucune référence à envoyer (« “Plan 2” n’a pas de référence : Ref2VA en demande au moins une pour ce plan. ») ;
+- un quota épuisé (« Quota GPU dépassé : 5 min nécessaires, 2 min restantes ce mois-ci. ») : passez à une qualité moins chère, à une plage plus courte ou à un modèle cloud.
 
-Ce qui avertit seulement, sans bloquer : une estimation de mémoire supérieure à celle du moteur. La barre affiche un avertissement (« N Go de VRAM nécessaires, M Go disponibles sur … : passez en brouillon, baissez la résolution ou changez de moteur ») et la génération continue. Le profil FL2VA sans aucune frame dans la plage avertit aussi : « Aucune frame dans la plage : les plans seront générés à partir du texte seul. » La génération continue, à partir du texte seul.
+Les boutons d’un seul plan (sur une carte du Storyboard, dans l’inspecteur, dans le visualiseur) n’attendent pas l’estimation, mais le serveur de votre admin applique les mêmes règles et la page affiche la première raison dans un message.
 
-Pendant une génération, la barre affiche l’étape et la progression, avec **Pause** (puis **Reprendre**) et **Annuler**. Quand elle se termine, un bouton indique combien de prises sont prêtes et ouvre les résultats. **Ajouter à la file** garde la plage courante pour plus tard : les fenêtres en file sont listées sous **File de génération** dans Director IA, onglet **Résultats**, et comptées dans la barre d’état.
+Ce qui avertit seulement, sans bloquer :
 
-Dans cette version, les moteurs sont des moteurs fictifs et la génération est simulée : les chiffres de l’estimation sont indicatifs, la progression est une simulation et aucun GPU n’est utilisé (chapitre 17).
+- une estimation de mémoire supérieure à celle du GPU : « Passera par la RAM de l’hôte, plus lent. » Les poids passent par la mémoire du serveur. La génération continue, plus lentement, et échoue si le serveur manque de mémoire pour cela (chapitre 18) ;
+- le profil FL2VA sans frame liée à un plan : « “Plan 2” n’a pas de frame liée : il sera généré à partir du texte seul. » La génération continue à partir du texte, et la carte de la prise indique « texte seul » ;
+- un plan plus long que ce que le moteur permet : « “Plan 2” dépasse la durée permise par ce moteur : il sera coupé à 15 s. »
 
-Disponible à partir de l’étape 4 : la génération réelle, les moteurs activés par votre admin, le temps mesuré sur vos propres générations, votre vrai quota mensuel et, pour les admins seulement, le coût cloud. L’avertissement pour une estimation de mémoire supérieure à celle du moteur indique alors que les poids passeront par la RAM de l’hôte, plus lentement.
+Deux remarques n’apparaissent que dans l’infobulle de l’estimation : « La mémoire nécessaire n’a pas pu être estimée. » et « Aucun temps mesuré pour ce moteur et cette résolution. »
+
+### Générer
+
+**Générer la sélection** (Ctrl+G) enregistre le projet et lance une prise par plan et par variante, chacune avec sa propre graine. Un plan est construit à partir de son instruction locale suivie des champs remplis de la direction globale, et de ses frames et références, selon le profil (voir plus bas). Si le projet n’a pas pu être enregistré, rien ne démarre (« Le projet n’a pas pu être enregistré : génération non lancée. »).
+
+- Les boutons d’un seul plan lancent des brouillons pour ce plan seulement : **Générer** sur une carte du Storyboard, **Générer des brouillons** dans l’inspecteur et le visualiseur, et « 1 brouillon de plus » (ou « 2 brouillons de plus ») dans l’inspecteur, onglet **Prises**.
+- Tant que des prises sont en cours, **Générer la sélection** est refusé avec « Une génération est déjà en cours. » La barre affiche alors la progression et **Annuler**. Un plan qui n’a aucune prise en cours peut encore être lancé par ses propres boutons.
+- Votre admin limite le nombre de générations que vous pouvez avoir en cours en même temps. Les prises au-delà attendent en **En file** et démarrent d’elles-mêmes, l’une après l’autre, quand les autres se terminent.
+- **Ajouter à la file** garde la plage courante pour plus tard. Les fenêtres en file sont listées sous **File de génération** dans Director IA, onglet **Résultats**, et comptées dans la barre d’état. **Générer la file** les lance et **Vider** efface la liste. Cette liste vit dans votre page : elle n’est pas enregistrée avec le projet.
+
+### Suivre les prises
+
+- Chaque prise affiche son état : **En file**, **En cours** (avec l’étape et le pourcentage), **Échec**, **Annulée**, ou, une fois terminée, sa durée. La barre affiche l’étape et la progression de l’ensemble du lot, la carte du Storyboard affiche la progression de son plan, et **Fenêtre › Tâches en arrière-plan** compte les prises en cours (« 2 prises en cours »).
+- Quand un lot se termine, un message indique combien de prises sont prêtes (« 2 prises brouillons prêtes ») avec un bouton **Voir** qui ouvre les résultats, et un autre combien ont échoué (« 1 prise en échec »). PotionUI envoie aussi les notifications « Video Producer: take ready » et « Video Producer: take failed » (leur libellé reste en anglais), si bien que vous pouvez quitter la page : les générations continuent sans elle, et les prises sont là à votre retour.
+- **Annuler** sur une carte arrête cette prise. **Annuler** dans la barre, ou **Production › Annuler la génération**, arrête toutes les prises en cours (« Génération annulée » ; « Aucune génération en cours. » s’il n’y en a pas). Les minutes GPU qu’elles avaient réservées sont rendues.
+- **Réessayer** sur une carte en échec lance une nouvelle prise pour le même plan, avec la même graine, la même qualité et le même moteur. La prise en échec reste dans la liste.
+
+### Profils selon le preset
+
+Le **Profil H3 du projet** (Director IA, onglet **Direction**) dit ce qui guide la génération. Ce qu’un moteur sait faire dépend de son preset, et la page grise les profils qu’il ne sait pas générer.
+
+| Profil | Wan 2.1 / 2.2, LTX-2 / 2.3, LTX-2.5, modèles cloud | MiniMax H3 | MiniMax H3 Fast et VDN |
+|---|---|---|---|
+| FL2VA | Oui | Oui | Oui |
+| Ref2VA | Grisé | Oui | Grisé |
+| Hybrid AV | Grisé | Oui | Oui |
+
+- Un profil grisé porte un badge tel que « Ref2VA · Hybrid AV : MiniMax H3 seulement », avec l’explication « Wan 2.1 / 2.2 ne sait pas générer Ref2VA, Hybrid AV : les images de référence (Ref2VA) et le son généré (Hybrid AV) demandent MiniMax H3. » Dans l’onglet **Références**, « Non envoyées avec ce moteur » vous dit que le moteur ignore les références (« Les références ne partent qu’avec le profil Ref2VA sur MiniMax H3 ; Wan 2.1 / 2.2 les ignore. »).
+- **FL2VA** utilise les frames liées au plan : une frame de début et une de fin donnent une prise « première et dernière frames », une frame de début seule « première frame », et aucune frame « texte seul », avec l’avertissement ci-dessus.
+- **Ref2VA** envoie à MiniMax H3 les références du plan, puis les références globales : au plus 9 images, 3 vidéos et 3 fichiers audio.
+- **Hybrid AV** fonctionne comme FL2VA sur MiniMax H3, dont le modèle produit l’image et le son ensemble. La piste qui guide la performance (Atelier avancé) n’est pas encore envoyée (chapitre 17).
 
 ## 9. Prises et final
 
-Une prise est une vidéo générée pour un plan.
+Une prise est une vidéo générée pour un plan. Sa vidéo est une génération PotionUI ordinaire : elle reste dans votre historique de générations (la galerie), même si vous supprimez la prise ici.
 
-- Les brouillons sont faits à la résolution choisie par votre admin (832×480 sauf changement). La cadence d’une prise est imposée par le preset (Wan 16 i/s, MiniMax-H3 24 i/s). La timeline et les exports utilisent la cadence du projet.
-- Plusieurs variantes sont faites par plan : A, B, etc. Elles sont listées dans l’inspecteur, onglet **Prises** (en **Finales** et **Brouillons**), et dans Director IA, onglet **Résultats**. Cliquez sur l’icône en forme d’œil pour en prévisualiser une dans le visualiseur, et utilisez **Comparer** sur deux prises pour les voir côte à côte.
-- Cliquez sur une prise dans l’inspecteur, ou sur **Utiliser** dans l’onglet Résultats, pour en faire celle que le plan joue ; elle affiche alors une coche, ou **Utilisée**. Le bouton en forme de drapeau (**Marquer à reprendre**) signale une prise à refaire, et la prise affiche alors **À reprendre**. **Instructions utilisées** ouvre les instructions exactes d’une prise : la direction globale, les instructions locales, les références et Control video, le profil, le mode et la graine.
-- **Final** sur une prise brouillon la passe en final. Par défaut, la prise est agrandie avec SeedVR2, en 720p, 1080p, 1440p ou 2160p. **Re-render**, l’action secondaire, génère le plan à nouveau à la résolution maximale du preset, avec la même graine. La nouvelle prise indique celle dont elle vient (« depuis A »).
-- **Assembler les prises choisies** (onglet Résultats) met dans le montage les prises que vous avez choisies.
+- Les brouillons sont faits à la résolution choisie par votre admin (832×480 sauf changement) ou à la plus proche que le moteur propose. La cadence d’une prise est imposée par le preset (Wan 16 i/s, MiniMax H3 24 i/s). La timeline et les exports utilisent la cadence du projet.
+- Plusieurs variantes sont faites par plan : A, B, etc. Une nouvelle génération pour le même plan continue avec les lettres libres suivantes (C, D…), séparément pour les brouillons et les finals ; **Réessayer** et **Passer en final** gardent la lettre de la prise dont elles partent. Elles sont listées dans l’inspecteur, onglet **Prises** (en **Finales** et **Brouillons**), et dans Director IA, onglet **Résultats**, regroupées par plan.
 
-Dans cette version, les prises sont simulées : chaque prise affiche une vignette procédurale, le numéro du plan sur un dégradé, marquée **Simulé** (chapitre 17).
+### La carte de prise
 
-Disponible à partir de l’étape 4.
+- La vignette porte la lettre de la prise. Cliquez dessus pour prévisualiser la prise dans le visualiseur (« Prévisualiser la prise A ») ; **Revenir à la séquence** vous ramène.
+- La première ligne dit « Brouillon », « Final » ou « Final · agrandi », puis l’état (« En file », « En cours », « Échec », « Annulée ») ou, une fois terminée, la durée. Les lignes suivantes donnent le profil et la façon dont le plan a démarré (« FL2VA · première et dernière frames », « FL2VA · texte seul », « FL2VA · première frame », « Ref2VA · références »), la résolution et, pour un final, la prise dont il vient (« issue de A »), la graine (« Graine 123456 ») et le moteur qui l’a produite (le preset ou le modèle, puis le backend).
+- Une prise en file n’affiche que son état (« En file ») au-dessus d’une ligne vide ; une prise en cours de génération affiche l’étape, le pourcentage et une barre de progression. Quand elle échoue, elle affiche la raison que donne PotionUI (en anglais) ou, s’il n’en donne aucune, « La génération a échoué (cuda_oom). » avec le code.
+- **Comparer** met la prise à côté d’une seconde dans le visualiseur, toutes deux lues en boucle (« Choisissez une seconde prise à comparer »). **Garder** (l’étoile) et **Rejeter** (le pouce vers le bas) marquent la prise ; cliquez de nouveau pour retirer la marque. L’export signale un plan dont la prise est marquée Rejeter. **Détails de la génération** ouvre la fenêtre de PotionUI sur la génération. **Supprimer** demande « Supprimer cette prise ? » (« La prise A de “Plan 2” quitte la liste. La vidéo reste dans votre historique de générations. »).
+- Une capture de cartes de prise, dans les thèmes sombre et clair de l’interface en anglais, se trouve dans `docs/screenshots/takes-cards.png`.
+- Sur une prise en cours, **Annuler** l’arrête. Sur une prise en échec, **Réessayer** lance une nouvelle prise.
+
+### Choisir une prise
+
+**Choisir** met la prise sur le plan : elle joue sur la timeline, le plan passe en Brouillon ou en Final, et la carte affiche une coche et **Utilisée**. Une seule prise est choisie par plan. Le premier brouillon qui se termine pour un plan encore « À générer » y est mis pour vous, et un final terminé aussi. Dans le visualiseur, une prise prévisualisée hors montage a **Utiliser cette prise**. **Assembler les prises choisies** (onglet Résultats) met dans le montage toutes les prises choisies ; sans aucune, la page dit « Choisissez d’abord des prises pour les plans. »
+
+### Passer en final
+
+**Passer en final** sur une carte brouillon (aussi le bouton d’une carte du Storyboard, **Passer la prise A en final** dans l’inspecteur, **Plan › Passer la prise en final** et Ctrl+Shift+G) ouvre la fenêtre « Passer en final · Plan 2 · A » avec la ligne « Brouillon en 832×480 · graine 123456 ». Elle propose deux voies :
+
+- **Agrandissement** est la voie par défaut. Le moteur agrandit la prise telle quelle : l’image et le mouvement ne changent pas, et c’est le plus rapide. Les prises de Wan, LTX, MiniMax H3 Fast et VDN et des modèles cloud passent par SeedVR2 (« SeedVR2 agrandit cette prise telle quelle : le plus rapide, le mouvement ne change pas. ») ; une prise du preset MiniMax H3 de base utilise le mode d’agrandissement de son propre preset (« MiniMax H3 agrandit cette prise avec son propre mode d’agrandissement : le mouvement ne change pas. »). Choisissez la **Résolution cible** : 720p, 1080p, 1440p ou 4K (la fenêtre part de la résolution de votre projet), puis cliquez sur « Agrandir en 1080p ».
+- **Générer à nouveau en pleine résolution** génère le plan à nouveau à la plus grande résolution du moteur, avec la même graine : « plus lent, le résultat peut légèrement différer. »
+
+Quand aucun agrandisseur ne vous est attribué, la fenêtre indique « Agrandisseur indisponible » (« Aucun agrandisseur ne vous est attribué : demandez à un administrateur d’activer SeedVR2, ou générez à nouveau en pleine résolution. »), les résolutions sont grisées et seul le nouveau rendu est proposé. Une prise du preset MiniMax H3 de base n’a pas besoin de SeedVR2, tant que son preset vous est attribué. Une capture de cette fenêtre, dans les thèmes sombre et clair de l’interface en anglais, se trouve dans `docs/screenshots/make-final.png`.
+
+La nouvelle prise est une prise **Final** (« Final » ou « Final · agrandi ») qui dit de quel brouillon elle vient (« issue de A »). Vous obtenez « Agrandissement en 1080p lancé » ou « Rendu en 1280×720 lancé », le final apparaît dans la liste de cartes quand il se termine, et il est mis sur le plan (« Version finale prête et appliquée au plan »). Un final consomme des minutes GPU comme toute prise et est vérifié par rapport à votre quota.
 
 ## 10. Assistant
 
@@ -277,11 +344,13 @@ La fenêtre **Bibliothèque & assistant de prompts** s’ouvre par **Fenêtre �
 
 Les trois profils H3 et ce que chacun demande sur la plage :
 
-| Profil | Sens | Il demande |
-|---|---|---|
-| FL2VA | Continuité entre les images de départ et d’arrivée. | Des frames de départ et d’arrivée sur la plage. Sans aucune frame, les plans sont générés à partir du texte seul. |
-| Ref2VA | Préserver l’identité des références pendant l’action. | Une référence d’identité (personnage, objet). Avec MiniMax-H3, la génération suit les références quand elle sera réelle (à partir de l’étape 4). |
-| Hybrid AV | La bande son, le rythme et le dialogue guident l’image. | Une piste audio existante sur la plage (dialogue ou musique). |
+| Profil | Sens | Il demande | Moteurs |
+|---|---|---|---|
+| FL2VA | Continuité entre les images de départ et d’arrivée. | Des frames de départ et d’arrivée sur la plage. Sans aucune frame, les plans sont générés à partir du texte seul. | Tous. |
+| Ref2VA | Préserver l’identité des références pendant l’action. | Une référence d’identité (personnage, objet). La génération suit vos références. | MiniMax H3 seulement (pas ses variantes Fast et VDN). |
+| Hybrid AV | La bande son, le rythme et le dialogue guident l’image. | Une piste audio existante sur la plage (dialogue ou musique). | MiniMax H3, Fast et VDN. |
+
+Le moteur, et non le tableau, a le dernier mot : la page grise un profil que le moteur choisi ne sait pas générer (chapitre 8). Les pistes audio du projet ne sont pas encore envoyées au moteur : MiniMax H3 produit le son lui-même, et la piste qui guide la performance reste simulée (chapitre 17).
 
 Quand une Control video est présente, le mouvement vient du guide.
 
@@ -307,7 +376,7 @@ Les quatre pistes d’un nouveau projet sont vides. **Audio › Importer un fich
 - **Vers un autre logiciel.** Final Cut Pro (`.fcpxml`), OpenTimelineIO (`.otio`) et EDL CMX 3600 (`.edl`). Ce sont de vrais fichiers.
 - **Sous-titres.** Un fichier SRT construit à partir du texte des dialogues et des titres. **Fichier › Exporter les sous-titres…** ouvre cet onglet.
 
-Avant l’export, la fenêtre signale les plans qui ne sont pas encore en version finale, les prises marquées **À reprendre** et les contradictions de direction non résolues. Les exports sont écrits dans votre stockage PotionUI, dans un dossier `video_producer/exports/`, et vous les téléchargez depuis la page. Votre admin fixe un budget de taille pour ce dossier, par utilisateur.
+Avant l’export, la fenêtre signale les plans qui ne sont pas encore en version finale, les plans qui utilisent une prise que vous avez marquée **Rejeter** et les contradictions de direction non résolues. Les exports sont écrits dans votre stockage PotionUI, dans un dossier `video_producer/exports/`, et vous les téléchargez depuis la page. Votre admin fixe un budget de taille pour ce dossier, par utilisateur.
 
 Dans cette version, seuls les deux derniers onglets produisent des fichiers. Leur bouton (le mot « Télécharger » suivi du nom du fichier, qui vient du nom du projet) construit le fichier dans votre navigateur et l’enregistre par son intermédiaire : rien n’est écrit dans votre stockage PotionUI. Les chemins de médias à l’intérieur des fichiers Final Cut Pro, OpenTimelineIO et EDL sont fabriqués à partir des noms des médias, ce ne sont pas des chemins de vrais fichiers vidéo, et un plan sans média devient un vide. L’onglet **Vidéo** affiche une barre de progression et se termine par une note disant qu’aucun fichier vidéo n’est écrit à cette étape.
 
@@ -379,56 +448,64 @@ Quand les raccourcis fonctionnent :
 
 ## 17. Ce qui est simulé
 
-Certaines parties gardent leur interface mais ne font pas encore la vraie chose. Elles portent un badge gris pointillé, **Simulé**, jamais jaune : le jaune est réservé aux vrais points à vérifier. **Aide › Fonctions simulées** ouvre la liste.
+Certaines parties gardent leur interface mais ne font pas encore la vraie chose. Elles portent un badge gris pointillé, **Simulé**, jamais jaune : le jaune est réservé aux vrais points à vérifier. **Aide › Fonctions simulées** ouvre la liste. Le même badge gris marque aussi ce que le moteur choisi ne sait pas faire (un profil grisé, « Non envoyées avec ce moteur » sur les références, « Non transmis à ce moteur » sur les réglages de l’atelier, « Agrandisseur indisponible » ; chapitres 8 et 9).
 
-Le badge apparaît dans l’en-tête des fenêtres **Référencer un fichier Gaussian Splat** et **Atelier Sound design** (intitulé **Voix et dialogues** pour une voix) ; à côté des formats **Fichier maître · ProRes 422** et **Archive · H.265**, à côté des stems audio et dans le pied de l’onglet **Vidéo** de la fenêtre d’export ; sur le bouton d’automation des tranches de la console ; sur la **Scène d’essai** et sur l’aperçu d’un fichier Gaussian Splat dans la scène 3D ; et sur une prise générée, dans le visualiseur (« Prise finale · IA simulée », « Brouillon 720p · IA simulée ») et sur sa vignette. Quelques notifications sont signalées de la même façon.
+Le badge **Simulé** apparaît dans l’en-tête des fenêtres **Référencer un fichier Gaussian Splat** et **Atelier Sound design** (intitulé **Voix et dialogues** pour une voix) ; à côté des formats **Fichier maître · ProRes 422** et **Archive · H.265**, à côté des stems audio et dans le pied de l’onglet **Vidéo** de la fenêtre d’export ; sur le bouton d’automation des tranches de la console ; sur la **Scène d’essai** et sur l’aperçu d’un fichier Gaussian Splat dans la scène 3D ; et sur une prise faite par une version antérieure du projet, sur sa carte (« Prise simulée d’une version antérieure du projet : lecture seule. ») et dans le visualiseur (« Prise finale · IA simulée », « Brouillon 720p · IA simulée »). Les prises de la génération réelle ne le portent jamais. Quelques notifications sont signalées de la même façon.
 
-Ce qui fonctionne déjà dans cette version : les projets enregistrés, **Fichier › Ouvrir…**, **Fichier › Historique des versions…** et **Fichier › Nouveau projet…**, l’import de vos images, vidéos et fichiers audio avec leurs vignettes et leur lecture, le montage sur la timeline (ajustement des plans, fondus, coupe, magnétisme, plage, marqueurs, annuler et rétablir), la sélection et l’inspecteur, le Storyboard, la bibliothèque de prompts et le compositeur, le contrôle des contradictions de direction, le raccord de couleur, la caméra, les trajectoires et les positions clés de la scène 3D, la console de mixage qui joue vos fichiers audio, et les fichiers Final Cut Pro, OpenTimelineIO, EDL et SRT, qui sont de vrais fichiers.
+Ce qui fonctionne déjà dans cette version : la génération elle-même (les moteurs activés par votre admin, l’estimation, les prises avec leur progression, l’annulation et la reprise, les finals par agrandissement ou nouveau rendu, le quota et les notifications), les projets enregistrés, **Fichier › Ouvrir…**, **Fichier › Historique des versions…** et **Fichier › Nouveau projet…**, l’import de vos images, vidéos et fichiers audio avec leurs vignettes et leur lecture, le montage sur la timeline (ajustement des plans, fondus, coupe, magnétisme, plage, marqueurs, annuler et rétablir), la sélection et l’inspecteur, le Storyboard, la bibliothèque de prompts et le compositeur, le contrôle des contradictions de direction, le raccord de couleur, la caméra, les trajectoires et les positions clés de la scène 3D, la console de mixage qui joue vos fichiers audio, et les fichiers Final Cut Pro, OpenTimelineIO, EDL et SRT, qui sont de vrais fichiers.
 
 La fenêtre **Fonctions simulées** liste huit éléments. Pour chacun, le tableau dit ce qu’il fait dans cette version et ce qu’il devient quand toutes les étapes sont livrées.
 
 | Élément de la fenêtre | Dans cette version | Quand toutes les étapes sont livrées |
 |---|---|---|
-| **Génération IA et rendu 3D** | Progression, étapes et prises simulées : chaque prise affiche une vignette procédurale numérotée, marquée « Simulé ». Les estimations de temps, mémoire, quota et coût sont indicatives. | Les prises sont de vrais fichiers vidéo produits par le moteur choisi (ce poste, un serveur d’atelier ou un modèle cloud) ; la progression et les erreurs viennent du moteur. L’estimation indique le temps GPU (d’après vos propres générations ici, « — » s’il n’y en a pas), la mémoire, votre quota mensuel et, pour les admins seulement, le coût cloud. **Final** agrandit la prise choisie avec SeedVR2 par défaut ; **Re-render** la régénère à la résolution maximale du preset avec la même graine. Avec MiniMax-H3, le profil Ref2VA conditionne réellement la génération sur vos références. Disponible à partir de l’étape 4. Les modes de rendu 3D restent simulés. |
+| **Modes de rendu 3D et réglages du moteur** | Les modes de sortie « Rendu 3D » et « Rendu 3D + IA » ne lancent rien. Les réglages grisés dans l’atelier avancé ne sont pas transmis au moteur : la graine (chaque prise tire la sienne), la résolution finale (le final prend la plus grande résolution du moteur), les étapes, le CFG, les LoRA, les fenêtres, la cohérence, les post-traitements et le pilote audio Hybrid AV ; pas plus que les Control video et les poids du Hybrid builder. Les prises faites par les versions antérieures gardent leur vignette numérotée. | Reste simulé. La génération IA elle-même est réelle : voyez les chapitres 8 et 9. |
 | **Découpage du synopsis** | Une phrase devient un plan. | L’assistant propose le découpage. Disponible à partir de l’étape 5. |
 | **Contrôle d’identité** | La similarité entre plans est simulée. Le contrôle de couleur, lui, analyse réellement les images. | Le raccord de couleur est mesuré sur les vraies vignettes des prises (à partir de l’étape 6). Le pourcentage de ressemblance reste simulé, car aucune mesure d’identité n’est offerte aux plugins. |
 | **Rendu vidéo** | Aucun fichier vidéo n’est écrit. Les exports Final Cut, OTIO, EDL et SRT produisent de vrais fichiers. | Des vidéos H.264 MP4 ou WebM VP9 assemblées avec ffmpeg et écrites dans votre stockage. ProRes 422, H.265 et stems audio restent simulés : le convertisseur vidéo de PotionUI n’écrit que du H.264 MP4 ou du WebM VP9, et aucun rendu audio par rôle n’existe. Disponible à partir de l’étape 6. |
 | **Gaussian Splat** | Le fichier référencé n’est pas chargé ; la scène d’essai est un nuage de points généré. | Reste simulé : la scène reste un aperçu de points en 2D et les fichiers Gaussian Splat sont référencés, pas chargés. |
 | **Control video** | Le calcul du guide depuis la scène 3D est simulé. | Reste simulé : la vidéo de guide n’est pas rendue depuis la scène, une Control video importée n’est envoyée à aucun moteur et la capture 3D n’est pas rendue depuis la scène. Les modes de production **Rendu 3D** et **Rendu 3D + IA** dépendent de ce guide et restent simulés. |
-| **Voix et sound design** | La préparation est simulée ; la pré-écoute est une synthèse simple. | Reste simulé : personnage, timbre et texte ne produisent pas de parole, la synchronisation labiale n’a pas d’étape séparée (MiniMax-H3 fait image et son en une passe) et aucun preset ne prépare ambiances, bruitages, textures, impacts ou musique pour l’atelier. Le texte des dialogues alimente bien les sous-titres. |
+| **Voix et sound design** | La préparation est simulée ; la pré-écoute est une synthèse simple. | Reste simulé : personnage, timbre et texte ne produisent pas de parole, la synchronisation labiale n’a pas d’étape séparée (MiniMax H3 fait image et son en une passe) et aucun preset ne prépare ambiances, bruitages, textures, impacts ou musique pour l’atelier. Le texte des dialogues alimente bien les sous-titres. |
 | **Audio du montage** | Les fichiers audio que vous importez sont lus pour de vrai par la console : faders, muet et solo, panoramique, égaliseur, compresseur, envois et vumètres agissent dessus. Les sons préparés par l’atelier Sound design sont synthétisés en temps réel (WebAudio). | Reste simulé pour les sons de l’atelier, car aucun preset ne les prépare, et pour les courbes d’automation : le bouton d’automation ne change qu’un mode, aucune courbe n’est enregistrée. |
 
-La fenêtre ne liste pas les contrôles de l’**Atelier avancé** que le preset ne déclare pas : cohérence entre fenêtres, verrouillage de l’identité des personnages, priorité au guide de mouvement, le Hybrid builder et ses profils enregistrés, décalage audio / image, rythme du montage, guidage, chevauchement, longueur de fenêtre, LoRAs, post-traitements, piste qui guide la performance, synchronisation labiale, nommage des résultats et insertion automatique de la variante A. Ils sont visibles mais ne pilotent aucune génération : un preset n’expose que les contrôles qu’il déclare ; MiniMax-H3, par exemple, n’a ni guidage ni prompt négatif. Avec de vrais moteurs, ils restent visibles, grisés et marqués simulés.
+La fenêtre ne liste pas tous les réglages de l’**Atelier avancé** que le moteur n’utilise pas : cohérence entre fenêtres, verrouillage de l’identité des personnages, priorité au guide de mouvement, les fenêtres de génération avec leur longueur et leur chevauchement, la résolution finale, la graine, les étapes, le guidage (CFG), les LoRAs, la piste qui guide la performance, la synchronisation labiale, le rythme du montage, le décalage audio / image, le nommage des résultats, les post-traitements et l’insertion automatique de la variante A. Ils restent dans le projet, mais ils ne sont pas envoyés au moteur et ne pilotent aucune génération : un preset n’expose que les contrôles qu’il déclare ; MiniMax H3, par exemple, n’a ni guidage ni prompt négatif. L’atelier les grise et marque chacun du badge « Non transmis à ce moteur » (survolez-le : « Le Video Director construit la requête à partir des plans, de la direction, des frames et des références ; ce réglage reste dans le projet mais ne change pas les prises. »). Les **Variantes par fenêtre** restent actives. Les poids du Hybrid builder et ses profils enregistrés, et le guidage d’une Control video, ne sont pas envoyés non plus, mais ils ne sont pas grisés. Ce qui compte, c’est le moteur, la qualité, les variantes et ce qui est dans votre projet : la direction, les instructions locales, les frames et les références. La graine d’une prise est tirée par le serveur et affichée sur sa carte, et les résolutions suivent les règles du brouillon et du final du chapitre 8.
 
 L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video Producer, qui écrit les instructions de plan, corrige les contradictions avec la direction globale, découpe un synopsis en plans et vérifie la continuité, et vous approuvez chaque changement avant qu’il touche le projet (disponible à partir de l’étape 5).
 
 ## 18. Dépannage
 
-- **La barre Production n’affiche aucun moteur.** Votre admin n’a pas terminé la mise en place : un moteur, un preset vidéo qui vous est attribué. Demandez-lui d’ouvrir Admin → Plugins → Video Producer.
-- **L’estimation affiche « — » pour le temps.** Rien n’a encore été mesuré pour ce preset, ce moteur et cette résolution sur ce poste. Elle se remplit après quelques générations.
-- **Les poids passeront par la RAM de l’hôte, plus lentement.** L’estimation de mémoire dépasse celle du moteur. La génération n’est pas bloquée. Si le serveur manque de mémoire libre pour cela, le moteur refuse de démarrer et la prise échoue avec une erreur.
-- **Le quota est épuisé.** **Générer la sélection** est refusé jusqu’au mois suivant ou jusqu’à ce que votre admin relève la limite de votre plan. Les générations en cours ne sont pas arrêtées.
-- **Générer la sélection est désactivé.** Lisez le message de la barre : pas de plage, ni direction ni instruction locale, une instruction vide, un mode 3D sans plan 3D, ou le quota.
-- **Un avertissement dit que les plans seront générés à partir du texte seul.** Le profil FL2VA n’a aucune frame dans la plage. Ajoutez une frame de départ ou d’arrivée, ou choisissez un autre profil H3 ; la génération n’est pas bloquée.
-- **Les références sont ignorées avec MiniMax-H3.** Demandez à votre admin de vérifier le fichier de modèle choisi pour le mode Références.
-- **Une prise a échoué.** Le message et son code sont affichés sur la prise. Si PotionUI a redémarré pendant la génération, la prise est marquée en échec et la génération ne peut pas reprendre : relancez-la.
+- **La barre Production n’affiche aucun moteur.** Le menu indique « Aucun moteur ». Votre admin n’a pas terminé la mise en place : un moteur, un preset vidéo qui vous est attribué, ou un modèle vidéo activé chez le fournisseur cloud. Demandez-lui d’ouvrir Admin → Plugins → Video Producer.
+- **L’estimation affiche « — » pour le temps.** Rien n’a encore été mesuré pour ce preset, ce moteur et cette résolution (la calibration est vide). Elle se remplit après quelques générations.
+- **« Passera par la RAM de l’hôte, plus lent. »** L’estimation de mémoire dépasse celle du GPU. La génération n’est pas bloquée. Si le serveur manque de mémoire libre pour cela, le moteur refuse de démarrer et la prise échoue (`host_ram_oom`).
+- **Le quota est épuisé.** **Générer la sélection** dit « Quota GPU dépassé » jusqu’au mois suivant ou jusqu’à ce que votre admin relève la limite de votre plan. Les générations en cours ne sont pas arrêtées, et une prise qui échoue ou qui est annulée rend ses minutes. Les premières prises d’un preset comptent 10 secondes de GPU par seconde de vidéo, ce qui peut paraître généreux tant que les durées réelles n’ont pas été mesurées.
+- **Générer la sélection est désactivé.** Lisez le message de la barre : pas de plage, ni direction ni instruction locale, une instruction vide, un mode 3D sans plan 3D, aucun moteur, un preset qui n’est pas le vôtre, un profil que le moteur ne sait pas générer, des modèles à installer, un modèle cloud à choisir, ou le quota.
+- **« Modèles à installer pour ce preset : … ».** Votre admin n’a pas téléchargé les fichiers de modèle dont ce preset a besoin. Demandez-les-lui.
+- **Un avertissement dit que les plans seront générés à partir du texte seul.** Le profil FL2VA n’a aucune frame liée au plan. Ajoutez une frame de départ ou d’arrivée, ou choisissez un autre profil H3 ; la génération n’est pas bloquée.
+- **Une prise reste En file.** Votre admin limite le nombre de générations que vous pouvez avoir en cours en même temps : la prise démarre d’elle-même quand l’une des vôtres se termine. Si elle reste En file alors que rien de vous ne tourne, prévenez votre admin.
+- **Une prise a échoué.** La carte affiche la raison que donne PotionUI (en anglais) ou, s’il n’en donne aucune, « La génération a échoué » suivi d’un code. **Réessayer** lance une nouvelle prise pour le même plan, avec la même graine. Causes fréquentes : le GPU a manqué de mémoire (`cuda_oom` : essayez un brouillon, un plan plus court ou un autre moteur) ; un fichier de modèle manque sur le serveur (`missing_model_file` : demandez à votre admin de le télécharger de nouveau) ; le serveur a manqué de mémoire en faisant passer le modèle par sa RAM (`host_ram_oom`). Si PotionUI a redémarré pendant la génération, la prise est marquée en échec et la génération ne peut pas reprendre : utilisez **Réessayer**.
+- **« Agrandisseur indisponible » dans Passer en final.** Aucun agrandisseur ne vous est attribué : SeedVR2 agrandit les prises de Wan, LTX, MiniMax H3 Fast et VDN et des modèles cloud. Utilisez **Générer à nouveau en pleine résolution**, ou interrogez votre admin sur SeedVR2.
+- **Les références sont ignorées avec MiniMax H3.** Demandez à votre admin de vérifier le fichier de modèle choisi pour le mode Références. Le moteur ignore les références d’un profil autre que Ref2VA, et de tout autre preset.
+- **J’ai fermé la page pendant une génération.** Les prises continuent ; rouvrez le projet pour les retrouver. Les notifications vous disent quand elles se terminent.
 - **Un export échoue.** Interrogez votre admin sur ffmpeg, ou libérez de la place dans vos exports : le dossier a un budget de taille.
 - **La barre projet indique « Non enregistré — réessayer ».** Le dernier enregistrement a échoué : la connexion a été coupée, ou le serveur a refusé le projet. Un message dit lequel. Cliquez sur l’état d’enregistrement ou sur le bouton **Réessayer** du message pour réessayer. Vos modifications restent dans la page et la modification suivante réessaie aussi. Tant qu’un enregistrement ne passe pas, ouvrir un autre projet ou restaurer une version demande de confirmer avant d’abandonner ces modifications. Si le message dit que le contenu a été refusé ou que le projet est trop volumineux, voyez votre admin : recharger la page ferait perdre les modifications non enregistrées.
 - **« Projet rechargé : il a été modifié ailleurs ».** Le projet a été enregistré depuis un autre onglet, une autre fenêtre ou un autre appareil après son ouverture chez vous, alors la page a chargé la version enregistrée. Les modifications que vous n’aviez pas enregistrées dans cette page sont perdues. Travaillez sur un projet à un seul endroit à la fois ; **Fichier › Historique des versions…** ramène un état antérieur.
 - **« Ce projet a été supprimé ailleurs ».** Le projet a été supprimé depuis un autre onglet ou un autre appareil pendant qu’il était ouvert ici. La page a ouvert votre projet modifié le plus récemment, ou créé le projet de départ. Les modifications que vous n’aviez pas enregistrées sont perdues.
-- **Un média ne s’affiche pas ou ne se lit pas.** Son fichier n’est plus disponible dans votre bibliothèque ou votre galerie PotionUI. Importez-le à nouveau.
+- **Un média ne s’affiche pas ou ne se lit pas.** Son fichier n’est plus disponible dans votre bibliothèque ou votre galerie PotionUI. Importez-le à nouveau. Une prise dont vous avez supprimé la génération de la galerie ne se lit plus non plus.
 - **« 1 fichier n’a pas pu être importé » (ou « N fichiers n’ont pas pu être importés »).** Le fichier n’est plus disponible dans la bibliothèque ou la galerie, ou son type n’est pas accepté par la fenêtre : images et vidéos pour **Importer des fichiers…** et **Depuis la galerie PotionUI**, audio pour **Importer un fichier audio…**.
 
-Disponible à partir de l’étape 4. Les exports à partir de l’étape 6.
+Les exports à partir de l’étape 6.
 
 ## 19. Glossaire
 
 | Français | English | Sens |
 |---|---|---|
 | plan | shot | Un morceau du film, une génération. |
-| prise | take | Une version générée d’un plan. |
+| prise | take | Une version générée d’un plan : une vraie vidéo produite par le moteur choisi. |
 | brouillon | draft | Une prise rapide, en résolution réduite, pour juger le mouvement et le cadrage. |
-| final | final | La prise retenue, agrandie ou régénérée. |
+| final | final | La prise retenue, agrandie (agrandissement) ou générée à nouveau à la plus grande résolution (nouveau rendu). |
+| moteur | engine | Ce qui produit les prises : un preset vidéo sur le matériel de votre admin, ou un modèle cloud. |
+| variante | variant | Une des prises (A, B, …) faites pour un même plan en une génération. |
+| graine | seed | Le nombre qui fixe le hasard d’une prise ; la même graine donne une prise semblable. |
+| calibration | calibration | Les durées réelles de vos générations passées, gardées par preset, moteur et résolution, que l’estimation utilise pour son temps ; elle affiche « — » tant qu’il n’y en a pas. |
 | raccord | match | Faire se ressembler deux plans voisins (couleur) ou garder la même identité. |
 | fondu | fade | Un début ou une fin progressive d’un clip. |
 | tête de lecture | playhead | La position courante sur la timeline. |

@@ -10,7 +10,6 @@
 	"size.large": "Grandes vignettes",
 	"placeholder": "Plan à générer",
 	"seamIssue": "Raccord à vérifier avec le plan précédent",
-	"paused": "En pause",
 	"shotName": "Nom du plan {n}",
 	"takes.one": "· {count} prise",
 	"takes.other": "· {count} prises",

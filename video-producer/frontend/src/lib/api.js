@@ -1,3 +1,5 @@
+import { progressText } from './generation.js';
+
 const CODE_BY_STATUS = {
 	400: 'invalid_request',
 	401: 'unauthorized',
@@ -84,7 +86,29 @@ export function unwrap(payload) {
 	return { ok: false, error: normalizeError(payload) };
 }
 
-async function call(api, method, path, body) {
+async function rawCall(api, method, path, body, signal) {
+	try {
+		const init = { method: method.toUpperCase(), signal };
+		if (body !== undefined) {
+			init.headers = { 'Content-Type': 'application/json' };
+			init.body = JSON.stringify(body);
+		}
+		const response = await api.fetchRaw(path, init);
+		let payload = null;
+		try {
+			payload = await response.json();
+		} catch {
+			payload = null;
+		}
+		if (!response.ok) return { ok: false, error: normalizeError(payload, response.status) };
+		return unwrap(payload);
+	} catch (err) {
+		return thrown(err);
+	}
+}
+
+async function call(api, method, path, body, signal) {
+	if (signal && typeof api?.fetchRaw === 'function') return rawCall(api, method, path, body, signal);
 	if (typeof api?.request === 'function') {
 		try {
 			return unwrap(await api.request(method.toUpperCase(), path, body));
@@ -125,18 +149,199 @@ function quotaOf(limits) {
 	return { kind: text(entry.kind), limit, used, remaining: Math.max(0, remaining), resetsAt: text(entry.resets_at) || null };
 }
 
+const ENGINE_KINDS = ['local', 'remote', 'cloud'];
+
+function strings(values) {
+	return Array.isArray(values) ? values.filter((value) => typeof value === 'string' && value) : [];
+}
+
+function normalizeModel(value) {
+	if (!isObject(value) || !text(value.id)) return null;
+	return {
+		id: value.id,
+		name: text(value.name) || value.id,
+		providerModelId: text(value.provider_model_id) || null,
+		tasks: strings(value.tasks),
+		typicalSeconds: number(value.typical_seconds),
+		maxSeconds: number(value.max_seconds)
+	};
+}
+
+export function normalizeEngine(value) {
+	if (!isObject(value) || !text(value.id) || !ENGINE_KINDS.includes(value.kind)) return null;
+	return {
+		id: value.id,
+		name: text(value.name) || value.id,
+		kind: value.kind,
+		driver: text(value.driver) || null,
+		device: text(value.execution_device) || null,
+		vramTotal: number(value.vram_total_gb),
+		vramFree: number(value.vram_free_gb),
+		isDefault: value.is_default === true,
+		models: value.kind === 'cloud' ? (list(value.models, normalizeModel) ?? []) : []
+	};
+}
+
+function normalizeResolution(value) {
+	if (typeof value === 'string' && value) return { value, label: value };
+	if (!isObject(value) || !text(value.value)) return null;
+	return { value: value.value, label: text(value.label) || value.value };
+}
+
+export function normalizePreset(value) {
+	if (!isObject(value) || !text(value.id)) return null;
+	const modes = Array.isArray(value.modes) ? strings(value.modes) : isObject(value.modes) ? Object.keys(value.modes) : [];
+	const limits = isObject(value.limits) ? value.limits : {};
+	const directorModes = strings(value.director_modes);
+	return {
+		id: value.id,
+		name: text(value.name) || value.id,
+		cloud: value.engine === 'cloud',
+		driver: text(value.driver) || null,
+		backendId: text(value.backend_id) || null,
+		video: Boolean(value.video_director) || directorModes.length > 0,
+		upscaler: value.upscaler === true,
+		modes,
+		resolutions: list(value.resolutions, normalizeResolution) ?? [],
+		fps: number(value.fps),
+		fpsLocked: value.fps_locked === true,
+		limits: { defaultDuration: number(limits.default_duration), maxDuration: number(limits.max_duration) },
+		directorModes,
+		profiles: Array.isArray(value.profiles) ? strings(value.profiles) : null
+	};
+}
+
 export function normalizeMe(data) {
 	const me = isObject(data) ? data : {};
 	const user = isObject(me.user) ? me.user : {};
 	const plugin = isObject(me.plugin) ? me.plugin : {};
+	const settings = isObject(me.settings) ? me.settings : {};
+	const features = isObject(me.features) ? me.features : {};
 	return {
 		locale: text(me.locale) || null,
 		version: text(plugin.version) || null,
 		username: text(user.username) || text(me.username),
 		isAdmin: me.is_admin === true || user.is_admin === true,
 		quota: quotaOf(me.limits),
-		lastProjectId: text(me.last_project_id) || null
+		lastProjectId: text(me.last_project_id) || null,
+		engines: list(me.engines, normalizeEngine) ?? [],
+		presets: list(me.presets, normalizePreset) ?? [],
+		features: { upscaler: features.upscaler === true },
+		upscaleTargets: strings(me.upscale_targets),
+		settings: { draftResolution: text(settings.draft_resolution) || null, maxParallelJobs: number(settings.max_parallel_jobs) }
 	};
+}
+
+const TAKE_STATES = ['queued', 'running', 'done', 'failed', 'cancelled'];
+const DIRECTOR_MODES = ['t2v', 'i2v', 'flf', 'refs'];
+
+function idText(value) {
+	if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+	return text(value) || null;
+}
+
+export function normalizeTake(value) {
+	if (!isObject(value) || !text(value.id)) return null;
+	return {
+		id: value.id,
+		projectId: text(value.project_id) || null,
+		shotId: text(value.shot_id) || null,
+		generationId: idText(value.generation_id),
+		quality: value.quality === 'final' ? 'final' : 'draft',
+		kind: value.kind === 'upscale' ? 'upscale' : 'render',
+		parentTakeId: text(value.parent_take_id) || null,
+		presetId: text(value.preset_id) || null,
+		mode: text(value.mode) || null,
+		directorMode: DIRECTOR_MODES.includes(value.director_mode) ? value.director_mode : null,
+		backendId: text(value.backend_id) || null,
+		modelId: text(value.model_id) || null,
+		seed: number(value.seed),
+		resolution: text(value.resolution) || null,
+		status: TAKE_STATES.includes(value.status) ? value.status : 'queued',
+		progress: number(value.progress),
+		step: progressText(value.step),
+		variant: text(value.variant) || 'A',
+		chosen: value.chosen === true || value.chosen === 1,
+		flag: value.flag === 'keep' || value.flag === 'reject' ? value.flag : null,
+		profile: text(value.profile) || null,
+		promptText: text(value.prompt_text),
+		url: text(value.url) || null,
+		thumbUrl: text(value.thumb_url) || null,
+		fileId: idText(value.file_id),
+		width: number(value.width),
+		height: number(value.height),
+		durationS: number(value.duration_s),
+		fps: number(value.fps),
+		errorCode: text(value.error_code) || null,
+		errorMessage: text(value.error_message) || null,
+		unitsReserved: number(value.units_reserved, 0),
+		createdAt: text(value.created_at) || null,
+		startedAt: text(value.started_at) || null,
+		finishedAt: text(value.finished_at) || null
+	};
+}
+
+function normalizeNote(value) {
+	if (!isObject(value) || !text(value.code)) return null;
+	return { code: value.code, message: text(value.message), data: isObject(value.data) ? value.data : null };
+}
+
+function normalizeShotEstimate(value) {
+	if (!isObject(value) || !text(value.shot_id)) return null;
+	return {
+		shotId: value.shot_id,
+		directorMode: DIRECTOR_MODES.includes(value.director_mode) ? value.director_mode : null,
+		seconds: number(value.seconds),
+		resolution: text(value.resolution) || null,
+		fps: number(value.fps)
+	};
+}
+
+function usd(value) {
+	if (typeof value === 'string') return value || null;
+	return number(value) === null ? null : String(value);
+}
+
+export function normalizeEstimate(value) {
+	if (!isObject(value)) return null;
+	const vram = isObject(value.vram) ? value.vram : null;
+	const time = isObject(value.time) ? value.time : {};
+	const quota = isObject(value.quota) ? value.quota : null;
+	const cost = isObject(value.cost) ? value.cost : null;
+	return {
+		shots: list(value.shots, normalizeShotEstimate) ?? [],
+		vram: vram
+			? {
+					estimateGb: number(vram.estimate_gb),
+					freeGb: number(vram.free_gb),
+					totalGb: number(vram.total_gb),
+					streams: vram.streams === true,
+					unknown: vram.unknown === true,
+					backendId: text(vram.backend_id) || null
+				}
+			: null,
+		time: { seconds: number(time.seconds), samples: number(time.samples, 0) },
+		quota: quota
+			? {
+					limit: number(quota.limit),
+					used: number(quota.used),
+					remaining: number(quota.remaining),
+					exempt: quota.exempt === true,
+					neededMinutes: number(quota.needed_minutes, 0),
+					applies: quota.applies !== false,
+					blocks: quota.blocks === true
+				}
+			: null,
+		cost: cost ? { totalUsd: usd(cost.total_usd), known: cost.known === true, message: text(cost.message) || null } : null,
+		blocks: list(value.blocks, normalizeNote) ?? [],
+		warnings: list(value.warnings, normalizeNote) ?? []
+	};
+}
+
+export function normalizeQueue(value) {
+	if (!isObject(value)) return null;
+	const slots = isObject(value.slots) ? value.slots : {};
+	return { takes: list(value.takes, normalizeTake) ?? [], slots: { inFlight: number(slots.in_flight, 0), max: number(slots.max) } };
 }
 
 export function normalizeProjectSummary(value) {
@@ -203,6 +408,8 @@ function list(values, normalize) {
 }
 
 const projectPath = (id) => `/projects/${encodeURIComponent(id)}`;
+const takePath = (projectId, takeId) => `${projectPath(projectId)}/takes/${encodeURIComponent(takeId)}`;
+const pickTake = (data) => normalizeTake(data.take);
 
 export async function coreFetch(api, path, init = {}) {
 	const headers = new Headers(init.headers);
@@ -259,6 +466,36 @@ export function createClient(api) {
 		},
 		async resolveMedia(origin) {
 			return mapped(await call(api, 'post', '/media/resolve', { origin }), (data) => normalizeMedia(data.media));
+		},
+		async listTakes(projectId) {
+			return mapped(await call(api, 'get', `${projectPath(projectId)}/takes`), (data) => list(data.takes, normalizeTake));
+		},
+		async chooseTake(projectId, takeId, chosen) {
+			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/choose`, { chosen }), pickTake);
+		},
+		async flagTake(projectId, takeId, flag) {
+			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/flag`, { flag }), pickTake);
+		},
+		async deleteTake(projectId, takeId) {
+			return mapped(await call(api, 'delete', takePath(projectId, takeId)), (data) => (text(data.deleted) ? { deleted: data.deleted } : null));
+		},
+		async finalTake(projectId, takeId, method, target) {
+			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/final`, { method, target }), pickTake);
+		},
+		async estimate(projectId, body, signal) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/estimate`, body, signal), normalizeEstimate);
+		},
+		async generate(projectId, body) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/generate`, body), (data) => list(data.takes, normalizeTake));
+		},
+		async cancelTake(takeId) {
+			return mapped(await call(api, 'post', `/takes/${encodeURIComponent(takeId)}/cancel`, {}), pickTake);
+		},
+		async retryTake(takeId) {
+			return mapped(await call(api, 'post', `/takes/${encodeURIComponent(takeId)}/retry`, {}), pickTake);
+		},
+		async queue(projectId) {
+			return mapped(await call(api, 'get', `${projectPath(projectId)}/queue`), normalizeQueue);
 		},
 		coreFetch(path, init) {
 			return coreFetch(api, path, init);

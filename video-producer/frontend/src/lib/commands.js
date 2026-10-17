@@ -11,19 +11,14 @@ import {
 	addAudioLane,
 	toast,
 	select,
-	startGeneration,
-	resumeGeneration,
-	queueWindow,
-	openResults,
-	assembleChosen,
 	seqDuration,
 	selected,
 	act,
 	clipAt,
 	addShot,
-	proposeShots,
-	promoteToFinal
+	proposeShots
 } from './state.svelte.js';
+import { startGeneration, cancelGeneration, queueWindow, openResults, assembleChosen, promoteToFinal, busy } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
 import { openGallery, openImport } from './importer.js';
 import { ulid } from './ulid.js';
@@ -102,9 +97,8 @@ const takes = () => {
 };
 const promote = () => {
 	const c = ui.selection?.kind === 'clip' ? selected() : clipAt(ui.playhead);
-	const r = c && doc.results.find((x) => x.id === c.take);
-	if (!r || r.quality !== 'draft') return toast(t('lib.toast.chooseDraft'), 'warning');
-	promoteToFinal(r.id);
+	if (!c?.take) return toast(t('lib.toast.chooseDraft'), 'warning');
+	promoteToFinal(c.take);
 };
 const match = () => {
 	const c = ui.selection?.kind === 'clip' ? selected() : clipAt(ui.playhead);
@@ -132,7 +126,7 @@ const scopes = () => {
 	ui.inspectorOpen = true;
 	ui.inspectorTab = 'color';
 };
-const resume = () => (ui.production.state === 'paused' ? resumeGeneration() : toast(t('lib.toast.noPaused')));
+const cancelRunning = () => (busy() ? cancelGeneration() : toast(t('lib.toast.noRunning')));
 
 export const menus = [
 	menu('app', [
@@ -195,7 +189,7 @@ export const menus = [
 			command('draft', () => (ui.production.quality = 'draft'), { check: () => ui.production.quality === 'draft' }),
 			command('final', () => (ui.production.quality = 'final'), { check: () => ui.production.quality === 'final' }),
 			command('queue', queueWindow, { keys: 'alt+mod+g' }),
-			command('resume', resume)
+			command('cancel-generation', cancelRunning)
 		],
 		[command('results', openResults, { keys: 'ctrl+mod+r' }), command('assemble', assembleChosen)],
 		[

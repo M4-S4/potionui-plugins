@@ -1,14 +1,13 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, toast, globalPrompt, itemsIn, productionRange, secs, select, clipLabel } from '../../lib/state.svelte.js';
+	import { ui, doc, act, toast, globalPrompt, itemsIn, productionRange, secs, select } from '../../lib/state.svelte.js';
 	import { promptLanguageOf } from '../../lib/starter.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { allCommands } from '../../lib/commands.js';
-	import { frameRoleLabel, modeLabel } from '../../lib/catalog.js';
+	import { frameRoleLabel } from '../../lib/catalog.js';
 	import { openReferences, refRoleLabel } from '../../lib/references.js';
 	import { addFileScene } from '../../lib/scene.js';
-	import { takeThumb } from '../../lib/media.js';
 	import Modal from './Modal.svelte';
 	import OpenProject from './OpenProject.svelte';
 	import VersionHistory from './VersionHistory.svelte';
@@ -17,6 +16,8 @@
 	import AdvancedWorkshop from './AdvancedWorkshop.svelte';
 	import SoundDesign from './SoundDesign.svelte';
 	import ExportDialog from './ExportDialog.svelte';
+	import MakeFinal from './MakeFinal.svelte';
+	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import Icon from '../Icon.svelte';
 
 	let { version = null, setLanguage = () => {} } = $props();
@@ -26,14 +27,10 @@
 
 	const recap = $derived.by(() => {
 		if (m?.type !== 'recap') return null;
-		const res = m.result ? doc.results.find((r) => r.id === m.result) : null;
-		const range = res ? res.range : productionRange();
+		const range = productionRange();
 		const it = itemsIn(range);
-		return { res, range, it, local: res ? [res.local] : it.prompts.map((p) => p.text) };
+		return { range, it, local: it.prompts.map((p) => p.text) };
 	});
-	const recapTitle = $derived(
-		recap?.res ? t('shell.recap.takeTitle', { shot: clipLabel(doc.clips.find((c) => c.id === recap.res.clipId)), variant: recap.res.variant }) : t('shell.recap.title')
-	);
 
 	let splatInput = $state();
 	const shortcutList = $derived(allCommands.filter((c) => c.keys));
@@ -51,7 +48,7 @@
 	]);
 
 	const simList = $derived([
-		[t('shell.simulations.generation.title'), t('shell.simulations.generation.text')],
+		[t('shell.simulations.render3d.title'), t('shell.simulations.render3d.text')],
 		[t('shell.simulations.synopsis.title'), t('shell.simulations.synopsis.text')],
 		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')],
 		[t('shell.simulations.render.title'), t('shell.simulations.render.text')],
@@ -102,24 +99,11 @@
 		<SoundDesign type={m.kind ?? 'Ambiance'} />
 	{:else if m?.type === 'export'}
 		<ExportDialog tab={m.tab ?? 'video'} />
+	{:else if m?.type === 'final'}
+		<MakeFinal takeId={m.take} />
 	{:else if m?.type === 'recap' && recap}
-		<Modal title={recapTitle} subtitle="{secs(recap.range[0])} → {secs(recap.range[1])}" icon="list" width={640}>
+		<Modal title={t('shell.recap.title')} subtitle="{secs(recap.range[0])} → {secs(recap.range[1])}" icon="list" width={640}>
 			<div class="space-y-3 p-4 text-sm">
-				{#if recap.res}
-					<div class="flex gap-3">
-						<img src={takeThumb(recap.res)} alt="" class="h-20 w-36 rounded object-cover" />
-						<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-							<dt class="text-fg-subtle">{t('shell.recap.profile')}</dt>
-							<dd>{recap.res.profile}</dd>
-							<dt class="text-fg-subtle">{t('shell.recap.mode')}</dt>
-							<dd>{modeLabel(recap.res.mode)}</dd>
-							<dt class="text-fg-subtle">{t('shell.recap.seed')}</dt>
-							<dd class="vp-tc">{recap.res.seed}</dd>
-							<dt class="text-fg-subtle">{t('shell.recap.created')}</dt>
-							<dd>{recap.res.created}</dd>
-						</dl>
-					</div>
-				{/if}
 				<section class="rounded-lg border border-line-strong p-3">
 					<div class="mb-1 flex items-center gap-2">
 						<span class="flex h-4 w-4 items-center justify-center rounded-sm bg-surface-3 text-2xs font-semibold">1</span>
@@ -271,10 +255,13 @@
 	{:else if m?.type === 'tasks'}
 		<Modal title={t('shell.tasks.title')} icon="history" width={480}>
 			<div class="space-y-2 p-4 text-sm">
-				{#if ui.production.state === 'running' || ui.production.state === 'paused'}
+				{#if ui.production.state === 'running'}
 					<div class="rounded-lg border border-line-strong p-2.5">
-						<div>{t('shell.tasks.generation', { step: ui.production.step || t('shell.tasks.paused') })}</div>
-						<div class="mt-1 h-1 rounded-full bg-surface-3"><div class="h-full bg-signal" style:width="{ui.production.progress}%"></div></div>
+						<div>{t('shell.tasks.generation', { step: ui.production.step || t('generation.state.queued') })}</div>
+						<div class="mt-1 text-xs text-fg-subtle">{t('generation.tasks.takes', { count: flyingTakes().length })}</div>
+						<div class="mt-1 h-1 rounded-full bg-surface-3" role="progressbar" aria-label={t('production.progress')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={ui.production.running ? Math.round(ui.production.progress) : undefined}>
+							<div class="h-full bg-signal" style:width="{ui.production.progress}%"></div>
+						</div>
 					</div>
 				{:else}
 					<p class="text-fg-muted">{t('shell.tasks.none')}</p>

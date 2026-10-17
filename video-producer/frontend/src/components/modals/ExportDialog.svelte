@@ -4,6 +4,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, seqDuration, secs, allIssues, toast, clipLabel } from '../../lib/state.svelte.js';
 	import { fcpxml, otio, edl, srt, srtCues, download } from '../../lib/exchange.js';
+	import { findTake } from '../../lib/production.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
 	import Tabs from '../shell/Tabs.svelte';
@@ -32,7 +33,7 @@
 	const formats = ['master', 'web', 'social', 'archive'];
 	const simulatedFormat = $derived(format === 'master' || format === 'archive');
 	const notFinal = $derived(doc.clips.filter((c) => c.stage === 'draft' || c.stage === 'todo'));
-	const pending = $derived(doc.results.filter((r) => r.status === 'redo').length);
+	const pending = $derived(doc.clips.filter((c) => findTake(c.take)?.flag === 'reject').length);
 	const issues = $derived(allIssues().filter((i) => i.level === 'conflict').length);
 	const dur = $derived(extent === 'range' && ui.range ? ui.range.out - ui.range.in : seqDuration());
 	const base = $derived(doc.name.replace(/\s+/g, '_'));

@@ -12,7 +12,6 @@
 	"addToCut": "Add to cut",
 	"placeholderHint": "Shot to generate: add a shot prompt on the Prompts track.",
 	"generateDrafts": "Generate drafts",
-	"approx": "≈ {duration}",
 	"simFinal": "Final take · simulated AI",
 	"simDraft": "720p draft · simulated AI",
 	"end": "End of the sequence",

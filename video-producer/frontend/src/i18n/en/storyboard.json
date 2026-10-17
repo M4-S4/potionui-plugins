@@ -10,7 +10,6 @@
 	"size.large": "Large thumbnails",
 	"placeholder": "Shot to generate",
 	"seamIssue": "Check the match with the previous shot",
-	"paused": "Paused",
 	"shotName": "Name of shot {n}",
 	"takes.one": "· {count} take",
 	"takes.other": "· {count} takes",

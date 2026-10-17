@@ -3,7 +3,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, select, clipLabel, proposeShots, acceptProposal, estimate, fmtDuration } from '../../lib/state.svelte.js';
+	import { ui, doc, select, clipLabel, proposeShots, acceptProposal, secs } from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { stages } from '../../lib/catalog.js';
 	import { seams, matchToPrevious } from '../../lib/continuity.svelte.js';
@@ -15,8 +15,8 @@
 	const allSeams = $derived(seams());
 	const issues = $derived(allSeams.flatMap((s) => s.issues.map((x) => ({ ...x, clip: s.to }))));
 	const measured = $derived(allSeams.some((s) => s.measured));
-	const draftEst = $derived(estimate({ seconds: doc.clips.filter((c) => c.stage === 'todo').reduce((sum, c) => sum + c.dur, 0), quality: 'draft' }));
-	const finalEst = $derived(estimate({ seconds: open.reduce((sum, c) => sum + c.dur, 0), quality: 'final', variants: 1 }));
+	const todo = $derived(doc.clips.filter((c) => c.stage === 'todo'));
+	const footage = (list) => t('generation.story.footage', { count: list.length, duration: secs(list.reduce((sum, c) => sum + c.dur, 0)) });
 	const kept = $derived(ui.storyProposal?.filter((x) => x.keep).length ?? 0);
 </script>
 
@@ -83,11 +83,11 @@
 			<div class="mt-2 grid grid-cols-2 gap-2 text-xs">
 				<div class="rounded-lg border border-line-strong p-2">
 					<div class="text-fg-subtle">{t('panels.story.draftsLeft')}</div>
-					<div class="vp-tc mt-0.5 text-sm text-fg">{t('panels.story.approx', { duration: fmtDuration(draftEst.gpuSec) })}</div>
+					<div class="vp-tc mt-0.5 text-sm text-fg">{footage(todo)}</div>
 				</div>
 				<div class="rounded-lg border border-line-strong p-2">
 					<div class="text-fg-subtle">{t('panels.story.toFinal')}</div>
-					<div class="vp-tc mt-0.5 text-sm text-fg">{t('panels.story.approx', { duration: fmtDuration(finalEst.gpuSec) })}</div>
+					<div class="vp-tc mt-0.5 text-sm text-fg">{footage(open)}</div>
 				</div>
 			</div>
 			<p class="mt-2 text-xs text-fg-subtle">{t('panels.story.sequenceHint')}</p>

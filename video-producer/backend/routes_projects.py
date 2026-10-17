@@ -2,7 +2,7 @@ from typing import Any, Dict, NoReturn, Optional
 
 from fastapi import APIRouter, Body, Depends
 
-from . import projects
+from . import core_bridge, generation, projects, takes
 from .core_bridge import AccountType, User, get_current_active_user
 from .projects import DocError, ProjectNotFound, VersionConflict, VersionNotFound
 from .responses import fail, ok
@@ -103,9 +103,14 @@ def save_project(
 
 
 @router.delete("/projects/{project_id}")
-def delete_project(project_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """Delete a project with its versions, takes and jobs."""
-    _accessible(user, project_id)
+async def delete_project(project_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
+    """Delete a project with its versions, takes and jobs, cancelling and refunding its takes in flight first."""
+    project = _accessible(user, project_id)
+    active = takes.list_active(project_id)
+    if active:
+        owner = user if project["user_id"] == user.id else core_bridge.get_user(project["user_id"]) or user
+        for take in active:
+            await generation.cancel(owner, take)
     if not projects.delete_project(project_id):
         _not_found()
     return ok({"deleted": project_id})

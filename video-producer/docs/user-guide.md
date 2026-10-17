@@ -2,7 +2,7 @@
 
 Français : [Video Producer : guide utilisateur](/docs?doc=plugin/video-producer/user-guide.fr) (fichier `docs/user-guide.fr.md`).
 
-This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. Video Producer is delivered in steps. This version has the complete interface, in English and in French, saves your projects and imports your media, but some functions are still simulated (chapter 17). A chapter about something that does not exist yet ends with "Available from step N". The administrator guide is a separate page that only admins see.
+This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. Video Producer is delivered in steps. This version has the complete interface, in English and in French, saves your projects, imports your media and generates real takes and finals (chapters 8 and 9), but some functions are still simulated (chapter 17). A chapter about something that does not exist yet ends with "Available from step N". The administrator guide is a separate page that only admins see.
 
 ## 1. What Video Producer is
 
@@ -11,8 +11,9 @@ Video Producer is a PotionUI plugin for audiovisual editing, AI sequence generat
 Before you start:
 
 - An admin has to prepare at least one engine (this machine, a studio server or a cloud model) and at least one video preset assigned to you. If the Production bar shows no engine, see chapter 18.
-- Your admin also sets the draft resolution and may limit the GPU minutes you can use per month.
-- The model MiniMax-H3 comes with a license that excludes use, and anything generated with it, in the European Union, the United Kingdom, the United States and South Korea without an individual authorization from MiniMax, and that asks a commercial product to display "MiniMax H3" prominently. Ask your admin before you use it.
+- Your admin also sets the draft resolution, how many generations you can have in progress at once, and may limit the GPU minutes you can use per month.
+- Generation is real: the takes are videos made by your admin's machines or cloud account, and they take time. The estimate in the Production bar tells you what to expect before you start (chapter 8).
+- The model MiniMax H3 (the **MiniMax H3** entries of the engine pop-up) comes with a license that excludes use, and anything generated with it, in the European Union, the United Kingdom, the United States and South Korea without an individual authorization from MiniMax, and that asks a commercial product to display "MiniMax H3" prominently. Ask your admin before you use it. Video Producer does not check any of this for you.
 
 The interface is in English by default and also exists in French (chapter 15).
 
@@ -26,12 +27,12 @@ The first time you open the page, it creates a starter project, "Dawn at the har
 2. **Set the global direction.** In the **Director IA** workspace, tab **Direction**: world and intent, characters and identity, photography, palette and lighting, pacing and continuity. Result: a text that guides every generation.
 3. **Add the references.** In **Director IA**, tab **References**: identities, 3D sets and motion guides. Result: what must stay the same from one shot to the next.
 4. **Split the film into shots.** In the **Storyboard** workspace: write the synopsis, click **Propose a breakdown**, keep the shots you want and adjust their shot prompts. Result: a row of shot cards.
-5. **Generate drafts.** In the Production bar, quality **Draft**, then **Generate selection** (Ctrl+G). The estimate shows GPU time and quota. Result: draft takes A, B, and so on.
-6. **Pick and make final.** In the Inspector, tab **Takes**: compare the takes, click the one the shot should play, then click **Final** on the best draft take. Result: the shot moves from Draft to Final.
+5. **Generate drafts.** In the Production bar, pick the **Generation engine**, quality **Draft**, then **Generate selection** (Ctrl+G). The estimate shows time, memory and quota. Result: real draft takes A, B, and so on, made by the engine you picked.
+6. **Pick and make final.** In the Inspector, tab **Takes**: compare the takes, click **Choose** on the one the shot should play, then click **Make final** on the best draft take. Result: the shot moves from Draft to Final.
 7. **Edit, match and mix.** Fades on the clips, color match in the Inspector tab **Color**, the console in **Mix**. Result: a finished sequence.
 8. **Prepare delivery.** **File › Export video…**, **Export to other software…** or **Export subtitles…**. Result: files you can download.
 
-The interface of all eight steps is in place, and your projects are saved as you work (chapter 5). The page opens the project you used last, or the starter project the first time (chapter 1). **New project…** starts an empty project, "Untitled project", and adds it to your projects. Available from step 4: drafts and finals. From step 6: delivery as video files.
+The interface of all eight steps is in place, and your projects are saved as you work (chapter 5). The page opens the project you used last, or the starter project the first time (chapter 1). **New project…** starts an empty project, "Untitled project", and adds it to your projects. Drafts and finals are real since step 4. From step 6: delivery as video files.
 
 ## 3. The screen
 
@@ -54,7 +55,7 @@ The ten menus group all the commands of the page. The command search (**Search c
 | **Edit** | Undo, Redo, Copy, Paste, Duplicate, Delete, Search media. |
 | **Cut** | The three tools, Split at playhead, trims, Change duration, in and out points, Clear range, Add marker, Add title, Fade in and out. |
 | **Shot** | New shot, Info, Show source, Shot takes, Make take final, Shot color, Match color to previous shot, Camera keyframes, Favorite, Reject, Remove flag. |
-| **Production** | Global direction, Split synopsis into shots, Continuity check, Generate selection, Draft and Final quality, the queue, Results and takes, Assemble chosen takes, Advanced workshop, the engine, the Hybrid builder. |
+| **Production** | Global direction, Split synopsis into shots, Continuity check, Generate selection, Draft and Final quality, the queue, Cancel the generation, Results and takes, Assemble chosen takes, Advanced workshop, the engine, the Hybrid builder. |
 | **Audio** | Add audio track, Import audio file, Mixing console, Voice and dialogue and the sound design workshop. |
 | **View** | Play, loop, full screen, framing guides, Compare takes, Luminance scope, Audio meters, timeline zoom, Snapping. |
 | **Window** | The five workspaces, the reference spaces, Side panel, Inspector, PotionUI assistant, Prompt library, Timeline index, Background tasks. |
@@ -84,15 +85,15 @@ The media of the project in one panel. A new project has none: the panel says "N
 
 The left panel has three tabs. A dot on **Direction** warns that there are points to check, and **Results** shows the number of takes.
 
-- **Direction.** Shows what guides the generation for the current range: the global direction, the shot prompt, the references and Control videos, with **View the generation summary**. Below, **To check**, the list of direction conflicts and color matches to fix, the **Project H3 profile** (FL2VA, Ref2VA or Hybrid AV, chapter 11) and the **Global direction** itself, in five fields (world and intent, characters and identity, photography, palette and lighting, pacing and continuity), with a counter out of 4000 characters. Each field has a **Library & assistant** link. The gear button, **H3 settings**, opens the **Advanced workshop**.
+- **Direction.** Shows what guides the generation for the current range: the global direction, the shot prompt, the references and Control videos, with **View the generation summary**. Below, **To check**, the list of direction conflicts and color matches to fix, the **Project H3 profile** (FL2VA, Ref2VA or Hybrid AV, chapters 8 and 11) and the **Global direction** itself, in five fields (world and intent, characters and identity, photography, palette and lighting, pacing and continuity), with a counter out of 4000 characters. Each field has a **Library & assistant** link. The gear button, **H3 settings**, opens the **Advanced workshop**.
 - **References.** Three families, **Images and identity**, **3D sets** and **Motion guides**. A reference is global (it goes with every generation) or applies to a range only; **Attach to range** sets the second. **Reference** adds one. The center shows the board of references, in two groups, **Global direction** and **On the timeline**, with a search field. Drag a thumbnail onto the Frames track to anchor it to a precise moment. A new project has no reference: the board says so, and **Reference** adds the first one.
-- **Results.** The takes of each shot, **Compare**, **Retake**, **Use**, the **Generation queue** and **Assemble chosen takes**.
+- **Results.** The take cards of each shot (chapter 9), the **Generation queue** and **Assemble chosen takes**.
 
 ### Storyboard
 
-On the left: the **Synopsis** (one sentence becomes one shot) and **Propose a breakdown**. The **Proposed breakdown** lists the shots: tick the ones to keep, rename them and click **Add N shots at the end**. In this version the breakdown is simulated: it only cuts the synopsis into sentences. Then **To produce**, with **Drafts left** and **Move to final** (the time they will take), and **Continuity**, which lists the color matches to check, each with **Match color**.
+On the left: the **Synopsis** (one sentence becomes one shot) and **Propose a breakdown**. The **Proposed breakdown** lists the shots: tick the ones to keep, rename them and click **Add N shots at the end**. In this version the breakdown is simulated: it only cuts the synopsis into sentences. Then **To produce**, with **Drafts left** and **Move to final** (the number of shots and the footage still to do for each), and **Continuity**, which lists the color matches to check, each with **Match color**.
 
-In the center: one card per shot, in order, with its number, its duration, its name, its stage (**Source**, **To generate**, **Draft** or **Final**), its number of takes and its shot prompt; click the prompt to write it. Drag a card to move it. The buttons of a card appear when you hover it or select it: the main one follows the stage, **Generate**, **Make final**, **See takes** or **Regenerate**, and three icons show the shot in the viewer, insert a shot after it and delete it. The header counts the shots per stage, adds one with **Shot** and sets the size of the thumbnails; a **New shot** tile at the end does the same. In this workspace, the Left and Right arrow keys move the selection to the previous or next shot.
+In the center: one card per shot, in order, with its number, its duration, its name, its stage (**Source**, **To generate**, **Draft** or **Final**), its number of takes and its shot prompt; click the prompt to write it. Drag a card to move it. The buttons of a card appear when you hover it or select it: the main one follows the stage, **Generate**, **Make final**, **See takes** or **Regenerate**, and three icons show the shot in the viewer, insert a shot after it and delete it. While a take of the shot is in progress, the card shows its step and progress and the button is disabled. The header counts the shots per stage, adds one with **Shot** and sets the size of the thumbnails; a **New shot** tile at the end does the same. In this workspace, the Left and Right arrow keys move the selection to the previous or next shot.
 
 ### 3D scene
 
@@ -131,7 +132,7 @@ A failed save shows one of three messages: "Could not save the project." (a netw
 
 - Select a row, then click **Open**. Double-clicking a row or pressing Enter on it does the same. **Open** is disabled while the selected row is the project that is already open. The page saves the current project before it opens another one. If that save failed and changes are waiting, a window titled "Unsaved changes" says that the changes could not be saved and will be lost: **Discard changes** goes on, and cancelling keeps the project that is open.
 - **New project** (bottom left) creates an empty project, like **File › New project…**.
-- The trash icon at the end of a row deletes that project, after a confirmation that tells you that the project and its versions will be deleted and that this cannot be undone. The project that is open has no trash icon. Deleting a project does not delete the media in your library or gallery.
+- The trash icon at the end of a row deletes that project, after a confirmation that tells you that the project and its versions will be deleted and that this cannot be undone. The project that is open has no trash icon. Deleting a project cancels the takes it still has in progress. It does not delete the media in your library or gallery, nor the videos of its takes, which stay in your generation history.
 - The window says "Loading projects…" while it loads, "No saved project" when you have none, and "Could not load your projects." with a **Retry** button when the server did not answer.
 
 **File › New project…** saves the current project, then creates an empty project, "Untitled project", opens it and shows "New empty project created". It asks for a confirmation (**Create an empty project**) only when the current project could not be saved.
@@ -172,7 +173,7 @@ An import copies nothing: the project keeps a reference to the library item or t
 
 ### In the Media panel
 
-After the import, your browser reads the duration and the size of each file. The duration shows at the bottom right of the thumbnail. For the selected item the panel shows **Duration**, **Format**, **Collection** and **Origin**: **Gallery** or **Library**; the thumbnail carries the same word. The frame rate of an imported video comes from the library when the library knows it, and shows after the size (for example "1280×720 · 25 fps"); otherwise, and for a gallery file, **Format** shows the size only. The collection pills sort images under **Images**, videos under **Videos** and audio files under **Audio**. **Generated** holds the takes of the project, which are simulated for now. A capture of the panel after an import is in `docs/screenshots/media-import.png`.
+After the import, your browser reads the duration and the size of each file. The duration shows at the bottom right of the thumbnail. For the selected item the panel shows **Duration**, **Format**, **Collection** and **Origin**: **Gallery** or **Library**; the thumbnail carries the same word. The frame rate of an imported video comes from the library when the library knows it, and shows after the size (for example "1280×720 · 25 fps"); otherwise, and for a gallery file, **Format** shows the size only. The collection pills sort images under **Images**, videos under **Videos** and audio files under **Audio**. **Generated** holds the videos of the finished takes of the project (chapter 9). A capture of the panel after an import is in `docs/screenshots/media-import.png`.
 
 ### Thumbnails
 
@@ -184,14 +185,14 @@ An image is its own thumbnail. For a video, the page uses the thumbnail that Pot
 - **Sound of a video.** The viewer does not play the sound of a video. Sound comes from the audio tracks (chapter 13).
 - **Audio.** An audio file placed on a track plays through its strip of the console. The faders, mute and solo, pan, equalizer, compressor, filter and sends act on the real sound, the meters show it, and the clip draws the waveform of the file in the timeline (chapter 13).
 
-What is still simulated: generation and the takes, which show a procedural thumbnail marked Simulated, and the sounds of the Sound design workshop, which your browser synthesizes (chapter 17).
+What is still simulated: the takes made by earlier versions of a project, which show a procedural thumbnail marked Simulated, and the sounds of the Sound design workshop, which your browser synthesizes (chapter 17). The takes of the real generation are ordinary videos and play like any other video (chapter 9).
 
 ## 7. Inspector
 
 The Inspector follows the selection and its title tells what is selected: **Video shot**, **Audio clip**, **Title**, **Shot prompt**, **Reference frame**, **Control video**, **3D shot**, **Marker**, **Reference** or **Console strip**. For a shot it starts with a thumbnail, the name (click it to rename the shot), the stage and the times, and has three tabs:
 
-- **Shot.** A shortcut to the next action (**Generate drafts**, or **Make take A final**), **Duration and source** (the duration, where the shot starts in its source and the length of the source), **Fades** (**In** and **Out**), the **Flag** (**None**, **Favorite** or **Rejected**) and three icons to split the shot in the middle, duplicate it and delete it.
-- **Takes.** The takes of the shot, as **Final** and **Drafts** (chapter 9).
+- **Shot.** A shortcut to the next action (**Generate drafts**, or **Make take A final**) with the engine it will use ("On" followed by the engine), **Duration and source** (the duration, where the shot starts in its source and the length of the source), **Fades** (**In** and **Out**), the **Flag** (**None**, **Favorite** or **Rejected**) and three icons to split the shot in the middle, duplicate it and delete it.
+- **Takes.** The take cards of the shot, as **Final** and **Drafts**, and a button that makes more drafts (for example "2 more drafts"; chapter 9).
 - **Color.** The luminance scope, the match with the previous shot, presets and fine settings (chapter 12).
 
 The other items have their own panel:
@@ -208,19 +209,29 @@ The other items have their own panel:
 
 In the **3D scene** workspace, with a 3D shot selected or nothing selected, the Inspector shows the **Camera**: focal length, pan, tilt, distance and target height, **Keyframe**, **Follow the path** and the list of keyframes. With nothing selected in the other workspaces, it shows the project (format, H3 profile, content), a reminder of the main shortcuts and a **Project properties…** button.
 
-## 8. Production bar and estimate
+## 8. Production bar and generation
 
-The Production bar reads like a sentence: a target (**Shot**, **Range** or **Sequence**), the range with the number of shots and prompts it holds, a quality (**Draft** or **Final**), an output mode, an engine, the **Advanced workshop**, then the estimate, **Add to queue** and **Generate selection**. A number with a warning icon after the counters is the number of direction conflicts in the range; click it to see them.
+The Production bar reads like a sentence: a target (**Shot**, **Range** or **Sequence**), the range with the number of shots and prompts it holds, a quality (**Draft** or **Final**), an output mode, the **Generation engine**, the **Advanced workshop**, then the estimate, **Add to queue** and **Generate selection**. A number with a warning icon after the counters is the number of direction conflicts in the range; click it to see them. Generation is real: a take is a video made in the background by the engine you pick.
 
-- The output mode **AI generation** is the real one. **3D render** and **3D render + AI** are simulated (chapter 17); with **3D render** the main button reads **Prepare the render**.
-- The engine pop-up lists what your admin enabled: this machine, a studio server and cloud models. In this version it shows three placeholder engines: **This machine · RTX 4090**, **Studio server · 2 × RTX A6000** and **Cloud provider · H100 on demand**. On a narrow window the pop-up is hidden: choose the engine in the **Advanced workshop** instead.
-- The **Advanced workshop** has three steps: **Sources and guides**, **Engine and Hybrid builder** and **Sound and delivery**. It opens from the bar, from **Production › Advanced workshop…** and, for the engine, from **H3 settings** in Director IA.
+### Choose the engine
 
-The estimate gives the GPU time, the memory and what is left of your quota. It sits on the right of the bar; hover it for the detail: the number of shots and variants, the resolution, the engine, the memory against the engine's and the quota or the cost.
+- The output mode **AI generation** is the real one. **3D render** and **3D render + AI** are still simulated (chapter 17); with **3D render** the main button reads **Prepare the render**.
+- The **Generation engine** pop-up lists what your admin enabled and assigned to you, in groups named after the backends. A group named after your admin's own backend holds the video presets that run on their hardware, for example **Wan 2.1 / 2.2** or **MiniMax H3**. Each cloud provider has its own group, with its video models by name. Your choice is saved with the project. Whether a preset runs on this machine or on a studio server is decided by PotionUI, and the take card tells you afterwards. Hover the pop-up to see the group and, for a preset that runs on the admin's hardware, the free memory of its GPU ("16.0 / 24.0 GB free"). On a window narrower than 1400 pixels the pop-up is hidden: use **Production › Generation engine…**, which opens the **Advanced workshop** on its engine step. A capture of the pop-up and of the bar around it, in the dark and light themes of the English interface, is in `docs/screenshots/engine-popup.png`.
+- With no engine, the pop-up reads "No engine" and the bar says "No generation engine: an administrator must enable a video preset or a cloud model." An admin also sees the link "Open plugin settings". When the engine of a project is no longer available, the pop-up reads "Engine no longer available" and the bar says "The engine of this project is no longer available: pick another one." A project from an earlier version that named a placeholder engine is moved to the matching real engine when you open it.
+- **Quality.** **Draft** makes quick takes at the resolution your admin chose, or the closest the engine offers; hover it to see which ("Quick draft in 832×480: check motion and framing"). **Final** makes takes at the largest resolution of the engine ("Final quality in 1280×720: keep it for the chosen takes"). To improve a draft you like, **Make final** (chapter 9) is usually the better way: it keeps the picture you chose.
+- The **Advanced workshop** has three steps: **Sources and guides**, **Engine and Hybrid builder** and **Sound and delivery**. It opens from the bar, from **Production › Advanced workshop…** and, for the engine, from **H3 settings** in Director IA. Its **Variants per window** field (1 to 4) sets how many takes, A, B and so on, each shot gets when you generate. The settings that the engine does not use are greyed there and carry the badge "Not sent with this engine" (chapter 17).
 
-- The time comes from your own past generations on this machine with the same preset, engine and resolution. It shows "—" when there is none yet.
-- The memory is an estimate from the size of the model files, never a guarantee.
-- The quota is your monthly Video Producer GPU minutes, shown as **GPU quota** in the status bar when your admin has set a limit for you; without a limit there is no quota figure. A cloud engine does not use it. Only admins see the cost of a cloud generation.
+### Read the estimate
+
+The estimate sits on the right of the bar once an engine is picked: a short line with the time, the memory (a cloud model has none) and, on a wide window, the minutes of quota or, for admins, the cost. Hover it for the detail. It follows your changes half a second after you stop, once the project is saved: until then it reads "The estimate updates once the project is saved." and, while it computes, "Estimating…". The detail has these lines:
+
+- **Scope.** The shots and variants and the resolution: "2 shots × 2 variants in 832×480".
+- **Time.** "Time ≈ 4 min on MiniMax H3 (measured on 3 takes)". It comes from the takes already made with the same preset, engine and resolution, whose real durations were measured: that is the calibration. With none yet it reads "Time: — (no measure yet on MiniMax H3)" and the bar shows "—". It fills in after a few generations.
+- **Memory.** "Memory ≈ 22.5 GB, 16.0 GB free on Local Generation". It is an estimate from the size of the model files, never a guarantee. "Memory: unknown" when it could not be estimated.
+- **Quota.** Your monthly Video Producer GPU minutes: "Quota: 5 min needed, 40 of 60 min left this month", "Quota: exempt" if you are exempt, and "Cloud: no GPU quota used" for a cloud model, which does not use them. It shows as **GPU quota** in the status bar when your admin set a limit. When your minutes are limited, the minutes of a take are reserved when it is created and adjusted to its real duration when it ends; a take that fails or is cancelled gives them back. With no limit, or if you are exempt, no minute is reserved or adjusted. Until a preset has been measured, each second of video counts for 10 seconds of GPU.
+- **Cost.** Admins only, for a cloud model: "Cost ≈ $0.84", or "Cost: unknown for this model" when the provider publishes no price.
+
+### Blocks and warnings
 
 What blocks **Generate selection** (the button is disabled and the bar shows the first reason; hover it to see them all):
 
@@ -228,29 +239,85 @@ What blocks **Generate selection** (the button is disabled and the bar shows the
 - neither a global direction nor a shot prompt in the range;
 - an empty shot prompt in the range;
 - a 3D output mode with no 3D shot in the range;
-- a spent quota ("GPU quota exceeded": switch to draft or use the cloud provider).
+- no engine, or an engine that is no longer available;
+- a preset that is missing or no longer assigned to you ("This preset is missing or no longer assigned to you.");
+- a profile the engine cannot generate ("Wan 2.1 / 2.2 cannot generate the Ref2VA profile: switch to FL2VA or to MiniMax H3.");
+- model files your admin has not installed ("Models to install for this preset: …"): ask your admin;
+- a cloud engine without a model ("Pick a cloud model for this engine.");
+- a Ref2VA shot with no reference that can be sent ("“Shot 2” has no reference: Ref2VA needs at least one for this shot.");
+- a spent quota ("GPU quota exceeded: 5 min needed, 2 min left this month."): switch to a cheaper quality, a shorter range or a cloud model.
 
-What only warns, without blocking: a memory estimate above what the engine has. The bar shows a warning ("N GB of VRAM needed, M GB available on …: switch to draft, lower the resolution or change engines") and the generation goes on. The FL2VA profile with no frame in the range warns as well: "No frame in the range: the shots will be generated from text only." The generation goes on, from text only.
+The buttons of a single shot (on a Storyboard card, in the Inspector, in the viewer) do not wait for the estimate, but your admin's server applies the same rules and the page shows the first reason in a message.
 
-While a generation runs the bar shows the step and the progress, with **Pause** (then **Resume**) and **Cancel**. When it ends, a button tells how many takes are ready and opens the results. **Add to queue** keeps the current range for later: the queued windows are listed under **Generation queue** in Director IA, tab **Results**, and counted in the status bar.
+What only warns, without blocking:
 
-In this version the engines are placeholder engines and the generation is simulated: the figures of the estimate are indicative, the progress is a simulation and no GPU is used (chapter 17).
+- a memory estimate above what the GPU has: "Will stream through host RAM, slower." The weights pass through the server's memory. The generation goes on, more slowly, and fails if the server lacks the memory for it (chapter 18);
+- the FL2VA profile with no frame linked to a shot: "“Shot 2” has no linked frame: it will be generated from text only." The generation goes on from the text, and the card of the take says "text only";
+- a shot longer than the engine allows: "“Shot 2” is longer than this engine allows: it will be cut to 15 s."
 
-Available from step 4: real generation, the engines your admin enabled, the time measured on your own generations, your real monthly quota and, for admins only, the cloud cost. The warning for a memory estimate above the engine's then reads "will stream through host RAM, slower".
+Two notes appear only in the estimate tooltip: "Memory use could not be estimated." and "No time measured yet for this engine and resolution."
+
+### Generate
+
+**Generate selection** (Ctrl+G) saves the project and starts one take per shot and per variant, each with its own seed. A shot is built from its shot prompt followed by the filled fields of the global direction, and from its frames and references, according to the profile (see below). If the project could not be saved, nothing starts ("The project could not be saved: generation not started.").
+
+- The single-shot buttons start drafts for that shot only: **Generate** on a Storyboard card, **Generate drafts** in the Inspector and the viewer, and "1 more draft" (or "2 more drafts") in the Inspector, tab **Takes**.
+- While takes are in progress, **Generate selection** is refused with "A generation is already running." The bar shows the progress and **Cancel** instead. A shot that has no take in progress can still be started from its own buttons.
+- Your admin limits how many generations you can have in progress at once. The takes past that number wait as **Queued** and start by themselves, one by one, as the others end.
+- **Add to queue** keeps the current range for later. The queued windows are listed under **Generation queue** in Director IA, tab **Results**, and counted in the status bar. **Generate the queue** starts them and **Clear** empties the list. This list lives in your page: it is not saved with the project.
+
+### Follow the takes
+
+- Each take shows its state: **Queued**, **Generating** (with the step and the percentage), **Failed**, **Cancelled**, or, once finished, its duration. The bar shows the step and the progress of the whole batch, the Storyboard card shows the progress of its shot, and **Window › Background tasks** counts the takes in progress ("2 takes in progress").
+- When a batch ends, a message tells how many takes are ready ("2 draft takes ready") with a **View** button that opens the results, and another how many failed ("1 take failed"). PotionUI also sends the notifications "Video Producer: take ready" and "Video Producer: take failed", so you can leave the page: the generations go on without it, and the takes are there when you come back.
+- **Cancel** on a card stops that take. **Cancel** in the bar, or **Production › Cancel the generation**, stops all the takes in progress ("Generation cancelled"; "No generation running." if there are none). The GPU minutes they reserved are given back.
+- **Retry** on a failed card starts a new take for the same shot, with the same seed, quality and engine. The failed take stays in the list.
+
+### Profiles per preset
+
+The **Project H3 profile** (Director IA, tab **Direction**) says what guides the generation. What an engine can do depends on its preset, and the page greys the profiles it cannot run.
+
+| Profile | Wan 2.1 / 2.2, LTX-2 / 2.3, LTX-2.5, cloud models | MiniMax H3 | MiniMax H3 Fast and VDN |
+|---|---|---|---|
+| FL2VA | Yes | Yes | Yes |
+| Ref2VA | Greyed | Yes | Greyed |
+| Hybrid AV | Greyed | Yes | Yes |
+
+- A greyed profile carries a badge such as "Ref2VA · Hybrid AV: MiniMax H3 only", with the explanation "Wan 2.1 / 2.2 cannot generate Ref2VA, Hybrid AV: reference images (Ref2VA) and generated sound (Hybrid AV) need MiniMax H3." In the **References** tab, "Not sent with this engine" tells you that the engine ignores the references ("References are sent only with the Ref2VA profile on MiniMax H3; Wan 2.1 / 2.2 ignores them.").
+- **FL2VA** uses the frames linked to the shot: a start and an end frame give a take "first and last frames", a start frame alone "first frame", and no frame "text only", with the warning above.
+- **Ref2VA** sends the references of the shot, then the global ones, to MiniMax H3: up to 9 images, 3 videos and 3 audio files.
+- **Hybrid AV** works like FL2VA on MiniMax H3, whose model makes the picture and the sound together. The track that drives the performance (Advanced workshop) is not sent yet (chapter 17).
 
 ## 9. Takes and final
 
-A take is one generated video for one shot.
+A take is one generated video for one shot. Its video is an ordinary PotionUI generation: it stays in your generation history (the gallery), even if you delete the take here.
 
-- Drafts are made at the resolution your admin chose (832×480 unless changed). The frame rate of a take is set by the preset (Wan 16 fps, MiniMax-H3 24 fps). The timeline and the exports use the frame rate of the project.
-- Several variants are made per shot: A, B, and so on. They are listed in the Inspector, tab **Takes** (as **Final** and **Drafts**), and in Director IA, tab **Results**. Click the eye icon to preview one in the viewer, use **Compare** on two takes to see them side by side.
-- Click a take in the Inspector, or **Use** in the Results tab, to make it the take the shot plays; it then shows a check mark, or **Used**. The flag button (**Mark for retake**) flags a take you want to redo, and the take then shows **Retake**. **Instructions used** opens the exact instructions behind a take: the global direction, the shot prompts, the references and Control videos, the profile, the mode and the seed.
-- **Final** on a draft take makes it final. By default the take is upscaled with SeedVR2, to 720p, 1080p, 1440p or 2160p. **Re-render**, the secondary action, generates the shot again at the highest resolution of the preset, with the same seed. The new take says which one it comes from ("from A").
-- **Assemble chosen takes** (Results tab) puts the takes you chose into the cut.
+- Drafts are made at the resolution your admin chose (832×480 unless changed) or the closest the engine offers. The frame rate of a take is set by the preset (Wan 16 fps, MiniMax H3 24 fps). The timeline and the exports use the frame rate of the project.
+- Several variants are made per shot: A, B, and so on. A new generation for the same shot goes on with the next free letters (C, D…), separately for drafts and finals; **Retry** and **Make final** keep the letter of the take they come from. They are listed in the Inspector, tab **Takes** (as **Final** and **Drafts**), and in Director IA, tab **Results**, grouped by shot.
 
-In this version the takes are simulated: each take shows a procedural thumbnail, the number of the shot on a gradient, marked **Simulated** (chapter 17).
+### The take card
 
-Available from step 4.
+- The thumbnail carries the letter of the take. Click it to preview the take in the viewer ("Preview take A"); **Back to the sequence** brings you back.
+- The first line says "Draft", "Final" or "Final · upscale", then the state ("Queued", "Generating", "Failed", "Cancelled") or, once finished, the duration. The next lines give the profile and how the shot started ("FL2VA · first and last frames", "FL2VA · text only", "FL2VA · first frame", "Ref2VA · references"), the resolution and, for a final, the take it comes from ("from A"), the seed ("Seed 123456") and the engine that made it (the preset or the model, then the backend).
+- A queued take shows only its state ("Queued") above an empty line; a take that is generating shows the step, the percentage and a progress bar. When it fails, it shows the reason that PotionUI gives (in English) or, when it gives none, "The generation failed (cuda_oom)." with the code.
+- **Compare** puts the take beside a second one in the viewer, both playing in a loop ("Pick a second take to compare"). **Keep** (the star) and **Reject** (the thumb down) flag the take; click again to remove the flag. The export warns about a shot whose take is flagged Reject. **Generation details** opens PotionUI's window about the generation. **Delete** asks "Delete this take?" ("Take A of “Shot 2” leaves the list. The video stays in your generation history.").
+- A capture of take cards, in the dark and light themes of the English interface, is in `docs/screenshots/takes-cards.png`.
+- On a take in progress, **Cancel** stops it. On a failed one, **Retry** starts a new take.
+
+### Choose a take
+
+**Choose** puts the take on the shot: it plays on the timeline, the shot becomes Draft or Final, and the card shows a check mark and **Used**. Only one take is chosen per shot. The first draft that finishes for a shot that was still "To generate" is put there for you, and so is a finished final. In the viewer, a take previewed outside the cut has **Use this take**. **Assemble chosen takes** (Results tab) puts all the chosen takes in the cut; without any it says "First choose takes for the shots."
+
+### Make final
+
+**Make final** on a draft card (also the button of a Storyboard card, **Make take A final** in the Inspector, **Shot › Make take final** and Ctrl+Shift+G) opens the window "Make final · Shot 2 · A" with the line "Draft in 832×480 · seed 123456". It offers two ways:
+
+- **Upscale** is the default. The engine enlarges the take as it is: the picture and the motion do not change, and it is the fastest way. Wan, LTX, MiniMax H3 Fast and VDN, and cloud takes go through SeedVR2 ("SeedVR2 enlarges this take as it is: fastest, the motion does not change."); a take of the base MiniMax H3 preset uses the upscale mode of its own preset ("MiniMax H3 enlarges this take with its own upscale mode: the motion does not change."). Pick the **Target resolution**: 720p, 1080p, 1440p or 4K (the window starts on the resolution of your project), then click "Upscale to 1080p".
+- **Re-render at full resolution** generates the shot again at the largest resolution of the engine, with the same seed: "slower, the result may differ slightly."
+
+When no upscaler is assigned to you, the window shows "Upscaler not available" ("No upscaler is assigned to you: ask an administrator to enable SeedVR2, or render again at full resolution."), the resolutions are greyed and only the re-render is offered. A take of the base MiniMax H3 preset does not need SeedVR2, as long as its preset is assigned to you. A capture of this window, in the dark and light themes of the English interface, is in `docs/screenshots/make-final.png`.
+
+The new take is a **Final** one ("Final" or "Final · upscale") that says which draft it comes from ("from A"). You get "Upscale to 1080p started" or "Render at 1280×720 started", the final appears on the card list when it ends, and it is put on the shot ("Final version ready and applied to the shot"). A final uses GPU minutes like any take and is checked against your quota.
 
 ## 10. Assistant
 
@@ -277,11 +344,13 @@ The window **Prompt library & assistant** opens from **Window › Prompt library
 
 The three H3 profiles and what each one asks for on the range:
 
-| Profile | Meaning | It asks for |
-|---|---|---|
-| FL2VA | Continuity between the start and end images. | Start and end frames in the range. Without any frame, the shots are generated from text only. |
-| Ref2VA | Keep the identity of the references during the action. | An identity reference (character, object). With MiniMax-H3 the generation follows the references once it is real (from step 4). |
-| Hybrid AV | The soundtrack, rhythm and dialogue drive the picture. | An existing audio track in the range (dialogue or music). |
+| Profile | Meaning | It asks for | Engines |
+|---|---|---|---|
+| FL2VA | Continuity between the start and end images. | Start and end frames in the range. Without any frame, the shots are generated from text only. | All of them. |
+| Ref2VA | Keep the identity of the references during the action. | An identity reference (character, object). The generation follows your references. | MiniMax H3 only (not its Fast and VDN variants). |
+| Hybrid AV | The soundtrack, rhythm and dialogue drive the picture. | An existing audio track in the range (dialogue or music). | MiniMax H3, Fast and VDN. |
+
+The engine, not the table, has the last word: the page greys a profile the chosen engine cannot generate (chapter 8). The audio tracks of the project are not sent to the engine yet: MiniMax H3 makes the sound itself, and the track that drives the performance stays simulated (chapter 17).
 
 When a Control video is present, the motion comes from the guide.
 
@@ -307,7 +376,7 @@ The four tracks of a new project are empty. **Audio › Import audio file…** b
 - **To other software.** Final Cut Pro (`.fcpxml`), OpenTimelineIO (`.otio`) and EDL CMX 3600 (`.edl`). They are real files.
 - **Subtitles.** An SRT file built from the dialogue text and the titles. **File › Export subtitles…** opens this tab.
 
-Before the export, the window warns about shots that are not final yet, takes flagged **Retake** and direction conflicts that are not solved. Exports are written to your PotionUI storage, in a `video_producer/exports/` folder, and you download them from the page. Your admin sets a size budget for that folder per user.
+Before the export, the window warns about shots that are not final yet, shots that use a take you flagged **Reject** and direction conflicts that are not solved. Exports are written to your PotionUI storage, in a `video_producer/exports/` folder, and you download them from the page. Your admin sets a size budget for that folder per user.
 
 In this version only the last two tabs produce files. Their button (the word "Download" followed by the file name, which comes from the project name) builds the file in your browser and saves it through the browser: nothing is written to your PotionUI storage. The media paths inside the Final Cut Pro, OpenTimelineIO and EDL files are made from the names of the media, not paths of real video files, and a shot without media becomes a gap. The **Video** tab shows a progress bar and ends with a note saying that no video file is written at this stage.
 
@@ -379,56 +448,64 @@ When the shortcuts work:
 
 ## 17. What is simulated
 
-Some parts keep their interface but do not do the real thing yet. They carry a gray dashed badge, **Simulated**, never a yellow one: yellow is kept for real points to check. **Help › Simulated features** opens the list.
+Some parts keep their interface but do not do the real thing yet. They carry a gray dashed badge, **Simulated**, never a yellow one: yellow is kept for real points to check. **Help › Simulated features** opens the list. The same gray badge also marks what the engine you picked cannot do (a greyed profile, "Not sent with this engine" on the references and on the workshop settings, "Upscaler not available"; chapters 8 and 9).
 
-The badge appears in the header of the windows **Reference a Gaussian Splat file** and **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265**, next to the audio stems and in the footer of the **Video** tab of the export window; on the automation button of the console strips; on the **Sample scene** and on the preview of a Gaussian Splat file in the 3D scene; and on a generated take, in the viewer ("Final take · simulated AI", "720p draft · simulated AI") and on its thumbnail. A few notifications are flagged the same way.
+The badge **Simulated** appears in the header of the windows **Reference a Gaussian Splat file** and **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265**, next to the audio stems and in the footer of the **Video** tab of the export window; on the automation button of the console strips; on the **Sample scene** and on the preview of a Gaussian Splat file in the 3D scene; and on a take made by an earlier version of the project, on its card ("Simulated take from an earlier version of the project: read only.") and in the viewer ("Final take · simulated AI", "720p draft · simulated AI"). The takes of the real generation never carry it. A few notifications are flagged the same way.
 
-Already working in this version: saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard, the prompt library and the composer, the direction conflict checks, the color match, the camera, the trajectories and the keyframes of the 3D scene, the mixing console playing your audio files, and the Final Cut Pro, OpenTimelineIO, EDL and SRT files, which are real files.
+Already working in this version: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard, the prompt library and the composer, the direction conflict checks, the color match, the camera, the trajectories and the keyframes of the 3D scene, the mixing console playing your audio files, and the Final Cut Pro, OpenTimelineIO, EDL and SRT files, which are real files.
 
 The window **Simulated features** lists eight items. For each one, the table says what it does in this version and what it becomes once all the steps are delivered.
 
 | Item in the window | In this version | Once all the steps are delivered |
 |---|---|---|
-| **AI generation and 3D render** | Progress, steps and takes are simulated: each take shows a numbered procedural thumbnail marked "Simulated". The estimates of time, memory, quota and cost are indicative. | Takes are real video files made by the engine you pick (this machine, a studio server or a cloud model); progress and errors come from the engine. The estimate shows GPU time (from your own past runs here, "—" when there is none), memory, your monthly quota and, for admins only, the cloud cost. **Final** upscales the chosen take with SeedVR2 by default; **Re-render** generates it again at the highest resolution of the preset with the same seed. With MiniMax-H3, the Ref2VA profile really conditions the generation on your references. Available from step 4. The 3D render modes stay simulated. |
+| **3D render modes and engine settings** | The output modes "3D render" and "3D render + AI" start nothing. The settings greyed in the Advanced workshop are not sent to the engine: the seed (each take draws its own), the final resolution (the final uses the largest resolution of the engine), steps, CFG, LoRA, windows, consistency, post-processing and the Hybrid AV audio driver; nor are the Control videos and the Hybrid builder weights. Takes made by earlier versions keep their numbered thumbnail. | Stays simulated. AI generation itself is real: see chapters 8 and 9. |
 | **Synopsis breakdown** | One sentence becomes one shot. | The assistant proposes the breakdown. Available from step 5. |
 | **Identity check** | The similarity between shots is simulated. The color check really analyzes the images. | Color matching is measured on the real thumbnails of the takes (from step 6). The similarity percentage stays simulated, because no identity measure is available to plugins. |
 | **Video render** | No video file is written. The Final Cut, OTIO, EDL and SRT exports produce real files. | H.264 MP4 or VP9 WebM videos assembled with ffmpeg and written to your storage. ProRes 422, H.265 and audio stems stay simulated: PotionUI's video converter writes H.264 MP4 or VP9 WebM only, and no per-role audio render exists. Available from step 6. |
 | **Gaussian Splat** | The referenced file is not loaded; the sample scene is a generated point cloud. | Stays simulated: the scene stays a 2D point preview and Gaussian Splat files are referenced, not loaded. |
 | **Control video** | Computing the guide from the 3D scene is simulated. | Stays simulated: the guide video is not rendered from the scene, an imported Control video is not sent to an engine and the 3D capture is not rendered from the scene. The production modes **3D render** and **3D render + AI** depend on that guide and stay simulated. |
-| **Voice and sound design** | Preparation is simulated; the preview is a simple synthesis. | Stays simulated: voice, character and timbre settings do not produce speech, lip sync has no separate step (MiniMax-H3 makes picture and sound in one pass) and no preset prepares ambience, foley, texture, impact or music for the workshop. The text of the dialogues does feed the subtitles for real. |
+| **Voice and sound design** | Preparation is simulated; the preview is a simple synthesis. | Stays simulated: voice, character and timbre settings do not produce speech, lip sync has no separate step (MiniMax H3 makes picture and sound in one pass) and no preset prepares ambience, foley, texture, impact or music for the workshop. The text of the dialogues does feed the subtitles for real. |
 | **Edit audio** | The audio files you import play for real through the console: faders, mute and solo, pan, equalizer, compressor, sends and meters work on them. The sounds prepared by the Sound design workshop are synthesized in real time (WebAudio). | Stays simulated for the workshop sounds, because no preset prepares them, and for the automation curves: the automation button only switches a mode, no curve is recorded. |
 
-The window does not list the controls of the **Advanced workshop** that a preset does not declare: consistency between windows, lock character identity, motion guide first, the Hybrid builder and its saved profiles, audio / picture offset, follow the rhythm of the cut, guidance, overlap, window length, LoRAs, post-processing, the track that drives the performance, lip sync, result naming and insert variant A automatically. They are visible but do not drive any generation: a preset only exposes the controls it declares, and MiniMax-H3, for example, has no guidance and no negative prompt. With real engines they stay visible, grayed and marked simulated.
+The window does not list every setting of the **Advanced workshop** that the engine does not use: consistency between windows, lock character identity, motion guide first, the generation windows with their length and overlap, the final resolution, the seed, the steps, the guidance (CFG), the LoRAs, the track that drives the performance, lip sync, follow the rhythm of the cut, audio / picture offset, result naming, post-processing and insert variant A automatically. They stay in the project, but they are not sent to the engine and drive no generation: a preset only exposes the controls it declares, and MiniMax H3, for example, has no guidance and no negative prompt. The workshop greys them and marks each one with the badge "Not sent with this engine" (hover it: "The Video Director builds the request from the shots, the direction, the frames and the references; this setting stays in the project but does not change the takes."). **Variants per window** stays active. The Hybrid builder weights and its saved profiles, and the guidance of a Control video, are not sent either, but they are not greyed. What counts is the engine, the quality, the variants and what is in your project: the direction, the shot prompts, the frames and the references. The seed of a take is drawn by the server and shown on its card, and the resolutions follow the draft and final rules of chapter 8.
 
 The assistant, for its part, is not simulated: it is the PotionUI chat in Video Producer mode, which writes shot prompts, fixes conflicts with the global direction, splits a synopsis into shots and checks continuity, and you approve each change before it touches the project (available from step 5).
 
 ## 18. Troubleshooting
 
-- **The Production bar shows no engine.** Your admin has not finished the setup: an engine, a video preset assigned to you. Ask them to open Admin → Plugins → Video Producer.
-- **The estimate shows "—" for the time.** Nothing has been measured yet for this preset, engine and resolution on this machine. It fills in after a few generations.
-- **"Will stream through host RAM, slower".** The memory estimate is above what the engine has. The generation is not blocked. If the server lacks free memory for it, the engine refuses to start and the take fails with an error.
-- **The quota is spent.** **Generate selection** is refused until the next month or until your admin raises the limit of your plan. Running generations are not stopped.
-- **Generate selection is disabled.** Read the message in the bar: no range, no direction and no shot prompt, an empty prompt, a 3D mode with no 3D shot, or the quota.
-- **A warning says the shots will be generated from text only.** The FL2VA profile has no frame in the range. Add a start or an end frame, or pick another H3 profile; the generation is not blocked.
-- **References are ignored with MiniMax-H3.** Ask your admin to check the model file picked for the References mode.
-- **A take failed.** The message and its code are shown on the take. If PotionUI was restarted during the generation, the take is marked failed and the generation cannot resume: start it again.
+- **The Production bar shows no engine.** The pop-up reads "No engine". Your admin has not finished the setup: an engine, a video preset assigned to you, or a video model turned on for the cloud provider. Ask them to open Admin → Plugins → Video Producer.
+- **The estimate shows "—" for the time.** Nothing has been measured yet for this preset, engine and resolution (the calibration is empty). It fills in after a few generations.
+- **"Will stream through host RAM, slower."** The memory estimate is above what the GPU has. The generation is not blocked. If the server lacks free memory for it, the engine refuses to start and the take fails (`host_ram_oom`).
+- **The quota is spent.** **Generate selection** says "GPU quota exceeded" until the next month or until your admin raises the limit of your plan. Running generations are not stopped, and a take that fails or is cancelled gives its minutes back. The first takes of a preset count 10 seconds of GPU for every second of video, which can look generous until the real durations are measured.
+- **Generate selection is disabled.** Read the message in the bar: no range, no direction and no shot prompt, an empty prompt, a 3D mode with no 3D shot, no engine, a preset that is not yours, a profile the engine cannot generate, models to install, a cloud model to pick, or the quota.
+- **"Models to install for this preset: …".** Your admin has not downloaded the model files that preset needs. Ask them.
+- **A warning says the shots will be generated from text only.** The FL2VA profile has no frame linked to the shot. Add a start or an end frame, or pick another H3 profile; the generation is not blocked.
+- **A take stays Queued.** Your admin limits how many generations you can have in progress at once: the take starts by itself when one of yours ends. If it stays Queued while nothing of yours is running, tell your admin.
+- **A take failed.** The card shows the reason that PotionUI gives (in English) or, when it gives none, "The generation failed" followed by a code. **Retry** starts a new take for the same shot with the same seed. Typical causes: the GPU ran out of memory (`cuda_oom`: try a draft, a shorter shot or another engine); a model file is missing on the server (`missing_model_file`: ask your admin to download it again); the server ran out of memory while streaming the model (`host_ram_oom`). If PotionUI was restarted during the generation, the take is marked failed and cannot resume: use **Retry**.
+- **"Upscaler not available" in Make final.** No upscaler is assigned to you: SeedVR2 enlarges the takes of Wan, LTX, MiniMax H3 Fast and VDN and of cloud models. Use **Re-render at full resolution**, or ask your admin about SeedVR2.
+- **References are ignored with MiniMax H3.** Ask your admin to check the model file picked for the References mode. The engine ignores the references of a profile other than Ref2VA, and of any other preset.
+- **I closed the page during a generation.** The takes go on; open the project again to find them. The notifications tell you when they end.
 - **An export fails.** Ask your admin about ffmpeg, or free some of your exports: the folder has a size budget.
 - **The project bar says "Not saved — retry".** The last save failed: the connection dropped, or the server refused the project. A message tells which. Click the save state or the **Retry** button of the message to try again. Your changes stay in the page and the next change tries again too. Until a save works, opening another project or restoring a version asks you to confirm before it drops those changes. If the message says that the content was refused or that the project is too large, ask your admin: reloading the page would lose the changes that are not saved.
 - **"Project reloaded: it changed elsewhere".** The project was saved from another tab, window or device after you opened it, so the page loaded the saved version. The changes you had not saved in this page are lost. Work on a project in one place at a time; **File › Version history…** brings back an earlier state.
 - **"This project was deleted elsewhere".** The project was deleted from another tab or device while it was open here. The page opened your most recently modified project, or created the starter project. The changes you had not saved are lost.
-- **A media does not show or play.** Its file is no longer available in your PotionUI library or gallery. Import it again.
+- **A media does not show or play.** Its file is no longer available in your PotionUI library or gallery. Import it again. A take whose generation you deleted from the gallery no longer plays either.
 - **"1 file could not be imported" (or "N files could not be imported").** The file is no longer available in the library or the gallery, or its kind is not accepted by the window: images and videos for **Import files…** and **From the PotionUI gallery**, audio for **Import audio file…**.
 
-Available from step 4. Exports from step 6.
+Exports from step 6.
 
 ## 19. Glossary
 
 | English | Français | Meaning |
 |---|---|---|
 | shot | plan | A clip of the film, one generation. |
-| take | prise | One generated version of a shot. |
+| take | prise | One generated version of a shot: a real video made by the engine you picked. |
 | draft | brouillon | A fast, lower-resolution take to judge motion and framing. |
-| final | final | The chosen take, upscaled or re-rendered. |
+| final | final | The chosen take, enlarged (upscale) or generated again at the largest resolution (re-render). |
+| engine | moteur | What makes the takes: a video preset on your admin's hardware, or a cloud model. |
+| variant | variante | One of the takes (A, B, …) made for the same shot in one generation. |
+| seed | graine | The number that fixes the randomness of a take; the same seed gives a similar take. |
+| calibration | calibration | The real durations of your past generations, kept per preset, engine and resolution, that the estimate uses for its time; it shows "—" until there is one. |
 | match | raccord | Making two neighbor shots look alike (color) or keep the same identity. |
 | fade | fondu | A gradual start or end of a clip. |
 | playhead | tête de lecture | The current position on the timeline. |

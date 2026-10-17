@@ -51,7 +51,7 @@
 	"cmd.draft": "Qualité brouillon",
 	"cmd.final": "Qualité finale",
 	"cmd.queue": "Ajouter la sélection à la file",
-	"cmd.resume": "Reprendre la génération",
+	"cmd.cancel-generation": "Annuler la génération",
 	"cmd.results": "Résultats et prises",
 	"cmd.assemble": "Assembler les prises choisies",
 	"cmd.advanced": "Atelier avancé…",

@@ -2,14 +2,16 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { ui, doc, select, secs, globalPrompt, allIssues, itemsIn, productionRange, insertResult, assembleChosen, act, startGeneration, toast, takesOf, clipLabel } from '../../lib/state.svelte.js';
+	import { ui, doc, select, secs, globalPrompt, allIssues, itemsIn, productionRange, act, clipLabel } from '../../lib/state.svelte.js';
+	import { takesOf, assembleChosen, generateQueue, supportedProfiles, engineLabel } from '../../lib/production.svelte.js';
+	import { takeStore } from '../../lib/takes.svelte.js';
 	import { seams, matchToPrevious } from '../../lib/continuity.svelte.js';
 	import { directionFields, stages } from '../../lib/catalog.js';
 	import { families, addReference, attachToRange } from '../../lib/references.js';
-	import { takeThumb } from '../../lib/media.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import Tabs from '../shell/Tabs.svelte';
+	import TakeCard from '../takes/TakeCard.svelte';
 	import Icon from '../Icon.svelte';
 
 	const modes = ['FL2VA', 'Ref2VA', 'Hybrid AV'];
@@ -21,11 +23,14 @@
 	const scope = $derived(itemsIn(range));
 	const local = $derived(scope.prompts[0]);
 	const seamIssues = $derived(seams().flatMap((s) => s.issues.map((x) => ({ ...x, clip: s.to }))));
-	const chosen = $derived(doc.results.filter((r) => r.status === 'chosen').length);
+	const chosen = $derived(takeStore.list.filter((r) => r.chosen && r.status === 'done').length);
+	const takeCount = $derived(takeStore.list.length + (doc.results?.length ?? 0));
+	const supported = $derived(supportedProfiles());
+	const unsupported = $derived(modes.filter((m) => !supported.includes(m)));
 	const tabs = $derived([
 		{ id: 'direction', label: t('panels.dock.tab.direction'), dot: issues.length > 0 || seamIssues.length > 0 },
 		{ id: 'references', label: t('panels.dock.tab.references') },
-		{ id: 'results', label: t('panels.dock.tab.results'), badge: doc.results.length || null }
+		{ id: 'results', label: t('panels.dock.tab.results'), badge: takeCount || null }
 	]);
 	const allFamilies = $derived([{ id: 'all', label: t('panels.dock.refs.all'), icon: 'bookmark', hint: '' }, ...families]);
 	const refFamily = $derived(families.find((f) => f.id === ui.refSpace) ?? null);
@@ -37,26 +42,10 @@
 		return t('panels.dock.mode.hybrid');
 	}
 
-	function toggleCompare(id) {
-		const c = ui.compare ? [...ui.compare] : [];
-		const i = c.indexOf(id);
-		if (i >= 0) c.splice(i, 1);
-		else c.push(id);
-		ui.compare = c.slice(-2);
-		ui.preview = null;
-		if (ui.compare.length === 1) toast(t('panels.dock.results.pickSecond'));
-	}
-
 	function openPrompt(p) {
 		select('prompt', p.id);
 		seek(p.start);
 		ui.modal = { type: 'prompt', id: p.id };
-	}
-
-	function generateQueue() {
-		ui.production.target = 'sequence';
-		startGeneration();
-		ui.production.queue = [];
 	}
 </script>
 
@@ -147,9 +136,21 @@
 			<div class="vp-label mb-1">{t('panels.dock.profile')}</div>
 			<HostUi
 				name="SegmentedControl"
-				props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('panels.dock.profileGroup'), items: modes.map((m) => ({ id: m, label: m })), selected: doc.direction.mode, onSelect: (m) => act(() => (doc.direction.mode = m)) }}
+				props={{
+					variant: 'toggle',
+					fullWidth: true,
+					ariaLabel: t('panels.dock.profileGroup'),
+					items: modes.map((m) => ({ id: m, label: m, disabled: !supported.includes(m) })),
+					selected: doc.direction.mode,
+					onSelect: (m) => act(() => (doc.direction.mode = m))
+				}}
 			/>
 			<p class="pt-1 text-xs text-fg-subtle">{modeHint(doc.direction.mode)}</p>
+			{#if unsupported.length}
+				<HostUi name="Tooltip" props={{ text: t('generation.profile.why', { profiles: unsupported.join(', '), engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
+					<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('generation.profile.badge', { profiles: unsupported.join(' · ') })}</span>
+				</HostUi>
+			{/if}
 		</div>
 
 		<div class="mt-3 border-t border-line">
@@ -178,6 +179,11 @@
 	{:else if ui.dockTab === 'references'}
 		<div class="flex flex-col gap-4 p-3">
 			<p class="text-xs text-fg-subtle">{t('panels.dock.refs.intro')}</p>
+			{#if !supported.includes('Ref2VA')}
+				<HostUi name="Tooltip" props={{ text: t('generation.refs.why', { engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
+					<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('generation.refs.badge')}</span>
+				</HostUi>
+			{/if}
 			<ul class="space-y-0.5" role="tablist" aria-label={t('panels.dock.refs.families')}>
 				{#each allFamilies as f (f.id)}
 					{@const n = f.id === 'all' ? doc.references.length : doc.references.filter((r) => r.space === f.id).length}
@@ -247,7 +253,7 @@
 				</div>
 			{/if}
 
-			{#if !doc.results.length}
+			{#if !takeCount && takeStore.loaded}
 				<HostUi name="EmptyState" props={{ compact: true, icon: 'sparkles', title: t('panels.dock.results.empty'), description: t('panels.dock.results.emptyHint') }} />
 			{/if}
 
@@ -259,55 +265,9 @@
 						<span class="min-w-0 flex-1 truncate text-sm font-medium">{clipLabel(c)}</span>
 						<span class="flex items-center gap-1 text-xs {stages[c.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[c.stage].dot}"></span>{stages[c.stage].label}</span>
 					</button>
-					<ul class="grid grid-cols-2 gap-2">
+					<ul class="space-y-2">
 						{#each list as r (r.id)}
-							{@const inCompare = !!ui.compare?.includes(r.id)}
-							{@const active = c.take === r.id}
-							<li class="overflow-hidden rounded-lg border transition-colors {active ? 'border-signal ring-1 ring-signal' : ui.preview?.id === r.id || inCompare ? 'border-signal/60' : 'border-line-strong hover:border-line-hover'}">
-								<button
-									type="button"
-									class="relative block aspect-video w-full"
-									onclick={() => ((ui.preview = { kind: 'result', id: r.id }), (ui.compare = null))}
-									title={t('panels.dock.results.previewTip')}
-									aria-label={t('panels.dock.results.preview', { variant: r.variant })}
-								>
-									<img src={takeThumb(r)} alt="" class="h-full w-full object-cover" />
-									<span class="absolute left-1 top-1 rounded bg-black/60 px-1 text-xs font-semibold text-white">{r.variant}</span>
-									<span class="absolute right-1 top-1 flex items-center gap-1 rounded bg-black/60 px-1 text-2xs text-white"><span class="h-1.5 w-1.5 rounded-full {r.quality === 'final' ? 'bg-success-solid' : 'bg-signal-solid'}"></span>{r.quality === 'final' ? t('panels.dock.final') : t('panels.dock.draft')}</span>
-									{#if r.status === 'redo'}<span class="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/60 px-1 text-2xs text-white"><span class="h-1.5 w-1.5 rounded-full bg-warning-solid"></span>{t('panels.dock.results.redo')}</span>{/if}
-								</button>
-								<div class="flex items-center gap-0.5 p-0.5">
-									<HostUi
-										name="IconButton"
-										props={{ icon: hostIconName('compare'), label: t('panels.dock.results.compare', { variant: r.variant }), size: 'xs', class: 'vp-toggle', ariaPressed: inCompare, tooltip: t('panels.dock.results.compareTip'), onclick: () => toggleCompare(r.id) }}
-									/>
-									<HostUi
-										name="IconButton"
-										props={{
-											icon: hostIconName('flag'),
-											label: t('panels.dock.results.flag', { variant: r.variant }),
-											size: 'xs',
-											class: 'vp-toggle',
-											ariaPressed: r.status === 'redo',
-											tooltip: t('panels.dock.results.flagTip'),
-											onclick: () => act(() => (r.status = r.status === 'redo' ? 'new' : 'redo'))
-										}}
-									/>
-									<HostUi
-										name="IconButton"
-										props={{ icon: 'info', label: t('panels.dock.results.info', { variant: r.variant }), size: 'xs', tooltip: t('panels.dock.results.infoTip'), onclick: () => (ui.modal = { type: 'recap', result: r.id }) }}
-									/>
-									{#if active}
-										<span class="ml-auto flex items-center gap-1 px-1.5 text-xs text-signal"><Icon name="check" class="h-3.5 w-3.5" />{t('panels.dock.results.used')}</span>
-									{:else}
-										<span class="ml-auto">
-											<HostUi name="Tooltip" props={{ text: t('panels.dock.results.useTip') }}>
-												<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => insertResult(r.id) }}>{t('panels.dock.results.use')}</HostUi>
-											</HostUi>
-										</span>
-									{/if}
-								</div>
-							</li>
+							<TakeCard take={r} clip={c} />
 						{/each}
 					</ul>
 				</section>
@@ -316,7 +276,7 @@
 	{/if}
 </div>
 
-{#if ui.dockTab === 'results' && doc.results.length}
+{#if ui.dockTab === 'results' && takeCount}
 	<div class="shrink-0 border-t border-line p-3">
 		<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'layers', class: 'w-full', disabled: !chosen, onclick: assembleChosen }}>{t('panels.dock.results.assemble', { count: chosen })}</HostUi>
 	</div>

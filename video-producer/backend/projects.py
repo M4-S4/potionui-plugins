@@ -38,8 +38,13 @@ def _array(items: Dict[str, Any]) -> Dict[str, Any]:
     return {"type": "array", "items": items}
 
 
-def _object(properties: Dict[str, Any]) -> Dict[str, Any]:
-    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
+def _object(properties: Dict[str, Any], optional: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {**properties, **(optional or {})},
+        "required": list(properties),
+        "additionalProperties": False,
+    }
 
 
 def _tagged(tag: str, variants: Dict[str, Dict[str, Any]], nullable: bool = False) -> Dict[str, Any]:
@@ -215,7 +220,8 @@ ENGINE = _object(
         "followCut": FLAG,
         "naming": TEXT,
         "autoInsert": FLAG,
-    }
+    },
+    optional={"preset": NULLABLE_TEXT, "model": NULLABLE_TEXT},
 )
 
 ASSET = _object(

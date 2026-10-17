@@ -18,19 +18,14 @@
 		promptIssues,
 		globalPrompt,
 		clipLabel,
-		takesOf,
-		promoteToFinal,
-		startGeneration,
-		estimate,
-		fmtDuration,
-		backend,
 		shotIdAt,
 		sourceLength
 	} from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
-	import { stages, audioRoleLabel, frameRoleLabel, engineName } from '../../lib/catalog.js';
+	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
+	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel } from '../../lib/production.svelte.js';
 	import { refRoleLabel } from '../../lib/references.js';
 	import { commandById } from '../../lib/commands.js';
 	import { currentPlan, markGuidesStale, addKeyframe, renderGuide } from '../../lib/scene.js';
@@ -72,7 +67,7 @@
 		return item.name ?? item.text ?? item.label ?? '';
 	});
 
-	const busy = $derived(ui.production.state === 'running' || ui.production.state === 'paused');
+	const busy = $derived(s?.kind === 'clip' && item ? shotActivity(item.id).state === 'running' : false);
 	const set = (k, v) => (item[k] = v);
 	const setClipDur = (v) => {
 		item.dur = round(clamp(v, 0.4, sourceLength(item) - item.srcIn), 0.04);
@@ -207,14 +202,14 @@
 
 			{#if s.kind === 'clip'}
 				{@const a = asset(item.assetId)}
-				{@const take = doc.results.find((r) => r.id === item.take)}
+				{@const take = findTake(item.take)}
 				{#if ui.inspectorTab === 'takes'}
 					<TakesSection clip={item} />
 				{:else if ui.inspectorTab === 'color'}
 					<ColorSection clip={item} />
 				{:else}
 					{#if item.stage !== 'final' && item.stage !== 'source'}
-						{@const promote = item.stage === 'draft'}
+						{@const promote = item.stage === 'draft' && take && !take.legacy}
 						<button
 							type="button"
 							class="flex w-full items-center gap-3 rounded-lg border border-line-strong bg-surface-2/60 p-2.5 text-left transition-colors hover:border-line-hover disabled:opacity-50"
@@ -224,12 +219,7 @@
 							<span class="flex h-8 w-8 items-center justify-center rounded-full bg-surface-3 text-fg"><Icon name={promote ? 'arrow-up' : 'sparkles'} class="h-4 w-4" /></span>
 							<span class="min-w-0 flex-1">
 								<span class="block text-sm font-medium">{promote ? t('inspector.promoteTake', { variant: take?.variant ?? '' }) : t('inspector.generateDrafts')}</span>
-								<span class="block text-xs text-fg-muted">
-									{t('inspector.estimateOn', {
-										duration: fmtDuration(estimate({ seconds: item.dur, quality: promote ? 'final' : 'draft', variants: promote ? 1 : doc.engine.variants }).gpuSec),
-										engine: engineName(backend())
-									})}
-								</span>
+								<span class="block truncate text-xs text-fg-muted">{t('inspector.engineOn', { engine: engineLabel() })}</span>
 							</span>
 						</button>
 					{/if}

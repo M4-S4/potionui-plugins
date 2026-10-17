@@ -12,7 +12,6 @@
 	"addToCut": "Ajouter au montage",
 	"placeholderHint": "Plan à générer : ajoutez une instruction locale dans la piste Prompts.",
 	"generateDrafts": "Générer des brouillons",
-	"approx": "≈ {duration}",
 	"simFinal": "Prise finale · IA simulée",
 	"simDraft": "Brouillon 720p · IA simulée",
 	"end": "Fin de la séquence",

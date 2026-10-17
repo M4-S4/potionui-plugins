@@ -35,8 +35,29 @@ class Catalog:
         self.presets = []
         self.asked = []
         self.broken = set()
+        self.fields = {}
+        self.models = {}
+        self.drivers = {}
         monkeypatch.setattr(core_bridge, "api_backends", SimpleNamespace(list_backends=self._backends))
         monkeypatch.setattr(core_bridge, "api_presets", SimpleNamespace(list_presets=self._presets))
+        monkeypatch.setattr(core_bridge, "preset_form_fields", self._fields)
+        monkeypatch.setattr(core_bridge, "cloud_video_models", self._models)
+        monkeypatch.setattr(core_bridge, "preset_driver", self._driver)
+
+    def _driver(self, preset_id):
+        if "drivers" in self.broken:
+            raise RuntimeError("AppContainer not initialized yet")
+        return self.drivers.get(preset_id)
+
+    def _fields(self, preset_id, mode):
+        if "fields" in self.broken:
+            raise RuntimeError("AppContainer not initialized yet")
+        return self.fields.get((preset_id, mode))
+
+    def _models(self, backend_id):
+        if "models" in self.broken:
+            raise RuntimeError("AppContainer not initialized yet")
+        return list(self.models.get(backend_id, []))
 
     def _backends(self):
         if "backends" in self.broken:
@@ -173,6 +194,8 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "plugin": {"id": "video-producer", "version": "0.1.0"},
             "engines": [],
             "presets": [],
+            "features": {"upscaler": False},
+            "upscale_targets": ["hd720", "fhd1080", "qhd1440", "uhd2160"],
         },
     }
 
@@ -446,6 +469,7 @@ def test_me_lists_the_native_and_cloud_engines_with_their_kind_in_priority_order
             "vram_free_gb": None,
             "is_default": True,
             "kind": "cloud",
+            "models": [],
         },
     ]
 
@@ -494,6 +518,14 @@ def test_me_describes_a_video_director_preset_with_its_modes_fields_and_director
             },
             "video_director": WAN_DIRECTOR,
             "upscaler": False,
+            "resolutions": [],
+            "fps": 16,
+            "fps_locked": False,
+            "limits": {"default_duration": 5, "default_fps": 16, "max_duration": 60},
+            "director_modes": ["t2v", "i2v", "flf", "director"],
+            "profiles": ["FL2VA"],
+            "driver": None,
+            "backend_id": None,
         }
     ]
 
@@ -533,6 +565,14 @@ def test_me_marks_seedvr2_as_the_upscaler_without_a_director(client, store, no_c
             },
             "video_director": None,
             "upscaler": True,
+            "resolutions": [],
+            "fps": None,
+            "fps_locked": False,
+            "limits": {},
+            "director_modes": [],
+            "profiles": [],
+            "driver": None,
+            "backend_id": None,
         }
     ]
 
@@ -722,3 +762,206 @@ def test_the_last_project_of_a_user_is_not_seen_by_another_one(app, client, make
     _as(app, make_user(user_id="user-2"))
 
     assert client.get(ME_URL).json()["data"]["last_project_id"] is None
+
+
+VEO = {
+    "id": "cm-veo",
+    "name": "Veo 3",
+    "provider_model_id": "google/veo-3",
+    "tasks": ["img2video", "txt2video"],
+    "typical_seconds": 90,
+    "max_seconds": 600,
+}
+
+H3_DIRECTOR = {
+    "family": "minimax_h3",
+    "preset_modes": ["video", "refs"],
+    "modes": {"t2v": {}, "i2v": {}, "flf": {}, "director": {"fps_locked": True}},
+    "limits": {"default_duration": 5, "default_fps": 24, "max_duration": 15},
+}
+
+CLOUD_DIRECTOR = {
+    **OPENROUTER_DIRECTOR,
+    "modes": {"t2v": {}, "director": {"fps_locked": True}},
+    "limits": {"default_duration": 5, "default_fps": 24, "max_duration": 10},
+    "preset_mode_overrides": {"img2video": {"modes": {"t2v": None, "i2v": {}, "flf": {}}}},
+}
+
+
+def _option(value, label=None):
+    return {"value": value, "label": label or value}
+
+
+def _h3(modes=("video", "refs", "upscale")):
+    return _description(
+        presets.MINIMAX_H3, "MiniMax-H3", vars={"fps": 24, "video_director": H3_DIRECTOR}, modes={mode: _mode() for mode in modes}
+    )
+
+
+def test_me_lists_the_video_models_of_each_cloud_engine_only(client, store, no_container, catalog):
+    catalog.backends = [
+        _backend("b-local", "This machine"),
+        _backend("b-cloud", "OpenRouter", engine=CLOUD_ENGINE, driver="cloud.openrouter"),
+    ]
+    catalog.models = {"b-cloud": [VEO], "b-local": [VEO]}
+
+    local, cloud = client.get(ME_URL).json()["data"]["engines"]
+
+    assert "models" not in local
+    assert cloud["models"] == [VEO]
+
+
+def test_me_lists_no_cloud_model_and_logs_when_the_catalog_cannot_be_read(client, store, no_container, catalog, caplog):
+    catalog.backends = [_backend("b-cloud", "OpenRouter", engine=CLOUD_ENGINE, driver="cloud.openrouter")]
+    catalog.broken.add("models")
+
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        (engine,) = client.get(ME_URL).json()["data"]["engines"]
+
+    assert engine["models"] == []
+    assert "Could not list the video models of cloud backend b-cloud" in caplog.text
+
+
+def test_me_gives_the_sizes_of_the_main_mode_resolution_field(client, store, no_container, catalog):
+    catalog.presets = [_wan()]
+    catalog.fields[(presets.WAN, "video")] = {
+        "resolution": {"type": "resolution", "options": [_option("832x480", "SD Landscape"), _option("1280x720"), _option("auto")]},
+        "fps": {"type": "slider", "options": []},
+    }
+
+    (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert preset["resolutions"] == [{"value": "832x480", "label": "SD Landscape"}, {"value": "1280x720", "label": "1280x720"}]
+    assert preset["fps_locked"] is False
+
+
+def test_me_lists_no_size_and_logs_when_the_fields_cannot_be_read(client, store, no_container, catalog, caplog):
+    catalog.presets = [_wan()]
+    catalog.broken.add("fields")
+
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert preset["resolutions"] == [] and preset["fps"] == 16
+    assert f"Could not read the fields of preset {presets.WAN} mode video" in caplog.text
+
+
+def test_me_gives_h3_its_three_profiles_and_its_locked_frame_rate(client, store, no_container, catalog):
+    catalog.presets = [_h3()]
+    catalog.fields[(presets.MINIMAX_H3, "video")] = {"resolution": {"type": "resolution", "options": [_option("1344x768")]}}
+
+    (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert preset["profiles"] == ["FL2VA", "Ref2VA", "Hybrid AV"]
+    assert (preset["fps"], preset["fps_locked"]) == (24, True)
+    assert preset["resolutions"] == [{"value": "1344x768", "label": "1344x768"}]
+    assert preset["limits"] == {"default_duration": 5, "default_fps": 24, "max_duration": 15}
+
+
+def test_me_offers_ref2va_only_with_the_h3_refs_mode(client, store, no_container, catalog):
+    catalog.presets = [_h3(modes=("video",))]
+
+    assert client.get(ME_URL).json()["data"]["presets"][0]["profiles"] == ["FL2VA", "Hybrid AV"]
+
+
+def test_me_gives_a_cloud_preset_the_modes_of_all_its_preset_modes(client, store, no_container, catalog):
+    catalog.presets = [
+        _description(
+            presets.OPENROUTER_VIDEO,
+            "OpenRouter Video",
+            engine=CLOUD_ENGINE,
+            vars={"video_director": CLOUD_DIRECTOR},
+            modes={"txt2video": _mode(), "img2video": _mode()},
+        )
+    ]
+
+    (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert preset["director_modes"] == ["t2v", "director", "i2v", "flf"]
+    assert (preset["fps"], preset["fps_locked"], preset["profiles"]) == (24, True, ["FL2VA"])
+
+
+def test_me_turns_the_upscaler_feature_on_with_seedvr2(client, store, no_container, catalog):
+    catalog.presets = [_wan()]
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False}
+
+    catalog.presets = [_wan(), _seedvr2()]
+    data = client.get(ME_URL).json()["data"]
+
+    assert data["features"] == {"upscaler": True}
+    assert data["upscale_targets"] == ["hd720", "fhd1080", "qhd1440", "uhd2160"]
+
+
+def _cloud_preset(preset_id=presets.OPENROUTER_VIDEO, name="OpenRouter Video"):
+    return _description(
+        preset_id, name, engine=CLOUD_ENGINE, vars={"video_director": CLOUD_DIRECTOR}, modes={"txt2video": _mode(), "img2video": _mode()}
+    )
+
+
+def test_me_ties_each_cloud_preset_to_the_first_cloud_backend_with_its_driver(client, store, no_container, catalog):
+    catalog.backends = [
+        _backend("b-local", "This machine", driver="cloud.openrouter"),
+        _backend("b-google", "Gemini", engine=CLOUD_ENGINE, driver="cloud.google"),
+        _backend("b-router", "OpenRouter", engine=CLOUD_ENGINE, driver="cloud.openrouter"),
+        _backend("b-router-2", "OpenRouter spare", engine=CLOUD_ENGINE, driver="cloud.openrouter"),
+    ]
+    catalog.presets = [_wan(), _cloud_preset(), _cloud_preset(presets.GEMINI_VIDEO, "Gemini Video")]
+    catalog.drivers = {presets.OPENROUTER_VIDEO: "cloud.openrouter", presets.GEMINI_VIDEO: "cloud.google"}
+
+    listed = client.get(ME_URL).json()["data"]["presets"]
+
+    assert [(preset["id"], preset["driver"], preset["backend_id"]) for preset in listed] == [
+        (presets.WAN, None, None),
+        (presets.OPENROUTER_VIDEO, "cloud.openrouter", "b-router"),
+        (presets.GEMINI_VIDEO, "cloud.google", "b-google"),
+    ]
+
+
+def test_me_gives_no_backend_to_a_cloud_preset_no_enabled_backend_runs(client, store, no_container, catalog):
+    catalog.backends = [_backend("b-google", "Gemini", engine=CLOUD_ENGINE, driver="cloud.google")]
+    catalog.presets = [_cloud_preset()]
+    catalog.drivers = {presets.OPENROUTER_VIDEO: "cloud.openrouter"}
+
+    (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert (preset["driver"], preset["backend_id"]) == ("cloud.openrouter", None)
+
+
+def test_me_gives_a_native_preset_a_driver_but_never_a_backend(client, store, no_container, catalog):
+    catalog.backends = [_backend("b-local", "This machine")]
+    catalog.presets = [_wan()]
+    catalog.drivers = {presets.WAN: "native.local"}
+
+    (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert (preset["driver"], preset["backend_id"]) == ("native.local", None)
+
+
+def test_me_logs_a_driver_or_backends_it_cannot_read_and_ties_nothing(client, store, no_container, catalog, caplog):
+    catalog.presets = [_cloud_preset()]
+    catalog.drivers = {presets.OPENROUTER_VIDEO: "cloud.openrouter"}
+    catalog.broken.add("backends")
+
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        (preset,) = client.get(ME_URL).json()["data"]["presets"]
+    assert (preset["driver"], preset["backend_id"]) == ("cloud.openrouter", None)
+    assert "no cloud preset is tied to one" in caplog.text
+
+    catalog.broken = {"drivers"}
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        (preset,) = client.get(ME_URL).json()["data"]["presets"]
+    assert (preset["driver"], preset["backend_id"]) == (None, None)
+    assert f"Could not read the driver of preset {presets.OPENROUTER_VIDEO}" in caplog.text
+
+
+@pytest.mark.parametrize("preset_id", [presets.MINIMAX_H3_FAST, presets.MINIMAX_H3_VDN])
+def test_me_derives_the_profiles_and_modes_of_an_h3_variant_from_its_own_modes(client, store, no_container, catalog, preset_id):
+    catalog.presets = [
+        _description(preset_id, "Variant", vars={"fps": 24, "video_director": {**H3_DIRECTOR, "preset_modes": ["video"]}}, modes={"video": _mode()})
+    ]
+
+    (preset,) = client.get(ME_URL).json()["data"]["presets"]
+
+    assert preset["profiles"] == ["FL2VA", "Hybrid AV"]
+    assert list(preset["modes"]) == ["video"]
+    assert preset["upscaler"] is False

@@ -20,6 +20,10 @@ hooks:
       handler: "hooks.lifecycle_hooks.on_disable"
     - hook: "notification_type.register"
       handler: "hooks.notification_hooks.register_types"
+    - hook: "generation.after_complete"
+      handler: "hooks.generation_hooks.on_after_complete"
+    - hook: "generation.failed"
+      handler: "hooks.generation_hooks.on_failed"
 
 pages:
   - route: "video-producer"
@@ -81,7 +85,7 @@ setup:
     label: "Install ffmpeg for video delivery"
   - kind: "check"
     check: "backend.setup_checks:MiniMaxH3Ready"
-    label: "If a MiniMax-H3 preset is installed, install its four model files (DiT, text encoder, video VAE, audio VAE)"
+    label: "If a MiniMax-H3 preset is installed, install its five model files (DiT, text encoder, video VAE, audio VAE, and the latent upscaler of its Upscale mode)"
 
 docs:
   - path: "README.md"

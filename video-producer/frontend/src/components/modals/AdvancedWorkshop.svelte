@@ -1,12 +1,14 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, toast, readiness, startGeneration, globalPrompt, secs, checkpoint, estimate, fmtDuration } from '../../lib/state.svelte.js';
-	import { backends, engineName, modeLabel, audioRoleLabel } from '../../lib/catalog.js';
+	import { ui, doc, act, toast, globalPrompt, secs, checkpoint, fmtDuration } from '../../lib/state.svelte.js';
+	import { readiness, startGeneration, engineChoices, currentEngine, selectEngine, supportedProfiles, estimateState } from '../../lib/production.svelte.js';
+	import { modeLabel, audioRoleLabel } from '../../lib/catalog.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { ulid } from '../../lib/ulid.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
+	import InfoTip from '../shell/InfoTip.svelte';
 
 	let { step: initial = 0, focus = null } = $props();
 	let step = $state(firstStep());
@@ -51,7 +53,10 @@
 		{ k: 'mouvement', label: t('modals.hybrid.mouvement'), src: 'Control video', help: t('modals.hybrid.mouvementHelp') },
 		{ k: 'style', label: t('modals.hybrid.style'), src: t('modals.hybrid.direction'), help: t('modals.hybrid.styleHelp') }
 	]);
-	const profileItems = ['FL2VA', 'Ref2VA', 'Hybrid AV'].map((m) => ({ id: m, label: m }));
+	const profileItems = $derived(['FL2VA', 'Ref2VA', 'Hybrid AV'].map((m) => ({ id: m, label: m, disabled: !supportedProfiles().includes(m) })));
+	const options = $derived(engineChoices());
+	const current = $derived(currentEngine());
+	const one = (v) => formatNumber(v ?? 0, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 	const qualities = $derived([
 		{ id: 'draft', label: t('modals.advanced.draft') },
 		{ id: 'final', label: t('modals.advanced.final') }
@@ -70,9 +75,15 @@
 		return t('modals.hybrid.intent', { first: lower(sorted[0].label), firstWeight: word(sorted[0].v), second: lower(sorted[1].label), last: sorted[4].label, lastWeight: word(sorted[4].v) });
 	});
 
-	function engineEstimate(b, est) {
-		const cost = b.cost ? (ui.isAdmin ? formatNumber(est.cost, { style: 'currency', currency: 'EUR' }) : '') : ui.quota ? t('modals.advanced.quota') : '';
-		return [`≈ ${fmtDuration(est.gpuSec)}`, cost].filter(Boolean).join(' · ');
+	function engineMeta(o) {
+		const backend = (ui.me?.engines ?? []).find((x) => x.id === o.backend);
+		const vram = backend && backend.kind !== 'cloud' && backend.vramFree != null && backend.vramTotal != null ? t('generation.engine.vram', { free: one(backend.vramFree), total: one(backend.vramTotal) }) : '';
+		return [o.group, vram].filter(Boolean).join(' · ');
+	}
+
+	function currentEstimate() {
+		const seconds = estimateState.data?.time.seconds;
+		return seconds != null ? `≈ ${fmtDuration(seconds)}` : '—';
 	}
 
 	function saveProfile() {
@@ -134,8 +145,8 @@
 					<div class="rounded-lg border border-line-strong p-3"><div class="text-xl font-semibold">{ready.items.frames.length}</div><div class="text-xs text-fg-subtle">{t('modals.advanced.statFrames', { count: ready.items.frames.length })}</div></div>
 					<div class="rounded-lg border border-line-strong p-3"><div class="text-xl font-semibold">{ready.items.references.length}</div><div class="text-xs text-fg-subtle">{t('modals.advanced.statReferences', { count: ready.items.references.length })}</div></div>
 				</div>
-				{@render slider(t('modals.advanced.consistency'), e.consistency, (v) => (e.consistency = v), 0, 100, 1, ' %', t('modals.advanced.consistencyHelp'))}
-				{@render toggle(t('modals.advanced.lockIdentity'), e.lockIdentity, (v) => (e.lockIdentity = v), t('modals.advanced.lockIdentityHelp'))}
+				{@render unsentSlider(t('modals.advanced.consistency'), e.consistency, (v) => (e.consistency = v), 0, 100, 1, ' %', t('modals.advanced.consistencyHelp'))}
+				{@render unsentToggle(t('modals.advanced.lockIdentity'), e.lockIdentity, (v) => (e.lockIdentity = v), t('modals.advanced.lockIdentityHelp'))}
 				<div class="h-px bg-line"></div>
 				<h4 class="text-md font-semibold">{t('modals.advanced.motion')}</h4>
 				{#if ready.items.controls.length || ready.items.plans3d.length}
@@ -168,26 +179,33 @@
 						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', class: 'shrink-0', onclick: () => go({ workspace: 'scene' }) }}>{t('modals.advanced.prepareCamera')}</HostUi>
 					</div>
 				{/if}
-				{@render toggle(t('modals.advanced.motionPriority'), e.motionPriority, (v) => (e.motionPriority = v), t('modals.advanced.motionPriorityHelp'))}
+				{@render unsentToggle(t('modals.advanced.motionPriority'), e.motionPriority, (v) => (e.motionPriority = v), t('modals.advanced.motionPriorityHelp'))}
 			{:else if step === 1}
 				<div>
 					<div class="vp-label mb-1.5">{t('modals.advanced.engine')}</div>
-					<div class="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t('modals.advanced.engine')}>
-						{#each backends as b (b.id)}
-							{@const be = estimate({ seconds: r[1] - r[0], be: b })}
-							<button
-								type="button"
-								role="radio"
-								class="rounded-xl border p-3 text-left transition-colors {e.backend === b.id ? 'border-signal ring-1 ring-signal' : 'border-line-strong hover:border-line-hover'}"
-								aria-checked={e.backend === b.id}
-								onclick={() => (e.backend = b.id)}
-							>
-								<span class="block text-sm font-medium">{engineName(b)}</span>
-								<span class="block text-xs text-fg-subtle">{t('modals.advanced.engineMeta', { vram: b.vram })}</span>
-								<span class="vp-tc mt-2 block text-xs {be.overVram ? 'text-warning' : 'text-fg-muted'}">{engineEstimate(b, be)}</span>
-							</button>
-						{/each}
-					</div>
+					{#if options.length}
+						<div class="grid grid-cols-3 gap-2" role="radiogroup" aria-label={t('modals.advanced.engine')}>
+							{#each options as o (o.key)}
+								{@const on = current?.key === o.key}
+								<button
+									type="button"
+									role="radio"
+									class="min-w-0 rounded-xl border p-3 text-left transition-colors {on ? 'border-signal ring-1 ring-signal' : 'border-line-strong hover:border-line-hover'}"
+									aria-checked={on}
+									onclick={() => selectEngine(o.key)}
+								>
+									<span class="block truncate text-sm font-medium">{o.label}</span>
+									<span class="block truncate text-xs text-fg-subtle">{engineMeta(o)}</span>
+									{#if on}<span class="vp-tc mt-2 block text-xs text-fg-muted">{currentEstimate()}</span>{/if}
+								</button>
+							{/each}
+						</div>
+					{:else}
+						<p class="rounded-lg border border-dashed border-line-hover p-3 text-sm text-fg-muted">
+							{t('generation.engine.empty')}
+							{#if ui.isAdmin}<a class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" href="/admin?tab=plugins">{t('generation.engine.settings')}</a>{/if}
+						</p>
+					{/if}
 				</div>
 				<div>
 					<div class="vp-label mb-1.5">{t('modals.advanced.mode')}</div>
@@ -199,21 +217,22 @@
 						<HostUi name="SegmentedControl" props={{ items: qualities, selected: ui.production.quality, variant: 'toggle', fullWidth: true, ariaLabel: t('modals.advanced.quality'), onSelect: (q) => (ui.production.quality = q) }} />
 						<span class="block text-xs text-fg-subtle">{ui.production.quality === 'draft' ? t('modals.advanced.draftHint') : t('modals.advanced.finalHint')}</span>
 					</div>
-					<label class="space-y-1">
-						<span class="vp-label block">{t('modals.advanced.resolution')}</span>
-						<select class="input vp-dense w-full" bind:value={e.resolution}><option value="720p">720p</option><option value="1080p">1080p</option><option value="4K">4K</option></select>
-					</label>
+					<div class="space-y-1">
+						<label class="vp-label block" for="vp-aw-resolution">{t('modals.advanced.resolution')}</label>
+						<select id="vp-aw-resolution" class="input vp-dense w-full disabled:opacity-50" disabled bind:value={e.resolution}><option value="720p">720p</option><option value="1080p">1080p</option><option value="4K">4K</option></select>
+						{@render unsent()}
+					</div>
 					<label class="space-y-1">
 						<span class="vp-label block">{t('modals.advanced.variants')}</span>
 						<input class="input vp-dense vp-tc w-full" type="number" min="1" max="4" bind:value={e.variants} />
 					</label>
 				</div>
 				<div>
-					<div class="mb-1.5 flex items-center justify-between">
-						<span class="vp-label">{t('modals.advanced.windows')}</span>
+					<div class="mb-1.5 flex items-center justify-between gap-2">
+						<span class="flex items-center gap-2"><span class="vp-label">{t('modals.advanced.windows')}</span>{@render unsent()}</span>
 						<span class="text-xs text-fg-subtle">{t('modals.advanced.windowCount', { count: windows.length })}</span>
 					</div>
-					<div class="relative h-14 rounded-lg border border-line-strong bg-canvas">
+					<div class="relative h-14 rounded-lg border border-line-strong bg-canvas opacity-50">
 						{#each windows as [a, b], i (i)}
 							<div
 								class="absolute h-4 rounded-sm border border-signal/60 bg-signal/20"
@@ -224,37 +243,38 @@
 						{/each}
 					</div>
 					<div class="mt-2 grid grid-cols-2 gap-3">
-						{@render slider(t('modals.advanced.windowLen'), e.windowLen, (v) => (e.windowLen = v), 2, 10, 0.5, ' s')}
-						{@render slider(t('modals.advanced.overlap'), e.overlap, (v) => (e.overlap = v), 0, 3, 0.25, ' s')}
+						{@render unsentSlider(t('modals.advanced.windowLen'), e.windowLen, (v) => (e.windowLen = v), 2, 10, 0.5, ' s')}
+						{@render unsentSlider(t('modals.advanced.overlap'), e.overlap, (v) => (e.overlap = v), 0, 3, 0.25, ' s')}
 					</div>
 				</div>
 				<button type="button" class="flex min-h-6 items-center gap-1.5 text-sm text-fg-muted hover:text-fg" onclick={() => (expert = !expert)} aria-expanded={expert}>
 					<Icon name={expert ? 'chevron-down' : 'chevron-right'} class="h-4 w-4" />{t('modals.advanced.expert')}
 				</button>
 				{#if expert}
+					{@render unsent()}
 					<div class="grid grid-cols-3 gap-3">
 						<div class="space-y-1">
 							<label class="vp-label block" for="vp-aw-seed">{t('modals.advanced.seed')}</label>
 							<div class="flex gap-1">
-								<input id="vp-aw-seed" class="input vp-dense vp-tc min-w-0 flex-1" type="number" bind:value={e.seed} />
-								<HostUi name="IconButton" props={{ icon: 'refresh', label: t('modals.advanced.randomSeed'), tooltip: t('modals.advanced.randomSeed'), size: 'xs', onclick: () => (e.seed = Math.floor(Math.random() * 99999)) }} />
+								<input id="vp-aw-seed" class="input vp-dense vp-tc min-w-0 flex-1 disabled:opacity-50" type="number" disabled bind:value={e.seed} />
+								<HostUi name="IconButton" props={{ icon: 'refresh', label: t('modals.advanced.randomSeed'), tooltip: t('modals.advanced.randomSeed'), size: 'xs', disabled: true, onclick: () => (e.seed = Math.floor(Math.random() * 99999)) }} />
 							</div>
 						</div>
-						<label class="space-y-1"><span class="vp-label block">{t('modals.advanced.steps')}</span><input class="input vp-dense vp-tc w-full" type="number" min="8" max="80" bind:value={e.steps} /></label>
-						<label class="space-y-1"><span class="vp-label block">{t('modals.advanced.cfg')}</span><input class="input vp-dense vp-tc w-full" type="number" min="1" max="15" step="0.5" bind:value={e.guidance} /></label>
+						<label class="space-y-1"><span class="vp-label block">{t('modals.advanced.steps')}</span><input class="input vp-dense vp-tc w-full disabled:opacity-50" type="number" min="8" max="80" disabled bind:value={e.steps} /></label>
+						<label class="space-y-1"><span class="vp-label block">{t('modals.advanced.cfg')}</span><input class="input vp-dense vp-tc w-full disabled:opacity-50" type="number" min="1" max="15" step="0.5" disabled bind:value={e.guidance} /></label>
 					</div>
 					<div>
 						<div class="mb-1.5 flex items-center justify-between">
 							<span class="vp-label">{t('modals.advanced.loras')}</span>
-							<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => e.loras.push({ name: t('modals.advanced.newLora'), weight: 0.5 }) }}>{t('modals.advanced.add')}</HostUi>
+							<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', disabled: true, onclick: () => e.loras.push({ name: t('modals.advanced.newLora'), weight: 0.5 }) }}>{t('modals.advanced.add')}</HostUi>
 						</div>
 						<ul class="space-y-1.5">
 							{#each e.loras as l, i (i)}
 								<li class="flex items-center gap-2">
-									<input class="input vp-dense w-48" bind:value={l.name} aria-label={t('modals.advanced.loraName')} />
-									<input class="vp-slider flex-1" type="range" min="0" max="1.5" step="0.05" bind:value={l.weight} aria-label={t('modals.advanced.weight')} />
+									<input class="input vp-dense w-48 disabled:opacity-50" disabled bind:value={l.name} aria-label={t('modals.advanced.loraName')} />
+									<input class="vp-slider flex-1 disabled:cursor-not-allowed disabled:opacity-50" type="range" min="0" max="1.5" step="0.05" disabled bind:value={l.weight} aria-label={t('modals.advanced.weight')} />
 									<span class="vp-tc w-10 text-xs">{formatNumber(+l.weight, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-									<HostUi name="IconButton" props={{ icon: 'trash', label: t('modals.advanced.remove'), tooltip: t('modals.advanced.remove'), size: 'xs', onclick: () => e.loras.splice(i, 1) }} />
+									<HostUi name="IconButton" props={{ icon: 'trash', label: t('modals.advanced.remove'), tooltip: t('modals.advanced.remove'), size: 'xs', disabled: true, onclick: () => e.loras.splice(i, 1) }} />
 								</li>
 							{/each}
 						</ul>
@@ -294,30 +314,33 @@
 					</div>
 				</div>
 			{:else}
-				<label class="block max-w-sm space-y-1">
-					<span class="vp-label block">{t('modals.advanced.audioDriver')}</span>
-					<select class="input vp-dense w-full" bind:value={e.audioDriver}>
+				<div class="max-w-sm space-y-1">
+					<span class="flex items-center gap-2"><label class="vp-label" for="vp-aw-audio-driver">{t('modals.advanced.audioDriver')}</label>{@render unsent()}</span>
+					<select id="vp-aw-audio-driver" class="input vp-dense w-full disabled:opacity-50" disabled bind:value={e.audioDriver}>
 						{#each doc.lanes as l (l.id)}<option value={l.id}>{l.id} · {l.name} ({audioRoleLabel(l.role)})</option>{/each}
 						<option value="">{t('modals.advanced.none')}</option>
 					</select>
-				</label>
-				{@render toggle(t('modals.advanced.lipSync'), e.lipSync, (v) => (e.lipSync = v), t('modals.advanced.lipSyncHelp'))}
-				{@render toggle(t('modals.advanced.followCut'), e.followCut, (v) => (e.followCut = v), t('modals.advanced.followCutHelp'))}
-				{@render slider(t('modals.advanced.offset'), e.offset, (v) => (e.offset = v), -200, 200, 10, ' ms')}
+				</div>
+				{@render unsentToggle(t('modals.advanced.lipSync'), e.lipSync, (v) => (e.lipSync = v), t('modals.advanced.lipSyncHelp'))}
+				{@render unsentToggle(t('modals.advanced.followCut'), e.followCut, (v) => (e.followCut = v), t('modals.advanced.followCutHelp'))}
+				{@render unsentSlider(t('modals.advanced.offset'), e.offset, (v) => (e.offset = v), -200, 200, 10, ' ms')}
 				{#if doc.direction.mode !== 'Hybrid AV'}<p class="text-xs text-fg-subtle">{t('modals.advanced.hybridTip')}</p>{/if}
 				<div class="h-px bg-line"></div>
 				<h4 class="text-md font-semibold">{t('modals.advanced.delivery')}</h4>
 				<div class="grid grid-cols-2 gap-3">
 					<label class="space-y-1"><span class="vp-label block">{t('modals.advanced.variants')}</span><input class="input vp-dense vp-tc w-full" type="number" min="1" max="4" bind:value={e.variants} /></label>
-					<label class="space-y-1"><span class="vp-label block">{t('modals.advanced.naming')}</span><input class="input vp-dense w-full" bind:value={e.naming} /></label>
+					<div class="space-y-1">
+						<span class="flex items-center gap-2"><label class="vp-label" for="vp-aw-naming">{t('modals.advanced.naming')}</label>{@render unsent()}</span>
+						<input id="vp-aw-naming" class="input vp-dense w-full disabled:opacity-50" disabled bind:value={e.naming} />
+					</div>
 				</div>
 				<div class="space-y-2">
 					<div class="vp-label">{t('modals.advanced.post')}</div>
-					{@render toggle(t('modals.advanced.interpolation'), e.post.interpolation, (v) => (e.post.interpolation = v))}
-					{@render toggle(t('modals.advanced.denoise'), e.post.denoise, (v) => (e.post.denoise = v))}
-					{@render toggle(t('modals.advanced.upscale'), e.post.upscale, (v) => (e.post.upscale = v), t('modals.advanced.upscaleHelp'))}
+					{@render unsentToggle(t('modals.advanced.interpolation'), e.post.interpolation, (v) => (e.post.interpolation = v))}
+					{@render unsentToggle(t('modals.advanced.denoise'), e.post.denoise, (v) => (e.post.denoise = v))}
+					{@render unsentToggle(t('modals.advanced.upscale'), e.post.upscale, (v) => (e.post.upscale = v), t('modals.advanced.upscaleHelp'))}
 				</div>
-				{@render toggle(t('modals.advanced.autoInsert'), e.autoInsert, (v) => (e.autoInsert = v))}
+				{@render unsentToggle(t('modals.advanced.autoInsert'), e.autoInsert, (v) => (e.autoInsert = v))}
 				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('export'), onclick: () => (ui.modal = { type: 'export' }) }}>{t('modals.advanced.prepareDelivery')}</HostUi>
 			{/if}
 		</div>
@@ -338,19 +361,25 @@
 	{/snippet}
 </Modal>
 
-{#snippet slider(label, value, set, min, max, stepSize, unit, help = '')}
+{#snippet unsent()}
+	<InfoTip lines={[t('generation.workshop.notSentWhy')]} wrapperClass="inline-flex shrink-0">
+		<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('generation.workshop.notSent')}</span>
+	</InfoTip>
+{/snippet}
+
+{#snippet unsentSlider(label, value, set, min, max, stepSize, unit, help = '')}
 	<div class="max-w-md">
-		<div class="flex justify-between"><span class="text-sm">{label}</span><span class="vp-tc text-xs">{formatNumber(value)}{unit}</span></div>
-		<input class="vp-slider" type="range" {min} {max} step={stepSize} {value} onpointerdown={checkpoint} oninput={(ev) => set(+ev.currentTarget.value)} aria-label={label} />
+		<div class="flex items-center justify-between gap-2"><span class="flex items-center gap-2 text-sm">{label}{@render unsent()}</span><span class="vp-tc text-xs">{formatNumber(value)}{unit}</span></div>
+		<input class="vp-slider disabled:cursor-not-allowed disabled:opacity-50" type="range" disabled {min} {max} step={stepSize} {value} onpointerdown={checkpoint} oninput={(ev) => set(+ev.currentTarget.value)} aria-label={label} />
 		{#if help}<div class="text-xs text-fg-subtle">{help}</div>{/if}
 	</div>
 {/snippet}
 
-{#snippet toggle(label, value, set, help = '')}
+{#snippet unsentToggle(label, value, set, help = '')}
 	<div class="flex max-w-lg items-start gap-3">
 		<span class="mt-0.5 inline-flex shrink-0">
-			<HostUi name="Switch" props={{ checked: value, size: 'lg', label, onchange: (v) => set(v) }} />
+			<HostUi name="Switch" props={{ checked: value, size: 'lg', label, disabled: true, onchange: (v) => set(v) }} />
 		</span>
-		<span><span class="block text-sm">{label}</span>{#if help}<span class="block text-xs text-fg-subtle">{help}</span>{/if}</span>
+		<span><span class="flex items-center gap-2 text-sm">{label}{@render unsent()}</span>{#if help}<span class="block text-xs text-fg-subtle">{help}</span>{/if}</span>
 	</div>
 {/snippet}

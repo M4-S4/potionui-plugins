@@ -28,9 +28,9 @@
 		toast,
 		secs,
 		clipLabel,
-		takesOf,
 		sourceLength
 	} from '../../lib/state.svelte.js';
+	import { takesOf } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
 	import { audioPeaks } from '../../lib/sources.svelte.js';

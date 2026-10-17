@@ -91,8 +91,10 @@ class Models:
         monkeypatch.setattr(core_bridge, "preset_model_hashes", self._hashes)
         monkeypatch.setattr(core_bridge, "model_file_present", self._present)
 
-    def _hashes(self, preset_id, field_names):
+    def _hashes(self, preset_id, field_names, modes=None):
         self.hash_requests.append((preset_id, list(field_names)))
+        if modes is not None:
+            return {name: {sha for mode in modes for sha in self.hashes.get((preset_id, mode, name), ())} for name in field_names}
         return {name: set(self.hashes.get((preset_id, name), ())) for name in field_names}
 
     def _present(self, sha256):
@@ -102,6 +104,10 @@ class Models:
     def recommend(self, preset_id, **by_role):
         for role, hashes in by_role.items():
             self.hashes[(preset_id, role)] = set(hashes)
+
+    def recommend_in(self, preset_id, mode, **by_role):
+        for role, hashes in by_role.items():
+            self.hashes[(preset_id, mode, role)] = set(hashes)
 
 
 @pytest.fixture
@@ -440,16 +446,44 @@ def test_without_an_installed_h3_preset_there_is_nothing_to_check(preset_states,
     assert models.hash_requests == [] and models.file_requests == []
 
 
-def test_an_installed_h3_preset_with_its_four_files_is_done(preset_states, models):
+def test_an_installed_h3_preset_with_its_five_files_is_done(preset_states, models):
     preset_states.set(presets.MINIMAX_H3, name="MiniMax-H3", installed=True)
     models.recommend(presets.MINIMAX_H3, model={"a" * 64}, text_encoder={"b" * 64}, video_vae={"c" * 64}, audio_vae={"d" * 64})
-    models.present = {"a" * 64, "b" * 64, "c" * 64, "d" * 64}
+    models.recommend_in(presets.MINIMAX_H3, "upscale", upscale_model={"e" * 64})
+    models.present = {"a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64}
 
     assert MiniMaxH3Ready().evaluate(CONTEXT) == SetupCheckResult(
         done=True,
-        description="The DiT, text encoder, video VAE and audio VAE files are on disk for MiniMax-H3.",
+        description=(
+            "The DiT, text encoder, video VAE and audio VAE files, and the latent upscaler of the Upscale mode, "
+            "are on disk for MiniMax-H3."
+        ),
     )
-    assert models.hash_requests == [(presets.MINIMAX_H3, ["model", "text_encoder", "video_vae", "audio_vae"])]
+    assert models.hash_requests == [
+        (presets.MINIMAX_H3, ["model", "text_encoder", "video_vae", "audio_vae"]),
+        (presets.MINIMAX_H3, ["upscale_model"]),
+    ]
+
+
+def test_a_missing_latent_upscaler_of_the_upscale_mode_is_reported(preset_states, models):
+    preset_states.set(presets.MINIMAX_H3, name="MiniMax-H3", installed=True)
+    models.recommend(presets.MINIMAX_H3, model={"a" * 64})
+    models.recommend_in(presets.MINIMAX_H3, "upscale", upscale_model={"e" * 64})
+    models.present = {"a" * 64}
+
+    result = MiniMaxH3Ready().evaluate(CONTEXT)
+
+    assert result.done is False
+    assert result.description.startswith("MiniMax-H3 is missing its latent upscaler. ")
+
+
+def test_a_variant_without_an_upscale_mode_is_not_asked_for_the_latent_upscaler(preset_states, models):
+    preset_states.set(presets.MINIMAX_H3, name="MiniMax-H3", installed=False)
+    preset_states.set(presets.MINIMAX_H3_FAST, name="MiniMax-H3-Fast", installed=True)
+    models.recommend(presets.MINIMAX_H3_FAST, model={"a" * 64}, upscale_model={"e" * 64})
+    models.present = {"a" * 64}
+
+    assert MiniMaxH3Ready().evaluate(CONTEXT).done is True
 
 
 @pytest.mark.parametrize(
@@ -519,7 +553,7 @@ def test_a_preset_that_is_not_installed_is_not_checked_for_files(preset_states, 
     result = MiniMaxH3Ready().evaluate(CONTEXT)
 
     assert result.done is True
-    assert [preset_id for preset_id, _ in models.hash_requests] == [presets.MINIMAX_H3_FAST]
+    assert [preset_id for preset_id, _ in models.hash_requests] == [presets.MINIMAX_H3_FAST, presets.MINIMAX_H3_FAST]
     assert result.description.endswith("are on disk for MiniMax-H3 Fast.")
 
 

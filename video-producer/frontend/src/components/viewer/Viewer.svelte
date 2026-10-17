@@ -1,7 +1,8 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, asset, clipAt, tc, seqDuration, addAssetToTimeline, insertResult, clipLabel, promptOf, startGeneration, estimate, fmtDuration } from '../../lib/state.svelte.js';
+	import { ui, doc, asset, clipAt, tc, seqDuration, addAssetToTimeline, clipLabel, promptOf } from '../../lib/state.svelte.js';
+	import { insertResult, startGeneration, findTake, shotActivity, engineLabel } from '../../lib/production.svelte.js';
 	import { togglePlay, seek } from '../../lib/playback.svelte.js';
 	import { clipFilter, fadeOpacity } from '../../lib/look.js';
 	import { assetThumb, clipThumb, takeThumb } from '../../lib/media.js';
@@ -22,13 +23,14 @@
 	const title = $derived(doc.titles.find((x) => time >= x.start && time < x.start + x.dur));
 
 	const previewAsset = $derived(ui.preview?.kind === 'asset' ? asset(ui.preview.id) : null);
-	const previewResult = $derived(ui.preview?.kind === 'result' ? doc.results.find((x) => x.id === ui.preview.id) : null);
-	const compareRes = $derived(ui.compare ? ui.compare.map((id) => doc.results.find((x) => x.id === id)).filter(Boolean) : []);
+	const previewResult = $derived(ui.preview?.kind === 'result' ? findTake(ui.preview.id) : null);
+	const compareRes = $derived(ui.compare ? ui.compare.map((id) => findTake(id)).filter(Boolean) : []);
 	const localPrompt = $derived(clip ? promptOf(clip) : null);
 	const mode = $derived(compareRes.length === 2 ? 'compare' : previewResult ? 'result' : previewAsset ? 'asset' : 'sequence');
 	const bare = $derived(mode === 'sequence' && !(clip && a));
 	const previewThumb = $derived(previewAsset ? assetThumb(previewAsset) : null);
-	const busy = $derived(ui.production.state === 'running' || ui.production.state === 'paused');
+	const busy = $derived(clip ? shotActivity(clip.id).state === 'running' : false);
+	const playable = (res) => !res.legacy && res.status === 'done' && res.url;
 	const key = (id) => commandById(id)?.key || undefined;
 	const liveVideo = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'video' ? a.src : null);
 	const liveImage = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'image' ? a.src : null);
@@ -53,7 +55,7 @@
 		return t('viewer.mode.asset');
 	}
 	function takeLabel(res) {
-		const shot = clipLabel(doc.clips.find((c) => c.id === res.clipId));
+		const shot = clipLabel(doc.clips.find((c) => c.id === res.shotId));
 		return res.quality === 'final' ? t('viewer.takeFinal', { shot, variant: res.variant }) : t('viewer.takeDraft', { shot, variant: res.variant });
 	}
 
@@ -80,17 +82,27 @@
 				{#if compareRes.length === 2}
 					<div class="grid h-full grid-cols-2 gap-px bg-line">
 						{#each compareRes as res (res.id)}
-							<div class="relative overflow-hidden">
-								<img src={takeThumb(res)} alt="" class="h-full w-full object-cover" />
-								<span class="absolute left-2 top-2 rounded-md bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur-sm">{takeLabel(res)}</span>
+							<div class="relative overflow-hidden bg-black">
+								{#if playable(res)}
+									<video src={res.url} class="h-full w-full object-contain" autoplay loop muted playsinline preload="auto" aria-label={takeLabel(res)}></video>
+								{:else}
+									<img src={takeThumb(res)} alt="" class="h-full w-full object-cover" />
+								{/if}
+								<span class="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur-sm">{takeLabel(res)}</span>
 							</div>
 						{/each}
 					</div>
 				{:else if previewResult}
-					<img src={takeThumb(previewResult)} alt="" class="h-full w-full object-cover" />
-					<div class="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/80 to-transparent px-3 pb-2.5 pt-8 text-sm text-white">
+					{#if playable(previewResult)}
+						<video src={previewResult.url} class="h-full w-full object-contain" controls muted playsinline preload="metadata" aria-label={takeLabel(previewResult)}></video>
+					{:else}
+						<img src={takeThumb(previewResult)} alt="" class="h-full w-full object-cover" />
+					{/if}
+					<div class="absolute inset-x-0 flex items-center gap-2 px-3 text-sm text-white {playable(previewResult) ? 'top-0 bg-gradient-to-b from-black/80 to-transparent pb-8 pt-12' : 'bottom-0 bg-gradient-to-t from-black/80 to-transparent pb-2.5 pt-8'}">
 						<span class="flex-1">{takeLabel(previewResult)} <span class="text-white/60">{t('viewer.outOfCut')}</span></span>
-						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => insertResult(previewResult.id) }}>{t('viewer.useTake')}</HostUi>
+						{#if playable(previewResult)}
+							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => insertResult(previewResult.id) }}>{t('viewer.useTake')}</HostUi>
+						{/if}
 					</div>
 				{:else if previewAsset}
 					{#if previewAsset.src && previewAsset.kind === 'video'}
@@ -118,7 +130,7 @@
 						{/if}
 						<div class="mt-1">
 							<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'sparkles', disabled: busy, onclick: () => startGeneration({ clips: [clip], quality: 'draft' }) }}>
-								{t('viewer.generateDrafts')} <span class="opacity-60">{t('viewer.approx', { duration: fmtDuration(estimate({ seconds: clip.dur, quality: 'draft' }).gpuSec) })}</span>
+								{t('viewer.generateDrafts')} <span class="opacity-60">{engineLabel()}</span>
 							</HostUi>
 						</div>
 					</div>

@@ -4,7 +4,8 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, select, act, secs, takesOf, clipLabel, addShot, moveClip, startGeneration, promoteToFinal, seqDuration, deleteSelection, promptOf, ensurePrompt } from '../../lib/state.svelte.js';
+	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf, ensurePrompt } from '../../lib/state.svelte.js';
+	import { takesOf, startGeneration, promoteToFinal, shotActivity } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { clipThumb } from '../../lib/media.js';
@@ -27,7 +28,6 @@
 	]);
 
 	const counts = $derived(Object.keys(stages).map((k) => [k, doc.clips.filter((c) => c.stage === k).length]));
-	const job = $derived(ui.production.state === 'running' || ui.production.state === 'paused' ? ui.production.job : null);
 	const isSel = (c) => ui.selection?.kind === 'clip' && ui.selection.id === c.id;
 	const primaryIcon = { todo: 'sparkles', draft: 'arrow-up', final: 'layers', source: 'refresh' };
 
@@ -67,8 +67,7 @@
 	}
 	function primary(c) {
 		select('clip', c.id);
-		const r = doc.results.find((x) => x.id === c.take);
-		if (c.stage === 'draft' && r) return promoteToFinal(r.id);
+		if (c.stage === 'draft' && c.take) return promoteToFinal(c.take);
 		if (c.stage === 'final') return (ui.inspectorOpen = true);
 		startGeneration({ clips: [c], quality: 'draft' });
 	}
@@ -133,7 +132,8 @@
 				{@const takes = takesOf(c)}
 				{@const p = promptOf(c)}
 				{@const sm = i > 0 ? seam(i) : null}
-				{@const busy = job?.clips.includes(c.id)}
+				{@const activity = shotActivity(c.id)}
+				{@const busy = activity.state === 'running'}
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<article
 					animate:flip={{ duration: ms(220) }}
@@ -180,8 +180,10 @@
 						<span class="vp-tc absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-white backdrop-blur-sm">{secs(c.dur)}</span>
 						{#if busy}
 							<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 backdrop-blur-[2px]" transition:fade={{ duration: ms(150) }}>
-								<span class="text-xs text-white">{ui.production.state === 'paused' ? t('storyboard.paused') : ui.production.step}</span>
-								<div class="h-1 w-2/3 overflow-hidden rounded-full bg-white/20"><div class="h-full bg-white transition-[width] duration-150" style:width="{ui.production.progress}%"></div></div>
+								<span class="max-w-[90%] truncate text-xs text-white">{activity.step || (activity.running ? t('generation.state.running') : t('generation.state.queued'))}</span>
+								<div class="h-1 w-2/3 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label={t('generation.shotProgress', { shot: clipLabel(c) })} aria-valuemin="0" aria-valuemax="100" aria-valuenow={activity.running ? Math.round(activity.progress) : undefined}>
+									<div class="h-full bg-white transition-[width] duration-150" style:width="{activity.progress}%"></div>
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -206,7 +208,7 @@
 							{p?.text || t('storyboard.addPrompt')}
 						</button>
 						<div class="mt-2 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 {isSel(c) || busy ? 'opacity-100' : ''}">
-							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName(primaryIcon[c.stage]), disabled: !!job, onclick: (e) => (e.stopPropagation(), primary(c)) }}>{primaryLabel(c.stage)}</HostUi>
+							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName(primaryIcon[c.stage]), disabled: busy, onclick: (e) => (e.stopPropagation(), primary(c)) }}>{primaryLabel(c.stage)}</HostUi>
 							<div class="flex-1"></div>
 							<HostUi name="IconButton" props={{ icon: hostIconName('eye'), label: t('storyboard.inViewer'), size: 'xs', tooltip: t('storyboard.inViewer'), onclick: (e) => (e.stopPropagation(), inViewer(c)) }} />
 							<HostUi name="IconButton" props={{ icon: 'plus', label: t('storyboard.insertAfter'), size: 'xs', tooltip: t('storyboard.insertAfter'), onclick: (e) => (e.stopPropagation(), addShot(t('lib.default.shot'), '', 4, c.id)) }} />

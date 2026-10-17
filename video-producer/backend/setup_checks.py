@@ -14,6 +14,10 @@ H3_MODEL_ROLES = (
     ("audio_vae", "audio VAE"),
 )
 
+H3_UPSCALER_ROLE = ("upscale_model", "latent upscaler")
+
+H3_UPSCALE_MODE = "upscale"
+
 
 def admin_href(**params: str) -> str:
     """A link to an Admin page with these query parameters."""
@@ -189,7 +193,7 @@ class FfmpegReady(SetupCheck):
 
 
 class MiniMaxH3Ready(SetupCheck):
-    """Every installed MiniMax-H3 preset has a recommended file on disk for each of its four models."""
+    """Every installed MiniMax-H3 preset has a recommended file on disk for each of its four models, and for the latent upscaler of its Upscale mode."""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
         try:
@@ -207,7 +211,10 @@ class MiniMaxH3Ready(SetupCheck):
         if not missing:
             return SetupCheckResult(
                 done=True,
-                description=f"The DiT, text encoder, video VAE and audio VAE files are on disk for {_names(installed)}.",
+                description=(
+                    "The DiT, text encoder, video VAE and audio VAE files, and the latent upscaler of the Upscale mode, "
+                    f"are on disk for {_names(installed)}."
+                ),
             )
         first = next(iter(missing))
         details = " ".join(f"{state.name} is missing its {_join(labels)}." for state, labels in missing.items())
@@ -224,8 +231,9 @@ class MiniMaxH3Ready(SetupCheck):
     @staticmethod
     def _missing(state: PresetState) -> List[str]:
         hashes: Dict[str, Set[str]] = core_bridge.preset_model_hashes(state.id, [field for field, _ in H3_MODEL_ROLES])
+        hashes.update(core_bridge.preset_model_hashes(state.id, [H3_UPSCALER_ROLE[0]], modes=[H3_UPSCALE_MODE]))
         return [
             label
-            for field, label in H3_MODEL_ROLES
+            for field, label in (*H3_MODEL_ROLES, H3_UPSCALER_ROLE)
             if hashes.get(field) and not any(core_bridge.model_file_present(sha256) for sha256 in sorted(hashes[field]))
         ]

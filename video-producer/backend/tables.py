@@ -64,7 +64,23 @@ _COLUMNS = {
 
 TABLE_NAMES = tuple(_COLUMNS)
 
-_ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (("video_producer_versions", "source_version", "INTEGER"),)
+_ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (
+    ("video_producer_versions", "source_version", "INTEGER"),
+    ("video_producer_takes", "director_mode", "TEXT"),
+    ("video_producer_takes", "model_id", "TEXT"),
+    ("video_producer_takes", "progress", "REAL"),
+    ("video_producer_takes", "step", "TEXT"),
+    ("video_producer_takes", "variant", "TEXT"),
+    ("video_producer_takes", "chosen", "INTEGER NOT NULL DEFAULT 0"),
+    ("video_producer_takes", "flag", "TEXT"),
+    ("video_producer_takes", "profile", "TEXT"),
+    ("video_producer_takes", "prompt_text", "TEXT"),
+    ("video_producer_takes", "file_id", "TEXT"),
+    ("video_producer_takes", "units_reserved", "REAL NOT NULL DEFAULT 0"),
+    ("video_producer_takes", "started_at", "TIMESTAMP"),
+    ("video_producer_takes", "user_id", "TEXT"),
+    ("video_producer_takes", "request", "TEXT"),
+)
 
 _INDEXES = (
     ("idx_video_producer_projects_user", "video_producer_projects", "user_id, updated_at"),

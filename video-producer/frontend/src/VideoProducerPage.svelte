@@ -7,6 +7,7 @@
 	import { ms } from './lib/motion.js';
 	import { ui, doc, applyMe, bottomKey, contextSnapshot, dispose as disposeState, toast } from './lib/state.svelte.js';
 	import { project, bindClient, disposeProject, flushSave, noteChange, openLatestOrStarter } from './lib/project.svelte.js';
+	import { startProduction } from './lib/production.svelte.js';
 	import { setPluginRoot } from './lib/focus.js';
 	import { needsProbe, probeAsset } from './lib/importer.js';
 	import { dispose as disposePlayback } from './lib/playback.svelte.js';
@@ -90,12 +91,14 @@
 		const unregister = chat.provideContext('video_producer', contextSnapshot);
 		const onvisibility = () => document.visibilityState === 'hidden' && flushSave();
 		document.addEventListener('visibilitychange', onvisibility);
+		const stopProduction = startProduction();
 		load();
 		return () => {
 			alive = false;
 			loadSeq += 1;
 			saveSeq += 1;
 			document.removeEventListener('visibilitychange', onvisibility);
+			stopProduction();
 			flushSave();
 			disposeProject();
 			window.removeEventListener('keydown', onkeydown);

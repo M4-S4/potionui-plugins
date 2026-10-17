@@ -20,7 +20,8 @@ def _last_project_id(user_id: str) -> Optional[str]:
 
 @router.get("/me")
 def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The signed-in user's locale, last project, role, quota, engines and video presets, and the plugin settings."""
+    """The signed-in user's locale, last project, role, quota, engines, video presets and features, and the plugin settings."""
+    video_presets = catalog.video_presets(user)
     return ok(
         {
             "locale": settings.user_locale(user.id),
@@ -30,7 +31,9 @@ def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
             "settings": settings.all_settings(),
             "plugin": {"id": PLUGIN_ID, "version": PLUGIN_VERSION},
             "engines": catalog.video_engines(),
-            "presets": catalog.video_presets(user),
+            "presets": video_presets,
+            "features": {"upscaler": any(preset["upscaler"] for preset in video_presets)},
+            "upscale_targets": list(catalog.UPSCALE_TARGETS),
         }
     )
 

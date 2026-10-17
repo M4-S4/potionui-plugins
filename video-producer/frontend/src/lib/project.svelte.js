@@ -12,6 +12,12 @@ let client = null;
 let lastSavedJson = null;
 let timer = null;
 let inFlight = null;
+const loadListeners = new Set();
+
+export function onLoaded(listener) {
+	loadListeners.add(listener);
+	return () => loadListeners.delete(listener);
+}
 
 export function bindClient(next) {
 	client = next;
@@ -31,6 +37,7 @@ function loaded(p) {
 	Object.assign(project, { id: p.id, version: p.version, status: 'saved', savedAt: p.updatedAt, error: null });
 	lastSavedJson = currentJson();
 	ui.dirty = false;
+	for (const listener of loadListeners) listener(p);
 }
 
 function remember(id) {
@@ -74,6 +81,12 @@ function forget(id) {
 async function reopenAfterDeletion() {
 	const result = await openLatestOrStarter();
 	if (!result.ok) project.fatal = result.error;
+}
+
+export async function projectGone(id) {
+	if (!id || id !== project.id) return;
+	forget(id);
+	await reopenAfterDeletion();
 }
 
 async function reloadAfterConflict(id) {
