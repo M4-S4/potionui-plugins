@@ -918,7 +918,7 @@ python -m pytest content/plugins/marketplace/video-producer/tests -q -m "not req
 python -m pytest tests/architecture tests/plugin_api tests/plugins/marketplace -q
 ```
 
-When this page was written the first command ran 2,197 tests that pass, 3 that are skipped and 3 expected failures (xfail), the same count on Windows and in a Linux container. The second one runs `tests/plugins/marketplace/test_video_producer_manifest.py` (60 tests), which loads the mode and the four tools through the plugin registry, and checks the routes of the exports, the export notification types, the five setup steps (their exact labels, and the report of the setup with the five steps still to do and their links) and the `FfmpegReady` step.
+When this page was written the first command ran 2,257 tests that pass, 3 that are skipped and 3 expected failures (xfail) in a Linux container (2,197 before the hardware-tier presets, the same count on Windows then). The second one runs `tests/plugins/marketplace/test_video_producer_manifest.py` (65 tests), which loads the mode and the four tools through the plugin registry, checks the routes of the exports, the export notification types, the five setup steps (their exact labels, and the report of the setup with the five steps still to do and their links) and the `FfmpegReady` step, and compares the four hardware-tier presets with the core presets they come from.
 
 The first command covers:
 
