@@ -2,7 +2,8 @@ import logging
 import shutil
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .. import core_bridge, notifications, projects
 from ..core_bridge import generate_ulid
@@ -44,6 +45,8 @@ _ACTIVE_SQL = "status IN ('queued', 'running')"
 _SELECT = f"SELECT {', '.join(COLUMNS)} FROM {JOBS}"
 
 _PROCESSES: Dict[str, Any] = {}
+
+_WORKING: Set[str] = set()
 
 
 def now() -> str:
@@ -191,8 +194,47 @@ def usage(user_id: str) -> int:
     return video.folder_size(video.exports_root(user_id))
 
 
+def _entries(path: Path) -> List[Path]:
+    try:
+        return list(path.iterdir())
+    except OSError:
+        return []
+
+
+def _folders(path: Path) -> List[Path]:
+    return [entry for entry in _entries(path) if entry.is_dir()]
+
+
+def _drop(path: Path) -> bool:
+    try:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    except OSError:
+        return False
+    return True
+
+
+def sweep(user_id: Optional[str] = None) -> int:
+    """Delete what the cleanup of a job left in the export cache of a user, or of everyone: the folders of jobs that are gone or did not succeed, and the work files of done jobs; returns how many it deleted."""
+    removed = 0
+    for owner in [video.exports_root(user_id)] if user_id else _folders(video.exports_base()):
+        known = {job["id"]: job for job in list_user(owner.name)}
+        for folder in _folders(owner):
+            job = known.get(folder.name)
+            if folder.name in _WORKING or (job is not None and job["status"] in ACTIVE):
+                continue
+            if job is None or job["status"] != "done":
+                removed += _drop(folder)
+            else:
+                removed += sum(_drop(path) for path in _entries(folder) if path.name != job["file_name"])
+    return removed
+
+
 def make_room(user_id: str, quota_bytes: int) -> bool:
     """Delete the user's oldest finished jobs until the cache is under the quota; False when it cannot get there."""
+    sweep(user_id)
     used = usage(user_id)
     for job in list_user(user_id):
         if used < quota_bytes:
@@ -204,15 +246,9 @@ def make_room(user_id: str, quota_bytes: int) -> bool:
 
 
 def kill(job_id: str) -> bool:
-    """Kill the ffmpeg process of a running job; False when it has none."""
+    """Kill the ffmpeg process of a running job with the processes it started; False when it has none."""
     process = _PROCESSES.get(job_id)
-    if process is None or process.returncode is not None:
-        return False
-    try:
-        process.kill()
-    except ProcessLookupError:
-        return False
-    return True
+    return process is not None and video.kill_tree(process)
 
 
 def cancel(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -259,6 +295,14 @@ def fail(job: Dict[str, Any], code: str, message: str) -> bool:
 
 async def execute(job: Dict[str, Any]) -> None:
     """Run one claimed job to its end."""
+    _WORKING.add(job["id"])
+    try:
+        await _run(job)
+    finally:
+        _WORKING.discard(job["id"])
+
+
+async def _run(job: Dict[str, Any]) -> None:
     project = projects.get_project(job["project_id"])
     owner = core_bridge.get_user(project["user_id"]) if project else None
     requester = core_bridge.get_user(job["user_id"])
@@ -356,11 +400,15 @@ def ensure_running() -> None:
 
 
 def recover() -> int:
-    """At startup, fail the jobs a stopped server left running and resume the queue; returns how many failed."""
+    """At startup, fail the jobs a stopped server left running, sweep the export cache and resume the queue; returns how many failed."""
     failed = 0
     for job in list_active():
         if job["status"] == "running" and fail(job, "ffmpeg_failed", "The server stopped during the export."):
             failed += 1
+    try:
+        sweep()
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not sweep the export cache", exc_info=True)
     if any(job["status"] == "queued" for job in list_active()):
         ensure_running()
     return failed

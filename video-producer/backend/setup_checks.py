@@ -18,6 +18,8 @@ H3_UPSCALER_ROLE = ("upscale_model", "latent upscaler")
 
 H3_UPSCALE_MODE = "upscale"
 
+NO_GPU = "no_gpu"
+
 
 def admin_href(**params: str) -> str:
     """A link to an Admin page with these query parameters."""
@@ -47,12 +49,14 @@ def _unchecked(what: str, action_label: str, action_href: str) -> SetupCheckResu
 
 
 class VideoEngineReady(SetupCheck):
-    """A native backend is enabled, or a cloud backend has a video model turned on."""
+    """A native backend that has a GPU is enabled, or a cloud backend has a video model turned on."""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
         try:
             backends = core_bridge.enabled_backends()
-            native = [backend for backend in backends if backend["driver"] in NATIVE_DRIVERS]
+            natives = [backend for backend in backends if backend["driver"] in NATIVE_DRIVERS]
+            native = [backend for backend in natives if backend.get("execution_device") != NO_GPU]
+            idle = [backend for backend in natives if backend.get("execution_device") == NO_GPU]
             cloud = [
                 (backend, core_bridge.enabled_cloud_video_models(backend["id"]))
                 for backend in backends
@@ -67,22 +71,25 @@ class VideoEngineReady(SetupCheck):
                 f"{backend['name']} ({count} video model{'s' if count != 1 else ''})" for backend, count in with_video
             ]
             return SetupCheckResult(done=True, description=f"Takes can run on {', '.join(engines)}.")
+        without_gpu = ""
+        if idle:
+            without_gpu = f"Takes cannot run on {', '.join(backend['name'] for backend in idle)}: no GPU is configured. "
         if cloud:
             return SetupCheckResult(
                 done=False,
                 description=(
-                    f"No video model is turned on in {', '.join(backend['name'] for backend, _ in cloud)}. "
+                    f"{without_gpu}No video model is turned on in {', '.join(backend['name'] for backend, _ in cloud)}. "
                     "Turn one on in the backend's catalog, or enable a native backend."
                 ),
                 action_label="Open catalog",
                 action_href=admin_href(tab="backends", backend=cloud[0][0]["id"], view="catalog"),
             )
+        enable = "Give a native backend a GPU, enable a native remote worker," if idle else (
+            "Enable the native backend of this machine or a native remote worker,"
+        )
         return SetupCheckResult(
             done=False,
-            description=(
-                "Enable the native backend of this machine or a native remote worker, "
-                "or add a cloud backend and turn on a video model in its catalog."
-            ),
+            description=f"{without_gpu}{enable} or add a cloud backend and turn on a video model in its catalog.",
             action_label="Open backends",
             action_href=BACKENDS_HREF,
         )

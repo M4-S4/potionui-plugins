@@ -2,7 +2,9 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+
+import psutil
 
 from .. import core_bridge, director, takes
 from ..core_bridge import TranscodeSpec, User, VideoTranscodeError
@@ -43,6 +45,10 @@ MEZZANINE = "mezzanine.mp4"
 
 GRAPH = "graph.txt"
 
+DISCARD_TRIES = 5
+
+DISCARD_PAUSE = 0.2
+
 ENCODER = (
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-b:a", "192k", "-ar", str(SAMPLE_RATE), "-ac", "2", "-movflags", "+faststart",
@@ -75,9 +81,14 @@ def last_line(text: str, limit: int = MESSAGE_LIMIT) -> str:
     return lines[-1][:limit] if lines else ""
 
 
+def exports_base() -> Path:
+    """The export cache of every user."""
+    return core_bridge.storage_directory() / "video_producer" / "exports"
+
+
 def exports_root(user_id: str) -> Path:
     """The export cache of a user."""
-    return core_bridge.storage_directory() / "video_producer" / "exports" / user_id
+    return exports_base() / user_id
 
 
 def job_folder(job: Mapping[str, Any]) -> Path:
@@ -177,6 +188,26 @@ def audible(doc: Mapping[str, Any]) -> List[Tuple[Mapping[str, Any], Mapping[str
     return playing
 
 
+def reach(path: Any, cwd: Optional[str] = None) -> str:
+    """How ffmpeg is told to open a file: its path, or, from the working folder cwd, its path relative to it behind ./ so that no name reads as an option or as a protocol."""
+    text = str(path)
+    if cwd is None:
+        return text
+    try:
+        return os.path.join(os.curdir, os.path.relpath(text, cwd))
+    except ValueError:
+        return text
+
+
+def common_folder(paths: Iterable[Any]) -> Optional[str]:
+    """The deepest folder that holds all these files, or None when they do not sit on one drive."""
+    folders = [os.path.dirname(os.path.abspath(str(path))) for path in paths]
+    try:
+        return os.path.commonpath(folders) if folders else None
+    except ValueError:
+        return None
+
+
 def _source_length(doc: Mapping[str, Any], clip: Mapping[str, Any], lengths: Mapping[str, Any]) -> Optional[float]:
     length = lengths.get(clip["id"])
     if length is None:
@@ -191,6 +222,7 @@ def _assembly(
     files: Mapping[str, Optional[Mapping[str, Any]]],
     options: Mapping[str, Any],
     sounds: Mapping[str, str],
+    cwd: Optional[str] = None,
 ) -> Tuple[List[str], List[str]]:
     fmt, resolution = options["format"], options["resolution"]
     width, height = frame_size(doc, fmt, resolution)
@@ -201,15 +233,23 @@ def _assembly(
     inputs: List[str] = []
     graph: List[str] = []
     pairs: List[str] = []
+    reading: Dict[str, Tuple[int, float]] = {}
     count = 0
 
     def add_input(path: str, still_for: Optional[float] = None) -> int:
         nonlocal count
         if still_for is not None:
             inputs.extend(["-loop", "1", "-framerate", fps, "-t", num(still_for)])
-        inputs.extend(["-i", str(path)])
+        inputs.extend(["-i", reach(path, cwd)])
         count += 1
         return count - 1
+
+    def shot_input(path: str, start: float, end: float) -> int:
+        """The input of a shot's file: the one already open when the shot reads on from where the last one stopped, else a new one, so that ffmpeg never holds the frames of later cuts in memory."""
+        last = reading.get(path)
+        index = last[0] if last is not None and start >= last[1] - EPSILON else add_input(path)
+        reading[path] = (index, end)
+        return index
 
     segments, _ = timeline(doc)
     for index, (dur, clip) in enumerate(segments):
@@ -229,7 +269,7 @@ def _assembly(
             graph.append(black)
             graph.append(silence)
         else:
-            source = add_input(entry["path"], start + dur if still else None)
+            source = add_input(entry["path"], start + dur) if still else shot_input(entry["path"], start, start + dur)
             if clip["id"] in blind:
                 graph.append(black)
             else:
@@ -299,8 +339,9 @@ def build_command(
     options: Mapping[str, Any],
     paths: Mapping[str, Any],
 ) -> List[str]:
-    """The one ffmpeg run that writes the mezzanine file, its filter graph read from the file at paths["graph"]."""
-    inputs, _ = _assembly(doc, files, options, paths.get("audio") or {})
+    """The one ffmpeg run that writes the mezzanine file, its filter graph read from the file at paths["graph"]; with paths["cwd"], run from that folder, the input files are named relative to it."""
+    cwd = paths.get("cwd")
+    inputs, _ = _assembly(doc, files, options, paths.get("audio") or {}, cwd)
     _, total = timeline(doc)
     return [
         paths["ffmpeg"], "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
@@ -323,16 +364,37 @@ def _progress_seconds(line: str) -> Optional[float]:
         return None
 
 
+def kill_tree(process: Any) -> bool:
+    """Kill an ffmpeg process and every process it started, as a launcher that runs the real ffmpeg as a child needs; False when it had already ended."""
+    if process.returncode is not None:
+        return False
+    try:
+        children = psutil.Process(process.pid).children(recursive=True)
+    except psutil.Error:
+        children = []
+    for child in children:
+        try:
+            child.kill()
+        except psutil.Error:
+            pass
+    try:
+        process.kill()
+    except (ProcessLookupError, PermissionError):
+        return False
+    return True
+
+
 async def assemble(
     command: Sequence[str],
     total: float,
     on_progress: Optional[Callable[[float], Any]] = None,
     on_process: Optional[Callable[[Any], Any]] = None,
+    cwd: Optional[str] = None,
 ) -> None:
-    """Run the assembly, reporting the share of the running time written; raises ExportError(ffmpeg_failed)."""
+    """Run the assembly from the folder cwd, reporting the share of the running time written; raises ExportError(ffmpeg_failed)."""
     try:
         process = await asyncio.create_subprocess_exec(
-            *command, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *command, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd
         )
     except OSError as exc:
         raise ExportError("ffmpeg_failed", last_line(str(exc)) or "ffmpeg could not start.") from exc
@@ -349,10 +411,28 @@ async def assemble(
     finally:
         if on_process is not None:
             on_process(None)
-        if process.returncode is None:
-            process.kill()
+        kill_tree(process)
     if code != 0:
         raise ExportError("ffmpeg_failed", last_line(stderr) or f"ffmpeg stopped with code {code}.")
+
+
+async def discard(path: Path) -> bool:
+    """Delete a work file, trying again for a moment when another program holds it open; False when it stays."""
+    for attempt in range(DISCARD_TRIES):
+        try:
+            path.unlink(missing_ok=True)
+            return True
+        except OSError:
+            if attempt + 1 < DISCARD_TRIES:
+                await asyncio.sleep(DISCARD_PAUSE)
+    logger.info("[VIDEO-PRODUCER] Could not delete %s; the export cache sweep takes it later", path)
+    return False
+
+
+async def discard_work(folder: Path) -> None:
+    """Delete what only the assembly needs: the filter graph and the local copies of the sources."""
+    for path in [folder / GRAPH, *folder.glob(f"{core_bridge.SOURCE_PREFIX}*")]:
+        await discard(path)
 
 
 def transcode(mezzanine: Path, final: Path, size: Tuple[int, int], fps: Any) -> Any:
@@ -415,38 +495,43 @@ async def render(
     ffmpeg = core_bridge.find_ffmpeg()
     if not ffmpeg:
         raise ExportError("ffmpeg_failed", "ffmpeg is not available on this server.")
+    ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     resolver = media.Resolver(owner)
-    shots, sounds = await asyncio.to_thread(media.local_inputs, doc, takes.list_takes(project["id"]), resolver, folder)
-    if not any(shots.values()):
-        raise ExportError("ffmpeg_failed", "No shot of the sequence has a file to assemble.")
     size = frame_size(doc, job["format"], job["resolution"])
     mezzanine, final = folder / MEZZANINE, folder / file_name(project["name"], job["resolution"])
-    options = {
-        "format": job["format"],
-        "resolution": job["resolution"],
-        "stills": [clip_id for clip_id, entry in shots.items() if entry is not None and entry["still"]],
-        **await asyncio.to_thread(inspect, shots),
-    }
-    paths = {"ffmpeg": ffmpeg, "output": str(mezzanine), "graph": str(folder / GRAPH), "audio": sounds}
-    Path(paths["graph"]).write_text(filter_graph(doc, shots, options, paths), encoding="utf-8")
-    command = build_command(doc, shots, options, paths)
-    _, total = timeline(doc)
+    try:
+        shots, sounds = await asyncio.to_thread(media.local_inputs, doc, takes.list_takes(project["id"]), resolver, folder)
+        if not any(shots.values()):
+            raise ExportError("ffmpeg_failed", "No shot of the sequence has a file to assemble.")
+        options = {
+            "format": job["format"],
+            "resolution": job["resolution"],
+            "stills": [clip_id for clip_id, entry in shots.items() if entry is not None and entry["still"]],
+            **await asyncio.to_thread(inspect, shots),
+        }
+        paths = {"ffmpeg": ffmpeg, "output": str(mezzanine), "graph": str(folder / GRAPH), "audio": sounds}
+        sources = [entry["path"] for entry in shots.values() if entry is not None] + list(sounds.values())
+        paths["cwd"] = common_folder(sources)
+        Path(paths["graph"]).write_text(filter_graph(doc, shots, options, paths), encoding="utf-8")
+        command = build_command(doc, shots, options, paths)
+        _, total = timeline(doc)
 
-    def assembled(share: float) -> None:
-        progress = share * ASSEMBLE_SHARE
-        report(progress, "mix" if progress >= MIX_FROM else "assemble")
+        def assembled(share: float) -> None:
+            progress = share * ASSEMBLE_SHARE
+            report(progress, "mix" if progress >= MIX_FROM else "assemble")
 
-    if not report(0, "assemble"):
-        raise cancelled()
-    await assemble(command, total, assembled, on_process)
-    Path(paths["graph"]).unlink(missing_ok=True)
+        if not report(0, "assemble"):
+            raise cancelled()
+        await assemble(command, total, assembled, on_process, paths["cwd"])
+    finally:
+        await discard_work(folder)
     if not report(ASSEMBLE_SHARE, "transcode"):
         raise cancelled()
     try:
         await asyncio.to_thread(transcode, mezzanine, final, size, fps_of(doc))
     except VideoTranscodeError as exc:
         raise ExportError("transcode_failed", last_line(str(exc)) or "The video could not be converted.") from exc
-    mezzanine.unlink(missing_ok=True)
+    await discard(mezzanine)
     if not report(TRANSCODE_END, "store"):
         raise cancelled()
     try:

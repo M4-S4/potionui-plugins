@@ -56,6 +56,7 @@ __all__ = [
     "NATIVE_DRIVERS",
     "NotificationTypeSpec",
     "PresetState",
+    "SOURCE_PREFIX",
     "SetupCheck",
     "SetupCheckContext",
     "SetupCheckResult",
@@ -110,6 +111,10 @@ __all__ = [
 logger = logging.getLogger("plugins.video-producer")
 
 NATIVE_DRIVERS = ("native.local", "native.remote")
+
+SOURCE_PREFIX = "source-"
+
+_COPY_CHUNK = 1 << 20
 
 _FILE_UNAVAILABLE = "ModelFileUnavailable"
 
@@ -256,15 +261,21 @@ def media_file_path(kind: str, value: str) -> Optional[str]:
 
 
 def local_media_file(kind: str, value: str, folder: Path) -> Optional[Path]:
-    """A local file holding a history or library media key, copied into the folder on object storage; None when missing. Temporary: reads the container."""
+    """A local file holding a history or library media key, streamed into the folder as source-<key> on object storage; None when missing. Temporary: reads the container."""
     driver = _media_driver(kind)
     path = driver.local_path(value)
     if path is not None:
         return Path(path) if Path(path).is_file() else None
     if not driver.exists(value):
         return None
-    target = Path(folder) / f"source-{value.replace('/', '_')}"
-    target.write_bytes(driver.get_bytes(value))
+    target = Path(folder) / f"{SOURCE_PREFIX}{value.replace('/', '_')}"
+    try:
+        with target.open("wb") as handle:
+            for chunk in driver.get_stream(value, _COPY_CHUNK):
+                handle.write(chunk)
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
     return target
 
 

@@ -87,6 +87,22 @@ def clock(monkeypatch):
 
 
 @pytest.fixture
+def job_clock(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from backend.exports import jobs
+
+    ticks = []
+
+    def now():
+        ticks.append(datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc) + timedelta(seconds=len(ticks)))
+        return ticks[-1].isoformat()
+
+    monkeypatch.setattr(jobs, "now", now)
+    return ticks
+
+
+@pytest.fixture
 def scheduled(monkeypatch):
     import concurrent.futures
 

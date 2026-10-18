@@ -9,6 +9,7 @@ FALLBACK_NAME = "video-producer"
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9.-]+")
 _SPACES = re.compile(r"\s+")
+_RESERVED = re.compile(r"(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?")
 
 
 class Exchange(NamedTuple):
@@ -36,9 +37,10 @@ def unicode_name(name: str) -> str:
 
 
 def slug(name: str) -> str:
-    """An ASCII file name for a project name."""
+    """An ASCII file name for a project name, a name Windows reserves (NUL, COM1, LPT1 ...) before its first dot made safe by a leading underscore."""
     plain = unicodedata.normalize("NFKD", unicode_name(name)).encode("ascii", "ignore").decode("ascii")
-    return _UNSAFE.sub("_", plain).strip("._") or FALLBACK_NAME
+    safe = _UNSAFE.sub("_", plain).strip("._") or FALLBACK_NAME
+    return f"_{safe}" if _RESERVED.fullmatch(safe) else safe
 
 
 def content_disposition(name: str, extension: str) -> str:

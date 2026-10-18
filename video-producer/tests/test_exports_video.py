@@ -1,13 +1,17 @@
 import asyncio
+import os
 import shutil
 import subprocess
+import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import psutil
 import pytest
 
 from backend import core_bridge, takes
-from backend.exports import jobs, video
+from backend.exports import content_disposition, jobs, slug, video
 from backend.exports.video import ExportError, build_command, filter_graph, frame_size, timeline
 
 HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
@@ -70,6 +74,20 @@ def test_the_name_of_an_exported_video_cuts_its_slug_to_80_characters():
     assert video.file_name("Aube sur le port", "4K") == "Aube_sur_le_port_4K.mp4"
     assert video.file_name("x" * 300, "1080p") == f"{'x' * 80}_1080p.mp4"
     assert video.file_name("a" * 79 + " b", "720p") == f"{'a' * 79}_720p.mp4"
+
+
+@pytest.mark.parametrize("name", ["nul.v2", "NUL", "con", "Prn.final", "aux.cut.2", "com1", "COM9.take", "lpt3", "Lpt1.mov"])
+def test_a_project_name_that_windows_reserves_gets_a_leading_underscore(name):
+    safe = slug(name)
+
+    assert safe == f"_{name}"
+    assert video.file_name(name, "1080p") == f"_{name}_1080p.mp4"
+    assert content_disposition(name, "edl").startswith(f'attachment; filename="_{name}.edl"')
+
+
+@pytest.mark.parametrize("name", ["nul_v2", "console", "com0", "com10", "lpt", "aux1", "my.nul", "v2.con", "Aube sur le port"])
+def test_a_name_that_only_looks_like_a_reserved_one_is_left_alone(name):
+    assert not slug(name).startswith("_")
 
 
 def test_the_resolution_defaults_to_the_projects_then_to_1080p(make_doc):
@@ -270,19 +288,20 @@ def test_a_shot_without_picture_is_black_with_the_sound_of_its_file_or_silent_wi
     assert graph[2:4] == ["color=c=black:s=1280x720:r=25:d=1,setsar=1,format=yuv420p[v1]", "anullsrc=r=48000:cl=stereo,atrim=duration=1[a1]"]
 
 
-def test_inspect_probes_each_file_once_for_its_sound_its_picture_and_its_length(monkeypatch):
-    found = {"/a.mp4": SimpleNamespace(duration=5.0, has_audio=True), "/b.mp4": SimpleNamespace(duration=0.0, has_audio=False)}
+def test_inspect_probes_each_file_once_for_its_sound_its_picture_and_its_length(monkeypatch, tmp_path):
+    a, b, voice, still = (str(tmp_path / name) for name in ("a.mp4", "b.mp4", "voice.wav", "s.png"))
+    found = {a: SimpleNamespace(duration=5.0, has_audio=True), b: SimpleNamespace(duration=0.0, has_audio=False)}
     probed = []
     monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe")
     monkeypatch.setattr(core_bridge, "probe_video", lambda path: probed.append(str(path)) or found.get(str(path)))
     shots = {
-        "c1": {"path": "/a.mp4", "still": False},
-        "c2": {"path": "/a.mp4", "still": False},
-        "c3": {"path": "/b.mp4", "still": False},
-        "c4": {"path": "/voice.wav", "still": False},
-        "c5": {"path": "/s.png", "still": True},
+        "c1": {"path": a, "still": False},
+        "c2": {"path": a, "still": False},
+        "c3": {"path": b, "still": False},
+        "c4": {"path": voice, "still": False},
+        "c5": {"path": still, "still": True},
         "c6": None,
-        "c7": {"path": "/a.mp4", "still": False, "sound": True},
+        "c7": {"path": a, "still": False, "sound": True},
     }
 
     assert video.inspect(shots) == {
@@ -290,14 +309,16 @@ def test_inspect_probes_each_file_once_for_its_sound_its_picture_and_its_length(
         "blind": ["c4", "c7"],
         "lengths": {"c1": 5.0, "c2": 5.0, "c7": 5.0},
     }
-    assert probed == ["/a.mp4", "/b.mp4", "/voice.wav"]
+    assert probed == [a, b, voice]
 
 
-def test_without_ffprobe_only_a_sound_asset_is_taken_for_a_shot_without_picture(monkeypatch):
+def test_without_ffprobe_only_a_sound_asset_is_taken_for_a_shot_without_picture(monkeypatch, tmp_path):
     monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: None)
     monkeypatch.setattr(core_bridge, "probe_video", lambda path: pytest.fail("probed without ffprobe"))
 
-    found = video.inspect({"c1": {"path": "/a.mp4", "still": False}, "c2": {"path": "/v.wav", "still": False, "sound": True}})
+    found = video.inspect(
+        {"c1": {"path": str(tmp_path / "a.mp4"), "still": False}, "c2": {"path": str(tmp_path / "v.wav"), "still": False, "sound": True}}
+    )
 
     assert found == {"audio": {"c1": False, "c2": True}, "blind": ["c2"], "lengths": {}}
 
@@ -309,6 +330,131 @@ def test_the_last_useful_line_of_stderr_is_kept_to_300_characters():
 
 def test_numbers_for_ffmpeg_have_no_trailing_zeros():
     assert [video.num(value) for value in (2, 2.5, 0.1 + 0.2, -0.0, 6500 - 15 * 20, 1 / 3)] == ["2", "2.5", "0.3", "0", "6200", "0.333333"]
+
+
+def _relative(*parts):
+    return os.path.join(os.curdir, *parts)
+
+
+def test_a_file_is_named_relative_to_the_working_folder_behind_a_dot_slash(tmp_path):
+    file = tmp_path / "generations" / "g" / "1.mp4"
+
+    assert video.reach(file) == str(file)
+    assert video.reach(file, None) == str(file)
+    assert video.reach(file, str(tmp_path)) == _relative("generations", "g", "1.mp4")
+
+
+@pytest.mark.parametrize("name", ["-hostile.mp4", "concat:a|b.mp4", "lavfi.mp4", "col:on.mp4", "file:x.mp4"])
+def test_no_name_relative_to_the_working_folder_reads_as_an_option_or_a_protocol(tmp_path, name):
+    argument = video.reach(tmp_path / name, str(tmp_path))
+
+    assert argument == _relative(name) and argument.startswith(os.curdir + os.sep)
+
+
+def test_a_file_that_cannot_be_named_relative_stays_absolute(tmp_path, monkeypatch):
+    def refuse(path, start):
+        raise ValueError("path is on mount 'D:', start on mount 'C:'")
+
+    monkeypatch.setattr(os.path, "relpath", refuse)
+
+    assert video.reach(tmp_path / "1.mp4", str(tmp_path)) == str(tmp_path / "1.mp4")
+
+
+def test_the_working_folder_is_the_deepest_folder_that_holds_every_file(tmp_path):
+    assert video.common_folder([tmp_path / "a" / "x.mp4", tmp_path / "a" / "b" / "y.mp4"]) == str(tmp_path / "a")
+    assert video.common_folder([str(tmp_path / "a" / "x.mp4"), str(tmp_path / "b" / "y.mp4")]) == str(tmp_path)
+    assert video.common_folder([tmp_path / "a" / "x.mp4"]) == str(tmp_path / "a")
+    assert video.common_folder([]) is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="drive letters exist on Windows only")
+def test_files_on_two_drives_have_no_working_folder_and_stay_absolute():
+    assert video.common_folder(["C:\media\a.mp4", "D:\work\out.mp4"]) is None
+    assert video.reach("D:\work\out.mp4", "C:\media") == "D:\work\out.mp4"
+
+
+def test_a_command_run_from_a_working_folder_names_its_input_files_relative_to_it(make_doc, tmp_path):
+    doc = _doc(make_doc, [{"id": "c1", "start": 0, "dur": 1}, {"id": "c2", "start": 1, "dur": 1}], audio=[{"id": "voice"}])
+    storage, work = tmp_path / "storage", tmp_path / "storage" / "video_producer" / "job"
+    files = {
+        "c1": {"name": "1.mp4", "path": str(storage / "generations" / "1.mp4")},
+        "c2": {"name": "-2.mp4", "path": str(storage / "uploads" / "-2.mp4")},
+    }
+    paths = {
+        **PATHS,
+        "output": str(work / "mezzanine.mp4"),
+        "graph": str(work / "graph.txt"),
+        "audio": {"voice": str(storage / "uploads" / "voice.wav")},
+        "cwd": str(storage),
+    }
+
+    command = build_command(doc, files, _options(), paths)
+
+    assert command[0] == PATHS["ffmpeg"]
+    assert _inputs(command) == [_relative("generations", "1.mp4"), _relative("uploads", "-2.mp4"), _relative("uploads", "voice.wav")]
+    assert command[command.index("-filter_complex_script") + 1] == str(work / "graph.txt")
+    assert command[-1] == str(work / "mezzanine.mp4")
+
+
+def test_a_command_without_a_working_folder_names_every_file_by_its_path(make_doc):
+    doc = _doc(make_doc, [{"id": "c1", "start": 0, "dur": 1}])
+
+    command = _command(doc, {"c1": {"name": "1.mp4", "path": "/media/1.mp4"}})
+
+    assert _inputs(command) == ["/media/1.mp4"] and command[-1] == PATHS["output"]
+
+
+def _sources(graph):
+    return [part.split(":")[0].lstrip("[") for part in graph if ":v]trim=" in part]
+
+
+def _shared(make_doc, cuts, path="/media/1.mp4"):
+    clips = [{"id": f"c{number}", "start": number * 2, "dur": dur, "srcIn": start} for number, (start, dur) in enumerate(cuts)]
+    doc = _doc(make_doc, clips)
+    files = {clip["id"]: {"name": "1.mp4", "path": path} for clip in clips}
+    return _command(doc, files), _graph(doc, files)
+
+
+def test_cuts_of_one_file_that_read_on_share_one_input(make_doc):
+    command, graph = _shared(make_doc, [(0, 2), (2, 2), (9, 1)])
+
+    assert _inputs(command) == ["/media/1.mp4"] and _sources(graph) == ["0", "0", "0"]
+
+
+@pytest.mark.parametrize(
+    "cuts",
+    [[(0, 2), (1, 2)], [(0, 2), (0, 2)], [(5, 2), (0, 2)], [(0, 2), (2, 2), (1, 1)]],
+    ids=["overlap", "again", "back", "back-after-sharing"],
+)
+def test_cuts_that_read_a_file_back_or_twice_over_each_open_their_own_input(make_doc, cuts):
+    command, graph = _shared(make_doc, cuts)
+
+    assert _inputs(command) == ["/media/1.mp4", "/media/1.mp4"] and _sources(graph)[-1] == "1"
+
+
+def test_cuts_of_two_files_taking_turns_keep_one_input_each(make_doc):
+    clips = [
+        {"id": "c0", "start": 0, "dur": 1, "srcIn": 0},
+        {"id": "c1", "start": 1, "dur": 1, "srcIn": 0},
+        {"id": "c2", "start": 2, "dur": 1, "srcIn": 1},
+        {"id": "c3", "start": 3, "dur": 1, "srcIn": 1},
+    ]
+    doc = _doc(make_doc, clips)
+    files = {clip["id"]: {"name": "f.mp4", "path": f"/media/{'xy'[number % 2]}.mp4"} for number, clip in enumerate(clips)}
+
+    command, graph = _command(doc, files), _graph(doc, files)
+
+    assert _inputs(command) == ["/media/x.mp4", "/media/y.mp4"] and _sources(graph) == ["0", "1", "0", "1"]
+
+
+def test_a_still_image_always_has_its_own_input(make_doc):
+    clips = [{"id": "c0", "start": 0, "dur": 2}, {"id": "c1", "start": 2, "dur": 2}]
+    doc = _doc(make_doc, clips)
+    files = {clip["id"]: {"name": "a.png", "path": "/media/a.png"} for clip in clips}
+
+    command = _command(doc, files, stills=["c0", "c1"])
+
+    assert _inputs(command) == ["/media/a.png", "/media/a.png"] and command.count("-loop") == 2
 
 
 def _make_clip(folder: Path, name: str, size: str, tone: bool) -> Path:
@@ -413,6 +559,197 @@ async def test_render_assembles_transcodes_and_stores_a_social_export(make_doc, 
     assert all(step == ("mix" if progress >= 50 else "assemble") for progress, step in steps[:-2])
 
 
+def _stripes(folder: Path) -> Path:
+    path = folder / "stripes.mp4"
+    command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
+    for color in ("red", "green", "blue"):
+        command += ["-f", "lavfi", "-i", f"color=c={color}:s=160x120:r=25:d=1"]
+    command += ["-filter_complex", "[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]", "-map", "[v]", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)]
+    subprocess.run(command, check=True, timeout=60)
+    return path
+
+
+def _dominant_color_at(path: Path, seconds: float) -> int:
+    command = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(seconds), "-i", str(path),
+        "-frames:v", "1", "-vf", "scale=1:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+    ]
+    pixel = tuple(subprocess.run(command, capture_output=True, check=True, timeout=60).stdout)
+    return max(range(3), key=pixel.__getitem__)
+
+
+@pytest.mark.requires_ffmpeg
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+@pytest.mark.parametrize(
+    "seconds, inputs",
+    [((0, 1, 2), 1), ((2, 1, 0), 3), ((0, 2, 1), 2), ((1, 2, 2), 2)],
+    ids=["read-on", "read-back", "read-on-then-back", "again"],
+)
+async def test_cuts_of_one_file_show_the_right_pictures_whether_they_share_an_input_or_not(make_doc, tmp_path, seconds, inputs):
+    source = _stripes(tmp_path)
+    clips = [{"id": f"c{number}", "assetId": "a1", "start": number, "dur": 1, "srcIn": second} for number, second in enumerate(seconds)]
+    doc = _doc(make_doc, clips)
+    files = {clip["id"]: {"name": source.name, "path": str(source)} for clip in clips}
+    work = tmp_path / "work"
+    work.mkdir()
+    options = {"format": "web", "resolution": "720p", **video.inspect(files)}
+    paths = {"ffmpeg": shutil.which("ffmpeg"), "output": str(work / "out.mp4"), "graph": str(work / "graph.txt"), "audio": {}}
+    paths["cwd"] = video.common_folder([source])
+    Path(paths["graph"]).write_text(filter_graph(doc, files, options, paths), encoding="utf-8")
+    command = build_command(doc, files, options, paths)
+
+    await asyncio.wait_for(video.assemble(command, 3.0, None, None, paths["cwd"]), timeout=60)
+
+    assert len(_inputs(command)) == inputs
+    assert [_dominant_color_at(work / "out.mp4", number + 0.5) for number in range(3)] == list(seconds)
+
+
+class ObjectStorage:
+    def __init__(self, blobs, broken=()):
+        self.blobs = blobs
+        self.broken = set(broken)
+        self.chunk_sizes = []
+
+    def local_path(self, key):
+        return None
+
+    def exists(self, key):
+        return key in self.blobs
+
+    def get_stream(self, key, chunk_size=65536):
+        self.chunk_sizes.append(chunk_size)
+        data = self.blobs[key]
+        for offset in range(0, len(data), 4096):
+            if key in self.broken and offset:
+                raise ConnectionError("the object store dropped the connection")
+            yield data[offset : offset + 4096]
+
+
+STORED_TAKE = {"id": "r1", "status": "done", "file_path": "generations/2026-10-18/g/1.mp4", "generation_id": "g", "file_id": "f"}
+
+
+@pytest.fixture
+def object_storage(monkeypatch, export_storage):
+    storage = ObjectStorage({})
+    container = SimpleNamespace(file_service=SimpleNamespace(storage_driver=storage), media_store=SimpleNamespace(storage_driver=storage))
+    monkeypatch.setattr(core_bridge, "api_hooks", SimpleNamespace(get_container=lambda: container))
+    monkeypatch.setattr(takes, "list_takes", lambda project_id: [STORED_TAKE])
+    return storage
+
+
+def _stored_project(make_doc):
+    doc = make_doc(
+        clips=[{"id": "c1", "assetId": "a1", "start": 0, "dur": 1}],
+        assets=[{"id": "a1", "kind": "video", "name": "Take", "resultId": "r1"}],
+    )
+    return {"id": "p-1", "name": "Aube", "doc": doc}
+
+
+def _folder_of(export_storage, job_id="job-1"):
+    return export_storage / "video_producer" / "exports" / "user-1" / job_id
+
+
+def _library(monkeypatch):
+    async def save_user_media(user, path):
+        return {"value": "uploads/0f0e.mp4", "media_type": "video", "original_filename": Path(path).name, "origin": None}
+
+    monkeypatch.setattr(core_bridge, "save_user_media", save_user_media)
+    monkeypatch.setattr(core_bridge, "upload_item", lambda user_id, value: {"item_id": "item-1", "filename": "x", "width": 1280, "height": 720})
+
+
+JOB = {"id": "job-1", "user_id": "user-1", "format": "web", "resolution": "720p"}
+
+
+@pytest.mark.requires_ffmpeg
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+async def test_a_source_on_object_storage_is_streamed_into_the_job_and_only_the_mp4_stays(make_doc, clips, object_storage, monkeypatch, export_storage, make_user):
+    object_storage.blobs[STORED_TAKE["file_path"]] = clips[0].read_bytes()
+    _library(monkeypatch)
+    user = make_user()
+
+    result = await video.render(JOB, _stored_project(make_doc), user, user, lambda progress, step: True)
+
+    folder = _folder_of(export_storage)
+    assert object_storage.chunk_sizes and result["file_name"] == "Aube_720p.mp4"
+    assert [path.name for path in folder.iterdir()] == ["Aube_720p.mp4"]
+    assert abs(core_bridge.probe_video(folder / "Aube_720p.mp4").duration - 1.0) < 0.15
+
+
+async def test_the_source_copies_are_deleted_when_ffmpeg_cannot_run(make_doc, object_storage, monkeypatch, export_storage, make_user):
+    object_storage.blobs[STORED_TAKE["file_path"]] = b"\0" * 20000
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: str(export_storage / "no-ffmpeg"))
+    monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: None)
+    user = make_user()
+
+    with pytest.raises(ExportError) as caught:
+        await video.render(JOB, _stored_project(make_doc), user, user, lambda progress, step: True)
+
+    assert caught.value.code == "ffmpeg_failed"
+    assert list(_folder_of(export_storage).iterdir()) == []
+
+
+async def test_the_source_copies_are_deleted_when_the_job_is_cancelled_before_ffmpeg_starts(make_doc, object_storage, monkeypatch, export_storage, make_user):
+    object_storage.blobs[STORED_TAKE["file_path"]] = b"\0" * 20000
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: str(export_storage / "no-ffmpeg"))
+    monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: None)
+    user = make_user()
+
+    with pytest.raises(ExportError) as caught:
+        await video.render(JOB, _stored_project(make_doc), user, user, lambda progress, step: False)
+
+    assert caught.value.code == "cancelled"
+    assert list(_folder_of(export_storage).iterdir()) == []
+
+
+async def test_the_copies_already_made_are_deleted_when_a_later_source_cannot_be_streamed(make_doc, object_storage, monkeypatch, export_storage, make_user):
+    second = {**STORED_TAKE, "id": "r2", "file_path": "generations/2026-10-18/g/2.mp4"}
+    monkeypatch.setattr(takes, "list_takes", lambda project_id: [STORED_TAKE, second])
+    object_storage.blobs.update({STORED_TAKE["file_path"]: b"\0" * 9000, second["file_path"]: b"\0" * 9000})
+    object_storage.broken.add(second["file_path"])
+    project = _stored_project(make_doc)
+    project["doc"] = make_doc(
+        clips=[{"id": "c1", "assetId": "a1", "start": 0, "dur": 1}, {"id": "c2", "assetId": "a2", "start": 1, "dur": 1}],
+        assets=[{"id": "a1", "kind": "video", "resultId": "r1"}, {"id": "a2", "kind": "video", "resultId": "r2"}],
+    )
+    user = make_user()
+
+    with pytest.raises(ConnectionError):
+        await video.render(JOB, project, user, user, lambda progress, step: True)
+
+    assert list(_folder_of(export_storage).iterdir()) == []
+
+
+@pytest.mark.requires_ffmpeg
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+async def test_an_export_whose_work_files_cannot_be_deleted_is_still_done_and_the_sweep_takes_them_later(
+    stored_jobs, make_doc, clips, object_storage, monkeypatch, export_storage, make_user
+):
+    object_storage.blobs[STORED_TAKE["file_path"]] = clips[0].read_bytes()
+    _library(monkeypatch)
+    monkeypatch.setattr(video, "DISCARD_PAUSE", 0)
+    user = make_user()
+    job = jobs.create_job("p-1", "user-1", "web", "720p")
+    real_unlink = Path.unlink
+
+    def held(self, missing_ok=False):
+        if self.name in (video.MEZZANINE, video.GRAPH):
+            raise PermissionError(32, "The process cannot access the file because it is being used by another process")
+        return real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", held)
+    result = await video.render(job, _stored_project(make_doc), user, user, lambda progress, step: True)
+    folder = video.job_folder(job)
+
+    assert result["file_name"] == "Aube_720p.mp4"
+    assert sorted(path.name for path in folder.iterdir()) == sorted([video.GRAPH, video.MEZZANINE, "Aube_720p.mp4"])
+    jobs.claim_next()
+    jobs.settle(job["id"], "done", **result)
+    monkeypatch.setattr(Path, "unlink", real_unlink)
+
+    assert jobs.sweep() == 2
+    assert [path.name for path in folder.iterdir()] == ["Aube_720p.mp4"]
+
+
 @pytest.mark.requires_ffmpeg
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
 async def test_killing_the_assembly_stops_ffmpeg_and_fails_the_run(tmp_path):
@@ -424,7 +761,7 @@ async def test_killing_the_assembly_stops_ffmpeg_and_fails_the_run(tmp_path):
 
     def on_progress(share):
         if processes and processes[-1] is not None and processes[-1].returncode is None:
-            processes[-1].kill()
+            video.kill_tree(processes[-1])
 
     with pytest.raises(ExportError) as caught:
         await asyncio.wait_for(video.assemble(command, 60.0, on_progress, processes.append), timeout=30)
@@ -466,7 +803,7 @@ def test_one_project_has_one_export_in_flight(stored_jobs):
     assert _job() is not None
 
 
-def test_jobs_are_claimed_oldest_first_and_settle_only_once(stored_jobs):
+def test_jobs_are_claimed_oldest_first_and_settle_only_once(stored_jobs, job_clock):
     first, second = _job(project_id="p-1"), _job(project_id="p-2")
 
     claimed = jobs.claim_next()
@@ -484,6 +821,8 @@ def test_jobs_are_claimed_oldest_first_and_settle_only_once(stored_jobs):
 
 
 class FakeProcess:
+    pid = 2**31 - 1
+
     def __init__(self):
         self.returncode = None
         self.killed = 0
@@ -491,6 +830,105 @@ class FakeProcess:
     def kill(self):
         self.killed += 1
         self.returncode = -9
+
+
+IDLE = "import time; time.sleep(120)"
+CHILD = f"import subprocess, sys, time; grandchild = subprocess.Popen([sys.executable, '-c', {IDLE!r}]); print(grandchild.pid, flush=True); time.sleep(120)"
+PARENT = (
+    "import subprocess, sys, time; "
+    f"child = subprocess.Popen([sys.executable, '-c', {CHILD!r}], stdout=subprocess.PIPE); "
+    "print(child.pid, child.stdout.readline().decode().strip(), flush=True); time.sleep(120)"
+)
+
+
+def _running(member):
+    try:
+        return member.status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
+
+
+async def _all_stopped(family, timeout=30):
+    deadline = time.monotonic() + timeout
+    while any(_running(member) for member in family):
+        if time.monotonic() > deadline:
+            return False
+        await asyncio.sleep(0.1)
+    return True
+
+
+async def test_killing_a_process_kills_every_process_it_started_down_the_tree():
+    process = await asyncio.create_subprocess_exec(sys.executable, "-c", PARENT, stdout=asyncio.subprocess.PIPE)
+    try:
+        await asyncio.wait_for(process.stdout.readline(), timeout=60)
+        family = psutil.Process(process.pid).children(recursive=True)
+        assert len(family) >= 2 and all(_running(member) for member in family)
+
+        assert video.kill_tree(process) is True
+
+        await asyncio.wait_for(process.wait(), timeout=30)
+        assert await _all_stopped(family)
+        assert video.kill_tree(process) is False
+    finally:
+        if process.returncode is None:
+            process.kill()
+
+
+async def test_a_process_that_already_ended_is_not_killed_again():
+    process = FakeProcess()
+    process.returncode = 0
+
+    assert video.kill_tree(process) is False and process.killed == 0
+
+
+async def test_a_process_that_vanishes_while_it_is_killed_is_not_an_error():
+    class Vanishing(FakeProcess):
+        def kill(self):
+            raise ProcessLookupError
+
+    assert video.kill_tree(Vanishing()) is False
+
+
+async def test_discard_tries_again_while_another_program_holds_the_file(tmp_path, monkeypatch):
+    path = tmp_path / "mezzanine.mp4"
+    path.write_bytes(b"x")
+    real_unlink, tries = Path.unlink, []
+
+    def held(self, missing_ok=False):
+        if self != path:
+            return real_unlink(self, missing_ok=missing_ok)
+        tries.append(1)
+        if len(tries) < 3:
+            raise PermissionError(32, "The process cannot access the file because it is being used by another process")
+        return real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", held)
+    monkeypatch.setattr(video, "DISCARD_PAUSE", 0)
+
+    assert await video.discard(path) is True and len(tries) == 3 and not path.exists()
+
+
+async def test_discard_gives_up_quietly_on_a_file_that_stays_held(tmp_path, monkeypatch, caplog):
+    path = tmp_path / "mezzanine.mp4"
+    path.write_bytes(b"x")
+    real_unlink, tries = Path.unlink, []
+
+    def held(self, missing_ok=False):
+        if self != path:
+            return real_unlink(self, missing_ok=missing_ok)
+        tries.append(1)
+        raise PermissionError(32, "The process cannot access the file because it is being used by another process")
+
+    monkeypatch.setattr(Path, "unlink", held)
+    monkeypatch.setattr(video, "DISCARD_PAUSE", 0)
+
+    assert await video.discard(path) is False
+    assert len(tries) == video.DISCARD_TRIES and path.exists()
+    assert [record.levelname for record in caplog.records if "Could not delete" in record.getMessage()] == ["INFO"]
+
+
+async def test_discard_of_a_file_that_is_already_gone_succeeds(tmp_path):
+    assert await video.discard(tmp_path / "nothing.mp4") is True
 
 
 def test_cancelling_a_running_job_kills_its_ffmpeg_process(stored_jobs):
@@ -512,7 +950,7 @@ def _fill(folder: Path, megabytes: float):
     (folder / "export.mp4").write_bytes(b"\0" * int(megabytes * 1024 * 1024))
 
 
-def test_room_is_made_by_deleting_the_oldest_finished_exports_first(stored_jobs):
+def test_room_is_made_by_deleting_the_oldest_finished_exports_first(stored_jobs, job_clock):
     old, newer, running = _job(project_id="p-1"), _job(project_id="p-2"), _job(project_id="p-3")
     for job in (old, newer):
         jobs.settle(job["id"], "done", file_name="export.mp4", file_size=1)
@@ -532,6 +970,132 @@ def test_the_quota_counts_only_the_users_own_cache(stored_jobs):
     _fill(video.job_folder(other), 2)
 
     assert jobs.usage("user-1") == 0 and jobs.make_room("user-1", 1024 * 1024) is True
+
+
+def _leftover(folder: Path, *names: str, size: int = 1000):
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (folder / name).write_bytes(b"\0" * size)
+
+
+def _finished(project_id, status, file_name="export.mp4"):
+    job = _job(project_id=project_id)
+    jobs.settle(job["id"], status, **({"file_name": file_name, "file_size": 1} if status == "done" else {"error_code": "ffmpeg_failed", "error_message": "x"}))
+    return jobs.get_job(job["id"])
+
+
+def test_the_sweep_deletes_what_the_cleanup_of_a_job_left_and_nothing_else(stored_jobs, export_storage):
+    done, failed, queued, running = _finished("p-1", "done"), _finished("p-2", "failed"), _job(project_id="p-3"), _job(project_id="p-4")
+    jobs.claim_next()
+    for job in (done, failed, queued, running):
+        _leftover(video.job_folder(job), "export.mp4", "mezzanine.mp4", "graph.txt", "source-uploads_a.mp4")
+    orphan = video.exports_root("user-1") / "01HGONEGONEGONEGONEGONEGON"
+    _leftover(orphan, "mezzanine.mp4")
+    stranger = video.exports_root("user-2") / "01HSTRANGERSTRANGERSTRANGE"
+    _leftover(stranger, "export.mp4")
+
+    assert jobs.sweep() == 3 + 1 + 1 + 1
+
+    assert sorted(path.name for path in video.job_folder(done).iterdir()) == ["export.mp4"]
+    assert not video.job_folder(failed).exists() and not orphan.exists() and not stranger.exists()
+    for job in (queued, running):
+        assert len(list(video.job_folder(job).iterdir())) == 4
+
+
+def test_the_sweep_of_one_user_leaves_the_folders_of_the_others(stored_jobs, export_storage):
+    mine, other = video.exports_root("user-1") / "01HMINEMINEMINEMINEMINEMIN", video.exports_root("user-2") / "01HOTHEROTHEROTHEROTHEROTH"
+    _leftover(mine, "mezzanine.mp4")
+    _leftover(other, "mezzanine.mp4")
+
+    assert jobs.sweep("user-1") == 1
+
+    assert not mine.exists() and other.exists()
+
+
+def test_the_sweep_of_an_export_cache_that_does_not_exist_yet_deletes_nothing(stored_jobs, export_storage):
+    assert jobs.sweep() == 0 and jobs.sweep("user-1") == 0
+
+
+def test_the_sweep_skips_the_folder_of_a_job_the_runner_is_still_working_on(stored_jobs, export_storage, monkeypatch):
+    cancelled = _finished("p-1", "cancelled")
+    _leftover(video.job_folder(cancelled), "mezzanine.mp4")
+    monkeypatch.setattr(jobs, "_WORKING", {cancelled["id"]})
+
+    assert jobs.sweep() == 0 and video.job_folder(cancelled).exists()
+
+    jobs._WORKING.clear()
+    assert jobs.sweep() == 1 and not video.job_folder(cancelled).exists()
+
+
+def test_a_folder_that_stays_held_is_counted_until_the_sweep_can_delete_it(stored_jobs, export_storage, monkeypatch):
+    orphan = video.exports_root("user-1") / "01HGONEGONEGONEGONEGONEGON"
+    _leftover(orphan, "mezzanine.mp4", size=2000)
+    real_rmtree = jobs.shutil.rmtree
+
+    def held(path, *args, **kwargs):
+        raise PermissionError(32, "The process cannot access the file because it is being used by another process")
+
+    monkeypatch.setattr(jobs.shutil, "rmtree", held)
+
+    assert jobs.sweep("user-1") == 0 and jobs.usage("user-1") == 2000
+
+    monkeypatch.setattr(jobs.shutil, "rmtree", real_rmtree)
+    assert jobs.sweep("user-1") == 1 and jobs.usage("user-1") == 0
+
+
+def test_room_is_made_by_sweeping_the_leftovers_before_any_finished_export_is_evicted(stored_jobs, export_storage, job_clock):
+    done = _finished("p-1", "done")
+    _fill(video.job_folder(done), 1)
+    _leftover(video.job_folder(done), "mezzanine.mp4", size=1024 * 1024)
+    orphan = video.exports_root("user-1") / "01HGONEGONEGONEGONEGONEGON"
+    _leftover(orphan, "mezzanine.mp4", size=1024 * 1024)
+
+    assert jobs.usage("user-1") == 3 * 1024 * 1024
+    assert jobs.make_room("user-1", 2 * 1024 * 1024 + 1) is True
+
+    assert jobs.get_job(done["id"]) is not None and not orphan.exists()
+    assert [path.name for path in video.job_folder(done).iterdir()] == ["export.mp4"]
+
+
+def test_at_startup_the_sweep_runs_after_the_interrupted_jobs_failed_and_before_the_queue_resumes(stored_jobs, export_storage, make_project):
+    left = jobs.create_job(make_project()["id"], "user-1", "web", "720p")
+    jobs.claim_next()
+    _leftover(video.job_folder(left), "mezzanine.mp4")
+    orphan = video.exports_root("user-1") / "01HGONEGONEGONEGONEGONEGON"
+    _leftover(orphan, "mezzanine.mp4")
+    done = _finished("p-9", "done")
+    _leftover(video.job_folder(done), "export.mp4", "mezzanine.mp4")
+
+    assert jobs.recover() == 1
+
+    assert not video.job_folder(left).exists() and not orphan.exists()
+    assert [path.name for path in video.job_folder(done).iterdir()] == ["export.mp4"]
+
+
+def test_a_sweep_that_cannot_run_does_not_stop_the_queue_from_resuming(stored_jobs, make_project, monkeypatch, caplog):
+    jobs.create_job(make_project()["id"], "user-1", "web", "720p")
+    monkeypatch.setattr(jobs, "sweep", lambda user_id=None: (_ for _ in ()).throw(RuntimeError("the disk is gone")))
+
+    with caplog.at_level("WARNING", logger="plugins.video-producer"):
+        assert jobs.recover() == 0
+
+    assert "Could not sweep the export cache" in caplog.text
+    assert [coroutine.__qualname__ for coroutine in stored_jobs.scheduled] == ["Runner.run"]
+
+
+async def test_the_runner_marks_a_job_as_worked_on_until_it_ends(stored_jobs, make_project, monkeypatch):
+    jobs.create_job(make_project()["id"], "user-1", "web", "720p")
+    seen = []
+
+    async def render(job, project, owner, requester, report, on_process=None):
+        seen.append(job["id"] in jobs._WORKING)
+        raise ExportError("ffmpeg_failed", "x")
+
+    monkeypatch.setattr(video, "render", render)
+
+    await jobs.execute(jobs.claim_next())
+
+    assert seen == [True] and jobs._WORKING == set()
 
 
 async def test_a_job_that_renders_is_done_with_its_file_and_its_owner_is_told(stored_jobs, make_project, monkeypatch):

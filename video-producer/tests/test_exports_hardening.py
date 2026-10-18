@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import xml.etree.ElementTree as ElementTree
@@ -25,6 +26,7 @@ BASE = "/api/plugins/video-producer"
 STORAGE = "/srv/storage"
 BACKSLASH = chr(92)
 HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+WINDOWS_COMMAND_LIMIT = 32767
 FORMATS = tuple(EXCHANGE)
 PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mp4", "graph": "/tmp/out/graph.txt"}
 MAX_ARGUMENT = 131072
@@ -89,8 +91,10 @@ def _prepare(doc, files, folder, label, audio=None, sounds=None, fmt="web", reso
     if audio is not None:
         options["audio"] = audio
     paths = {"ffmpeg": shutil.which("ffmpeg"), "output": str(folder / f"{label}.mp4"), "graph": str(folder / f"{label}.graph"), "audio": sounds or {}}
+    sources = [entry["path"] for entry in files.values() if entry is not None] + list((sounds or {}).values())
+    paths["cwd"] = video.common_folder(sources)
     Path(paths["graph"]).write_text(filter_graph(doc, files, options, paths), encoding="utf-8")
-    return build_command(doc, files, options, paths)
+    return build_command(doc, files, options, paths), paths["cwd"]
 
 
 def _with_audio(doc, items=(), lanes=None):
@@ -534,11 +538,58 @@ async def test_a_long_sequence_assembles_when_ffmpeg_is_started_from_the_command
     clips = [_shot(index, start=index * 0.04, dur=0.04, contrast=110, fadeIn=0.01, fadeOut=0.01, temperature=5) for index in range(400)]
     doc = _doc(make_doc, clips)
     files = {clip["id"]: {"name": "src.mp4", "path": str(source)} for clip in clips}
-    command = _prepare(doc, files, tmp_path, "long", audio={clip["id"]: True for clip in clips})
+    command, cwd = _prepare(doc, files, tmp_path, "long", audio={clip["id"]: True for clip in clips})
 
-    await video.assemble(command, 16.0, None)
+    await video.assemble(command, 16.0, None, None, cwd)
 
     assert abs(core_bridge.probe_video(tmp_path / "long.mp4").duration - 16.0) < 0.2
+
+
+def _long_folder(tmp_path):
+    folder = tmp_path / ("a-long-folder-for-the-takes-" * 2) / ("and-a-longer-one-inside-" * 2)
+    folder.mkdir(parents=True)
+    return folder
+
+
+def _distinct_sources(make_doc, tmp_path, count):
+    source = _clip(tmp_path, "src.mp4", "160x120", 1.0, True)
+    folder = _long_folder(tmp_path)
+    clips = [_shot(index, start=index * 0.04, dur=0.04, contrast=110, fadeIn=0.01, fadeOut=0.01, temperature=5) for index in range(count)]
+    files = {}
+    for clip in clips:
+        copy = folder / f"take-{clip['id']}.mp4"
+        shutil.copyfile(source, copy)
+        files[clip["id"]] = {"name": copy.name, "path": str(copy)}
+    return _doc(make_doc, clips), files, clips
+
+
+def test_four_hundred_shots_of_four_hundred_files_in_a_long_folder_fit_in_a_windows_command_line(make_doc, tmp_path):
+    doc, files, clips = _distinct_sources(make_doc, tmp_path, 400)
+    audio = {clip["id"]: True for clip in clips}
+    options = _options(audio=audio)
+    sources = [entry["path"] for entry in files.values()]
+    absolute = {**PATHS, "output": str(tmp_path / "out.mp4"), "graph": str(tmp_path / "out.graph"), "audio": {}}
+    relative = {**absolute, "cwd": video.common_folder(sources)}
+
+    long_line = build_command(doc, files, options, absolute)
+    short_line = build_command(doc, files, options, relative)
+
+    assert sum(len(argument) + 1 for argument in long_line) > WINDOWS_COMMAND_LIMIT
+    assert sum(len(argument) + 1 for argument in short_line) < WINDOWS_COMMAND_LIMIT
+    assert len(_inputs(short_line)) == 400 and len(set(_inputs(short_line))) == 400
+    assert not any(str(tmp_path) in argument for argument in _inputs(short_line))
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+@pytest.mark.requires_ffmpeg
+async def test_four_hundred_shots_of_four_hundred_files_in_a_long_folder_assemble(make_doc, tmp_path):
+    doc, files, clips = _distinct_sources(make_doc, tmp_path, 400)
+    command, cwd = _prepare(doc, files, tmp_path, "distinct", audio={clip["id"]: True for clip in clips})
+
+    await video.assemble(command, 16.0, None, None, cwd)
+
+    assert sum(len(argument) + 1 for argument in command) < WINDOWS_COMMAND_LIMIT
+    assert abs(core_bridge.probe_video(tmp_path / "distinct.mp4").duration - 16.0) < 0.2
 
 
 HOSTILE = [
@@ -572,6 +623,21 @@ def test_a_hostile_file_name_is_only_ever_the_value_of_an_input_option(make_doc,
     position = command.index(path)
     assert command[position - 1] == "-i" and command.count(path) == 1
     assert not any(part in graph for part in (name, path, "pwned", STORAGE))
+
+
+@pytest.mark.parametrize("name", HOSTILE)
+def test_a_hostile_file_name_from_a_working_folder_is_a_relative_path_behind_a_dot_slash(make_doc, tmp_path, name):
+    doc = _doc(make_doc, [_shot(0), _shot(1)])
+    path = str(tmp_path / "takes" / name)
+    files = {"c0": {"name": name, "path": path}, "c1": None}
+    paths = {**PATHS, "audio": {}, "cwd": str(tmp_path / "takes"), "output": str(tmp_path / "work" / "m.mp4"), "graph": str(tmp_path / "work" / "g.txt")}
+
+    command = build_command(doc, files, _options(audio={"c0": True}), paths)
+
+    argument = os.path.join(os.curdir, name)
+    position = command.index(argument)
+    assert command[position - 1] == "-i" and command.count(argument) == 1 and argument.startswith(os.curdir + os.sep)
+    assert not any(str(tmp_path) in part for part in _inputs(command))
 
 
 def test_no_text_of_the_document_reaches_the_graph(make_doc):
@@ -732,9 +798,9 @@ def _sound(folder):
 
 
 async def _assemble(doc, files, tmp_path, label, audio=None, sounds=None, fmt="web", resolution="720p", stills=()):
-    command = _prepare(doc, files, tmp_path, label, audio=audio, sounds=sounds, fmt=fmt, resolution=resolution, stills=stills)
+    command, cwd = _prepare(doc, files, tmp_path, label, audio=audio, sounds=sounds, fmt=fmt, resolution=resolution, stills=stills)
     _, total = video.timeline(doc)
-    await asyncio.wait_for(video.assemble(command, total, None), timeout=120)
+    await asyncio.wait_for(video.assemble(command, total, None, None, cwd), timeout=120)
     return tmp_path / f"{label}.mp4", total
 
 
@@ -919,16 +985,17 @@ def _limited(gigabytes):
 
 @pytest.mark.requires_ffmpeg
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+@pytest.mark.skipif(sys.platform == "win32", reason="RLIMIT_AS and preexec_fn exist on POSIX only")
 def test_a_shot_that_starts_after_the_end_of_its_source_does_not_swallow_the_memory_of_the_server(make_doc, tmp_path):
     source = _clip(tmp_path, "a.mp4")
     doc = _doc(make_doc, [_shot(0, srcIn=10), _shot(1)])
     files = {"c0": _file(source), "c1": _file(source)}
-    command = _prepare(doc, files, tmp_path, "late", audio={"c0": True, "c1": True})
+    command, cwd = _prepare(doc, files, tmp_path, "late", audio={"c0": True, "c1": True})
     command = [argument for argument in command if argument not in ("-progress", "pipe:1")]
     # glibc reserves an arena of address space per thread, which RLIMIT_AS counts like memory
     environment = {**os.environ, "MALLOC_ARENA_MAX": "2"}
 
-    run = subprocess.run(command, capture_output=True, timeout=120, preexec_fn=_limited(2), env=environment)
+    run = subprocess.run(command, capture_output=True, timeout=120, preexec_fn=_limited(2), env=environment, cwd=cwd)
 
     assert run.returncode == 0 and abs(core_bridge.probe_video(tmp_path / "late.mp4").duration - 2.0) < 0.2
 
@@ -1024,7 +1091,7 @@ def test_sixteen_threads_creating_a_job_for_one_project_get_one_job(project, hos
     assert len([job for job in created if job is not None]) == 1
 
 
-def test_exports_of_several_projects_wait_in_the_order_they_were_asked(client, exportable):
+def test_exports_of_several_projects_wait_in_the_order_they_were_asked(client, exportable, job_clock):
     projects_asked = [exportable(f"g{number}") for number in range(4)]
     for asked in projects_asked:
         assert _start(client, asked["id"]).status_code == 202
@@ -1047,6 +1114,8 @@ def test_cancelling_a_queued_job_frees_the_project_clears_its_folder_and_is_skip
 
 
 class Process:
+    pid = 2**31 - 1
+
     def __init__(self):
         self.returncode = None
         self.killed = 0
@@ -1134,20 +1203,20 @@ def test_the_quota_is_a_strict_bound_on_the_bytes_already_cached(client, project
     assert exact.status_code == 429 and exact.json()["detail"]["data"] == {"quota_mb": 1}
 
 
-def test_eviction_takes_the_oldest_finished_exports_first_and_stops_as_soon_as_the_cache_fits(client, project, host, store):
+def test_eviction_takes_the_oldest_finished_exports_first_and_stops_as_soon_as_the_cache_fits(client, project, host, store, job_clock):
     store[("export_dir_quota_mb", None)] = "1"
     ids = []
-    for status in ("done", "failed", "cancelled"):
+    for status in ("failed", "done", "cancelled", "done"):
         job = jobs.create_job("other-project", "user-1", "web", "720p")
         ids.append(job["id"])
-        _folder(job, 400 * 1024)
+        if status == "done":
+            _folder(job, 600 * 1024, "x_1080p.mp4")
         _finish(job["id"], status)
-        time.sleep(0.002)
 
     answer = _start(client, project["id"])
 
     assert answer.status_code == 202
-    assert jobs.get_job(ids[0]) is None and jobs.get_job(ids[1]) is not None and jobs.get_job(ids[2]) is not None
+    assert [jobs.get_job(job_id) is None for job_id in ids] == [True, True, False, False]
 
 
 def test_eviction_never_touches_a_job_that_is_queued_or_running(client, project, host, store):

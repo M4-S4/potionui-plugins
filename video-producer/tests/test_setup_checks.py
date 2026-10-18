@@ -27,7 +27,7 @@ README_HREF = "/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME"
 ALL_CHECKS = (VideoEngineReady, VideoPresetsReady, UpscalerReady, FfmpegReady, MiniMaxH3Ready)
 
 
-def _backend(backend_id, name, engine="native", driver="native.local"):
+def _backend(backend_id, name, engine="native", driver="native.local", device="unestablished"):
     return {
         "id": backend_id,
         "name": name,
@@ -36,7 +36,7 @@ def _backend(backend_id, name, engine="native", driver="native.local"):
         "enabled": True,
         "is_default": False,
         "quick_actions": [],
-        "execution_device": "unestablished",
+        "execution_device": device,
         "max_concurrent_runs": None,
         "vram_total_gb": None,
         "vram_free_gb": None,
@@ -176,6 +176,73 @@ def test_a_native_local_backend_is_an_engine(engines):
         done=True, description="Takes can run on This machine."
     )
     assert engines.asked == []
+
+
+@pytest.mark.parametrize("device", ["this_host_gpu", "remote", "unestablished"])
+def test_a_native_backend_on_a_gpu_a_worker_or_not_yet_running_is_an_engine(engines, device):
+    engines.backends = [_backend("b-1", "This machine", device=device)]
+
+    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="Takes can run on This machine.")
+
+
+def test_a_native_local_backend_without_a_gpu_is_not_an_engine(engines):
+    engines.backends = [_backend("b-1", "This machine", device="no_gpu")]
+
+    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=False,
+        description=(
+            "Takes cannot run on This machine: no GPU is configured. "
+            "Give a native backend a GPU, enable a native remote worker, "
+            "or add a cloud backend and turn on a video model in its catalog."
+        ),
+        action_label="Open backends",
+        action_href=BACKENDS_HREF,
+    )
+    assert engines.asked == []
+
+
+def test_every_native_backend_without_a_gpu_is_named_and_none_is_an_engine(engines):
+    engines.backends = [_backend("b-1", "This machine", device="no_gpu"), _backend("b-2", "Spare", device="no_gpu")]
+
+    result = VideoEngineReady().evaluate(CONTEXT)
+
+    assert result.done is False
+    assert result.description.startswith("Takes cannot run on This machine, Spare: no GPU is configured. ")
+
+
+def test_a_native_backend_without_a_gpu_is_left_out_when_another_engine_exists(engines):
+    engines.backends = [_backend("b-1", "This machine", device="no_gpu"), _backend("b-2", "Render box", driver="native.remote", device="remote")]
+
+    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="Takes can run on Render box.")
+
+
+def test_a_native_backend_without_a_gpu_does_not_hide_a_cloud_video_model(engines):
+    engines.backends = [_backend("b-1", "This machine", device="no_gpu"), _cloud("c-1", "OpenRouter")]
+    engines.video_models = {"c-1": 2}
+
+    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="Takes can run on OpenRouter (2 video models).")
+
+
+def test_a_native_backend_without_a_gpu_and_a_cloud_backend_without_video_model_ask_for_the_catalog_and_say_why(engines):
+    engines.backends = [_backend("b-1", "This machine", device="no_gpu"), _cloud("c-1", "OpenRouter")]
+
+    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=False,
+        description=(
+            "Takes cannot run on This machine: no GPU is configured. "
+            "No video model is turned on in OpenRouter. Turn one on in the backend's catalog, or enable a native backend."
+        ),
+        action_label="Open catalog",
+        action_href="/admin?tab=backends&backend=c-1&view=catalog",
+    )
+
+
+def test_a_backend_that_reports_no_execution_device_still_counts_as_an_engine(engines):
+    backend = _backend("b-1", "This machine")
+    del backend["execution_device"]
+    engines.backends = [backend]
+
+    assert VideoEngineReady().evaluate(CONTEXT).done is True
 
 
 def test_a_native_remote_worker_is_an_engine(engines):

@@ -820,9 +820,11 @@ def test_the_driver_of_a_preset_is_read_from_its_template(monkeypatch):
 
 
 class _Driver:
-    def __init__(self, root=None, blobs=None):
+    def __init__(self, root=None, blobs=None, break_after=None):
         self.root = root
         self.blobs = blobs or {}
+        self.break_after = break_after
+        self.chunk_sizes = []
 
     def local_path(self, key):
         return None if self.root is None else self.root / key
@@ -830,8 +832,13 @@ class _Driver:
     def exists(self, key):
         return key in self.blobs
 
-    def get_bytes(self, key):
-        return self.blobs[key]
+    def get_stream(self, key, chunk_size=65536):
+        self.chunk_sizes.append(chunk_size)
+        data = self.blobs[key]
+        for number, offset in enumerate(range(0, len(data), 1000)):
+            if self.break_after is not None and number >= self.break_after:
+                raise ConnectionError("the object store dropped the connection")
+            yield data[offset : offset + 1000]
 
 
 def _media_container(monkeypatch, history, library, uploads=None):
@@ -863,6 +870,31 @@ def test_local_media_file_uses_the_local_file_or_copies_the_bytes_into_the_folde
     copied = core_bridge.local_media_file("library", "uploads/a.wav", folder)
     assert copied.parent == folder and copied.read_bytes() == b"sound"
     assert core_bridge.local_media_file("library", "uploads/gone.wav", folder) is None
+
+
+def test_an_object_storage_source_is_streamed_into_the_folder_in_chunks_and_never_read_whole(monkeypatch, tmp_path):
+    blob = bytes(range(256)) * 40
+    library = _Driver(blobs={"uploads/big.mp4": blob})
+    _media_container(monkeypatch, _Driver(), library)
+    folder = tmp_path / "job"
+    folder.mkdir()
+
+    copied = core_bridge.local_media_file("library", "uploads/big.mp4", folder)
+
+    assert copied == folder / f"{core_bridge.SOURCE_PREFIX}uploads_big.mp4" and copied.read_bytes() == blob
+    assert library.chunk_sizes and library.chunk_sizes[0] >= 1 << 16
+
+
+def test_a_stream_that_breaks_leaves_no_half_copy_in_the_folder(monkeypatch, tmp_path):
+    library = _Driver(blobs={"uploads/big.mp4": b"x" * 5000}, break_after=2)
+    _media_container(monkeypatch, _Driver(), library)
+    folder = tmp_path / "job"
+    folder.mkdir()
+
+    with pytest.raises(ConnectionError):
+        core_bridge.local_media_file("library", "uploads/big.mp4", folder)
+
+    assert list(folder.iterdir()) == []
 
 
 def test_upload_item_reads_the_library_item_of_an_uploads_key_of_the_user(monkeypatch):
