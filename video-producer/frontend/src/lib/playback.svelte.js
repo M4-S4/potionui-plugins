@@ -16,6 +16,8 @@ export function play() {
 	if (ui.playhead >= end - 0.05) ui.playhead = ui.range && ui.loop ? ui.range.in : 0;
 	ui.playing = true;
 	ensureAudio();
+	updateAudio();
+	unlockVoices();
 	last = performance.now();
 	raf = requestAnimationFrame(frame);
 }
@@ -130,6 +132,28 @@ function strip(lane) {
 }
 
 const unplayable = new Set();
+const unlocked = new WeakSet();
+let refusalShown = false;
+
+function refused(error) {
+	if (error?.name !== 'NotAllowedError' || refusalShown) return;
+	refusalShown = true;
+	toast(t('lib.toast.audioBlocked'), 'warning');
+}
+
+function unlockVoices() {
+	for (const v of voices.values()) {
+		const el = v.el;
+		if (!el || !el.paused || unlocked.has(el)) continue;
+		unlocked.add(el);
+		el.play().then(
+			() => {
+				if (!v.live) el.pause();
+			},
+			() => unlocked.delete(el)
+		);
+	}
+}
 
 function warnUnplayable(el, clip, src) {
 	if (mediaFailure(el) !== 'unsupported' || unplayable.has(src)) return;
@@ -301,7 +325,7 @@ function updateAudio() {
 			v.out.connect(strip(lane).input);
 			v.lane = lane.id;
 		}
-		if (v.el) follow(v.el, c, t);
+		if (v.el) follow(v, c, t);
 		v.out.gain.setTargetAtTime(envelope(c, t) * (v.el ? 1 : 0.5), now, 0.02);
 	}
 	for (const [id, v] of voices)
@@ -313,16 +337,17 @@ function updateAudio() {
 	readMeters();
 }
 
-function follow(el, c, t) {
-	const inside = ui.playing && t >= c.start && t < c.start + c.dur;
-	if (!inside) {
+function follow(v, c, t) {
+	const el = v.el;
+	v.live = ui.playing && t >= c.start && t < c.start + c.dur;
+	if (!v.live) {
 		if (!el.paused) el.pause();
 		return;
 	}
 	const target = t - c.start + c.srcIn;
 	if (el.paused) {
 		el.currentTime = target;
-		el.play().catch(() => {});
+		el.play().catch(refused);
 	} else if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
 }
 
@@ -390,6 +415,7 @@ export function dispose() {
 	voices.clear();
 	strips.clear();
 	unplayable.clear();
+	refusalShown = false;
 	const closing = ctx;
 	ctx = null;
 	master = null;

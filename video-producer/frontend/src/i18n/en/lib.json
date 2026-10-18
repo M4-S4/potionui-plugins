@@ -57,6 +57,7 @@
 	"toast.selectFollowingShot": "Select a shot that follows another shot.",
 	"toast.copied": "Copied to the project clipboard",
 	"toast.audioUnplayable": "This browser cannot play the audio of “{name}”: the clip stays silent.",
+	"toast.audioBlocked": "The browser blocked the sound of the timeline. Press Play again to hear it.",
 	"toast.saved": "Project saved",
 	"toast.fades": "Fade in and out applied",
 	"block.noRange": "No valid range: select a shot or draw a range.",

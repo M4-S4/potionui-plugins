@@ -1,4 +1,5 @@
 import { t } from '../i18n/index.svelte.js';
+import { filterOf, lookSteps } from './grade.js';
 
 export const colorPresets = {
 	Original: { exposure: 0, contrast: 100, saturation: 100, temperature: 0 },
@@ -21,14 +22,7 @@ export function colorPresetLabel(name) {
 }
 
 export function clipFilter(clip) {
-	const f = [];
-	if (!clip) return 'none';
-	if (clip.exposure) f.push(`brightness(${1 + clip.exposure * 0.25})`);
-	if (clip.contrast !== 100) f.push(`contrast(${clip.contrast / 100})`);
-	if (clip.saturation !== 100) f.push(`saturate(${clip.saturation / 100})`);
-	if (clip.temperature > 0) f.push(`sepia(${clip.temperature / 250})`);
-	if (clip.temperature < 0) f.push(`hue-rotate(${clip.temperature / 5}deg) saturate(${1 + clip.temperature / 400})`);
-	return f.join(' ') || 'none';
+	return filterOf(lookSteps(clip));
 }
 
 export function fadeOpacity(item, time) {

@@ -3,6 +3,7 @@
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { doc, asset, act, toast } from '../../lib/state.svelte.js';
 	import { colorPresets, colorPresetLabel, clipFilter } from '../../lib/look.js';
+	import { drawGraded, lookSteps } from '../../lib/grade.js';
 	import { matchToPrevious, seam } from '../../lib/continuity.svelte.js';
 	import SliderField from './SliderField.svelte';
 	import Icon from '../Icon.svelte';
@@ -33,7 +34,7 @@
 			bins = [];
 			return;
 		}
-		const filter = clipFilter(clip);
+		const steps = lookSteps(clip);
 		let alive = true;
 		const img = new Image();
 		img.onload = () => {
@@ -43,9 +44,7 @@
 			c.height = 90;
 			const g = c.getContext('2d', { willReadFrequently: true });
 			if (!g) return;
-			g.filter = filter;
-			g.drawImage(img, 0, 0, 160, 90);
-			const d = g.getImageData(0, 0, 160, 90).data;
+			const d = drawGraded(g, img, 160, 90, steps);
 			const h = new Array(64).fill(0);
 			for (let i = 0; i < d.length; i += 4) h[Math.min(63, Math.floor((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 4))]++;
 			const max = Math.max(...h);

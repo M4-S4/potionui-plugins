@@ -57,6 +57,7 @@
 	"toast.selectFollowingShot": "Sélectionnez un plan qui suit un autre plan.",
 	"toast.copied": "Copié dans le presse-papiers du projet",
 	"toast.audioUnplayable": "Ce navigateur ne peut pas lire le son de « {name} » : le clip reste muet.",
+	"toast.audioBlocked": "Le navigateur a bloqué le son de la timeline. Appuyez de nouveau sur Lecture pour l’entendre.",
 	"toast.saved": "Projet enregistré",
 	"toast.fades": "Fondus d’entrée et de sortie appliqués",
 	"block.noRange": "Aucune plage valide : sélectionnez un plan ou tracez une plage.",

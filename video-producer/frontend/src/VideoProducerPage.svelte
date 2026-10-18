@@ -572,6 +572,7 @@
 			background-color: rgb(var(--surface-3) / 0.95);
 			padding: 0.25rem;
 			box-shadow: var(--shadow-overlay);
+			-webkit-backdrop-filter: blur(24px);
 			backdrop-filter: blur(24px);
 		}
 		.vp-root .vp-menu [role='menuitem'] {
@@ -610,6 +611,7 @@
 			justify-content: center;
 			padding-top: 6rem;
 			background-color: rgb(0 0 0 / 0.4);
+			-webkit-backdrop-filter: blur(2px);
 			backdrop-filter: blur(2px);
 		}
 		.vp-root .vp-palette {
@@ -621,6 +623,7 @@
 			border: 1px solid rgb(var(--line-strong));
 			background-color: rgb(var(--surface-3) / 0.95);
 			box-shadow: var(--shadow-overlay);
+			-webkit-backdrop-filter: blur(24px);
 			backdrop-filter: blur(24px);
 		}
 		.vp-root .vp-palette-search {
@@ -762,6 +765,7 @@
 			line-height: 16px;
 			color: rgb(var(--fg));
 			box-shadow: var(--shadow-overlay);
+			-webkit-backdrop-filter: blur(24px);
 			backdrop-filter: blur(24px);
 		}
 		.vp-root .vp-toast-sim {
@@ -777,6 +781,7 @@
 			justify-content: center;
 			padding: 1.5rem;
 			background-color: rgb(0 0 0 / 0.5);
+			-webkit-backdrop-filter: blur(2px);
 			backdrop-filter: blur(2px);
 		}
 		.vp-root .vp-modal {
