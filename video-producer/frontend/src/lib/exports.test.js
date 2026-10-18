@@ -26,7 +26,13 @@ import {
 test('slugify: the backend slug, spaces to underscores, accents folded, never empty', () => {
 	assert.equal(slugify('Aube sur le port'), 'Aube_sur_le_port');
 	assert.equal(slugify('  Été — à Montréal !  '), 'Ete__a_Montreal');
-	assert.equal(slugify('Œuvre n°2'), 'uvre_n2');
+	assert.equal(slugify('Œuvre n°2'), 'Oeuvre_n2');
+	assert.equal(slugify('Cœur'), 'Coeur');
+	assert.equal(slugify('Le cœur de l’œuvre'), 'Le_coeur_de_loeuvre');
+	assert.equal(slugify('Æon'), 'Aeon');
+	assert.equal(slugify('Straße'), 'Strasse');
+	assert.equal(slugify('Søren'), 'Soren');
+	assert.equal(slugify('ŒÆØ'), 'OeAeO');
 	assert.equal(slugify('v1.2 final-cut'), 'v1.2_final-cut');
 	assert.equal(slugify('.hidden_'), 'hidden');
 	assert.equal(slugify('日本'), 'video-producer');

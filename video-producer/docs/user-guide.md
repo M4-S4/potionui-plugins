@@ -589,19 +589,18 @@ What it never changes: nothing you typed is translated, and changing the setting
 
 ## 16. Keyboard shortcuts
 
-The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl, ⌥ for Alt and ⇧ for Shift; the menus and the tooltips show the notation of your system, and the side panel is ⌃⌘1 (Control and Command). **Search commands…** (Ctrl+K) finds any command, and **Keyboard shortcuts** (Ctrl+Alt+K) lists those that have a shortcut.
+The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl, ⌥ for Alt and ⇧ for Shift; the menus and the tooltips show the notation of your system, and the side panel is ⌃⌘1 (Control and Command). **Search commands…** (Ctrl+K) finds any command, and **Keyboard shortcuts** (Ctrl+/) lists those that have a shortcut. The menus, the command search and that window show only the shortcuts that work.
 
 | Shortcut | Action |
 |---|---|
 | Ctrl+K | Search commands… |
-| Ctrl+Alt+K | Keyboard shortcuts |
+| Ctrl+/ | Keyboard shortcuts |
 | Ctrl+, | Preferences… |
 | Esc | Close, in this order: the command search, the open window, the open menu, a take preview or comparison; otherwise clear the selection |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, Redo |
 | Ctrl+S | Save |
 | Ctrl+O | Open… |
 | Ctrl+I | Import files… |
-| Ctrl+Alt+J | Project properties… |
 | Ctrl+E, Ctrl+Shift+E | Export video…, Export to other software… |
 | Ctrl+G | Generate selection |
 | Ctrl+Alt+G | Add selection to queue |
@@ -614,18 +613,23 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Backspace, Delete | Delete |
 | A, R, B | Select tool, Range tool, Blade tool |
 | I, O | Set in point, Set out point |
+| Alt+X | Clear range |
+| Alt+[, Alt+] | Trim start to playhead, Trim end to playhead |
 | M | Add marker |
 | N | Snapping |
-| Left arrow, Right arrow | Move the playhead by 1/25 s (1 s with Shift) |
+| F, U, Alt+Backspace | Favorite, Remove flag, Reject |
+| Left arrow, Right arrow | Move the playhead by one frame, 1/fps of the project (1 s with Shift) |
 | Left arrow, Right arrow (Storyboard) | Select the previous or next shot |
 | Home | Go to the start |
 
-The single-letter shortcuts (A, R, B, I, O, M and N) can be turned off in **Video Producer › Preferences…**, setting **Single-key shortcuts**, which is on by default. Space, Backspace, Delete, the arrows and Home do not depend on it.
+The single-letter shortcuts (A, R, B, I, O, M, N, F and U) can be turned off in **Video Producer › Preferences…**, setting **Single-key shortcuts**, which is on by default. Space, Backspace, Delete, the arrows and Home do not depend on it.
 
 When the shortcuts work:
 
-- Only while the focus is on the page and not in a text field. With a text field focused, a window open (a PotionUI picker or confirmation included) or the command search open, the other shortcuts are off; Esc, Ctrl+K and Ctrl+Alt+K always act. While the PotionUI chat is open, the shortcuts of the page are off.
-- The menus and the **Keyboard shortcuts** window also show other combinations, for example Ctrl+N, Ctrl+C, Ctrl+V, Ctrl+F or Ctrl+1 to Ctrl+5 for the workspaces. They are not active: use the menu, the buttons or the workspace selector.
+- Only while the focus is on the page and not in a text field. With a text field focused, a window open (a PotionUI picker or confirmation included) or the command search open, the other shortcuts are off; Esc, Ctrl+K and Ctrl+/ always act. While the PotionUI chat is open, the shortcuts of the page are off.
+- A combination acts only with exactly its keys. Ctrl+Shift+I and Ctrl+Shift+J (on a Mac Option+Command+I, J or K) stay with the developer tools of the browser, and the Alt+Left arrow of the browser keeps going back. The page never takes the combinations that manage the tabs and windows of the browser (Ctrl+N, Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+1 to Ctrl+9), its address bar (Ctrl+L), its page search (Ctrl+F) or the clipboard (Ctrl+C, Ctrl+V): for the workspaces, a new project or a new title, use the menu, the buttons or the workspace selector.
+- A key held down does not repeat a command that switches something (Space, M, N, F, U, Ctrl+S, Ctrl+G, Ctrl+D and the like). Undo, Redo, Delete and the arrows do repeat.
+- On a Mac, Ctrl+K in a text field stays with the text editor; the command search is ⌘K. The / of Ctrl+/ needs Shift on some keyboard layouts, such as the French one: the page accepts it either way.
 
 ### Keyboard and screen readers
 

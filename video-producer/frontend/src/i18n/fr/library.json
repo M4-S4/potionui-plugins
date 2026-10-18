@@ -47,6 +47,7 @@
 	"replaced": "Texte remplacé · {target}",
 	"added": "Texte ajouté · {target}",
 	"copied": "Prompt copié",
+	"copyFailed": "Le prompt n’a pas pu être copié : sélectionnez le texte et copiez-le à la main.",
 	"insertedAt": "Inséré le {time}",
 	"profileH3": "Profil H3",
 	"profile.fl2va": "organise autour de la continuité entre images",

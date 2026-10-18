@@ -10,6 +10,7 @@ export const POLL_EVERY = 1000;
 export const BACKGROUND_POLL_EVERY = 3000;
 export const README_HREF = '/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME';
 export const FALLBACK_NAME = 'video-producer';
+const LETTERS = { œ: 'oe', Œ: 'Oe', æ: 'ae', Æ: 'Ae', ß: 'ss', ẞ: 'SS', ø: 'o', Ø: 'O' };
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
@@ -23,7 +24,10 @@ export function slugify(name) {
 	const spaced = String(name ?? '')
 		.trim()
 		.replace(/\s+/g, '_') || FALLBACK_NAME;
-	const ascii = spaced.normalize('NFKD').replace(/[\u0080-\uffff]/g, '');
+	const ascii = spaced
+		.replace(/[œŒæÆßẞøØ]/g, (letter) => LETTERS[letter])
+		.normalize('NFKD')
+		.replace(/[\u0080-\uffff]/g, '');
 	return ascii.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '') || FALLBACK_NAME;
 }
 

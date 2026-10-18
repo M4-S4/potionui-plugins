@@ -4,6 +4,8 @@ const MAC_KEYS = { backspace: '⌫', plus: '+', minus: '−' };
 const PC_KEYS = { plus: '+', minus: '−' };
 const ACTIVATION = 'button, [role="button"], a, [role="tab"], [role="menuitem"], input, textarea, select, [contenteditable="true"]';
 const HOST_OVERLAY = '[aria-modal="true"]:not(.vp-modal), button.ai-chat-trigger[aria-pressed="true"]';
+const KEY_ALIASES = { space: ' ', plus: '+', minus: '-' };
+const SYMBOL = /^[^a-z0-9\s]$/;
 
 export function detectMac(nav = typeof navigator === 'undefined' ? undefined : navigator) {
 	const platform = nav?.userAgentData?.platform || nav?.platform || '';
@@ -40,6 +42,42 @@ export function eventKey(e) {
 		if (e.code === 'BracketRight') return ']';
 	}
 	return String(e.key ?? '').toLowerCase();
+}
+
+export function requiredMods(mods, mac = detectMac()) {
+	const mod = mods.has('mod');
+	if (mac) return { ctrl: mods.has('ctrl'), meta: mod, alt: mods.has('alt'), shift: mods.has('shift') };
+	return { ctrl: mod || mods.has('ctrl'), meta: false, alt: mods.has('alt') || (mod && mods.has('ctrl')), shift: mods.has('shift') };
+}
+
+export function matchShortcut(e, spec, mac = detectMac()) {
+	const { key, mods } = parseShortcut(spec);
+	if (!key) return false;
+	const need = requiredMods(mods, mac);
+	if (Boolean(e.ctrlKey) !== need.ctrl || Boolean(e.metaKey) !== need.meta || Boolean(e.altKey) !== need.alt) return false;
+	const wanted = KEY_ALIASES[key] ?? key;
+	if (eventKey(e) !== wanted) return false;
+	return (SYMBOL.test(wanted) && !need.shift) || Boolean(e.shiftKey) === need.shift;
+}
+
+export function findShortcut(e, bindings, mac = detectMac()) {
+	return bindings.find((binding) => matchShortcut(e, binding.spec, mac)) ?? null;
+}
+
+export function isSingleKey(spec) {
+	const { key, mods } = parseShortcut(spec);
+	return mods.size === 0 && /^[a-z0-9]$/.test(key);
+}
+
+export function isActivationKey(e) {
+	return (e.key === 'Enter' || e.key === ' ') && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.target === e.currentTarget;
+}
+
+export function activateOnKey(e, handler) {
+	if (!isActivationKey(e)) return false;
+	e.preventDefault();
+	handler(e);
+	return true;
 }
 
 export function isTypingTarget(el) {

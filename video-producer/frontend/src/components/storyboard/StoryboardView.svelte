@@ -16,6 +16,7 @@
 
 	let size = $state('m');
 	let dragId = $state(null);
+	let editingId = $state(null);
 	let overIdx = $state(null);
 	let countsEl = $state();
 	let compact = $state(false);
@@ -139,7 +140,7 @@
 					animate:flip={{ duration: ms(220) }}
 					role="listitem"
 					class="group relative rounded-xl border bg-surface-1 p-2 transition-[box-shadow,border-color,opacity] duration-150 {isSel(c) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'} {dragId === c.id ? 'opacity-40' : ''}"
-					draggable="true"
+					draggable={editingId !== c.id}
 					ondragstart={(e) => onDragStart(e, c)}
 					ondragover={(e) => onDragOver(e, i)}
 					ondrop={onDrop}
@@ -193,6 +194,10 @@
 							class="w-full truncate rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-fg hover:border-line-strong focus:border-signal focus:outline-none"
 							value={clipLabel(c)}
 							onclick={(e) => e.stopPropagation()}
+							onpointerdown={() => (editingId = c.id)}
+							onfocus={() => (editingId = c.id)}
+							onblur={() => (editingId = editingId === c.id ? null : editingId)}
+							onpointerleave={(e) => document.activeElement !== e.currentTarget && editingId === c.id && (editingId = null)}
 							onchange={(e) => act(() => (c.label = e.currentTarget.value))}
 							aria-label={t('storyboard.shotName', { n: i + 1 })}
 						/>

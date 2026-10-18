@@ -47,6 +47,7 @@
 	"replaced": "Text replaced · {target}",
 	"added": "Text added · {target}",
 	"copied": "Prompt copied",
+	"copyFailed": "The prompt could not be copied: select the text and copy it by hand.",
 	"insertedAt": "Inserted at {time}",
 	"profileH3": "H3 profile",
 	"profile.fl2va": "built around continuity between frames",

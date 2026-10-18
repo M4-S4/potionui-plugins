@@ -35,5 +35,8 @@
 	"resolutionTip": "Résolution · {fps} i/s",
 	"uhd": "4K UHD",
 	"fullscreen": "Plein écran",
-	"offlineHint": "Le fichier source de « {name} » n’est plus disponible : importez-le à nouveau ou choisissez une prise."
+	"offlineHint": "Le fichier source de « {name} » n’est plus disponible : importez-le à nouveau ou choisissez une prise.",
+	"cannotPlay": "Ce navigateur ne peut pas lire ce média.",
+	"cannotPlayFormat": "Format : {format}",
+	"cannotPlayHint": "Essayez un autre navigateur, ou convertissez le fichier dans un format très répandu : MP4 H.264 ou WebM pour la vidéo, MP3 ou WAV pour le son."
 }

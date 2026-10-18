@@ -590,19 +590,18 @@ Ce qu’elle ne change jamais : rien de ce que vous avez saisi n’est traduit, 
 
 ## 16. Raccourcis clavier
 
-Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pour Ctrl, ⌥ pour Alt et ⇧ pour Shift ; les menus et les infobulles affichent la notation de votre système, et le panneau latéral se fait avec ⌃⌘1 (Contrôle et Commande). **Rechercher une commande…** (Ctrl+K) trouve toutes les commandes, et **Raccourcis clavier** (Ctrl+Alt+K) liste celles qui ont un raccourci.
+Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pour Ctrl, ⌥ pour Alt et ⇧ pour Shift ; les menus et les infobulles affichent la notation de votre système, et le panneau latéral se fait avec ⌃⌘1 (Contrôle et Commande). **Rechercher une commande…** (Ctrl+K) trouve toutes les commandes, et **Raccourcis clavier** (Ctrl+/) liste celles qui ont un raccourci. Les menus, la recherche de commande et cette fenêtre n’affichent que les raccourcis qui fonctionnent.
 
 | Raccourci | Action |
 |---|---|
 | Ctrl+K | Rechercher une commande… |
-| Ctrl+Alt+K | Raccourcis clavier |
+| Ctrl+/ | Raccourcis clavier |
 | Ctrl+, | Préférences… |
 | Échap | Fermer, dans cet ordre : la recherche de commande, la fenêtre ouverte, le menu ouvert, un aperçu ou une comparaison de prises ; sinon désélectionner |
 | Ctrl+Z, Ctrl+Shift+Z | Annuler, Rétablir |
 | Ctrl+S | Enregistrer |
 | Ctrl+O | Ouvrir… |
 | Ctrl+I | Importer des fichiers… |
-| Ctrl+Alt+J | Propriétés du projet… |
 | Ctrl+E, Ctrl+Shift+E | Exporter la vidéo…, Exporter vers un autre logiciel… |
 | Ctrl+G | Générer la sélection |
 | Ctrl+Alt+G | Ajouter la sélection à la file |
@@ -615,18 +614,23 @@ Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pou
 | Retour arrière, Suppr | Supprimer |
 | A, R, B | Outil Sélection, Outil Plage, Outil Lame |
 | I, O | Définir le point d’entrée, Définir le point de sortie |
+| Alt+X | Effacer la plage |
+| Alt+[, Alt+] | Ajuster le début à la tête, Ajuster la fin à la tête |
 | M | Ajouter un marqueur |
 | N | Magnétisme |
-| Flèche gauche, Flèche droite | Déplacer la tête de lecture de 1/25 s (1 s avec Shift) |
+| F, U, Alt+Retour arrière | Favori, Retirer la marque, Rejeter |
+| Flèche gauche, Flèche droite | Déplacer la tête de lecture d’une image, soit 1/fps du projet (1 s avec Shift) |
 | Flèche gauche, Flèche droite (Storyboard) | Sélectionner le plan précédent ou suivant |
 | Home | Aller au début |
 
-Les raccourcis à une lettre (A, R, B, I, O, M et N) peuvent être désactivés dans **Video Producer › Préférences…**, réglage **Raccourcis à une touche**, activé par défaut. Espace, Retour arrière, Suppr, les flèches et Home n’en dépendent pas.
+Les raccourcis à une lettre (A, R, B, I, O, M, N, F et U) peuvent être désactivés dans **Video Producer › Préférences…**, réglage **Raccourcis à une touche**, activé par défaut. Espace, Retour arrière, Suppr, les flèches et Home n’en dépendent pas.
 
 Quand les raccourcis fonctionnent :
 
-- Seulement quand le focus est sur la page et pas dans un champ de texte. Avec un champ de texte actif, une fenêtre ouverte (sélecteur ou confirmation PotionUI compris) ou la recherche de commande ouverte, les autres raccourcis sont inactifs ; Échap, Ctrl+K et Ctrl+Alt+K agissent toujours. Tant que le chat PotionUI est ouvert, les raccourcis de la page sont inactifs.
-- Les menus et la fenêtre **Raccourcis clavier** affichent aussi d’autres combinaisons, par exemple Ctrl+N, Ctrl+C, Ctrl+V, Ctrl+F ou Ctrl+1 à Ctrl+5 pour les espaces. Elles ne sont pas actives : utilisez le menu, les boutons ou le sélecteur d’espaces.
+- Seulement quand le focus est sur la page et pas dans un champ de texte. Avec un champ de texte actif, une fenêtre ouverte (sélecteur ou confirmation PotionUI compris) ou la recherche de commande ouverte, les autres raccourcis sont inactifs ; Échap, Ctrl+K et Ctrl+/ agissent toujours. Tant que le chat PotionUI est ouvert, les raccourcis de la page sont inactifs.
+- Une combinaison n’agit qu’avec exactement ses touches. Ctrl+Shift+I et Ctrl+Shift+J (sur un Mac Option+Commande+I, J ou K) restent aux outils de développement du navigateur, et Alt+Flèche gauche continue de revenir en arrière. La page ne prend jamais les combinaisons qui gèrent les onglets et les fenêtres du navigateur (Ctrl+N, Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+1 à Ctrl+9), sa barre d’adresse (Ctrl+L), sa recherche dans la page (Ctrl+F) ni le presse-papiers (Ctrl+C, Ctrl+V) : pour les espaces de travail, un nouveau projet ou un nouveau titre, utilisez le menu, les boutons ou le sélecteur d’espaces.
+- Une touche maintenue enfoncée ne répète pas une commande qui bascule quelque chose (Espace, M, N, F, U, Ctrl+S, Ctrl+G, Ctrl+D et les autres). Annuler, Rétablir, Supprimer et les flèches se répètent.
+- Sur un Mac, Ctrl+K dans un champ de texte reste à l’éditeur de texte ; la recherche de commande se fait avec ⌘K. Le / de Ctrl+/ demande Shift sur certaines dispositions de clavier, comme la disposition française : la page l’accepte dans les deux cas.
 
 ### Clavier et lecteurs d’écran
 

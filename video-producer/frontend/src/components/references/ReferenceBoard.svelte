@@ -6,6 +6,7 @@
 	import { families, addReference, refTypeLabel, refRoleLabel } from '../../lib/references.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { realThumb } from '../../lib/media.js';
+	import { activateOnKey } from '../../lib/keyboard.js';
 	import Icon from '../Icon.svelte';
 
 	let q = $state('');
@@ -81,12 +82,14 @@
 							{@const f = fam(r.space)}
 							{@const shot = shotOf(r)}
 							<li>
-								<button
-									type="button"
+								<div
+									role="button"
+									tabindex="0"
 									class="group w-full rounded-xl border bg-surface-1 p-2 text-left transition-[border-color,box-shadow] duration-150 {isSel(r) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'}"
 									draggable={!!a?.src}
 									ondragstart={(e) => a?.src && e.dataTransfer.setData('text/x-asset', a.id)}
 									onclick={() => select('reference', r.id)}
+									onkeydown={(e) => activateOnKey(e, () => select('reference', r.id))}
 									ondblclick={() => openAt(r)}
 									title={a?.src ? t('references.dragHint') : f?.hint}
 								>
@@ -107,7 +110,7 @@
 										<div class="truncate text-sm font-medium">{r.name}</div>
 										<div class="truncate text-xs text-fg-subtle">{r.file ? t('references.roleFile', { role: refRoleLabel(r.role), file: r.file }) : refRoleLabel(r.role)}</div>
 									</div>
-								</button>
+								</div>
 							</li>
 						{/each}
 					</ul>

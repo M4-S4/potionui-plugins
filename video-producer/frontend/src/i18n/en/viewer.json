@@ -35,5 +35,8 @@
 	"resolutionTip": "Resolution · {fps} fps",
 	"uhd": "4K UHD",
 	"fullscreen": "Full screen",
-	"offlineHint": "The source file of “{name}” is no longer available: import it again or choose a take."
+	"offlineHint": "The source file of “{name}” is no longer available: import it again or choose a take.",
+	"cannotPlay": "This browser cannot play this media.",
+	"cannotPlayFormat": "Format: {format}",
+	"cannotPlayHint": "Try another browser, or convert the file to a widely supported format: H.264 MP4 or WebM for video, MP3 or WAV for audio."
 }

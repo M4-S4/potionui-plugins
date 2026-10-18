@@ -56,6 +56,7 @@
 	"toast.chooseDraft": "First pick a draft take for this shot.",
 	"toast.selectFollowingShot": "Select a shot that follows another shot.",
 	"toast.copied": "Copied to the project clipboard",
+	"toast.audioUnplayable": "This browser cannot play the audio of “{name}”: the clip stays silent.",
 	"toast.saved": "Project saved",
 	"toast.fades": "Fade in and out applied",
 	"block.noRange": "No valid range: select a shot or draw a range.",

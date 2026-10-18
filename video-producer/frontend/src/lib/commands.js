@@ -26,7 +26,8 @@ import { matchToPrevious } from './continuity.svelte.js';
 import { openReferences } from './references.js';
 import { togglePlay, seek } from './playback.svelte.js';
 import { chat, confirm } from './host.js';
-import { detectMac, eventKey, formatShortcut, hostOverlayOpen, isActivationTarget, isTypingTarget } from './keyboard.js';
+import { detectMac, findShortcut, formatShortcut, hostOverlayOpen, isActivationTarget, isSingleKey, isTypingTarget } from './keyboard.js';
+import { frameDuration } from './timebase.js';
 import { closeTopLayer } from './focus.js';
 
 export const IS_MAC = detectMac();
@@ -35,12 +36,15 @@ export function shortcutLabel(spec) {
 	return formatShortcut(spec, { mac: IS_MAC, names: { space: t('commands.kbd.space'), backspace: t('commands.kbd.backspace') } });
 }
 
-function command(id, run, { keys = null, check = null } = {}) {
+function command(id, run, { keys = null, check = null, global = false, press = null, repeat = false } = {}) {
 	return {
 		id,
 		run,
 		keys,
 		check,
+		global,
+		press: press ?? run,
+		repeat,
 		menuId: null,
 		get label() {
 			return t(`commands.cmd.${id}`);
@@ -131,16 +135,19 @@ const cancelRunning = () => (busy() ? cancelGeneration() : toast(t('lib.toast.no
 export const menus = [
 	menu('app', [
 		[command('about', modal('about')), command('prefs', modal('prefs'), { keys: 'mod+,' })],
-		[command('shortcuts', modal('shortcuts'), { keys: 'alt+mod+k' }), command('palette', () => (ui.paletteOpen = true), { keys: 'mod+k' })]
+		[
+			command('shortcuts', modal('shortcuts'), { keys: 'mod+/', global: true }),
+			command('palette', () => (ui.paletteOpen = true), { keys: 'mod+k', global: true, press: () => (ui.paletteOpen = !ui.paletteOpen) })
+		]
 	]),
 	menu('file', [
 		[
-			command('new-project', () => createProject(), { keys: 'mod+n' }),
+			command('new-project', () => createProject()),
 			command('open', modal('open'), { keys: 'mod+o' }),
 			command('save', () => save(), { keys: 'mod+s' }),
 			command('versions', modal('versions'))
 		],
-		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-gallery', gallery), command('project-props', modal('project'), { keys: 'alt+mod+j' })],
+		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-gallery', gallery), command('project-props', modal('project'))],
 		[
 			command('export', modal('export', { tab: 'video' }), { keys: 'mod+e' }),
 			command('export-xml', modal('export', { tab: 'exchange' }), { keys: 'shift+mod+e' }),
@@ -148,14 +155,14 @@ export const menus = [
 		]
 	]),
 	menu('edit', [
-		[command('undo', undo, { keys: 'mod+z' }), command('redo', redo, { keys: 'shift+mod+z' })],
+		[command('undo', undo, { keys: 'mod+z', repeat: true }), command('redo', redo, { keys: 'shift+mod+z', repeat: true })],
 		[
-			command('copy', () => toast(t('lib.toast.copied')), { keys: 'mod+c' }),
-			command('paste', duplicateSelection, { keys: 'mod+v' }),
+			command('copy', () => toast(t('lib.toast.copied'))),
+			command('paste', duplicateSelection),
 			command('duplicate', duplicateSelection, { keys: 'mod+d' }),
-			command('delete', deleteSelection, { keys: 'backspace' })
+			command('delete', deleteSelection, { keys: 'backspace', repeat: true })
 		],
-		[command('find', ws('media'), { keys: 'mod+f' })]
+		[command('find', ws('media'))]
 	]),
 	menu('edit-timeline', [
 		[
@@ -167,19 +174,19 @@ export const menus = [
 			command('blade', () => bladeAt(), { keys: 'mod+b' }),
 			command('trim-start', nudgeTrim('start'), { keys: 'alt+[' }),
 			command('trim-end', nudgeTrim('end'), { keys: 'alt+]' }),
-			command('duration', () => (ui.inspectorOpen = true), { keys: 'ctrl+d' })
+			command('duration', () => (ui.inspectorOpen = true))
 		],
 		[
 			command('in', () => setInOut('in'), { keys: 'i' }),
 			command('out', () => setInOut('out'), { keys: 'o' }),
 			command('clear-range', () => (ui.range = null), { keys: 'alt+x' })
 		],
-		[command('marker', () => addMarker(), { keys: 'm' }), command('title', () => addTitle(), { keys: 'ctrl+t' }), command('transition', () => crossfade(), { keys: 'mod+t' })]
+		[command('marker', () => addMarker(), { keys: 'm' }), command('title', () => addTitle()), command('transition', () => crossfade())]
 	]),
 	menu('clip', [
-		[command('new-shot', newShot, { keys: 'alt+n' }), command('info', () => (ui.inspectorOpen = !ui.inspectorOpen), { keys: 'mod+4' }), command('reveal', ws('media'), { keys: 'shift+f' })],
-		[command('takes', takes, { keys: 'mod+y' }), command('promote', promote, { keys: 'shift+mod+g' })],
-		[command('color', scopes, { keys: 'mod+6' }), command('match', match, { keys: 'alt+mod+m' }), command('keyframes', ws('scene'), { keys: 'alt+k' })],
+		[command('new-shot', newShot), command('info', () => (ui.inspectorOpen = !ui.inspectorOpen)), command('reveal', ws('media'))],
+		[command('takes', takes), command('promote', promote, { keys: 'shift+mod+g' })],
+		[command('color', scopes), command('match', match), command('keyframes', ws('scene'))],
 		[command('fav', flag('favori'), { keys: 'f' }), command('reject', flag('rejet'), { keys: 'alt+backspace' }), command('unflag', flag(null), { keys: 'u' })]
 	]),
 	menu('production', [
@@ -191,17 +198,17 @@ export const menus = [
 			command('queue', queueWindow, { keys: 'alt+mod+g' }),
 			command('cancel-generation', cancelRunning)
 		],
-		[command('results', openResults, { keys: 'ctrl+mod+r' }), command('assemble', assembleChosen)],
+		[command('results', openResults), command('assemble', assembleChosen)],
 		[
-			command('advanced', modal('advanced', { step: 0 }), { keys: 'shift+mod+a' }),
+			command('advanced', modal('advanced', { step: 0 })),
 			command('engine', modal('advanced', { step: 1 })),
 			command('hybrid', modal('advanced', { step: 1, focus: 'hybrid' }))
 		]
 	]),
 	menu('audio', [
-		[command('audio-add', addAudioLane, { keys: 'alt+mod+n' }), command('audio-import', () => openImport('audio')), command('audio-mixer', mixer, { keys: 'mod+8' })],
+		[command('audio-add', addAudioLane), command('audio-import', () => openImport('audio')), command('audio-mixer', mixer)],
 		[
-			command('voice', modal('sound', { kind: 'Voix' }), { keys: 'shift+mod+v' }),
+			command('voice', modal('sound', { kind: 'Voix' })),
 			command('sd-ambience', modal('sound', { kind: 'Ambiance' })),
 			command('sd-foley', modal('sound', { kind: 'Bruitage' })),
 			command('sd-texture', modal('sound', { kind: 'Texture' })),
@@ -212,31 +219,31 @@ export const menus = [
 	menu('view', [
 		[
 			command('play', togglePlay, { keys: 'space' }),
-			command('loop', () => (ui.loop = !ui.loop), { keys: 'mod+l', check: () => ui.loop }),
-			command('fullscreen', () => document.querySelector('#viewer-frame')?.requestFullscreen?.(), { keys: 'shift+mod+f' })
+			command('loop', () => (ui.loop = !ui.loop), { check: () => ui.loop }),
+			command('fullscreen', () => document.querySelector('#viewer-frame')?.requestFullscreen?.())
 		],
 		[
-			command('guides', () => (ui.guides = !ui.guides), { keys: 'ctrl+g', check: () => ui.guides }),
-			command('compare', openResults, { keys: 'ctrl+mod+6' }),
-			command('scopes', scopes, { keys: 'mod+7' }),
-			command('meters', mixer, { keys: 'shift+mod+8' })
+			command('guides', () => (ui.guides = !ui.guides), { check: () => ui.guides }),
+			command('compare', openResults),
+			command('scopes', scopes),
+			command('meters', mixer)
 		],
 		[
-			command('zoom-in', () => (ui.pxPerSec = Math.min(220, ui.pxPerSec * 1.25)), { keys: 'mod+plus' }),
-			command('zoom-out', () => (ui.pxPerSec = Math.max(8, ui.pxPerSec / 1.25)), { keys: 'mod+minus' }),
+			command('zoom-in', () => (ui.pxPerSec = Math.min(220, ui.pxPerSec * 1.25))),
+			command('zoom-out', () => (ui.pxPerSec = Math.max(8, ui.pxPerSec / 1.25))),
 			command('snap', () => (ui.snapping = !ui.snapping), { keys: 'n', check: () => ui.snapping })
 		]
 	]),
 	menu('window', [
 		[
-			command('ws-media', ws('media'), { keys: 'ctrl+1' }),
-			command('ws-director', ws('director'), { keys: 'ctrl+2' }),
-			command('ws-story', ws('storyboard'), { keys: 'ctrl+3' }),
-			command('ws-scene', ws('scene'), { keys: 'ctrl+4' }),
-			command('ws-mixer', ws('mixer'), { keys: 'ctrl+5' })
+			command('ws-media', ws('media')),
+			command('ws-director', ws('director')),
+			command('ws-story', ws('storyboard')),
+			command('ws-scene', ws('scene')),
+			command('ws-mixer', ws('mixer'))
 		],
 		[
-			command('ref-all', refs('all'), { keys: 'alt+mod+r' }),
+			command('ref-all', refs('all')),
 			command('ref-identity', refs('identite')),
 			command('ref-3d', refs('decors3d')),
 			command('ref-motion', refs('mouvement')),
@@ -244,15 +251,15 @@ export const menus = [
 		],
 		[
 			command('sidebar', () => (ui.sidebarOpen = !ui.sidebarOpen), { keys: 'ctrl+mod+1', check: () => ui.sidebarOpen }),
-			command('inspector', () => (ui.inspectorOpen = !ui.inspectorOpen), { keys: 'mod+4', check: () => ui.inspectorOpen }),
-			command('assistant', () => chat.open(), { keys: 'mod+j', check: () => chat.isOpen() }),
-			command('library', modal('library', { target: null }), { keys: 'shift+mod+l' }),
-			command('index', modal('index'), { keys: 'shift+mod+2' }),
-			command('tasks', modal('tasks'), { keys: 'mod+9' })
+			command('inspector', () => (ui.inspectorOpen = !ui.inspectorOpen), { check: () => ui.inspectorOpen }),
+			command('assistant', () => chat.open(), { keys: 'mod+j', check: () => chat.isOpen(), press: () => chat.toggle() }),
+			command('library', modal('library', { target: null })),
+			command('index', modal('index')),
+			command('tasks', modal('tasks'))
 		]
 	]),
 	menu('help', [
-		[command('tour', modal('tour')), command('help-keys', modal('shortcuts')), command('help-find', () => (ui.paletteOpen = true), { keys: 'mod+k' })],
+		[command('tour', modal('tour')), command('help-keys', modal('shortcuts')), command('help-find', () => (ui.paletteOpen = true))],
 		[command('help-sim', modal('simulations'))]
 	])
 ];
@@ -306,10 +313,6 @@ function crossfade() {
 	toast(t('lib.toast.fades'));
 }
 
-function sidebarCombo(e) {
-	return IS_MAC ? e.ctrlKey && e.metaKey : e.ctrlKey && e.altKey;
-}
-
 function escape() {
 	if (ui.paletteOpen) ui.paletteOpen = false;
 	else if (ui.modal) closeTopLayer() || (ui.modal = null);
@@ -328,67 +331,47 @@ function stepShot(forward) {
 	seek(next.start + 0.01);
 }
 
+function arrow(forward, whole) {
+	return () => {
+		if (ui.workspace === 'storyboard') return stepShot(forward);
+		seek(ui.playhead + (forward ? 1 : -1) * (whole ? 1 : frameDuration(doc.fps)));
+	};
+}
+
+const fixedBindings = [
+	{ spec: 'delete', run: () => deleteSelection(), repeat: true },
+	{ spec: 'home', run: () => seek(0) },
+	{ spec: 'arrowleft', run: arrow(false, false), repeat: true },
+	{ spec: 'arrowright', run: arrow(true, false), repeat: true },
+	{ spec: 'shift+arrowleft', run: arrow(false, true), repeat: true },
+	{ spec: 'shift+arrowright', run: arrow(true, true), repeat: true }
+];
+
+const keymap = [
+	...allCommands
+		.filter((c) => c.keys)
+		.map((c) => ({ spec: c.keys, run: c.press, global: c.global, repeat: c.repeat, single: isSingleKey(c.keys) })),
+	...fixedBindings
+];
+
+function hasModifier(e) {
+	return e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
+}
+
 export function handleKeydown(e, root) {
 	const target = e.target;
 	if (target && target !== document.body && root && !root.contains(target)) return;
 	if (ui.hostModal || hostOverlayOpen()) return;
-	if (e.key === 'Escape') return escape();
-	const mod = e.metaKey || e.ctrlKey;
-	const k = eventKey(e);
-	if (mod && k === 'k') {
-		e.preventDefault();
-		if (e.altKey) ui.modal = { type: 'shortcuts' };
-		else ui.paletteOpen = !ui.paletteOpen;
+	if (e.key === 'Escape') {
+		if (!hasModifier(e)) escape();
 		return;
 	}
-	if (isTypingTarget(target) || ui.modal || ui.paletteOpen) return;
-	const withMod = {
-		z: () => (e.shiftKey ? redo() : undo()),
-		s: () => save(),
-		b: () => bladeAt(),
-		d: () => duplicateSelection(),
-		g: () => (e.shiftKey ? promote() : e.altKey ? queueWindow() : startGeneration()),
-		e: () => (ui.modal = { type: 'export', tab: e.shiftKey ? 'exchange' : 'video' }),
-		j: () => (e.altKey ? (ui.modal = { type: 'project' }) : chat.toggle()),
-		i: () => openImport(),
-		o: () => (ui.modal = { type: 'open' }),
-		',': () => (ui.modal = { type: 'prefs' })
-	};
-	if (mod) {
-		if (k === '1' && sidebarCombo(e)) {
-			e.preventDefault();
-			ui.sidebarOpen = !ui.sidebarOpen;
-			return;
-		}
-		if (withMod[k]) {
-			e.preventDefault();
-			withMod[k]();
-		}
-		return;
-	}
-	if (ui.workspace === 'storyboard' && (k === 'arrowleft' || k === 'arrowright')) {
-		e.preventDefault();
-		return stepShot(k === 'arrowright');
-	}
-	const single = ui.singleKeyShortcuts && !e.altKey;
-	const plain = {
-		' ': () => togglePlay(),
-		a: single && (() => (ui.tool = 'select')),
-		r: single && (() => (ui.tool = 'range')),
-		b: single && (() => (ui.tool = 'blade')),
-		m: single && (() => addMarker()),
-		i: single && (() => setInOut('in')),
-		o: single && (() => setInOut('out')),
-		n: single && (() => (ui.snapping = !ui.snapping)),
-		backspace: () => deleteSelection(),
-		delete: () => deleteSelection(),
-		arrowleft: () => seek(ui.playhead - (e.shiftKey ? 1 : 1 / 25)),
-		arrowright: () => seek(ui.playhead + (e.shiftKey ? 1 : 1 / 25)),
-		home: () => seek(0)
-	};
-	const action = plain[k];
-	if (!action) return;
-	if (k === ' ' && isActivationTarget(target)) return;
+	const hit = findShortcut(e, keymap, IS_MAC);
+	if (!hit) return;
+	if (!hit.global && (isTypingTarget(target) || ui.modal || ui.paletteOpen)) return;
+	if (hit.single && !ui.singleKeyShortcuts) return;
+	if (hit.spec === 'space' && isActivationTarget(target)) return;
 	e.preventDefault();
-	action();
+	if (e.repeat && !hit.repeat) return;
+	hit.run();
 }

@@ -6,7 +6,20 @@ import { fileURLToPath } from 'node:url';
 import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
 import { isUlid, ulid, ulidTime } from './ulid.js';
 import { emptyDoc, newAsset, promptLanguageOf, starterDoc } from './starter.js';
-import { detectMac, eventKey, formatShortcut, isActivationTarget, isTypingTarget, parseShortcut } from './keyboard.js';
+import {
+	activateOnKey,
+	detectMac,
+	eventKey,
+	findShortcut,
+	formatShortcut,
+	isActivationKey,
+	isActivationTarget,
+	isSingleKey,
+	isTypingTarget,
+	matchShortcut,
+	parseShortcut,
+	requiredMods
+} from './keyboard.js';
 import { HOST_ALIASES, HOST_MISSING, HOST_VARIANTS, hostIconName, hostIcons, paths } from './icons.js';
 import { closeLayer, closeTopLayer, isTopLayer, leaveLayer, openLayer } from './focus.js';
 
@@ -250,4 +263,119 @@ test('window layers: Escape closes only the foreground window, a replaced window
 	} finally {
 		globalThis.document = saved;
 	}
+});
+
+const press = (key, { ctrl = false, meta = false, alt = false, shift = false, code, repeat = false } = {}) => ({ key, code, ctrlKey: ctrl, metaKey: meta, altKey: alt, shiftKey: shift, repeat });
+
+test('shortcut match: a combination fires only with exactly the modifiers it declares', () => {
+	assert.ok(matchShortcut(press('i', { ctrl: true }), 'mod+i', false));
+	assert.ok(!matchShortcut(press('I', { ctrl: true, shift: true }), 'mod+i', false));
+	assert.ok(!matchShortcut(press('J', { ctrl: true, shift: true }), 'mod+j', false));
+	assert.ok(!matchShortcut(press('i', { ctrl: true, alt: true, code: 'KeyI' }), 'mod+i', false));
+	assert.ok(!matchShortcut(press('i', { ctrl: true, meta: true }), 'mod+i', false));
+	assert.ok(matchShortcut(press('i', { meta: true }), 'mod+i', true));
+	assert.ok(!matchShortcut(press('ˆ', { meta: true, alt: true, code: 'KeyI' }), 'mod+i', true));
+	assert.ok(!matchShortcut(press('∆', { meta: true, alt: true, code: 'KeyJ' }), 'mod+j', true));
+	assert.ok(!matchShortcut(press('˚', { meta: true, alt: true, code: 'KeyK' }), 'mod+k', true));
+	assert.ok(!matchShortcut(press('i', { ctrl: true }), 'mod+i', true));
+	assert.ok(matchShortcut(press('k', { ctrl: true }), 'mod+k', false));
+	assert.ok(!matchShortcut(press('k', { ctrl: true }), 'mod+k', true));
+	assert.ok(matchShortcut(press('k', { meta: true }), 'mod+k', true));
+	assert.ok(!matchShortcut(press('k', { ctrl: true, alt: true, code: 'KeyK' }), 'mod+k', false));
+});
+
+test('shortcut match: Ctrl+Alt on Windows and Linux, Control+Command on a Mac, Alt alone, plain keys', () => {
+	assert.deepEqual(requiredMods(parseShortcut('ctrl+mod+1').mods, false), { ctrl: true, meta: false, alt: true, shift: false });
+	assert.deepEqual(requiredMods(parseShortcut('ctrl+mod+1').mods, true), { ctrl: true, meta: true, alt: false, shift: false });
+	assert.deepEqual(requiredMods(parseShortcut('alt+mod+g').mods, false), { ctrl: true, meta: false, alt: true, shift: false });
+	assert.ok(matchShortcut(press('¡', { ctrl: true, alt: true, code: 'Digit1' }), 'ctrl+mod+1', false));
+	assert.ok(!matchShortcut(press('1', { ctrl: true }), 'ctrl+mod+1', false));
+	assert.ok(matchShortcut(press('1', { ctrl: true, meta: true }), 'ctrl+mod+1', true));
+	assert.ok(!matchShortcut(press('1', { meta: true }), 'ctrl+mod+1', true));
+	assert.ok(matchShortcut(press('g', { ctrl: true, alt: true, code: 'KeyG' }), 'alt+mod+g', false));
+	assert.ok(!matchShortcut(press('g', { ctrl: true }), 'alt+mod+g', false));
+	assert.ok(matchShortcut(press('[', { alt: true, code: 'BracketLeft' }), 'alt+[', false));
+	assert.ok(matchShortcut(press('x', { alt: true, code: 'KeyX' }), 'alt+x', true));
+	assert.ok(!matchShortcut(press('x', { alt: true, ctrl: true, code: 'KeyX' }), 'alt+x', true));
+	assert.ok(matchShortcut(press('Backspace', { alt: true }), 'alt+backspace', true));
+	assert.ok(!matchShortcut(press('Backspace', { alt: true }), 'backspace', true));
+	assert.ok(matchShortcut(press('Backspace'), 'backspace', false));
+	assert.ok(matchShortcut(press('a'), 'a', false));
+	assert.ok(!matchShortcut(press('a', { shift: true }), 'a', false));
+	assert.ok(!matchShortcut(press('A', { shift: true }), 'a', false));
+	assert.ok(!matchShortcut(press('a', { ctrl: true }), 'a', false));
+	assert.ok(!matchShortcut(press('a', { meta: true }), 'a', false));
+	assert.ok(matchShortcut(press(' '), 'space', false));
+	assert.ok(!matchShortcut(press(' ', { shift: true }), 'space', false));
+	assert.ok(matchShortcut(press('Z', { ctrl: true, shift: true }), 'shift+mod+z', false));
+	assert.ok(!matchShortcut(press('z', { ctrl: true }), 'shift+mod+z', false));
+	assert.ok(!matchShortcut(press('z', { ctrl: true, shift: true }), 'mod+z', false));
+	assert.ok(!matchShortcut(press('x'), '', false));
+});
+
+test('shortcut match: the shift of a punctuation key depends on the layout, so Ctrl+/ works on a French keyboard too', () => {
+	assert.ok(matchShortcut(press('/', { ctrl: true }), 'mod+/', false));
+	assert.ok(matchShortcut(press('/', { ctrl: true, shift: true }), 'mod+/', false));
+	assert.ok(matchShortcut(press('/', { meta: true, shift: true }), 'mod+/', true));
+	assert.ok(!matchShortcut(press('/', { ctrl: true, alt: true, code: 'Slash' }), 'mod+/', false));
+	assert.ok(!matchShortcut(press('/'), 'mod+/', false));
+	assert.ok(matchShortcut(press(',', { ctrl: true }), 'mod+,', false));
+	assert.ok(!matchShortcut(press(',', { ctrl: true, alt: true }), 'mod+,', false));
+});
+
+test('findShortcut: the first binding that matches, nothing when no binding does', () => {
+	const bindings = [
+		{ spec: 'mod+z', id: 'undo' },
+		{ spec: 'shift+mod+z', id: 'redo' },
+		{ spec: 'a', id: 'tool' }
+	];
+	assert.equal(findShortcut(press('z', { ctrl: true }), bindings, false).id, 'undo');
+	assert.equal(findShortcut(press('Z', { ctrl: true, shift: true }), bindings, false).id, 'redo');
+	assert.equal(findShortcut(press('a'), bindings, false).id, 'tool');
+	assert.equal(findShortcut(press('a', { alt: true, code: 'KeyA' }), bindings, false), null);
+	assert.equal(findShortcut(press('z', { meta: true }), bindings, false), null);
+});
+
+test('single keys are the letters and digits alone; activation keys are Enter and Space on the element itself', () => {
+	assert.ok(isSingleKey('a'));
+	assert.ok(isSingleKey('1'));
+	assert.ok(!isSingleKey('mod+a'));
+	assert.ok(!isSingleKey('shift+a'));
+	assert.ok(!isSingleKey('space'));
+	assert.ok(!isSingleKey('backspace'));
+	const target = {};
+	const on = (key, extra = {}) => ({
+		key,
+		target,
+		currentTarget: target,
+		repeat: false,
+		ctrlKey: false,
+		metaKey: false,
+		altKey: false,
+		shiftKey: false,
+		preventDefault() {
+			this.prevented = true;
+		},
+		...extra
+	});
+	assert.ok(isActivationKey(on('Enter')));
+	assert.ok(isActivationKey(on(' ')));
+	assert.ok(!isActivationKey(on('a')));
+	assert.ok(!isActivationKey(on('Enter', { ctrlKey: true })));
+	assert.ok(!isActivationKey(on('Enter', { repeat: true })));
+	assert.ok(!isActivationKey(on('Enter', { target: {} })));
+	const calls = [];
+	const space = on(' ');
+	assert.equal(
+		activateOnKey(space, () => calls.push('run')),
+		true
+	);
+	assert.equal(space.prevented, true);
+	const other = on('x');
+	assert.equal(
+		activateOnKey(other, () => calls.push('never')),
+		false
+	);
+	assert.equal(other.prevented, undefined);
+	assert.deepEqual(calls, ['run']);
 });

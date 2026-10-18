@@ -1,4 +1,6 @@
-import { ui, doc, asset, seqDuration, clamp } from './state.svelte.js';
+import { t } from '../i18n/index.svelte.js';
+import { ui, doc, asset, seqDuration, clamp, toast } from './state.svelte.js';
+import { mediaFailure } from './playable.js';
 
 export const meters = $state({ lanes: {}, master: [0, 0] });
 
@@ -127,14 +129,24 @@ function strip(lane) {
 	return s;
 }
 
+const unplayable = new Set();
+
+function warnUnplayable(el, clip, src) {
+	if (mediaFailure(el) !== 'unsupported' || unplayable.has(src)) return;
+	unplayable.add(src);
+	toast(t('lib.toast.audioUnplayable', { name: asset(clip.assetId)?.name ?? '' }), 'warning');
+}
+
 function mediaVoice(clip, src) {
 	const out = ctx.createGain();
 	out.gain.value = 0;
 	const el = new Audio();
 	el.preload = 'auto';
+	el.onerror = () => warnUnplayable(el, clip, src);
 	el.src = src;
 	ctx.createMediaElementSource(el).connect(out);
 	const stop = () => {
+		el.onerror = null;
 		el.pause();
 		el.removeAttribute('src');
 		el.load();
@@ -377,6 +389,7 @@ export function dispose() {
 	}
 	voices.clear();
 	strips.clear();
+	unplayable.clear();
 	const closing = ctx;
 	ctx = null;
 	master = null;

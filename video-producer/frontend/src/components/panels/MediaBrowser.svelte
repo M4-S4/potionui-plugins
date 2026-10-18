@@ -8,6 +8,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { openImport } from '../../lib/importer.js';
+	import { activateOnKey } from '../../lib/keyboard.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -80,12 +81,14 @@
 			{#each list as a (a.id)}
 				{@const thumb = assetThumb(a)}
 				<li>
-					<button
-						type="button"
+					<div
+						role="button"
+						tabindex="0"
 						class="group w-full overflow-hidden rounded-lg border text-left {picked === a.id ? 'border-signal ring-1 ring-signal' : 'border-line-strong hover:border-line-hover'}"
 						draggable="true"
 						ondragstart={(e) => e.dataTransfer.setData('text/x-asset', a.id)}
 						onclick={() => (picked = a.id)}
+						onkeydown={(e) => activateOnKey(e, () => (picked = a.id))}
 						ondblclick={() => (ui.preview = { kind: 'asset', id: a.id })}
 						title={t('panels.media.dragHint')}
 					>
@@ -103,7 +106,7 @@
 							{/if}
 						</div>
 						<div class="truncate px-1.5 py-1 text-xs text-fg">{a.name}</div>
-					</button>
+					</div>
 				</li>
 			{/each}
 		</ul>

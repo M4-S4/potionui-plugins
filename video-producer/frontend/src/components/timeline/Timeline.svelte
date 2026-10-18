@@ -41,6 +41,7 @@
 	import { markGuidesStale } from '../../lib/scene.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { wheelZoomFactor } from '../../lib/timebase.js';
 	import { ulid } from '../../lib/ulid.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from '../shell/Dropdown.svelte';
@@ -215,6 +216,7 @@
 				reorder = { id: c.id, dx, index, at: index < others.length ? others[index].start : total };
 				setDragText(t('timeline.drag.position', { n: index + 1 }));
 			},
+			onCancel: () => (reorder = null),
 			onEnd: () => {
 				if (!reorder) return;
 				const from = doc.clips.findIndex((o) => o.id === c.id);
@@ -310,7 +312,7 @@
 		e.preventDefault();
 		const at = timeAt(e.clientX);
 		const before = e.clientX - scroller.getBoundingClientRect().left - HEAD;
-		ui.pxPerSec = clamp(ui.pxPerSec * (e.deltaY < 0 ? 1.15 : 1 / 1.15), 8, 220);
+		ui.pxPerSec = clamp(ui.pxPerSec * wheelZoomFactor(e), 8, 220);
 		requestAnimationFrame(() => scroller && (scroller.scrollLeft = at * ui.pxPerSec - before));
 	}
 	function fit() {
@@ -367,12 +369,12 @@
 		</HostUi>
 	</div>
 
-	<div class="relative min-h-0 flex-1 overflow-auto" bind:this={scroller} bind:clientWidth={viewW} onwheel={wheel} style:cursor={ui.tool === 'blade' ? 'crosshair' : ui.tool === 'range' ? 'col-resize' : 'default'}>
+	<div class="relative min-h-0 flex-1 overflow-auto" bind:this={scroller} bind:clientWidth={viewW} onwheel={wheel} style:overscroll-behavior-x="contain" style:cursor={ui.tool === 'blade' ? 'crosshair' : ui.tool === 'range' ? 'col-resize' : 'default'}>
 		<div class="relative" style:width="{HEAD + contentW}px">
 			<div class="sticky top-0 z-40 flex h-7 border-b border-line bg-surface-1">
 				<div class="sticky left-0 z-50 flex w-[156px] shrink-0 items-center border-r border-line bg-surface-1 px-3 text-xs text-fg-subtle">{doc.name}</div>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="relative flex-1 cursor-text" onpointerdown={rulerDown}>
+				<div class="relative flex-1 cursor-text vp-touch-none" onpointerdown={rulerDown}>
 					{#each ticks as tick (tick)}
 						<div class="absolute bottom-0 h-2 w-px bg-viz-axis" style:left="{x(tick)}px"></div>
 						<span class="vp-tc absolute top-1 pl-1 text-2xs text-fg-subtle" style:left="{x(tick)}px">{tickLabel(tick)}</span>
@@ -386,7 +388,7 @@
 							<HostUi name="Tooltip" props={{ text: t('timeline.marker.tip', { label: m.label, time: secs(m.time) }), position: 'bottom', wrapperClass: 'flex' }}>
 								<button
 									type="button"
-									class="flex h-6 w-6 justify-center {m.kind === 'favori' ? 'text-success' : m.kind === 'rejet' ? 'text-danger' : 'text-warning'}"
+									class="vp-touch-none flex h-6 w-6 justify-center {m.kind === 'favori' ? 'text-success' : m.kind === 'rejet' ? 'text-danger' : 'text-warning'}"
 									aria-label={t('timeline.marker.label', { label: m.label })}
 									onpointerdown={(e) => markerDown(e, m)}
 									ondblclick={() => select('marker', m.id)}
@@ -432,6 +434,7 @@
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						class="relative flex-1 {row.id === 'v1' ? 'bg-canvas/60' : ''}"
+						class:vp-touch-none={ui.tool === 'range'}
 						data-lane={row.lane ? row.id : null}
 						onpointerdown={laneDown}
 						ondblclick={(e) => laneDbl(e, row)}
@@ -454,7 +457,7 @@
 								{@const fthumb = assetThumb(asset(f.assetId))}
 								<button
 									type="button"
-									class="group absolute top-1 flex h-[26px] -translate-x-1/2 items-center gap-1 rounded border bg-surface-2 pl-0.5 pr-1.5 {isSel('frame', f.id) ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-hover'}"
+									class="vp-touch-none group absolute top-1 flex h-[26px] -translate-x-1/2 items-center gap-1 rounded border bg-surface-2 pl-0.5 pr-1.5 {isSel('frame', f.id) ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-hover'}"
 									style:left="{x(f.time)}px"
 									style:border-left={`3px solid rgb(var(--${row.color}))`}
 									title={t('timeline.frame.tip', { role: frameRoleLabel(f.role), time: secs(f.time), strength: f.strength })}
@@ -480,7 +483,7 @@
 									<button
 										type="button"
 										tabindex="-1"
-										class="absolute top-0 z-20 -ml-3 flex h-6 w-6 items-center justify-center"
+										class="vp-touch-none absolute top-0 z-20 -ml-3 flex h-6 w-6 items-center justify-center"
 										style:left="{x(s.start + k.t)}px"
 										title={t('timeline.keyframe.tip', { time: secs(s.start + k.t) })}
 										aria-label={t('timeline.keyframe.label', { time: secs(s.start + k.t) })}
@@ -566,7 +569,7 @@
 	{@const sel = isSel('clip', c.id)}
 	{@const takes = takesOf(c).length}
 	<div
-		class="group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/40'} {reorder?.id === c.id ? 'opacity-60' : ''}"
+		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/40'} {reorder?.id === c.id ? 'opacity-60' : ''}"
 		style:left="{x(c.start)}px"
 		style:width="{w}px"
 		style:transform={reorder?.id === c.id ? `translateX(${reorder.dx}px)` : null}
@@ -616,7 +619,7 @@
 	{@const peaks = audioPeaks(src)}
 	{@const sel = isSel('audio', a.id)}
 	<div
-		class="group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/30'} {row.lane.mute ? 'opacity-40' : ''}"
+		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/30'} {row.lane.mute ? 'opacity-40' : ''}"
 		style:left="{x(a.start)}px"
 		style:width="{w}px"
 		style:background="rgb(var(--{row.color}) / 0.28)"
@@ -654,7 +657,7 @@
 	{@const sel = isSel(kind, item.id)}
 	{@const warn = issues.filter((i) => i.level !== 'missing')}
 	<div
-		class="group absolute bottom-0.5 top-0.5 flex items-center gap-1 overflow-hidden rounded border px-2 text-xs {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-hover'} {color ? 'text-fg' : 'bg-surface-3 text-fg'}"
+		class="vp-touch-none group absolute bottom-0.5 top-0.5 flex items-center gap-1 overflow-hidden rounded border px-2 text-xs {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-hover'} {color ? 'text-fg' : 'bg-surface-3 text-fg'}"
 		style:left="{x(item.start)}px"
 		style:top={top === null ? null : `${top}px`}
 		style:width="{Math.max(6, x(item.dur))}px"

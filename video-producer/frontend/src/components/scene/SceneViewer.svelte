@@ -186,7 +186,7 @@
 
 		<div class="relative min-h-0 flex-1" bind:clientWidth={w} bind:clientHeight={h}>
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<canvas bind:this={canvas} class="absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing" style:width="{w}px" style:height="{h}px" onpointerdown={orbit} onwheel={wheel}></canvas>
+			<canvas bind:this={canvas} class="vp-touch-none absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing" style:width="{w}px" style:height="{h}px" onpointerdown={orbit} onwheel={wheel}></canvas>
 
 			{#if scene.kind === 'file'}
 				<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">

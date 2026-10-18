@@ -29,6 +29,7 @@
 	import { suggest } from '../../lib/assistant.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { ulid } from '../../lib/ulid.js';
+	import { copyText } from '../../lib/clipboard.js';
 	import Modal from './Modal.svelte';
 	import Tabs from '../shell/Tabs.svelte';
 	import Icon from '../Icon.svelte';
@@ -79,13 +80,13 @@
 		suggest(text);
 	}
 
-	function insert(text) {
+	async function insert(text) {
 		const clean = text.trim();
 		if (!clean) return;
 		const merge = (old) => (mode === 'replace' || !old?.trim() ? clean : `${old.trim()} ${clean}`);
 		if (target?.kind === 'direction') act(() => (doc.direction[target.key] = merge(doc.direction[target.key])));
 		else if (targetPrompt) act(() => (targetPrompt.text = merge(targetPrompt.text)));
-		else navigator.clipboard?.writeText?.(clean)?.catch?.(() => {});
+		else if (!(await copyText(clean))) return toast(t('library.copyFailed'), 'warning');
 		templates.push({
 			id: ulid(),
 			lib: 'Historique',

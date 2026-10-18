@@ -22,7 +22,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
-	class="vp-splitter"
+	class="vp-splitter vp-touch-none"
 	role="separator"
 	aria-orientation="horizontal"
 	aria-label={t('shell.layout.splitter')}

@@ -506,6 +506,10 @@
 		.vp-root .vp-hit:not(.absolute) {
 			position: relative;
 		}
+		.vp-root .vp-hit,
+		.vp-root .vp-touch-none {
+			touch-action: none;
+		}
 		.vp-root .vp-hit::before {
 			content: '';
 			position: absolute;

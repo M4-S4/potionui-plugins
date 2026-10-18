@@ -1,4 +1,4 @@
-import { ui, doc, checkpoint, round } from './state.svelte.js';
+import { ui, doc, checkpoint, discardLast, round } from './state.svelte.js';
 
 let release = null;
 
@@ -7,14 +7,24 @@ export function cancelDrag() {
 	ui.drag = null;
 }
 
-export function drag(e, { onMove, onEnd, onClick, undoable = true }) {
+function capturePointer(e) {
+	try {
+		e.currentTarget?.setPointerCapture?.(e.pointerId);
+	} catch {}
+}
+
+export function drag(e, { onMove, onEnd, onClick, onCancel, undoable = true }) {
 	if (e.button !== 0) return;
 	e.stopPropagation();
 	cancelDrag();
+	capturePointer(e);
+	const id = e.pointerId;
 	const x0 = e.clientX;
 	const y0 = e.clientY;
 	let started = false;
+	const mine = (ev) => ev.pointerId === id;
 	const move = (ev) => {
+		if (!mine(ev)) return;
 		const dx = ev.clientX - x0;
 		const dy = ev.clientY - y0;
 		if (!started) {
@@ -26,18 +36,30 @@ export function drag(e, { onMove, onEnd, onClick, undoable = true }) {
 		onMove(dx, dy, ev);
 	};
 	const up = (ev) => {
+		if (!mine(ev)) return;
 		release();
 		if (started) onEnd?.(ev);
 		else onClick?.(ev);
 		ui.drag = null;
 	};
+	const cancel = (ev) => {
+		if (!mine(ev)) return;
+		release();
+		if (started) {
+			if (undoable) discardLast();
+			onCancel?.(ev);
+		}
+		ui.drag = null;
+	};
 	release = () => {
 		window.removeEventListener('pointermove', move);
 		window.removeEventListener('pointerup', up);
+		window.removeEventListener('pointercancel', cancel);
 		release = null;
 	};
 	window.addEventListener('pointermove', move);
 	window.addEventListener('pointerup', up);
+	window.addEventListener('pointercancel', cancel);
 }
 
 export function snapTargets(excludeId) {

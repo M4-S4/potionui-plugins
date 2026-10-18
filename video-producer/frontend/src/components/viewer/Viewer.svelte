@@ -8,6 +8,8 @@
 	import { assetThumb, takeThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { mediaFailure, mediaFormat } from '../../lib/playable.js';
+	import { frameDuration } from '../../lib/timebase.js';
 	import Icon from '../Icon.svelte';
 
 	let w = $state(0);
@@ -35,6 +37,11 @@
 	const liveVideo = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'video' ? a.src : null);
 	const liveImage = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'image' ? a.src : null);
 	let video = $state();
+	let failed = $state({});
+	const mark = (src, el, withSize = false) => {
+		const reason = mediaFailure(el, { video: withSize });
+		if (reason) failed[src] = reason;
+	};
 
 	$effect(() => {
 		const el = video;
@@ -83,8 +90,21 @@
 					<div class="grid h-full grid-cols-2 gap-px bg-line">
 						{#each compareRes as res (res.id)}
 							<div class="relative overflow-hidden bg-black">
-								{#if playable(res)}
-									<video src={res.url} class="h-full w-full object-contain" autoplay loop muted playsinline preload="auto" aria-label={takeLabel(res)}></video>
+								{#if playable(res) && failed[res.url]}
+									{@render cannotPlay(failed[res.url], takeLabel(res), res.url)}
+								{:else if playable(res)}
+									<video
+										src={res.url}
+										class="h-full w-full object-contain"
+										autoplay
+										loop
+										muted
+										playsinline
+										preload="auto"
+										aria-label={takeLabel(res)}
+										onerror={(e) => mark(res.url, e.currentTarget)}
+										onloadedmetadata={(e) => mark(res.url, e.currentTarget, true)}
+									></video>
 								{:else if takeThumb(res)}
 									<img src={takeThumb(res)} alt="" class="h-full w-full object-cover" />
 								{/if}
@@ -93,8 +113,20 @@
 						{/each}
 					</div>
 				{:else if previewResult}
-					{#if playable(previewResult)}
-						<video src={previewResult.url} class="h-full w-full object-contain" controls muted playsinline preload="metadata" aria-label={takeLabel(previewResult)}></video>
+					{#if playable(previewResult) && failed[previewResult.url]}
+						{@render cannotPlay(failed[previewResult.url], takeLabel(previewResult), previewResult.url)}
+					{:else if playable(previewResult)}
+						<video
+							src={previewResult.url}
+							class="h-full w-full object-contain"
+							controls
+							muted
+							playsinline
+							preload="metadata"
+							aria-label={takeLabel(previewResult)}
+							onerror={(e) => mark(previewResult.url, e.currentTarget)}
+							onloadedmetadata={(e) => mark(previewResult.url, e.currentTarget, true)}
+						></video>
 					{:else if takeThumb(previewResult)}
 						<img src={takeThumb(previewResult)} alt="" class="h-full w-full object-cover" />
 					{/if}
@@ -105,12 +137,24 @@
 						{/if}
 					</div>
 				{:else if previewAsset}
-					{#if previewAsset.src && previewAsset.kind === 'video'}
-						<video src={previewAsset.src} class="h-full w-full object-contain" controls muted playsinline preload="metadata" aria-label={previewAsset.name}></video>
+					{#if previewAsset.src && previewAsset.kind !== 'image' && failed[previewAsset.src]}
+						{@render cannotPlay(failed[previewAsset.src], previewAsset.name, previewAsset.src)}
+					{:else if previewAsset.src && previewAsset.kind === 'video'}
+						<video
+							src={previewAsset.src}
+							class="h-full w-full object-contain"
+							controls
+							muted
+							playsinline
+							preload="metadata"
+							aria-label={previewAsset.name}
+							onerror={(e) => mark(previewAsset.src, e.currentTarget)}
+							onloadedmetadata={(e) => mark(previewAsset.src, e.currentTarget, true)}
+						></video>
 					{:else if previewAsset.src && previewAsset.kind === 'audio'}
 						<div class="flex h-full flex-col items-center justify-center gap-4 text-white/60">
 							<Icon name="music" class="h-10 w-10" />
-							<audio src={previewAsset.src} controls preload="metadata" aria-label={previewAsset.name}></audio>
+							<audio src={previewAsset.src} controls preload="metadata" aria-label={previewAsset.name} onerror={(e) => mark(previewAsset.src, e.currentTarget)}></audio>
 						</div>
 					{:else if previewThumb}
 						<img src={previewThumb} alt={previewAsset.name} class="h-full w-full object-contain" />
@@ -134,6 +178,8 @@
 							</HostUi>
 						</div>
 					</div>
+				{:else if liveVideo && failed[liveVideo]}
+					{@render cannotPlay(failed[liveVideo], a.name, liveVideo)}
 				{:else if liveVideo}
 					{#key liveVideo}
 						<video
@@ -146,6 +192,8 @@
 							aria-label={a.name}
 							style:opacity={fadeOpacity(clip, time)}
 							style:filter={clipFilter(clip)}
+							onerror={(e) => mark(liveVideo, e.currentTarget)}
+							onloadedmetadata={(e) => mark(liveVideo, e.currentTarget, true)}
 						></video>
 					{/key}
 				{:else if liveImage}
@@ -196,13 +244,13 @@
 		</div>
 		<div class="flex items-center gap-1">
 			<HostUi name="IconButton" props={{ icon: hostIconName('skip-back'), label: t('viewer.toStart'), size: 'sm', class: 'vp-h7', tooltip: t('viewer.start'), kbd: t('viewer.kbd.home'), onclick: () => seek(0) }} />
-			<HostUi name="IconButton" props={{ icon: hostIconName('step-back'), label: t('viewer.prevFrame'), size: 'sm', class: 'vp-h7', kbd: t('viewer.kbd.prev'), onclick: () => seek(ui.playhead - 1 / 25) }} />
+			<HostUi name="IconButton" props={{ icon: hostIconName('step-back'), label: t('viewer.prevFrame'), size: 'sm', class: 'vp-h7', kbd: t('viewer.kbd.prev'), onclick: () => seek(ui.playhead - frameDuration(doc.fps)) }} />
 			<HostUi name="Tooltip" props={{ text: t('viewer.playPause'), kbd: key('play') }}>
 				<button type="button" class="flex h-8 w-8 items-center justify-center rounded-full bg-surface-3 text-fg transition-colors hover:bg-line-hover" onclick={togglePlay} aria-label={ui.playing ? t('viewer.pause') : t('viewer.play')}>
 					<Icon name={ui.playing ? 'pause' : 'play'} class="h-4 w-4" strokeWidth={2.25} />
 				</button>
 			</HostUi>
-			<HostUi name="IconButton" props={{ icon: hostIconName('step-fwd'), label: t('viewer.nextFrame'), size: 'sm', class: 'vp-h7', kbd: t('viewer.kbd.next'), onclick: () => seek(ui.playhead + 1 / 25) }} />
+			<HostUi name="IconButton" props={{ icon: hostIconName('step-fwd'), label: t('viewer.nextFrame'), size: 'sm', class: 'vp-h7', kbd: t('viewer.kbd.next'), onclick: () => seek(ui.playhead + frameDuration(doc.fps)) }} />
 			<HostUi
 				name="IconButton"
 				props={{ icon: hostIconName('repeat'), label: t('viewer.loopLabel'), size: 'sm', class: 'vp-h7 vp-toggle', ariaPressed: ui.loop, tooltip: t('viewer.loop'), kbd: key('loop'), onclick: () => (ui.loop = !ui.loop) }}
@@ -234,3 +282,18 @@
 		</div>
 	</div>
 </section>
+
+{#snippet cannotPlay(reason, name, src)}
+	{@const format = mediaFormat(name, src)}
+	<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-white/70" role="alert">
+		<Icon name="alert" class="h-7 w-7" />
+		{#if reason === 'offline'}
+			<div class="text-md font-medium text-white">{t('lib.media.offline')}</div>
+			<p class="max-w-md text-sm">{t('viewer.offlineHint', { name })}</p>
+		{:else}
+			<div class="text-md font-medium text-white">{t('viewer.cannotPlay')}</div>
+			{#if format}<p class="text-sm">{t('viewer.cannotPlayFormat', { format })}</p>{/if}
+			<p class="max-w-md text-sm">{t('viewer.cannotPlayHint')}</p>
+		{/if}
+	</div>
+{/snippet}
