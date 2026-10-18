@@ -782,8 +782,10 @@ def test_the_ffmpeg_setup_check_loads_through_the_core_and_reads_the_hosts_ffmpe
     assert step["label"] == "Install ffmpeg for video delivery"
     assert check_class.__module__ == "video_producer.backend.setup_checks" and issubclass(check_class, SetupCheck)
     monkeypatch.setattr(bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe")
     assert check_class().evaluate(SimpleNamespace()).done is True
     monkeypatch.setattr(bridge, "find_ffmpeg", lambda: None)
+    monkeypatch.setattr(bridge, "find_ffprobe", lambda: None)
     missing = check_class().evaluate(SimpleNamespace())
     assert missing.done is False and "ffmpeg" in missing.description and missing.action_label == "Read the guide"
 
@@ -818,6 +820,7 @@ def _fake_host(monkeypatch, bridge, *, backends, states, ffmpeg):
     monkeypatch.setattr(bridge, "preset_model_hashes", lambda preset_id, names, modes=None: {name: set() for name in names})
     monkeypatch.setattr(bridge, "model_file_present", lambda sha256: False)
     monkeypatch.setattr(bridge, "find_ffmpeg", lambda: ffmpeg)
+    monkeypatch.setattr(bridge, "find_ffprobe", lambda: ffmpeg and ffmpeg.replace("ffmpeg", "ffprobe"))
 
 
 def test_the_core_setup_report_runs_the_checks(loader, manifest, monkeypatch):
