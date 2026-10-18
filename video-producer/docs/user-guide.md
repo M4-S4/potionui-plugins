@@ -533,10 +533,10 @@ The export runs on the server, in the background. The window shows a card with t
 | Waiting in the queue | Another export is running on the server, which makes one at a time. |
 | Assembling the shots | The shots are put end to end, with their color and fades. |
 | Mixing the audio | The sound is mixed. This is the same run as the assembly: the step changes at 50 %. |
-| Converting to MP4 | The final MP4 is made. The percentage stays at 70 % during this step. |
+| Converting to MP4 | The final MP4 is made. The percentage goes from 70 to 95 % during this step. |
 | Saving to your library | The MP4 is copied into your library. |
 
-- **Cancel** stops a queued or running export ("The export was cancelled."). If you cancel during "Converting to MP4", the card says **Cancelled** at once, but the server finishes that step in the background, so your next export may wait a little.
+- **Cancel** stops a queued or running export ("The export was cancelled."), at any step.
 - You can close the window or leave the page: the export goes on. With the window closed the page keeps following it and shows a toast with **Download** when it is ready. PotionUI sends the notification "Video Producer: export ready" (or "Video Producer: export failed"), and when you open **Export and share** again the card is back.
 - A project has one export at a time ("An export of this project is already running.").
 - When it is ready the card says "Dawn_at_the_harbour_1080p.mp4 is ready" with its size, and offers **Download** and, when your PotionUI can show it, **Show in the library**, which opens your library on the videos. The MP4 is also in your library like any video, so you can import it into a project (chapter 6).
@@ -681,7 +681,7 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **"An export of this project is already running."** A project has one export at a time. Wait for it, or click **Cancel** on its card.
 - **"The export folder is full: delete older exports and try again."** Your exports have used your size budget. Delete some in **Previous exports** (the copies in your library stay), or ask your admin for a bigger export budget.
 - **An export stays Queued.** The server makes one export at a time, for everybody, so yours waits its turn. If it never starts, tell your admin.
-- **The progress stays at 70 % ("Converting to MP4").** That step reports no progress. A long sequence at 4K can take several minutes, and the server gives up after 10 minutes: the export then fails with "The video could not be converted." Export again at 1080p or 720p.
+- **"Converting to MP4" takes long.** A long sequence at 4K can take many minutes on a small server; the percentage shows how far it is. The export fails with "The video could not be converted." only if ffmpeg stops making progress for 5 minutes. Export at 1080p or 720p to go faster.
 - **An export is Failed.** The card says what failed and, under it, the message of the server. "ffmpeg could not assemble the video." can come from a file ffmpeg cannot read, or from PotionUI restarting during the export ("The server stopped during the export."); start it again, and if it fails again give the message to your admin. "The video could not be saved to your library." means that your PotionUI storage is full: free some space and export again.
 - **A shot is black or silent in the video.** The server found no file for that shot (media removed from your library or gallery), or the file has no soundtrack. The sound of the console's pan, equalizer, compressor, filter, sends and automation is not in the file (chapter 14).
 - **An FCPXML, OpenTimelineIO or EDL file does not find its media.** The paths in the file are paths on the PotionUI server. Copy the media to your editing computer and relink them in your software (chapter 14).

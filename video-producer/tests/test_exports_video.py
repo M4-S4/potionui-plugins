@@ -730,8 +730,11 @@ async def test_render_assembles_transcodes_and_stores_a_social_export(make_doc, 
     }
     assert stored == [("user-1", "Aube_sur_le_port_720p.mp4", final.stat().st_size)]
     assert not (final.parent / video.MEZZANINE).exists() and not (final.parent / video.GRAPH).exists()
-    assert steps[0] == (0, "assemble") and steps[-2:] == [(70, "transcode"), (95, "store")]
-    assert all(step == ("mix" if progress >= 50 else "assemble") for progress, step in steps[:-2])
+    converting = [progress for progress, step in steps if step == "transcode"]
+    assembling = [(progress, step) for progress, step in steps if step not in ("transcode", "store")]
+    assert steps[0] == (0, "assemble") and steps[-1] == (95, "store")
+    assert converting[0] == 70 and len(converting) > 1 and all(70 <= progress <= 95 for progress in converting)
+    assert all(step == ("mix" if progress >= 50 else "assemble") for progress, step in assembling)
 
 
 def _stripes(folder: Path) -> Path:
@@ -956,6 +959,125 @@ async def test_a_missing_ffmpeg_fails_the_assembly_with_its_reason(tmp_path):
         await video.assemble([str(tmp_path / "no-ffmpeg"), "-version"], 1.0)
 
     assert caught.value.code == "ffmpeg_failed" and caught.value.message
+
+
+def test_every_picture_input_is_decoded_on_four_threads_and_a_sound_input_on_its_own(make_doc):
+    clips = [{"id": "c1", "assetId": "a1", "start": 0, "dur": 1}, {"id": "c2", "assetId": "a1", "start": 1, "dur": 1}]
+    doc = _doc(make_doc, clips, audio=[{"id": "u0"}])
+    files = {"c1": {"name": "a.mp4", "path": "/srv/a.mp4"}, "c2": {"name": "b.png", "path": "/srv/b.png"}}
+
+    command = _command(doc, files, sounds={"u0": "/srv/voice.wav"}, stills=["c2"])
+
+    shot, still, sound = command.index("/srv/a.mp4"), command.index("/srv/b.png"), command.index("/srv/voice.wav")
+    assert command[shot - 3:shot] == ["-threads", "4", "-i"]
+    assert command[still - 9:still - 7] == ["-threads", "4"] and command[still - 7:still - 5] == ["-loop", "1"]
+    assert command[sound - 1] == "-i" and command[sound - 3] != "-threads"
+    assert command.count("-threads") == 2
+
+
+def _scattered(make_doc, count):
+    clips = [{"id": f"c{index}", "assetId": "a1", "start": index, "dur": 1} for index in range(count)]
+    files = {f"c{index}": {"name": f"{index}.mp4", "path": f"/srv/takes/{index}.mp4"} for index in range(count)}
+    return _doc(make_doc, clips), files
+
+
+def test_parts_cover_the_sequence_in_order_and_each_opens_at_most_forty_inputs(make_doc):
+    doc, files = _scattered(make_doc, 130)
+    segments, _ = timeline(doc)
+
+    groups = video.plan_parts(doc, files, _options(), segments)
+
+    assert [len(group) for group in groups] == [40, 40, 40, 10]
+    assert [segment for group in groups for segment in group] == segments
+    for group in groups:
+        inputs, graph = video._assembly(doc, files, _options(), {}, None, group, mix=False)
+        assert len(_inputs(inputs)) <= video.PART_INPUTS and graph[-1].endswith(f"concat=n={len(group)}:v=1:a=1[vout][aout]")
+
+
+def test_a_file_read_on_shot_after_shot_and_black_gaps_open_one_input_in_one_part(make_doc):
+    clips = [{"id": f"c{index}", "assetId": "a1", "start": index * 2, "dur": 1, "srcIn": index} for index in range(100)]
+    files = {clip["id"]: {"name": "long.mp4", "path": "/srv/long.mp4"} for clip in clips}
+    doc = _doc(make_doc, clips)
+    segments, _ = timeline(doc)
+
+    groups = video.plan_parts(doc, files, _options(), segments)
+
+    assert groups == [segments] and len(segments) == 199
+    assert len(_inputs(video._assembly(doc, files, _options(), {}, None, segments)[0])) == 1
+
+
+def test_a_sequence_that_one_run_can_open_is_one_part(make_doc):
+    doc, files = _scattered(make_doc, 40)
+    segments, _ = timeline(doc)
+
+    assert video.plan_parts(doc, files, _options(), segments) == [segments]
+
+
+@pytest.mark.parametrize("groups, rounds", [(1, 0), (2, 1), (40, 1), (41, 2), (1600, 2), (1601, 3)])
+def test_rounds_of_part_runs_before_one_run_joins_them(groups, rounds):
+    assert video._rounds(groups) == rounds
+
+
+def _stalling(monkeypatch, seconds=0.5):
+    monkeypatch.setattr(video, "STALL_SECONDS", seconds)
+    monkeypatch.setattr(video, "STALL_POLL", 0.05)
+
+
+def _python(code):
+    return [sys.executable, "-c", code]
+
+
+async def test_an_ffmpeg_that_writes_nothing_new_is_killed_and_fails_with_the_code_of_its_run(monkeypatch):
+    _stalling(monkeypatch)
+    command = _python("import time; print('out_time_us=1000000', flush=True); time.sleep(60)")
+    processes, shares = [], []
+    started = time.monotonic()
+
+    with pytest.raises(ExportError) as caught:
+        await asyncio.wait_for(video.assemble(command, 10.0, shares.append, processes.append, None, "transcode_failed"), timeout=30)
+
+    assert caught.value.code == "transcode_failed" and "nothing new" in caught.value.message
+    assert processes[0].returncode is not None and processes[-1] is None
+    assert shares == [pytest.approx(0.1)] and time.monotonic() - started < 20
+
+
+async def test_an_ffmpeg_that_never_starts_writing_is_killed_as_well(monkeypatch):
+    _stalling(monkeypatch)
+    processes = []
+
+    with pytest.raises(ExportError) as caught:
+        await asyncio.wait_for(video.assemble(_python("import time; time.sleep(60)"), 10.0, None, processes.append), timeout=30)
+
+    assert caught.value.code == "ffmpeg_failed" and processes[0].returncode is not None
+
+
+async def test_the_last_second_of_a_run_is_not_watched_so_the_file_can_be_finished(monkeypatch):
+    _stalling(monkeypatch, 0.2)
+    command = _python("import time; print('out_time_us=9500000', flush=True); time.sleep(1.0)")
+
+    await asyncio.wait_for(video.assemble(command, 10.0), timeout=30)
+
+
+def test_the_delivery_run_reports_its_progress_with_the_host_converters_settings(tmp_path):
+    mezzanine, final = tmp_path / "mezzanine.mp4", tmp_path / "final.mp4"
+
+    command = video.convert_command("/usr/bin/ffmpeg", mezzanine, final, (1920, 1080), 24)
+
+    expected = {
+        "-vf": "scale='min(1920,iw)':-2:flags=lanczos,fps=24", "-r": "24", "-c:v": "libx264", "-crf": "26", "-preset": "slow",
+        "-pix_fmt": "yuv420p", "-movflags": "+faststart", "-c:a": "aac", "-b:a": "96k", "-f": "mp4", "-progress": "pipe:1",
+    }
+    assert {option: command[command.index(option) + 1] for option in expected} == expected
+    assert "-nostdin" in command and command[command.index("-i") + 1] == str(mezzanine) and command[-1] == str(final)
+
+
+@pytest.mark.requires_ffmpeg
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+async def test_a_conversion_that_fails_is_a_transcode_failure(tmp_path):
+    with pytest.raises(ExportError) as caught:
+        await video.convert(shutil.which("ffmpeg"), tmp_path / "missing.mp4", tmp_path / "final.mp4", (320, 240), 25, 1.0, lambda progress, step: True)
+
+    assert caught.value.code == "transcode_failed" and caught.value.message
 
 
 @pytest.fixture

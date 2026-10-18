@@ -599,6 +599,115 @@ async def test_four_hundred_shots_of_four_hundred_files_in_a_long_folder_assembl
     assert abs(core_bridge.probe_video(tmp_path / "distinct.mp4").duration - 16.0) < 0.2
 
 
+def _recorded(monkeypatch):
+    commands = []
+    real = video.assemble
+
+    async def assemble(command, *args, **kwargs):
+        commands.append(list(command))
+        return await real(command, *args, **kwargs)
+
+    monkeypatch.setattr(video, "assemble", assemble)
+    return commands
+
+
+def _sequence_paths(folder, label, sounds):
+    ffmpeg = shutil.which("ffmpeg")
+    return {
+        "ffmpeg": ffmpeg,
+        "graph_option": video.graph_option(ffmpeg),
+        "output": str(folder / f"{label}.mp4"),
+        "graph": str(folder / f"{label}.graph"),
+        "audio": sounds,
+    }
+
+
+def _colored(folder, name, color, tone):
+    path = folder / name
+    command = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", f"color=c={color}:s=160x120:r=25:d=1", "-f", "lavfi", "-i", f"sine=frequency={tone}:duration=1",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(path),
+    ]
+    subprocess.run(command, check=True, timeout=60)
+    return path
+
+
+def _rgb_at(path, seconds):
+    command = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(seconds), "-i", str(path),
+        "-frames:v", "1", "-vf", "scale=1:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+    ]
+    return tuple(subprocess.run(command, capture_output=True, check=True, timeout=60).stdout)
+
+
+def _mean_volume(path):
+    command = ["ffmpeg", "-hide_banner", "-i", str(path), "-map", "0:a", "-af", "volumedetect", "-f", "null", "-"]
+    run = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    return float(re.search(r"mean_volume: (-?[\d.]+) dB", run.stderr).group(1))
+
+
+def _output_of(command):
+    return Path(command[-1]).name
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+@pytest.mark.requires_ffmpeg
+@pytest.mark.parametrize("limit, rounds", [(4, 1), (2, 3)])
+async def test_a_sequence_assembled_in_parts_matches_its_single_run_in_picture_timing_and_sound(make_doc, tmp_path, monkeypatch, limit, rounds):
+    colors = ["red", "lime", "blue"]
+    clips, files = [], {}
+    for index in range(9):
+        source = _colored(tmp_path, f"shot-{index}.mp4", colors[index % 3], 300 + 100 * index)
+        clips.append(_shot(index, start=index * 0.5, dur=0.5, srcIn=0.2, fadeIn=0.1 if index == 4 else 0))
+        files[f"c{index}"] = {"name": source.name, "path": str(source)}
+    sounds = {}
+    for index in range(5):
+        tone = tmp_path / f"tone-{index}.wav"
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", f"sine=frequency={500 + 50 * index}:duration=1", str(tone)], check=True, timeout=60)
+        sounds[f"u{index}"] = str(tone)
+    doc = _with_audio(_doc(make_doc, clips), [{"start": index * 0.8, "dur": 0.6, "gain": -6} for index in range(5)])
+    options = {"format": "web", "resolution": "720p", "stills": [], **video.inspect(files)}
+    whole, parted = _sequence_paths(tmp_path, "whole", sounds), _sequence_paths(tmp_path, "parted", sounds)
+    await video.assemble_sequence(doc, files, options, whole, tmp_path, lambda progress, step: True)
+    monkeypatch.setattr(video, "PART_INPUTS", limit)
+    monkeypatch.setattr(video, "MIX_INPUTS", 2)
+    commands, steps = _recorded(monkeypatch), []
+
+    await video.assemble_sequence(doc, files, options, parted, tmp_path, lambda progress, step: steps.append((progress, step)) or True)
+
+    parts = [command for command in commands if _output_of(command).startswith("part-")]
+    premixes = [command for command in commands if _output_of(command).startswith("lanes-")]
+    assert {_output_of(command).split("-")[1] for command in parts} == {str(level) for level in range(rounds)}
+    assert parts and all(len(_inputs(command)) <= limit for command in parts)
+    assert len(premixes) == 3 and all(len(_inputs(command)) <= 2 for command in premixes)
+    assert _output_of(commands[-1]) == "parted.mp4" and len(commands) == len(parts) + len(premixes) + 1
+    first, second = core_bridge.probe_video(tmp_path / "whole.mp4"), core_bridge.probe_video(tmp_path / "parted.mp4")
+    assert abs(first.duration - second.duration) < 0.05 and abs(second.duration - 4.5) < 0.1
+    for index in range(9):
+        expected = _rgb_at(tmp_path / "whole.mp4", index * 0.5 + 0.3)
+        assert max(expected) > 200 and max(abs(a - b) for a, b in zip(expected, _rgb_at(tmp_path / "parted.mp4", index * 0.5 + 0.3))) < 12
+    assert abs(_mean_volume(tmp_path / "whole.mp4") - _mean_volume(tmp_path / "parted.mp4")) < 0.5
+    assert [progress for progress, _ in steps] == sorted(progress for progress, _ in steps)
+    assert all(step == ("mix" if progress >= video.MIX_FROM else "assemble") for progress, step in steps)
+    assert steps[-1][0] == pytest.approx(video.ASSEMBLE_SHARE, abs=2)
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+@pytest.mark.requires_ffmpeg
+async def test_seven_hundred_shots_of_seven_hundred_files_assemble_in_runs_of_forty_inputs_and_short_command_lines(make_doc, tmp_path, monkeypatch):
+    doc, files, clips = _distinct_sources(make_doc, tmp_path, 700)
+    options = {"format": "web", "resolution": "720p", "stills": [], "audio": {clip["id"]: True for clip in clips}, "lengths": {clip["id"]: 1.0 for clip in clips}}
+    paths = {**_sequence_paths(tmp_path, "long", {}), "cwd": video.common_folder(entry["path"] for entry in files.values())}
+    commands = _recorded(monkeypatch)
+
+    await video.assemble_sequence(doc, files, options, paths, tmp_path, lambda progress, step: True)
+
+    assert len(commands) == 19 and max(len(_inputs(command)) for command in commands) <= video.PART_INPUTS
+    assert max(len(subprocess.list2cmdline(command)) for command in commands) < WINDOWS_COMMAND_LIMIT // 4
+    assert abs(core_bridge.probe_video(tmp_path / "long.mp4").duration - 28.0) < 0.2
+
+
 HOSTILE = [
     "semi;colon.mp4",
     "br[ack]et.mp4",

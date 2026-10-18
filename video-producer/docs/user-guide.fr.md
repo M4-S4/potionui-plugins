@@ -534,10 +534,10 @@ L’export se fait sur le serveur, en arrière-plan. La fenêtre montre une cart
 | En file d’attente | Un autre export tourne sur le serveur, qui n’en fait qu’un à la fois. |
 | Assemblage des plans | Les plans sont mis bout à bout, avec leur couleur et leurs fondus. |
 | Mixage de l’audio | Le son est mixé. C’est le même passage que l’assemblage : l’étape change à 50 %. |
-| Conversion en MP4 | Le MP4 final est fabriqué. Le pourcentage reste à 70 % pendant cette étape. |
+| Conversion en MP4 | Le MP4 final est fabriqué. Le pourcentage passe de 70 à 95 % pendant cette étape. |
 | Enregistrement dans votre bibliothèque | Le MP4 est copié dans votre bibliothèque. |
 
-- **Annuler** arrête un export en file ou en cours (« L’export a été annulé. »). Si vous annulez pendant « Conversion en MP4 », la carte dit **Annulé** tout de suite, mais le serveur termine cette étape en arrière-plan, et votre export suivant peut attendre un peu.
+- **Annuler** arrête un export en file ou en cours (« L’export a été annulé. »), à n’importe quelle étape.
 - Vous pouvez fermer la fenêtre ou quitter la page : l’export continue. Fenêtre fermée, la page continue de le suivre et affiche un toast avec **Télécharger** quand il est prêt. PotionUI envoie la notification « Video Producer: export ready » (ou « Video Producer: export failed » ; leur libellé reste en anglais), et quand vous rouvrez **Exporter et partager** la carte est de retour.
 - Un projet n’a qu’un export à la fois (« Un export de ce projet est déjà en cours. »).
 - Quand il est prêt, la carte dit « Aube_sur_le_port_1080p.mp4 est prêt » avec sa taille, et propose **Télécharger** et, quand votre PotionUI peut l’afficher, **Afficher dans la bibliothèque**, qui ouvre votre bibliothèque sur les vidéos. Le MP4 est aussi dans votre bibliothèque comme n’importe quelle vidéo : vous pouvez l’importer dans un projet (chapitre 6).
@@ -682,7 +682,7 @@ L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video
 - **« Un export de ce projet est déjà en cours. »** Un projet n’a qu’un export à la fois. Attendez-le, ou cliquez sur **Annuler** sur sa carte.
 - **« Le dossier d’export est plein : supprimez d’anciens exports et réessayez. »** Vos exports ont consommé votre budget de taille. Supprimez-en dans **Exports précédents** (les copies de votre bibliothèque restent), ou demandez à votre admin un budget d’export plus grand.
 - **Un export reste En file.** Le serveur fait un export à la fois, pour tout le monde, le vôtre attend donc son tour. S’il ne démarre jamais, prévenez votre admin.
-- **La progression reste à 70 % (« Conversion en MP4 »).** Cette étape n’indique aucune progression. Une longue séquence en 4K peut prendre plusieurs minutes, et le serveur abandonne au bout de 10 minutes : l’export échoue alors avec « La vidéo n’a pas pu être convertie. » Exportez de nouveau en 1080p ou en 720p.
+- **« Conversion en MP4 » est longue.** Une longue séquence en 4K peut prendre de nombreuses minutes sur un petit serveur ; le pourcentage montre où elle en est. L’export n’échoue avec « La vidéo n’a pas pu être convertie. » que si ffmpeg n’avance plus pendant 5 minutes. Exportez en 1080p ou en 720p pour aller plus vite.
 - **Un export est en Échec.** La carte dit ce qui a échoué et, en dessous, le message du serveur. « ffmpeg n’a pas pu assembler la vidéo. » peut venir d’un fichier que ffmpeg ne sait pas lire, ou d’un redémarrage de PotionUI pendant l’export (« The server stopped during the export. ») ; relancez-le, et s’il échoue encore donnez le message à votre admin. « La vidéo n’a pas pu être enregistrée dans votre bibliothèque. » signifie que votre stockage PotionUI est plein : libérez de la place et exportez de nouveau.
 - **Un plan est noir ou silencieux dans la vidéo.** Le serveur n’a trouvé aucun fichier pour ce plan (un média retiré de votre bibliothèque ou de votre galerie), ou le fichier n’a pas de bande son. Le son du panoramique, de l’égaliseur, du compresseur, du filtre, des envois et de l’automation de la console n’est pas dans le fichier (chapitre 14).
 - **Un fichier FCPXML, OpenTimelineIO ou EDL ne retrouve pas ses médias.** Les chemins du fichier sont des chemins sur le serveur PotionUI. Copiez les médias sur votre ordinateur de montage et reliez-les de nouveau dans votre logiciel (chapitre 14).

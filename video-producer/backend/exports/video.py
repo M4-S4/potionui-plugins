@@ -3,13 +3,14 @@ import logging
 import os
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import psutil
 
 from .. import core_bridge, director, takes
-from ..core_bridge import TranscodeSpec, User, VideoTranscodeError
+from ..core_bridge import User
 from . import media, slug
 from .common import asset_of, fps_of, seq_duration, timing_error
 
@@ -47,6 +48,14 @@ MEZZANINE = "mezzanine.mp4"
 
 GRAPH = "graph.txt"
 
+PART_NAME = "part-{}-{}.mkv"
+
+PART_GRAPH = "graph-{}-{}.txt"
+
+LANES_NAME = "lanes-{}.wav"
+
+LANES_GRAPH = "graph-lanes-{}.txt"
+
 DISCARD_TRIES = 5
 
 DISCARD_PAUSE = 0.2
@@ -61,10 +70,32 @@ VERSION_TIMEOUT = 15
 
 RELEASE = re.compile(r"\bversion\s+n?(\d+)")
 
-ENCODER = (
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p",
-    "-c:a", "aac", "-b:a", "192k", "-ar", str(SAMPLE_RATE), "-ac", "2", "-movflags", "+faststart",
+DECODER_THREADS = 4
+
+PART_INPUTS = 40
+
+MIX_INPUTS = 200
+
+STALL_SECONDS = 300
+
+STALL_POLL = 5.0
+
+VIDEO_ENCODER = ("-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p")
+
+AUDIO_LAYOUT = ("-ar", str(SAMPLE_RATE), "-ac", "2")
+
+ENCODER = (*VIDEO_ENCODER, "-c:a", "aac", "-b:a", "192k", *AUDIO_LAYOUT, "-movflags", "+faststart")
+
+PART_ENCODER = (*VIDEO_ENCODER, "-c:a", "pcm_f32le", *AUDIO_LAYOUT)
+
+LANES_ENCODER = ("-c:a", "pcm_f32le", *AUDIO_LAYOUT)
+
+DELIVERY = (
+    "-c:v", "libx264", "-crf", "26", "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+    "-c:a", "aac", "-b:a", "96k", "-f", "mp4",
 )
+
+Segment = Tuple[float, Optional[Mapping[str, Any]]]
 
 
 class ExportError(Exception):
@@ -136,9 +167,9 @@ def frame_size(doc: Mapping[str, Any], fmt: str, resolution: str) -> Tuple[int, 
     return base, _even(base / aspect)
 
 
-def timeline(doc: Mapping[str, Any]) -> Tuple[List[Tuple[float, Optional[Mapping[str, Any]]]], float]:
+def timeline(doc: Mapping[str, Any]) -> Tuple[List[Segment], float]:
     """The shots in document order with black where nothing plays, and the running time of the sequence."""
-    segments: List[Tuple[float, Optional[Mapping[str, Any]]]] = []
+    segments: List[Segment] = []
     cursor = 0.0
     for clip in doc.get("clips") or []:
         dur = float(clip.get("dur") or 0)
@@ -229,46 +260,31 @@ def _source_length(doc: Mapping[str, Any], clip: Mapping[str, Any], lengths: Map
     return float(length)
 
 
-def _assembly(
+@dataclass(frozen=True)
+class Shot:
+    """What one segment of the timeline plays: the file entry (None for black), where it starts in its source, whether it is a still, the length of its source, whether its sound is heard and whether its picture is."""
+
+    dur: float
+    clip: Optional[Mapping[str, Any]]
+    entry: Optional[Mapping[str, Any]]
+    start: float
+    still: bool
+    source_end: Optional[float]
+    sound: bool
+    blind: bool
+
+
+def _shots(
     doc: Mapping[str, Any],
     files: Mapping[str, Optional[Mapping[str, Any]]],
     options: Mapping[str, Any],
-    sounds: Mapping[str, str],
-    cwd: Optional[str] = None,
-) -> Tuple[List[str], List[str]]:
-    fmt, resolution = options["format"], options["resolution"]
-    width, height = frame_size(doc, fmt, resolution)
-    rate = fps_of(doc)
-    fps = num(rate)
+    segments: Sequence[Segment],
+) -> List[Shot]:
     clip_audio, stills = options.get("audio") or {}, set(options.get("stills") or ())
     blind, lengths = set(options.get("blind") or ()), options.get("lengths") or {}
-    inputs: List[str] = []
-    graph: List[str] = []
-    pairs: List[str] = []
-    reading: Dict[str, Tuple[int, float]] = {}
-    count = 0
-
-    def add_input(path: str, still_for: Optional[float] = None) -> int:
-        nonlocal count
-        if still_for is not None:
-            inputs.extend(["-loop", "1", "-framerate", fps, "-t", num(still_for)])
-        inputs.extend(["-i", reach(path, cwd)])
-        count += 1
-        return count - 1
-
-    def shot_input(path: str, start: float, end: float) -> int:
-        """The input of a shot's file: the one already open when the shot reads on from where the last one stopped, else a new one, so that ffmpeg never holds the frames of later cuts in memory."""
-        last = reading.get(path)
-        index = last[0] if last is not None and start >= last[1] - EPSILON else add_input(path)
-        reading[path] = (index, end)
-        return index
-
-    segments, _ = timeline(doc)
-    for index, (dur, clip) in enumerate(segments):
+    shots = []
+    for dur, clip in segments:
         entry = files.get(clip["id"]) if clip is not None else None
-        length = num(dur)
-        black = f"color=c=black:s={width}x{height}:r={fps}:d={length},setsar=1,format=yuv420p[v{index}]"
-        silence = f"anullsrc=r={SAMPLE_RATE}:cl=stereo,atrim=duration={length}[a{index}]"
         start = float(clip.get("srcIn") or 0) if clip is not None else 0.0
         still = entry is not None and clip["id"] in stills
         source_end = None if entry is None or still else _source_length(doc, clip, lengths)
@@ -277,45 +293,59 @@ def _assembly(
             entry = None
         elif entry is not None and clip["id"] in blind and not sound:
             entry = None
-        if entry is None:
-            graph.append(black)
-            graph.append(silence)
-        else:
-            source = add_input(entry["path"], start + dur) if still else shot_input(entry["path"], start, start + dur)
-            if clip["id"] in blind:
-                graph.append(black)
-            else:
-                # one frame of slack: a file can end a frame before its probed length
-                pad = dur if source_end is None else min(dur, max(start + dur - source_end, 0.0) + 1 / rate)
-                video = [
-                    f"trim=start={num(start)}:duration={length}",
-                    "setpts=PTS-STARTPTS",
-                    f"fps={fps}",
-                    _fit(fmt, width, height),
-                    "setsar=1",
-                    "format=yuv420p",
-                    f"tpad=stop_mode=clone:stop_duration={num(pad)}",
-                    f"trim=duration={length}",
-                    *_look(clip),
-                    *_fades(clip, dur, "fade"),
-                ]
-                graph.append(f"[{source}:v]{','.join(video)}[v{index}]")
-            if sound:
-                graph.append(
-                    f"[{source}:a]atrim=start={num(start)}:duration={length},asetpts=PTS-STARTPTS,"
-                    f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                    f"apad=whole_dur={length},atrim=duration={length}[a{index}]"
-                )
-            else:
-                graph.append(silence)
-        pairs.append(f"[v{index}][a{index}]")
-    graph.append(f"{''.join(pairs)}concat=n={len(segments)}:v=1:a=1[vout][bed]")
-    mixed: List[str] = []
+        shots.append(Shot(dur, clip, entry, start, still, source_end, sound, clip is not None and clip["id"] in blind))
+    return shots
+
+
+class _Inputs:
+    """The inputs of one ffmpeg run: a shot's file opened once while the shots read on through it, so that ffmpeg never holds the frames of later cuts in memory, and every picture decoder held to DECODER_THREADS threads."""
+
+    def __init__(self, fps: str = "1", cwd: Optional[str] = None):
+        self.fps = fps
+        self.cwd = cwd
+        self.args: List[str] = []
+        self.count = 0
+        self.reading: Dict[str, Tuple[int, float]] = {}
+
+    def opens(self, shot: Shot) -> bool:
+        """Whether the shot needs an input of its own."""
+        if shot.entry is None:
+            return False
+        if shot.still:
+            return True
+        last = self.reading.get(shot.entry["path"])
+        return last is None or shot.start < last[1] - EPSILON
+
+    def add(self, path: Any, still_for: Optional[float] = None, picture: bool = True) -> int:
+        if picture:
+            self.args.extend(["-threads", str(DECODER_THREADS)])
+        if still_for is not None:
+            self.args.extend(["-loop", "1", "-framerate", self.fps, "-t", num(still_for)])
+        self.args.extend(["-i", reach(path, self.cwd)])
+        self.count += 1
+        return self.count - 1
+
+    def sound(self, path: Any) -> int:
+        return self.add(path, picture=False)
+
+    def shot(self, shot: Shot) -> int:
+        path = shot.entry["path"]
+        if shot.still:
+            return self.add(path, shot.start + shot.dur)
+        index = self.add(path) if self.opens(shot) else self.reading[path][0]
+        self.reading[path] = (index, shot.start + shot.dur)
+        return index
+
+
+def _lanes(doc: Mapping[str, Any], sounds: Mapping[str, str], inputs: _Inputs) -> Tuple[List[str], List[str]]:
+    """The chains of the audio items heard in the mix, each from its own input, and their labels."""
+    chains: List[str] = []
+    labels: List[str] = []
     for item, lane in audible(doc):
         if item["id"] not in sounds:
             continue
         dur = float(item["dur"])
-        source = add_input(sounds[item["id"]])
+        source = inputs.sound(sounds[item["id"]])
         gain = float(item.get("gain") or 0) + float(lane.get("vol") or 0)
         chain = [
             f"atrim=start={num(item.get('srcIn') or 0)}:duration={num(dur)}",
@@ -326,13 +356,108 @@ def _assembly(
             *_fades(item, dur, "afade"),
             f"adelay=delays={round(float(item.get('start') or 0) * 1000)}:all=1",
         ]
-        graph.append(f"[{source}:a]{','.join(chain)}[m{len(mixed)}]")
-        mixed.append(f"[m{len(mixed)}]")
-    if mixed:
-        graph.append(f"[bed]{''.join(mixed)}amix=inputs={len(mixed) + 1}:duration=first:dropout_transition=0:normalize=0[aout]")
+        label = f"[m{len(labels)}]"
+        chains.append(f"[{source}:a]{','.join(chain)}{label}")
+        labels.append(label)
+    return chains, labels
+
+
+def _assembly(
+    doc: Mapping[str, Any],
+    files: Mapping[str, Optional[Mapping[str, Any]]],
+    options: Mapping[str, Any],
+    sounds: Mapping[str, str],
+    cwd: Optional[str] = None,
+    segments: Optional[Sequence[Segment]] = None,
+    mix: bool = True,
+) -> Tuple[List[str], List[str]]:
+    fmt, resolution = options["format"], options["resolution"]
+    width, height = frame_size(doc, fmt, resolution)
+    rate = fps_of(doc)
+    fps = num(rate)
+    inputs = _Inputs(fps, cwd)
+    graph: List[str] = []
+    pairs: List[str] = []
+    shots = _shots(doc, files, options, timeline(doc)[0] if segments is None else segments)
+    for index, shot in enumerate(shots):
+        length = num(shot.dur)
+        black = f"color=c=black:s={width}x{height}:r={fps}:d={length},setsar=1,format=yuv420p[v{index}]"
+        silence = f"anullsrc=r={SAMPLE_RATE}:cl=stereo,atrim=duration={length}[a{index}]"
+        if shot.entry is None:
+            graph.append(black)
+            graph.append(silence)
+        else:
+            source = inputs.shot(shot)
+            if shot.blind:
+                graph.append(black)
+            else:
+                # one frame of slack: a file can end a frame before its probed length
+                pad = shot.dur if shot.source_end is None else min(shot.dur, max(shot.start + shot.dur - shot.source_end, 0.0) + 1 / rate)
+                video = [
+                    f"trim=start={num(shot.start)}:duration={length}",
+                    "setpts=PTS-STARTPTS",
+                    f"fps={fps}",
+                    _fit(fmt, width, height),
+                    "setsar=1",
+                    "format=yuv420p",
+                    f"tpad=stop_mode=clone:stop_duration={num(pad)}",
+                    f"trim=duration={length}",
+                    *_look(shot.clip),
+                    *_fades(shot.clip, shot.dur, "fade"),
+                ]
+                graph.append(f"[{source}:v]{','.join(video)}[v{index}]")
+            if shot.sound:
+                graph.append(
+                    f"[{source}:a]atrim=start={num(shot.start)}:duration={length},asetpts=PTS-STARTPTS,"
+                    f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                    f"apad=whole_dur={length},atrim=duration={length}[a{index}]"
+                )
+            else:
+                graph.append(silence)
+        pairs.append(f"[v{index}][a{index}]")
+    graph.append(f"{''.join(pairs)}concat=n={len(shots)}:v=1:a=1[vout][{'bed' if mix else 'aout'}]")
+    if not mix:
+        return inputs.args, graph
+    chains, labels = _lanes(doc, sounds, inputs)
+    graph.extend(chains)
+    if labels:
+        graph.append(f"[bed]{''.join(labels)}amix=inputs={len(labels) + 1}:duration=first:dropout_transition=0:normalize=0[aout]")
     else:
         graph.append("[bed]anull[aout]")
-    return inputs, graph
+    return inputs.args, graph
+
+
+def plan_parts(
+    doc: Mapping[str, Any],
+    files: Mapping[str, Optional[Mapping[str, Any]]],
+    options: Mapping[str, Any],
+    segments: Sequence[Segment],
+    limit: Optional[int] = None,
+) -> List[List[Segment]]:
+    """The segments cut into runs of consecutive segments that each open at most limit inputs (PART_INPUTS by default); one run when the whole sequence does."""
+    limit = PART_INPUTS if limit is None else limit
+    groups: List[List[Segment]] = []
+    current: List[Segment] = []
+    inputs = _Inputs()
+    for segment, shot in zip(segments, _shots(doc, files, options, segments)):
+        if current and inputs.opens(shot) and inputs.count >= limit:
+            groups.append(current)
+            current, inputs = [], _Inputs()
+        if shot.entry is not None:
+            inputs.shot(shot)
+        current.append(segment)
+    groups.append(current)
+    return groups
+
+
+def _rounds(groups: int, limit: Optional[int] = None) -> int:
+    """How many rounds of part runs a sequence cut into that many groups takes before one run can join them."""
+    limit = PART_INPUTS if limit is None else limit
+    rounds = 0
+    while groups > 1:
+        rounds += 1
+        groups = -(-groups // limit)
+    return rounds
 
 
 def filter_graph(
@@ -341,7 +466,7 @@ def filter_graph(
     options: Mapping[str, Any],
     paths: Mapping[str, Any],
 ) -> str:
-    """The filter graph that assembles, grades, fades and mixes the sequence: the text of the file build_command's run reads."""
+    """The filter graph that assembles, grades, fades and mixes the sequence in one run: the text of the file build_command's run reads."""
     return ";".join(_assembly(doc, files, options, paths.get("audio") or {})[1])
 
 
@@ -372,6 +497,26 @@ def graph_option(ffmpeg: str) -> str:
     return option
 
 
+def _command(
+    paths: Mapping[str, Any],
+    inputs: Sequence[str],
+    encoder: Sequence[str],
+    total: Optional[float] = None,
+    fps: Any = None,
+    maps: Sequence[str] = ("[vout]", "[aout]"),
+) -> List[str]:
+    return [
+        paths["ffmpeg"], "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
+        *inputs,
+        paths.get("graph_option") or LEGACY_GRAPH_OPTION, str(paths["graph"]),
+        *[argument for label in maps for argument in ("-map", label)],
+        *(["-t", num(total)] if total is not None else []),
+        *(["-r", num(fps)] if fps is not None else []),
+        *encoder,
+        str(paths["output"]),
+    ]
+
+
 def build_command(
     doc: Mapping[str, Any],
     files: Mapping[str, Optional[Mapping[str, Any]]],
@@ -379,17 +524,19 @@ def build_command(
     paths: Mapping[str, Any],
 ) -> List[str]:
     """The one ffmpeg run that writes the mezzanine file, its filter graph read from the file at paths["graph"] by the option paths["graph_option"] (-filter_complex_script when absent); with paths["cwd"], run from that folder, the input files are named relative to it."""
-    cwd = paths.get("cwd")
-    inputs, _ = _assembly(doc, files, options, paths.get("audio") or {}, cwd)
+    inputs, _ = _assembly(doc, files, options, paths.get("audio") or {}, paths.get("cwd"))
     _, total = timeline(doc)
+    return _command(paths, inputs, ENCODER, total, fps_of(doc))
+
+
+def convert_command(ffmpeg: str, mezzanine: Path, final: Path, size: Tuple[int, int], fps: Any) -> List[str]:
+    """The ffmpeg run that writes the delivery file from the mezzanine with the host converter's settings: H.264 at crf 26 with the slow preset, AAC at 96 kb/s, an MP4 that plays while it downloads."""
+    rate = num(fps)
     return [
-        paths["ffmpeg"], "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
-        *inputs,
-        paths.get("graph_option") or LEGACY_GRAPH_OPTION, str(paths["graph"]),
-        "-map", "[vout]", "-map", "[aout]",
-        "-t", num(total), "-r", num(fps_of(doc)),
-        *ENCODER,
-        str(paths["output"]),
+        ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
+        "-i", str(mezzanine), "-map", "0:v:0", "-map", "0:a:0?",
+        "-vf", f"scale='min({size[0]},iw)':-2:flags=lanczos,fps={rate}", "-r", rate, "-map_metadata", "-1",
+        *DELIVERY, str(final),
     ]
 
 
@@ -429,30 +576,146 @@ async def assemble(
     on_progress: Optional[Callable[[float], Any]] = None,
     on_process: Optional[Callable[[Any], Any]] = None,
     cwd: Optional[str] = None,
+    code: str = "ffmpeg_failed",
 ) -> None:
-    """Run the assembly from the folder cwd, reporting the share of the running time written; raises ExportError(ffmpeg_failed)."""
+    """Run one ffmpeg command from the folder cwd, reporting the share of the running time written; raises ExportError(code) when it fails, and kills it when it writes nothing new for STALL_SECONDS more than a second before the end."""
     try:
         process = await asyncio.create_subprocess_exec(
             *command, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd
         )
     except OSError as exc:
-        raise ExportError("ffmpeg_failed", last_line(str(exc)) or "ffmpeg could not start.") from exc
+        raise ExportError(code, last_line(str(exc)) or "ffmpeg could not start.") from exc
     if on_process is not None:
         on_process(process)
     errors = asyncio.ensure_future(process.stderr.read())
+    loop = asyncio.get_running_loop()
+    reached, moved, stalled = 0.0, loop.time(), False
     try:
-        async for raw in process.stdout:
-            seconds = _progress_seconds(raw.decode("utf-8", "replace").strip())
-            if seconds is not None and on_progress is not None and total > 0:
-                on_progress(min(max(seconds / total, 0.0), 1.0))
-        code = await process.wait()
+        while True:
+            try:
+                raw = await asyncio.wait_for(process.stdout.readline(), STALL_POLL)
+            except asyncio.TimeoutError:
+                raw = None
+            if raw == b"":
+                break
+            seconds = _progress_seconds(raw.decode("utf-8", "replace").strip()) if raw else None
+            if seconds is not None and seconds > reached:
+                reached, moved = seconds, loop.time()
+                if on_progress is not None and total > 0:
+                    on_progress(min(max(seconds / total, 0.0), 1.0))
+            elif reached + 1.0 < total and loop.time() - moved > STALL_SECONDS:
+                stalled = kill_tree(process)
+                break
+        returncode = await process.wait()
         stderr = (await errors).decode("utf-8", "replace")
     finally:
         if on_process is not None:
             on_process(None)
         kill_tree(process)
-    if code != 0:
-        raise ExportError("ffmpeg_failed", last_line(stderr) or f"ffmpeg stopped with code {code}.")
+    if stalled:
+        raise ExportError(code, f"ffmpeg wrote nothing new for {num(STALL_SECONDS / 60)} minutes and was stopped.")
+    if returncode != 0:
+        raise ExportError(code, last_line(stderr) or f"ffmpeg stopped with code {returncode}.")
+
+
+def _progress(report: Callable[[float, str], bool], start: float, width: float, ceiling: float = ASSEMBLE_SHARE) -> Callable[[float], None]:
+    """Report the share of one ffmpeg run as the progress from start over width, at most ceiling; the mix step from MIX_FROM on."""
+
+    def advance(share: float) -> None:
+        progress = min(start + share * width, ceiling)
+        report(progress, "mix" if progress >= MIX_FROM else "assemble")
+
+    return advance
+
+
+def _step(report: Callable[[float, str], bool], progress: float) -> None:
+    if not report(progress, "mix" if progress >= MIX_FROM else "assemble"):
+        raise cancelled()
+
+
+async def _premix(
+    doc: Mapping[str, Any],
+    sounds: Mapping[str, str],
+    paths: Mapping[str, Any],
+    folder: Path,
+    total: float,
+    on_process: Optional[Callable[[Any], Any]],
+) -> Tuple[Mapping[str, Any], Mapping[str, str]]:
+    """The document and sounds the last run mixes: as they are with at most MIX_INPUTS audio items, else each run of that many items mixed first into a file of its own, heard as one item."""
+    playing = [item for item, _ in audible(doc) if item["id"] in sounds]
+    if len(playing) <= MIX_INPUTS:
+        return doc, sounds
+    cwd = common_folder([sounds[item["id"]] for item in playing])
+    mixes: Dict[str, str] = {}
+    for number, first in enumerate(range(0, len(playing), MIX_INPUTS)):
+        group = {**doc, "audio": playing[first:first + MIX_INPUTS]}
+        inputs = _Inputs(cwd=cwd)
+        chains, labels = _lanes(group, sounds, inputs)
+        mix = "anull" if len(labels) == 1 else f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0"
+        graph = folder / LANES_GRAPH.format(number)
+        graph.write_text(";".join([*chains, f"{''.join(labels)}{mix}[aout]"]), encoding="utf-8")
+        output = folder / LANES_NAME.format(number)
+        run = {**paths, "graph": str(graph), "output": str(output)}
+        await assemble(_command(run, inputs.args, LANES_ENCODER, total, maps=("[aout]",)), total, None, on_process, cwd)
+        mixes[f"lanes-{number}"] = str(output)
+    items = [{"id": key, "lane": "lanes", "start": 0, "dur": total, "srcIn": 0, "gain": 0} for key in mixes]
+    return {**doc, "lanes": [{"id": "lanes", "vol": 0}], "audio": items}, mixes
+
+
+async def _part_length(path: Path, nominal: float) -> float:
+    probe = await asyncio.to_thread(core_bridge.probe_video, path) if core_bridge.find_ffprobe() else None
+    return float(probe.duration) if probe is not None and probe.duration > 0 else nominal
+
+
+async def assemble_sequence(
+    doc: Mapping[str, Any],
+    shots: Mapping[str, Optional[Mapping[str, Any]]],
+    options: Mapping[str, Any],
+    paths: Mapping[str, Any],
+    folder: Path,
+    report: Callable[[float, str], bool],
+    on_process: Optional[Callable[[Any], Any]] = None,
+) -> None:
+    """Write the mezzanine at paths["output"]: in one ffmpeg run when the sequence opens at most PART_INPUTS inputs, else in parts of consecutive shots that each open at most that many, joined by a last run that mixes the audio items in, so that neither the memory ffmpeg holds per open input nor the length of its command line grows with the sequence."""
+    segments, total = timeline(doc)
+    fps = fps_of(doc)
+    sounds: Mapping[str, str] = paths.get("audio") or {}
+    files, picks, cwd = shots, options, paths.get("cwd")
+    groups = plan_parts(doc, files, picks, segments)
+    rounds = _rounds(len(groups))
+    work = max(rounds * total, EPSILON)
+    done, level, ceiling = 0.0, 0, MIX_FROM - 0.1
+    while len(groups) > 1:
+        parts: Dict[str, Mapping[str, Any]] = {}
+        lengths: Dict[str, float] = {}
+        joined: List[Segment] = []
+        for index, group in enumerate(groups):
+            start = min(done / work * MIX_FROM, ceiling)
+            _step(report, start)
+            span = sum(dur for dur, _ in group)
+            graph, output = folder / PART_GRAPH.format(level, index), folder / PART_NAME.format(level, index)
+            inputs, chains = _assembly(doc, files, picks, {}, cwd, group, mix=False)
+            graph.write_text(";".join(chains), encoding="utf-8")
+            command = _command({**paths, "graph": str(graph), "output": str(output)}, inputs, PART_ENCODER, fps=fps)
+            await assemble(command, span, _progress(report, start, span / work * MIX_FROM, ceiling), on_process, cwd)
+            done += span
+            key = f"part-{level}-{index}"
+            parts[key] = {"name": output.name, "path": str(output), "still": False}
+            lengths[key] = await _part_length(output, span)
+            joined.append((lengths[key], {"id": key}))
+        files, cwd, segments = parts, str(folder), joined
+        picks = {**options, "audio": {key: True for key in parts}, "stills": [], "blind": [], "lengths": lengths}
+        groups = plan_parts(doc, files, picks, segments)
+        level += 1
+    start = MIX_FROM if level else 0.0
+    if level:
+        _step(report, start)
+    mix_doc, sounds = await _premix(doc, sounds, paths, folder, total, on_process)
+    cwd = common_folder([entry["path"] for entry in files.values() if entry is not None] + list(sounds.values()))
+    inputs, chains = _assembly(mix_doc, files, picks, sounds, cwd, segments)
+    Path(paths["graph"]).write_text(";".join(chains), encoding="utf-8")
+    command = _command(paths, inputs, ENCODER, total, fps)
+    await assemble(command, total, _progress(report, start, ASSEMBLE_SHARE - start), on_process, cwd)
 
 
 async def discard(path: Path) -> bool:
@@ -469,15 +732,30 @@ async def discard(path: Path) -> bool:
 
 
 async def discard_work(folder: Path) -> None:
-    """Delete what only the assembly needs: the filter graph and the local copies of the sources."""
-    for path in [folder / GRAPH, *folder.glob(f"{core_bridge.SOURCE_PREFIX}*")]:
-        await discard(path)
+    """Delete what only the assembly needs: the filter graphs, the parts, the audio premixes and the local copies of the sources."""
+    for pattern in ("graph*.txt", "part-*.mkv", "lanes-*.wav", f"{core_bridge.SOURCE_PREFIX}*"):
+        for path in folder.glob(pattern):
+            await discard(path)
 
 
-def transcode(mezzanine: Path, final: Path, size: Tuple[int, int], fps: Any) -> Any:
-    """The delivery file from the mezzanine, by the host's converter: MP4 H.264 with its audio."""
-    spec = TranscodeSpec(container="mp4", max_width=size[0], fps=float(fps), keep_audio=True)
-    return core_bridge.transcode_video(mezzanine, final, spec)
+async def convert(
+    ffmpeg: str,
+    mezzanine: Path,
+    final: Path,
+    size: Tuple[int, int],
+    fps: Any,
+    total: float,
+    report: Callable[[float, str], bool],
+    on_process: Optional[Callable[[Any], Any]] = None,
+) -> None:
+    """Write the delivery file from the mezzanine, reporting the transcode step from ASSEMBLE_SHARE to TRANSCODE_END; raises ExportError(transcode_failed)."""
+
+    def converted(share: float) -> None:
+        report(ASSEMBLE_SHARE + share * (TRANSCODE_END - ASSEMBLE_SHARE), "transcode")
+
+    await assemble(convert_command(ffmpeg, mezzanine, final, size, fps), total, converted, on_process, None, "transcode_failed")
+    if not final.exists() or final.stat().st_size == 0:
+        raise ExportError("transcode_failed", "ffmpeg wrote an empty video.")
 
 
 def folder_size(path: Path) -> int:
@@ -538,6 +816,7 @@ async def render(
     resolver = media.Resolver(owner)
     size = frame_size(doc, job["format"], job["resolution"])
     mezzanine, final = folder / MEZZANINE, folder / file_name(project["name"], job["resolution"])
+    _, total = timeline(doc)
     try:
         shots, sounds = await asyncio.to_thread(media.local_inputs, doc, takes.list_takes(project["id"]), resolver, folder)
         if not any(shots.values()):
@@ -557,26 +836,17 @@ async def render(
         }
         sources = [entry["path"] for entry in shots.values() if entry is not None] + list(sounds.values())
         paths["cwd"] = common_folder(sources)
-        Path(paths["graph"]).write_text(filter_graph(doc, shots, options, paths), encoding="utf-8")
-        command = build_command(doc, shots, options, paths)
-        _, total = timeline(doc)
-
-        def assembled(share: float) -> None:
-            progress = share * ASSEMBLE_SHARE
-            report(progress, "mix" if progress >= MIX_FROM else "assemble")
-
         if not report(0, "assemble"):
             raise cancelled()
-        await assemble(command, total, assembled, on_process, paths["cwd"])
+        await assemble_sequence(doc, shots, options, paths, folder, report, on_process)
     finally:
         await discard_work(folder)
     if not report(ASSEMBLE_SHARE, "transcode"):
         raise cancelled()
     try:
-        await asyncio.to_thread(transcode, mezzanine, final, size, fps_of(doc))
-    except VideoTranscodeError as exc:
-        raise ExportError("transcode_failed", last_line(str(exc)) or "The video could not be converted.") from exc
-    await discard(mezzanine)
+        await convert(ffmpeg, mezzanine, final, size, fps_of(doc), total, report, on_process)
+    finally:
+        await discard(mezzanine)
     if not report(TRANSCODE_END, "store"):
         raise cancelled()
     try:
