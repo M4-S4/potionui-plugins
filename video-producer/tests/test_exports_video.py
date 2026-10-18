@@ -18,6 +18,26 @@ HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 
 PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mp4", "graph": "/tmp/out/graph.txt"}
 
+FILE_NAMES = [
+    ("Cœur", "Coeur"),
+    ("Æther", "Aether"),
+    ("Straße", "Strasse"),
+    ("Søren", "Soren"),
+    ("nul.v2", "_nul.v2"),
+    ("CON", "_CON"),
+    ("com1.final", "_com1.final"),
+    ("Concert", "Concert"),
+    ("Prn.final", "_Prn.final"),
+    ("lpt9", "_lpt9"),
+    ("com10", "com10"),
+    ("v2.con", "v2.con"),
+    ("STRAẞE", "STRASSE"),
+    ("Aube & marée / v2", "Aube_maree_v2"),
+    ("a__b", "a_b"),
+    ("a\ufeffb", "a_b"),
+    ("a\x85b", "a_b"),
+]
+
 
 def _options(fmt="web", resolution="720p", audio=None, stills=(), **probed):
     return {"format": fmt, "resolution": resolution, "audio": audio or {}, "stills": list(stills), **probed}
@@ -74,6 +94,13 @@ def test_the_name_of_an_exported_video_cuts_its_slug_to_80_characters():
     assert video.file_name("Aube sur le port", "4K") == "Aube_sur_le_port_4K.mp4"
     assert video.file_name("x" * 300, "1080p") == f"{'x' * 80}_1080p.mp4"
     assert video.file_name("a" * 79 + " b", "720p") == f"{'a' * 79}_720p.mp4"
+
+
+@pytest.mark.parametrize("name, expected", FILE_NAMES)
+def test_a_name_gets_the_file_name_the_page_gives_it(name, expected):
+    assert slug(name) == expected
+    assert video.file_name(name, "1080p") == f"{expected}_1080p.mp4"
+    assert content_disposition(name, "edl").startswith(f'attachment; filename="{expected}.edl"')
 
 
 @pytest.mark.parametrize("name", ["nul.v2", "NUL", "con", "Prn.final", "aux.cut.2", "com1", "COM9.take", "lpt3", "Lpt1.mov"])

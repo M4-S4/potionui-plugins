@@ -780,7 +780,7 @@ VEO = {
     "max_seconds": 600,
 }
 
-H3_DIRECTOR = {
+H3_VIDEO_DIRECTOR = {
     "family": "minimax_h3",
     "preset_modes": ["video", "refs"],
     "modes": {"t2v": {}, "i2v": {}, "flf": {}, "director": {"fps_locked": True}},
@@ -801,7 +801,7 @@ def _option(value, label=None):
 
 def _h3(modes=("video", "refs", "upscale")):
     return _description(
-        presets.MINIMAX_H3, "MiniMax-H3", vars={"fps": 24, "video_director": H3_DIRECTOR}, modes={mode: _mode() for mode in modes}
+        presets.MINIMAX_H3, "MiniMax-H3", vars={"fps": 24, "video_director": H3_VIDEO_DIRECTOR}, modes={mode: _mode() for mode in modes}
     )
 
 
@@ -964,7 +964,7 @@ def test_me_logs_a_driver_or_backends_it_cannot_read_and_ties_nothing(client, st
 @pytest.mark.parametrize("preset_id", [presets.MINIMAX_H3_FAST, presets.MINIMAX_H3_VDN])
 def test_me_derives_the_profiles_and_modes_of_an_h3_variant_from_its_own_modes(client, store, no_container, catalog, preset_id):
     catalog.presets = [
-        _description(preset_id, "Variant", vars={"fps": 24, "video_director": {**H3_DIRECTOR, "preset_modes": ["video"]}}, modes={"video": _mode()})
+        _description(preset_id, "Variant", vars={"fps": 24, "video_director": {**H3_VIDEO_DIRECTOR, "preset_modes": ["video"]}}, modes={"video": _mode()})
     ]
 
     (preset,) = client.get(ME_URL).json()["data"]["presets"]
@@ -980,8 +980,8 @@ SIZES_12GB = ("1344x768", "768x1344", "960x544", "544x960", "832x480", "480x832"
 @pytest.mark.parametrize(
     "preset_id, name, director",
     [
-        (presets.MINIMAX_H3_12GB, "MiniMax-H3 (12 GB)", H3_DIRECTOR),
-        (presets.MINIMAX_H3_FAST_12GB, "MiniMax-H3-Fast (12 GB)", {**H3_DIRECTOR, "preset_modes": ["video"]}),
+        (presets.MINIMAX_H3_12GB, "MiniMax-H3 (12 GB)", H3_VIDEO_DIRECTOR),
+        (presets.MINIMAX_H3_FAST_12GB, "MiniMax-H3-Fast (12 GB)", {**H3_VIDEO_DIRECTOR, "preset_modes": ["video"]}),
     ],
 )
 def test_me_lists_a_12_gb_preset_with_its_memory_profile(client, store, no_container, catalog, preset_id, name, director):
@@ -1019,6 +1019,6 @@ def test_me_lists_a_12_gb_preset_with_its_memory_profile(client, store, no_conta
     ],
 )
 def test_me_reads_the_memory_profile_only_from_a_text_video_producer_profile(client, store, no_container, catalog, variables, profile):
-    catalog.presets = [_description(presets.MINIMAX_H3, "MiniMax-H3", vars={"fps": 24, "video_director": H3_DIRECTOR, **variables}, modes={"video": _mode()})]
+    catalog.presets = [_description(presets.MINIMAX_H3, "MiniMax-H3", vars={"fps": 24, "video_director": H3_VIDEO_DIRECTOR, **variables}, modes={"video": _mode()})]
 
     assert client.get(ME_URL).json()["data"]["presets"][0]["profile"] == profile

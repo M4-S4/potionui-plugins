@@ -25,7 +25,7 @@ import {
 
 test('slugify: the backend slug, spaces to underscores, accents folded, never empty', () => {
 	assert.equal(slugify('Aube sur le port'), 'Aube_sur_le_port');
-	assert.equal(slugify('  Été — à Montréal !  '), 'Ete__a_Montreal');
+	assert.equal(slugify('  Été — à Montréal !  '), 'Ete_a_Montreal');
 	assert.equal(slugify('Œuvre n°2'), 'Oeuvre_n2');
 	assert.equal(slugify('Cœur'), 'Coeur');
 	assert.equal(slugify('Le cœur de l’œuvre'), 'Le_coeur_de_loeuvre');
@@ -33,7 +33,7 @@ test('slugify: the backend slug, spaces to underscores, accents folded, never em
 	assert.equal(slugify('Straße'), 'Strasse');
 	assert.equal(slugify('Søren'), 'Soren');
 	assert.equal(slugify('ŒÆØ'), 'OeAeO');
-	assert.equal(slugify('v1.2 final-cut'), 'v1.2_final-cut');
+	assert.equal(slugify('v1.2 final-mix'), 'v1.2_final-mix');
 	assert.equal(slugify('.hidden_'), 'hidden');
 	assert.equal(slugify('日本'), 'video-producer');
 	assert.equal(slugify(''), 'video-producer');
@@ -41,6 +41,34 @@ test('slugify: the backend slug, spaces to underscores, accents folded, never em
 	assert.equal(videoFile('x'.repeat(120), '1080p'), `${'x'.repeat(80)}_1080p.mp4`);
 	assert.equal(videoFile('a'.repeat(79) + '._', '720p'), `${'a'.repeat(79)}_720p.mp4`);
 });
+
+const FILE_NAMES = [
+	['Cœur', 'Coeur'],
+	['Æther', 'Aether'],
+	['Straße', 'Strasse'],
+	['Søren', 'Soren'],
+	['nul.v2', '_nul.v2'],
+	['CON', '_CON'],
+	['com1.final', '_com1.final'],
+	['Concert', 'Concert'],
+	['Prn.final', '_Prn.final'],
+	['lpt9', '_lpt9'],
+	['com10', 'com10'],
+	['v2.con', 'v2.con'],
+	['STRAẞE', 'STRASSE'],
+	['Aube & marée / v2', 'Aube_maree_v2'],
+	['a__b', 'a_b'],
+	['a\ufeffb', 'a_b'],
+	['a\x85b', 'a_b']
+];
+
+for (const [name, expected] of FILE_NAMES) {
+	test(`a name gets the file name the server gives it: ${JSON.stringify(name)}`, () => {
+		assert.equal(slugify(name), expected);
+		assert.equal(videoFile(name, '1080p'), `${expected}_1080p.mp4`);
+		assert.equal(exchangeFile(name, 'edl'), `${expected}.edl`);
+	});
+}
 
 test('file names and routes follow the contract', () => {
 	assert.equal(exchangeFile('Aube sur le port', 'fcpxml'), 'Aube_sur_le_port.fcpxml');

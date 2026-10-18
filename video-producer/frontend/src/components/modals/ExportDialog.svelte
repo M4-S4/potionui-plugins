@@ -62,7 +62,7 @@
 	const fileName = $derived(real ? videoFile(doc.name, res) : `${slugify(doc.name)}_${res}.${format === 'master' ? 'mov' : 'mp4'}`);
 	const cues = $derived(subtitleCues());
 	const targets = {
-		fcpxml: { label: 'Final Cut Pro', ext: EXCHANGE.fcpxml.ext },
+		fcpxml: { label: 'FCPXML', ext: EXCHANGE.fcpxml.ext },
 		otio: { label: 'OpenTimelineIO', ext: EXCHANGE.otio.ext },
 		edl: { label: 'EDL CMX 3600', ext: EXCHANGE.edl.ext }
 	};

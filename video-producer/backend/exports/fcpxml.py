@@ -37,7 +37,7 @@ def media_url(entry: Mapping[str, str]) -> str:
 
 
 def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict[str, str]]], locale: str = "en") -> str:
-    """The sequence as Final Cut Pro XML 1.10."""
+    """The sequence as FCPXML 1.10."""
     time = Timebase(doc)
     media = [(index, clip) for index, clip in enumerate(doc["clips"]) if files.get(("clips", index))]
     width, height = SIZES.get(doc["resolution"], (1920, 1080))

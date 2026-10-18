@@ -8,8 +8,9 @@ from . import edl, fcpxml, otio, srt
 FALLBACK_NAME = "video-producer"
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9.-]+")
-_SPACES = re.compile(r"\s+")
+_SPACES = re.compile(r"[\s\ufeff]+")
 _RESERVED = re.compile(r"(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?")
+_LETTERS = str.maketrans({"œ": "oe", "Œ": "Oe", "æ": "ae", "Æ": "Ae", "ß": "ss", "ẞ": "SS", "ø": "o", "Ø": "O"})
 
 
 class Exchange(NamedTuple):
@@ -37,8 +38,8 @@ def unicode_name(name: str) -> str:
 
 
 def slug(name: str) -> str:
-    """An ASCII file name for a project name, a name Windows reserves (NUL, COM1, LPT1 ...) before its first dot made safe by a leading underscore."""
-    plain = unicodedata.normalize("NFKD", unicode_name(name)).encode("ascii", "ignore").decode("ascii")
+    """An ASCII file name for a project name, œ, æ, ß and ø spelled out in letters, a name Windows reserves (NUL, COM1, LPT1 ...) before its first dot made safe by a leading underscore. The page spells it the same way."""
+    plain = unicodedata.normalize("NFKD", unicode_name(name).translate(_LETTERS)).encode("ascii", "ignore").decode("ascii")
     safe = _UNSAFE.sub("_", plain).strip("._") or FALLBACK_NAME
     return f"_{safe}" if _RESERVED.fullmatch(safe) else safe
 

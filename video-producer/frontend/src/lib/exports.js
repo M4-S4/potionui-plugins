@@ -11,6 +11,7 @@ export const BACKGROUND_POLL_EVERY = 3000;
 export const README_HREF = '/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME';
 export const FALLBACK_NAME = 'video-producer';
 const LETTERS = { œ: 'oe', Œ: 'Oe', æ: 'ae', Æ: 'Ae', ß: 'ss', ẞ: 'SS', ø: 'o', Ø: 'O' };
+const RESERVED = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
@@ -23,12 +24,13 @@ export const isJobActive = (job) => job?.status === 'queued' || job?.status === 
 export function slugify(name) {
 	const spaced = String(name ?? '')
 		.trim()
-		.replace(/\s+/g, '_') || FALLBACK_NAME;
+		.replace(/[\s\x1c-\x1f\x85]+/g, '_') || FALLBACK_NAME;
 	const ascii = spaced
 		.replace(/[œŒæÆßẞøØ]/g, (letter) => LETTERS[letter])
 		.normalize('NFKD')
 		.replace(/[\u0080-\uffff]/g, '');
-	return ascii.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '') || FALLBACK_NAME;
+	const safe = ascii.replace(/[^A-Za-z0-9.-]+/g, '_').replace(/^[._]+|[._]+$/g, '') || FALLBACK_NAME;
+	return RESERVED.test(safe) ? `_${safe}` : safe;
 }
 
 export const exchangeFile = (name, format) => `${slugify(name)}.${EXCHANGE[format].ext}`;

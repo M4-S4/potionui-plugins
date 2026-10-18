@@ -64,7 +64,7 @@ def list_exports(project_id: str, user: User = Depends(get_current_active_user))
 def exchange_export(
     project_id: str, fmt: str, media: str = Query("path"), user: User = Depends(get_current_active_user)
 ) -> Response:
-    """The sequence as Final Cut Pro XML, OpenTimelineIO, EDL or SubRip, naming each shot's real file by path or by name."""
+    """The sequence as FCPXML, OpenTimelineIO, EDL or SubRip, naming each shot's real file by path or by name."""
     if fmt not in EXCHANGE:
         _invalid(f"The format must be one of: {', '.join(EXCHANGE)}.")
     if media not in MEDIA_MODES:
