@@ -1,20 +1,39 @@
+import importlib
+import importlib.util
 import re
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import yaml
 
-from backend import catalog, presets
 from src.features.presets.children_paths import resolve_children_path
 from src.features.presets.loader import PresetTemplateLoader
 from src.features.recipes.schema import parse_recipe, validate_recipe_dict
 from src.features.video_director.normalize import normalize_video_director
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PLUGIN_ROOT = REPO_ROOT / "content" / "plugins" / "marketplace" / "video-producer"
+PACKAGE = "video_producer_recipes_under_test"
+
+
+def _plugin_module(name):
+    if PACKAGE not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            PACKAGE, PLUGIN_ROOT / "__init__.py", submodule_search_locations=[str(PLUGIN_ROOT)]
+        )
+        package = importlib.util.module_from_spec(spec)
+        sys.modules[PACKAGE] = package
+        spec.loader.exec_module(package)
+    return importlib.import_module(f"{PACKAGE}.{name}")
+
+
+catalog = _plugin_module("backend.catalog")
+presets = _plugin_module("backend.presets")
+
 RECIPES_ROOT = PLUGIN_ROOT / "recipes"
 PRESETS_ROOT = PLUGIN_ROOT / "presets"
-REPO_ROOT = PLUGIN_ROOT.parents[3]
 CORE_WAN_PRESET = REPO_ROOT / "content" / "presets" / "marketplace" / "Wan"
 SHARED_PRESETS = REPO_ROOT / "content" / "presets" / "_shared"
 
