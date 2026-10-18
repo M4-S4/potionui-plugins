@@ -1,0 +1,307 @@
+fields:
+  - type: "section"
+    label: "Sampling"
+    formula: "speed"
+    children:
+      - name: "steps"
+        type: "slider"
+        label: "Steps"
+        audience: "advanced"
+        default: 30
+        configuration: {min: 1, max: 100, step: 1}
+        reactions:
+          - when: { field: "speed_profile", equals: "balanced" }
+            then: { set_value: 30, set_disabled: false }
+          - when: { field: "speed_profile", equals: "fast" }
+            then: { set_value: 6, set_disabled: false }
+          - when: { field: "speed_profile", equals: "custom" }
+            then: { set_disabled: false }
+
+      - type: "row"
+        children:
+          - name: "sampler"
+            type: "sampler"
+            label: "Sampler"
+            audience: "advanced"
+            default: "unipc"
+            configuration:
+              family: "wan"
+              exclude: ["lcm"]
+            reactions:
+              - when: { field: "speed_profile", equals: "balanced" }
+                then: { set_value: "unipc", set_disabled: false }
+              - when: { field: "speed_profile", equals: "fast" }
+                then: { set_value: "unipc", set_disabled: false }
+              - when: { field: "speed_profile", equals: "custom" }
+                then: { set_disabled: false }
+
+          - name: "schedule"
+            type: "schedule"
+            label: "Schedule"
+            audience: "advanced"
+            default: "shift"
+            configuration:
+              family: "wan"
+              exclude: ["manual"]
+            reactions:
+              - when: { field: "speed_profile", equals: "balanced" }
+                then: { set_value: "shift", set_disabled: false }
+              - when: { field: "speed_profile", equals: "fast" }
+                then: { set_value: "shift", set_disabled: false }
+              - when: { field: "speed_profile", equals: "custom" }
+                then: { set_disabled: false }
+
+      - name: "cfg"
+        type: "slider"
+        label: "CFG Scale"
+        audience: "advanced"
+        default: 6.0
+        configuration: {min: 1.0, max: 20.0, step: 0.5}
+        reactions:
+          - when: { field: "speed_profile", equals: "balanced" }
+            then: { set_value: 6.0, set_disabled: false }
+          - when: { field: "speed_profile", equals: "fast" }
+            then: { set_value: 1.0, set_disabled: false }
+          - when: { field: "speed_profile", equals: "custom" }
+            then: { set_disabled: false }
+
+      - type: "row"
+        children:
+          - name: "linear_quadratic_threshold_noise"
+            type: "slider"
+            label: "Threshold noise"
+            default: 0.025
+            configuration: {min: 0.001, max: 0.5, step: 0.001}
+            reactions:
+              - when: { field: "schedule", equals: "linear_quadratic" }
+                then: { set_visibility: true }
+              - when: { field: "schedule", not_equals: "linear_quadratic" }
+                then: { set_visibility: false }
+
+      - type: "row"
+        children:
+          - name: "linear_quadratic_linear_steps_auto"
+            type: "checkbox"
+            label: "Automatic linear steps (steps ÷ 2)"
+            default: true
+            reactions:
+              - when: { field: "schedule", equals: "linear_quadratic" }
+                then: { set_visibility: true }
+              - when: { field: "schedule", not_equals: "linear_quadratic" }
+                then: { set_visibility: false }
+          - name: "linear_quadratic_linear_steps"
+            type: "number"
+            label: "Linear steps"
+            configuration: {min: 0, step: 1, placeholder: "steps // 2"}
+            reactions:
+              - when: { field: "linear_quadratic_linear_steps_auto", equals: false }
+                then: { set_visibility: true }
+              - when: { field: "linear_quadratic_linear_steps_auto", equals: true }
+                then: { set_visibility: false, set_value: 1 }
+
+      - name: "manual_sigmas"
+        type: "textbox"
+        formula: false
+        label: "Manual sigmas"
+        default: ""
+        configuration:
+          placeholder: "Comma-separated descending, e.g. 1.0, 0.75, 0.5, 0.0"
+
+  - type: "section"
+    label: "Expert switching"
+    formula: "speed"
+    children:
+      - type: "row"
+        children:
+          - name: "expert_boundary_preset"
+            type: "select"
+            label: "Expert boundary"
+            default: ""
+            configuration:
+              options:
+                - { label: "Model default (t2v σ 0.875 · i2v σ 0.900)", value: "" }
+                - { label: "Official t2v (σ 0.875)", value: "0.875" }
+                - { label: "Official i2v (σ 0.900)", value: "0.900" }
+
+          - name: "expert_switch_step"
+            type: "number"
+            label: "Switch at step (optional)"
+            full_width: true
+            configuration: {min: 0, step: 1, placeholder: "Use boundary above"}
+
+  - type: "section"
+    label: "Negative prompt guidance (NAG)"
+    formula: "guidance"
+    children:
+      - type: "row"
+        children:
+          - name: "nag_scale"
+            type: "slider"
+            label: "NAG scale"
+            default: 1.0
+            configuration: {min: 1.0, max: 2.0, step: 0.05}
+          - name: "nag_tau"
+            type: "slider"
+            label: "Tau"
+            default: 3.5
+            configuration: {min: 1.0, max: 10.0, step: 0.5}
+          - name: "nag_alpha"
+            type: "slider"
+            label: "Alpha"
+            default: 0.5
+            configuration: {min: 0.0, max: 1.0, step: 0.05}
+
+  - type: "section"
+    label: "CFG-Zero*"
+    formula: "guidance"
+    children:
+      - type: "row"
+        children:
+          - name: "cfg_zero_star"
+            type: "checkbox"
+            label: "CFG-Zero* rescale"
+            default: true
+          - name: "zero_init_steps"
+            type: "number"
+            label: "Zero-init steps"
+            default: 0
+            configuration: {min: 0, step: 1, placeholder: "0 = off"}
+
+  - type: "section"
+    label: "Adaptive Projected Guidance (APG)"
+    formula: "guidance"
+    audience: "advanced"
+    children:
+      - type: "row"
+        children:
+          - name: "apg_eta"
+            type: "slider"
+            label: "APG eta"
+            default: 1.0
+            configuration: {min: 0.0, max: 1.0, step: 0.05}
+          - name: "apg_norm_threshold"
+            type: "slider"
+            label: "Norm cap"
+            default: 0.0
+            configuration: {min: 0.0, max: 30.0, step: 0.5}
+          - name: "apg_momentum"
+            type: "slider"
+            label: "Momentum"
+            default: 0.0
+            configuration: {min: -1.0, max: 1.0, step: 0.05}
+
+  - type: "section"
+    label: "Skip-Layer Guidance (SLG)"
+    formula: "guidance"
+    audience: "advanced"
+    children:
+      - type: "row"
+        children:
+          - name: "slg_scale"
+            type: "slider"
+            label: "SLG scale"
+            default: 0.0
+            configuration: {min: 0.0, max: 10.0, step: 0.1}
+          - name: "slg_layers"
+            type: "textbox"
+            label: "Skip layers"
+            default: ""
+            configuration: {placeholder: "e.g. 9, 10"}
+      - type: "row"
+        children:
+          - name: "slg_sigma_start"
+            type: "slider"
+            label: "Sigma start"
+            default: 1.0
+            configuration: {min: 0.0, max: 1.0, step: 0.05}
+          - name: "slg_sigma_end"
+            type: "slider"
+            label: "Sigma end"
+            default: 0.0
+            configuration: {min: 0.0, max: 1.0, step: 0.05}
+
+  - type: "section"
+    label: "Detail warp (sigma daemon)"
+    formula: "quality"
+    audience: "advanced"
+    children:
+      - type: "row"
+        children:
+          - name: "detail_strength"
+            type: "slider"
+            label: "Strength"
+            default: 0.0
+            configuration: {min: -0.3, max: 0.3, step: 0.01}
+          - name: "detail_start"
+            type: "slider"
+            label: "Window start"
+            default: 0.1
+            configuration: {min: 0.0, max: 1.0, step: 0.05}
+          - name: "detail_end"
+            type: "slider"
+            label: "Window end"
+            default: 0.9
+            configuration: {min: 0.0, max: 1.0, step: 0.05}
+
+  - type: "section"
+    label: "FreeInit (temporal flicker) -- text-to-video only"
+    formula: "quality"
+    audience: "advanced"
+    children:
+      - type: "row"
+        children:
+          - name: "freeinit_iterations"
+            type: "number"
+            label: "FreeInit iterations"
+            default: 0
+            configuration: {min: 0, max: 5, step: 1, placeholder: "0 = off"}
+          - name: "freeinit_cutoff"
+            type: "slider"
+            label: "Cutoff"
+            default: 0.25
+            configuration: {min: 0.01, max: 1.0, step: 0.01}
+          - name: "freeinit_order"
+            type: "number"
+            label: "Filter order"
+            default: 4
+            configuration: {min: 1, max: 8, step: 1}
+
+  - type: "gate"
+    name: "riflex"
+    formula: "quality"
+    label: "Long-video RoPE (RIFLEx)"
+    audience: "advanced"
+    default: false
+    configuration:
+      summary: "Clamps an intrinsic RoPE frequency so the model can extrapolate past its trained frame count without the looping/degradation long clips otherwise show -- relevant to long single shots and director chains"
+    children:
+      - name: "riflex_trained_frames"
+        type: "number"
+        label: "Trained frames (optional)"
+        configuration: {min: 1, step: 1, placeholder: "Family default"}
+
+  - type: "section"
+    label: "Step cache (FBCache)"
+    formula: "cache"
+    audience: "advanced"
+    children:
+      - type: "row"
+        children:
+          - name: "step_cache_threshold"
+            type: "slider"
+            label: "Cache threshold"
+            default: 0.0
+            ai_hint: "A speed-for-fidelity trade, never a quality improvement -- it only removes work. Suggest 0.08 when the user explicitly wants a long Wan run faster and can accept some softening and smoothed motion; 0.15 only if they ask for aggressive speed. Keep it at 0.0 for final renders, and for short distilled/turbo runs (under ~15 steps) where the warmup steps already cover most of the trajectory and there is almost nothing left to skip."
+            configuration: {min: 0.0, max: 0.3, step: 0.01}
+          - name: "step_cache_warmup_steps"
+            type: "slider"
+            label: "Warmup steps"
+            default: 4
+            ai_hint: "Only has an effect when Cache threshold is above 0. Raise toward 6-8 if a cached run loses composition or motion -- it gives back some of the speed."
+            configuration: {min: 0, max: 12, step: 1}
+          - name: "step_cache_max_skips"
+            type: "slider"
+            label: "Max consecutive skips"
+            default: 3
+            ai_hint: "Only has an effect when Cache threshold is above 0. Lower to 1-2 if a cached run drifts or loses detail late in the trajectory."
+            configuration: {min: 0, max: 10, step: 1}

@@ -44,8 +44,8 @@ export function presetLabel(preset) {
 }
 
 export function withProfile(label, profile) {
-	if (!profile || label.toLowerCase().includes(profile.toLowerCase())) return label;
-	return `${label} · ${profile}`;
+	const missing = (profile || '').split('·').map((part) => part.trim()).filter((part) => part && !label.toLowerCase().includes(part.toLowerCase()));
+	return missing.length ? `${label} · ${missing.join(' · ')}` : label;
 }
 
 export function presetProfiles(preset) {

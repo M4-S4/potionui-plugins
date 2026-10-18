@@ -10,12 +10,14 @@ MODEL_REF = "model:"
 
 MODEL_FIELD = "model"
 
+LORA_FIELD = "lora_picker"
+
 Fields = Dict[str, Dict[str, Any]]
 
 
 @dataclass(frozen=True)
 class ResolvedModels:
-    values: Dict[str, str] = field(default_factory=dict)
+    values: Dict[str, Any] = field(default_factory=dict)
     missing: List[str] = field(default_factory=list)
 
 
@@ -107,7 +109,7 @@ def resolve_models(
             (found for other in others if (found := (other.get(name) or {}).get("recommendations") or [])), []
         )
 
-    values: Dict[str, str] = {}
+    values: Dict[str, Any] = {}
     missing: List[str] = []
     for name in [*required, *optional]:
         model_id = next((found for item in recommended(name) if (found := _installed(item, cache))), None)
@@ -115,4 +117,32 @@ def resolve_models(
             values[name] = f"{MODEL_REF}{model_id}"
         elif name in required:
             missing.append(name)
+    for name, rows in _default_loras(fields):
+        resolved = _resolve_loras(rows, cache)
+        if resolved is None:
+            missing.append(name)
+        else:
+            values[name] = resolved
     return ResolvedModels(values=values, missing=missing)
+
+
+def _default_loras(fields: Fields) -> List[Tuple[str, List[Dict[str, Any]]]]:
+    found = []
+    for name, spec in fields.items():
+        rows = spec.get("default") if spec.get("type") == LORA_FIELD else None
+        if isinstance(rows, list) and any(isinstance(row, dict) and row.get("model") for row in rows):
+            found.append((name, [row for row in rows if isinstance(row, dict) and row.get("model")]))
+    return found
+
+
+def _resolve_loras(rows: List[Dict[str, Any]], cache: Dict[Tuple[str, str], Optional[str]]) -> Optional[List[Dict[str, Any]]]:
+    resolved = []
+    for row in rows:
+        model = str(row["model"])
+        if not model.startswith(MODEL_REF):
+            model_id = _lookup("filename", model.replace("\\", "/").rsplit("/", 1)[-1], cache)
+            if model_id is None:
+                return None
+            model = f"{MODEL_REF}{model_id}"
+        resolved.append({**row, "model": model})
+    return resolved

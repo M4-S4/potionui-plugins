@@ -133,6 +133,7 @@ function noteText(note) {
 	if (code === 'vram_unknown') return t('generation.warn.vramUnknown');
 	if (code === 'time_unknown') return t('generation.warn.timeUnknown');
 	if (code === 'fl2va_no_frame') return t('generation.warn.noFrame', { shot: shotName(data.shot_id) });
+	if (code === 'text_only_preset') return t('generation.warn.textOnly', { shot: shotName(data.shot_id) });
 	if (code === 'duration_clamped') return t('generation.warn.durationClamped', { shot: shotName(data.shot_id), max: secs(Number(data.max) || 0) });
 	return note?.message || code || '';
 }

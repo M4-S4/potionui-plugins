@@ -23,11 +23,12 @@ name: "MiniMax-H3 (12 GB)"
 category: "video"
 version: "1.0.0"
 engine: "native"
-tags: ["12gb", "low-vram", "minimax", "minimax-h3", "video", "audio", "t2va", "fl2va", "flow-matching", "local"]
+tags: ["12gb", "low-vram", "ram-64gb", "minimax", "minimax-h3", "video", "audio", "t2va", "fl2va", "flow-matching", "local"]
 
 requires:
   min_vram_gb: 12
   recommended_vram_gb: 12
+  min_ram_gb: 64
 
 configuration:
   checkpoint_tags:
@@ -129,7 +130,7 @@ vars:
             max_overlap_frames: null
 
   video_producer:
-    profile: "12 GB"
+    profile: "12 GB · 64 GB RAM"
 
 llm:
   guide: |

@@ -386,6 +386,11 @@ class _Context:
         return self.fields[mode]
 
 
+def _text_only(preset: Preset) -> bool:
+    modes = catalog.director_modes(preset.variables)
+    return bool(modes) and "i2v" not in modes
+
+
 def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
     preset, doc, shot_id = context.preset, context.doc, clip["id"]
     mode = REFS_MODE if context.profile == REF2VA else preset.main_mode
@@ -416,8 +421,12 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
             raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
         request["form_data"]["references"] = references
         director_mode = REFS_MODE
+    elif _text_only(preset) and shot_frames(doc, shot_id)[0] is not None:
+        director_mode = "t2v"
+        warnings.append(note("text_only_preset", "The preset generates from text only: the frames of the shot are not used.", shot_id=shot_id))
     else:
-        request, director_mode = bind_frames(context.user, doc, shot_id, request)
+        modes = catalog.director_modes(preset.variables)
+        request, director_mode = bind_frames(context.user, doc, shot_id, request, last_allowed=not modes or "flf" in modes)
         if director_mode == "t2v" and context.profile == FL2VA:
             warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
     resolved = models.resolve_models(preset.id, mode, director_mode, fields)

@@ -1,9 +1,16 @@
+import copy
+
 import pytest
 
 from backend import director, presets
 from backend.director import DirectorError
 
 SHOT = {"id": "s1", "start": 0, "dur": 4, "label": "Opening"}
+TEXT_ONLY_WARNING = {
+    "code": "text_only_preset",
+    "message": "The preset generates from text only: the frames of the shot are not used.",
+    "data": {"shot_id": "s1"},
+}
 
 
 def _history(asset_id, generation_id, file_id, kind="image"):
@@ -263,6 +270,154 @@ def test_a_12_gb_h3_preset_runs_the_wan2gp_dit_found_by_its_file_name(core, make
 
     assert plans.blocks == []
     assert plans.shots[0].request["form_data"]["model"] == f"model:id-{WAN2GP_DIT}"
+
+
+def _wan_tier(core, modes=None, preset_id=presets.WAN22_TI2V_5B_8GB, fps=24):
+    wan = core.use_wan()
+    director_vars = {
+        **wan.vars["video_director"],
+        "modes": {"t2v": {}} if modes is None else modes,
+        "limits": {"default_duration": 5, "default_fps": fps, "max_duration": 5},
+    }
+    variables = {**wan.vars, "default_fps": fps, "video_director": director_vars}
+    fields = copy.deepcopy(core.fields[(presets.WAN, "video")])
+    core.add_preset(preset_id, "Wan 2.2 TI2V 5B (8 GB)", {"video": fields}, variables=variables)
+    return preset_id
+
+
+@pytest.mark.parametrize("preset_id", presets.WAN_TIER_PRESETS)
+def test_a_shot_with_a_first_frame_runs_text_to_video_on_a_text_only_preset_without_linking_the_frame(core, make_doc, preset_id):
+    _wan_tier(core, preset_id=preset_id)
+    doc = make_doc(clips=[SHOT], frames=[_frame("f1", "a", "first")], assets=_images(core))
+
+    plans = _plans(core, doc, preset_id=preset_id)
+
+    assert plans.blocks == []
+    (plan,) = plans.shots
+    form = plan.request["form_data"]
+    assert (plan.director_mode, plan.preset_mode) == ("t2v", "video")
+    assert form["video_director"]["mode"] == "t2v" and form["video_director"]["media"] == []
+    assert form["t2v_high_noise_model"] == "model:id-t2v_high_noise_model-sha"
+    assert not any(key.startswith("i2v_") for key in form)
+    assert plans.warnings == [TEXT_ONLY_WARNING]
+
+
+def test_a_first_and_a_last_frame_are_both_left_out_of_a_text_only_preset_with_a_single_warning(core, make_doc):
+    preset_id = _wan_tier(core)
+    frames = [_frame("f1", "a", "first", time=0.1), _frame("f2", "b", "last", time=3.9)]
+    doc = make_doc(clips=[SHOT], frames=frames, assets=_images(core))
+
+    plans = _plans(core, doc, preset_id=preset_id)
+
+    assert plans.shots[0].director_mode == "t2v"
+    assert plans.shots[0].request["form_data"]["video_director"]["media"] == []
+    assert plans.warnings == [TEXT_ONLY_WARNING]
+
+
+def test_a_text_only_preset_warns_about_each_shot_that_has_a_first_frame_and_only_those(core, make_doc):
+    preset_id = _wan_tier(core)
+    clips = [SHOT, {"id": "s2", "start": 4, "dur": 4}, {"id": "s3", "start": 8, "dur": 4}]
+    frames = [_frame("f1", "a", "first", shot_id="s1"), _frame("f3", "b", "first", shot_id="s3")]
+    doc = make_doc(clips=clips, frames=frames, assets=_images(core))
+
+    plans = _plans(core, doc, preset_id=preset_id, shots=("s1", "s2", "s3"))
+
+    assert [plan.director_mode for plan in plans.shots] == ["t2v", "t2v", "t2v"]
+    assert [(warning["code"], warning["data"]["shot_id"]) for warning in plans.warnings] == [
+        ("text_only_preset", "s1"),
+        ("fl2va_no_frame", "s2"),
+        ("text_only_preset", "s3"),
+    ]
+
+
+@pytest.mark.parametrize("frames", [[], [_frame("f2", "b", "last")]])
+def test_a_text_only_preset_keeps_the_no_first_frame_warning_when_the_shot_has_no_first_frame(core, make_doc, frames):
+    preset_id = _wan_tier(core)
+    doc = make_doc(clips=[SHOT], frames=frames, assets=_images(core))
+
+    plans = _plans(core, doc, preset_id=preset_id)
+
+    assert plans.shots[0].director_mode == "t2v"
+    assert [warning["code"] for warning in plans.warnings] == ["fl2va_no_frame"]
+
+
+@pytest.mark.parametrize(
+    "modes, director_mode, roles",
+    [
+        ({"t2v": {}, "i2v": {}}, "i2v", ["first"]),
+        ({"t2v": {}, "i2v": {}, "flf": {}}, "flf", ["first", "last"]),
+        ({"t2v": {}, "i2v": {}, "flf": {}, "director": {"max_segments": 8}}, "flf", ["first", "last"]),
+        ({}, "flf", ["first", "last"]),
+    ],
+)
+def test_a_preset_that_declares_image_to_video_keeps_binding_the_frames_its_modes_allow(core, make_doc, modes, director_mode, roles):
+    preset_id = _wan_tier(core, modes=modes)
+    frames = [_frame("f1", "a", "first", time=0.1), _frame("f2", "b", "last", time=3.9)]
+    doc = make_doc(clips=[SHOT], frames=frames, assets=_images(core))
+
+    plans = _plans(core, doc, preset_id=preset_id)
+
+    (plan,) = plans.shots
+    media = plan.request["form_data"]["video_director"]["media"]
+    assert plan.director_mode == director_mode and plan.request["form_data"]["video_director"]["mode"] == director_mode
+    assert [entry["role"] for entry in media] == roles
+    assert plan.request["form_data"]["i2v_high_noise_model"] == "model:id-i2v_high_noise_model-sha"
+    assert plans.warnings == []
+
+
+@pytest.mark.parametrize("preset_id, fps", [(presets.WAN21_T2V_1_3B_8GB, 16), (presets.WAN22_TI2V_5B_8GB, 24)])
+def test_a_text_only_preset_plans_a_shot_at_its_own_frame_rate_and_cuts_it_to_5_seconds(core, make_doc, preset_id, fps):
+    _wan_tier(core, preset_id=preset_id, fps=fps)
+    doc = make_doc(clips=[{"id": "s1", "start": 0, "dur": 8}])
+
+    plans = _plans(core, doc, preset_id=preset_id)
+
+    (plan,) = plans.shots
+    assert (plan.fps, plan.seconds) == (fps, 5.0)
+    assert plan.request["form_data"]["fps"] == fps
+    assert plan.request["form_data"]["video_director"]["settings"] == {"fps": fps, "duration": 5.0, "resolution": "832x480", "seed": -1}
+    assert [warning["code"] for warning in plans.warnings] == ["duration_clamped", "fl2va_no_frame"]
+
+
+LIGHTNING_HIGH = "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors"
+LIGHTNING_LOW = "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
+
+
+def _lightning(core):
+    preset_id = _wan_tier(core, preset_id="wan-with-default-loras", fps=16)
+    fields = core.fields[(preset_id, "video")]
+    fields["t2v_loras_high"] = {**fields["seed"], "type": "lora_picker", "default": [{"model": f"models/loras/{LIGHTNING_HIGH}", "strength": 1.0}]}
+    fields["t2v_loras_low"] = {**fields["seed"], "type": "lora_picker", "default": [{"model": LIGHTNING_LOW, "strength": 0.8}]}
+    fields["i2v_loras_high"] = {**fields["seed"], "type": "lora_picker", "default": []}
+    return preset_id
+
+
+def test_the_default_loras_of_a_preset_are_sent_as_installed_models(core, make_doc):
+    preset_id = _lightning(core)
+
+    plans = _plans(core, make_doc(clips=[SHOT]), preset_id=preset_id)
+
+    assert plans.blocks == []
+    form = plans.shots[0].request["form_data"]
+    assert form["t2v_loras_high"] == [{"model": f"model:id-{LIGHTNING_HIGH}", "strength": 1.0}]
+    assert form["t2v_loras_low"] == [{"model": f"model:id-{LIGHTNING_LOW}", "strength": 0.8}]
+    assert "i2v_loras_high" not in form
+
+
+def test_a_default_lora_that_is_not_installed_blocks_with_its_field(core, make_doc):
+    preset_id = _lightning(core)
+    core.missing.add(LIGHTNING_LOW)
+
+    plans = _plans(core, make_doc(clips=[SHOT]), preset_id=preset_id)
+
+    assert plans.blocks == [
+        {
+            "code": "missing_models",
+            "message": "Install a recommended file for: t2v_loras_low.",
+            "data": {"fields": ["t2v_loras_low"]},
+        }
+    ]
+    assert "t2v_loras_low" not in plans.shots[0].request["form_data"]
 
 
 def test_ref2va_runs_the_h3_refs_mode_with_the_shot_references_then_the_global_ones(core, make_doc):

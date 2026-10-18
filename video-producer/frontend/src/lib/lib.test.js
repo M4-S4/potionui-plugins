@@ -204,6 +204,18 @@ test('readiness: an FL2VA shot without a frame warns instead of blocking, so the
 	assert.ok(doc.prompts.every((p) => p.text.trim()));
 });
 
+test('readiness: a text-only engine that ignores a shot frame warns about that shot in both languages, as a warning rather than a note', () => {
+	const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'production.svelte.js'), 'utf-8');
+	assert.match(source, /code === 'text_only_preset'\) return t\('generation\.warn\.textOnly', \{ shot: shotName\(data\.shot_id\) \}\)/);
+	assert.match(source, /const INFO_WARNINGS = \['time_unknown', 'vram_unknown'\];/);
+	assert.equal(dictionaries.en['generation.warn.textOnly'], 'This engine generates from text only: the frames linked to “{shot}” will not be used.');
+	assert.equal(dictionaries.fr['generation.warn.textOnly'], 'Ce moteur génère à partir du texte seul : les frames liées à « {shot} » ne seront pas utilisées.');
+	const missing = [];
+	assert.equal(translator('en', missing)('generation.warn.textOnly', { shot: 'Opening' }), 'This engine generates from text only: the frames linked to “Opening” will not be used.');
+	assert.equal(translator('fr', missing)('generation.warn.textOnly', { shot: 'Ouverture' }), 'Ce moteur génère à partir du texte seul : les frames liées à « Ouverture » ne seront pas utilisées.');
+	assert.deepEqual(missing, []);
+});
+
 test('newAsset: every field of the persisted asset contract, null when it does not apply', () => {
 	const a = newAsset({ kind: 'image', name: 'still.png', src: '/api/media/uploads/still.png', origin: { kind: 'library', itemId: 'i1' } });
 	assert.deepEqual(Object.keys(a), ['id', 'kind', 'name', 'src', 'origin', 'srcDur', 'width', 'height', 'fps', 'res', 'generated', 'quality', 'resultId', 'role', 'synth', 'transcript', 'character', 'lipSync']);

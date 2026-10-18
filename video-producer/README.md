@@ -19,7 +19,7 @@ This page is the administration guide. Every user can read the user guide, in En
 
 ## Hardware
 
-Generation runs on the machines you give it, so the figures below decide what your users can do. They were measured on one machine and are not guarantees for another: an NVIDIA RTX 4070 Ti with 12 GB of VRAM (12,282 MiB), a host with 128 GB of RAM of which 67 GB were given to the PotionUI container, and the native engine of PotionUI. Not measured: cloud models (no API key was available), LTX, a Studio server and cards with more than 12 GB. A dash means that no figure was recorded or that the step does not use the card.
+Generation runs on the machines you give it, so the figures below decide what your users can do. They were measured on one machine and are not guarantees for another: an NVIDIA RTX 4070 Ti with 12 GB of VRAM (12,282 MiB), a host with 128 GB of RAM of which 67 GB were given to Docker, and the native engine of PotionUI. Not measured: cloud models (no API key was available), a Studio server and cards with more than 12 GB. A dash means that no figure was recorded or that the step does not use the card. The first table comes from the first real takes; the measures of the hardware-tier presets, made with a RAM limit on the container and, for 8 GB, a capped card, are under Models and presets › Hardware tiers.
 
 | What was run | VRAM peak | System RAM peak | Measured time | Notes |
 |---|---|---|---|---|
@@ -32,8 +32,9 @@ Generation runs on the machines you give it, so the figures below decide what yo
 
 What to plan for:
 
-- **12 GB of VRAM.** For MiniMax-H3, install and assign the two 12 GB presets (see Memory profiles): the Fast preset without that profile ran out of memory on this card before the text encoder could stream from RAM, and the base and VDN presets load the same text encoder. Wan 2.1 / 2.2 runs, slowly. The estimate says so before the user starts: it announced 37.1 GB for Wan and between 41.75 and 42.85 GB for the 12 GB presets against a budget of 10 GB, with the warning "Will stream through host RAM, slower" and no block.
-- **64 GB of system RAM.** The 12 GB presets stream their text encoder from system RAM (the `text_encoder_placement` option, see Memory profiles), and the part of the DiT that does not fit on the card stays there too. Plan on 64 GB. The container peaks seen were 25.1 to 25.9 GB with the 12 GB presets and 41.75 GiB with Wan 2.1 / 2.2. The `requires` of the 12 GB presets declares VRAM only.
+- **8 GB of VRAM.** Install and assign the two 8 GB presets, **Wan 2.1 T2V 1.3B (8 GB)** and **Wan 2.2 TI2V 5B (8 GB)** (see Hardware tiers): text to video in 480p, with 32 GB of system RAM.
+- **12 GB of VRAM.** For MiniMax-H3, install and assign the two 12 GB presets (see Hardware tiers): the Fast preset without that profile ran out of memory on this card before the text encoder could stream from RAM, and the base and VDN presets load the same text encoder. Wan 2.1 / 2.2 14B runs text to video, slowly; its image-to-video mode and its Lightning LoRAs ran out of GPU memory on this card (see Hardware tiers › What does not fit on 12 GB yet). The estimate warns before the user starts: it announced 37.1 GB for Wan and between 41.75 and 42.85 GB for the 12 GB presets against a budget of 10 GB, with the warning "Will stream through host RAM, slower" and no block.
+- **System RAM.** Plan on 32 GB for the 8 GB presets and on 64 GB for the 12 GB presets and for Wan 2.2 14B: the MiniMax-H3 presets stream their text encoder from system RAM (the `text_encoder_placement` option), the part of the DiT that does not fit on the card stays there too, and Wan 2.2 14B holds about 35 GB of process memory. Each preset declares its figure in `requires.min_ram_gb`, shown as a badge in the preset picker.
 - **Time.** On this card a 5-second draft takes about 6 to 7.5 minutes with the 12 GB presets and about 26 minutes with Wan, and a final by SeedVR2 upscale to 1080p takes more than two hours. Tell your users, and set **Max generations in flight per user** and the monthly GPU minutes with this in mind.
 - **After an out-of-memory error.** The native engine can keep an unusable CUDA context after a CUDA out of memory error. If every take then fails within seconds, restart PotionUI.
 - **The assistant.** When its model shares the video GPU, unload it before a generation: see The assistant mode › Which language model.
@@ -147,11 +148,12 @@ Cloud cost: PotionUI records the cost of every cloud job and shows it to admins 
 
 ## Models and presets
 
-Video Producer can generate with every installed preset that declares Video Director, once it is assigned to the user: Wan, LTX-2, LTX-2.5, MiniMax-H3 (and its Fast and VDN variants, and the two 12 GB presets the plugin ships, see Memory profiles), OpenRouter Video and Gemini Video. The frame rate of a take is set by the preset, and a user sees only the presets assigned to them.
+Video Producer can generate with every installed preset that declares Video Director, once it is assigned to the user: Wan, LTX-2, LTX-2.5, MiniMax-H3 (and its Fast and VDN variants), the four hardware-tier presets the plugin ships (see Hardware tiers), OpenRouter Video and Gemini Video. The frame rate of a take is set by the preset, and a user sees only the presets assigned to them.
 
 | Preset | Profiles | What Video Producer asks of it |
 |---|---|---|
 | Wan 2.1 / 2.2, LTX-2 / 2.3, LTX-2.5 | FL2VA | Mode `video` of the preset, with a text-only, first-frame or first-and-last-frame composition. Wan runs at 16 fps by default. |
+| Wan 2.1 T2V 1.3B (8 GB), Wan 2.2 TI2V 5B (8 GB) | FL2VA | Mode `video`, text only: their Video Director declares the `t2v` composition alone, so the frames linked to a shot are not used and the estimate warns `text_only_preset`. 16 fps for the 1.3B, 24 fps for the 5B, shots cut to 5 seconds. |
 | MiniMax-H3 | FL2VA, Ref2VA, Hybrid AV | Mode `video` for FL2VA and Hybrid AV, mode `refs` for Ref2VA, mode `upscale` for a final. Fixed 24 fps, clips up to 15 seconds. |
 | MiniMax-H3 Fast, MiniMax-H3 VDN, MiniMax-H3 (12 GB) and MiniMax-H3-Fast (12 GB) | FL2VA, Hybrid AV | Mode `video` only. They have no `refs` mode, so no Ref2VA, and no `upscale` mode, so their finals go through SeedVR2 like those of Wan. Fixed 24 fps. |
 | OpenRouter Video, Gemini Video | FL2VA | Mode `txt2video`, or `img2video` when the shot has a first frame and the model accepts one. |
@@ -161,11 +163,12 @@ The profiles that a preset cannot generate are greyed in the page and marked "Mi
 ### Wan
 
 - The preset defaults to 832×480 at 16 fps, which is also the default draft resolution of the plugin.
-- PotionUI's hardware page lists Wan 2.2 14B (two experts) at 16 GB of VRAM or more, and the 5B variant as the realistic option for a small card (12 GB or more).
+- PotionUI's hardware page lists Wan 2.2 14B (two experts) at 16 GB of VRAM or more, and the 5B variant as the realistic option for a small card (12 GB or more). Measured here, the 14B text-to-video pair runs on a 12 GB card with about 35 GB of process memory, its image-to-video pair does not yet (see Hardware tiers), and the 1.3B and 5B run on an 8 GB card in the plugin's two 8 GB presets.
 
 ### LTX
 
 - PotionUI's hardware page lists the LTX family as not yet recommended at any tier, because GPU validation is still open. LTX-2 and 2.3 are one all-in-one checkpoint of about 27 GB; LTX-2.5 uses separate files.
+- On the 12 GB card of the Hardware measures, LTX-2.3 22B distilled fp8 ran out of GPU memory in the DiT at 832×480, for a 5-second and for a 2-second clip, with 62 GB of RAM. The plugin ships no LTX preset.
 
 ### MiniMax-H3: read before enabling
 
@@ -179,14 +182,44 @@ Video Producer offers MiniMax-H3 as soon as its presets are installed and assign
 
 In Video Producer, the reference-guided profile (Ref2VA) uses the References mode of MiniMax-H3. If a user says that references are ignored, check the DiT file first. In Admin → Presets → Configuration, the MiniMax-H3 preset has tag filters for its DiT, text encoder and VAE pickers if you want to narrow the choices.
 
-### Memory profiles
+### Hardware tiers
 
-Video Producer ships two presets of its own for a card with **12 GB of VRAM**: **MiniMax-H3 (12 GB)** and **MiniMax-H3-Fast (12 GB)**. They live in the plugin's `presets` folder (declared by `presets:` in `manifest.yml`), so Admin → Presets lists them as soon as the plugin is enabled; install and assign them like any other preset. `GET /me` gives every preset a `profile`: `"12 GB"` for these two, read from `vars.video_producer.profile` of the preset, and `null` for the others.
+Video Producer ships four presets of its own, each set up for one size of graphics card, and one recipe per preset that downloads its files, installs and assigns the preset and runs a short first generation. They live in the plugin's `presets` and `recipes` folders (declared by `presets:` and `recipes:` in `manifest.yml`), so Admin → Presets and Admin → Recipes list them as soon as the plugin is enabled.
 
-- **Why.** On a 12 GB card, MiniMax-H3 fails before sampling: its 32B text encoder (14.6 GB in nvfp4) is moved to the GPU in one piece and runs out of memory. These presets keep the model, its pipeline and its controls, and change what loads and where the form starts.
-- **What they reuse.** MiniMax-H3 (12 GB) is the Video mode of the core MiniMax-H3 preset, MiniMax-H3-Fast (12 GB) the core MiniMax-H3-Fast preset. The LoRA and Enhance tabs (and the Advanced tab of Fast) and the resolution lists are read from the core presets. The pipeline, the Generation tab (and the Advanced tab of the base model) are copies, because the loader reads them from the preset's own folder and a default cannot be overridden by reference; the copies only change defaults and recommendations, and the tests fail if a copy drifts from the core preset. Video Director capabilities, prompt templates and the assistant's prompt guide are the core ones. Neither preset has a References or an Upscale mode, so their finals go through SeedVR2.
+| Preset | Card | System RAM | What it makes | Recipe |
+|---|---|---|---|---|
+| **Wan 2.1 T2V 1.3B (8 GB)** | 8 GB | 32 GB | Text to video, 832×480, 480×832, 640×480 or 480×640, 16 fps, up to 5 s, 30 steps, CFG 6 | `vp-wan21-t2v-1-3b-8gb` (2.84 GB to download if nothing is there yet, 9.8 GB in all) |
+| **Wan 2.2 TI2V 5B (8 GB)** | 8 GB | 32 GB | Text to video, 832×480 or 480×832, 24 fps, up to 5 s, 30 steps, CFG 5 | `vp-wan22-ti2v-5b-8gb` (18.1 GB in all) |
+| **MiniMax-H3 (12 GB)** | 12 GB | 64 GB | Video and sound, 832×480 by default, 24 fps, up to 15 s, 20 steps | `vp-minimax-h3-12gb` (about 40 GB) |
+| **MiniMax-H3-Fast (12 GB)** | 12 GB | 64 GB | Video and sound, the same canvas, 8 steps | `vp-minimax-h3-fast-12gb` (about 41 GB) |
 
-**Files.** Each model picker recommends one tier, recognised by SHA-256 or else by file name, so the Wan2GP name works before the catalog has hashed the file. The int4 `convrot_w4a4` DiT is not recommended: the native engine cannot read it.
+- **Name, `requires` and profile.** The name says the card; `requires` carries `min_vram_gb`, `recommended_vram_gb` (12 for the 8 GB presets) and `min_ram_gb`, which the preset picker shows as badges. `GET /me` gives every preset a `profile`, read from `vars.video_producer.profile`: `"8 GB · 32 GB RAM"` or `"12 GB · 64 GB RAM"` for these four, `null` for the others. The engine pop-up adds to the name the parts of the profile it does not already contain, so it shows **Wan 2.1 T2V 1.3B (8 GB) · 32 GB RAM**. The tags start with the card (`8gb` or `12gb`), `low-vram` and the RAM (`ram-32gb` or `ram-64gb`).
+- **The engine settings.** No preset and no recipe can set the engine: `text_encoder_placement`, `gpu_max_vram` and the fp8 quantization at load are settings of the native backend (Admin → Backends). These presets were measured with the defaults (`auto`), and they expect them.
+- **The recipes.** Each one enables the HuggingFace provider, indexes the models already on disk, asks to download only what is missing (the consent window of Admin → Recipes), installs and assigns the preset. The two Wan recipes then run a 1-second text-to-video clip with 10 steps, because the recipe runner gives a first generation 5 minutes (measured: 3 min 30 s and 2 min 32 s for the whole recipe with the files present). The two MiniMax-H3 recipes run no first generation: on a 12 GB card, loading MiniMax-H3 alone took more than those 5 minutes, so their test generation always timed out. They have no "Validate the pipeline" step: that step of the core builds a test form without a Video Director document, which every Video Director preset rejects (the core `wan22-starter` recipe stops there too). The MiniMax-H3 recipe accepts the DiT of Comfy-Org or of Wan2GP, whichever is already installed.
+- **Docker Desktop on Windows.** WSL 2 gives Docker half of the host's RAM by default. To give PotionUI the RAM a preset needs, raise it in `%UserProfile%\.wslconfig` (`[wsl2]`, `memory=…`), then run `wsl --shutdown`.
+
+**How they were measured.** On the RTX 4070 Ti of the Hardware section, with the code of this branch, in a container limited with `--memory` equal to `--memory-swap` (no swap), at the full RAM tier and 3 GB below it (16, 13, 32, 29, 62 GB; the Docker VM had 62 GiB in all). For the 8 GB presets the card was capped with `POTIONUI_VRAM_CAP_GB=7.99` (what an 8 GB card reports) and `gpu_max_vram` 6 (what the engine derives for it). A second process that holds VRAM does not stand in for a smaller card on Windows: a container under WSL 2 does not see the VRAM that another one holds. VRAM is the engine's own peak (`peak_vram_mb`, the torch high-water mark); `nvidia-smi` also counts the cache of the allocator. RAM is the cgroup's anonymous memory; its `memory.current` also counts the file cache of the model files. Each figure comes from one 5-second clip, cold start included.
+
+| Preset | RAM limit | Result | Time | VRAM peak (engine) | Process RAM peak |
+|---|---|---|---|---|---|
+| Wan 2.1 T2V 1.3B (8 GB) | 32 GB, 29 GB | done | 5 min 55 s, 5 min 40 s | 5.2 GB | 10.7 GB |
+| Wan 2.1 T2V 1.3B (8 GB) | 16 GB | refused by the engine before sampling: it counts the file cache as used RAM and did not see the 2.6 GB + 2 GB it wants for streaming | — | — | 7.2 GB |
+| Wan 2.2 TI2V 5B (8 GB), 832×480 | 32 GB, 29 GB | done | 4 min 51 s, 4 min 38 s | 5.5 GB | 18.6 GB |
+| Wan 2.2 TI2V 5B, 1280×704 | 32 GB | stopped after 38 min: the 30 steps took 26 min, then the Wan 2.2 VAE decode overflowed the 8 GB (11.9 GB on the card, 15.7 GB of shared memory) | — | — | 17.0 GB |
+| MiniMax-H3 (12 GB) | 32 GB | done | 9 min 48 s | 5.0 GB | 24.5 GB |
+| MiniMax-H3 (12 GB) | 29 GB | killed for lack of memory after 8 min 37 s | — | — | 21.0 GB |
+| MiniMax-H3-Fast (12 GB) | 32 GB | killed for lack of memory after 5 min 08 s | — | — | 19.0 GB |
+| MiniMax-H3-Fast (12 GB) | 62 GB | done | 6 min 11 s | 5.0 GB | 25.6 GB |
+
+The two MiniMax-H3 presets therefore declare 64 GB: the base one finished with 32 GB but without margin, the Fast one did not.
+
+**What does not fit on 12 GB yet.** Measured on the same card with 62 GB of RAM:
+
+- **Wan 2.2 14B with the lightx2v Lightning LoRAs** (6 steps, CFG 1): the PotionUI process is killed by a CUDA out-of-memory error raised in a copy thread during sampling, with `gpu_max_vram` 8 or with the LoRAs not folded alike. The same pair without LoRA (the core Wan 2.1 / 2.2 preset) finishes, in 5 min with 6 steps and 34.8 GB of process memory. With the engine told that the card has 8 GB (`POTIONUI_VRAM_CAP_GB`), the Lightning run finishes in 5 min 36 s with a 6.1 GB engine peak: on 12 GB the engine places too much of the experts on the card to leave room for the LoRAs. No Lightning preset is shipped until that is fixed in the engine.
+- **Wan 2.2 14B image to video** (core Wan 2.1 / 2.2 preset with its I2V pair): runs out of GPU memory while encoding the first frame (`build_i2v_concat`), for the same reason; it finishes in 5 min 17 s when the engine is told the card has 8 GB.
+- **LTX-2.3 22B distilled**: see LTX.
+
+**Files.** Each model picker recommends one tier, recognised by SHA-256 or else by file name, so the Wan2GP name works before the catalog has hashed the file. The 8 GB presets recommend the 1.3B DiT (`wan2.1_t2v_1.3B_fp16.safetensors`) or the 5B DiT (`wan2.2_ti2v_5B_fp16.safetensors`, converted to fp8 when it loads on an 8 GB card), the fp8 UMT5-XXL text encoder and the matching VAE (`wan_2.1_vae.safetensors` or `wan2.2_vae.safetensors`). For the MiniMax-H3 presets the int4 `convrot_w4a4` DiT is not recommended: the native engine cannot read it.
 
 | Model | MiniMax-H3 (12 GB) | MiniMax-H3-Fast (12 GB) |
 |---|---|---|
@@ -195,9 +228,10 @@ Video Producer ships two presets of its own for a card with **12 GB of VRAM**: *
 | Video VAE | `minimax_h3_video_vae_int8_convrot.safetensors` | the same |
 | Audio VAE | `minimax_h3_audio_vae_fp32.safetensors` | the same |
 
-- **Settings.** 832×480 (480×832, 960×544 and 544×960 are offered, and 1344×768 stays in the list), 124 frames (5.17 s at 24 fps), one clip, sampler Res multistep with the Simple scheduler, a keyframe detail budget of 1× the output area, and the engine's automatic memory handling. The base model runs 20 steps (the Custom speed profile; Quality and Turbo are still there), Fast its fixed 8. In Video Producer a draft follows the `draft_resolution` setting (832×480 by default) and a re-rendered final of a 16:9 project takes 1344×768.
-- **Prerequisites.** The native backend option `text_encoder_placement`, delivered by the core change "Stream the text encoder from host RAM when it does not fit in VRAM" (pull request M4-S4/PotionUI#2, merged into this branch): leave it on `auto`, which streams a text encoder that does not fit from system RAM, or set it to `stream`. Without that option the presets load but the text encoder still runs out of GPU memory. Plan on 64 GB of system RAM: the streamed encoder, the part of the 20 GB DiT that does not fit on the card and the rest of the process share it. `requires` declares 12 GB of VRAM (minimum and recommended) and no RAM figure.
-- **Speed.** Everything that does not fit on the card streams from system RAM, so expect the prompt encoding and every step to take noticeably longer than on a card that holds the model; the estimate warns `vram_stream` and does not block. Measured on a 12 GB card (see Hardware): a 5-second draft took 5 min 57 s with MiniMax-H3-Fast (12 GB) and 7 min 26 s with MiniMax-H3 (12 GB), with a peak of about 11.9 GB of VRAM and 25 to 26 GB of container RAM.
+- **The 8 GB presets.** They copy the pipeline of the core Wan 2.1 / 2.2 preset unchanged and read its I2V Models, SVI Pro and (for the 5B) Advanced tabs, the first two hidden: the pipeline needs their fields, and a hidden field is not required. Their Video Director declares `t2v` alone with shots of up to 5 seconds, so Video Producer never sends them a frame (warning `text_only_preset`). The 5B offers no 720p: on 8 GB its decode overflowed (see the table). The engine samples every Wan model with a shift of 8.0 where the 5B's official setting is 5.0; the form does not expose the shift.
+- **Settings of the MiniMax-H3 presets.** 832×480 (480×832, 960×544 and 544×960 are offered, and 1344×768 stays in the list), 124 frames (5.17 s at 24 fps), one clip, sampler Res multistep with the Simple scheduler, a keyframe detail budget of 1× the output area, and the engine's automatic memory handling. The base model runs 20 steps (the Custom speed profile; Quality and Turbo are still there), Fast its fixed 8. In Video Producer a draft follows the `draft_resolution` setting (832×480 by default) and a re-rendered final of a 16:9 project takes 1344×768.
+- **Prerequisites.** The native backend option `text_encoder_placement`, delivered by the core change "Stream the text encoder from host RAM when it does not fit in VRAM" (pull request M4-S4/PotionUI#2, merged into this branch): leave it on `auto`, which streams a text encoder that does not fit from system RAM, or set it to `stream`. Without that option the presets load but the text encoder still runs out of GPU memory. The streamed encoder, the part of the 20 GB DiT that does not fit on the card and the rest of the process share the system RAM: `requires` declares 12 GB of VRAM (minimum and recommended) and 64 GB of RAM.
+- **Speed.** Everything that does not fit on the card streams from system RAM, so expect the prompt encoding and every step to take noticeably longer than on a card that holds the model; the estimate warns `vram_stream` and does not block. Measured on a 12 GB card (see Hardware): a 5-second draft took 5 min 57 s with MiniMax-H3-Fast (12 GB) and 7 min 26 s with MiniMax-H3 (12 GB) with 67 GB given to Docker, and 9 min 48 s for MiniMax-H3 (12 GB) in a container limited to 32 GB.
 
 ### SeedVR2 for finals
 
@@ -264,7 +298,7 @@ The page asks for it half a second after the last change, once the project is sa
 | `no_preset` | The preset is unknown, not assigned to the user, or has no mode that the Video Director can run. Also, for an upscale: SeedVR2 is not available to the user and the take does not come from an assigned MiniMax-H3 preset. | `preset_id` |
 | `upscale_unsupported` | An upscale of a take of an assigned MiniMax-H3 variant that has no `upscale` mode (Fast, VDN, the 12 GB presets), when SeedVR2 is not available to the user. The message invites to install SeedVR2 for final takes, or to render the take again at full resolution. The page shows its own sentence, "Upscaling this take needs SeedVR2: ask an administrator to install it, or render the take again at full resolution." (`generation.block.upscaleUnsupported`; in French "Agrandir cette prise demande SeedVR2 : demandez à un administrateur de l’installer, ou générez la prise à nouveau en pleine résolution."): in the Make final window under the **Upscaler not available** badge, as the tooltip of the Make final button of the take card, and in the message of a refused request. | `preset_id` |
 | `profile_unsupported` | Ref2VA or Hybrid AV on a preset that cannot generate it. | `profile`, `preset_id` |
-| `missing_models` | A required model field has no installed recommended file. | `fields` |
+| `missing_models` | A required model field has no installed recommended file, or a LoRA that the preset selects by default is not installed. Video Producer finds a default LoRA by its file name and sends it as an installed model. | `fields` |
 | `quota_exceeded` | The takes need more minutes than the user has left. | `needed_minutes`, `remaining` |
 | `no_model` | A cloud preset without a valid video model, or a model that needs a first frame for a shot that has none. | `model_id` or `shot_id` |
 | `no_references` | Ref2VA on a shot with no usable reference. | `shot_id` |
@@ -276,6 +310,7 @@ The page asks for it half a second after the last change, once the project is sa
 | `vram_unknown` | PotionUI could not estimate the memory. | |
 | `time_unknown` | No take of this preset was measured at this resolution yet. | |
 | `fl2va_no_frame` | The shot has no first frame: it is generated from text only. | `shot_id` |
+| `text_only_preset` | The shot has a first frame but the preset only declares the `t2v` composition (the two 8 GB Wan presets): the frames are not used and the shot is generated from text only. | `shot_id` |
 | `duration_clamped` | The shot is longer than the preset or the model allows: it is cut. | `shot_id`, `max` |
 
 The page shows the first block in the Production bar (it disables the buttons) and the first warning next to it, with the full list in the tooltip. `vram_unknown` and `time_unknown` only appear in the estimate tooltip.
@@ -918,7 +953,7 @@ node --test "frontend/src/i18n/*.test.js"
 node --test "frontend/src/lib/*.test.js"
 ```
 
-When this page was written the first command ran 22 tests and the second one 115, all of them passing. The first command checks the two dictionaries. Every string of the page goes through `t()` with a key declared in `frontend/src/i18n/en/<domain>.json` and `fr/<domain>.json`, English being the default and French complete, and the test fails on: a key missing from one language, different parameters between the two languages, a `t()` key that does not exist, and a declared key that nothing uses. A key counts as used when a literal `t()` call names it or when it sits under one of the declared dynamic prefixes (`shell.error.`, `shell.menu.`, `commands.cmd.`, `generation.failed.`), and each prefix must really be used. It also checks that `generation.failed.<code>` matches the failure codes of the take cards, that every command and menu of `lib/commands.js` has a label, and that Help › Simulated features lists the seven items of What stays simulated, each with a title and a text.
+When this page was written the first command ran 22 tests and the second one 118, all of them passing. The first command checks the two dictionaries. Every string of the page goes through `t()` with a key declared in `frontend/src/i18n/en/<domain>.json` and `fr/<domain>.json`, English being the default and French complete, and the test fails on: a key missing from one language, different parameters between the two languages, a `t()` key that does not exist, and a declared key that nothing uses. A key counts as used when a literal `t()` call names it or when it sits under one of the declared dynamic prefixes (`shell.error.`, `shell.menu.`, `commands.cmd.`, `generation.failed.`), and each prefix must really be used. It also checks that `generation.failed.<code>` matches the failure codes of the take cards, that every command and menu of `lib/commands.js` has a label, and that Help › Simulated features lists the seven items of What stays simulated, each with a title and a text.
 
 The second one covers the shortcut notation per platform, the keyboard focus rules, the icons, the engine and take helpers of `lib/generation.js`, the assistant helpers of `lib/assistant.js` (the context, how a tool result is applied, proposals and the check list), the shared rules of `lib/rules.js`, with the parity of `lib/rules.json`, the export helpers of `lib/exports.js` (job normalizing, polling and file names, checked with the same examples as `tests/test_exports_video.py`), the seam-frame helpers of `lib/seam.js`, the progress announcements of `lib/announce.js` (a screen reader hears the export and the generation progress at each 10 % or each change of step, and at most once every 3 seconds), and `lib/exchange.test.js`, which rebuilds the four files in the browser from the document of `tests/fixtures/exports/reference-project.json` and compares them byte for byte with the golden files `reference.fcpxml`, `reference.otio`, `reference.edl` and `reference.srt` that the Python tests also check, so that the page and the server cannot drift apart.
 

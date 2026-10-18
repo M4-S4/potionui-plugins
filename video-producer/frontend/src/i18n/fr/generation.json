@@ -17,6 +17,7 @@
 	"warn.vramUnknown": "La mémoire nécessaire n’a pas pu être estimée.",
 	"warn.timeUnknown": "Aucun temps mesuré pour ce moteur et cette résolution.",
 	"warn.noFrame": "« {shot} » n’a pas de frame liée : il sera généré à partir du texte seul.",
+	"warn.textOnly": "Ce moteur génère à partir du texte seul : les frames liées à « {shot} » ne seront pas utilisées.",
 	"warn.durationClamped": "« {shot} » dépasse la durée permise par ce moteur : il sera coupé à {max}.",
 	"estimate.loading": "Estimation…",
 	"estimate.pending": "L’estimation se met à jour une fois le projet enregistré.",

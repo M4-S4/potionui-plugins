@@ -17,6 +17,7 @@
 	"warn.vramUnknown": "Memory use could not be estimated.",
 	"warn.timeUnknown": "No time measured yet for this engine and resolution.",
 	"warn.noFrame": "“{shot}” has no linked frame: it will be generated from text only.",
+	"warn.textOnly": "This engine generates from text only: the frames linked to “{shot}” will not be used.",
 	"warn.durationClamped": "“{shot}” is longer than this engine allows: it will be cut to {max}.",
 	"estimate.loading": "Estimating…",
 	"estimate.pending": "The estimate updates once the project is saved.",

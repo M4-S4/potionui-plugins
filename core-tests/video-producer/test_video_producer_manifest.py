@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pytest
 import yaml
@@ -1118,6 +1119,9 @@ CORE_PRESETS = REPO_ROOT / "content" / "presets" / "marketplace"
 SHARED_PRESETS = REPO_ROOT / "content" / "presets" / "_shared"
 H3_12GB = "01M54HN72B0KY7H63BKQ16T253"
 H3_FAST_12GB = "01M54HN72PABVRE54YNQA2Q7ZT"
+WAN_1_3B_8GB = "01M57QPEMDPKHHW83YSEYBN0WZ"
+WAN_5B_8GB = "01M57QPEMDPKHHW83YSEYBN0X0"
+MINIMAX_H3_FAST = "01KX47H3FASTH30000000000VA"
 COMFY_DIT = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
 WAN2GP_DIT = "MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors"
 WAN2GP_SHA256 = "30ff400f974b11a1ef13d216c5d9f6439a9c10322a3988b0374a39672ce286f0"
@@ -1125,37 +1129,187 @@ FASTH3_DIT = "fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors"
 TEXT_ENCODER = "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
 VIDEO_VAE = "minimax_h3_video_vae_int8_convrot.safetensors"
 AUDIO_VAE = "minimax_h3_audio_vae_fp32.safetensors"
+UMT5 = "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+WAN21_VAE = "wan_2.1_vae.safetensors"
+WAN22_VAE = "wan2.2_vae.safetensors"
+WAN_1_3B_DIT = "wan2.1_t2v_1.3B_fp16.safetensors"
+WAN_5B_DIT = "wan2.2_ti2v_5B_fp16.safetensors"
+WAN_HIDDEN_TABS = ("I2V Models", "SVI Pro")
+H3_DEFAULTS = {"resolution": "832x480", "quantity": 1, "sampler": "res_multistep", "scheduler": "simple", "keyframe_pixel_budget": "1"}
+WAN_DEFAULTS = {"seed": -1, "sampler": "unipc", "schedule": "shift", "steps": 30}
+
+
+@dataclasses.dataclass(frozen=True)
+class Shipped:
+    name: str
+    folder: str
+    source_id: str
+    source_folder: str
+    min_vram_gb: int
+    recommended_vram_gb: int
+    ram_gb: Optional[int]
+    family_tag: str
+    fps_var: str
+    fps: int
+    frames: int
+    description_mentions: Tuple[str, ...]
+    changed_fields: Dict[str, Set[str]]
+    defaults: Dict[str, Any]
+    recommended: Dict[str, List[str]]
+    hidden_tabs: Tuple[str, ...] = ()
+    own_resolutions: Optional[Tuple[str, ...]] = None
+    speed_options: Tuple[str, ...] = ()
+    reacted: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    draft: Tuple[str, ...] = ()
+    final: Tuple[str, ...] = ()
+
+    @property
+    def is_wan(self):
+        return self.family_tag == "wan"
+
+    @property
+    def requires(self):
+        ram = {} if self.ram_gb is None else {"min_ram_gb": self.ram_gb}
+        return {"min_vram_gb": self.min_vram_gb, "recommended_vram_gb": self.recommended_vram_gb, **ram}
+
+    @property
+    def profile(self):
+        return f"{self.min_vram_gb} GB" + ("" if self.ram_gb is None else f" · {self.ram_gb} GB RAM")
+
+    @property
+    def ram_tags(self):
+        return [] if self.ram_gb is None else [f"ram-{self.ram_gb}gb"]
+
+    @property
+    def leading_tags(self):
+        return [f"{self.min_vram_gb}gb", "low-vram", *self.ram_tags, self.family_tag][:3]
+
+    @property
+    def profiles(self):
+        return ["FL2VA"] if self.is_wan else ["FL2VA", "Hybrid AV"]
+
+    @property
+    def director_modes(self):
+        return ["t2v"] if self.is_wan else ["t2v", "i2v", "flf", "director"]
+
+    @property
+    def max_duration(self):
+        return 5 if self.is_wan else 15
+
+
 SHIPPED_PRESETS = {
-    H3_12GB: ("MiniMax-H3 (12 GB)", "MiniMax-H3-12GB", "01KX47H3MINIMAX000000000VA"),
-    H3_FAST_12GB: ("MiniMax-H3-Fast (12 GB)", "MiniMax-H3-Fast-12GB", "01KX47H3FASTH30000000000VA"),
+    WAN_1_3B_8GB: Shipped(
+        name="Wan 2.1 T2V 1.3B (8 GB)",
+        folder="Wan2.1-T2V-1.3B-8GB",
+        source_id=WAN,
+        source_folder="Wan",
+        min_vram_gb=8,
+        recommended_vram_gb=12,
+        ram_gb=32,
+        family_tag="wan",
+        fps_var="default_fps",
+        fps=16,
+        frames=81,
+        description_mentions=("8 GB of VRAM",),
+        changed_fields={
+            "speed_profile": {"configuration"},
+            "resolution": {"configuration"},
+            "text_encoder": {"configuration"},
+            "vae": {"configuration"},
+            "t2v_high_noise_model": {"configuration"},
+            "t2v_low_noise_model": {"configuration"},
+            "cfg": {"default", "reactions"},
+        },
+        defaults={**WAN_DEFAULTS, "speed_profile": "balanced", "resolution": "832x480", "fps": 16, "cfg": 6.0, "t2v_loras_high": [], "t2v_loras_low": []},
+        recommended={"text_encoder": [UMT5], "vae": [WAN21_VAE], "t2v_high_noise_model": [WAN_1_3B_DIT], "t2v_low_noise_model": []},
+        hidden_tabs=WAN_HIDDEN_TABS,
+        own_resolutions=("832x480", "480x832", "640x480", "480x640"),
+        speed_options=("balanced", "custom"),
+        draft=("832x480", "480x832"),
+        final=("832x480", "480x832"),
+    ),
+    WAN_5B_8GB: Shipped(
+        name="Wan 2.2 TI2V 5B (8 GB)",
+        folder="Wan2.2-TI2V-5B-8GB",
+        source_id=WAN,
+        source_folder="Wan",
+        min_vram_gb=8,
+        recommended_vram_gb=12,
+        ram_gb=32,
+        family_tag="wan",
+        fps_var="default_fps",
+        fps=24,
+        frames=121,
+        description_mentions=("8 GB of VRAM",),
+        changed_fields={
+            "speed_profile": {"configuration"},
+            "resolution": {"configuration"},
+            "fps": {"default"},
+            "text_encoder": {"configuration"},
+            "vae": {"configuration"},
+            "t2v_high_noise_model": {"configuration"},
+            "t2v_low_noise_model": {"configuration"},
+        },
+        defaults={**WAN_DEFAULTS, "speed_profile": "balanced", "resolution": "832x480", "fps": 24, "cfg": 5.0, "t2v_loras_high": [], "t2v_loras_low": []},
+        recommended={"text_encoder": [UMT5], "vae": [WAN22_VAE], "t2v_high_noise_model": [WAN_5B_DIT], "t2v_low_noise_model": []},
+        hidden_tabs=WAN_HIDDEN_TABS,
+        own_resolutions=("832x480", "480x832"),
+        speed_options=("balanced", "custom"),
+        draft=("832x480", "480x832"),
+        final=("832x480", "480x832"),
+    ),
+    H3_12GB: Shipped(
+        name="MiniMax-H3 (12 GB)",
+        folder="MiniMax-H3-12GB",
+        source_id=MINIMAX_H3,
+        source_folder="MiniMax-H3",
+        min_vram_gb=12,
+        recommended_vram_gb=12,
+        ram_gb=64,
+        family_tag="minimax",
+        fps_var="fps",
+        fps=24,
+        frames=124,
+        description_mentions=("12 GB", "64 GB"),
+        changed_fields={
+            "speed_profile": {"default"},
+            "resolution": {"default", "configuration"},
+            "model": {"configuration"},
+            "text_encoder": {"configuration"},
+            "video_vae": {"configuration"},
+            "keyframe_pixel_budget": {"default"},
+            "steps": {"default"},
+            "sampler": {"default", "ai_hint"},
+        },
+        defaults={**H3_DEFAULTS, "speed_profile": "custom", "steps": 20},
+        recommended={"model": [COMFY_DIT, WAN2GP_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
+    ),
+    H3_FAST_12GB: Shipped(
+        name="MiniMax-H3-Fast (12 GB)",
+        folder="MiniMax-H3-Fast-12GB",
+        source_id=MINIMAX_H3_FAST,
+        source_folder="MiniMax-H3-Fast",
+        min_vram_gb=12,
+        recommended_vram_gb=12,
+        ram_gb=64,
+        family_tag="minimax",
+        fps_var="fps",
+        fps=24,
+        frames=124,
+        description_mentions=("12 GB", "64 GB"),
+        changed_fields={
+            "resolution": {"default", "configuration"},
+            "model": {"configuration"},
+            "text_encoder": {"configuration"},
+            "video_vae": {"configuration", "ai_hint"},
+            "keyframe_pixel_budget": {"default"},
+        },
+        defaults={**H3_DEFAULTS, "speed_profile": "distilled", "steps": 8},
+        recommended={"model": [FASTH3_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
+    ),
 }
-CHANGED_FIELDS = {
-    H3_12GB: {
-        "speed_profile": {"default"},
-        "resolution": {"default", "configuration"},
-        "model": {"configuration"},
-        "text_encoder": {"configuration"},
-        "video_vae": {"configuration"},
-        "keyframe_pixel_budget": {"default"},
-        "steps": {"default"},
-        "sampler": {"default", "ai_hint"},
-    },
-    H3_FAST_12GB: {
-        "resolution": {"default", "configuration"},
-        "model": {"configuration"},
-        "text_encoder": {"configuration"},
-        "video_vae": {"configuration", "ai_hint"},
-        "keyframe_pixel_budget": {"default"},
-    },
-}
-PROFILE_DEFAULTS = {
-    H3_12GB: {"speed_profile": "custom", "steps": 20},
-    H3_FAST_12GB: {"speed_profile": "distilled", "steps": 8},
-}
-RECOMMENDED = {
-    H3_12GB: {"model": [COMFY_DIT, WAN2GP_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
-    H3_FAST_12GB: {"model": [FASTH3_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
-}
+H3_PRESETS = {preset_id: shipped for preset_id, shipped in SHIPPED_PRESETS.items() if not shipped.is_wan}
+WAN_PRESETS = {preset_id: shipped for preset_id, shipped in SHIPPED_PRESETS.items() if shipped.is_wan}
 
 
 def _preset_loader(roots, manifests=()):
@@ -1174,8 +1328,9 @@ def shipped_presets(manifest):
 
 
 @pytest.fixture(scope="module")
-def core_h3_presets():
-    loader, loaded = _preset_loader([CORE_PRESETS / "MiniMax-H3", CORE_PRESETS / "MiniMax-H3-Fast"])
+def core_presets():
+    roots = sorted({CORE_PRESETS / shipped.source_folder for shipped in SHIPPED_PRESETS.values()})
+    loader, loaded = _preset_loader(roots)
     assert loader.load_errors == {}
     return loaded
 
@@ -1195,6 +1350,20 @@ def _video_form(preset):
     return _flatten(form.fields, {}, [])
 
 
+def _all_fields(fields):
+    found = []
+    for field in fields:
+        found.append(field)
+        if isinstance(field.children, list):
+            found += _all_fields(field.children)
+    return found
+
+
+def _video_fields(preset):
+    [form] = preset.modes["video"].forms
+    return _all_fields(form.fields)
+
+
 def _option_files(preset, field):
     from src.features.presets.children_paths import resolve_children_path
 
@@ -1204,39 +1373,52 @@ def _option_files(preset, field):
     ]
 
 
+def _recommendations(field):
+    return (field.configuration or {}).get("recommendations") or []
+
+
 def test_the_manifest_declares_the_presets_folder(manifest):
     assert manifest.presets == [{"path": "presets"}]
 
 
 def test_the_shipped_presets_load_through_the_cores_loader(shipped_presets):
     assert {preset_id: preset.name for preset_id, preset in shipped_presets.items()} == {
-        preset_id: name for preset_id, (name, _, _) in SHIPPED_PRESETS.items()
+        preset_id: shipped.name for preset_id, shipped in SHIPPED_PRESETS.items()
     }
-    for preset_id, (_, folder, _) in SHIPPED_PRESETS.items():
+    for preset_id, shipped in SHIPPED_PRESETS.items():
         preset = shipped_presets[preset_id]
-        assert preset.origin == {"kind": "plugin", "plugin_id": PLUGIN_ID, "path": folder}
+        assert preset.origin == {"kind": "plugin", "plugin_id": PLUGIN_ID, "path": shipped.folder}
         assert (preset.engine, preset.category, list(preset.modes)) == ("native", "video", ["video"])
-        assert preset.requires == {"min_vram_gb": 12, "recommended_vram_gb": 12}
-        assert preset.tags[:2] == ["12gb", "low-vram"]
-        assert preset.vars["video_producer"] == {"profile": "12 GB"}
-        assert (preset.vars["fps"], preset.vars["default_frames"]) == (24, 124)
-        assert "12 GB" in preset.description and "64 GB" in preset.description
+        assert preset.requires == shipped.requires, preset_id
+        assert preset.tags[:3] == shipped.leading_tags, preset_id
+        assert [tag for tag in preset.tags if tag.startswith("ram-")] == shipped.ram_tags, preset_id
+        assert preset.vars["video_producer"] == {"profile": shipped.profile}, preset_id
+        assert (preset.vars[shipped.fps_var], preset.vars["default_frames"]) == (shipped.fps, shipped.frames), preset_id
+        for text in shipped.description_mentions:
+            assert text in preset.description, (preset_id, text)
 
 
 def test_the_backend_knows_the_shipped_presets_and_reads_their_profile(shipped_presets):
     presets = _load("backend.presets")
     catalog = _load("backend.catalog")
 
-    for preset_id, preset in shipped_presets.items():
-        assert preset_id in presets.MINIMAX_H3_PRESETS and preset_id in presets.VIDEO_DIRECTOR_PRESETS
-        assert catalog.memory_profile(preset.vars) == "12 GB"
+    assert (presets.WAN21_T2V_1_3B_8GB, presets.WAN22_TI2V_5B_8GB) == (WAN_1_3B_8GB, WAN_5B_8GB)
+    assert set(presets.WAN_TIER_PRESETS) == set(WAN_PRESETS)
+    for preset_id, shipped in SHIPPED_PRESETS.items():
+        preset = shipped_presets[preset_id]
+        assert preset_id in presets.VIDEO_DIRECTOR_PRESETS
+        assert (preset_id in presets.WAN_TIER_PRESETS, preset_id in presets.MINIMAX_H3_PRESETS) == (shipped.is_wan, not shipped.is_wan)
+        assert catalog.memory_profile(preset.vars) == shipped.profile
         assert catalog.main_mode(preset.vars, list(preset.modes)) == "video"
-        assert catalog.profiles(preset_id, preset.vars, list(preset.modes)) == ["FL2VA", "Hybrid AV"]
+        assert catalog.profiles(preset_id, preset.vars, list(preset.modes)) == shipped.profiles
+        assert catalog.director_modes(preset.vars) == shipped.director_modes
+        assert catalog.preset_limits(preset.vars)["max_duration"] == shipped.max_duration
+        assert catalog.preset_fps(preset.vars) == shipped.fps
 
 
-def test_the_shipped_presets_keep_the_director_and_prompt_help_of_the_core_presets(shipped_presets, core_h3_presets):
-    for preset_id, (_, _, source_id) in SHIPPED_PRESETS.items():
-        preset, source = shipped_presets[preset_id], core_h3_presets[source_id]
+def test_the_shipped_h3_presets_keep_the_director_and_prompt_help_of_the_core_presets(shipped_presets, core_presets):
+    for preset_id, shipped in H3_PRESETS.items():
+        preset, source = shipped_presets[preset_id], core_presets[shipped.source_id]
         assert preset.vars["video_director"] == source.vars["video_director"]
         assert preset.vars["prompt"]["segment_templates"] == source.vars["prompt"]["segment_templates"][:1]
         assert preset.configuration == source.configuration
@@ -1245,42 +1427,91 @@ def test_the_shipped_presets_keep_the_director_and_prompt_help_of_the_core_prese
         assert preset.formulas["groups"] == {name: group for name, group in source.formulas["groups"].items() if name != "memory"}
 
 
-def test_the_shipped_presets_run_the_core_pipelines_unchanged(shipped_presets, core_h3_presets):
-    for preset_id, (_, folder, source_id) in SHIPPED_PRESETS.items():
-        preset, source = shipped_presets[preset_id], core_h3_presets[source_id]
-        assert preset.modes["video"].pipes == source.modes["video"].pipes
-        copy = yaml.safe_load((PLUGIN_ROOT / "presets" / folder / "modes" / "video" / "pipeline.yml").read_text(encoding="utf-8"))
+def test_the_shipped_wan_presets_keep_the_prompt_help_of_the_core_preset_and_generate_from_text_only(shipped_presets, core_presets):
+    own_vars = ("video_director", "video_producer", "default_fps", "default_frames")
+    for preset_id, shipped in WAN_PRESETS.items():
+        preset, source = shipped_presets[preset_id], core_presets[shipped.source_id]
+        director = preset.vars["video_director"]
+        limits = {"default_duration": 5, "default_fps": shipped.fps, "max_duration": 5}
+        assert director == {**source.vars["video_director"], "modes": {"t2v": {}}, "limits": limits}, preset_id
+        assert {key for key, value in director.items() if value != source.vars["video_director"].get(key)} == {"modes", "limits"}, preset_id
+        assert set(preset.vars) == set(own_vars), preset_id
+        assert {key: value for key, value in preset.vars.items() if key not in own_vars} == {
+            key: value for key, value in source.vars.items() if key not in own_vars
+        }
+        assert preset.configuration == source.configuration, preset_id
+        assert preset.llm == source.llm, preset_id
+        assert preset.prompt_syntax == source.prompt_syntax, preset_id
+        assert preset.formulas == source.formulas, preset_id
+        assert preset.formulas["groups"] == source.formulas["groups"], preset_id
+        assert preset.negative_prompt == source.negative_prompt, preset_id
+
+
+def test_the_shipped_presets_run_the_core_pipelines_unchanged(shipped_presets, core_presets):
+    for preset_id, shipped in SHIPPED_PRESETS.items():
+        preset, source = shipped_presets[preset_id], core_presets[shipped.source_id]
+        assert preset.modes["video"].pipes == source.modes["video"].pipes, preset_id
+        copy = yaml.safe_load((PLUGIN_ROOT / "presets" / shipped.folder / "modes" / "video" / "pipeline.yml").read_text(encoding="utf-8"))
         original = yaml.safe_load((Path(source.path) / "modes" / "video" / "pipeline.yml").read_text(encoding="utf-8"))
-        assert copy == original
+        assert copy == original, preset_id
 
 
-def test_the_shipped_forms_change_only_the_12_gb_defaults_and_files_of_the_core_forms(shipped_presets, core_h3_presets):
-    for preset_id, (_, _, source_id) in SHIPPED_PRESETS.items():
-        preset, source = shipped_presets[preset_id], core_h3_presets[source_id]
+def test_the_shipped_forms_change_only_the_tier_defaults_models_and_files_of_the_core_forms(shipped_presets, core_presets):
+    for preset_id, shipped in SHIPPED_PRESETS.items():
+        preset, source = shipped_presets[preset_id], core_presets[shipped.source_id]
         named, skeleton = _video_form(preset)
         source_named, source_skeleton = _video_form(source)
-        assert skeleton == source_skeleton
+        assert skeleton == source_skeleton, preset_id
+        assert [field.label for field in _video_fields(preset) if field.visible is False] == list(shipped.hidden_tabs), preset_id
         for name, field in named.items():
-            changed = CHANGED_FIELDS[preset_id].get(name, set())
-            assert field == dataclasses.replace(source_named[name], **{attr: getattr(field, attr) for attr in changed}), name
-        assert {name: named[name].default for name in ("resolution", "quantity", "sampler", "scheduler", "keyframe_pixel_budget")} == {
-            "resolution": "832x480",
-            "quantity": 1,
-            "sampler": "res_multistep",
-            "scheduler": "simple",
-            "keyframe_pixel_budget": "1",
-        }
-        assert {name: named[name].default for name in PROFILE_DEFAULTS[preset_id]} == PROFILE_DEFAULTS[preset_id]
-        assert preset.speed_profiles[named["speed_profile"].default]["steps"] == named["steps"].default
-        assert _option_files(preset, named["resolution"]) == _option_files(source, source_named["resolution"])
-        for name in RECOMMENDED[preset_id]:
+            changed = shipped.changed_fields.get(name, set())
+            assert field == dataclasses.replace(source_named[name], **{attr: getattr(field, attr) for attr in changed}), (preset_id, name)
+        for mine, theirs in zip(_video_fields(preset), _video_fields(source)):
+            if not mine.name:
+                hidden = {"visible": False} if mine.type == "tab" and mine.label in shipped.hidden_tabs else {}
+                assert dataclasses.replace(mine, children=None) == dataclasses.replace(theirs, children=None, **hidden), (preset_id, mine.label)
+        assert {name: named[name].default for name in shipped.defaults} == shipped.defaults, preset_id
+        if not shipped.is_wan:
+            assert preset.speed_profiles[named["speed_profile"].default]["steps"] == named["steps"].default, preset_id
+        if shipped.own_resolutions is None:
+            assert _option_files(preset, named["resolution"]) == _option_files(source, source_named["resolution"]), preset_id
+        else:
+            files = _option_files(preset, named["resolution"])
+            offered = [item["value"] for path, _ in files for item in yaml.safe_load(path.read_text(encoding="utf-8"))]
+            assert all(Path(preset.path).resolve() in path.parents for path, _ in files), preset_id
+            assert offered == list(shipped.own_resolutions), preset_id
+        for name in shipped.recommended:
             mine = {key: value for key, value in named[name].configuration.items() if key not in ("recommendations", "placeholder")}
             theirs = {key: value for key, value in source_named[name].configuration.items() if key not in ("recommendations", "placeholder")}
-            assert mine == theirs, name
-            assert all(len(item["sha256"]) == 64 for item in named[name].configuration["recommendations"]), name
-        assert {
-            name: [item["name"] for item in named[name].configuration["recommendations"]] for name in RECOMMENDED[preset_id]
-        } == RECOMMENDED[preset_id]
+            assert mine == theirs, (preset_id, name)
+            assert all(len(item["sha256"]) == 64 for item in _recommendations(named[name])), (preset_id, name)
+        assert {name: [item["name"] for item in _recommendations(named[name])] for name in shipped.recommended} == shipped.recommended, preset_id
+
+
+def test_the_shipped_recommendations_the_core_forms_already_make_are_copied_unchanged(shipped_presets, core_presets):
+    for preset_id, shipped in SHIPPED_PRESETS.items():
+        named, _ = _video_form(shipped_presets[preset_id])
+        source_named, _ = _video_form(core_presets[shipped.source_id])
+        known = {item["name"]: item for field in source_named.values() for item in _recommendations(field)}
+        for name in shipped.recommended:
+            for item in _recommendations(named[name]):
+                if item["name"] in known:
+                    keys = ("link", "size", "sha256")
+                    assert {key: item[key] for key in keys} == {key: known[item["name"]][key] for key in keys}, (preset_id, item["name"])
+
+
+def test_the_wan_forms_bind_to_the_defaults_and_the_speed_profile_they_declare(shipped_presets):
+    from src.features.forms.binding import bind_form
+
+    for preset_id, shipped in WAN_PRESETS.items():
+        preset = shipped_presets[preset_id]
+        values = bind_form(preset, "video", None, {"text_encoder": "text-encoder", "vae": "vae"}).values
+        named, _ = _video_form(preset)
+        expected = {**shipped.defaults, **shipped.reacted}
+        assert {name: values[name] for name in expected} == expected, preset_id
+        assert [option["value"] for option in named["speed_profile"].configuration["options"]] == list(shipped.speed_options), preset_id
+        assert list(preset.speed_profiles) == list(shipped.speed_options), preset_id
+        assert preset.speed_profiles[values["speed_profile"]] == {"steps": values["steps"], "guidance": values["cfg"], "sampler": values["sampler"]}, preset_id
 
 
 @pytest.mark.parametrize("aspect, draft, final", [(16 / 9, "832x480", "1344x768"), (9 / 16, "480x832", "768x1344")])
@@ -1289,7 +1520,8 @@ def test_the_plugin_drafts_the_shipped_presets_at_832x480_and_finishes_them_at_t
     models = _load("backend.models")
     director = _load("backend.director")
 
-    for preset in shipped_presets.values():
+    for preset_id in H3_PRESETS:
+        preset = shipped_presets[preset_id]
         [form] = preset.modes["video"].forms
         fields = {}
         bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
@@ -1303,6 +1535,30 @@ def test_the_plugin_drafts_the_shipped_presets_at_832x480_and_finishes_them_at_t
         assert models.model_fields(fields) == (["model", "text_encoder", "video_vae", "audio_vae"], [])
         if preset.id == H3_12GB:
             assert {"sha256": WAN2GP_SHA256, "filename": WAN2GP_DIT} in fields["model"]["recommendations"]
+
+
+@pytest.mark.parametrize("aspect, side", [(16 / 9, 0), (9 / 16, 1)])
+def test_the_plugin_drafts_the_wan_presets_at_832x480_and_finishes_them_at_the_largest_size_they_offer(shipped_presets, aspect, side):
+    bridge = _load("backend.core_bridge")
+    models = _load("backend.models")
+    director = _load("backend.director")
+
+    for preset_id, shipped in WAN_PRESETS.items():
+        preset = shipped_presets[preset_id]
+        [form] = preset.modes["video"].forms
+        fields = {}
+        bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
+        options = models.resolution_options(fields)
+        values = [option["value"] for option in options]
+
+        if shipped.own_resolutions is not None:
+            assert values == list(shipped.own_resolutions), preset_id
+        else:
+            assert {"832x480", "480x832", "960x544", "544x960", "1280x720", "720x1280"} <= set(values), preset_id
+        assert fields["resolution"]["default"] == shipped.defaults["resolution"], preset_id
+        assert director.draft_resolution(options, "832x480", aspect) == shipped.draft[side], preset_id
+        assert director.final_resolution(options, aspect) == shipped.final[side], preset_id
+        assert models.model_fields(fields) == (["text_encoder", "vae", "t2v_high_noise_model"], ["t2v_low_noise_model"]), preset_id
 
 
 def test_every_export_and_seam_route_loaded_by_the_core_depends_on_the_signed_in_user(loader, manifest):

@@ -16,7 +16,8 @@ import {
 	progressText,
 	sortTakes,
 	takeAsset,
-	upscaleTargetFor
+	upscaleTargetFor,
+	withProfile
 } from './generation.js';
 
 const H3 = '01KX47H3MINIMAX000000000VA';
@@ -164,6 +165,38 @@ test('engine popup: a memory profile preset keeps the MiniMax H3 name and shows 
 	assert.equal(labels['wan-low'], 'Wan 2.1 / 2.2');
 	assert.equal(labels[H3], 'MiniMax H3');
 	assert.deepEqual(presetProfiles(profiled.presets.find((p) => p.id === '01M54HN72PABVRE54YNQA2Q7ZT')), ['FL2VA', 'Ref2VA', 'Hybrid AV']);
+});
+
+test('withProfile: adds only the parts of the memory profile the label does not already say', () => {
+	assert.equal(withProfile('Wan 2.1 T2V 1.3B (8 GB)', '8 GB · 32 GB RAM'), 'Wan 2.1 T2V 1.3B (8 GB) · 32 GB RAM');
+	assert.equal(withProfile('Wan 2.2 14B Lightning (12 GB)', '12 GB · 48 GB RAM'), 'Wan 2.2 14B Lightning (12 GB) · 48 GB RAM');
+	assert.equal(withProfile('MiniMax H3 Fast', '12 GB · 64 GB RAM'), 'MiniMax H3 Fast · 12 GB · 64 GB RAM');
+	assert.equal(withProfile('MiniMax H3 Fast', '12 GB'), 'MiniMax H3 Fast · 12 GB');
+	assert.equal(withProfile('Wan 2.1 / 2.2', ''), 'Wan 2.1 / 2.2');
+	assert.equal(withProfile('Wan 2.1 / 2.2', null), 'Wan 2.1 / 2.2');
+	assert.equal(withProfile('Wan 2.1 / 2.2', undefined), 'Wan 2.1 / 2.2');
+	assert.equal(withProfile('Wan 2.1 / 2.2', ' · '), 'Wan 2.1 / 2.2');
+	assert.equal(withProfile('MiniMax H3 (12 GB)', '12 GB'), 'MiniMax H3 (12 GB)');
+	assert.equal(withProfile('MiniMax H3 (12 GB)', '12 gb'), 'MiniMax H3 (12 GB)');
+	assert.equal(withProfile('Wan 2.1 T2V 1.3B (8 GB · 32 GB RAM)', '8 GB · 32 GB RAM'), 'Wan 2.1 T2V 1.3B (8 GB · 32 GB RAM)');
+});
+
+test('engine popup: a hardware tier preset shows its VRAM once and its RAM after the name', () => {
+	const WAN_1_3B = '01M57QPEMDPKHHW83YSEYBN0WZ';
+	const WAN_LIGHTNING = '01M57QPEMDPKHHW83YSEYBN0X1';
+	const tiers = normalizeMe({
+		...rawMe,
+		presets: [
+			...rawMe.presets,
+			{ id: WAN_1_3B, name: 'Wan 2.1 T2V 1.3B (8 GB)', engine: 'native', modes: { video: {} }, video_director: { family: 'wan' }, profile: '8 GB · 32 GB RAM' },
+			{ id: WAN_LIGHTNING, name: 'Wan 2.2 14B Lightning (12 GB)', engine: 'native', modes: { video: {} }, video_director: { family: 'wan' }, profile: '12 GB · 32 GB RAM' }
+		]
+	});
+	const labels = Object.fromEntries(engineOptions(tiers).filter((o) => !o.model).map((o) => [o.preset, o.label]));
+	assert.equal(labels[WAN_1_3B], 'Wan 2.1 T2V 1.3B (8 GB) · 32 GB RAM');
+	assert.equal(labels[WAN_LIGHTNING], 'Wan 2.2 14B Lightning (12 GB) · 32 GB RAM');
+	assert.equal(labels[WAN], 'Wan 2.1 / 2.2');
+	assert.deepEqual(presetProfiles(tiers.presets.find((p) => p.id === WAN_1_3B)), ['FL2VA']);
 });
 
 test('migrateEngine: legacy local / studio / cloud backends map to the first engine of that kind and get a default entry', () => {

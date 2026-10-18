@@ -13,7 +13,7 @@ Before you start:
 - An admin has to prepare at least one engine (this machine, a studio server or a cloud model) and at least one video preset assigned to you. If the Production bar shows no engine, see chapter 18.
 - Your admin also sets the draft resolution, how many generations you can have in progress at once, and may limit the GPU minutes you can use per month.
 - Generation is real: the takes are videos made by your admin's machines or cloud account, and they take time. The estimate in the Production bar tells you what to expect before you start (chapter 8). As a measure, on a 12 GB graphics card a 5-second draft took about 6 to 7.5 minutes with the presets named (12 GB) and about 26 minutes with Wan, and a final by upscale to 1080p took more than two hours.
-- The machine your admin runs decides what you can use. On a graphics card with 12 GB of memory, pick the presets whose name ends with (12 GB), **MiniMax H3 (12 GB)** and **MiniMax H3 Fast (12 GB)**, in the engine pop-up (chapter 8): the other MiniMax H3 presets are made for bigger cards (the Fast one ran out of memory on a 12 GB card in our tests). The server also needs a lot of ordinary memory, 64 GB of RAM being a good figure. Ask your admin which card they have.
+- The machine your admin runs decides what you can use. A preset whose name ends with a card size is set up for a graphics card of that size, and the engine pop-up adds the ordinary memory (RAM) the server needs (chapter 8). On an 8 GB card, pick **Wan 2.1 T2V 1.3B (8 GB) · 32 GB RAM** or **Wan 2.2 TI2V 5B (8 GB) · 32 GB RAM**: they make 480p clips of up to 5 seconds from the text alone. On a 12 GB card, pick **MiniMax H3 (12 GB) · 64 GB RAM** or **MiniMax H3 Fast (12 GB) · 64 GB RAM**: the other MiniMax H3 presets are made for bigger cards (the Fast one ran out of memory on a 12 GB card in our tests). Ask your admin which card they have.
 - Delivering a video file needs ffmpeg on your PotionUI server. If the export window says that ffmpeg is missing, ask your admin (chapters 14 and 18). The files for other software and the subtitles do not need it.
 - The assistant needs a language model that your admin has configured in PotionUI and assigned to you (chapter 10). Ask your admin to connect a local model server set up for the assistant (llama.cpp `llama-server` or Ollama) or an online provider: the model built into PotionUI ran out of memory or could not call the tools on a 12 GB graphics card in our tests. Everything else works without it.
 - The model MiniMax H3 (the **MiniMax H3** entries of the engine pop-up) comes with a license that excludes use, and anything generated with it, in the European Union, the United Kingdom, the United States and South Korea without an individual authorization from MiniMax, and that asks a commercial product to display "MiniMax H3" prominently. Ask your admin before you use it. Video Producer does not check any of this for you.
@@ -256,6 +256,7 @@ What only warns, without blocking:
 
 - a memory estimate above what the GPU has: "Will stream through host RAM, slower." The weights pass through the server's memory. The generation goes on, more slowly, and fails if the server lacks the memory for it (chapter 18);
 - the FL2VA profile with no frame linked to a shot: "“Shot 2” has no linked frame: it will be generated from text only." The generation goes on from the text, and the card of the take says "text only". When the shot has a previous shot with a finished take, an icon next to the warning in the Production bar, **Use the previous shot’s last frame**, gives it a first frame (chapter 12);
+- an engine that generates from text only, such as the (8 GB) Wan presets, for a shot with linked frames: "This engine generates from text only: the frames linked to “Shot 2” will not be used." The generation goes on from the text;
 - a shot longer than the engine allows: "“Shot 2” is longer than this engine allows: it will be cut to 15 s."
 
 Two notes appear only in the estimate tooltip: "Memory use could not be estimated." and "No time measured yet for this engine and resolution."
@@ -280,7 +281,7 @@ Two notes appear only in the estimate tooltip: "Memory use could not be estimate
 
 The **Project H3 profile** (Director IA, tab **Direction**) says what guides the generation. What an engine can do depends on its preset, and the page greys the profiles it cannot run.
 
-| Profile | Wan 2.1 / 2.2, LTX-2 / 2.3, LTX-2.5, cloud models | MiniMax H3 | MiniMax H3 Fast and VDN, MiniMax H3 (12 GB), MiniMax H3 Fast (12 GB) |
+| Profile | Wan 2.1 / 2.2 and its (8 GB) presets, LTX-2 / 2.3, LTX-2.5, cloud models | MiniMax H3 | MiniMax H3 Fast and VDN, MiniMax H3 (12 GB), MiniMax H3 Fast (12 GB) |
 |---|---|---|---|
 | FL2VA | Yes | Yes | Yes |
 | Ref2VA | Greyed | Yes | Greyed |

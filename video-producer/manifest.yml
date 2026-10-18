@@ -13,6 +13,9 @@ api:
 presets:
   - path: "presets"
 
+recipes:
+  - path: "recipes"
+
 hooks:
   backend:
     - hook: "plugin.lifecycle.boot"

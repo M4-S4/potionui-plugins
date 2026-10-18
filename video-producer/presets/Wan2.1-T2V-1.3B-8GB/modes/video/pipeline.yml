@@ -1,0 +1,296 @@
+pipeline:
+  - name: "model_loader/wan22"
+    id: "t2v_loader"
+    enabled: "{{ form.video_director.needs_t2v_set }}"
+    configuration:
+      high_noise_model:
+        file_path: "{{ form.t2v_high_noise_model }}"
+        name: "{{ form.t2v_high_noise_model }}"
+      low_noise_model:
+        file_path: "{{ form.t2v_low_noise_model | default('') }}"
+        name: "{{ form.t2v_low_noise_model | default('') }}"
+      text_encoder:
+        file_path: "{{ form.text_encoder }}"
+        name: "{{ form.text_encoder }}"
+      vae:
+        file_path: "{{ form.vae }}"
+        name: "{{ form.vae }}"
+      loras_high:
+        "@loop":
+          items: "{{ form.t2v_loras_high }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+      loras_low:
+        "@loop":
+          items: "{{ form.t2v_loras_low }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+
+  - name: "model_loader/wan22"
+    id: "i2v_loader"
+    enabled: "{{ form.video_director.needs_i2v_set }}"
+    configuration:
+      high_noise_model:
+        file_path: "{{ form.i2v_high_noise_model }}"
+        name: "{{ form.i2v_high_noise_model }}"
+      low_noise_model:
+        file_path: "{{ form.i2v_low_noise_model | default('') }}"
+        name: "{{ form.i2v_low_noise_model | default('') }}"
+      text_encoder:
+        file_path: "{{ form.text_encoder }}"
+        name: "{{ form.text_encoder }}"
+      vae:
+        file_path: "{{ form.vae }}"
+        name: "{{ form.vae }}"
+      loras_high:
+        "@loop":
+          items: "{{ form.i2v_loras_high }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+      loras_low:
+        "@loop":
+          items: "{{ form.i2v_loras_low }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+
+  - name: "prompt_encoder"
+    input:
+      - ["text_encoder", "{% if form.video_director.needs_t2v_set %}t2v_loader{% else %}i2v_loader{% endif %}", "text_encoder"]
+    enabled: true
+    configuration:
+      p_prompt:
+        input: "{{ generation.prompts.first.positive }}"
+        output: "{{ generation.prompts.first.positive }}"
+      n_prompt:
+        input: "{{ generation.prompts.first.negative }}"
+        output: "{{ generation.prompts.first.negative }}"
+      pairs:
+        "@loop":
+          items: "{{ form.video_director.segments }}"
+          template:
+            positive: "{{ item.prompt }}"
+            negative: "{{ item.negative_prompt }}"
+      quantity: "{{ form.video_director.segments | length }}"
+      guidance_scale: "{{ form.cfg | default(generation.profile.guidance) }}"
+      nag_scale: "{{ form.nag_scale }}"
+      negative_applied: "{{ generation.negative_applied }}"
+
+  - name: "seed_generator"
+    enabled: true
+    configuration:
+      seed: "{{ form.video_director.settings.seed }}"
+      quantity: 1
+
+  - name: "from_iotype"
+    id: "from_iotype"
+    enabled: true
+    input:
+      - ["seed", "seed_generator", "seed"]
+    configuration:
+      from: "seed"
+
+  - name: "param_emitter"
+    id: "param_emitter"
+    enabled: true
+    input:
+      - ["seed", "from_iotype", "seed"]
+    configuration:
+      quantity: "{{ form.video_director.segments | length }}"
+      parameters:
+        - ["model", "{{ form.t2v_high_noise_model | default('') }}"]
+        - ["model", "{{ form.t2v_low_noise_model | default('') }}"]
+        - ["model", "{{ form.i2v_high_noise_model | default('') }}"]
+        - ["model", "{{ form.i2v_low_noise_model | default('') }}"]
+        - ["model", "{{ form.text_encoder }}"]
+        - ["model", "{{ form.vae }}"]
+        - "@loop":
+            items: "{{ (form.t2v_loras_high) + (form.t2v_loras_low) + (form.i2v_loras_high) + (form.i2v_loras_low) | active_loras }}"
+            template: ["model", "{{ item.model }}"]
+        - ["positive_prompt", "{{ form.video_director.segments | map(attribute='prompt') | list }}"]
+        - ["negative_prompt", "{{ form.video_director.segments | map(attribute='negative_prompt') | list }}"]
+        - ["cfg", "{{ form.cfg | default(generation.profile.guidance) }}"]
+        - ["steps", "{{ form.steps | default(generation.profile.steps) }}"]
+        - ["sampler", "{{ form.sampler | default(generation.profile.sampler) }}"]
+        - ["schedule", "{{ form.schedule }}"]
+        - ["resolution", "{{ form.resolution }}"]
+        - ["fps", "{{ form.video_director.settings.fps }}"]
+        - ["director_mode", "{{ form.video_director.mode | default('') }}"]
+
+  - name: "media_loader"
+    id: "media_first"
+    enabled: "{{ (form.video_director.media | selectattr('role', 'equalto', 'first') | list | length) > 0 }}"
+    configuration:
+      media:
+        "@loop":
+          items: "{{ form.video_director.media | selectattr('role', 'equalto', 'first') | list }}"
+          template:
+            type: "image"
+            path: "{{ item.media.path }}"
+
+  - name: "media_loader"
+    id: "media_last"
+    enabled: "{{ (form.video_director.media | selectattr('role', 'equalto', 'last') | list | length) > 0 }}"
+    configuration:
+      media:
+        "@loop":
+          items: "{{ form.video_director.media | selectattr('role', 'equalto', 'last') | list }}"
+          template:
+            type: "image"
+            path: "{{ item.media.path }}"
+
+  - name: "generator/txt2vid_wan22"
+    input:
+      - ["model", "t2v_loader", "model"]
+      - ["conditioning", "prompt_encoder", "conditioning"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: "{{ form.video_director.mode == 't2v' }}"
+    configuration:
+      steps: "{{ form.steps | default(generation.profile.steps) }}"
+      cfg: "{{ form.cfg | default(generation.profile.guidance) }}"
+      sampler: "{{ form.sampler | default(generation.profile.sampler) }}"
+      expert_boundary: "{% set b = form.expert_boundary_preset %}{% if b is not none and b != '' %}{{ b }}{% endif %}"
+      expert_switch_step: "{% set s = form.expert_switch_step | default('') %}{% if s is not none and s != '' %}{{ s }}{% endif %}"
+      nag_scale: "{{ form.nag_scale }}"
+      nag_tau: "{{ form.nag_tau }}"
+      nag_alpha: "{{ form.nag_alpha }}"
+      cfg_zero_star: "{{ form.cfg_zero_star }}"
+      zero_init_steps: "{{ form.zero_init_steps }}"
+      apg_eta: "{{ form.apg_eta }}"
+      apg_norm_threshold: "{{ form.apg_norm_threshold }}"
+      apg_momentum: "{{ form.apg_momentum }}"
+      slg_scale: "{{ form.slg_scale }}"
+      slg_layers: "{{ form.slg_layers }}"
+      slg_sigma_start: "{{ form.slg_sigma_start }}"
+      slg_sigma_end: "{{ form.slg_sigma_end }}"
+      schedule: "{{ form.schedule }}"
+      schedule_options:
+        threshold_noise: "{{ form.linear_quadratic_threshold_noise }}"
+        linear_steps: "{{ none if (form.linear_quadratic_linear_steps_auto) else (form.linear_quadratic_linear_steps | default(none)) }}"
+      manual_sigmas: "{{ form.manual_sigmas }}"
+      detail_strength: "{{ form.detail_strength }}"
+      detail_start: "{{ form.detail_start }}"
+      detail_end: "{{ form.detail_end }}"
+      riflex: "{{ form.riflex }}"
+      riflex_trained_frames: "{% set r = form.riflex_trained_frames | default('') %}{% if r is not none and r != '' %}{{ r }}{% endif %}"
+      freeinit_iterations: "{{ form.freeinit_iterations }}"
+      freeinit_cutoff: "{{ form.freeinit_cutoff }}"
+      freeinit_order: "{{ form.freeinit_order }}"
+      step_cache_threshold: "{{ form.step_cache_threshold }}"
+      step_cache_warmup_steps: "{{ form.step_cache_warmup_steps }}"
+      step_cache_max_skips: "{{ form.step_cache_max_skips }}"
+      resolution: "{{ form.resolution }}"
+      frames: "{{ ((form.video_director.settings.duration or 0) * form.video_director.settings.fps) | round | int }}"
+      fps: "{{ form.video_director.settings.fps }}"
+      quantity: "{{ form.video_director.segments | length }}"
+
+  - name: "generator/img2vid_wan22"
+    input:
+      - ["model", "i2v_loader", "model"]
+      - ["conditioning", "prompt_encoder", "conditioning"]
+      - ["image", "media_first", "image"]
+      - ["end_image", "media_last", "image"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: "{{ form.video_director.mode in ['i2v', 'flf'] }}"
+    configuration:
+      steps: "{{ form.steps | default(generation.profile.steps) }}"
+      cfg: "{{ form.cfg | default(generation.profile.guidance) }}"
+      sampler: "{{ form.sampler | default(generation.profile.sampler) }}"
+      expert_boundary: "{% set b = form.expert_boundary_preset %}{% if b is not none and b != '' %}{{ b }}{% endif %}"
+      expert_switch_step: "{% set s = form.expert_switch_step | default('') %}{% if s is not none and s != '' %}{{ s }}{% endif %}"
+      nag_scale: "{{ form.nag_scale }}"
+      nag_tau: "{{ form.nag_tau }}"
+      nag_alpha: "{{ form.nag_alpha }}"
+      cfg_zero_star: "{{ form.cfg_zero_star }}"
+      zero_init_steps: "{{ form.zero_init_steps }}"
+      apg_eta: "{{ form.apg_eta }}"
+      apg_norm_threshold: "{{ form.apg_norm_threshold }}"
+      apg_momentum: "{{ form.apg_momentum }}"
+      slg_scale: "{{ form.slg_scale }}"
+      slg_layers: "{{ form.slg_layers }}"
+      slg_sigma_start: "{{ form.slg_sigma_start }}"
+      slg_sigma_end: "{{ form.slg_sigma_end }}"
+      schedule: "{{ form.schedule }}"
+      schedule_options:
+        threshold_noise: "{{ form.linear_quadratic_threshold_noise }}"
+        linear_steps: "{{ none if (form.linear_quadratic_linear_steps_auto) else (form.linear_quadratic_linear_steps | default(none)) }}"
+      manual_sigmas: "{{ form.manual_sigmas }}"
+      detail_strength: "{{ form.detail_strength }}"
+      detail_start: "{{ form.detail_start }}"
+      detail_end: "{{ form.detail_end }}"
+      riflex: "{{ form.riflex }}"
+      riflex_trained_frames: "{% set r = form.riflex_trained_frames | default('') %}{% if r is not none and r != '' %}{{ r }}{% endif %}"
+      step_cache_threshold: "{{ form.step_cache_threshold }}"
+      step_cache_warmup_steps: "{{ form.step_cache_warmup_steps }}"
+      step_cache_max_skips: "{{ form.step_cache_max_skips }}"
+      resolution: "{{ form.resolution }}"
+      frames: "{{ ((form.video_director.settings.duration or 0) * form.video_director.settings.fps) | round | int }}"
+      fps: "{{ form.video_director.settings.fps }}"
+      quantity: "{{ form.video_director.segments | length }}"
+
+  - name: "generator/chain_video_wan22"
+    input:
+      - ["model", "i2v_loader", "model"]
+      - ["model_t2v", "t2v_loader", "model"]
+      - ["conditioning", "prompt_encoder", "conditioning"]
+      - ["image", "media_first", "image"]
+      - ["end_image", "media_last", "image"]
+    enabled: "{{ form.video_director.mode == 'director' }}"
+    configuration:
+      document: "{{ form.video_director }}"
+      motion_latent_count: "{{ form.svi_motion_latent_count }}"
+      anchor_latent_strength: "{{ form.svi_anchor_latent_strength }}"
+      steps: "{{ form.steps | default(generation.profile.steps) }}"
+      cfg: "{{ form.cfg | default(generation.profile.guidance) }}"
+      sampler: "{{ form.sampler | default(generation.profile.sampler) }}"
+      nag_scale: "{{ form.nag_scale }}"
+      nag_tau: "{{ form.nag_tau }}"
+      nag_alpha: "{{ form.nag_alpha }}"
+      cfg_zero_star: "{{ form.cfg_zero_star }}"
+      zero_init_steps: "{{ form.zero_init_steps }}"
+      apg_eta: "{{ form.apg_eta }}"
+      apg_norm_threshold: "{{ form.apg_norm_threshold }}"
+      apg_momentum: "{{ form.apg_momentum }}"
+      slg_scale: "{{ form.slg_scale }}"
+      slg_layers: "{{ form.slg_layers }}"
+      slg_sigma_start: "{{ form.slg_sigma_start }}"
+      slg_sigma_end: "{{ form.slg_sigma_end }}"
+      schedule: "{{ form.schedule }}"
+      schedule_options:
+        threshold_noise: "{{ form.linear_quadratic_threshold_noise }}"
+        linear_steps: "{{ none if (form.linear_quadratic_linear_steps_auto) else (form.linear_quadratic_linear_steps | default(none)) }}"
+      manual_sigmas: "{{ form.manual_sigmas }}"
+      detail_strength: "{{ form.detail_strength }}"
+      detail_start: "{{ form.detail_start }}"
+      detail_end: "{{ form.detail_end }}"
+      riflex: "{{ form.riflex }}"
+      riflex_trained_frames: "{% set r = form.riflex_trained_frames | default('') %}{% if r is not none and r != '' %}{{ r }}{% endif %}"
+      step_cache_threshold: "{{ form.step_cache_threshold }}"
+      step_cache_warmup_steps: "{{ form.step_cache_warmup_steps }}"
+      step_cache_max_skips: "{{ form.step_cache_max_skips }}"
+      resolution: "{{ form.resolution }}"
+      fps: "{{ form.video_director.settings.fps }}"
+      expert_boundary: "{% set b = form.expert_boundary_preset %}{% if b is not none and b != '' %}{{ b }}{% endif %}"
+      expert_switch_step: "{% set s = form.expert_switch_step | default('') %}{% if s is not none and s != '' %}{{ s }}{% endif %}"
+      dtype: "bfloat16"
+      t2v_high_noise_model:
+        file_path: "{{ form.t2v_high_noise_model | default('') }}"
+        name: "{{ form.t2v_high_noise_model | default('') }}"
+      t2v_low_noise_model:
+        file_path: "{{ form.t2v_low_noise_model | default('') }}"
+        name: "{{ form.t2v_low_noise_model | default('') }}"
+      i2v_high_noise_model:
+        file_path: "{{ form.i2v_high_noise_model | default('') }}"
+        name: "{{ form.i2v_high_noise_model | default('') }}"
+      i2v_low_noise_model:
+        file_path: "{{ form.i2v_low_noise_model | default('') }}"
+        name: "{{ form.i2v_low_noise_model | default('') }}"
+
+  - name: "gallery"
+    input:
+      - ["video", "{% if form.video_director.mode == 't2v' %}generator/txt2vid_wan22{% elif form.video_director.mode in ['i2v', 'flf'] %}generator/img2vid_wan22{% else %}generator/chain_video_wan22{% endif %}", "video"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: true
