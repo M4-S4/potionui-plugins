@@ -90,7 +90,14 @@ def _prepare(doc, files, folder, label, audio=None, sounds=None, fmt="web", reso
     options = {"format": fmt, "resolution": resolution, "stills": list(stills), **video.inspect(files)}
     if audio is not None:
         options["audio"] = audio
-    paths = {"ffmpeg": shutil.which("ffmpeg"), "output": str(folder / f"{label}.mp4"), "graph": str(folder / f"{label}.graph"), "audio": sounds or {}}
+    ffmpeg = shutil.which("ffmpeg")
+    paths = {
+        "ffmpeg": ffmpeg,
+        "graph_option": video.graph_option(ffmpeg),
+        "output": str(folder / f"{label}.mp4"),
+        "graph": str(folder / f"{label}.graph"),
+        "audio": sounds or {},
+    }
     sources = [entry["path"] for entry in files.values() if entry is not None] + list((sounds or {}).values())
     paths["cwd"] = video.common_folder(sources)
     Path(paths["graph"]).write_text(filter_graph(doc, files, options, paths), encoding="utf-8")

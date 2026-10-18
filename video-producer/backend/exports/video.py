@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+import re
+import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -48,6 +50,16 @@ GRAPH = "graph.txt"
 DISCARD_TRIES = 5
 
 DISCARD_PAUSE = 0.2
+
+GRAPH_OPTION = "-/filter_complex"
+
+LEGACY_GRAPH_OPTION = "-filter_complex_script"
+
+GRAPH_OPTION_SINCE = 7
+
+VERSION_TIMEOUT = 15
+
+RELEASE = re.compile(r"\bversion\s+n?(\d+)")
 
 ENCODER = (
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_fmt", "yuv420p",
@@ -333,20 +345,47 @@ def filter_graph(
     return ";".join(_assembly(doc, files, options, paths.get("audio") or {})[1])
 
 
+def graph_option_of(banner: str) -> str:
+    """The option that reads a filter graph from a file, by the first line of what ffmpeg -version prints: -filter_complex_script before FFmpeg 7, which FFmpeg 9 removed, else -/filter_complex; a version that is not a release number, as a git build's, is a recent one."""
+    release = RELEASE.search(str(banner or "").partition("\n")[0])
+    if release is not None and int(release.group(1)) < GRAPH_OPTION_SINCE:
+        return LEGACY_GRAPH_OPTION
+    return GRAPH_OPTION
+
+
+_graph_options: Dict[str, str] = {}
+
+
+def graph_option(ffmpeg: str) -> str:
+    """The option that reads a filter graph from a file for this ffmpeg executable, asked of it once; the recent option when it does not answer."""
+    known = _graph_options.get(ffmpeg)
+    if known is not None:
+        return known
+    try:
+        run = subprocess.run([ffmpeg, "-version"], stdin=subprocess.DEVNULL, capture_output=True, timeout=VERSION_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return GRAPH_OPTION
+    if run.returncode != 0:
+        return GRAPH_OPTION
+    option = graph_option_of(run.stdout.decode("utf-8", "replace"))
+    _graph_options[ffmpeg] = option
+    return option
+
+
 def build_command(
     doc: Mapping[str, Any],
     files: Mapping[str, Optional[Mapping[str, Any]]],
     options: Mapping[str, Any],
     paths: Mapping[str, Any],
 ) -> List[str]:
-    """The one ffmpeg run that writes the mezzanine file, its filter graph read from the file at paths["graph"]; with paths["cwd"], run from that folder, the input files are named relative to it."""
+    """The one ffmpeg run that writes the mezzanine file, its filter graph read from the file at paths["graph"] by the option paths["graph_option"] (-filter_complex_script when absent); with paths["cwd"], run from that folder, the input files are named relative to it."""
     cwd = paths.get("cwd")
     inputs, _ = _assembly(doc, files, options, paths.get("audio") or {}, cwd)
     _, total = timeline(doc)
     return [
         paths["ffmpeg"], "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
         *inputs,
-        "-filter_complex_script", str(paths["graph"]),
+        paths.get("graph_option") or LEGACY_GRAPH_OPTION, str(paths["graph"]),
         "-map", "[vout]", "-map", "[aout]",
         "-t", num(total), "-r", num(fps_of(doc)),
         *ENCODER,
@@ -509,7 +548,13 @@ async def render(
             "stills": [clip_id for clip_id, entry in shots.items() if entry is not None and entry["still"]],
             **await asyncio.to_thread(inspect, shots),
         }
-        paths = {"ffmpeg": ffmpeg, "output": str(mezzanine), "graph": str(folder / GRAPH), "audio": sounds}
+        paths = {
+            "ffmpeg": ffmpeg,
+            "graph_option": await asyncio.to_thread(graph_option, ffmpeg),
+            "output": str(mezzanine),
+            "graph": str(folder / GRAPH),
+            "audio": sounds,
+        }
         sources = [entry["path"] for entry in shots.values() if entry is not None] + list(sounds.values())
         paths["cwd"] = common_folder(sources)
         Path(paths["graph"]).write_text(filter_graph(doc, shots, options, paths), encoding="utf-8")

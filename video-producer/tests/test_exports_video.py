@@ -431,6 +431,148 @@ def test_a_command_without_a_working_folder_names_every_file_by_its_path(make_do
     assert _inputs(command) == ["/media/1.mp4"] and command[-1] == PATHS["output"]
 
 
+@pytest.mark.parametrize("option", ["-/filter_complex", "-filter_complex_script"])
+def test_the_graph_file_is_read_by_the_option_the_paths_name(make_doc, option):
+    doc = _doc(make_doc, [{"id": "c1", "start": 0, "dur": 1}])
+
+    command = build_command(doc, {"c1": None}, _options(), {**PATHS, "graph_option": option})
+
+    assert command.count(option) == 1 and command[command.index(option) + 1] == PATHS["graph"]
+    assert {"-/filter_complex", "-filter_complex_script", "-filter_complex"} & set(command) == {option}
+
+
+@pytest.mark.parametrize("option", [None, ""])
+def test_paths_without_a_graph_option_keep_the_option_every_ffmpeg_before_9_knows(make_doc, option):
+    doc = _doc(make_doc, [{"id": "c1", "start": 0, "dur": 1}])
+
+    command = build_command(doc, {"c1": None}, _options(), {**PATHS, "graph_option": option})
+
+    assert command[command.index("-filter_complex_script") + 1] == PATHS["graph"] and "-/filter_complex" not in command
+
+
+BANNERS = [
+    ("ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers", "-filter_complex_script"),
+    ("ffmpeg version 5.1.6-0+deb12u1 Copyright (c) 2000-2024 the FFmpeg developers", "-filter_complex_script"),
+    ("ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers", "-filter_complex_script"),
+    ("ffmpeg version 6.1.1-essentials_build-www.gyan.dev Copyright (c) 2000-2023 the FFmpeg developers", "-filter_complex_script"),
+    ("ffmpeg version n6.1.2 Copyright (c) 2000-2024 the FFmpeg developers", "-filter_complex_script"),
+    ("ffmpeg version 6.1.1 Copyright (c) 2000-2023 the FFmpeg developers\r\nbuilt with gcc 13 (Ubuntu 13.2.0-23ubuntu3)", "-filter_complex_script"),
+    ("ffmpeg version 7.0 Copyright (c) 2000-2024 the FFmpeg developers", "-/filter_complex"),
+    ("ffmpeg version 7.1.1-static https://johnvansickle.com/ffmpeg/  Copyright (c) 2000-2025 the FFmpeg developers", "-/filter_complex"),
+    ("ffmpeg version 8.0.1-essentials_build-www.gyan.dev Copyright (c) 2000-2025 the FFmpeg developers", "-/filter_complex"),
+    ("ffmpeg version 9.0.2-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers", "-/filter_complex"),
+    ("ffmpeg version 10.0 Copyright (c) 2000-2027 the FFmpeg developers", "-/filter_complex"),
+    ("ffmpeg version N-118456-g8b9c1d2e5f-20250101 Copyright (c) 2000-2025 the FFmpeg developers", "-/filter_complex"),
+    ("ffmpeg version git-2025-01-05-8b9c1d2 Copyright (c) 2000-2025 the FFmpeg developers", "-/filter_complex"),
+    ("ffmpeg version 2025-10-27-git-abcdef1234-full_build-www.gyan.dev Copyright (c) 2000-2025 the FFmpeg developers", "-/filter_complex"),
+    ("ffmpeg version N-118456-g8b9c1d2e5f\nbuilt with gcc 4.9 version 4", "-/filter_complex"),
+    ("", "-/filter_complex"),
+    ("not ffmpeg at all", "-/filter_complex"),
+]
+
+
+@pytest.mark.parametrize("banner, option", BANNERS)
+def test_the_option_that_reads_the_graph_file_follows_the_version_ffmpeg_prints(banner, option):
+    assert video.graph_option_of(banner) == option
+
+
+def test_a_missing_banner_takes_the_option_of_a_recent_ffmpeg():
+    assert video.graph_option_of(None) == "-/filter_complex"
+
+
+def _answering(monkeypatch, stdout=b"", code=0, error=None):
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        if error is not None:
+            raise error
+        return SimpleNamespace(returncode=code, stdout=stdout)
+
+    monkeypatch.setattr(video, "_graph_options", {})
+    monkeypatch.setattr(video.subprocess, "run", run)
+    return calls
+
+
+def test_ffmpeg_is_asked_for_its_version_once_per_executable(monkeypatch):
+    calls = _answering(monkeypatch, b"ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers\n")
+
+    first = [video.graph_option("/usr/bin/ffmpeg") for _ in range(3)]
+    other = video.graph_option("/opt/ffmpeg/bin/ffmpeg")
+
+    assert first == ["-filter_complex_script"] * 3 and other == "-filter_complex_script"
+    assert [command for command, _ in calls] == [["/usr/bin/ffmpeg", "-version"], ["/opt/ffmpeg/bin/ffmpeg", "-version"]]
+    assert all(kwargs["stdin"] == subprocess.DEVNULL and kwargs["timeout"] == video.VERSION_TIMEOUT for _, kwargs in calls)
+
+
+def test_the_version_of_a_recent_ffmpeg_is_read_from_bytes_that_are_not_all_utf8(monkeypatch):
+    _answering(monkeypatch, b"ffmpeg version 9.0.2-full_build Copyright \xa9 2000-2026 the FFmpeg developers\r\n")
+
+    assert video.graph_option("ffmpeg") == "-/filter_complex"
+
+
+@pytest.mark.parametrize(
+    "error, code",
+    [
+        (FileNotFoundError(2, "No such file or directory"), 0),
+        (PermissionError(13, "Permission denied"), 0),
+        (subprocess.TimeoutExpired("ffmpeg", 15), 0),
+        (None, 1),
+    ],
+    ids=["missing", "denied", "hangs", "fails"],
+)
+def test_an_ffmpeg_that_does_not_answer_takes_the_recent_option_and_is_asked_again_next_time(monkeypatch, error, code):
+    calls = _answering(monkeypatch, b"ffmpeg version 6.1.1 Copyright", code, error)
+
+    assert [video.graph_option("ffmpeg"), video.graph_option("ffmpeg")] == ["-/filter_complex"] * 2
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    "banner, option",
+    [(b"ffmpeg version 6.1.1-3ubuntu5 Copyright", "-filter_complex_script"), (b"ffmpeg version 9.0.2 Copyright", "-/filter_complex")],
+    ids=["ffmpeg-6", "ffmpeg-9"],
+)
+async def test_the_assembly_reads_its_graph_by_the_option_of_the_ffmpeg_that_runs_it(
+    make_doc, object_storage, monkeypatch, export_storage, make_user, banner, option
+):
+    object_storage.blobs[STORED_TAKE["file_path"]] = b"\0" * 20000
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: str(export_storage / "ffmpeg"))
+    monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: None)
+    _answering(monkeypatch, banner)
+    commands = []
+
+    async def assemble(command, total, on_progress=None, on_process=None, cwd=None):
+        commands.append(command)
+        raise ExportError("ffmpeg_failed", "stopped before ffmpeg ran")
+
+    monkeypatch.setattr(video, "assemble", assemble)
+    user = make_user()
+
+    with pytest.raises(ExportError):
+        await video.render(JOB, _stored_project(make_doc), user, user, lambda progress, step: True)
+
+    (command,) = commands
+    assert command.count(option) == 1 and command[command.index(option) + 1] == str(_folder_of(export_storage) / video.GRAPH)
+    assert {"-/filter_complex", "-filter_complex_script"} & set(command) == {option}
+
+
+@pytest.mark.requires_ffmpeg
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+def test_the_option_found_for_the_ffmpeg_on_the_path_reads_a_graph_file(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    graph = tmp_path / "graph.txt"
+    graph.write_text("[0:v]null[vout]", encoding="utf-8")
+    command = [
+        ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64:d=0.2",
+        video.graph_option(ffmpeg), str(graph), "-map", "[vout]", "-f", "null", "-",
+    ]
+
+    run = subprocess.run(command, capture_output=True, text=True, timeout=60)
+
+    assert run.returncode == 0, run.stderr
+
+
 def _sources(graph):
     return [part.split(":")[0].lstrip("[") for part in graph if ":v]trim=" in part]
 
@@ -531,7 +673,13 @@ async def test_two_one_second_clips_assemble_into_a_two_second_720p_mezzanine_wi
     output = tmp_path / "mezzanine.mp4"
     files = {"c1": {"name": first.name, "path": str(first)}, "c2": {"name": second.name, "path": str(second)}}
     options = {"format": "web", "resolution": "720p", **video.inspect(files)}
-    paths = {"ffmpeg": shutil.which("ffmpeg"), "output": str(output), "graph": str(tmp_path / "graph.txt"), "audio": {"voice": str(voice)}}
+    paths = {
+        "ffmpeg": shutil.which("ffmpeg"),
+        "graph_option": video.graph_option(shutil.which("ffmpeg")),
+        "output": str(output),
+        "graph": str(tmp_path / "graph.txt"),
+        "audio": {"voice": str(voice)},
+    }
     Path(paths["graph"]).write_text(filter_graph(doc, files, options, paths), encoding="utf-8")
     command = build_command(doc, files, options, paths)
     shares = []
@@ -620,7 +768,13 @@ async def test_cuts_of_one_file_show_the_right_pictures_whether_they_share_an_in
     work = tmp_path / "work"
     work.mkdir()
     options = {"format": "web", "resolution": "720p", **video.inspect(files)}
-    paths = {"ffmpeg": shutil.which("ffmpeg"), "output": str(work / "out.mp4"), "graph": str(work / "graph.txt"), "audio": {}}
+    paths = {
+        "ffmpeg": shutil.which("ffmpeg"),
+        "graph_option": video.graph_option(shutil.which("ffmpeg")),
+        "output": str(work / "out.mp4"),
+        "graph": str(work / "graph.txt"),
+        "audio": {},
+    }
     paths["cwd"] = video.common_folder([source])
     Path(paths["graph"]).write_text(filter_graph(doc, files, options, paths), encoding="utf-8")
     command = build_command(doc, files, options, paths)
