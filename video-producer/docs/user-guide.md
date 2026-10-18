@@ -15,7 +15,7 @@ Before you start:
 - Generation is real: the takes are videos made by your admin's machines or cloud account, and they take time. The estimate in the Production bar tells you what to expect before you start (chapter 8). As a measure, on a 12 GB graphics card a 5-second draft took about 6 to 7.5 minutes with the presets named (12 GB) and about 26 minutes with Wan, and a final by upscale to 1080p took more than two hours.
 - The machine your admin runs decides what you can use. On a graphics card with 12 GB of memory, pick the presets whose name ends with (12 GB), **MiniMax H3 (12 GB)** and **MiniMax H3 Fast (12 GB)**, in the engine pop-up (chapter 8): the other MiniMax H3 presets are made for bigger cards (the Fast one ran out of memory on a 12 GB card in our tests). The server also needs a lot of ordinary memory, 64 GB of RAM being a good figure. Ask your admin which card they have.
 - Delivering a video file needs ffmpeg on your PotionUI server. If the export window says that ffmpeg is missing, ask your admin (chapters 14 and 18). The files for other software and the subtitles do not need it.
-- The assistant needs a language model that your admin has configured in PotionUI and assigned to you (chapter 10). Ask your admin to connect Ollama or an online provider: the model built into PotionUI ran out of memory or could not call the tools on a 12 GB graphics card in our tests. Everything else works without it.
+- The assistant needs a language model that your admin has configured in PotionUI and assigned to you (chapter 10). Ask your admin to connect a local model server set up for the assistant (llama.cpp `llama-server` or Ollama) or an online provider: the model built into PotionUI ran out of memory or could not call the tools on a 12 GB graphics card in our tests. Everything else works without it.
 - The model MiniMax H3 (the **MiniMax H3** entries of the engine pop-up) comes with a license that excludes use, and anything generated with it, in the European Union, the United Kingdom, the United States and South Korea without an individual authorization from MiniMax, and that asks a commercial product to display "MiniMax H3" prominently. Ask your admin before you use it. Video Producer does not check any of this for you.
 
 The interface is in English by default and also exists in French (chapter 15).
@@ -328,7 +328,7 @@ The assistant is the PotionUI chat, working in its own mode for this page, **Vid
 
 ### Before you start
 
-- Your admin has to configure a language model in PotionUI (Admin › LLM / Assistant) and assign it to you. It must be able to call tools, and Ollama or an online provider such as OpenAI is the safer choice: the model built into PotionUI ran out of memory, or was too small to call the tools, on a 12 GB graphics card in our tests. Without a model the chat says that it is unavailable (see "If it does not work" below).
+- Your admin has to configure a language model in PotionUI (Admin › LLM / Assistant) and assign it to you. It must be able to call tools, and a local model server set up for the assistant (llama.cpp `llama-server` or Ollama, with the settings of the administration guide) or an online provider such as OpenAI is the safer choice: the model built into PotionUI ran out of memory, or was too small to call the tools, on a 12 GB graphics card in our tests. Without a model the chat says that it is unavailable (see "If it does not work" below).
 - The assistant reads your project as the page shows it, but it writes into the project as saved on the server. Wait for "Saved at" in the project bar before you approve a change.
 - Keep the Video Producer page open while you chat: the assistant only knows your project while the page is open on it.
 
@@ -417,7 +417,9 @@ The chat itself is a PotionUI window: its buttons (**Tools**, **New chat**, **Ap
 - **"The project could not be reloaded. Reopen it to see the assistant’s changes."** The assistant's change is saved, but the page could not reload it: open the project again (**File › Open…**).
 - **The suggestion did not appear in the box.** You had already typed a draft, or your PotionUI cannot fill the box (it then opens it empty). Type or paste the request.
 - **A prompt came out in the wrong language.** The assistant follows the **Prompt language** of the project, in **Project properties…** (chapter 15). Change it, then ask again.
-- **The assistant ends with an out-of-memory error, answers in text only or never shows a card.** If your admin connected the model built into PotionUI on a 12 GB graphics card, it can run out of memory or be too small to call the tools. Ask your admin to connect Ollama or an online provider (chapter 1).
+- **The assistant ends with an out-of-memory error, answers in text only or never shows a card.** If your admin connected the model built into PotionUI on a 12 GB graphics card, it can run out of memory or be too small to call the tools. Ask your admin to connect llama.cpp `llama-server`, Ollama or an online provider (chapter 1).
+- **The chat shows "Ollama returned status 400: request (… tokens) exceeds the available context size".** The model is connected through Ollama with its default context, which is too small for the assistant. Ask your admin to set the **Context Size** of the Ollama configuration to 16384.
+- **The assistant waits about ten seconds before every answer, or sometimes ends without a card.** The model thinks before each call, or is loaded again at every turn. Ask your admin to turn its thinking off (**Reasoning Effort** None for an OpenAI configuration, **Thinking Mode** Automatic or Disabled for Ollama) and, for Ollama, to set **Keep Alive**.
 
 ## 11. Prompts: library and composer
 

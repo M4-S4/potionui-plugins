@@ -14,7 +14,7 @@ This page is the administration guide. Every user can read the user guide, in En
 - ffmpeg and ffprobe on the PotionUI server, to deliver a video file and to extract a frame of a take at a given time. See ffmpeg below.
 - For a local engine, a GPU that meets PotionUI's own Hardware Requirements page: a Turing or newer NVIDIA card, driver 580 or newer, 8 GB of VRAM and 16 GB of system RAM as the supported minimum, 16 to 24 GB of VRAM and 32 GB of RAM recommended. Video families need more than the floor; that page has a verdict per family. What Video Producer measured on a 12 GB card, and the system RAM it needs, is under Hardware.
 - For a cloud engine, an account and an API key with the provider (OpenRouter or Google AI Studio).
-- For the assistant, a language model configured in PotionUI (Admin → LLM / Assistant) and assigned to the users, able to call tools. Ollama or an online provider such as OpenAI is recommended; the Native client is not recommended on a 12 GB card. See The assistant mode › Which language model.
+- For the assistant, a language model configured in PotionUI (Admin → LLM / Assistant) and assigned to the users, able to call tools. A local llama.cpp `llama-server` (added as an OpenAI configuration) is recommended when the model shares the video card; Ollama works once its context size, keep-alive and thinking mode are set; an online provider such as OpenAI is possible too. The Native client is not recommended on a 12 GB card. See The assistant mode › Which language model.
 - The `jsonschema` Python package, which checks the project documents. The plugin relies on it; the PotionUI image already contains it, and its version is pinned in `constraints.txt`. There is nothing to install.
 
 ## Hardware
@@ -36,7 +36,7 @@ What to plan for:
 - **64 GB of system RAM.** The 12 GB presets stream their text encoder from system RAM (the `text_encoder_placement` option, see Memory profiles), and the part of the DiT that does not fit on the card stays there too. Plan on 64 GB. The container peaks seen were 25.1 to 25.9 GB with the 12 GB presets and 41.75 GiB with Wan 2.1 / 2.2. The `requires` of the 12 GB presets declares VRAM only.
 - **Time.** On this card a 5-second draft takes about 6 to 7.5 minutes with the 12 GB presets and about 26 minutes with Wan, and a final by SeedVR2 upscale to 1080p takes more than two hours. Tell your users, and set **Max generations in flight per user** and the monthly GPU minutes with this in mind.
 - **After an out-of-memory error.** The native engine can keep an unusable CUDA context after a CUDA out of memory error. If every take then fails within seconds, restart PotionUI.
-- **The assistant.** Do not give it the video GPU: see The assistant mode › Which language model.
+- **The assistant.** When its model shares the video GPU, unload it before a generation: see The assistant mode › Which language model.
 - **Disk.** The Wan starter recipe downloads about 35.6 GB; the SeedVR2 files are listed under SeedVR2 for finals.
 
 ## Install and activate
@@ -656,16 +656,61 @@ The assistant is the PotionUI chat, working in a chat mode that this plugin cont
 
 ### Requirements
 
-- **A language model, configured and assigned.** In Admin → LLM / Assistant, click **Add configuration**, pick a type (Ollama or OpenAI are recommended, see Which language model), then assign the configuration to the users or groups who use Video Producer. The plugin calls no model itself: the chat uses the model that PotionUI gives the user, like for every other chat mode. Without an assigned configuration the chat is empty: an admin reads "No enabled LLM configurations", a user "Chat is currently unavailable".
+- **A language model, configured and assigned.** In Admin → LLM / Assistant, click **Add configuration**, pick a type (OpenAI for a local llama.cpp `llama-server` or an online provider, or Ollama with its settings adjusted, see Which language model), then assign the configuration to the users or groups who use Video Producer. The plugin calls no model itself: the chat uses the model that PotionUI gives the user, like for every other chat mode. Without an assigned configuration the chat is empty: an admin reads "No enabled LLM configurations", a user "Chat is currently unavailable".
 - **A model that can call tools.** The four actions are tools. A model that cannot call them only answers in text.
 - **Tools on.** In the composer of the chat, **Tools** must be on (its tooltip reads "Tools ON" or "Tools OFF"). An admin can also turn a tool off, or lock it on, for one configuration: Admin → LLM / Assistant, open the configuration, tab **Toolset**, group **Video Producer**.
-- **Where the text goes.** The context block described below is sent to the model with every message. With a hosted provider such as OpenAI it leaves your server for that provider; with a model that runs on your own machines (Native, or an Ollama that you host) it does not.
+- **Where the text goes.** The context block described below is sent to the model with every message. With a hosted provider such as OpenAI it leaves your server for that provider; with a model that runs on your own machines (Native, or a llama-server or Ollama that you host) it does not.
 
 ### Which language model
 
-The chat sends the context block and the definitions of the four tools with every message, and the tools only work when the model calls them correctly. The model must also fit in memory next to whatever else runs on the machine.
+The chat sends the context block and the definitions of the four tools with every message, and the tools only work when the model calls them correctly. The model must also fit in memory next to whatever else runs on the machine. There are two local options, plus the online providers. Both local engines were measured on the RTX 4070 Ti 12 GB, with real conversations of the assistant and the real OpenAI-type and Ollama-type clients of the PotionUI core. With the same settings they run at the same speed, because Ollama 0.30 and later runs the `llama-server` of llama.cpp itself: for Qwen3-8B Q4_K_M, about 5,000 tokens/s of prefill and 74 tokens/s of generation, and a tool turn takes 0.5 to 7.7 s.
 
-- **Recommended: Ollama, or an online provider such as OpenAI.** Ollama on a machine other than the video GPU, or a provider, leaves the whole video card to the engine. Neither was tried during validation (no Ollama instance and no API key were available): the assistant was validated end to end against a scripted OpenAI-compatible server (mode, context, tools, approval cards, writes, page updates). Check one conversation with the model you choose, and pick a model that supports tool calls.
+- **Recommended when the model shares the video card: llama.cpp `llama-server`, added as an OpenAI configuration.** It reserves its memory at load time, unloads on demand and takes an API key.
+  - Simple mode, one model:
+
+    ```
+    llama-server -m Qwen3-4B-Q4_K_M.gguf -a qwen3-4b -c 16384 -ctk q8_0 -ctv q8_0 -np 1 --reasoning off --host 127.0.0.1 --port 9931 --api-key-file llm-keys.txt --sleep-idle-seconds 60
+    ```
+
+    `-a qwen3-4b` names the model; `-c 16384` opens a context of 16,384 tokens; `-ctk q8_0 -ctv q8_0` keeps the KV cache in q8_0, about 1.1 GB less than f16 at that size; `-np 1` opens a single slot; `--reasoning off` turns the thinking of Qwen3 off on the server; `--host 127.0.0.1` listens locally; `--api-key-file` reads the API keys from a file, one per line; `--sleep-idle-seconds 60` puts the server to sleep after 60 s without a request, which frees its VRAM (measured with Qwen3-8B: about 6.9 GB freed, and the next request woke it in about 2 s).
+  - Router mode, to unload on demand:
+
+    ```
+    llama-server --models-preset models.ini --models-max 1 --host 127.0.0.1 --port 9931 --api-key-file llm-keys.txt
+    ```
+
+    with a preset file of this form:
+
+    ```ini
+    [qwen3-4b]
+    model = /models/Qwen3-4B-Q4_K_M.gguf
+    ctx-size = 16384
+    cache-type-k = q8_0
+    cache-type-v = q8_0
+    parallel = 1
+    ```
+
+    Before a video generation, `POST /models/unload` with the body `{"model": "qwen3-4b"}` unloads the model (measured: 1.0 s, VRAM back to its base level); the next chat request loads it again by itself (2 to 3 s). PotionUI has no action for this call yet: send it, with the header `Authorization: Bearer <key>`, from your own script or scheduler.
+  - The default port of llama-server is 9931 since llama.cpp v0.7.0 (8080 in its Docker images).
+  - In PotionUI, Admin → LLM / Assistant → **Add configuration**:
+    - type **OpenAI**;
+    - **Base URL** `http://127.0.0.1:9931/v1`, or `http://host.docker.internal:9931/v1` from the PotionUI Docker image under Docker Desktop. Under Docker on Linux, start the container with `--add-host=host.docker.internal:host-gateway` and make llama-server listen beyond 127.0.0.1 (`--host 0.0.0.0`), hence the API key;
+    - **API Key**: a key of the file;
+    - **Model**: the name given by `-a`, or the section name of the preset file (`qwen3-4b`); the model discovery of the form lists them;
+    - under **OpenAI Options**, **Reasoning Effort** **None**. Otherwise Qwen3 thinks before every call: a turn takes about 14 s instead of 1 to 2 s, and the thinking can use up **Max Tokens** without calling a tool;
+    - under **OpenAI Options**, **Context window** = the value of `-c` (16384), so that the chat budgets the conversation to what the server accepts.
+- **Ollama works once three settings are made under Ollama Options.** Without them the assistant does not work.
+  - **Context Size** 16384 or more. Left empty, Ollama opens its default context, 4,096 tokens on a card under 24 GB, and every turn of the assistant is refused with "Ollama returned status 400: request (… tokens) exceeds the available context size (4096 tokens)": the first turn already takes about 4,800 tokens.
+  - **Keep Alive** between 5m and 30m. The PotionUI default is 0: the model is unloaded after every answer and loaded again at every turn, which adds 4.5 to 6 s.
+  - **Thinking Mode** **Automatic** (it turns thinking off when tools are sent) or **Disabled**.
+  - Ollama has no authentication: leave it on 127.0.0.1.
+  - To free the VRAM before a generation: the quick action **Clear Ollama VRAM** of the Ollama plugin, or the automation template **Free VRAM before a generation (automatic)**.
+- **Measured models**, each with every tool call correct (8 of 8, or 6 of 6):
+  - Qwen3-4B Q4_K_M when the video shares the card: about 3.9 GB of VRAM with the q8_0 KV cache at 16,384 tokens, 0.3 to 5.5 s per turn;
+  - Qwen3-8B Q4_K_M otherwise: about 6.0 GB with the q8_0 KV cache, 7.1 GB in f16, 0.5 to 7.7 s per turn.
+  - In both engines the VRAM does not grow while a long prompt is processed: the memory is reserved at load time, and a prompt that is too long is refused instead of running out of memory.
+- **Unload before a video generation, whichever the engine.** Under native Windows an overlap gives no error but silently slows one of the two processes (measured: −50 % on prefill). Under Docker or Linux, a CUDA out of memory error from the video engine is likely.
+- **An online provider** (OpenAI or another) stays possible and leaves the whole card to the engine. It was not measured: the assistant was validated end to end against a scripted OpenAI-compatible server (mode, context, tools, approval cards, writes, page updates). Whatever you pick, check one conversation with the model you choose, and pick a model that supports tool calls.
 - **Not recommended on a 12 GB card: the Native client.** Measured on the RTX 4070 Ti 12 GB, with the tools sent as part of the prompt (`force_prompt_tools`):
   - Qwen3 4B in nf4 loads (129 s the first time, about 4.4 GB of VRAM for the model) and answers a short question, but the first real turn of the assistant ran out of GPU memory while the prompt was processed: peak 11,971 MiB, CUDA out of memory after 91 s, no tool called. With the thinking mode of the model on, the turn had not ended after 12 minutes. The context block is not the cause (about 1,500 characters for a project of four shots): the native client does not bound its attention memory while it processes the prompt. After the error the CUDA context of the PotionUI process stayed unusable, so every following turn failed within seconds until the container was restarted.
   - Qwen3 1.7B in nf4 loads in 29 s (about 2.6 GB) and never ran out of memory (peak 4.6 GB), and its turns lasted 5 to 91 s, but it produced one well-formed tool call in nine attempts and no approval card: it is too small for the tool protocol.
@@ -824,7 +869,9 @@ Everything else works for real: saved projects with their versions, imports thro
 - **A suggestion opens the chat with an empty box**: the host has no `chat.prefill` (see The assistant mode › Suggestions), or the composer already held a draft, which is kept.
 - **A shot says "Media offline"**: the page cannot play the file of that shot any more, because the library item or the generation file was removed, or the shot kept no source. The viewer shows "Media offline" and says that the source file of the media is no longer available (import it again or choose a take). The user imports the media again or chooses a take. The export looks for the file again on the server, and a shot with no file is black and silent in the video.
 - **Every take fails within seconds after an out-of-memory error** (native engine): the CUDA context of the PotionUI process can stay unusable after a `cuda_oom` (seen on a 12 GB card, with MiniMax-H3 before the 12 GB presets and with the Native language model). Restart PotionUI, then use the 12 GB presets or a lighter model (see Hardware).
-- **The assistant ends with "CUDA out of memory" or never shows a card on the Native language model**: see The assistant mode › Which language model. Move the configuration to Ollama or to an online provider.
+- **The assistant ends with "CUDA out of memory" or never shows a card on the Native language model**: see The assistant mode › Which language model. Move the configuration to a llama-server or an Ollama set up as described there, or to an online provider.
+- **Every turn fails with "Ollama returned status 400: request (… tokens) exceeds the available context size (4096 tokens)"**: the Ollama configuration has no **Context Size**, so Ollama opened its default context. Set **Context Size** to 16384 under Ollama Options (see The assistant mode › Which language model).
+- **Every turn of the assistant is slow** (about 14 s instead of 1 to 2 s when the model thinks before each call; 6.5 to 14.5 s instead of 0.5 to 7.7 s when Ollama reloads the model at every turn): set **Reasoning Effort** to None for an OpenAI configuration, or **Thinking Mode** to Automatic or Disabled for Ollama, and set **Keep Alive** between 5m and 30m, since its default is 0.
 
 
 ## Development
