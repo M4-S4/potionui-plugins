@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
 import { isUlid, ulid, ulidTime } from './ulid.js';
-import { emptyDoc, newAsset, promptLanguageOf, starterDoc } from './starter.js';
+import { emptyDoc, migrate, newAsset, promptLanguageOf, starterDoc } from './starter.js';
 import {
 	activateOnKey,
 	detectMac,
@@ -214,6 +214,48 @@ test('readiness: a text-only engine that ignores a shot frame warns about that s
 	assert.equal(translator('en', missing)('generation.warn.textOnly', { shot: 'Opening' }), 'This engine generates from text only: the frames linked to “Opening” will not be used.');
 	assert.equal(translator('fr', missing)('generation.warn.textOnly', { shot: 'Ouverture' }), 'Ce moteur génère à partir du texte seul : les frames liées à « Ouverture » ne seront pas utilisées.');
 	assert.deepEqual(missing, []);
+});
+
+test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D captures go, old camera keys become pos/target', () => {
+	const old = {
+		name: 'Old',
+		scenes: [
+			{ id: 'sample', kind: 'sample', name: 'Sample scene' },
+			{ id: 'file', kind: 'file', name: 'room.splat', file: '/data/room.splat' },
+			{ id: 's1', kind: 'splatfile', name: 'Room', fileId: 'f1', format: 'ply', view: null }
+		],
+		plans3d: [
+			{ id: 'p1', shotId: 'c1', sceneId: 'sample', name: 'Orbit', start: 0, dur: 5, keyframes: [{ id: 'k1', t: 0, az: 90, el: 0, dist: 10, focal: 30, height: 1.5 }] },
+			{ id: 'p2', shotId: 'c2', sceneId: 's1', name: 'Kept', start: 5, dur: 3, keyframes: [] },
+			{ id: 'p3', shotId: null, sceneId: 'file', name: 'File', start: 8, dur: 2, source: 'trajectory', preset: 'orbit', amount: 12, camera: null, keyframes: [] }
+		],
+		frames: [
+			{ id: 'f1', shotId: 'c1', time: 1, assetId: null, role: 'Capture 3D', strength: 80 },
+			{ id: 'f2', shotId: 'c1', time: 2, assetId: 'a1', role: 'Capture 3D', strength: 80 },
+			{ id: 'f3', shotId: 'c1', time: 3, assetId: null, role: 'first', strength: 100 }
+		],
+		controls: [{ id: 'g1', source: 'scene3d', stale: false }]
+	};
+	const doc = migrate(old);
+	assert.deepEqual(doc.scenes.map((s) => s.id), ['s1']);
+	assert.deepEqual(doc.plans3d.map((p) => p.sceneId), [null, 's1', null]);
+	assert.deepEqual(doc.frames.map((f) => f.id), ['f2', 'f3']);
+	assert.deepEqual(doc.controls, old.controls);
+	const [p1, p2, p3] = doc.plans3d;
+	assert.deepEqual([p1.source, p1.preset, p1.amount, p1.camera], ['manual', null, null, null]);
+	assert.deepEqual([p3.source, p3.preset, p3.amount], ['trajectory', 'orbit', 12]);
+	assert.deepEqual(p2.keyframes, []);
+	const [k] = p1.keyframes;
+	assert.deepEqual([k.id, k.t, k.target, k.focal, k.roll], ['k1', 0, [0, 1.5, 0], 30, 0]);
+	assert.ok(Math.abs(k.pos[0] - 10) < 1e-6 && Math.abs(k.pos[1] - 1.5) < 1e-6 && Math.abs(k.pos[2]) < 1e-6);
+	assert.ok(!('az' in k));
+	assert.equal(old.scenes.length, 3, 'the input is not changed');
+	assert.deepEqual(migrate(doc), doc);
+	assert.equal(migrate(null), null);
+	const bare = { name: 'Bare' };
+	assert.deepEqual(migrate(bare), bare);
+	const fresh = emptyDoc(translator('en', []));
+	assert.deepEqual(migrate(fresh), fresh);
 });
 
 test('newAsset: every field of the persisted asset contract, null when it does not apply', () => {

@@ -98,3 +98,14 @@ test('placeSeamFrame: adds the frame, or replaces the frames of the same role in
 	const last = placeSeamFrame(doc, doc.clips[0], 'last', { id: 'new3', kind: 'image' });
 	assert.deepEqual([last.id, last.time, last.role], ['f1', 3.96, 'last']);
 });
+
+test('placeSeamFrame: a frame captured in a 3D scene carries its sceneId, a later seam frame drops it', () => {
+	const doc = sampleDoc();
+	const captured = placeSeamFrame(doc, doc.clips[2], 'last', { id: 'cap', kind: 'image' }, () => 'fc', 's1');
+	assert.deepEqual(captured, { id: 'fc', shotId: 'c3', time: 11.96, assetId: 'cap', role: 'last', strength: 100, sceneId: 's1' });
+	const seam = placeSeamFrame(doc, doc.clips[2], 'last', { id: 'seam', kind: 'image' });
+	assert.equal(seam.id, 'fc');
+	assert.ok(!('sceneId' in seam));
+	const again = placeSeamFrame(doc, doc.clips[2], 'last', { id: 'cap2', kind: 'image' }, () => 'x', 's2');
+	assert.equal(again.sceneId, 's2');
+});

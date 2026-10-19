@@ -114,6 +114,44 @@ async function rawCall(api, method, path, body, signal) {
 	}
 }
 
+async function settle(response) {
+	let payload = null;
+	try {
+		payload = await response.json();
+	} catch {
+		payload = null;
+	}
+	if (!response.ok) return { ok: false, error: normalizeError(payload, response.status) };
+	return unwrap(payload);
+}
+
+export async function upload(api, path, form, signal) {
+	if (typeof api?.fetchRaw === 'function') {
+		try {
+			return await settle(await api.fetchRaw(path, { method: 'POST', body: form, signal }));
+		} catch (err) {
+			return thrown(err);
+		}
+	}
+	if (typeof api?.uploadFile !== 'function') return failure(0, 'no_api');
+	try {
+		return unwrap(await api.uploadFile(path, form));
+	} catch (err) {
+		return { ok: false, error: requestError(err) };
+	}
+}
+
+export async function fetchBytes(api, path, signal) {
+	if (typeof api?.fetchRaw !== 'function') return failure(0, 'no_api');
+	try {
+		const response = await api.fetchRaw(path, { method: 'GET', signal });
+		if (!response.ok) return settle(response);
+		return { ok: true, data: await response.arrayBuffer() };
+	} catch (err) {
+		return thrown(err);
+	}
+}
+
 async function call(api, method, path, body, signal) {
 	if (signal && typeof api?.fetchRaw === 'function') return rawCall(api, method, path, body, signal);
 	if (typeof api?.request === 'function') {
@@ -411,11 +449,52 @@ export function normalizeMedia(value) {
 	};
 }
 
+const SCENE_JOB_STATES = ['queued', 'running', 'done', 'failed', 'cancelled'];
+const SPLAT_FORMATS = ['ply', 'spz', 'splat'];
+const SCENE_FILE_FORMATS = [...SPLAT_FORMATS, 'glb', 'gltf'];
+
+export function normalizeView(value) {
+	if (!isObject(value)) return null;
+	const fov = number(value.fov);
+	const aspect = number(value.aspect);
+	const depth = number(value.depth);
+	return fov > 0 && fov < 180 && aspect > 0 && depth > 0 ? { fov, aspect, depth } : null;
+}
+
+export function normalizeSceneJob(value) {
+	if (!isObject(value) || !idText(value.id)) return null;
+	const count = number(value.count);
+	return {
+		id: idText(value.id),
+		sceneId: text(value.sceneId) || text(value.scene_id) || null,
+		status: SCENE_JOB_STATES.includes(value.status) ? value.status : 'queued',
+		progress: Math.min(100, Math.max(0, number(value.progress, 0))),
+		error: text(value.error) || (isObject(value.error) ? text(value.error.code) || text(value.error.message) : '') || null,
+		fileId: idText(value.fileId ?? value.file_id),
+		count: Number.isInteger(count) ? count : null,
+		view: normalizeView(value.view)
+	};
+}
+
+export function normalizeSceneFile(value) {
+	if (!isObject(value) || !idText(value.id)) return null;
+	return { id: idText(value.id), format: SCENE_FILE_FORMATS.includes(value.format) ? value.format : null, size: number(value.size), view: normalizeView(value.view) };
+}
+
+export function normalizeSavedMedia(value, type) {
+	if (!isObject(value) || !text(value.url)) return null;
+	if ((text(value.media_type) || type) !== type) return null;
+	const itemId = idText(value.item_id) || text(value.origin?.itemId);
+	if (!itemId) return null;
+	return { itemId, url: value.url, filename: text(value.filename), width: Number.isInteger(value.width) ? value.width : null, height: Number.isInteger(value.height) ? value.height : null };
+}
+
 function list(values, normalize) {
 	return Array.isArray(values) ? values.map(normalize).filter(Boolean) : null;
 }
 
 const projectPath = (id) => `/projects/${encodeURIComponent(id)}`;
+const renderPath = (projectId, renderId) => `${projectPath(projectId)}/renders/${encodeURIComponent(renderId)}`;
 const takePath = (projectId, takeId) => `${projectPath(projectId)}/takes/${encodeURIComponent(takeId)}`;
 const pickTake = (data) => normalizeTake(data.take);
 
@@ -554,6 +633,39 @@ export function createClient(api, save) {
 		},
 		async seamFrame(projectId, shotId, source) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/seam-frame`, requestBody(source)), (data) => normalizeSeamMedia(data.media));
+		},
+		async sceneFromImage(projectId, body) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/scenes/from-image`, body), (data) => normalizeSceneJob(data.job));
+		},
+		async sceneJobs(projectId) {
+			return mapped(await call(api, 'get', `${projectPath(projectId)}/scenes/jobs`), (data) => list(data.jobs, normalizeSceneJob));
+		},
+		async cancelSceneJob(projectId, jobId) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/scenes/jobs/${encodeURIComponent(jobId)}/cancel`, {}), (data) => normalizeSceneJob(data.job));
+		},
+		async uploadSceneFile(projectId, file, kind, signal) {
+			const form = new FormData();
+			form.append('file', file, file.name);
+			form.append('kind', kind);
+			return mapped(await upload(api, `${projectPath(projectId)}/scene-files`, form, signal), (data) => normalizeSceneFile(data.file));
+		},
+		sceneFile(projectId, fileId, signal) {
+			return fetchBytes(api, `${projectPath(projectId)}/scene-files/${encodeURIComponent(fileId)}`, signal);
+		},
+		async capture(projectId, png, name) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/captures`, { png, name }), (data) => normalizeSavedMedia(data.media, 'image'));
+		},
+		async createRender(projectId, body) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/renders`, body), (data) => (idText(data.render?.id) ? { id: idText(data.render.id) } : null));
+		},
+		async renderFrames(projectId, renderId, start, images) {
+			return mapped(await call(api, 'post', `${renderPath(projectId, renderId)}/frames`, { start, images }), (data) => ({ received: number(data.received, images.length) }));
+		},
+		async finishRender(projectId, renderId) {
+			return mapped(await call(api, 'post', `${renderPath(projectId, renderId)}/finish`, {}), (data) => normalizeSavedMedia(data.media, 'video'));
+		},
+		deleteRender(projectId, renderId) {
+			return call(api, 'delete', renderPath(projectId, renderId));
 		},
 		download(path, filename) {
 			return downloadFrom(api, path, filename, save);

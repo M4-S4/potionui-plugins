@@ -34,15 +34,17 @@ function errorText(error) {
 	return t('lib.seam.error.generic');
 }
 
-async function replaceAllowed(clip, kind) {
-	if (!framesOf(doc, clip.id, kind).some((f) => f.assetId)) return true;
-	return confirm({
-		title: kind === 'first' ? t('lib.seam.replaceFirstTitle') : t('lib.seam.replaceLastTitle'),
-		message: kind === 'first' ? t('lib.seam.replaceFirstMessage', { shot: clipLabel(clip) }) : t('lib.seam.replaceLastMessage', { shot: clipLabel(clip) }),
-		variant: 'warning',
-		confirmLabel: t('lib.seam.replace'),
-		cancelLabel: t('lib.seam.keep')
-	});
+function replaceText(clip, kinds) {
+	const shot = clipLabel(clip);
+	if (kinds.length > 1) return { title: t('lib.seam.replaceBothTitle'), message: t('lib.seam.replaceBothMessage', { shot }) };
+	if (kinds[0] === 'first') return { title: t('lib.seam.replaceFirstTitle'), message: t('lib.seam.replaceFirstMessage', { shot }) };
+	return { title: t('lib.seam.replaceLastTitle'), message: t('lib.seam.replaceLastMessage', { shot }) };
+}
+
+export async function replaceAllowed(clip, kinds) {
+	const taken = [kinds].flat().filter((kind) => framesOf(doc, clip.id, kind).some((f) => f.assetId));
+	if (!taken.length) return true;
+	return confirm({ ...replaceText(clip, taken), variant: 'warning', confirmLabel: t('lib.seam.replace'), cancelLabel: t('lib.seam.keep') });
 }
 
 function doneText(clip, kind, source, previous) {

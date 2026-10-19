@@ -171,5 +171,7 @@
 	"frameRole.capture3d": "3D capture",
 	"mode.ai": "AI generation",
 	"mode.render3d": "3D render",
-	"mode.render3dAi": "3D render + AI"
+	"mode.render3dAi": "3D render + AI",
+	"seam.replaceBothTitle": "Replace the first and last frames?",
+	"seam.replaceBothMessage": "“{shot}” already has a first or a last frame. The new images replace them; you can undo."
 }

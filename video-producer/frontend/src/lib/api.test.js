@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createClient, downloadFrom, normalizeError, normalizeMe, normalizeMedia, normalizeOrigin, normalizeProject, normalizeProjectSummary, normalizeVersion } from './api.js';
+import { createClient, downloadFrom, fetchBytes, normalizeError, normalizeMe, normalizeMedia, normalizeOrigin, normalizeProject, normalizeProjectSummary, normalizeSavedMedia, normalizeSceneFile, normalizeSceneJob, normalizeVersion, upload } from './api.js';
 
 test('normalizeError: the plugin error envelope keeps its code, message and data', () => {
 	const conflict = { detail: { success: false, error: 'version_conflict', message: 'stale', data: { version: 7 } } };
@@ -223,4 +223,98 @@ test('downloadFrom: without host download, fetchRaw and a Blob saved under the b
 	const broken = await downloadFrom({ fetchRaw: async () => Promise.reject(new TypeError('offline')) }, '/x', 'x', save);
 	assert.equal(broken.error.code, 'network_error');
 	assert.equal(saved.length, 3);
+});
+
+test('scene payloads: jobs, stored files and saved media are checked and camelCased', () => {
+	assert.deepEqual(normalizeSceneJob({ id: 'j1', sceneId: 's1', status: 'running', progress: 140, error: null, fileId: null, count: null, view: null }), {
+		id: 'j1',
+		sceneId: 's1',
+		status: 'running',
+		progress: 100,
+		error: null,
+		fileId: null,
+		count: null,
+		view: null
+	});
+	const done = normalizeSceneJob({ id: 7, scene_id: 's2', status: 'done', progress: 100, file_id: 'f9', count: 120000, view: { fov: 55, aspect: 1.5, depth: 4 } });
+	assert.deepEqual([done.id, done.sceneId, done.fileId, done.count, done.view], ['7', 's2', 'f9', 120000, { fov: 55, aspect: 1.5, depth: 4 }]);
+	assert.equal(normalizeSceneJob({ id: 'j', status: 'weird', view: { fov: 0, aspect: 1, depth: 1 } }).status, 'queued');
+	assert.equal(normalizeSceneJob({ id: 'j', status: 'failed', error: { code: 'quota_exceeded' } }).error, 'quota_exceeded');
+	assert.equal(normalizeSceneJob({ status: 'done' }), null);
+	assert.deepEqual(normalizeSceneFile({ id: 'f1', format: 'spz', size: 1024, view: null }), { id: 'f1', format: 'spz', size: 1024, view: null });
+	assert.equal(normalizeSceneFile({ id: 'f1', format: 'obj' }).format, null);
+	const media = { kind: 'library', item_id: 'i3', media_type: 'video', url: '/api/media/uploads/r.mp4', filename: 'r.mp4', width: 1920, height: 1056 };
+	assert.deepEqual(normalizeSavedMedia(media, 'video'), { itemId: 'i3', url: '/api/media/uploads/r.mp4', filename: 'r.mp4', width: 1920, height: 1056 });
+	assert.equal(normalizeSavedMedia(media, 'image'), null);
+	assert.equal(normalizeSavedMedia({ ...media, item_id: null, origin: { itemId: 'i4' } }, 'video').itemId, 'i4');
+	assert.equal(normalizeSavedMedia({ url: '/x.png' }, 'image'), null);
+});
+
+test('client: scene, capture and render routes with their bodies', async () => {
+	const job = { id: 'j1', sceneId: 's1', status: 'queued', progress: 0, error: null, fileId: null, count: null, view: null };
+	const media = (type, name) => ({ kind: 'library', item_id: 'i1', media_type: type, url: `/api/media/uploads/${name}`, filename: name, width: 1920, height: 1080 });
+	const api = hostApi([
+		{ success: true, data: { job } },
+		{ success: true, data: { jobs: [{ ...job, status: 'done', fileId: 'f1', count: 10 }, { bad: true }] } },
+		{ success: true, data: { job: { ...job, status: 'cancelled' } } },
+		{ success: true, data: { media: media('image', 'c.png') } },
+		{ success: true, data: { render: { id: 'r1' } } },
+		{ success: true, data: { received: 2 } },
+		{ success: true, data: { media: media('video', 'r.mp4') } },
+		{ success: true, data: {} },
+		httpError(409, { detail: { success: false, error: 'quota_exceeded', message: 'no minutes' } })
+	]);
+	const client = createClient(api);
+	assert.equal((await client.sceneFromImage('p1', { sceneId: 's1', assetId: 'a1', time: 2.5, name: 'Harbour' })).data.status, 'queued');
+	assert.deepEqual((await client.sceneJobs('p1')).data.map((j) => [j.id, j.status, j.fileId]), [['j1', 'done', 'f1']]);
+	assert.equal((await client.cancelSceneJob('p1', 'j1')).data.status, 'cancelled');
+	assert.equal((await client.capture('p1', 'data:image/png;base64,AAA', 'Capture')).data.filename, 'c.png');
+	assert.deepEqual((await client.createRender('p1', { width: 1920, height: 1056, fps: 24, frames: 48, name: 'Orbit' })).data, { id: 'r1' });
+	assert.deepEqual((await client.renderFrames('p1', 'r1', 0, ['data:image/jpeg;base64,A', 'data:image/jpeg;base64,B'])).data, { received: 2 });
+	assert.equal((await client.finishRender('p1', 'r1')).data.url, '/api/media/uploads/r.mp4');
+	assert.equal((await client.deleteRender('p1', 'r1')).ok, true);
+	const refused = await client.sceneFromImage('p1', { sceneId: 's2', assetId: 'a2', time: null, name: 'Still' });
+	assert.deepEqual([refused.ok, refused.error.status, refused.error.code], [false, 409, 'quota_exceeded']);
+	assert.deepEqual(api.calls, [
+		['POST', '/projects/p1/scenes/from-image', { sceneId: 's1', assetId: 'a1', time: 2.5, name: 'Harbour' }],
+		['GET', '/projects/p1/scenes/jobs', undefined],
+		['POST', '/projects/p1/scenes/jobs/j1/cancel', {}],
+		['POST', '/projects/p1/captures', { png: 'data:image/png;base64,AAA', name: 'Capture' }],
+		['POST', '/projects/p1/renders', { width: 1920, height: 1056, fps: 24, frames: 48, name: 'Orbit' }],
+		['POST', '/projects/p1/renders/r1/frames', { start: 0, images: ['data:image/jpeg;base64,A', 'data:image/jpeg;base64,B'] }],
+		['POST', '/projects/p1/renders/r1/finish', {}],
+		['DELETE', '/projects/p1/renders/r1', undefined],
+		['POST', '/projects/p1/scenes/from-image', { sceneId: 's2', assetId: 'a2', time: null, name: 'Still' }]
+	]);
+});
+
+test('client: a scene file goes up as multipart through fetchRaw and comes back as bytes', async () => {
+	const seen = [];
+	const api = {
+		fetchRaw: async (path, init) => {
+			seen.push([path, init.method, init.body instanceof FormData ? [...init.body.keys()] : null, init.headers]);
+			if (init.method === 'POST') return new Response(JSON.stringify({ success: true, data: { file: { id: 'f1', format: 'glb', size: 4, view: null } } }), { status: 200 });
+			if (path.endsWith('/gone')) return new Response(JSON.stringify({ detail: { success: false, error: 'file_not_found', message: 'gone' } }), { status: 404 });
+			return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+		}
+	};
+	const client = createClient(api);
+	const file = new File([new Uint8Array([0, 1, 2, 3])], 'set.glb');
+	assert.deepEqual((await client.uploadSceneFile('p1', file, 'glb')).data, { id: 'f1', format: 'glb', size: 4, view: null });
+	const bytes = await client.sceneFile('p1', 'f1');
+	assert.deepEqual([...new Uint8Array(bytes.data)], [1, 2, 3]);
+	const missing = await client.sceneFile('p1', 'gone');
+	assert.deepEqual([missing.ok, missing.error.status, missing.error.code], [false, 404, 'file_not_found']);
+	assert.deepEqual(seen, [
+		['/projects/p1/scene-files', 'POST', ['file', 'kind'], undefined],
+		['/projects/p1/scene-files/f1', 'GET', null, undefined],
+		['/projects/p1/scene-files/gone', 'GET', null, undefined]
+	]);
+	const tooBig = await upload({ fetchRaw: async () => new Response(JSON.stringify({ detail: 'Request Entity Too Large' }), { status: 413 }) }, '/x', new FormData());
+	assert.deepEqual([tooBig.ok, tooBig.error.status], [false, 413]);
+	const fallback = await upload({ uploadFile: async (path, form) => ({ success: true, data: { path, keys: [...form.keys()] } }) }, '/y', new FormData());
+	assert.deepEqual(fallback.data, { path: '/y', keys: [] });
+	assert.equal((await upload({}, '/z', new FormData())).error.code, 'no_api');
+	assert.equal((await fetchBytes({}, '/z')).error.code, 'no_api');
+	assert.equal((await fetchBytes({ fetchRaw: async () => Promise.reject(new TypeError('offline')) }, '/z')).error.code, 'network_error');
 });

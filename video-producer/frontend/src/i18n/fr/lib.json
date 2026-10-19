@@ -171,5 +171,7 @@
 	"frameRole.capture3d": "Capture 3D",
 	"mode.ai": "Génération IA",
 	"mode.render3d": "Rendu 3D",
-	"mode.render3dAi": "Rendu 3D + IA"
+	"mode.render3dAi": "Rendu 3D + IA",
+	"seam.replaceBothTitle": "Remplacer la première et la dernière image ?",
+	"seam.replaceBothMessage": "« {shot} » a déjà une première ou une dernière image. Les nouvelles les remplacent ; vous pourrez annuler."
 }

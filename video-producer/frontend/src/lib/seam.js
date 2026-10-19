@@ -66,12 +66,14 @@ export function seamAsset(media, fallbackName) {
 	return newAsset({ kind: 'image', name: media.filename || fallbackName, src: media.url, origin: { kind: 'library', itemId: media.itemId }, width: media.width, height: media.height, res });
 }
 
-export function placeSeamFrame(doc, clip, kind, asset, makeId = ulid) {
+export function placeSeamFrame(doc, clip, kind, asset, makeId = ulid, sceneId = null) {
 	doc.assets.push(asset);
 	const existing = framesOf(doc, clip.id, kind);
 	const fields = { shotId: clip.id, time: frameTime(clip, kind), assetId: asset.id, role: kind, strength: SEAM_STRENGTH };
+	if (sceneId) fields.sceneId = sceneId;
 	if (existing.length) {
 		Object.assign(existing[0], fields);
+		if (!sceneId) delete existing[0].sceneId;
 		for (const extra of existing.slice(1)) doc.frames.splice(doc.frames.indexOf(extra), 1);
 		return existing[0];
 	}
