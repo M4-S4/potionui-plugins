@@ -123,6 +123,7 @@ presets:
 smoke:
   preset_id: "01KX47WANVIDEO0000000000TV"
   mode: "video"
+  timeout_seconds: 600
   seed: 12345
   form:
     resolution: "480x832"

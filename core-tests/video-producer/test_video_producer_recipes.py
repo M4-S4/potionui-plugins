@@ -10,7 +10,7 @@ import yaml
 
 from src.features.presets.children_paths import resolve_children_path
 from src.features.presets.loader import PresetTemplateLoader
-from src.features.recipes.schema import parse_recipe, validate_recipe_dict
+from src.features.recipes.schema import DEFAULT_SMOKE_TIMEOUT_SECONDS, parse_recipe, validate_recipe_dict
 from src.features.video_director.normalize import normalize_video_director
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -47,6 +47,7 @@ RECIPE_PRESETS = {
 }
 WITHOUT_SMOKE = {"vp-minimax-h3-12gb", "vp-minimax-h3-fast-12gb"}
 WITH_SMOKE = sorted(set(RECIPE_PRESETS) - WITHOUT_SMOKE)
+SMOKE_TIMEOUTS = {"vp-wan22-14b-lightning-12gb": 600, "vp-wan22-14b-i2v": 600}
 PATH_HINTS = {
     presets.WAN21_T2V_1_3B_8GB: "video-producer/Wan2.1-T2V-1.3B-8GB",
     presets.WAN22_TI2V_5B_8GB: "video-producer/Wan2.2-TI2V-5B-8GB",
@@ -250,6 +251,11 @@ def test_the_lightning_recipe_downloads_the_lora_of_each_expert_the_preset_selec
     assert "high_noise" in high[0] and "low_noise" in low[0]
     assert sorted(loras) == sorted(high + low)
     assert all(artifact.required for artifact in recipe.artifacts if artifact.kind == "lora")
+
+
+@pytest.mark.parametrize("recipe_id", WITH_SMOKE)
+def test_a_14b_smoke_waits_ten_minutes_and_the_others_keep_the_default(recipe_id):
+    assert _recipe(recipe_id).smoke.timeout_seconds == SMOKE_TIMEOUTS.get(recipe_id, DEFAULT_SMOKE_TIMEOUT_SECONDS)
 
 
 @pytest.mark.parametrize("recipe_id", WITH_SMOKE)
