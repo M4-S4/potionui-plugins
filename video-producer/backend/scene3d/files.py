@@ -1,5 +1,7 @@
 import asyncio
 import json
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Tuple
 
@@ -8,14 +10,19 @@ try:
 except ImportError:
     from multipart.multipart import MultipartParser, parse_options_header
 
+from .. import limits, projects
 from ..core_bridge import generate_ulid
 from . import formats, storage
 from .formats import Probe
-from .storage import MIB, SceneError
+from .storage import GIB, MIB, SceneError
 
 FILES = "video_producer_scene_files"
 
 MAX_BYTES = 1024 * MIB
+
+PROJECT_MAX_BYTES = 20 * GIB
+
+ORPHAN_SECONDS = 24 * 3600
 
 MULTIPART_MARGIN = 64 * 1024
 
@@ -150,6 +157,82 @@ def forget_project(project_id: str) -> None:
 
     with db.get_cursor() as cursor:
         cursor.execute(f"DELETE FROM {FILES} WHERE project_id = ?", (project_id,))
+
+
+def _bytes(column: str, value: str) -> int:
+    from src.plugin_api import db
+
+    with db.get_cursor() as cursor:
+        cursor.execute(f"SELECT COALESCE(SUM(size), 0) AS total FROM {FILES} WHERE {column} = ?", (value,))
+        return int(cursor.fetchone()["total"] or 0)
+
+
+def ensure_room(project_id: str, owner_id: str, incoming: int, upload: bool = False) -> None:
+    """Refuse a scene file of incoming bytes that would take the project past its cap or its owner past the storage plan, counting the owner's scene files on top of what the core measures; an upload also meets the plan's largest file. SceneError 413 otherwise."""
+    used = _bytes("project_id", project_id)
+    if used + incoming > PROJECT_MAX_BYTES:
+        raise SceneError(
+            413, "storage_full", f"The scene files of a project take at most {PROJECT_MAX_BYTES // GIB} GiB.", limit=PROJECT_MAX_BYTES, used=used, needed=incoming
+        )
+    largest = limits.upload_size_status(owner_id)["remaining"] if upload else None
+    if largest is not None and incoming > largest:
+        raise SceneError(413, "file_too_large", "The file is larger than the storage plan allows for one upload.", limit=int(largest))
+    remaining = limits.storage_status(owner_id)["remaining"]
+    if remaining is None:
+        return
+    left = max(0, int(remaining) - _bytes("user_id", owner_id))
+    if incoming > left:
+        raise SceneError(413, "storage_full", "The storage plan of the project owner is full.", remaining=left, needed=incoming)
+
+
+def _cited(found: Dict[str, Any]) -> bool:
+    from src.plugin_api import db
+
+    marker = f'"fileId":"{found["id"]}"'
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            f"SELECT 1 FROM {projects.PROJECTS} WHERE id = ? AND instr(doc, ?) > 0 "
+            f"UNION ALL SELECT 1 FROM {projects.VERSIONS} WHERE project_id = ? AND instr(doc, ?) > 0 LIMIT 1",
+            (found["project_id"], marker, found["project_id"], marker),
+        )
+        return cursor.fetchone() is not None
+
+
+def _created(found: Dict[str, Any]) -> float:
+    try:
+        return datetime.fromisoformat(found["created_at"]).timestamp()
+    except (TypeError, ValueError):
+        return time.time()
+
+
+def _strays(project: Path, limit: float) -> int:
+    kept = {found["stored_name"] for found in list_project(project.name)}
+    removed = 0
+    for entry in project.iterdir():
+        try:
+            stray = entry.is_file() and entry.name not in kept and entry.stat().st_mtime < limit
+        except OSError:
+            continue
+        if stray:
+            entry.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
+def collect_orphans(min_age: float = ORPHAN_SECONDS, now: Optional[float] = None) -> int:
+    """Delete the scene files that neither the current document of their project nor any of its stored versions cites by fileId, and the files of a project folder no row knows, never one younger than a day; returns how many it deleted."""
+    limit = (time.time() if now is None else now) - min_age
+    removed = 0
+    for found in _fetch(_SELECT, ()):
+        if _created(found) < limit and not _cited(found):
+            delete_file(found)
+            removed += 1
+    for project in storage.folders(storage.scenes_base()):
+        try:
+            removed += _strays(project, limit)
+        except OSError:
+            continue
+    return removed
 
 
 def accepted_format(kind: str, filename: str) -> str:
@@ -292,7 +375,7 @@ async def read_form(form: UploadForm, content_type: str, stream: AsyncIterator[b
 
 
 async def receive_upload(project_id: str, user_id: str, content_type: str, stream: AsyncIterator[bytes]) -> Dict[str, Any]:
-    """Store the splat or glb file of a multipart form (fields file and kind) of at most 1 GiB, written once into the work folder as it arrives, checked, then moved into place; SceneError otherwise."""
+    """Store the splat or glb file of a multipart form (fields file and kind) of at most 1 GiB, written once into the work folder as it arrives, checked against the storage room and its format, then moved into place; SceneError otherwise."""
     file_id = generate_ulid()
     form = UploadForm(storage.work_folder(project_id), file_id)
     stored = False
@@ -304,6 +387,7 @@ async def receive_upload(project_id: str, user_id: str, content_type: str, strea
         if form.path is None or not form.filename:
             raise _invalid("The request needs a file.")
         fmt = accepted_format(kind, form.filename)
+        ensure_room(project_id, user_id, form.size, upload=True)
         try:
             probe = await asyncio.to_thread(formats.probe, fmt, form.path)
         except formats.FormatError as exc:

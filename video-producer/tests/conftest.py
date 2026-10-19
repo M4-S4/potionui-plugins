@@ -445,6 +445,7 @@ class FakeCore:
         self.recorded = []
         self.refunded = []
         self.quota = {"limit": 600, "used": 0, "remaining": 600.0, "exempt": False, "resets_at": None}
+        self.quotas = {}
         self.memory = {
             "estimate": {"checkpoint_estimate_gb": 18.5},
             "device": {"kind": "local", "free_gb": 22.0, "total_gb": 24.0},
@@ -660,7 +661,9 @@ class FakeCore:
         return 1
 
     def limit_status(self, user_id, kind):
-        return dict(self.quota)
+        if kind == "video-producer.gpu_minutes":
+            return dict(self.quota)
+        return dict(self.quotas.get(kind, {"limit": None, "used": None, "remaining": None, "exempt": False, "resets_at": None}))
 
     def estimate_cloud_cost(self, user, model_id, shots):
         from src.plugin_api import AccountType

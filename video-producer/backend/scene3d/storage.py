@@ -10,6 +10,8 @@ ULID = re.compile(r"[0-9A-HJKMNP-TV-Z]{26}")
 
 MIB = 1024 * 1024
 
+GIB = 1024 * MIB
+
 RENDERS = "renders"
 
 WORK = "work"

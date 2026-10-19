@@ -190,6 +190,33 @@ def test_a_user_with_less_than_a_minute_left_is_blocked_and_an_exempt_user_reser
     assert core.recorded == []
 
 
+def test_a_scene_is_refused_before_anything_is_reserved_when_the_owner_has_no_storage_left(client, core, scene):
+    project, _ = scene
+    core.quotas["storage_bytes"] = {"limit": 1000, "used": 1000, "remaining": 0, "exempt": False, "resets_at": None}
+
+    response = _start(client, project)
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (413, "storage_full")
+    assert (core.submitted, core.recorded, jobs.list_project(project["id"])) == ([], [], [])
+
+
+def test_a_finished_splat_that_does_not_fit_the_storage_plan_fails_the_job_and_refunds_it(client, core, scene, tmp_path, samples, monkeypatch):
+    project, _ = scene
+    _ply_source(tmp_path, samples, monkeypatch)
+    job = _start(client, project).json()["data"]["job"]
+    core.quotas["storage_bytes"] = {"limit": 1000, "used": 990, "remaining": 10, "exempt": False, "resets_at": None}
+    core.complete_splat("gen-1")
+
+    _tick()
+
+    failed = jobs.get_job(job["id"])
+    assert (failed["status"], failed["error_code"]) == ("failed", "storage_full")
+    assert core.refunded == [f"video-producer:scene:{job['id']}"]
+    assert files.list_project(project["id"]) == []
+    folder = storage.project_folder(project["id"])
+    assert [path for path in folder.rglob("*") if path.is_file()] == []
+
+
 def test_a_request_the_core_refuses_gives_a_failed_job_and_refunds_its_minute(client, core, scene):
     project, _ = scene
     core.refusal = PermissionError("not assigned")

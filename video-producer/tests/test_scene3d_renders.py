@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shutil
@@ -141,7 +142,7 @@ def test_a_render_the_library_refuses_answers_store_failed(client, project, samp
 
 @pytest.mark.parametrize(
     "fields",
-    [{"width": 63}, {"height": 8}, {"width": 4098}, {"fps": 0}, {"fps": "24"}, {"fps": 121}, {"frames": 0}, {"frames": 7201}, {"frames": 2.5}, {"name": 4}, {"width": True}],
+    [{"width": 63}, {"height": 8}, {"width": 4098}, {"fps": 0}, {"fps": "24"}, {"fps": 121}, {"frames": 0}, {"frames": 401}, {"frames": 2.5}, {"name": 4}, {"width": True}],
 )
 def test_a_render_outside_the_limits_is_an_invalid_request(client, project, fields):
     response = _open(client, project, **fields)
@@ -196,15 +197,20 @@ def test_deleting_a_render_stops_its_encoding_and_drops_its_frames(client, proje
     assert client.delete(f"{BASE}/projects/{project['id']}/renders/{render['id']}").json()["detail"]["error"] == "render_not_found"
 
 
-def test_the_startup_sweep_deletes_the_renders_and_work_files_left_for_more_than_a_day(client, project, make_project, samples):
+def test_the_sweep_deletes_the_renders_and_work_files_left_without_a_write_for_an_hour(client, project, make_project, samples):
     old = _open(client, project).json()["data"]["render"]
     fresh = _open(client, project).json()["data"]["render"]
     work = storage.work_folder(project["id"])
     work.mkdir(parents=True)
     (work / "upload-01M5OLDUPLOAD0000000000000").write_bytes(b"x")
-    day_ago = time.time() - 25 * 3600
+    (work / "upload-01M5NEWUPLOAD0000000000000").write_bytes(b"x")
+    assert renders.STALE_SECONDS == 3600
+    hour_ago, minutes_ago = time.time() - 3660, time.time() - 3540
     for path in (storage.renders_folder(project["id"]) / old["id"], work / "upload-01M5OLDUPLOAD0000000000000"):
-        os.utime(path, (day_ago, day_ago))
+        os.utime(path, (hour_ago, hour_ago))
+    for path in (storage.renders_folder(project["id"]) / fresh["id"], work / "upload-01M5NEWUPLOAD0000000000000"):
+        os.utime(path, (minutes_ago, minutes_ago))
+    day_ago = time.time() - 25 * 3600
     scene_file = storage.project_folder(project["id"]) / "01M5SCENEFILE0000000000000.ply"
     scene_file.write_bytes(samples.ply())
     os.utime(scene_file, (day_ago, day_ago))
@@ -212,7 +218,85 @@ def test_the_startup_sweep_deletes_the_renders_and_work_files_left_for_more_than
     assert renders.sweep() == 2
 
     assert [folder.name for folder in storage.folders(storage.renders_folder(project["id"]))] == [fresh["id"]]
-    assert list(work.iterdir()) == [] and scene_file.is_file()
+    assert [path.name for path in work.iterdir()] == ["upload-01M5NEWUPLOAD0000000000000"] and scene_file.is_file()
+
+
+def test_a_render_being_encoded_is_never_swept(client, project, monkeypatch):
+    render = _open(client, project).json()["data"]["render"]
+    hour_ago = time.time() - 7200
+    os.utime(storage.renders_folder(project["id"]) / render["id"], (hour_ago, hour_ago))
+    monkeypatch.setattr(renders, "_FINISHING", {render["id"]})
+
+    assert renders.sweep() == 0
+
+
+def test_a_project_has_at_most_two_renders_open_and_an_abandoned_one_makes_room(client, project, make_project):
+    first = _open(client, project).json()["data"]["render"]
+    _open(client, project)
+
+    refused = _open(client, project)
+
+    assert (refused.status_code, refused.json()["detail"]["error"]) == (409, "render_limit")
+    assert refused.json()["detail"]["data"] == {"limit": 2}
+    assert _open(client, make_project()).status_code == 201
+    hour_ago = time.time() - 3660
+    os.utime(storage.renders_folder(project["id"]) / first["id"], (hour_ago, hour_ago))
+    assert _open(client, project).status_code == 201
+    assert len(storage.folders(storage.renders_folder(project["id"]))) == 2
+    assert renders.get_render(project["id"], first["id"]) is None
+
+
+def test_a_render_holds_at_most_400_frames_and_2_gib_of_them(client, project, samples, monkeypatch):
+    assert (renders.MAX_FRAMES, renders.MAX_RENDER_BYTES) == (400, 2 * 1024 ** 3)
+    render = _open(client, project, frames=400).json()["data"]["render"]
+    frames = [samples.data_url(samples.jpeg(), "jpeg")] * 3
+    size = len(samples.jpeg())
+    monkeypatch.setattr(renders, "MAX_RENDER_BYTES", 3 * size + 2)
+    assert _send(client, project, render["id"], 0, frames).json()["data"] == {"received": 3}
+    assert _send(client, project, render["id"], 0, frames[:1]).json()["data"] == {"received": 3}
+
+    response = _send(client, project, render["id"], 3, frames[:1])
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (413, "render_too_large")
+    assert response.json()["detail"]["data"] == {"limit": 3 * size + 2}
+    assert len(list((storage.renders_folder(project["id"]) / render["id"]).glob("*.jpg"))) == 3
+
+
+def test_the_tracker_sweeps_the_scene_storage_every_ten_minutes(monkeypatch):
+    import threading
+
+    from backend import scene3d, tracker
+
+    assert tracker.SWEEP_INTERVAL == 600
+    swept, stop = [], threading.Event()
+    monkeypatch.setattr(scene3d, "sweep", lambda: swept.append("swept") or 0)
+    monkeypatch.setattr(tracker, "SWEEP_INTERVAL", 0)
+
+    async def tick(self):
+        return False
+
+    async def sleep(seconds):
+        if len(swept) >= 2:
+            stop.set()
+
+    monkeypatch.setattr(tracker.Tracker, "tick", tick)
+    monkeypatch.setattr(tracker.asyncio, "sleep", sleep)
+
+    asyncio.run(tracker.Tracker().run(stop))
+
+    assert swept == ["swept", "swept"]
+
+
+def test_a_failed_sweep_is_logged_and_the_tracker_goes_on(monkeypatch, caplog):
+    from backend import scene3d, tracker
+
+    def sweep():
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(scene3d, "sweep", sweep)
+
+    assert asyncio.run(tracker.Tracker().sweep()) == 0
+    assert "Could not sweep the scene storage" in caplog.text
 
 
 def test_the_sweep_ignores_a_storage_without_scenes(export_storage):

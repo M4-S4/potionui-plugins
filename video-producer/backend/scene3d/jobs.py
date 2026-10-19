@@ -258,8 +258,9 @@ async def _submit(owner: User, job: Dict[str, Any]) -> None:
 async def from_image(
     owner: User, project: Mapping[str, Any], scene_id: str, asset_id: str, time: Optional[float]
 ) -> Dict[str, Any]:
-    """Make a splat of an image of the project, or of a frame of one of its videos: reserve its minutes and hand it to the core."""
+    """Make a splat of an image of the project, or of a frame of one of its videos: reserve its minutes and hand it to the core; SceneError 413 when the project or its owner has no storage room left."""
     form, minutes = _plan(owner)
+    files.ensure_room(project["id"], owner.id, 1)
     value = await source_image(owner, project["doc"], asset_id, time)
     job_id = generate_ulid()
     request = {
@@ -319,7 +320,7 @@ def _copy(job: Mapping[str, Any], item: Mapping[str, Any], file_id: str) -> Tupl
 
 
 async def finish_done(job: Mapping[str, Any], user: User, state: Mapping[str, Any]) -> bool:
-    """End a job whose generation completed: copy its splat into the project's scene storage, read its view, adjust its minutes."""
+    """End a job whose generation completed: copy its splat into the project's scene storage when the project and its owner have room for it, read its view, adjust its minutes."""
     try:
         found = core_bridge.list_generation_files(user, job["generation_id"])
     except GenerationNotFoundException:
@@ -335,8 +336,14 @@ async def finish_done(job: Mapping[str, Any], user: User, state: Mapping[str, An
     except OSError:
         logger.warning("[VIDEO-PRODUCER] Could not copy the splat of scene job %s", job["id"], exc_info=True)
         return fail(job, "output_missing", "The splat of the generation could not be copied.")
+    size = target.stat().st_size
+    try:
+        files.ensure_room(job["project_id"], job["user_id"], size)
+    except SceneError as exc:
+        target.unlink(missing_ok=True)
+        return fail(job, exc.error, exc.message)
     count = item.get("splat_count") if isinstance(item.get("splat_count"), int) else probe.count
-    stored = files.add_file(file_id, job["project_id"], job["user_id"], "splat", target.name, target.stat().st_size, probe, job_id=job["id"])
+    stored = files.add_file(file_id, job["project_id"], job["user_id"], "splat", target.name, size, probe, job_id=job["id"])
     fields = {
         "file_id": file_id,
         "splat_count": count,

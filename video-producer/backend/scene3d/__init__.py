@@ -7,13 +7,21 @@ from . import files, jobs, renders, storage
 logger = logging.getLogger("plugins.video-producer")
 
 
+def sweep() -> int:
+    """Delete the renders and work files left without a write for an hour, and the scene files no stored version of their project cites any more once they are a day old; returns how many it deleted."""
+    removed = 0
+    for step, what in ((renders.sweep, "the abandoned renders"), (files.collect_orphans, "the orphan scene files")):
+        try:
+            removed += step()
+        except Exception:
+            logger.warning("[VIDEO-PRODUCER] Could not sweep %s", what, exc_info=True)
+    return removed
+
+
 def recover() -> int:
-    """At startup, fail the scene jobs a stopped server left before the core took them and delete the renders left unfinished for a day; returns how many jobs failed."""
+    """At startup, fail the scene jobs a stopped server left before the core took them and sweep the scene storage; returns how many jobs failed."""
     failed = jobs.recover()
-    try:
-        renders.sweep()
-    except Exception:
-        logger.warning("[VIDEO-PRODUCER] Could not sweep the unfinished renders", exc_info=True)
+    sweep()
     return failed
 
 

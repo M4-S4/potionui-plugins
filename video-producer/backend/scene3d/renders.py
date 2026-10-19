@@ -21,7 +21,7 @@ MAX_SIDE = 4096
 
 MAX_FPS = 120
 
-MAX_FRAMES = 7200
+MAX_FRAMES = 400
 
 MAX_BATCH = 24
 
@@ -29,7 +29,11 @@ MAX_FRAME_BYTES = 8 * storage.MIB
 
 BODY_LIMIT = 32 * storage.MIB
 
-STALE_SECONDS = 24 * 3600
+MAX_RENDER_BYTES = 2 * storage.GIB
+
+MAX_OPEN = 2
+
+STALE_SECONDS = 3600
 
 ENCODER = ("-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an")
 
@@ -58,8 +62,25 @@ def get_render(project_id: str, render_id: str) -> Optional[Dict[str, Any]]:
     return meta if meta is not None and meta.get("project_id") == project_id else None
 
 
+def _abandoned(entry: Path, limit: float) -> bool:
+    try:
+        idle = entry.stat().st_mtime < limit
+    except OSError:
+        return False
+    return idle and entry.name not in _FINISHING and entry.name not in _PROCESSES
+
+
 def create(project_id: str, user_id: str, width: int, height: int, fps: float, frames: int, name: str) -> Dict[str, Any]:
-    """Open a render: a folder that receives its JPEG frames before they are encoded."""
+    """Open a render: a folder that receives its JPEG frames before they are encoded; the project's renders left without a write for an hour go first, and SceneError when MAX_OPEN others are still open."""
+    limit = time.time() - STALE_SECONDS
+    still_open = []
+    for folder in storage.folders(storage.renders_folder(project_id)):
+        if _abandoned(folder, limit):
+            storage.drop(folder)
+        else:
+            still_open.append(folder)
+    if len(still_open) >= MAX_OPEN:
+        raise SceneError(409, "render_limit", f"A project has at most {MAX_OPEN} renders open at once.", limit=MAX_OPEN)
     render_id = generate_ulid()
     folder = folder_of(project_id, render_id)
     folder.mkdir(parents=True, exist_ok=True)
@@ -89,11 +110,25 @@ def busy(render_id: str) -> bool:
     return render_id in _FINISHING
 
 
+def _frames_bytes(folder: Path, replaced: Set[str]) -> int:
+    total = 0
+    for path in folder.glob("*.jpg"):
+        if path.name not in replaced:
+            try:
+                total += path.stat().st_size
+            except OSError:
+                continue
+    return total
+
+
 def add_frames(render: Dict[str, Any], start: int, images: Sequence[bytes]) -> int:
-    """Store a batch of JPEG frames from frame start on; returns how many frames of the render are on disk, SceneError when it is being encoded or is gone."""
+    """Store a batch of JPEG frames from frame start on; returns how many frames of the render are on disk, SceneError when it is being encoded, is gone or would pass MAX_RENDER_BYTES."""
     if busy(render["id"]):
         raise SceneError(409, "render_busy", "This render is already being encoded.")
     folder = folder_of(render["project_id"], render["id"])
+    replaced = {FRAME_NAME.format(start + offset) for offset in range(len(images))}
+    if _frames_bytes(folder, replaced) + sum(len(data) for data in images) > MAX_RENDER_BYTES:
+        raise SceneError(413, "render_too_large", f"The frames of a render take at most {MAX_RENDER_BYTES // storage.GIB} GiB.", limit=MAX_RENDER_BYTES)
     try:
         for offset, data in enumerate(images):
             path = folder / FRAME_NAME.format(start + offset)
@@ -202,7 +237,7 @@ def forget_project(project_id: str) -> None:
 
 
 def sweep(max_age: float = STALE_SECONDS, now: Optional[float] = None) -> int:
-    """Delete the renders and work files left unfinished for more than a day; returns how many it deleted."""
+    """Delete the renders and work files left without a write for more than an hour; returns how many it deleted."""
     limit = (time.time() if now is None else now) - max_age
     removed = 0
     for project in storage.folders(storage.scenes_base()):
@@ -212,11 +247,7 @@ def sweep(max_age: float = STALE_SECONDS, now: Optional[float] = None) -> int:
             except OSError:
                 continue
             for entry in entries:
-                try:
-                    stale = entry.stat().st_mtime < limit
-                except OSError:
-                    continue
-                if stale and entry.name not in _FINISHING and entry.name not in _PROCESSES:
+                if _abandoned(entry, limit):
                     storage.drop(entry)
                     removed += 1
     return removed

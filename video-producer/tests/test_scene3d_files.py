@@ -1,9 +1,12 @@
 import math
+import os
 import struct
+import time
 
 import pytest
 
 from backend import core_bridge
+from backend.core_bridge import generate_ulid
 from backend.scene3d import files, formats, storage
 from backend.scene3d.formats import FormatError
 
@@ -439,3 +442,132 @@ def test_a_scene_file_is_read_only_through_its_own_project(client, project, make
     assert client.get(f"{BASE}/projects/{project['id']}/scene-files/01M5NOTAFILE00000000000000").status_code == 404
     files.path_of(files.get_file(stored["id"])).unlink()
     assert client.get(stored["url"]).json()["detail"]["error"] == "file_not_found"
+
+
+UNLIMITED = {"limit": None, "used": None, "remaining": None, "exempt": False, "resets_at": None}
+
+
+@pytest.fixture
+def plan(monkeypatch):
+    statuses = {}
+
+    def limit_status(user_id, kind):
+        return {**UNLIMITED, **statuses.get(kind, {})}
+
+    monkeypatch.setattr(core_bridge, "limit_status", limit_status)
+    return statuses
+
+
+def test_an_upload_past_the_project_cap_is_refused_with_storage_full_and_leaves_nothing(client, project, samples, monkeypatch, plan):
+    first = samples.ply(count=2)
+    assert files.PROJECT_MAX_BYTES == 20 * 1024 ** 3
+    monkeypatch.setattr(files, "PROJECT_MAX_BYTES", len(first) + 10)
+    assert _upload(client, project["id"], "first.ply", first).status_code == 201
+
+    response = _upload(client, project["id"], "second.ply", samples.ply(count=2))
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (413, "storage_full")
+    assert response.json()["detail"]["data"] == {"limit": len(first) + 10, "used": len(first), "needed": len(first)}
+    assert len(files.list_project(project["id"])) == 1
+    assert list(storage.work_folder(project["id"]).iterdir()) == []
+
+
+def test_the_scene_files_of_the_owner_count_against_the_storage_plan(client, project, make_project, samples, plan):
+    data = samples.ply(count=2)
+    plan["storage_bytes"] = {"limit": 10**6, "used": 10**6 - 2 * len(data) + 1, "remaining": 2 * len(data) - 1}
+    other = make_project()
+    assert _upload(client, other["id"], "first.ply", data).status_code == 201
+
+    response = _upload(client, project["id"], "second.ply", data)
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (413, "storage_full")
+    assert response.json()["detail"]["data"] == {"remaining": len(data) - 1, "needed": len(data)}
+    assert files.list_project(project["id"]) == []
+
+
+def test_an_upload_to_a_full_plan_is_refused_before_it_is_read(client, project, samples, plan, unread):
+    plan["storage_bytes"] = {"limit": 100, "used": 100, "remaining": 0}
+
+    response = _upload(client, project["id"], "set.ply", samples.ply())
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (413, "storage_full")
+
+
+def test_an_upload_larger_than_the_plan_allows_for_one_file_is_refused(client, project, samples, plan):
+    plan["upload_file_size"] = {"limit": 64, "used": 0, "remaining": 64}
+
+    response = _upload(client, project["id"], "set.ply", samples.ply())
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (413, "file_too_large")
+    assert response.json()["detail"]["data"] == {"limit": 64}
+
+
+def test_an_exempt_or_unlimited_owner_only_meets_the_project_cap(client, project, samples, plan):
+    plan["storage_bytes"] = {"limit": 100, "used": None, "remaining": None, "exempt": True}
+
+    assert _upload(client, project["id"], "set.ply", samples.ply()).status_code == 201
+
+
+def _scene(file_id):
+    return {"id": f"scene-{file_id[-4:]}", "kind": "splatfile", "name": "set", "fileId": file_id, "format": "ply", "view": None}
+
+
+def _stored(project_id, samples, days=2.0):
+    from datetime import datetime, timedelta, timezone
+
+    from src.plugin_api import db
+
+    file_id = generate_ulid()
+    folder = storage.project_folder(project_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    data = samples.ply()
+    (folder / files.stored_name(file_id, "ply")).write_bytes(data)
+    files.add_file(file_id, project_id, "user-1", "splat", "set.ply", len(data), formats.Probe(format="ply", count=2))
+    created = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    with db.get_cursor() as cursor:
+        cursor.execute(f"UPDATE {files.FILES} SET created_at = ? WHERE id = ?", (created, file_id))
+    return file_id
+
+
+def test_the_sweep_deletes_the_scene_files_no_stored_version_cites_once_they_are_a_day_old(store, make_project, make_doc, export_storage, samples):
+    from backend import projects, scene3d
+
+    doc = make_doc()
+    project = make_project(doc=doc)
+    pid = project["id"]
+    in_an_old_version, in_the_current_one, orphan = (_stored(pid, samples) for _ in range(3))
+    fresh = _stored(pid, samples, days=0.9)
+    projects.save_project(pid, {**doc, "scenes": [_scene(in_an_old_version)]}, 1)
+    projects.save_project(pid, {**doc, "scenes": [_scene(in_the_current_one)]}, 2)
+    folder = storage.project_folder(pid)
+    stray_old, stray_new = folder / "01M5STRAYOLD00000000000000.ply", folder / "01M5STRAYNEW00000000000000.ply"
+    for path in (stray_old, stray_new):
+        path.write_bytes(b"x")
+    day_ago = time.time() - 25 * 3600
+    os.utime(stray_old, (day_ago, day_ago))
+
+    assert scene3d.sweep() == 2
+
+    assert sorted(found["id"] for found in files.list_project(pid)) == sorted([in_an_old_version, in_the_current_one, fresh])
+    assert not (folder / files.stored_name(orphan, "ply")).exists() and not stray_old.exists()
+    assert stray_new.exists() and (folder / files.stored_name(fresh, "ply")).exists()
+    assert files.collect_orphans() == 0
+
+
+def test_a_scene_file_whose_last_citing_version_was_pruned_is_collected(store, make_project, make_doc, export_storage, samples):
+    from backend import projects
+
+    doc = make_doc()
+    project = make_project(doc=doc)
+    cited = _stored(project["id"], samples)
+    projects.save_project(project["id"], {**doc, "scenes": [_scene(cited)]}, 1)
+    projects.save_project(project["id"], doc, 2)
+    assert files.collect_orphans() == 0
+
+    from src.plugin_api import db
+
+    with db.get_cursor() as cursor:
+        cursor.execute(f"DELETE FROM {projects.VERSIONS} WHERE project_id = ? AND version = 2", (project["id"],))
+
+    assert files.collect_orphans() == 1
+    assert files.get_file(cited) is None

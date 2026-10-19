@@ -142,6 +142,7 @@ async def upload_scene_file(project_id: str, request: Request, user: User = Depe
         fail(413, "file_too_large", f"A scene file is at most {files.MAX_BYTES // MIB} MiB.")
     project = access.project_for(user, project_id)
     try:
+        files.ensure_room(project["id"], project["user_id"], max(1, length - files.MULTIPART_MARGIN), upload=True)
         stored = await files.receive_upload(project["id"], project["user_id"], request.headers.get("content-type", ""), request.stream())
     except SceneError as exc:
         _scene_error(exc)
@@ -192,7 +193,11 @@ def open_render(
     frames = _integer(body, "frames", 1, renders.MAX_FRAMES)
     name = _name(body) or ""
     project = access.project_for(user, project_id)
-    render = renders.create(project["id"], user.id, width, height, float(fps), frames, name)
+    try:
+        render = renders.create(project["id"], user.id, width, height, float(fps), frames, name)
+    except SceneError as exc:
+        _scene_error(exc)
+    tracker.ensure_running()
     return ok({"render": {key: render[key] for key in ("id", "width", "height", "fps", "frames")}})
 
 
