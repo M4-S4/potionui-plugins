@@ -6,6 +6,8 @@
 	"freeCamera": "Caméra libre",
 	"hint": "Glisser pour orbiter · clic droit ou Maj pour déplacer · molette pour avancer · Alt+molette pour la focale",
 	"topView": "Vue de dessus de la trajectoire",
+	"surface": "Vue caméra 3D",
+	"keys": "Les flèches font orbiter la caméra, Maj et les flèches la déplacent, + et − l’avancent et la reculent, 0 revient à la vue d’origine.",
 	"hud": "{focal} mm · {fov}° vertical · {hfov}° horizontal · roulis {roll}°",
 	"play": "Lire la trajectoire",
 	"pause": "Pause",

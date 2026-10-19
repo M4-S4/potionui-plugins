@@ -246,6 +246,9 @@
 			outline: 2px solid rgb(var(--signal));
 			outline-offset: 2px;
 		}
+		.vp-root .vp-scene-surface:focus-visible {
+			outline-offset: -2px;
+		}
 		.vp-root .input:focus-visible,
 		.vp-root .vp-modal:focus-visible,
 		.vp-root .vp-modal:focus {

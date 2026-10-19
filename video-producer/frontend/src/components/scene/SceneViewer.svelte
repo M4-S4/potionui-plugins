@@ -39,6 +39,11 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 
+	const ORBIT_STEP = 2;
+	const PAN_STEP = 0.02;
+	const DOLLY_STEP = 0.92;
+	const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+
 	let w = $state(0);
 	let h = $state(0);
 	let host = $state();
@@ -121,6 +126,7 @@
 	function down(e) {
 		if (!live || (e.button !== 0 && e.button !== 1 && e.button !== 2)) return;
 		e.preventDefault();
+		e.currentTarget.focus({ preventScroll: true });
 		e.currentTarget.setPointerCapture?.(e.pointerId);
 		gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, moved: false };
 	}
@@ -149,6 +155,21 @@
 		const base = takeOver();
 		if (e.altKey) setFreeCamera({ ...base, focal: clamp(base.focal * Math.exp(-e.deltaY * 0.001), FOCAL_RANGE[0], FOCAL_RANGE[1]) });
 		else setFreeCamera(dollyCamera(base, Math.exp(e.deltaY * 0.001), depth * 0.02));
+	}
+
+	function key(e) {
+		if (!live || e.ctrlKey || e.metaKey || e.altKey) return;
+		const arrow = ARROWS[e.key];
+		if (arrow) {
+			const base = takeOver();
+			const [x, y] = arrow;
+			setFreeCamera(e.shiftKey ? panCamera(base, x * PAN_STEP, y * PAN_STEP) : orbitCamera(base, x * ORBIT_STEP, y * ORBIT_STEP));
+		} else if (e.key === '+' || e.key === '=') setFreeCamera(dollyCamera(takeOver(), DOLLY_STEP, depth * 0.02));
+		else if (e.key === '-' || e.key === '_') setFreeCamera(dollyCamera(takeOver(), 1 / DOLLY_STEP, depth * 0.02));
+		else if (e.key === '0') resetToSource();
+		else return;
+		e.preventDefault();
+		e.stopPropagation();
 	}
 
 	const path = $derived(plan?.keyframes.length && plan.sceneId === scene?.id ? Array.from({ length: 33 }, (_, i) => cameraAt(plan, (i / 32) * plan.dur)) : []);
@@ -198,17 +219,23 @@
 
 		<div class="relative min-h-0 flex-1 overflow-hidden" bind:clientWidth={w} bind:clientHeight={h}>
 			<div class="absolute overflow-hidden bg-black" style:left="{(w - frameW) / 2}px" style:top="{(h - frameH) / 2}px" style:width="{frameW}px" style:height="{frameH}px">
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 				<div
 					bind:this={host}
-					class="vp-touch-none absolute inset-0 {live ? 'cursor-grab active:cursor-grabbing' : ''}"
+					class="vp-touch-none vp-scene-surface absolute inset-0 {live ? 'cursor-grab active:cursor-grabbing' : ''}"
+					role="application"
+					tabindex={live ? 0 : -1}
+					aria-label={t('scene.surface')}
+					aria-describedby="vp-scene-keys"
 					onpointerdown={down}
 					onpointermove={move}
 					onpointerup={up}
 					onpointercancel={up}
 					onwheel={wheel}
+					onkeydown={key}
 					oncontextmenu={(e) => e.preventDefault()}
 				></div>
+				<p id="vp-scene-keys" class="sr-only">{t('scene.keys')}</p>
 
 				{#if sceneBusy(scene)}
 					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">

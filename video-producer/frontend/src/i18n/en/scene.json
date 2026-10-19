@@ -6,6 +6,8 @@
 	"freeCamera": "Free camera",
 	"hint": "Drag to orbit · right-drag or Shift-drag to pan · scroll to move in · Alt+scroll for the focal length",
 	"topView": "Top view of the trajectory",
+	"surface": "3D camera view",
+	"keys": "Arrow keys orbit the camera, Shift and the arrow keys pan it, + and − move it in and out, 0 returns to the source view.",
 	"hud": "{focal} mm · {fov}° vertical · {hfov}° horizontal · roll {roll}°",
 	"play": "Play the trajectory",
 	"pause": "Pause",
