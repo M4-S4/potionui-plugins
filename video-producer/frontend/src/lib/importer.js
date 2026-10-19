@@ -47,11 +47,9 @@ export function pickImage(title, onPicked) {
 	const close = openHostModal('UploadLibraryModal', {
 		title,
 		mediaType: 'image',
-		multiple: false,
-		selectedKeys: [],
-		selectableMediaTypes: ['image'],
-		onConfirm: async (keys, items) => {
-			const id = await importImage(items?.[0]);
+		onSelect: async (item) => {
+			close?.();
+			const id = await importImage(item?.id ? { origin: { kind: 'library', itemId: item.id }, filename: item.original_filename || item.filename } : null);
 			if (id) onPicked(id);
 		},
 		onClosed: () => (ui.hostModal = false)
