@@ -932,6 +932,7 @@ def test_the_keys_are_read_in_time_order_and_a_3d_shot_without_two_usable_keys_f
     shuffled["keyframes"] = list(reversed(shuffled["keyframes"]))
     broken = _orbit("plan-c2")
     broken["keyframes"][1]["pos"] = [0, "x", 0]
+    broken["keyframes"].append(_key("k3", 5, (0, 0, -4), (0, 0, -4), 30))
     doc["plans3d"] = [shuffled, broken]
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots

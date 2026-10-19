@@ -396,7 +396,7 @@ def _keys(plan: Mapping[str, Any]) -> List[Dict[str, Any]]:
     keys = []
     for key in plan.get("keyframes") or []:
         pos, target, time = _point(key.get("pos")), _point(key.get("target")), key.get("t")
-        if pos and target and isinstance(time, (int, float)) and not isinstance(time, bool):
+        if pos and target and _length(_sub(target, pos)) > 1e-9 and isinstance(time, (int, float)) and not isinstance(time, bool):
             focal = key.get("focal")
             keys.append({"t": float(time), "pos": pos, "target": target, "focal": focal if isinstance(focal, (int, float)) else None})
     return sorted(keys, key=lambda key: key["t"])
