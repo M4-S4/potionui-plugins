@@ -32,6 +32,7 @@ import { RUNNING, createPoller, jobScene, lostScene, orphanJobs } from './scene3
 const POLL_EVERY = 2000;
 const BATCH_BYTES = 6 * 1024 * 1024;
 const BATCH_FRAMES = 12;
+const MAX_RENDER_FRAMES = 400;
 const SPLAT_FORMAT = ['ply', 'spz', 'splat'];
 
 export const sceneState = $state({
@@ -550,6 +551,12 @@ function cancelOrphans() {
 	}
 }
 
+function failureText(code, fallback) {
+	if (code === 'storage_full' || code === 'render_too_large') return t('scene.error.storage');
+	if (code === 'render_limit') return t('scene.toast.renderLimit');
+	return fallback;
+}
+
 export function sceneErrorText(code) {
 	if (code === 'cancelled') return t('scene.error.cancelled');
 	if (code === 'lost') return t('scene.error.lost');
@@ -558,6 +565,8 @@ export function sceneErrorText(code) {
 	if (code === 'asset_not_found' || code === 'source_unavailable') return t('scene.error.source');
 	if (code === 'extract_failed') return t('scene.error.extract');
 	if (code === 'save') return t('scene.error.save');
+	if (code === 'storage_full') return t('scene.error.storage');
+	if (code === 'scene_jobs_busy') return t('scene.error.busy');
 	return t('scene.error.generic');
 }
 
@@ -691,7 +700,7 @@ export async function uploadSceneFile(file) {
 		if (projectId !== project.id) return;
 		if (!result.ok) {
 			if (result.error.code === 'project_not_found') return projectGone(projectId);
-			return toast(result.error.status === 413 ? t('scene.toast.tooLarge') : t('scene.toast.uploadFailed'), 'error');
+			return toast(result.error.code === 'storage_full' ? t('scene.error.storage') : result.error.status === 413 ? t('scene.toast.tooLarge') : t('scene.toast.uploadFailed'), 'error');
 		}
 		const stored = result.data;
 		const name = sceneName(file.name);
@@ -776,7 +785,7 @@ export async function saveCapture(clipId, usage) {
 		return true;
 	} catch (err) {
 		if (err?.code === 'project_not_found') projectGone(projectId);
-		else toast(t('scene.toast.captureFailed'), 'error');
+		else toast(failureText(err?.code, t('scene.toast.captureFailed')), 'error');
 		return false;
 	} finally {
 		sceneState.saving = false;
@@ -815,6 +824,7 @@ export async function renderPlan(plan) {
 	const size = videoSize();
 	const times = renderTimes(plan.dur);
 	const total = times.length;
+	if (total > MAX_RENDER_FRAMES) return toast(t('scene.toast.tooLong', { max: secs(MAX_RENDER_FRAMES / FPS) }), 'warning');
 	const poses = times.map((time) => fovFor(cameraAt(plan, time), size));
 	const signature = planSignature(plan);
 	const projectId = project.id;
@@ -866,7 +876,7 @@ export async function renderPlan(plan) {
 		if (renderId) client.deleteRender(projectId, renderId);
 		if (err?.name === 'AbortError' || controller.signal.aborted) toast(t('scene.toast.renderCancelled'));
 		else if (err?.code === 'project_not_found') projectGone(projectId);
-		else toast(t('scene.toast.renderFailed'), 'error');
+		else toast(failureText(err?.code, t('scene.toast.renderFailed')), 'error');
 	} finally {
 		if (renderController === controller) renderController = null;
 		sceneState.render = null;
@@ -910,7 +920,7 @@ export async function useStartEnd(plan) {
 		toast(t('scene.toast.ends', { shot: clipLabel(target) }), 'success', { label: t('shell.toast.undo'), run: undo });
 	} catch (err) {
 		if (err?.code === 'project_not_found') projectGone(projectId);
-		else toast(t('scene.toast.captureFailed'), 'error');
+		else toast(failureText(err?.code, t('scene.toast.captureFailed')), 'error');
 	} finally {
 		sceneState.ends = null;
 		release();
