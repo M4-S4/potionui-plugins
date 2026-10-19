@@ -4,6 +4,7 @@ import { toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
 import { resetTakes } from './takes.svelte.js';
 import { compileRules, conflictIds, namesCamera } from './rules.js';
+import { dropPlanControls } from './scene3d/doc.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -107,6 +108,11 @@ export function seqDuration() {
 
 const past = $state([]);
 const future = $state([]);
+const restoreListeners = new Set();
+export function onRestore(listener) {
+	restoreListeners.add(listener);
+	return () => restoreListeners.delete(listener);
+}
 export const history = {
 	get canUndo() {
 		return past.length > 0;
@@ -124,6 +130,7 @@ export function checkpoint() {
 function restore(json) {
 	const d = JSON.parse(json);
 	for (const k of Object.keys(d)) doc[k] = d[k];
+	for (const listener of restoreListeners) listener();
 }
 export function undo() {
 	if (!past.length) return;
@@ -233,6 +240,7 @@ export function deleteSelection() {
 			dropLinked(removed.id);
 			relayout();
 		}
+		if (s.kind === 'plan3d') dropPlanControls(doc.controls, removed.id);
 	});
 	ui.selection = null;
 	toast(t('lib.toast.deleted'), 'info', { label: t('shell.toast.undo'), run: undo });

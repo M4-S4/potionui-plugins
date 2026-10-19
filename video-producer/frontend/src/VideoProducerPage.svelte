@@ -16,7 +16,7 @@
 	import { handleKeydown } from './lib/commands.js';
 	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
 	import { startAssistant } from './lib/assistant.svelte.js';
-	import { pollScenes, scenesBusy } from './lib/scene.svelte.js';
+	import { disposeScenes, pollScenes, scenesBusy } from './lib/scene.svelte.js';
 	import MenuBar from './components/shell/MenuBar.svelte';
 	import ProjectBar from './components/shell/ProjectBar.svelte';
 	import StatusBar from './components/shell/StatusBar.svelte';
@@ -107,6 +107,7 @@
 			saveSeq += 1;
 			document.removeEventListener('visibilitychange', onvisibility);
 			stopProduction();
+			disposeScenes();
 			disposeExports();
 			flushSave();
 			disposeProject();

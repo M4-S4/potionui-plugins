@@ -23,10 +23,13 @@
 		retryLoad,
 		loadEngine,
 		ensureStage,
+		getStage,
+		retryEngine,
 		projectAspect,
 		retryScene,
 		cancelScene,
 		sceneErrorText,
+		sceneProgress,
 		chooseSceneFile,
 		cancelRender
 	} from '../../lib/scene.svelte.js';
@@ -39,8 +42,8 @@
 	let w = $state(0);
 	let h = $state(0);
 	let host = $state();
-	let stage = $state.raw(null);
 	let gesture = null;
+	const stage = $derived(getStage());
 
 	const scene = $derived(currentScene());
 	const plan = $derived(currentPlan());
@@ -58,6 +61,8 @@
 	const one = (v) => formatNumber(v, { maximumFractionDigits: 1 });
 	const hud = $derived(t('scene.hud', { focal: Math.round(cam.focal), fov: one(fov), hfov: one(horizontalFov(cam.focal)), roll: Math.round(cam.roll ?? 0) }));
 	const render = $derived(sceneState.render);
+	const progress = $derived(sceneProgress(scene));
+	const live = $derived(ready && sceneState.status === 'ready');
 
 	const emptyProps = $derived({
 		icon: 'cube',
@@ -73,13 +78,9 @@
 	});
 
 	onMount(() => {
-		let alive = true;
 		loadEngine();
-		ensureStage().then((st) => {
-			if (alive) stage = st;
-		});
+		ensureStage();
 		return () => {
-			alive = false;
 			gesture = null;
 		};
 	});
@@ -118,7 +119,7 @@
 	});
 
 	function down(e) {
-		if (!ready || sceneState.status !== 'ready' || (e.button !== 0 && e.button !== 1 && e.button !== 2)) return;
+		if (!live || (e.button !== 0 && e.button !== 1 && e.button !== 2)) return;
 		e.preventDefault();
 		e.currentTarget.setPointerCapture?.(e.pointerId);
 		gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, moved: false };
@@ -143,7 +144,7 @@
 	}
 
 	function wheel(e) {
-		if (!ready || sceneState.status !== 'ready') return;
+		if (!live) return;
 		e.preventDefault();
 		const base = takeOver();
 		if (e.altKey) setFreeCamera({ ...base, focal: clamp(base.focal * Math.exp(-e.deltaY * 0.001), FOCAL_RANGE[0], FOCAL_RANGE[1]) });
@@ -200,7 +201,7 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					bind:this={host}
-					class="vp-touch-none absolute inset-0 {ready && sceneState.status === 'ready' ? 'cursor-grab active:cursor-grabbing' : ''}"
+					class="vp-touch-none absolute inset-0 {live ? 'cursor-grab active:cursor-grabbing' : ''}"
 					onpointerdown={down}
 					onpointermove={move}
 					onpointerup={up}
@@ -213,8 +214,8 @@
 					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
 						<HostUi name="Spinner" props={{ size: 'md' }} />
 						<div class="text-sm text-white">{scene.status === 'queued' ? t('scene.status.queued') : t('scene.status.running')}</div>
-						<div class="h-1 w-48 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label={t('scene.status.running')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(scene.progress)}>
-							<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{scene.progress}%"></div>
+						<div class="h-1 w-48 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label={t('scene.status.running')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(progress)}>
+							<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{progress}%"></div>
 						</div>
 						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => cancelScene(scene) }}>{t('scene.cancel')}</HostUi>
 					</div>
@@ -224,10 +225,19 @@
 						<div class="max-w-sm text-sm text-white">{sceneErrorText(scene.error)}</div>
 						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: () => retryScene(scene) }}>{t('scene.retry')}</HostUi>
 					</div>
+				{:else if sceneState.engine === 'lost'}
+					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center" role="alert">
+						<Icon name="alert" class="h-6 w-6 text-warning" />
+						<div class="max-w-sm text-sm text-white">{t('scene.engine.lost')}</div>
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: retryEngine }}>{t('scene.retry')}</HostUi>
+					</div>
 				{:else if sceneState.engine === 'unsupported' || sceneState.engine === 'failed'}
 					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
 						<Icon name="alert" class="h-6 w-6 text-warning" />
 						<div class="max-w-sm text-sm text-white">{sceneState.engine === 'unsupported' ? t('scene.engine.unsupported') : t('scene.engine.failed')}</div>
+						{#if sceneState.engine === 'failed'}
+							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: () => location.reload() }}>{t('scene.engine.reload')}</HostUi>
+						{/if}
 					</div>
 				{:else if sceneState.status === 'failed'}
 					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
@@ -242,7 +252,7 @@
 					</div>
 				{/if}
 
-				{#if ready && sceneState.status === 'ready'}
+				{#if live}
 					<div class="vp-tc pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white">{hud}</div>
 					{#if gap}
 						<div class="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white" role="status">
@@ -302,7 +312,9 @@
 						<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{(render.done / render.total) * 100}%"></div>
 					</div>
 				</div>
-				<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', onclick: cancelRender }}>{t('scene.cancel')}</HostUi>
+				{#if render.phase !== 'encoding'}
+					<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', onclick: cancelRender }}>{t('scene.cancel')}</HostUi>
+				{/if}
 			{/if}
 			<span class="vp-tc text-md">{tc(ui.playhead, doc.fps)}</span>
 		</div>

@@ -29,7 +29,6 @@
 	import { refRoleLabel } from '../../lib/references.js';
 	import { commandById } from '../../lib/commands.js';
 	import {
-		sceneState,
 		currentPlan,
 		currentScene,
 		sceneOf,
@@ -49,8 +48,10 @@
 		useStartEnd,
 		setPlanDur,
 		setPlanScene,
+		setPlanStart,
 		presetLabel,
-		sceneReady
+		sceneReady,
+		sceneLocked
 	} from '../../lib/scene.svelte.js';
 	import { FOCAL_RANGE, ROLL_RANGE, distance, dollyCamera, pose } from '../../lib/scene3d/camera.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -405,7 +406,7 @@
 					<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>
 						<div class="flex items-center gap-2">
 							<span class="flex-1">{t('inspector.control.stale')}</span>
-							{#if owner}<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', disabled: Boolean(sceneState.render), onclick: () => renderPlan(owner) }}>{t('inspector.control.rerender')}</HostUi>{/if}
+							{#if owner}<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', disabled: sceneLocked(), onclick: () => renderPlan(owner) }}>{t('inspector.control.rerender')}</HostUi>{/if}
 						</div>
 					</HostUi>
 				{/if}
@@ -435,16 +436,16 @@
 			{:else if s.kind === 'plan3d'}
 				{@const control = controlOf(item)}
 				{@const planScene = sceneOf(item.sceneId)}
-				{@const locked = !sceneReady(planScene) || !item.keyframes.length || Boolean(sceneState.render || sceneState.ends)}
+				{@const locked = !sceneReady(planScene) || !item.keyframes.length || sceneLocked()}
 				<section class="space-y-2">
 					<label class="flex items-center gap-2">
 						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.scene')}</span>
-						<select class="input vp-dense min-w-0 flex-1" value={item.sceneId ?? ''} onchange={(e) => setPlanScene(item, e.currentTarget.value)}>
+						<select class="input vp-dense min-w-0 flex-1" value={item.sceneId ?? ''} disabled={sceneLocked()} onchange={(e) => setPlanScene(item, e.currentTarget.value)}>
 							<option value="">{t('inspector.field.noScene')}</option>
 							{#each doc.scenes as sc (sc.id)}<option value={sc.id}>{sc.name}</option>{/each}
 						</select>
 					</label>
-					<NumField label={t('inspector.field.start')} value={item.start} min={0} step={0.04} unit="s" onchange={(v) => set('start', v)} />
+					<NumField label={t('inspector.field.start')} value={item.start} min={0} step={0.04} unit="s" onchange={(v) => setPlanStart(item, v)} />
 					<NumField label={t('inspector.field.duration')} value={item.dur} min={0.5} step={0.04} unit="s" onchange={(v) => setPlanDur(item, v)} />
 					<div class="flex items-center gap-2 text-xs">
 						<span class="w-24 shrink-0 text-fg-muted">{t('inspector.plan.path')}</span>

@@ -139,6 +139,6 @@
 	"scene.short": "Shorter than {min}: the reference video will be too short for MiniMax.",
 	"scene.rendered": "Reference video of “{name}” ready ({duration}).",
 	"scene.noPlan": "Select a 3D shot, or put the playhead in one, to render it.",
-	"scene.size": "Reference video: {width} × {height}, {fps} fps",
+	"scene.size": "Reference video: {width} × {height}, {fps} fps (long side capped at {max} px)",
 	"dock.refs.fromScene": "Capture from a 3D scene…"
 }

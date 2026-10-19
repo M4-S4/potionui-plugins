@@ -77,7 +77,12 @@ export async function encode(pixels, width, height, type = 'image/png', quality)
 	return blobUrl(blob);
 }
 
-export function createStage() {
+function discard(loaded) {
+	loaded?.splat?.dispose();
+	if (loaded?.gltf) disposeObject(loaded.gltf.scene);
+}
+
+export function createStage({ onLost } = {}) {
 	const canvas = document.createElement('canvas');
 	canvas.style.cssText = 'display:block;width:100%;height:100%;touch-action:none';
 	const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'high-performance' });
@@ -94,6 +99,15 @@ export function createStage() {
 	let content = null;
 	let offline = null;
 	let environment = null;
+	let generation = 0;
+	let time = 0;
+	let pendingClear = false;
+	let kill = null;
+	const killed = new Promise((_, reject) => (kill = reject));
+	killed.catch(() => {});
+	canvas.addEventListener('webglcontextlost', () => {
+		if (!disposed) onLost?.();
+	});
 	const request = () => {
 		dirty = true;
 		if (!raf && !disposed) raf = requestAnimationFrame(frame);
@@ -140,7 +154,12 @@ export function createStage() {
 		const fileType = SPLAT_TYPES[format];
 		if (!fileType) throw new Error('unsupported_format');
 		const splat = new SplatMesh({ fileBytes: bytes, fileType, fileName: `scene.${format}` });
-		await splat.initialized;
+		try {
+			await splat.initialized;
+		} catch (err) {
+			splat.dispose();
+			throw err;
+		}
 		const root = new THREE.Group();
 		root.rotation.x = Math.PI;
 		root.add(splat);
@@ -200,7 +219,7 @@ export function createStage() {
 			cam.getWorldQuaternion(quaternion);
 			return { t, pos: position.toArray(), quat: quaternion.toArray(), yfov: cam.fov, aspect: own };
 		});
-		animate(content, 0);
+		animate(content, time);
 		return samples;
 	}
 
@@ -213,14 +232,16 @@ export function createStage() {
 		return spark;
 	}
 
-	async function pixels(pose, width, height, time = 0) {
+	async function draw(pose, width, height, at) {
 		const spark = offlineFor(width, height);
 		applyPose(shot, pose, width / height);
-		animate(content, time);
+		animate(content, at);
 		await spark.update({ scene, camera: shot });
 		const raw = await spark.renderReadTarget({ scene, camera: shot });
 		return upright(raw, width, height);
 	}
+
+	const pixels = (pose, width, height, at = 0) => Promise.race([draw(pose, width, height, at), killed]);
 
 	async function exclusive(task) {
 		busy += 1;
@@ -228,30 +249,44 @@ export function createStage() {
 			return await task();
 		} finally {
 			busy -= 1;
-			animate(content, 0);
+			if (!busy) {
+				if (pendingClear) {
+					pendingClear = false;
+					clear();
+				}
+				animate(content, time);
+			}
 			request();
 		}
 	}
 
 	return {
 		canvas,
+		get busy() {
+			return busy > 0;
+		},
 		async load({ kind, bytes, format }) {
-			clear();
+			const mine = ++generation;
+			if (!busy) clear();
 			const loaded = kind === 'glb' ? await loadGltf(bytes) : await loadSplat(bytes, format);
-			if (disposed) {
-				loaded.splat?.dispose();
-				if (loaded.gltf) disposeObject(loaded.gltf.scene);
+			if (disposed || mine !== generation) {
+				discard(loaded);
 				return null;
 			}
+			clear();
+			pendingClear = false;
 			content = { kind, ...loaded };
 			scene.add(content.root);
 			if (content.gltf) scene.environment = environment;
 			fitClipping(content.bounds);
+			animate(content, time);
 			request();
 			return { bounds: content.bounds, count: content.count ?? null };
 		},
 		unload() {
-			clear();
+			generation += 1;
+			if (busy) pendingClear = true;
+			else clear();
 			request();
 		},
 		sampleCamera,
@@ -259,7 +294,8 @@ export function createStage() {
 			applyPose(camera, pose, camera.aspect);
 			request();
 		},
-		setTime(time) {
+		setTime(at) {
+			time = Math.max(0, Number(at) || 0);
 			if (!content?.mixer || busy) return;
 			animate(content, time);
 			request();
@@ -272,23 +308,26 @@ export function createStage() {
 			request();
 		},
 		refresh: request,
-		capture(pose, width, height, time = 0) {
+		capture(pose, width, height, at = 0) {
 			return exclusive(async () => {
-				const { pixels: image, coverage } = await pixels(pose, width, height, time);
+				const { pixels: image, coverage } = await pixels(pose, width, height, at);
 				return { url: await encode(image, width, height, 'image/png'), coverage };
 			});
 		},
-		async render(poses, width, height, { fps, quality = 0.92, onFrame, signal } = {}) {
+		async render(poses, width, height, { times = [], quality = 0.92, onFrame, signal } = {}) {
 			return exclusive(async () => {
 				for (let i = 0; i < poses.length; i++) {
 					if (signal?.aborted || disposed) throw new DOMException('aborted', 'AbortError');
-					const { pixels: image } = await pixels(poses[i], width, height, i / fps);
+					const { pixels: image } = await pixels(poses[i], width, height, times[i] ?? 0);
 					await onFrame(i, await encode(image, width, height, 'image/jpeg', quality));
 				}
 			});
 		},
 		dispose() {
+			if (disposed) return;
 			disposed = true;
+			generation += 1;
+			kill(new DOMException('disposed', 'AbortError'));
 			cancelAnimationFrame(raf);
 			clear();
 			offline?.spark.dispose();

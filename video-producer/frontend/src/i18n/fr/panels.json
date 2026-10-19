@@ -139,6 +139,6 @@
 	"scene.short": "Moins de {min} : la vidéo de référence sera trop courte pour MiniMax.",
 	"scene.rendered": "Vidéo de référence de « {name} » prête ({duration}).",
 	"scene.noPlan": "Sélectionnez un plan 3D, ou placez-y la tête de lecture, pour le rendre.",
-	"scene.size": "Vidéo de référence : {width} × {height}, {fps} i/s",
+	"scene.size": "Vidéo de référence : {width} × {height}, {fps} i/s (grand côté limité à {max} px)",
 	"dock.refs.fromScene": "Capturer depuis une scène 3D…"
 }

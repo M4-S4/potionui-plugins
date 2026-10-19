@@ -1,5 +1,5 @@
-import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, select, toast, undo, clamp, round, secs, shotIdAt, asset, newAsset, clipLabel } from './state.svelte.js';
+import { formatBytes, t } from '../i18n/index.svelte.js';
+import { ui, doc, act, select, toast, undo, clamp, round, secs, shotIdAt, asset, newAsset, clipLabel, onRestore } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { pause, seek } from './playback.svelte.js';
 import { aspectOf } from './generation.js';
@@ -14,25 +14,24 @@ import {
 	cameraKeys,
 	distance,
 	focalToFov,
-	frameCount,
 	pose,
 	presetAmount,
 	presetBase,
 	projectSize,
-	renderPoses,
 	renderSize,
+	renderTimes,
 	retime,
 	sampleTimes,
 	sourceView,
 	trajectory
 } from './scene3d/camera.js';
-import { MAX_SCENE_FILE, SCENE_FILE_ACCEPT, cameraNode, gltfCameras, gltfJson, plyView, sceneFileKind, sceneName } from './scene3d/files.js';
+import { GLTF_READ_LIMIT, MAX_SCENE_FILE, SCENE_FILE_ACCEPT, cameraNode, gltfCameras, gltfJson, plyView, readSceneHead, sceneFileKind, sceneName } from './scene3d/files.js';
+import { controlFor, movePlan, planSignature, pruneAsset } from './scene3d/doc.js';
+import { RUNNING, createPoller, jobScene, lostScene, orphanJobs } from './scene3d/jobs.js';
 
 const POLL_EVERY = 2000;
-const RUNNING = ['queued', 'running'];
 const BATCH_BYTES = 6 * 1024 * 1024;
 const BATCH_FRAMES = 12;
-const GLB_HEADER = 20;
 const SPLAT_FORMAT = ['ply', 'spz', 'splat'];
 
 export const sceneState = $state({
@@ -45,18 +44,22 @@ export const sceneState = $state({
 	render: null,
 	capture: null,
 	ends: null,
+	progress: {},
 	uploading: false,
 	saving: false
 });
 
-let stage = null;
+let stage = $state.raw(null);
 let enginePromise = null;
 let loadToken = 0;
 let loading = null;
-let pollTimer = null;
 let renderController = null;
+let deferred = false;
+let closed = false;
 const submitting = new Set();
+const liveJobs = new Map();
 const gltfMeta = new Map();
+const poller = createPoller({ every: POLL_EVERY, run: tick, active: () => !closed && scenesBusy() });
 
 export const projectAspect = () => aspectOf(doc.aspect, doc.resolution);
 export const captureSize = () => projectSize(doc.resolution, projectAspect());
@@ -88,6 +91,9 @@ export function sceneReady(scene) {
 
 export const sceneBusy = (scene) => scene?.kind === 'splat' && RUNNING.includes(scene.status);
 export const scenesBusy = () => doc.scenes.some(sceneBusy);
+export const sceneProgress = (scene) => (scene ? (sceneState.progress[scene.id] ?? scene.progress ?? 0) : 0);
+export const sceneLocked = () => Boolean(sceneState.render || sceneState.ends || sceneState.capture?.busy);
+const heldScene = () => sceneState.render?.sceneId ?? sceneState.ends?.sceneId ?? (sceneState.capture?.busy ? sceneState.capture.sceneId : null);
 export const sceneInfo = (scene) => (scene ? (sceneState.info[scene.id] ?? null) : null);
 export const sourceOf = (scene) => sourceView(scene, sceneInfo(scene));
 
@@ -97,10 +103,7 @@ export function shotOfPlan(plan) {
 }
 
 export function controlOf(plan) {
-	if (!plan) return null;
-	const own = doc.controls.find((c) => c.planId === plan.id);
-	if (own) return own;
-	return doc.controls.find((c) => c.source === 'scene3d' && !c.planId && (plan.shotId && c.shotId ? c.shotId === plan.shotId : c.start === plan.start)) ?? null;
+	return controlFor(doc.controls, plan);
 }
 
 export function planOfControl(control) {
@@ -167,10 +170,27 @@ export function resetToSource() {
 	ui.scene.keyframe = 'free';
 }
 
+function refuseWhileLocked() {
+	if (!sceneLocked()) return false;
+	toast(t('scene.toast.busy'), 'warning');
+	return true;
+}
+
 export function showScene(scene) {
 	if (!scene) return;
-	ui.scene.current = scene.id;
+	if (!sceneLocked()) ui.scene.current = scene.id;
 	ui.workspace = 'scene';
+}
+
+export function pickScene(id) {
+	if (ui.scene.current === id || refuseWhileLocked()) return;
+	ui.scene.current = id;
+}
+
+export function focusPlan(plan) {
+	select('plan3d', plan.id);
+	if (plan.sceneId && !sceneLocked()) ui.scene.current = plan.sceneId;
+	seek(plan.start);
 }
 
 export function loadEngine() {
@@ -192,11 +212,12 @@ export function loadEngine() {
 }
 
 export async function ensureStage() {
-	if (stage) return stage;
+	if (stage || closed || sceneState.engine === 'lost') return stage;
 	const engine = await loadEngine();
-	if (!engine) return null;
+	if (!engine || closed || sceneState.engine === 'lost') return null;
+	if (stage) return stage;
 	try {
-		stage ??= engine.createStage();
+		stage = engine.createStage({ onLost: contextLost });
 	} catch {
 		sceneState.engine = 'unsupported';
 		return null;
@@ -211,6 +232,34 @@ function forgetLoaded() {
 	loading = null;
 	stage?.unload();
 	Object.assign(sceneState, { loadedId: null, loadedFile: null, status: 'idle', error: null });
+}
+
+function dropStage() {
+	const old = stage;
+	stage = null;
+	loadToken += 1;
+	loading = null;
+	try {
+		old?.dispose();
+	} catch {}
+}
+
+function contextLost() {
+	renderController?.abort();
+	dropStage();
+	Object.assign(sceneState, { engine: 'lost', loadedId: null, loadedFile: null, status: 'idle', error: null });
+}
+
+export async function retryEngine() {
+	if (sceneState.engine !== 'lost') return;
+	sceneState.engine = 'ready';
+	if (await ensureStage()) syncStage();
+}
+
+function release() {
+	if (!deferred || sceneLocked() || stage?.busy) return;
+	deferred = false;
+	syncStage();
 }
 
 async function readScene(scene, token) {
@@ -244,12 +293,18 @@ async function readScene(scene, token) {
 	return st;
 }
 
-export function syncStage(scene = currentScene()) {
-	if (!scene || !sceneReady(scene)) {
+export function syncStage(target = currentScene()) {
+	if (closed) return Promise.resolve(null);
+	const scene = target && sceneReady(target) ? target : null;
+	if (scene && stage && sceneState.loadedId === scene.id && sceneState.loadedFile === scene.fileId && sceneState.status === 'ready') return Promise.resolve(stage);
+	if (stage?.busy || (sceneLocked() && scene?.id !== heldScene())) {
+		deferred = true;
+		return Promise.resolve(null);
+	}
+	if (!scene) {
 		if (sceneState.loadedId || loading) forgetLoaded();
 		return Promise.resolve(null);
 	}
-	if (sceneState.loadedId === scene.id && sceneState.loadedFile === scene.fileId && sceneState.status === 'ready') return Promise.resolve(stage);
 	const key = `${scene.id}:${scene.fileId}`;
 	if (loading?.key === key) return loading.promise;
 	const token = ++loadToken;
@@ -393,7 +448,17 @@ export function setPlanDur(plan, dur) {
 	markStale(plan);
 }
 
+export function relinkPlan(plan) {
+	return movePlan(doc.controls, plan, shotIdAt(plan.start));
+}
+
+export function setPlanStart(plan, start) {
+	plan.start = Math.max(0, start);
+	relinkPlan(plan);
+}
+
 export function setPlanScene(plan, sceneId) {
+	if (refuseWhileLocked()) return;
 	act(() => {
 		plan.sceneId = sceneId || null;
 		markStale(plan);
@@ -402,6 +467,7 @@ export function setPlanScene(plan, sceneId) {
 }
 
 export async function useBlenderCamera(plan, name) {
+	if (refuseWhileLocked()) return;
 	const scene = sceneOf(plan?.sceneId);
 	if (!scene || scene.kind !== 'glb') return toast(t('scene.toast.noBlender'), 'warning');
 	ui.scene.current = scene.id;
@@ -422,16 +488,25 @@ export async function useBlenderCamera(plan, name) {
 	toast(t('scene.toast.blender', { camera: name, count: target.keyframes.length }));
 }
 
-function applyJob(job) {
-	const scene = doc.scenes.find((s) => s.kind === 'splat' && (s.id === job.sceneId || (job.id && s.jobId === job.id)));
+function applyJob(job, own = false) {
+	const scene = jobScene(doc.scenes, job, own ? null : submitting);
 	if (!scene) return;
 	const before = scene.status;
 	const done = job.status === 'done';
 	const status = done && !job.fileId ? 'failed' : job.status === 'cancelled' ? 'failed' : job.status;
-	const patch = { status, progress: done ? 100 : job.progress, jobId: job.id ?? scene.jobId };
+	const progress = done ? 100 : job.progress;
+	const patch = { status, jobId: job.id ?? scene.jobId };
+	if (status !== before) patch.progress = progress;
 	if (status === 'done') Object.assign(patch, { fileId: job.fileId, count: job.count, view: job.view, error: null });
 	if (status === 'failed') patch.error = job.status === 'cancelled' ? 'cancelled' : done ? 'no_file' : job.error || 'failed';
 	for (const [key, value] of Object.entries(patch)) if (JSON.stringify(scene[key]) !== JSON.stringify(value)) scene[key] = value;
+	if (RUNNING.includes(status)) {
+		sceneState.progress[scene.id] = progress;
+		if (patch.jobId) liveJobs.set(scene.id, patch.jobId);
+	} else {
+		delete sceneState.progress[scene.id];
+		liveJobs.delete(scene.id);
+	}
 	if (before === status || !RUNNING.includes(before)) return;
 	if (status === 'done') toast(t('scene.toast.ready', { name: scene.name }), 'success');
 	else if (status === 'failed' && patch.error !== 'cancelled') toast(t('scene.toast.failed', { name: scene.name }), 'error');
@@ -439,28 +514,40 @@ function applyJob(job) {
 
 function lostJobs(jobs) {
 	for (const scene of doc.scenes) {
-		if (!sceneBusy(scene) || submitting.has(scene.id)) continue;
-		if (jobs.some((j) => (scene.jobId && j.id === scene.jobId) || j.sceneId === scene.id)) continue;
+		if (!sceneBusy(scene) || submitting.has(scene.id) || !lostScene(scene, jobs)) continue;
 		Object.assign(scene, { status: 'failed', error: 'lost' });
+		delete sceneState.progress[scene.id];
+		liveJobs.delete(scene.id);
 	}
 }
 
 async function tick() {
-	pollTimer = null;
 	const projectId = project.id;
 	if (!projectId || !scenesBusy()) return;
 	const result = await getClient().sceneJobs(projectId);
-	if (projectId !== project.id) return;
+	if (projectId !== project.id || closed) return;
 	if (result.ok) {
 		for (const job of result.data) applyJob(job);
 		lostJobs(result.data);
-	} else if (result.error.code === 'project_not_found') return projectGone(projectId);
-	if (scenesBusy()) pollTimer = setTimeout(tick, POLL_EVERY);
+	} else if (result.error.code === 'project_not_found') {
+		projectGone(projectId);
+		return false;
+	}
 }
 
 export function pollScenes() {
-	if (pollTimer || !scenesBusy()) return;
-	pollTimer = setTimeout(tick, POLL_EVERY);
+	poller.arm();
+}
+
+function cancelOrphans() {
+	const projectId = project.id;
+	const client = getClient();
+	if (!projectId || !client) return;
+	for (const [sceneId, jobId] of orphanJobs(liveJobs, doc.scenes)) {
+		liveJobs.delete(sceneId);
+		delete sceneState.progress[sceneId];
+		client.cancelSceneJob(projectId, jobId);
+	}
 }
 
 export function sceneErrorText(code) {
@@ -485,16 +572,20 @@ async function submit(sceneId) {
 			return toast(t('scene.toast.saveFirst'), 'error');
 		}
 		const projectId = project.id;
-		const result = await getClient().sceneFromImage(projectId, { sceneId, assetId: scene.sourceAssetId, time: scene.sourceTime, name: scene.name });
+		const client = getClient();
+		const result = await client.sceneFromImage(projectId, { sceneId, assetId: scene.sourceAssetId, time: scene.sourceTime, name: scene.name });
 		if (projectId !== project.id) return;
 		const target = sceneOf(sceneId);
-		if (!target) return;
+		if (!target || !sceneBusy(target)) {
+			if (result.ok && result.data?.id) client.cancelSceneJob(projectId, result.data.id);
+			return;
+		}
 		if (!result.ok) {
 			if (result.error.code === 'project_not_found') return projectGone(projectId);
 			Object.assign(target, { status: 'failed', error: result.error.code || 'failed' });
 			return toast(sceneErrorText(result.error.code), 'error');
 		}
-		applyJob({ ...result.data, sceneId });
+		applyJob({ ...result.data, sceneId }, true);
 		toast(t('scene.toast.started', { name: target.name }));
 	} finally {
 		submitting.delete(sceneId);
@@ -539,14 +630,15 @@ export async function cancelScene(scene) {
 	const projectId = project.id;
 	const result = await getClient().cancelSceneJob(projectId, scene.jobId);
 	if (projectId !== project.id) return;
-	if (result.ok) applyJob({ ...result.data, sceneId: scene.id });
+	if (result.ok) applyJob({ ...result.data, sceneId: scene.id }, true);
 	else if (result.error.status === 404) Object.assign(scene, { status: 'failed', error: 'cancelled' });
 	else toast(t('scene.toast.cancelFailed'), 'error');
 }
 
 export async function removeScene(scene) {
-	if (!scene) return;
+	if (!scene || refuseWhileLocked()) return;
 	if (sceneBusy(scene)) await cancelScene(scene);
+	if (refuseWhileLocked()) return;
 	act(() => {
 		const i = doc.scenes.indexOf(scene);
 		if (i >= 0) doc.scenes.splice(i, 1);
@@ -561,11 +653,10 @@ export async function removeScene(scene) {
 	toast(t('scene.toast.removed', { name: scene.name }), 'info', { label: t('shell.toast.undo'), run: undo });
 }
 
-async function gltfHead(file) {
-	const head = new Uint8Array(await file.slice(0, GLB_HEADER).arrayBuffer());
-	const view = new DataView(head.buffer);
-	if (head.length === GLB_HEADER && view.getUint32(0, true) === 0x46546c67) return new Uint8Array(await file.slice(0, GLB_HEADER + view.getUint32(12, true)).arrayBuffer());
-	return new Uint8Array(await file.arrayBuffer());
+function gltfErrorText(code) {
+	if (code === 'gltf_external') return t('scene.toast.gltfExternal');
+	if (code === 'gltf_large') return t('scene.toast.gltfLarge', { size: formatBytes(GLTF_READ_LIMIT) });
+	return t('scene.toast.gltfInvalid');
 }
 
 export function chooseSceneFile() {
@@ -587,12 +678,16 @@ export async function uploadSceneFile(file) {
 	if (sceneState.uploading) return;
 	sceneState.uploading = true;
 	try {
-		const cameras = kind.kind === 'glb' ? gltfCameras(await gltfHead(file)) : [];
+		const head = kind.kind === 'glb' ? await readSceneHead(file, kind.format) : null;
+		if (head?.error) return toast(gltfErrorText(head.error), 'warning');
+		const cameras = head?.json ? gltfCameras(head.json) : [];
 		const headerView = kind.format === 'ply' ? plyView(await file.slice(0, 65536).arrayBuffer()) : null;
+		const glbName = `${sceneName(file.name)}.glb`;
+		const body = head?.packed ? new File([head.packed], glbName, { type: 'model/gltf-binary' }) : head?.rename ? new File([file], glbName, { type: 'model/gltf-binary' }) : file;
 		const saved = await flushSave();
 		if (!saved || !project.id) return toast(t('scene.toast.saveFirst'), 'error');
 		const projectId = project.id;
-		const result = await getClient().uploadSceneFile(projectId, file, kind.kind);
+		const result = await getClient().uploadSceneFile(projectId, body, kind.kind);
 		if (projectId !== project.id) return;
 		if (!result.ok) {
 			if (result.error.code === 'project_not_found') return projectGone(projectId);
@@ -623,6 +718,7 @@ export async function prepareCapture() {
 		sceneState.capture = null;
 		return toast(t('scene.toast.notReady'), 'warning');
 	}
+	if (refuseWhileLocked()) return;
 	const size = captureSize();
 	const plan = currentPlan();
 	const cam = shownCamera();
@@ -634,13 +730,16 @@ export async function prepareCapture() {
 		const shot = await st.capture(fovFor(cam, size), size.width, size.height, time);
 		if (sceneState.capture?.sceneId === scene.id) sceneState.capture = { busy: false, sceneId: scene.id, url: shot.url, coverage: shot.coverage, ...size };
 	} catch {
-		sceneState.capture = null;
+		if (sceneState.capture?.sceneId === scene.id) sceneState.capture = null;
 		toast(t('scene.toast.captureFailed'), 'error');
+	} finally {
+		release();
 	}
 }
 
 export function openCapture() {
 	if (!sceneReady(currentScene())) return toast(t('scene.toast.notReady'), 'warning');
+	if (refuseWhileLocked()) return;
 	ui.modal = { type: 'capture' };
 	prepareCapture();
 }
@@ -684,16 +783,18 @@ export async function saveCapture(clipId, usage) {
 	}
 }
 
-function attachRender(planId, media, size, frames) {
+function attachRender(planId, media, size, frames, stale) {
 	const plan = planOf(planId);
 	if (!plan) return;
 	act(() => {
 		const video = newAsset({ kind: 'video', name: media.filename || t('scene.render.name', { name: plan.name }), src: media.url, origin: { kind: 'library', itemId: media.itemId }, srcDur: frames / FPS, width: size.width, height: size.height, fps: FPS, res: `${size.width}×${size.height}` });
 		doc.assets.push(video);
-		const fields = { shotId: plan.shotId ?? shotIdAt(plan.start), start: plan.start, dur: plan.dur, source: 'scene3d', stale: false, planId: plan.id, assetId: video.id };
+		const fields = { shotId: plan.shotId ?? shotIdAt(plan.start), start: plan.start, dur: plan.dur, source: 'scene3d', stale, planId: plan.id, assetId: video.id };
 		const existing = controlOf(plan);
+		const previous = existing?.assetId ?? null;
 		if (existing) Object.assign(existing, fields);
 		else doc.controls.push({ id: ulid(), name: t('lib.default.guide3d', { name: plan.name }), guidance: 65, ...fields });
+		if (previous && previous !== video.id) pruneAsset(doc, previous);
 	});
 }
 
@@ -707,23 +808,27 @@ function renderCheck(plan) {
 }
 
 export async function renderPlan(plan) {
-	if (sceneState.render || sceneState.ends) return;
+	if (sceneLocked()) return;
 	const scene = renderCheck(plan);
 	if (!scene?.id) return;
 	if (plan.dur < MIN_REFERENCE_SECONDS) toast(t('scene.toast.short', { min: secs(MIN_REFERENCE_SECONDS) }), 'warning');
 	const size = videoSize();
-	const total = frameCount(plan.dur);
-	const poses = renderPoses(plan).map((p) => fovFor(p, size));
+	const times = renderTimes(plan.dur);
+	const total = times.length;
+	const poses = times.map((time) => fovFor(cameraAt(plan, time), size));
+	const signature = planSignature(plan);
 	const projectId = project.id;
 	const client = getClient();
 	const controller = new AbortController();
+	const aborted = () => new DOMException('aborted', 'AbortError');
 	renderController = controller;
-	sceneState.render = { planId: plan.id, done: 0, total, phase: 'loading' };
+	sceneState.render = { planId: plan.id, sceneId: scene.id, done: 0, total, phase: 'loading' };
 	let renderId = null;
 	try {
 		const st = await syncStage(scene);
 		if (!st) throw Object.assign(new Error('load'), { code: 'load_failed' });
-		sceneState.render.phase = 'rendering';
+		if (controller.signal.aborted) throw aborted();
+		if (sceneState.render) sceneState.render.phase = 'rendering';
 		const created = await client.createRender(projectId, { width: size.width, height: size.height, fps: FPS, frames: total, name: t('scene.render.name', { name: plan.name }) });
 		if (!created.ok) throw Object.assign(new Error('create'), { code: created.error.code });
 		renderId = created.data.id;
@@ -739,7 +844,7 @@ export async function renderPlan(plan) {
 			bytes = 0;
 		};
 		await st.render(poses, size.width, size.height, {
-			fps: FPS,
+			times,
 			signal: controller.signal,
 			onFrame: async (i, url) => {
 				batch.push(url);
@@ -749,39 +854,41 @@ export async function renderPlan(plan) {
 			}
 		});
 		await flush();
-		if (controller.signal.aborted) throw new DOMException('aborted', 'AbortError');
-		sceneState.render.phase = 'encoding';
+		if (controller.signal.aborted) throw aborted();
+		if (sceneState.render) sceneState.render.phase = 'encoding';
 		const finished = await client.finishRender(projectId, renderId);
 		if (!finished.ok) throw Object.assign(new Error('finish'), { code: finished.error.code });
-		if (projectId !== project.id) return;
 		renderId = null;
-		attachRender(plan.id, finished.data, size, total);
+		if (projectId !== project.id) return;
+		attachRender(plan.id, finished.data, size, total, planSignature(planOf(plan.id)) !== signature);
 		toast(t('scene.toast.rendered', { name: plan.name }), 'success', { label: t('shell.toast.undo'), run: undo });
 	} catch (err) {
-		if (renderId && projectId === project.id) client.deleteRender(projectId, renderId);
+		if (renderId) client.deleteRender(projectId, renderId);
 		if (err?.name === 'AbortError' || controller.signal.aborted) toast(t('scene.toast.renderCancelled'));
 		else if (err?.code === 'project_not_found') projectGone(projectId);
 		else toast(t('scene.toast.renderFailed'), 'error');
 	} finally {
 		if (renderController === controller) renderController = null;
 		sceneState.render = null;
+		release();
 	}
 }
 
 export function cancelRender() {
+	if (sceneState.render?.phase === 'encoding') return;
 	renderController?.abort();
 }
 
 export async function useStartEnd(plan) {
-	if (sceneState.render || sceneState.ends) return;
+	if (sceneLocked()) return;
 	const scene = renderCheck(plan);
 	if (!scene?.id) return;
 	const clip = shotOfPlan(plan);
 	if (!clip) return toast(t('scene.toast.noShot'), 'warning');
-	if (!(await replaceAllowed(clip, ['first', 'last']))) return;
+	if (!(await replaceAllowed(clip, ['first', 'last'])) || sceneLocked()) return;
 	const projectId = project.id;
 	const size = captureSize();
-	sceneState.ends = plan.id;
+	sceneState.ends = { planId: plan.id, sceneId: scene.id };
 	try {
 		const st = await syncStage(scene);
 		if (!st) throw new Error('load');
@@ -806,6 +913,7 @@ export async function useStartEnd(plan) {
 		else toast(t('scene.toast.captureFailed'), 'error');
 	} finally {
 		sceneState.ends = null;
+		release();
 	}
 }
 
@@ -827,13 +935,29 @@ export function presetSpec(preset) {
 }
 
 function resetScenes() {
-	clearTimeout(pollTimer);
-	pollTimer = null;
+	closed = false;
+	poller.stop();
 	renderController?.abort();
 	gltfMeta.clear();
+	liveJobs.clear();
+	deferred = false;
 	forgetLoaded();
-	Object.assign(sceneState, { info: {}, capture: null, ends: null });
+	Object.assign(sceneState, { info: {}, progress: {}, capture: null });
 	pollScenes();
 }
 
+export function disposeScenes() {
+	closed = true;
+	poller.stop();
+	renderController?.abort();
+	deferred = false;
+	forgetLoaded();
+	dropStage();
+	gltfMeta.clear();
+	liveJobs.clear();
+	Object.assign(sceneState, { info: {}, progress: {}, capture: null });
+	if (sceneState.engine === 'lost') sceneState.engine = 'ready';
+}
+
 onLoaded(resetScenes);
+onRestore(cancelOrphans);

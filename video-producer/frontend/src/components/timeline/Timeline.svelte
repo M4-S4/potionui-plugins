@@ -38,7 +38,7 @@
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { addTitle, commandById } from '../../lib/commands.js';
-	import { markStale, selectKey, editKey } from '../../lib/scene.svelte.js';
+	import { markStale, selectKey, editKey, relinkPlan } from '../../lib/scene.svelte.js';
 	import { retime } from '../../lib/scene3d/camera.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -135,8 +135,9 @@
 		if (row.id === 'controls') addControl();
 	}
 
-	function relinkAfter(item) {
-		if ('shotId' in item) relink(item);
+	function relinkAfter(kind, item) {
+		if (kind === 'plan3d') relinkPlan(item);
+		else if ('shotId' in item) relink(item);
 	}
 
 	function moveBlock(e, kind, item) {
@@ -158,7 +159,7 @@
 				if (ui.drag) ui.drag.at = r.at;
 				setDragText(kind === 'audio' && item.lane !== lane0 ? t('timeline.drag.moveLane', { start: secs(item.start), lane: item.lane }) : t('timeline.drag.move', { start: secs(item.start), dur: secs(item.dur) }));
 			},
-			onEnd: () => relinkAfter(item),
+			onEnd: () => relinkAfter(kind, item),
 			onClick: () => {}
 		});
 	}
@@ -187,7 +188,7 @@
 				setDragText(limit ? t('timeline.drag.sourceLimit') : t('timeline.drag.duration', { dur: secs(item.dur) }), limit);
 			},
 			onEnd: () => {
-				relinkAfter(item);
+				relinkAfter(kind, item);
 				if (kind !== 'plan3d' || Math.abs(item.dur - d0) < 1e-6) return;
 				if (item.source === 'trajectory') item.keyframes = retime(item.keyframes, d0, item.dur);
 				markStale(item);

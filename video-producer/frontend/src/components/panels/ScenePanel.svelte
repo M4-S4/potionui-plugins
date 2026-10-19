@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, secs, select, asset } from '../../lib/state.svelte.js';
+	import { ui, doc, secs, asset } from '../../lib/state.svelte.js';
 	import { sceneLabel } from '../../lib/catalog.js';
 	import { assetThumb } from '../../lib/media.js';
 	import {
@@ -25,10 +25,13 @@
 		removeScene,
 		chooseSceneFile,
 		sceneErrorText,
+		sceneProgress,
+		sceneLocked,
+		pickScene,
+		focusPlan,
 		videoSize
 	} from '../../lib/scene.svelte.js';
-	import { FPS, MIN_REFERENCE_SECONDS, PRESETS, PRESET_IDS, holesMatter, presetWarns } from '../../lib/scene3d/camera.js';
-	import { seek } from '../../lib/playback.svelte.js';
+	import { FPS, MAX_REFERENCE_SIDE, MIN_REFERENCE_SECONDS, PRESETS, PRESET_IDS, holesMatter, presetWarns } from '../../lib/scene3d/camera.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import SliderField from '../inspector/SliderField.svelte';
@@ -45,7 +48,8 @@
 	const cameras = $derived(planScene?.kind === 'glb' ? planScene.cameras : []);
 	let cameraName = $state('');
 	const pickedCamera = $derived(cameras.find((c) => c.name === cameraName) ?? cameras.find((c) => c.animated) ?? cameras[0] ?? null);
-	const busy = $derived(Boolean(sceneState.render || sceneState.ends));
+	const busy = $derived(sceneLocked());
+	const encoding = $derived(sceneState.render?.phase === 'encoding');
 	const video = $derived(videoSize());
 	const canRender = $derived(Boolean(plan && planScene && sceneReady(planScene) && plan.keyframes.length));
 	const presetIcon = (id) => (id === 'orbit' ? 'orbit' : id === 'crane' ? 'arrow-up' : 'arrow-right');
@@ -54,7 +58,7 @@
 	function status(s) {
 		if (s.kind === 'splat') {
 			if (s.status === 'queued') return t('scene.status.queued');
-			if (s.status === 'running') return t('scene.status.progress', { value: Math.round(s.progress) });
+			if (s.status === 'running') return t('scene.status.progress', { value: Math.round(sceneProgress(s)) });
 			if (s.status === 'failed') return sceneErrorText(s.error);
 			return s.count ? t('scene.status.splats', { count: s.count }) : sceneLabel(s);
 		}
@@ -89,7 +93,7 @@
 				{#each doc.scenes as s (s.id)}
 					{@const thumb = s.kind === 'splat' ? assetThumb(asset(s.sourceAssetId)) : null}
 					<li class="flex items-center gap-1 rounded-lg border p-1.5 {active?.id === s.id ? 'border-signal ring-1 ring-signal' : 'border-line-strong hover:border-line-hover'}">
-						<button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" aria-pressed={active?.id === s.id} onclick={() => (ui.scene.current = s.id)}>
+						<button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed" aria-pressed={active?.id === s.id} disabled={busy && active?.id !== s.id} onclick={() => pickScene(s.id)}>
 							{#if thumb}
 								<img src={thumb} alt="" class="h-8 w-14 shrink-0 rounded object-cover" />
 							{:else}
@@ -105,7 +109,7 @@
 						{:else if s.kind === 'splat' && s.status === 'failed'}
 							<HostUi name="IconButton" props={{ icon: 'refresh', label: t('scene.retry'), tooltip: t('scene.retry'), size: 'xs', onclick: () => retryScene(s) }} />
 						{/if}
-						<HostUi name="IconButton" props={{ icon: 'trash', label: t('scene.remove'), tooltip: t('scene.remove'), size: 'xs', onclick: () => removeScene(s) }} />
+						<HostUi name="IconButton" props={{ icon: 'trash', label: t('scene.remove'), tooltip: t('scene.remove'), size: 'xs', disabled: busy, onclick: () => removeScene(s) }} />
 					</li>
 				{/each}
 			</ul>
@@ -126,7 +130,7 @@
 					<button
 						type="button"
 						class="flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left text-sm {ui.selection?.id === p.id ? 'border-signal bg-surface-2' : 'border-transparent hover:bg-surface-2'}"
-						onclick={() => (select('plan3d', p.id), p.sceneId && (ui.scene.current = p.sceneId), seek(p.start))}
+						onclick={() => focusPlan(p)}
 					>
 						<span class="h-2 w-2 rounded-sm bg-viz-8"></span><span class="flex-1 truncate">{p.name}</span>
 						<span class="vp-tc text-xs text-fg-muted">{t('panels.scene.planMeta', { start: secs(p.start), source: sourceName(p) })}</span>
@@ -166,7 +170,7 @@
 				<select class="input vp-dense w-full" value={pickedCamera?.name ?? ''} onchange={(e) => (cameraName = e.currentTarget.value)} aria-label={t('panels.scene.blender')}>
 					{#each cameras as c (c.name)}<option value={c.name}>{cameraMeta(c)}</option>{/each}
 				</select>
-				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'camera', class: 'w-full', disabled: !pickedCamera || !sceneReady(planScene), onclick: useCamera }}>{t('panels.scene.useCamera')}</HostUi>
+				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'camera', class: 'w-full', disabled: !pickedCamera || !sceneReady(planScene) || busy, onclick: useCamera }}>{t('panels.scene.useCamera')}</HostUi>
 			</div>
 		</div>
 	{/if}
@@ -183,8 +187,8 @@
 		<div class="flex flex-col gap-1.5">
 			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'image', class: 'w-full', disabled: !sceneReady(active) || busy, onclick: openCapture }}>{t('panels.scene.capture')}</HostUi>
 			{#if sceneState.render}
-				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('x'), class: 'w-full', onclick: cancelRender }}>
-					{t('panels.scene.cancelRender', { done: sceneState.render.done, total: sceneState.render.total })}
+				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('x'), class: 'w-full', disabled: encoding, onclick: cancelRender }}>
+					{encoding ? t('scene.render.encoding') : t('panels.scene.cancelRender', { done: sceneState.render.done, total: sceneState.render.total })}
 				</HostUi>
 			{:else}
 				<HostUi name="Tooltip" props={{ text: t('panels.scene.renderTip'), wrapperClass: 'flex w-full' }}>
@@ -206,6 +210,6 @@
 		{:else if !plan}
 			<p class="mt-1.5 text-xs text-fg-subtle">{t('panels.scene.noPlan')}</p>
 		{/if}
-		<p class="mt-1.5 text-xs text-fg-subtle">{t('panels.scene.size', { width: formatNumber(video.width, { useGrouping: false }), height: formatNumber(video.height, { useGrouping: false }), fps: FPS })}</p>
+		<p class="mt-1.5 text-xs text-fg-subtle">{t('panels.scene.size', { width: formatNumber(video.width, { useGrouping: false }), height: formatNumber(video.height, { useGrouping: false }), fps: FPS, max: formatNumber(MAX_REFERENCE_SIDE, { useGrouping: false }) })}</p>
 	</div>
 </div>
