@@ -86,8 +86,8 @@ def _script(doc, files, sounds=None, **options):
     return filter_graph(doc, files, _options(**options), {**PATHS, "audio": sounds or {}})
 
 
-def _prepare(doc, files, folder, label, audio=None, sounds=None, fmt="web", resolution="720p", stills=()):
-    options = {"format": fmt, "resolution": resolution, "stills": list(stills), **video.inspect(files)}
+def _prepare(doc, files, folder, label, audio=None, sounds=None, fmt="web", resolution="720p", stills=(), lengths=None):
+    options = {"format": fmt, "resolution": resolution, "stills": list(stills), **(video.inspect(files) if lengths is None else {"lengths": lengths})}
     if audio is not None:
         options["audio"] = audio
     ffmpeg = shutil.which("ffmpeg")
@@ -591,7 +591,10 @@ def test_four_hundred_shots_of_four_hundred_files_in_a_long_folder_fit_in_a_wind
 @pytest.mark.requires_ffmpeg
 async def test_four_hundred_shots_of_four_hundred_files_in_a_long_folder_assemble(make_doc, tmp_path):
     doc, files, clips = _distinct_sources(make_doc, tmp_path, 400)
-    command, cwd = _prepare(doc, files, tmp_path, "distinct", audio={clip["id"]: True for clip in clips})
+    length = core_bridge.probe_video(Path(files[clips[0]["id"]]["path"])).duration
+    command, cwd = _prepare(
+        doc, files, tmp_path, "distinct", audio={clip["id"]: True for clip in clips}, lengths={clip["id"]: length for clip in clips}
+    )
 
     await video.assemble(command, 16.0, None, None, cwd)
 
