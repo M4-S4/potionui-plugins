@@ -47,7 +47,6 @@ SCENE3D = "scene3d"
 GUIDE_MIN_SECONDS = 2.0
 
 GUIDE = "guide"
-SCENE_PICTURE = "scene"
 REFERENCE = "reference"
 
 LABELS = {"image": "Picture", "video": "Video", "audio": "Audio"}
@@ -59,7 +58,6 @@ MIN_ZOOM = 0.05
 
 REFS_TEXT: Dict[str, Dict[str, str]] = {
     "en": {
-        "define_scene": "<Subject {subject}> is the scene shown in {label}, a clean picture of the set of [Shot 1].",
         "define_character": "<Subject {subject}> is the character shown in {label}.",
         "define_setting": "<Subject {subject}> is the setting shown in {label}.",
         "define_motion": "{label} is the source of the motion of [Shot 1].",
@@ -99,7 +97,6 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "static": "stays still",
     },
     "fr": {
-        "define_scene": "<Subject {subject}> est la scène montrée par {label}, une image nette du décor de [Shot 1].",
         "define_character": "<Subject {subject}> est le personnage montré par {label}.",
         "define_setting": "<Subject {subject}> est le décor montré par {label}.",
         "define_motion": "{label} est la source du mouvement de [Shot 1].",
@@ -250,8 +247,6 @@ class SentReference:
     def role(self) -> str:
         if self.origin == GUIDE:
             return GUIDE
-        if self.origin == SCENE_PICTURE:
-            return SCENE_PICTURE
         if self.kind == "audio":
             return "audio"
         return ROLES_BY_SPACE.get(str((self.item or {}).get("space")), "setting")
@@ -453,10 +448,6 @@ def _plan3d(doc: Mapping[str, Any], plan_id: Any) -> Optional[Dict[str, Any]]:
     return next((plan for plan in doc.get("plans3d") or [] if plan_id and plan.get("id") == plan_id), None)
 
 
-def _scene(doc: Mapping[str, Any], scene_id: Any) -> Optional[Dict[str, Any]]:
-    return next((scene for scene in doc.get("scenes") or [] if scene_id and scene.get("id") == scene_id), None)
-
-
 def camera_sentences(doc: Mapping[str, Any], guide: SentReference) -> List[str]:
     """What the camera of a shot does along a 3D guide, in the project's prompt language: the move read from its 3D shot, then the order it is played in."""
     text = REFS_TEXT[_language(doc)]
@@ -479,7 +470,7 @@ def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[
     subject = 0
     for entry in sent:
         role = entry.role
-        if role in (SCENE_PICTURE, "character", "setting"):
+        if role in ("character", "setting"):
             subject += 1
             kept = "character" if role == "character" else "setting"
             definitions.append(text[f"define_{role}"].format(subject=subject, label=entry.label))
@@ -680,20 +671,10 @@ def guide_seconds(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> float:
     return float(guide.get("dur") or 0)
 
 
-def scene_pictures(doc: Mapping[str, Any], guides: Sequence[Mapping[str, Any]]) -> List[str]:
-    """The assets of the pictures the splat scenes of these 3D guides were built from, once each."""
-    found: List[str] = []
-    for guide in guides:
-        scene = _scene(doc, (_plan3d(doc, guide.get("planId")) or {}).get("sceneId"))
-        if scene and scene.get("kind") == "splat" and scene.get("sourceAssetId") and scene["sourceAssetId"] not in found:
-            found.append(scene["sourceAssetId"])
-    return found
-
-
 def reference_media(
     user: User, doc: Mapping[str, Any], shot_id: str, guides: Sequence[Mapping[str, Any]] = ()
 ) -> List[SentReference]:
-    """What a shot sends as references, within the per-kind limits: its 3D guide videos, the pictures their scenes were built from, its own references, then the global ones; each with its rank among the references of its kind."""
+    """What a shot sends as references, within the per-kind limits: its 3D guide videos, its own references, then the global ones; each with its rank among the references of its kind."""
     scoped, shared = [], []
     for reference in doc.get("references") or []:
         scope = reference.get("scope")
@@ -717,8 +698,6 @@ def reference_media(
 
     for guide in guides:
         add(GUIDE, guide.get("assetId"), guide, "video")
-    for asset_id in scene_pictures(doc, [entry.item or {} for entry in sent]):
-        add(SCENE_PICTURE, asset_id, None, "image")
     for reference in [*scoped, *shared]:
         add(REFERENCE, reference.get("assetId"), reference)
     return sent

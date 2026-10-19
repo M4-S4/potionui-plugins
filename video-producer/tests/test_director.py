@@ -841,7 +841,7 @@ def test_ref2va_sends_the_fresh_3d_guide_video_first_in_a_six_section_prompt_tha
     assert plans.renders == [{"shot_id": "s1", "control_id": "c1", "plan_id": "plan-c1", "asset_id": "orbit"}]
 
 
-def test_the_picture_a_splat_scene_was_built_from_goes_with_its_guide_as_the_look_of_the_shot(core, make_doc):
+def test_the_six_sections_come_in_order_and_the_picture_a_splat_scene_was_built_from_is_not_sent(core, make_doc):
     core.use_h3()
     doc = _guided(core, make_doc, [_guide("c1", "orbit")])
     doc["plans3d"] = [_orbit()]
@@ -849,50 +849,12 @@ def test_the_picture_a_splat_scene_was_built_from_goes_with_its_guide_as_the_loo
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3, production="render3d_ai").shots
 
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/hero.png"]
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
     sections = _sections(plan.prompt_text)
     assert list(sections) == ["subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music"]
-    assert sections["subject_definitions"] == (
-        "<Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]. "
-        "<Subject 1> is the scene shown in <Picture 1>, a clean picture of the set of [Shot 1]."
-    )
-    assert sections["retention_analysis"].splitlines() == [
-        GUIDE_RETENTION,
-        "<Subject 1> (appears in [Shot 1]): partially_preserved - keeps the place, the subjects, the light and the colours; the framing follows the camera move.",
-    ]
-    assert sections["detailed_description"] == "[Shot 1] The hut at dawn. The shot takes place in <Subject 1>. " + ORBIT_SENTENCES
-
-
-@pytest.mark.parametrize(
-    "scene",
-    [
-        {**_splat(), "sourceAssetId": "walk", "sourceTime": 1.5},
-        {"id": "scene-1", "kind": "glb", "name": "Set", "fileId": "f1", "cameras": []},
-        {**_splat(), "sourceAssetId": "gone"},
-        {**_splat(), "id": "other"},
-    ],
-)
-def test_no_picture_goes_with_a_guide_whose_scene_was_not_built_from_a_picture_found(core, make_doc, scene):
-    core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
-    doc["plans3d"] = [_orbit()]
-    doc["scenes"] = [scene]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
-    assert "<Picture" not in plan.prompt_text and "<Subject" not in plan.prompt_text
-
-
-def test_the_scene_picture_of_a_stale_guide_is_not_sent_and_a_picture_shared_by_two_guides_is_sent_once(core, make_doc):
-    core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly"), _guide("c3", "walk", stale=True)])
-    doc["plans3d"] = [_orbit("plan-c1"), _orbit("plan-c2"), _orbit("plan-c3", scene_id="scene-2")]
-    doc["scenes"] = [_splat(), _splat("scene-2", source="swim")]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/dolly.mp4", "uploads/hero.png"]
+    assert sections["subject_definitions"] == "<Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]."
+    assert sections["retention_analysis"] == GUIDE_RETENTION
+    assert sections["detailed_description"] == "[Shot 1] The hut at dawn. " + ORBIT_SENTENCES
 
 
 @pytest.mark.parametrize(
@@ -952,19 +914,16 @@ def test_the_six_sections_keep_their_english_labels_and_markers_and_follow_the_p
     core.use_h3()
     doc = _guided(core, make_doc, [_guide("c1", "orbit")], language="fr", prompt="La cabane à l'aube")
     doc["plans3d"] = [_orbit()]
-    doc["scenes"] = [_splat()]
     doc["clips"][0]["dur"] = 4.5
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
 
     assert _sections(plan.prompt_text) == {
-        "subject_definitions": "<Video 1> est un rendu 3D de prévisualisation, grossier, de la scène, utilisé seulement comme source de la trajectoire de caméra de [Shot 1]. "
-        "<Subject 1> est la scène montrée par <Picture 1>, une image nette du décor de [Shot 1].",
+        "subject_definitions": "<Video 1> est un rendu 3D de prévisualisation, grossier, de la scène, utilisé seulement comme source de la trajectoire de caméra de [Shot 1].",
         "summary": "[reference generation] Un plan de 4,5 secondes fait d'après la description ci-dessous, dont le mouvement de caméra vient de <Video 1>.",
         "retention_analysis": "<Video 1> (trajectoire de caméra de [Shot 1]): weak_reference - mouvement de caméra seulement, pas l'aspect : seuls le sens, l'amplitude et la vitesse "
-        "de son mouvement de caméra sont suivis ; son contenu, ses couleurs, ses textures, ses zones floues ou étirées, ses trous et ses bords noirs ne sont pas reproduits.\n"
-        "<Subject 1> (appears in [Shot 1]): partially_preserved - garde le lieu, les sujets, la lumière et les couleurs ; le cadrage suit le mouvement de caméra.",
-        "detailed_description": "[Shot 1] La cabane à l'aube. Le plan se déroule dans <Subject 1>. "
+        "de son mouvement de caméra sont suivis ; son contenu, ses couleurs, ses textures, ses zones floues ou étirées, ses trous et ses bords noirs ne sont pas reproduits.",
+        "detailed_description": "[Shot 1] La cabane à l'aube. "
         "La caméra décrit un arc de gauche à droite d'environ 20 degrés autour du sujet sur toute la durée du plan. "
         "Le mouvement suit <Video 1> dans le sens du temps : le plan s'ouvre sur le point de vue de sa première image et se termine sur celui de sa dernière image, jamais à l'envers. "
         "Ce mouvement de caméra remplace tout autre mouvement de caméra mentionné plus haut.",
