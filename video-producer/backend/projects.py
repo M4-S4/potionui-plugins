@@ -19,6 +19,12 @@ RETIRED_SCENES = ("sample", "file")
 
 CAPTURE_ROLE = "Capture 3D"
 
+GUIDE_SOURCE = "scene3d"
+
+SET_SPACE = "decors3d"
+
+RETIRED_SET_TYPES = ("Scène d’essai", "Scène d'essai", "Gaussian Splat")
+
 OLD_KEYFRAME = ("az", "el", "dist", "focal", "height")
 
 PROJECTS = "video_producer_projects"
@@ -381,8 +387,16 @@ def _empty_capture(frame: Any) -> bool:
     return isinstance(frame, dict) and frame.get("role") == CAPTURE_ROLE and not frame.get("assetId")
 
 
+def _simulated_guide(control: Any) -> bool:
+    return isinstance(control, dict) and control.get("source") == GUIDE_SOURCE and not control.get("assetId") and not control.get("planId")
+
+
+def _retired_set(reference: Any) -> bool:
+    return isinstance(reference, dict) and reference.get("space") == SET_SPACE and reference.get("type") in RETIRED_SET_TYPES
+
+
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: without the keys and simulated scenes earlier versions of the page wrote, the plans 3D that cited those scenes unlinked, the empty 3D captures dropped and the old orbit keyframes turned into positions; the same object when nothing changes."""
+    """A document in the current schema: without the keys, simulated scenes and simulated 3D guides earlier versions of the page wrote, the plans 3D that cited those scenes unlinked, the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, and the old orbit keyframes turned into positions; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -394,6 +408,16 @@ def migrate(doc: Any) -> Any:
     frames = doc.get("frames")
     if isinstance(frames, list) and any(_empty_capture(frame) for frame in frames):
         changes["frames"] = [frame for frame in frames if not _empty_capture(frame)]
+    controls = doc.get("controls")
+    if isinstance(controls, list) and any(_simulated_guide(control) for control in controls):
+        changes["controls"] = [control for control in controls if not _simulated_guide(control)]
+    references = doc.get("references")
+    if isinstance(references, list) and any(_retired_set(reference) for reference in references):
+        changes["references"] = [
+            {**reference, "type": CAPTURE_ROLE} if _retired_set(reference) else reference
+            for reference in references
+            if not _retired_set(reference) or reference.get("assetId")
+        ]
     plans = doc.get("plans3d")
     if isinstance(plans, list):
         migrated = [_plan(plan, dropped) for plan in plans]

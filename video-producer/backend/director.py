@@ -359,13 +359,14 @@ def bind_frames(
 
 
 def shot_guides(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[Dict[str, Any]]:
-    """The 3D guides of a shot: the scene3d controls linked to it, and those linked to no shot that overlap it."""
+    """The 3D guides of a shot: the scene3d controls with a 3D shot or a video linked to it, and those linked to no shot that overlap it."""
     start = float(clip.get("start") or 0)
     end = start + float(clip.get("dur") or 0)
     return [
         control
         for control in doc.get("controls") or []
         if control.get("source") == SCENE3D
+        and (control.get("planId") or control.get("assetId"))
         and (control.get("shotId") == clip.get("id") or (not control.get("shotId") and _overlap(start, end, control) > 0))
     ]
 

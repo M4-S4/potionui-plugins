@@ -868,6 +868,18 @@ def test_a_guide_linked_to_no_shot_counts_for_the_shots_it_overlaps_and_other_gu
     assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"] and plan.guides == ["over"]
 
 
+def test_a_scene3d_control_with_neither_a_3d_shot_nor_a_video_is_not_a_guide(core, make_doc):
+    core.use_wan()
+    simulated = {"id": "simulated", "shotId": "s1", "start": 0, "dur": 4, "stale": False, "planId": None, "assetId": None}
+    legacy = {"id": "legacy", "shotId": None, "start": 0, "dur": 4, "stale": True}
+    doc = _guided(core, make_doc, [simulated, legacy, _guide("planned", None)], direction={"mode": "FL2VA"})
+
+    assert [guide["id"] for guide in director.shot_guides(doc, doc["clips"][0])] == ["planned"]
+    doc["controls"] = doc["controls"][:2]
+    assert director.shot_guides(doc, doc["clips"][0]) == []
+    assert [warning["code"] for warning in _plans(core, doc).warnings if warning["code"] != "fl2va_no_frame"] == []
+
+
 def test_a_guide_whose_media_is_not_a_video_is_not_sent_as_a_camera_reference(core, make_doc):
     core.use_h3()
     references = [{"id": "r1", "assetId": "walk", "scope": None}]

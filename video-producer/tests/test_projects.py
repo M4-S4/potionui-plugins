@@ -170,7 +170,7 @@ def _rich(doc):
             "id": "01M535B4GTREF1000000000000",
             "name": "Hut",
             "space": "decors3d",
-            "type": "Gaussian Splat",
+            "type": "Capture 3D",
             "assetId": "01M535B4GTVIDEO00000000000",
             "role": "Décor 3D",
             "scope": {"type": "shot", "shotId": clip["id"]},
@@ -575,6 +575,82 @@ def test_migrating_drops_the_3d_captures_without_an_image_and_keeps_the_other_fr
     assert [frame["id"] for frame in migrated["frames"]] == ["f2", "f3"]
     assert len(starter["frames"]) == 3
     assert migrate(migrated) is migrated
+
+
+def test_migrating_drops_the_simulated_3d_guides_and_keeps_those_with_a_3d_shot_or_a_video(starter):
+    rich = _rich(starter)
+    guide = rich["controls"][0]
+    simulated = {**guide, "id": "simulated", "planId": None, "assetId": None}
+    legacy = {key: value for key, value in simulated.items() if key not in ("planId", "assetId")}
+    legacy["id"] = "legacy"
+    imported = {**simulated, "id": "imported", "source": "import"}
+    rich["controls"] = [
+        simulated,
+        guide,
+        legacy,
+        {**simulated, "id": "planned", "planId": "01M535B4GTPLAN000000000000"},
+        {**simulated, "id": "rendered", "assetId": "01M535B4GTVIDEO00000000000"},
+        {**simulated, "id": "empty", "planId": "", "assetId": ""},
+        imported,
+    ]
+    before = copy.deepcopy(rich)
+
+    migrated = migrate(rich)
+
+    assert rich == before
+    assert [control["id"] for control in migrated["controls"]] == ["01M535B4GTCONTROL000000000", "planned", "rendered", "imported"]
+    assert migrated["controls"][0] is guide
+    validate_doc(migrated)
+    assert migrate(migrated) is migrated
+
+
+def test_migrating_turns_the_retired_3d_set_references_into_captures_when_they_have_an_image_and_drops_the_others(starter):
+    rich = _rich(starter)
+    hut = rich["references"][1]
+
+    def reference(reference_id, space, kind, asset_id):
+        return {**hut, "id": reference_id, "space": space, "type": kind, "assetId": asset_id}
+
+    rich["references"] = [
+        reference("typographic", "decors3d", "Scène d’essai", "01M535B4GTVIDEO00000000000"),
+        reference("straight", "decors3d", "Scène d'essai", "01M535B4GTVIDEO00000000000"),
+        reference("splat", "decors3d", "Gaussian Splat", "01M535B4GTVIDEO00000000000"),
+        reference("empty-typographic", "decors3d", "Scène d’essai", None),
+        reference("empty-straight", "decors3d", "Scène d'essai", None),
+        reference("empty-splat", "decors3d", "Gaussian Splat", None),
+        reference("other-set", "decors3d", "Photo", None),
+        reference("other-space", "identite", "Gaussian Splat", None),
+        hut,
+    ]
+    before = copy.deepcopy(rich)
+
+    migrated = migrate(rich)
+
+    assert rich == before
+    assert [(item["id"], item["type"]) for item in migrated["references"]] == [
+        ("typographic", "Capture 3D"),
+        ("straight", "Capture 3D"),
+        ("splat", "Capture 3D"),
+        ("other-set", "Photo"),
+        ("other-space", "Gaussian Splat"),
+        (hut["id"], "Capture 3D"),
+    ]
+    assert migrated["references"][0] == {**rich["references"][0], "type": "Capture 3D"}
+    assert migrated["references"][-1] is hut
+    validate_doc(migrated)
+    assert migrate(migrated) is migrated
+
+
+def test_a_stored_project_is_read_through_the_migration(project_db, store, starter):
+    from backend import projects
+
+    starter["controls"] = [{"id": "c", "shotId": None, "name": "Guide 3D", "start": 0, "dur": 4, "guidance": 65, "source": "scene3d", "stale": False}]
+    starter["references"] = [{"id": "r", "name": "Set", "space": "decors3d", "type": "Scène d’essai", "assetId": "a", "role": "Décor 3D", "scope": None}]
+    created = projects.create_project("user-1", starter)
+
+    stored = projects.get_project(created["id"])["doc"]
+
+    assert stored["controls"] == [] and stored["references"][0]["type"] == "Capture 3D"
 
 
 def test_migrating_the_document_of_a_user_with_scenes_and_empty_plans_3d_keeps_it_as_it_is(starter):
