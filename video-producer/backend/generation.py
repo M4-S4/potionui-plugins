@@ -96,7 +96,8 @@ def reserves(quota: Mapping[str, Any]) -> bool:
     return quota.get("limit") is not None and not quota.get("exempt")
 
 
-def _missing_block(missing: List[str]) -> Dict[str, Any]:
+def missing_block(missing: List[str]) -> Dict[str, Any]:
+    """The block of model fields left without an installed recommended file."""
     return note("missing_models", f"Install a recommended file for: {', '.join(missing)}.", fields=list(missing))
 
 
@@ -179,7 +180,8 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
     return [takes.get_take(take["id"]) for take in created]
 
 
-def _refusal(exc: Exception) -> Tuple[str, str]:
+def refusal(exc: Exception) -> Tuple[str, str]:
+    """The error code and message of a request the core refused."""
     if isinstance(exc, PermissionError):
         return "preset_not_available", "The preset is not available to you."
     if isinstance(exc, IdempotencyKeyConflict):
@@ -191,7 +193,8 @@ def _refusal(exc: Exception) -> Tuple[str, str]:
     return "submit_failed", "The take could not be started."
 
 
-async def _quiet_cancel(user: User, generation_id: str) -> None:
+async def quiet_cancel(user: User, generation_id: str) -> None:
+    """Cancel a generation, logging instead of raising when it cannot be cancelled."""
     try:
         await core_bridge.cancel_generation(user, generation_id)
     except Exception:
@@ -203,14 +206,14 @@ async def _submit(user: User, take: Dict[str, Any]) -> bool:
         submitted = await core_bridge.submit_generation(user, take["request"] or {})
     except Exception as exc:
         logger.warning("[VIDEO-PRODUCER] The core refused take %s", take["id"], exc_info=True)
-        code, message = _refusal(exc)
+        code, message = refusal(exc)
         fail_take(take, code, message)
         return False
     generation_id = str(submitted["generation_id"])
     if takes.attach_generation(take["id"], generation_id):
         takes.add_job(take["id"], generation_id, limit_ref(take["id"]), take["units_reserved"])
         return True
-    await _quiet_cancel(user, generation_id)
+    await quiet_cancel(user, generation_id)
     return False
 
 
@@ -316,7 +319,8 @@ def _adjust(take: Mapping[str, Any], duration_ms: Optional[int]) -> None:
         core_bridge.record_limit_event(take["user_id"], limits.GPU_MINUTES, actual, f"{ref}:actual")
 
 
-def _duration_ms(state: Mapping[str, Any]) -> Optional[int]:
+def state_duration_ms(state: Mapping[str, Any]) -> Optional[int]:
+    """How long a generation ran, in milliseconds, or None when its state does not say."""
     value = state.get("duration_ms")
     return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else None
 
@@ -347,7 +351,7 @@ def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
     }
     if not takes.settle(take["id"], "done", **fields):
         return False
-    duration_ms = _duration_ms(state)
+    duration_ms = state_duration_ms(state)
     seconds = float(take.get("duration_s") or 0)
     if duration_ms and backend_id and seconds > 0 and take.get("resolution") and take.get("preset_id"):
         takes.add_calibration(take["preset_id"], backend_id, take["resolution"], seconds, duration_ms)
@@ -357,7 +361,8 @@ def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
     return True
 
 
-def _percent(value: Any) -> Optional[float]:
+def percent(value: Any) -> Optional[float]:
+    """A progress the core reports, as a fraction or a percentage, as a percentage from 0 to 100."""
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
     percent = float(value) * 100 if 0 <= value <= 1 else float(value)
@@ -394,7 +399,8 @@ def failure_message(
     return f"{fullest}\nError ID: {error_id}" if generic and not admin and error_id else fullest
 
 
-def _is_admin(user: Optional[User]) -> bool:
+def is_admin(user: Optional[User]) -> bool:
+    """True for an administrator."""
     return getattr(user, "account_type", None) == AccountType.ADMIN
 
 
@@ -405,14 +411,14 @@ def apply_state(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
         finish_done(take, user, state)
     elif status == "failed":
         code = str(state.get("error_code") or "generation_failed")
-        fail_take(take, code, failure_message(state, error_code=code, admin=_is_admin(user), error_id=take.get("generation_id")))
+        fail_take(take, code, failure_message(state, error_code=code, admin=is_admin(user), error_id=take.get("generation_id")))
     elif status == "cancelled":
         cancel_local(take)
     elif status == "running":
         takes.update_active(
             take["id"],
             status="running",
-            progress=_percent(state.get("progress")),
+            progress=percent(state.get("progress")),
             step=state.get("current_step") or state.get("message"),
             backend_id=state.get("backend_id") or take.get("backend_id"),
             started_at=take.get("started_at") or state.get("started_at") or takes.now(),
@@ -450,7 +456,7 @@ def settle_from_hook(
     if status == "failed":
         user, state = _quiet_state(take)
         code = str(error_code or state.get("error_code") or "generation_failed")
-        reason = failure_message(state, message, code, admin=_is_admin(user), error_id=take.get("generation_id"))
+        reason = failure_message(state, message, code, admin=is_admin(user), error_id=take.get("generation_id"))
         return fail_take(take, code, reason)
     user = core_bridge.get_user(take["user_id"])
     if user is None:
@@ -460,7 +466,7 @@ def settle_from_hook(
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not read generation %s", generation_id, exc_info=True)
         state = {}
-    if not _duration_ms(state) and isinstance(duration, (int, float)) and not isinstance(duration, bool) and duration > 0:
+    if not state_duration_ms(state) and isinstance(duration, (int, float)) and not isinstance(duration, bool) and duration > 0:
         state = {**state, "duration_ms": int(duration * 1000)}
     return finish_done(take, user, state)
 
@@ -490,7 +496,7 @@ async def delete(owner: User, take: Mapping[str, Any]) -> bool:
 
 def _checked(plan: ShotPlan, preset_id: str, native: bool, owner: User, backend_id: Optional[str]) -> float:
     if plan.missing_models:
-        raise Blocked([_missing_block(plan.missing_models)])
+        raise Blocked([missing_block(plan.missing_models)])
     if not native:
         return 0.0
     minutes = estimate.plan_minutes(plan, preset_id, backend_id)

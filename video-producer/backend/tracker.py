@@ -4,6 +4,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from . import core_bridge, generation, takes
+from .scene3d import jobs as scene_jobs
 from .core_bridge import GenerationNotFoundException
 
 logger = logging.getLogger("plugins.video-producer")
@@ -15,7 +16,7 @@ _UNREADABLE = object()
 
 
 class Tracker:
-    """Follows the takes in flight on the application loop and hands the queued ones to the core."""
+    """Follows the takes and splat jobs in flight on the application loop and hands the queued takes to the core."""
 
     def __init__(self) -> None:
         self._future: Any = None
@@ -59,7 +60,7 @@ class Tracker:
             await asyncio.sleep(BUSY_INTERVAL if busy else IDLE_INTERVAL)
 
     async def tick(self) -> bool:
-        """One round: follow each generation in flight, then hand queued takes to the core; True while takes remain active."""
+        """One round: follow each generation in flight, hand queued takes to the core, then follow the splat jobs; True while takes or splat jobs remain active."""
         users: Dict[Optional[str], Any] = {}
 
         def owner(user_id: Optional[str]) -> Any:
@@ -90,7 +91,8 @@ class Tracker:
             user = owner(user_id)
             if user is not None and user is not _UNREADABLE:
                 await generation.pump(user)
-        return bool(takes.list_active())
+        scenes = await scene_jobs.follow(owner, _UNREADABLE)
+        return bool(takes.list_active()) or scenes
 
 
 TRACKER = Tracker()
