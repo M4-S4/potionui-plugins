@@ -2,11 +2,13 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, selected, seqDuration, secs, allIssues } from '../../lib/state.svelte.js';
+	import { sceneState } from '../../lib/scene.svelte.js';
 	import Icon from '../Icon.svelte';
 
 	const sel = $derived(selected());
 	const issues = $derived(allIssues().filter((i) => i.level !== 'missing'));
 	const ratio = $derived(ui.quota?.limit > 0 ? Math.min(1, ui.quota.used / ui.quota.limit) : 0);
+	const building = $derived(doc.scenes.filter((s) => s.kind === 'splat' && (s.status === 'queued' || s.status === 'running')));
 	const language = $derived(getLocale() === 'fr' ? t('shell.locale.fr') : t('shell.locale.en'));
 
 	function kindLabel(kind) {
@@ -50,6 +52,15 @@
 	{#if issues.length}
 		<button type="button" class="flex h-6 items-center gap-1 text-warning hover:underline" onclick={directionIssues}>
 			<Icon name="alert" class="h-3 w-3" />{t('shell.status.issues', { count: issues.length })}
+		</button>
+	{/if}
+	{#if sceneState.render}
+		<button type="button" class="flex h-6 items-center gap-1 text-signal hover:underline" onclick={() => (ui.workspace = 'scene')}>
+			<Icon name="cube" class="h-3 w-3" />{t('shell.status.rendering', { done: sceneState.render.done, total: sceneState.render.total })}
+		</button>
+	{:else if building.length}
+		<button type="button" class="flex h-6 items-center gap-1 text-signal hover:underline" onclick={() => (ui.workspace = 'scene')}>
+			<Icon name="cube" class="h-3 w-3" />{t('shell.status.building', { count: building.length, value: Math.round(building.reduce((sum, s) => sum + (s.progress ?? 0), 0) / building.length) })}
 		</button>
 	{/if}
 	{#if ui.production.queue.length}

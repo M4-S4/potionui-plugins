@@ -132,5 +132,8 @@
 	"block.sourceUnavailable": "The video of the source take is no longer available.",
 	"block.upscaleUnsupported": "Upscaling this take needs SeedVR2: ask an administrator to install it, or render the take again at full resolution.",
 	"workshop.notSent": "Not sent with this engine",
-	"workshop.notSentWhy": "The Video Director builds the request from the shots, the direction, the frames and the references; this setting stays in the project but does not change the takes."
+	"workshop.notSentWhy": "The Video Director builds the request from the shots, the direction, the frames and the references; this setting stays in the project but does not change the takes.",
+	"block.refsPresetNeeded": "“3D render + AI” needs a MiniMax-H3 preset with the reference mode (refs).",
+	"warn.staleGuide": "The reference video of “{shot}” is out of date: render it again in 3D scene.",
+	"warn.guideNeedsRefs": "“{shot}” has a 3D reference video, but FL2VA does not read it: choose Ref2VA, or use the start and end frames."
 }

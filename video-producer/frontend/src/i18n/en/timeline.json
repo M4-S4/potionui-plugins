@@ -41,7 +41,7 @@
 	"prompt.empty": "Empty prompt — double-click to write",
 	"prompt.hint": "Double-click to write a prompt here",
 	"frame.tip": "Frame · {role} · {time} · influence {strength}%",
-	"control.stale": "Guide to recompute after the scene changed",
+	"control.stale": "Reference video to render again: the 3D shot changed",
 	"keyframe.tip": "Keyframe · {time} · drag to move",
 	"keyframe.label": "Camera keyframe at {time}",
 	"drag.range": "Range {start} → {end}",

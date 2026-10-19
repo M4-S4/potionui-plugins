@@ -21,7 +21,7 @@
 		scheduleEstimate,
 		estimateState
 	} from '../../lib/production.svelte.js';
-	import { modeLabel } from '../../lib/catalog.js';
+	import { PRODUCTION_MODES, modeLabel } from '../../lib/catalog.js';
 	import { aspectOf, draftResolution, finalResolution } from '../../lib/generation.js';
 	import { commandById } from '../../lib/commands.js';
 	import { announcer } from '../../lib/announce.js';
@@ -29,8 +29,6 @@
 	import Icon from '../Icon.svelte';
 	import InfoTip from '../shell/InfoTip.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
-
-	const modes = ['Génération IA', 'Rendu 3D', 'Rendu 3D + IA'];
 
 	const p = $derived(ui.production);
 	const ready = $derived(readiness());
@@ -49,7 +47,7 @@
 	const blocked = $derived(ready.missing.length > 0);
 	const notes = $derived(blocked ? ready.missing : ready.warnings);
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
-	const primary = $derived(p.mode === 'Rendu 3D' ? t('production.prepareRender') : t('production.generate'));
+	const primary = $derived(p.mode === 'render3d' ? t('production.prepareRender') : t('production.generate'));
 	const targets = $derived([
 		{ id: 'clip', label: t('production.target.clip') },
 		{ id: 'range', label: t('production.target.range') },
@@ -159,7 +157,7 @@
 		<HostUi name="SegmentedControl" props={{ items: qualities, selected: p.quality, variant: 'toggle', ariaLabel: t('production.quality.label'), onSelect: (id) => (ui.production.quality = id) }} />
 	</HostUi>
 	<select class="vp-popup" bind:value={ui.production.mode} disabled={busy} aria-label={t('production.mode.label')}>
-		{#each modes as m (m)}<option value={m}>{modeLabel(m)}</option>{/each}
+		{#each PRODUCTION_MODES as m (m)}<option value={m}>{modeLabel(m)}</option>{/each}
 	</select>
 	<HostUi name="Tooltip" props={{ text: engineTip, wrapperClass: 'hidden items-center min-[1400px]:inline-flex' }}>
 		<select class="vp-popup max-w-48" value={engine?.key ?? ''} disabled={!groups.length} aria-label={t('production.engine.label')} onchange={(e) => selectEngine(e.currentTarget.value)}>
@@ -206,7 +204,7 @@
 			{#if ready.noEngine && ui.isAdmin}
 				<a class="vp-link-hit shrink-0 whitespace-nowrap text-xs text-fg underline decoration-signal underline-offset-2 hover:decoration-2" href="/admin?tab=plugins">{t('generation.engine.settings')}</a>
 			{/if}
-			{#if !ready.noEngine && p.mode === 'Génération IA'}
+			{#if !ready.noEngine && p.mode !== 'render3d'}
 				<InfoTip lines={estLines} wrapperClass="inline-flex shrink-0 items-center">
 					<span class="flex items-center gap-1.5 whitespace-nowrap text-xs transition-opacity {over ? 'text-warning' : 'text-fg-muted'} {estimateState.loading ? 'opacity-60' : ''}">
 						<Icon name={over ? 'alert' : 'history'} class="h-3.5 w-3.5" />

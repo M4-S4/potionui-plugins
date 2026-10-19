@@ -91,30 +91,9 @@ export const roleColor = {
 };
 
 export function sceneLabel(scene) {
-	return scene?.kind === 'file' ? t('lib.scene.file') : t('lib.scene.sample');
-}
-
-export const motionPresets = {
-	Orbite: [
-		{ t: 0, az: -60, el: 20, dist: 13, focal: 30, height: 1.5 },
-		{ t: 0.5, az: 0, el: 20, dist: 13, focal: 30, height: 1.5 },
-		{ t: 1, az: 60, el: 20, dist: 13, focal: 30, height: 1.5 }
-	],
-	'Travelling avant': [
-		{ t: 0, az: 0, el: 12, dist: 18, focal: 28, height: 1.4 },
-		{ t: 1, az: 0, el: 10, dist: 8, focal: 32, height: 1.4 }
-	],
-	Élévation: [
-		{ t: 0, az: -10, el: 4, dist: 12, focal: 24, height: 1.2 },
-		{ t: 1, az: 10, el: 42, dist: 15, focal: 24, height: 2.4 }
-	]
-};
-
-export function motionPresetLabel(name) {
-	if (name === 'Orbite') return t('lib.motionPreset.orbit');
-	if (name === 'Travelling avant') return t('lib.motionPreset.dolly');
-	if (name === 'Élévation') return t('lib.motionPreset.rise');
-	return name;
+	if (scene?.kind === 'splat') return t('lib.scene.splat');
+	if (scene?.kind === 'glb') return t('lib.scene.glb');
+	return t('lib.scene.splatfile', { format: String(scene?.format ?? 'ply').toUpperCase() });
 }
 
 export function audioRoleLabel(role) {
@@ -135,9 +114,11 @@ export function frameRoleLabel(role) {
 	return role;
 }
 
+export const PRODUCTION_MODES = ['ai', 'render3d', 'render3d_ai'];
+
 export function modeLabel(mode) {
-	if (mode === 'Génération IA') return t('lib.mode.ai');
-	if (mode === 'Rendu 3D') return t('lib.mode.render3d');
-	if (mode === 'Rendu 3D + IA') return t('lib.mode.render3dAi');
+	if (mode === 'ai') return t('lib.mode.ai');
+	if (mode === 'render3d') return t('lib.mode.render3d');
+	if (mode === 'render3d_ai') return t('lib.mode.render3dAi');
 	return mode;
 }

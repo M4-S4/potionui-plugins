@@ -85,7 +85,6 @@
 	"cmd.ref-identity": "Références · Images et identité",
 	"cmd.ref-3d": "Références · Décors 3D",
 	"cmd.ref-motion": "Références · Guides de mouvement",
-	"cmd.splat": "Référencer un fichier Gaussian Splat…",
 	"cmd.sidebar": "Panneau latéral",
 	"cmd.inspector": "Inspecteur",
 	"cmd.assistant": "Assistant PotionUI",
@@ -98,5 +97,7 @@
 	"cmd.help-sim": "Fonctions simulées",
 	"kbd.space": "Espace",
 	"kbd.backspace": "Retour arrière",
-	"kbd.escape": "Échap"
+	"kbd.escape": "Échap",
+	"cmd.scene-new": "Nouvelle scène 3D depuis une image…",
+	"cmd.scene-import": "Importer un splat ou un fichier Blender…"
 }

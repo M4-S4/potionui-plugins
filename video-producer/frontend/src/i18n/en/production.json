@@ -35,5 +35,5 @@
 	"queued.one": "{count} queued",
 	"queued.other": "{count} queued",
 	"generate": "Generate selection",
-	"prepareRender": "Prepare the render"
+	"prepareRender": "Place the 3D renders"
 }

@@ -1,13 +1,16 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { ui, doc, act, toast, simulated, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs } from './state.svelte.js';
+import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
-import { modeLabel } from './catalog.js';
+import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
 import { ulid } from './ulid.js';
 
-const AI_MODE = 'Génération IA';
+const AI_MODE = 'ai';
+const RENDER_MODE = 'render3d';
+const HYBRID_MODE = 'render3d_ai';
+const generates = (mode) => mode === AI_MODE || mode === HYBRID_MODE;
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
 const INFO_WARNINGS = ['time_unknown', 'vram_unknown'];
@@ -135,6 +138,9 @@ function noteText(note) {
 	if (code === 'fl2va_no_frame') return t('generation.warn.noFrame', { shot: shotName(data.shot_id) });
 	if (code === 'text_only_preset') return t('generation.warn.textOnly', { shot: shotName(data.shot_id) });
 	if (code === 'duration_clamped') return t('generation.warn.durationClamped', { shot: shotName(data.shot_id), max: secs(Number(data.max) || 0) });
+	if (code === 'stale_guide') return t('generation.warn.staleGuide', { shot: shotName(data.shot_id) });
+	if (code === 'guide_needs_refs') return t('generation.warn.guideNeedsRefs', { shot: shotName(data.shot_id) });
+	if (code === 'refs_preset_needed') return t('generation.block.refsPresetNeeded');
 	return note?.message || code || '';
 }
 
@@ -151,11 +157,13 @@ export function jobClips(range = productionRange()) {
 }
 
 function requestBody(clips, quality, variants, option) {
-	return { shots: clips.map((c) => c.id), quality, variants, preset_id: option.preset, model_id: option.model };
+	const body = { shots: clips.map((c) => c.id), quality, variants, preset_id: option.preset, model_id: option.model };
+	if (ui.production.mode === HYBRID_MODE) Object.assign(body, { production_mode: HYBRID_MODE, profile: 'Ref2VA' });
+	return body;
 }
 
 export function estimateRequest() {
-	if (!project.id || ui.production.mode !== AI_MODE) return null;
+	if (!project.id || !generates(ui.production.mode)) return null;
 	const option = currentEngine();
 	const clips = jobClips();
 	if (!option || !clips.length) return null;
@@ -226,15 +234,20 @@ export function readiness(opts = {}) {
 	const gaps = [];
 	const mode = ui.production.mode;
 	if (range[1] - range[0] <= 0.05) missing.push(t('lib.block.noRange'));
-	if (mode !== 'Rendu 3D') {
+	if (mode !== RENDER_MODE) {
 		if (!globalPrompt() && !items.prompts.length) missing.push(t('lib.block.noDirection'));
 		const empty = items.prompts.filter((p) => !p.text.trim());
 		if (empty.length) missing.push(t('lib.block.emptyPrompts', { count: empty.length }));
 	}
-	if (mode !== AI_MODE && !items.plans3d.length) missing.push(t('lib.block.noPlan3d'));
-	const noEngine = mode === AI_MODE && !currentEngine();
+	if (mode !== AI_MODE) {
+		const clips = opts.clips ?? jobClips(range);
+		const rendered = clips.filter((c) => freshRender(c.id));
+		if (!rendered.length) missing.push(items.plans3d.length ? t('lib.block.noRender3d') : t('lib.block.noPlan3d'));
+		else if (rendered.length < clips.length) warnings.push(t('lib.warn.unrendered', { count: clips.length - rendered.length }));
+	}
+	const noEngine = generates(mode) && !currentEngine();
 	if (noEngine) missing.push(doc.engine?.preset ? t('generation.block.unavailable') : t('generation.block.noEngine'));
-	const est = !opts.clips && !noEngine && mode === AI_MODE ? estimateState.data : null;
+	const est = !opts.clips && !noEngine && generates(mode) ? estimateState.data : null;
 	const request = est ? estimateRequest() : null;
 	const fresh = Boolean(request && (request.hold || request.key === estimateState.key));
 	if (est && fresh) {
@@ -262,7 +275,11 @@ function failed(error, fallback) {
 }
 
 export async function startGeneration(opts = {}) {
-	if (ui.production.mode !== AI_MODE) return simulated(modeLabel(ui.production.mode));
+	if (ui.production.mode === RENDER_MODE) {
+		const { missing, range } = readiness(opts);
+		if (missing.length) return toast(missing[0], 'warning');
+		return applyRenders(opts.clips ?? jobClips(range));
+	}
 	if (run.starting) return;
 	if (!opts.clips && busy()) return toast(t('lib.toast.jobRunning'), 'warning');
 	const { missing, warnings, range } = readiness(opts);

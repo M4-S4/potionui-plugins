@@ -41,7 +41,7 @@
 	"prompt.empty": "Prompt vide — double-cliquez pour écrire",
 	"prompt.hint": "Double-cliquez pour écrire un prompt à cet endroit",
 	"frame.tip": "Frame · {role} · {time} · influence {strength} %",
-	"control.stale": "Guide à recalculer après modification de la scène",
+	"control.stale": "Vidéo de référence à rendre à nouveau : le plan 3D a changé",
 	"keyframe.tip": "Position clé · {time} · glisser pour déplacer",
 	"keyframe.label": "Position clé de caméra à {time}",
 	"drag.range": "Plage {start} → {end}",

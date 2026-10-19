@@ -7,6 +7,7 @@
 	import { openImport } from '../../lib/importer.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { sceneState, scenesBusy } from '../../lib/scene.svelte.js';
 	import Icon from '../Icon.svelte';
 
 	const workspaces = [
@@ -27,6 +28,7 @@
 
 	const tip = (id) => ({ text: commandById(id)?.label ?? '', kbd: commandById(id)?.key || undefined });
 	const savedTime = $derived(project.savedAt ? formatTime(project.savedAt) : null);
+	const sceneWork = $derived(scenesBusy() || Boolean(sceneState.render));
 	const saveState = $derived(project.status === 'saving' ? 'saving' : project.status === 'error' ? 'error' : ui.dirty ? 'dirty' : 'saved');
 
 	function nameChanged() {
@@ -74,7 +76,7 @@
 		{#each workspaces as w (w.id)}
 			<HostUi name="Tooltip" props={{ text: workspaceLabel(w.id), kbd: shortcutLabel(w.keys), wrapperClass: 'flex' }}>
 				<button type="button" role="tab" aria-selected={ui.workspace === w.id} onclick={() => (ui.workspace = w.id)}>
-					<Icon name={w.icon} class="h-3.5 w-3.5" />{workspaceLabel(w.id)}
+					<Icon name={w.icon} class="h-3.5 w-3.5" />{workspaceLabel(w.id)}{#if w.id === 'scene' && sceneWork}<span class="h-1.5 w-1.5 rounded-full bg-signal" aria-label={t('shell.workspace.sceneBusy')}></span>{/if}
 				</button>
 			</HostUi>
 		{/each}

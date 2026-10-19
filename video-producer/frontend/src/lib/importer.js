@@ -42,6 +42,42 @@ export function openLibrary(title) {
 	open('UploadLibraryModal', { title, mediaType: 'video' }, ['video']);
 }
 
+export function pickImage(title, onPicked) {
+	if (ui.hostModal) return;
+	const close = openHostModal('UploadLibraryModal', {
+		title,
+		mediaType: 'image',
+		multiple: false,
+		selectedKeys: [],
+		selectableMediaTypes: ['image'],
+		onConfirm: async (keys, items) => {
+			const id = await importImage(items?.[0]);
+			if (id) onPicked(id);
+		},
+		onClosed: () => (ui.hostModal = false)
+	});
+	if (!close) return toast(t('project.toast.pickerMissing'), 'warning');
+	ui.hostModal = true;
+}
+
+async function importImage(item) {
+	const origin = normalizeOrigin(item?.origin);
+	const key = originKey(origin);
+	if (!key) return null;
+	const existing = doc.assets.find((a) => originKey(a.origin) === key);
+	if (existing) return existing.id;
+	const result = await getClient()?.resolveMedia(origin);
+	const media = result?.ok ? result.data : null;
+	if (!media || media.mediaType !== 'image') {
+		toast(t('project.toast.importFailed', { count: 1 }), 'warning');
+		return null;
+	}
+	const made = newAsset({ kind: 'image', name: media.filename || item.filename || t('project.import.untitled'), src: media.url, origin });
+	act(() => doc.assets.push(made));
+	probeAsset(made.id);
+	return made.id;
+}
+
 const originKey = (o) => (o?.kind === 'history' ? `history:${o.generationId}:${o.fileId}` : o?.kind === 'library' ? `library:${o.itemId}` : null);
 
 function fpsOf(item) {

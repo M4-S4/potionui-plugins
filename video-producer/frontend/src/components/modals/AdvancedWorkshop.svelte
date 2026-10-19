@@ -4,6 +4,7 @@
 	import { ui, doc, act, toast, globalPrompt, secs, checkpoint, fmtDuration } from '../../lib/state.svelte.js';
 	import { readiness, startGeneration, engineChoices, currentEngine, selectEngine, supportedProfiles, estimateState } from '../../lib/production.svelte.js';
 	import { modeLabel, audioRoleLabel } from '../../lib/catalog.js';
+	import { controlOf, presetLabel } from '../../lib/scene.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { ulid } from '../../lib/ulid.js';
 	import Modal from './Modal.svelte';
@@ -103,6 +104,13 @@
 		Object.assign(ui, target);
 	}
 
+	function planLine(p) {
+		const control = controlOf(p);
+		const path = p.source === 'trajectory' && p.preset ? presetLabel(p.preset) : p.source === 'blender' ? t('modals.advanced.planBlender') : t('modals.advanced.keyframes', { count: p.keyframes.length });
+		const video = control?.stale ? t('modals.advanced.stale') : control?.assetId ? t('modals.advanced.planRendered') : t('modals.advanced.planNoVideo');
+		return `${path} · ${video}`;
+	}
+
 	function generate() {
 		ui.modal = null;
 		startGeneration();
@@ -167,8 +175,8 @@
 						{#each ready.items.plans3d as p (p.id)}
 							<li class="flex items-center gap-3 rounded-lg border border-line-strong p-3">
 								<Icon name="cube" class="h-4 w-4 text-fg-muted" />
-								<div class="flex-1"><div class="text-sm">{p.name}</div><div class="text-xs text-fg-subtle">{t('modals.advanced.keyframes', { count: p.keyframes.length })}</div></div>
-								<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => go({ workspace: 'scene' }) }}>{t('modals.advanced.openScene')}</HostUi>
+								<div class="flex-1"><div class="text-sm">{p.name}</div><div class="text-xs text-fg-subtle">{planLine(p)}</div></div>
+								<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => go({ workspace: 'scene', selection: { kind: 'plan3d', id: p.id } }) }}>{t('modals.advanced.openScene')}</HostUi>
 							</li>
 						{/each}
 					</ul>
@@ -353,9 +361,9 @@
 			</HostUi>
 		{/if}
 		<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', onclick: () => (ui.modal = null) }}>{t('modals.advanced.close')}</HostUi>
-		<HostUi name="Tooltip" props={{ text: ready.missing[0] ?? (ui.production.mode === 'Rendu 3D' ? t('production.prepareRender') : t('production.generate')) }}>
+		<HostUi name="Tooltip" props={{ text: ready.missing[0] ?? (ui.production.mode === 'render3d' ? t('production.prepareRender') : t('production.generate')) }}>
 			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: 'sparkles', disabled: ready.missing.length > 0, onclick: generate }}>
-				{ui.production.mode === 'Rendu 3D' ? t('production.prepareRender') : t('production.generate')}
+				{ui.production.mode === 'render3d' ? t('production.prepareRender') : t('production.generate')}
 			</HostUi>
 		</HostUi>
 	{/snippet}

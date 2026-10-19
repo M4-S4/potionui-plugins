@@ -1,166 +1,174 @@
 <script>
+	import { onMount, untrack } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, tc, clamp } from '../../lib/state.svelte.js';
+	import { ui, doc, tc } from '../../lib/state.svelte.js';
 	import { togglePlay } from '../../lib/playback.svelte.js';
 	import { sceneLabel } from '../../lib/catalog.js';
-	import { currentPlan, cameraAt, currentScene, addSampleScene } from '../../lib/scene.js';
+	import {
+		sceneState,
+		currentScene,
+		currentPlan,
+		sceneReady,
+		sceneBusy,
+		sourceOf,
+		shownCamera,
+		following,
+		inPlan,
+		takeOver,
+		setFreeCamera,
+		seedCamera,
+		resetToSource,
+		syncStage,
+		retryLoad,
+		loadEngine,
+		ensureStage,
+		projectAspect,
+		retryScene,
+		cancelScene,
+		sceneErrorText,
+		chooseSceneFile,
+		cancelRender
+	} from '../../lib/scene.svelte.js';
+	import { FOCAL_RANGE, cameraAt, clamp, deviation, deviationLevel, distance, dollyCamera, focalToFov, holesMatter, horizontalFov, orbitCamera, panCamera } from '../../lib/scene3d/camera.js';
 	import { mountHostSlot } from '../../lib/host.js';
-	import { drag, cancelDrag } from '../../lib/timeline.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 
-	let canvas = $state();
 	let w = $state(0);
 	let h = $state(0);
+	let host = $state();
+	let stage = $state.raw(null);
+	let gesture = null;
+
 	const scene = $derived(currentScene());
+	const plan = $derived(currentPlan());
+	const ready = $derived(sceneReady(scene));
+	const aspect = $derived(projectAspect());
+	const frameW = $derived(Math.max(0, Math.floor(Math.min(w, h * aspect))));
+	const frameH = $derived(Math.max(0, Math.floor(frameW / aspect)));
+	const cam = $derived(shownCamera());
+	const onPath = $derived(following(plan));
+	const fov = $derived(focalToFov(cam.focal, aspect));
+	const source = $derived(scene ? sourceOf(scene) : null);
+	const depth = $derived(source ? distance(source.pos, source.target) : 1);
+	const gap = $derived(source && holesMatter(scene) ? deviation(cam, source) : null);
+	const level = $derived(gap ? deviationLevel(gap) : 'ok');
+	const one = (v) => formatNumber(v, { maximumFractionDigits: 1 });
+	const hud = $derived(t('scene.hud', { focal: Math.round(cam.focal), fov: one(fov), hfov: one(horizontalFov(cam.focal)), roll: Math.round(cam.roll ?? 0) }));
+	const render = $derived(sceneState.render);
+
 	const emptyProps = $derived({
 		icon: 'cube',
 		title: t('scene.empty.title'),
 		description: t('scene.empty.text'),
-		actions: { slot: (el) => mountHostSlot(el, 'Button', { variant: 'secondary', size: 'sm', icon: 'plus', onclick: addSampleScene, children: t('scene.sample.name') }) }
-	});
-	const plan = $derived(currentPlan());
-	const inPlan = $derived(!!plan && ui.playhead >= plan.start && ui.playhead <= plan.start + plan.dur);
-	const cam = $derived(inPlan && plan.keyframes.length && (ui.playing || !ui.scene.keyframe) ? cameraAt(plan, ui.playhead - plan.start) : ui.scene);
-
-	function rand(seed) {
-		let s = seed;
-		return () => (s = (s * 16807) % 2147483647) / 2147483647;
-	}
-	const points = (() => {
-		const r = rand(7);
-		const p = [];
-		for (let i = 0; i < 3200; i++) {
-			const x = (r() - 0.5) * 24;
-			const z = (r() - 0.5) * 24;
-			const y = Math.max(0, Math.sin(x * 0.25) * 1.2 + Math.cos(z * 0.2) * 1.4 + (Math.abs(z) > 8 ? (Math.abs(z) - 8) * 0.9 : 0));
-			const g = 90 + y * 25;
-			p.push([x, y, z, `rgb(${60 + y * 18},${g},${70 + y * 12})`, 0.16]);
-		}
-		for (let i = 0; i < 2600; i++) {
-			const side = Math.floor(r() * 5);
-			let x = (r() - 0.5) * 3;
-			let y = r() * 2.2;
-			let z = (r() - 0.5) * 3;
-			if (side === 0) x = -1.5;
-			else if (side === 1) x = 1.5;
-			else if (side === 2) z = -1.5;
-			else if (side === 3) z = 1.5;
-			else y = 2.2 + (1.5 - Math.abs(x)) * 0.8;
-			p.push([x, y + 0.6, z, side === 4 ? 'rgb(150,70,55)' : 'rgb(205,195,175)', 0.12]);
-		}
-		for (let tree = 0; tree < 26; tree++) {
-			const tx = (r() - 0.5) * 20;
-			const tz = (r() - 0.5) * 20;
-			if (Math.hypot(tx, tz) < 3.5) continue;
-			for (let i = 0; i < 90; i++) {
-				const hh = r() * 3;
-				const rad = (1 - hh / 3) * 0.7;
-				const a = r() * Math.PI * 2;
-				p.push([tx + Math.cos(a) * rad * r(), hh + 0.8, tz + Math.sin(a) * rad * r(), `rgb(30,${70 + r() * 30},45)`, 0.18]);
+		actions: {
+			slot: (el) => {
+				const offNew = mountHostSlot(el, 'Button', { variant: 'primary', size: 'sm', icon: 'plus', onclick: () => (ui.modal = { type: 'scene-new' }), children: t('scene.new') });
+				const offImport = mountHostSlot(el, 'Button', { variant: 'secondary', size: 'sm', icon: 'upload', onclick: chooseSceneFile, children: t('scene.import') });
+				return () => (offNew(), offImport());
 			}
 		}
-		return p;
-	})();
+	});
 
-	function eye(c) {
-		const az = (c.az * Math.PI) / 180;
-		const el = (c.el * Math.PI) / 180;
-		return [Math.sin(az) * Math.cos(el) * c.dist, c.height + Math.sin(el) * c.dist, Math.cos(az) * Math.cos(el) * c.dist];
-	}
+	onMount(() => {
+		let alive = true;
+		loadEngine();
+		ensureStage().then((st) => {
+			if (alive) stage = st;
+		});
+		return () => {
+			alive = false;
+			gesture = null;
+		};
+	});
 
 	$effect(() => {
-		if (!canvas || !w || !h || !scene) return;
-		const c = cam;
-		const g = canvas.getContext('2d');
-		if (!g) return;
-		const dpr = window.devicePixelRatio || 1;
-		canvas.width = w * dpr;
-		canvas.height = h * dpr;
-		g.setTransform(dpr, 0, 0, dpr, 0, 0);
-		const sky = g.createLinearGradient(0, 0, 0, h);
-		sky.addColorStop(0, '#2b3a4f');
-		sky.addColorStop(1, '#0e1218');
-		g.fillStyle = sky;
-		g.fillRect(0, 0, w, h);
-		if (scene.kind === 'file') return;
-		const [ex, ey, ez] = eye(c);
-		const tgt = [0, c.height, 0];
-		let fx = tgt[0] - ex,
-			fy = tgt[1] - ey,
-			fz = tgt[2] - ez;
-		const fl = Math.hypot(fx, fy, fz);
-		fx /= fl;
-		fy /= fl;
-		fz /= fl;
-		let rx = fz,
-			rz = -fx;
-		const rl = Math.hypot(rx, rz) || 1;
-		rx /= rl;
-		rz /= rl;
-		const ux = -rz * fy,
-			uy = rz * fx - rx * fz,
-			uz = rx * fy;
-		const f = (c.focal / 36) * w;
-		const proj = [];
-		for (const [x, y, z, col, s] of points) {
-			const dx = x - ex,
-				dy = y - ey,
-				dz = z - ez;
-			const d = dx * fx + dy * fy + dz * fz;
-			if (d < 0.3) continue;
-			const px = w / 2 + ((dx * rx + dz * rz) / d) * f;
-			const py = h / 2 - ((dx * ux + dy * uy + dz * uz) / d) * f;
-			proj.push([d, px, py, col, (s * f * 0.22) / d]);
-		}
-		proj.sort((a, b) => b[0] - a[0]);
-		for (const [d, px, py, col, rad] of proj) {
-			g.globalAlpha = clamp(1.2 - d / 30, 0.25, 0.9);
-			g.fillStyle = col;
-			g.beginPath();
-			g.arc(px, py, Math.max(0.7, rad), 0, Math.PI * 2);
-			g.fill();
-		}
-		g.globalAlpha = 1;
+		const st = stage;
+		const el = host;
+		if (!st || !el) return;
+		el.appendChild(st.canvas);
+		st.refresh();
+		return () => st.canvas.remove();
 	});
 
-	$effect(() => cancelDrag);
+	$effect(() => {
+		if (stage && frameW && frameH) stage.resize(frameW, frameH);
+	});
 
-	function orbit(e) {
-		if (e.button !== 0) return;
-		if (ui.playing) togglePlay();
-		if (cam !== ui.scene) Object.assign(ui.scene, { az: Math.round(cam.az), el: Math.round(cam.el), dist: +cam.dist.toFixed(1), focal: Math.round(cam.focal), height: +cam.height.toFixed(2) });
-		ui.scene.keyframe = 'free';
-		const az0 = ui.scene.az;
-		const el0 = ui.scene.el;
-		drag(e, {
-			undoable: false,
-			onMove: (dx, dy) => {
-				ui.scene.az = Math.round(az0 + dx * 0.4);
-				ui.scene.el = clamp(Math.round(el0 + dy * 0.3), -5, 80);
-			}
-		});
-	}
-	function wheel(e) {
+	$effect(() => {
+		const s = scene;
+		const key = s ? `${s.id}:${s.fileId}:${ready}` : '';
+		untrack(() => (key && ready ? syncStage(s) : syncStage(null)));
+	});
+
+	$effect(() => {
+		if (scene) seedCamera(scene);
+	});
+
+	$effect(() => {
+		if (!stage || sceneState.status !== 'ready') return;
+		stage.setPose({ ...cam, fov });
+	});
+
+	$effect(() => {
+		if (!stage || sceneState.status !== 'ready') return;
+		stage.setTime(onPath ? ui.playhead - plan.start : 0);
+	});
+
+	function down(e) {
+		if (!ready || sceneState.status !== 'ready' || (e.button !== 0 && e.button !== 1 && e.button !== 2)) return;
 		e.preventDefault();
-		ui.scene.dist = clamp(+(ui.scene.dist * (e.deltaY > 0 ? 1.08 : 0.92)).toFixed(1), 2, 30);
+		e.currentTarget.setPointerCapture?.(e.pointerId);
+		gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, pan: e.button !== 0 || e.shiftKey, moved: false };
 	}
 
-	const path = $derived(plan?.keyframes.length ? Array.from({ length: 30 }, (_, i) => cameraAt(plan, (i / 29) * plan.dur)) : []);
-	const map = (c) => {
-		const [x, , z] = eye(c);
-		return [60 + x * 2.6, 60 + z * 2.6];
-	};
-	const hud = $derived(
-		t('scene.hud', {
-			focal: Math.round(cam.focal),
-			az: Math.round(cam.az),
-			el: Math.round(cam.el),
-			dist: formatNumber(cam.dist, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-		})
-	);
+	function move(e) {
+		if (!gesture || e.pointerId !== gesture.id) return;
+		const dx = e.clientX - gesture.x;
+		const dy = e.clientY - gesture.y;
+		if (!gesture.moved && Math.hypot(dx, dy) < 2) return;
+		const start = gesture.moved ? null : takeOver();
+		gesture.moved = true;
+		gesture.x = e.clientX;
+		gesture.y = e.clientY;
+		const base = start ?? shownCamera();
+		const k = (2 * Math.tan(((fov * Math.PI) / 180) / 2)) / Math.max(1, frameH);
+		setFreeCamera(gesture.pan ? panCamera(base, -dx * k, dy * k) : orbitCamera(base, -dx * 0.25, dy * 0.25));
+	}
+
+	function up(e) {
+		if (gesture && e.pointerId === gesture.id) gesture = null;
+	}
+
+	function wheel(e) {
+		if (!ready || sceneState.status !== 'ready') return;
+		e.preventDefault();
+		const base = takeOver();
+		if (e.altKey) setFreeCamera({ ...base, focal: clamp(base.focal * Math.exp(-e.deltaY * 0.001), FOCAL_RANGE[0], FOCAL_RANGE[1]) });
+		else setFreeCamera(dollyCamera(base, Math.exp(e.deltaY * 0.001), depth * 0.02));
+	}
+
+	const path = $derived(plan?.keyframes.length && plan.sceneId === scene?.id ? Array.from({ length: 33 }, (_, i) => cameraAt(plan, (i / 32) * plan.dur)) : []);
+	const keys = $derived(plan && plan.sceneId === scene?.id && plan.source !== 'blender' ? plan.keyframes : []);
+	const mapBox = $derived.by(() => {
+		const points = [cam.pos, cam.target, ...(source ? [source.pos, source.target] : []), ...path.map((c) => c.pos)];
+		const xs = points.map((p) => p[0]);
+		const zs = points.map((p) => p[2]);
+		const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+		const cz = (Math.min(...zs) + Math.max(...zs)) / 2;
+		const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), 1e-3);
+		return { cx, cz, s: 92 / span };
+	});
+	const map = (p) => [60 + (p[0] - mapBox.cx) * mapBox.s, 60 + (p[2] - mapBox.cz) * mapBox.s];
+	const camDot = $derived(map(cam.pos));
+	const looking = $derived.by(() => {
+		const [ax, ay] = map(cam.pos);
+		const [bx, by] = map(cam.target);
+		const l = Math.hypot(bx - ax, by - ay) || 1;
+		return [ax + ((bx - ax) / l) * 14, ay + ((by - ay) / l) * 14];
+	});
 </script>
 
 <section class="isolate flex min-w-0 flex-col bg-canvas" aria-label={t('scene.label')}>
@@ -172,50 +180,100 @@
 		</div>
 	{:else}
 		<div class="flex h-10 min-w-0 shrink-0 items-center gap-2 overflow-hidden whitespace-nowrap border-b border-line px-3">
-			<span class="text-sm font-semibold">{scene.name}</span>
+			<span class="truncate text-sm font-semibold">{scene.name}</span>
 			<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{sceneLabel(scene)}</HostUi>
-			{#if scene.kind === 'sample'}<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>{/if}
-			{#if inPlan}
+			{#if onPath}
 				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md', class: '!text-fg' }}><span class="h-2 w-2 rounded-sm bg-viz-8"></span>{t('scene.planCamera', { plan: plan.name })}</HostUi>
 			{:else}
 				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('scene.freeCamera')}</HostUi>
 			{/if}
 			<div class="flex-1"></div>
 			<span class="hidden truncate text-xs text-fg-subtle 2xl:inline">{t('scene.hint')}</span>
+			<HostUi
+				name="Button"
+				props={{ variant: 'secondary', size: 'xs', icon: hostIconName('target'), disabled: !ready, onclick: resetToSource }}
+			>{t('scene.sourceView')}</HostUi>
 		</div>
 
-		<div class="relative min-h-0 flex-1" bind:clientWidth={w} bind:clientHeight={h}>
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<canvas bind:this={canvas} class="vp-touch-none absolute inset-0 h-full w-full cursor-grab active:cursor-grabbing" style:width="{w}px" style:height="{h}px" onpointerdown={orbit} onwheel={wheel}></canvas>
+		<div class="relative min-h-0 flex-1 overflow-hidden" bind:clientWidth={w} bind:clientHeight={h}>
+			<div class="absolute overflow-hidden bg-black" style:left="{(w - frameW) / 2}px" style:top="{(h - frameH) / 2}px" style:width="{frameW}px" style:height="{frameH}px">
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					bind:this={host}
+					class="vp-touch-none absolute inset-0 {ready && sceneState.status === 'ready' ? 'cursor-grab active:cursor-grabbing' : ''}"
+					onpointerdown={down}
+					onpointermove={move}
+					onpointerup={up}
+					onpointercancel={up}
+					onwheel={wheel}
+					oncontextmenu={(e) => e.preventDefault()}
+				></div>
 
-			{#if scene.kind === 'file'}
-				<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
-					<Icon name="link" class="h-8 w-8 text-white/60" />
-					<div class="text-sm text-white">{scene.file}</div>
-					<div class="max-w-sm text-xs text-white/70">{t('scene.fileNote')}</div>
-					<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('scene.simPreview')}</span>
-				</div>
-			{/if}
-
-			<div class="pointer-events-none absolute inset-[8%] border border-white/15"></div>
-
-			<svg class="absolute bottom-3 right-3 rounded-lg border border-line-strong bg-surface-1/90" width="120" height="120" viewBox="0 0 120 120" role="img" aria-label={t('scene.topView')}>
-				<rect x="55" y="55" width="10" height="10" fill="rgb(var(--fg-subtle))" />
-				{#if path.length}
-					<polyline points={path.map((c) => map(c).join(',')).join(' ')} fill="none" stroke="rgb(var(--viz-8))" stroke-width="1.5" />
-					{#each plan.keyframes as k (k.id)}
-						{@const [x, y] = map(k)}
-						<rect x={x - 3} y={y - 3} width="6" height="6" transform="rotate(45 {x} {y})" fill={ui.scene.keyframe === k.id ? 'rgb(var(--signal))' : 'rgb(var(--fg))'} />
-					{/each}
+				{#if sceneBusy(scene)}
+					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
+						<HostUi name="Spinner" props={{ size: 'md' }} />
+						<div class="text-sm text-white">{scene.status === 'queued' ? t('scene.status.queued') : t('scene.status.running')}</div>
+						<div class="h-1 w-48 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label={t('scene.status.running')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(scene.progress)}>
+							<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{scene.progress}%"></div>
+						</div>
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => cancelScene(scene) }}>{t('scene.cancel')}</HostUi>
+					</div>
+				{:else if scene.kind === 'splat' && scene.status === 'failed'}
+					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
+						<Icon name="alert" class="h-6 w-6 text-warning" />
+						<div class="max-w-sm text-sm text-white">{sceneErrorText(scene.error)}</div>
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: () => retryScene(scene) }}>{t('scene.retry')}</HostUi>
+					</div>
+				{:else if sceneState.engine === 'unsupported' || sceneState.engine === 'failed'}
+					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
+						<Icon name="alert" class="h-6 w-6 text-warning" />
+						<div class="max-w-sm text-sm text-white">{sceneState.engine === 'unsupported' ? t('scene.engine.unsupported') : t('scene.engine.failed')}</div>
+					</div>
+				{:else if sceneState.status === 'failed'}
+					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
+						<Icon name="alert" class="h-6 w-6 text-warning" />
+						<div class="max-w-sm text-sm text-white">{sceneState.error === 'fetch_failed' ? t('scene.load.fetchFailed') : t('scene.load.failed')}</div>
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: retryLoad }}>{t('scene.retry')}</HostUi>
+					</div>
+				{:else if sceneState.engine !== 'ready' || sceneState.status === 'loading'}
+					<div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
+						<HostUi name="Spinner" props={{ size: 'md' }} />
+						<div class="text-sm text-white/70">{sceneState.engine !== 'ready' ? t('scene.engine.loading') : t('scene.load.loading')}</div>
+					</div>
 				{/if}
-				{#if cam}
-					{@const [cx, cy] = map(cam)}
-					<circle {cx} {cy} r="4" fill="rgb(var(--signal))" />
-					<line x1={cx} y1={cy} x2="60" y2="60" stroke="rgb(var(--signal))" stroke-dasharray="2 2" />
-				{/if}
-			</svg>
 
-			<div class="vp-tc absolute left-3 top-3 rounded bg-black/60 px-2 py-1 text-xs text-white">{hud}</div>
+				{#if ready && sceneState.status === 'ready'}
+					<div class="vp-tc pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white">{hud}</div>
+					{#if gap}
+						<div class="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white" role="status">
+							<div class="flex items-center gap-2">
+								<span class="h-1 w-16 overflow-hidden rounded-full bg-white/20">
+									<span class="block h-full rounded-full {level === 'holes' ? 'bg-danger' : level === 'near' ? 'bg-warning' : 'bg-success'}" style:width="{Math.min(100, Math.max(gap.angle / 15, gap.shift / 0.25) * 100)}%"></span>
+								</span>
+								<span class="vp-tc">{t('scene.gap', { angle: Math.round(gap.angle), shift: Math.round(gap.shift * 100) })}</span>
+							</div>
+							{#if level === 'holes'}<div class="mt-0.5 text-warning">{t('scene.holes')}</div>{/if}
+						</div>
+					{/if}
+					<svg class="pointer-events-none absolute bottom-2 right-2 rounded-lg border border-line-strong bg-surface-1/90" width="120" height="120" viewBox="0 0 120 120" role="img" aria-label={t('scene.topView')}>
+						{#if source}
+							{@const [sx, sy] = map(source.pos)}
+							{@const [tx, ty] = map(source.target)}
+							<rect x={tx - 3} y={ty - 3} width="6" height="6" fill="rgb(var(--fg-subtle))" />
+							<circle cx={sx} cy={sy} r="3" fill="none" stroke="rgb(var(--fg-subtle))" />
+						{/if}
+						{#if path.length}
+							<polyline points={path.map((c) => map(c.pos).join(',')).join(' ')} fill="none" stroke="rgb(var(--viz-8))" stroke-width="1.5" />
+							{#each keys as k (k.id)}
+								{@const [x, y] = map(k.pos)}
+								<rect x={x - 3} y={y - 3} width="6" height="6" transform="rotate(45 {x} {y})" fill={ui.scene.keyframe === k.id ? 'rgb(var(--signal))' : 'rgb(var(--fg))'} />
+							{/each}
+						{/if}
+						<line x1={camDot[0]} y1={camDot[1]} x2={looking[0]} y2={looking[1]} stroke="rgb(var(--signal))" stroke-width="1.5" />
+						<circle cx={camDot[0]} cy={camDot[1]} r="4" fill="rgb(var(--signal))" />
+					</svg>
+				{/if}
+			</div>
 		</div>
 
 		<div class="flex h-11 shrink-0 items-center gap-2 border-t border-line px-3">
@@ -232,8 +290,20 @@
 					onclick: togglePlay
 				}}
 			/>
-			<span class="text-xs text-fg-muted">{t('scene.preview')}</span>
+			<span class="text-xs text-fg-muted">{inPlan(plan) ? t('scene.preview') : t('scene.previewOutside')}</span>
 			<div class="flex-1"></div>
+			{#if render}
+				<div class="w-44">
+					<div class="flex justify-between gap-2 text-xs">
+						<span class="truncate text-signal">{render.phase === 'encoding' ? t('scene.render.encoding') : t('scene.render.frames', { done: render.done, total: render.total })}</span>
+						<span class="vp-tc text-fg-muted">{t('exports.percent', { value: Math.round((render.done / render.total) * 100) })}</span>
+					</div>
+					<div class="mt-1 h-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-label={t('scene.render.progress')} aria-valuemin="0" aria-valuemax={render.total} aria-valuenow={render.done}>
+						<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{(render.done / render.total) * 100}%"></div>
+					</div>
+				</div>
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', onclick: cancelRender }}>{t('scene.cancel')}</HostUi>
+			{/if}
 			<span class="vp-tc text-md">{tc(ui.playhead, doc.fps)}</span>
 		</div>
 	{/if}

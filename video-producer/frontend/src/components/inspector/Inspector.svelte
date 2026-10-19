@@ -28,7 +28,31 @@
 	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel } from '../../lib/production.svelte.js';
 	import { refRoleLabel } from '../../lib/references.js';
 	import { commandById } from '../../lib/commands.js';
-	import { currentPlan, markGuidesStale, addKeyframe, renderGuide } from '../../lib/scene.js';
+	import {
+		sceneState,
+		currentPlan,
+		currentScene,
+		sceneOf,
+		sourceOf,
+		controlOf,
+		planOfControl,
+		addKeyframe,
+		deleteKeyframe,
+		editKey,
+		selectKey,
+		takeOver,
+		freeCamera,
+		setFreeCamera,
+		shownCamera,
+		resetToSource,
+		renderPlan,
+		useStartEnd,
+		setPlanDur,
+		setPlanScene,
+		presetLabel,
+		sceneReady
+	} from '../../lib/scene.svelte.js';
+	import { FOCAL_RANGE, ROLL_RANGE, distance, dollyCamera, pose } from '../../lib/scene3d/camera.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
 	import Tabs from '../shell/Tabs.svelte';
@@ -86,14 +110,19 @@
 	const fadeMax = $derived(item?.dur ? item.dur / 2 : 0);
 	const issues = $derived(s?.kind === 'prompt' ? promptIssues(item) : []);
 	const plan = $derived(ui.workspace === 'scene' && (!s || s.kind === 'plan3d') ? currentPlan() : null);
+	const cameraPanel = $derived(!item && ui.workspace === 'scene' && doc.scenes.length > 0);
 	const gain = (v) => `${formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'exceptZero' })} dB`;
 
+	const shown = $derived(shownCamera());
+	const sceneDepth = $derived.by(() => {
+		const scene = currentScene();
+		const source = scene ? sourceOf(scene) : null;
+		return source ? distance(source.pos, source.target) : 4;
+	});
 	const camFields = $derived([
-		{ k: 'focal', label: t('inspector.camera.focal'), min: 12, max: 135, step: 1, unit: ' mm' },
-		{ k: 'az', label: t('inspector.camera.az'), min: -180, max: 180, step: 1, unit: '°' },
-		{ k: 'el', label: t('inspector.camera.el'), min: -5, max: 80, step: 1, unit: '°' },
-		{ k: 'dist', label: t('inspector.camera.dist'), min: 2, max: 30, step: 0.1, unit: ' m' },
-		{ k: 'height', label: t('inspector.camera.height'), min: 0, max: 4, step: 0.1, unit: ' m' }
+		{ k: 'focal', label: t('inspector.camera.focal'), min: FOCAL_RANGE[0], max: FOCAL_RANGE[1], step: 1, unit: ' mm', value: shown.focal },
+		{ k: 'roll', label: t('inspector.camera.roll'), min: ROLL_RANGE[0], max: ROLL_RANGE[1], step: 1, unit: '°', value: shown.roll ?? 0 },
+		{ k: 'dist', label: t('inspector.camera.dist'), min: +(sceneDepth * 0.05).toFixed(2), max: Math.max(1, +(sceneDepth * 4).toFixed(1)), step: 0.01, unit: '', value: distance(shown.pos, shown.target) }
 	]);
 	const flags = $derived([
 		{ id: 'none', label: t('inspector.flag.none') },
@@ -112,12 +141,18 @@
 	]);
 
 	function camSet(k, v) {
-		ui.scene[k] = v;
-		const kf = plan?.keyframes.find((x) => x.id === ui.scene.keyframe);
-		if (kf) {
-			kf[k] = v;
-			markGuidesStale();
-		} else if (ui.scene.keyframe == null) ui.scene.keyframe = 'free';
+		const owner = plan ?? (s?.kind === 'plan3d' ? item : null);
+		const key = owner?.keyframes.find((x) => x.id === ui.scene.keyframe);
+		const base = key ? pose(key) : ui.scene.keyframe === null ? takeOver() : freeCamera();
+		const next = k === 'dist' ? dollyCamera(base, v / Math.max(1e-6, distance(base.pos, base.target)), 1e-3) : { ...base, [k]: v };
+		setFreeCamera(next);
+		if (key) editKey(key, { pos: [...next.pos], target: [...next.target], focal: next.focal, roll: next.roll });
+	}
+
+	function sourceText(p) {
+		if (p.source === 'trajectory' && p.preset) return t('inspector.plan.preset', { preset: presetLabel(p.preset), amount: p.amount ?? 0, unit: p.preset === 'dolly' ? '%' : '°' });
+		if (p.source === 'blender') return t('inspector.plan.blender', { camera: p.camera ?? '—' });
+		return t('inspector.plan.manual');
 	}
 
 	const seamFrame = (shotId, kind) => framesOf(doc, shotId, kind).find((f) => f.assetId) ?? null;
@@ -131,8 +166,8 @@
 
 <aside class="flex min-h-0 flex-col overflow-hidden border-l border-line bg-surface-1" aria-label={t('inspector.title')} class:invisible={!ui.inspectorOpen}>
 	<div class="vp-panel-head border-b border-line">
-		<Icon name={item ? icons[s.kind] : plan ? 'camera' : 'info'} class="h-4 w-4 text-fg-muted" />
-		<span class="truncate text-sm font-semibold">{item ? kindTitle(s.kind) : plan ? t('inspector.camera.title') : t('inspector.title')}</span>
+		<Icon name={item ? icons[s.kind] : cameraPanel ? 'camera' : 'info'} class="h-4 w-4 text-fg-muted" />
+		<span class="truncate text-sm font-semibold">{item ? kindTitle(s.kind) : cameraPanel ? t('inspector.camera.title') : t('inspector.title')}</span>
 		<div class="flex-1"></div>
 		<HostUi
 			name="IconButton"
@@ -153,7 +188,7 @@
 		/>
 	{/if}
 	<div class="min-h-0 flex-1 space-y-4 overflow-auto p-3">
-		{#if !item && plan}
+		{#if cameraPanel}
 			{@render camera()}
 		{:else if !item}
 			<div class="space-y-3">
@@ -356,17 +391,21 @@
 					<label class="flex items-center gap-2">
 						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
 						<select class="input vp-dense min-w-0 flex-1" value={roleOption(item.role)} onchange={(e) => act(() => (item.role = e.currentTarget.value))}>
-							{#each ['Début', 'Fin', 'Transition', 'Identité', 'Style', 'Capture 3D'] as r (r)}<option value={r}>{frameRoleLabel(r)}</option>{/each}
+							{#each ['Début', 'Fin', 'Transition', 'Identité', 'Style', ...(item.role === 'Capture 3D' ? ['Capture 3D'] : [])] as r (r)}<option value={r}>{frameRoleLabel(r)}</option>{/each}
 						</select>
 					</label>
+					{#if item.sceneId}
+						<div class="flex items-center gap-2 text-xs text-fg-muted"><Icon name="cube" class="h-3.5 w-3.5 shrink-0" />{t('inspector.frame.fromScene', { scene: sceneOf(item.sceneId)?.name ?? t('inspector.frame.removedScene') })}</div>
+					{/if}
 					<SliderField label={t('inspector.field.strength')} value={item.strength} unit=" %" onchange={(v) => set('strength', v)} />
 				</section>
 			{:else if s.kind === 'control'}
+				{@const owner = planOfControl(item)}
 				{#if item.stale}
 					<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>
 						<div class="flex items-center gap-2">
 							<span class="flex-1">{t('inspector.control.stale')}</span>
-							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: renderGuide }}>{t('inspector.control.rerender')}</HostUi>
+							{#if owner}<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', disabled: Boolean(sceneState.render), onclick: () => renderPlan(owner) }}>{t('inspector.control.rerender')}</HostUi>{/if}
 						</div>
 					</HostUi>
 				{/if}
@@ -379,22 +418,48 @@
 						<span class="w-24 shrink-0 text-fg-muted">{t('inspector.field.source')}</span>
 						<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{item.source === 'scene3d' ? t('inspector.control.scene3d') : t('inspector.control.imported')}</HostUi>
 					</div>
+					{#if item.source === 'scene3d'}
+						<div class="flex items-center gap-2 text-xs">
+							<span class="w-24 shrink-0 text-fg-muted">{t('inspector.control.video')}</span>
+							<span class="min-w-0 flex-1 truncate {asset(item.assetId) ? 'text-fg' : 'text-fg-subtle'}">{asset(item.assetId)?.name ?? t('inspector.control.noVideo')}</span>
+						</div>
+						{#if owner}
+							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'cube', class: 'w-full', onclick: () => (select('plan3d', owner.id), (ui.workspace = 'scene')) }}>{t('inspector.control.openPlan', { name: owner.name })}</HostUi>
+						{/if}
+					{/if}
 					<NumField label={t('inspector.field.start')} value={item.start} min={0} step={0.04} unit="s" onchange={(v) => set('start', v)} />
 					<NumField label={t('inspector.field.duration')} value={item.dur} min={0.3} step={0.04} unit="s" onchange={(v) => set('dur', v)} />
 					<SliderField label={t('inspector.field.guidance')} value={item.guidance} unit=" %" onchange={(v) => set('guidance', v)} />
 					<p class="text-xs text-fg-subtle">{t('inspector.control.note')}</p>
 				</section>
 			{:else if s.kind === 'plan3d'}
+				{@const control = controlOf(item)}
+				{@const planScene = sceneOf(item.sceneId)}
+				{@const locked = !sceneReady(planScene) || !item.keyframes.length || Boolean(sceneState.render || sceneState.ends)}
 				<section class="space-y-2">
 					<label class="flex items-center gap-2">
 						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.scene')}</span>
-						<select class="input vp-dense min-w-0 flex-1" value={item.sceneId} onchange={(e) => act(() => ((item.sceneId = e.currentTarget.value), markGuidesStale()))}>
-							{#if !doc.scenes.length}<option value="">{t('inspector.field.noScene')}</option>{/if}
+						<select class="input vp-dense min-w-0 flex-1" value={item.sceneId ?? ''} onchange={(e) => setPlanScene(item, e.currentTarget.value)}>
+							<option value="">{t('inspector.field.noScene')}</option>
 							{#each doc.scenes as sc (sc.id)}<option value={sc.id}>{sc.name}</option>{/each}
 						</select>
 					</label>
 					<NumField label={t('inspector.field.start')} value={item.start} min={0} step={0.04} unit="s" onchange={(v) => set('start', v)} />
-					<NumField label={t('inspector.field.duration')} value={item.dur} min={0.5} step={0.04} unit="s" onchange={(v) => (set('dur', v), markGuidesStale())} />
+					<NumField label={t('inspector.field.duration')} value={item.dur} min={0.5} step={0.04} unit="s" onchange={(v) => setPlanDur(item, v)} />
+					<div class="flex items-center gap-2 text-xs">
+						<span class="w-24 shrink-0 text-fg-muted">{t('inspector.plan.path')}</span>
+						<span class="min-w-0 flex-1 truncate text-fg">{sourceText(item)}</span>
+					</div>
+					<div class="flex items-center gap-2 text-xs">
+						<span class="w-24 shrink-0 text-fg-muted">{t('inspector.plan.video')}</span>
+						<span class="min-w-0 flex-1 truncate {control?.stale ? 'text-warning' : control?.assetId ? 'text-fg' : 'text-fg-subtle'}">
+							{control?.stale ? t('inspector.plan.videoStale') : control?.assetId ? t('inspector.plan.videoReady') : t('inspector.plan.videoNone')}
+						</span>
+					</div>
+					<div class="grid grid-cols-2 gap-1.5">
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName('route'), disabled: locked, onclick: () => renderPlan(item) }}>{t('inspector.plan.render')}</HostUi>
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName('image'), disabled: locked, onclick: () => useStartEnd(item) }}>{t('inspector.plan.ends')}</HostUi>
+					</div>
 				</section>
 				{@render camera()}
 			{:else if s.kind === 'title'}
@@ -517,34 +582,31 @@
 			{/if}
 		</div>
 		{#each camFields as f (f.k)}
-			<SliderField label={f.label} value={ui.scene[f.k]} min={f.min} max={f.max} step={f.step} unit={f.unit} onchange={(v) => camSet(f.k, v)} />
+			<SliderField label={f.label} value={f.value} min={f.min} max={f.max} step={f.step} unit={f.unit} onchange={(v) => camSet(f.k, v)} />
 		{/each}
 		<div class="grid grid-cols-2 gap-1.5">
 			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('diamond'), onclick: addKeyframe }}>{t('inspector.camera.addKey')}</HostUi>
 			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', disabled: ui.scene.keyframe == null, onclick: () => (ui.scene.keyframe = null) }}>{t('inspector.camera.followPath')}</HostUi>
 		</div>
+		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: hostIconName('target'), class: 'w-full', onclick: resetToSource }}>{t('scene.sourceView')}</HostUi>
 	</section>
 	{#if p}
 		<section class="space-y-1.5">
 			<div class="vp-section-title">{t('inspector.camera.keys', { name: p.name })}</div>
-			{#each p.keyframes as k (k.id)}
-				<div class="flex items-center gap-2 rounded px-2 py-0.5 text-xs {ui.scene.keyframe === k.id ? 'bg-surface-3 text-fg ring-1 ring-inset ring-signal' : 'text-fg-muted hover:bg-surface-2'}">
-					<button
-						type="button"
-						class="flex min-h-6 flex-1 items-center gap-2 text-left"
-						aria-pressed={ui.scene.keyframe === k.id}
-						onclick={() => (Object.assign(ui.scene, { az: k.az, el: k.el, dist: k.dist, focal: k.focal, height: k.height, keyframe: k.id }), seek(p.start + k.t))}
-					>
-						<Icon name="diamond" class="h-3 w-3" /><span class="vp-tc">{secs(p.start + k.t)}</span><span class="text-fg-muted">{t('inspector.camera.keyMeta', { focal: k.focal, az: k.az })}</span>
-					</button>
-					<HostUi
-						name="IconButton"
-						props={{ icon: 'trash', label: t('inspector.camera.deleteKey'), tooltip: t('inspector.camera.deleteKey'), size: 'xs', onclick: () => act(() => (p.keyframes.splice(p.keyframes.indexOf(k), 1), markGuidesStale())) }}
-					/>
-				</div>
+			{#if p.source === 'blender'}
+				<p class="text-xs text-fg-subtle">{t('inspector.camera.sampled', { count: p.keyframes.length, camera: p.camera ?? '—' })}</p>
 			{:else}
-				<p class="text-xs text-fg-subtle">{t('inspector.camera.noKeys')}</p>
-			{/each}
+				{#each p.keyframes as k (k.id)}
+					<div class="flex items-center gap-2 rounded px-2 py-0.5 text-xs {ui.scene.keyframe === k.id ? 'bg-surface-3 text-fg ring-1 ring-inset ring-signal' : 'text-fg-muted hover:bg-surface-2'}">
+						<button type="button" class="flex min-h-6 flex-1 items-center gap-2 text-left" aria-pressed={ui.scene.keyframe === k.id} onclick={() => selectKey(p, k)}>
+							<Icon name="diamond" class="h-3 w-3" /><span class="vp-tc">{secs(p.start + k.t)}</span><span class="text-fg-muted">{t('inspector.camera.keyMeta', { focal: Math.round(k.focal), dist: formatNumber(distance(k.pos, k.target), { maximumFractionDigits: 2 }) })}</span>
+						</button>
+						<HostUi name="IconButton" props={{ icon: 'trash', label: t('inspector.camera.deleteKey'), tooltip: t('inspector.camera.deleteKey'), size: 'xs', onclick: () => deleteKeyframe(p, k) }} />
+					</div>
+				{:else}
+					<p class="text-xs text-fg-subtle">{t('inspector.camera.noKeys')}</p>
+				{/each}
+			{/if}
 		</section>
 	{/if}
 {/snippet}

@@ -19,6 +19,11 @@
 	import Icon from '../Icon.svelte';
 
 	const modes = ['FL2VA', 'Ref2VA', 'Hybrid AV'];
+
+	function fromScene() {
+		ui.workspace = 'scene';
+		if (!doc.scenes.length) ui.modal = { type: 'scene-new' };
+	}
 	let open = $state({ univers: true, personnages: false, photographie: false, palette: true, rythme: false });
 
 	const chars = $derived(globalPrompt().length);
@@ -301,7 +306,7 @@
 			{/if}
 			<div class="flex flex-col gap-0.5">
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'w-full !justify-start', onclick: () => addReference() }}>{t('panels.dock.refs.add')}</HostUi>
-				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'w-full !justify-start', onclick: () => (ui.modal = { type: 'splat' }) }}>{t('panels.dock.refs.splat')}</HostUi>
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'cube', class: 'w-full !justify-start', onclick: fromScene }}>{t('panels.dock.refs.fromScene')}</HostUi>
 			</div>
 			<p class="text-xs text-fg-subtle">{t('panels.dock.refs.dragHint')}</p>
 		</div>

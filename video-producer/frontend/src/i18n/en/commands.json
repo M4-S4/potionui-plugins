@@ -85,7 +85,6 @@
 	"cmd.ref-identity": "References · Images and identity",
 	"cmd.ref-3d": "References · 3D sets",
 	"cmd.ref-motion": "References · Motion guides",
-	"cmd.splat": "Reference a Gaussian Splat file…",
 	"cmd.sidebar": "Side panel",
 	"cmd.inspector": "Inspector",
 	"cmd.assistant": "PotionUI assistant",
@@ -98,5 +97,7 @@
 	"cmd.help-sim": "Simulated features",
 	"kbd.space": "Space",
 	"kbd.backspace": "Backspace",
-	"kbd.escape": "Esc"
+	"kbd.escape": "Esc",
+	"cmd.scene-new": "New 3D scene from image…",
+	"cmd.scene-import": "Import a splat or Blender file…"
 }

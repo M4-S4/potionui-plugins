@@ -1,5 +1,5 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { emptyDoc, newAsset, newClip, promptLanguageOf } from './starter.js';
+import { emptyDoc, migrate, newAsset, newClip, promptLanguageOf } from './starter.js';
 import { toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
 import { resetTakes } from './takes.svelte.js';
@@ -45,10 +45,10 @@ export const ui = $state({
 	mediaQuery: '',
 	mediaCollection: 'all',
 	mixerFilter: 'Tous',
-	scene: { current: null, az: -40, el: 18, dist: 14, focal: 28, height: 1.4, keyframe: null },
+	scene: { current: null, pos: [0, 0, 0], target: [0, 0, -4], focal: 35, roll: 0, keyframe: null, seeded: null, preset: 'orbit', amounts: { orbit: 10, dolly: 15, crane: 10 } },
 	production: {
 		target: 'clip',
-		mode: 'Génération IA',
+		mode: 'ai',
 		state: 'ready',
 		progress: 0,
 		running: 0,
@@ -160,7 +160,6 @@ export function toast(message, level = 'info', action) {
 	}, duration);
 	toastTimers.add(timer);
 }
-export const simulated = (what) => toast(t('lib.toast.simulated', { what }), 'sim');
 
 const collections = { clip: 'clips', audio: 'audio', title: 'titles', prompt: 'prompts', frame: 'frames', control: 'controls', plan3d: 'plans3d', marker: 'markers', reference: 'references' };
 const LINKED = ['prompts', 'frames', 'controls', 'plans3d'];
@@ -247,6 +246,7 @@ export function duplicateSelection() {
 	if (i < 0) return;
 	const copy = JSON.parse(JSON.stringify($state.snapshot(list[i])));
 	copy.id = ulid();
+	if (s.kind === 'plan3d') copy.keyframes = copy.keyframes.map((k) => ({ ...k, id: ulid() }));
 	act(() => {
 		if (s.kind === 'clip') {
 			list.splice(i + 1, 0, copy);
@@ -368,9 +368,8 @@ export function addFrame(assetId = clipAt(ui.playhead)?.assetId ?? null, time = 
 	toast(t('lib.toast.frameAdded'));
 }
 
-export function addControl(source = 'import') {
-	const name = source === 'scene3d' ? t('lib.default.guide3d', { name: doc.plans3d[0]?.name ?? t('lib.default.scene') }) : t('lib.default.importedControl');
-	const c = { id: ulid(), shotId: shotIdAt(ui.playhead), name, start: round(ui.playhead, 0.04), dur: 4, guidance: 60, source, stale: false };
+export function addControl() {
+	const c = { id: ulid(), shotId: shotIdAt(ui.playhead), name: t('lib.default.importedControl'), start: round(ui.playhead, 0.04), dur: 4, guidance: 60, source: 'import', stale: false };
 	act(() => doc.controls.push(c));
 	select('control', c.id);
 	toast(t('lib.toast.controlAdded'));
@@ -513,7 +512,7 @@ export function acceptProposal() {
 }
 
 export function replaceDoc(next) {
-	const incoming = { ...next, assets: Array.isArray(next?.assets) ? next.assets : [] };
+	const incoming = migrate({ ...next, assets: Array.isArray(next?.assets) ? next.assets : [] });
 	delete incoming.results;
 	for (const k of Object.keys(doc)) if (!(k in incoming)) delete doc[k];
 	Object.assign(doc, incoming);
@@ -522,7 +521,7 @@ export function replaceDoc(next) {
 	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, dirty: false });
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', queue: [], lastCount: 0 });
 	resetTakes();
-	Object.assign(ui.scene, { current: null, keyframe: null });
+	Object.assign(ui.scene, { current: null, keyframe: null, seeded: null });
 	if (ui.playhead > seqDuration()) ui.playhead = 0;
 }
 

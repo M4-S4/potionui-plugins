@@ -38,7 +38,8 @@
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { addTitle, commandById } from '../../lib/commands.js';
-	import { markGuidesStale } from '../../lib/scene.js';
+	import { markStale, selectKey, editKey } from '../../lib/scene.svelte.js';
+	import { retime } from '../../lib/scene3d/camera.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { wheelZoomFactor } from '../../lib/timebase.js';
@@ -63,7 +64,7 @@
 	const ticks = $derived(Array.from({ length: Math.ceil(contentW / pps / step) + 1 }, (_, i) => i * step));
 	const key = (id) => commandById(id)?.key || undefined;
 
-	const keyed = $derived(doc.plans3d.some((p) => p.keyframes.length));
+	const keyed = $derived(doc.plans3d.some((p) => p.source !== 'blender' && p.keyframes.length));
 	const rows = $derived([
 		{ id: 'titles', label: t('timeline.row.titles'), icon: 'type', h: BLOCK_ROW, color: null },
 		{ id: 'prompts', label: t('timeline.row.prompts'), icon: 'sparkles', h: BLOCK_ROW, color: roleColor.Prompts },
@@ -83,7 +84,7 @@
 	const addItems = $derived([
 		{ label: t('timeline.add.prompt'), icon: 'sparkles', run: () => addPrompt() },
 		{ label: t('timeline.add.frame'), icon: 'image', run: () => addFrame() },
-		{ label: t('timeline.add.control'), icon: 'route', run: () => addControl('import') },
+		{ label: t('timeline.add.control'), icon: 'route', run: () => addControl() },
 		{ label: t('timeline.add.title'), icon: 'type', key: key('title'), run: () => addTitle() },
 		{ label: t('timeline.add.marker'), icon: 'bookmark', key: key('marker'), run: () => addMarker() },
 		{ label: t('timeline.add.lane'), icon: 'wave', key: key('audio-add'), run: addAudioLane }
@@ -131,7 +132,7 @@
 		const at = round(timeAt(e.clientX), 0.04);
 		if (row.id === 'prompts') addPrompt(at, 4);
 		if (row.id === 'frames') addFrame(undefined, at);
-		if (row.id === 'controls') addControl('import');
+		if (row.id === 'controls') addControl();
 	}
 
 	function relinkAfter(item) {
@@ -185,7 +186,12 @@
 				}
 				setDragText(limit ? t('timeline.drag.sourceLimit') : t('timeline.drag.duration', { dur: secs(item.dur) }), limit);
 			},
-			onEnd: () => relinkAfter(item)
+			onEnd: () => {
+				relinkAfter(item);
+				if (kind !== 'plan3d' || Math.abs(item.dur - d0) < 1e-6) return;
+				if (item.source === 'trajectory') item.keyframes = retime(item.keyframes, d0, item.dur);
+				markStale(item);
+			}
 		});
 	}
 
@@ -267,15 +273,12 @@
 	}
 
 	function keyDown(e, plan, k) {
-		select('plan3d', plan.id);
-		ui.scene.keyframe = k.id;
-		Object.assign(ui.scene, { az: k.az, el: k.el, dist: k.dist, focal: k.focal, height: k.height });
+		selectKey(plan, k, false);
 		const t0 = k.t;
 		drag(e, {
 			onMove: (dx) => {
-				k.t = round(clamp(t0 + dx / pps, 0, plan.dur), 0.04);
+				editKey(k, { t: round(clamp(t0 + dx / pps, 0, plan.dur), 0.04) });
 				plan.keyframes.sort((a, b) => a.t - b.t);
-				markGuidesStale();
 				setDragText(t('timeline.drag.keyframe', { time: secs(plan.start + k.t) }));
 			}
 		});
@@ -467,8 +470,9 @@
 									{#if fthumb}
 									<img src={fthumb} alt="" class="h-5 w-7 rounded-sm object-cover" draggable="false" />
 								{:else}
-									<span class="flex h-5 w-7 items-center justify-center rounded-sm bg-surface-3 text-fg-muted"><Icon name={f.role === 'Capture 3D' ? 'cube' : 'image'} class="h-3 w-3" /></span>
+									<span class="flex h-5 w-7 items-center justify-center rounded-sm bg-surface-3 text-fg-muted"><Icon name={f.sceneId || f.role === 'Capture 3D' ? 'cube' : 'image'} class="h-3 w-3" /></span>
 								{/if}
+									{#if f.sceneId}<Icon name="cube" class="h-3 w-3 shrink-0 text-fg-muted" />{/if}
 									<span class="text-xs text-fg-muted">{frameRoleLabel(f.role)}</span>
 								</button>
 							{/each}
@@ -479,7 +483,7 @@
 						{:else if row.id === 'plans3d'}
 							{#each doc.plans3d as s (s.id)}
 								{@render block('plan3d', s, s.name, row.color, [], keyed ? KEY_BAND + 2 : null)}
-								{#each s.keyframes as k (k.id)}
+								{#each s.source === 'blender' ? [] : s.keyframes as k (k.id)}
 									<button
 										type="button"
 										tabindex="-1"

@@ -24,6 +24,7 @@ import { openGallery, openImport } from './importer.js';
 import { ulid } from './ulid.js';
 import { matchToPrevious } from './continuity.svelte.js';
 import { openReferences } from './references.js';
+import { chooseSceneFile } from './scene.svelte.js';
 import { togglePlay, seek } from './playback.svelte.js';
 import { chat, confirm } from './host.js';
 import { detectMac, findShortcut, formatShortcut, hostOverlayOpen, isActivationTarget, isSingleKey, isTypingTarget } from './keyboard.js';
@@ -131,6 +132,14 @@ const scopes = () => {
 	ui.inspectorTab = 'color';
 };
 const cancelRunning = () => (busy() ? cancelGeneration() : toast(t('lib.toast.noRunning')));
+const sceneNew = () => {
+	ui.workspace = 'scene';
+	ui.modal = { type: 'scene-new' };
+};
+const sceneImport = () => {
+	ui.workspace = 'scene';
+	chooseSceneFile();
+};
 
 export const menus = [
 	menu('app', [
@@ -247,7 +256,8 @@ export const menus = [
 			command('ref-identity', refs('identite')),
 			command('ref-3d', refs('decors3d')),
 			command('ref-motion', refs('mouvement')),
-			command('splat', modal('splat'))
+			command('scene-new', sceneNew),
+			command('scene-import', sceneImport)
 		],
 		[
 			command('sidebar', () => (ui.sidebarOpen = !ui.sidebarOpen), { keys: 'ctrl+mod+1', check: () => ui.sidebarOpen }),

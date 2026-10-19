@@ -43,7 +43,7 @@ export const families = [
 		}
 	}
 ];
-const types = { identite: ['Personnage', 'Décor', 'Objet', 'Style'], decors3d: ['Scène d’essai', 'Gaussian Splat'], mouvement: ['Control video', 'Trajectoire'] };
+const types = { identite: ['Personnage', 'Décor', 'Objet', 'Style'], decors3d: ['Capture 3D'], mouvement: ['Control video', 'Trajectoire'] };
 const roles = { identite: 'Identité', decors3d: 'Décor 3D', mouvement: 'Mouvement' };
 
 export function refTypeLabel(type) {
@@ -51,8 +51,7 @@ export function refTypeLabel(type) {
 	if (type === 'Décor') return t('lib.refType.set');
 	if (type === 'Objet') return t('lib.refType.object');
 	if (type === 'Style') return t('lib.refType.style');
-	if (type === 'Scène d’essai') return t('lib.refType.sampleScene');
-	if (type === 'Gaussian Splat') return t('lib.refType.splat');
+	if (type === 'Capture 3D') return t('lib.refType.capture3d');
 	if (type === 'Control video') return t('lib.refType.control');
 	if (type === 'Trajectoire') return t('lib.refType.trajectory');
 	return type;

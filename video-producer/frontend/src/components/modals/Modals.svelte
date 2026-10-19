@@ -1,13 +1,12 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, toast, globalPrompt, itemsIn, productionRange, secs, select } from '../../lib/state.svelte.js';
+	import { ui, doc, act, globalPrompt, itemsIn, productionRange, secs, select } from '../../lib/state.svelte.js';
 	import { promptLanguageOf } from '../../lib/starter.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { allCommands } from '../../lib/commands.js';
 	import { frameRoleLabel } from '../../lib/catalog.js';
 	import { openReferences, refRoleLabel } from '../../lib/references.js';
-	import { addFileScene } from '../../lib/scene.js';
 	import Modal from './Modal.svelte';
 	import OpenProject from './OpenProject.svelte';
 	import VersionHistory from './VersionHistory.svelte';
@@ -17,6 +16,8 @@
 	import SoundDesign from './SoundDesign.svelte';
 	import ExportDialog from './ExportDialog.svelte';
 	import MakeFinal from './MakeFinal.svelte';
+	import SceneNew from './SceneNew.svelte';
+	import SceneCapture from './SceneCapture.svelte';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import Icon from '../Icon.svelte';
 
@@ -32,7 +33,6 @@
 		return { range, it, local: it.prompts.map((p) => p.text) };
 	});
 
-	let splatInput = $state();
 	const shortcutList = $derived(allCommands.filter((c) => c.keys));
 	const introParts = $derived(t('shell.simulations.intro').split('{badge}'));
 
@@ -50,7 +50,6 @@
 	const simList = $derived([
 		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')],
 		[t('shell.simulations.lipSync.title'), t('shell.simulations.lipSync.text')],
-		[t('shell.simulations.scene.title'), t('shell.simulations.scene.text')],
 		[t('shell.simulations.voice.title'), t('shell.simulations.voice.text')],
 		[t('shell.simulations.console.title'), t('shell.simulations.console.text')],
 		[t('shell.simulations.formats.title'), t('shell.simulations.formats.text')],
@@ -76,15 +75,6 @@
 	function setPromptLanguage(id) {
 		if (id !== promptLanguage) act(() => (doc.promptLanguage = id));
 	}
-
-	function referenceSplat() {
-		const file = splatInput?.value.trim() ?? '';
-		if (!file) return splatInput?.focus();
-		const scene = addFileScene(file);
-		ui.workspace = 'scene';
-		toast(t('shell.splat.done', { file: scene.name }));
-		close();
-	}
 </script>
 
 {#key m}
@@ -100,6 +90,10 @@
 		<ExportDialog tab={m.tab ?? 'video'} />
 	{:else if m?.type === 'final'}
 		<MakeFinal takeId={m.take} />
+	{:else if m?.type === 'scene-new'}
+		<SceneNew />
+	{:else if m?.type === 'capture'}
+		<SceneCapture />
 	{:else if m?.type === 'recap' && recap}
 		<Modal title={t('shell.recap.title')} subtitle="{secs(recap.range[0])} → {secs(recap.range[1])}" icon="list" width={640}>
 			<div class="space-y-3 p-4 text-sm">
@@ -226,17 +220,6 @@
 		<OpenProject />
 	{:else if m?.type === 'versions'}
 		<VersionHistory />
-	{:else if m?.type === 'splat'}
-		<Modal title={t('shell.splat.title')} icon="link" width={520} sim>
-			<div class="space-y-3 p-4">
-				<label class="block space-y-1"><span class="vp-label">{t('shell.splat.path')}</span><input bind:this={splatInput} class="input vp-dense" placeholder={t('shell.splat.placeholder')} onkeydown={(e) => e.key === 'Enter' && referenceSplat()} /></label>
-				<p class="text-xs text-fg-subtle">{t('shell.splat.note')}</p>
-			</div>
-			{#snippet footer()}
-				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', onclick: close }}>{t('shell.splat.cancel')}</HostUi>
-				<HostUi name="Button" props={{ variant: 'primary', size: 'sm', onclick: referenceSplat }}>{t('shell.splat.confirm')}</HostUi>
-			{/snippet}
-		</Modal>
 	{:else if m?.type === 'index'}
 		<Modal title={t('shell.index.title')} icon="list" width={560}>
 			<ul class="divide-y divide-line p-2 text-sm">

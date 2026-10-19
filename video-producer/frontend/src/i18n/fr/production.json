@@ -35,5 +35,5 @@
 	"queued.one": "{count} en file",
 	"queued.other": "{count} en file",
 	"generate": "Générer la sélection",
-	"prepareRender": "Préparer le rendu"
+	"prepareRender": "Placer les rendus 3D"
 }
