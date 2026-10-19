@@ -156,7 +156,7 @@ async def store_upload(project_id: str, user_id: str, kind: str, upload: Any) ->
     folder = storage.work_folder(project_id)
     folder.mkdir(parents=True, exist_ok=True)
     file_id = generate_ulid()
-    work = folder / f"upload-{file_id}"
+    work = folder / f"upload-{file_id}.{fmt}"
     size = 0
     try:
         with work.open("wb") as handle:

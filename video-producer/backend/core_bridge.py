@@ -94,6 +94,7 @@ __all__ = [
     "preset_model_hashes",
     "preset_state",
     "preview_memory",
+    "probe_splat",
     "probe_video",
     "record_limit_event",
     "refund_limit_event",
@@ -227,6 +228,14 @@ def find_ffprobe() -> Optional[str]:
 def probe_video(path: Path) -> Optional[VideoProbe]:
     """What ffprobe reads of a video file, or None."""
     return api_media.probe_video(Path(path))
+
+
+def probe_splat(path: Path) -> Dict[str, Any]:
+    """The format, gaussian count and source view the core reads in a splat file named with its format; raises MediaRefError, without the file's path in its message."""
+    try:
+        return dict(api_media.probe_splat(Path(path)))
+    except MediaRefError as exc:
+        raise MediaRefError(exc.code, str(exc).replace(f": {Path(path)}", "")) from None
 
 
 def transcode_video(src: Path, dest: Path, spec: TranscodeSpec) -> Any:

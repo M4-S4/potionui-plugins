@@ -1,9 +1,14 @@
+import math
+import struct
+
 import pytest
 
+from backend import core_bridge
 from backend.scene3d import files, formats, storage
 from backend.scene3d.formats import FormatError
 
 BASE = "/api/plugins/video-producer"
+PROPERTIES = ("x", "y", "z", "f_dc_0", "f_dc_1", "f_dc_2", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3")
 
 
 def _write(tmp_path, name, data):
@@ -30,7 +35,7 @@ def test_a_ply_without_a_complete_potionui_view_comment_has_no_view(tmp_path, sa
 
 
 def test_a_ply_may_carry_more_properties_than_the_3dgs_ones(tmp_path, samples):
-    properties = (*formats.GAUSSIAN_PROPERTIES[:3], "nx", "ny", "nz", *formats.GAUSSIAN_PROPERTIES[3:], "f_rest_0")
+    properties = (*PROPERTIES[:3], "nx", "ny", "nz", *PROPERTIES[3:], "f_rest_0")
 
     assert formats.probe("ply", _write(tmp_path, "scene.ply", samples.ply(count=3, properties=properties))).count == 3
 
@@ -39,20 +44,37 @@ def test_a_ply_may_carry_more_properties_than_the_3dgs_ones(tmp_path, samples):
     "build, message",
     [
         (lambda s: b"not a ply at all", "not a PLY file"),
-        (lambda s: s.ply(header_format="ascii"), "binary little-endian"),
-        (lambda s: s.ply(header_format="binary_big_endian"), "binary little-endian"),
-        (lambda s: s.ply(properties=formats.GAUSSIAN_PROPERTIES[:-1]), "it has no rot_3"),
-        (lambda s: s.ply(count=0), "no gaussians"),
-        (lambda s: s.ply(short=True), "shorter than its header"),
-        (lambda s: s.ply().replace(b"element vertex 2", b"element face 2"), "no gaussians"),
-        (lambda s: s.ply().replace(b"property float x", b"property list uchar int x"), "does not use"),
+        (lambda s: s.ply(header_format="ascii"), "not binary_little_endian"),
+        (lambda s: s.ply(header_format="binary_big_endian"), "not binary_little_endian"),
+        (lambda s: s.ply(properties=PROPERTIES[:-1]), "missing rot_3"),
+        (lambda s: s.ply(count=0), "no Gaussians"),
+        (lambda s: s.ply(short=True), "truncated"),
+        (lambda s: s.ply().replace(b"element vertex 2", b"element face 2"), "first element is not vertex"),
+        (lambda s: s.ply().replace(b"property float x", b"property list uchar int x"), "list property"),
+        (lambda s: s.ply().replace(b"property float x", b"property double x"), "must be float"),
     ],
 )
-def test_a_file_that_is_not_a_binary_3dgs_ply_is_refused(tmp_path, samples, build, message):
+def test_a_file_that_is_not_a_binary_3dgs_ply_is_refused_by_the_core_probe_without_its_path(tmp_path, samples, build, message):
     with pytest.raises(FormatError) as caught:
         formats.probe("ply", _write(tmp_path, "scene.ply", build(samples)))
 
     assert message in str(caught.value)
+    assert str(tmp_path) not in str(caught.value)
+
+
+def test_the_splat_formats_are_read_by_the_core_probe(tmp_path, monkeypatch):
+    asked = []
+
+    def probe_splat(path):
+        asked.append(path.name)
+        return {"format": "ply", "count": 9, "view": {"fov_y": 50.0, "aspect": 1.5, "depth": 3.0, "width": 96, "height": 64, "convention": "opencv"}}
+
+    monkeypatch.setattr(core_bridge, "probe_splat", probe_splat)
+
+    assert formats.probe("ply", _write(tmp_path, "set.ply", b"anything")) == formats.Probe(format="ply", count=9, view={"fov": 50.0, "aspect": 1.5, "depth": 3.0})
+    assert asked == ["set.ply"]
+    with pytest.raises(FormatError, match="not a .spz splat"):
+        formats.probe("spz", _write(tmp_path, "set.spz", b"anything"))
 
 
 def test_an_spz_file_gives_the_count_of_its_header(tmp_path, samples):
@@ -62,10 +84,10 @@ def test_an_spz_file_gives_the_count_of_its_header(tmp_path, samples):
 @pytest.mark.parametrize(
     "build, message",
     [
-        (lambda s: s.splat(), "not gzip-compressed"),
-        (lambda s: s.spz(magic=b"SPLT"), "NGSP magic"),
-        (lambda s: s.spz()[:12], "cannot be decompressed"),
-        (lambda s: s.spz(count=0), "no gaussians"),
+        (lambda s: s.splat(), "not gzip"),
+        (lambda s: s.spz(magic=b"SPLT"), "bad magic"),
+        (lambda s: s.spz()[:12], "does not decompress"),
+        (lambda s: s.spz(count=0), "no Gaussians"),
     ],
 )
 def test_an_spz_file_must_be_gzip_with_the_ngsp_magic(tmp_path, samples, build, message):
@@ -75,11 +97,22 @@ def test_an_spz_file_must_be_gzip_with_the_ngsp_magic(tmp_path, samples, build, 
     assert message in str(caught.value)
 
 
+def _gaussian(position=(0.5, -0.2, 3.0), scale=(0.01, 0.01, 0.02)):
+    return struct.pack("<6f", *position, *scale) + bytes([200, 120, 40, 255, 128, 128, 128, 255])
+
+
 def test_a_splat_file_holds_32_bytes_per_gaussian(tmp_path, samples):
     assert formats.probe("splat", _write(tmp_path, "scene.splat", samples.splat(count=4))).count == 4
+    assert formats.probe("splat", _write(tmp_path, "real.splat", _gaussian() * 3)) == formats.Probe(format="splat", count=3)
     for size in (0, 33):
         with pytest.raises(FormatError):
             formats.probe("splat", _write(tmp_path, f"scene-{size}.splat", bytes(size)))
+
+
+@pytest.mark.parametrize("record", [_gaussian(position=(math.nan, 0, 1)), _gaussian(scale=(0.1, math.inf, 0.1)), bytes(12) + bytes.fromhex("ffffff7f") + bytes(16)])
+def test_a_splat_file_whose_first_gaussians_have_a_position_or_a_scale_that_is_not_finite_is_refused(tmp_path, record):
+    with pytest.raises(FormatError, match="not a finite number"):
+        formats.probe("splat", _write(tmp_path, "scene.splat", _gaussian() * 2 + record))
 
 
 BLENDER_SCENE = {
