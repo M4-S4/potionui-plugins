@@ -28,3 +28,31 @@ cases:
       min_outputs: 1
       resolution: "832x480"
       not_black: true
+
+  # ref2va: the References mode. The reference image is a PLACEHOLDER, as in the
+  # base preset's case, and `model` pins the Ref2VA DiT, a different file from
+  # the fl2va one above.
+  - name: "minimax-h3-12gb-ref2va"
+    mode: "refs"
+    kind: "video"
+    seed: 12345
+    tags: ["12gb", "needs-model"]
+    form:
+      prompt: "the woman from the reference walks through a rainy street at night, neon reflections on the pavement, her footsteps and the rain"
+      resolution: "832x480"
+      frames: 124
+      steps: 20
+      references:
+        - "PLACEHOLDER/minimax-h3-reference-1.png"
+    models:
+      model:
+        sha256: "e09db861c48d13560222948b4e38082bc21b1b7d4ddcaed9c865bf9c3233898c"
+      text_encoder:
+        sha256: "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"
+      video_vae:
+        sha256: "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"
+      audio_vae:
+        sha256: "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48"
+    checks:
+      min_outputs: 1
+      not_black: true

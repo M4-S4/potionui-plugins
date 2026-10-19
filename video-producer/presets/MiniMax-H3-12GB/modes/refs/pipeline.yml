@@ -1,0 +1,208 @@
+# Copy of content/presets/marketplace/MiniMax-H3/modes/refs/pipeline.yml, whose
+# comments explain every pipe. The loader reads a mode's pipeline.yml from the
+# preset's own directory; the plugin's tests keep this copy identical.
+pipeline:
+  - name: "model_loader/minimax_h3"
+    enabled: true
+    configuration:
+      model:
+        file_path: "{{ form.model }}"
+        name: "{{ form.model }}"
+      text_encoder:
+        file_path: "{{ form.text_encoder }}"
+        name: "{{ form.text_encoder }}"
+      video_vae:
+        file_path: "{{ form.video_vae }}"
+        name: "{{ form.video_vae }}"
+      audio_vae:
+        file_path: "{{ form.audio_vae }}"
+        name: "{{ form.audio_vae }}"
+      loras:
+        "@loop":
+          items: "{{ form.loras }}"
+          template:
+            file_path: "{{ item.model }}"
+            weight: "{{ item.strength }}"
+
+  - name: "media_loader"
+    id: "references"
+    enabled: "{{ (form.references | default([], true) | media_of_kind('image') | length) > 0 }}"
+    configuration:
+      media:
+        "@loop":
+          items: "{{ form.references | default([], true) | media_of_kind('image') }}"
+          template:
+            type: "image"
+            path: "{{ item.path | default(item) }}"
+
+  - name: "media_loader"
+    id: "reference_videos"
+    enabled: "{{ (form.references | default([], true) | media_of_kind('video') | length) > 0 }}"
+    configuration:
+      media:
+        "@loop":
+          items: "{{ form.references | default([], true) | media_of_kind('video') }}"
+          template:
+            type: "video"
+            path: "{{ item.path | default(item) }}"
+
+  - name: "media_loader"
+    id: "reference_audios"
+    enabled: "{{ (form.references | default([], true) | media_of_kind('audio') | length) > 0 }}"
+    configuration:
+      media:
+        "@loop":
+          items: "{{ form.references | default([], true) | media_of_kind('audio') }}"
+          template:
+            type: "audio"
+            path: "{{ item.path | default(item) }}"
+
+  - name: "prompt_encoder"
+    input:
+      - ["text_encoder", "model_loader/minimax_h3", "text_encoder"]
+      - ["reference_image", "references", "image"]
+      - ["reference_video", "reference_videos", "video"]
+      - ["reference_audio", "reference_audios", "audio"]
+      - ["vae", "model_loader/minimax_h3", "video_vae"]
+    enabled: true
+    configuration:
+      p_prompt:
+        input: "{{ generation.prompts.first.positive }}"
+        output: "{{ generation.prompts.first.positive }}"
+      pairs: "{{ generation.prompts.pairs }}"
+      quantity: "{{ form.quantity }}"
+      guidance_scale: 1.0
+      image_pixel_budget: "{{ form.reference_pixel_budget }}"
+      output_resolution: "{{ form.resolution }}"
+      reference_video_frames: "{{ ((form.video_director.settings.duration * preset.vars.fps) | round(0, 'floor') | int) if (form.video_director is defined and form.video_director.settings is defined and form.video_director.settings.duration is not none) else (((form.duration) * preset.vars.fps) | round(0, 'floor') | int if form.duration is defined else preset.vars.default_frames) }}"
+      reference_mods:
+        "@loop":
+          items: "{{ form.reference_mods | default([], true) }}"
+          template:
+            file_path: "{{ item.model }}"
+            strength: "{{ item.strength }}"
+
+  - name: "prompt_encoder"
+    id: "prompt_encoder_director"
+    input:
+      - ["text_encoder", "model_loader/minimax_h3", "text_encoder"]
+      - ["reference_image", "references", "image"]
+      - ["reference_video", "reference_videos", "video"]
+      - ["reference_audio", "reference_audios", "audio"]
+      - ["vae", "model_loader/minimax_h3", "video_vae"]
+    enabled: "{{ form.video_director is defined and form.video_director.mode == 'director' }}"
+    configuration:
+      p_prompt:
+        input: "{{ generation.prompts.first.positive }}"
+        output: "{{ generation.prompts.first.positive }}"
+      pairs:
+        "@loop":
+          items: "{{ form.video_director.segments if form.video_director is defined else [] }}"
+          template:
+            positive: "{{ item.prompt }}"
+            negative: ""
+      reference_selections:
+        "@loop":
+          items: "{{ form.video_director.segments if form.video_director is defined else [] }}"
+          template: "{{ item.reference_indices }}"
+      quantity: "{{ (form.video_director.segments | length) if form.video_director is defined else 1 }}"
+      guidance_scale: 1.0
+      image_pixel_budget: "{{ form.reference_pixel_budget }}"
+      output_resolution: "{{ form.resolution }}"
+      reference_video_frames: "{{ ((form.video_director.settings.duration * preset.vars.fps) | round(0, 'floor') | int) if (form.video_director is defined and form.video_director.settings is defined and form.video_director.settings.duration is not none) else (((form.duration) * preset.vars.fps) | round(0, 'floor') | int if form.duration is defined else preset.vars.default_frames) }}"
+      reference_mods:
+        "@loop":
+          items: "{{ form.reference_mods | default([], true) }}"
+          template:
+            file_path: "{{ item.model }}"
+            strength: "{{ item.strength }}"
+
+  - name: "seed_generator"
+    enabled: true
+    configuration:
+      seed: "{{ form.seed }}"
+      quantity: "{{ form.quantity }}"
+
+  - name: "dynamic_prompts_renderer"
+    id: "dynamic_prompts_renderer"
+    enabled: true
+    configuration:
+      pairs: "{{ generation.prompts.pairs }}"
+      quantity: "{{ form.quantity }}"
+
+  - name: "from_iotype"
+    id: "from_iotype"
+    enabled: true
+    input:
+      - ["seed", "seed_generator", "seed"]
+    configuration:
+      from: "seed"
+
+  - name: "param_emitter"
+    id: "param_emitter"
+    enabled: true
+    input:
+      - ["seed", "from_iotype", "seed"]
+    configuration:
+      quantity: "{{ form.quantity }}"
+      parameters:
+        - ["model", "{{ form.model }}"]
+        - ["model", "{{ form.text_encoder }}"]
+        - ["model", "{{ form.video_vae }}"]
+        - ["model", "{{ form.audio_vae }}"]
+        - "@loop":
+            items: "{{ form.loras | active_loras }}"
+            template: ["model", "{{ item.model }}"]
+        - ["positive_prompt", "{{ generation.prompts.positives }}"]
+        - ["steps", "{{ form.steps | default(generation.profile.steps) }}"]
+        - ["speed_profile", "{{ form.speed_profile }}"]
+        - ["resolution", "{{ form.resolution }}"]
+        - ["frames", "{{ ((form.video_director.settings.duration * preset.vars.fps) | round(0, 'floor') | int) if (form.video_director is defined and form.video_director.settings is defined and form.video_director.settings.duration is not none) else (((form.duration) * preset.vars.fps) | round(0, 'floor') | int if form.duration is defined else preset.vars.default_frames) }}"]
+        - ["fps", "{{ preset.vars.fps }}"]
+
+  - name: "generator/video_minimax_h3"
+    input:
+      - ["model", "model_loader/minimax_h3", "model"]
+      - ["conditioning", "{% if form.video_director is defined and form.video_director.mode == 'director' %}prompt_encoder_director{% else %}prompt_encoder{% endif %}", "conditioning"]
+      - ["seed", "seed_generator", "seed"]
+      - ["reference_images", "references", "image"]
+      - ["reference_videos", "reference_videos", "video"]
+      - ["reference_audios", "reference_audios", "audio"]
+    enabled: true
+    configuration:
+      mode: "references"
+      document: "{{ form.video_director if (form.video_director is defined and form.video_director.mode == 'director') else none }}"
+      references: "{{ form.references | default([], true) | media_of_kind('image') }}"
+      reference_videos: "{{ form.references | default([], true) | media_of_kind('video') }}"
+      reference_audios: "{{ form.references | default([], true) | media_of_kind('audio') }}"
+      reference_mods:
+        "@loop":
+          items: "{{ form.reference_mods | default([], true) }}"
+          template:
+            file_path: "{{ item.model }}"
+            strength: "{{ item.strength }}"
+      steps: "{{ form.steps | default(generation.profile.steps) }}"
+      resolution: "{{ form.resolution }}"
+      frames: "{{ ((form.video_director.settings.duration * preset.vars.fps) | round(0, 'floor') | int) if (form.video_director is defined and form.video_director.settings is defined and form.video_director.settings.duration is not none) else (((form.duration) * preset.vars.fps) | round(0, 'floor') | int if form.duration is defined else preset.vars.default_frames) }}"
+      quantity: "{{ form.quantity }}"
+      preview: "{{ form.preview }}"
+      audio_source: "generate"
+      decode: true
+      step_cache_threshold: "{{ form.step_cache_threshold }}"
+      step_cache_warmup_steps: "{{ form.step_cache_warmup_steps }}"
+      step_cache_max_skips: "{{ form.step_cache_max_skips }}"
+      sparse_attn: "{{ form.sparse_attn }}"
+      sol_attn_tau: "{{ form.sol_attn_tau }}"
+      sla_sparsity: "{{ form.sla_sparsity }}"
+      sla_block_size: "{{ form.sla_block_size | int }}"
+      sparse_attn_dense_last_steps: "{{ form.sparse_attn_dense_last_steps }}"
+      sampler: "{{ form.sampler }}"
+      scheduler: "{{ form.scheduler }}"
+      manual_sigmas: "{{ form.manual_sigmas }}"
+      manual_audio_sigmas: "{{ form.manual_audio_sigmas }}"
+
+  - name: "gallery"
+    input:
+      - ["video", "generator/video_minimax_h3", "video"]
+      - ["seed", "seed_generator", "seed"]
+    enabled: true

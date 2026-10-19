@@ -1,0 +1,40 @@
+fields:
+  - name: "references"
+    type: "media"
+    label: "References"
+    merge_from: ["reference_videos", "reference_audios"]
+    ai_hint: "One list holding up to 9 images, 3 videos and 3 audio tracks. The model reads them as one packed sequence: every image first, then every video, then every audio track, whatever order they sit in here, and each kind is numbered on its own counter. IMAGES: image 1 is <Picture 1>, image 2 is <Picture 2>, and so on, in the prompt's subject_definitions and retention_analysis sections; reordering the images renumbers them, and adding a video or audio track never does. Each item's label names the subject it carries (\"the woman in the blue cardigan\", \"the cafe interior\"); write the subject_definitions from those labels rather than inventing new ones. When several images define one character, costume or style, cite them together inside a single <Subject N> definition instead of listing each as a standalone Picture. VIDEOS: video 1 is <Video 1>, video 2 is <Video 2>. A video reference carries motion and continuity (a walk cycle, a camera move, a lighting change over time), which a still cannot; use one when the request is about how something MOVES and images when it is about how something LOOKS. It costs far more than an image: it is VAE-encoded as a whole frame stack, and it is truncated to the generated clip's own length, so a reference longer than Clip length contributes only its opening. Its own soundtrack is ignored; sound comes only from audio items. AUDIO: audio 1 is <Audio 1>, audio 2 is <Audio 2>. An audio reference conditions the soundtrack H3 generates (a voice to keep, a room's ambience, a piece of music to stay in the style of) and contributes no picture at all, so it cannot be the only reference on a request: pair it with at least one image or video. Only its opening is used, truncated to Clip length. The waveform never reaches the text encoder, which is told only that an audio reference exists, so describe the sound you want in overall_soundscape and non_diegetic_music rather than assuming the model can hear the file. At least one reference of some kind is required, but it does not have to be an image."
+    configuration:
+      multi: true
+      accepted_types: ["image", "video", "audio"]
+      max_items_by_kind:
+        image: 9
+        video: 3
+        audio: 3
+
+  - name: "reference_mods"
+    type: "lora_picker"
+    label: "RefMods"
+    ai_hint: "A RefMod is a tiny, already-VAE-encoded bundle of H3 reference latents -- image, video and/or audio members -- built outside PotionUI (ComfyUI with ComfyUI-MiniMaxH3Mod, or that repo's extract_mod.py) and dropped in models/refmods/. It skips the VAE-encode cost of an ordinary reference, so it is cheap to add even in bulk. Each member is packed AFTER the native references of its own kind: with two images in References and one RefMod carrying an image member, that member is <Picture 3>, not <Picture 1> -- count that kind's items in References above before numbering a RefMod member in subject_definitions. Strength runs 0 to 1: 1 keeps the member at full conditioning, a lower value BLURS/weakens it (never adds noise), and 0 drops the member from the packed sequence entirely, same as unchecking it. A RefMod satisfies the \"at least one reference\" rule on its own -- it does not need to be paired with a native image or video."
+    configuration:
+      model_type: "refmod"
+      max_items: 6
+      strength_min: 0
+      strength_max: 1
+      strength_step: 0.05
+      strength_default: 1
+      show_triggers: false
+      allow_info_modal: false
+      placeholder: "Select a RefMod..."
+
+  - name: "reference_pixel_budget"
+    type: "select"
+    label: "Reference detail budget"
+    default: "1"
+    ai_hint: "Caps how much of each reference the text encoder's vision tower reads — the VAE-encoded reference rows are unaffected and always run at the picked Resolution. Uncapped reads up to 16MP per image and is paid for by area, which with nine references is the slowest part of the request. '0' (uncapped) is the right answer when the user cares about likeness. Suggest 2x once there are more than three or four references, or 1x when encoding is slow and the references are large photos. Values are multiples of the output canvas AREA, not edge length."
+    configuration:
+      options:
+        - { label: "Uncapped (model default)", value: "0" }
+        - { label: "1x output area (fastest)", value: "1" }
+        - { label: "2x output area", value: "2" }
+        - { label: "4x output area", value: "4" }

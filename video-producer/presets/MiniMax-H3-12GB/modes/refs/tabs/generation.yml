@@ -1,0 +1,142 @@
+fields:
+  - name: "speed_profile"
+    type: "select"
+    formula: "speed"
+    label: "Speed"
+    default: "custom"
+    ai_hint: >-
+      Turbo is a 4-step recipe. It works on the base model alone — MiniMax-H3
+      turns out to be a capable few-step generator on its own schedule — so no
+      LoRA is required; expect softer detail than the 24-step Quality profile.
+      Be more careful than usual about offering it here: a 4-step run holds a
+      reference's likeness less well than a 24-step one, so pick Quality
+      whenever the references carry a face or a costume the user expects back.
+      The turbo distillation LoRA on the LoRA tab sharpens it further, but read
+      that field's hint before loading one: the original ModelTC file omits its
+      PEFT alpha metadata and produces noise unless its strength is set to 0.125
+      by hand, while Kijai's conversion is correct at about 0.75. Custom pins
+      nothing and hands the Steps slider to the user — suggest it whenever they
+      ask for a specific step count.
+    configuration:
+      options:
+        - { label: "Quality (24 steps)", value: "quality" }
+        - { label: "Turbo (4 steps, optional distillation LoRA)", value: "turbo" }
+        - { label: "Custom (set Steps yourself)", value: "custom" }
+
+  - type: "section"
+    label: "Video"
+    children:
+      # Krea-2 layout: seed+quantity row first, then resolution. Clip length
+      # has no Krea-2 counterpart -- grouped after, next to the resolution
+      # it shapes the output alongside.
+      - type: "row"
+        children:
+          - name: "seed"
+            type: "seed"
+            label: "Seed"
+            default: -1
+            width: "3/5"
+
+          - name: "quantity"
+            type: "stepper"
+            label: "Quantity"
+            default: 1
+            configuration: {min: 1, max: 4, step: 1}
+            width: "2/5"
+            full_width: true
+
+      - name: "resolution"
+        type: "resolution"
+        formula: "size"
+        label: "Resolution"
+        ai_hint: "Both axes must be multiples of 32, aspect ratio between 1:4 and 4:1 — the offered sizes are what MiniMax-H3's own canvas math produces. Area is the dominant cost. References are fitted onto this canvas, so pick the aspect ratio the finished video should have rather than the references' own."
+        configuration:
+          files:
+            - { path: "{{ paths._shared }}/../marketplace/MiniMax-H3/files/form/resolutions_canvas.yml", group: "Native canvas (768 short edge)" }
+            - { path: "{{ paths._shared }}/../marketplace/MiniMax-H3/files/form/resolutions_fast.yml", group: "Faster (below native canvas)" }
+        default: "832x480"
+
+      # Seconds, like every other duration surface in the app (Director
+      # limits, chat tools). The pipeline converts to frames at the model's
+      # fixed 24 fps and the generator snaps UP to the next 17n+5 on its
+      # lattice; the model's release notes suggest staying in a 5-15s range,
+      # but only the 15s ceiling is a real technical limit -- there is no
+      # enforced floor below it.
+      - name: "duration"
+        type: "slider"
+        formula: "size"
+        label: "Clip length (seconds)"
+        default: 5
+        hidden_when_video_director: true
+        ai_hint: "Seconds of video (and audio) to generate; the model's release notes suggest 5-15s, but shorter is allowed. Cost is close to linear in this, and it is the single biggest knob on how long a run takes. Stay near 5 unless the user asked for a shorter or longer clip, and keep in mind that every extra second is more time for a reference's likeness to drift."
+        configuration: {min: 0.1, max: 14.3, step: 0.1}
+
+  - type: "section"
+    label: "Models"
+    formula: "models"
+    children:
+      - name: "model"
+        type: "model"
+        label: "MiniMax-H3 DiT (reference partition)"
+        required: true
+        ai_hint: "This mode requires the ref2va DiT (the reference-to-video partition, e.g. minimax_h3_ref2va_*), not the fl2va file the Video mode uses. Insist on the ref2va checkpoint and say why. The ref2va and fl2va files are byte-identical in architecture and key set, so PotionUI cannot detect a wrong pick — an fl2va DiT loads cleanly here and then silently generates a video that ignores the reference images entirely. If the user's picker only lists an fl2va file, tell them they need to download the ref2va partition; do not suggest running the reference mode on it."
+        configuration:
+          model_type: "diffusion_model"
+          placeholder: "minimax_h3_ref2va_pruned_int8_convrot..."
+          filter_tags: "@config:checkpoint_tags"
+          recommendations:
+            - name: "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+              link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+              size: "19.53 GB"
+              sha256: "9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779"
+              description: "MiniMax-H3 reference-image to video+audio, pruned + int8 ConvRot - the 12 GB profile's DiT, no fp8 hardware needed."
+            - name: "MiniMax-H3-Ref2VA-pruned_rank8_int8_convrot.safetensors"
+              link: "https://huggingface.co/DeepBeepMeep/MiniMax-H3/resolve/main/MiniMax-H3-Ref2VA-pruned_rank8_int8_convrot.safetensors"
+              size: "19.61 GB"
+              sha256: "e09db861c48d13560222948b4e38082bc21b1b7d4ddcaed9c865bf9c3233898c"
+              description: "Wan2GP's pruned rank-8 int8 ConvRot repack of the Ref2VA DiT (DeepBeepMeep), under its Wan2GP file name - same size class as the Comfy-Org file."
+
+      - name: "text_encoder"
+        type: "model"
+        label: "Text Encoder (Qwen3-VL-32B)"
+        required: true
+        configuration:
+          model_type: "text_encoder"
+          placeholder: "qwen3vl_32b_minimax_h3_nvfp4_awq..."
+          filter_tags: "@config:text_encoder_tags"
+          recommendations:
+            - name: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+              link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+              size: "14.61 GB"
+              sha256: "35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6"
+              description: "Qwen3-VL-32B encoder, nvfp4 AWQ - larger than a 12 GB card, so the 12 GB profile streams it from system RAM."
+
+      - name: "video_vae"
+        type: "model"
+        label: "Video VAE"
+        required: true
+        configuration:
+          model_type: "vae"
+          placeholder: "minimax_h3_video_vae_int8_convrot..."
+          filter_tags: "@config:vae_tags"
+          recommendations:
+            - name: "minimax_h3_video_vae_int8_convrot.safetensors"
+              link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_int8_convrot.safetensors"
+              size: "2.62 GB"
+              sha256: "52a2c8c73583c86e4f41cdcce3a6ad0ea562987bc0bf3d60a0cef5f5c8e60c0e"
+              description: "MiniMax-H3 video VAE, int8 ConvRot - about half the fp16 file."
+
+      - name: "audio_vae"
+        type: "model"
+        label: "Audio VAE"
+        required: true
+        configuration:
+          model_type: "vae"
+          placeholder: "minimax_h3_audio_vae..."
+          filter_tags: "@config:vae_tags"
+          recommendations:
+            - name: "minimax_h3_audio_vae_fp32.safetensors"
+              link: "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors"
+              size: "577.2 MB"
+              sha256: "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48"
+              description: "MiniMax-H3 audio VAE, fp32 - required for the audio track."
