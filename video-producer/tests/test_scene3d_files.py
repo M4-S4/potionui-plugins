@@ -174,7 +174,40 @@ def test_a_file_that_is_not_a_gltf_2_binary_is_refused(tmp_path, samples, build,
     assert message in str(caught.value)
 
 
-@pytest.mark.parametrize("name, fmt", [("Scene.PLY", "ply"), ("a.b.spz", "spz"), ("x.splat", "splat"), ("set.glb", "glb"), ("set.gltf", None), ("ply", None), ("", None)])
+def _glb_of(payload):
+    payload += b" " * (-len(payload) % 4)
+    return b"glTF" + struct.pack("<II", 2, 20 + len(payload)) + struct.pack("<II", len(payload), formats.GLB_JSON) + payload
+
+
+DEEP_GLB = _glb_of(b'{"nodes":' + b"[" * 200000 + b"]" * 200000 + b"}")
+
+
+def test_a_glb_whose_json_nests_too_deep_is_refused_as_an_invalid_file(tmp_path):
+    with pytest.raises(FormatError, match="cannot be read"):
+        formats.probe("glb", _write(tmp_path, "deep.glb", DEEP_GLB))
+
+
+def test_a_glb_whose_json_chunk_is_over_64_mib_is_refused_before_it_is_read(tmp_path, samples, monkeypatch):
+    data = samples.glb({"asset": {"version": "2.0"}, "nodes": [{"name": "x" * 64}]})
+    assert formats.MAX_GLB_JSON == 64 * 1024 * 1024
+    monkeypatch.setattr(formats, "MAX_GLB_JSON", 32)
+
+    with pytest.raises(FormatError, match="JSON chunk of the glTF file is over"):
+        formats.probe("glb", _write(tmp_path, "big.glb", data))
+
+
+@pytest.mark.parametrize("error", [RecursionError("maximum recursion depth exceeded"), ValueError("bad value")])
+def test_a_recursion_or_value_error_while_reading_a_scene_file_is_a_format_error(tmp_path, samples, monkeypatch, error):
+    def glb_cameras(data):
+        raise error
+
+    monkeypatch.setattr(formats, "glb_cameras", glb_cameras)
+
+    with pytest.raises(FormatError, match="not a .glb file that can be read"):
+        formats.probe("glb", _write(tmp_path, "set.glb", samples.glb({"asset": {}})))
+
+
+@pytest.mark.parametrize("name, fmt",[("Scene.PLY", "ply"), ("a.b.spz", "spz"), ("x.splat", "splat"), ("set.glb", "glb"), ("set.gltf", None), ("ply", None), ("", None)])
 def test_the_format_of_a_file_comes_from_its_extension(name, fmt):
     assert formats.format_of(name) == fmt
 
@@ -244,6 +277,14 @@ def test_an_upload_of_the_wrong_kind_or_content_is_refused_and_leaves_nothing(cl
     assert files.list_project(project["id"]) == []
     work = storage.work_folder(project["id"])
     assert not work.exists() or list(work.iterdir()) == []
+
+
+def test_an_uploaded_glb_whose_json_nests_too_deep_answers_invalid_file_and_leaves_nothing(client, project):
+    response = _upload(client, project["id"], "deep.glb", DEEP_GLB, kind="glb")
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (422, "invalid_file")
+    assert files.list_project(project["id"]) == []
+    assert list(storage.work_folder(project["id"]).iterdir()) == []
 
 
 def test_an_upload_over_the_size_limit_is_refused_and_leaves_nothing(client, project, samples, monkeypatch):

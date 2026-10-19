@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -169,7 +170,7 @@ async def store_upload(project_id: str, user_id: str, kind: str, upload: Any) ->
                     raise SceneError(413, "file_too_large", "A scene file is at most 1 GiB.")
                 handle.write(chunk)
         try:
-            probe = formats.probe(fmt, work)
+            probe = await asyncio.to_thread(formats.probe, fmt, work)
         except formats.FormatError as exc:
             raise SceneError(422, "invalid_file", str(exc)) from None
         target = storage.project_folder(project_id) / stored_name(file_id, fmt)

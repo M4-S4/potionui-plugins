@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from .. import core_bridge
 from ..core_bridge import MediaRefError
+from .storage import MIB
 
 SPLAT_FORMATS = ("ply", "spz", "splat")
 
@@ -25,6 +26,8 @@ SPLAT_FLOATS = struct.Struct("<6f")
 GLB_MAGIC = b"glTF"
 
 GLB_JSON = 0x4E4F534A
+
+MAX_GLB_JSON = 64 * MIB
 
 MOVING_PATHS = ("translation", "rotation", "scale")
 
@@ -86,10 +89,12 @@ def glb_json(path: Path) -> Dict[str, Any]:
             raise FormatError(f"The glTF file is version {version}; only version 2 is read.")
         if length != size or chunk_type != GLB_JSON or chunk_length > size - 20:
             raise FormatError("The glTF file is cut short or has no JSON chunk.")
+        if chunk_length > MAX_GLB_JSON:
+            raise FormatError(f"The JSON chunk of the glTF file is over {MAX_GLB_JSON // MIB} MiB.")
         raw = handle.read(chunk_length)
     try:
         data = json.loads(raw.decode("utf-8").rstrip(" \x00"))
-    except (UnicodeDecodeError, ValueError):
+    except (ValueError, RecursionError):
         raise FormatError("The JSON chunk of the glTF file cannot be read.") from None
     if not isinstance(data, dict):
         raise FormatError("The JSON chunk of the glTF file is not an object.")
@@ -166,5 +171,9 @@ def probe(fmt: str, path: Path) -> Probe:
     """What a scene file of a format holds; FormatError when it is not that format."""
     try:
         return probe_glb(path) if fmt == GLB else probe_splat(fmt, path)
+    except FormatError:
+        raise
     except OSError as exc:
         raise FormatError(f"The file cannot be read: {exc.strerror or exc}") from None
+    except (RecursionError, ValueError):
+        raise FormatError(f"The file is not a .{fmt} file that can be read.") from None
