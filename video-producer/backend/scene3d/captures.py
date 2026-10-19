@@ -42,9 +42,11 @@ def decode(data_url: Any, kind: str, limit: int) -> Optional[bytes]:
 
 
 def file_stem(name: Any, fallback: str) -> str:
-    """A safe file name for a capture or a render, without its extension."""
-    stem = slug(str(name or "").strip() or fallback)[:NAME_LIMIT].strip("._")
-    return stem or fallback
+    """A safe file name for a capture or a render, without its extension, that never starts with a dash or a dot."""
+    stem = slug(str(name or "").strip() or fallback)[:NAME_LIMIT]
+    while stem.startswith(("-", ".")):
+        stem = slug(stem.lstrip("-.") or fallback)[:NAME_LIMIT]
+    return stem.rstrip("._") or fallback
 
 
 async def store_media(owner: User, path: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:

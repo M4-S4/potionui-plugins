@@ -87,7 +87,7 @@ def test_a_finished_render_is_encoded_into_an_h264_mp4_and_stored_in_the_owner_l
         "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
         "-f", "image2", "-framerate", "24", "-start_number", "0", "-i", "%06d.jpg",
         "-frames:v", "3", "-vf", "scale=64:36:flags=lanczos", "-r", "24",
-        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", "Orbit_guide.mp4",
+        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", "./Orbit_guide.mp4",
     ]
     assert (run["total"], run["code"], run["frames"]) == (0.125, "encode_failed", ["000000.jpg", "000001.jpg", "000002.jpg"])
     assert not (storage.renders_folder(project["id"]) / render["id"]).exists()
@@ -255,6 +255,36 @@ def test_a_png_capture_is_stored_in_the_owner_library_under_its_name(client, pro
     }
     assert [(saved["user_id"], saved["name"], saved["data"]) for saved in media_store.saved] == [("user-1", "Hut_wide_angle.png", png)]
     assert list(storage.work_folder(project["id"]).iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "name, stem",
+    [
+        ("-vf", "vf"),
+        ("--help me", "help_me"),
+        (".hidden", "hidden"),
+        ("-.-y", "y"),
+        ("*-x", "x"),
+        ("-", "render"),
+        ("- -", "render"),
+        ("-NUL", "_NUL"),
+        ("Hut – wide angle", "Hut_wide_angle"),
+        ("a" * 79 + ".b", "a" * 79),
+    ],
+)
+def test_a_file_name_never_starts_with_a_dash_or_a_dot(name, stem):
+    assert captures.file_stem(name, "render") == stem
+
+
+def test_a_render_named_like_an_option_is_encoded_into_a_path_ffmpeg_cannot_read_as_one(client, project, samples, media_store, fake_encode):
+    render = _open(client, project, frames=1, name="-y -i /etc/passwd").json()["data"]["render"]
+    _send(client, project, render["id"], 0, _frames(samples, 1))
+
+    response = client.post(f"{BASE}/projects/{project['id']}/renders/{render['id']}/finish")
+
+    assert response.status_code == 200, response.text
+    assert fake_encode[0]["command"][-1] == "./y_-i_etc_passwd.mp4"
+    assert media_store.saved[0]["name"] == "y_-i_etc_passwd.mp4"
 
 
 def test_a_capture_without_a_name_is_called_capture(client, project, samples, media_store):
