@@ -122,6 +122,7 @@ export function inPlan(plan) {
 }
 
 export function following(plan = currentPlan()) {
+	if (plan?.sceneId && plan.sceneId !== currentScene()?.id) return false;
 	return Boolean(inPlan(plan) && plan.keyframes.length && (ui.playing || ui.scene.keyframe === null));
 }
 
