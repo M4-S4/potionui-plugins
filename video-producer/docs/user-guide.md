@@ -100,7 +100,34 @@ In the center: one card per shot, in order, with its number, its duration, its n
 
 ### 3D scene
 
-A new project has no 3D scene. In the left panel the **Scenes** list is empty: **Sample scene** creates a procedural point cloud, marked **Simulated**, and **Reference a Gaussian Splat file…** asks for the path of a file and adds it as a scene. Then come the **3D shots on the timeline** (**New 3D shot at the playhead**), the **Preset trajectories** (**Orbit**, **Dolly in**, **Rise**), the camera and its keyframes in the Inspector, and the **Outputs for generation**: **Capture a frame** and **Generate the Control video**. The center is the 3D view (before any scene it says "No 3D scene" and offers **Sample scene**): drag to orbit, scroll to change the distance, play to preview the trajectory. This workspace is partly simulated: see chapter 17.
+The 3D scene turns a picture into a set you can film from other angles. A new project has none: the center says "No 3D scene" and offers **New scene from image…** and **Import splat or Blender file…**, which the **Scenes** list of the left panel and the **Window** menu offer too.
+
+- **New scene from image…** builds a Gaussian Splat, a cloud of small colored blobs that a camera can move through, from one picture. Pick the source: **Shot frame** (the frame of the shot under the playhead, taken from its video, for example a take you generated), **Project image** or **Library** (a picture of your PotionUI library, which joins the media of the project). Name the scene and click **Build the scene**. The scene is built on the generation queue, like a take, in a few seconds to a minute, and counts against your GPU minutes. The list shows its progress with a cancel button, the project bar shows a dot on **3D scene** and the status bar the percentage; "Scene ready" tells when it is done. A scene that failed offers **Try again**.
+- **Import splat or Blender file…** adds a `.ply`, `.spz` or `.splat` splat, or a `.glb` or `.gltf` file exported from Blender (meshes, cameras and their animation), up to 1 GB. A `.gltf` must hold its textures and data.
+
+The center draws the selected scene in the frame of your project. Drag to orbit around the target, drag with the right button (or with Shift) to pan, scroll to move in or out, and scroll with Alt to change the focal length. **Source view** goes back to the camera of the picture. The top left shows the focal length with the vertical and horizontal angles of view; the top view at the bottom right shows the source camera (circle), the target (square), the current camera and the path of the 3D shot. A picture only holds about ±10° of camera movement: for a scene built from a picture, the gauge at the bottom left shows how far the camera is from the source view, and turns red with "Holes likely" beyond 15° or 25 %, where empty patches appear behind the objects. Nothing is blocked.
+
+#### Capture an angle for another shot
+
+Place the camera, then click **Capture for a shot…**. The window shows the capture at the resolution of your project and how much of it is empty. Pick the shot (by default the selected shot, or the one under the playhead) and the use:
+
+- **First frame** or **Last frame**: the capture becomes the first or last frame of that shot, so the generation starts from this new angle or ends on it (FL2VA). If the shot already has one, you confirm the replacement. The frame shows a cube on the **Frames** row.
+- **Reference**: the capture becomes a **3D sets** reference of the shot. It keeps the set consistent, while the framing still comes from the prompt (Ref2VA).
+
+#### Move the camera along a path
+
+A **3D shot** is a camera path on the timeline (row **3D shot**). **New 3D shot at the playhead** creates one for the current scene. Give it its path:
+
+- **Preset trajectories**: **Orbit** (±10° around the subject), **Push in** (15 % of the distance) and **Rise** (+10°, tilting toward the subject), with the **amplitude** slider below; moving the slider updates the path of the selected 3D shot. Beyond 15° or 25 % the panel warns that holes are likely.
+- **Keyframe**, in the Inspector, stores the camera at the playhead; **Follow the path** shows the camera of the path again after you moved it.
+- **Blender camera**: for a Blender scene, pick an animated camera and click **Use this camera**. Its animation becomes the path, at 24 frames per second, and the 3D shot takes its length.
+
+Play to preview the path. Then, under **Outputs for generation**:
+
+- **Render reference video** renders the 3D shot frame by frame at 24 frames per second and turns it into a video of the project, placed as a **Control video** on the shot. The bar at the bottom of the view counts the frames, and **Cancel** stops it. Keep the tab visible while it renders: a hidden tab renders much more slowly. A reference video needs at least 2 seconds. When you change the path, the scene or the length of the 3D shot, the video is marked out of date: render it again.
+- **Use start and end as first and last frames** captures the start and the end of the path and sets them as the first and last frames of the shot, so that the engine moves the camera between these two angles. This works today with FL2VA, on 12 GB too.
+
+Three output modes use these videos (chapter 8).
 
 ### Mix
 
@@ -203,14 +230,14 @@ The other items have their own panel:
 - **Audio clip:** its track, start, duration, gain, fades, and a button that opens its strip in the console.
 - **Title:** the text, the subtitle, the start and the duration.
 - **Shot prompt:** the text, the **Library & assistant** link, the **Editor** button, the warnings about the direction, the start, the duration, the influence, and the global direction that applies.
-- **Reference frame:** the image (picked among the images of the project, which a new project does not have), the position, the role (start, end, transition, identity, style, 3D capture) and the strength of its influence.
-- **Control video:** the name, its source (**3D scene** or **Imported video**), the start, the duration and the strength of its guidance. In its range the motion comes from the guide: camera instructions in the prompts are ignored.
-- **3D shot:** the scene, the start, the duration and the **Camera**.
+- **Reference frame:** the image (picked among the images of the project, which a new project does not have), the position, the role (start, end, transition, identity, style), the strength of its influence and, for a capture of a 3D scene, the scene it comes from.
+- **Control video:** the name, its source (**3D scene** or **Imported video**), the start, the duration and the strength of its guidance. In its range the motion comes from the guide: camera instructions in the prompts are ignored. For the reference video of a 3D shot: the video, **Open the 3D shot “…”** and, when it is out of date, **Render again**.
+- **3D shot:** the scene, the start, the duration, the camera path (a preset with its amplitude, manual keys or a Blender camera), the state of its reference video with **Render video** and **Start and end**, and the **Camera**.
 - **Marker:** the label and the position.
 - **Reference:** the name, the role, the scope (**Global direction** or **Specific moment**) and the shot it applies to.
 - **Console strip:** the name, the role, the effects (**Equalizer**, **Compressor**, **Filter**) and the sends.
 
-In the **3D scene** workspace, with a 3D shot selected or nothing selected, the Inspector shows the **Camera**: focal length, pan, tilt, distance and target height, **Keyframe**, **Follow the path** and the list of keyframes. With nothing selected in the other workspaces, it shows the project (format, H3 profile, content), a reminder of the main shortcuts and a **Project properties…** button.
+In the **3D scene** workspace, with a 3D shot selected or nothing selected, the Inspector shows the **Camera**: focal length, roll and distance, **Keyframe**, **Follow the path**, **Source view** and the keyframes of the 3D shot (for a Blender camera, the number of sampled keys). With nothing selected in the other workspaces, it shows the project (format, H3 profile, content), a reminder of the main shortcuts and a **Project properties…** button.
 
 ## 8. Production bar and generation
 
@@ -218,7 +245,7 @@ The Production bar reads like a sentence: a target (**Shot**, **Range** or **Seq
 
 ### Choose the engine
 
-- The output mode **AI generation** is the real one. **3D render** and **3D render + AI** are simulated (chapter 17); with **3D render** the main button reads **Prepare the render**.
+- The output mode **AI generation** generates the takes. With the Ref2VA profile, the up-to-date reference videos of a shot (chapter 4) go with its references, and the engine is asked to follow their camera path. **3D render** generates nothing: the main button reads **Place the 3D renders** and makes each shot that has an up-to-date reference video play that video. **3D render + AI** generates Ref2VA takes guided by these videos, whatever the profile of the project; it needs a MiniMax-H3 preset with the reference mode.
 - The **Generation engine** pop-up lists what your admin enabled and assigned to you, in groups named after the backends. A group named after your admin's own backend holds the video presets that run on their hardware, for example **Wan 2.1 / 2.2**, **MiniMax H3** or, on a 12 GB card, **MiniMax H3 (12 GB)**. Each cloud provider has its own group, with its video models by name. Your choice is saved with the project. Whether a preset runs on this machine or on a studio server is decided by PotionUI, and the take card tells you afterwards. Hover the pop-up to see the group and, for a preset that runs on the admin's hardware, the free memory of its GPU ("16.0 / 24.0 GB free"). On a window narrower than 1400 pixels the pop-up is hidden: use **Production › Generation engine…**, which opens the **Advanced workshop** on its engine step. A capture of the pop-up and of the bar around it, in the dark and light themes of the English interface, is in `docs/screenshots/engine-popup.png`.
 - With no engine, the pop-up reads "No engine" and the bar says "No generation engine: an administrator must enable a video preset or a cloud model." An admin also sees the link "Open plugin settings". When the engine of a project is no longer available, the pop-up reads "Engine no longer available" and the bar says "The engine of this project is no longer available: pick another one." A project from an earlier version that named a placeholder engine is moved to the matching real engine when you open it.
 - **Quality.** **Draft** makes quick takes at the resolution your admin chose, or the closest the engine offers; hover it to see which ("Quick draft in 832×480: check motion and framing"). **Final** makes takes at the largest resolution of the engine ("Final quality in 1280×720: keep it for the chosen takes"). To improve a draft you like, **Make final** (chapter 9) is usually the better way: it keeps the picture you chose.
@@ -241,7 +268,8 @@ What blocks **Generate selection** (the button is disabled and the bar shows the
 - no valid range;
 - neither a global direction nor a shot prompt in the range;
 - an empty shot prompt in the range;
-- a 3D output mode with no 3D shot in the range;
+- a 3D output mode with no up-to-date reference video for the shots of the range (render them in **3D scene**);
+- **3D render + AI** with a preset that has no reference mode: ask your admin for a MiniMax-H3 preset that has it;
 - no engine, or an engine that is no longer available;
 - a preset that is missing or no longer assigned to you ("This preset is missing or no longer assigned to you.");
 - a profile the engine cannot generate ("Wan 2.1 / 2.2 cannot generate the Ref2VA profile: switch to FL2VA or to MiniMax H3.");
@@ -257,6 +285,8 @@ What only warns, without blocking:
 - a memory estimate above what the GPU has: "Will stream through host RAM, slower." The weights pass through the server's memory. The generation goes on, more slowly, and fails if the server lacks the memory for it (chapter 18);
 - the FL2VA profile with no frame linked to a shot: "“Shot 2” has no linked frame: it will be generated from text only." The generation goes on from the text, and the card of the take says "text only". When the shot has a previous shot with a finished take, an icon next to the warning in the Production bar, **Use the previous shot’s last frame**, gives it a first frame (chapter 12);
 - an engine that generates from text only, such as the (8 GB) Wan presets, for a shot with linked frames: "This engine generates from text only: the frames linked to “Shot 2” will not be used." The generation goes on from the text;
+- a 3D shot changed after its reference video was rendered: "The reference video of “Shot 2” is out of date: render it again in 3D scene." The old video is still sent;
+- a 3D reference video on a shot with the FL2VA profile: "“Shot 2” has a 3D reference video, but FL2VA does not read it: choose Ref2VA, or use the start and end frames.";
 - a shot longer than the engine allows: "“Shot 2” is longer than this engine allows: it will be cut to 15 s."
 
 Two notes appear only in the estimate tooltip: "Memory use could not be estimated." and "No time measured yet for this engine and resolution."
@@ -640,19 +670,18 @@ Every button has an accessible name, and an icon button shows its tooltip when i
 
 ## 17. What is simulated
 
-Some parts keep their interface but do not do the real thing. They carry a gray dashed badge, **Simulated**, never a yellow one: yellow is kept for real points to check. **Help › Simulated features** opens the list of the seven items below. What the engine you picked cannot do is not a simulation, and it has a plain gray badge instead: a greyed profile ("Ref2VA: MiniMax H3 only"), **Upscaler not available** and **Not sent with this engine** (chapters 8 and 9). In the Advanced workshop that last badge has the same dashed outline as **Simulated**, because the setting it marks stays in your project and changes nothing.
+Some parts keep their interface but do not do the real thing. They carry a gray dashed badge, **Simulated**, never a yellow one: yellow is kept for real points to check. **Help › Simulated features** opens the list of the six items below. What the engine you picked cannot do is not a simulation, and it has a plain gray badge instead: a greyed profile ("Ref2VA: MiniMax H3 only"), **Upscaler not available** and **Not sent with this engine** (chapters 8 and 9). In the Advanced workshop that last badge has the same dashed outline as **Simulated**, because the setting it marks stays in your project and changes nothing.
 
-The badge **Simulated** appears in the header of the windows **Reference a Gaussian Splat file** and **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265** when one of them is picked, next to the audio stems and, when a simulated format is picked, in the footer of the **Video** tab of the export window ("Simulated render: master and archive"); on the automation button of the console strips; on the **Sample scene** and on the preview of a Gaussian Splat file in the 3D scene ("Simulated preview"); and on the identity line of the assistant's check (chapter 10). A few messages end with "— simulated operation.", for example when you start the **3D render** mode.
+The badge **Simulated** appears in the header of the window **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265** when one of them is picked, next to the audio stems and, when a simulated format is picked, in the footer of the **Video** tab of the export window ("Simulated render: master and archive"); on the automation button of the console strips; and on the identity line of the assistant's check (chapter 10).
 
-Everything else works for real: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard (the **Propose a breakdown** button is a simple cut into sentences, not a simulation), the PotionUI assistant with its four tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the camera, the trajectories and the keyframes of the 3D scene, the mixing console playing your audio files, the seam frames, the web and social videos (MP4 files that ffmpeg assembles on the server) and the FCPXML, OpenTimelineIO, EDL and SRT files, which are real files.
+Everything else works for real: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard (the **Propose a breakdown** button is a simple cut into sentences, not a simulation), the PotionUI assistant with its four tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the 3D scene (scenes built from a picture, imported splats and Blender files, the camera, captures, reference videos and the 3D output modes), the mixing console playing your audio files, the seam frames, the web and social videos (MP4 files that ffmpeg assembles on the server) and the FCPXML, OpenTimelineIO, EDL and SRT files, which are real files.
 
-The window **Simulated features** lists seven items. For each one, the table gives what the window says and what is real next to it.
+The window **Simulated features** lists six items. For each one, the table gives what the window says and what is real next to it.
 
 | Item in the window | What the window says | What is real next to it |
 |---|---|---|
 | **Identity score** | The identity similarity between two shots, in the continuity check and in the assistant’s review, is simulated. The color match really analyzes the images. | The color check analyzes the images for real: the seam frames of the shots and their thumbnails (chapter 12). No identity measure is available to plugins, so the percentage stays simulated. |
 | **Lip sync** | No lip sync is computed: the lip sync options of the Sound design workshop and of the Advanced workshop stay in the project and change neither the takes nor the export. | MiniMax H3 makes picture and sound in one pass, so there is no separate lip-sync step. The text of the dialogues feeds the subtitles for real. |
-| **Gaussian Splat and 3D scene render** | A referenced Gaussian Splat file is not loaded and the sample scene is a generated point cloud. The camera, the trajectories, the keyframes and the frame captures work, but no Control video is rendered from the scene, and the “3D render” and “3D render + AI” output modes start nothing. | The camera, the trajectories, the keyframes and the frame captures work. AI generation itself is real (chapters 8 and 9). |
 | **Generated voices and dialogue** | The Sound design workshop generates no voice, dialogue or sound: preparing is simulated and what you hear is a simple synthesis in the browser. The dialogue text feeds the subtitles, and imported audio files play for real. | The audio files you import play for real through the console (chapter 13). PotionUI has no speech or sound-effect preset to prepare ambience, foley, texture, impact or music for the workshop. |
 | **Console automation and processing** | The Auto button only switches a mode: no automation curve is recorded. Pan, inserts, sends and the master bus are heard in the browser but are not applied to the exported video, which keeps the gain, the track faders, mute, solo and the fades. | The console plays your audio files for real: faders, mute and solo, pan, equalizer, compressor, filter, sends and meters act on the sound you hear. The exported video applies gain, track faders, mute, solo and fades (chapter 14). |
 | **ProRes, H.265 and stems** | The master file (ProRes), the archive (H.265) and the audio stems are simulated: no file is written. The web and social MP4 videos and the FCPXML, OTIO, EDL and SRT files are real. | The web and social videos and the FCPXML, OpenTimelineIO, EDL and SRT files are real (chapter 14). PotionUI's video converter writes only H.264 MP4 or VP9 WebM, and no audio is rendered per role. For the simulated formats the window ends with "Simulated render complete: no file is written for this format." |
@@ -668,7 +697,7 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **The estimate shows "—" for the time.** Nothing has been measured yet for this preset, engine and resolution (the calibration is empty). It fills in after a few generations.
 - **"Will stream through host RAM, slower."** The memory estimate is above what the GPU has. The generation is not blocked. If the server lacks free memory for it, the engine refuses to start and the take fails (`host_ram_oom`).
 - **The quota is spent.** **Generate selection** says "GPU quota exceeded" until the next month or until your admin raises the limit of your plan. Running generations are not stopped, and a take that fails or is cancelled gives its minutes back. The first takes of a preset count 10 seconds of GPU for every second of video, which can look generous until the real durations are measured.
-- **Generate selection is disabled.** Read the message in the bar: no range, no direction and no shot prompt, an empty prompt, a 3D mode with no 3D shot, no engine, a preset that is not yours, a profile the engine cannot generate, models to install, a cloud model to pick, or the quota.
+- **Generate selection is disabled.** Read the message in the bar: no range, no direction and no shot prompt, an empty prompt, a 3D mode with no up-to-date reference video, no engine, a preset that is not yours, a profile the engine cannot generate, models to install, a cloud model to pick, or the quota.
 - **"Models to install for this preset: …".** Your admin has not downloaded the model files that preset needs. Ask them.
 - **A warning says the shots will be generated from text only.** The FL2VA profile has no frame linked to the shot. Add a start or an end frame (**Use the previous shot’s last frame** takes the first one from the previous shot, chapter 12), or pick another H3 profile; the generation is not blocked.
 - **A take stays Queued.** Your admin limits how many generations you can have in progress at once: the take starts by itself when one of yours ends. If it stays Queued while nothing of yours is running, tell your admin.
@@ -692,6 +721,11 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **"This project was deleted elsewhere".** The project was deleted from another tab or device while it was open here. The page opened your most recently modified project, or created the starter project. The changes you had not saved are lost.
 - **A media does not show or play.** The viewer says **Media offline** ("The source file of “…” is no longer available: import it again or choose a take.") and so does the thumbnail of the shot on the timeline: the file is no longer available in your PotionUI library or gallery. Import it again, or choose a take for the shot. A take whose generation you deleted from the gallery no longer plays either.
 - **"1 file could not be imported" (or "N files could not be imported").** The file is no longer available in the library or the gallery, or its kind is not accepted by the window: images and videos for **Import files…** and **From the PotionUI gallery**, audio for **Import audio file…**.
+- **The 3D view says that the browser cannot display 3D.** The page needs WebGL 2. Turn on the hardware acceleration of your browser, or use a recent Chrome, Edge, Firefox or Safari.
+- **A scene from an image failed.** The list and the view give the reason: your GPU minutes are used up, the Image to Splat preset is not available to you (ask your admin), or the image could not be read or extracted from the video. Click **Try again**; if it fails again, tell your admin.
+- **Holes appear when the camera moves.** A picture only shows one side of things: beyond about 15° or 25 % from the source view, empty patches appear. Stay closer to the **Source view**, lower the amplitude, or build another scene from a picture taken from the angle you need.
+- **The reference video renders slowly.** Your computer's graphics card draws each frame, and a hidden tab or a minimized window slows it down a lot. Keep the page visible until the end; **Cancel** stops it.
+- **A Blender file does not load.** Export a `.glb` (glTF binary) from Blender, or a `.gltf` with its data embedded: a `.gltf` with separate `.bin` or texture files cannot be read.
 - **The assistant does not answer, shows no card or acts on the wrong project.** See chapter 10, "If it does not work".
 
 
@@ -717,6 +751,10 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 | version | version | A saved state of the project; **Version history…** lists them and restores one. |
 | shot prompt | instruction locale | The text for one shot; it completes the global direction. |
 | Control video | Control video | A guide video that sets the motion. |
+| Gaussian Splat | Gaussian Splat | A 3D scene made of many small colored blobs, built from a picture or imported, that a camera can move through (chapter 4). |
+| 3D shot | plan 3D | A camera path in a 3D scene, on the 3D shot row of the timeline. |
+| source view | vue d’origine | The camera of the picture a scene was built from: the scene looks right around it. |
+| reference video | vidéo de référence | The video of a 3D shot rendered frame by frame, which guides the camera of a generation. |
 | H3 profile | profil H3 | FL2VA, Ref2VA or Hybrid AV: what guides the generation. |
 | mode | mode | A way the PotionUI chat works, with its own instructions and tools. This page uses **Video Producer assistant**; a conversation keeps its mode. |
 | tool | outil | An action the assistant can run in your project: write a shot prompt, fix conflicts, split the synopsis, check continuity. |
