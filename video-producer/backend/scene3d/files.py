@@ -1,18 +1,29 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Tuple
+
+try:
+    from python_multipart.multipart import MultipartParser, parse_options_header
+except ImportError:
+    from multipart.multipart import MultipartParser, parse_options_header
 
 from ..core_bridge import generate_ulid
 from . import formats, storage
 from .formats import Probe
-from .storage import SceneError
+from .storage import MIB, SceneError
 
 FILES = "video_producer_scene_files"
 
-MAX_BYTES = 1024 * 1024 * 1024
+MAX_BYTES = 1024 * MIB
 
-CHUNK = 1024 * 1024
+MULTIPART_MARGIN = 64 * 1024
+
+FIELD_LIMIT = 1024
+
+FIELD_COUNT = 8
+
+FILE_FIELD = "file"
 
 NAME_LIMIT = 200
 
@@ -150,31 +161,156 @@ def accepted_format(kind: str, filename: str) -> str:
     return fmt
 
 
-async def store_upload(project_id: str, user_id: str, kind: str, upload: Any) -> Dict[str, Any]:
-    """Store an uploaded splat or glb file of at most 1 GiB after checking its format; SceneError otherwise."""
-    filename = str(getattr(upload, "filename", "") or "")
-    fmt = accepted_format(kind, filename)
-    folder = storage.work_folder(project_id)
-    folder.mkdir(parents=True, exist_ok=True)
-    file_id = generate_ulid()
-    work = folder / f"upload-{file_id}.{fmt}"
-    size = 0
+def _invalid(message: str) -> SceneError:
+    return SceneError(422, "invalid_request", message)
+
+
+class UploadForm:
+    """A multipart form read as it arrives: its few small fields kept in memory, its one file written straight into the work folder."""
+
+    def __init__(self, folder: Path, file_id: str):
+        self.folder = folder
+        self.file_id = file_id
+        self.fields: Dict[str, str] = {}
+        self.filename: Optional[str] = None
+        self.path: Optional[Path] = None
+        self.size = 0
+        self.pending: List[bytes] = []
+        self.handle: Optional[BinaryIO] = None
+        self.created: List[Path] = []
+        self.open_part = False
+        self._header = b""
+        self._value = b""
+        self._disposition = b""
+        self._name: Optional[str] = None
+        self._file = False
+        self._data = bytearray()
+
+    def callbacks(self) -> Dict[str, Any]:
+        return {
+            "on_part_begin": self.on_part_begin,
+            "on_header_field": self.on_header_field,
+            "on_header_value": self.on_header_value,
+            "on_header_end": self.on_header_end,
+            "on_headers_finished": self.on_headers_finished,
+            "on_part_data": self.on_part_data,
+            "on_part_end": self.on_part_end,
+        }
+
+    def on_part_begin(self) -> None:
+        self.open_part = True
+        self._disposition, self._name, self._file, self._data = b"", None, False, bytearray()
+
+    def on_header_field(self, data: bytes, start: int, end: int) -> None:
+        self._header += data[start:end]
+
+    def on_header_value(self, data: bytes, start: int, end: int) -> None:
+        self._value += data[start:end]
+
+    def on_header_end(self) -> None:
+        if self._header.strip().lower() == b"content-disposition":
+            self._disposition = self._value
+        self._header, self._value = b"", b""
+
+    def on_headers_finished(self) -> None:
+        _, options = parse_options_header(self._disposition)
+        if b"name" not in options:
+            raise _invalid("Each part of the form needs a name.")
+        self._name = options[b"name"].decode("utf-8", "replace")
+        if b"filename" not in options:
+            if len(self.fields) >= FIELD_COUNT:
+                raise _invalid("The form has too many fields.")
+            return
+        if self._name != FILE_FIELD or self.filename is not None:
+            raise _invalid(f"The form takes one file, in the field {FILE_FIELD}.")
+        self.filename = options[b"filename"].decode("utf-8", "replace")
+        fmt = formats.format_of(self.filename)
+        if fmt is None:
+            raise SceneError(422, "unsupported_format", "A scene file must be a .ply, .spz, .splat or .glb file.")
+        self.created = [folder for folder in (self.folder.parent, self.folder) if not folder.exists()]
+        self.folder.mkdir(parents=True, exist_ok=True)
+        self.path = self.folder / f"upload-{self.file_id}.{fmt}"
+        self.handle = self.path.open("wb")
+        self._file = True
+
+    def on_part_data(self, data: bytes, start: int, end: int) -> None:
+        if self._file:
+            self.size += end - start
+            if self.size > MAX_BYTES:
+                raise SceneError(413, "file_too_large", f"A scene file is at most {MAX_BYTES // MIB} MiB.")
+            self.pending.append(bytes(data[start:end]))
+            return
+        self._data += data[start:end]
+        if len(self._data) > FIELD_LIMIT:
+            raise _invalid(f"A field of the form is longer than {FIELD_LIMIT} bytes.")
+
+    def on_part_end(self) -> None:
+        self.open_part = False
+        if not self._file and self._name is not None:
+            self.fields[self._name] = self._data.decode("utf-8", "replace")
+        self._file = False
+
+    def write(self, chunks: List[bytes]) -> None:
+        if self.handle is not None:
+            self.handle.writelines(chunks)
+
+    def close(self) -> None:
+        if self.handle is not None:
+            self.handle.close()
+            self.handle = None
+
+    def drop(self, stored: bool) -> None:
+        self.close()
+        if self.path is not None:
+            self.path.unlink(missing_ok=True)
+        for folder in [] if stored else reversed(self.created):
+            try:
+                folder.rmdir()
+            except OSError:
+                pass
+
+
+async def read_form(form: UploadForm, content_type: str, stream: AsyncIterator[bytes]) -> None:
+    """Feed a multipart body to the form as it arrives, writing the file off the event loop; SceneError for a body that is not such a form."""
+    mime, options = parse_options_header(content_type)
+    if mime != b"multipart/form-data" or not options.get(b"boundary"):
+        raise _invalid("The request needs a file, sent as multipart/form-data.")
+    parser = MultipartParser(options[b"boundary"], form.callbacks())
     try:
-        with work.open("wb") as handle:
-            while True:
-                chunk = await upload.read(CHUNK)
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > MAX_BYTES:
-                    raise SceneError(413, "file_too_large", "A scene file is at most 1 GiB.")
-                handle.write(chunk)
+        async for chunk in stream:
+            if chunk:
+                parser.write(chunk)
+            if form.pending:
+                chunks, form.pending = form.pending, []
+                await asyncio.to_thread(form.write, chunks)
+        parser.finalize()
+    except ValueError:
+        raise _invalid("The request body is not a valid multipart form.") from None
+    if form.open_part:
+        raise _invalid("The form ends before its last part.")
+    await asyncio.to_thread(form.close)
+
+
+async def receive_upload(project_id: str, user_id: str, content_type: str, stream: AsyncIterator[bytes]) -> Dict[str, Any]:
+    """Store the splat or glb file of a multipart form (fields file and kind) of at most 1 GiB, written once into the work folder as it arrives, checked, then moved into place; SceneError otherwise."""
+    file_id = generate_ulid()
+    form = UploadForm(storage.work_folder(project_id), file_id)
+    stored = False
+    try:
+        await read_form(form, content_type, stream)
+        kind = form.fields.get("kind")
+        if kind not in formats.KINDS:
+            raise _invalid(f"kind must be one of: {', '.join(formats.KINDS)}.")
+        if form.path is None or not form.filename:
+            raise _invalid("The request needs a file.")
+        fmt = accepted_format(kind, form.filename)
         try:
-            probe = await asyncio.to_thread(formats.probe, fmt, work)
+            probe = await asyncio.to_thread(formats.probe, fmt, form.path)
         except formats.FormatError as exc:
             raise SceneError(422, "invalid_file", str(exc)) from None
         target = storage.project_folder(project_id) / stored_name(file_id, fmt)
-        work.replace(target)
+        form.path.replace(target)
+        stored = True
     finally:
-        work.unlink(missing_ok=True)
-    return add_file(file_id, project_id, user_id, kind, Path(filename.replace("\\", "/")).name, size, probe)
+        form.drop(stored)
+    return add_file(file_id, project_id, user_id, kind, Path(form.filename.replace("\\", "/")).name, form.size, probe)

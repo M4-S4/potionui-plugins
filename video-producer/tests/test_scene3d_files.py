@@ -284,19 +284,126 @@ def test_an_uploaded_glb_whose_json_nests_too_deep_answers_invalid_file_and_leav
 
     assert (response.status_code, response.json()["detail"]["error"]) == (422, "invalid_file")
     assert files.list_project(project["id"]) == []
-    assert list(storage.work_folder(project["id"]).iterdir()) == []
+    assert not storage.project_folder(project["id"]).exists()
 
 
-def test_an_upload_over_the_size_limit_is_refused_and_leaves_nothing(client, project, samples, monkeypatch):
+def test_an_upload_over_the_size_limit_is_refused_while_it_streams_and_leaves_nothing(client, project, samples, monkeypatch):
     monkeypatch.setattr(files, "MAX_BYTES", 100)
-    monkeypatch.setattr(files, "CHUNK", 64)
 
     response = _upload(client, project["id"], "big.ply", samples.ply(count=4))
 
     assert response.status_code == 413
     assert response.json()["detail"]["error"] == "file_too_large"
     assert files.list_project(project["id"]) == []
-    assert list(storage.work_folder(project["id"]).iterdir()) == []
+    assert not storage.project_folder(project["id"]).exists()
+
+
+@pytest.fixture
+def unread(monkeypatch):
+    async def receive_upload(*args):
+        raise AssertionError("the body was read")
+
+    monkeypatch.setattr(files, "receive_upload", receive_upload)
+
+
+def test_an_upload_whose_content_length_is_over_the_limit_and_its_margin_is_refused_before_it_is_read(client, project, samples, monkeypatch, unread):
+    data = samples.ply(count=4)
+    monkeypatch.setattr(files, "MAX_BYTES", len(data))
+    monkeypatch.setattr(files, "MULTIPART_MARGIN", 10)
+
+    response = _upload(client, project["id"], "big.ply", data)
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (413, "file_too_large")
+    assert (files.MAX_BYTES, files.MULTIPART_MARGIN) == (len(data), 10)
+
+
+def test_an_upload_without_a_content_length_is_refused_before_it_is_read(client, project, unread):
+    headers = {"content-type": "multipart/form-data; boundary=x"}
+
+    response = client.post(f"{BASE}/projects/{project['id']}/scene-files", content=iter([b"--x--"]), headers=headers)
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (411, "length_required")
+
+
+def test_another_user_is_refused_before_the_upload_is_read(app, client, project, samples, make_user, unread):
+    from src.plugin_api import get_current_active_user
+
+    app.dependency_overrides[get_current_active_user] = lambda: make_user(user_id="user-2")
+
+    assert _upload(client, project["id"], "set.ply", samples.ply()).json()["detail"]["error"] == "project_not_found"
+
+
+def test_an_upload_is_written_once_in_the_work_folder_and_moved_into_place(client, project, samples, monkeypatch):
+    probed = []
+    probe = formats.probe
+
+    def spy(fmt, path):
+        probed.append((path.parent.name, path.name, path.stat().st_ino))
+        return probe(fmt, path)
+
+    monkeypatch.setattr(formats, "probe", spy)
+
+    stored = _upload(client, project["id"], "set.ply", samples.ply(count=3)).json()["data"]["file"]
+
+    ((folder, name, inode),) = probed
+    assert (folder, name) == ("work", f"upload-{stored['id']}.ply")
+    assert files.path_of(files.get_file(stored["id"])).stat().st_ino == inode
+
+
+def _multipart(*parts, boundary="vpboundary"):
+    body = b""
+    for headers, payload in parts:
+        body += f"--{boundary}\r\n{headers}\r\n\r\n".encode("utf-8") + payload + b"\r\n"
+    return body + f"--{boundary}--\r\n".encode("utf-8"), {"content-type": f"multipart/form-data; boundary={boundary}"}
+
+
+def _file_part(name="file", filename="set.ply", payload=b"ply"):
+    return f'Content-Disposition: form-data; name="{name}"; filename="{filename}"', payload
+
+
+def _field_part(name="kind", value=b"splat"):
+    return f'Content-Disposition: form-data; name="{name}"', value
+
+
+@pytest.mark.parametrize(
+    "parts, error, message",
+    [
+        ((_file_part(), _file_part(), _field_part()), "invalid_request", "one file"),
+        ((_file_part(name="scene"), _field_part()), "invalid_request", "one file"),
+        ((_file_part(filename="set.obj"), _field_part()), "unsupported_format", ".ply, .spz, .splat or .glb"),
+        ((_field_part(value=b"x" * 1025), _file_part()), "invalid_request", "longer than 1024 bytes"),
+        (tuple(_field_part(name=f"f{index}") for index in range(9)), "invalid_request", "too many fields"),
+        ((("Content-Disposition: form-data", b"splat"),), "invalid_request", "needs a name"),
+    ],
+)
+def test_a_form_with_more_than_one_file_an_unknown_file_or_oversized_fields_is_refused_and_leaves_nothing(client, project, parts, error, message):
+    body, headers = _multipart(*parts)
+
+    response = client.post(f"{BASE}/projects/{project['id']}/scene-files", content=body, headers=headers)
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (422, error)
+    assert message in response.json()["detail"]["message"]
+    assert files.list_project(project["id"]) == []
+    work = storage.work_folder(project["id"])
+    assert not work.exists() or list(work.iterdir()) == []
+
+
+def test_a_form_cut_before_its_last_part_or_with_a_broken_boundary_is_an_invalid_request(client, project, samples):
+    body, headers = _multipart(_field_part(), _file_part(payload=samples.ply()))
+
+    for content in (body[: len(body) // 2], body.replace(b"--vpboundary\r\n", b"--vpboundary\rX", 1)):
+        response = client.post(f"{BASE}/projects/{project['id']}/scene-files", content=content, headers=headers)
+        assert (response.status_code, response.json()["detail"]["error"]) == (422, "invalid_request")
+    assert files.list_project(project["id"]) == []
+
+
+def test_the_kind_may_come_before_the_file_and_a_quoted_unicode_file_name_is_kept(client, project, samples):
+    body, headers = _multipart(_field_part(), _file_part(filename="Crête nord.ply", payload=samples.ply(count=2)))
+
+    response = client.post(f"{BASE}/projects/{project['id']}/scene-files", content=body, headers=headers)
+
+    assert response.status_code == 201, response.text
+    assert (response.json()["data"]["file"]["name"], response.json()["data"]["file"]["count"]) == ("Crête nord.ply", 2)
 
 
 @pytest.mark.parametrize("data", [{}, {"kind": "mesh"}])

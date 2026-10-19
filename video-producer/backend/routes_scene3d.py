@@ -2,7 +2,7 @@ import asyncio
 import math
 from typing import Any, Dict, NoReturn, Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import FileResponse
 
 from . import access, tracker
@@ -133,21 +133,16 @@ async def cancel_scene_job(project_id: str, job_id: str, user: User = Depends(ge
 
 
 @router.post("/projects/{project_id}/scene-files", status_code=201)
-async def upload_scene_file(
-    project_id: str,
-    file: Optional[UploadFile] = File(default=None),
-    kind: Optional[str] = Form(default=None),
-    user: User = Depends(get_current_active_user),
-) -> Dict[str, Any]:
-    """Store a Gaussian Splat (.ply, .spz, .splat) or a Blender scene (.glb) of at most 1 GiB, with its gaussian count, source view or cameras."""
-    if kind not in formats.KINDS:
-        _invalid(f"kind must be one of: {', '.join(formats.KINDS)}.")
-    if file is None or not file.filename:
-        _invalid("The request needs a file.")
+async def upload_scene_file(project_id: str, request: Request, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
+    """Store a Gaussian Splat (.ply, .spz, .splat) or a Blender scene (.glb) of at most 1 GiB, sent as the multipart fields file and kind, with its gaussian count, source view or cameras."""
+    length = _declared_length(request)
+    if length is None:
+        fail(411, "length_required", "A scene file upload must declare its Content-Length.")
+    if length > files.MAX_BYTES + files.MULTIPART_MARGIN:
+        fail(413, "file_too_large", f"A scene file is at most {files.MAX_BYTES // MIB} MiB.")
+    project = access.project_for(user, project_id)
     try:
-        files.accepted_format(kind, file.filename)
-        project = access.project_for(user, project_id)
-        stored = await files.store_upload(project["id"], project["user_id"], kind, file)
+        stored = await files.receive_upload(project["id"], project["user_id"], request.headers.get("content-type", ""), request.stream())
     except SceneError as exc:
         _scene_error(exc)
     return ok({"file": files.public(stored)})
