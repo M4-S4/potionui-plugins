@@ -4,6 +4,6 @@ Generate a video from a prompt with Wan 2.2's 14B text-to-video expert pair in 6
 
 **Memory.** The number of steps does not change memory use: this preset loads the same experts as the 30-step profile, and most of each expert streams from system RAM on a 12 GB card, with about 35 GB of process memory, hence **64 GB of system RAM**. It leaves the engine's memory settings at their defaults.
 
-**Not working on 12 GB yet.** Measured on a 12 GB card, the PotionUI process is killed by a CUDA out-of-memory error during sampling: the engine places as much of each expert on the card as fits and leaves no room for the LoRAs. With the engine told that the card has 8 GB (`POTIONUI_VRAM_CAP_GB=7.99`), the same clip finished in 5 min 36 s with a 6.1 GB engine peak. This preset is kept out of the shipped ones until the engine reserves that room.
+**Measured on 12 GB.** On an RTX 4070 Ti with 12 GB, the whole card left to the engine and its default settings, a 5-second clip at 832×480 took 3 min 24 s once the models were in memory, with an 8.1 GB engine peak and 34.7 GB of process memory. The first run of a session also reads the 38 GB of files from disk.
 
 **Licensing.** The Wan 2.2 weights and the lightx2v LoRAs are published under the Apache-2.0 license.

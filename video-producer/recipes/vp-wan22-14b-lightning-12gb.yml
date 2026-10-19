@@ -123,7 +123,7 @@ presets:
 smoke:
   preset_id: "01M57QPEMDPKHHW83YSEYBN0X1"
   mode: "video"
-  timeout_seconds: 600
+  timeout_seconds: 900
   prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
   seed: 12345
   form:
