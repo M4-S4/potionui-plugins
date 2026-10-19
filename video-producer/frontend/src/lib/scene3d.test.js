@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	FPS,
+	MAX_REFERENCE_SIDE,
 	PRESETS,
 	cameraAt,
 	cameraKeys,
@@ -24,6 +25,7 @@ import {
 	projectSize,
 	renderPoses,
 	renderSize,
+	renderTimes,
 	retime,
 	rollOf,
 	sampleTimes,
@@ -32,7 +34,9 @@ import {
 	spherical,
 	trajectory
 } from './scene3d/camera.js';
-import { cameraNode, gltfCameras, gltfJson, plyHeader, plyView, sceneFileKind, sceneName } from './scene3d/files.js';
+import { GLTF_READ_LIMIT, cameraNode, gltfCameras, gltfExternal, gltfJson, packGltf, plyHeader, plyView, readSceneHead, sceneFileKind, sceneName } from './scene3d/files.js';
+import { assetInUse, controlFor, dropPlanControls, movePlan, planSignature, pruneAsset } from './scene3d/doc.js';
+import { createPoller, jobScene, lostScene, orphanJobs } from './scene3d/jobs.js';
 
 const near = (actual, expected, eps = 1e-6) => assert.ok(Math.abs(actual - expected) <= eps, `${actual} is not ${expected}`);
 const nearVec = (actual, expected, eps = 1e-6) => expected.forEach((v, i) => near(actual[i], v, eps));
@@ -177,29 +181,48 @@ test('Blender camera: samples at 24 fps, target 1 m along local −z, focal from
 	near(turned.t, 0.0417, 1e-4);
 });
 
-test('render size: the project frame (short side from the resolution, long side from the aspect), floored to multiples of 32 for the video', () => {
+test('render size: captures at the project frame (short side from the resolution, long side from the aspect); the reference video capped at 1280 on its long side, floored to multiples of 32', () => {
+	assert.equal(MAX_REFERENCE_SIDE, 1280);
 	assert.deepEqual(projectSize('1080p', 16 / 9), { width: 1920, height: 1080 });
-	assert.deepEqual(renderSize(projectSize('1080p', 16 / 9)), { width: 1920, height: 1056 });
+	assert.deepEqual(renderSize(projectSize('1080p', 16 / 9)), { width: 1280, height: 704 });
 	assert.deepEqual(projectSize('720p', 16 / 9), { width: 1280, height: 720 });
 	assert.deepEqual(renderSize(projectSize('720p', 16 / 9)), { width: 1280, height: 704 });
 	assert.deepEqual(projectSize('1080p', 9 / 16), { width: 1080, height: 1920 });
-	assert.deepEqual(renderSize(projectSize('1080p', 9 / 16)), { width: 1056, height: 1920 });
+	assert.deepEqual(renderSize(projectSize('1080p', 9 / 16)), { width: 704, height: 1280 });
 	assert.deepEqual(projectSize('4K', 16 / 9), { width: 3840, height: 2160 });
-	assert.deepEqual(renderSize(projectSize('4K', 16 / 9)), { width: 3840, height: 2144 });
+	assert.deepEqual(renderSize(projectSize('4K', 16 / 9)), { width: 1280, height: 704 });
+	assert.deepEqual(renderSize(projectSize('480p', 16 / 9)), { width: 832, height: 480 });
+	assert.deepEqual(renderSize(projectSize('1080p', 16 / 9), 1920), { width: 1920, height: 1056 });
+	assert.deepEqual(renderSize(projectSize('1080p', 2.39)), { width: 1280, height: 512 });
+	for (const size of [projectSize('1080p', 16 / 9), projectSize('1080p', 1), projectSize('4K', 2.39), projectSize('720p', 4 / 5)]) {
+		const video = renderSize(size);
+		assert.ok(Math.max(video.width, video.height) <= MAX_REFERENCE_SIDE);
+		assert.equal(video.width % 32, 0);
+		assert.equal(video.height % 32, 0);
+	}
 	assert.deepEqual(projectSize('1080p', 2.39), { width: 2580, height: 1080 });
 	assert.deepEqual(projectSize('1080p', 9), { width: 1920, height: 1080 });
 	assert.deepEqual(projectSize('weird', 1), { width: 1080, height: 1080 });
 });
 
-test('frames: 24 fps for the length of the 3D shot, the pose a pure function of the frame index', () => {
+test('frames: 24 fps for the length of the 3D shot, the first and last frames exactly on the start and end keys, the pose a pure function of the frame index', () => {
 	assert.equal(frameCount(5.17), 124);
 	assert.equal(frameCount(2), 48);
-	assert.equal(frameCount(0.01), 1);
+	assert.equal(frameCount(0.01), 2);
+	const times = renderTimes(2);
+	assert.equal(times.length, 48);
+	assert.deepEqual([times[0], times[47]], [0, 2]);
+	near(times[1], 2 / 47);
+	assert.ok(times.every((t, i) => i === 0 || t > times[i - 1]));
+	assert.deepEqual(renderTimes(0.01), [0, 0.01]);
+	assert.equal(renderTimes(5.17).at(-1), 5.17);
 	const plan = { dur: 2, keyframes: trajectory('orbit', 10, source, 2, makeId) };
 	const poses = renderPoses(plan);
 	assert.equal(poses.length, 48);
 	assert.deepEqual(poses[0], cameraAt(plan, 0));
-	assert.deepEqual(poses[24], cameraAt(plan, 1));
+	assert.deepEqual(poses[0].pos, plan.keyframes[0].pos);
+	assert.deepEqual(poses[47].pos, plan.keyframes[1].pos);
+	assert.deepEqual(poses[47], cameraAt(plan, 2));
 	assert.deepEqual(renderPoses(plan), poses);
 	assert.deepEqual(retime(plan.keyframes, 2, 4).map((k) => k.t), [0, 4]);
 	assert.equal(retime(plan.keyframes, 0, 4), plan.keyframes);
@@ -290,4 +313,192 @@ test('scene files: splats and Blender files by extension, the name without it', 
 	]);
 	assert.equal(sceneName('C:\\scans\\harbour.v2.ply'), 'harbour.v2');
 	assert.equal(sceneName('set.glb'), 'set');
+});
+
+const dataUri = 'data:application/octet-stream;base64,AAAA';
+
+test('a .gltf is accepted only when its buffers and images are data: URIs, and is packed into a .glb that keeps them', () => {
+	assert.deepEqual(gltfExternal({ buffers: [{ uri: dataUri, byteLength: 3 }], images: [{ uri: 'data:image/png;base64,AA' }] }), []);
+	assert.deepEqual(gltfExternal({ buffers: [{ uri: 'scene.bin', byteLength: 3 }], images: [{ uri: 'wood.png' }, { bufferView: 0, mimeType: 'image/png' }] }), ['scene.bin', 'wood.png']);
+	assert.deepEqual(gltfExternal({ buffers: [{ byteLength: 3 }] }), ['']);
+	assert.deepEqual(gltfExternal({ asset: {} }), []);
+	const json = { ...gltf, buffers: [{ uri: dataUri, byteLength: 3 }] };
+	const text = JSON.stringify(json);
+	const packed = packGltf(new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(text)]));
+	const view = new DataView(packed.buffer);
+	assert.deepEqual([view.getUint32(0, true), view.getUint32(4, true), view.getUint32(8, true), view.getUint32(16, true)], [0x46546c67, 2, packed.length, 0x4e4f534a]);
+	assert.equal(packed.length % 4, 0);
+	assert.equal(view.getUint32(12, true), packed.length - 20);
+	assert.deepEqual(gltfJson(packed), json);
+	assert.deepEqual(gltfCameras(packed), gltfCameras(json));
+});
+
+test('reading a Blender file before the upload: the JSON chunk of a .glb only, a self-contained .gltf packed, and a clear refusal for the others', async () => {
+	const ok = new Blob([JSON.stringify({ ...gltf, buffers: [{ uri: dataUri, byteLength: 3 }] })]);
+	const packed = await readSceneHead(ok, 'gltf');
+	assert.equal(packed.error, undefined);
+	assert.equal(packed.json.nodes.length, 5);
+	assert.deepEqual(gltfCameras(packed.packed).map((c) => c.name), ['Camera', 'Lens', 'Camera 2']);
+	assert.deepEqual(await readSceneHead(new Blob([JSON.stringify({ ...gltf, buffers: [{ uri: 'set.bin', byteLength: 3 }] })]), 'gltf'), { error: 'gltf_external' });
+	assert.deepEqual(await readSceneHead(new Blob(['{ not json']), 'gltf'), { error: 'gltf_invalid' });
+	assert.deepEqual(await readSceneHead(ok, 'gltf', 16), { error: 'gltf_large' });
+	assert.equal(GLTF_READ_LIMIT, 64 * 1024 * 1024);
+	const binary = glb(gltf);
+	const big = new Blob([binary, new Uint8Array(1 << 20)]);
+	let read = 0;
+	const spy = { size: big.size, slice: (a, b) => ((read += Math.min(b, big.size) - a), big.slice(a, b)) };
+	const head = await readSceneHead(spy, 'glb');
+	assert.equal(head.json.nodes.length, 5);
+	assert.equal(head.rename, false);
+	assert.equal(read, 20 + binary.length, 'only the header and the JSON chunk are read');
+	assert.equal((await readSceneHead(new Blob([binary]), 'gltf')).rename, true);
+	assert.equal((await readSceneHead(new Blob([binary]), 'glb', 8)).json, null);
+	assert.equal((await readSceneHead(new Blob([new Uint8Array(4)]), 'glb')).json, null);
+});
+
+test('plan signature: changes with the keys, the length, the start, the scene, the amount, the preset and the camera, not with the name', () => {
+	const plan = { id: 'p', name: 'A', shotId: 'c1', sceneId: 's1', start: 0, dur: 4, source: 'trajectory', preset: 'orbit', amount: 10, camera: null, keyframes: trajectory('orbit', 10, source, 4, makeId) };
+	const base = planSignature(plan);
+	assert.equal(planSignature({ ...plan, name: 'B' }), base);
+	assert.equal(planSignature(JSON.parse(JSON.stringify(plan))), base);
+	for (const change of [{ dur: 5 }, { start: 1 }, { sceneId: 's2' }, { amount: 12 }, { preset: 'dolly' }, { camera: 'Cam' }, { keyframes: plan.keyframes.slice(1) }]) assert.notEqual(planSignature({ ...plan, ...change }), base);
+	assert.equal(planSignature(null), '');
+});
+
+test('3D shot and its reference video: found by planId or by the old shot rule, moved and made stale with the shot, dropped with the 3D shot', () => {
+	const plan = { id: 'p1', shotId: 'c1', start: 2 };
+	const own = { id: 'g1', source: 'scene3d', planId: 'p1', shotId: 'c1', start: 2, stale: false };
+	const legacy = { id: 'g2', source: 'scene3d', planId: null, shotId: 'c1', start: 2, stale: false };
+	const other = { id: 'g3', source: 'import', shotId: 'c1', start: 2 };
+	assert.equal(controlFor([legacy, own], plan), own);
+	assert.equal(controlFor([other, legacy], plan), legacy);
+	assert.equal(controlFor([other], plan), null);
+	assert.equal(controlFor([{ ...legacy, shotId: null, start: 2 }], { id: 'p9', shotId: null, start: 2 }).id, 'g2');
+	assert.equal(controlFor([own], null), null);
+	const controls = [{ ...own }, { ...other }];
+	const moved = { ...plan };
+	assert.equal(movePlan(controls, moved, 'c1'), null);
+	assert.equal(controls[0].stale, false);
+	const control = movePlan(controls, moved, 'c2');
+	assert.equal(control, controls[0]);
+	assert.deepEqual([moved.shotId, control.shotId, control.stale, control.planId], ['c2', 'c2', true, 'p1']);
+	assert.equal(controls[1].shotId, 'c1');
+	const adopted = [{ ...legacy }];
+	movePlan(adopted, { ...plan }, null);
+	assert.deepEqual([adopted[0].shotId, adopted[0].planId, adopted[0].stale], [null, 'p1', true]);
+	assert.equal(movePlan([], { ...plan }, 'c3'), null);
+	const list = [{ id: 'a', planId: 'p1' }, { id: 'b', planId: 'p2' }, { id: 'c', planId: 'p1' }, { id: 'd' }];
+	assert.equal(dropPlanControls(list, 'p1'), 2);
+	assert.deepEqual(list.map((c) => c.id), ['b', 'd']);
+});
+
+test('an old reference video leaves the project only when nothing else uses its asset', () => {
+	const doc = {
+		assets: [{ id: 'v1' }, { id: 'v2' }, { id: 'v3' }, { id: 'img' }, { id: 'src' }],
+		clips: [{ id: 'c1', assetId: 'v2' }],
+		audio: [],
+		frames: [{ id: 'f1', assetId: 'img' }],
+		references: [{ id: 'r1', assetId: 'v3' }],
+		controls: [{ id: 'g1', assetId: 'new' }],
+		scenes: [{ id: 's1', kind: 'splat', sourceAssetId: 'src' }]
+	};
+	assert.deepEqual(['v1', 'v2', 'v3', 'img', 'src', 'new', null].map((id) => assetInUse(doc, id)), [false, true, true, true, true, true, false]);
+	assert.equal(pruneAsset(doc, 'v2'), false);
+	assert.equal(pruneAsset(doc, 'v3'), false);
+	assert.equal(pruneAsset(doc, 'v1'), true);
+	assert.equal(pruneAsset(doc, 'v1'), false);
+	assert.equal(pruneAsset(doc, null), false);
+	assert.deepEqual(doc.assets.map((a) => a.id), ['v2', 'v3', 'img', 'src']);
+	assert.equal(assetInUse({ assets: [] }, 'x'), false);
+});
+
+test('scene jobs: a scene follows only its own job, a job still being submitted is not overwritten by an older one, lost and orphan jobs are found', () => {
+	const scenes = [
+		{ id: 's1', kind: 'splat', status: 'running', jobId: 'j2' },
+		{ id: 's2', kind: 'splat', status: 'queued', jobId: null },
+		{ id: 's3', kind: 'glb' }
+	];
+	assert.equal(jobScene(scenes, { id: 'j2', sceneId: 's1' }), scenes[0]);
+	assert.equal(jobScene(scenes, { id: 'j1', sceneId: 's1', status: 'failed' }), null, 'an earlier failed attempt no longer overwrites the retry');
+	assert.equal(jobScene(scenes, { id: 'j3', sceneId: 's2' }), scenes[1]);
+	assert.equal(jobScene(scenes, { id: 'j3', sceneId: 's2' }, new Set(['s2'])), null);
+	assert.equal(jobScene(scenes, { id: 'j3', sceneId: 's2' }, new Set(['s1'])), scenes[1]);
+	assert.equal(jobScene(scenes, { id: 'j9', sceneId: 's3' }), null);
+	assert.equal(jobScene(scenes, { id: 'j9', sceneId: 'gone' }), null);
+	assert.equal(lostScene(scenes[0], [{ id: 'j1', sceneId: 's1' }]), true);
+	assert.equal(lostScene(scenes[0], [{ id: 'j2', sceneId: 's1' }]), false);
+	assert.equal(lostScene(scenes[1], [{ id: 'j3', sceneId: 's2' }]), false);
+	assert.equal(lostScene(scenes[1], []), true);
+	const live = new Map([
+		['s1', 'j2'],
+		['s2', 'j3'],
+		['gone', 'j4'],
+		['s4', 'j5'],
+		['s5', 'j6']
+	]);
+	const now = [...scenes, { id: 's4', kind: 'splat', status: 'failed', jobId: 'j5' }, { id: 's5', kind: 'splat', status: 'running', jobId: 'j0' }];
+	assert.deepEqual(orphanJobs(live, now), [
+		['gone', 'j4'],
+		['s4', 'j5'],
+		['s5', 'j6']
+	]);
+});
+
+function fakeTimers() {
+	const pending = new Map();
+	let next = 1;
+	return {
+		pending,
+		setTimeout: (fn) => (pending.set(next, fn), next++),
+		clearTimeout: (id) => pending.delete(id),
+		async fire() {
+			const [[id, fn]] = pending;
+			pending.delete(id);
+			await fn();
+		}
+	};
+}
+
+test('polling: one chain at a time, however often it is armed, stopped for good until armed again', async () => {
+	const timers = fakeTimers();
+	let busy = true;
+	let release;
+	let runs = 0;
+	const poller = createPoller({ every: 2000, active: () => busy, timers, run: () => ((runs += 1), new Promise((resolve) => (release = resolve))) });
+	poller.arm();
+	poller.arm();
+	assert.equal(timers.pending.size, 1);
+	const first = timers.fire();
+	assert.equal(poller.running, true);
+	poller.arm();
+	assert.equal(timers.pending.size, 0, 'arming while a request runs does not start a second chain');
+	release();
+	await first;
+	assert.equal(timers.pending.size, 1);
+	assert.equal(runs, 1);
+	const second = timers.fire();
+	poller.stop();
+	poller.arm();
+	release();
+	await second;
+	assert.equal(timers.pending.size, 1, 'stopped then armed during a request: one chain goes on');
+	const third = timers.fire();
+	poller.stop();
+	release();
+	await third;
+	assert.equal(timers.pending.size, 0, 'stopped during a request: nothing is armed again');
+	poller.arm();
+	assert.equal(timers.pending.size, 1);
+	busy = false;
+	const fourth = timers.fire();
+	release();
+	await fourth;
+	assert.equal(timers.pending.size, 0);
+	poller.arm();
+	assert.equal(timers.pending.size, 0);
+	const quiet = createPoller({ every: 10, active: () => true, timers, run: async () => false });
+	quiet.arm();
+	await timers.fire();
+	assert.equal(timers.pending.size, 0, 'a run that returns false ends the chain');
+	assert.equal(quiet.armed, false);
 });

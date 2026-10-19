@@ -216,7 +216,7 @@ test('readiness: a text-only engine that ignores a shot frame warns about that s
 	assert.deepEqual(missing, []);
 });
 
-test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D captures go, old camera keys become pos/target', () => {
+test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D captures go, old camera keys become pos/target, simulated guides go, retired 3D set references become captures', () => {
 	const old = {
 		name: 'Old',
 		scenes: [
@@ -234,13 +234,28 @@ test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D 
 			{ id: 'f2', shotId: 'c1', time: 2, assetId: 'a1', role: 'Capture 3D', strength: 80 },
 			{ id: 'f3', shotId: 'c1', time: 3, assetId: null, role: 'first', strength: 100 }
 		],
-		controls: [{ id: 'g1', source: 'scene3d', stale: false }]
+		controls: [
+			{ id: 'g1', source: 'scene3d', stale: false },
+			{ id: 'g2', source: 'scene3d', stale: false, planId: null, assetId: 'v1' },
+			{ id: 'g3', source: 'scene3d', stale: true, planId: 'p2', assetId: null },
+			{ id: 'g4', source: 'import', stale: false }
+		],
+		references: [
+			{ id: 'r1', name: 'Sample', space: 'decors3d', type: 'Scène d’essai', assetId: null, role: 'Décor 3D', scope: { type: 'global' } },
+			{ id: 'r2', name: 'Harbour', space: 'decors3d', type: 'Gaussian Splat', assetId: 'a1', role: 'Décor 3D', scope: { type: 'global' } },
+			{ id: 'r3', name: 'Hero', space: 'identite', type: 'Personnage', assetId: 'a2', role: 'Identité', scope: { type: 'global' } },
+			{ id: 'r4', name: 'Capture', space: 'decors3d', type: 'Capture 3D', assetId: 'a3', role: '', scope: { type: 'shot', shotId: 'c1' } }
+		]
 	};
 	const doc = migrate(old);
 	assert.deepEqual(doc.scenes.map((s) => s.id), ['s1']);
 	assert.deepEqual(doc.plans3d.map((p) => p.sceneId), [null, 's1', null]);
 	assert.deepEqual(doc.frames.map((f) => f.id), ['f2', 'f3']);
-	assert.deepEqual(doc.controls, old.controls);
+	assert.deepEqual(doc.controls.map((c) => c.id), ['g2', 'g3', 'g4'], 'a scene3d guide with neither video nor 3D shot was simulated and goes');
+	assert.deepEqual(doc.controls[0], old.controls[1]);
+	assert.deepEqual(doc.references.map((r) => [r.id, r.type]), [['r2', 'Capture 3D'], ['r3', 'Personnage'], ['r4', 'Capture 3D']], 'the retired 3D set types become Capture 3D when they hold an image, and go otherwise');
+	assert.deepEqual({ ...doc.references[0], type: 'Gaussian Splat' }, old.references[1]);
+	assert.equal(old.references[1].type, 'Gaussian Splat');
 	const [p1, p2, p3] = doc.plans3d;
 	assert.deepEqual([p1.source, p1.preset, p1.amount, p1.camera], ['manual', null, null, null]);
 	assert.deepEqual([p3.source, p3.preset, p3.amount], ['trajectory', 'orbit', 12]);

@@ -4,6 +4,9 @@ export const SCENE_FILE_ACCEPT = '.ply,.spz,.splat,.glb,.gltf';
 const GLB_MAGIC = 0x46546c67;
 const JSON_CHUNK = 0x4e4f534a;
 const HEADER_LIMIT = 65536;
+const GLB_HEADER = 20;
+const BOM = [0xef, 0xbb, 0xbf];
+export const GLTF_READ_LIMIT = 64 * 1024 * 1024;
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const bytesOf = (data) => (data instanceof Uint8Array ? data : data instanceof ArrayBuffer ? new Uint8Array(data) : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : null);
@@ -122,4 +125,53 @@ export function cameraNode(data, name) {
 		n += 1;
 	}
 	return -1;
+}
+
+export function gltfExternal(json) {
+	if (!isObject(json)) return [];
+	const uris = [];
+	for (const key of ['buffers', 'images']) {
+		for (const item of Array.isArray(json[key]) ? json[key] : []) {
+			if (!isObject(item)) continue;
+			if (typeof item.uri === 'string' && !item.uri.startsWith('data:')) uris.push(item.uri);
+			else if (key === 'buffers' && typeof item.uri !== 'string') uris.push('');
+		}
+	}
+	return uris;
+}
+
+export function packGltf(data) {
+	let body = bytesOf(data) ?? new TextEncoder().encode(String(data ?? ''));
+	if (BOM.every((b, i) => body[i] === b)) body = body.subarray(BOM.length);
+	const padded = Math.ceil(body.length / 4) * 4;
+	const out = new Uint8Array(GLB_HEADER + padded).fill(0x20, GLB_HEADER + body.length);
+	const view = new DataView(out.buffer);
+	view.setUint32(0, GLB_MAGIC, true);
+	view.setUint32(4, 2, true);
+	view.setUint32(8, out.length, true);
+	view.setUint32(12, padded, true);
+	view.setUint32(16, JSON_CHUNK, true);
+	out.set(body, GLB_HEADER);
+	return out;
+}
+
+async function bytesAt(file, start, end) {
+	return new Uint8Array(await file.slice(start, end).arrayBuffer());
+}
+
+export async function readSceneHead(file, format, limit = GLTF_READ_LIMIT) {
+	const head = await bytesAt(file, 0, GLB_HEADER);
+	const view = new DataView(head.buffer, head.byteOffset, head.byteLength);
+	if (head.length >= GLB_HEADER && view.getUint32(0, true) === GLB_MAGIC) {
+		const size = view.getUint32(12, true);
+		const json = view.getUint32(16, true) === JSON_CHUNK && size <= limit ? gltfJson(await bytesAt(file, 0, GLB_HEADER + size)) : null;
+		return { json, rename: format === 'gltf' };
+	}
+	if (format !== 'gltf') return { json: null };
+	if (file.size > limit) return { error: 'gltf_large' };
+	const bytes = await bytesAt(file, 0, file.size);
+	const json = gltfJson(bytes);
+	if (!json) return { error: 'gltf_invalid' };
+	if (gltfExternal(json).length) return { error: 'gltf_external' };
+	return { json, packed: packGltf(bytes) };
 }

@@ -149,8 +149,11 @@ export function starterDoc(t, promptT = t, promptLanguage = DEFAULT_PROMPT_LANGU
 }
 
 const RETIRED_SCENES = ['sample', 'file'];
-const RETIRED_ROLE = 'Capture 3D';
+const CAPTURE = 'Capture 3D';
+const RETIRED_SET_TYPES = ['Scène d’essai', "Scène d'essai", 'Gaussian Splat'];
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const retiredSet = (r) => isObject(r) && r.space === 'decors3d' && RETIRED_SET_TYPES.includes(r.type);
+const simulatedGuide = (c) => isObject(c) && c.source === 'scene3d' && !c.assetId && !c.planId;
 
 function migratePlan(plan, retired) {
 	if (!isObject(plan)) return plan;
@@ -167,6 +170,8 @@ export function migrate(doc) {
 	const next = { ...doc };
 	if (Array.isArray(doc.scenes)) next.scenes = scenes.filter((s) => isObject(s) && !RETIRED_SCENES.includes(s.kind));
 	if (Array.isArray(doc.plans3d)) next.plans3d = doc.plans3d.map((p) => migratePlan(p, retired));
-	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === RETIRED_ROLE && !f.assetId));
+	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId));
+	if (Array.isArray(doc.references)) next.references = doc.references.filter((r) => !retiredSet(r) || r.assetId).map((r) => (retiredSet(r) ? { ...r, type: CAPTURE } : r));
+	if (Array.isArray(doc.controls)) next.controls = doc.controls.filter((c) => !simulatedGuide(c));
 	return next;
 }

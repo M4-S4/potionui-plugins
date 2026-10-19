@@ -17,6 +17,7 @@ export const PRESETS = {
 export const PRESET_IDS = Object.keys(PRESETS);
 
 const SHORT_SIDES = { '4K': 2160 };
+export const MAX_REFERENCE_SIDE = 1280;
 
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const rad = (d) => (d * Math.PI) / 180;
@@ -246,17 +247,24 @@ export function projectSize(resolution, aspect) {
 	return ratio >= 1 ? { width: even(base * ratio), height: base } : { width: base, height: even(base / ratio) };
 }
 
-export function renderSize(size) {
-	const floor32 = (v) => Math.max(32, Math.floor(v / 32) * 32);
+export function renderSize(size, maxSide = MAX_REFERENCE_SIDE) {
+	const k = Math.min(1, maxSide / Math.max(size.width, size.height));
+	const floor32 = (v) => Math.max(32, Math.floor((v * k) / 32 + 1e-6) * 32);
 	return { width: floor32(size.width), height: floor32(size.height) };
 }
 
 export function frameCount(dur, fps = FPS) {
-	return Math.max(1, Math.round(dur * fps));
+	return Math.max(2, Math.round(dur * fps));
+}
+
+export function renderTimes(dur, fps = FPS) {
+	const n = frameCount(dur, fps);
+	const span = Math.max(0, dur);
+	return Array.from({ length: n }, (_, i) => (i === n - 1 ? span : (i * span) / (n - 1)));
 }
 
 export function renderPoses(plan, fps = FPS) {
-	return Array.from({ length: frameCount(plan.dur, fps) }, (_, i) => cameraAt(plan, i / fps));
+	return renderTimes(plan.dur, fps).map((time) => cameraAt(plan, time));
 }
 
 export function migrateKeyframe(k) {
