@@ -1,4 +1,5 @@
 import copy
+import math
 
 import pytest
 
@@ -755,10 +756,63 @@ def _guided(core, make_doc, controls, assets=(), references=(), direction=None, 
     )
 
 
-def test_ref2va_sends_the_fresh_3d_guide_video_first_and_names_it_the_camera_reference_in_the_prompt(core, make_doc):
+def _sections(prompt):
+    sections = {}
+    for block in prompt.split("\n\n"):
+        name, _, content = block.partition(": ")
+        sections[name] = content
+    return sections
+
+
+def _key(key_id, time, pos, target, focal):
+    return {"id": key_id, "t": time, "pos": list(pos), "target": list(target), "focal": focal, "roll": 0}
+
+
+def _plan3d(plan_id, start_pos, end_pos, start_target=(0, 0, -4), end_target=None, scene_id="scene-1", focal=(30, 30), dur=4):
+    return {
+        "id": plan_id,
+        "shotId": "s1",
+        "sceneId": scene_id,
+        "name": plan_id,
+        "start": 0,
+        "dur": dur,
+        "source": "trajectory",
+        "preset": None,
+        "amount": None,
+        "camera": None,
+        "keyframes": [_key("k1", 0, start_pos, start_target, focal[0]), _key("k2", dur, end_pos, end_target or start_target, focal[1])],
+    }
+
+
+def _around(degrees):
+    return (4 * math.sin(math.radians(degrees)), 0, -4 + 4 * math.cos(math.radians(degrees)))
+
+
+def _orbit(plan_id="plan-c1", degrees=10, scene_id="scene-1"):
+    return _plan3d(plan_id, _around(-degrees), _around(degrees), scene_id=scene_id)
+
+
+def _splat(scene_id="scene-1", source="hero"):
+    return {"id": scene_id, "kind": "splat", "name": "Bow", "sourceAssetId": source, "sourceTime": None, "status": "done", "progress": 100,
+            "jobId": "j1", "fileId": "f1", "count": 10, "view": {"fov": 32, "aspect": 1.73, "depth": 4}, "error": None}
+
+
+ORBIT_SENTENCES = (
+    "The camera arcs from left to right around the subject through about 20 degrees over the whole shot. "
+    "The move follows <Video 1> forward in time: the shot opens on the viewpoint of its first frame and ends on the viewpoint of its last frame, never in reverse. "
+    "This camera movement replaces any other camera movement mentioned above."
+)
+GUIDE_RETENTION = (
+    "<Video 1> (camera path of [Shot 1]): weak_reference - camera movement only, not the look: only the direction, amplitude and speed of its camera move are followed; "
+    "its content, colours, textures, blurred or stretched patches, holes and black borders are not reproduced."
+)
+
+
+def test_ref2va_sends_the_fresh_3d_guide_video_first_in_a_six_section_prompt_that_keeps_only_its_camera_movement(core, make_doc):
     core.use_h3()
     references = [{"id": "r1", "assetId": "hero", "scope": {"type": "global"}}, {"id": "r2", "assetId": "walk", "scope": {"type": "shot", "shotId": "s1"}}]
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], references=references)
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], references=references, direction={"univers": "A small harbour at dawn", "palette": "Cold blues."})
+    doc["plans3d"] = [_orbit()]
 
     plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
 
@@ -766,8 +820,20 @@ def test_ref2va_sends_the_fresh_3d_guide_video_first_and_names_it_the_camera_ref
     (plan,) = plans.shots
     form = plan.request["form_data"]
     assert form["references"] == ["uploads/orbit.mp4", "uploads/walk.mp4", "uploads/hero.png"]
-    sentence = "Use <Video 1> as the camera reference and follow its exact camera path."
-    assert plan.prompt_text == f"The hut at dawn.\n{sentence}"
+    assert plan.prompt_text == "\n\n".join(
+        [
+            "subject_definitions: <Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]. "
+            "<Subject 1> is the character shown in <Video 2>. <Subject 2> is the character shown in <Picture 1>.",
+            "summary: [reference generation] A 4-second shot made from the description below, with its camera movement taken from <Video 1>.",
+            "retention_analysis: " + GUIDE_RETENTION + "\n"
+            "<Subject 1> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.\n"
+            "<Subject 2> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.",
+            "detailed_description: A small harbour at dawn. Cold blues. [Shot 1] The hut at dawn. "
+            "<Subject 1> appears in the shot. <Subject 2> appears in the shot. " + ORBIT_SENTENCES,
+            "overall_soundscape: The natural ambient sound of the place and the physical sounds of the action described above.",
+            "non_diegetic_music: N/A",
+        ]
+    )
     assert plan.request["prompts"] == [{"positive": plan.prompt_text, "negative": ""}]
     assert form["video_director"]["segments"][0]["prompt"] == plan.prompt_text
     assert plan.guides == ["c1"]
@@ -775,17 +841,164 @@ def test_ref2va_sends_the_fresh_3d_guide_video_first_and_names_it_the_camera_ref
     assert plans.renders == [{"shot_id": "s1", "control_id": "c1", "plan_id": "plan-c1", "asset_id": "orbit"}]
 
 
-def test_the_camera_sentence_follows_the_prompt_language_and_the_rank_of_each_guide_among_the_videos(core, make_doc):
+def test_the_picture_a_splat_scene_was_built_from_goes_with_its_guide_as_the_look_of_the_shot(core, make_doc):
     core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly")], language="fr", prompt="")
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
+    doc["plans3d"] = [_orbit()]
+    doc["scenes"] = [_splat()]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3, production="render3d_ai").shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/hero.png"]
+    sections = _sections(plan.prompt_text)
+    assert list(sections) == ["subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music"]
+    assert sections["subject_definitions"] == (
+        "<Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]. "
+        "<Subject 1> is the scene shown in <Picture 1>, a clean picture of the set of [Shot 1]."
+    )
+    assert sections["retention_analysis"].splitlines() == [
+        GUIDE_RETENTION,
+        "<Subject 1> (appears in [Shot 1]): partially_preserved - keeps the place, the subjects, the light and the colours; the framing follows the camera move.",
+    ]
+    assert sections["detailed_description"] == "[Shot 1] The hut at dawn. The shot takes place in <Subject 1>. " + ORBIT_SENTENCES
+
+
+@pytest.mark.parametrize(
+    "scene",
+    [
+        {**_splat(), "sourceAssetId": "walk", "sourceTime": 1.5},
+        {"id": "scene-1", "kind": "glb", "name": "Set", "fileId": "f1", "cameras": []},
+        {**_splat(), "sourceAssetId": "gone"},
+        {**_splat(), "id": "other"},
+    ],
+)
+def test_no_picture_goes_with_a_guide_whose_scene_was_not_built_from_a_picture_found(core, make_doc, scene):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
+    doc["plans3d"] = [_orbit()]
+    doc["scenes"] = [scene]
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
 
-    assert plan.prompt_text == (
-        "Utilise <Video 1> comme référence de caméra et suis exactement sa trajectoire.\n"
-        "Utilise <Video 2> comme référence de caméra et suis exactement sa trajectoire."
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
+    assert "<Picture" not in plan.prompt_text and "<Subject" not in plan.prompt_text
+
+
+def test_the_scene_picture_of_a_stale_guide_is_not_sent_and_a_picture_shared_by_two_guides_is_sent_once(core, make_doc):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly"), _guide("c3", "walk", stale=True)])
+    doc["plans3d"] = [_orbit("plan-c1"), _orbit("plan-c2"), _orbit("plan-c3", scene_id="scene-2")]
+    doc["scenes"] = [_splat(), _splat("scene-2", source="swim")]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/dolly.mp4", "uploads/hero.png"]
+
+
+@pytest.mark.parametrize(
+    "plan, move",
+    [
+        (_orbit(degrees=10), "arcs from left to right around the subject through about 20 degrees"),
+        (_plan3d("plan-c1", (0.694593, 0, -0.060769), (-0.694593, 0, -0.060769)), "arcs from right to left around the subject through about 20 degrees"),
+        (_plan3d("plan-c1", (0, 0, 0), (0, 0, -0.6)), "pushes in toward the subject, closing about 15 % of the distance"),
+        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 1)), "pulls back from the subject, widening the distance by about 25 %"),
+        (_plan3d("plan-c1", (0, 0, 0), (0, 4 * math.sin(math.radians(10)), -4 + 4 * math.cos(math.radians(10)))), "rises through about 10 degrees, tilting down to keep the subject framed"),
+        (_plan3d("plan-c1", (0, 0, 0), (1, 0, 0), end_target=(1, 0, -4)), "trucks from left to right"),
+        (_plan3d("plan-c1", (0, 0, 0), (0, -0.5, 0), end_target=(0, -0.5, -4)), "pedestals down"),
+        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 0), end_target=(-4 * math.sin(math.radians(15)), 0, -4 * math.cos(math.radians(15)))), "pans from right to left through about 15 degrees"),
+        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 0), end_target=(0, 1, -4)), "tilts up through about 14 degrees"),
+        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 0), focal=(30, 50)), "zooms in"),
+        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 0)), "stays still"),
+        (
+            _plan3d("plan-c1", (-0.694593, 0, -0.060769), (0.694593, 0, -0.060769), focal=(50, 30)),
+            "arcs from left to right around the subject through about 20 degrees and zooms out",
+        ),
+    ],
+)
+def test_the_prompt_spells_out_the_move_of_the_3d_shot_from_its_first_key_to_its_last(core, make_doc, plan, move):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
+    doc["plans3d"] = [plan]
+
+    (shot,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert f"[Shot 1] The hut at dawn. The camera {move} over the whole shot. The move follows <Video 1> forward in time" in shot.prompt_text
+
+
+def test_the_keys_are_read_in_time_order_and_a_3d_shot_without_two_usable_keys_falls_back_to_following_the_video(core, make_doc):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly")])
+    shuffled = _orbit("plan-c1")
+    shuffled["keyframes"] = list(reversed(shuffled["keyframes"]))
+    broken = _orbit("plan-c2")
+    broken["keyframes"][1]["pos"] = [0, "x", 0]
+    doc["plans3d"] = [shuffled, broken]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert _sections(plan.prompt_text)["detailed_description"] == (
+        "[Shot 1] The hut at dawn. "
+        "The camera arcs from left to right around the subject through about 20 degrees over the whole shot. "
+        "The move follows <Video 1> forward in time: the shot opens on the viewpoint of its first frame and ends on the viewpoint of its last frame, never in reverse. "
+        "The camera follows the camera path of <Video 2>. "
+        "The move follows <Video 2> forward in time: the shot opens on the viewpoint of its first frame and ends on the viewpoint of its last frame, never in reverse. "
+        "This camera movement replaces any other camera movement mentioned above."
     )
-    assert plan.guides == ["c1", "c2"]
+    assert _sections(plan.prompt_text)["summary"].endswith("with its camera movement taken from <Video 1> and <Video 2>.")
+
+
+def test_the_six_sections_keep_their_english_labels_and_markers_and_follow_the_prompt_language(core, make_doc):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], language="fr", prompt="La cabane à l'aube")
+    doc["plans3d"] = [_orbit()]
+    doc["scenes"] = [_splat()]
+    doc["clips"][0]["dur"] = 4.5
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert _sections(plan.prompt_text) == {
+        "subject_definitions": "<Video 1> est un rendu 3D de prévisualisation, grossier, de la scène, utilisé seulement comme source de la trajectoire de caméra de [Shot 1]. "
+        "<Subject 1> est la scène montrée par <Picture 1>, une image nette du décor de [Shot 1].",
+        "summary": "[reference generation] Un plan de 4,5 secondes fait d'après la description ci-dessous, dont le mouvement de caméra vient de <Video 1>.",
+        "retention_analysis": "<Video 1> (trajectoire de caméra de [Shot 1]): weak_reference - mouvement de caméra seulement, pas l'aspect : seuls le sens, l'amplitude et la vitesse "
+        "de son mouvement de caméra sont suivis ; son contenu, ses couleurs, ses textures, ses zones floues ou étirées, ses trous et ses bords noirs ne sont pas reproduits.\n"
+        "<Subject 1> (appears in [Shot 1]): partially_preserved - garde le lieu, les sujets, la lumière et les couleurs ; le cadrage suit le mouvement de caméra.",
+        "detailed_description": "[Shot 1] La cabane à l'aube. Le plan se déroule dans <Subject 1>. "
+        "La caméra décrit un arc de gauche à droite d'environ 20 degrés autour du sujet sur toute la durée du plan. "
+        "Le mouvement suit <Video 1> dans le sens du temps : le plan s'ouvre sur le point de vue de sa première image et se termine sur celui de sa dernière image, jamais à l'envers. "
+        "Ce mouvement de caméra remplace tout autre mouvement de caméra mentionné plus haut.",
+        "overall_soundscape": "Le son ambiant naturel du lieu et les sons physiques de l'action décrite plus haut.",
+        "non_diegetic_music": "N/A",
+    }
+
+
+def test_each_reference_of_a_ref2va_shot_without_guide_is_defined_and_kept_by_its_space(core, make_doc):
+    core.use_h3()
+    core.add_media({"kind": "library", "item_id": "lib-voice"}, "uploads/voice.wav", "audio")
+    references = [
+        {"id": "r1", "assetId": "hero", "space": "identite", "scope": {"type": "shot", "shotId": "s1"}},
+        {"id": "r2", "assetId": "walk", "space": "mouvement", "scope": None},
+        {"id": "r3", "assetId": "voice", "space": "identite", "scope": None},
+        {"id": "r4", "assetId": "swim", "space": "decors3d", "scope": None},
+    ]
+    voice = {"id": "voice", "kind": "audio", "name": "voice", "origin": {"kind": "library", "itemId": "lib-voice"}}
+    doc = _guided(core, make_doc, [], references=references, assets=[voice])
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/hero.png", "uploads/walk.mp4", "uploads/voice.wav", "uploads/swim.mp4"]
+    assert _sections(plan.prompt_text) == {
+        "subject_definitions": "<Subject 1> is the character shown in <Picture 1>. <Video 1> is the source of the motion of [Shot 1]. "
+        "<Audio 1> is a reference sound for [Shot 1]. <Subject 2> is the setting shown in <Video 2>.",
+        "summary": "[reference generation] A 4-second shot made from the description below and its references.",
+        "retention_analysis": "<Subject 1> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.\n"
+        "<Video 1> (motion of [Shot 1]): attribute_transfer - its motion is carried over to the subjects of the shot.\n"
+        "<Audio 1> (sound of [Shot 1]): reference - its voice or sound serves as a reference.\n"
+        "<Subject 2> (appears in [Shot 1]): partially_preserved - keeps the place, the subjects, the light and the colours; the framing follows the camera move.",
+        "detailed_description": "[Shot 1] The hut at dawn. <Subject 1> appears in the shot. The shot takes place in <Subject 2>.",
+        "overall_soundscape": "The natural ambient sound of the place and the physical sounds of the action described above.",
+        "non_diegetic_music": "N/A",
+    }
 
 
 def test_a_reference_video_already_sent_as_a_guide_is_not_sent_twice_and_the_guides_keep_their_ranks(core, make_doc):
@@ -796,10 +1009,20 @@ def test_a_reference_video_already_sent_as_a_guide_is_not_sent_twice_and_the_gui
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
 
     assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/dolly.mp4"]
-    assert plan.prompt_text.splitlines()[1:] == [
-        "Use <Video 1> as the camera reference and follow its exact camera path.",
-        "Use <Video 2> as the camera reference and follow its exact camera path.",
-    ]
+    assert _sections(plan.prompt_text)["subject_definitions"] == (
+        "<Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]. "
+        "<Video 2> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]."
+    )
+    assert plan.guides == ["c1", "c2"]
+
+
+def test_the_shot_prompt_outside_ref2va_is_the_instruction_then_the_direction_without_any_section(core, make_doc):
+    core.use_wan()
+    doc = _guided(core, make_doc, [], direction={"mode": "FL2VA", "univers": "A harbour."})
+
+    (plan,) = _plans(core, doc).shots
+
+    assert plan.prompt_text == "The hut at dawn.\nA harbour."
 
 
 def test_the_3d_guides_count_within_the_three_reference_videos_of_a_shot(core, make_doc):
@@ -821,7 +1044,7 @@ def test_a_stale_guide_is_left_out_with_a_warning_and_does_not_block(core, make_
 
     (plan,) = plans.shots
     assert plan.request["form_data"]["references"] == ["uploads/hero.png"]
-    assert plan.prompt_text == "The hut at dawn." and plan.guides == []
+    assert _sections(plan.prompt_text)["detailed_description"] == "[Shot 1] The hut at dawn. <Subject 1> appears in the shot." and plan.guides == []
     assert plans.warnings == [
         {"code": "stale_guide", "message": "The 3D guide of the shot is stale: render it again.", "data": {"shot_id": "s1", "control_id": "c1"}}
     ]
@@ -888,7 +1111,7 @@ def test_a_guide_whose_media_is_not_a_video_is_not_sent_as_a_camera_reference(co
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
 
     assert plan.request["form_data"]["references"] == ["uploads/walk.mp4"]
-    assert plan.prompt_text == "The hut at dawn." and plan.guides == []
+    assert _sections(plan.prompt_text)["detailed_description"] == "[Shot 1] The hut at dawn. <Subject 1> appears in the shot." and plan.guides == []
 
 
 @pytest.mark.parametrize("stale", [False, True])

@@ -46,10 +46,101 @@ SCENE3D = "scene3d"
 
 GUIDE_MIN_SECONDS = 2.0
 
-CAMERA_SENTENCES = {
-    "en": "Use <Video {rank}> as the camera reference and follow its exact camera path.",
-    "fr": "Utilise <Video {rank}> comme référence de caméra et suis exactement sa trajectoire.",
+GUIDE = "guide"
+SCENE_PICTURE = "scene"
+REFERENCE = "reference"
+
+LABELS = {"image": "Picture", "video": "Video", "audio": "Audio"}
+
+STILL = 0.02
+MIN_SHIFT = 0.03
+MIN_DEGREES = 1.0
+MIN_ZOOM = 0.05
+
+REFS_TEXT: Dict[str, Dict[str, str]] = {
+    "en": {
+        "define_scene": "<Subject {subject}> is the scene shown in {label}, a clean picture of the set of [Shot 1].",
+        "define_character": "<Subject {subject}> is the character shown in {label}.",
+        "define_setting": "<Subject {subject}> is the setting shown in {label}.",
+        "define_motion": "{label} is the source of the motion of [Shot 1].",
+        "define_audio": "{label} is a reference sound for [Shot 1].",
+        "define_guide": "{label} is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1].",
+        "summary": "[reference generation] A {seconds}-second shot made from the description below and its references.",
+        "summary_camera": "[reference generation] A {seconds}-second shot made from the description below, with its camera movement taken from {videos}.",
+        "keep_character": "<Subject {subject}> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.",
+        "keep_setting": "<Subject {subject}> (appears in [Shot 1]): partially_preserved - keeps the place, the subjects, the light and the colours; the framing follows the camera move.",
+        "keep_motion": "{label} (motion of [Shot 1]): attribute_transfer - its motion is carried over to the subjects of the shot.",
+        "keep_audio": "{label} (sound of [Shot 1]): reference - its voice or sound serves as a reference.",
+        "keep_guide": "{label} (camera path of [Shot 1]): weak_reference - camera movement only, not the look: only the direction, amplitude and speed of its camera move are followed; its content, colours, textures, blurred or stretched patches, holes and black borders are not reproduced.",
+        "cite_setting": "The shot takes place in <Subject {subject}>.",
+        "cite_character": "<Subject {subject}> appears in the shot.",
+        "camera": "The camera {moves} over the whole shot.",
+        "camera_unknown": "The camera follows the camera path of {label}.",
+        "forward": "The move follows {label} forward in time: the shot opens on the viewpoint of its first frame and ends on the viewpoint of its last frame, never in reverse.",
+        "override": "This camera movement replaces any other camera movement mentioned above.",
+        "and": "and",
+        "soundscape": "The natural ambient sound of the place and the physical sounds of the action described above.",
+        "arc_right": "arcs from left to right around the subject through about {amount} degrees",
+        "arc_left": "arcs from right to left around the subject through about {amount} degrees",
+        "crane_up": "rises through about {amount} degrees, tilting down to keep the subject framed",
+        "crane_down": "lowers through about {amount} degrees, tilting up to keep the subject framed",
+        "push_in": "pushes in toward the subject, closing about {amount} % of the distance",
+        "pull_out": "pulls back from the subject, widening the distance by about {amount} %",
+        "truck_right": "trucks from left to right",
+        "truck_left": "trucks from right to left",
+        "pedestal_up": "pedestals up",
+        "pedestal_down": "pedestals down",
+        "pan_right": "pans from left to right through about {amount} degrees",
+        "pan_left": "pans from right to left through about {amount} degrees",
+        "tilt_up": "tilts up through about {amount} degrees",
+        "tilt_down": "tilts down through about {amount} degrees",
+        "zoom_in": "zooms in",
+        "zoom_out": "zooms out",
+        "static": "stays still",
+    },
+    "fr": {
+        "define_scene": "<Subject {subject}> est la scène montrée par {label}, une image nette du décor de [Shot 1].",
+        "define_character": "<Subject {subject}> est le personnage montré par {label}.",
+        "define_setting": "<Subject {subject}> est le décor montré par {label}.",
+        "define_motion": "{label} est la source du mouvement de [Shot 1].",
+        "define_audio": "{label} est un son de référence pour [Shot 1].",
+        "define_guide": "{label} est un rendu 3D de prévisualisation, grossier, de la scène, utilisé seulement comme source de la trajectoire de caméra de [Shot 1].",
+        "summary": "[reference generation] Un plan de {seconds} secondes fait d'après la description ci-dessous et ses références.",
+        "summary_camera": "[reference generation] Un plan de {seconds} secondes fait d'après la description ci-dessous, dont le mouvement de caméra vient de {videos}.",
+        "keep_character": "<Subject {subject}> (appears in [Shot 1]): fully_preserved - garde l'identité et l'apparence.",
+        "keep_setting": "<Subject {subject}> (appears in [Shot 1]): partially_preserved - garde le lieu, les sujets, la lumière et les couleurs ; le cadrage suit le mouvement de caméra.",
+        "keep_motion": "{label} (mouvement de [Shot 1]): attribute_transfer - son mouvement est repris par les sujets du plan.",
+        "keep_audio": "{label} (son de [Shot 1]): reference - sa voix ou son son sert de référence.",
+        "keep_guide": "{label} (trajectoire de caméra de [Shot 1]): weak_reference - mouvement de caméra seulement, pas l'aspect : seuls le sens, l'amplitude et la vitesse de son mouvement de caméra sont suivis ; son contenu, ses couleurs, ses textures, ses zones floues ou étirées, ses trous et ses bords noirs ne sont pas reproduits.",
+        "cite_setting": "Le plan se déroule dans <Subject {subject}>.",
+        "cite_character": "<Subject {subject}> apparaît dans le plan.",
+        "camera": "La caméra {moves} sur toute la durée du plan.",
+        "camera_unknown": "La caméra suit la trajectoire de caméra de {label}.",
+        "forward": "Le mouvement suit {label} dans le sens du temps : le plan s'ouvre sur le point de vue de sa première image et se termine sur celui de sa dernière image, jamais à l'envers.",
+        "override": "Ce mouvement de caméra remplace tout autre mouvement de caméra mentionné plus haut.",
+        "and": "et",
+        "soundscape": "Le son ambiant naturel du lieu et les sons physiques de l'action décrite plus haut.",
+        "arc_right": "décrit un arc de gauche à droite d'environ {amount} degrés autour du sujet",
+        "arc_left": "décrit un arc de droite à gauche d'environ {amount} degrés autour du sujet",
+        "crane_up": "s'élève d'environ {amount} degrés en basculant vers le bas pour garder le sujet cadré",
+        "crane_down": "descend d'environ {amount} degrés en basculant vers le haut pour garder le sujet cadré",
+        "push_in": "avance vers le sujet en réduisant la distance d'environ {amount} %",
+        "pull_out": "recule depuis le sujet en augmentant la distance d'environ {amount} %",
+        "truck_right": "se déplace latéralement de gauche à droite",
+        "truck_left": "se déplace latéralement de droite à gauche",
+        "pedestal_up": "monte verticalement",
+        "pedestal_down": "descend verticalement",
+        "pan_right": "fait un panoramique de gauche à droite d'environ {amount} degrés",
+        "pan_left": "fait un panoramique de droite à gauche d'environ {amount} degrés",
+        "tilt_up": "bascule vers le haut d'environ {amount} degrés",
+        "tilt_down": "bascule vers le bas d'environ {amount} degrés",
+        "zoom_in": "fait un zoom avant",
+        "zoom_out": "fait un zoom arrière",
+        "static": "reste immobile",
+    },
 }
+
+ROLES_BY_SPACE = {"identite": "character", "decors3d": "setting", "mouvement": "motion"}
 
 
 class DirectorError(Exception):
@@ -143,6 +234,29 @@ class ShotPlan:
         return request
 
 
+@dataclass(frozen=True)
+class SentReference:
+    value: str
+    kind: str
+    rank: int
+    origin: str
+    item: Optional[Dict[str, Any]] = None
+
+    @property
+    def label(self) -> str:
+        return f"<{LABELS[self.kind]} {self.rank}>"
+
+    @property
+    def role(self) -> str:
+        if self.origin == GUIDE:
+            return GUIDE
+        if self.origin == SCENE_PICTURE:
+            return SCENE_PICTURE
+        if self.kind == "audio":
+            return "audio"
+        return ROLES_BY_SPACE.get(str((self.item or {}).get("space")), "setting")
+
+
 @dataclass
 class Plans:
     preset: Optional[Preset]
@@ -193,14 +307,8 @@ def _overlap(start: float, end: float, item: Mapping[str, Any]) -> float:
     return min(end, begin + float(item.get("dur") or 0)) - max(start, begin)
 
 
-def camera_sentence(doc: Mapping[str, Any], rank: int) -> str:
-    """The sentence that makes the n-th reference video of a shot its camera path, in the project's prompt language."""
-    language = doc.get("promptLanguage")
-    return CAMERA_SENTENCES[language if language in CAMERA_SENTENCES else "en"].format(rank=rank)
-
-
-def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], camera_videos: Sequence[int] = ()) -> str:
-    """The shot's own instruction, else the global one over its interval, then the filled direction fields, one per line, and a camera sentence for each reference video that is a 3D guide."""
+def shot_instruction(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
+    """The shot's own instruction, else the global one covering most of its interval."""
     prompts = doc.get("prompts") or []
     local = next((prompt for prompt in prompts if prompt.get("shotId") == clip.get("id")), None)
     if local is None:
@@ -212,11 +320,198 @@ def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], camera_videos: 
             if not prompt.get("shotId") and (overlap := _overlap(start, end, prompt)) > 0
         ]
         local = max(covering, key=lambda pair: pair[0])[1] if covering else None
+    return str(local.get("text") or "").strip() if local is not None else ""
+
+
+def direction_lines(doc: Mapping[str, Any]) -> List[str]:
+    """The filled direction fields of the project, in order."""
     direction = doc.get("direction") or {}
-    lines = [str(local.get("text") or "").strip()] if local is not None else []
-    lines += [str(direction.get(name) or "").strip() for name in DIRECTION_FIELDS]
-    lines += [camera_sentence(doc, rank) for rank in camera_videos]
-    return "\n".join(line for line in lines if line)
+    return [text for text in (str(direction.get(name) or "").strip() for name in DIRECTION_FIELDS) if text]
+
+
+def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
+    """The shot's instruction, then the filled direction fields, one per line."""
+    return "\n".join(line for line in [shot_instruction(doc, clip), *direction_lines(doc)] if line)
+
+
+def _language(doc: Mapping[str, Any]) -> str:
+    language = doc.get("promptLanguage")
+    return language if language in REFS_TEXT else "en"
+
+
+def _sentence(text: str) -> str:
+    return text if text[-1:] in ".!?…»\"'" else f"{text}."
+
+
+def _listed(items: Sequence[str], conjunction: str) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} {conjunction} {items[-1]}"
+
+
+def _seconds_text(seconds: float, language: str) -> str:
+    text = f"{seconds:g}"
+    return text.replace(".", ",") if language == "fr" else text
+
+
+def _point(value: Any) -> Optional[List[float]]:
+    if isinstance(value, Sequence) and not isinstance(value, str) and len(value) == 3:
+        if all(isinstance(item, (int, float)) and not isinstance(item, bool) and math.isfinite(item) for item in value):
+            return [float(item) for item in value]
+    return None
+
+
+def _sub(a: Sequence[float], b: Sequence[float]) -> List[float]:
+    return [x - y for x, y in zip(a, b)]
+
+
+def _dot(a: Sequence[float], b: Sequence[float]) -> float:
+    return sum(x * y for x, y in zip(a, b))
+
+
+def _length(a: Sequence[float]) -> float:
+    return math.sqrt(_dot(a, a))
+
+
+def _unit(a: Sequence[float]) -> Optional[List[float]]:
+    size = _length(a)
+    return [x / size for x in a] if size > 1e-9 else None
+
+
+def _cross(a: Sequence[float], b: Sequence[float]) -> List[float]:
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+
+def _heading(vector: Sequence[float]) -> float:
+    return math.degrees(math.atan2(vector[0], -vector[2]))
+
+
+def _elevation(vector: Sequence[float]) -> float:
+    return math.degrees(math.asin(max(-1.0, min(1.0, vector[1] / _length(vector)))))
+
+
+def _turn(start: float, end: float) -> float:
+    return (end - start + 180.0) % 360.0 - 180.0
+
+
+def _keys(plan: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    keys = []
+    for key in plan.get("keyframes") or []:
+        pos, target, time = _point(key.get("pos")), _point(key.get("target")), key.get("t")
+        if pos and target and isinstance(time, (int, float)) and not isinstance(time, bool):
+            focal = key.get("focal")
+            keys.append({"t": float(time), "pos": pos, "target": target, "focal": focal if isinstance(focal, (int, float)) else None})
+    return sorted(keys, key=lambda key: key["t"])
+
+
+def camera_move(plan: Mapping[str, Any]) -> Optional[List[Tuple[str, Optional[float]]]]:
+    """The camera move of a 3D shot from its first key to its last, as clauses with their amount in degrees or percent; None without two usable keys."""
+    keys = _keys(plan)
+    if len(keys) < 2:
+        return None
+    first, last = keys[0], keys[-1]
+    offset = _sub(first["pos"], first["target"])
+    distance = _length(offset)
+    forward = _unit(_sub(first["target"], first["pos"]))
+    if forward is None:
+        return None
+    right = _unit(_cross(forward, [0.0, 1.0, 0.0])) or [1.0, 0.0, 0.0]
+    up = _cross(right, forward)
+    moved = _sub(last["pos"], first["pos"])
+    clauses: List[Tuple[str, Optional[float]]] = []
+    if _length(_sub(last["target"], first["target"])) <= STILL * distance:
+        reached = _sub(last["pos"], first["target"])
+        arc = _turn(math.degrees(math.atan2(offset[0], offset[2])), math.degrees(math.atan2(reached[0], reached[2])))
+        rise = _elevation(reached) - _elevation(offset) if _length(reached) > 1e-9 else 0.0
+        ratio = _length(reached) / distance
+        if abs(arc) >= MIN_DEGREES:
+            clauses.append(("arc_right" if _dot(moved, right) > 0 else "arc_left", abs(arc)))
+        if abs(rise) >= MIN_DEGREES:
+            clauses.append(("crane_up" if rise > 0 else "crane_down", abs(rise)))
+        if abs(1 - ratio) >= MIN_SHIFT:
+            clauses.append(("push_in" if ratio < 1 else "pull_out", abs(1 - ratio) * 100))
+    elif _length(moved) <= STILL * distance:
+        facing = _sub(last["target"], last["pos"])
+        pan = _turn(_heading(forward), _heading(facing))
+        tilt = _elevation(facing) - _elevation(forward)
+        if abs(pan) >= MIN_DEGREES:
+            clauses.append(("pan_right" if pan > 0 else "pan_left", abs(pan)))
+        if abs(tilt) >= MIN_DEGREES:
+            clauses.append(("tilt_up" if tilt > 0 else "tilt_down", abs(tilt)))
+    else:
+        side, lift, ahead = (_dot(moved, axis) / distance for axis in (right, up, forward))
+        if abs(side) >= MIN_SHIFT:
+            clauses.append(("truck_right" if side > 0 else "truck_left", None))
+        if abs(lift) >= MIN_SHIFT:
+            clauses.append(("pedestal_up" if lift > 0 else "pedestal_down", None))
+        if abs(ahead) >= MIN_SHIFT:
+            clauses.append(("push_in" if ahead > 0 else "pull_out", abs(ahead) * 100))
+    if first["focal"] and last["focal"] and abs(last["focal"] / first["focal"] - 1) >= MIN_ZOOM:
+        clauses.append(("zoom_in" if last["focal"] > first["focal"] else "zoom_out", None))
+    return clauses or [("static", None)]
+
+
+def _plan3d(doc: Mapping[str, Any], plan_id: Any) -> Optional[Dict[str, Any]]:
+    return next((plan for plan in doc.get("plans3d") or [] if plan_id and plan.get("id") == plan_id), None)
+
+
+def _scene(doc: Mapping[str, Any], scene_id: Any) -> Optional[Dict[str, Any]]:
+    return next((scene for scene in doc.get("scenes") or [] if scene_id and scene.get("id") == scene_id), None)
+
+
+def camera_sentences(doc: Mapping[str, Any], guide: SentReference) -> List[str]:
+    """What the camera of a shot does along a 3D guide, in the project's prompt language: the move read from its 3D shot, then the order it is played in."""
+    text = REFS_TEXT[_language(doc)]
+    move = camera_move(_plan3d(doc, (guide.item or {}).get("planId")) or {})
+    if move is None:
+        described = text["camera_unknown"].format(label=guide.label)
+    else:
+        clauses = [text[name].format(amount=max(1, round(amount)) if amount is not None else "") for name, amount in move]
+        described = text["camera"].format(moves=_listed(clauses, text["and"]))
+    return [described, text["forward"].format(label=guide.label)]
+
+
+def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> str:
+    """The six-section document of MiniMax-H3's reference mode: what each reference is, the task, how much of each is kept, the shot itself with the move of its 3D guides spelled out, its sound and its score."""
+    language = _language(doc)
+    text = REFS_TEXT[language]
+    definitions: List[str] = []
+    retention: List[str] = []
+    citations: List[str] = []
+    subject = 0
+    for entry in sent:
+        role = entry.role
+        if role in (SCENE_PICTURE, "character", "setting"):
+            subject += 1
+            kept = "character" if role == "character" else "setting"
+            definitions.append(text[f"define_{role}"].format(subject=subject, label=entry.label))
+            retention.append(text[f"keep_{kept}"].format(subject=subject))
+            citations.append(text[f"cite_{kept}"].format(subject=subject))
+        else:
+            definitions.append(text[f"define_{role}"].format(label=entry.label))
+            retention.append(text[f"keep_{role}"].format(label=entry.label))
+    guides = [entry for entry in sent if entry.origin == GUIDE]
+    seconds_text = _seconds_text(seconds, language)
+    summary = (
+        text["summary_camera"].format(seconds=seconds_text, videos=_listed([guide.label for guide in guides], text["and"]))
+        if guides
+        else text["summary"].format(seconds=seconds_text)
+    )
+    shot = [shot_instruction(doc, clip), *citations]
+    for guide in guides:
+        shot += camera_sentences(doc, guide)
+    if guides:
+        shot.append(text["override"])
+    style = " ".join(_sentence(line) for line in direction_lines(doc))
+    body = " ".join(_sentence(line) for line in shot if line)
+    description = " ".join(part for part in (style, f"[Shot 1] {body}".rstrip()) if part)
+    sections = [
+        ("subject_definitions", " ".join(definitions)),
+        ("summary", summary),
+        ("retention_analysis", "\n".join(retention)),
+        ("detailed_description", description),
+        ("overall_soundscape", text["soundscape"]),
+        ("non_diegetic_music", "N/A"),
+    ]
+    return "\n\n".join(f"{name}: {content}" for name, content in sections)
 
 
 def aspect_of(doc: Mapping[str, Any]) -> float:
@@ -385,10 +680,20 @@ def guide_seconds(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> float:
     return float(guide.get("dur") or 0)
 
 
+def scene_pictures(doc: Mapping[str, Any], guides: Sequence[Mapping[str, Any]]) -> List[str]:
+    """The assets of the pictures the splat scenes of these 3D guides were built from, once each."""
+    found: List[str] = []
+    for guide in guides:
+        scene = _scene(doc, (_plan3d(doc, guide.get("planId")) or {}).get("sceneId"))
+        if scene and scene.get("kind") == "splat" and scene.get("sourceAssetId") and scene["sourceAssetId"] not in found:
+            found.append(scene["sourceAssetId"])
+    return found
+
+
 def reference_media(
     user: User, doc: Mapping[str, Any], shot_id: str, guides: Sequence[Mapping[str, Any]] = ()
-) -> Tuple[List[str], List[Tuple[Dict[str, Any], int]]]:
-    """The media values of the shot's 3D guide videos, then its own references, then the global ones, within the per-kind limits; with each guide sent and its rank among the reference videos."""
+) -> List[SentReference]:
+    """What a shot sends as references, within the per-kind limits: its 3D guide videos, the pictures their scenes were built from, its own references, then the global ones; each with its rank among the references of its kind."""
     scoped, shared = [], []
     for reference in doc.get("references") or []:
         scope = reference.get("scope")
@@ -397,28 +702,31 @@ def reference_media(
                 scoped.append(reference)
         else:
             shared.append(reference)
-    candidates = [(dict(guide), guide.get("assetId")) for guide in guides] + [(None, reference.get("assetId")) for reference in [*scoped, *shared]]
-    values: List[str] = []
-    sent: List[Tuple[Dict[str, Any], int]] = []
+    sent: List[SentReference] = []
     counts = {kind: 0 for kind in REFERENCE_LIMITS}
-    for guide, asset_id in candidates:
+
+    def add(origin: str, asset_id: Any, item: Optional[Mapping[str, Any]] = None, wanted: Optional[str] = None) -> None:
         resolved = _resolve(user, _asset(doc, asset_id))
-        if resolved is None or resolved["value"] in values:
-            continue
+        if resolved is None or any(entry.value == resolved["value"] for entry in sent):
+            return
         kind = resolved["media_type"]
-        if guide is not None and kind != "video":
-            continue
-        if kind in counts and counts[kind] < REFERENCE_LIMITS[kind]:
-            counts[kind] += 1
-            values.append(resolved["value"])
-            if guide is not None:
-                sent.append((guide, counts[kind]))
-    return values, sent
+        if (wanted is not None and kind != wanted) or kind not in counts or counts[kind] >= REFERENCE_LIMITS[kind]:
+            return
+        counts[kind] += 1
+        sent.append(SentReference(resolved["value"], kind, counts[kind], origin, dict(item) if item is not None else None))
+
+    for guide in guides:
+        add(GUIDE, guide.get("assetId"), guide, "video")
+    for asset_id in scene_pictures(doc, [entry.item or {} for entry in sent]):
+        add(SCENE_PICTURE, asset_id, None, "image")
+    for reference in [*scoped, *shared]:
+        add(REFERENCE, reference.get("assetId"), reference)
+    return sent
 
 
 def shot_references(user: User, doc: Mapping[str, Any], shot_id: str) -> List[str]:
     """The media values of the shot's own references, then the global ones, within the per-kind limits."""
-    return reference_media(user, doc, shot_id)[0]
+    return [entry.value for entry in reference_media(user, doc, shot_id)]
 
 
 def _guide_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], warnings: List[Dict[str, Any]], refs: bool) -> None:
@@ -523,14 +831,15 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     ) or (fields.get("resolution") or {}).get("default") or context.draft_setting
     seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
     fps = preset.fps
-    references: List[str] = []
-    sent: List[Tuple[Dict[str, Any], int]] = []
+    sent: List[SentReference] = []
+    guides: List[Dict[str, Any]] = []
     if context.profile == REF2VA:
-        references, sent = reference_media(context.user, doc, shot_id, fresh_guides(doc, clip))
-        if not references:
+        sent = reference_media(context.user, doc, shot_id, fresh_guides(doc, clip))
+        if not sent:
             raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
+        guides = [entry.item or {} for entry in sent if entry.origin == GUIDE]
         _guide_warnings(doc, clip, warnings, refs=True)
-        for guide, _ in sent:
+        for guide in guides:
             if guide_seconds(doc, guide) < GUIDE_MIN_SECONDS:
                 warnings.append(
                     note(
@@ -541,11 +850,12 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
                         min=GUIDE_MIN_SECONDS,
                     )
                 )
-        if context.production == RENDER_3D_AI and not sent:
+        if context.production == RENDER_3D_AI and not guides:
             warnings.append(_render_missing(clip))
+        prompt = refs_prompt(doc, clip, sent, seconds)
     else:
         _guide_warnings(doc, clip, warnings, refs=False)
-    prompt = shot_prompt(doc, clip, [rank for _, rank in sent])
+        prompt = shot_prompt(doc, clip)
     form: Dict[str, Any] = {"seed": -1, "video_director": _document(prompt, fps, seconds, resolution)}
     if "resolution" in fields:
         form["resolution"] = resolution
@@ -555,7 +865,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         form["quantity"] = 1
     request = _request(preset.id, mode, prompt, form)
     if context.profile == REF2VA:
-        request["form_data"]["references"] = references
+        request["form_data"]["references"] = [entry.value for entry in sent]
         director_mode = REFS_MODE
     elif _text_only(preset) and shot_frames(doc, shot_id)[0] is not None:
         director_mode = "t2v"
@@ -578,7 +888,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         prompt_text=prompt,
         request=request,
         missing_models=list(resolved.missing),
-        guides=[str(guide.get("id")) for guide, _ in sent],
+        guides=[str(guide.get("id")) for guide in guides],
     )
 
 
