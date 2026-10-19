@@ -87,8 +87,8 @@ def test_a_finished_render_is_encoded_into_an_h264_mp4_and_stored_in_the_owner_l
     assert run["command"] == [
         "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
         "-f", "image2", "-framerate", "24", "-start_number", "0", "-i", "%06d.jpg",
-        "-frames:v", "3", "-vf", "scale=64:36:flags=lanczos", "-r", "24",
-        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", "./Orbit_guide.mp4",
+        "-frames:v", "3", "-vf", "scale=64:36:flags=lanczos:out_range=tv", "-r", "24",
+        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-color_range", "tv", "-movflags", "+faststart", "-an", "./Orbit_guide.mp4",
     ]
     assert (run["total"], run["code"], run["frames"]) == (0.125, "encode_failed", ["000000.jpg", "000001.jpg", "000002.jpg"])
     assert not (storage.renders_folder(project["id"]) / render["id"]).exists()

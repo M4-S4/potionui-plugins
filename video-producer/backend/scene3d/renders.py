@@ -35,7 +35,7 @@ MAX_OPEN = 2
 
 STALE_SECONDS = 3600
 
-ENCODER = ("-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an")
+ENCODER = ("-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-color_range", "tv", "-movflags", "+faststart", "-an")
 
 _PROCESSES: Dict[str, Any] = {}
 
@@ -155,12 +155,12 @@ def add_batch(render: Dict[str, Any], start: int, images: Sequence[Any]) -> int:
 
 
 def command(ffmpeg: str, render: Dict[str, Any], output: str) -> List[str]:
-    """The ffmpeg run that encodes a render's frames, read from its folder, into an H.264 MP4 at crf 18 in yuv420p, written to ./output in that folder."""
+    """The ffmpeg run that encodes a render's frames, read from its folder, into an H.264 MP4 at crf 18 in limited-range yuv420p, written to ./output in that folder."""
     rate = num(render["fps"])
     return [
         ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
         "-f", "image2", "-framerate", rate, "-start_number", "0", "-i", PATTERN,
-        "-frames:v", str(render["frames"]), "-vf", f"scale={render['width']}:{render['height']}:flags=lanczos", "-r", rate,
+        "-frames:v", str(render["frames"]), "-vf", f"scale={render['width']}:{render['height']}:flags=lanczos:out_range=tv", "-r", rate,
         *ENCODER, f"./{output}",
     ]
 
