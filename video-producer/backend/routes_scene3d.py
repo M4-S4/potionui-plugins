@@ -1,7 +1,8 @@
+import asyncio
 import math
 from typing import Any, Dict, NoReturn, Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from . import access, tracker
@@ -10,7 +11,7 @@ from .generation import Blocked
 from .responses import fail, ok
 from .routes_takes import blocked
 from .scene3d import captures, files, formats, jobs, renders
-from .scene3d.storage import SceneError
+from .scene3d.storage import MIB, SceneError
 
 router = APIRouter()
 
@@ -29,6 +30,30 @@ def _object(body: Any) -> Dict[str, Any]:
     if not isinstance(body, dict):
         _invalid("The request body must be a JSON object.")
     return body
+
+
+def _declared_length(request: Request) -> Optional[int]:
+    if request.headers.get("transfer-encoding"):
+        return None
+    try:
+        length = int(request.headers.get("content-length", ""))
+    except ValueError:
+        return None
+    return length if length >= 0 else None
+
+
+def _bounded(request: Request, limit: int) -> None:
+    length = _declared_length(request)
+    if length is None or length > limit:
+        fail(413, "body_too_large", f"The request body must declare its Content-Length and be at most {limit} bytes.", limit=limit)
+
+
+async def _json(request: Request) -> Dict[str, Any]:
+    try:
+        body = await request.json()
+    except ValueError:
+        _invalid("The request body must be a JSON object.")
+    return _object(body)
 
 
 def _id(body: Dict[str, Any], key: str) -> str:
@@ -140,16 +165,15 @@ def scene_file(project_id: str, file_id: str, user: User = Depends(get_current_a
 
 
 @router.post("/projects/{project_id}/captures")
-async def store_capture(
-    project_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+async def store_capture(project_id: str, request: Request, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
     """Store a PNG capture of a scene as an image of the project owner's library."""
-    body = _object(body)
-    png = captures.decode(body.get("png"), "png")
-    if png is None:
-        _invalid("png must be a base64 data URL of a PNG image of at most 40 MiB.")
-    name = _name(body)
+    _bounded(request, captures.BODY_LIMIT)
     project = access.project_for(user, project_id)
+    body = await _json(request)
+    name = _name(body)
+    png = await asyncio.to_thread(captures.decode, body.get("png"), "png", captures.MAX_CAPTURE_BYTES)
+    if png is None:
+        _invalid(f"png must be a base64 data URL of a PNG image of at most {captures.MAX_CAPTURE_BYTES // MIB} MiB.")
     try:
         media = await captures.capture(access.owner_of(user, project), project["id"], png, name)
     except SceneError as exc:
@@ -178,25 +202,24 @@ def open_render(
 
 
 @router.post("/projects/{project_id}/renders/{render_id}/frames")
-def render_frames(
-    project_id: str, render_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
-) -> Dict[str, Any]:
+async def render_frames(project_id: str, render_id: str, request: Request, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
     """Store a batch of JPEG frames of a render; answers how many of its frames have arrived."""
-    body = _object(body)
+    _bounded(request, renders.BODY_LIMIT)
+    project = access.project_for(user, project_id)
+    render = _render_for(project, render_id)
+    body = await _json(request)
     start, images = body.get("start"), body.get("images")
     if not isinstance(start, int) or isinstance(start, bool) or start < 0:
         _invalid("start must be the index of the first frame of the batch.")
     if not isinstance(images, list) or not 1 <= len(images) <= renders.MAX_BATCH:
         _invalid(f"images must be a list of 1 to {renders.MAX_BATCH} JPEG data URLs.")
-    decoded = [captures.decode(image, "jpeg") for image in images]
-    bad = next((index for index, data in enumerate(decoded) if data is None), None)
-    if bad is not None:
-        _invalid(f"images[{bad}] is not a base64 data URL of a JPEG image of at most 40 MiB.")
-    project = access.project_for(user, project_id)
-    render = _render_for(project, render_id)
-    if start + len(decoded) > render["frames"]:
+    if start + len(images) > render["frames"]:
         _invalid(f"The render has {render['frames']} frames; this batch ends past them.")
-    return ok({"received": renders.add_frames(render, start, decoded)})
+    try:
+        received = await asyncio.to_thread(renders.add_batch, render, start, images)
+    except SceneError as exc:
+        _scene_error(exc)
+    return ok({"received": received})
 
 
 @router.post("/projects/{project_id}/renders/{render_id}/finish")

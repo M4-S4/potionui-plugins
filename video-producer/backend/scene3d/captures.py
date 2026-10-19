@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import binascii
 import shutil
@@ -15,7 +16,9 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 JPEG_SIGNATURE = b"\xff\xd8\xff"
 
-MAX_IMAGE_BYTES = 40 * 1024 * 1024
+MAX_CAPTURE_BYTES = 24 * storage.MIB
+
+BODY_LIMIT = MAX_CAPTURE_BYTES * 4 // 3 + 64 * 1024
 
 NAME_LIMIT = 80
 
@@ -24,18 +27,18 @@ PREFIXES = {"png": ("data:image/png;base64,",), "jpeg": ("data:image/jpeg;base64
 SIGNATURES = {"png": PNG_SIGNATURE, "jpeg": JPEG_SIGNATURE}
 
 
-def decode(data_url: Any, kind: str) -> Optional[bytes]:
-    """The bytes of a base64 data URL of a PNG or a JPEG image, or None when it is not one or is over 40 MiB."""
+def decode(data_url: Any, kind: str, limit: int) -> Optional[bytes]:
+    """The bytes of a base64 data URL of a PNG or a JPEG image, or None when it is not one or is over limit bytes."""
     if not isinstance(data_url, str):
         return None
     prefix = next((prefix for prefix in PREFIXES[kind] if data_url.startswith(prefix)), None)
-    if prefix is None or (len(data_url) - len(prefix)) * 3 // 4 > MAX_IMAGE_BYTES + 3:
+    if prefix is None or (len(data_url) - len(prefix)) * 3 // 4 > limit + 3:
         return None
     try:
         raw = base64.b64decode(data_url[len(prefix):], validate=True)
     except (binascii.Error, ValueError):
         return None
-    return raw if raw.startswith(SIGNATURES[kind]) and len(raw) <= MAX_IMAGE_BYTES else None
+    return raw if raw.startswith(SIGNATURES[kind]) and len(raw) <= limit else None
 
 
 def file_stem(name: Any, fallback: str) -> str:
@@ -80,7 +83,7 @@ async def capture(owner: User, project_id: str, png: bytes, name: Any) -> Dict[s
     folder.mkdir(parents=True, exist_ok=True)
     try:
         path = folder / f"{file_stem(name, 'capture')}.png"
-        path.write_bytes(png)
+        await asyncio.to_thread(path.write_bytes, png)
         stored, item = await store_media(owner, path)
     finally:
         shutil.rmtree(folder, ignore_errors=True)

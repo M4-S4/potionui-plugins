@@ -275,10 +275,127 @@ def test_a_capture_that_is_not_a_png_data_url_is_refused(client, project, media_
     assert media_store.saved == []
 
 
-def test_a_capture_over_40_mib_is_refused(project, samples, monkeypatch):
-    monkeypatch.setattr(captures, "MAX_IMAGE_BYTES", 64)
+def test_a_capture_over_its_size_limit_is_refused(client, project, samples, media_store, monkeypatch):
+    png = samples.png()
+    assert captures.MAX_CAPTURE_BYTES == 24 * 1024 * 1024
+    assert captures.decode(samples.data_url(png), "png", len(png) - 1) is None
+    monkeypatch.setattr(captures, "MAX_CAPTURE_BYTES", 64)
 
-    assert captures.decode(samples.data_url(samples.png()), "png") is None
+    response = client.post(f"{BASE}/projects/{project['id']}/captures", json={"png": samples.data_url(png)})
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (422, "invalid_request")
+    assert media_store.saved == []
+
+
+@pytest.fixture
+def read_bodies(monkeypatch):
+    from starlette.requests import Request
+
+    calls = []
+    original = Request.json
+
+    async def json(self):
+        calls.append(self.url.path)
+        return await original(self)
+
+    monkeypatch.setattr(Request, "json", json)
+    return calls
+
+
+def test_a_capture_or_a_batch_over_the_body_limit_is_refused_before_its_body_is_read(client, project, samples, media_store, read_bodies, monkeypatch):
+    render = _open(client, project).json()["data"]["render"]
+    read_bodies.clear()
+    monkeypatch.setattr(captures, "BODY_LIMIT", 100)
+    monkeypatch.setattr(renders, "BODY_LIMIT", 100)
+
+    capture = client.post(f"{BASE}/projects/{project['id']}/captures", json={"png": samples.data_url(samples.png())})
+    batch = _send(client, project, render["id"], 0, _frames(samples, 1))
+
+    for response in (capture, batch):
+        assert response.status_code == 413
+        assert response.json()["detail"]["error"] == "body_too_large"
+        assert response.json()["detail"]["data"] == {"limit": 100}
+    assert read_bodies == [] and media_store.saved == []
+    assert list((storage.renders_folder(project["id"]) / render["id"]).glob("*.jpg")) == []
+
+
+def test_a_capture_or_a_batch_without_a_content_length_is_refused_before_its_body_is_read(client, project, samples, read_bodies):
+    render = _open(client, project).json()["data"]["render"]
+    read_bodies.clear()
+    headers = {"content-type": "application/json"}
+
+    for path in ("captures", f"renders/{render['id']}/frames"):
+        response = client.post(f"{BASE}/projects/{project['id']}/{path}", content=iter([b'{"png": null}']), headers=headers)
+        assert response.status_code == 413, path
+        assert response.json()["detail"]["error"] == "body_too_large"
+    assert read_bodies == []
+
+
+def test_a_body_that_is_not_json_is_an_invalid_request(client, project):
+    response = client.post(f"{BASE}/projects/{project['id']}/captures", content=b"png=1", headers={"content-type": "application/x-www-form-urlencoded"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["error"] == "invalid_request"
+
+
+def _jpeg_of(size):
+    return captures.JPEG_SIGNATURE + os.urandom(size - 3)
+
+
+def test_the_batches_the_page_sends_are_accepted(client, project, samples):
+    render = _open(client, project, frames=24).json()["data"]["render"]
+    half_megabyte = [samples.data_url(_jpeg_of(375 * 1024), "jpeg") for _ in range(12)]
+    assert sum(len(url) for url in half_megabyte) >= 6 * 1000 * 1000
+
+    first = _send(client, project, render["id"], 0, half_megabyte)
+    last = _send(client, project, render["id"], 12, [samples.data_url(_jpeg_of(400 * 1024), "jpeg")] * 11 + [samples.data_url(_jpeg_of(renders.MAX_FRAME_BYTES), "jpeg")])
+
+    assert (first.status_code, first.json()["data"]) == (200, {"received": 12}), first.text
+    assert (last.status_code, last.json()["data"]) == (200, {"received": 24}), last.text
+
+
+def test_a_batch_holds_at_most_24_frames_of_at_most_8_mib(client, project, samples):
+    render = _open(client, project, frames=30).json()["data"]["render"]
+
+    too_many = _send(client, project, render["id"], 0, _frames(samples, 25))
+    too_big = _send(client, project, render["id"], 0, [samples.data_url(_jpeg_of(renders.MAX_FRAME_BYTES + 1), "jpeg")])
+
+    assert (renders.MAX_BATCH, renders.MAX_FRAME_BYTES) == (24, 8 * 1024 * 1024)
+    assert too_many.status_code == 422 and "1 to 24" in too_many.json()["detail"]["message"]
+    assert too_big.status_code == 422 and "images[0]" in too_big.json()["detail"]["message"]
+    assert _send(client, project, render["id"], 0, _frames(samples, 24)).json()["data"] == {"received": 24}
+
+
+def test_frames_sent_while_the_render_is_encoded_or_after_it_is_deleted_get_a_clean_answer(client, project, samples, monkeypatch):
+    render = _open(client, project).json()["data"]["render"]
+    monkeypatch.setattr(renders, "_FINISHING", {render["id"]})
+
+    busy = _send(client, project, render["id"], 0, _frames(samples, 1))
+
+    assert (busy.status_code, busy.json()["detail"]["error"]) == (409, "render_busy")
+    monkeypatch.setattr(renders, "_FINISHING", set())
+    stored = renders.get_render(project["id"], render["id"])
+    storage.drop(renders.folder_of(project["id"], render["id"]))
+    with pytest.raises(storage.SceneError) as caught:
+        renders.add_frames(stored, 0, [samples.jpeg()])
+    assert (caught.value.status_code, caught.value.error) == (404, "render_not_found")
+    assert _send(client, project, render["id"], 0, _frames(samples, 1)).status_code == 404
+
+
+def test_a_render_deleted_while_it_is_encoded_answers_render_not_found(client, project, samples, media_store, monkeypatch):
+    render = _open(client, project, frames=1).json()["data"]["render"]
+    _send(client, project, render["id"], 0, _frames(samples, 1))
+
+    async def assemble(command, total, on_progress=None, on_process=None, cwd=None, code="ffmpeg_failed"):
+        (Path(cwd) / command[-1]).write_bytes(b"mp4 bytes")
+        storage.drop(Path(cwd))
+
+    monkeypatch.setattr(video, "assemble", assemble)
+
+    response = client.post(f"{BASE}/projects/{project['id']}/renders/{render['id']}/finish")
+
+    assert (response.status_code, response.json()["detail"]["error"]) == (404, "render_not_found")
+    assert media_store.saved == [] and not renders.busy(render["id"])
 
 
 def test_a_capture_the_library_cannot_find_answers_store_failed(client, project, samples, monkeypatch):

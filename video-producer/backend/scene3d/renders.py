@@ -23,7 +23,11 @@ MAX_FPS = 120
 
 MAX_FRAMES = 7200
 
-MAX_BATCH = 120
+MAX_BATCH = 24
+
+MAX_FRAME_BYTES = 8 * storage.MIB
+
+BODY_LIMIT = 32 * storage.MIB
 
 STALE_SECONDS = 24 * 3600
 
@@ -80,16 +84,39 @@ def received(render: Dict[str, Any]) -> int:
     return sum(1 for index in range(render["frames"]) if (folder / FRAME_NAME.format(index)).is_file())
 
 
+def busy(render_id: str) -> bool:
+    """True while a render is being encoded."""
+    return render_id in _FINISHING
+
+
 def add_frames(render: Dict[str, Any], start: int, images: Sequence[bytes]) -> int:
-    """Store a batch of JPEG frames from frame start on; returns how many frames of the render are on disk."""
+    """Store a batch of JPEG frames from frame start on; returns how many frames of the render are on disk, SceneError when it is being encoded or is gone."""
+    if busy(render["id"]):
+        raise SceneError(409, "render_busy", "This render is already being encoded.")
     folder = folder_of(render["project_id"], render["id"])
-    for offset, data in enumerate(images):
-        path = folder / FRAME_NAME.format(start + offset)
-        part = path.with_suffix(".part")
-        part.write_bytes(data)
-        part.replace(path)
-    os.utime(folder)
+    try:
+        for offset, data in enumerate(images):
+            path = folder / FRAME_NAME.format(start + offset)
+            part = path.with_suffix(".part")
+            part.write_bytes(data)
+            part.replace(path)
+        os.utime(folder)
+    except FileNotFoundError:
+        raise SceneError(404, "render_not_found", "The render does not exist.") from None
     return received(render)
+
+
+def add_batch(render: Dict[str, Any], start: int, images: Sequence[Any]) -> int:
+    """Decode a batch of JPEG data URLs and store them as frames from frame start on; SceneError for an image that is not one."""
+    decoded = []
+    for index, image in enumerate(images):
+        data = captures.decode(image, "jpeg", MAX_FRAME_BYTES)
+        if data is None:
+            raise SceneError(
+                422, "invalid_request", f"images[{index}] is not a base64 data URL of a JPEG image of at most {MAX_FRAME_BYTES // storage.MIB} MiB."
+            )
+        decoded.append(data)
+    return add_frames(render, start, decoded)
 
 
 def command(ffmpeg: str, render: Dict[str, Any], output: str) -> List[str]:
@@ -139,7 +166,11 @@ async def finish(owner: User, render: Dict[str, Any]) -> Dict[str, Any]:
         try:
             await video.assemble(command(ffmpeg, render, output), seconds, None, _track(render_id), str(folder), "encode_failed")
         except ExportError as exc:
+            if not folder.is_dir():
+                raise SceneError(404, "render_not_found", "The render was deleted while it was being encoded.") from None
             raise SceneError(502, exc.code, exc.message) from None
+        if not folder.is_dir():
+            raise SceneError(404, "render_not_found", "The render was deleted while it was being encoded.")
         path = folder / output
         if not path.is_file() or path.stat().st_size == 0:
             raise SceneError(502, "encode_failed", "ffmpeg wrote an empty video.")

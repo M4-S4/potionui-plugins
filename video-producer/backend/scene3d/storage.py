@@ -8,6 +8,8 @@ from .. import core_bridge
 
 ULID = re.compile(r"[0-9A-HJKMNP-TV-Z]{26}")
 
+MIB = 1024 * 1024
+
 RENDERS = "renders"
 
 WORK = "work"
