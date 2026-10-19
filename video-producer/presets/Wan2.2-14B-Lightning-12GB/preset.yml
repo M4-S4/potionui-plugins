@@ -1,0 +1,102 @@
+schema: 1
+id: "01M57QPEMDPKHHW83YSEYBN0X1"
+name: "Wan 2.2 14B Lightning (12 GB)"
+category: "video"
+version: "1.0.0"
+engine: "native"
+tags: ["12gb", "low-vram", "ram-64gb", "wan", "wan2.2", "lightning", "lightx2v", "4-step", "video", "t2v", "flow-matching", "local"]
+
+requires:
+  min_vram_gb: 12
+  recommended_vram_gb: 16
+  min_ram_gb: 64
+
+configuration:
+  checkpoint_tags:
+    type: "model_tags"
+    label: "Checkpoint tags"
+    description: "Only models with any of these tags appear in the Checkpoint picker."
+  text_encoder_tags:
+    type: "model_tags"
+    label: "Text encoder tags"
+    description: "Only models with any of these tags appear in the Text Encoder picker."
+  vae_tags:
+    type: "model_tags"
+    label: "VAE tags"
+    description: "Only models with any of these tags appear in the VAE picker."
+  lora_tags:
+    type: "model_tags"
+    label: "LoRA tags"
+    description: "Only LoRAs with any of these tags appear in the LoRA picker."
+
+speed_profiles:
+  fast:
+    steps: 6
+    guidance: 1.0
+    sampler: "unipc"
+  custom:
+    steps: 6
+    guidance: 1.0
+    sampler: "unipc"
+
+vars:
+  default_frames: 81
+  default_fps: 16
+  video_director:
+    family: "wan"
+    timing:
+      motion_latent_count_field: "svi_motion_latent_count"
+      motion_latent_count_default: 1
+    preset_modes: ["video"]
+    segment_routing: true
+    modes:
+      t2v: {}
+    limits:
+      default_duration: 5
+      default_fps: 16
+      max_duration: 5
+  video_producer:
+    profile: "12 GB · 64 GB RAM"
+
+llm:
+  guide: |
+    Structure prompts as: entity (specific description) + scene (specific description) +
+    motion (specific description) + aesthetic control + stylization, written as natural
+    English prose, not tags. Weak prompts skip the last two and produce a static camera
+    in an undefined void - always add camera work (push-in, pull-out, tracking shot,
+    orbit), lighting (soft light, hard light, rim light, side light), shot type
+    (close-up, wide-angle, aerial, establishing), precise motion adverbs (swaying
+    violently, drifting slowly), and a visual style when appropriate (cyberpunk, line
+    art, wasteland style). English and Chinese prose both work. Image-to-video:
+    describe motion, action, camera movement and scene evolution forward from the
+    image - do not re-describe what the image already shows. The official default
+    negative prompt is: "Bright tones, overexposed, static, blurred details,
+    subtitles, style, works, paintings, images, static, overall gray, worst
+    quality, low quality, JPEG compression residue, ugly, incomplete, extra
+    fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured,
+    misshapen limbs, fused fingers, still picture, messy background, three legs,
+    many people in the background, walking backwards" - use it as the baseline
+    and adjust for the specific shot. Avoid: named real people, rapid scene
+    changes in one clip, legible-text requirements, long choreographed sequences,
+    lip-synced dialogue.
+
+formulas:
+  groups:
+    speed:      { label: "Speed and sampling" }
+    size:       { label: "Size" }
+    loras:      { label: "LoRAs" }
+    guidance:   { label: "Guidance" }
+    quality:    { label: "Quality tweaks" }
+    continuity: { label: "Long video continuity" }
+    cache:      { label: "Step cache" }
+    models:     { label: "Models", preselect: false }
+
+negative_prompt:
+  applies_when:
+    logic: "OR"
+    conditions:
+      - { field: "cfg", greater_than: 1 }
+      - { field: "nag_scale", greater_than: 1 }
+
+modes:
+  - video

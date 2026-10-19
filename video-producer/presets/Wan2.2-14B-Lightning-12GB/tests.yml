@@ -1,0 +1,25 @@
+schema: 1
+
+cases:
+  - name: "wan22-14b-lightning-12gb-t2v"
+    mode: "video"
+    kind: "video"
+    seed: 12345
+    tags: ["12gb"]
+    form:
+      prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+      resolution: "832x480"
+      speed_profile: "fast"
+    models:
+      t2v_high_noise_model:
+        sha256: "cad711ae211c8b23455ec68cd6a190a33a3d874234a77eb57266d73f8f0e6c9f"
+      t2v_low_noise_model:
+        sha256: "e71b96d7c82e638694c5e7fb98fac4bfb0e4ddc5fbbb4b1df40da8f0f1278a97"
+      text_encoder:
+        sha256: "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68"
+      vae:
+        sha256: "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+    checks:
+      min_outputs: 1
+      resolution: "832x480"
+      not_black: true

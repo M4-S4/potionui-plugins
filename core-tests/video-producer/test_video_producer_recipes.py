@@ -40,14 +40,17 @@ SHARED_PRESETS = REPO_ROOT / "content" / "presets" / "_shared"
 RECIPE_PRESETS = {
     "vp-wan21-t2v-1-3b-8gb": presets.WAN21_T2V_1_3B_8GB,
     "vp-wan22-ti2v-5b-8gb": presets.WAN22_TI2V_5B_8GB,
+    "vp-wan22-14b-lightning-12gb": presets.WAN22_14B_LIGHTNING_12GB,
     "vp-minimax-h3-12gb": presets.MINIMAX_H3_12GB,
     "vp-minimax-h3-fast-12gb": presets.MINIMAX_H3_FAST_12GB,
+    "vp-wan22-14b-i2v": presets.WAN,
 }
 WITHOUT_SMOKE = {"vp-minimax-h3-12gb", "vp-minimax-h3-fast-12gb"}
 WITH_SMOKE = sorted(set(RECIPE_PRESETS) - WITHOUT_SMOKE)
 PATH_HINTS = {
     presets.WAN21_T2V_1_3B_8GB: "video-producer/Wan2.1-T2V-1.3B-8GB",
     presets.WAN22_TI2V_5B_8GB: "video-producer/Wan2.2-TI2V-5B-8GB",
+    presets.WAN22_14B_LIGHTNING_12GB: "video-producer/Wan2.2-14B-Lightning-12GB",
     presets.MINIMAX_H3_12GB: "video-producer/MiniMax-H3-12GB",
     presets.MINIMAX_H3_FAST_12GB: "video-producer/MiniMax-H3-Fast-12GB",
     presets.WAN: "marketplace/Wan",
@@ -233,6 +236,20 @@ def test_the_loras_of_a_recipe_are_the_ones_its_preset_selects_by_default(recipe
     ]
 
     assert sorted(file.filename for artifact in recipe.artifacts if artifact.kind == "lora" for file in _files(artifact)) == sorted(selected)
+
+
+def test_the_lightning_recipe_downloads_the_lora_of_each_expert_the_preset_selects(loaded_presets):
+    recipe = _recipe("vp-wan22-14b-lightning-12gb")
+    preset = loaded_presets[presets.WAN22_14B_LIGHTNING_12GB]
+    high = [item["model"].rsplit("/", 1)[-1] for item in _named(preset, "t2v_loras_high").default]
+    low = [item["model"].rsplit("/", 1)[-1] for item in _named(preset, "t2v_loras_low").default]
+    loras = [artifact.filename for artifact in recipe.artifacts if artifact.kind == "lora"]
+
+    assert all(item["model"].startswith("models/loras/") for name in ("t2v_loras_high", "t2v_loras_low") for item in _named(preset, name).default)
+    assert len(high) == len(low) == 1
+    assert "high_noise" in high[0] and "low_noise" in low[0]
+    assert sorted(loras) == sorted(high + low)
+    assert all(artifact.required for artifact in recipe.artifacts if artifact.kind == "lora")
 
 
 @pytest.mark.parametrize("recipe_id", WITH_SMOKE)
