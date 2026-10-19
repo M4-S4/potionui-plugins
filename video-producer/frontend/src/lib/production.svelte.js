@@ -158,7 +158,7 @@ export function jobClips(range = productionRange()) {
 
 function requestBody(clips, quality, variants, option) {
 	const body = { shots: clips.map((c) => c.id), quality, variants, preset_id: option.preset, model_id: option.model };
-	if (ui.production.mode === HYBRID_MODE) Object.assign(body, { production_mode: HYBRID_MODE, profile: 'Ref2VA' });
+	if (ui.production.mode === HYBRID_MODE) body.production = HYBRID_MODE;
 	return body;
 }
 

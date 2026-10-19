@@ -156,7 +156,8 @@ Video Producer can generate with every installed preset that declares Video Dire
 | Wan 2.1 / 2.2, LTX-2 / 2.3, LTX-2.5 | FL2VA | Mode `video` of the preset, with a text-only, first-frame or first-and-last-frame composition. Wan runs at 16 fps by default. |
 | Wan 2.1 T2V 1.3B (8 GB), Wan 2.2 TI2V 5B (8 GB) | FL2VA | Mode `video`, text only: their Video Director declares the `t2v` composition alone, so the frames linked to a shot are not used and the estimate warns `text_only_preset`. 16 fps for the 1.3B, 24 fps for the 5B, shots cut to 5 seconds. |
 | MiniMax-H3 | FL2VA, Ref2VA, Hybrid AV | Mode `video` for FL2VA and Hybrid AV, mode `refs` for Ref2VA, mode `upscale` for a final. Fixed 24 fps, clips up to 15 seconds. |
-| MiniMax-H3 Fast, MiniMax-H3 VDN, MiniMax-H3 (12 GB) and MiniMax-H3-Fast (12 GB) | FL2VA, Hybrid AV | Mode `video` only. They have no `refs` mode, so no Ref2VA, and no `upscale` mode, so their finals go through SeedVR2 like those of Wan. Fixed 24 fps. |
+| MiniMax-H3 (12 GB) | FL2VA, Ref2VA, Hybrid AV | Mode `video` for FL2VA and Hybrid AV, mode `refs` for Ref2VA, with the same memory profile. No `upscale` mode, so its finals go through SeedVR2 like those of Wan. Fixed 24 fps. |
+| MiniMax-H3 Fast, MiniMax-H3 VDN and MiniMax-H3-Fast (12 GB) | FL2VA, Hybrid AV | Mode `video` only. They have no `refs` mode, so no Ref2VA, and no `upscale` mode, so their finals go through SeedVR2 like those of Wan. Fixed 24 fps. |
 | OpenRouter Video, Gemini Video | FL2VA | Mode `txt2video`, or `img2video` when the shot has a first frame and the model accepts one. |
 
 The profiles that a preset cannot generate are greyed in the page and marked "MiniMax H3 only" (Ref2VA and Hybrid AV need a MiniMax H3 preset, and Ref2VA the base one), and the server answers the block `profile_unsupported` if a client asks for one anyway.
@@ -275,7 +276,7 @@ A file that exists on this machine but not on the Studio server worker passes th
 
 ### The estimate
 
-`POST /projects/{id}/estimate` takes the same body as `generate` (`shots`, `quality`, `variants`, `preset_id`, `model_id`, and in the “3D render + AI” output mode `production_mode` and `profile`) and answers without starting anything:
+`POST /projects/{id}/estimate` takes the same body as `generate` (`shots`, `quality`, `variants`, `preset_id`, `model_id`, and `production`, which is `render3d_ai` in the “3D render + AI” output mode) and answers without starting anything:
 
 | Key | Content |
 |---|---|
@@ -642,7 +643,7 @@ The PNG goes to the server, which stores it as a library item of the user (as a 
 
 - **AI generation**: with the Ref2VA profile, the fresh reference videos of a shot (Control videos `scene3d` with a video and not out of date) join its video references, 3 at most, and the shot prompt gets a sentence in the prompt language of the project, "Use <Video N> as the camera reference and follow its exact camera path." An out-of-date video gives the warning `stale_guide`; a reference video on an FL2VA shot gives `guide_needs_refs`, because that composition does not read it.
 - **3D render**: no generation. **Place the 3D renders** makes each shot of the selection that has a fresh reference video play that video (as a draft) and leaves the other shots as they are; the undo of the page reverts it. The exports then use the video like any other media of a shot.
-- **3D render + AI**: a Ref2VA generation of the selection with its reference videos, whatever the profile of the project. With the estimate and the generation, the page sends `production_mode: "render3d_ai"` and `profile: "Ref2VA"` next to the usual body. A preset without the MiniMax-H3 `refs` mode is blocked with `refs_preset_needed`.
+- **3D render + AI**: a Ref2VA generation of the selection with its reference videos, whatever the profile of the project. With the estimate and the generation, the page sends `production: "render3d_ai"` next to the usual body, and the server runs the Ref2VA profile. A preset without the MiniMax-H3 `refs` mode is blocked with `refs_preset_needed`.
 
 ### Older documents
 
