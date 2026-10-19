@@ -1,0 +1,28 @@
+# The References to Video mode of content/presets/marketplace/MiniMax-H3 with
+# the 12 GB memory profile of this preset's Video mode: the LoRA tab is read
+# from the base preset, the Advanced tab is this preset's own (20 steps, Res
+# multistep), and the Generation and References tabs are copies that only
+# change defaults and recommendations (the plugin's tests compare them).
+name: "custom"
+mode_label: "References to Video"
+short_description: "Generate a video that follows reference images."
+fields:
+  - type: "tabs"
+    children:
+      - type: "tab"
+        label: "Generation"
+        configuration: {icon: "generation", icon_display: "icon_only"}
+        children: "{{ paths.preset }}/modes/refs/tabs/generation.yml"
+      - type: "tab"
+        label: "References"
+        configuration: {icon: "image", icon_display: "icon_only"}
+        children: "{{ paths.preset }}/modes/refs/tabs/references.yml"
+      - type: "tab"
+        label: "LoRA"
+        configuration: {icon: "lora", icon_display: "icon_only"}
+        children: "{{ paths._shared }}/../marketplace/MiniMax-H3/modes/video/tabs/lora.yml"
+      - type: "tab"
+        label: "Advanced"
+        audience: "advanced"
+        configuration: {icon: "settings", icon_display: "icon_only"}
+        children: "{{ paths.preset }}/modes/video/tabs/advanced.yml"

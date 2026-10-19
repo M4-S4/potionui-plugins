@@ -141,11 +141,90 @@
     ],
     "prompts": [],
     "frames": [],
-    "controls": [],
-    "plans3d": [],
+    "controls": [
+      {
+        "id": "01M5R0GUIDEORBIT000000000C",
+        "shotId": "01M5R0CLIP0000000000000003",
+        "name": "Orbit",
+        "start": 9.2,
+        "dur": 3,
+        "guidance": 65,
+        "source": "scene3d",
+        "stale": false,
+        "planId": "01M5R0PLANORBIT0000000000P",
+        "assetId": null
+      }
+    ],
+    "plans3d": [
+      {
+        "id": "01M5R0PLANORBIT0000000000P",
+        "shotId": "01M5R0CLIP0000000000000003",
+        "sceneId": "01M5R0SCENEHARBOUR0000000S",
+        "name": "Orbit",
+        "start": 9.2,
+        "dur": 3,
+        "source": "trajectory",
+        "preset": "orbit",
+        "amount": 10,
+        "camera": null,
+        "keyframes": [
+          {
+            "id": "01M5R0KEYORBIT00000000000A",
+            "t": 0,
+            "pos": [
+              -0.694593,
+              0,
+              -0.060307
+            ],
+            "target": [
+              0,
+              0,
+              -4
+            ],
+            "focal": 39.9,
+            "roll": 0
+          },
+          {
+            "id": "01M5R0KEYORBIT00000000000B",
+            "t": 3,
+            "pos": [
+              0.694593,
+              0,
+              -0.060307
+            ],
+            "target": [
+              0,
+              0,
+              -4
+            ],
+            "focal": 39.9,
+            "roll": 0
+          }
+        ]
+      }
+    ],
     "markers": [],
     "references": [],
-    "scenes": [],
+    "scenes": [
+      {
+        "id": "01M5R0SCENEHARBOUR0000000S",
+        "kind": "splat",
+        "name": "Harbour",
+        "sourceAssetId": "01M5R0SRCHARBOURWIDE00000V",
+        "sourceTime": 2.0,
+        "status": "done",
+        "progress": 100,
+        "jobId": "01M5R0SCENEJOB00000000000J",
+        "fileId": "01M5R0SCENEFILE0000000000F",
+        "count": 786432,
+        "view": {
+          "fov": 47.2,
+          "aspect": 1.7778,
+          "depth": 4.0
+        },
+        "error": null
+      }
+    ],
     "lanes": [
       {
         "id": "A1",

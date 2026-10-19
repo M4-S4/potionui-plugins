@@ -718,3 +718,246 @@ def test_the_upscale_target_of_an_upscale_take_is_read_back_from_its_request():
     assert director.upscale_target({"request": {"form_data": {"resolution_target": "qhd1440"}}}) == "qhd1440"
     assert director.upscale_target({"request": {"form_data": {"target_size": "2k"}}}) == "qhd1440"
     assert director.upscale_target({"request": None}) == "fhd1080"
+
+
+def _video_asset(asset_id, item_id, seconds=4.0, kind="video"):
+    return {"id": asset_id, "kind": kind, "name": asset_id, "origin": {"kind": "library", "itemId": item_id}, "srcDur": seconds}
+
+
+def _guide(control_id, asset_id, shot_id="s1", stale=False, start=0, dur=4):
+    return {"id": control_id, "shotId": shot_id, "start": start, "dur": dur, "stale": stale, "planId": f"plan-{control_id}", "assetId": asset_id}
+
+
+def _guided(core, make_doc, controls, assets=(), references=(), direction=None, language="en", prompt="The hut at dawn."):
+    for item_id, value, kind in (
+        ("lib-orbit", "uploads/orbit.mp4", "video"),
+        ("lib-dolly", "uploads/dolly.mp4", "video"),
+        ("lib-walk", "uploads/walk.mp4", "video"),
+        ("lib-swim", "uploads/swim.mp4", "video"),
+        ("lib-hero", "uploads/hero.png", "image"),
+    ):
+        core.add_media({"kind": "library", "item_id": item_id}, value, kind)
+    base = [
+        _video_asset("orbit", "lib-orbit"),
+        _video_asset("dolly", "lib-dolly"),
+        _video_asset("walk", "lib-walk"),
+        _video_asset("swim", "lib-swim"),
+        {"id": "hero", "kind": "image", "name": "hero", "origin": {"kind": "library", "itemId": "lib-hero"}},
+    ]
+    return make_doc(
+        clips=[SHOT],
+        prompts=[{"id": "p", "shotId": "s1", "text": prompt}],
+        assets=[*base, *assets],
+        references=list(references),
+        controls=list(controls),
+        direction={"mode": "Ref2VA", **(direction or {})},
+        language=language,
+    )
+
+
+def test_ref2va_sends_the_fresh_3d_guide_video_first_and_names_it_the_camera_reference_in_the_prompt(core, make_doc):
+    core.use_h3()
+    references = [{"id": "r1", "assetId": "hero", "scope": {"type": "global"}}, {"id": "r2", "assetId": "walk", "scope": {"type": "shot", "shotId": "s1"}}]
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], references=references)
+
+    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
+
+    assert plans.blocks == [] and plans.warnings == []
+    (plan,) = plans.shots
+    form = plan.request["form_data"]
+    assert form["references"] == ["uploads/orbit.mp4", "uploads/walk.mp4", "uploads/hero.png"]
+    sentence = "Use <Video 1> as the camera reference and follow its exact camera path."
+    assert plan.prompt_text == f"The hut at dawn.\n{sentence}"
+    assert plan.request["prompts"] == [{"positive": plan.prompt_text, "negative": ""}]
+    assert form["video_director"]["segments"][0]["prompt"] == plan.prompt_text
+    assert plan.guides == ["c1"]
+    assert plan.summary()["guides"] == ["c1"]
+    assert plans.renders == [{"shot_id": "s1", "control_id": "c1", "plan_id": "plan-c1", "asset_id": "orbit"}]
+
+
+def test_the_camera_sentence_follows_the_prompt_language_and_the_rank_of_each_guide_among_the_videos(core, make_doc):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly")], language="fr", prompt="")
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.prompt_text == (
+        "Utilise <Video 1> comme référence de caméra et suis exactement sa trajectoire.\n"
+        "Utilise <Video 2> comme référence de caméra et suis exactement sa trajectoire."
+    )
+    assert plan.guides == ["c1", "c2"]
+
+
+def test_a_reference_video_already_sent_as_a_guide_is_not_sent_twice_and_the_guides_keep_their_ranks(core, make_doc):
+    core.use_h3()
+    references = [{"id": "r1", "assetId": "orbit", "scope": {"type": "shot", "shotId": "s1"}}]
+    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly")], references=references)
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/dolly.mp4"]
+    assert plan.prompt_text.splitlines()[1:] == [
+        "Use <Video 1> as the camera reference and follow its exact camera path.",
+        "Use <Video 2> as the camera reference and follow its exact camera path.",
+    ]
+
+
+def test_the_3d_guides_count_within_the_three_reference_videos_of_a_shot(core, make_doc):
+    core.use_h3()
+    references = [{"id": f"r{index}", "assetId": asset, "scope": {"type": "global"}} for index, asset in enumerate(("walk", "swim"))]
+    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly")], references=references)
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/dolly.mp4", "uploads/walk.mp4"]
+
+
+def test_a_stale_guide_is_left_out_with_a_warning_and_does_not_block(core, make_doc):
+    core.use_h3()
+    references = [{"id": "r1", "assetId": "hero", "scope": None}]
+    doc = _guided(core, make_doc, [_guide("c1", "orbit", stale=True)], references=references)
+
+    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
+
+    (plan,) = plans.shots
+    assert plan.request["form_data"]["references"] == ["uploads/hero.png"]
+    assert plan.prompt_text == "The hut at dawn." and plan.guides == []
+    assert plans.warnings == [
+        {"code": "stale_guide", "message": "The 3D guide of the shot is stale: render it again.", "data": {"shot_id": "s1", "control_id": "c1"}}
+    ]
+    assert plans.renders == []
+
+
+def test_a_guide_video_under_two_seconds_is_sent_with_a_warning(core, make_doc):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "short")], assets=[_video_asset("short", "lib-orbit", seconds=1.5)])
+
+    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
+
+    assert plans.shots[0].request["form_data"]["references"] == ["uploads/orbit.mp4"]
+    assert plans.warnings == [
+        {
+            "code": "guide_too_short",
+            "message": "The 3D guide video of the shot is shorter than the 2 s MiniMax-H3 reads.",
+            "data": {"shot_id": "s1", "control_id": "c1", "min": 2.0},
+        }
+    ]
+
+
+def test_a_guide_without_a_known_length_is_as_long_as_its_control(core, make_doc):
+    core.use_h3()
+    unknown = {**_video_asset("unknown", "lib-orbit"), "srcDur": None}
+    doc = _guided(core, make_doc, [_guide("c1", "unknown", dur=1.0)], assets=[unknown])
+
+    assert [warning["code"] for warning in _plans(core, doc, preset_id=presets.MINIMAX_H3).warnings] == ["guide_too_short"]
+
+
+def test_a_guide_linked_to_no_shot_counts_for_the_shots_it_overlaps_and_other_guides_are_ignored(core, make_doc):
+    core.use_h3()
+    controls = [
+        _guide("over", "orbit", shot_id=None, start=3, dur=5),
+        _guide("after", "dolly", shot_id=None, start=4, dur=2),
+        _guide("other", "walk", shot_id="s2"),
+        {**_guide("import", "swim"), "source": "import"},
+        _guide("unrendered", None),
+    ]
+    doc = _guided(core, make_doc, controls)
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"] and plan.guides == ["over"]
+
+
+def test_a_guide_whose_media_is_not_a_video_is_not_sent_as_a_camera_reference(core, make_doc):
+    core.use_h3()
+    references = [{"id": "r1", "assetId": "walk", "scope": None}]
+    doc = _guided(core, make_doc, [_guide("c1", "hero"), _guide("c2", "gone")], references=references)
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/walk.mp4"]
+    assert plan.prompt_text == "The hut at dawn." and plan.guides == []
+
+
+@pytest.mark.parametrize("stale", [False, True])
+def test_a_3d_guide_on_a_shot_generated_without_references_warns_that_only_ref2va_follows_it(core, make_doc, stale):
+    core.use_wan()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit", stale=stale)], direction={"mode": "FL2VA"})
+
+    plans = _plans(core, doc)
+
+    (plan,) = plans.shots
+    assert "references" not in plan.request["form_data"] and plan.prompt_text == "The hut at dawn."
+    assert [warning for warning in plans.warnings if warning["code"] != "fl2va_no_frame"] == [
+        {"code": "guide_needs_refs", "message": "The shot has a 3D guide video: only a Ref2VA preset follows it.", "data": {"shot_id": "s1"}}
+    ]
+
+
+def test_a_3d_guide_on_a_cloud_shot_warns_that_only_ref2va_follows_it(core, make_doc):
+    core.use_openrouter()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], direction={"mode": "FL2VA"})
+
+    plans = _plans(core, doc, preset_id=presets.OPENROUTER_VIDEO, model_id="cm-veo")
+
+    assert "guide_needs_refs" in [warning["code"] for warning in plans.warnings]
+
+
+def test_the_3d_render_and_ai_mode_runs_ref2va_whatever_the_project_profile(core, make_doc):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], direction={"mode": "FL2VA"})
+
+    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3, production="render3d_ai")
+
+    (plan,) = plans.shots
+    assert (plans.profile, plans.production, plan.director_mode, plan.preset_mode) == ("Ref2VA", "render3d_ai", "refs", "refs")
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"] and plans.warnings == []
+
+
+def test_the_3d_render_and_ai_mode_warns_about_a_shot_without_a_rendered_guide(core, make_doc):
+    core.use_h3()
+    doc = _guided(core, make_doc, [], references=[{"id": "r1", "assetId": "hero", "scope": None}])
+
+    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3, production="render3d_ai")
+
+    assert plans.warnings == [{"code": "render_missing", "message": "The shot has no up-to-date 3D render.", "data": {"shot_id": "s1"}}]
+    assert plans.shots[0].request["form_data"]["references"] == ["uploads/hero.png"]
+
+
+@pytest.mark.parametrize("preset_id", [presets.MINIMAX_H3_12GB, presets.WAN])
+def test_the_3d_render_and_ai_mode_needs_a_minimax_h3_preset_with_its_refs_mode(core, make_doc, preset_id):
+    core.use_wan()
+    core.use_h3_variant(presets.MINIMAX_H3_12GB, "MiniMax-H3 (12 GB)")
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
+
+    plans = _plans(core, doc, preset_id=preset_id, production="render3d_ai")
+
+    assert plans.shots == []
+    assert plans.blocks == [
+        {
+            "code": "refs_preset_needed",
+            "message": "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode.",
+            "data": {"preset_id": preset_id},
+        }
+    ]
+
+
+def test_the_3d_render_mode_gives_each_shot_its_latest_fresh_render_without_a_preset(core, make_doc):
+    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly"), _guide("c3", "walk", stale=True), _guide("c4", "missing")])
+    doc["clips"].append({**doc["clips"][0], "id": "s2", "start": 4})
+
+    plans = director.build_plans(core.users["user-1"], doc, ["s1", "s2", "nowhere"], None, "draft", production="render3d")
+
+    assert (plans.preset, plans.production, plans.shots, plans.blocks) == (None, "render3d", [], [])
+    assert plans.renders == [{"shot_id": "s1", "control_id": "c2", "plan_id": "plan-c2", "asset_id": "dolly"}]
+    assert [(warning["code"], warning["data"]) for warning in plans.warnings] == [
+        ("stale_guide", {"shot_id": "s1", "control_id": "c3"}),
+        ("render_missing", {"shot_id": "s2"}),
+    ]
+
+
+def test_the_3d_render_mode_without_any_render_or_shot_is_blocked(core, make_doc):
+    doc = _guided(core, make_doc, [])
+    user = core.users["user-1"]
+
+    assert [block["code"] for block in director.build_plans(user, doc, ["s1"], None, "draft", production="render3d").blocks] == ["no_render"]
+    assert [block["code"] for block in director.build_plans(user, doc, [], None, "draft", production="render3d").blocks] == ["no_shots"]

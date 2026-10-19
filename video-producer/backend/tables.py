@@ -79,6 +79,44 @@ _COLUMNS = {
         started_at TIMESTAMP,
         finished_at TIMESTAMP
     """,
+    "video_producer_scene_jobs": """
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        scene_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        generation_id TEXT,
+        status TEXT NOT NULL,
+        progress REAL NOT NULL DEFAULT 0,
+        source_asset_id TEXT,
+        source_time REAL,
+        source_value TEXT,
+        backend_id TEXT,
+        file_id TEXT,
+        splat_count INTEGER,
+        view TEXT,
+        units_reserved REAL NOT NULL DEFAULT 0,
+        request TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        started_at TIMESTAMP,
+        finished_at TIMESTAMP
+    """,
+    "video_producer_scene_files": """
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        format TEXT NOT NULL,
+        name TEXT NOT NULL,
+        stored_name TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        splat_count INTEGER,
+        view TEXT,
+        cameras TEXT,
+        job_id TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    """,
 }
 
 TABLE_NAMES = tuple(_COLUMNS)
@@ -111,6 +149,9 @@ _INDEXES = (
     ("idx_video_producer_calibration_key", "video_producer_calibration", "preset_id, backend_id, resolution"),
     ("idx_video_producer_export_jobs_project", "video_producer_export_jobs", "project_id, created_at"),
     ("idx_video_producer_export_jobs_status", "video_producer_export_jobs", "status, created_at"),
+    ("idx_video_producer_scene_jobs_project", "video_producer_scene_jobs", "project_id, created_at"),
+    ("idx_video_producer_scene_jobs_status", "video_producer_scene_jobs", "status, created_at"),
+    ("idx_video_producer_scene_files_project", "video_producer_scene_files", "project_id, created_at"),
 )
 
 

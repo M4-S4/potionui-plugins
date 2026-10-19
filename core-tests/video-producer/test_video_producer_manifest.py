@@ -157,7 +157,7 @@ def test_on_boot_loaded_by_the_core_creates_the_plugin_tables(loader, manifest, 
         cursor.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'video_producer_%'")
         created = {row["name"] for row in cursor.fetchall()}
     assert created == set(_load("backend.tables").TABLE_NAMES)
-    assert len(created) == 6
+    assert len(created) == 8
 
 
 def test_api_module_loads_and_exposes_the_router(loader, manifest):
@@ -198,6 +198,16 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("GET", f"{base}/exports/{{job_id}}/file"),
         ("DELETE", f"{base}/exports/{{job_id}}"),
         ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/seam-frame"),
+        ("POST", f"{base}/projects/{{project_id}}/scenes/from-image"),
+        ("GET", f"{base}/projects/{{project_id}}/scenes/jobs"),
+        ("POST", f"{base}/projects/{{project_id}}/scenes/jobs/{{job_id}}/cancel"),
+        ("POST", f"{base}/projects/{{project_id}}/scene-files"),
+        ("GET", f"{base}/projects/{{project_id}}/scene-files/{{file_id}}"),
+        ("POST", f"{base}/projects/{{project_id}}/captures"),
+        ("POST", f"{base}/projects/{{project_id}}/renders"),
+        ("POST", f"{base}/projects/{{project_id}}/renders/{{render_id}}/frames"),
+        ("POST", f"{base}/projects/{{project_id}}/renders/{{render_id}}/finish"),
+        ("DELETE", f"{base}/projects/{{project_id}}/renders/{{render_id}}"),
     }
 
 
@@ -1162,6 +1172,7 @@ class Shipped:
     reacted: Dict[str, Any] = dataclasses.field(default_factory=dict)
     draft: Tuple[str, ...] = ()
     final: Tuple[str, ...] = ()
+    modes: Tuple[str, ...] = ("video",)
 
     @property
     def is_wan(self):
@@ -1186,7 +1197,7 @@ class Shipped:
 
     @property
     def profiles(self):
-        return ["FL2VA"] if self.is_wan else ["FL2VA", "Hybrid AV"]
+        return ["FL2VA"] if self.is_wan else ["FL2VA", *(["Ref2VA"] if "refs" in self.modes else []), "Hybrid AV"]
 
     @property
     def director_modes(self):
@@ -1283,6 +1294,7 @@ SHIPPED_PRESETS = {
         },
         defaults={**H3_DEFAULTS, "speed_profile": "custom", "steps": 20},
         recommended={"model": [COMFY_DIT, WAN2GP_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
+        modes=("video", "refs"),
     ),
     H3_FAST_12GB: Shipped(
         name="MiniMax-H3-Fast (12 GB)",
@@ -1345,8 +1357,8 @@ def _flatten(fields, named, skeleton):
     return named, skeleton
 
 
-def _video_form(preset):
-    [form] = preset.modes["video"].forms
+def _video_form(preset, mode="video"):
+    [form] = preset.modes[mode].forms
     return _flatten(form.fields, {}, [])
 
 
@@ -1388,7 +1400,7 @@ def test_the_shipped_presets_load_through_the_cores_loader(shipped_presets):
     for preset_id, shipped in SHIPPED_PRESETS.items():
         preset = shipped_presets[preset_id]
         assert preset.origin == {"kind": "plugin", "plugin_id": PLUGIN_ID, "path": shipped.folder}
-        assert (preset.engine, preset.category, list(preset.modes)) == ("native", "video", ["video"])
+        assert (preset.engine, preset.category, list(preset.modes)) == ("native", "video", list(shipped.modes))
         assert preset.requires == shipped.requires, preset_id
         assert preset.tags[:3] == shipped.leading_tags, preset_id
         assert [tag for tag in preset.tags if tag.startswith("ram-")] == shipped.ram_tags, preset_id
@@ -1422,8 +1434,10 @@ def test_the_shipped_h3_presets_keep_the_director_and_prompt_help_of_the_core_pr
         assert preset.vars["video_director"] == source.vars["video_director"]
         assert preset.vars["prompt"]["segment_templates"] == source.vars["prompt"]["segment_templates"][:1]
         assert preset.configuration == source.configuration
-        assert preset.llm == {key: value for key, value in source.llm.items() if key != "modes"}
-        assert preset.prompt_syntax == {"video": source.prompt_syntax["video"]}
+        guides = {mode: guide for mode, guide in source.llm.get("modes", {}).items() if mode in shipped.modes}
+        assert preset.llm == {**{key: value for key, value in source.llm.items() if key != "modes"}, **({"modes": guides} if guides else {})}
+        assert preset.prompt_syntax == {mode: source.prompt_syntax[mode] for mode in shipped.modes}
+        assert preset.prompt_resources == {mode: entries for mode, entries in (source.prompt_resources or {}).items() if mode in shipped.modes}
         assert preset.formulas["groups"] == {name: group for name, group in source.formulas["groups"].items() if name != "memory"}
 
 
@@ -1450,10 +1464,11 @@ def test_the_shipped_wan_presets_keep_the_prompt_help_of_the_core_preset_and_gen
 def test_the_shipped_presets_run_the_core_pipelines_unchanged(shipped_presets, core_presets):
     for preset_id, shipped in SHIPPED_PRESETS.items():
         preset, source = shipped_presets[preset_id], core_presets[shipped.source_id]
-        assert preset.modes["video"].pipes == source.modes["video"].pipes, preset_id
-        copy = yaml.safe_load((PLUGIN_ROOT / "presets" / shipped.folder / "modes" / "video" / "pipeline.yml").read_text(encoding="utf-8"))
-        original = yaml.safe_load((Path(source.path) / "modes" / "video" / "pipeline.yml").read_text(encoding="utf-8"))
-        assert copy == original, preset_id
+        for mode in shipped.modes:
+            assert preset.modes[mode].pipes == source.modes[mode].pipes, (preset_id, mode)
+            copy = yaml.safe_load((PLUGIN_ROOT / "presets" / shipped.folder / "modes" / mode / "pipeline.yml").read_text(encoding="utf-8"))
+            original = yaml.safe_load((Path(source.path) / "modes" / mode / "pipeline.yml").read_text(encoding="utf-8"))
+            assert copy == original, (preset_id, mode)
 
 
 def test_the_shipped_forms_change_only_the_tier_defaults_models_and_files_of_the_core_forms(shipped_presets, core_presets):
@@ -1486,6 +1501,71 @@ def test_the_shipped_forms_change_only_the_tier_defaults_models_and_files_of_the
             assert mine == theirs, (preset_id, name)
             assert all(len(item["sha256"]) == 64 for item in _recommendations(named[name])), (preset_id, name)
         assert {name: [item["name"] for item in _recommendations(named[name])] for name in shipped.recommended} == shipped.recommended, preset_id
+
+
+COMFY_REF2VA_DIT = "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+WAN2GP_REF2VA_DIT = "MiniMax-H3-Ref2VA-pruned_rank8_int8_convrot.safetensors"
+WAN2GP_REF2VA_SHA256 = "e09db861c48d13560222948b4e38082bc21b1b7d4ddcaed9c865bf9c3233898c"
+REFS_CHANGED_FIELDS = {
+    "speed_profile": {"default"},
+    "resolution": {"default", "configuration"},
+    "model": {"configuration"},
+    "text_encoder": {"configuration"},
+    "video_vae": {"configuration"},
+    "reference_pixel_budget": {"default"},
+    "steps": {"default"},
+    "sampler": {"default", "ai_hint"},
+}
+REFS_RECOMMENDED = {"model": [COMFY_REF2VA_DIT, WAN2GP_REF2VA_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]}
+
+
+def test_the_12_gb_refs_form_changes_only_the_tier_defaults_models_and_files_of_the_core_refs_form(shipped_presets, core_presets):
+    preset, source = shipped_presets[H3_12GB], core_presets[MINIMAX_H3]
+    named, skeleton = _video_form(preset, "refs")
+    source_named, source_skeleton = _video_form(source, "refs")
+
+    assert skeleton == source_skeleton
+    for name, field in named.items():
+        changed = REFS_CHANGED_FIELDS.get(name, set())
+        assert field == dataclasses.replace(source_named[name], **{attr: getattr(field, attr) for attr in changed}), name
+    assert {name: named[name].default for name in ("resolution", "speed_profile", "steps", "sampler", "scheduler", "reference_pixel_budget", "quantity")} == {
+        "resolution": "832x480",
+        "speed_profile": "custom",
+        "steps": 20,
+        "sampler": "res_multistep",
+        "scheduler": "simple",
+        "reference_pixel_budget": "1",
+        "quantity": 1,
+    }
+    assert preset.speed_profiles[named["speed_profile"].default]["steps"] == named["steps"].default
+    assert _option_files(preset, named["resolution"]) == _option_files(source, source_named["resolution"])
+    assert named["steps"] == _video_form(preset)[0]["steps"] and named["sampler"] == _video_form(preset)[0]["sampler"]
+    assert {name: [item["name"] for item in _recommendations(named[name])] for name in REFS_RECOMMENDED} == REFS_RECOMMENDED
+    for name in REFS_RECOMMENDED:
+        mine = {key: value for key, value in named[name].configuration.items() if key not in ("recommendations", "placeholder")}
+        theirs = {key: value for key, value in source_named[name].configuration.items() if key not in ("recommendations", "placeholder")}
+        assert mine == theirs, name
+    known = {item["name"]: item for field in [*source_named.values(), *_video_form(preset)[0].values()] for item in _recommendations(field)}
+    for name in REFS_RECOMMENDED:
+        for item in _recommendations(named[name]):
+            assert len(item["sha256"]) == 64, item["name"]
+            if item["name"] in known:
+                assert {key: item[key] for key in ("link", "size", "sha256")} == {key: known[item["name"]][key] for key in ("link", "size", "sha256")}
+    assert next(item for item in _recommendations(named["model"]) if item["name"] == WAN2GP_REF2VA_DIT)["sha256"] == WAN2GP_REF2VA_SHA256
+
+
+def test_the_plugin_runs_ref2va_on_the_12_gb_preset_with_its_refs_models(shipped_presets):
+    bridge = _load("backend.core_bridge")
+    models = _load("backend.models")
+    preset = shipped_presets[H3_12GB]
+    [form] = preset.modes["refs"].forms
+    fields = {}
+    bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
+
+    assert models.model_fields(fields, "refs") == (["model", "text_encoder", "video_vae", "audio_vae"], [])
+    assert fields["resolution"]["default"] == "832x480"
+    assert {"sha256": WAN2GP_REF2VA_SHA256, "filename": WAN2GP_REF2VA_DIT} in fields["model"]["recommendations"]
+    assert fields["references"]["type"] == "media"
 
 
 def test_the_shipped_recommendations_the_core_forms_already_make_are_copied_unchanged(shipped_presets, core_presets):
@@ -1561,15 +1641,20 @@ def test_the_plugin_drafts_the_wan_presets_at_832x480_and_finishes_them_at_the_l
         assert models.model_fields(fields) == (["text_encoder", "vae", "t2v_high_noise_model"], ["t2v_low_noise_model"]), preset_id
 
 
-def test_every_export_and_seam_route_loaded_by_the_core_depends_on_the_signed_in_user(loader, manifest):
+def test_every_export_seam_and_scene_route_loaded_by_the_core_depends_on_the_signed_in_user(loader, manifest):
     api = loader.load_plugin_module(manifest, "backend.api")
 
     def depends_on_user(dependant):
         return any(item.call is get_current_active_user or depends_on_user(item) for item in dependant.dependencies)
 
-    guarded = [route for route in api.router.routes if "/exports" in route.path or route.path.endswith("/seam-frame")]
+    scene_parts = ("/scenes/", "/scene-files", "/captures", "/renders")
+    guarded = [
+        route
+        for route in api.router.routes
+        if "/exports" in route.path or route.path.endswith("/seam-frame") or any(part in route.path for part in scene_parts)
+    ]
 
-    assert len(guarded) == 7
+    assert len(guarded) == 17
     assert all(depends_on_user(route.dependant) for route in guarded)
 
 

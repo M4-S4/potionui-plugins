@@ -67,6 +67,24 @@ def _video_asset(**fields):
     }
 
 
+def _splat_scene(**fields):
+    return {
+        "id": "01M535B4GTSCENE00000000000",
+        "kind": "splat",
+        "name": "Ridge",
+        "sourceAssetId": "01M535B4GTVIDEO00000000000",
+        "sourceTime": 2.5,
+        "status": "done",
+        "progress": 100,
+        "jobId": "01M535B4GTJOB0000000000000",
+        "fileId": "01M535B4GTFILE20000000000",
+        "count": 524288,
+        "view": {"fov": 48.5, "aspect": 1.7778, "depth": 4.0},
+        "error": None,
+        **fields,
+    }
+
+
 def _rich(doc):
     clip = doc["clips"][0]
     doc["clips"][1].update(assetId="gen-01M535B4GTRESULT00000000", take="01M535B4GTRESULT00000000", stage="draft", flag="favori")
@@ -85,7 +103,15 @@ def _rich(doc):
         }
     )
     doc["frames"].append(
-        {"id": "01M535B4GTFRAME00000000000", "shotId": clip["id"], "time": 1.2, "assetId": None, "role": "Capture 3D", "strength": 80}
+        {
+            "id": "01M535B4GTFRAME00000000000",
+            "shotId": clip["id"],
+            "time": 1.2,
+            "assetId": "01M535B4GTVIDEO00000000000",
+            "role": "first",
+            "strength": 100,
+            "sceneId": "01M535B4GTSCENE00000000000",
+        }
     )
     doc["controls"].append(
         {
@@ -97,23 +123,36 @@ def _rich(doc):
             "guidance": 65,
             "source": "scene3d",
             "stale": True,
+            "planId": "01M535B4GTPLAN000000000000",
+            "assetId": "01M535B4GTVIDEO00000000000",
         }
     )
     doc["scenes"] += [
-        {"id": "01M535B4GTSCENE00000000000", "kind": "sample", "name": "Sample set"},
-        {"id": "01M535B4GTSCENEFILE0000000", "kind": "file", "name": "set.ply", "file": "C:/scenes/set.ply"},
+        _splat_scene(),
+        {"id": "01M535B4GTSCENEFILE0000000", "kind": "splatfile", "name": "set.spz", "fileId": "01M535B4GTFILE00000000000", "format": "spz", "view": None},
+        {
+            "id": "01M535B4GTSCENEGLB00000000",
+            "kind": "glb",
+            "name": "hut.glb",
+            "fileId": "01M535B4GTFILE10000000000",
+            "cameras": [{"name": "camera", "animated": True, "duration": 4.5}, {"name": "still", "animated": False, "duration": None}],
+        },
     ]
     doc["plans3d"].append(
         {
             "id": "01M535B4GTPLAN000000000000",
             "shotId": clip["id"],
-            "sceneId": None,
+            "sceneId": "01M535B4GTSCENE00000000000",
             "name": "Orbit",
             "start": 0,
             "dur": 5,
+            "source": "trajectory",
+            "preset": "orbit",
+            "amount": 10,
+            "camera": None,
             "keyframes": [
-                {"id": "01M535B4GTKEY0000000000000", "t": 0, "az": -60, "el": 20, "dist": 13, "focal": 30, "height": 1.5},
-                {"id": "01M535B4GTKEY1000000000000", "t": 5, "az": 60, "el": 20, "dist": 13, "focal": 30, "height": 1.5},
+                {"id": "01M535B4GTKEY0000000000000", "t": 0, "pos": [-0.7, 0, 0], "target": [0, 0, -4], "focal": 30, "roll": 0},
+                {"id": "01M535B4GTKEY1000000000000", "t": 5, "pos": [0.7, 0, 0], "target": [0, 0, -4], "focal": 30, "roll": 0},
             ],
         }
     )
@@ -174,6 +213,16 @@ def test_the_documents_the_editor_starts_from_are_valid(name):
 
 def test_a_document_using_every_collection_is_valid(starter):
     validate_doc(_rich(starter))
+
+
+def test_the_reference_project_with_its_splat_scene_plan_3d_and_guide_is_valid_and_current():
+    doc = _fixture("exports/reference-project")["doc"]
+
+    assert validate_doc(doc) == canonical(doc)
+    assert migrate(doc) is doc
+    assert [scene["kind"] for scene in doc["scenes"]] == ["splat"]
+    assert doc["plans3d"][0]["sceneId"] == doc["scenes"][0]["id"]
+    assert doc["controls"][0]["planId"] == doc["plans3d"][0]["id"]
 
 
 def test_an_audio_asset_from_sound_design_and_a_video_asset_without_audio_fields_are_valid(starter):
@@ -361,15 +410,192 @@ def test_an_asset_outside_the_contract_is_refused(starter, asset, path):
 @pytest.mark.parametrize(
     "item, path",
     [
-        ({"id": "s", "kind": "file", "name": "set.ply"}, "$.scenes[0]"),
-        ({"id": "s", "kind": "sample", "name": "Sample", "file": "x"}, "$.scenes[0]"),
+        ({"id": "s", "kind": "file", "name": "set.ply", "file": "C:/set.ply"}, "$.scenes[0].kind"),
+        ({"id": "s", "kind": "sample", "name": "Sample"}, "$.scenes[0].kind"),
         ({"id": "s", "kind": "url", "name": "Sample"}, "$.scenes[0].kind"),
+        ({key: value for key, value in _splat_scene().items() if key != "view"}, "$.scenes[0]"),
+        (_splat_scene(status="cancelled"), "$.scenes[0].status"),
+        (_splat_scene(count=1.5), "$.scenes[0].count"),
+        (_splat_scene(view={"fov": 50, "aspect": 1.5}), "$.scenes[0].view"),
+        (_splat_scene(view={"fov": 50, "aspect": 1.5, "depth": 4, "width": 832}), "$.scenes[0].view"),
+        ({"id": "s", "kind": "splatfile", "name": "set.ply", "fileId": "f", "format": "obj", "view": None}, "$.scenes[0].format"),
+        ({"id": "s", "kind": "splatfile", "name": "set.ply", "fileId": None, "format": "ply", "view": None}, "$.scenes[0].fileId"),
+        (
+            {"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f", "cameras": [{"name": "camera", "animated": "yes", "duration": None}]},
+            "$.scenes[0].cameras[0].animated",
+        ),
+        ({"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f"}, "$.scenes[0]"),
     ],
 )
 def test_a_scene_follows_its_kind(starter, item, path):
     starter["scenes"] = [item]
 
     assert str(_error(starter)).startswith(f"{path}: ")
+
+
+@pytest.mark.parametrize(
+    "scene",
+    [
+        _splat_scene(status="queued", progress=0, fileId=None, count=None, view=None),
+        _splat_scene(
+            status="failed", sourceAssetId=None, sourceTime=None, jobId=None, fileId=None, count=None, view=None, error="The GPU ran out of memory."
+        ),
+        {"id": "s", "kind": "splatfile", "name": "set.splat", "fileId": "f", "format": "splat", "view": {"fov": 50, "aspect": 0.5625, "depth": 3}},
+        {"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f", "cameras": []},
+    ],
+)
+def test_each_scene_kind_of_the_contract_is_valid(starter, scene):
+    starter["scenes"] = [scene]
+
+    validate_doc(starter)
+
+
+def _plan(**fields):
+    return {
+        "id": "p",
+        "shotId": None,
+        "sceneId": None,
+        "name": "Plan",
+        "start": 0,
+        "dur": 4,
+        "keyframes": [{"id": "k", "t": 0, "pos": [0, 1.5, 8], "target": [0, 1.5, 0], "focal": 35, "roll": 0}],
+        **fields,
+    }
+
+
+def _key(**fields):
+    return {"id": "k", "t": 0, "pos": [0, 1, 2], "target": [0, 0, 0], "focal": 35, "roll": 0, **fields}
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {},
+        {"source": "manual", "preset": None, "amount": None, "camera": None},
+        {"source": "trajectory", "preset": "crane", "amount": 12.5, "camera": None},
+        {"source": "blender", "preset": None, "amount": None, "camera": "camera"},
+    ],
+)
+def test_a_plan_3d_may_say_where_its_keyframes_come_from(starter, fields):
+    starter["plans3d"] = [_plan(**fields)]
+
+    validate_doc(starter)
+
+
+@pytest.mark.parametrize(
+    "plan, path",
+    [
+        (_plan(source="sample"), "$.plans3d[0].source"),
+        (_plan(preset="spiral"), "$.plans3d[0].preset"),
+        (_plan(amount="10"), "$.plans3d[0].amount"),
+        (_plan(camera=3), "$.plans3d[0].camera"),
+        (_plan(keyframes=[_key(pos=[0, 1])]), "$.plans3d[0].keyframes[0].pos"),
+        (_plan(keyframes=[_key(pos=[0, 1, 2, 3])]), "$.plans3d[0].keyframes[0].pos"),
+        (_plan(keyframes=[_key(target=[0, "0", 0])]), "$.plans3d[0].keyframes[0].target[1]"),
+        (_plan(keyframes=[{key: value for key, value in _key().items() if key != "roll"}]), "$.plans3d[0].keyframes[0]"),
+        (_plan(keyframes=[{"id": "k", "t": 0, "az": 0, "el": 0, "dist": 8, "focal": 35, "height": 1.5, "roll": 0}]), "$.plans3d[0].keyframes[0]"),
+    ],
+)
+def test_a_plan_3d_outside_the_contract_is_refused(starter, plan, path):
+    starter["plans3d"] = [plan]
+
+    assert str(_error(starter)).startswith(f"{path}: ")
+
+
+FRAME_ITEM = {"id": "f", "shotId": None, "time": 0, "assetId": None, "role": "first", "strength": 100}
+CONTROL_ITEM = {"id": "c", "shotId": None, "name": "", "start": 0, "dur": 4, "guidance": 65, "source": "scene3d", "stale": False}
+
+
+@pytest.mark.parametrize(
+    "collection, item, key, wrong",
+    [("frames", FRAME_ITEM, "sceneId", ""), ("controls", CONTROL_ITEM, "planId", 3), ("controls", CONTROL_ITEM, "assetId", "")],
+)
+def test_the_scene_of_a_frame_and_the_plan_and_video_of_a_control_are_optional_ids_or_null(starter, collection, item, key, wrong):
+    starter[collection] = [dict(item)]
+    validate_doc(starter)
+
+    for value, valid in ((wrong, False), (None, True), ("01M535B4GTID", True)):
+        starter[collection][0][key] = value
+        if valid:
+            validate_doc(starter)
+        else:
+            assert str(_error(starter)).startswith(f"$.{collection}[0].{key}: ")
+
+
+LEGACY_SCENES = [
+    {"id": "sc-sample", "kind": "sample", "name": "Sample set"},
+    {"id": "sc-file", "kind": "file", "name": "set.ply", "file": "C:/scenes/set.ply"},
+]
+
+
+def _legacy_plan(plan_id, scene_id):
+    return {
+        "id": plan_id,
+        "shotId": None,
+        "sceneId": scene_id,
+        "name": "Orbit",
+        "start": 0,
+        "dur": 5,
+        "keyframes": [
+            {"id": f"{plan_id}-k0", "t": 0, "az": 90, "el": 30, "dist": 10, "focal": 30, "height": 1.5},
+            {"id": f"{plan_id}-k1", "t": 5, "az": 0, "el": 0, "dist": 13, "focal": 50, "height": 0},
+        ],
+    }
+
+
+def test_migrating_drops_the_simulated_scenes_unlinks_their_plans_and_turns_orbit_keyframes_into_positions(starter):
+    legacy = copy.deepcopy(starter)
+    legacy["scenes"] = [*LEGACY_SCENES, _splat_scene()]
+    legacy["plans3d"] = [_legacy_plan("p1", "sc-sample"), _legacy_plan("p2", "sc-file"), _legacy_plan("p3", "01M535B4GTSCENE00000000000")]
+    before = copy.deepcopy(legacy)
+
+    migrated = migrate(legacy)
+
+    assert legacy == before
+    assert migrated["scenes"] == [_splat_scene()]
+    assert [plan["sceneId"] for plan in migrated["plans3d"]] == [None, None, "01M535B4GTSCENE00000000000"]
+    assert migrated["plans3d"][0]["keyframes"] == [
+        {"id": "p1-k0", "t": 0, "pos": [8.660254, 6.5, 0.0], "target": [0, 1.5, 0], "focal": 30, "roll": 0},
+        {"id": "p1-k1", "t": 5, "pos": [0.0, 0.0, 13.0], "target": [0, 0, 0], "focal": 50, "roll": 0},
+    ]
+    assert [key["pos"] for key in migrated["plans3d"][2]["keyframes"]] == [[8.660254, 6.5, 0.0], [0.0, 0.0, 13.0]]
+    validate_doc(migrated)
+    assert migrate(migrated) is migrated
+
+
+def test_migrating_drops_the_3d_captures_without_an_image_and_keeps_the_other_frames(starter):
+    starter["frames"] = [
+        {"id": "f1", "shotId": None, "time": 1, "assetId": None, "role": "Capture 3D", "strength": 80},
+        {"id": "f2", "shotId": None, "time": 2, "assetId": "a", "role": "Capture 3D", "strength": 80},
+        {"id": "f3", "shotId": None, "time": 3, "assetId": None, "role": "Transition", "strength": 75},
+    ]
+
+    migrated = migrate(starter)
+
+    assert [frame["id"] for frame in migrated["frames"]] == ["f2", "f3"]
+    assert len(starter["frames"]) == 3
+    assert migrate(migrated) is migrated
+
+
+def test_migrating_the_document_of_a_user_with_scenes_and_empty_plans_3d_keeps_it_as_it_is(starter):
+    starter["scenes"] = []
+    starter["plans3d"] = []
+
+    assert migrate(starter) is starter
+    validate_doc(starter)
+
+
+def test_migrating_a_document_already_in_the_new_shape_returns_it_as_it_is(starter):
+    rich = _rich(starter)
+
+    assert migrate(rich) is rich
+
+
+def test_migrating_leaves_malformed_scene_collections_to_the_validation(starter):
+    starter["scenes"] = {"kind": "sample"}
+    starter["plans3d"] = [3, {"id": "p", "keyframes": "none"}]
+
+    assert migrate(starter) is starter
 
 
 @pytest.mark.parametrize(

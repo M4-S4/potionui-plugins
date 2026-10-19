@@ -27,9 +27,10 @@ class Order:
     shots: List[str]
     quality: str
     variants: int
-    preset_id: str
+    preset_id: Optional[str]
     model_id: Optional[str] = None
     label: Optional[str] = None
+    production: str = director.AI
 
 
 @dataclass
@@ -45,7 +46,7 @@ class Evaluation:
 
 
 def parse_order(body: Any) -> Order:
-    """The shots, quality, variants, preset and model a body asks for; OrderError for a malformed one."""
+    """The shots, quality, variants, preset, model and production mode a body asks for; OrderError for a malformed one. The 3D render mode needs no preset."""
     if not isinstance(body, dict):
         raise OrderError("The request body must be a JSON object.")
     shots = body.get("shots")
@@ -57,8 +58,12 @@ def parse_order(body: Any) -> Order:
     variants = body.get("variants")
     if not isinstance(variants, int) or isinstance(variants, bool) or not 1 <= variants <= MAX_VARIANTS:
         raise OrderError(f"variants must be an integer from 1 to {MAX_VARIANTS}.")
+    production = body.get("production", director.AI)
+    if production not in director.PRODUCTIONS:
+        raise OrderError(f"production must be one of: {', '.join(director.PRODUCTIONS)}.")
     preset_id = body.get("preset_id")
-    if not isinstance(preset_id, str) or not preset_id:
+    rendered = production == director.RENDER_3D and preset_id is None
+    if not rendered and (not isinstance(preset_id, str) or not preset_id):
         raise OrderError("preset_id must be a preset id.")
     model_id = body.get("model_id")
     if model_id is not None and (not isinstance(model_id, str) or not model_id):
@@ -66,7 +71,9 @@ def parse_order(body: Any) -> Order:
     label = body.get("label")
     if label is not None and (not isinstance(label, str) or len(label) > LABEL_LIMIT):
         raise OrderError(f"label must be a string of at most {LABEL_LIMIT} characters.")
-    return Order(shots=list(shots), quality=quality, variants=variants, preset_id=preset_id, model_id=model_id, label=label)
+    return Order(
+        shots=list(shots), quality=quality, variants=variants, preset_id=preset_id, model_id=model_id, label=label, production=production
+    )
 
 
 def calibrated_ratio(preset_id: str, backend_id: Optional[str], resolution: Optional[str]) -> Tuple[Optional[float], int]:
@@ -197,7 +204,7 @@ def _cost(caller: User, plans: Plans, variants: int) -> Optional[Dict[str, Any]]
 
 async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order) -> Evaluation:
     """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape."""
-    plans = director.build_plans(owner, doc, order.shots, order.preset_id, order.quality, order.model_id)
+    plans = director.build_plans(owner, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production)
     vram, vram_warnings = await _vram(owner, plans)
     backend_id = vram.get("backend_id") or (plans.model or {}).get("backend_id")
     minutes: Dict[str, float] = {}
@@ -216,7 +223,9 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
     if plans.shots and seconds is None:
         warnings.append(note("time_unknown", "No take of this preset was measured at this resolution yet."))
     payload = {
+        "production": plans.production,
         "shots": [plan.summary() for plan in plans.shots],
+        "renders": list(plans.renders),
         "vram": vram,
         "time": {"seconds": seconds, "samples": samples},
         "quota": quota,

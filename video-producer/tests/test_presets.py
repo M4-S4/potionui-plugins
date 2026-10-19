@@ -29,6 +29,7 @@ class Tier:
     director_modes: Tuple[str, ...]
     profiles: Tuple[str, ...]
     max_duration: int
+    modes: Tuple[str, ...] = ("video",)
 
     @property
     def is_wan(self):
@@ -92,8 +93,9 @@ TIERS = {
         fps=24,
         frames=124,
         director_modes=H3_MODES,
-        profiles=("FL2VA", "Hybrid AV"),
+        profiles=("FL2VA", "Ref2VA", "Hybrid AV"),
         max_duration=15,
+        modes=("video", "refs"),
     ),
     "MiniMax-H3-Fast-12GB": Tier(
         id=presets.MINIMAX_H3_FAST_12GB,
@@ -153,7 +155,7 @@ def test_a_shipped_preset_declares_its_hardware_tier(folder):
     assert manifest["requires"] == tier.requires
     assert manifest["tags"][:3] == tier.leading_tags
     assert [tag for tag in manifest["tags"] if tag.startswith("ram-")] == tier.ram_tags
-    assert manifest["modes"] == ["video"]
+    assert manifest["modes"] == list(tier.modes)
     assert (variables[tier.fps_var], variables["default_frames"]) == (tier.fps, tier.frames)
     assert catalog.preset_fps(variables) == tier.fps
     assert catalog.main_mode(variables, manifest["modes"]) == "video"
@@ -186,3 +188,14 @@ def test_a_shipped_preset_lints_without_error(folder):
 
     assert errors == []
     assert warnings == []
+
+
+def test_the_12_gb_h3_preset_runs_ref2va_through_its_refs_mode():
+    manifest = _manifest("MiniMax-H3-12GB")
+    variables = manifest["vars"]
+
+    assert catalog.REFS_MODE in manifest["modes"]
+    assert variables["video_director"]["preset_modes"] == ["video", "refs"]
+    assert catalog.profiles(presets.MINIMAX_H3_12GB, variables, manifest["modes"]) == ["FL2VA", "Ref2VA", "Hybrid AV"]
+    assert catalog.main_mode(variables, manifest["modes"]) == "video"
+    assert (PRESETS_ROOT / "MiniMax-H3-12GB" / "modes" / "refs" / "pipeline.yml").is_file()

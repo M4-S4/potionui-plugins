@@ -1,15 +1,17 @@
 ########
-## MiniMax-H3 (12 GB): the base MiniMax-H3 video mode, set up for a 12 GB card
-## with 64 GB of system RAM. Shipped by the Video Producer plugin.
+## MiniMax-H3 (12 GB): the base MiniMax-H3 video and references modes, set up
+## for a 12 GB card with 64 GB of system RAM. Shipped by the Video Producer plugin.
 ##
-## Same pipeline and form as content/presets/marketplace/MiniMax-H3 (video
-## mode). The LoRA and Enhance tabs and the resolution lists are read from that
-## preset; pipeline.yml and the Generation and Advanced tabs are copies that
-## only change defaults and recommendations (the plugin's tests compare them).
+## Same pipelines and forms as content/presets/marketplace/MiniMax-H3 (video
+## and refs modes). The LoRA and Enhance tabs and the resolution lists are read
+## from that preset; the pipelines and the Generation, References and Advanced
+## tabs are copies that only change defaults and recommendations (the plugin's
+## tests compare them). The refs mode reads this preset's Advanced tab.
 ##
 ## Memory profile: int8 ConvRot DiT and video VAE, nvfp4 text encoder streamed
 ## from system RAM (the native backend's text_encoder_placement option), 832x480,
-## 124 frames, 20 steps, res_multistep / simple, keyframe budget 1x.
+## 124 frames, 20 steps, res_multistep / simple, keyframe and reference budget
+## 1x. The refs mode recommends the int8 ConvRot Ref2VA DiT.
 ##
 ## WEIGHTS LICENSE: same MiniMax H3 Community License as the base preset (the
 ## Applicable Territory excludes the EU, the UK, the US and the Republic of
@@ -184,6 +186,74 @@ llm:
     any later cut inside it is timed from that shot's own 00:00, and it never
     mentions or continues from another Director shot.
 
+  modes:
+    refs:
+      guide: |
+        Reference mode uses a SIX-SECTION prompt that REPLACES the three-field format.
+        The References field numbers each kind on its own counter, by order: images are
+        <Picture 1>, <Picture 2>...; videos <Video 1>...; audio <Audio 1>.... Their labels name the
+        subjects. A Director shot uses only the references its own prompt cites,
+        renumbered within the shot. Write all sections in English, in this order:
+
+        subject_definitions: define each referenced thing and its label. <Subject N>
+        is an abstraction over the assets (it has NO attachment of its own); images
+        that only define a character/costume/style are cited INSIDE the Subject
+        definition, never as standalone Picture entries. Examples:
+        "<Subject 1> is the young woman in <Picture 1>, with long dark hair and a
+        blue cardigan." / "<Picture 2> is the first frame of [Shot 1], showing a
+        woman seated beside a cafe window."
+
+        summary: one short paragraph opening with bracketed task types, combined
+        with " + ", chosen from: keyframe completion, reference generation, video
+        editing, video continuation, audio reuse, audio reference. E.g.
+        "[reference generation] ...". A reference merely existing does not create
+        a task type. Introduce no new labels here.
+
+        retention_analysis: one line per label with a FIXED marker - visual
+        (<Subject/Picture/Video N>): fully_preserved | partially_preserved |
+        attribute_transfer | weak_reference; audio (<Audio N>): fully_copy |
+        partially_copy | reference | weak_reference. Format:
+        "<Subject 1> (appears in [Shot 1], [Shot 3]): fully_preserved - ...".
+        No (Sx) speaker IDs in this section.
+
+        detailed_description: the main body, 350-500 words. State the overall style
+        in one or two sentences BEFORE [Shot 1] (unlike base mode). Then timed shots
+        in playback order: [Shot 1] no timestamp; later shots "[Shot 2] At
+        00:03.500, the camera cuts to...", strictly increasing. There is NO
+        alignment-instruction line - anchor frames in prose: "the shot begins from
+        <Picture 1>", "the shot ends on <Picture 3>". Cite <Subject N>/<Picture N>
+        at first appearance and where their role applies. Camera motion as natural
+        English: zoom/push/pan/truck/tilt/pedestal, arc, tracking, static, POV,
+        roll, shake - optionally "with small/large amplitude", "at slow/fast
+        speed". Speakers get stable (S1)/(S2) IDs assigned by order of first vocal
+        event; a referenced subject speaking keeps both: "<Subject 2> (S1) says,
+        <d>[English] ...</d>". Preserve user-provided words verbatim inside <d>;
+        on-screen text verbatim in double quotes.
+
+        overall_soundscape: 1-4 sentences of ambience, physical action sounds,
+        non-verbal human sounds for the whole video; no dialogue or music here;
+        "N/A" only for explicit total silence.
+
+        non_diegetic_music: 1-3 sentences, instrumentation/tempo/rhythm/dynamics,
+        never abstract mood words; "N/A" when no score. When reference audio is
+        reused, state the copy/reference relationship only in the section matching
+        the audible layer.
+
+prompt_resources:
+  refs:
+    - field: "references"
+      kind: "image"
+      label: "Pictures"
+      token: "<Picture @>"
+    - field: "references"
+      kind: "video"
+      label: "Videos"
+      token: "<Video @>"
+    - field: "references"
+      kind: "audio"
+      label: "Audio"
+      token: "<Audio @>"
+
 prompt_syntax:
   video:
     - token: "integrated_multimodal_description:"
@@ -214,6 +284,72 @@ prompt_syntax:
       insert: "<d>{}</d>"
       help: "Wraps a speaker's exact words, preserved verbatim"
       color: "mediumseagreen"
+  refs:
+    - token: "subject_definitions:"
+      kind: "label"
+      help: "Defines each referenced Subject and cites the pictures/videos that anchor it"
+      color: "cornflowerblue"
+    - token: "summary:"
+      kind: "label"
+      help: "One paragraph opening with bracketed task types, e.g. [reference generation]"
+      color: "cornflowerblue"
+    - token: "retention_analysis:"
+      kind: "label"
+      help: "One line per label with a fixed preservation marker (fully_preserved, partially_preserved, ...)"
+      color: "cornflowerblue"
+    - token: "detailed_description:"
+      kind: "label"
+      help: "Main body: overall style, then timed shots in playback order"
+      color: "cornflowerblue"
+    - token: "overall_soundscape:"
+      kind: "label"
+      help: "Ambience and action sounds for the whole video (no dialogue or music)"
+      color: "cornflowerblue"
+    - token: "non_diegetic_music:"
+      kind: "label"
+      help: "Background score by instrumentation, tempo, rhythm and dynamics"
+      color: "cornflowerblue"
+    - token: "[Shot 1]"
+      kind: "marker"
+      pattern: '\[Shot \d+\]'
+      help: "Marks a new shot; Shot 1 opens the timeline, later shots carry a timestamp"
+      color: "goldenrod"
+    - token: "(S1)"
+      kind: "marker"
+      pattern: '\(S\d+(?:,S\d+)*\)'
+      help: "Stable speaker ID, assigned by order of first vocal event"
+      color: "mediumorchid"
+    - token: "<d></d>"
+      kind: "wrap"
+      pattern: '<d>[\s\S]*?</d>'
+      insert: "<d>{}</d>"
+      help: "Wraps a speaker's exact words, preserved verbatim"
+      color: "mediumseagreen"
+    - token: "<Subject 1>"
+      kind: "marker"
+      pattern: '<Subject \d+>'
+      insert: "<Subject {n=1}>"
+      help: "References a Subject defined in subject_definitions"
+      color: "mediumvioletred"
+    - token: "<Picture 1>"
+      kind: "marker"
+      pattern: '<Picture \d+>'
+      insert: "<Picture {n=1}>"
+      help: "References a picture reference by its 1-based position"
+      color: "mediumturquoise"
+    - token: "<Video 1>"
+      kind: "marker"
+      pattern: '<Video \d+>'
+      insert: "<Video {n=1}>"
+      help: "References a video reference by its 1-based position"
+      color: "mediumturquoise"
+    - token: "<Audio 1>"
+      kind: "marker"
+      pattern: '<Audio \d+>'
+      insert: "<Audio {n=1}>"
+      help: "References an audio reference by its 1-based position"
+      color: "cadetblue"
 
 modes:
   - video
+  - refs

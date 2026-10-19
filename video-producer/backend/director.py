@@ -36,6 +36,21 @@ UPSCALE_SHORT_SIDES = {"hd720": 720, "fhd1080": 1080, "qhd1440": 1440, "uhd2160"
 H3_TARGET_SIZES = {"hd720": "hd", "fhd1080": "hd", "qhd1440": "2k", "uhd2160": "2k"}
 H3_TARGET_BACK = {"hd": "fhd1080", "2k": "qhd1440"}
 
+AI = "ai"
+RENDER_3D = "render3d"
+RENDER_3D_AI = "render3d_ai"
+
+PRODUCTIONS = (AI, RENDER_3D, RENDER_3D_AI)
+
+SCENE3D = "scene3d"
+
+GUIDE_MIN_SECONDS = 2.0
+
+CAMERA_SENTENCES = {
+    "en": "Use <Video {rank}> as the camera reference and follow its exact camera path.",
+    "fr": "Utilise <Video {rank}> comme référence de caméra et suis exactement sa trajectoire.",
+}
+
 
 class DirectorError(Exception):
     """A shot the plugin cannot turn into a generation request."""
@@ -101,15 +116,17 @@ class ShotPlan:
     cloud_params: Dict[str, Any] = field(default_factory=dict)
     missing_models: List[str] = field(default_factory=list)
     seeded: bool = True
+    guides: List[str] = field(default_factory=list)
 
     def summary(self) -> Dict[str, Any]:
-        """The shot as the estimate reports it."""
+        """The shot as the estimate reports it, with the 3D guides sent as its camera references."""
         return {
             "shot_id": self.shot_id,
             "director_mode": self.director_mode,
             "seconds": self.seconds,
             "resolution": self.resolution,
             "fps": self.fps,
+            "guides": list(self.guides),
         }
 
     def request_for(self, take_id: Optional[str] = None, seed: Optional[int] = None) -> Dict[str, Any]:
@@ -132,7 +149,9 @@ class Plans:
     model: Optional[Dict[str, Any]]
     quality: str
     profile: str
+    production: str = AI
     shots: List[ShotPlan] = field(default_factory=list)
+    renders: List[Dict[str, Any]] = field(default_factory=list)
     blocks: List[Dict[str, Any]] = field(default_factory=list)
     warnings: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -174,8 +193,14 @@ def _overlap(start: float, end: float, item: Mapping[str, Any]) -> float:
     return min(end, begin + float(item.get("dur") or 0)) - max(start, begin)
 
 
-def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
-    """The shot's own instruction, else the global one over its interval, then the filled direction fields, one per line."""
+def camera_sentence(doc: Mapping[str, Any], rank: int) -> str:
+    """The sentence that makes the n-th reference video of a shot its camera path, in the project's prompt language."""
+    language = doc.get("promptLanguage")
+    return CAMERA_SENTENCES[language if language in CAMERA_SENTENCES else "en"].format(rank=rank)
+
+
+def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], camera_videos: Sequence[int] = ()) -> str:
+    """The shot's own instruction, else the global one over its interval, then the filled direction fields, one per line, and a camera sentence for each reference video that is a 3D guide."""
     prompts = doc.get("prompts") or []
     local = next((prompt for prompt in prompts if prompt.get("shotId") == clip.get("id")), None)
     if local is None:
@@ -190,6 +215,7 @@ def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
     direction = doc.get("direction") or {}
     lines = [str(local.get("text") or "").strip()] if local is not None else []
     lines += [str(direction.get(name) or "").strip() for name in DIRECTION_FIELDS]
+    lines += [camera_sentence(doc, rank) for rank in camera_videos]
     return "\n".join(line for line in lines if line)
 
 
@@ -332,8 +358,36 @@ def bind_frames(
         return request, "i2v"
 
 
-def shot_references(user: User, doc: Mapping[str, Any], shot_id: str) -> List[str]:
-    """The media values of the shot's own references, then the global ones, within the per-kind limits."""
+def shot_guides(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """The 3D guides of a shot: the scene3d controls linked to it, and those linked to no shot that overlap it."""
+    start = float(clip.get("start") or 0)
+    end = start + float(clip.get("dur") or 0)
+    return [
+        control
+        for control in doc.get("controls") or []
+        if control.get("source") == SCENE3D
+        and (control.get("shotId") == clip.get("id") or (not control.get("shotId") and _overlap(start, end, control) > 0))
+    ]
+
+
+def fresh_guides(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """The 3D guides of a shot that are rendered and not stale."""
+    return [control for control in shot_guides(doc, clip) if control.get("assetId") and not control.get("stale")]
+
+
+def guide_seconds(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> float:
+    """How long the video of a 3D guide lasts: its asset's length when known, else the guide's."""
+    asset = _asset(doc, guide.get("assetId")) or {}
+    length = asset.get("srcDur")
+    if isinstance(length, (int, float)) and not isinstance(length, bool) and length > 0:
+        return float(length)
+    return float(guide.get("dur") or 0)
+
+
+def reference_media(
+    user: User, doc: Mapping[str, Any], shot_id: str, guides: Sequence[Mapping[str, Any]] = ()
+) -> Tuple[List[str], List[Tuple[Dict[str, Any], int]]]:
+    """The media values of the shot's 3D guide videos, then its own references, then the global ones, within the per-kind limits; with each guide sent and its rank among the reference videos."""
     scoped, shared = [], []
     for reference in doc.get("references") or []:
         scope = reference.get("scope")
@@ -342,17 +396,78 @@ def shot_references(user: User, doc: Mapping[str, Any], shot_id: str) -> List[st
                 scoped.append(reference)
         else:
             shared.append(reference)
+    candidates = [(dict(guide), guide.get("assetId")) for guide in guides] + [(None, reference.get("assetId")) for reference in [*scoped, *shared]]
     values: List[str] = []
+    sent: List[Tuple[Dict[str, Any], int]] = []
     counts = {kind: 0 for kind in REFERENCE_LIMITS}
-    for reference in [*scoped, *shared]:
-        resolved = _resolve(user, _asset(doc, reference.get("assetId")))
+    for guide, asset_id in candidates:
+        resolved = _resolve(user, _asset(doc, asset_id))
         if resolved is None or resolved["value"] in values:
             continue
         kind = resolved["media_type"]
+        if guide is not None and kind != "video":
+            continue
         if kind in counts and counts[kind] < REFERENCE_LIMITS[kind]:
             counts[kind] += 1
             values.append(resolved["value"])
-    return values
+            if guide is not None:
+                sent.append((guide, counts[kind]))
+    return values, sent
+
+
+def shot_references(user: User, doc: Mapping[str, Any], shot_id: str) -> List[str]:
+    """The media values of the shot's own references, then the global ones, within the per-kind limits."""
+    return reference_media(user, doc, shot_id)[0]
+
+
+def _guide_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], warnings: List[Dict[str, Any]], refs: bool) -> None:
+    guides = shot_guides(doc, clip)
+    if guides and not refs:
+        warnings.append(
+            note("guide_needs_refs", "The shot has a 3D guide video: only a Ref2VA preset follows it.", shot_id=clip["id"])
+        )
+        return
+    for guide in guides:
+        if guide.get("stale"):
+            warnings.append(
+                note("stale_guide", "The 3D guide of the shot is stale: render it again.", shot_id=clip["id"], control_id=guide.get("id"))
+            )
+
+
+def _render_of(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    rendered = [guide for guide in fresh_guides(doc, clip) if _asset(doc, guide.get("assetId")) is not None]
+    if not rendered:
+        return None
+    guide = rendered[-1]
+    return {"shot_id": clip["id"], "control_id": guide.get("id"), "plan_id": guide.get("planId"), "asset_id": guide["assetId"]}
+
+
+def shot_renders(doc: Mapping[str, Any], clips: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """The rendered 3D guide videos the shots would take as they are in the 3D render mode: shot, guide, plan 3D and asset."""
+    return [render for render in (_render_of(doc, clip) for clip in clips) if render is not None]
+
+
+def _render_missing(clip: Mapping[str, Any]) -> Dict[str, Any]:
+    return note("render_missing", "The shot has no up-to-date 3D render.", shot_id=clip["id"])
+
+
+def build_renders(doc: Mapping[str, Any], shot_ids: Sequence[str], quality: str) -> Plans:
+    """The 3D render mode: each shot with an up-to-date rendered guide takes its video as it is, without a generation."""
+    plans = Plans(preset=None, model=None, quality=quality, profile=profile_of(doc), production=RENDER_3D)
+    clips = [clip for clip in (clip_of(doc, shot_id) for shot_id in dict.fromkeys(shot_ids)) if clip is not None]
+    if not clips:
+        plans.blocks.append(note("no_shots", "Select at least one shot of the project."))
+        return plans
+    for clip in clips:
+        _guide_warnings(doc, clip, plans.warnings, refs=True)
+        render = _render_of(doc, clip)
+        if render is None:
+            plans.warnings.append(_render_missing(clip))
+        else:
+            plans.renders.append(render)
+    if not plans.renders:
+        plans.blocks.append(note("no_render", "No selected shot has an up-to-date 3D render."))
+    return plans
 
 
 def _document(prompt: str, fps: float, seconds: float, resolution: Optional[str]) -> Dict[str, Any]:
@@ -378,6 +493,7 @@ class _Context:
     profile: str
     model: Optional[Dict[str, Any]]
     draft_setting: str
+    production: str = AI
     fields: Dict[str, models.Fields] = field(default_factory=dict)
 
     def mode_fields(self, mode: str) -> models.Fields:
@@ -406,7 +522,29 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     ) or (fields.get("resolution") or {}).get("default") or context.draft_setting
     seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
     fps = preset.fps
-    prompt = shot_prompt(doc, clip)
+    references: List[str] = []
+    sent: List[Tuple[Dict[str, Any], int]] = []
+    if context.profile == REF2VA:
+        references, sent = reference_media(context.user, doc, shot_id, fresh_guides(doc, clip))
+        if not references:
+            raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
+        _guide_warnings(doc, clip, warnings, refs=True)
+        for guide, _ in sent:
+            if guide_seconds(doc, guide) < GUIDE_MIN_SECONDS:
+                warnings.append(
+                    note(
+                        "guide_too_short",
+                        f"The 3D guide video of the shot is shorter than the {GUIDE_MIN_SECONDS:g} s MiniMax-H3 reads.",
+                        shot_id=shot_id,
+                        control_id=guide.get("id"),
+                        min=GUIDE_MIN_SECONDS,
+                    )
+                )
+        if context.production == RENDER_3D_AI and not sent:
+            warnings.append(_render_missing(clip))
+    else:
+        _guide_warnings(doc, clip, warnings, refs=False)
+    prompt = shot_prompt(doc, clip, [rank for _, rank in sent])
     form: Dict[str, Any] = {"seed": -1, "video_director": _document(prompt, fps, seconds, resolution)}
     if "resolution" in fields:
         form["resolution"] = resolution
@@ -416,9 +554,6 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         form["quantity"] = 1
     request = _request(preset.id, mode, prompt, form)
     if context.profile == REF2VA:
-        references = shot_references(context.user, doc, shot_id)
-        if not references:
-            raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
         request["form_data"]["references"] = references
         director_mode = REFS_MODE
     elif _text_only(preset) and shot_frames(doc, shot_id)[0] is not None:
@@ -442,6 +577,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         prompt_text=prompt,
         request=request,
         missing_models=list(resolved.missing),
+        guides=[str(guide.get("id")) for guide, _ in sent],
     )
 
 
@@ -557,6 +693,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         )
     if director_mode == "t2v" and context.profile == FL2VA:
         warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
+    _guide_warnings(doc, clip, warnings, refs=False)
     params = {"duration_s": seconds, "resolution": resolution, "aspect_ratio": aspect}
     return ShotPlan(
         shot_id=shot_id,
@@ -592,13 +729,23 @@ def build_plans(
     quality: str,
     model_id: Optional[str] = None,
     profile: Optional[str] = None,
+    production: str = AI,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know."""
+    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run that needs a MiniMax-H3 preset with its refs mode."""
+    if production == RENDER_3D:
+        return build_renders(doc, shot_ids, quality)
+    if production == RENDER_3D_AI:
+        profile = REF2VA
     profile = profile if profile in PROFILES else profile_of(doc)
     preset = find_preset(user, preset_id)
-    plans = Plans(preset=preset, model=None, quality=quality, profile=profile)
+    plans = Plans(preset=preset, model=None, quality=quality, profile=profile, production=production)
     if preset is None:
         plans.blocks.append(note("no_preset", "The preset is not available to you.", preset_id=preset_id))
+        return plans
+    if production == RENDER_3D_AI and (preset.id not in presets.MINIMAX_H3_PRESETS or REFS_MODE not in preset.modes):
+        plans.blocks.append(
+            note("refs_preset_needed", "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode.", preset_id=preset.id)
+        )
         return plans
     if profile not in preset.profiles:
         plans.blocks.append(
@@ -614,6 +761,7 @@ def build_plans(
     if not clips:
         plans.blocks.append(note("no_shots", "Select at least one shot of the project."))
         return plans
+    plans.renders = shot_renders(doc, clips)
     context = _Context(
         user=user,
         doc=doc,
@@ -622,6 +770,7 @@ def build_plans(
         profile=profile,
         model=plans.model,
         draft_setting=str(settings.get_setting("draft_resolution")),
+        production=production,
     )
     missing: List[str] = []
     for clip in clips:

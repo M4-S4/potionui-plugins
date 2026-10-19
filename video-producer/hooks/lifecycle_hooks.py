@@ -1,11 +1,11 @@
 import logging
 
 if __name__.count(".") >= 2:
-    from ..backend import PLUGIN_ID, tables, tracker
+    from ..backend import PLUGIN_ID, scene3d, tables, tracker
     from ..backend.core_bridge import HookContext
     from ..backend.exports import jobs
 else:
-    from backend import PLUGIN_ID, tables, tracker
+    from backend import PLUGIN_ID, scene3d, tables, tracker
     from backend.core_bridge import HookContext
     from backend.exports import jobs
 
@@ -23,7 +23,7 @@ def on_boot(context: HookContext) -> HookContext:
 
 
 def on_ready(context: HookContext) -> HookContext:
-    """Start following the takes in flight and resume the export queue once the application loop is up."""
+    """Start following the takes in flight, resume the export queue and clear what a stop left of the scenes once the application loop is up."""
     try:
         if tracker.TRACKER.start():
             logger.info("[VIDEO-PRODUCER] Take tracker started")
@@ -35,6 +35,12 @@ def on_ready(context: HookContext) -> HookContext:
             logger.info("[VIDEO-PRODUCER] %s export(s) interrupted by the last stop marked failed", failed)
     except Exception:
         logger.exception("[VIDEO-PRODUCER] Could not resume the export queue")
+    try:
+        failed = scene3d.recover()
+        if failed:
+            logger.info("[VIDEO-PRODUCER] %s splat job(s) interrupted by the last stop marked failed", failed)
+    except Exception:
+        logger.exception("[VIDEO-PRODUCER] Could not clear the scenes the last stop left")
     return context
 
 
