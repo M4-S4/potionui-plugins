@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
@@ -26,6 +27,12 @@ SOURCE_FIELD = "source_image"
 RESERVED_MINUTES = 1.0
 
 ACTIVE = ("queued", "running")
+
+MAX_ACTIVE_PER_USER = 2
+
+FINISH_ATTEMPTS = 3
+
+_FINISH_FAILURES: Dict[str, int] = {}
 
 COLUMNS = (
     "id",
@@ -110,6 +117,11 @@ def list_project(project_id: str) -> List[Dict[str, Any]]:
 def has_active(project_id: str) -> bool:
     """True while a scene job of the project is queued or running."""
     return bool(_fetch(f"{_SELECT} WHERE project_id = ? AND {_ACTIVE_SQL} LIMIT 1", (project_id,)))
+
+
+def active_of(user_id: str) -> List[Dict[str, Any]]:
+    """The queued and running scene jobs of a user, every project included."""
+    return _fetch(f"{_SELECT} WHERE user_id = ? AND {_ACTIVE_SQL} ORDER BY created_at, id", (user_id,))
 
 
 def list_active() -> List[Dict[str, Any]]:
@@ -258,8 +270,10 @@ async def _submit(owner: User, job: Dict[str, Any]) -> None:
 async def from_image(
     owner: User, project: Mapping[str, Any], scene_id: str, asset_id: str, time: Optional[float]
 ) -> Dict[str, Any]:
-    """Make a splat of an image of the project, or of a frame of one of its videos: reserve its minutes and hand it to the core; SceneError 413 when the project or its owner has no storage room left."""
+    """Make a splat of an image of the project, or of a frame of one of its videos: reserve its minutes and hand it to the core; SceneError 409 while the owner already has MAX_ACTIVE_PER_USER scenes in flight, 413 when the project or its owner has no storage room left."""
     form, minutes = _plan(owner)
+    if len(active_of(owner.id)) >= MAX_ACTIVE_PER_USER:
+        raise SceneError(409, "scene_jobs_busy", f"At most {MAX_ACTIVE_PER_USER} scenes of a user are built at once.", limit=MAX_ACTIVE_PER_USER)
     files.ensure_room(project["id"], owner.id, 1)
     value = await source_image(owner, project["doc"], asset_id, time)
     job_id = generate_ulid()
@@ -301,26 +315,43 @@ def _splat(found: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 
 
 def _copy(job: Mapping[str, Any], item: Mapping[str, Any], file_id: str) -> Tuple[Path, formats.Probe]:
-    folder = storage.project_folder(job["project_id"])
-    folder.mkdir(parents=True, exist_ok=True)
+    work = storage.work_folder(job["project_id"])
+    work.mkdir(parents=True, exist_ok=True)
     fmt = formats.format_of(str(item.get("file_path") or "")) or str(item.get("splat_format") or "ply")
-    local = core_bridge.local_media_file("history", str(item["file_path"]), folder)
+    local = core_bridge.local_media_file("history", str(item["file_path"]), work)
     if local is None:
         raise FileNotFoundError(item["file_path"])
-    target = folder / files.stored_name(file_id, fmt)
-    if local.parent == folder and local.name.startswith(core_bridge.SOURCE_PREFIX):
-        local.replace(target)
-    else:
-        shutil.copyfile(local, target)
+    temp = work / f"copy-{file_id}.{fmt}"
     try:
-        return target, formats.probe(fmt, target)
-    except FormatError:
-        target.unlink(missing_ok=True)
-        raise
+        if local.parent == work and local.name.startswith(core_bridge.SOURCE_PREFIX):
+            local.replace(temp)
+        else:
+            shutil.copyfile(local, temp)
+        probe = formats.probe(fmt, temp)
+        target = storage.project_folder(job["project_id"]) / files.stored_name(file_id, fmt)
+        os.replace(temp, target)
+    finally:
+        temp.unlink(missing_ok=True)
+    return target, probe
 
 
 async def finish_done(job: Mapping[str, Any], user: User, state: Mapping[str, Any]) -> bool:
-    """End a job whose generation completed: copy its splat into the project's scene storage when the project and its owner have room for it, read its view, adjust its minutes."""
+    """End a job whose generation completed: copy its splat into the project's scene storage when the project and its owner have room for it, read its view, adjust its minutes; after FINISH_ATTEMPTS rounds that raise, fail it and refund it."""
+    try:
+        finished = await _finish(job, user, state)
+    except Exception:
+        failures = _FINISH_FAILURES.get(job["id"], 0) + 1
+        if failures < FINISH_ATTEMPTS:
+            _FINISH_FAILURES[job["id"]] = failures
+            raise
+        _FINISH_FAILURES.pop(job["id"], None)
+        logger.warning("[VIDEO-PRODUCER] Scene job %s could not be finished in %s attempts", job["id"], failures, exc_info=True)
+        return fail(job, "finish_failed", "The splat of the scene could not be stored.")
+    _FINISH_FAILURES.pop(job["id"], None)
+    return finished
+
+
+async def _finish(job: Mapping[str, Any], user: User, state: Mapping[str, Any]) -> bool:
     try:
         found = core_bridge.list_generation_files(user, job["generation_id"])
     except GenerationNotFoundException:
@@ -343,7 +374,11 @@ async def finish_done(job: Mapping[str, Any], user: User, state: Mapping[str, An
         target.unlink(missing_ok=True)
         return fail(job, exc.error, exc.message)
     count = item.get("splat_count") if isinstance(item.get("splat_count"), int) else probe.count
-    stored = files.add_file(file_id, job["project_id"], job["user_id"], "splat", target.name, size, probe, job_id=job["id"])
+    try:
+        stored = files.add_file(file_id, job["project_id"], job["user_id"], "splat", target.name, size, probe, job_id=job["id"])
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
     fields = {
         "file_id": file_id,
         "splat_count": count,

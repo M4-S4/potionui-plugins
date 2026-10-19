@@ -284,7 +284,7 @@ def test_a_splat_streamed_from_object_storage_is_moved_into_place(client, core, 
 
     folder = storage.project_folder(project["id"])
     (job,) = jobs.list_project(project["id"])
-    assert sorted(path.name for path in folder.iterdir()) == [f"{job['file_id']}.ply"]
+    assert sorted(path.name for path in folder.rglob("*") if path.is_file()) == [f"{job['file_id']}.ply"]
 
 
 @pytest.mark.parametrize(
@@ -308,7 +308,72 @@ def test_a_generation_without_a_readable_splat_fails_the_job_and_refunds_it(clie
     assert core.refunded == [f"video-producer:scene:{job['id']}"]
     assert files.list_project(project["id"]) == []
     folder = storage.project_folder(project["id"])
-    assert not folder.exists() or [path.name for path in folder.iterdir()] == []
+    assert not folder.exists() or [path.name for path in folder.rglob("*") if path.is_file()] == []
+
+
+def test_the_splat_is_checked_in_the_work_folder_and_appears_in_place_only_once_whole(client, core, scene, tmp_path, samples, monkeypatch):
+    from backend.scene3d import formats
+
+    project, _ = scene
+    _ply_source(tmp_path, samples, monkeypatch)
+    _start(client, project)
+    core.complete_splat("gen-1")
+    probed = []
+    probe = formats.probe
+
+    def spy(fmt, path):
+        probed.append((path.parent.name, path.name, sorted(entry.name for entry in storage.project_folder(project["id"]).iterdir() if entry.is_file())))
+        return probe(fmt, path)
+
+    monkeypatch.setattr(formats, "probe", spy)
+
+    _tick()
+
+    (job,) = jobs.list_project(project["id"])
+    assert probed == [("work", f"copy-{job['file_id']}.ply", [])]
+    assert files.path_of(files.get_file(job["file_id"])).is_file()
+    assert list(storage.work_folder(project["id"]).iterdir()) == []
+
+
+def test_a_finish_that_keeps_failing_ends_the_job_failed_and_refunded_after_three_rounds(client, core, scene, tmp_path, samples, monkeypatch, caplog):
+    project, _ = scene
+    _ply_source(tmp_path, samples, monkeypatch)
+    job = _start(client, project).json()["data"]["job"]
+    core.complete_splat("gen-1")
+    rounds = []
+
+    def add_file(*args, **kwargs):
+        rounds.append(args[0])
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(files, "add_file", add_file)
+
+    assert _tick() is True
+    assert _tick() is True
+    assert jobs.get_job(job["id"])["status"] == "queued" and core.refunded == []
+    assert _tick() is False
+
+    failed = jobs.get_job(job["id"])
+    assert (failed["status"], failed["error_code"]) == ("failed", "finish_failed")
+    assert len(rounds) == jobs.FINISH_ATTEMPTS == 3
+    assert core.refunded == [f"video-producer:scene:{job['id']}"]
+    assert [path for path in storage.project_folder(project["id"]).rglob("*") if path.is_file()] == []
+    assert jobs._FINISH_FAILURES == {}
+    assert "could not be finished in 3 attempts" in caplog.text
+
+
+def test_a_user_builds_at_most_two_scenes_at_once(client, core, scene, make_project):
+    project, _ = scene
+    first = _start(client, project).json()["data"]["job"]
+    _start(client, make_project(assets=ASSETS), scene_id="sc-2")
+
+    refused = _start(client, project, scene_id="sc-3")
+
+    assert (refused.status_code, refused.json()["detail"]["error"]) == (409, "scene_jobs_busy")
+    assert refused.json()["detail"]["data"] == {"limit": 2}
+    assert len(core.submitted) == 2 and len(core.recorded) == 2
+    client.post(f"{BASE}/projects/{project['id']}/scenes/jobs/{first['id']}/cancel")
+    assert _start(client, project, scene_id="sc-3").status_code == 202
 
 
 def test_a_splat_file_the_server_cannot_reach_fails_the_job(client, core, scene, monkeypatch):
