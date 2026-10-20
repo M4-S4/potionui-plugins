@@ -1131,6 +1131,7 @@ H3_12GB = "01M54HN72B0KY7H63BKQ16T253"
 H3_FAST_12GB = "01M54HN72PABVRE54YNQA2Q7ZT"
 WAN_1_3B_8GB = "01M57QPEMDPKHHW83YSEYBN0WZ"
 WAN_5B_8GB = "01M57QPEMDPKHHW83YSEYBN0X0"
+WAN_LIGHTNING_12GB = "01M57QPEMDPKHHW83YSEYBN0X1"
 MINIMAX_H3_FAST = "01KX47H3FASTH30000000000VA"
 COMFY_DIT = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
 WAN2GP_DIT = "MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors"
@@ -1144,6 +1145,10 @@ WAN21_VAE = "wan_2.1_vae.safetensors"
 WAN22_VAE = "wan2.2_vae.safetensors"
 WAN_1_3B_DIT = "wan2.1_t2v_1.3B_fp16.safetensors"
 WAN_5B_DIT = "wan2.2_ti2v_5B_fp16.safetensors"
+WAN_14B_HIGH_DIT = "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
+WAN_14B_LOW_DIT = "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
+LIGHTNING_HIGH_LORA = "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors"
+LIGHTNING_LOW_LORA = "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
 WAN_HIDDEN_TABS = ("I2V Models", "SVI Pro")
 H3_DEFAULTS = {"resolution": "832x480", "quantity": 1, "sampler": "res_multistep", "scheduler": "simple", "keyframe_pixel_budget": "1"}
 WAN_DEFAULTS = {"seed": -1, "sampler": "unipc", "schedule": "shift", "steps": 30}
@@ -1268,6 +1273,49 @@ SHIPPED_PRESETS = {
         speed_options=("balanced", "custom"),
         draft=("832x480", "480x832"),
         final=("832x480", "480x832"),
+    ),
+    WAN_LIGHTNING_12GB: Shipped(
+        name="Wan 2.2 14B Lightning (12 GB)",
+        folder="Wan2.2-14B-Lightning-12GB",
+        source_id=WAN,
+        source_folder="Wan",
+        min_vram_gb=12,
+        recommended_vram_gb=16,
+        ram_gb=64,
+        family_tag="wan",
+        fps_var="default_fps",
+        fps=16,
+        frames=81,
+        description_mentions=("12 GB of VRAM",),
+        changed_fields={
+            "speed_profile": {"configuration", "default"},
+            "text_encoder": {"configuration"},
+            "vae": {"configuration"},
+            "t2v_high_noise_model": {"configuration"},
+            "t2v_low_noise_model": {"configuration"},
+            "t2v_loras_high": {"default"},
+            "t2v_loras_low": {"default"},
+        },
+        defaults={
+            **WAN_DEFAULTS,
+            "speed_profile": "fast",
+            "resolution": "832x480",
+            "fps": 16,
+            "cfg": 5.0,
+            "t2v_loras_high": [{"model": f"models/loras/{LIGHTNING_HIGH_LORA}", "strength": 1.0}],
+            "t2v_loras_low": [{"model": f"models/loras/{LIGHTNING_LOW_LORA}", "strength": 1.0}],
+        },
+        recommended={
+            "text_encoder": [UMT5],
+            "vae": [WAN21_VAE],
+            "t2v_high_noise_model": [WAN_14B_HIGH_DIT],
+            "t2v_low_noise_model": [WAN_14B_LOW_DIT],
+        },
+        hidden_tabs=WAN_HIDDEN_TABS,
+        speed_options=("fast", "custom"),
+        reacted={"steps": 6, "cfg": 1.0},
+        draft=("832x480", "480x832"),
+        final=("1280x720", "720x1280"),
     ),
     H3_12GB: Shipped(
         name="MiniMax-H3 (12 GB)",
@@ -1414,7 +1462,11 @@ def test_the_backend_knows_the_shipped_presets_and_reads_their_profile(shipped_p
     presets = _load("backend.presets")
     catalog = _load("backend.catalog")
 
-    assert (presets.WAN21_T2V_1_3B_8GB, presets.WAN22_TI2V_5B_8GB) == (WAN_1_3B_8GB, WAN_5B_8GB)
+    assert (presets.WAN21_T2V_1_3B_8GB, presets.WAN22_TI2V_5B_8GB, presets.WAN22_14B_LIGHTNING_12GB) == (
+        WAN_1_3B_8GB,
+        WAN_5B_8GB,
+        WAN_LIGHTNING_12GB,
+    )
     assert set(presets.WAN_TIER_PRESETS) == set(WAN_PRESETS)
     for preset_id, shipped in SHIPPED_PRESETS.items():
         preset = shipped_presets[preset_id]

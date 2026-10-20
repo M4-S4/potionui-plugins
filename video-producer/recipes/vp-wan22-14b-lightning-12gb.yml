@@ -1,0 +1,187 @@
+schema_version: 1
+id: "vp-wan22-14b-lightning-12gb"
+version: 1
+name: "Wan 2.2 14B Lightning (12 GB)"
+engine: "native"
+category: "video"
+summary: "Set up Wan 2.2's 14B text-to-video pair with the lightx2v Lightning LoRAs for a 12 GB card, 6 steps per clip."
+description: >
+  Installs the Video Producer preset Wan 2.2 14B Lightning (12 GB) on the native engine, makes sure
+  its six files are available (the 14B high-noise and low-noise experts in fp8, the fp8 UMT5-XXL text
+  encoder, the Wan 2.1 VAE and the lightx2v 4-step LoRA pair, about 38 GB together) and runs a first
+  real generation. Text to video only. The preset declares the system RAM it was measured with.
+  Weights and LoRAs: Apache-2.0.
+
+plugins:
+  - id: "huggingface-provider"
+    reason: >
+      Resolves every file from Hugging Face by its exact repository path; the sha256 of each artifact
+      verifies the download.
+  - id: "video-producer"
+    reason: "Ships this recipe and the hardware-tier presets it installs."
+
+backend:
+  engine: "native"
+
+artifacts:
+  - id: "wan22-t2v-high"
+    kind: "diffusion_model"
+    model_type: "diffusion_model"
+    filename: "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
+    display_name: "Wan 2.2 14B t2v DiT - high-noise expert (fp8-scaled)"
+    required: true
+    size_bytes: 14293923632
+    checksum:
+      algorithm: "sha256"
+      value: "cad711ae211c8b23455ec68cd6a190a33a3d874234a77eb57266d73f8f0e6c9f"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
+  - id: "wan22-t2v-low"
+    kind: "diffusion_model"
+    model_type: "diffusion_model"
+    filename: "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
+    display_name: "Wan 2.2 14B t2v DiT - low-noise expert (fp8-scaled)"
+    required: true
+    size_bytes: 14293923632
+    checksum:
+      algorithm: "sha256"
+      value: "e71b96d7c82e638694c5e7fb98fac4bfb0e4ddc5fbbb4b1df40da8f0f1278a97"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
+  - id: "umt5-text-encoder"
+    kind: "text_encoder"
+    model_type: "text_encoder"
+    filename: "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    display_name: "UMT5-XXL text encoder (fp8-scaled)"
+    required: true
+    size_bytes: 6735906897
+    checksum:
+      algorithm: "sha256"
+      value: "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - id: "wan21-vae"
+    kind: "vae"
+    model_type: "vae"
+    filename: "wan_2.1_vae.safetensors"
+    display_name: "Wan 2.1 VAE"
+    required: true
+    size_bytes: 253815318
+    checksum:
+      algorithm: "sha256"
+      value: "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/vae/wan_2.1_vae.safetensors"
+  - id: "lightx2v-t2v-high"
+    kind: "lora"
+    model_type: "lora"
+    filename: "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors"
+    display_name: "lightx2v 4-step LoRA v1.1, high-noise expert"
+    required: true
+    size_bytes: 1226977424
+    checksum:
+      algorithm: "sha256"
+      value: "698321cb86bd30c4af06c9b84e656a1048c8cb54e06d50694536fb5de37fde41"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors"
+  - id: "lightx2v-t2v-low"
+    kind: "lora"
+    model_type: "lora"
+    filename: "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
+    display_name: "lightx2v 4-step LoRA v1.1, low-noise expert"
+    required: true
+    size_bytes: 1226977424
+    checksum:
+      algorithm: "sha256"
+      value: "ec95216e614b3c132c11bfb387b11feedf62163150ccc9068bca8a189771e75a"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
+
+presets:
+  - preset_id: "01M57QPEMDPKHHW83YSEYBN0X1"
+    path_hint: "video-producer/Wan2.2-14B-Lightning-12GB"
+    assign_to_owner: true
+
+smoke:
+  preset_id: "01M57QPEMDPKHHW83YSEYBN0X1"
+  mode: "video"
+  timeout_seconds: 900
+  prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+  seed: 12345
+  form:
+    resolution: "832x480"
+    speed_profile: "fast"
+    video_director:
+      schema_version: 1
+      mode: "t2v"
+      settings:
+        fps: 16
+        duration: 1
+        resolution: "832x480"
+        seed: 12345
+      segments:
+        - id: "shot-1"
+          prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+          negative_prompt: ""
+      media: []
+
+steps:
+  - key: "plugins.ensure"
+    kind: "plugins.ensure"
+    title: "Enable required plugins"
+    params:
+      plugin_ids: ["huggingface-provider"]
+  - key: "backend.ensure"
+    kind: "backend.ensure"
+    title: "Prepare the native backend"
+    params:
+      engine: "native"
+  - key: "models.index"
+    kind: "models.index"
+    title: "Find models you already have"
+    params:
+      engine: "native"
+  - key: "artifacts.plan"
+    kind: "artifacts.plan"
+    title: "Plan required downloads"
+    params:
+      artifact_ids: ["wan22-t2v-high", "wan22-t2v-low", "umt5-text-encoder", "wan21-vae", "lightx2v-t2v-high", "lightx2v-t2v-low"]
+  - key: "artifacts.fetch"
+    kind: "artifacts.fetch"
+    title: "Download the Wan 2.2 14B and Lightning files"
+    params:
+      artifact_ids: ["wan22-t2v-high", "wan22-t2v-low", "umt5-text-encoder", "wan21-vae", "lightx2v-t2v-high", "lightx2v-t2v-low"]
+  - key: "models.index.downloads"
+    kind: "models.index"
+    title: "Register downloaded models"
+    params:
+      engine: "native"
+  - key: "preset.ensure"
+    kind: "preset.ensure"
+    title: "Install and assign the Wan 2.2 14B Lightning (12 GB) preset"
+    params:
+      preset_id: "01M57QPEMDPKHHW83YSEYBN0X1"
+  - key: "generation.smoke"
+    kind: "generation.smoke"
+    title: "Run a first real generation"
+    params:
+      preset_id: "01M57QPEMDPKHHW83YSEYBN0X1"
+      mode: "video"
