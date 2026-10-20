@@ -171,6 +171,7 @@ The profiles that a preset cannot generate are greyed in the page and marked "Mi
 
 - PotionUI's hardware page lists the LTX family as not yet recommended at any tier, because GPU validation is still open. LTX-2 and 2.3 are one all-in-one checkpoint of about 27 GB; LTX-2.5 uses separate files.
 - On the 12 GB card of the Hardware measures, LTX-2.3 22B distilled fp8 ran out of GPU memory in the DiT at 832×480, for a 5-second and for a 2-second clip, with 62 GB of RAM. The plugin ships no LTX preset.
+- LTX-2.5 22B distilled int8 ConvRot, with its Gemma4 int8 encoder, ran on that card for a text-to-video clip of 1 second at 480×832 with sound: 5 min 57 s from a cold start, about 1 minute of it for the 8 steps and the decode. The Layout-To-Render shots of the 3D render + AI mode did not run there: with the reference video and the first frame the sequence holds about twice the tokens of the clip, and the DiT ran out of GPU memory in its first step at 832×480 for 3 seconds and at 640×352 for 2 seconds, the LoRA passed as an IC-LoRA or as a form LoRA alike (measured on 20 October 2026). The core places the DiT without counting an IC-LoRA, and its activation reserve is too small for a partly streamed int8 DiT with a LoRA; until it does, this mode needs a larger card.
 
 ### MiniMax-H3: read before enabling
 
