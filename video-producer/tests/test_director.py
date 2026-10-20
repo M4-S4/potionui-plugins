@@ -1118,10 +1118,12 @@ def test_the_3d_render_and_ai_mode_warns_about_a_shot_without_a_rendered_guide(c
     assert plans.shots[0].request["form_data"]["references"] == ["uploads/hero.png"]
 
 
-@pytest.mark.parametrize("preset_id", [presets.MINIMAX_H3_12GB, presets.WAN])
-def test_the_3d_render_and_ai_mode_needs_a_minimax_h3_preset_with_its_refs_mode(core, make_doc, preset_id):
+@pytest.mark.parametrize("preset_id", [presets.MINIMAX_H3_12GB, presets.WAN, presets.LTX_2])
+def test_the_3d_render_and_ai_mode_needs_a_minimax_h3_preset_with_its_refs_mode_or_ltx_2_5(core, make_doc, preset_id):
     core.use_wan()
     core.use_h3_variant(presets.MINIMAX_H3_12GB, "MiniMax-H3 (12 GB)")
+    ltx = core.use_ltx25()
+    core.add_preset(presets.LTX_2, "LTX-2 / 2.3", {"video": core.fields[(presets.LTX_2_5, "video")]}, variables=ltx.vars)
     doc = _guided(core, make_doc, [_guide("c1", "orbit")])
 
     plans = _plans(core, doc, preset_id=preset_id, production="render3d_ai")
@@ -1130,10 +1132,81 @@ def test_the_3d_render_and_ai_mode_needs_a_minimax_h3_preset_with_its_refs_mode(
     assert plans.blocks == [
         {
             "code": "refs_preset_needed",
-            "message": "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode.",
+            "message": "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode, or LTX-2.5.",
             "data": {"preset_id": preset_id},
         }
     ]
+
+
+LAYOUT_LORA_REF = f"model:id-{director.LAYOUT_LORA}"
+HERO_FIRST = {
+    "id": "bound-first-seg-1",
+    "role": "first",
+    "segment_id": "seg-1",
+    "at": 0.0,
+    "strength": 1.0,
+    "media": {"path": "uploads/hero.png", "relative_path": "uploads/hero.png", "type": "image"},
+}
+NO_FRAME_WARNING = {
+    "code": "layout_no_frame",
+    "message": "The shot has no first frame: LTX-2.5 keeps the look of its 3D render.",
+    "data": {"shot_id": "s1"},
+}
+
+
+def _layout_doc(core, make_doc, controls, first=True, fps=24):
+    core.use_ltx25()
+    doc = _guided(core, make_doc, controls, direction={"mode": "FL2VA"})
+    for asset in doc["assets"]:
+        if asset["kind"] == "video":
+            asset["fps"] = fps
+    if first:
+        doc["frames"] = [_frame("f1", "hero", "first")]
+    return doc
+
+
+def _layout(reference, strength=0.65):
+    return [
+        {
+            "id": "ic-layout",
+            "lora": {"model": LAYOUT_LORA_REF, "strength": 1.0},
+            "reference": {"path": reference, "relative_path": reference, "type": "video"},
+            "strength": strength,
+        }
+    ]
+
+
+def test_the_3d_render_and_ai_mode_on_ltx_2_5_sends_the_3d_guide_to_the_layout_to_render_ic_lora_and_the_first_frame_for_the_look(core, make_doc):
+    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
+
+    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
+
+    assert (plans.blocks, plans.warnings, plans.profile, plans.production) == ([], [], "FL2VA", "render3d_ai")
+    (plan,) = plans.shots
+    assert (plan.director_mode, plan.preset_mode, plan.seconds, plan.resolution, plan.fps) == ("director", "video", 4.0, "832x480", 24)
+    assert plan.request == {
+        "preset_id": presets.LTX_2_5,
+        "mode": "video",
+        "prompts": [{"positive": "The hut at dawn.", "negative": ""}],
+        "form_data": {
+            "seed": -1,
+            "resolution": "832x480",
+            "fps": 24,
+            "video_director": {
+                "schema_version": 1,
+                "mode": "director",
+                "settings": {"fps": 24, "duration": 4.0, "resolution": "832x480", "seed": -1},
+                "segments": [{"id": "seg-1", "prompt": "The hut at dawn.", "negative_prompt": "", "start": 0.0, "end": 4.0}],
+                "media": [HERO_FIRST],
+                "ic_lora": _layout("uploads/orbit.mp4"),
+            },
+            "model": "model:id-ltx25-sha",
+            "text_encoder": "model:id-gemma4_text_encoder-sha",
+            "video_vae": "model:id-ltx25_video_vae-sha",
+        },
+    }
+    assert plan.guides == ["c1"] and plan.summary()["guides"] == ["c1"]
+    assert plans.renders == [{"shot_id": "s1", "control_id": "c1", "plan_id": "plan-c1", "asset_id": "orbit"}]
 
 
 def test_the_3d_render_mode_gives_each_shot_its_latest_fresh_render_without_a_preset(core, make_doc):
@@ -1156,3 +1229,99 @@ def test_the_3d_render_mode_without_any_render_or_shot_is_blocked(core, make_doc
 
     assert [block["code"] for block in director.build_plans(user, doc, ["s1"], None, "draft", production="render3d").blocks] == ["no_render"]
     assert [block["code"] for block in director.build_plans(user, doc, [], None, "draft", production="render3d").blocks] == ["no_shots"]
+
+
+@pytest.mark.parametrize("guidance, strength", [(0, 0.0), (40, 0.4), (100, 1.0), (130, 1.0)])
+def test_the_guidance_of_the_control_sets_how_firmly_the_reference_holds_the_layout_and_the_lora_stays_at_full_strength(
+    core, make_doc, guidance, strength
+):
+    doc = _layout_doc(core, make_doc, [{**_guide("c1", "orbit"), "guidance": guidance}])
+
+    (plan,) = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai").shots
+
+    assert plan.request["form_data"]["video_director"]["ic_lora"] == _layout("uploads/orbit.mp4", strength)
+
+
+@pytest.mark.parametrize("guidance, strength", [(None, 1.0), (True, 1.0), (float("nan"), 1.0), (-5, 0.0), (65, 0.65)])
+def test_a_guide_without_a_usable_guidance_holds_the_layout_fully(guidance, strength):
+    guide = {} if guidance is None else {"guidance": guidance}
+
+    assert director.guide_strength(guide) == strength
+
+
+def test_a_layout_shot_without_a_first_frame_warns_that_it_keeps_the_look_of_its_3d_render(core, make_doc):
+    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")], first=False)
+
+    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
+
+    assert plans.blocks == [] and plans.warnings == [NO_FRAME_WARNING]
+    document = plans.shots[0].request["form_data"]["video_director"]
+    assert (document["mode"], document["media"], document["ic_lora"]) == ("director", [], _layout("uploads/orbit.mp4"))
+
+
+def test_the_layout_takes_the_latest_fresh_guide_and_the_preset_frame_rate_when_its_video_has_none(core, make_doc):
+    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly"), _guide("c3", "walk", stale=True)], fps=None)
+
+    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
+
+    (plan,) = plans.shots
+    document = plan.request["form_data"]["video_director"]
+    assert document["ic_lora"] == _layout("uploads/dolly.mp4")
+    assert (plan.fps, document["settings"]["fps"], plan.request["form_data"]["fps"], plan.guides) == (25, 25, 25, ["c2"])
+    assert [(warning["code"], warning["data"]) for warning in plans.warnings] == [("stale_guide", {"shot_id": "s1", "control_id": "c3"})]
+
+
+@pytest.mark.parametrize("controls", [[_guide("c1", "walk", stale=True)], [_guide("c1", "hero")], []])
+def test_without_a_fresh_guide_video_ltx_2_5_runs_the_shot_from_its_first_frame_and_warns(core, make_doc, controls):
+    doc = _layout_doc(core, make_doc, controls)
+
+    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
+
+    (plan,) = plans.shots
+    document = plan.request["form_data"]["video_director"]
+    assert (plan.director_mode, document["mode"], plan.fps, plan.guides) == ("i2v", "i2v", 25, [])
+    assert "ic_lora" not in document
+    codes = [warning["code"] for warning in plans.warnings]
+    assert codes == [*(["stale_guide"] if controls and controls[0]["stale"] else []), "render_missing"]
+
+
+def test_the_layout_to_render_ic_lora_not_installed_blocks_with_its_file_and_repository(core, make_doc):
+    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
+    core.missing.add(director.LAYOUT_LORA)
+
+    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
+
+    assert plans.shots == []
+    assert plans.blocks == [
+        {
+            "code": "layout_lora_missing",
+            "message": "Install the Layout-To-Render IC-LoRA ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors "
+            "(Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render on Hugging Face) to run LTX-2.5 in the 3D render + AI mode.",
+            "data": {"file": "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors", "repo": "Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"},
+        }
+    ]
+
+
+def test_ltx_2_5_outside_the_3d_render_and_ai_mode_leaves_its_3d_guide_out(core, make_doc):
+    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
+
+    plans = _plans(core, doc, preset_id=presets.LTX_2_5)
+
+    (plan,) = plans.shots
+    assert (plan.director_mode, plan.guides) == ("i2v", [])
+    assert "ic_lora" not in plan.request["form_data"]["video_director"]
+    assert [warning["code"] for warning in plans.warnings] == ["guide_needs_refs"]
+
+
+def test_a_layout_shot_whose_first_frame_cannot_be_bound_still_runs_with_its_guide(core, make_doc, monkeypatch):
+    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
+
+    def refuse(*args, **kwargs):
+        raise director.DirectorBindingError("role_unsupported", "no first frame here")
+
+    monkeypatch.setattr(director.core_bridge, "bind_director_media", refuse)
+
+    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
+
+    document = plans.shots[0].request["form_data"]["video_director"]
+    assert (document["media"], document["ic_lora"], plans.warnings) == ([], _layout("uploads/orbit.mp4"), [NO_FRAME_WARNING])

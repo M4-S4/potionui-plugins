@@ -46,6 +46,12 @@ SCENE3D = "scene3d"
 
 GUIDE_MIN_SECONDS = 2.0
 
+LAYOUT_LORA = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"
+LAYOUT_REPO = "Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"
+LAYOUT_ID = "ic-layout"
+FULL_GUIDANCE = 100.0
+MAX_FPS = 60
+
 GUIDE = "guide"
 REFERENCE = "reference"
 
@@ -782,6 +788,7 @@ class _Context:
     model: Optional[Dict[str, Any]]
     draft_setting: str
     production: str = AI
+    layout_lora: Optional[str] = None
     fields: Dict[str, models.Fields] = field(default_factory=dict)
 
     def mode_fields(self, mode: str) -> models.Fields:
@@ -795,19 +802,143 @@ def _text_only(preset: Preset) -> bool:
     return bool(modes) and "i2v" not in modes
 
 
-def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
-    preset, doc, shot_id = context.preset, context.doc, clip["id"]
-    mode = REFS_MODE if context.profile == REF2VA else preset.main_mode
-    if mode is None or mode not in preset.modes:
-        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
-    fields = context.mode_fields(mode)
+def _native_size(context: _Context, fields: models.Fields) -> Optional[str]:
     options = models.resolution_options(fields)
-    aspect = aspect_of(doc)
-    resolution = (
+    aspect = aspect_of(context.doc)
+    return (
         final_resolution(options, aspect)
         if context.quality == "final"
         else draft_resolution(options, context.draft_setting, aspect)
     ) or (fields.get("resolution") or {}).get("default") or context.draft_setting
+
+
+def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Optional[str], fps: float) -> Dict[str, Any]:
+    form: Dict[str, Any] = {"seed": -1, "video_director": document}
+    if "resolution" in fields:
+        form["resolution"] = resolution
+    if "fps" in fields:
+        form["fps"] = fps
+    if "quantity" in fields:
+        form["quantity"] = 1
+    return form
+
+
+def layout_preset(preset: Preset) -> bool:
+    """True for a preset that runs the Layout-To-Render IC-LoRA: LTX-2.5, whose director mode takes IC-LoRA."""
+    composition = catalog.director_of(preset.variables).get("modes") or {}
+    capabilities = composition.get("director") if isinstance(composition, Mapping) else None
+    return preset.id in presets.LAYOUT_PRESETS and isinstance(capabilities, Mapping) and bool(capabilities.get("ic_lora"))
+
+
+def layout_lora() -> Optional[str]:
+    """The installed Layout-To-Render IC-LoRA as model:<id>, or None."""
+    try:
+        model_id = core_bridge.installed_model_for_file(LAYOUT_LORA)
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not look up the model file %s", LAYOUT_LORA, exc_info=True)
+        return None
+    return f"{models.MODEL_REF}{model_id}" if model_id else None
+
+
+def guide_strength(guide: Mapping[str, Any]) -> float:
+    """How firmly a 3D guide video holds the layout: the guidance of its control, from 0 to 100 %, as a strength from 0 to 1."""
+    guidance = guide.get("guidance")
+    if not isinstance(guidance, (int, float)) or isinstance(guidance, bool) or not math.isfinite(guidance):
+        return 1.0
+    return max(0.0, min(1.0, guidance / FULL_GUIDANCE))
+
+
+def layout_guide(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    """The latest up-to-date 3D guide of a shot whose video resolves, with that video."""
+    for guide in reversed(fresh_guides(doc, clip)):
+        resolved = _resolve(user, _asset(doc, guide.get("assetId")))
+        if resolved is not None and resolved["media_type"] == "video":
+            return guide, resolved
+    return None
+
+
+def _layout_fps(preset: Preset, fields: models.Fields, asset: Optional[Mapping[str, Any]]) -> float:
+    fps = (asset or {}).get("fps")
+    if "fps" in fields and isinstance(fps, (int, float)) and not isinstance(fps, bool) and 0 < fps <= MAX_FPS:
+        return fps
+    return preset.fps
+
+
+def layout_document(
+    prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str, strength: float
+) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes a 3D guide video as its reference."""
+    document = _document(prompt, fps, seconds, resolution)
+    document["mode"] = "director"
+    document["segments"][0].update(start=0.0, end=seconds)
+    document["ic_lora"] = [
+        {
+            "id": LAYOUT_ID,
+            "lora": {"model": lora, "strength": 1.0},
+            "reference": {"path": video, "relative_path": video, "type": "video"},
+            "strength": strength,
+        }
+    ]
+    return document
+
+
+def _layout_plan(
+    context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]], guide: Mapping[str, Any], video: Mapping[str, Any]
+) -> ShotPlan:
+    preset, doc, shot_id = context.preset, context.doc, clip["id"]
+    mode = preset.main_mode
+    if mode is None or mode not in preset.modes:
+        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
+    fields = context.mode_fields(mode)
+    resolution = _native_size(context, fields)
+    seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
+    fps = _layout_fps(preset, fields, _asset(doc, guide.get("assetId")))
+    _guide_warnings(doc, clip, warnings, refs=True)
+    prompt = shot_prompt(doc, clip)
+    document = layout_document(prompt, fps, seconds, resolution, str(context.layout_lora), video["value"], guide_strength(guide))
+    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
+    first_media = _frame_media(context.user, doc, shot_frames(doc, shot_id)[0])
+    bound = False
+    if first_media is not None:
+        try:
+            request = core_bridge.bind_director_media(
+                request, "first", first_media, segment_id=SEGMENT_ID, capabilities=catalog.director_of(preset.variables)
+            )
+            bound = True
+        except DirectorBindingError:
+            logger.warning("[VIDEO-PRODUCER] Could not bind the first frame of shot %s", shot_id, exc_info=True)
+    if not bound:
+        warnings.append(
+            note("layout_no_frame", "The shot has no first frame: LTX-2.5 keeps the look of its 3D render.", shot_id=shot_id)
+        )
+    resolved = models.resolve_models(preset.id, mode, "director", fields)
+    request["form_data"].update(resolved.values)
+    return ShotPlan(
+        shot_id=shot_id,
+        profile=context.profile,
+        director_mode="director",
+        preset_mode=mode,
+        seconds=seconds,
+        resolution=resolution,
+        fps=fps,
+        prompt_text=prompt,
+        request=request,
+        missing_models=list(resolved.missing),
+        guides=[str(guide.get("id"))],
+    )
+
+
+def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
+    preset, doc, shot_id = context.preset, context.doc, clip["id"]
+    layout = context.layout_lora is not None
+    guided = layout_guide(context.user, doc, clip) if layout else None
+    if guided is not None:
+        return _layout_plan(context, clip, warnings, *guided)
+    mode = REFS_MODE if context.profile == REF2VA else preset.main_mode
+    if mode is None or mode not in preset.modes:
+        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
+    fields = context.mode_fields(mode)
+    resolution = _native_size(context, fields)
     seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
     fps = preset.fps
     sent: List[SentReference] = []
@@ -833,16 +964,11 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
             warnings.append(_render_missing(clip))
         prompt = refs_prompt(doc, clip, sent, seconds)
     else:
-        _guide_warnings(doc, clip, warnings, refs=False)
+        _guide_warnings(doc, clip, warnings, refs=layout)
+        if layout:
+            warnings.append(_render_missing(clip))
         prompt = shot_prompt(doc, clip)
-    form: Dict[str, Any] = {"seed": -1, "video_director": _document(prompt, fps, seconds, resolution)}
-    if "resolution" in fields:
-        form["resolution"] = resolution
-    if "fps" in fields:
-        form["fps"] = fps
-    if "quantity" in fields:
-        form["quantity"] = 1
-    request = _request(preset.id, mode, prompt, form)
+    request = _request(preset.id, mode, prompt, _native_form(fields, _document(prompt, fps, seconds, resolution), resolution, fps))
     if context.profile == REF2VA:
         request["form_data"]["references"] = [entry.value for entry in sent]
         director_mode = REFS_MODE
@@ -1021,7 +1147,7 @@ def build_plans(
     profile: Optional[str] = None,
     production: str = AI,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run that needs a MiniMax-H3 preset with its refs mode."""
+    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference."""
     if production == RENDER_3D:
         return build_renders(doc, shot_ids, quality)
     if production == RENDER_3D_AI:
@@ -1032,9 +1158,27 @@ def build_plans(
     if preset is None:
         plans.blocks.append(note("no_preset", "The preset is not available to you.", preset_id=preset_id))
         return plans
-    if production == RENDER_3D_AI and (preset.id not in presets.MINIMAX_H3_PRESETS or REFS_MODE not in preset.modes):
+    lora: Optional[str] = None
+    if production == RENDER_3D_AI and layout_preset(preset):
+        plans.profile = profile = FL2VA
+        lora = layout_lora()
+        if lora is None:
+            plans.blocks.append(
+                note(
+                    "layout_lora_missing",
+                    f"Install the Layout-To-Render IC-LoRA {LAYOUT_LORA} ({LAYOUT_REPO} on Hugging Face) to run LTX-2.5 in the 3D render + AI mode.",
+                    file=LAYOUT_LORA,
+                    repo=LAYOUT_REPO,
+                )
+            )
+            return plans
+    elif production == RENDER_3D_AI and (preset.id not in presets.MINIMAX_H3_PRESETS or REFS_MODE not in preset.modes):
         plans.blocks.append(
-            note("refs_preset_needed", "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode.", preset_id=preset.id)
+            note(
+                "refs_preset_needed",
+                "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode, or LTX-2.5.",
+                preset_id=preset.id,
+            )
         )
         return plans
     if profile not in preset.profiles:
@@ -1061,6 +1205,7 @@ def build_plans(
         model=plans.model,
         draft_setting=str(settings.get_setting("draft_resolution")),
         production=production,
+        layout_lora=lora,
     )
     missing: List[str] = []
     for clip in clips:

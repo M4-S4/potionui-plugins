@@ -351,11 +351,29 @@ def test_the_3d_render_and_ai_estimate_is_blocked_without_a_refs_preset(core, ma
     assert payload["blocks"] == [
         {
             "code": "refs_preset_needed",
-            "message": "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode.",
+            "message": "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode, or LTX-2.5.",
             "data": {"preset_id": presets.WAN},
         }
     ]
     assert payload["shots"] == [] and payload["quota"]["needed_minutes"] == 0.0
+
+
+def test_the_3d_render_and_ai_estimate_on_ltx_2_5_lists_a_director_shot_with_its_guide(core, make_doc):
+    core.use_ltx25()
+    core.add_media({"kind": "library", "item_id": "lib-guide"}, "uploads/guide.mp4", "video")
+
+    payload = _evaluate(core, _guided_doc(make_doc), preset_id=presets.LTX_2_5, production="render3d_ai").payload
+
+    assert (payload["production"], payload["blocks"]) == ("render3d_ai", [])
+    assert payload["shots"] == [
+        {"shot_id": "s1", "director_mode": "director", "seconds": 4.0, "resolution": "832x480", "fps": 25, "guides": ["c1"]},
+        {"shot_id": "s2", "director_mode": "t2v", "seconds": 6.0, "resolution": "832x480", "fps": 25, "guides": []},
+    ]
+    assert [(item["code"], item["data"]["shot_id"]) for item in payload["warnings"] if "shot_id" in (item.get("data") or {})] == [
+        ("layout_no_frame", "s1"),
+        ("render_missing", "s2"),
+        ("fl2va_no_frame", "s2"),
+    ]
 
 
 @pytest.mark.parametrize(

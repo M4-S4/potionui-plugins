@@ -133,7 +133,9 @@
 	"block.upscaleUnsupported": "Upscaling this take needs SeedVR2: ask an administrator to install it, or render the take again at full resolution.",
 	"workshop.notSent": "Not sent with this engine",
 	"workshop.notSentWhy": "The Video Director builds the request from the shots, the direction, the frames and the references; this setting stays in the project but does not change the takes.",
-	"block.refsPresetNeeded": "“3D render + AI” needs a MiniMax-H3 preset with the reference mode (refs).",
+	"block.refsPresetNeeded": "“3D render + AI” needs a MiniMax-H3 preset with the reference mode (refs), or LTX-2.5.",
+	"block.layoutLoraMissing": "“3D render + AI” on LTX-2.5 needs the Layout-To-Render IC-LoRA: ask your admin to install {file}.",
 	"warn.staleGuide": "The reference video of “{shot}” is out of date: render it again in 3D scene.",
-	"warn.guideNeedsRefs": "“{shot}” has a 3D reference video, but FL2VA does not read it: choose Ref2VA, or use the start and end frames."
+	"warn.guideNeedsRefs": "“{shot}” has a 3D reference video, but FL2VA does not read it: choose Ref2VA, or use the start and end frames.",
+	"warn.layoutNoFrame": "“{shot}” has no first frame: LTX-2.5 will keep the look of the 3D render."
 }
