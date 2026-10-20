@@ -51,6 +51,8 @@ LAYOUT_REPO = "Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"
 LAYOUT_ID = "ic-layout"
 FULL_GUIDANCE = 100.0
 MAX_FPS = 60
+DISTILLED = "distilled"
+DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
 
 GUIDE = "guide"
 REFERENCE = "reference"
@@ -864,6 +866,14 @@ def _layout_fps(preset: Preset, fields: models.Fields, asset: Optional[Mapping[s
     return preset.fps
 
 
+def distilled_form(fields: models.Fields, resolved: models.ResolvedModels) -> Dict[str, Any]:
+    """The Distilled speed profile Lightricks runs Layout-To-Render with (8 steps, CFG 1, euler_ancestral), for the fields the mode has, when the DiT in use is a distilled file and the mode offers that profile; empty otherwise."""
+    options = [option.get("value") for option in (fields.get("speed_profile") or {}).get("options") or []]
+    if DISTILLED not in options or DISTILLED not in resolved.files.get(models.MODEL_FIELD, "").lower():
+        return {}
+    return {name: value for name, value in {"speed_profile": DISTILLED, **DISTILLED_RECIPE}.items() if name in fields}
+
+
 def layout_document(
     prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str, strength: float
 ) -> Dict[str, Any]:
@@ -913,6 +923,7 @@ def _layout_plan(
         )
     resolved = models.resolve_models(preset.id, mode, "director", fields)
     request["form_data"].update(resolved.values)
+    request["form_data"].update(distilled_form(fields, resolved))
     return ShotPlan(
         shot_id=shot_id,
         profile=context.profile,

@@ -1203,6 +1203,10 @@ def test_the_3d_render_and_ai_mode_on_ltx_2_5_sends_the_3d_guide_to_the_layout_t
             "model": "model:id-ltx25-sha",
             "text_encoder": "model:id-gemma4_text_encoder-sha",
             "video_vae": "model:id-ltx25_video_vae-sha",
+            "speed_profile": "distilled",
+            "steps": 8,
+            "cfg": 1.0,
+            "sampler": "euler_ancestral",
         },
     }
     assert plan.guides == ["c1"] and plan.summary()["guides"] == ["c1"]
@@ -1325,3 +1329,25 @@ def test_a_layout_shot_whose_first_frame_cannot_be_bound_still_runs_with_its_gui
 
     document = plans.shots[0].request["form_data"]["video_director"]
     assert (document["media"], document["ic_lora"], plans.warnings) == ([], _layout("uploads/orbit.mp4"), [NO_FRAME_WARNING])
+
+
+@pytest.mark.parametrize(
+    "filename, options",
+    [
+        ("ltx-2.5-22b-dev-transformer-bf16.safetensors", ("balanced", "distilled", "quality", "custom")),
+        ("ltx-2.5-22b-distilled-transformer-bf16.safetensors", ("balanced", "quality", "custom")),
+        (None, ("balanced", "distilled", "quality", "custom")),
+    ],
+)
+def test_a_layout_shot_keeps_the_preset_speed_profile_unless_its_dit_is_distilled_and_the_mode_offers_the_distilled_profile(
+    core, make_doc, filename, options
+):
+    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
+    fields = core.fields[(presets.LTX_2_5, "video")]
+    fields["model"]["recommendations"] = [{"sha256": "ltx25-sha", "filename": filename}]
+    fields["speed_profile"]["options"] = [{"value": value, "label": value} for value in options]
+
+    form = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai").shots[0].request["form_data"]
+
+    assert {"speed_profile", "steps", "cfg", "sampler"}.isdisjoint(form)
+    assert form["model"] == "model:id-ltx25-sha"
