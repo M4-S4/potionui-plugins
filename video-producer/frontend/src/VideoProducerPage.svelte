@@ -22,6 +22,8 @@
 	import StatusBar from './components/shell/StatusBar.svelte';
 	import Splitter from './components/shell/Splitter.svelte';
 	import Toasts from './components/shell/Toasts.svelte';
+	import Uploads from './components/shell/Uploads.svelte';
+	import { hasFiles } from './lib/upload.js';
 	import CommandPalette from './components/shell/CommandPalette.svelte';
 	import Modals from './components/modals/Modals.svelte';
 	import LeftPanel from './components/panels/LeftPanel.svelte';
@@ -89,6 +91,12 @@
 	$effect(() => {
 		if (phase === 'ready' && scenesBusy()) untrack(pollScenes);
 	});
+
+	function refuseStrayFiles(e) {
+		if (e.defaultPrevented || !hasFiles(e.dataTransfer)) return;
+		e.preventDefault();
+		e.dataTransfer.dropEffect = 'none';
+	}
 
 	onMount(() => {
 		setHeaderHidden?.(true);
@@ -159,7 +167,8 @@
 	}
 </script>
 
-<div bind:this={root} tabindex="-1" class="vp-root bg-canvas font-sans text-base text-fg antialiased" lang={locale}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div bind:this={root} tabindex="-1" class="vp-root bg-canvas font-sans text-base text-fg antialiased" lang={locale} ondragover={refuseStrayFiles} ondrop={refuseStrayFiles}>
 	{#if phase === 'loading'}
 		<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6">
 			<HostUi name="Spinner" props={{ size: 'lg' }} />
@@ -222,6 +231,7 @@
 		<Modals version={ui.me?.version ?? null} {setLanguage} />
 		<CommandPalette />
 		<Toasts />
+		<Uploads />
 	{/if}
 </div>
 
@@ -776,6 +786,58 @@
 			box-shadow: var(--shadow-overlay);
 			-webkit-backdrop-filter: blur(24px);
 			backdrop-filter: blur(24px);
+		}
+		.vp-root .vp-dropzone {
+			pointer-events: none;
+			position: absolute;
+			inset: 0.375rem;
+			z-index: 30;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 0.5rem;
+			border-radius: 8px;
+			border: 2px dashed rgb(var(--signal));
+			background-color: rgb(var(--surface-1) / 0.94);
+			padding: 1rem;
+			text-align: center;
+			font-size: 13px;
+			line-height: 18px;
+			color: rgb(var(--fg));
+		}
+		.vp-root .vp-dropzone-refused {
+			border-color: rgb(var(--danger));
+			color: rgb(var(--danger));
+		}
+		.vp-root .vp-uploads {
+			position: fixed;
+			right: 1rem;
+			bottom: 2.5rem;
+			width: 20rem;
+			max-width: calc(100vw - 2rem);
+			overflow: hidden;
+			border-radius: 10px;
+			border: 1px solid rgb(var(--line-strong));
+			background-color: rgb(var(--surface-3) / 0.95);
+			color: rgb(var(--fg));
+			box-shadow: var(--shadow-overlay);
+			-webkit-backdrop-filter: blur(24px);
+			backdrop-filter: blur(24px);
+		}
+		.vp-root .vp-upload-x {
+			display: flex;
+			height: 1.5rem;
+			width: 1.5rem;
+			flex-shrink: 0;
+			align-items: center;
+			justify-content: center;
+			border-radius: 4px;
+			color: rgb(var(--fg-muted));
+		}
+		.vp-root .vp-upload-x:hover {
+			background-color: rgb(var(--surface-2));
+			color: rgb(var(--fg));
 		}
 		.vp-root .vp-toast-sim {
 			border-style: dashed;

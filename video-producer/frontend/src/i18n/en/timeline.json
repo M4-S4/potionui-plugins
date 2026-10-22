@@ -75,5 +75,7 @@
 	"kind.plan3d": "3D shot",
 	"block.label": "{kind}: {label}",
 	"block.editTip": "Double-click to edit",
-	"block.percent": "{value}%"
+	"block.percent": "{value}%",
+	"drop.here": "Drop at {time}",
+	"drop.refused": "Not accepted on this track"
 }

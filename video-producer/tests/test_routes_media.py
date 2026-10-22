@@ -168,3 +168,97 @@ def test_resolving_needs_a_signed_in_user(app, resolver):
 
     assert response.status_code == 401
     assert resolver.asked == []
+
+
+UPLOADED_URL = "/api/plugins/video-producer/media/uploaded"
+
+
+class Uploads:
+    def __init__(self):
+        self.asked = []
+        self.items = {}
+
+    def __call__(self, user_id, value):
+        self.asked.append((user_id, value))
+        return self.items.get((user_id, value))
+
+
+@pytest.fixture
+def uploads(monkeypatch):
+    uploads = Uploads()
+    monkeypatch.setattr(core_bridge, "upload_item", uploads)
+    return uploads
+
+
+def test_an_uploaded_file_resolves_to_its_library_item_and_the_media_the_editor_plays(client, resolver, uploads):
+    uploads.items[("user-1", "9b1c.mp4")] = {"item_id": "01M535UPLOAD0000000000000", "filename": "Harbour at dawn.mp4"}
+    resolver.answer = {"value": "uploads/9b1c.mp4", "media_type": "video/mp4", "original_filename": "Harbour at dawn.mp4", "origin": None}
+
+    response = client.post(UPLOADED_URL, json={"filename": "9b1c.mp4"})
+
+    assert response.status_code == 200
+    assert response.json()["data"]["media"] == {
+        "kind": "library",
+        "media_type": "video",
+        "url": "/api/media/uploads/9b1c.mp4",
+        "filename": "Harbour at dawn.mp4",
+        "origin": LIBRARY,
+    }
+    assert uploads.asked == [("user-1", "9b1c.mp4")]
+    assert resolver.asked == [("user-1", {"kind": "library", "item_id": LIBRARY["itemId"]})]
+
+
+def test_the_same_file_uploaded_twice_gives_the_same_origin(client, resolver, uploads):
+    uploads.items[("user-1", "a.wav")] = {"item_id": "01M535UPLOAD0000000000000", "filename": "a.wav"}
+    resolver.answer = {"value": "uploads/a.wav", "media_type": "audio", "original_filename": "a.wav", "origin": None}
+
+    first, second = (client.post(UPLOADED_URL, json={"filename": "a.wav"}).json()["data"]["media"] for _ in range(2))
+
+    assert first["origin"] == second["origin"] == LIBRARY
+
+
+def test_an_upload_of_another_user_or_an_unknown_file_is_not_found(app, client, make_user, resolver, uploads):
+    uploads.items[("user-1", "mine.png")] = {"item_id": "01M535UPLOAD0000000000000", "filename": "mine.png"}
+    app.dependency_overrides[get_current_active_user] = lambda: make_user(user_id="user-2")
+
+    response = client.post(UPLOADED_URL, json={"filename": "mine.png"})
+
+    assert response.status_code == 404
+    assert _detail(response)["error"] == "media_not_found"
+    assert uploads.asked == [("user-2", "mine.png")]
+    assert resolver.asked == []
+
+
+@pytest.mark.parametrize("core_type", ["model/gltf-binary", "application/octet-stream", "MESH", None])
+def test_an_uploaded_file_that_is_not_an_image_a_video_or_audio_is_refused(client, resolver, uploads, core_type):
+    uploads.items[("user-1", "scene.glb")] = {"item_id": "01M535UPLOAD0000000000000", "filename": "scene.glb"}
+    resolver.answer = {"value": "uploads/scene.glb", "media_type": core_type, "original_filename": "scene.glb", "origin": None}
+
+    response = client.post(UPLOADED_URL, json={"filename": "scene.glb"})
+
+    assert response.status_code == 415
+    assert _detail(response)["error"] == "unsupported_media"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"filename": ""}, {"filename": "  "}, {"filename": 3}, {"filename": "uploads/a.png"}, {"filename": "..\a.png"}, {"filename": ".env"}, ["a.png"], None],
+    ids=repr,
+)
+def test_a_body_without_a_bare_file_name_is_an_invalid_request(client, resolver, uploads, body):
+    response = client.post(UPLOADED_URL, json=body)
+
+    assert response.status_code == 422
+    assert _detail(response)["error"] == "invalid_request"
+    assert uploads.asked == []
+    assert resolver.asked == []
+
+
+def test_resolving_an_upload_needs_a_signed_in_user(app, resolver, uploads):
+    app.dependency_overrides.clear()
+
+    with TestClient(app) as anonymous:
+        response = anonymous.post(UPLOADED_URL, json={"filename": "a.png"})
+
+    assert response.status_code == 401
+    assert uploads.asked == []

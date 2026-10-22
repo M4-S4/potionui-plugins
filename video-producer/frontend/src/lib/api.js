@@ -552,6 +552,42 @@ export async function coreFetch(api, path, init = {}) {
 	return { ok: false, error: normalizeError(body, response.status) };
 }
 
+function parsed(xhr) {
+	try {
+		return JSON.parse(xhr.responseText);
+	} catch {
+		return null;
+	}
+}
+
+export function coreUpload(api, path, form, { onProgress = () => {}, signal = null, createRequest = () => new XMLHttpRequest() } = {}) {
+	return new Promise((resolve) => {
+		const xhr = createRequest();
+		const token = typeof api?.getToken === 'function' ? api.getToken() : null;
+		const abort = () => xhr.abort();
+		const done = (result) => {
+			signal?.removeEventListener?.('abort', abort);
+			resolve(result);
+		};
+		xhr.open('POST', path);
+		xhr.withCredentials = true;
+		if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+		xhr.upload.onprogress = (e) => {
+			if (e.lengthComputable && e.total > 0) onProgress(Math.min(100, (e.loaded / e.total) * 100));
+		};
+		xhr.onload = () => {
+			const body = parsed(xhr);
+			if (xhr.status < 200 || xhr.status >= 300) return done({ ok: false, error: normalizeError(body, xhr.status) });
+			done(unwrap(body));
+		};
+		xhr.onerror = () => done(failure(0, 'network_error'));
+		xhr.onabort = () => done(failure(0, 'aborted'));
+		if (signal?.aborted) return done(failure(0, 'aborted'));
+		signal?.addEventListener?.('abort', abort);
+		xhr.send(form);
+	});
+}
+
 export function createClient(api, save) {
 	return {
 		async me() {
@@ -672,6 +708,12 @@ export function createClient(api, save) {
 		},
 		coreFetch(path, init) {
 			return coreFetch(api, path, init);
+		},
+		uploadMedia(form, options) {
+			return coreUpload(api, '/api/media/upload', form, options);
+		},
+		async uploadedMedia(filename) {
+			return mapped(await call(api, 'post', '/media/uploaded', { filename }), (data) => normalizeMedia(data.media));
 		}
 	};
 }

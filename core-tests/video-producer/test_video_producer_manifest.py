@@ -181,6 +181,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("GET", f"{base}/projects/{{project_id}}/versions"),
         ("POST", f"{base}/projects/{{project_id}}/versions/{{version}}/restore"),
         ("POST", f"{base}/media/resolve"),
+        ("POST", f"{base}/media/uploaded"),
         ("GET", f"{base}/projects/{{project_id}}/takes"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/choose"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/flag"),

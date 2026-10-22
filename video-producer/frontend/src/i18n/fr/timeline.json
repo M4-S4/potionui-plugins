@@ -75,5 +75,7 @@
 	"kind.plan3d": "Plan 3D",
 	"block.label": "{kind} : {label}",
 	"block.editTip": "Double-cliquez pour éditer",
-	"block.percent": "{value} %"
+	"block.percent": "{value} %",
+	"drop.here": "Déposer à {time}",
+	"drop.refused": "Non accepté sur cette piste"
 }

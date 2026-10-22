@@ -20,7 +20,7 @@ import {
 } from './state.svelte.js';
 import { startGeneration, cancelGeneration, queueWindow, openResults, assembleChosen, promoteToFinal, busy } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
-import { openGallery, openImport } from './importer.js';
+import { openGallery, openImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
 import { matchToPrevious } from './continuity.svelte.js';
 import { openReferences } from './references.js';
@@ -156,7 +156,7 @@ export const menus = [
 			command('save', () => save(), { keys: 'mod+s' }),
 			command('versions', modal('versions'))
 		],
-		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-gallery', gallery), command('project-props', modal('project'))],
+		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-local', () => openLocalImport(), { keys: 'ctrl+mod+i' }), command('import-gallery', gallery), command('project-props', modal('project'))],
 		[
 			command('export', modal('export', { tab: 'video' }), { keys: 'mod+e' }),
 			command('export-xml', modal('export', { tab: 'exchange' }), { keys: 'shift+mod+e' }),
@@ -215,7 +215,7 @@ export const menus = [
 		]
 	]),
 	menu('audio', [
-		[command('audio-add', addAudioLane), command('audio-import', () => openImport('audio')), command('audio-mixer', mixer)],
+		[command('audio-add', addAudioLane), command('audio-import', () => openImport('audio')), command('audio-import-local', () => openLocalImport('audio')), command('audio-mixer', mixer)],
 		[
 			command('voice', modal('sound', { kind: 'Voix' })),
 			command('sd-ambience', modal('sound', { kind: 'Ambiance' })),

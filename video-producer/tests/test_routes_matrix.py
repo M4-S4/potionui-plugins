@@ -87,6 +87,7 @@ class World:
         monkeypatch.setattr(core_bridge, "upload_item", self._upload_item)
         monkeypatch.setattr(core_bridge, "resolve_media", self._resolve_as_owner(core.resolve_media))
         core.add_media({"kind": "library", "item_id": "item-1"}, "uploads/still.png", media_type="image")
+        core.add_media({"kind": "library", "item_id": "item-user-1"}, "uploads/upload.png", media_type="image")
         self.project = make_project(clips=SHOTS, assets=[{"id": "still", "kind": "image", "origin": {"kind": "library", "itemId": "item-1"}}])
         self.reference = self._reference(make_project)
         self.done = self.take("s1", "done")
@@ -268,6 +269,11 @@ ROUTES = {
         ),
         denied=lambda w: Call("/media/resolve", {"origin": {"kind": "library", "itemId": "item-1"}}, 404, "media_not_found", "user-2"),
         invalid=lambda w: Call("/media/resolve", {"origin": "library"}, 422, "invalid_request"),
+    ),
+    "POST /media/uploaded": Route(
+        success=lambda w: Call("/media/uploaded", {"filename": "upload.png"}, check=lambda r: _data(r)["media"]["origin"] == {"kind": "library", "itemId": "item-user-1"}),
+        denied=lambda w: Call("/media/uploaded", {"filename": "upload.png"}, 404, "media_not_found", "user-2"),
+        invalid=lambda w: Call("/media/uploaded", {"filename": "uploads/upload.png"}, 422, "invalid_request"),
     ),
     "GET /projects/{id}/takes": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes", check=lambda r: w.done["id"] in [t["id"] for t in _data(r)["takes"]]),

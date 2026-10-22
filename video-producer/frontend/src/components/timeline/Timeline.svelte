@@ -7,7 +7,6 @@
 		asset,
 		select,
 		seqDuration,
-		act,
 		relayout,
 		relink,
 		clamp,
@@ -23,7 +22,6 @@
 		addControl,
 		addAudioLane,
 		addMarker,
-		addAssetToTimeline,
 		promptIssues,
 		toast,
 		secs,
@@ -43,7 +41,9 @@
 	import { overlayLayer } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { wheelZoomFactor } from '../../lib/timebase.js';
-	import { ulid } from '../../lib/ulid.js';
+	import { importFiles, placeAsset } from '../../lib/importer.js';
+	import { fileDrop } from '../../lib/filedrop.js';
+	import { rowKinds } from '../../lib/upload.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from '../shell/Dropdown.svelte';
 
@@ -53,6 +53,7 @@
 	let scroller = $state();
 	let viewW = $state(800);
 	let reorder = $state(null);
+	let fileHover = $state(null);
 
 	const pps = $derived(ui.pxPerSec);
 	const total = $derived(seqDuration());
@@ -299,16 +300,22 @@
 	function onDrop(e, row) {
 		e.preventDefault();
 		const id = e.dataTransfer.getData('text/x-asset');
-		const a = asset(id);
-		if (!a) return;
-		const at = round(timeAt(e.clientX), 0.04);
-		if (row.id === 'frames' && a.kind !== 'audio') return addFrame(id, at);
-		if (row.lane && a.kind === 'audio') {
-			act(() => doc.audio.push({ id: ulid(), assetId: id, lane: row.id, start: at, dur: Math.min(8, a.srcDur ?? 8), srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 }));
-			return toast(t('timeline.toast.dropped', { name: a.name, lane: row.id }));
-		}
-		if (row.id === 'v1' && a.kind !== 'audio') return addAssetToTimeline(id, at);
-		toast(t('timeline.toast.dropHint'), 'warning');
+		if (asset(id)) placeAsset(id, row, timeAt(e.clientX));
+	}
+
+	function filesOn(row) {
+		const kinds = rowKinds(row);
+		return {
+			kinds,
+			hover: (verdict, e) => {
+				if (verdict) fileHover = { row: row.id, verdict, at: round(timeAt(e.clientX), 0.04) };
+				else if (fileHover?.row === row.id) fileHover = null;
+			},
+			drop: (files, e) => {
+				if (!kinds.length) return toast(t('timeline.toast.dropHint'), 'warning');
+				importFiles(files, kinds, { row: { id: row.id, lane: Boolean(row.lane) }, at: timeAt(e.clientX) });
+			}
+		};
 	}
 
 	function wheel(e) {
@@ -444,7 +451,14 @@
 						ondblclick={(e) => laneDbl(e, row)}
 						ondragover={(e) => e.preventDefault()}
 						ondrop={(e) => onDrop(e, row)}
+						use:fileDrop={filesOn(row)}
 					>
+						{#if fileHover?.row === row.id}
+							<div class="pointer-events-none absolute inset-0 z-20 border {fileHover.verdict === 'reject' ? 'border-danger bg-danger/10' : 'border-signal bg-signal/10'}">
+								{#if fileHover.verdict !== 'reject'}<div class="absolute inset-y-0 w-0.5 bg-signal" style:left="{x(fileHover.at)}px"></div>{/if}
+								<span class="absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded border border-line-strong bg-surface-3 px-1.5 py-0.5 text-2xs {fileHover.verdict === 'reject' ? 'text-danger' : 'text-fg'}" style:left="{x(fileHover.at) + 8}px">{fileHover.verdict === 'reject' ? t('timeline.drop.refused') : t('timeline.drop.here', { time: secs(fileHover.at) })}</span>
+							</div>
+						{/if}
 						{#if row.id === 'titles'}
 							{#each doc.titles as ti (ti.id)}
 								{@render block('title', ti, ti.text, null)}

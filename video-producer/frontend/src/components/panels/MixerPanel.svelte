@@ -2,7 +2,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, addAssetToTimeline, secs } from '../../lib/state.svelte.js';
-	import { openImport } from '../../lib/importer.js';
+	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { roleColor, audioRoleLabel } from '../../lib/catalog.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import Icon from '../Icon.svelte';
@@ -17,7 +17,8 @@
 </script>
 
 <PanelHeader icon="sliders" title={t('panels.mixer.title')}>
-	<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => openImport('audio') }}>{t('panels.mixer.addSound')}</HostUi>
+	<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'folder', onclick: () => openImport('audio') }}>{t('panels.mixer.addSound')}</HostUi>
+	<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'upload', onclick: () => openLocalImport('audio') }}>{t('panels.mixer.addSoundLocal')}</HostUi>
 </PanelHeader>
 
 <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">

@@ -20,6 +20,8 @@
 	"project.unsaved": "Not saved",
 	"project.import": "Import",
 	"project.importTip": "Import media",
+	"project.importLibrary": "From the library…",
+	"project.importLocal": "From this computer…",
 	"project.export": "Export",
 	"project.exportTip": "Export and share",
 	"project.assistant": "Assistant",
