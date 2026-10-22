@@ -42,7 +42,7 @@ All eight steps work for real, and your projects are saved as you work (chapter 
 The page has five levels of controls, from the widest to the most local, around a left panel, a center area, the Inspector and the timeline:
 
 - **Menu bar.** Ten menus, in this order: **Video Producer**, **File**, **Edit**, **Cut**, **Shot**, **Production**, **Audio**, **View**, **Window**, **Help**. The **Video Producer** menu holds **About Video Producer**, **Preferences…**, **Keyboard shortcuts** and **Search commands…**. A menu shows "…" only when the command opens a window that asks for something, and a check mark in front of a state that is on.
-- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import**, **Export**, **Assistant** (it opens the PotionUI chat, chapter 10), a search button for the commands and the button that shows or hides the Inspector.
+- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import** (a menu with **From the library…** and **From this computer…**, chapter 6), **Export**, **Assistant** (it opens the PotionUI chat, chapter 10), a search button for the commands and the button that shows or hides the Inspector.
 - **Production bar.** It targets what to generate and holds the only main button of the page, **Generate selection** (chapter 8).
 - **Area headers and the timeline toolbar.** A title and counters on the left, small icons on the right.
 - **Content.** Small buttons that appear when you hover or select.
@@ -54,12 +54,12 @@ The ten menus group all the commands of the page. The command search (**Search c
 | Menu | What it holds |
 |---|---|
 | **Video Producer** | About, Preferences, Keyboard shortcuts, command search. |
-| **File** | New project, Open, Save, Version history, Import files, From the PotionUI gallery, Project properties, the three exports. |
+| **File** | New project, Open, Save, Version history, Import from the library, Import from this computer, From the PotionUI gallery, Project properties, the three exports. |
 | **Edit** | Undo, Redo, Copy, Paste, Duplicate, Delete, Search media. |
 | **Cut** | The three tools, Split at playhead, trims, Change duration, in and out points, Clear range, Add marker, Add title, Fade in and out. |
 | **Shot** | New shot, Info, Show source, Shot takes, Make take final, Shot color, Match color to previous shot, Camera keyframes, Favorite, Reject, Remove flag. |
 | **Production** | Global direction, Split synopsis into shots, Continuity check, Generate selection, Draft and Final quality, the queue, Cancel the generation, Results and takes, Assemble chosen takes, Advanced workshop, the engine, the Hybrid builder. |
-| **Audio** | Add audio track, Import audio file, Mixing console, Voice and dialogue and the sound design workshop. |
+| **Audio** | Add audio track, Import audio from the library, Import audio from this computer, Mixing console, Voice and dialogue and the sound design workshop. |
 | **View** | Play, loop, full screen, framing guides, Compare takes, Luminance scope, Audio meters, timeline zoom, Snapping. |
 | **Window** | The five workspaces, the reference spaces, Side panel, Inspector, PotionUI assistant, Prompt library, Timeline index, Background tasks. |
 | **Help** | Getting started, Keyboard shortcuts, Search features, Simulated features. |
@@ -82,7 +82,7 @@ Each workspace changes the left panel and the center. The Inspector on the right
 
 ### Media
 
-The media of the project in one panel. A new project has none: the panel says "No media in this project." and offers **Import media**, like the import button of its header and **Import** in the project bar; chapter 6 explains how to bring in your images, videos and audio files. Filter with the collection pills (**All**, **Images**, **Videos**, **Audio**, **Generated**), search by name without worrying about accents, double-click to preview, drag to the timeline. For a selected item the panel shows its duration, format, collection and origin, and the buttons **Preview**, **Add to cut** and, for images and videos, **Use as frame at the playhead**. The center is the viewer.
+The media of the project in one panel. A new project has none: the panel says "No media in this project." and offers **Library** and **From computer**, like the two import buttons of its header and the **Import** menu of the project bar; you can also drop files on it. Chapter 6 explains how to bring in your images, videos and audio files. Filter with the collection pills (**All**, **Images**, **Videos**, **Audio**, **Generated**), search by name without worrying about accents, double-click to preview, drag to the timeline. For a selected item the panel shows its duration, format, collection and origin, and the buttons **Preview**, **Add to cut** and, for images and videos, **Use as frame at the playhead**. The center is the viewer.
 
 ### Director IA
 
@@ -193,17 +193,25 @@ The media of a project are the images, videos and audio files you imported, and 
 
 ### Importing
 
-- **Images and videos.** **File › Import files…** (Ctrl+I), **Import** in the project bar, the import button in the header of the Media panel and **Import media** in an empty panel open the window **Import images and videos**. It is the PotionUI picker of your library: the files you uploaded to PotionUI and the generations you copied there.
+Media come from two places: your PotionUI library and gallery, or the computer your browser runs on. Each place has its button: **Library** (a folder) and **From computer** (an arrow going up), side by side in the header of the Media panel, in an empty Media panel, in **Project sounds** of the **Mix** workspace and in the console; the **Import** menu of the project bar offers both.
+
+- **Images and videos from the library.** **File › Import from the library…** (Ctrl+I) and the **Library** buttons open the window **Import images and videos**. It is the PotionUI picker of your library: the files you uploaded to PotionUI and the generations you copied there.
 - **From the gallery.** **File › From the PotionUI gallery** opens **Import from the gallery**, with your past generations. Every file of a generation can be picked on its own. Only images and videos can be picked.
-- **Audio.** **Audio › Import audio file…**, the **Sound** button of **Project sounds** in the **Mix** workspace and the **Import** button of the console open **Import audio files**, the picker of your library with audio only.
+- **Audio from the library.** **Audio › Import audio from the library…** and the **Library** buttons of **Project sounds** and of the console open **Import audio files**, the picker of your library with audio only.
+- **From this computer.** **File › Import from this computer…** (Ctrl+Alt+I) and the **From computer** buttons open the file window of your system, where you can pick several images, videos and audio files at once. **Audio › Import audio from this computer…** and the **From computer** buttons of **Project sounds** and of the console offer audio files only; another kind of file is refused there ("… cannot be imported here: only audio files are accepted.").
+- **By dropping files.** Drag files from your computer onto the Media panel: a frame shows while you hover it, red with "Only images, videos and audio files can be imported" when what you drag is not accepted. Or drop them on the timeline: they are placed at the time where you drop them, which a line and "Drop at" with the time show. Images and videos go on the video track **V1**, as new shots one after the other, or on **Frames**; audio files go on an audio track. A track that does not take what you drag is framed in red ("Not accepted on this track"), and dropping there tells you where each kind goes.
+
+The files you can bring from the computer are those PotionUI accepts: images `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp` and `.bmp`, videos `.mp4`, `.webm`, `.mov`, `.mkv` and `.avi`, audio `.wav`, `.mp3`, `.ogg`, `.flac`, `.m4a` and `.aac`. A file of another kind is refused before anything is sent, for example "“notes.pdf” cannot be imported: only images, videos and audio files are accepted."
+
+The files from the computer are sent to your PotionUI library one at a time. The **Imports** panel, at the bottom right, lists them with a bar and a percentage each, "Waiting" for those not started yet and a button to cancel each one; a file reads "Imported" once it is in the project, and the panel closes by itself. Each file becomes an item of your library: you find it in the **Library** pickers of every project and in the PotionUI library. A file whose content is already in your library is not stored twice, and a file already in the project is counted apart, as with the pickers. The largest file and the room you have are those of your PotionUI storage plan: when a file cannot be stored, the page says so with the reason, for example "“Rushes.mov” could not be imported: the file is too large for the server." Captures, in the dark and light themes of the English interface: files dragged over the Media panel in `docs/screenshots/media-import-local.png`, the **Imports** panel while they are sent in `docs/screenshots/upload-progress.png`, and a file dragged over the timeline in `docs/screenshots/timeline-drop.png`.
 
 In each picker you tick several files and confirm them together. The files then appear in the Media panel and the page shows, for example, "2 files imported". A media that is already in the project (same origin) is not imported again: the page counts it apart, for example "2 files imported · 1 file already in the project", or "1 file already in the project" when nothing is new. When some cannot be imported it adds, for example, "1 file could not be imported": the file is no longer available, or its kind is not accepted by the window. If your server has no picker, the page says "The media picker is not available on this server."
 
-An import copies nothing: the project keeps a reference to the library item or the gallery file, and the address the page uses to show it. If you delete the file from PotionUI, the project can no longer show or play it.
+An import from the library or the gallery copies nothing: the project keeps a reference to the library item or the gallery file, and the address the page uses to show it. A file from the computer is copied once, into your library, and the project keeps a reference to that item. If you delete the file from PotionUI, the project can no longer show or play it.
 
 ### In the Media panel
 
-After the import, your browser reads the duration and the size of each file. The duration shows at the bottom right of the thumbnail. For the selected item the panel shows **Duration**, **Format**, **Collection** and **Origin**: **Gallery** or **Library**; the thumbnail carries the same word. The frame rate of an imported video comes from the library when the library knows it, and shows after the size (for example "1280×720 · 25 fps"); otherwise, and for a gallery file, **Format** shows the size only. The collection pills sort images under **Images**, videos under **Videos** and audio files under **Audio**. **Generated** holds the videos of the finished takes of the project (chapter 9). A capture of the panel after an import is in `docs/screenshots/media-import.png`.
+After the import, your browser reads the duration and the size of each file. The duration shows at the bottom right of the thumbnail. For the selected item the panel shows **Duration**, **Format**, **Collection** and **Origin**: **Gallery** or **Library** (a file from the computer is in your library, so it reads **Library**); the thumbnail carries the same word. The frame rate of an imported video comes from the library when the library knows it, and shows after the size (for example "1280×720 · 25 fps"); otherwise, and for a gallery file, **Format** shows the size only. The collection pills sort images under **Images**, videos under **Videos** and audio files under **Audio**. **Generated** holds the videos of the finished takes of the project (chapter 9). A capture of the panel after an import is in `docs/screenshots/media-import.png`.
 
 ### Thumbnails
 
@@ -528,9 +536,9 @@ The assistant can run more checks on request: shots without a prompt, contradict
 
 ## 13. Audio and subtitles
 
-Audio lives in tracks, each with a role: Dialogue, Music, Ambience or SFX. **Audio › Add audio track** and **Audio › Import audio file…** bring sounds in; **Audio › Mixing console** shows the console. In the console each strip has a role, effects (**Equalizer**, **Compressor**, **Filter**; **+ effect** adds one), sends to the reverb and delay buses (R and D), pan, a fader (double-click it to go back to 0 dB), a meter, **M** and **S** and an automation button; the auxiliary buses and the **Master** follow. The pills at the top show one role only. **Voice and dialogue…** and the sound design commands (**Ambience…**, **Foley…**, **Texture…**, **Impact…**, **Musical intent…**) open the **Sound design workshop**, which is simulated (chapter 17). The text of a dialogue is real: it feeds the subtitles, together with the titles of the timeline (chapter 14).
+Audio lives in tracks, each with a role: Dialogue, Music, Ambience or SFX. **Audio › Add audio track**, **Audio › Import audio from the library…** and **Audio › Import audio from this computer…** bring sounds in; **Audio › Mixing console** shows the console. In the console each strip has a role, effects (**Equalizer**, **Compressor**, **Filter**; **+ effect** adds one), sends to the reverb and delay buses (R and D), pan, a fader (double-click it to go back to 0 dB), a meter, **M** and **S** and an automation button; the auxiliary buses and the **Master** follow. The pills at the top show one role only. **Voice and dialogue…** and the sound design commands (**Ambience…**, **Foley…**, **Texture…**, **Impact…**, **Musical intent…**) open the **Sound design workshop**, which is simulated (chapter 17). The text of a dialogue is real: it feeds the subtitles, together with the titles of the timeline (chapter 14).
 
-The four tracks of a new project are empty. **Audio › Import audio file…** brings in your own audio files (chapter 6). The console plays them for real: the faders, mute and solo, pan, equalizer, compressor, filter and sends act on the sound you hear, the meters show it, and the clips of the timeline draw the waveform of the file. The sounds that the Sound design workshop prepares are still synthesized by your browser (WebAudio).
+The four tracks of a new project are empty. **Audio › Import audio from the library…** and **Audio › Import audio from this computer…** bring in your own audio files, and you can drop audio files on a track (chapter 6). The console plays them for real: the faders, mute and solo, pan, equalizer, compressor, filter and sends act on the sound you hear, the meters show it, and the clips of the timeline draw the waveform of the file. The sounds that the Sound design workshop prepares are still synthesized by your browser (WebAudio).
 
 ## 14. Exports
 
@@ -634,7 +642,8 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Ctrl+Z, Ctrl+Shift+Z | Undo, Redo |
 | Ctrl+S | Save |
 | Ctrl+O | Open… |
-| Ctrl+I | Import files… |
+| Ctrl+I | Import from the library… |
+| Ctrl+Alt+I | Import from this computer… |
 | Ctrl+E, Ctrl+Shift+E | Export video…, Export to other software… |
 | Ctrl+G | Generate selection |
 | Ctrl+Alt+G | Add selection to queue |
@@ -721,7 +730,8 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **"Project reloaded: it changed elsewhere".** The project was saved from another tab, window or device after you opened it, so the page loaded the saved version. The changes you had not saved in this page are lost. Work on a project in one place at a time; **File › Version history…** brings back an earlier state.
 - **"This project was deleted elsewhere".** The project was deleted from another tab or device while it was open here. The page opened your most recently modified project, or created the starter project. The changes you had not saved are lost.
 - **A media does not show or play.** The viewer says **Media offline** ("The source file of “…” is no longer available: import it again or choose a take.") and so does the thumbnail of the shot on the timeline: the file is no longer available in your PotionUI library or gallery. Import it again, or choose a take for the shot. A take whose generation you deleted from the gallery no longer plays either.
-- **"1 file could not be imported" (or "N files could not be imported").** The file is no longer available in the library or the gallery, or its kind is not accepted by the window: images and videos for **Import files…** and **From the PotionUI gallery**, audio for **Import audio file…**.
+- **"1 file could not be imported" (or "N files could not be imported").** The file is no longer available in the library or the gallery, or its kind is not accepted by the window: images and videos for **Import from the library…** and **From the PotionUI gallery**, audio for **Import audio from the library…**.
+- **"“…” could not be imported: …".** A file from the computer did not reach your library. The reason follows: the file is too large for the server, the connection was lost, or PotionUI refused it (its message is shown, for example when your storage plan is full). Free some room in your library or ask your admin, then import the file again.
 - **The 3D view says that the browser cannot display 3D.** The page needs WebGL 2. Turn on the hardware acceleration of your browser, or use a recent Chrome, Edge, Firefox or Safari.
 - **A scene from an image failed.** The list and the view give the reason: your GPU minutes are used up, the Image to Splat preset is not available to you (ask your admin), or the image could not be read or extracted from the video. Click **Try again**; if it fails again, tell your admin.
 - **Holes appear when the camera moves.** A picture only shows one side of things: beyond about 15° or 25 % from the source view, empty patches appear. Stay closer to the **Source view**, lower the amplitude, or build another scene from a picture taken from the angle you need.

@@ -1,12 +1,15 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, asset, newAsset, toast } from './state.svelte.js';
-import { getClient } from './project.svelte.js';
+import { ui, doc, act, asset, newAsset, toast, round, addFrame, addAssetToTimeline } from './state.svelte.js';
+import { getClient, project } from './project.svelte.js';
 import { normalizeOrigin } from './api.js';
 import { openHostModal } from './host.js';
 import { probeMedia } from './sources.svelte.js';
+import { LOCAL_KINDS, acceptFor, fileKind, importQueue, sortFiles, uploadForm } from './upload.js';
+import { trackUploads, updateUpload } from './uploads.svelte.js';
+import { ulid } from './ulid.js';
 
 const KINDS = { media: ['image', 'video'], audio: ['audio'] };
-const probing = new Set();
+const probing = new Map();
 const probed = new Set();
 
 function open(name, props, allowed) {
@@ -110,16 +113,125 @@ async function importItems(items, allowed) {
 		}
 		made.push(newAsset({ kind: media.mediaType, name: media.filename || picked[i].item.filename || t('project.import.untitled'), src: media.url, origin: picked[i].origin, fps: fpsOf(picked[i].item) }));
 	});
-	if (made.length) {
-		act(() => doc.assets.push(...made));
-		ui.mediaCollection = 'all';
-		for (const a of made) probeAsset(a.id);
-	}
-	const imported = t('project.toast.imported', { count: made.length });
-	if (made.length && present) toast(t('project.toast.importSummary', { imported, present: t('project.toast.alreadyPresent', { count: present }) }), 'success');
-	else if (made.length) toast(imported, 'success');
+	addAssets(made);
+	report(made.length, present, failed);
+}
+
+function addAssets(made) {
+	if (!made.length) return;
+	act(() => doc.assets.push(...made));
+	ui.mediaCollection = 'all';
+	for (const a of made) probeAsset(a.id);
+}
+
+function report(made, present, failed) {
+	const imported = t('project.toast.imported', { count: made });
+	if (made && present) toast(t('project.toast.importSummary', { imported, present: t('project.toast.alreadyPresent', { count: present }) }), 'success');
+	else if (made) toast(imported, 'success');
 	else if (present) toast(t('project.toast.alreadyPresent', { count: present }), 'info');
 	if (failed) toast(t('project.toast.importFailed', { count: failed }), 'warning');
+}
+
+let chain = Promise.resolve();
+
+export function openLocalImport(kind = 'media') {
+	if (typeof document === 'undefined') return;
+	const kinds = LOCAL_KINDS[kind] ?? LOCAL_KINDS.media;
+	const input = document.createElement('input');
+	input.type = 'file';
+	input.multiple = true;
+	input.accept = acceptFor(kinds);
+	input.onchange = () => importFiles(input.files, kinds);
+	ui.menuOpen = null;
+	ui.paletteOpen = false;
+	input.click();
+}
+
+export function importFiles(files, kinds = LOCAL_KINDS.media, target = null) {
+	const { accepted, rejected } = sortFiles(files, kinds);
+	if (rejected.length) {
+		const params = { count: rejected.length, name: rejected[0].name };
+		const misplaced = rejected.every((f) => fileKind(f.name));
+		toast(misplaced ? (target ? t('timeline.toast.dropHint') : t('project.upload.audioOnly', params)) : t('project.upload.unsupported', params), 'warning');
+	}
+	if (!accepted.length) return Promise.resolve();
+	const entries = trackUploads(accepted);
+	const run = chain.then(() => uploadAll(entries, kinds, target));
+	chain = run.catch(() => {});
+	return run;
+}
+
+function failureReason(error) {
+	if (error?.code === 'unsupported_media' || error?.status === 415) return t('project.upload.reasonType');
+	if (error?.status === 413) return t('project.upload.reasonSize');
+	if (error?.code === 'network_error') return t('project.upload.reasonNetwork');
+	return error?.message || t('project.upload.reasonServer');
+}
+
+async function uploadAll(entries, kinds, target) {
+	const client = getClient();
+	const projectId = project.id;
+	const results = await importQueue(entries, {
+		upload: (entry, onProgress) => (client ? client.uploadMedia(uploadForm(entry.file), { onProgress, signal: entry.controller.signal }) : { ok: false, error: { code: 'no_api' } }),
+		resolve: (filename) => client.uploadedMedia(filename),
+		update: updateUpload,
+		allowed: kinds
+	});
+	if (project.id !== projectId) return;
+	const byOrigin = new Map(doc.assets.map((a) => [originKey(a.origin), a]).filter(([key]) => key));
+	const made = [];
+	const placed = [];
+	let present = 0;
+	for (const { entry, media, error } of results) {
+		if (error) {
+			if (error.code !== 'aborted') toast(t('project.upload.failed', { name: entry.file.name, reason: failureReason(error) }), 'error');
+			continue;
+		}
+		const key = originKey(media.origin);
+		let a = key ? byOrigin.get(key) : null;
+		if (a) present += 1;
+		else {
+			a = newAsset({ kind: media.mediaType, name: media.filename || entry.file.name || t('project.import.untitled'), src: media.url, origin: media.origin });
+			made.push(a);
+			if (key) byOrigin.set(key, a);
+		}
+		placed.push(a.id);
+	}
+	addAssets(made);
+	if (target) await placeAll(placed, target);
+	else report(made.length, present, 0);
+}
+
+async function placeAll(ids, target) {
+	let at = target.at;
+	for (const id of ids) {
+		await probeAsset(id).catch(() => {});
+		const end = placeAsset(id, target.row, at);
+		if (end !== null) at = end;
+	}
+}
+
+export function placeAsset(id, row, at) {
+	const a = asset(id);
+	if (!a) return null;
+	const start = round(at, 0.04);
+	if (row.id === 'frames' && a.kind !== 'audio') {
+		addFrame(id, start);
+		return start;
+	}
+	if (row.lane && a.kind === 'audio') {
+		const dur = Math.min(8, a.srcDur ?? 8);
+		act(() => doc.audio.push({ id: ulid(), assetId: id, lane: row.id, start, dur, srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 }));
+		toast(t('timeline.toast.dropped', { name: a.name, lane: row.id }));
+		return start + dur;
+	}
+	if (row.id === 'v1' && a.kind !== 'audio') {
+		addAssetToTimeline(id, start);
+		const clip = doc.clips.find((c) => c.id === ui.selection?.id);
+		return clip ? clip.start + clip.dur : start;
+	}
+	toast(t('timeline.toast.dropHint'), 'warning');
+	return null;
 }
 
 export function needsProbe(a) {
@@ -129,10 +241,16 @@ export function needsProbe(a) {
 	return a.srcDur === null;
 }
 
-export async function probeAsset(id) {
+export function probeAsset(id) {
+	if (probing.has(id)) return probing.get(id);
 	const a = asset(id);
-	if (!needsProbe(a)) return;
-	probing.add(id);
+	if (!needsProbe(a)) return Promise.resolve();
+	const run = probe(id, a);
+	probing.set(id, run);
+	return run;
+}
+
+async function probe(id, a) {
 	const info = await probeMedia(a);
 	probing.delete(id);
 	probed.add(id);

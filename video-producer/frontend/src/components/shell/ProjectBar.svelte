@@ -4,11 +4,12 @@
 	import { ui, doc } from '../../lib/state.svelte.js';
 	import { commandById, save, shortcutLabel } from '../../lib/commands.js';
 	import { chat } from '../../lib/host.js';
-	import { openImport } from '../../lib/importer.js';
+	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { sceneState, scenesBusy } from '../../lib/scene.svelte.js';
 	import Icon from '../Icon.svelte';
+	import Dropdown from './Dropdown.svelte';
 
 	const workspaces = [
 		{ id: 'media', icon: 'image', keys: 'ctrl+1' },
@@ -26,6 +27,10 @@
 		return t('shell.workspace.mixer');
 	}
 
+	const importItems = $derived([
+		{ label: t('shell.project.importLibrary'), icon: 'folder', key: commandById('import')?.key, run: () => openImport() },
+		{ label: t('shell.project.importLocal'), icon: 'upload', key: commandById('import-local')?.key, run: () => openLocalImport() }
+	]);
 	const tip = (id) => ({ text: commandById(id)?.label ?? '', kbd: commandById(id)?.key || undefined });
 	const savedTime = $derived(project.savedAt ? formatTime(project.savedAt) : null);
 	const sceneWork = $derived(scenesBusy() || Boolean(sceneState.render));
@@ -83,9 +88,7 @@
 	</div>
 
 	<div class="flex min-w-0 items-center justify-end gap-0.5">
-		<HostUi name="Tooltip" props={{ text: t('shell.project.importTip'), kbd: commandById('import')?.key }}>
-			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: 'upload', onclick: () => openImport() }}>{t('shell.project.import')}</HostUi>
-		</HostUi>
+		<Dropdown label={t('shell.project.import')} title={t('shell.project.importTip')} icon="upload" size="sm" align="right" items={importItems} />
 		<HostUi name="Tooltip" props={{ text: t('shell.project.exportTip'), kbd: commandById('export')?.key }}>
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: hostIconName('export'), onclick: () => (ui.modal = { type: 'export' }) }}>{t('shell.project.export')}</HostUi>
 		</HostUi>

@@ -5,7 +5,7 @@
 	import { meters, togglePlay } from '../../lib/playback.svelte.js';
 	import { roleColor, audioRoleLabel } from '../../lib/catalog.js';
 	import { commandById } from '../../lib/commands.js';
-	import { openImport } from '../../lib/importer.js';
+	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 
@@ -61,7 +61,8 @@
 		</div>
 		<div class="vp-divider"></div>
 		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: addAudioLane }}>{t('mixer.addLane')}</HostUi>
-		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'upload', onclick: () => openImport('audio') }}>{t('mixer.import')}</HostUi>
+		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'folder', onclick: () => openImport('audio') }}>{t('mixer.import')}</HostUi>
+		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'upload', onclick: () => openLocalImport('audio') }}>{t('mixer.importLocal')}</HostUi>
 		<div class="flex-1"></div>
 		<HostUi
 			name="IconButton"

@@ -207,7 +207,7 @@ test('exports.error.<code> matches the export error codes the export window tran
 });
 
 test('every command and menu of lib/commands.js has a label, and every label has a command', () => {
-	assert.equal(commandIds.length, 98, 'the source editor has 97 commands, minus the theme switch, plus the version history and the import of a 3D scene file');
+	assert.equal(commandIds.length, 100, 'the source editor has 97 commands, minus the theme switch, plus the version history, the import of a 3D scene file and the two imports from the computer');
 	assert.equal(new Set(commandIds).size, commandIds.length, 'duplicate command id');
 	assert.equal(menuIds.length, 10);
 	assert.ok(!commandIds.includes('theme'), 'the theme command belongs to the host');
