@@ -1154,24 +1154,25 @@ NO_FRAME_WARNING = {
 }
 
 
-def _layout_doc(core, make_doc, controls, first=True, fps=24):
+def _layout_doc(core, make_doc, controls, first=True, fps=24, frames=97):
     core.use_ltx25()
     doc = _guided(core, make_doc, controls, direction={"mode": "FL2VA"})
     for asset in doc["assets"]:
         if asset["kind"] == "video":
             asset["fps"] = fps
+            asset["srcDur"] = frames / 24
     if first:
         doc["frames"] = [_frame("f1", "hero", "first")]
     return doc
 
 
-def _layout(reference, strength=0.65):
+def _layout(reference):
     return [
         {
             "id": "ic-layout",
             "lora": {"model": LAYOUT_LORA_REF, "strength": 1.0},
             "reference": {"path": reference, "relative_path": reference, "type": "video"},
-            "strength": strength,
+            "strength": 1.0,
         }
     ]
 
@@ -1235,22 +1236,38 @@ def test_the_3d_render_mode_without_any_render_or_shot_is_blocked(core, make_doc
     assert [block["code"] for block in director.build_plans(user, doc, [], None, "draft", production="render3d").blocks] == ["no_shots"]
 
 
-@pytest.mark.parametrize("guidance, strength", [(0, 0.0), (40, 0.4), (100, 1.0), (130, 1.0)])
-def test_the_guidance_of_the_control_sets_how_firmly_the_reference_holds_the_layout_and_the_lora_stays_at_full_strength(
-    core, make_doc, guidance, strength
-):
+@pytest.mark.parametrize("guidance", [0, 40, 65, 130])
+def test_the_reference_and_the_lora_stay_at_full_strength_whatever_the_guidance_of_the_control(core, make_doc, guidance):
     doc = _layout_doc(core, make_doc, [{**_guide("c1", "orbit"), "guidance": guidance}])
 
     (plan,) = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai").shots
 
-    assert plan.request["form_data"]["video_director"]["ic_lora"] == _layout("uploads/orbit.mp4", strength)
+    assert plan.request["form_data"]["video_director"]["ic_lora"] == _layout("uploads/orbit.mp4")
 
 
-@pytest.mark.parametrize("guidance, strength", [(None, 1.0), (True, 1.0), (float("nan"), 1.0), (-5, 0.0), (65, 0.65)])
-def test_a_guide_without_a_usable_guidance_holds_the_layout_fully(guidance, strength):
-    guide = {} if guidance is None else {"guidance": guidance}
+@pytest.mark.parametrize("frames, snapped", [(1, 1), (2, 1), (48, 49), (69, 65), (70, 73), (72, 73), (96, 97), (97, 97)])
+def test_ltx_snaps_a_frame_count_to_the_nearest_one_plus_eight_k(frames, snapped):
+    assert director.snapped_frames(frames) == snapped
 
-    assert director.guide_strength(guide) == strength
+
+def test_a_guide_video_rendered_before_the_one_plus_eight_k_rule_warns_that_it_leaves_the_end_of_the_shot_free(core, make_doc):
+    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")], frames=96)
+
+    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
+
+    assert plans.warnings == [
+        {
+            "code": "layout_guide_short",
+            "message": "The 3D guide video conditions 89 of the 97 frames of the shot: render it again.",
+            "data": {"shot_id": "s1", "control_id": "c1", "covered": 89, "needed": 97},
+        }
+    ]
+    assert plans.shots[0].request["form_data"]["video_director"]["ic_lora"] == _layout("uploads/orbit.mp4")
+
+
+@pytest.mark.parametrize("length, rate", [(None, 24), (4.0, None), (0, 24)])
+def test_a_guide_video_of_unknown_length_or_frame_rate_gives_no_coverage_warning(length, rate):
+    assert director.guide_coverage({"srcDur": length, "fps": rate}, 4.0, 24) is None
 
 
 def test_a_layout_shot_without_a_first_frame_warns_that_it_keeps_the_look_of_its_3d_render(core, make_doc):

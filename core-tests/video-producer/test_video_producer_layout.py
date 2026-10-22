@@ -46,7 +46,7 @@ def storage(tmp_path):
 
 
 def _request(capabilities, first=True):
-    document = director.layout_document("The hut at dawn.", 24, 4.0, "832x480", "model:ic-lora", "uploads/orbit.mp4", 0.65)
+    document = director.layout_document("The hut at dawn.", 24, 4.0, "832x480", "model:ic-lora", "uploads/orbit.mp4")
     request = {"preset_id": presets.LTX_2_5, "mode": "video", "form_data": {"video_director": document}}
     if first:
         request = core_bridge.bind_director_media(
@@ -71,13 +71,13 @@ def test_the_core_normalizes_a_layout_shot_into_a_first_keyframe_then_the_guide_
     assert normalized["segments"][0]["prompt"] == "The hut at dawn."
     assert (normalized["settings"]["fps"], normalized["settings"]["frame_count"]) == (24, 97)
     (entry,) = normalized["ic_lora"]
-    assert (entry["lora"], entry["strength"]) == ({"model": "model:ic-lora", "strength": 1.0}, 0.65)
+    assert (entry["lora"], entry["strength"]) == ({"model": "model:ic-lora", "strength": 1.0}, 1.0)
     assert Path(entry["reference"]["path"]) == storage / "uploads" / "orbit.mp4"
     assert [Path(path) for path in normalized["media_images"]] == [storage / "uploads" / "hero.png"]
     assert [Path(path) for path in normalized["media_videos"]] == [storage / "uploads" / "orbit.mp4"]
     assert normalized["media_placements"] == [
         {"source": "image", "index": 0, "frame": "first", "strength": 1.0, "role": "keyframe"},
-        {"source": "video", "index": 0, "frame": "first", "strength": 0.65, "role": "reference"},
+        {"source": "video", "index": 0, "frame": "first", "strength": 1.0, "role": "reference"},
     ]
 
 
@@ -87,4 +87,4 @@ def test_a_layout_shot_without_a_first_frame_conditions_on_its_guide_video_alone
     normalized = normalize_video_director(_request(capabilities, first=False)["form_data"]["video_director"], capabilities, str(storage))
 
     assert normalized["media_images"] == []
-    assert normalized["media_placements"] == [{"source": "video", "index": 0, "frame": "first", "strength": 0.65, "role": "reference"}]
+    assert normalized["media_placements"] == [{"source": "video", "index": 0, "frame": "first", "strength": 1.0, "role": "reference"}]

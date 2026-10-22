@@ -49,8 +49,8 @@ GUIDE_MIN_SECONDS = 2.0
 LAYOUT_LORA = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"
 LAYOUT_REPO = "Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"
 LAYOUT_ID = "ic-layout"
-FULL_GUIDANCE = 100.0
 MAX_FPS = 60
+LTX_FRAME_STEP = 8
 DISTILLED = "distilled"
 DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
 
@@ -842,14 +842,6 @@ def layout_lora() -> Optional[str]:
     return f"{models.MODEL_REF}{model_id}" if model_id else None
 
 
-def guide_strength(guide: Mapping[str, Any]) -> float:
-    """How firmly a 3D guide video holds the layout: the guidance of its control, from 0 to 100 %, as a strength from 0 to 1."""
-    guidance = guide.get("guidance")
-    if not isinstance(guidance, (int, float)) or isinstance(guidance, bool) or not math.isfinite(guidance):
-        return 1.0
-    return max(0.0, min(1.0, guidance / FULL_GUIDANCE))
-
-
 def layout_guide(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
     """The latest up-to-date 3D guide of a shot whose video resolves, with that video."""
     for guide in reversed(fresh_guides(doc, clip)):
@@ -866,6 +858,21 @@ def _layout_fps(preset: Preset, fields: models.Fields, asset: Optional[Mapping[s
     return preset.fps
 
 
+def snapped_frames(frames: int) -> int:
+    """The 1 + 8k frame count LTX gives a clip of this many frames: the nearest, the lower one on a tie."""
+    return 1 + LTX_FRAME_STEP * max(0, math.ceil((frames - 1) / LTX_FRAME_STEP - 0.5))
+
+
+def guide_coverage(asset: Optional[Mapping[str, Any]], seconds: float, fps: float) -> Optional[Tuple[int, int]]:
+    """How many frames of the shot a 3D guide video conditions and how many the shot has, when the video is too short; None when it covers the shot or its length is unknown."""
+    length, rate = (asset or {}).get("srcDur"), (asset or {}).get("fps")
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 for value in (length, rate)):
+        return None
+    covered = (round(length * rate) - 1) // LTX_FRAME_STEP * LTX_FRAME_STEP + 1
+    needed = snapped_frames(math.floor(seconds * fps + 0.5))
+    return (covered, needed) if covered < needed else None
+
+
 def distilled_form(fields: models.Fields, resolved: models.ResolvedModels) -> Dict[str, Any]:
     """The Distilled speed profile Lightricks runs Layout-To-Render with (8 steps, CFG 1, euler_ancestral), for the fields the mode has, when the DiT in use is a distilled file and the mode offers that profile; empty otherwise."""
     options = [option.get("value") for option in (fields.get("speed_profile") or {}).get("options") or []]
@@ -874,10 +881,8 @@ def distilled_form(fields: models.Fields, resolved: models.ResolvedModels) -> Di
     return {name: value for name, value in {"speed_profile": DISTILLED, **DISTILLED_RECIPE}.items() if name in fields}
 
 
-def layout_document(
-    prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str, strength: float
-) -> Dict[str, Any]:
-    """A director document of one segment whose IC-LoRA entry takes a 3D guide video as its reference."""
+def layout_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes a 3D guide video as its reference, the LoRA and the reference both at strength 1: below 1 the reference tokens are no longer clean and LTX-2.5 copies the render instead of following it."""
     document = _document(prompt, fps, seconds, resolution)
     document["mode"] = "director"
     document["segments"][0].update(start=0.0, end=seconds)
@@ -886,7 +891,7 @@ def layout_document(
             "id": LAYOUT_ID,
             "lora": {"model": lora, "strength": 1.0},
             "reference": {"path": video, "relative_path": video, "type": "video"},
-            "strength": strength,
+            "strength": 1.0,
         }
     ]
     return document
@@ -902,10 +907,23 @@ def _layout_plan(
     fields = context.mode_fields(mode)
     resolution = _native_size(context, fields)
     seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
-    fps = _layout_fps(preset, fields, _asset(doc, guide.get("assetId")))
+    asset = _asset(doc, guide.get("assetId"))
+    fps = _layout_fps(preset, fields, asset)
     _guide_warnings(doc, clip, warnings, refs=True)
+    coverage = guide_coverage(asset, seconds, fps)
+    if coverage is not None:
+        warnings.append(
+            note(
+                "layout_guide_short",
+                f"The 3D guide video conditions {coverage[0]} of the {coverage[1]} frames of the shot: render it again.",
+                shot_id=shot_id,
+                control_id=guide.get("id"),
+                covered=coverage[0],
+                needed=coverage[1],
+            )
+        )
     prompt = shot_prompt(doc, clip)
-    document = layout_document(prompt, fps, seconds, resolution, str(context.layout_lora), video["value"], guide_strength(guide))
+    document = layout_document(prompt, fps, seconds, resolution, str(context.layout_lora), video["value"])
     request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
     first_media = _frame_media(context.user, doc, shot_frames(doc, shot_id)[0])
     bound = False

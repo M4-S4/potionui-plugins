@@ -143,6 +143,7 @@ function noteText(note) {
 	if (code === 'refs_preset_needed') return t('generation.block.refsPresetNeeded');
 	if (code === 'layout_lora_missing') return t('generation.block.layoutLoraMissing', { file: data.file ?? '' });
 	if (code === 'layout_no_frame') return t('generation.warn.layoutNoFrame', { shot: shotName(data.shot_id) });
+	if (code === 'layout_guide_short') return t('generation.warn.layoutGuideShort', { shot: shotName(data.shot_id), covered: data.covered ?? '—', needed: data.needed ?? '—' });
 	return note?.message || code || '';
 }
 
