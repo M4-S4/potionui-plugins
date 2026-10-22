@@ -47,7 +47,7 @@ RECIPE_PRESETS = {
 }
 WITHOUT_SMOKE = {"vp-minimax-h3-12gb", "vp-minimax-h3-fast-12gb"}
 WITH_SMOKE = sorted(set(RECIPE_PRESETS) - WITHOUT_SMOKE)
-SMOKE_TIMEOUTS = {"vp-wan22-14b-lightning-12gb": 900, "vp-wan22-14b-i2v": 600}
+SMOKE_TIMEOUTS = {"vp-wan22-14b-lightning-12gb": 600, "vp-wan22-14b-i2v": 600}
 PATH_HINTS = {
     presets.WAN21_T2V_1_3B_8GB: "video-producer/Wan2.1-T2V-1.3B-8GB",
     presets.WAN22_TI2V_5B_8GB: "video-producer/Wan2.2-TI2V-5B-8GB",
