@@ -398,10 +398,17 @@ def describe_preset(preset_id: str) -> Optional[api_presets.PresetDescription]:
 
 
 def bind_director_media(
-    request: Mapping[str, Any], role: str, media: Mapping[str, Any], promote: bool = False
+    request: Mapping[str, Any],
+    role: str,
+    media: Mapping[str, Any],
+    promote: bool = False,
+    segment_id: Optional[str] = None,
+    capabilities: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Bind a resolved image as the first or last frame of a request's Video Director document."""
-    return api_presets.bind_director_media(dict(request), role, dict(media), promote=promote)
+    """Bind a resolved image as the first or last frame of a request's Video Director document, on segment_id in a director document, against capabilities when given."""
+    return api_presets.bind_director_media(
+        dict(request), role, dict(media), segment_id=segment_id, promote=promote, capabilities=capabilities
+    )
 
 
 async def submit_generation(user: User, request: Mapping[str, Any]) -> Dict[str, Any]:

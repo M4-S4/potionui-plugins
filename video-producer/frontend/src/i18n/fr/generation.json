@@ -133,7 +133,10 @@
 	"block.upscaleUnsupported": "Agrandir cette prise demande SeedVR2 : demandez à un administrateur de l’installer, ou générez la prise à nouveau en pleine résolution.",
 	"workshop.notSent": "Non transmis à ce moteur",
 	"workshop.notSentWhy": "Le Video Director construit la requête à partir des plans, de la direction, des frames et des références ; ce réglage reste dans le projet mais ne change pas les prises.",
-	"block.refsPresetNeeded": "« Rendu 3D + IA » demande un preset MiniMax-H3 doté du mode références (refs).",
+	"block.refsPresetNeeded": "« Rendu 3D + IA » demande un preset MiniMax-H3 doté du mode références (refs), ou LTX-2.5.",
+	"block.layoutLoraMissing": "« Rendu 3D + IA » sur LTX-2.5 demande l’IC-LoRA Layout-To-Render : demandez à votre admin d’installer {file}.",
 	"warn.staleGuide": "La vidéo de référence de « {shot} » n’est plus à jour : rendez-la à nouveau dans Scène 3D.",
-	"warn.guideNeedsRefs": "« {shot} » a une vidéo de référence 3D, mais FL2VA ne la lit pas : choisissez Ref2VA, ou utilisez les images de début et de fin."
+	"warn.guideNeedsRefs": "« {shot} » a une vidéo de référence 3D, mais FL2VA ne la lit pas : choisissez Ref2VA, ou utilisez les images de début et de fin.",
+	"warn.layoutNoFrame": "« {shot} » n’a pas de première image : LTX-2.5 gardera l’aspect du rendu 3D.",
+	"warn.layoutGuideShort": "La vidéo de référence de « {shot} » ne guide que {covered} de ses {needed} images : rendez-la à nouveau dans Scène 3D."
 }

@@ -13,6 +13,7 @@ import {
 	focalToFov,
 	fovToFocal,
 	frameCount,
+	FRAME_STEP,
 	holesMatter,
 	horizontalFov,
 	interpolate,
@@ -181,48 +182,58 @@ test('Blender camera: samples at 24 fps, target 1 m along local −z, focal from
 	near(turned.t, 0.0417, 1e-4);
 });
 
-test('render size: captures at the project frame (short side from the resolution, long side from the aspect); the reference video capped at 1280 on its long side, floored to multiples of 32', () => {
+test('render size: captures at the project frame (short side from the resolution, long side from the aspect); the reference video capped at 1280 on its long side with the same aspect ratio, even sides', () => {
 	assert.equal(MAX_REFERENCE_SIDE, 1280);
 	assert.deepEqual(projectSize('1080p', 16 / 9), { width: 1920, height: 1080 });
-	assert.deepEqual(renderSize(projectSize('1080p', 16 / 9)), { width: 1280, height: 704 });
+	assert.deepEqual(renderSize(projectSize('1080p', 16 / 9)), { width: 1280, height: 720 });
 	assert.deepEqual(projectSize('720p', 16 / 9), { width: 1280, height: 720 });
-	assert.deepEqual(renderSize(projectSize('720p', 16 / 9)), { width: 1280, height: 704 });
+	assert.deepEqual(renderSize(projectSize('720p', 16 / 9)), { width: 1280, height: 720 });
 	assert.deepEqual(projectSize('1080p', 9 / 16), { width: 1080, height: 1920 });
-	assert.deepEqual(renderSize(projectSize('1080p', 9 / 16)), { width: 704, height: 1280 });
+	assert.deepEqual(renderSize(projectSize('1080p', 9 / 16)), { width: 720, height: 1280 });
 	assert.deepEqual(projectSize('4K', 16 / 9), { width: 3840, height: 2160 });
-	assert.deepEqual(renderSize(projectSize('4K', 16 / 9)), { width: 1280, height: 704 });
-	assert.deepEqual(renderSize(projectSize('480p', 16 / 9)), { width: 832, height: 480 });
-	assert.deepEqual(renderSize(projectSize('1080p', 16 / 9), 1920), { width: 1920, height: 1056 });
-	assert.deepEqual(renderSize(projectSize('1080p', 2.39)), { width: 1280, height: 512 });
+	assert.deepEqual(renderSize(projectSize('4K', 16 / 9)), { width: 1280, height: 720 });
+	assert.deepEqual(renderSize(projectSize('480p', 16 / 9)), { width: 852, height: 480 });
+	assert.deepEqual(renderSize(projectSize('1080p', 16 / 9), 1920), { width: 1920, height: 1080 });
+	assert.deepEqual(renderSize(projectSize('1080p', 2.39)), { width: 1280, height: 536 });
 	for (const size of [projectSize('1080p', 16 / 9), projectSize('1080p', 1), projectSize('4K', 2.39), projectSize('720p', 4 / 5)]) {
 		const video = renderSize(size);
 		assert.ok(Math.max(video.width, video.height) <= MAX_REFERENCE_SIDE);
-		assert.equal(video.width % 32, 0);
-		assert.equal(video.height % 32, 0);
+		assert.equal(video.width % 2, 0);
+		assert.equal(video.height % 2, 0);
+		assert.ok(Math.abs(video.width / video.height / (size.width / size.height) - 1) < 0.005);
 	}
 	assert.deepEqual(projectSize('1080p', 2.39), { width: 2580, height: 1080 });
 	assert.deepEqual(projectSize('1080p', 9), { width: 1920, height: 1080 });
 	assert.deepEqual(projectSize('weird', 1), { width: 1080, height: 1080 });
 });
 
-test('frames: 24 fps for the length of the 3D shot, the first and last frames exactly on the start and end keys, the pose a pure function of the frame index', () => {
-	assert.equal(frameCount(5.17), 124);
-	assert.equal(frameCount(2), 48);
-	assert.equal(frameCount(0.01), 2);
+test('frames: 1 + 8k frames at 24 fps, at least the length of the 3D shot, one every 1/24 s from the start key, the last one on the end key and the extra ones holding it, the pose a pure function of the frame index', () => {
+	assert.equal(FRAME_STEP, 8);
+	assert.equal(frameCount(5.17), 129);
+	assert.equal(frameCount(3), 73);
+	assert.equal(frameCount(2), 49);
+	assert.equal(frameCount(0.01), 9);
 	const times = renderTimes(2);
-	assert.equal(times.length, 48);
-	assert.deepEqual([times[0], times[47]], [0, 2]);
-	near(times[1], 2 / 47);
+	assert.equal(times.length, 49);
+	assert.deepEqual([times[0], times[48]], [0, 2]);
+	near(times[1], 1 / 24);
 	assert.ok(times.every((t, i) => i === 0 || t > times[i - 1]));
-	assert.deepEqual(renderTimes(0.01), [0, 0.01]);
-	assert.equal(renderTimes(5.17).at(-1), 5.17);
+	const three = renderTimes(3);
+	assert.equal(three.length, 73);
+	assert.ok(three.every((t, i) => Math.abs(t - i / 24) < 1e-9));
+	assert.equal(renderTimes(3.02).at(-1), 3.02);
+	assert.deepEqual(renderTimes(0.01), [0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]);
+	const long = renderTimes(5.17);
+	assert.equal(long.at(-1), 5.17);
+	assert.deepEqual(long.slice(125), [5.17, 5.17, 5.17, 5.17]);
+	assert.ok(long.every((t, i) => i === 0 || t >= long[i - 1]));
 	const plan = { dur: 2, keyframes: trajectory('orbit', 10, source, 2, makeId) };
 	const poses = renderPoses(plan);
-	assert.equal(poses.length, 48);
+	assert.equal(poses.length, 49);
 	assert.deepEqual(poses[0], cameraAt(plan, 0));
 	assert.deepEqual(poses[0].pos, plan.keyframes[0].pos);
-	assert.deepEqual(poses[47].pos, plan.keyframes[1].pos);
-	assert.deepEqual(poses[47], cameraAt(plan, 2));
+	assert.deepEqual(poses[48].pos, plan.keyframes[1].pos);
+	assert.deepEqual(poses[48], cameraAt(plan, 2));
 	assert.deepEqual(renderPoses(plan), poses);
 	assert.deepEqual(retime(plan.keyframes, 2, 4).map((k) => k.t), [0, 4]);
 	assert.equal(retime(plan.keyframes, 0, 4), plan.keyframes);

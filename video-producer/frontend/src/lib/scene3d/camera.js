@@ -1,5 +1,6 @@
 export const FPS = 24;
 export const MIN_REFERENCE_SECONDS = 2;
+export const FRAME_STEP = 8;
 export const SENSOR_HALF_WIDTH = 18;
 export const WARN_ANGLE = 15;
 export const WARN_SHIFT = 0.25;
@@ -249,18 +250,18 @@ export function projectSize(resolution, aspect) {
 
 export function renderSize(size, maxSide = MAX_REFERENCE_SIDE) {
 	const k = Math.min(1, maxSide / Math.max(size.width, size.height));
-	const floor32 = (v) => Math.max(32, Math.floor((v * k) / 32 + 1e-6) * 32);
-	return { width: floor32(size.width), height: floor32(size.height) };
+	return { width: even(size.width * k), height: even(size.height * k) };
 }
 
 export function frameCount(dur, fps = FPS) {
-	return Math.max(2, Math.round(dur * fps));
+	const frames = Math.max(2, Math.round(dur * fps));
+	return 1 + FRAME_STEP * Math.ceil((frames - 1) / FRAME_STEP);
 }
 
 export function renderTimes(dur, fps = FPS) {
 	const n = frameCount(dur, fps);
 	const span = Math.max(0, dur);
-	return Array.from({ length: n }, (_, i) => (i === n - 1 ? span : (i * span) / (n - 1)));
+	return Array.from({ length: n }, (_, i) => (i === n - 1 ? span : Math.min(span, i / fps)));
 }
 
 export function renderPoses(plan, fps = FPS) {

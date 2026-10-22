@@ -19,6 +19,7 @@ Fields = Dict[str, Dict[str, Any]]
 class ResolvedModels:
     values: Dict[str, Any] = field(default_factory=dict)
     missing: List[str] = field(default_factory=list)
+    files: Dict[str, str] = field(default_factory=dict)
 
 
 def parse_size(value: Any) -> Optional[Tuple[int, int]]:
@@ -90,7 +91,7 @@ def _other_modes(preset_id: str, mode: str) -> List[str]:
 def resolve_models(
     preset_id: str, mode: str, director_mode: Optional[str] = None, fields: Optional[Fields] = None
 ) -> ResolvedModels:
-    """The first installed recommended file of each model field a run needs, as model:<id>, and the fields left without one."""
+    """The first installed recommended file of each model field a run needs, as model:<id>, the fields left without one, and the file name of each recommendation used."""
     fields = form_fields(preset_id, mode) if fields is None else fields
     required, optional = model_fields(fields, director_mode)
     cache: Dict[Tuple[str, str], Optional[str]] = {}
@@ -111,10 +112,13 @@ def resolve_models(
 
     values: Dict[str, Any] = {}
     missing: List[str] = []
+    files: Dict[str, str] = {}
     for name in [*required, *optional]:
-        model_id = next((found for item in recommended(name) if (found := _installed(item, cache))), None)
-        if model_id is not None:
-            values[name] = f"{MODEL_REF}{model_id}"
+        chosen = next(((item, found) for item in recommended(name) if (found := _installed(item, cache))), None)
+        if chosen is not None:
+            values[name] = f"{MODEL_REF}{chosen[1]}"
+            if chosen[0].get("filename"):
+                files[name] = str(chosen[0]["filename"])
         elif name in required:
             missing.append(name)
     for name, rows in _default_loras(fields):
@@ -123,7 +127,7 @@ def resolve_models(
             missing.append(name)
         else:
             values[name] = resolved
-    return ResolvedModels(values=values, missing=missing)
+    return ResolvedModels(values=values, missing=missing, files=files)
 
 
 def _default_loras(fields: Fields) -> List[Tuple[str, List[Dict[str, Any]]]]:

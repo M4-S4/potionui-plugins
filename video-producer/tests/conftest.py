@@ -204,6 +204,7 @@ def tracker_reset():
 
 WAN_ID = "01KX47WANVIDEO0000000000TV"
 H3_ID = "01KX47H3MINIMAX000000000VA"
+LTX25_ID = "01KX47LTX25VIDEO00000000TV"
 SEEDVR2_ID = "01KXB7C553THYMSMKY1QSYESFM"
 SPLAT_ID = "01KX47GSP4TQ0000000000SP3D"
 OPENROUTER_ID = "01M3SV8HJTGT3JPPH2BA5MP6PR"
@@ -241,6 +242,15 @@ H3_VARS = {
         "modes": {"t2v": {}, "i2v": {}, "flf": {}, "director": {"keyframes": "anywhere", "audio": True, "fps_locked": True}},
         "limits": {"default_duration": 5, "default_fps": 24, "max_duration": 15},
         "preset_mode_overrides": {"refs": {"references": "per_shot", "reference_fields": ["references"]}},
+    },
+}
+LTX25_VARS = {
+    "default_frames": 49,
+    "default_fps": 25,
+    "video_director": {
+        "preset_modes": ["video"],
+        "modes": {"t2v": {}, "i2v": {}, "flf": {}, "director": {"audio": True, "ic_lora": True, "max_keyframes": 8}},
+        "limits": {"default_duration": 5, "default_fps": 25, "max_duration": 40, "max_frames": 1001},
     },
 }
 OPENROUTER_VARS = {
@@ -299,6 +309,23 @@ def h3_video_fields():
         "video_vae": _model("video_vae"),
         "audio_vae": _model("audio_vae"),
         "upscale_model": _model("upscale_model", required=False),
+    }
+
+
+def ltx25_fields():
+    return {
+        "speed_profile": _plain("select", "balanced", ("balanced", "distilled", "quality", "custom")),
+        "seed": _plain("seed", -1),
+        "resolution": _plain("resolution", "768x512", WAN_RESOLUTIONS),
+        "fps": _plain("slider", 25),
+        "generate_audio": _plain("checkbox", False),
+        "steps": _plain("slider", 24),
+        "cfg": _plain("slider", 4.0),
+        "sampler": _plain("select", "euler_ancestral", ("euler_ancestral", "euler")),
+        "model": _model("model", sha256="ltx25-sha", filename="ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"),
+        "text_encoder": _model("gemma4_text_encoder"),
+        "video_vae": _model("ltx25_video_vae"),
+        "audio_vae": _model("ltx25_audio_vae", required=False),
     }
 
 
@@ -505,6 +532,9 @@ class FakeCore:
             {"video": h3_video_fields(), "refs": h3_refs_fields(), "upscale": h3_upscale_fields()},
             variables=H3_VARS,
         )
+
+    def use_ltx25(self):
+        return self.add_preset(LTX25_ID, "LTX-2.5", {"video": ltx25_fields()}, variables=LTX25_VARS)
 
     def use_h3_variant(self, preset_id, name):
         director = {**H3_VARS["video_director"], "preset_modes": ["video"]}

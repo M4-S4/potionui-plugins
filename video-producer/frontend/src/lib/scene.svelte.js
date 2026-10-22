@@ -8,6 +8,7 @@ import { placeSeamFrame, seamAsset } from './seam.js';
 import { replaceAllowed } from './seam.svelte.js';
 import {
 	FPS,
+	FRAME_STEP,
 	MIN_REFERENCE_SECONDS,
 	PRESETS,
 	cameraAt,
@@ -824,7 +825,7 @@ export async function renderPlan(plan) {
 	const size = videoSize();
 	const times = renderTimes(plan.dur);
 	const total = times.length;
-	if (total > MAX_RENDER_FRAMES) return toast(t('scene.toast.tooLong', { max: secs(MAX_RENDER_FRAMES / FPS) }), 'warning');
+	if (total > MAX_RENDER_FRAMES) return toast(t('scene.toast.tooLong', { max: secs((1 + FRAME_STEP * Math.floor((MAX_RENDER_FRAMES - 1) / FRAME_STEP)) / FPS) }), 'warning');
 	const poses = times.map((time) => fovFor(cameraAt(plan, time), size));
 	const signature = planSignature(plan);
 	const projectId = project.id;
