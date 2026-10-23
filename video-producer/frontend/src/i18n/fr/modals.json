@@ -183,6 +183,7 @@
 	"shot.removeReferenceTip": "Retirer du plan",
 	"shot.noOwn": "Aucune référence propre.",
 	"shot.durationMax": "Au plus {max} avec le média du plan.",
+	"shot.durationEngine": "Au plus {max} avec le moteur du plan.",
 	"shot.draftsHint": "Générés d’un coup par les boutons Générer du plan.",
 	"shot.engine": "Moteur",
 	"shot.staleWarning": "Les prises du plan seront marquées « Prompt modifié »",

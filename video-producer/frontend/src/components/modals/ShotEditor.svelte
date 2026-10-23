@@ -1,13 +1,13 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, asset, clipLabel, globalPrompt, promptIssues, relayout, secs, sourceLength } from '../../lib/state.svelte.js';
-	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf } from '../../lib/production.svelte.js';
+	import { ui, doc, act, asset, clipLabel, globalPrompt, promptIssues, relayout, secs } from '../../lib/state.svelte.js';
+	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf, shotDurationLimit } from '../../lib/production.svelte.js';
 	import { PROFILES, optionKey, presetProfiles } from '../../lib/generation.js';
 	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
 	import { families, refTypeLabel } from '../../lib/references.js';
 	import { assetThumb } from '../../lib/media.js';
-	import { applyShotDraft, inputsChanged, shotDraft, shotReferences } from '../../lib/shots.js';
+	import { SHOT_CAP, applyShotDraft, inputsChanged, shotDraft, shotReferences } from '../../lib/shots.js';
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
 	import { laneTitle } from '../../lib/tracks.js';
 	import { ulid } from '../../lib/ulid.js';
@@ -42,7 +42,7 @@
 	const family = (space) => families.find((f) => f.id === space) ?? null;
 	const inherited = $derived(clip ? shotReferences(doc, clip, draft.exclude).inherited : []);
 	const sentCount = $derived(draft.own.length + inherited.filter((x) => !x.excluded).length);
-	const maxDur = $derived(clip ? sourceLength(clip) - clip.srcIn : 60);
+	const limit = $derived(clip ? shotDurationLimit({ ...clip, engine: draft.engine }) : { max: SHOT_CAP, by: null, take: null });
 	const issues = $derived(clip ? promptIssues({ text: draft.text, start: clip.start, dur: +draft.dur, shotId: clip.id }) : []);
 	const changed = $derived(Boolean(baseline) && inputsChanged(baseline, draft));
 	const groups = $derived(engineGroups());
@@ -105,7 +105,7 @@
 	function saveIt() {
 		if (!clip) return (ui.modal = null);
 		act(() => {
-			const { resized } = applyShotDraft(doc, clip, baseline, $state.snapshot(draft), { makeId: ulid, maxDur, engine: doc.engine });
+			const { resized } = applyShotDraft(doc, clip, baseline, $state.snapshot(draft), { makeId: ulid, maxDur: limit.max, engine: doc.engine });
 			if (resized) relayout();
 		});
 		ui.modal = null;
@@ -252,9 +252,10 @@
 				<section class="space-y-1.5">
 					<label class="block space-y-1">
 						<span class="vp-label">{t('modals.prompt.duration')}</span>
-						<input class="input vp-dense vp-tc w-full" type="number" step="0.04" min="0.4" max={maxDur} bind:value={draft.dur} />
+						<input class="input vp-dense vp-tc w-full" type="number" step="0.04" min="0.4" max={limit.max} bind:value={draft.dur} />
 					</label>
-					{#if clip.assetId && asset(clip.assetId)?.srcDur}<p class="text-xs text-fg-subtle">{t('modals.shot.durationMax', { max: secs(maxDur) })}</p>{/if}
+					{#if limit.by === 'source'}<p class="text-xs text-fg-subtle">{t('modals.shot.durationMax', { max: secs(limit.max) })}</p>{/if}
+					{#if limit.by === 'engine'}<p class="text-xs text-fg-subtle">{t('modals.shot.durationEngine', { max: secs(limit.max) })}</p>{/if}
 				</section>
 				<section class="space-y-1.5">
 					<div class="vp-section-title">{t('inspector.section.frames')}</div>

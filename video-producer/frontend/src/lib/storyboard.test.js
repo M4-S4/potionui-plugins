@@ -5,8 +5,10 @@ import { aggregate, activityStep } from './generation.js';
 import { canLabel, finalsToSync, labelGroups, labelOf, legacyLabel, marksOf, rejectedCount, relabel, toggledLabel, visibleTakes } from './labels.js';
 import {
 	MAX_DRAFTS,
+	SHOT_CAP,
 	applyShotDraft,
 	draftsOf,
+	durationLimit,
 	excludedOf,
 	generationCounts,
 	inputsChanged,
@@ -222,6 +224,34 @@ test('shot editor: the duration stays within the media, a removed frame goes, an
 	assert.deepEqual(doc.frames, []);
 });
 
+function takeDoc() {
+	const doc = editorDoc();
+	doc.assets = [
+		{ id: 'src', kind: 'video', generated: false, srcDur: 6 },
+		{ id: 'gen-t1', kind: 'video', generated: true, srcDur: 4.375 },
+		{ id: 'still', kind: 'image', generated: false, srcDur: null }
+	];
+	Object.assign(doc.clips[0], { assetId: 'gen-t1', take: 't1', stage: 'final', dur: 4.4 });
+	doc.prompts[0].dur = 4.4;
+	Object.assign(doc.clips[1], { assetId: 'src', stage: 'source', srcIn: 1 });
+	return doc;
+}
+
+test('shot duration: a source bounds the shot, a generated take leaves it free up to the engine of the shot', () => {
+	const doc = takeDoc();
+	const [shot, source] = doc.clips;
+
+	assert.deepEqual(durationLimit(doc, source, 15), { max: 5, by: 'source', take: null });
+	assert.deepEqual(durationLimit(doc, shot, 15), { max: 15, by: 'engine', take: 4.375 });
+	assert.deepEqual(durationLimit(doc, shot, null), { max: SHOT_CAP, by: null, take: 4.375 });
+	assert.deepEqual(durationLimit(doc, { ...source, assetId: 'still', srcIn: 0 }, 15), { max: SHOT_CAP, by: null, take: null });
+	assert.deepEqual(durationLimit(doc, { id: 's3', assetId: null, srcIn: 0 }, 15), { max: SHOT_CAP, by: null, take: null });
+
+	const before = shotDraft(doc, source, doc.engine);
+	applyShotDraft(doc, source, before, { ...before, dur: 30 }, { makeId: () => 'p2', maxDur: durationLimit(doc, source, 15).max, engine: doc.engine });
+	assert.deepEqual([source.dur, source.assetId, source.stage], [5, 'src', 'source']);
+});
+
 test('shot editor: a change of prompt, duration, frame, exclusion or own reference counts, a change of drafts does not', () => {
 	const base = { text: 'A', dur: 4, first: null, last: null, exclude: ['g1'], own: [{ id: 'o1', assetId: 'i', type: 'Objet' }], drafts: 2 };
 
@@ -250,7 +280,7 @@ test('progress: the timeline block and the storyboard card show the same shot ac
 	const timeline = source('../components/timeline/Timeline.svelte');
 	const storyboard = source('../components/storyboard/StoryboardView.svelte');
 
-	assert.match(timeline, /import \{ takesOf, shotActivity, shotEngineText \} from '\.\.\/\.\.\/lib\/production\.svelte\.js';/);
+	assert.match(timeline, /import \{ takesOf, shotActivity, shotEngineText(, \w+)* \} from '\.\.\/\.\.\/lib\/production\.svelte\.js';/);
 	assert.match(timeline, /\{@const activity = shotActivity\(c\.id\)\}/);
 	assert.match(timeline, /\{#if activity\.state === 'running'\}/);
 	for (const page of [timeline, storyboard]) assert.match(page, /activityStep\(activity\) \|\| \(activity\.running \? t\('generation\.state\.running'\) : t\('lib\.status\.queued'\)\)/);

@@ -60,6 +60,7 @@
 	"drag.fadeOut": "Fondu de sortie {dur}",
 	"drag.position": "Déplacer en position {n}",
 	"drag.sourceLimitAt": "Limite du média source ({dur})",
+	"drag.engineLimitAt": "Limite du moteur ({dur})",
 	"drag.rippled": "Durée {dur} · montage décalé",
 	"drag.frame": "Frame à {time}",
 	"drag.keyframe": "Position clé à {time}",

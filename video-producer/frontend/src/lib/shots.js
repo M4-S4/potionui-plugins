@@ -141,6 +141,18 @@ export function migrateShots(doc) {
 
 const MIN_SHOT = 0.4;
 const snap = (value) => +(Math.round(value / 0.04) * 0.04).toFixed(3);
+export const SHOT_CAP = 60;
+
+export function durationLimit(doc, clip, engineMax = null) {
+	const media = (doc.assets ?? []).find((a) => a.id === clip?.assetId) ?? null;
+	const srcIn = clip?.srcIn ?? 0;
+	const length = typeof media?.srcDur === 'number' ? media.srcDur : null;
+	if (media?.generated) {
+		const take = length === null ? null : length - srcIn;
+		return engineMax > 0 ? { max: engineMax, by: 'engine', take } : { max: SHOT_CAP, by: null, take };
+	}
+	return { max: (length ?? SHOT_CAP) - srcIn, by: length ? 'source' : null, take: null };
+}
 const promptFor = (doc, clip) => (doc.prompts ?? []).find((p) => p.shotId === clip.id) ?? null;
 const frameAsset = (doc, clip, kind) => framesOf(doc, clip.id, kind).find((f) => f.assetId)?.assetId ?? null;
 const ownCopy = (r) => ({ id: r.id, name: r.name, space: r.space, type: r.type, assetId: r.assetId ?? null, role: r.role });

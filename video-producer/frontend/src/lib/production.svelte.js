@@ -6,7 +6,7 @@ import { PROFILES, aggregate, canUpscale, engineOptions, isH3, isInFlight, migra
 import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
 import { finalsToSync, labelOf, marksOf, relabel } from './labels.js';
-import { generationCounts } from './shots.js';
+import { durationLimit, generationCounts } from './shots.js';
 import { effectiveEngine, projectQuality, shotEngineOf } from './engine.js';
 import { audioBehavior, shotSound } from './sound.js';
 import { prioritized } from './queue.js';
@@ -475,6 +475,11 @@ function syncFinals() {
 		const take = takeById(id);
 		if (take) sendLabel(take, label);
 	}
+}
+
+export function shotDurationLimit(clip) {
+	const option = optionFor(engineChoices(), effectiveEngine(clip, doc));
+	return durationLimit(doc, clip, option?.info.limits.maxDuration ?? null);
 }
 
 export function labelTake(clip, take, label) {
