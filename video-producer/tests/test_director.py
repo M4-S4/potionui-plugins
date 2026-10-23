@@ -841,7 +841,14 @@ def test_ref2va_sends_the_fresh_3d_guide_video_first_in_a_six_section_prompt_tha
     assert plans.renders == [{"shot_id": "s1", "control_id": "c1", "plan_id": "plan-c1", "asset_id": "orbit"}]
 
 
-def test_the_six_sections_come_in_order_and_the_picture_a_splat_scene_was_built_from_is_not_sent(core, make_doc):
+SCENE_DEFINITION = "<Picture 1> shows the scene itself: keep its look, colours and lighting."
+SCENE_RETENTION = (
+    "<Picture 1> (look of the scene of [Shot 1]): partially_preserved - keeps the look, the colours and the lighting of the scene; "
+    "the framing follows the camera path."
+)
+
+
+def test_the_six_sections_come_in_order_and_the_picture_a_splat_scene_was_built_from_is_sent_for_its_look(core, make_doc):
     core.use_h3()
     doc = _guided(core, make_doc, [_guide("c1", "orbit")])
     doc["plans3d"] = [_orbit()]
@@ -849,12 +856,115 @@ def test_the_six_sections_come_in_order_and_the_picture_a_splat_scene_was_built_
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3, production="render3d_ai").shots
 
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/hero.png"]
     sections = _sections(plan.prompt_text)
     assert list(sections) == ["subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music"]
-    assert sections["subject_definitions"] == "<Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]."
-    assert sections["retention_analysis"] == GUIDE_RETENTION
+    assert sections["subject_definitions"] == (
+        "<Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]. " + SCENE_DEFINITION
+    )
+    assert sections["retention_analysis"] == GUIDE_RETENTION + "\n" + SCENE_RETENTION
     assert sections["detailed_description"] == "[Shot 1] The hut at dawn. " + ORBIT_SENTENCES
+    assert plan.guides == ["c1"]
+
+
+def test_the_scene_picture_is_sent_once_when_the_user_also_attached_it_as_a_reference(core, make_doc):
+    core.use_h3()
+    references = [{"id": "r1", "assetId": "hero", "scope": {"type": "global"}}]
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], references=references)
+    doc["plans3d"] = [_orbit()]
+    doc["scenes"] = [_splat()]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/hero.png"]
+    sections = _sections(plan.prompt_text)
+    assert SCENE_DEFINITION in sections["subject_definitions"]
+    assert "<Subject" not in sections["subject_definitions"]
+
+
+def test_a_scene_built_from_a_video_frame_sends_the_frame_its_scene_job_took(core, make_doc, media_store, monkeypatch):
+    from backend.scene3d import jobs
+
+    core.use_h3()
+    media_store.items["uploads/0001-frame.png"] = "item-frame"
+    monkeypatch.setattr(jobs, "get_job", lambda job_id: {"id": job_id, "source_value": "uploads/0001-frame.png"} if job_id == "j1" else None)
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
+    doc["plans3d"] = [_orbit()]
+    scene = _splat(source="walk")
+    scene["sourceTime"] = 1.5
+    doc["scenes"] = [scene]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/0001-frame.png"]
+    assert SCENE_DEFINITION in _sections(plan.prompt_text)["subject_definitions"]
+
+
+def test_a_scene_frame_no_longer_stored_is_not_sent_and_nothing_is_extracted(core, make_doc, media_store, monkeypatch):
+    from backend import core_bridge
+    from backend.scene3d import jobs
+
+    core.use_h3()
+    monkeypatch.setattr(jobs, "get_job", lambda job_id: {"id": job_id, "source_value": "uploads/0001-frame.png"})
+
+    async def refuse(*args, **kwargs):
+        raise AssertionError("planning a take must not extract a frame")
+
+    monkeypatch.setattr(core_bridge, "extract_frame", refuse)
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
+    doc["plans3d"] = [_orbit()]
+    doc["scenes"] = [_splat(source="walk")]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
+
+
+@pytest.mark.parametrize(
+    "scene",
+    [
+        {"id": "scene-1", "kind": "splatfile", "name": "Bow", "fileId": "f1", "format": "ply", "view": None},
+        {**_splat(), "status": "running"},
+        {**_splat(), "sourceAssetId": "gone"},
+    ],
+)
+def test_no_picture_is_sent_for_an_imported_unfinished_or_sourceless_scene(core, make_doc, scene):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
+    doc["plans3d"] = [_orbit()]
+    doc["scenes"] = [scene]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
+
+
+def test_no_scene_picture_is_sent_without_a_fresh_guide(core, make_doc):
+    core.use_h3()
+    references = [{"id": "r1", "assetId": "walk", "scope": {"type": "global"}}]
+    doc = _guided(core, make_doc, [_guide("c1", "orbit", stale=True)], references=references)
+    doc["plans3d"] = [_orbit()]
+    doc["scenes"] = [_splat()]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/walk.mp4"]
+
+
+def test_the_scene_picture_reads_in_french(core, make_doc):
+    core.use_h3()
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], language="fr")
+    doc["plans3d"] = [_orbit()]
+    doc["scenes"] = [_splat()]
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    sections = _sections(plan.prompt_text)
+    assert sections["subject_definitions"].endswith("<Picture 1> montre la scène elle-même : garder son aspect, ses couleurs et sa lumière.")
+    assert sections["retention_analysis"].endswith(
+        "<Picture 1> (aspect de la scène de [Shot 1]): partially_preserved - garde l'aspect, les couleurs et la lumière de la scène ; "
+        "le cadrage suit la trajectoire de caméra."
+    )
 
 
 @pytest.mark.parametrize(
