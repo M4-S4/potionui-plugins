@@ -21,6 +21,8 @@
 		addFrame,
 		addControl,
 		addAudioLane,
+		deleteLane,
+		act,
 		addMarker,
 		promptIssues,
 		toast,
@@ -44,6 +46,7 @@
 	import { importFiles, placeAsset } from '../../lib/importer.js';
 	import { fileDrop } from '../../lib/filedrop.js';
 	import { rowKinds } from '../../lib/upload.js';
+	import { laneAudible, laneCode, videoTrack } from '../../lib/tracks.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from '../shell/Dropdown.svelte';
 
@@ -54,6 +57,7 @@
 	let viewW = $state(800);
 	let reorder = $state(null);
 	let fileHover = $state(null);
+	let laneMenu = $state(null);
 
 	const pps = $derived(ui.pxPerSec);
 	const total = $derived(seqDuration());
@@ -73,7 +77,7 @@
 		{ id: 'controls', label: t('timeline.row.controls'), icon: 'route', h: BLOCK_ROW, color: roleColor.Guides },
 		{ id: 'plans3d', label: t('timeline.row.plans3d'), icon: 'cube', h: keyed ? BLOCK_ROW + KEY_BAND : BLOCK_ROW, color: roleColor.Guides },
 		{ id: 'v1', label: t('timeline.row.video'), icon: 'film', h: 60, color: roleColor.Vidéo },
-		...doc.lanes.map((l) => ({ id: l.id, lane: l, label: t('timeline.row.lane', { id: l.id, name: l.name }), icon: l.role === 'Dialogue' ? 'mic' : l.role === 'Musique' ? 'music' : 'wave', h: 38, color: roleColor[l.role] }))
+		...doc.lanes.map((l) => ({ id: l.id, lane: l, label: t('timeline.row.lane', { id: laneCode(doc.lanes, l.id), name: l.name }), icon: l.role === 'Dialogue' ? 'mic' : l.role === 'Musique' ? 'music' : 'wave', h: 38, color: roleColor[l.role] }))
 	]);
 
 	const tools = $derived([
@@ -92,6 +96,34 @@
 	]);
 
 	const isSel = (kind, id) => ui.selection?.kind === kind && ui.selection?.id === id;
+	const video = $derived(videoTrack(doc));
+	const menuLane = $derived(laneMenu && ui.menuOpen === `lane:${laneMenu.id}` ? doc.lanes.find((l) => l.id === laneMenu.id) : null);
+
+	function toggleVideo(key) {
+		doc.video = { ...videoTrack(doc), [key]: !videoTrack(doc)[key] };
+	}
+	function openLaneMenu(e, lane) {
+		e.preventDefault();
+		select('lane', lane.id);
+		laneMenu = { id: lane.id, x: e.clientX, y: e.clientY };
+		ui.menuOpen = `lane:${lane.id}`;
+	}
+	function laneMenuKey(e, lane) {
+		if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return;
+		const r = e.currentTarget.getBoundingClientRect();
+		openLaneMenu({ preventDefault: () => e.preventDefault(), clientX: r.left, clientY: r.bottom }, lane);
+	}
+	function laneAction(run) {
+		const lane = menuLane;
+		ui.menuOpen = null;
+		run(lane);
+	}
+	function placeMenu(node) {
+		const r = node.getBoundingClientRect();
+		node.style.left = `${clamp(laneMenu.x, 8, window.innerWidth - r.width - 8)}px`;
+		node.style.top = `${clamp(laneMenu.y, 8, window.innerHeight - r.height - 8)}px`;
+		node.querySelector('[role="menuitem"]')?.focus();
+	}
 	const timeAt = (clientX) => {
 		const r = scroller.getBoundingClientRect();
 		return Math.max(0, (clientX - r.left - HEAD + scroller.scrollLeft) / pps);
@@ -158,7 +190,7 @@
 					if (laneEl) item.lane = laneEl.dataset.lane;
 				}
 				if (ui.drag) ui.drag.at = r.at;
-				setDragText(kind === 'audio' && item.lane !== lane0 ? t('timeline.drag.moveLane', { start: secs(item.start), lane: item.lane }) : t('timeline.drag.move', { start: secs(item.start), dur: secs(item.dur) }));
+				setDragText(kind === 'audio' && item.lane !== lane0 ? t('timeline.drag.moveLane', { start: secs(item.start), lane: laneCode(doc.lanes, item.lane) }) : t('timeline.drag.move', { start: secs(item.start), dur: secs(item.dur) }));
 			},
 			onEnd: () => relinkAfter(kind, item),
 			onClick: () => {}
@@ -418,10 +450,43 @@
 
 			{#each rows as row (row.id)}
 				<div class="flex border-b border-line/70" style:height="{row.h}px">
-					<div class="sticky left-0 z-30 flex w-[156px] shrink-0 items-center gap-2 border-r border-line bg-surface-1 pl-0 pr-1.5">
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="sticky left-0 z-30 flex w-[156px] shrink-0 items-center gap-2 border-r border-line pl-0 pr-1.5 {row.lane && isSel('lane', row.id) ? 'bg-surface-2' : 'bg-surface-1'}"
+						oncontextmenu={row.lane ? (e) => openLaneMenu(e, row.lane) : null}
+					>
 						<span class="h-full w-[3px] {row.color ? '' : 'bg-line-hover'}" style:background={row.color ? `rgb(var(--${row.color}))` : null}></span>
 						<Icon name={row.icon} class="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-						<span class="flex-1 truncate text-xs text-fg-muted" title={row.label}>{row.label}</span>
+						{#if row.lane}
+							<button
+								type="button"
+								class="min-w-0 flex-1 truncate text-left text-xs {isSel('lane', row.id) ? 'text-fg' : 'text-fg-muted hover:text-fg'}"
+								title={t('timeline.lane.headTip', { lane: row.label })}
+								aria-haspopup="menu"
+								onclick={() => select('lane', row.id)}
+								onkeydown={(e) => laneMenuKey(e, row.lane)}>{row.label}</button
+							>
+						{:else}
+							<span class="flex-1 truncate text-xs text-fg-muted" title={row.label}>{row.label}</span>
+						{/if}
+						{#if row.id === 'v1'}
+							<button
+								type="button"
+								class="h-6 w-6 rounded-sm text-2xs font-semibold {video.mute ? 'bg-warning text-black' : 'bg-surface-2 text-fg-muted hover:text-fg'}"
+								aria-pressed={video.mute}
+								onclick={() => toggleVideo('mute')}
+								title={t('timeline.video.muteTip')}
+								aria-label={t('timeline.lane.muteLabel', { lane: row.label })}>{t('timeline.lane.muteShort')}</button
+							>
+							<button
+								type="button"
+								class="h-6 w-6 rounded-sm text-2xs font-semibold {video.solo ? 'bg-signal text-accent-contrast' : 'bg-surface-2 text-fg-muted hover:text-fg'}"
+								aria-pressed={video.solo}
+								onclick={() => toggleVideo('solo')}
+								title={t('timeline.video.soloTip')}
+								aria-label={t('timeline.lane.soloLabel', { lane: row.label })}>{t('timeline.lane.soloShort')}</button
+							>
+						{/if}
 						{#if row.lane}
 							<button
 								type="button"
@@ -539,6 +604,22 @@
 	</div>
 </div>
 
+{#if menuLane}
+	{#key laneMenu}
+		<div class="vp-menu" style:position="fixed" style:left="{laneMenu.x}px" style:top="{laneMenu.y}px" role="menu" aria-label={t('timeline.lane.menu', { lane: laneCode(doc.lanes, menuLane.id) })} data-vp-menu use:overlayLayer use:placeMenu>
+			<button type="button" role="menuitem" onclick={() => laneAction((lane) => ((ui.inspectorOpen = true), select('lane', lane.id)))}>
+				<Icon name="sliders" class="h-3.5 w-3.5 text-fg-muted" /><span class="flex-1">{t('timeline.lane.settings')}</span>
+			</button>
+			<button type="button" role="menuitem" onclick={() => laneAction(() => addAudioLane())}>
+				<Icon name="plus" class="h-3.5 w-3.5 text-fg-muted" /><span class="flex-1">{t('timeline.lane.add')}</span><span class="vp-menu-key">{key('audio-add') ?? ''}</span>
+			</button>
+			<button type="button" role="menuitem" onclick={() => laneAction((lane) => deleteLane(lane.id))}>
+				<Icon name="trash" class="h-3.5 w-3.5 text-danger" /><span class="flex-1 text-danger">{t('timeline.lane.delete')}</span><span class="vp-menu-key">{key('delete') ?? ''}</span>
+			</button>
+		</div>
+	{/key}
+{/if}
+
 {#if ui.drag?.text}
 	<div
 		class="pointer-events-none fixed rounded border bg-surface-3 px-2 py-1 text-xs shadow-floating {ui.drag.limit ? 'border-danger text-danger' : 'border-line-strong text-fg'}"
@@ -609,9 +690,21 @@
 		<div class="vp-clip-head absolute inset-x-0 top-0 flex h-5 items-center gap-1 bg-viz-1 px-1.5 text-xs font-semibold">
 			<span class="h-1.5 w-1.5 shrink-0 rounded-full {stages[c.stage].dot}" title={stages[c.stage].label}></span>
 			{#if c.flag}<Icon name={flagIcon[c.flag]} class="h-3 w-3" />{/if}
-			<span class="truncate">{clipLabel(c)}</span>
-			{#if takes > 1 && w > 120}<span class="ml-auto shrink-0 rounded-sm border border-current/40 px-1 text-2xs">{t('timeline.clip.takes', { count: takes })}</span>{/if}
+			<span class="min-w-0 flex-1 truncate">{clipLabel(c)}</span>
+			{#if takes > 1 && w > 120}<span class="shrink-0 rounded-sm border border-current/40 px-1 text-2xs">{t('timeline.clip.takes', { count: takes })}</span>{/if}
 		</div>
+		{#if media?.kind === 'video' && (c.mute || w > 72)}
+			<button
+				type="button"
+				tabindex="-1"
+				class="vp-hit absolute bottom-1 left-7 z-10 flex h-5 w-5 items-center justify-center rounded-sm {c.mute ? 'bg-warning text-black' : 'bg-black/50 text-white opacity-0 hover:bg-black/70 group-hover:opacity-100'}"
+				aria-pressed={Boolean(c.mute)}
+				aria-label={c.mute ? t('timeline.clip.unmute', { name: clipLabel(c) }) : t('timeline.clip.mute', { name: clipLabel(c) })}
+				title={c.mute ? t('timeline.clip.unmuteTip') : t('timeline.clip.muteTip')}
+				onpointerdown={(e) => e.stopPropagation()}
+				onclick={() => act(() => (c.mute = !c.mute))}
+			><Icon name={c.mute ? 'volume-x' : 'volume'} class="h-3 w-3" /></button>
+		{/if}
 		{@render fades(c, 'clip', w, 52)}
 		<button
 			type="button"
@@ -638,7 +731,7 @@
 	{@const peaks = audioPeaks(src)}
 	{@const sel = isSel('audio', a.id)}
 	<div
-		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/30'} {row.lane.mute ? 'opacity-40' : ''}"
+		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/30'} {laneAudible(doc, row.lane) ? '' : 'opacity-40'}"
 		style:left="{x(a.start)}px"
 		style:width="{w}px"
 		style:background="rgb(var(--{row.color}) / 0.28)"

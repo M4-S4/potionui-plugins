@@ -1,5 +1,6 @@
 import { ulid } from './ulid.js';
 import { migrateKeyframe } from './scene3d/camera.js';
+import { migrateTracks, newLaneId, newVideoTrack } from './tracks.js';
 
 const SHOT_DURATION = 5;
 export const PROMPT_LANGUAGES = ['en', 'fr'];
@@ -8,7 +9,7 @@ export const DEFAULT_PROMPT_LANGUAGE = 'en';
 export const promptLanguageOf = (value) => (PROMPT_LANGUAGES.includes(value) ? value : DEFAULT_PROMPT_LANGUAGE);
 
 export function newClip(extra = {}) {
-	return { id: ulid(), assetId: null, start: 0, dur: 4, srcIn: 0, label: '', stage: 'todo', take: null, fadeIn: 0, fadeOut: 0, exposure: 0, contrast: 100, saturation: 100, temperature: 0, preset: 'Original', flag: null, ...extra };
+	return { id: ulid(), assetId: null, start: 0, dur: 4, srcIn: 0, label: '', stage: 'todo', take: null, fadeIn: 0, fadeOut: 0, exposure: 0, contrast: 100, saturation: 100, temperature: 0, preset: 'Original', flag: null, mute: false, ...extra };
 }
 
 export function newAsset(extra = {}) {
@@ -35,9 +36,9 @@ export function newAsset(extra = {}) {
 	};
 }
 
-function lane(id, name, role, vol, pan) {
+function lane(name, role, vol, pan) {
 	return {
-		id,
+		id: newLaneId(),
 		name,
 		role,
 		vol,
@@ -54,6 +55,12 @@ function lane(id, name, role, vol, pan) {
 }
 
 function baseDoc(t, name, promptLanguage) {
+	const lanes = [
+		lane(t('starter.lane.dialogue'), 'Dialogue', 0, 0),
+		lane(t('starter.lane.music'), 'Musique', -2, 0),
+		lane(t('starter.lane.ambience'), 'Ambiance', -6, -0.2),
+		lane(t('starter.lane.foley'), 'SFX', -4, 0.3)
+	];
 	return {
 		name,
 		promptLanguage: promptLanguageOf(promptLanguage),
@@ -73,12 +80,8 @@ function baseDoc(t, name, promptLanguage) {
 		references: [],
 		scenes: [],
 		assets: [],
-		lanes: [
-			lane('A1', t('starter.lane.dialogue'), 'Dialogue', 0, 0),
-			lane('A2', t('starter.lane.music'), 'Musique', -2, 0),
-			lane('A3', t('starter.lane.ambience'), 'Ambiance', -6, -0.2),
-			lane('A4', t('starter.lane.foley'), 'SFX', -4, 0.3)
-		],
+		lanes,
+		video: newVideoTrack(),
 		aux: [
 			{ id: 'R1', name: t('starter.lane.reverb'), vol: -6, mute: false },
 			{ id: 'D1', name: t('starter.lane.delay'), vol: -10, mute: false }
@@ -102,7 +105,7 @@ function baseDoc(t, name, promptLanguage) {
 			consistency: 70,
 			lockIdentity: true,
 			motionPriority: true,
-			audioDriver: 'A1',
+			audioDriver: lanes[0].id,
 			lipSync: true,
 			offset: 0,
 			followCut: true,
@@ -167,7 +170,7 @@ export function migrate(doc) {
 	if (!isObject(doc)) return doc;
 	const scenes = Array.isArray(doc.scenes) ? doc.scenes : [];
 	const retired = new Set(scenes.filter((s) => isObject(s) && RETIRED_SCENES.includes(s.kind)).map((s) => s.id));
-	const next = { ...doc };
+	const next = migrateTracks(doc);
 	if (Array.isArray(doc.scenes)) next.scenes = scenes.filter((s) => isObject(s) && !RETIRED_SCENES.includes(s.kind));
 	if (Array.isArray(doc.plans3d)) next.plans3d = doc.plans3d.map((p) => migratePlan(p, retired));
 	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId));

@@ -11,7 +11,7 @@ def reference(entry: Optional[Mapping[str, str]]) -> Dict[str, Any]:
 
 
 def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict[str, str]]], locale: str = "en") -> str:
-    """The sequence as an OpenTimelineIO timeline: the shots on V1, one audio track per lane."""
+    """The sequence as an OpenTimelineIO timeline: the shots on V1, one audio track per lane named A1, A2… by its position."""
     time = Timebase(doc)
 
     def span(start: Any, dur: Any) -> Dict[str, Any]:
@@ -39,7 +39,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
             video.append({"OTIO_SCHEMA": "Gap.1", "name": clip_label(doc, clip, locale), "source_range": span(0, clip["dur"])})
     lanes = []
     audio = list(enumerate(doc.get("audio") or []))
-    for lane in doc.get("lanes") or []:
+    for position, lane in enumerate(doc.get("lanes") or [], start=1):
         items = sorted((pair for pair in audio if pair[1].get("lane") == lane["id"]), key=lambda pair: pair[1]["start"])
         children: List[Dict[str, Any]] = []
         at: Any = 0
@@ -58,7 +58,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
                 }
             )
             at = item["start"] + item["dur"]
-        lanes.append({"OTIO_SCHEMA": "Track.1", "name": f"{lane['id']} · {lane['name']}", "kind": "Audio", "children": children})
+        lanes.append({"OTIO_SCHEMA": "Track.1", "name": f"A{position} · {lane['name']}", "kind": "Audio", "children": children})
     timeline = {
         "OTIO_SCHEMA": "Timeline.1",
         "name": doc["name"],

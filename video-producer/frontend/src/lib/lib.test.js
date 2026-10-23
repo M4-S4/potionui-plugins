@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
 import { isUlid, ulid, ulidTime } from './ulid.js';
 import { emptyDoc, migrate, newAsset, promptLanguageOf, starterDoc } from './starter.js';
+import { laneCode } from './tracks.js';
 import {
 	activateOnKey,
 	detectMac,
@@ -140,7 +141,7 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 	);
 	assert.equal(en.markers[0].label, 'Cast off');
 	assert.deepEqual(
-		fr.lanes.map((l) => [l.id, l.name, l.role]),
+		fr.lanes.map((l) => [laneCode(fr.lanes, l.id), l.name, l.role]),
 		[
 			['A1', 'Dialogue', 'Dialogue'],
 			['A2', 'Musique', 'Musique'],
@@ -148,6 +149,11 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 			['A4', 'Bruitages', 'SFX']
 		]
 	);
+	assert.ok(fr.lanes.every((l) => isUlid(l.id)));
+	assert.equal(new Set(fr.lanes.map((l) => l.id)).size, 4);
+	assert.equal(fr.engine.audioDriver, fr.lanes[0].id);
+	assert.deepEqual(fr.video, { mute: false, solo: false });
+	assert.ok(fr.clips.every((c) => c.mute === false));
 	assert.deepEqual(
 		fr.aux.map((a) => [a.id, a.name]),
 		[
@@ -176,7 +182,7 @@ test('emptyDoc: an untitled project with no shot and the four empty lanes', () =
 	for (const key of ['clips', 'prompts', 'titles', 'markers', 'audio', 'frames', 'scenes', 'assets']) assert.deepEqual(fr[key], [], key);
 	assert.ok(!('results' in fr));
 	assert.deepEqual(
-		en.lanes.map((l) => [l.id, l.name, l.role]),
+		en.lanes.map((l) => [laneCode(en.lanes, l.id), l.name, l.role]),
 		[
 			['A1', 'Dialogue', 'Dialogue'],
 			['A2', 'Music', 'Musique'],
@@ -268,7 +274,8 @@ test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D 
 	assert.deepEqual(migrate(doc), doc);
 	assert.equal(migrate(null), null);
 	const bare = { name: 'Bare' };
-	assert.deepEqual(migrate(bare), bare);
+	assert.deepEqual(migrate(bare), { name: 'Bare', video: { mute: false, solo: false } });
+	assert.deepEqual(bare, { name: 'Bare' }, 'the input is not changed');
 	const fresh = emptyDoc(translator('en', []));
 	assert.deepEqual(migrate(fresh), fresh);
 });

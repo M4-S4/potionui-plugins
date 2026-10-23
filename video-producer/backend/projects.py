@@ -96,7 +96,8 @@ CLIP = _object(
         "temperature": NUMBER,
         "preset": TEXT,
         "flag": _enum("favori", "rejet", None),
-    }
+    },
+    optional={"mute": FLAG},
 )
 
 AUDIO = _object(
@@ -222,6 +223,8 @@ LANE = _object(
     }
 )
 
+VIDEO_TRACK = _object({"mute": FLAG, "solo": FLAG})
+
 AUX = _object({"id": ID, "name": TEXT, "vol": NUMBER, "mute": FLAG})
 
 PROFILE = _object({"id": ID, "name": TEXT, "weights": HYBRID})
@@ -316,7 +319,8 @@ DOC_SCHEMA: Dict[str, Any] = {
             "engine": ENGINE,
             "hybrid": HYBRID,
             "assets": _array(ASSET),
-        }
+        },
+        optional={"video": VIDEO_TRACK},
     ),
 }
 

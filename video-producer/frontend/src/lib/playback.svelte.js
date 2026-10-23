@@ -1,8 +1,12 @@
 import { t } from '../i18n/index.svelte.js';
 import { ui, doc, asset, seqDuration, clamp, toast } from './state.svelte.js';
 import { mediaFailure } from './playable.js';
+import { clipSoundAudible, laneAudible } from './tracks.js';
 
-export const meters = $state({ lanes: {}, master: [0, 0] });
+export const meters = $state({ lanes: {}, video: 0, master: [0, 0] });
+
+const CLIP_LEAD = 1.5;
+const SILENT_AFTER = 1;
 
 let raf = 0;
 let last = 0;
@@ -49,6 +53,8 @@ let ctx = null;
 let master = null;
 let masterAn = null;
 let monitor = null;
+let videoBus = null;
+let videoAn = null;
 const voices = new Map();
 const strips = new Map();
 let reverb = null;
@@ -65,6 +71,10 @@ function ensureAudio() {
 			master.connect(masterAn).connect(monitor).connect(ctx.destination);
 			reverb = makeReverb();
 			delay = makeDelay();
+			videoBus = ctx.createGain();
+			videoAn = ctx.createAnalyser();
+			videoAn.fftSize = 512;
+			videoBus.connect(videoAn).connect(master);
 		}
 		if (ctx.state === 'suspended') ctx.resume();
 	} catch {
@@ -132,6 +142,7 @@ function strip(lane) {
 }
 
 const unplayable = new Set();
+const silent = new Set();
 const unlocked = new WeakSet();
 let refusalShown = false;
 
@@ -161,12 +172,12 @@ function warnUnplayable(el, clip, src) {
 	toast(t('lib.toast.audioUnplayable', { name: asset(clip.assetId)?.name ?? '' }), 'warning');
 }
 
-function mediaVoice(clip, src) {
+function mediaVoice(clip, src, warn = true) {
 	const out = ctx.createGain();
 	out.gain.value = 0;
 	const el = new Audio();
 	el.preload = 'auto';
-	el.onerror = () => warnUnplayable(el, clip, src);
+	if (warn) el.onerror = () => warnUnplayable(el, clip, src);
 	el.src = src;
 	ctx.createMediaElementSource(el).connect(out);
 	const stop = () => {
@@ -280,6 +291,35 @@ function voice(clip) {
 	return v;
 }
 
+function dropVoice(id) {
+	const v = voices.get(id);
+	if (!v) return;
+	v.stop();
+	v.out.disconnect();
+	voices.delete(id);
+}
+
+function clipVoice(c, src) {
+	const v = voices.get(c.id);
+	if (v && v.src === src) return v;
+	if (v) dropVoice(c.id);
+	const made = mediaVoice(c, src, false);
+	made.out.connect(videoBus);
+	made.lane = 'video';
+	return made;
+}
+
+function clipSource(c) {
+	const a = asset(c.assetId);
+	return a?.kind === 'video' && a.src && !silent.has(a.src) ? a.src : null;
+}
+
+function heardNothing(v) {
+	const el = v.el;
+	if (!('webkitAudioDecodedByteCount' in el) || el.webkitAudioDecodedByteCount > 0) return false;
+	return v.from != null && el.currentTime - v.from >= SILENT_AFTER;
+}
+
 function envelope(c, t) {
 	if (t < c.start || t > c.start + c.dur) return 0;
 	const local = t - c.start;
@@ -295,11 +335,15 @@ function updateAudio() {
 	const now = ctx.currentTime;
 	monitor.gain.setTargetAtTime(ui.muted ? 0 : ui.monitorVol, now, 0.03);
 	master.gain.setTargetAtTime(db(doc.master.vol), now, 0.03);
-	const anySolo = doc.lanes.some((l) => l.solo);
+	for (const [id, s] of strips)
+		if (!doc.lanes.some((l) => l.id === id)) {
+			s.fader.disconnect();
+			strips.delete(id);
+			delete meters.lanes[id];
+		}
 	for (const lane of doc.lanes) {
 		const s = strip(lane);
-		const audible = !lane.mute && (!anySolo || lane.solo);
-		s.fader.gain.setTargetAtTime(audible ? db(lane.vol) : 0, now, 0.03);
+		s.fader.gain.setTargetAtTime(laneAudible(doc, lane) ? db(lane.vol) : 0, now, 0.03);
 		s.pan.pan.setTargetAtTime(lane.pan, now, 0.03);
 		const eq = lane.inserts.find((i) => i.type === 'eq');
 		s.lo.gain.value = eq?.on ? eq.low : 0;
@@ -328,6 +372,20 @@ function updateAudio() {
 		if (v.el) follow(v, c, t);
 		v.out.gain.setTargetAtTime(envelope(c, t) * (v.el ? 1 : 0.5), now, 0.02);
 	}
+	for (const c of doc.clips) {
+		if (t < c.start - CLIP_LEAD || t >= c.start + c.dur) continue;
+		const src = clipSource(c);
+		if (!src) continue;
+		live.add(c.id);
+		const v = clipVoice(c, src);
+		follow(v, c, t);
+		if (heardNothing(v)) {
+			silent.add(src);
+			live.delete(c.id);
+			continue;
+		}
+		v.out.gain.setTargetAtTime(clipSoundAudible(doc, c) ? envelope(c, t) : 0, now, 0.02);
+	}
 	for (const [id, v] of voices)
 		if (!live.has(id)) {
 			v.stop();
@@ -347,8 +405,12 @@ function follow(v, c, t) {
 	const target = t - c.start + c.srcIn;
 	if (el.paused) {
 		el.currentTime = target;
+		v.from = target;
 		el.play().catch(refused);
-	} else if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
+	} else if (Math.abs(el.currentTime - target) > 0.25) {
+		el.currentTime = target;
+		v.from = target;
+	}
 }
 
 const buf = new Float32Array(512);
@@ -364,6 +426,8 @@ function readMeters() {
 		const v = level(s.an);
 		meters.lanes[id] = v > prev ? v : prev * 0.9;
 	}
+	const vm = level(videoAn);
+	meters.video = vm > meters.video ? vm : meters.video * 0.9;
 	const m = level(masterAn);
 	meters.master = [m, m * (0.92 + Math.random() * 0.08)];
 }
@@ -371,6 +435,7 @@ function readMeters() {
 let silenceTimer = 0;
 function resetMeters() {
 	for (const k of Object.keys(meters.lanes)) meters.lanes[k] = 0;
+	meters.video = 0;
 	meters.master = [0, 0];
 }
 function silence() {
@@ -415,12 +480,15 @@ export function dispose() {
 	voices.clear();
 	strips.clear();
 	unplayable.clear();
+	silent.clear();
 	refusalShown = false;
 	const closing = ctx;
 	ctx = null;
 	master = null;
 	masterAn = null;
 	monitor = null;
+	videoBus = null;
+	videoAn = null;
 	reverb = null;
 	delay = null;
 	resetMeters();

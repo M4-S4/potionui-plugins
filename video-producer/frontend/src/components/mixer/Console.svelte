@@ -7,6 +7,7 @@
 	import { commandById } from '../../lib/commands.js';
 	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { laneCode, videoTrack } from '../../lib/tracks.js';
 	import Icon from '../Icon.svelte';
 
 	const roles = ['Dialogue', 'Musique', 'Ambiance', 'SFX'];
@@ -14,6 +15,11 @@
 	const lanes = $derived(doc.lanes.filter((l) => ui.mixerFilter === 'Tous' || l.role === ui.mixerFilter));
 	const dbFmt = (v) => (v <= -59 ? '−∞' : formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'exceptZero' }));
 	const autoNext = { off: 'read', read: 'write', write: 'off' };
+	const video = $derived(videoTrack(doc));
+
+	function toggleVideo(key) {
+		doc.video = { ...videoTrack(doc), [key]: !videoTrack(doc)[key] };
+	}
 
 	function filterLabel(f) {
 		return f === 'Tous' ? t('mixer.filter.all') : audioRoleLabel(f);
@@ -74,6 +80,7 @@
 	</div>
 
 	<div class="flex min-h-0 flex-1 gap-px overflow-auto bg-line p-px">
+		{@render videoStrip()}
 		{#each lanes as l (l.id)}
 			{@render strip(l, roleColor[l.role] ?? 'viz-1')}
 		{/each}
@@ -119,10 +126,10 @@
 
 {#snippet strip(l, color)}
 	{@const sel = ui.selection?.kind === 'lane' && ui.selection.id === l.id}
-	<div class="flex w-28 shrink-0 flex-col gap-1.5 bg-surface-1 p-1.5 {sel ? 'ring-1 ring-inset ring-signal' : ''}" role="group" aria-label={t('mixer.strip', { id: l.id, name: l.name })}>
+	<div class="flex w-28 shrink-0 flex-col gap-1.5 bg-surface-1 p-1.5 {sel ? 'ring-1 ring-inset ring-signal' : ''}" role="group" aria-label={t('mixer.strip', { id: laneCode(doc.lanes, l.id), name: l.name })}>
 		<button type="button" class="flex min-h-6 items-center gap-1.5 text-left" onclick={() => openStrip(l)}>
 			<span class="h-3 w-1 rounded-sm" style:background="rgb(var(--{color}))"></span>
-			<span class="truncate text-xs font-medium">{l.id} · {l.name}</span>
+			<span class="truncate text-xs font-medium">{laneCode(doc.lanes, l.id)} · {l.name}</span>
 		</button>
 		<select class="input vp-dense w-full" value={l.role} onchange={(e) => act(() => (l.role = e.currentTarget.value))} aria-label={t('mixer.role', { name: l.name })}>
 			{#each roles as r (r)}<option value={r}>{audioRoleLabel(r)}</option>{/each}
@@ -174,6 +181,21 @@
 				<Icon name="automation" class="h-3 w-3" />{autoLabel(l.automation)}
 			</button>
 		</HostUi>
+	</div>
+{/snippet}
+
+{#snippet videoStrip()}
+	<div class="flex w-24 shrink-0 flex-col gap-1.5 bg-surface-1 p-1.5" role="group" aria-label={t('mixer.video.label')}>
+		<div class="flex min-h-6 items-center gap-1.5">
+			<span class="h-3 w-1 rounded-sm bg-viz-1"></span>
+			<span class="truncate text-xs font-medium">{t('mixer.video.name')}</span>
+		</div>
+		<div class="text-2xs text-fg-muted">{t('mixer.video.info')}</div>
+		<div class="flex min-h-[72px] flex-1 justify-center">{@render meter(meters.video)}</div>
+		<div class="grid grid-cols-2 gap-1">
+			<button type="button" class="vp-toggle h-6 rounded-sm bg-surface-2 text-xs font-semibold {video.mute ? '!text-warning' : 'text-fg-muted hover:text-fg'}" aria-pressed={video.mute} aria-label={t('mixer.mute', { name: t('mixer.video.name') })} onclick={() => toggleVideo('mute')}>{t('mixer.muteShort')}</button>
+			<button type="button" class="vp-toggle h-6 rounded-sm bg-surface-2 text-xs font-semibold {video.solo ? '!text-signal' : 'text-fg-muted hover:text-fg'}" aria-pressed={video.solo} aria-label={t('mixer.solo', { name: t('mixer.video.name') })} onclick={() => toggleVideo('solo')}>{t('mixer.soloShort')}</button>
+		</div>
 	</div>
 {/snippet}
 

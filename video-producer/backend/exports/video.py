@@ -218,14 +218,32 @@ def _fit(fmt: str, width: int, height: int) -> str:
     )
 
 
+def video_track(doc: Mapping[str, Any]) -> Dict[str, bool]:
+    """The mute and solo of the video track, both off when the document has none."""
+    video = doc.get("video")
+    video = video if isinstance(video, Mapping) else {}
+    return {"mute": video.get("mute") is True, "solo": video.get("solo") is True}
+
+
+def any_solo(doc: Mapping[str, Any]) -> bool:
+    """Whether a track is soloed, the video track counted with the audio lanes."""
+    return video_track(doc)["solo"] or any(lane.get("solo") is True for lane in doc.get("lanes") or [])
+
+
+def clip_heard(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> bool:
+    """Whether a shot's own sound is in the mix: neither the video track nor the shot muted, and the video track soloed when any track is."""
+    video = video_track(doc)
+    return not video["mute"] and not clip.get("mute") and (not any_solo(doc) or video["solo"])
+
+
 def audible(doc: Mapping[str, Any]) -> List[Tuple[Mapping[str, Any], Mapping[str, Any]]]:
-    """The audio items heard in the mix with their lane: muted lanes left out, soloed lanes alone when any is."""
+    """The audio items heard in the mix with their lane: items of a missing or muted lane left out, soloed lanes alone when any track is, the video track included."""
     lanes = {lane["id"]: lane for lane in doc.get("lanes") or []}
-    soloed = any(lane.get("solo") for lane in lanes.values())
+    soloed = any_solo(doc)
     playing = []
     for item in doc.get("audio") or []:
-        lane = lanes.get(item.get("lane")) or {}
-        if lane.get("mute") or (soloed and not lane.get("solo")) or float(item.get("dur") or 0) <= EPSILON:
+        lane = lanes.get(item.get("lane"))
+        if lane is None or lane.get("mute") or (soloed and not lane.get("solo")) or float(item.get("dur") or 0) <= EPSILON:
             continue
         playing.append((item, lane))
     return playing
@@ -288,7 +306,7 @@ def _shots(
         start = float(clip.get("srcIn") or 0) if clip is not None else 0.0
         still = entry is not None and clip["id"] in stills
         source_end = None if entry is None or still else _source_length(doc, clip, lengths)
-        sound = entry is not None and not still and bool(clip_audio.get(clip["id"]))
+        sound = entry is not None and not still and bool(clip_audio.get(clip["id"])) and clip_heard(doc, clip)
         if source_end is not None and start >= source_end - EPSILON:
             entry = None
         elif entry is not None and clip["id"] in blind and not sound:
@@ -410,7 +428,7 @@ def _assembly(
                 graph.append(
                     f"[{source}:a]atrim=start={num(shot.start)}:duration={length},asetpts=PTS-STARTPTS,"
                     f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                    f"apad=whole_dur={length},atrim=duration={length}[a{index}]"
+                    f"apad=whole_dur={length},atrim=duration={length}{''.join(',' + fade for fade in _fades(shot.clip, shot.dur, 'afade'))}[a{index}]"
                 )
             else:
                 graph.append(silence)
@@ -659,7 +677,7 @@ async def _premix(
         await assemble(_command(run, inputs.args, LANES_ENCODER, total, maps=("[aout]",)), total, None, on_process, cwd)
         mixes[f"lanes-{number}"] = str(output)
     items = [{"id": key, "lane": "lanes", "start": 0, "dur": total, "srcIn": 0, "gain": 0} for key in mixes]
-    return {**doc, "lanes": [{"id": "lanes", "vol": 0}], "audio": items}, mixes
+    return {**doc, "lanes": [{"id": "lanes", "vol": 0, "solo": any_solo(doc)}], "audio": items}, mixes
 
 
 async def _part_length(path: Path, nominal: float) -> float:

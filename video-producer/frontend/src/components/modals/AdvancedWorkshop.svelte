@@ -6,6 +6,7 @@
 	import { modeLabel, audioRoleLabel } from '../../lib/catalog.js';
 	import { controlOf, presetLabel } from '../../lib/scene.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { laneCode } from '../../lib/tracks.js';
 	import { ulid } from '../../lib/ulid.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
@@ -325,7 +326,7 @@
 				<div class="max-w-sm space-y-1">
 					<span class="flex items-center gap-2"><label class="vp-label" for="vp-aw-audio-driver">{t('modals.advanced.audioDriver')}</label>{@render unsent()}</span>
 					<select id="vp-aw-audio-driver" class="input vp-dense w-full disabled:opacity-50" disabled bind:value={e.audioDriver}>
-						{#each doc.lanes as l (l.id)}<option value={l.id}>{l.id} · {l.name} ({audioRoleLabel(l.role)})</option>{/each}
+						{#each doc.lanes as l (l.id)}<option value={l.id}>{laneCode(doc.lanes, l.id)} · {l.name} ({audioRoleLabel(l.role)})</option>{/each}
 						<option value="">{t('modals.advanced.none')}</option>
 					</select>
 				</div>

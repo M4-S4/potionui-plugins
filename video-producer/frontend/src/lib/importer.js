@@ -7,6 +7,7 @@ import { probeMedia } from './sources.svelte.js';
 import { LOCAL_KINDS, acceptFor, fileKind, importQueue, sortFiles, uploadForm } from './upload.js';
 import { trackUploads, updateUpload } from './uploads.svelte.js';
 import { ulid } from './ulid.js';
+import { laneCode } from './tracks.js';
 
 const KINDS = { media: ['image', 'video'], audio: ['audio'] };
 const probing = new Map();
@@ -222,7 +223,7 @@ export function placeAsset(id, row, at) {
 	if (row.lane && a.kind === 'audio') {
 		const dur = Math.min(8, a.srcDur ?? 8);
 		act(() => doc.audio.push({ id: ulid(), assetId: id, lane: row.id, start, dur, srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 }));
-		toast(t('timeline.toast.dropped', { name: a.name, lane: row.id }));
+		toast(t('timeline.toast.dropped', { name: a.name, lane: laneCode(doc.lanes, row.id) }));
 		return start + dur;
 	}
 	if (row.id === 'v1' && a.kind !== 'audio') {

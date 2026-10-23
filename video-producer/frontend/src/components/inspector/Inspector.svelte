@@ -15,6 +15,7 @@
 		bladeAt,
 		duplicateSelection,
 		deleteSelection,
+		deleteLane,
 		promptIssues,
 		globalPrompt,
 		clipLabel,
@@ -55,6 +56,7 @@
 	} from '../../lib/scene.svelte.js';
 	import { FOCAL_RANGE, ROLL_RANGE, distance, dollyCamera, pose } from '../../lib/scene3d/camera.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { clipSoundAudible, laneCode, laneItemCount, laneTitle, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
 	import Tabs from '../shell/Tabs.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
@@ -91,6 +93,7 @@
 	const name = $derived.by(() => {
 		if (!item) return '';
 		if (s.kind === 'clip' || s.kind === 'audio' || s.kind === 'frame') return asset(item.assetId)?.name;
+		if (s.kind === 'lane') return laneTitle(doc.lanes, item);
 		return item.name ?? item.text ?? item.label ?? '';
 	});
 
@@ -311,6 +314,27 @@
 						<p class="text-xs text-fg-subtle">{t('inspector.frames.hint')}</p>
 					</section>
 					{@render fadeFields(true)}
+					{#if a?.kind === 'video'}
+						{@const video = videoTrack(doc)}
+						<section class="space-y-2">
+							<div class="vp-section-title">{t('inspector.section.sound')}</div>
+							<div class="flex min-h-6 items-center justify-between gap-2 text-xs text-fg-muted">
+								<label for="vp-clip-mute">{t('inspector.sound.mute')}</label>
+								<HostUi name="Switch" props={{ id: 'vp-clip-mute', checked: Boolean(item.mute), size: 'lg', label: t('inspector.sound.mute'), onchange: (v) => act(() => (item.mute = v)) }} />
+							</div>
+							<p class="text-xs text-fg-subtle">
+								{#if item.mute}
+									{t('inspector.sound.muted')}
+								{:else if video.mute}
+									{t('inspector.sound.trackMuted')}
+								{:else if !clipSoundAudible(doc, item)}
+									{t('inspector.sound.otherSolo')}
+								{:else}
+									{t('inspector.sound.hint')}
+								{/if}
+							</p>
+						</section>
+					{/if}
 					<section class="space-y-2">
 						<div class="vp-section-title">{t('inspector.section.flag')}</div>
 						<HostUi
@@ -333,7 +357,7 @@
 					<label class="flex items-center gap-2">
 						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.lane')}</span>
 						<select class="input vp-dense min-w-0 flex-1" value={item.lane} onchange={(e) => act(() => (item.lane = e.currentTarget.value))}>
-							{#each doc.lanes as l (l.id)}<option value={l.id}>{l.id} · {l.name} ({audioRoleLabel(l.role)})</option>{/each}
+							{#each doc.lanes as l (l.id)}<option value={l.id}>{laneCode(doc.lanes, l.id)} · {l.name} ({audioRoleLabel(l.role)})</option>{/each}
 						</select>
 					</label>
 					<NumField label={t('inspector.field.start')} value={item.start} min={0} step={0.04} unit="s" onchange={(v) => set('start', v)} />
@@ -342,7 +366,7 @@
 				</section>
 				{@render fadeFields(false)}
 				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('sliders'), class: 'w-full', onclick: () => ((ui.workspace = 'mixer'), select('lane', item.lane)) }}>
-					{t('inspector.openStrip', { lane: item.lane })}
+					{t('inspector.openStrip', { lane: laneCode(doc.lanes, item.lane) })}
 				</HostUi>
 			{:else if s.kind === 'prompt'}
 				<section class="space-y-2">
@@ -554,6 +578,10 @@
 					<div class="vp-section-title">{t('inspector.section.sends')}</div>
 					<SliderField label={t('inspector.send.reverb')} value={item.sends.R1} min={-60} max={0} unit=" dB" onchange={(v) => (item.sends.R1 = v)} />
 					<SliderField label={t('inspector.send.delay')} value={item.sends.D1} min={-60} max={0} unit=" dB" onchange={(v) => (item.sends.D1 = v)} />
+				</section>
+				<section class="space-y-2 border-t border-line pt-3">
+					<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'trash', class: 'w-full', onclick: () => deleteLane(item.id) }}>{t('inspector.lane.delete', { lane: laneCode(doc.lanes, item.id) })}</HostUi>
+					<p class="text-xs text-fg-subtle">{laneItemCount(doc, item.id) ? t('inspector.lane.deleteHint', { count: laneItemCount(doc, item.id) }) : t('inspector.lane.deleteEmpty')}</p>
 				</section>
 			{/if}
 		{/if}

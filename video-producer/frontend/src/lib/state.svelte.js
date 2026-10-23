@@ -1,10 +1,11 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
 import { emptyDoc, migrate, newAsset, newClip, promptLanguageOf } from './starter.js';
-import { toast as hostToast } from './host.js';
+import { confirm, toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
 import { resetTakes } from './takes.svelte.js';
 import { compileRules, conflictIds, namesCamera } from './rules.js';
 import { dropPlanControls } from './scene3d/doc.js';
+import { laneCode, laneFor, laneItemCount, newLaneId, removeLane } from './tracks.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -230,7 +231,8 @@ export function relayout() {
 
 export function deleteSelection() {
 	const s = ui.selection;
-	if (!s || s.kind === 'lane') return;
+	if (s?.kind === 'lane') return deleteLane(s.id);
+	if (!s) return;
 	const list = listOf(s.kind);
 	const i = list.findIndex((x) => x.id === s.id);
 	if (i < 0) return;
@@ -319,9 +321,12 @@ export function addAssetToTimeline(assetId, at = null) {
 	const a = asset(assetId);
 	if (!a) return;
 	if (a.kind === 'audio') {
-		const laneId = doc.lanes.find((l) => l.role === a.role)?.id ?? 'A2';
-		act(() => doc.audio.push({ id: ulid(), assetId, lane: laneId, start: round(at ?? ui.playhead, 0.04), dur: Math.min(a.srcDur ?? 8, 8), srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 }));
-		toast(t('lib.toast.addedToLane', { name: a.name, lane: laneId }));
+		let laneId = null;
+		act(() => {
+			laneId = laneForRole(a.role ?? 'Musique').id;
+			doc.audio.push({ id: ulid(), assetId, lane: laneId, start: round(at ?? ui.playhead, 0.04), dur: Math.min(a.srcDur ?? 8, 8), srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 });
+		});
+		toast(t('lib.toast.addedToLane', { name: a.name, lane: laneCode(doc.lanes, laneId) }));
 		return;
 	}
 	const c = newClip({ assetId, dur: Math.min(5, a.srcDur ?? 5), label: a.name, stage: a.generated ? a.quality : 'source' });
@@ -383,23 +388,57 @@ export function addControl() {
 	toast(t('lib.toast.controlAdded'));
 }
 
+function newLane(role = 'Ambiance') {
+	const lane = {
+		id: newLaneId(),
+		name: t('lib.default.track', { n: doc.lanes.length + 1 }),
+		role,
+		vol: -6,
+		pan: 0,
+		mute: false,
+		solo: false,
+		automation: 'off',
+		sends: { R1: -60, D1: -60 },
+		inserts: [{ type: 'eq', on: false, low: 0, mid: 0, high: 0 }]
+	};
+	doc.lanes.push(lane);
+	return lane;
+}
+
+export function laneForRole(role) {
+	return laneFor(doc, role) ?? newLane(role);
+}
+
 export function addAudioLane() {
-	const n = doc.lanes.length + 1;
-	act(() =>
-		doc.lanes.push({
-			id: `A${n}`,
-			name: t('lib.default.track', { n }),
-			role: 'Ambiance',
-			vol: -6,
-			pan: 0,
-			mute: false,
-			solo: false,
-			automation: 'off',
-			sends: { R1: -60, D1: -60 },
-			inserts: [{ type: 'eq', on: false, low: 0, mid: 0, high: 0 }]
-		})
-	);
-	toast(t('lib.toast.laneAdded', { id: `A${n}` }));
+	act(() => newLane());
+	toast(t('lib.toast.laneAdded', { id: laneCode(doc.lanes, doc.lanes.at(-1).id) }));
+}
+
+let confirmingLane = false;
+
+export async function deleteLane(id) {
+	const lane = doc.lanes.find((l) => l.id === id);
+	if (!lane || confirmingLane) return false;
+	const code = laneCode(doc.lanes, id);
+	const count = laneItemCount(doc, id);
+	confirmingLane = true;
+	let ok = false;
+	try {
+		ok = await confirm({
+			title: t('lib.lane.deleteTitle', { lane: code }),
+			message: count ? t('lib.lane.deleteItems', { count, lane: code, name: lane.name }) : t('lib.lane.deleteEmpty', { lane: code, name: lane.name }),
+			variant: 'danger',
+			confirmLabel: t('lib.lane.deleteConfirm')
+		});
+	} finally {
+		confirmingLane = false;
+	}
+	if (!ok || !doc.lanes.some((l) => l.id === id)) return false;
+	let removed = 0;
+	act(() => (removed = removeLane(doc, id).items.length));
+	if (ui.selection && !selected()) ui.selection = null;
+	toast(removed ? t('lib.toast.laneDeleted', { count: removed, lane: code }) : t('lib.toast.laneDeletedEmpty', { lane: code }), 'info', { label: t('shell.toast.undo'), run: undo });
+	return true;
 }
 
 export function productionRange() {

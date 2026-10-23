@@ -459,7 +459,7 @@ def test_audio_that_points_at_nothing_gives_no_subtitle_and_an_unnamed_otio_clip
     assert dialogue["OTIO_SCHEMA"] == "Clip.2" and "name" not in dialogue
 
 
-def test_audio_on_a_lane_the_document_does_not_declare_is_left_out_of_the_otio_but_played_in_the_video(make_doc):
+def test_audio_on_a_lane_the_document_does_not_declare_is_left_out_of_the_otio_and_of_the_video(make_doc):
     doc = _doc(make_doc, [_shot(0)])
     _with_audio(doc, [{"id": "u0", "lane": "A9"}])
 
@@ -467,7 +467,7 @@ def test_audio_on_a_lane_the_document_does_not_declare_is_left_out_of_the_otio_b
 
     assert [track["name"].split(" ")[0] for track in tracks] == ["V1", "A1", "A2", "A3", "A4"]
     assert all(track["children"] == [] for track in tracks[1:])
-    assert [item["id"] for item, _ in video.audible(doc)] == ["u0"]
+    assert video.audible(doc) == []
 
 
 @pytest.mark.parametrize("status", ["queued", "running", "failed", "cancelled"])

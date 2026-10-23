@@ -155,7 +155,8 @@ def test_a_shot_with_a_file_is_trimmed_fitted_graded_and_faded(make_doc):
     )
     assert graph[1] == (
         "[0:a]atrim=start=0.5:duration=2.5,asetpts=PTS-STARTPTS,aresample=48000,"
-        "aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=2.5,atrim=duration=2.5[a0]"
+        "aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=2.5,atrim=duration=2.5,"
+        "afade=t=in:st=0:d=0.4,afade=t=out:st=1.9:d=0.6[a0]"
     )
     assert graph[2] == "[v0][a0]concat=n=1:v=1:a=1[vout][bed]"
     assert graph[3] == "[bed]anull[aout]"

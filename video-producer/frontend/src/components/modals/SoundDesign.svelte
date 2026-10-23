@@ -2,7 +2,8 @@
 	import { onDestroy } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, newAsset, toast, productionRange, secs, round } from '../../lib/state.svelte.js';
+	import { ui, doc, act, newAsset, toast, productionRange, secs, round, laneForRole } from '../../lib/state.svelte.js';
+	import { laneCode } from '../../lib/tracks.js';
 	import { audition } from '../../lib/playback.svelte.js';
 	import { audioRoleLabel } from '../../lib/catalog.js';
 	import { suggest } from '../../lib/assistant.svelte.js';
@@ -147,12 +148,13 @@
 	}
 
 	function addToTimeline() {
-		const lane = doc.lanes.find((l) => l.role === made.role) ?? doc.lanes[0];
+		let lane = null;
 		act(() => {
+			lane = laneForRole(made.role ?? 'SFX');
 			doc.assets.push($state.snapshot(made));
 			doc.audio.push({ id: ulid(), assetId: made.id, lane: lane.id, start: +start, dur: +end - +start, srcIn: 0, fadeIn: 0.5, fadeOut: 0.8, gain: -6 });
 		});
-		toast(t('modals.sound.added', { name: made.name, lane: lane.id }), 'success', { label: t('modals.sound.console'), run: () => ((ui.workspace = 'mixer'), (ui.bottomView = 'console')) });
+		toast(t('modals.sound.added', { name: made.name, lane: laneCode(doc.lanes, lane.id) }), 'success', { label: t('modals.sound.console'), run: () => ((ui.workspace = 'mixer'), (ui.bottomView = 'console')) });
 		ui.modal = null;
 	}
 

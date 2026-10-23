@@ -1,3 +1,5 @@
+import { laneCode } from './tracks.js';
+
 export const EXCHANGE = {
 	fcpxml: { ext: 'fcpxml', mime: 'application/xml' },
 	otio: { ext: 'otio', mime: 'application/json' },
@@ -126,7 +128,7 @@ export function otio(doc, { label }) {
 			});
 			at = a.start + a.dur;
 		}
-		return { OTIO_SCHEMA: 'Track.1', name: `${l.id} · ${l.name}`, kind: 'Audio', children };
+		return { OTIO_SCHEMA: 'Track.1', name: `${laneCode(doc.lanes, l.id)} · ${l.name}`, kind: 'Audio', children };
 	});
 	return JSON.stringify(
 		{ OTIO_SCHEMA: 'Timeline.1', name: doc.name, global_start_time: null, tracks: { OTIO_SCHEMA: 'Stack.1', name: 'tracks', children: [{ OTIO_SCHEMA: 'Track.1', name: 'V1', kind: 'Video', children: video }, ...lanes] } },

@@ -74,7 +74,7 @@ The ten menus group all the commands of the page. The command search (**Search c
 
 The viewer has its own transport bar: monitor volume, go to the start, previous and next frame, play, loop, the timecode, framing guides, aspect ratio, resolution and full screen. When you preview a take, a comparison or a source media, a pill at the top of the viewer brings you **Back to the sequence**.
 
-The timeline has a toolbar and one row per kind of item. The toolbar holds **Undo** and **Redo**, the **Select tool**, **Range tool** and **Blade tool**, **Split at the playhead**, **Duplicate**, **Delete**, the **Add** menu (**Prompt**, **Reference frame**, **Control video**, **Title**, **Marker**, **Audio track**), **Snapping**, the zoom and **Fit**. The rows are **Titles**, **Prompts**, **Frames**, **Control video**, **3D shot**, **V1 · Video** and one row per audio track, with **M** (mute) and **S** (solo). Click the ruler to move the playhead; with the Range tool, or by dragging with Alt held, draw a range. Drag a shot to change its order, drag its edges to trim it (the shots after it follow), drag the white handles at the top of a clip to set its fades, drag an audio clip to another track. The trim and fade handles are for the mouse; from the keyboard, use **Cut › Trim start to playhead**, **Trim end to playhead** and **Fade in and out**, or the **Duration and source** and **Fades** fields of the Inspector (chapter 7). Ctrl and the mouse wheel zoom. Double-click an empty spot of the Prompts, Frames or Control video row to create an item there.
+The timeline has a toolbar and one row per kind of item. The toolbar holds **Undo** and **Redo**, the **Select tool**, **Range tool** and **Blade tool**, **Split at the playhead**, **Duplicate**, **Delete**, the **Add** menu (**Prompt**, **Reference frame**, **Control video**, **Title**, **Marker**, **Audio track**), **Snapping**, the zoom and **Fit**. The rows are **Titles**, **Prompts**, **Frames**, **Control video**, **3D shot**, **V1 · Video** and one row per audio track, named **A1**, **A2**… from top to bottom. **V1** and every audio track have **M** (mute) and **S** (solo) in their header (chapter 13). Click the name of an audio track to select it; right-click it, or press the Menu key or Shift+F10 on it, for its menu: **Track settings**, **Add an audio track** and **Delete track…**. A shot whose media is a video shows a speaker at the bottom left of its block when you hover it: click it to mute the sound of that shot, and it stays shown, crossed out, while the shot is muted. Click the ruler to move the playhead; with the Range tool, or by dragging with Alt held, draw a range. Drag a shot to change its order, drag its edges to trim it (the shots after it follow), drag the white handles at the top of a clip to set its fades, drag an audio clip to another track. The trim and fade handles are for the mouse; from the keyboard, use **Cut › Trim start to playhead**, **Trim end to playhead** and **Fade in and out**, or the **Duration and source** and **Fades** fields of the Inspector (chapter 7). Ctrl and the mouse wheel zoom. Double-click an empty spot of the Prompts, Frames or Control video row to create an item there.
 
 ## 4. Workspaces
 
@@ -131,7 +131,7 @@ Three output modes use these videos (chapter 8).
 
 ### Mix
 
-The **Sound design workshop**, the **Project sounds** (drag one to a track, or use its plus button to add it at the playhead), the **Roles** (**Dialogue**, **Music**, **Ambience**, **SFX**) with their number of tracks, and the mixing console, which takes the place of the timeline: faders, **M** and **S**, pan, equalizer, compressor, filter, reverb and delay sends, meters and an automation mode. The center is the viewer. The four tracks of a new project are empty, and **Project sounds** says "No sounds in this project." until you import one (chapter 6). The console plays the audio files you import (chapter 13); the sounds that the workshop prepares are synthesized by your browser. The workshop and the automation curves are simulated: see chapter 17.
+The **Sound design workshop**, the **Project sounds** (drag one to a track, or use its plus button to add it at the playhead), the **Roles** (**Dialogue**, **Music**, **Ambience**, **SFX**) with their number of tracks, and the mixing console, which takes the place of the timeline. It starts with the strip **V1 · Shots**, the sound of the videos on V1, with its meter, **M** and **S**; then come the audio tracks with their faders, **M** and **S**, pan, equalizer, compressor, filter, reverb and delay sends, meters and an automation mode. The center is the viewer. The four tracks of a new project are empty, and **Project sounds** says "No sounds in this project." until you import one (chapter 6). The console plays the audio files you import (chapter 13); the sounds that the workshop prepares are synthesized by your browser. The workshop and the automation curves are simulated: see chapter 17.
 
 ## 5. Projects
 
@@ -220,7 +220,7 @@ An image is its own thumbnail. For a video, the page uses the thumbnail that Pot
 ### Playback
 
 - **Video and images.** Put the media in the cut (**Add to cut**, or drag it to the timeline). The viewer then plays the real video in step with the playhead, or shows the image, with the fades and the color settings of the shot. To look at a media on its own, double-click it or click **Preview**: the viewer shows it, a video with the controls of your browser and an audio file with an audio player, and **Back to the sequence** brings you back.
-- **Sound of a video.** The viewer does not play the sound of a video. Sound comes from the audio tracks (chapter 13).
+- **Sound of a video.** The viewer plays the sound of each shot's video with its picture, at its place in the sequence, with the fades of the shot. It goes through the console: the strip **V1 · Shots** shows its level, and the master fader and the monitor volume of the viewer act on it. Mute it for one shot (the speaker of the shot on the timeline, or **Shot sound** in the Inspector), for every shot (**M** in the header of V1), or hear it alone (**S**) (chapter 13). A take generated without a sound track stays silent, as it does in the export. Your browser reads the sound from the file a second time, next to the picture, from a second and a half before the shot starts.
 - **Audio.** An audio file placed on a track plays through its strip of the console. The faders, mute and solo, pan, equalizer, compressor, filter and sends act on the real sound, the meters show it, and the clip draws the waveform of the file in the timeline (chapter 13).
 
 What is simulated here: the sounds of the Sound design workshop, which your browser synthesizes (chapter 17). The takes of the real generation are ordinary videos and play like any other video (chapter 9). When the file of a shot's media is no longer reachable (you deleted it from your library or gallery), the viewer shows **Media offline** ("The source file of “…” is no longer available: import it again or choose a take.") and so does the thumbnail of the shot on the timeline.
@@ -229,7 +229,7 @@ What is simulated here: the sounds of the Sound design workshop, which your brow
 
 The Inspector follows the selection and its title tells what is selected: **Video shot**, **Audio clip**, **Title**, **Shot prompt**, **Reference frame**, **Control video**, **3D shot**, **Marker**, **Reference** or **Console strip**. For a shot it starts with a thumbnail, the name (click it to rename the shot), the stage and the times, and has three tabs:
 
-- **Shot.** A shortcut to the next action (**Generate drafts**, or **Make take A final**) with the engine it will use ("On" followed by the engine), **Duration and source** (the duration, where the shot starts in its source and the length of the source), **Frames** (the **First frame** and the **Last frame** of the shot, and the button **Use the previous shot’s last frame**; chapter 12), **Fades** (**In** and **Out**), the **Flag** (**None**, **Favorite** or **Rejected**) and three icons to split the shot in the middle, duplicate it and delete it.
+- **Shot.** A shortcut to the next action (**Generate drafts**, or **Make take A final**) with the engine it will use ("On" followed by the engine), **Duration and source** (the duration, where the shot starts in its source and the length of the source), **Frames** (the **First frame** and the **Last frame** of the shot, and the button **Use the previous shot’s last frame**; chapter 12), **Fades** (**In** and **Out**), for a video **Shot sound** (**Mute this shot**, with a line that says whether the shot is heard and why not), the **Flag** (**None**, **Favorite** or **Rejected**) and three icons to split the shot in the middle, duplicate it and delete it.
 - **Takes.** The take cards of the shot, as **Final** and **Drafts**, and a button that makes more drafts (for example "2 more drafts"; chapter 9).
 - **Color.** The luminance scope, the match with the previous shot, presets and fine settings (chapter 12).
 
@@ -243,7 +243,7 @@ The other items have their own panel:
 - **3D shot:** the scene, the start, the duration, the camera path (a preset with its amplitude, manual keys or a Blender camera), the state of its reference video with **Render video** and **Start and end**, and the **Camera**.
 - **Marker:** the label and the position.
 - **Reference:** the name, the role, the scope (**Global direction** or **Specific moment**) and the shot it applies to.
-- **Console strip:** the name, the role, the effects (**Equalizer**, **Compressor**, **Filter**) and the sends.
+- **Console strip:** the name, the role, the effects (**Equalizer**, **Compressor**, **Filter**), the sends and **Delete track A2** (with the number of audio clips that go with it; chapter 13).
 
 In the **3D scene** workspace, with a 3D shot selected or nothing selected, the Inspector shows the **Camera**: focal length, roll and distance, **Keyframe**, **Follow the path**, **Source view** and the keyframes of the 3D shot (for a Blender camera, the number of sampled keys). With nothing selected in the other workspaces, it shows the project (format, H3 profile, content), a reminder of the main shortcuts and a **Project properties…** button.
 
@@ -538,6 +538,24 @@ The assistant can run more checks on request: shots without a prompt, contradict
 
 Audio lives in tracks, each with a role: Dialogue, Music, Ambience or SFX. **Audio › Add audio track**, **Audio › Import audio from the library…** and **Audio › Import audio from this computer…** bring sounds in; **Audio › Mixing console** shows the console. In the console each strip has a role, effects (**Equalizer**, **Compressor**, **Filter**; **+ effect** adds one), sends to the reverb and delay buses (R and D), pan, a fader (double-click it to go back to 0 dB), a meter, **M** and **S** and an automation button; the auxiliary buses and the **Master** follow. The pills at the top show one role only. **Voice and dialogue…** and the sound design commands (**Ambience…**, **Foley…**, **Texture…**, **Impact…**, **Musical intent…**) open the **Sound design workshop**, which is simulated (chapter 17). The text of a dialogue is real: it feeds the subtitles, together with the titles of the timeline (chapter 14).
 
+### Tracks: add, delete
+
+**Audio › Add audio track**, the **Add** menu of the timeline and **+ Audio track** in the console add an audio track at the bottom. Tracks are named **A1**, **A2**… by their place: delete A2 and the track that was A3 becomes A2. Their names (**Dialogue**, **Music**…) do not change.
+
+To delete a track, select it (click its name on the timeline or its strip in the console) and click **Delete track A2** at the bottom of the Inspector, or press Delete; or right-click its name on the timeline and choose **Delete track…**. A window asks first and says what goes with it, for example "A2 · Music holds 3 audio clips. They are deleted with the track. Undo brings them back." **Delete track** deletes the track and its audio clips; **Edit › Undo** (Ctrl+Z) brings both back. The last track can be deleted too: an audio file you add afterwards gets a new track for its role. Captures, in the dark and light themes of the English interface: the track menu on the timeline in `docs/screenshots/timeline-tracks.png`, the confirmation in `docs/screenshots/lane-delete.png`.
+
+### Mute and solo
+
+**M** mutes a track, **S** solos it, on the timeline as in the console; the video track **V1** has them too, for the sound of the shots' videos. One rule decides what you hear, in the viewer as in the exported video:
+
+- An audio clip is heard when its track is not muted and, if any track is soloed (V1 included), its track is soloed too.
+- The sound of a shot is heard when neither V1 nor the shot is muted and, if any track is soloed, V1 is soloed too. **Mute this shot** (Inspector, **Shot sound**) or the speaker of the shot on the timeline mutes one shot.
+- Mute wins over solo. Solo V1 and A1 to hear the shots with the dialogue only.
+
+The Inspector of a shot says why its sound is not heard: "Track V1 is muted…" or "An audio track is soloed…". A capture of **Shot sound** with an audio track soloed is in `docs/screenshots/shot-sound.png`.
+
+### Your audio files
+
 The four tracks of a new project are empty. **Audio › Import audio from the library…** and **Audio › Import audio from this computer…** bring in your own audio files, and you can drop audio files on a track (chapter 6). The console plays them for real: the faders, mute and solo, pan, equalizer, compressor, filter and sends act on the sound you hear, the meters show it, and the clips of the timeline draw the waveform of the file. The sounds that the Sound design workshop prepares are still synthesized by your browser (WebAudio).
 
 ## 14. Exports
@@ -558,7 +576,7 @@ Under the choices the window shows the name of the file (the project name with s
 What the video holds:
 
 - The shots in the order of the project, with the **Color** settings (exposure, contrast, saturation, temperature) and the fades of each shot. A shot with no file that the server can find, and every gap between shots, is black and silent. An image placed as a shot is held for the length of the shot.
-- The sound of each shot's own video (the viewer does not play it, but the export keeps it), and your audio tracks with their gain, the fader of their track, mute and solo, and their fades. The tracks are added together as they are, without automatic leveling.
+- The sound of each shot's own video, with the fades of the shot, unless the shot or the track V1 is muted or another track is soloed, and your audio tracks with their gain, the fader of their track, mute and solo, and their fades (the rule of chapter 13, the same as in the viewer). The tracks are added together as they are, without automatic leveling.
 - Not in the video: the titles and markers, the subtitles (always a separate file, see below), and the pan, equalizer, compressor, filter, sends, automation and master fader of the console. What you hear in the console with those is not what the file holds.
 
 If your admin has not installed ffmpeg on the server, the Video tab says "ffmpeg is missing on the server: web and social exports need it." (with a **Read the guide** link for an admin, and "Ask an administrator to install it." for anyone else) and **Export** is disabled for the web and social formats.
@@ -592,7 +610,7 @@ The MP4 files are kept in your PotionUI storage, in a `video_producer/exports/` 
 Three files, built by the server from your saved project: **FCPXML** (`.fcpxml`), **OpenTimelineIO** (`.otio`) and **EDL CMX 3600** (`.edl`). Click a card, read its note and the beginning of the file, then click **Download** followed by the file name, which comes from the project name (for example "Download Dawn_at_the_harbour.fcpxml"). The page says "<file> downloaded".
 
 - **FCPXML.** "V1 sequence with the chosen takes, shot names and in points." One video row, with a shot without media as a gap. No audio.
-- **OpenTimelineIO.** "Video and audio tracks by role; opens in Resolve, Premiere (plugin) and Nuke Studio." The same video row, and one audio track per track of the console, with the position, role and gain of each clip. The audio clips carry no file.
+- **OpenTimelineIO.** "Video and audio tracks by role; opens in Resolve, Premiere (plugin) and Nuke Studio." The same video row, and one audio track per track of the console, named **A1**, **A2**… as on the timeline, with the position, role and gain of each clip. The audio clips carry no file.
 - **EDL.** "Universal edit list (V1 only), for grading or conforming." One event per shot, with its name and its media file; a shot without media is on a black reel (BL).
 
 These files carry the cut only: no fades, no color settings, no titles and no audio files.
@@ -653,7 +671,7 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Space | Play / pause |
 | Ctrl+B | Split at playhead |
 | Ctrl+D | Duplicate |
-| Backspace, Delete | Delete |
+| Backspace, Delete | Delete (a selected audio track: delete it after a confirmation) |
 | A, R, B | Select tool, Range tool, Blade tool |
 | I, O | Set in point, Set out point |
 | Alt+X | Clear range |
@@ -722,7 +740,7 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **An export stays Queued.** The server makes one export at a time, for everybody, so yours waits its turn. If it never starts, tell your admin.
 - **"Converting to MP4" takes long.** A long sequence at 4K can take many minutes on a small server; the percentage shows how far it is. The export fails with "The video could not be converted." only if ffmpeg stops making progress for 5 minutes. Export at 1080p or 720p to go faster.
 - **An export is Failed.** The card says what failed and, under it, the message of the server. "ffmpeg could not assemble the video." can come from a file ffmpeg cannot read, or from PotionUI restarting during the export ("The server stopped during the export."); start it again, and if it fails again give the message to your admin. "The video could not be saved to your library." means that your PotionUI storage is full: free some space and export again.
-- **A shot is black or silent in the video.** The server found no file for that shot (media removed from your library or gallery), or the file has no soundtrack. The sound of the console's pan, equalizer, compressor, filter, sends and automation is not in the file (chapter 14).
+- **A shot is black or silent in the video.** The server found no file for that shot (media removed from your library or gallery), or the file has no soundtrack, or its sound is muted: the shot or the track V1 is muted, or an audio track is soloed without V1 (chapter 13). The sound of the console's pan, equalizer, compressor, filter, sends and automation is not in the file (chapter 14).
 - **An FCPXML, OpenTimelineIO or EDL file does not find its media.** The paths in the file are paths on the PotionUI server. Copy the media to your editing computer and relink them in your software (chapter 14).
 - **"This export no longer exists." or "The video is not ready yet."** when you download: the export was deleted, or it is still running. Export again, or wait for the end of the card.
 - **A seam frame is refused.** "This shot has no previous shot." (the first shot cannot take one); "“Shot 1” has no finished take yet." or "The previous shot has no finished take with a file." (generate and choose a take for the previous shot first); "The image could not be extracted from the take." or "The image could not be extracted: try again." (try again, and tell your admin if it persists); "The project could not be saved: no image extracted." (the project must be saved first: see the save state in the project bar).
