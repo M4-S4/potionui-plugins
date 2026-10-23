@@ -546,60 +546,17 @@ export async function downloadFrom(api, path, filename, save) {
 	return { ok: true, data: { filename: name } };
 }
 
-export async function coreFetch(api, path, init = {}) {
-	const headers = new Headers(init.headers);
-	const token = typeof api?.getToken === 'function' ? api.getToken() : null;
-	if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
-	let response;
+export async function coreUpload(api, path, form, { onProgress = () => {}, signal = null } = {}) {
+	if (typeof api?.fetchRawFromApp !== 'function') return failure(0, 'no_api');
+	if (signal?.aborted) return failure(0, 'aborted');
+	const onUploadProgress = (loaded, total) => {
+		if (total > 0) onProgress(Math.min(100, (loaded / total) * 100));
+	};
 	try {
-		response = await fetch(path, { ...init, headers, credentials: 'include' });
+		return await settle(await api.fetchRawFromApp(path, { method: 'POST', body: form, signal: signal ?? undefined, onUploadProgress }));
 	} catch (err) {
 		return thrown(err);
 	}
-	if (response.ok) return { ok: true, response };
-	let body = null;
-	try {
-		body = await response.json();
-	} catch {
-		body = null;
-	}
-	return { ok: false, error: normalizeError(body, response.status) };
-}
-
-function parsed(xhr) {
-	try {
-		return JSON.parse(xhr.responseText);
-	} catch {
-		return null;
-	}
-}
-
-export function coreUpload(api, path, form, { onProgress = () => {}, signal = null, createRequest = () => new XMLHttpRequest() } = {}) {
-	return new Promise((resolve) => {
-		const xhr = createRequest();
-		const token = typeof api?.getToken === 'function' ? api.getToken() : null;
-		const abort = () => xhr.abort();
-		const done = (result) => {
-			signal?.removeEventListener?.('abort', abort);
-			resolve(result);
-		};
-		xhr.open('POST', path);
-		xhr.withCredentials = true;
-		if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-		xhr.upload.onprogress = (e) => {
-			if (e.lengthComputable && e.total > 0) onProgress(Math.min(100, (e.loaded / e.total) * 100));
-		};
-		xhr.onload = () => {
-			const body = parsed(xhr);
-			if (xhr.status < 200 || xhr.status >= 300) return done({ ok: false, error: normalizeError(body, xhr.status) });
-			done(unwrap(body));
-		};
-		xhr.onerror = () => done(failure(0, 'network_error'));
-		xhr.onabort = () => done(failure(0, 'aborted'));
-		if (signal?.aborted) return done(failure(0, 'aborted'));
-		signal?.addEventListener?.('abort', abort);
-		xhr.send(form);
-	});
 }
 
 export function createClient(api, save) {
@@ -719,9 +676,6 @@ export function createClient(api, save) {
 		},
 		download(path, filename) {
 			return downloadFrom(api, path, filename, save);
-		},
-		coreFetch(path, init) {
-			return coreFetch(api, path, init);
 		},
 		uploadMedia(form, options) {
 			return coreUpload(api, '/api/media/upload', form, options);
