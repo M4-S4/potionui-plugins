@@ -9,7 +9,8 @@
 		readiness,
 		startGeneration,
 		cancelGeneration,
-		queueWindow,
+		openQueue,
+		openEngineSettings,
 		openResults,
 		jobClips,
 		currentEngine,
@@ -31,6 +32,7 @@
 	import SeamAction from '../takes/SeamAction.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import { takeCount } from '../../lib/shots.js';
+	import { flyingTakes } from '../../lib/takes.svelte.js';
 
 	const p = $derived(ui.production);
 	const ready = $derived(readiness());
@@ -97,7 +99,8 @@
 		return [...lines, ...ready.notes];
 	});
 	const over = $derived(Boolean(vram?.streams || quota?.blocks));
-	const queueTip = $derived(p.queue.length ? `${t('production.queue')} · ${t('production.queued', { count: p.queue.length })}` : t('production.queue'));
+	const queued = $derived(flyingTakes().length);
+	const queueTip = $derived(queued ? `${t('production.queue')} · ${t('production.queued', { count: queued })}` : t('production.queue'));
 	const engineTip = $derived.by(() => {
 		if (!engine) return groups.length ? engineLabel() : t('generation.engine.empty');
 		const backend = (ui.me?.engines ?? []).find((e) => e.id === engine.backend);
@@ -174,10 +177,11 @@
 	</HostUi>
 	<HostUi
 		name="IconButton"
-		props={{ icon: hostIconName('sliders'), label: t('production.advanced'), tooltip: t('production.advanced'), kbd: commandById('advanced')?.key, size: 'sm', class: 'vp-h7', onclick: () => (ui.modal = { type: 'advanced', step: 0 }) }}
+		props={{ icon: hostIconName('sliders'), label: t('production.engineSettings'), tooltip: t('production.engineSettings'), size: 'sm', class: 'vp-h7', onclick: openEngineSettings }}
 	/>
 
 	<div class="flex-1"></div>
+	<HostUi name="IconButton" props={{ icon: hostIconName('list'), label: t('production.queueLabel'), tooltip: queueTip, kbd: commandById('queue')?.key, size: 'sm', class: 'vp-h7', onclick: openQueue }} />
 
 	<div class="sr-only" aria-live="polite">{spoken}</div>
 	<div class="flex min-w-0 items-center gap-2">
@@ -223,7 +227,6 @@
 					</span>
 				</InfoTip>
 			{/if}
-			<HostUi name="IconButton" props={{ icon: hostIconName('list'), label: t('production.queueLabel'), tooltip: queueTip, kbd: commandById('queue')?.key, size: 'sm', class: 'vp-h7', disabled: blocked, onclick: queueWindow }} />
 			<HostUi name="Tooltip" props={{ text: primary, kbd: commandById('generate')?.key }}>
 				<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: 'sparkles', class: 'h-8 px-3.5', disabled: blocked, onclick: () => startGeneration() }}>{primary}</HostUi>
 			</HostUi>

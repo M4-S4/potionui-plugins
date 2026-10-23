@@ -26,7 +26,7 @@
 	"stale": "Prompt modified",
 	"staleTip": "The shot was edited after its take was generated: generate new drafts to follow the edit",
 	"edit": "Edit shot {shot}",
-	"editTip": "Open the shot editor: prompt, duration, frames, references and drafts",
+	"editTip": "Open the shot editor: prompt, duration, frames, references, drafts and engine",
 	"editShort": "Edit",
 	"noPrompt": "No instruction"
 }

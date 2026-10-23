@@ -36,6 +36,10 @@ UPSCALE_SHORT_SIDES = {"hd720": 720, "fhd1080": 1080, "qhd1440": 1440, "uhd2160"
 H3_TARGET_SIZES = {"hd720": "hd", "fhd1080": "hd", "qhd1440": "2k", "uhd2160": "2k"}
 H3_TARGET_BACK = {"hd": "fhd1080", "2k": "qhd1440"}
 
+QUALITIES = ("draft", "final")
+
+SEED_RANGE = 2**31
+
 AI = "ai"
 RENDER_3D = "render3d"
 RENDER_3D_AI = "render3d_ai"
@@ -218,6 +222,11 @@ class ShotPlan:
     missing_models: List[str] = field(default_factory=list)
     seeded: bool = True
     guides: List[str] = field(default_factory=list)
+    preset_id: str = ""
+    quality: str = "draft"
+    cloud: bool = False
+    backend_id: Optional[str] = None
+    seed: Optional[int] = None
 
     def summary(self) -> Dict[str, Any]:
         """The shot as the estimate reports it, with the 3D guides sent as its camera references."""
@@ -228,6 +237,10 @@ class ShotPlan:
             "resolution": self.resolution,
             "fps": self.fps,
             "guides": list(self.guides),
+            "preset_id": self.preset_id,
+            "model_id": self.model_id,
+            "profile": self.profile,
+            "quality": self.quality,
         }
 
     def request_for(self, take_id: Optional[str] = None, seed: Optional[int] = None) -> Dict[str, Any]:
@@ -314,6 +327,26 @@ def shot_revision(doc: Mapping[str, Any], shot_id: str) -> int:
     """How many times the shot was edited in its shot editor; 0 for a shot never edited or unknown."""
     revision = (clip_of(doc, shot_id) or {}).get("revision")
     return revision if isinstance(revision, int) and not isinstance(revision, bool) and revision > 0 else 0
+
+
+def shot_engine(doc: Mapping[str, Any], shot_id: str) -> Dict[str, Any]:
+    """The engine settings a shot sets for itself instead of the project's: a preset with its model, a profile, a quality and a seed, each only when valid."""
+    engine = (clip_of(doc, shot_id) or {}).get("engine")
+    if not isinstance(engine, Mapping):
+        return {}
+    chosen: Dict[str, Any] = {}
+    preset = engine.get("preset")
+    if isinstance(preset, str) and preset:
+        model = engine.get("model")
+        chosen.update(preset=preset, model=model if isinstance(model, str) and model else None)
+    if engine.get("profile") in PROFILES:
+        chosen["profile"] = engine["profile"]
+    if engine.get("quality") in QUALITIES:
+        chosen["quality"] = engine["quality"]
+    seed = engine.get("seed")
+    if isinstance(seed, int) and not isinstance(seed, bool) and 0 <= seed < SEED_RANGE:
+        chosen["seed"] = seed
+    return chosen
 
 
 def excluded_references(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
@@ -1223,6 +1256,30 @@ def _cloud_model(model_id: Optional[str]) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _engine_of(
+    doc: Mapping[str, Any], shot_id: str, preset_id: str, quality: str, model_id: Optional[str], profile: Optional[str], production: str
+) -> Tuple[str, str, Optional[str], Optional[str]]:
+    chosen = shot_engine(doc, shot_id)
+    if "preset" in chosen:
+        preset_id, model_id = chosen["preset"], chosen["model"]
+    if production == AI and "profile" in chosen:
+        profile = chosen["profile"]
+    return preset_id, chosen.get("quality", quality), model_id, profile
+
+
+def _merge(plans: Plans, part: Plans, shot_ids: Sequence[str], own: bool) -> None:
+    plans.shots.extend(part.shots)
+    plans.renders.extend(part.renders)
+    for kind in ("blocks", "warnings"):
+        target = getattr(plans, kind)
+        for item in getattr(part, kind):
+            data = item.get("data") or {}
+            if own and kind == "blocks" and "shot_id" not in data:
+                item = {**item, "data": {**data, "shot_ids": list(shot_ids)}}
+            if item not in target:
+                target.append(item)
+
+
 def build_plans(
     user: User,
     doc: Mapping[str, Any],
@@ -1232,10 +1289,42 @@ def build_plans(
     model_id: Optional[str] = None,
     profile: Optional[str] = None,
     production: str = AI,
+    overrides: bool = False,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference."""
+    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots."""
     if production == RENDER_3D:
         return build_renders(doc, shot_ids, quality)
+    if not overrides:
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, production)
+    project = (preset_id, quality, model_id, profile)
+    groups: Dict[Tuple[str, str, Optional[str], Optional[str]], List[str]] = {}
+    for shot_id in dict.fromkeys(shot_ids):
+        if clip_of(doc, shot_id) is not None:
+            groups.setdefault(_engine_of(doc, shot_id, *project, production), []).append(shot_id)
+    if not groups:
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, production)
+    parts = [(key, ids, _build(user, doc, ids, *key, production)) for key, ids in groups.items()]
+    main = next((part for key, _, part in parts if key == project), parts[0][2])
+    plans = Plans(preset=main.preset, model=main.model, quality=quality, profile=main.profile, production=production)
+    for key, ids, part in parts:
+        _merge(plans, part, ids, own=key != project)
+    for plan in plans.shots:
+        plan.seed = shot_engine(doc, plan.shot_id).get("seed")
+    order = {shot_id: index for index, shot_id in enumerate(dict.fromkeys(shot_ids))}
+    plans.shots.sort(key=lambda plan: order[plan.shot_id])
+    return plans
+
+
+def _build(
+    user: User,
+    doc: Mapping[str, Any],
+    shot_ids: Sequence[str],
+    preset_id: str,
+    quality: str,
+    model_id: Optional[str],
+    profile: Optional[str],
+    production: str,
+) -> Plans:
     if production == RENDER_3D_AI:
         profile = REF2VA
     profile = profile if profile in PROFILES else profile_of(doc)
@@ -1301,6 +1390,8 @@ def build_plans(
             if exc.note() not in plans.blocks:
                 plans.blocks.append(exc.note())
             continue
+        plan.preset_id, plan.quality, plan.cloud = preset.id, quality, preset.cloud
+        plan.backend_id = (plans.model or {}).get("backend_id") if preset.cloud else None
         plans.shots.append(plan)
         missing.extend(name for name in plan.missing_models if name not in missing)
     if missing:

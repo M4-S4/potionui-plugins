@@ -42,7 +42,6 @@
 	"toast.takesFinal.other": "{count} prises finales prêtes",
 	"toast.takesDraft.one": "{count} prise brouillon prête",
 	"toast.takesDraft.other": "{count} prises brouillons prêtes",
-	"toast.queued": "Fenêtre ajoutée à la file de génération",
 	"toast.chooseFirst": "Choisissez d’abord des prises pour les plans.",
 	"toast.assembled.one": "{count} prise assemblée dans le montage",
 	"toast.assembled.other": "{count} prises assemblées dans le montage",

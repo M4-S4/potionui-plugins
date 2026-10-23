@@ -1,5 +1,6 @@
 import logging
 import statistics
+from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -140,13 +141,9 @@ def _number(value: Any) -> Optional[float]:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
-async def _vram(owner: User, plans: Plans) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    if plans.preset is None or plans.preset.cloud or not plans.shots:
-        return _unknown_vram(), []
-    if any(block["code"] == "missing_models" for block in plans.blocks):
-        return _unknown_vram(), []
+async def _plan_vram(owner: User, plan: ShotPlan) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     try:
-        result = await core_bridge.preview_memory(owner, plans.shots[0].request_for())
+        result = await core_bridge.preview_memory(owner, plan.request_for())
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not preview the memory of a take", exc_info=True)
         return _unknown_vram(), [note("vram_unknown", "The memory a take needs could not be estimated.")]
@@ -182,10 +179,29 @@ async def _vram(owner: User, plans: Plans) -> Tuple[Dict[str, Any], List[Dict[st
     return vram, []
 
 
+async def _vram(owner: User, plans: Plans) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """The memory of the most demanding local preset of the run, previewed once per preset, with the warnings of every preset."""
+    if any(block["code"] == "missing_models" for block in plans.blocks):
+        return _unknown_vram(), []
+    firsts: Dict[str, ShotPlan] = {}
+    for plan in plans.shots:
+        if not plan.cloud:
+            firsts.setdefault(plan.preset_id, plan)
+    if not firsts:
+        return _unknown_vram(), []
+    results = [await _plan_vram(owner, plan) for plan in firsts.values()]
+    vram = max(results, key=lambda result: (result[0]["streams"], result[0]["estimate_gb"] or 0.0))[0]
+    warnings: List[Dict[str, Any]] = []
+    for _, found in results:
+        warnings.extend(item for item in found if item not in warnings)
+    return vram, warnings
+
+
 def _quota(owner: User, plans: Plans, minutes: Mapping[str, float], counts: Mapping[str, int]) -> Dict[str, Any]:
     status = limits.gpu_minutes_status(owner.id)
-    applies = plans.preset is not None and not plans.preset.cloud
-    needed = sum(value * counts.get(shot_id, 1) for shot_id, value in minutes.items()) if applies else 0.0
+    native = [plan for plan in plans.shots if not plan.cloud]
+    applies = bool(native) or (not plans.shots and plans.preset is not None and not plans.preset.cloud)
+    needed = sum(minutes.get(plan.shot_id, 0.0) * counts.get(plan.shot_id, 1) for plan in native)
     limited = status.get("limit") is not None and not status.get("exempt")
     remaining = status.get("remaining")
     blocks = bool(applies and limited and remaining is not None and needed > float(remaining) + 1e-9)
@@ -210,14 +226,9 @@ def quota_block(quota: Mapping[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dict[str, Any]]:
-    if getattr(caller, "account_type", None) != AccountType.ADMIN:
-        return None
-    if plans.preset is None or not plans.preset.cloud or plans.model is None or not plans.shots:
-        return None
-    shots = [{"task": plan.cloud_task, "params": dict(plan.cloud_params)} for plan in plans.shots for _ in range(counts.get(plan.shot_id, 1))]
+def _model_cost(caller: User, model_id: str, shots: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     try:
-        result = core_bridge.estimate_cloud_cost(caller, plans.model["id"], shots)
+        result = core_bridge.estimate_cloud_cost(caller, model_id, shots)
     except PermissionError:
         return None
     except ValueError as exc:
@@ -228,17 +239,45 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
     return {"total_usd": result.get("total_usd"), "known": bool(result.get("known")), "message": result.get("message")}
 
 
+def _total(costs: List[Dict[str, Any]]) -> Optional[str]:
+    try:
+        return str(sum((Decimal(str(cost["total_usd"])) for cost in costs), Decimal(0)))
+    except (InvalidOperation, TypeError):
+        return None
+
+
+def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dict[str, Any]]:
+    """What the cloud shots of the run cost an administrator, summed over the cloud models they run on."""
+    if getattr(caller, "account_type", None) != AccountType.ADMIN:
+        return None
+    by_model: Dict[str, List[Dict[str, Any]]] = {}
+    for plan in plans.shots:
+        if plan.cloud and plan.model_id:
+            by_model.setdefault(plan.model_id, []).extend(
+                {"task": plan.cloud_task, "params": dict(plan.cloud_params)} for _ in range(counts.get(plan.shot_id, 1))
+            )
+    costs = [cost for cost in (_model_cost(caller, model_id, shots) for model_id, shots in by_model.items()) if cost is not None]
+    if not costs:
+        return None
+    if len(costs) == 1:
+        return costs[0]
+    known = all(cost["known"] and cost["total_usd"] is not None for cost in costs)
+    message = next((cost["message"] for cost in costs if cost["message"]), None)
+    return {"total_usd": _total(costs) if known else None, "known": known, "message": message}
+
+
 async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order) -> Evaluation:
     """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape."""
-    plans = director.build_plans(owner, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production)
+    plans = director.build_plans(
+        owner, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production, overrides=True
+    )
     vram, vram_warnings = await _vram(owner, plans)
-    backend_id = vram.get("backend_id") or (plans.model or {}).get("backend_id")
     counts = {plan.shot_id: order.count(plan.shot_id) for plan in plans.shots}
     minutes: Dict[str, float] = {}
     work: Optional[float] = 0.0
     samples = 0
     for index, plan in enumerate(plans.shots):
-        ratio, count = calibrated_ratio(plans.preset.id, backend_id, plan.resolution)
+        ratio, count = calibrated_ratio(plan.preset_id, plan.backend_id or vram.get("backend_id"), plan.resolution)
         if index == 0:
             samples = count
         minutes[plan.shot_id] = take_minutes(plan.seconds, ratio)

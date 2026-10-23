@@ -80,6 +80,16 @@ def flag_take(
     return ok({"take": takes.public(takes.set_flag(take_id, body["flag"]))})
 
 
+@router.post("/projects/{project_id}/takes/{take_id}/prioritize")
+def prioritize_take(project_id: str, take_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
+    """Move a waiting take to the head of its owner's queue; a take already handed to the core is left as it is."""
+    project = access.project_for(user, project_id)
+    take = access.take_in(project, take_id)
+    if take["status"] not in takes.ACTIVE:
+        fail(409, "take_not_queued", "Only a queued take can move to the head of the queue.")
+    return ok({"take": takes.public(takes.prioritize(take))})
+
+
 @router.delete("/projects/{project_id}/takes/{take_id}")
 async def delete_take(project_id: str, take_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
     """Delete a take, cancelling it first while it is in flight; the host generation is kept."""

@@ -49,11 +49,20 @@ async def generate_takes(
 
 @router.get("/projects/{project_id}/queue")
 def project_queue(project_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The project's queued and running takes, and how many of its owner's generation slots are taken."""
+    """The project's queued and running takes in queue order, each waiting one with its place among all its owner's waiting takes; how many of the owner's generation slots are taken; and how many of the owner's active takes belong to other projects."""
     project = access.project_for(user, project_id)
+    active = takes.list_user_active(project["user_id"])
+    waiting = [take["id"] for take in active if take["status"] == "queued" and not take.get("generation_id")]
+    places = {take_id: index + 1 for index, take_id in enumerate(waiting)}
+    mine = takes.list_active(project_id)
+    others = [take for take in active if take["project_id"] != project_id]
     return ok(
         {
-            "takes": [takes.public(take) for take in takes.list_active(project_id)],
+            "takes": [{**takes.public(take), "queue_position": places.get(take["id"])} for take in mine],
             "slots": {"in_flight": takes.in_flight(project["user_id"]), "max": settings.get_setting("max_parallel_jobs")},
+            "elsewhere": {
+                "waiting": sum(1 for take in others if take["id"] in places),
+                "in_flight": sum(1 for take in others if take["id"] not in places),
+            },
         }
     )

@@ -5,7 +5,7 @@
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
 	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf } from '../../lib/state.svelte.js';
-	import { takesOf, startGeneration, promoteToFinal, shotActivity } from '../../lib/production.svelte.js';
+	import { takesOf, startGeneration, promoteToFinal, shotActivity, shotEngineText } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { clipThumb } from '../../lib/media.js';
@@ -139,6 +139,7 @@
 				{@const activity = shotActivity(c.id)}
 				{@const busy = activity.state === 'running'}
 				{@const stale = shotStale(c, takes)}
+				{@const ownEngine = shotEngineText(c)}
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<article
 					animate:flip={{ duration: ms(220) }}
@@ -211,6 +212,11 @@
 						<div class="flex items-center gap-2 px-1 text-xs">
 							<span class="flex items-center gap-1.5 {stages[c.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[c.stage].dot}"></span>{stages[c.stage].label}</span>
 							{#if takes.length}<span class="text-fg-subtle">{t('storyboard.takes', { count: takes.length })}</span>{/if}
+							{#if ownEngine}
+								<HostUi name="Tooltip" props={{ text: ownEngine, wrapperClass: 'inline-flex' }}>
+									<span class="flex items-center text-signal" role="img" aria-label={ownEngine} data-own-engine><Icon name="sliders" class="h-3.5 w-3.5" /></span>
+								</HostUi>
+							{/if}
 							<HostUi name="Tooltip" props={{ text: t('storyboard.editTip'), wrapperClass: 'ml-auto inline-flex' }}>
 								<button type="button" class="flex min-h-6 items-center gap-1 rounded px-1 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg" aria-label={t('storyboard.edit', { shot: clipLabel(c) })} onclick={(e) => (e.stopPropagation(), editShot(c))}>
 									<Icon name="pencil" class="h-3 w-3" />{#if size !== 's'}{t('storyboard.editShort')}{/if}

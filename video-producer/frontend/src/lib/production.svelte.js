@@ -5,9 +5,10 @@ import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realT
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
 import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
-import { ulid } from './ulid.js';
 import { labelOf, marksOf, relabel } from './labels.js';
 import { generationCounts } from './shots.js';
+import { projectQuality, shotEngineOf } from './engine.js';
+import { prioritized } from './queue.js';
 
 const AI_MODE = 'ai';
 const RENDER_MODE = 'render3d';
@@ -18,6 +19,7 @@ const POLL_EVERY = 5000;
 const INFO_WARNINGS = ['time_unknown', 'vram_unknown'];
 
 export const estimateState = $state({ key: null, data: null, loading: false, error: null });
+export const queueState = $state({ slots: null, elsewhere: null, positions: {} });
 const run = $state({ starting: false });
 
 let alive = false;
@@ -64,6 +66,12 @@ export function backendName(id) {
 	return (ui.me?.engines ?? []).find((e) => e.id === id)?.name ?? id ?? '—';
 }
 
+export function engineOptionLabel(preset, model = null) {
+	const option = optionFor(engineChoices(), { preset, model });
+	if (option) return option.label;
+	return preset ? t('generation.engine.unavailable') : t('generation.engine.none');
+}
+
 export function engineLabel() {
 	const option = currentEngine();
 	if (option) return option.label;
@@ -78,6 +86,34 @@ export function selectEngine(key) {
 		doc.engine.model = option.model;
 		doc.engine.backend = option.backend;
 	});
+}
+
+export function shotEngineText(clip) {
+	const own = shotEngineOf(clip);
+	const parts = [];
+	if ('preset' in own) parts.push(engineOptionLabel(own.preset, own.model));
+	if (own.profile) parts.push(own.profile);
+	if (own.quality) parts.push(own.quality === 'final' ? t('lib.stage.final') : t('lib.stage.draft'));
+	if (own.seed !== undefined) parts.push(t('generation.ownEngine.seed', { seed: own.seed }));
+	return parts.length ? t('generation.ownEngine.tip', { details: parts.join(' · ') }) : '';
+}
+
+export function setProjectQuality(quality) {
+	const next = quality === 'final' ? 'final' : 'draft';
+	act(() => (doc.engine.quality = next));
+	ui.production.quality = next;
+}
+
+export function openEngineSettings() {
+	ui.workspace = 'director';
+	ui.dockTab = 'direction';
+	ui.dockFocus = 'engine';
+	ui.modal = null;
+}
+
+export function openQueue() {
+	ui.workspace = 'director';
+	ui.dockTab = 'queue';
 }
 
 function syncEngine() {
@@ -120,11 +156,17 @@ function fieldNames(fields) {
 const minutes = (v) => formatNumber(v ?? 0, { maximumFractionDigits: 1 });
 
 function noteText(note) {
+	const text = baseNoteText(note);
+	const shots = Array.isArray(note?.data?.shot_ids) ? note.data.shot_ids.map(shotName) : [];
+	return shots.length ? t('generation.block.forShots', { shots: shots.join(', '), text }) : text;
+}
+
+function baseNoteText(note) {
 	const data = note?.data ?? {};
 	const code = note?.code;
 	if (code === 'no_shots') return t('generation.block.noShots');
 	if (code === 'no_preset') return t('generation.block.noPreset');
-	if (code === 'profile_unsupported') return t('generation.block.profileUnsupported', { profile: doc.direction.mode, engine: engineLabel() });
+	if (code === 'profile_unsupported') return t('generation.block.profileUnsupported', { profile: data.profile ?? doc.direction.mode, engine: data.preset_id ? engineOptionLabel(data.preset_id, null) : engineLabel() });
 	if (code === 'missing_models') return t('generation.block.missingModels', { fields: fieldNames(data.fields).join(', ') || '—' });
 	if (code === 'quota_exceeded') {
 		const quota = estimateState.data?.quota;
@@ -358,6 +400,25 @@ export async function cancelGeneration() {
 	toast(failures ? t('generation.toast.actionFailed') : t('lib.toast.cancelled'), failures ? 'error' : 'info');
 }
 
+export async function prioritizeTake(take) {
+	const priority = prioritized(takeStore.list, take.id);
+	if (priority === null) return;
+	const before = take.priority ?? 0;
+	patchTake(take.id, { priority });
+	const projectId = project.id;
+	const result = await getClient().prioritizeTake(projectId, take.id);
+	if (projectId !== project.id) return;
+	if (!result.ok) {
+		patchTake(take.id, { priority: before });
+		if (gone(result.error)) return projectGone(projectId);
+		if (result.error.status === 404 || result.error.status === 409) await refreshTakes();
+		else toast(t('generation.toast.actionFailed'), 'error');
+		return;
+	}
+	upsertTake(result.data);
+	await poll();
+}
+
 export async function retryTake(take) {
 	const result = await getClient().retryTake(take.id);
 	if (!result.ok) return failed(result.error, t('generation.toast.actionFailed'));
@@ -498,28 +559,6 @@ export function openResults() {
 	if (ui.production.state === 'done') ui.production.state = 'ready';
 }
 
-export function queueWindow() {
-	const { missing, range } = readiness();
-	if (missing.length) return toast(missing[0], 'warning');
-	ui.production.queue.push({ id: ulid(), range, mode: ui.production.mode, quality: ui.production.quality, label: `${secs(range[0])} → ${secs(range[1])}` });
-	toast(t('lib.toast.queued'));
-}
-
-export async function generateQueue() {
-	const windows = [...ui.production.queue];
-	ui.production.queue = [];
-	for (const quality of ['draft', 'final']) {
-		const ids = new Set();
-		for (const w of windows.filter((x) => x.quality === quality)) {
-			const inRange = shotsIn(w.range);
-			const toMake = inRange.filter((c) => c.stage !== 'source');
-			for (const c of toMake.length ? toMake : inRange) ids.add(c.id);
-		}
-		const clips = doc.clips.filter((c) => ids.has(c.id));
-		if (clips.length) await startGeneration({ clips, quality });
-	}
-}
-
 function doneMessage(done) {
 	if (done.every((x) => x.parentTakeId && x.quality === 'final')) return t('lib.toast.finalReady');
 	if (done.every((x) => x.quality === 'final')) return t('lib.toast.takesFinal', { count: done.length });
@@ -592,11 +631,15 @@ function track() {
 		session.add(take.id);
 		subscribe(take);
 	}
-	if (flying.length && !pollTimer) pollTimer = setInterval(poll, POLL_EVERY);
+	if (flying.length && !pollTimer) {
+		pollTimer = setInterval(poll, POLL_EVERY);
+		poll();
+	}
 	if (!flying.length && pollTimer) {
 		clearInterval(pollTimer);
 		pollTimer = null;
 	}
+	if (!flying.length) Object.assign(queueState, { slots: null, elsewhere: null, positions: {} });
 	updateProduction();
 }
 
@@ -618,6 +661,7 @@ async function poll() {
 		return;
 	}
 	const seen = new Set(result.data.takes.map((x) => x.id));
+	Object.assign(queueState, { slots: result.data.slots, elsewhere: result.data.elsewhere, positions: result.data.positions });
 	for (const take of result.data.takes) upsertTake(take);
 	if (flyingTakes().some((x) => !seen.has(x.id))) await refreshTakes();
 	else track();
@@ -652,6 +696,7 @@ async function openTakes(projectId) {
 	stopTracking();
 	session.clear();
 	syncEngine();
+	ui.production.quality = projectQuality(doc.engine);
 	setTakes(projectId, []);
 	takeStore.loaded = false;
 	const result = await getClient().listTakes(projectId);

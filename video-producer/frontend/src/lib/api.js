@@ -312,6 +312,7 @@ export function normalizeTake(value) {
 		flag: value.flag === 'keep' || value.flag === 'reject' ? value.flag : null,
 		label: LABELS.includes(value.label) ? value.label : legacyLabel(value.chosen, value.flag),
 		shotRevision: Number.isInteger(value.shot_revision) && value.shot_revision > 0 ? value.shot_revision : 0,
+		priority: Number.isInteger(value.priority) ? value.priority : 0,
 		profile: text(value.profile) || null,
 		promptText: text(value.prompt_text),
 		url: text(value.url) || null,
@@ -390,7 +391,16 @@ export function normalizeEstimate(value) {
 export function normalizeQueue(value) {
 	if (!isObject(value)) return null;
 	const slots = isObject(value.slots) ? value.slots : {};
-	return { takes: list(value.takes, normalizeTake) ?? [], slots: { inFlight: number(slots.in_flight, 0), max: number(slots.max) } };
+	const elsewhere = isObject(value.elsewhere) ? value.elsewhere : {};
+	const raw = Array.isArray(value.takes) ? value.takes : [];
+	const positions = {};
+	for (const take of raw) if (isObject(take) && text(take.id) && Number.isInteger(take.queue_position) && take.queue_position > 0) positions[take.id] = take.queue_position;
+	return {
+		takes: list(raw, normalizeTake) ?? [],
+		slots: { inFlight: number(slots.in_flight, 0), max: number(slots.max) },
+		elsewhere: { waiting: number(elsewhere.waiting, 0), inFlight: number(elsewhere.in_flight, 0) },
+		positions
+	};
 }
 
 export function normalizeProjectSummary(value) {
@@ -644,6 +654,9 @@ export function createClient(api, save) {
 		},
 		async generate(projectId, body) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/generate`, body), (data) => list(data.takes, normalizeTake));
+		},
+		async prioritizeTake(projectId, takeId) {
+			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/prioritize`, {}), pickTake);
 		},
 		async cancelTake(takeId) {
 			return mapped(await call(api, 'post', `/takes/${encodeURIComponent(takeId)}/cancel`, {}), pickTake);

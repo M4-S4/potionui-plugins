@@ -126,8 +126,6 @@
 	"block.noReferences": "“{shot}” has no reference: Ref2VA needs at least one for this shot.",
 	"block.sourceUnavailable": "The video of the source take is no longer available.",
 	"block.upscaleUnsupported": "Upscaling this take needs SeedVR2: ask an administrator to install it, or render the take again at full resolution.",
-	"workshop.notSent": "Not sent with this engine",
-	"workshop.notSentWhy": "The Video Director builds the request from the shots, the direction, the frames and the references; this setting stays in the project but does not change the takes.",
 	"block.refsPresetNeeded": "“3D render + AI” needs a MiniMax-H3 preset with the reference mode (refs), or LTX-2.5.",
 	"block.layoutLoraMissing": "“3D render + AI” on LTX-2.5 needs the Layout-To-Render IC-LoRA: ask your admin to install {file}.",
 	"warn.staleGuide": "The reference video of “{shot}” is out of date: render it again in 3D scene.",
@@ -161,5 +159,9 @@
 	"drafts.tip": "How many drafts to generate for this shot",
 	"drafts.mixedTip": "The shots of the selection ask for different numbers of drafts; picking a number sets it for all of them",
 	"drafts.mixed": "Mixed",
-	"drafts.option": "×{count}"
+	"drafts.option": "×{count}",
+	"block.forShots": "{shots}: {text}",
+	"ownEngine.tip": "Own engine: {details}",
+	"ownEngine.seed": "seed {seed}",
+	"refs.notSent": "Not sent with this engine"
 }

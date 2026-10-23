@@ -26,7 +26,7 @@
 	"stale": "Prompt modifié",
 	"staleTip": "Le plan a été modifié après la génération de sa prise : générez de nouveaux brouillons pour suivre la modification",
 	"edit": "Modifier le plan {shot}",
-	"editTip": "Ouvrir l’éditeur de plan : prompt, durée, images, références et brouillons",
+	"editTip": "Ouvrir l’éditeur de plan : prompt, durée, images, références, brouillons et moteur",
 	"editShort": "Modifier",
 	"noPrompt": "Aucune instruction"
 }

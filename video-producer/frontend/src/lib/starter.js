@@ -88,32 +88,7 @@ function baseDoc(t, name, promptLanguage) {
 			{ id: 'D1', name: t('starter.lane.delay'), vol: -10, mute: false }
 		],
 		master: { vol: 0 },
-		profiles: [],
-		engine: {
-			seed: 48121,
-			quality: 'Standard',
-			resolution: '1080p',
-			steps: 30,
-			guidance: 6.5,
-			overlap: 1,
-			windowLen: 5,
-			loras: [],
-			post: { upscale: false, interpolation: true, denoise: true },
-			variants: 2,
-			backend: '',
-			preset: null,
-			model: null,
-			consistency: 70,
-			lockIdentity: true,
-			motionPriority: true,
-			audioDriver: lanes[0].id,
-			lipSync: true,
-			offset: 0,
-			followCut: true,
-			naming: '{projet}_{fenêtre}_{variante}',
-			autoInsert: false
-		},
-		hybrid: { continuite: 80, identite: 55, audio: 10, mouvement: 40, style: 50 }
+		engine: { quality: 'draft', variants: 2, backend: '', preset: null, model: null }
 	};
 }
 

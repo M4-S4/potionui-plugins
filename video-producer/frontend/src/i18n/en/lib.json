@@ -42,7 +42,6 @@
 	"toast.takesFinal.other": "{count} final takes ready",
 	"toast.takesDraft.one": "{count} draft take ready",
 	"toast.takesDraft.other": "{count} draft takes ready",
-	"toast.queued": "Window added to the generation queue",
 	"toast.chooseFirst": "First choose takes for the shots.",
 	"toast.assembled.one": "{count} take assembled into the cut",
 	"toast.assembled.other": "{count} takes assembled into the cut",

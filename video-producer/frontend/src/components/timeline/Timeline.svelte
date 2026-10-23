@@ -30,7 +30,7 @@
 		clipLabel,
 		sourceLength
 	} from '../../lib/state.svelte.js';
-	import { takesOf, shotActivity } from '../../lib/production.svelte.js';
+	import { takesOf, shotActivity, shotEngineText } from '../../lib/production.svelte.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
@@ -670,6 +670,7 @@
 	{@const sel = isSel('clip', c.id)}
 	{@const takes = takesOf(c).length}
 	{@const activity = shotActivity(c.id)}
+	{@const ownEngine = shotEngineText(c)}
 	<div
 		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/40'} {reorder?.id === c.id ? 'opacity-60' : ''}"
 		style:left="{x(c.start)}px"
@@ -692,6 +693,7 @@
 		<div class="vp-clip-head absolute inset-x-0 top-0 flex h-5 items-center gap-1 bg-viz-1 px-1.5 text-xs font-semibold">
 			<span class="h-1.5 w-1.5 shrink-0 rounded-full {stages[c.stage].dot}" title={stages[c.stage].label}></span>
 			{#if c.flag}<Icon name={flagIcon[c.flag]} class="h-3 w-3" />{/if}
+			{#if ownEngine}<span class="flex shrink-0" role="img" aria-label={ownEngine} title={ownEngine} data-own-engine><Icon name="sliders" class="h-3 w-3" /></span>{/if}
 			<span class="min-w-0 flex-1 truncate">{clipLabel(c)}</span>
 			{#if takes > 1 && w > 120}<span class="shrink-0 rounded-sm border border-current/40 px-1 text-2xs">{t('timeline.clip.takes', { count: takes })}</span>{/if}
 		</div>
