@@ -137,6 +137,19 @@ test('applyPrompts replaces an existing prompt and creates a missing one, the sa
 	assert.equal(JSON.stringify(doc), JSON.stringify(saved));
 });
 
+test('applyPrompts bumps the revision of a shot whose text changes, as the server does, so its takes read Prompt modified', () => {
+	const doc = sampleDoc();
+	doc.clips[1].revision = 2;
+	const before = doc.prompts.find((p) => p.shotId === 'c2').text;
+	applyPrompts(doc, [
+		{ shotId: 'c1', promptId: 'p1', text: 'Rewritten ridge' },
+		{ shotId: 'c2', promptId: 'p2', text: before },
+		{ shotId: 'c3', promptId: 'p3', text: 'Inside the hut' }
+	]);
+
+	assert.deepEqual(doc.clips.map((c) => c.revision ?? 0), [1, 2, 1]);
+});
+
 test('proposalFrom: valid shots become a kept, numbered proposal with bounded label and duration', () => {
 	counter = 0;
 	const proposal = proposalFrom(

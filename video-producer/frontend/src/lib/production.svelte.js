@@ -1,11 +1,11 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs } from './state.svelte.js';
+import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs, onRestore } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
 import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
-import { labelOf, marksOf, relabel } from './labels.js';
+import { finalsToSync, labelOf, marksOf, relabel } from './labels.js';
 import { generationCounts } from './shots.js';
 import { projectQuality, shotEngineOf } from './engine.js';
 import { prioritized } from './queue.js';
@@ -441,6 +441,13 @@ async function sendLabel(take, label) {
 	toast(t('generation.toast.actionFailed'), 'error');
 }
 
+function syncFinals() {
+	for (const [id, label] of finalsToSync(doc.clips, takeStore.list)) {
+		const take = takeById(id);
+		if (take) sendLabel(take, label);
+	}
+}
+
 export function labelTake(clip, take, label) {
 	if (!take) return;
 	if (label === 'final') return labelOf(take) === 'final' && clip?.take === take.id ? undefined : useTake(clip, take.id);
@@ -722,8 +729,10 @@ function stopTracking() {
 export function startProduction() {
 	alive = true;
 	const off = onLoaded((p) => openTakes(p.id));
+	const offRestore = onRestore(syncFinals);
 	return () => {
 		off();
+		offRestore();
 		alive = false;
 		closeDetails?.();
 		stopTracking();

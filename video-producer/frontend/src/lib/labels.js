@@ -47,3 +47,15 @@ export function labelGroups(takes, hideRejected = false) {
 export function rejectedCount(takes) {
 	return takes.filter((x) => labelOf(x) === 'rejected').length;
 }
+
+export function finalsToSync(clips, takes) {
+	const changes = [];
+	for (const clip of clips) {
+		const own = takes.filter((x) => x.shotId === clip.id);
+		const placed = own.find((x) => x.id === clip.take && x.status === 'done' && x.url);
+		if (placed) {
+			if (labelOf(placed) !== 'final') changes.push([placed.id, 'final']);
+		} else for (const x of own) if (labelOf(x) === 'final') changes.push([x.id, 'candidate']);
+	}
+	return changes;
+}

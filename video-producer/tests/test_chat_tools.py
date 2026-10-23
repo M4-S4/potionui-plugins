@@ -133,7 +133,16 @@ async def test_write_confirmed_replaces_the_text_as_given_and_keeps_everything_e
     stored = _stored(project["id"])["doc"]
     assert data["prompt_id"] == "p1"
     assert [(prompt["id"], prompt["text"]) for prompt in stored["prompts"]] == [("p1", text), ("seq", "Rain over the city")]
-    assert stored["clips"] == project["doc"]["clips"]
+    assert stored["clips"] == [{**clip, "revision": 1} if clip["id"] == "s1" else clip for clip in project["doc"]["clips"]]
+
+
+async def test_write_confirmed_bumps_the_revision_of_the_shot_only_when_its_text_changes(project):
+    revisions = []
+    for text in ("Static shot of the bridge", "Static shot of the bridge", "Slow pan over the bridge"):
+        _data(await WriteShotPromptTool().execute_confirmed(_context(project["id"]), shot_id="s2", text=text))
+        revisions.append(next(clip.get("revision") for clip in _stored(project["id"])["doc"]["clips"] if clip["id"] == "s2"))
+
+    assert revisions == [1, 1, 2]
 
 
 async def test_an_administrator_writes_into_any_project(db, make_project, project):
@@ -262,6 +271,7 @@ async def test_fix_conflicts_confirmed_applies_every_rewrite_in_one_save(project
             rewrites=[{"shot_id": "s1", "text": "Wide shot, steady"}, {"shot_id": "s3", "text": "Rain on the bridge, steady"}],
         )
     )
+    assert {clip["id"]: clip.get("revision") for clip in _stored(project["id"])["doc"]["clips"]} == {"s1": 1, "s2": None, "s3": 1}
 
     stored = _stored(project["id"])
     created = next(prompt for prompt in stored["doc"]["prompts"] if prompt["shotId"] == "s3")

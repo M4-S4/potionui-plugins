@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aggregate, activityStep } from './generation.js';
-import { canLabel, labelGroups, labelOf, legacyLabel, marksOf, rejectedCount, relabel, toggledLabel, visibleTakes } from './labels.js';
+import { canLabel, finalsToSync, labelGroups, labelOf, legacyLabel, marksOf, rejectedCount, relabel, toggledLabel, visibleTakes } from './labels.js';
 import {
 	MAX_DRAFTS,
 	applyShotDraft,
@@ -64,6 +64,15 @@ test('labels: the takes are grouped final, candidates, drafts, rejected, and the
 	assert.deepEqual(visibleTakes(takes, true).map((x) => x.id), ['a', 'c', 'd']);
 	assert.equal(visibleTakes(takes, false).length, 5);
 	assert.equal(rejectedCount(takes), 2);
+});
+
+test('labels: after an undo or a redo the final follows the take the shot plays, and a shot that plays none keeps no final', () => {
+	const takes = [take('a', { label: 'final' }), take('b', { label: 'candidate' }), take('c', { shotId: 's2', label: 'final' }), take('d', { shotId: 's3' }), take('e', { shotId: 's4', status: 'running', url: null })];
+	const clips = [{ id: 's1', take: 'b' }, { id: 's2', take: null }, { id: 's3', take: 'd' }, { id: 's4', take: 'e' }];
+
+	assert.deepEqual(finalsToSync(clips, takes), [['b', 'final'], ['c', 'candidate'], ['d', 'final']]);
+	assert.deepEqual(finalsToSync([{ id: 's1', take: 'a' }], takes), []);
+	assert.match(source('./production.svelte.js'), /const offRestore = onRestore\(syncFinals\);/);
 });
 
 test('drafts: a shot keeps its own number from 1 to 8, else the project number', () => {

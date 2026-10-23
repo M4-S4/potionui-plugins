@@ -1,3 +1,5 @@
+import { touch } from './shots.js';
+
 export const PROMPT_LIMIT = 300;
 export const LABEL_LIMIT = 34;
 export const MAX_PROPOSAL = 24;
@@ -79,6 +81,7 @@ export function applyPrompts(target, changes) {
 		const clip = target.clips.find((x) => x.id === c.shotId);
 		if (!clip) continue;
 		const prompt = target.prompts.find((p) => p.id === c.promptId) ?? promptFor(target, c.shotId);
+		if ((prompt ? prompt.text : '') !== c.text) touch(clip);
 		if (prompt) prompt.text = c.text;
 		else target.prompts.push({ id: c.promptId, shotId: clip.id, start: clip.start, dur: clip.dur, strength: 75, text: c.text });
 	}

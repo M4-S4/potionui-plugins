@@ -38,7 +38,7 @@
 	"mode.i2v": "première frame",
 	"mode.flf": "première et dernière frames",
 	"mode.refs": "références",
-	"card.upscale": "Final · agrandi",
+	"card.upscale": "Qualité finale · agrandie",
 	"card.from": "issue de {variant}",
 	"card.seed": "Graine {seed}",
 	"card.preview": "Prévisualiser la prise {variant}",
@@ -163,5 +163,7 @@
 	"block.forShots": "{shots} : {text}",
 	"ownEngine.tip": "Moteur propre : {details}",
 	"ownEngine.seed": "graine {seed}",
-	"refs.notSent": "Non transmis à ce moteur"
+	"refs.notSent": "Non transmis à ce moteur",
+	"card.qualityFinal": "Qualité finale",
+	"card.qualityDraft": "Qualité brouillon"
 }

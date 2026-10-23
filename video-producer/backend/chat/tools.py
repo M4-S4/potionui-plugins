@@ -7,7 +7,7 @@ from src.plugin_api.chat import BaseTool, ToolApprovalPreview, ToolContext, Tool
 from .. import projects
 from ..catalog import FL2VA
 from ..core_bridge import generate_ulid
-from ..director import profile_of, shot_frames
+from ..director import profile_of, shot_frames, shot_revision
 from . import rules
 from .context import CONTEXT_KEY
 
@@ -142,9 +142,11 @@ def instruction_of(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
     return str(prompt.get("text") or "") if prompt is not None else ""
 
 
-def write_prompt(doc: Dict[str, Any], clip: Mapping[str, Any], text: str) -> str:
-    """Set the text of the shot's prompt, creating the prompt when the shot has none; returns its id."""
+def write_prompt(doc: Dict[str, Any], clip: Dict[str, Any], text: str) -> str:
+    """Set the text of the shot's prompt, creating the prompt when the shot has none, and bump the revision of the shot when the text changes, as the page does, so its takes read "Prompt modified"; returns the prompt id."""
     prompt = linked_prompt(doc, clip["id"])
+    if (prompt.get("text") if prompt is not None else "") != text:
+        clip["revision"] = shot_revision(doc, clip["id"]) + 1
     if prompt is None:
         prompt = {
             "id": generate_ulid(),
