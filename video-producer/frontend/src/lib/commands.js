@@ -18,7 +18,7 @@ import {
 	addShot,
 	proposeShots
 } from './state.svelte.js';
-import { startGeneration, cancelGeneration, queueWindow, openResults, assembleChosen, promoteToFinal, busy } from './production.svelte.js';
+import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
 import { openGallery, openImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
@@ -204,15 +204,11 @@ export const menus = [
 			command('generate', () => startGeneration(), { keys: 'mod+g' }),
 			command('draft', () => (ui.production.quality = 'draft'), { check: () => ui.production.quality === 'draft' }),
 			command('final', () => (ui.production.quality = 'final'), { check: () => ui.production.quality === 'final' }),
-			command('queue', queueWindow, { keys: 'alt+mod+g' }),
+			command('queue', openQueue, { keys: 'alt+mod+g' }),
 			command('cancel-generation', cancelRunning)
 		],
 		[command('results', openResults), command('assemble', assembleChosen)],
-		[
-			command('advanced', modal('advanced', { step: 0 })),
-			command('engine', modal('advanced', { step: 1 })),
-			command('hybrid', modal('advanced', { step: 1, focus: 'hybrid' }))
-		]
+		[command('engine', openEngineSettings)]
 	]),
 	menu('audio', [
 		[command('audio-add', addAudioLane), command('audio-import', () => openImport('audio')), command('audio-import-local', () => openLocalImport('audio')), command('audio-mixer', mixer)],

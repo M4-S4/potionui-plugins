@@ -20,6 +20,10 @@ def _codes(notes):
     return [item["code"] for item in notes]
 
 
+WAN_DRAFT = {"preset_id": presets.WAN, "model_id": None, "profile": "FL2VA", "quality": "draft"}
+LTX_DRAFT = {**WAN_DRAFT, "preset_id": presets.LTX_2_5}
+
+
 def test_a_native_estimate_has_the_contract_shape(core, make_doc):
     core.use_wan()
     doc = make_doc(clips=SHOTS)
@@ -28,8 +32,8 @@ def test_a_native_estimate_has_the_contract_shape(core, make_doc):
 
     assert payload["production"] == "ai"
     assert payload["shots"] == [
-        {"shot_id": "s1", "director_mode": "t2v", "seconds": 4.0, "resolution": "832x480", "fps": 16, "guides": []},
-        {"shot_id": "s2", "director_mode": "t2v", "seconds": 6.0, "resolution": "832x480", "fps": 16, "guides": []},
+        {"shot_id": "s1", "director_mode": "t2v", "seconds": 4.0, "resolution": "832x480", "fps": 16, "guides": [], **WAN_DRAFT},
+        {"shot_id": "s2", "director_mode": "t2v", "seconds": 6.0, "resolution": "832x480", "fps": 16, "guides": [], **WAN_DRAFT},
     ]
     assert payload["renders"] == []
     assert payload["vram"] == {
@@ -366,8 +370,8 @@ def test_the_3d_render_and_ai_estimate_on_ltx_2_5_lists_a_director_shot_with_its
 
     assert (payload["production"], payload["blocks"]) == ("render3d_ai", [])
     assert payload["shots"] == [
-        {"shot_id": "s1", "director_mode": "director", "seconds": 4.0, "resolution": "832x480", "fps": 25, "guides": ["c1"]},
-        {"shot_id": "s2", "director_mode": "t2v", "seconds": 6.0, "resolution": "832x480", "fps": 25, "guides": []},
+        {"shot_id": "s1", "director_mode": "director", "seconds": 4.0, "resolution": "832x480", "fps": 25, "guides": ["c1"], **LTX_DRAFT},
+        {"shot_id": "s2", "director_mode": "t2v", "seconds": 6.0, "resolution": "832x480", "fps": 25, "guides": [], **LTX_DRAFT},
     ]
     assert [(item["code"], item["data"]["shot_id"]) for item in payload["warnings"] if "shot_id" in (item.get("data") or {})] == [
         ("layout_no_frame", "s1"),

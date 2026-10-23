@@ -44,6 +44,7 @@ COLUMNS = (
     "flag",
     "label",
     "shot_revision",
+    "priority",
     "profile",
     "prompt_text",
     "file_path",
@@ -85,6 +86,7 @@ PUBLIC = (
     "flag",
     "label",
     "shot_revision",
+    "priority",
     "profile",
     "prompt_text",
     "file_path",
@@ -104,6 +106,10 @@ PUBLIC = (
 )
 
 _ACTIVE_SQL = "status IN ('queued', 'running')"
+
+_WAITING_SQL = "status = 'queued' AND generation_id IS NULL"
+
+_QUEUE_ORDER = "priority DESC, created_at, id"
 
 _SELECT = f"SELECT {', '.join(COLUMNS)} FROM {TAKES}"
 
@@ -138,6 +144,7 @@ def _take(row: Any) -> Dict[str, Any]:
     if take["label"] not in LABELS:
         take["label"] = legacy_label(take["chosen"], take["flag"])
     take["chosen"] = bool(take["chosen"])
+    take["priority"] = int(take["priority"] or 0)
     take["units_reserved"] = float(take["units_reserved"] or 0)
     take["request"] = json.loads(take["request"]) if take["request"] else None
     return take
@@ -179,7 +186,9 @@ def create_take(fields: Dict[str, Any]) -> Dict[str, Any]:
     from src.plugin_api import db
 
     take = {column: None for column in COLUMNS}
-    take.update({"id": generate_ulid(), "status": "queued", "chosen": False, "units_reserved": 0.0, "created_at": _now()})
+    take.update(
+        {"id": generate_ulid(), "status": "queued", "chosen": False, "priority": 0, "units_reserved": 0.0, "created_at": _now()}
+    )
     take.update({key: value for key, value in fields.items() if key in COLUMNS})
     if take["label"] not in LABELS:
         take["label"] = legacy_label(take["chosen"], take["flag"]) if take["chosen"] or take["flag"] else initial_label(take["quality"])
@@ -211,17 +220,21 @@ def list_takes(project_id: str) -> List[Dict[str, Any]]:
 
 
 def list_active(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """The queued and running takes, of one project or of all, oldest first."""
+    """The queued and running takes, of one project or of all, in queue order: those handed to the core first, then the waiting ones by priority, oldest first."""
+    order = f"ORDER BY generation_id IS NULL, {_QUEUE_ORDER}"
     if project_id is None:
-        return _fetch_all(f"{_SELECT} WHERE {_ACTIVE_SQL} ORDER BY created_at, id")
-    return _fetch_all(f"{_SELECT} WHERE project_id = ? AND {_ACTIVE_SQL} ORDER BY created_at, id", (project_id,))
+        return _fetch_all(f"{_SELECT} WHERE {_ACTIVE_SQL} {order}")
+    return _fetch_all(f"{_SELECT} WHERE project_id = ? AND {_ACTIVE_SQL} {order}", (project_id,))
+
+
+def list_user_active(user_id: str) -> List[Dict[str, Any]]:
+    """The user's queued and running takes, of all their projects, in queue order."""
+    return _fetch_all(f"{_SELECT} WHERE user_id = ? AND {_ACTIVE_SQL} ORDER BY generation_id IS NULL, {_QUEUE_ORDER}", (user_id,))
 
 
 def waiting(user_id: str) -> List[Dict[str, Any]]:
-    """The user's queued takes not yet handed to the core, oldest first."""
-    return _fetch_all(
-        f"{_SELECT} WHERE user_id = ? AND status = 'queued' AND generation_id IS NULL ORDER BY created_at, id", (user_id,)
-    )
+    """The user's queued takes not yet handed to the core, in the order the pump hands them: highest priority first, then oldest first."""
+    return _fetch_all(f"{_SELECT} WHERE user_id = ? AND {_WAITING_SQL} ORDER BY {_QUEUE_ORDER}", (user_id,))
 
 
 def waiting_user_ids() -> List[str]:
@@ -276,6 +289,14 @@ def update_active(take_id: str, **fields: Any) -> bool:
 def settle(take_id: str, status: str, **fields: Any) -> bool:
     """End a queued or running take; True only for the caller that ended it."""
     return _update(take_id, {**fields, "status": status}, _ACTIVE_SQL)
+
+
+def prioritize(take: Dict[str, Any]) -> Dict[str, Any]:
+    """Move a waiting take before every other waiting take of its user, its priority one above theirs; a take already first, handed to the core or ended is left alone."""
+    queue = waiting(take["user_id"]) if take.get("user_id") else []
+    if queue and queue[0]["id"] != take["id"] and any(item["id"] == take["id"] for item in queue):
+        _update(take["id"], {"priority": queue[0]["priority"] + 1}, _WAITING_SQL)
+    return get_take(take["id"]) or take
 
 
 def set_label(take_id: str, label: str) -> Optional[Dict[str, Any]]:

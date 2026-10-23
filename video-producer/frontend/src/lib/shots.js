@@ -1,5 +1,6 @@
 import { labelOf } from './labels.js';
 import { SEAM_STRENGTH, frameTime, framesOf } from './seam.js';
+import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
 
 export const MIN_DRAFTS = 1;
 export const MAX_DRAFTS = 8;
@@ -109,7 +110,7 @@ const MAX_STORED_DRAFTS = 16;
 
 function migrateClip(clip) {
 	if (!isObject(clip)) return clip;
-	const next = { ...clip };
+	const next = migrateShotEngine({ ...clip });
 	if ('drafts' in next && !(Number.isInteger(next.drafts) && next.drafts >= MIN_DRAFTS && next.drafts <= MAX_STORED_DRAFTS)) delete next.drafts;
 	if ('revision' in next && !(Number.isInteger(next.revision) && next.revision >= 0)) delete next.revision;
 	if ('referenceOverrides' in next) {
@@ -139,7 +140,8 @@ export function shotDraft(doc, clip, engine) {
 		last: frameAsset(doc, clip, 'last'),
 		exclude: excludedOf(clip),
 		own: shotReferences(doc, clip).own.map(ownCopy),
-		drafts: draftsOf(clip, engine)
+		drafts: draftsOf(clip, engine),
+		engine: shotEngineOf(clip)
 	};
 }
 
@@ -188,6 +190,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	setExcluded(clip, draft.exclude);
 	writeReferences(doc, clip, draft.own);
 	if (draft.drafts !== before.drafts || Number.isInteger(clip.drafts)) clip.drafts = count(draft.drafts) ?? projectDrafts(engine);
+	if ('engine' in draft) setShotEngine(clip, draft.engine);
 	if (changed) touch(clip);
 	return { changed, resized };
 }

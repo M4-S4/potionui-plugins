@@ -10,7 +10,7 @@ from .estimate import Evaluation
 
 logger = logging.getLogger("plugins.video-producer")
 
-SEED_RANGE = 2**31
+SEED_RANGE = director.SEED_RANGE
 
 MESSAGE_LIMIT = 300
 
@@ -157,10 +157,9 @@ def _create(
 
 
 async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation) -> List[Dict[str, Any]]:
-    """Create the takes each shot asks for, one per variant with its own seed, and hand what fits to the core."""
+    """Create the takes each shot asks for on its own engine, one per variant: a fresh seed each, or the shot's fixed seed for the first and the seeds after it for the others, and hand what fits to the core."""
     if evaluation.blocked:
         raise Blocked(evaluation.payload["blocks"])
-    plans = evaluation.plans
     quota = evaluation.payload["quota"]
     reserve = bool(quota["applies"]) and reserves(quota)
     created = [
@@ -168,16 +167,16 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
             owner,
             project["id"],
             plan,
-            preset_id=plans.preset.id,
-            quality=plans.quality,
+            preset_id=plan.preset_id,
+            quality=plan.quality,
             kind=RENDER,
-            seed=new_seed(),
+            seed=new_seed() if plan.seed is None else (plan.seed + index) % SEED_RANGE,
             variant=letter,
-            minutes=evaluation.minutes.get(plan.shot_id, 0.0) if reserve else 0.0,
+            minutes=evaluation.minutes.get(plan.shot_id, 0.0) if reserve and not plan.cloud else 0.0,
             revision=director.shot_revision(project["doc"], plan.shot_id),
         )
-        for plan in plans.shots
-        for letter in next_variants(project["id"], plan.shot_id, plans.quality, evaluation.count(plan.shot_id))
+        for plan in evaluation.plans.shots
+        for index, letter in enumerate(next_variants(project["id"], plan.shot_id, plan.quality, evaluation.count(plan.shot_id)))
     ]
     await pump(owner)
     return [takes.get_take(take["id"]) for take in created]
@@ -514,7 +513,7 @@ def _render_plan(
     )
     if plans.blocks:
         raise Blocked(plans.blocks)
-    return plans.shots[0], plans.preset.id, not plans.preset.cloud
+    return plans.shots[0], plans.shots[0].preset_id, not plans.shots[0].cloud
 
 
 def _upscale_plan(owner: User, source: Mapping[str, Any], target: str) -> Tuple[ShotPlan, str, bool]:

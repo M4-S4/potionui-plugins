@@ -63,7 +63,7 @@ function eventFor(spec, mac, flip = null) {
 }
 
 test('shortcuts: 33 commands carry a shortcut, each one different, and the others show none', () => {
-	assert.equal(commands.length, 100);
+	assert.equal(commands.length, 98);
 	assert.deepEqual(
 		bound.map((c) => c.id),
 		[

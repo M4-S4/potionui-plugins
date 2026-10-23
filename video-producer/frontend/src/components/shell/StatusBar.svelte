@@ -3,12 +3,15 @@
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, selected, seqDuration, secs, allIssues } from '../../lib/state.svelte.js';
 	import { sceneState, sceneBusy, sceneProgress } from '../../lib/scene.svelte.js';
+	import { flyingTakes } from '../../lib/takes.svelte.js';
+	import { openQueue } from '../../lib/production.svelte.js';
 	import Icon from '../Icon.svelte';
 
 	const sel = $derived(selected());
 	const issues = $derived(allIssues().filter((i) => i.level !== 'missing'));
 	const ratio = $derived(ui.quota?.limit > 0 ? Math.min(1, ui.quota.used / ui.quota.limit) : 0);
 	const building = $derived(doc.scenes.filter(sceneBusy));
+	const queued = $derived(flyingTakes().length);
 	const language = $derived(getLocale() === 'fr' ? t('shell.locale.fr') : t('shell.locale.en'));
 
 	function kindLabel(kind) {
@@ -63,8 +66,10 @@
 			<Icon name="cube" class="h-3 w-3" />{t('shell.status.building', { count: building.length, value: Math.round(building.reduce((sum, s) => sum + sceneProgress(s), 0) / building.length) })}
 		</button>
 	{/if}
-	{#if ui.production.queue.length}
-		<span>{t('shell.status.queue', { count: ui.production.queue.length })}</span>
+	{#if queued}
+		<button type="button" class="flex h-6 items-center gap-1 hover:text-fg hover:underline" onclick={openQueue}>
+			<Icon name="list" class="h-3 w-3" />{t('shell.status.queue', { count: queued })}
+		</button>
 	{/if}
 	<span>{ui.snapping ? t('shell.status.snapping.on') : t('shell.status.snapping.off')}</span>
 	{#if ui.quota}

@@ -16,6 +16,7 @@ export const doc = $state(emptyDoc(t));
 export const ui = $state({
 	workspace: 'storyboard',
 	dockTab: 'direction',
+	dockFocus: null,
 	refSpace: 'all',
 	sidebarOpen: true,
 	inspectorOpen: typeof window === 'undefined' || window.innerWidth >= 1360,
@@ -56,7 +57,6 @@ export const ui = $state({
 		progress: 0,
 		running: 0,
 		step: '',
-		queue: [],
 		lastCount: 0,
 		quality: 'draft'
 	},
@@ -576,7 +576,7 @@ export function replaceDoc(next) {
 	past.length = 0;
 	future.length = 0;
 	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, dirty: false });
-	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', queue: [], lastCount: 0 });
+	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0 });
 	resetTakes();
 	Object.assign(ui.scene, { current: null, keyframe: null, seeded: null });
 	if (ui.playhead > seqDuration()) ui.playhead = 0;

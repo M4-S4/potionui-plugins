@@ -184,6 +184,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/media/uploaded"),
         ("GET", f"{base}/projects/{{project_id}}/takes"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/label"),
+        ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/prioritize"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/choose"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/flag"),
         ("DELETE", f"{base}/projects/{{project_id}}/takes/{{take_id}}"),
@@ -1076,7 +1077,7 @@ def test_the_takes_routes_loaded_by_the_core_list_label_choose_flag_and_delete_a
         (take["id"], "/api/media/generations/gen-1/1.mp4", "done")
     ]
     assert "request" not in listed[0] and "user_id" not in listed[0]
-    assert queue == {"takes": [], "slots": {"in_flight": 0, "max": 2}}
+    assert queue == {"takes": [], "slots": {"in_flight": 0, "max": 2}, "elsewhere": {"waiting": 0, "in_flight": 0}}
     assert (labelled.status_code, labelled.json()["data"]["take"]["label"]) == (200, "rejected")
     assert (chosen.status_code, chosen.json()["data"]["take"]["chosen"], chosen.json()["data"]["take"]["label"]) == (200, True, "final")
     assert (flagged.status_code, flagged.json()["data"]["take"]["label"]) == (200, "final")

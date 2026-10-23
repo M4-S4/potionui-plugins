@@ -13,7 +13,6 @@
 	import PromptEditor from './PromptEditor.svelte';
 	import ShotEditor from './ShotEditor.svelte';
 	import PromptLibrary from './PromptLibrary.svelte';
-	import AdvancedWorkshop from './AdvancedWorkshop.svelte';
 	import SoundDesign from './SoundDesign.svelte';
 	import ExportDialog from './ExportDialog.svelte';
 	import MakeFinal from './MakeFinal.svelte';
@@ -54,7 +53,7 @@
 		[t('shell.simulations.voice.title'), t('shell.simulations.voice.text')],
 		[t('shell.simulations.console.title'), t('shell.simulations.console.text')],
 		[t('shell.simulations.formats.title'), t('shell.simulations.formats.text')],
-		[t('shell.simulations.engine.title'), t('shell.simulations.engine.text')]
+		[t('shell.simulations.guidance.title'), t('shell.simulations.guidance.text')]
 	]);
 
 	const timelineIndex = $derived(
@@ -85,8 +84,6 @@
 		<ShotEditor id={m.id} draft={m.draft ?? null} baseline={m.baseline ?? null} />
 	{:else if m?.type === 'library'}
 		<PromptLibrary target={m.target} tab={m.tab} />
-	{:else if m?.type === 'advanced'}
-		<AdvancedWorkshop step={m.step ?? 0} focus={m.focus} />
 	{:else if m?.type === 'sound'}
 		<SoundDesign type={m.kind ?? 'Ambiance'} />
 	{:else if m?.type === 'export'}
@@ -251,7 +248,6 @@
 				{:else}
 					<p class="text-fg-muted">{t('shell.tasks.none')}</p>
 				{/if}
-				{#if ui.production.queue.length}<p class="text-xs text-fg-subtle">{t('shell.tasks.queue', { count: ui.production.queue.length })}</p>{/if}
 			</div>
 		</Modal>
 	{:else if m?.type === 'tour'}

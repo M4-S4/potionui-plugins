@@ -1,10 +1,13 @@
 <script>
+	import { untrack } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatTime, t } from '../../i18n/index.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { ui, doc, select, secs, globalPrompt, allIssues, itemsIn, productionRange, act, clipLabel } from '../../lib/state.svelte.js';
-	import { takesOf, assembleChosen, generateQueue, supportedProfiles, engineLabel } from '../../lib/production.svelte.js';
-	import { takeStore } from '../../lib/takes.svelte.js';
+	import { takesOf, assembleChosen, supportedProfiles, engineLabel, currentEngine, engineGroups, selectEngine, setProjectQuality, openEngineSettings } from '../../lib/production.svelte.js';
+	import { takeStore, flyingTakes } from '../../lib/takes.svelte.js';
+	import { projectQuality, hasOwnEngine } from '../../lib/engine.js';
+	import { projectDrafts } from '../../lib/shots.js';
 	import { seams, matchToPrevious, seamTip } from '../../lib/continuity.svelte.js';
 	import { directionFields, stages } from '../../lib/catalog.js';
 	import { families, addReference, attachToRange } from '../../lib/references.js';
@@ -16,6 +19,8 @@
 	import Tabs from '../shell/Tabs.svelte';
 	import TakeCard from '../takes/TakeCard.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
+	import DraftsField from '../shots/DraftsField.svelte';
+	import QueuePanel from './QueuePanel.svelte';
 	import Icon from '../Icon.svelte';
 	import { labelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
 
@@ -41,10 +46,31 @@
 	const shown = $derived(doc.clips.map((c) => [c, visibleTakes(takesOf(c), ui.hideRejected)]).filter(([, list]) => list.length));
 	const supported = $derived(supportedProfiles());
 	const unsupported = $derived(modes.filter((m) => !supported.includes(m)));
+	const engine = $derived(currentEngine());
+	const groups = $derived(engineGroups());
+	const overridden = $derived(doc.clips.filter(hasOwnEngine).length);
+	const queued = $derived(flyingTakes().length);
+	const qualities = $derived([
+		{ id: 'draft', label: t('lib.stage.draft') },
+		{ id: 'final', label: t('lib.stage.final') }
+	]);
+	let engineSection = $state(null);
+
+	$effect(() => {
+		if (ui.dockFocus !== 'engine' || ui.dockTab !== 'direction' || !engineSection) return;
+		const section = engineSection;
+		untrack(() => (ui.dockFocus = null));
+		requestAnimationFrame(() => {
+			section.scrollIntoView?.({ block: 'start' });
+			(section.querySelector('select') ?? section.querySelector('button'))?.focus({ preventScroll: true });
+		});
+	});
+
 	const tabs = $derived([
 		{ id: 'direction', label: t('panels.dock.tab.direction'), dot: issues.length > 0 || seamIssues.length > 0 || checkedCount > 0 },
 		{ id: 'references', label: t('panels.dock.tab.references') },
-		{ id: 'results', label: t('panels.dock.tab.results'), badge: takeCount || null }
+		{ id: 'results', label: t('panels.dock.tab.results'), badge: takeCount || null },
+		{ id: 'queue', label: t('panels.dock.tab.queue'), badge: queued || null }
 	]);
 	const allFamilies = $derived([{ id: 'all', label: t('panels.dock.refs.all'), icon: 'bookmark', hint: '' }, ...families]);
 	const refFamily = $derived(families.find((f) => f.id === ui.refSpace) ?? null);
@@ -82,7 +108,7 @@
 <PanelHeader icon="sparkles" title={t('panels.dock.title')} border={false}>
 	<HostUi
 		name="IconButton"
-		props={{ icon: 'settings', label: t('panels.dock.settings'), size: 'sm', class: 'vp-h7', tooltip: t('panels.dock.settingsTip'), onclick: () => (ui.modal = { type: 'advanced', step: 1 }) }}
+		props={{ icon: 'settings', label: t('panels.dock.settings'), size: 'sm', class: 'vp-h7', tooltip: t('panels.dock.settingsTip'), onclick: openEngineSettings }}
 	/>
 </PanelHeader>
 
@@ -213,26 +239,64 @@
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'sparkles', class: 'w-full', onclick: () => suggest(t('assistant.suggest.continuity')) }}>{t('assistant.check')}</HostUi>
 		</div>
 
-		<div class="space-y-1 px-3">
-			<div class="vp-label mb-1">{t('panels.dock.profile')}</div>
-			<HostUi
-				name="SegmentedControl"
-				props={{
-					variant: 'toggle',
-					fullWidth: true,
-					ariaLabel: t('panels.dock.profileGroup'),
-					items: modes.map((m) => ({ id: m, label: m, disabled: !supported.includes(m) })),
-					selected: doc.direction.mode,
-					onSelect: (m) => act(() => (doc.direction.mode = m))
-				}}
-			/>
-			<p class="pt-1 text-xs text-fg-subtle">{modeHint(doc.direction.mode)}</p>
-			{#if unsupported.length}
-				<HostUi name="Tooltip" props={{ text: t('generation.profile.why', { profiles: unsupported.join(', '), engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
-					<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.profile.badge', { profiles: unsupported.join(' · ') })}</HostUi>
-				</HostUi>
+		<section id="vp-dock-engine" class="space-y-3 border-t border-line px-3 pb-1 pt-3" aria-labelledby="vp-dock-engine-title" bind:this={engineSection}>
+			<div class="flex items-center gap-1.5">
+				<Icon name="sliders" class="h-3.5 w-3.5 text-fg-subtle" />
+				<span id="vp-dock-engine-title" class="vp-section-title">{t('panels.dock.engine.title')}</span>
+			</div>
+			<div class="space-y-1">
+				<label class="vp-label block" for="vp-dock-engine-select">{t('panels.dock.engine.engine')}</label>
+				{#if groups.length}
+					<select id="vp-dock-engine-select" class="vp-popup w-full" value={engine?.key ?? ''} onchange={(e) => selectEngine(e.currentTarget.value)}>
+						{#if !engine}<option value="" disabled>{engineLabel()}</option>{/if}
+						{#each groups as g (g.label)}
+							<optgroup label={g.label}>
+								{#each g.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
+							</optgroup>
+						{/each}
+					</select>
+				{:else}
+					<p class="rounded-lg border border-dashed border-line-hover p-2 text-xs text-fg-muted">
+						{t('generation.engine.empty')}
+						{#if ui.isAdmin}<a class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" href="/admin?tab=plugins">{t('generation.engine.settings')}</a>{/if}
+					</p>
+				{/if}
+			</div>
+			<div class="space-y-1">
+				<div class="vp-label">{t('panels.dock.profile')}</div>
+				<HostUi
+					name="SegmentedControl"
+					props={{
+						variant: 'toggle',
+						fullWidth: true,
+						ariaLabel: t('panels.dock.profileGroup'),
+						items: modes.map((m) => ({ id: m, label: m, disabled: !supported.includes(m) })),
+						selected: doc.direction.mode,
+						onSelect: (m) => act(() => (doc.direction.mode = m))
+					}}
+				/>
+				<p class="pt-1 text-xs text-fg-subtle">{modeHint(doc.direction.mode)}</p>
+				{#if unsupported.length}
+					<HostUi name="Tooltip" props={{ text: t('generation.profile.why', { profiles: unsupported.join(', '), engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
+						<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.profile.badge', { profiles: unsupported.join(' · ') })}</HostUi>
+					</HostUi>
+				{/if}
+			</div>
+			<div class="grid grid-cols-[1fr_auto] items-end gap-3">
+				<div class="min-w-0 space-y-1">
+					<div class="vp-label">{t('panels.dock.engine.quality')}</div>
+					<HostUi name="SegmentedControl" props={{ items: qualities, selected: projectQuality(doc.engine), variant: 'toggle', fullWidth: true, ariaLabel: t('panels.dock.engine.quality'), onSelect: setProjectQuality }} />
+				</div>
+				<div class="space-y-1">
+					<label class="vp-label block" for="vp-dock-engine-drafts">{t('panels.dock.engine.drafts')}</label>
+					<DraftsField id="vp-dock-engine-drafts" value={projectDrafts(doc.engine)} onchange={(n) => act(() => (doc.engine.variants = n))} label={false} />
+				</div>
+			</div>
+			<p class="text-xs text-fg-subtle">{t('panels.dock.engine.hint')}</p>
+			{#if overridden}
+				<p class="flex items-center gap-1.5 text-xs text-fg-muted"><Icon name="info" class="h-3.5 w-3.5 shrink-0" />{t('panels.dock.engine.overridden', { count: overridden })}</p>
 			{/if}
-		</div>
+		</section>
 
 		<div class="mt-3 border-t border-line">
 			<div class="flex items-center justify-between px-3 pb-1 pt-3">
@@ -262,7 +326,7 @@
 			<p class="text-xs text-fg-subtle">{t('panels.dock.refs.intro')}</p>
 			{#if !supported.includes('Ref2VA')}
 				<HostUi name="Tooltip" props={{ text: t('generation.refs.why', { engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
-					<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.workshop.notSent')}</HostUi>
+					<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.refs.notSent')}</HostUi>
 				</HostUi>
 			{/if}
 			<ul class="space-y-0.5" role="tablist" aria-label={t('panels.dock.refs.families')}>
@@ -313,27 +377,10 @@
 			</div>
 			<p class="text-xs text-fg-subtle">{t('panels.dock.refs.dragHint')}</p>
 		</div>
+	{:else if ui.dockTab === 'queue'}
+		<QueuePanel />
 	{:else}
 		<div class="flex flex-col gap-4 p-3">
-			{#if ui.production.queue.length}
-				<div class="rounded-lg border border-line-strong p-2.5">
-					<div class="mb-1.5 flex items-center justify-between">
-						<span class="vp-section-title">{t('panels.dock.queue.title', { count: ui.production.queue.length })}</span>
-						<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => (ui.production.queue = []) }}>{t('panels.dock.queue.clear')}</HostUi>
-					</div>
-					<ul class="space-y-1 text-xs text-fg-muted">
-						{#each ui.production.queue as w, i (w.id)}
-							<li class="flex items-center gap-2">
-								<span class="vp-tc">{i + 1}.</span>{w.label}<span class="ml-auto text-fg-subtle">{w.quality === 'final' ? t('lib.stage.final') : t('lib.stage.draft')}</span>
-							</li>
-						{/each}
-					</ul>
-					<div class="mt-2">
-						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'sparkles', class: 'w-full', onclick: generateQueue }}>{t('panels.dock.queue.generate')}</HostUi>
-					</div>
-				</div>
-			{/if}
-
 			{#if !takeCount && takeStore.loaded}
 				<HostUi name="EmptyState" props={{ compact: true, icon: 'sparkles', title: t('panels.dock.results.empty'), description: t('panels.dock.results.emptyHint') }} />
 			{/if}

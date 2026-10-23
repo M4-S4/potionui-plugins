@@ -171,7 +171,8 @@ test('shot editor: the draft reads the prompt, the frames, the references and th
 		last: null,
 		exclude: [],
 		own: [{ id: 'o1', name: 'Hat', space: 'identite', type: 'Objet', assetId: 'img2', role: 'Identité' }],
-		drafts: 2
+		drafts: 2,
+		engine: {}
 	});
 });
 
@@ -239,7 +240,7 @@ test('progress: the timeline block and the storyboard card show the same shot ac
 	const timeline = source('../components/timeline/Timeline.svelte');
 	const storyboard = source('../components/storyboard/StoryboardView.svelte');
 
-	assert.match(timeline, /import \{ takesOf, shotActivity \} from '\.\.\/\.\.\/lib\/production\.svelte\.js';/);
+	assert.match(timeline, /import \{ takesOf, shotActivity, shotEngineText \} from '\.\.\/\.\.\/lib\/production\.svelte\.js';/);
 	assert.match(timeline, /\{@const activity = shotActivity\(c\.id\)\}/);
 	assert.match(timeline, /\{#if activity\.state === 'running'\}/);
 	for (const page of [timeline, storyboard]) assert.match(page, /activityStep\(activity\) \|\| \(activity\.running \? t\('generation\.state\.running'\) : t\('lib\.status\.queued'\)\)/);

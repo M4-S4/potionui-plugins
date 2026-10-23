@@ -7,6 +7,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import best_match
 
 from . import settings
+from .catalog import PROFILES
 from .core_bridge import generate_ulid
 
 MAX_DOC_BYTES = 4 * 1024 * 1024
@@ -43,6 +44,7 @@ NULLABLE_TEXT = {"type": ["string", "null"]}
 NULLABLE_FLAG = {"type": ["boolean", "null"]}
 AUDIO_ROLES = ("Dialogue", "Musique", "Ambiance", "SFX")
 MAX_DRAFTS = 16
+SEED_LIMIT = 2**31 - 1
 
 
 def _enum(*values: Any) -> Dict[str, Any]:
@@ -79,6 +81,18 @@ def _tagged(tag: str, variants: Dict[str, Dict[str, Any]], nullable: bool = Fals
 
 REFERENCE_OVERRIDES = _object({}, optional={"exclude": {**_array(ID), "uniqueItems": True}})
 
+SHOT_ENGINE = _object(
+    {},
+    optional={
+        "preset": ID,
+        "model": REF,
+        "backend": TEXT,
+        "profile": _enum(*PROFILES),
+        "quality": _enum("draft", "final"),
+        "seed": {"type": "integer", "minimum": 0, "maximum": SEED_LIMIT},
+    },
+)
+
 HYBRID = _object({"continuite": NUMBER, "identite": NUMBER, "audio": NUMBER, "mouvement": NUMBER, "style": NUMBER})
 
 CLIP = _object(
@@ -105,6 +119,7 @@ CLIP = _object(
         "drafts": {"type": "integer", "minimum": 1, "maximum": MAX_DRAFTS},
         "revision": {"type": "integer", "minimum": 0},
         "referenceOverrides": REFERENCE_OVERRIDES,
+        "engine": SHOT_ENGINE,
     },
 )
 
@@ -238,9 +253,11 @@ AUX = _object({"id": ID, "name": TEXT, "vol": NUMBER, "mute": FLAG})
 PROFILE = _object({"id": ID, "name": TEXT, "weights": HYBRID})
 
 ENGINE = _object(
-    {
+    {"quality": TEXT, "variants": NULLABLE_INTEGER, "backend": TEXT},
+    optional={
+        "preset": NULLABLE_TEXT,
+        "model": NULLABLE_TEXT,
         "seed": NULLABLE_INTEGER,
-        "quality": TEXT,
         "resolution": TEXT,
         "steps": NULLABLE_NUMBER,
         "guidance": NULLABLE_NUMBER,
@@ -248,8 +265,6 @@ ENGINE = _object(
         "windowLen": NUMBER,
         "loras": _array(_object({"name": TEXT, "weight": NUMBER})),
         "post": _object({"upscale": FLAG, "interpolation": FLAG, "denoise": FLAG}),
-        "variants": NULLABLE_INTEGER,
-        "backend": TEXT,
         "consistency": NUMBER,
         "lockIdentity": FLAG,
         "motionPriority": FLAG,
@@ -260,7 +275,6 @@ ENGINE = _object(
         "naming": TEXT,
         "autoInsert": FLAG,
     },
-    optional={"preset": NULLABLE_TEXT, "model": NULLABLE_TEXT},
 )
 
 ASSET = _object(
@@ -323,12 +337,10 @@ DOC_SCHEMA: Dict[str, Any] = {
             "lanes": _array(LANE),
             "aux": _array(AUX),
             "master": _object({"vol": NUMBER}),
-            "profiles": _array(PROFILE),
             "engine": ENGINE,
-            "hybrid": HYBRID,
             "assets": _array(ASSET),
         },
-        optional={"video": VIDEO_TRACK},
+        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID},
     ),
 }
 

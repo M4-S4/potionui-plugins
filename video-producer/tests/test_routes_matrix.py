@@ -144,6 +144,10 @@ class World:
             asyncio.run(tracker.Tracker().tick())
         return takes.get_take(take["id"])
 
+    def waiting(self):
+        fields = {"project_id": self.pid, "shot_id": "s2", "user_id": "user-1", "quality": "draft", "kind": "render"}
+        return [takes.create_take(fields) for _ in range(2)][-1]
+
     def scene_job(self) -> str:
         response = self.client.post(f"{BASE}/projects/{self.pid}/scenes/from-image", json={"sceneId": "sc-1", "assetId": "still", "time": None})
         assert response.status_code == 202, response.text
@@ -184,7 +188,7 @@ class World:
             projects = [tuple(row) for row in cursor.fetchall()]
             cursor.execute("SELECT project_id, version, label FROM video_producer_versions ORDER BY project_id, version")
             versions = [tuple(row) for row in cursor.fetchall()]
-            cursor.execute("SELECT id, status, chosen, flag, label FROM video_producer_takes ORDER BY id")
+            cursor.execute("SELECT id, status, chosen, flag, label, priority FROM video_producer_takes ORDER BY id")
             rows = [tuple(row) for row in cursor.fetchall()]
             cursor.execute("SELECT id, status FROM video_producer_export_jobs ORDER BY id")
             exports = [tuple(row) for row in cursor.fetchall()]
@@ -297,6 +301,11 @@ ROUTES = {
         success=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "candidate"}, check=lambda r: _data(r)["take"]["label"] == "candidate"),
         denied=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "final"}, 404, "project_not_found", "user-2"),
         invalid=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "keep"}, 422, "invalid_request"),
+    ),
+    "POST /projects/{id}/takes/{take}/prioritize": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/takes/{w.waiting()['id']}/prioritize", check=lambda r: _data(r)["take"]["priority"] == 1),
+        denied=lambda w: Call(f"/projects/{w.pid}/takes/{w.waiting()['id']}/prioritize", status=404, code="project_not_found", who="user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/prioritize", status=409, code="take_not_queued"),
     ),
     "POST /projects/{id}/takes/{take}/choose": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/choose", {"chosen": True}, check=lambda r: _data(r)["take"]["chosen"]),

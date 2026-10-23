@@ -2,7 +2,9 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, asset, clipLabel, globalPrompt, promptIssues, relayout, secs, sourceLength } from '../../lib/state.svelte.js';
-	import { takesOf, engineLabel } from '../../lib/production.svelte.js';
+	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine } from '../../lib/production.svelte.js';
+	import { PROFILES, optionKey, presetProfiles } from '../../lib/generation.js';
+	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
 	import { families, refTypeLabel } from '../../lib/references.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { applyShotDraft, inputsChanged, shotDraft, shotReferences } from '../../lib/shots.js';
@@ -39,6 +41,31 @@
 	const maxDur = $derived(clip ? sourceLength(clip) - clip.srcIn : 60);
 	const issues = $derived(clip ? promptIssues({ text: draft.text, start: clip.start, dur: +draft.dur, shotId: clip.id }) : []);
 	const changed = $derived(Boolean(baseline) && inputsChanged(baseline, draft));
+	const groups = $derived(engineGroups());
+	const draftKey = $derived(draft.engine.preset ? optionKey(draft.engine.preset, draft.engine.model ?? null) : '');
+	const draftOption = $derived(draftKey ? (engineChoices().find((o) => o.key === draftKey) ?? null) : null);
+	const profiles = $derived.by(() => {
+		const option = draftKey ? draftOption : currentEngine();
+		return option ? presetProfiles(option.info) : [...PROFILES];
+	});
+	const ownEngine = $derived(Object.keys(draft.engine).length > 0);
+
+	function pickEngine(key) {
+		const { preset, model, backend, ...rest } = draft.engine;
+		const option = engineChoices().find((o) => o.key === key);
+		draft.engine = option ? { ...rest, preset: option.preset, model: option.model, backend: option.backend } : rest;
+	}
+
+	function setOwn(key, value) {
+		const { [key]: dropped, ...rest } = draft.engine;
+		draft.engine = value ? { ...rest, [key]: value } : rest;
+	}
+
+	function setSeed(value) {
+		const seed = value === '' ? null : Number(value);
+		setOwn('seed', null);
+		if (validSeed(seed)) draft.engine = { ...draft.engine, seed };
+	}
 
 	function toggleExclude(refId, on) {
 		draft.exclude = on ? [...draft.exclude, refId] : draft.exclude.filter((x) => x !== refId);
@@ -179,11 +206,48 @@
 					<DraftsField value={draft.drafts} onchange={(n) => (draft.drafts = n)} label={false} />
 					<p class="text-xs text-fg-subtle">{t('modals.shot.draftsHint')}</p>
 				</section>
-				<section class="space-y-1.5" data-slot="engine">
-					<div class="vp-section-title">{t('modals.shot.engine')}</div>
-					<div class="rounded-lg border border-line-strong p-2 text-xs text-fg-muted">
-						<div class="truncate text-fg">{engineLabel()}</div>
-						<div>{t('modals.shot.engineProject', { profile: doc.direction.mode })}</div>
+				<section class="space-y-2" data-slot="engine" aria-labelledby="{textId}-engine">
+					<div class="flex items-center justify-between gap-2">
+						<span id="{textId}-engine" class="vp-section-title">{t('modals.shot.engine')}</span>
+						{#if ownEngine}
+							<button type="button" class="vp-link-hit text-xs text-fg-muted underline decoration-line-hover underline-offset-2 hover:text-fg" onclick={() => (draft.engine = {})}>{t('modals.shot.engineReset')}</button>
+						{/if}
+					</div>
+					<label class="block space-y-1">
+						<span class="vp-label">{t('modals.shot.engineChoice')}</span>
+						<select class="vp-popup w-full" value={draftKey} onchange={(e) => pickEngine(e.currentTarget.value)}>
+							<option value="">{t('modals.shot.asProject', { value: engineLabel() })}</option>
+							{#if draftKey && !draftOption}<option value={draftKey}>{t('generation.engine.unavailable')}</option>{/if}
+							{#each groups as g (g.label)}
+								<optgroup label={g.label}>
+									{#each g.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
+								</optgroup>
+							{/each}
+						</select>
+					</label>
+					<label class="block space-y-1">
+						<span class="vp-label">{t('modals.shot.profile')}</span>
+						<select class="vp-popup w-full" value={draft.engine.profile ?? ''} onchange={(e) => setOwn('profile', e.currentTarget.value)}>
+							<option value="">{t('modals.shot.asProject', { value: doc.direction.mode })}</option>
+							{#each PROFILES as m (m)}<option value={m} disabled={!profiles.includes(m)}>{m}</option>{/each}
+						</select>
+					</label>
+					{#if draft.engine.profile && !profiles.includes(draft.engine.profile)}<p class="text-xs text-warning">{t('modals.shot.profileUnsupported', { profile: draft.engine.profile })}</p>{/if}
+					<label class="block space-y-1">
+						<span class="vp-label">{t('modals.shot.quality')}</span>
+						<select class="vp-popup w-full" value={draft.engine.quality ?? ''} onchange={(e) => setOwn('quality', e.currentTarget.value)}>
+							<option value="">{t('modals.shot.asOrder')}</option>
+							<option value="draft">{t('lib.stage.draft')}</option>
+							<option value="final">{t('lib.stage.final')}</option>
+						</select>
+					</label>
+					<div class="space-y-1">
+						<label class="vp-label block" for="{textId}-seed">{t('modals.shot.seed')}</label>
+						<div class="flex gap-1">
+							<input id="{textId}-seed" class="input vp-dense vp-tc min-w-0 flex-1" type="number" min="0" max={SEED_MAX} step="1" placeholder={t('modals.shot.seedRandom')} value={draft.engine.seed ?? ''} oninput={(e) => setSeed(e.currentTarget.value)} />
+							<HostUi name="IconButton" props={{ icon: 'refresh', label: t('modals.shot.seedPick'), tooltip: t('modals.shot.seedPick'), size: 'sm', onclick: () => (draft.engine = { ...draft.engine, seed: randomSeed() }) }} />
+						</div>
+						<p class="text-xs text-fg-subtle">{t('modals.shot.seedHint')}</p>
 					</div>
 				</section>
 			</div>

@@ -9,7 +9,7 @@ PLUGIN = Path(__file__).resolve().parents[1]
 I18N = PLUGIN / "frontend" / "src" / "i18n"
 SHOTS = PLUGIN / "docs" / "screenshots"
 DIST = PLUGIN / "frontend" / "dist" / "VideoProducerPage.js"
-SIMULATION_ORDER = ("identity", "lipSync", "voice", "console", "formats", "engine")
+SIMULATION_ORDER = ("identity", "lipSync", "voice", "console", "formats", "guidance")
 ALLOWED_COMMENTS = {("backend/exports/video.py", "# one frame of slack: a file can end a frame before its probed length")}
 
 
@@ -94,7 +94,7 @@ def test_the_served_dist_keeps_no_trace_of_the_retired_simulated_take():
 
     for leftover in ("generation.card.legacy", "viewer.simDraft", "shell.menubar.simulated"):
         assert leftover not in dist, leftover
-    assert dist.count("vp-sim") == 10
+    assert dist.count("vp-sim") == 9
 
 
 def test_the_page_draws_a_focus_ring_around_the_host_switches():

@@ -126,8 +126,6 @@
 	"block.noReferences": "« {shot} » n’a pas de référence : Ref2VA en demande au moins une pour ce plan.",
 	"block.sourceUnavailable": "La vidéo de la prise source n’est plus disponible.",
 	"block.upscaleUnsupported": "Agrandir cette prise demande SeedVR2 : demandez à un administrateur de l’installer, ou générez la prise à nouveau en pleine résolution.",
-	"workshop.notSent": "Non transmis à ce moteur",
-	"workshop.notSentWhy": "Le Video Director construit la requête à partir des plans, de la direction, des frames et des références ; ce réglage reste dans le projet mais ne change pas les prises.",
 	"block.refsPresetNeeded": "« Rendu 3D + IA » demande un preset MiniMax-H3 doté du mode références (refs), ou LTX-2.5.",
 	"block.layoutLoraMissing": "« Rendu 3D + IA » sur LTX-2.5 demande l’IC-LoRA Layout-To-Render : demandez à votre admin d’installer {file}.",
 	"warn.staleGuide": "La vidéo de référence de « {shot} » n’est plus à jour : rendez-la à nouveau dans Scène 3D.",
@@ -161,5 +159,9 @@
 	"drafts.tip": "Combien de brouillons générer pour ce plan",
 	"drafts.mixedTip": "Les plans de la sélection demandent des nombres de brouillons différents ; choisir un nombre le donne à tous",
 	"drafts.mixed": "Variable",
-	"drafts.option": "×{count}"
+	"drafts.option": "×{count}",
+	"block.forShots": "{shots} : {text}",
+	"ownEngine.tip": "Moteur propre : {details}",
+	"ownEngine.seed": "graine {seed}",
+	"refs.notSent": "Non transmis à ce moteur"
 }

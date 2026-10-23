@@ -151,7 +151,8 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 	);
 	assert.ok(fr.lanes.every((l) => isUlid(l.id)));
 	assert.equal(new Set(fr.lanes.map((l) => l.id)).size, 4);
-	assert.equal(fr.engine.audioDriver, fr.lanes[0].id);
+	assert.deepEqual(fr.engine, { quality: 'draft', variants: 2, backend: '', preset: null, model: null });
+	assert.ok(!('hybrid' in fr) && !('profiles' in fr));
 	assert.deepEqual(fr.video, { mute: false, solo: false });
 	assert.ok(fr.clips.every((c) => c.mute === false));
 	assert.deepEqual(
@@ -161,9 +162,8 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 			['D1', 'Délai']
 		]
 	);
-	for (const key of ['audio', 'frames', 'controls', 'plans3d', 'references', 'scenes', 'profiles', 'assets']) assert.deepEqual(fr[key], [], key);
+	for (const key of ['audio', 'frames', 'controls', 'plans3d', 'references', 'scenes', 'assets']) assert.deepEqual(fr[key], [], key);
 	assert.ok(!('results' in fr), 'the document has no results field');
-	assert.deepEqual([fr.engine.seed, fr.engine.variants, fr.engine.backend, fr.engine.preset, fr.engine.model, fr.engine.loras], [48121, 2, '', null, null, []]);
 	const ids = [...fr.clips, ...fr.prompts, ...fr.titles, ...fr.markers].map((x) => x.id);
 	assert.ok(ids.every(isUlid));
 	assert.equal(new Set(ids).size, ids.length);
