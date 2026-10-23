@@ -40,7 +40,7 @@ fields:
         configuration:
           files:
             - { path: "{{ paths._shared }}/../marketplace/MiniMax-H3-Fast/files/form/resolutions_canvas.yml", group: "Native canvas (768 short edge)" }
-            - { path: "{{ paths._shared }}/../marketplace/MiniMax-H3-Fast/files/form/resolutions_fast.yml", group: "Faster (below native canvas)" }
+            - { path: "{{ paths._shared }}/resolutions/minimax_h3_fast.yml", group: "Faster (below native canvas)" }
         default: "832x480"
 
   - type: "section"
