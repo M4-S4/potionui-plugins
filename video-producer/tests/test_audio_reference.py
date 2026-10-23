@@ -32,9 +32,9 @@ def _tone(path: Path, seconds: float, frequency: float = 440.0, amplitude: float
     return path
 
 
-def _samples(path: Path):
+def _samples(path: Path, rate: int = RATE):
     with wave.open(str(path), "rb") as handle:
-        assert (handle.getnchannels(), handle.getsampwidth(), handle.getframerate()) == (2, 2, RATE)
+        assert (handle.getnchannels(), handle.getsampwidth(), handle.getframerate()) == (2, 2, rate)
         raw = handle.readframes(handle.getnframes())
     left = struct.unpack(f"<{len(raw) // 2}h", raw)[0::2]
     return [value / 32767 for value in left]
@@ -164,12 +164,17 @@ def test_a_mixed_cut_adds_the_audio_references_from_their_beginning(make_doc):
     assert graph.split(";")[2] == "[1:a]atrim=duration=3,asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[m1]"
 
 
-def test_the_cut_command_writes_a_stereo_48_khz_wav_of_exactly_the_interval(tmp_path):
+def test_the_cut_command_writes_a_stereo_wav_of_exactly_the_interval_at_48_khz_or_at_the_rate_asked(tmp_path):
     command = soundtrack.cut_command("ffmpeg", ["-i", "/v.wav"], "g", 3.5, tmp_path / "out.wav")
 
     assert command[command.index("-filter_complex") + 1] == "g"
     assert command[command.index("-t") + 1] == "3.5"
-    assert command[-7:] == ["-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", str(tmp_path / "out.wav")]
+    assert command[-7:] == ["-c:a", "pcm_s16le", "-ac", "2", "-ar", "48000", str(tmp_path / "out.wav")]
+    assert soundtrack.cut_command("ffmpeg", [], "g", 1, tmp_path / "out.wav", 32000)[-2] == "32000"
+    assert soundtrack.convert_command("ffmpeg", "/rain.wav", tmp_path / "out.wav", 32000) == [
+        "ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
+        "-i", "/rain.wav", "-map", "0:a:0", "-vn", "-c:a", "pcm_s16le", "-ac", "2", "-ar", "32000", str(tmp_path / "out.wav"),
+    ]
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
@@ -259,7 +264,8 @@ def test_a_fourth_sound_is_left_out_and_its_track_is_not_cut(core, make_doc):
     (plan,) = _plans(core, doc, presets.MINIMAX_H3).shots
 
     assert plan.request["form_data"]["references"] == ["uploads/voice.wav", "uploads/music.wav", "uploads/rain.wav", "uploads/hero.png"]
-    assert plan.audio.lanes == [] and not plan.needs_audio
+    assert plan.audio.lanes == [] and plan.audio.references == ["voice", "music", "rain"]
+    assert plan.audio.sent == {"voice": "uploads/voice.wav", "music": "uploads/music.wav", "rain": "uploads/rain.wav"}
 
 
 def test_ref2va_with_nothing_but_sound_is_blocked_since_a_picture_has_to_anchor_it(core, make_doc):
@@ -428,24 +434,34 @@ def test_the_mux_entry_is_the_shape_the_core_director_document_takes():
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
-def test_attaching_a_guided_shot_stores_each_track_cut_and_puts_it_in_place_of_its_placeholder(core, make_doc, sounds, stored, export_storage):
+def test_attaching_a_guided_shot_stores_each_track_cut_and_each_sound_at_32_khz_in_place_of_what_the_plan_sent(core, make_doc, sounds, stored, export_storage):
     core.use_h3()
     _media(core)
     doc = _doc(
         make_doc,
         [_item("v", "A1", 1, 5), _item("m", "A2", 2, 2, asset="music")],
         reference_lanes=("A1", "A2"),
-        references=[{"id": "r-hero", "assetId": "hero", "scope": {"type": "global"}}],
-        assets=("voice", "music", "hero"),
+        references=[
+            {"id": "r-hero", "assetId": "hero", "scope": {"type": "global"}},
+            {"id": "r-rain", "assetId": "rain", "space": "son", "type": "Ambiance", "scope": {"type": "shot", "shotId": "s1"}},
+        ],
+        assets=("voice", "music", "hero", "rain"),
         mode="Ref2VA",
     )
     doc["engine"]["referenceMargin"] = 0.5
     (plan,) = _plans(core, doc, presets.MINIMAX_H3).shots
+    assert plan.request["form_data"]["references"] == ["uploads/rain.wav", "track:A1", "track:A2", "uploads/hero.png"]
 
     asyncio.run(soundtrack.attach(core.users["user-1"], {"id": "p-1", "doc": doc}, plan))
 
-    assert plan.request["form_data"]["references"] == ["uploads/vp-sound-shot-01-a1.wav", "uploads/vp-sound-shot-01-a2.wav", "uploads/hero.png"]
-    assert [len(_samples(path)) for path in stored] == [int(4 * RATE), int(4 * RATE)]
+    assert plan.request["form_data"]["references"] == [
+        "uploads/vp-sound-shot-01-sound1.wav",
+        "uploads/vp-sound-shot-01-a1.wav",
+        "uploads/vp-sound-shot-01-a2.wav",
+        "uploads/hero.png",
+    ]
+    lengths = {path.name: len(_samples(path, soundtrack.H3_RATE)) for path in stored}
+    assert lengths == {"vp-sound-shot-01-a1.wav": 4 * soundtrack.H3_RATE, "vp-sound-shot-01-a2.wav": 4 * soundtrack.H3_RATE, "vp-sound-shot-01-sound1.wav": 8 * soundtrack.H3_RATE}
     assert list((export_storage / "video_producer" / "audio" / "user-1").iterdir()) == []
 
 

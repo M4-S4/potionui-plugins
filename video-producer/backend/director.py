@@ -225,6 +225,7 @@ class ShotAudio:
     end: float
     lanes: List[str] = field(default_factory=list)
     references: List[str] = field(default_factory=list)
+    sent: Dict[str, str] = field(default_factory=dict)
 
     @property
     def length(self) -> float:
@@ -262,9 +263,7 @@ class ShotPlan:
     @property
     def needs_audio(self) -> bool:
         """True when a file of the shot's sound must be cut before its takes are created."""
-        return self.audio is not None and self.audio.behavior in (CONDITION, MUX) and bool(
-            self.audio.lanes or (self.audio.behavior == MUX and self.audio.references)
-        )
+        return self.audio is not None and self.audio.behavior in (CONDITION, MUX) and bool(self.audio.lanes or self.audio.references)
 
     def summary(self) -> Dict[str, Any]:
         """The shot as the estimate reports it, with the 3D guides sent as its camera references."""
@@ -1294,6 +1293,8 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
                 start=window[0],
                 end=window[1],
                 lanes=[str((entry.item or {}).get("laneId")) for entry in sounds if entry.origin == TRACK],
+                references=[str((entry.item or {}).get("assetId")) for entry in sounds if entry.origin == REFERENCE],
+                sent={str((entry.item or {}).get("assetId")): entry.value for entry in sounds if entry.origin == REFERENCE},
             )
         guides = [entry.item or {} for entry in sent if entry.origin == GUIDE]
         _guide_warnings(doc, clip, warnings, refs=True)
