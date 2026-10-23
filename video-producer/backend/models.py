@@ -89,11 +89,13 @@ def _other_modes(preset_id: str, mode: str) -> List[str]:
 
 
 def resolve_models(
-    preset_id: str, mode: str, director_mode: Optional[str] = None, fields: Optional[Fields] = None
+    preset_id: str, mode: str, director_mode: Optional[str] = None, fields: Optional[Fields] = None, needed: Sequence[str] = ()
 ) -> ResolvedModels:
-    """The first installed recommended file of each model field a run needs, as model:<id>, the fields left without one, and the file name of each recommendation used."""
+    """The first installed recommended file of each model field a run needs (with the named ones the mode has, such as the audio VAE of a run that carries sound), as model:<id>, the fields left without one, and the file name of each recommendation used."""
     fields = form_fields(preset_id, mode) if fields is None else fields
     required, optional = model_fields(fields, director_mode)
+    required += [name for name in needed if name in fields and name not in required]
+    optional = [name for name in optional if name not in required]
     cache: Dict[Tuple[str, str], Optional[str]] = {}
     others: List[Fields] = []
     loaded = False

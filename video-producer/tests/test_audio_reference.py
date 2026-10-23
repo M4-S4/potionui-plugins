@@ -337,6 +337,28 @@ def test_ltx_2_5_lays_the_sound_of_the_shot_onto_its_take_through_a_director_doc
     ]
 
 
+def test_a_mixed_shot_sends_the_audio_vae_the_ltx_pipeline_loads_to_mux_and_a_silent_one_does_not(core, make_doc):
+    core.use_ltx25()
+    _media(core)
+
+    (mixed,) = _plans(core, _doc(make_doc, [_item("v", "A1", 2, 3)]), presets.LTX_2_5).shots
+    (silent,) = _plans(core, _doc(make_doc, reference_lanes=()), presets.LTX_2_5).shots
+
+    assert mixed.request["form_data"]["audio_vae"] == "model:id-ltx25_audio_vae-sha"
+    assert "audio_vae" not in silent.request["form_data"]
+
+
+def test_a_mixed_shot_without_the_audio_vae_installed_is_blocked(core, make_doc):
+    core.use_ltx25()
+    _media(core)
+    core.missing.add("ltx25_audio_vae-sha")
+
+    plans = _plans(core, _doc(make_doc, [_item("v", "A1", 2, 3)]), presets.LTX_2_5)
+
+    assert [block["code"] for block in plans.blocks] == ["missing_models"]
+    assert plans.blocks[0]["data"] == {"fields": ["audio_vae"]}
+
+
 def test_a_mixed_shot_keeps_its_first_and_last_frames_on_the_segment_of_its_director_document(core, make_doc):
     core.use_ltx25()
     _media(core)

@@ -18,6 +18,8 @@ LAST_ROLES = ("last", "fin")
 TXT2VIDEO = "txt2video"
 IMG2VIDEO = "img2video"
 
+AUDIO_VAE = "audio_vae"
+
 FIRST_FRAME = "first_frame"
 LAST_FRAME = "last_frame"
 
@@ -1240,7 +1242,7 @@ def _layout_plan(
         warnings.append(
             note("layout_no_frame", "The shot has no first frame: LTX-2.5 keeps the look of its 3D render.", shot_id=shot_id)
         )
-    resolved = models.resolve_models(preset.id, mode, "director", fields)
+    resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if audio is not None and audio.behavior == MUX else ())
     request["form_data"].update(resolved.values)
     request["form_data"].update(distilled_form(fields, resolved))
     return ShotPlan(
@@ -1343,7 +1345,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         )
         if director_mode == "t2v" and context.profile == FL2VA:
             warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
-    resolved = models.resolve_models(preset.id, mode, director_mode, fields)
+    resolved = models.resolve_models(preset.id, mode, director_mode, fields, (AUDIO_VAE,) if mixed else ())
     request["form_data"].update(resolved.values)
     return ShotPlan(
         shot_id=shot_id,
