@@ -178,5 +178,12 @@
 	"scene.splatfile": "Gaussian Splat · {format}",
 	"scene.glb": "Blender scene",
 	"seam.replaceBothTitle": "Replace the first and last frames?",
-	"seam.replaceBothMessage": "“{shot}” already has a first or a last frame. The new images replace them; you can undo."
+	"seam.replaceBothMessage": "“{shot}” already has a first or a last frame. The new images replace them; you can undo.",
+	"family.son.label": "Sound",
+	"family.son.short": "Sound",
+	"family.son.hint": "Voices, music and ambiences that accompany the generation.",
+	"refType.voice": "Voice",
+	"refType.music": "Music",
+	"refType.ambience": "Ambience",
+	"refRole.sound": "Sound"
 }

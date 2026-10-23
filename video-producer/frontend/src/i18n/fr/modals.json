@@ -201,5 +201,18 @@
 	"shot.seed": "Graine",
 	"shot.seedRandom": "Aléatoire",
 	"shot.seedPick": "Tirer une graine",
-	"shot.seedHint": "Avec une graine, la première prise de chaque génération la prend et les suivantes les graines d’après : générer à nouveau donne les mêmes prises."
+	"shot.seedHint": "Avec une graine, la première prise de chaque génération la prend et les suivantes les graines d’après : générer à nouveau donne les mêmes prises.",
+	"shot.pickSound": "Choisir le son : {slot}",
+	"shot.noSound": "Aucun son",
+	"shot.projectSounds": "Sons du projet",
+	"shot.noProjectSound": "Le projet n’a encore aucun son.",
+	"shot.removeSound": "Retirer le son",
+	"shot.listen": "Écouter {name}",
+	"shot.addSound": "Ajouter un son",
+	"shot.newSound": "Référence sonore",
+	"shot.tracks": "Pistes de référence",
+	"shot.trackPortion.one": "{count} clip entre {start} et {end}",
+	"shot.trackPortion.other": "{count} clips entre {start} et {end}",
+	"shot.trackSilent": "Rien entre {start} et {end} : rien n’est envoyé",
+	"shot.noTracks": "Aucune piste audio n’est cochée comme référence pour la génération."
 }

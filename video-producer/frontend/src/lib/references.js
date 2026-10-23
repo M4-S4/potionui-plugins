@@ -1,6 +1,7 @@
 import { t } from '../i18n/index.svelte.js';
 import { ui, doc, act, select, toast, productionRange, secs, clipAt, overlaps } from './state.svelte.js';
 import { ulid } from './ulid.js';
+import { SOUND_ROLE, SOUND_SPACE, SOUND_TYPES } from './sound.js';
 
 export const families = [
 	{
@@ -41,10 +42,25 @@ export const families = [
 		get hint() {
 			return t('lib.family.mouvement.hint');
 		}
+	},
+	{
+		id: SOUND_SPACE,
+		icon: 'wave',
+		get label() {
+			return t('lib.family.son.label');
+		},
+		get short() {
+			return t('lib.family.son.short');
+		},
+		get hint() {
+			return t('lib.family.son.hint');
+		}
 	}
 ];
-const types = { identite: ['Personnage', 'Décor', 'Objet', 'Style'], decors3d: ['Capture 3D'], mouvement: ['Control video', 'Trajectoire'] };
-const roles = { identite: 'Identité', decors3d: 'Décor 3D', mouvement: 'Mouvement' };
+const types = { identite: ['Personnage', 'Décor', 'Objet', 'Style'], decors3d: ['Capture 3D'], mouvement: ['Control video', 'Trajectoire'], [SOUND_SPACE]: SOUND_TYPES };
+const roles = { identite: 'Identité', decors3d: 'Décor 3D', mouvement: 'Mouvement', [SOUND_SPACE]: SOUND_ROLE };
+
+export const typesOf = (space) => types[space] ?? [];
 
 export function refTypeLabel(type) {
 	if (type === 'Personnage') return t('lib.refType.character');
@@ -54,6 +70,9 @@ export function refTypeLabel(type) {
 	if (type === 'Capture 3D') return t('lib.refType.capture3d');
 	if (type === 'Control video') return t('lib.refType.control');
 	if (type === 'Trajectoire') return t('lib.refType.trajectory');
+	if (type === 'Voix') return t('lib.refType.voice');
+	if (type === 'Musique') return t('lib.refType.music');
+	if (type === 'Ambiance') return t('lib.refType.ambience');
 	return type;
 }
 
@@ -65,6 +84,7 @@ export function refRoleLabel(role) {
 	if (role === 'Décor 3D') return t('lib.refRole.set3d');
 	if (role === 'Mouvement') return t('lib.refRole.motion');
 	if (role === 'Caméra') return t('lib.refRole.camera');
+	if (role === SOUND_ROLE) return t('lib.refRole.sound');
 	return role;
 }
 

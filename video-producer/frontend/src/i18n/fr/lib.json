@@ -178,5 +178,12 @@
 	"scene.splatfile": "Gaussian Splat · {format}",
 	"scene.glb": "Scène Blender",
 	"seam.replaceBothTitle": "Remplacer la première et la dernière image ?",
-	"seam.replaceBothMessage": "« {shot} » a déjà une première ou une dernière image. Les nouvelles les remplacent ; vous pourrez annuler."
+	"seam.replaceBothMessage": "« {shot} » a déjà une première ou une dernière image. Les nouvelles les remplacent ; vous pourrez annuler.",
+	"family.son.label": "Son",
+	"family.son.short": "Son",
+	"family.son.hint": "Voix, musiques et ambiances qui accompagnent la génération.",
+	"refType.voice": "Voix",
+	"refType.music": "Musique",
+	"refType.ambience": "Ambiance",
+	"refRole.sound": "Son"
 }

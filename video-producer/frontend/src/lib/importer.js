@@ -46,14 +46,14 @@ export function openLibrary(title) {
 	open('UploadLibraryModal', { title, mediaType: 'video' }, ['video']);
 }
 
-export function pickImage(title, onPicked) {
+export function pickMedia(kind, title, onPicked) {
 	if (ui.hostModal) return;
 	const close = openHostModal('UploadLibraryModal', {
 		title,
-		mediaType: 'image',
+		mediaType: kind,
 		onSelect: async (item) => {
 			close?.();
-			const id = await importImage(item?.id ? { origin: { kind: 'library', itemId: item.id }, filename: item.original_filename || item.filename } : null);
+			const id = await importPicked(item?.id ? { origin: { kind: 'library', itemId: item.id }, filename: item.original_filename || item.filename } : null, kind);
 			if (id) onPicked(id);
 		},
 		onClosed: () => (ui.hostModal = false)
@@ -62,7 +62,9 @@ export function pickImage(title, onPicked) {
 	ui.hostModal = true;
 }
 
-async function importImage(item) {
+export const pickImage = (title, onPicked) => pickMedia('image', title, onPicked);
+
+async function importPicked(item, kind) {
 	const origin = normalizeOrigin(item?.origin);
 	const key = originKey(origin);
 	if (!key) return null;
@@ -70,11 +72,11 @@ async function importImage(item) {
 	if (existing) return existing.id;
 	const result = await getClient()?.resolveMedia(origin);
 	const media = result?.ok ? result.data : null;
-	if (!media || media.mediaType !== 'image') {
+	if (!media || media.mediaType !== kind) {
 		toast(t('project.toast.importFailed', { count: 1 }), 'warning');
 		return null;
 	}
-	const made = newAsset({ kind: 'image', name: media.filename || item.filename || t('project.import.untitled'), src: media.url, origin });
+	const made = newAsset({ kind, name: media.filename || item.filename || t('project.import.untitled'), src: media.url, origin });
 	act(() => doc.assets.push(made));
 	probeAsset(made.id);
 	return made.id;
@@ -148,19 +150,21 @@ export function openLocalImport(kind = 'media') {
 	input.click();
 }
 
-export function pickLocalImage(onPicked) {
+export function pickLocalMedia(kind, onPicked) {
 	if (typeof document === 'undefined') return;
 	const input = document.createElement('input');
 	input.type = 'file';
-	input.accept = acceptFor(['image']);
-	input.onchange = () => importFiles(input.files, ['image'], { pick: onPicked });
+	input.accept = acceptFor([kind]);
+	input.onchange = () => importFiles(input.files, [kind], { pick: onPicked, kind });
 	input.click();
 }
+
+export const pickLocalImage = (onPicked) => pickLocalMedia('image', onPicked);
 
 function refusal(rejected, target) {
 	const params = { count: rejected.length, name: rejected[0].name };
 	if (!rejected.every((f) => fileKind(f.name))) return t('project.upload.unsupported', params);
-	if (target?.pick) return t('project.upload.imageOnly', params);
+	if (target?.pick) return target.kind === 'audio' ? t('project.upload.soundOnly', params) : t('project.upload.imageOnly', params);
 	return target ? t('timeline.toast.dropHint') : t('project.upload.audioOnly', params);
 }
 

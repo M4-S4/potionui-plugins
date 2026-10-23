@@ -165,5 +165,8 @@
 	"queue.prioritizeTip": "Passer en tête de file",
 	"queue.prioritizeNo": "Déjà en tête, ou déjà confiée au moteur",
 	"queue.cancel": "Annuler la prise {variant}",
-	"queue.cancelTip": "Annuler"
+	"queue.cancelTip": "Annuler",
+	"dock.engine.margin": "Marge des pistes de référence",
+	"dock.engine.marginUnit": "secondes avant et après le plan",
+	"dock.engine.marginHint": "Élargit la portion d’une piste de référence qui guide MiniMax H3. Une piste mixée sur la prise est toujours coupée au plan."
 }

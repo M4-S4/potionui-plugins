@@ -163,5 +163,17 @@
 	"block.forShots": "{shots}: {text}",
 	"ownEngine.tip": "Own engine: {details}",
 	"ownEngine.seed": "seed {seed}",
-	"refs.notSent": "Not sent with this engine"
+	"refs.notSent": "Not sent with this engine",
+	"sound.condition": "Guides the generation: MiniMax H3 follows this sound.",
+	"sound.mux": "Will be mixed onto the take, not used as a guide.",
+	"sound.ignored": "Ignored by this engine: the sound stays in the edit only.",
+	"warn.audioCondition": "{shot}: its sound guides the generation.",
+	"warn.audioMux": "{shot}: its sound will be mixed onto the take, not used as a guide.",
+	"warn.audioIgnored": "{shot}: its sound is ignored by this engine.",
+	"warn.audioTrackMuted": "{shot}: the reference track {lane} is muted, nothing of it is sent.",
+	"warn.audioTrackEmpty": "{shot}: the reference track {lane} has no sound under the shot, nothing of it is sent.",
+	"block.audioOnly": "{shot}: Ref2VA needs a picture or a video next to its sound.",
+	"block.audioFfmpeg": "ffmpeg is not available on this server: the sound of the shots cannot be cut.",
+	"block.audioSource": "{shot}: a sound it sends can no longer be read.",
+	"block.audioCut": "{shot}: its sound could not be cut or stored."
 }

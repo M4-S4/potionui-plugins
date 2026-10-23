@@ -45,5 +45,8 @@
 	"master": "Master",
 	"masterInfo": "Stéréo · −14 LUFS cible",
 	"masterOut": "Sortie master",
-	"masterVolume": "Volume master"
+	"masterVolume": "Volume master",
+	"reference": "Référence pour la génération : {name}",
+	"referenceShort": "Réf.",
+	"referenceTip": "Référence pour la génération : la portion de la piste sous chaque plan accompagne sa génération."
 }

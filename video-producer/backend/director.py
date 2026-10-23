@@ -61,6 +61,19 @@ DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
 GUIDE = "guide"
 REFERENCE = "reference"
 SCENE_PICTURE = "scene"
+TRACK = "track"
+
+TRACK_PREFIX = "track:"
+
+CONDITION = "condition"
+MUX = "mux"
+IGNORED = "ignored"
+
+MUX_ID = "a-1"
+
+MAX_MARGIN = 10.0
+
+EPSILON = 1e-6
 
 LABELS = {"image": "Picture", "video": "Video", "audio": "Audio"}
 
@@ -206,6 +219,23 @@ class Preset:
 
 
 @dataclass
+class ShotAudio:
+    behavior: str
+    start: float
+    end: float
+    lanes: List[str] = field(default_factory=list)
+    references: List[str] = field(default_factory=list)
+
+    @property
+    def length(self) -> float:
+        return round(self.end - self.start, 6)
+
+    def summary(self) -> Dict[str, Any]:
+        """What the shot sends of its sound and how the engine takes it."""
+        return {"behavior": self.behavior, "lanes": list(self.lanes), "references": len(self.references)}
+
+
+@dataclass
 class ShotPlan:
     shot_id: str
     profile: Optional[str]
@@ -227,6 +257,14 @@ class ShotPlan:
     cloud: bool = False
     backend_id: Optional[str] = None
     seed: Optional[int] = None
+    audio: Optional[ShotAudio] = None
+
+    @property
+    def needs_audio(self) -> bool:
+        """True when a file of the shot's sound must be cut before its takes are created."""
+        return self.audio is not None and self.audio.behavior in (CONDITION, MUX) and bool(
+            self.audio.lanes or (self.audio.behavior == MUX and self.audio.references)
+        )
 
     def summary(self) -> Dict[str, Any]:
         """The shot as the estimate reports it, with the 3D guides sent as its camera references."""
@@ -241,6 +279,7 @@ class ShotPlan:
             "model_id": self.model_id,
             "profile": self.profile,
             "quality": self.quality,
+            "audio": self.audio.summary() if self.audio is not None else None,
         }
 
     def request_for(self, take_id: Optional[str] = None, seed: Optional[int] = None) -> Dict[str, Any]:
@@ -354,6 +393,163 @@ def excluded_references(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
     overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
     exclude = overrides.get("exclude") if isinstance(overrides, Mapping) else None
     return {str(item) for item in exclude if isinstance(item, str)} if isinstance(exclude, list) else set()
+
+
+def excluded_lanes(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
+    """The ids of the reference tracks the shot leaves out."""
+    overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
+    lanes = overrides.get("excludeLanes") if isinstance(overrides, Mapping) else None
+    return {str(item) for item in lanes if isinstance(item, str)} if isinstance(lanes, list) else set()
+
+
+def reference_margin(doc: Mapping[str, Any]) -> float:
+    """The seconds a reference track is cut before and after the shot, from 0 to MAX_MARGIN; 0 when the project sets none."""
+    margin = (doc.get("engine") or {}).get("referenceMargin")
+    if not isinstance(margin, (int, float)) or isinstance(margin, bool) or not math.isfinite(margin):
+        return 0.0
+    return float(min(max(margin, 0.0), MAX_MARGIN))
+
+
+def reference_lanes(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
+    """The audio tracks checked as a reference for the generation that the shot does not leave out, in track order."""
+    excluded = excluded_lanes(doc, shot_id)
+    return [lane for lane in doc.get("lanes") or [] if lane.get("reference") is True and lane.get("id") not in excluded]
+
+
+def _any_solo(doc: Mapping[str, Any]) -> bool:
+    video = doc.get("video") if isinstance(doc.get("video"), Mapping) else {}
+    return video.get("solo") is True or any(lane.get("solo") is True for lane in doc.get("lanes") or [])
+
+
+def lane_heard(doc: Mapping[str, Any], lane: Mapping[str, Any]) -> bool:
+    """Whether a track is in the mix: not muted, and soloed when any track is."""
+    return not lane.get("mute") and (not _any_solo(doc) or lane.get("solo") is True)
+
+
+def lane_items(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
+    """The audio items of a track that play between start and end on the timeline, in time order."""
+    items = [
+        item
+        for item in doc.get("audio") or []
+        if item.get("lane") == lane_id
+        and float(item.get("dur") or 0) > EPSILON
+        and _overlap(start, end, item) > EPSILON
+    ]
+    return sorted(items, key=lambda item: float(item.get("start") or 0))
+
+
+def _asset_kind(doc: Mapping[str, Any], asset_id: Any) -> Optional[str]:
+    return (_asset(doc, asset_id) or {}).get("kind")
+
+
+def audio_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
+    """The references of the shot whose media is a sound: its own, then the global ones it does not exclude."""
+    excluded = excluded_references(doc, shot_id)
+    scoped, shared = [], []
+    for reference in doc.get("references") or []:
+        if _asset_kind(doc, reference.get("assetId")) != "audio":
+            continue
+        scope = reference.get("scope")
+        if isinstance(scope, Mapping) and scope.get("type") == "shot":
+            if scope.get("shotId") == shot_id:
+                scoped.append(reference)
+        elif reference.get("id") not in excluded:
+            shared.append(reference)
+    return [*scoped, *shared]
+
+
+def audio_behavior(preset: Preset, profile: Optional[str]) -> str:
+    """How an engine takes the sound of a shot: as a guide in MiniMax-H3's reference mode, mixed onto the take when its director mode declares audio, else not at all."""
+    if profile == REF2VA:
+        return CONDITION
+    if preset.cloud:
+        return IGNORED
+    return MUX if catalog.audio_mux(preset.variables) else IGNORED
+
+
+def _track_lanes(
+    doc: Mapping[str, Any], shot_id: str, start: float, end: float, warnings: List[Dict[str, Any]]
+) -> List[str]:
+    lanes: List[str] = []
+    for lane in reference_lanes(doc, shot_id):
+        if not lane_heard(doc, lane):
+            warnings.append(
+                note("audio_track_muted", "The reference track is muted: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
+            )
+        elif not lane_items(doc, lane["id"], start, end):
+            warnings.append(
+                note("audio_track_empty", "The reference track has no sound under the shot: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
+            )
+        else:
+            lanes.append(str(lane["id"]))
+    return lanes
+
+
+def condition_window(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float) -> Tuple[float, float]:
+    """The part of the timeline a reference track is cut from for a guided shot: the shot with the project's margin on both sides, never before 0."""
+    start = float(clip.get("start") or 0)
+    margin = reference_margin(doc)
+    return max(0.0, start - margin), start + seconds + margin
+
+
+def mux_window(clip: Mapping[str, Any], seconds: float) -> Tuple[float, float]:
+    """The part of the timeline mixed onto a take: exactly the shot, so that the sound stays in sync with the picture."""
+    start = float(clip.get("start") or 0)
+    return start, start + seconds
+
+
+def _audio_note(behavior: str, shot_id: str) -> Dict[str, Any]:
+    if behavior == CONDITION:
+        return note("audio_condition", "The sound of the shot guides the generation.", shot_id=shot_id)
+    if behavior == MUX:
+        return note("audio_mux", "The sound of the shot is mixed onto the take, not used as a guide.", shot_id=shot_id)
+    return note("audio_ignored", "This engine ignores the sound of the shot.", shot_id=shot_id)
+
+
+def _ignored_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
+    shot_id = clip["id"]
+    if not audio_references(doc, shot_id) and not reference_lanes(doc, shot_id):
+        return None
+    warnings.append(_audio_note(IGNORED, shot_id))
+    return ShotAudio(behavior=IGNORED, start=0.0, end=0.0)
+
+
+def mux_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
+    """What a shot mixes onto its take: the part of its reference tracks under it and its audio references, or None when it has neither."""
+    shot_id = clip["id"]
+    references = [str(reference["assetId"]) for reference in audio_references(doc, shot_id)]
+    if not references and not reference_lanes(doc, shot_id):
+        return None
+    start, end = mux_window(clip, seconds)
+    lanes = _track_lanes(doc, shot_id, start, end, warnings)
+    if not lanes and not references:
+        return None
+    warnings.append(_audio_note(MUX, shot_id))
+    return ShotAudio(behavior=MUX, start=start, end=end, lanes=lanes, references=list(dict.fromkeys(references)))
+
+
+def mux_entry(value: str, length: float) -> Dict[str, Any]:
+    """The audio entry of a director document that lays a stored sound onto the finished video."""
+    return {
+        "id": MUX_ID,
+        "role": MUX,
+        "start": 0.0,
+        "trim_start": 0.0,
+        "length": length,
+        "media": {"path": value, "relative_path": value, "type": "audio"},
+    }
+
+
+def audio_document(document: Dict[str, Any], seconds: float, fps: float, capabilities: Mapping[str, Any]) -> Dict[str, Any]:
+    """A one-segment document turned into a director document that can carry an audio entry: timed by start and end, or by a frame count when the preset chains its segments."""
+    document = copy.deepcopy(document)
+    document["mode"] = "director"
+    segment = document["segments"][0]
+    if capabilities.get("segment_routing"):
+        segment["frames"] = max(1, math.floor(seconds * fps + 0.5))
+    else:
+        segment.update(start=0.0, end=seconds)
+    return document
 
 
 def _overlap(start: float, end: float, item: Mapping[str, Any]) -> float:
@@ -681,15 +877,22 @@ def _frame_media(user: User, doc: Mapping[str, Any], frame: Optional[Mapping[str
 
 
 def bind_frames(
-    user: User, doc: Mapping[str, Any], shot_id: str, request: Dict[str, Any], last_allowed: bool = True
+    user: User,
+    doc: Mapping[str, Any],
+    shot_id: str,
+    request: Dict[str, Any],
+    last_allowed: bool = True,
+    segment_id: Optional[str] = None,
+    capabilities: Optional[Mapping[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], str]:
-    """The request with the shot's first and last frames bound, and the composition mode that results."""
+    """The request with the shot's first and last frames bound, on segment_id of a director document when given, and the composition mode that results."""
     first, last = shot_frames(doc, shot_id)
     first_media = _frame_media(user, doc, first)
     if first_media is None:
         return request, "t2v"
+    placed = {"segment_id": segment_id, "capabilities": capabilities} if segment_id is not None else {"promote": True}
     try:
-        request = core_bridge.bind_director_media(request, "first", first_media, promote=True)
+        request = core_bridge.bind_director_media(request, "first", first_media, **placed)
     except DirectorBindingError:
         logger.warning("[VIDEO-PRODUCER] Could not bind the first frame of shot %s", shot_id, exc_info=True)
         return request, "t2v"
@@ -697,7 +900,7 @@ def bind_frames(
     if last_media is None:
         return request, "i2v"
     try:
-        return core_bridge.bind_director_media(request, "last", last_media, promote=True), "flf"
+        return core_bridge.bind_director_media(request, "last", last_media, **placed), "flf"
     except DirectorBindingError:
         logger.warning("[VIDEO-PRODUCER] Could not bind the last frame of shot %s", shot_id, exc_info=True)
         return request, "i2v"
@@ -758,9 +961,13 @@ def scene_picture(user: User, doc: Mapping[str, Any], guide: Mapping[str, Any]) 
 
 
 def reference_media(
-    user: User, doc: Mapping[str, Any], shot_id: str, guides: Sequence[Mapping[str, Any]] = ()
+    user: User,
+    doc: Mapping[str, Any],
+    shot_id: str,
+    guides: Sequence[Mapping[str, Any]] = (),
+    tracks: Sequence[str] = (),
 ) -> List[SentReference]:
-    """What a shot sends as references, within the per-kind limits: its 3D guide videos, the picture the scene of the first one was built from, its own references, then the global ones it does not exclude; each with its rank among the references of its kind."""
+    """What a shot sends as references, within the per-kind limits: its 3D guide videos, the picture the scene of the first one was built from, its own references, the cut of each of its reference tracks (a track: placeholder until the cut is stored), then the global ones it does not exclude; each with its rank among the references of its kind."""
     scoped, shared = [], []
     excluded = excluded_references(doc, shot_id)
     for reference in doc.get("references") or []:
@@ -796,7 +1003,11 @@ def reference_media(
         if picture is not None:
             add(SCENE_PICTURE, None, {"sceneId": picture["scene_id"], "controlId": (entry.item or {}).get("id")}, "image", picture)
             break
-    for reference in [*scoped, *shared]:
+    for reference in scoped:
+        add(REFERENCE, reference.get("assetId"), reference)
+    for lane_id in tracks:
+        add(TRACK, None, {"laneId": lane_id}, "audio", {"value": f"{TRACK_PREFIX}{lane_id}", "media_type": "audio"})
+    for reference in shared:
         add(REFERENCE, reference.get("assetId"), reference)
     return sent
 
@@ -1013,6 +1224,7 @@ def _layout_plan(
             )
         )
     prompt = shot_prompt(doc, clip)
+    audio = _shot_mux(context, clip, seconds, warnings)
     document = layout_document(prompt, fps, seconds, resolution, str(context.layout_lora), video["value"])
     request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
     first_media = _frame_media(context.user, doc, shot_frames(doc, shot_id)[0])
@@ -1044,6 +1256,7 @@ def _layout_plan(
         request=request,
         missing_models=list(resolved.missing),
         guides=[str(guide.get("id"))],
+        audio=audio,
     )
 
 
@@ -1062,10 +1275,26 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     fps = preset.fps
     sent: List[SentReference] = []
     guides: List[Dict[str, Any]] = []
+    audio: Optional[ShotAudio] = None
     if context.profile == REF2VA:
-        sent = reference_media(context.user, doc, shot_id, fresh_guides(doc, clip))
+        window = condition_window(doc, clip, seconds)
+        tracks = _track_lanes(doc, shot_id, *window, warnings)
+        sent = reference_media(context.user, doc, shot_id, fresh_guides(doc, clip), tracks)
         if not sent:
             raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
+        if all(entry.kind == "audio" for entry in sent):
+            raise DirectorError(
+                "audio_only_references", "Ref2VA needs a picture or a video next to the sound of this shot.", shot_id=shot_id
+            )
+        sounds = [entry for entry in sent if entry.kind == "audio"]
+        if sounds:
+            warnings.append(_audio_note(CONDITION, shot_id))
+            audio = ShotAudio(
+                behavior=CONDITION,
+                start=window[0],
+                end=window[1],
+                lanes=[str((entry.item or {}).get("laneId")) for entry in sounds if entry.origin == TRACK],
+            )
         guides = [entry.item or {} for entry in sent if entry.origin == GUIDE]
         _guide_warnings(doc, clip, warnings, refs=True)
         for guide in guides:
@@ -1087,7 +1316,13 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         if layout:
             warnings.append(_render_missing(clip))
         prompt = shot_prompt(doc, clip)
-    request = _request(preset.id, mode, prompt, _native_form(fields, _document(prompt, fps, seconds, resolution), resolution, fps))
+        audio = _shot_mux(context, clip, seconds, warnings)
+    capabilities = catalog.director_of(preset.variables)
+    document = _document(prompt, fps, seconds, resolution)
+    mixed = audio is not None and audio.behavior == MUX
+    if mixed:
+        document = audio_document(document, seconds, fps, capabilities)
+    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
     if context.profile == REF2VA:
         request["form_data"]["references"] = [entry.value for entry in sent]
         director_mode = REFS_MODE
@@ -1096,7 +1331,15 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         warnings.append(note("text_only_preset", "The preset generates from text only: the frames of the shot are not used.", shot_id=shot_id))
     else:
         modes = catalog.director_modes(preset.variables)
-        request, director_mode = bind_frames(context.user, doc, shot_id, request, last_allowed=not modes or "flf" in modes)
+        request, director_mode = bind_frames(
+            context.user,
+            doc,
+            shot_id,
+            request,
+            last_allowed=not modes or "flf" in modes,
+            segment_id=SEGMENT_ID if mixed else None,
+            capabilities=capabilities if mixed else None,
+        )
         if director_mode == "t2v" and context.profile == FL2VA:
             warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
     resolved = models.resolve_models(preset.id, mode, director_mode, fields)
@@ -1113,7 +1356,14 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         request=request,
         missing_models=list(resolved.missing),
         guides=[str(guide.get("id")) for guide in guides],
+        audio=audio,
     )
+
+
+def _shot_mux(context: _Context, clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
+    if audio_behavior(context.preset, context.profile) == MUX:
+        return mux_audio(context.doc, clip, seconds, warnings)
+    return _ignored_audio(context.doc, clip, warnings)
 
 
 def _applies(item: Mapping[str, Any], task: str) -> bool:
@@ -1229,6 +1479,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     if director_mode == "t2v" and context.profile == FL2VA:
         warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
     _guide_warnings(doc, clip, warnings, refs=False)
+    audio = _ignored_audio(doc, clip, warnings)
     params = {"duration_s": seconds, "resolution": resolution, "aspect_ratio": aspect}
     return ShotPlan(
         shot_id=shot_id,
@@ -1243,6 +1494,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         model_id=model["id"],
         cloud_task=task,
         cloud_params={key: value for key, value in params.items() if value is not None},
+        audio=audio,
     )
 
 
@@ -1397,6 +1649,11 @@ def _build(
     if missing:
         plans.blocks.append(
             note("missing_models", f"Install a recommended file for: {', '.join(missing)}.", fields=missing)
+        )
+    cutting = [plan.shot_id for plan in plans.shots if plan.needs_audio]
+    if cutting and not core_bridge.find_ffmpeg():
+        plans.blocks.append(
+            note("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shots cannot be cut.", shot_ids=cutting)
         )
     return plans
 

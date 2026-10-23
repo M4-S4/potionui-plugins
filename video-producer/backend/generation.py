@@ -3,7 +3,7 @@ import logging
 import secrets
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple
 
-from . import core_bridge, director, estimate, limits, models, notifications, projects, settings, takes
+from . import core_bridge, director, estimate, limits, models, notifications, projects, settings, soundtrack, takes
 from .core_bridge import AccountType, GenerationNotFoundException, IdempotencyKeyConflict, User
 from .director import DirectorError, ShotPlan, note
 from .estimate import Evaluation
@@ -109,6 +109,15 @@ def _require_quota(owner: User, minutes: float) -> bool:
     return reserves(status)
 
 
+async def with_sound(owner: User, project: Mapping[str, Any], plans: List[ShotPlan]) -> None:
+    """Cut and store the sound each plan sends, once per plan; Blocked when one cannot be."""
+    for plan in plans:
+        try:
+            await soundtrack.attach(owner, project, plan)
+        except soundtrack.SoundError as exc:
+            raise Blocked([note(exc.code, exc.message, shot_id=plan.shot_id)]) from None
+
+
 def _create(
     owner: User,
     project_id: str,
@@ -162,6 +171,7 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
         raise Blocked(evaluation.payload["blocks"])
     quota = evaluation.payload["quota"]
     reserve = bool(quota["applies"]) and reserves(quota)
+    await with_sound(owner, project, evaluation.plans.shots)
     created = [
         _create(
             owner,
@@ -532,6 +542,7 @@ async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         _upscale_plan(owner, source, target) if method == UPSCALE else _render_plan(owner, project, source, "final")
     )
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
+    await with_sound(owner, project, [plan])
     take = _create(
         owner,
         project["id"],
@@ -563,6 +574,7 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         plan, preset_id, native = _render_plan(owner, project, source, source["quality"])
         revision = director.shot_revision(project["doc"], source["shot_id"])
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
+    await with_sound(owner, project, [plan])
     take = _create(
         owner,
         project["id"],

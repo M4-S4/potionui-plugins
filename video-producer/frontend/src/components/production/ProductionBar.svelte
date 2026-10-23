@@ -49,7 +49,7 @@
 	const status = $derived(p.state === 'running' ? 'running' : p.state === 'done' ? 'done' : ready.missing.length ? 'missing' : 'ready');
 	const busy = $derived(status === 'running');
 	const blocked = $derived(ready.missing.length > 0);
-	const notes = $derived(blocked ? ready.missing : ready.warnings);
+	const notes = $derived(blocked ? [...ready.missing, ...ready.warnings] : ready.warnings);
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
 	const primary = $derived(p.mode === 'render3d' ? t('production.prepareRender') : t('production.generate'));
 	const targets = $derived([

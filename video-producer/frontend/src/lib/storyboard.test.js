@@ -170,6 +170,7 @@ test('shot editor: the draft reads the prompt, the frames, the references and th
 		first: 'img1',
 		last: null,
 		exclude: [],
+		excludeLanes: [],
 		own: [{ id: 'o1', name: 'Hat', space: 'identite', type: 'Objet', assetId: 'img2', role: 'Identité' }],
 		drafts: 2,
 		engine: {}

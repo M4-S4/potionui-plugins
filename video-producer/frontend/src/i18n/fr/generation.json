@@ -163,5 +163,17 @@
 	"block.forShots": "{shots} : {text}",
 	"ownEngine.tip": "Moteur propre : {details}",
 	"ownEngine.seed": "graine {seed}",
-	"refs.notSent": "Non transmis à ce moteur"
+	"refs.notSent": "Non transmis à ce moteur",
+	"sound.condition": "Conditionne la génération : MiniMax H3 suit ce son.",
+	"sound.mux": "Sera mixé sur la prise, pas utilisé comme guide.",
+	"sound.ignored": "Ignoré par ce moteur : le son reste seulement dans le montage.",
+	"warn.audioCondition": "{shot} : le son du plan conditionne la génération.",
+	"warn.audioMux": "{shot} : le son du plan sera mixé sur la prise, pas utilisé comme guide.",
+	"warn.audioIgnored": "{shot} : le son du plan est ignoré par ce moteur.",
+	"warn.audioTrackMuted": "{shot} : la piste de référence {lane} est muette, rien n’en est envoyé.",
+	"warn.audioTrackEmpty": "{shot} : la piste de référence {lane} n’a aucun son sous le plan, rien n’en est envoyé.",
+	"block.audioOnly": "{shot} : Ref2VA demande une image ou une vidéo à côté du son du plan.",
+	"block.audioFfmpeg": "ffmpeg n’est pas disponible sur ce serveur : le son des plans ne peut pas être découpé.",
+	"block.audioSource": "{shot} : un son qu’il envoie ne peut plus être lu.",
+	"block.audioCut": "{shot} : le son du plan n’a pas pu être découpé ou enregistré."
 }

@@ -253,6 +253,7 @@ export function normalizePreset(value) {
 		fpsLocked: value.fps_locked === true,
 		limits: { defaultDuration: number(limits.default_duration), maxDuration: number(limits.max_duration) },
 		directorModes,
+		audioMux: value.audio_mux === true,
 		profiles: Array.isArray(value.profiles) ? strings(value.profiles) : null
 	};
 }

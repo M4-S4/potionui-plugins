@@ -43,6 +43,8 @@ NULLABLE_INTEGER = {"type": ["integer", "null"]}
 NULLABLE_TEXT = {"type": ["string", "null"]}
 NULLABLE_FLAG = {"type": ["boolean", "null"]}
 AUDIO_ROLES = ("Dialogue", "Musique", "Ambiance", "SFX")
+REFERENCE_SPACES = ("identite", "decors3d", "mouvement", "son")
+MAX_REFERENCE_MARGIN = 10
 MAX_DRAFTS = 16
 SEED_LIMIT = 2**31 - 1
 
@@ -79,7 +81,9 @@ def _tagged(tag: str, variants: Dict[str, Dict[str, Any]], nullable: bool = Fals
     }
 
 
-REFERENCE_OVERRIDES = _object({}, optional={"exclude": {**_array(ID), "uniqueItems": True}})
+REFERENCE_OVERRIDES = _object(
+    {}, optional={"exclude": {**_array(ID), "uniqueItems": True}, "excludeLanes": {**_array(ID), "uniqueItems": True}}
+)
 
 SHOT_ENGINE = _object(
     {},
@@ -187,7 +191,7 @@ REFERENCE = _object(
     {
         "id": ID,
         "name": TEXT,
-        "space": _enum("identite", "decors3d", "mouvement"),
+        "space": _enum(*REFERENCE_SPACES),
         "type": TEXT,
         "assetId": REF,
         "role": TEXT,
@@ -243,7 +247,8 @@ LANE = _object(
         "automation": _enum("off", "read", "write"),
         "sends": _object({"R1": NUMBER, "D1": NUMBER}),
         "inserts": _array(INSERT),
-    }
+    },
+    optional={"reference": FLAG},
 )
 
 VIDEO_TRACK = _object({"mute": FLAG, "solo": FLAG})
@@ -274,6 +279,7 @@ ENGINE = _object(
         "followCut": FLAG,
         "naming": TEXT,
         "autoInsert": FLAG,
+        "referenceMargin": {"type": "number", "minimum": 0, "maximum": MAX_REFERENCE_MARGIN},
     },
 )
 

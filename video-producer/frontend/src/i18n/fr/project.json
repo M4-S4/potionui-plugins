@@ -82,5 +82,7 @@
 	"upload.dropMedia": "Déposez pour importer les images, vidéos et fichiers audio dans le projet et dans la bibliothèque PotionUI",
 	"upload.dropRefused": "Seuls les images, les vidéos et les fichiers audio peuvent être importés",
 	"upload.imageOnly.one": "« {name} » ne peut pas servir ici : seules les images sont acceptées.",
-	"upload.imageOnly.other": "{count} fichiers ne peuvent pas servir ici : seules les images sont acceptées."
+	"upload.imageOnly.other": "{count} fichiers ne peuvent pas servir ici : seules les images sont acceptées.",
+	"upload.soundOnly.one": "« {name} » ne peut pas servir ici : seuls les fichiers audio sont acceptés.",
+	"upload.soundOnly.other": "{count} fichiers ne peuvent pas servir ici : seuls les fichiers audio sont acceptés."
 }

@@ -51,14 +51,26 @@ export function excludedOf(clip) {
 	return Array.isArray(exclude) ? exclude.filter((id) => typeof id === 'string' && id) : [];
 }
 
-export function setExcluded(clip, ids) {
-	const unique = [...new Set(ids.filter((id) => typeof id === 'string' && id))];
-	if (unique.length) clip.referenceOverrides = { ...(isObject(clip.referenceOverrides) ? clip.referenceOverrides : {}), exclude: unique };
+const idList = (list) => [...new Set((Array.isArray(list) ? list : []).filter((id) => typeof id === 'string' && id))];
+
+function setOverride(clip, key, ids) {
+	const unique = idList(ids);
+	if (unique.length) clip.referenceOverrides = { ...(isObject(clip.referenceOverrides) ? clip.referenceOverrides : {}), [key]: unique };
 	else if (isObject(clip.referenceOverrides)) {
-		const { exclude, ...rest } = clip.referenceOverrides;
+		const { [key]: dropped, ...rest } = clip.referenceOverrides;
 		if (Object.keys(rest).length) clip.referenceOverrides = rest;
 		else delete clip.referenceOverrides;
 	}
+}
+
+export function setExcluded(clip, ids) {
+	setOverride(clip, 'exclude', ids);
+}
+
+export const excludedLanesOf = (clip) => idList(clip?.referenceOverrides?.excludeLanes);
+
+export function setExcludedLanes(clip, ids) {
+	setOverride(clip, 'excludeLanes', ids);
 }
 
 export function shotReferences(doc, clip, excluded = excludedOf(clip)) {
@@ -102,6 +114,7 @@ export function inputsChanged(before, after) {
 		before.first !== after.first ||
 		before.last !== after.last ||
 		!sameList([...before.exclude].sort(), [...after.exclude].sort()) ||
+		!sameList([...(before.excludeLanes ?? [])].sort(), [...(after.excludeLanes ?? [])].sort()) ||
 		!sameList(before.own.map((r) => `${r.id}:${r.assetId}:${r.type}`), after.own.map((r) => `${r.id}:${r.assetId}:${r.type}`))
 	);
 }
@@ -114,8 +127,8 @@ function migrateClip(clip) {
 	if ('drafts' in next && !(Number.isInteger(next.drafts) && next.drafts >= MIN_DRAFTS && next.drafts <= MAX_STORED_DRAFTS)) delete next.drafts;
 	if ('revision' in next && !(Number.isInteger(next.revision) && next.revision >= 0)) delete next.revision;
 	if ('referenceOverrides' in next) {
-		const exclude = excludedOf(next);
-		if (exclude.length) next.referenceOverrides = { exclude: [...new Set(exclude)] };
+		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next) }).filter(([, list]) => list.length);
+		if (kept.length) next.referenceOverrides = Object.fromEntries(kept);
 		else delete next.referenceOverrides;
 	}
 	return next;
@@ -139,6 +152,7 @@ export function shotDraft(doc, clip, engine) {
 		first: frameAsset(doc, clip, 'first'),
 		last: frameAsset(doc, clip, 'last'),
 		exclude: excludedOf(clip),
+		excludeLanes: excludedLanesOf(clip),
 		own: shotReferences(doc, clip).own.map(ownCopy),
 		drafts: draftsOf(clip, engine),
 		engine: shotEngineOf(clip)
@@ -188,6 +202,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	if (resized || before.first !== draft.first) placeFrame(doc, clip, 'first', draft.first, makeId);
 	if (resized || before.last !== draft.last) placeFrame(doc, clip, 'last', draft.last, makeId);
 	setExcluded(clip, draft.exclude);
+	if ('excludeLanes' in draft) setExcludedLanes(clip, draft.excludeLanes);
 	writeReferences(doc, clip, draft.own);
 	if (draft.drafts !== before.drafts || Number.isInteger(clip.drafts)) clip.drafts = count(draft.drafts) ?? projectDrafts(engine);
 	if ('engine' in draft) setShotEngine(clip, draft.engine);
