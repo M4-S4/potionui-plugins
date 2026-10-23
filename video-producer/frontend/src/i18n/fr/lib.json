@@ -35,6 +35,7 @@
 	"toast.laneDeletedEmpty": "Piste {lane} supprimée",
 	"toast.useTakeFinal": "« {shot} » utilise la prise finale {variant}",
 	"toast.useTakeDraft": "« {shot} » utilise la prise brouillon {variant}",
+	"toast.takeReleased": "« {shot} » dépasse sa prise : il repasse à générer",
 	"toast.jobRunning": "Une génération est déjà en cours.",
 	"toast.cancelled": "Génération annulée",
 	"toast.finalReady": "Version finale prête et appliquée au plan",

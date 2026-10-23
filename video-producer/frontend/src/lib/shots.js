@@ -141,6 +141,28 @@ export function migrateShots(doc) {
 
 const MIN_SHOT = 0.4;
 const snap = (value) => +(Math.round(value / 0.04) * 0.04).toFixed(3);
+export const SHOT_CAP = 60;
+export const TAKE_SLACK = 0.05;
+
+export function durationLimit(doc, clip, engineMax = null) {
+	const media = (doc.assets ?? []).find((a) => a.id === clip?.assetId) ?? null;
+	const srcIn = clip?.srcIn ?? 0;
+	const length = typeof media?.srcDur === 'number' ? media.srcDur : null;
+	if (media?.generated) {
+		const take = length === null ? null : length - srcIn;
+		return engineMax > 0 ? { max: engineMax, by: 'engine', take } : { max: SHOT_CAP, by: null, take };
+	}
+	return { max: (length ?? SHOT_CAP) - srcIn, by: length ? 'source' : null, take: null };
+}
+
+export const overrunsTake = (take, before, dur) => take !== null && dur > before + 1e-6 && dur > take + TAKE_SLACK;
+
+export function releaseOverrun(doc, clip, before) {
+	if (!overrunsTake(durationLimit(doc, clip).take, before, clip.dur)) return null;
+	const released = { take: clip.take ?? null };
+	Object.assign(clip, { assetId: null, take: null, srcIn: 0, stage: 'todo' });
+	return released;
+}
 const promptFor = (doc, clip) => (doc.prompts ?? []).find((p) => p.shotId === clip.id) ?? null;
 const frameAsset = (doc, clip, kind) => framesOf(doc, clip.id, kind).find((f) => f.assetId)?.assetId ?? null;
 const ownCopy = (r) => ({ id: r.id, name: r.name, space: r.space, type: r.type, assetId: r.assetId ?? null, role: r.role });
@@ -194,6 +216,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	const covered = prompt && Math.abs(prompt.start - clip.start) < 1e-6 && Math.abs(prompt.dur - clip.dur) < 1e-6;
 	const dur = snap(Math.min(Math.max(MIN_SHOT, Number(draft.dur) || clip.dur), Math.max(MIN_SHOT, maxDur)));
 	const resized = Math.abs(dur - clip.dur) > 1e-6;
+	const was = clip.dur;
 	clip.dur = dur;
 	if (prompt) {
 		prompt.text = text;
@@ -206,6 +229,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	writeReferences(doc, clip, draft.own);
 	if (draft.drafts !== before.drafts || Number.isInteger(clip.drafts)) clip.drafts = count(draft.drafts) ?? projectDrafts(engine);
 	if ('engine' in draft) setShotEngine(clip, draft.engine);
+	const released = resized ? releaseOverrun(doc, clip, was) : null;
 	if (changed) touch(clip);
-	return { changed, resized };
+	return { changed, resized, released };
 }

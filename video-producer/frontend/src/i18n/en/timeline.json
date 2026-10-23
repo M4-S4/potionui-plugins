@@ -60,6 +60,8 @@
 	"drag.fadeOut": "Fade out {dur}",
 	"drag.position": "Move to position {n}",
 	"drag.sourceLimitAt": "Source media limit ({dur})",
+	"drag.engineLimitAt": "Engine limit ({dur})",
+	"drag.beyondTake": "Duration {dur} · beyond the take, to generate again",
 	"drag.rippled": "Duration {dur} · cut rippled",
 	"drag.frame": "Frame at {time}",
 	"drag.keyframe": "Keyframe at {time}",

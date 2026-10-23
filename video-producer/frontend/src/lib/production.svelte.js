@@ -5,8 +5,8 @@ import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realT
 import { PROFILES, aggregate, canUpscale, engineOptions, isH3, isInFlight, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
 import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
-import { finalsToSync, labelOf, marksOf, relabel } from './labels.js';
-import { generationCounts } from './shots.js';
+import { finalsToSync, labelOf, marksOf, relabel, releasedLabel } from './labels.js';
+import { durationLimit, generationCounts, releaseOverrun } from './shots.js';
 import { effectiveEngine, projectQuality, shotEngineOf } from './engine.js';
 import { audioBehavior, shotSound } from './sound.js';
 import { prioritized } from './queue.js';
@@ -475,6 +475,25 @@ function syncFinals() {
 		const take = takeById(id);
 		if (take) sendLabel(take, label);
 	}
+}
+
+export function shotDurationLimit(clip) {
+	const option = optionFor(engineChoices(), effectiveEngine(clip, doc));
+	return durationLimit(doc, clip, option?.info.limits.maxDuration ?? null);
+}
+
+export function settleRelease(clip, released) {
+	if (!clip || !released) return;
+	const take = takeById(released.take);
+	const label = releasedLabel(take);
+	if (label) sendLabel(take, label);
+	toast(t('lib.toast.takeReleased', { shot: clipLabel(clip) }));
+}
+
+export function fitShot(clip, before) {
+	const released = releaseOverrun(doc, clip, before);
+	settleRelease(clip, released);
+	return released;
 }
 
 export function labelTake(clip, take, label) {

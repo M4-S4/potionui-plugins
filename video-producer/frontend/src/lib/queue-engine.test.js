@@ -147,7 +147,7 @@ test('engine: the shot editor reads and writes the shot settings in one step, wi
 
 	const result = applyShotDraft(doc, clip, before, { ...before, engine: { preset: LTX, model: null, backend: 'b-local', seed: 42 } }, { makeId: () => 'x', engine: doc.engine });
 
-	assert.deepEqual(result, { changed: false, resized: false });
+	assert.deepEqual(result, { changed: false, resized: false, released: null });
 	assert.deepEqual(clip.engine, { preset: LTX, model: null, backend: 'b-local', seed: 42 });
 	assert.equal(revisionOf(clip), 0);
 	applyShotDraft(doc, clip, shotDraft(doc, clip, doc.engine), { ...shotDraft(doc, clip, doc.engine), engine: {} }, { makeId: () => 'x', engine: doc.engine });

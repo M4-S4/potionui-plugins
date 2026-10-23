@@ -2,16 +2,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aggregate, activityStep } from './generation.js';
-import { canLabel, finalsToSync, labelGroups, labelOf, legacyLabel, marksOf, rejectedCount, relabel, toggledLabel, visibleTakes } from './labels.js';
+import { canLabel, finalsToSync, labelGroups, labelOf, legacyLabel, marksOf, rejectedCount, relabel, releasedLabel, toggledLabel, visibleTakes } from './labels.js';
 import {
 	MAX_DRAFTS,
+	SHOT_CAP,
 	applyShotDraft,
 	draftsOf,
+	durationLimit,
 	excludedOf,
 	generationCounts,
 	inputsChanged,
 	isStale,
 	migrateShots,
+	overrunsTake,
+	releaseOverrun,
 	revisionOf,
 	sentReferences,
 	setDrafts,
@@ -193,13 +197,13 @@ test('shot editor: saving writes every field and bumps the revision only when wh
 	let n = 0;
 	const makeId = () => `new${++n}`;
 
-	assert.deepEqual(applyShotDraft(doc, clip, before, { ...before, drafts: 4 }, { makeId, engine: doc.engine }), { changed: false, resized: false });
+	assert.deepEqual(applyShotDraft(doc, clip, before, { ...before, drafts: 4 }, { makeId, engine: doc.engine }), { changed: false, resized: false, released: null });
 	assert.deepEqual([clip.drafts, revisionOf(clip)], [4, 0]);
 
 	const after = { ...shotDraft(doc, clip, doc.engine), text: ' A lighthouse at dusk. ', dur: 5.01, last: 'img3', exclude: ['g1'], own: [{ id: 'o2', name: 'Cat', space: 'identite', type: 'Personnage', assetId: 'img4', role: 'Identité' }] };
 	const result = applyShotDraft(doc, clip, shotDraft(doc, clip, doc.engine), after, { makeId, maxDur: 60, engine: doc.engine });
 
-	assert.deepEqual(result, { changed: true, resized: true });
+	assert.deepEqual(result, { changed: true, resized: true, released: null });
 	assert.equal(revisionOf(clip), 1);
 	assert.deepEqual([doc.prompts[0].text, doc.prompts[0].dur, clip.dur], ['A lighthouse at dusk.', 5, 5]);
 	assert.deepEqual(doc.frames.map((f) => [f.role, f.assetId, f.time, f.sceneId ?? null]), [['first', 'img1', 0, 'sc1'], ['last', 'img3', 4.96, null]]);
@@ -220,6 +224,85 @@ test('shot editor: the duration stays within the media, a removed frame goes, an
 	const kept = shotDraft(doc, first, doc.engine);
 	applyShotDraft(doc, first, kept, { ...kept, first: null }, { makeId: () => 'x', engine: doc.engine });
 	assert.deepEqual(doc.frames, []);
+});
+
+function takeDoc() {
+	const doc = editorDoc();
+	doc.assets = [
+		{ id: 'src', kind: 'video', generated: false, srcDur: 6 },
+		{ id: 'gen-t1', kind: 'video', generated: true, srcDur: 4.375 },
+		{ id: 'still', kind: 'image', generated: false, srcDur: null }
+	];
+	Object.assign(doc.clips[0], { assetId: 'gen-t1', take: 't1', stage: 'final', dur: 4.4 });
+	doc.prompts[0].dur = 4.4;
+	Object.assign(doc.clips[1], { assetId: 'src', stage: 'source', srcIn: 1 });
+	return doc;
+}
+
+test('shot duration: a source bounds the shot, a generated take leaves it free up to the engine of the shot', () => {
+	const doc = takeDoc();
+	const [shot, source] = doc.clips;
+
+	assert.deepEqual(durationLimit(doc, source, 15), { max: 5, by: 'source', take: null });
+	assert.deepEqual(durationLimit(doc, shot, 15), { max: 15, by: 'engine', take: 4.375 });
+	assert.deepEqual(durationLimit(doc, shot, null), { max: SHOT_CAP, by: null, take: 4.375 });
+	assert.deepEqual(durationLimit(doc, { ...source, assetId: 'still', srcIn: 0 }, 15), { max: SHOT_CAP, by: null, take: null });
+	assert.deepEqual(durationLimit(doc, { id: 's3', assetId: null, srcIn: 0 }, 15), { max: SHOT_CAP, by: null, take: null });
+
+	const before = shotDraft(doc, source, doc.engine);
+	assert.deepEqual(applyShotDraft(doc, source, before, { ...before, dur: 30 }, { makeId: () => 'p2', maxDur: durationLimit(doc, source, 15).max, engine: doc.engine }).released, null);
+	assert.deepEqual([source.dur, source.assetId, source.stage], [5, 'src', 'source']);
+});
+
+test('shot duration: past its take a generated shot goes back to be generated, the take staying in the history', () => {
+	const doc = takeDoc();
+	const shot = doc.clips[0];
+	const maxDur = durationLimit(doc, shot, 15).max;
+	const before = shotDraft(doc, shot, doc.engine);
+
+	const result = applyShotDraft(doc, shot, before, { ...before, dur: 8 }, { makeId: () => 'x', maxDur, engine: doc.engine });
+	assert.deepEqual(result, { changed: true, resized: true, released: { take: 't1' } });
+	assert.deepEqual([shot.dur, shot.assetId, shot.take, shot.srcIn, shot.stage], [8, null, null, 0, 'todo']);
+	assert.deepEqual([doc.prompts[0].dur, doc.frames[0].time], [8, 0]);
+	assert.ok(doc.assets.some((a) => a.id === 'gen-t1'));
+
+	const capped = takeDoc();
+	const long = capped.clips[0];
+	const draft = shotDraft(capped, long, capped.engine);
+	applyShotDraft(capped, long, draft, { ...draft, dur: 30 }, { makeId: () => 'x', maxDur: durationLimit(capped, long, 15).max, engine: capped.engine });
+	assert.deepEqual([long.dur, long.stage], [15, 'todo']);
+});
+
+test('shot duration: within its take, or by less than a frame step, a generated shot keeps its take', () => {
+	for (const dur of [4.2, 2, 4.4]) {
+		const doc = takeDoc();
+		const shot = doc.clips[0];
+		const before = shotDraft(doc, shot, doc.engine);
+		const result = applyShotDraft(doc, shot, before, { ...before, text: 'A storm.', dur }, { makeId: () => 'x', maxDur: 15, engine: doc.engine });
+		assert.equal(result.released, null, String(dur));
+		assert.deepEqual([shot.dur, shot.assetId, shot.take, shot.stage], [dur, 'gen-t1', 't1', 'final']);
+	}
+
+	const doc = takeDoc();
+	const shot = Object.assign(doc.clips[0], { dur: 4 });
+	shot.dur = 4.4;
+	assert.equal(releaseOverrun(doc, shot, 4), null);
+	shot.dur = 4.44;
+	assert.deepEqual(releaseOverrun(doc, shot, 4), { take: 't1' });
+	assert.equal(shot.stage, 'todo');
+
+	assert.equal(overrunsTake(4.375, 6, 5), false);
+	assert.equal(overrunsTake(null, 4, 8), false);
+	assert.equal(overrunsTake(4, 4, 4.08), true);
+});
+
+test('shot duration: a released Final or Candidate take turns Draft, the other takes of the shot keep their label', () => {
+	assert.deepEqual([take('a', { label: 'final' }), take('b', { label: 'candidate' }), take('c', { chosen: true, label: undefined })].map(releasedLabel), ['draft', 'draft', 'draft']);
+	assert.deepEqual([take('d'), take('e', { label: 'rejected' }), null].map(releasedLabel), [null, null, null]);
+
+	const takes = [take('a', { label: 'final' }), take('b', { label: 'candidate' })];
+	assert.deepEqual(relabel(takes, 'a', releasedLabel(takes[0])), { a: 'draft' });
+	assert.deepEqual(finalsToSync([{ id: 's1', take: null }], [take('a', { label: 'draft' }), take('b', { label: 'candidate' })]), []);
 });
 
 test('shot editor: a change of prompt, duration, frame, exclusion or own reference counts, a change of drafts does not', () => {
@@ -250,7 +333,7 @@ test('progress: the timeline block and the storyboard card show the same shot ac
 	const timeline = source('../components/timeline/Timeline.svelte');
 	const storyboard = source('../components/storyboard/StoryboardView.svelte');
 
-	assert.match(timeline, /import \{ takesOf, shotActivity, shotEngineText \} from '\.\.\/\.\.\/lib\/production\.svelte\.js';/);
+	assert.match(timeline, /import \{ takesOf, shotActivity, shotEngineText(, \w+)* \} from '\.\.\/\.\.\/lib\/production\.svelte\.js';/);
 	assert.match(timeline, /\{@const activity = shotActivity\(c\.id\)\}/);
 	assert.match(timeline, /\{#if activity\.state === 'running'\}/);
 	for (const page of [timeline, storyboard]) assert.match(page, /activityStep\(activity\) \|\| \(activity\.running \? t\('generation\.state\.running'\) : t\('lib\.status\.queued'\)\)/);
