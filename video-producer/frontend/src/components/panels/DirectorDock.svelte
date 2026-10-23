@@ -17,6 +17,7 @@
 	import TakeCard from '../takes/TakeCard.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import Icon from '../Icon.svelte';
+	import { labelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
 
 	const modes = ['FL2VA', 'Ref2VA', 'Hybrid AV'];
 
@@ -34,8 +35,10 @@
 	const seamIssues = $derived(seams().flatMap((s) => s.issues.map((x) => ({ ...x, clip: s.to }))));
 	const checked = $derived(review.current?.projectId === project.id ? review.current : null);
 	const checkedCount = $derived(reviewCount(checked));
-	const chosen = $derived(takeStore.list.filter((r) => r.chosen && r.status === 'done').length);
+	const chosen = $derived(takeStore.list.filter((r) => labelOf(r) === 'final' && r.status === 'done').length);
 	const takeCount = $derived(takeStore.list.length);
+	const rejected = $derived(rejectedCount(takeStore.list));
+	const shown = $derived(doc.clips.map((c) => [c, visibleTakes(takesOf(c), ui.hideRejected)]).filter(([, list]) => list.length));
 	const supported = $derived(supportedProfiles());
 	const unsupported = $derived(modes.filter((m) => !supported.includes(m)));
 	const tabs = $derived([
@@ -335,8 +338,14 @@
 				<HostUi name="EmptyState" props={{ compact: true, icon: 'sparkles', title: t('panels.dock.results.empty'), description: t('panels.dock.results.emptyHint') }} />
 			{/if}
 
-			{#each doc.clips.filter((c) => takesOf(c).length) as c (c.id)}
-				{@const list = takesOf(c)}
+			{#if rejected}
+				<div class="flex min-h-6 items-center justify-between gap-2 text-xs text-fg-muted">
+					<label for="vp-results-hide-rejected">{t('generation.labels.hideRejected', { count: rejected })}</label>
+					<HostUi name="Switch" props={{ id: 'vp-results-hide-rejected', checked: ui.hideRejected, size: 'lg', label: t('generation.labels.hideRejected', { count: rejected }), onchange: (v) => (ui.hideRejected = v) }} />
+				</div>
+			{/if}
+
+			{#each shown as [c, list] (c.id)}
 				<section>
 					<button type="button" class="mb-1 flex min-h-7 w-full items-center gap-2 text-left" onclick={() => (select('clip', c.id), seek(c.start))}>
 						<span class="vp-tc text-xs text-fg-subtle">{String(doc.clips.indexOf(c) + 1).padStart(2, '0')}</span>

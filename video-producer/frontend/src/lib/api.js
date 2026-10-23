@@ -1,4 +1,5 @@
 import { progressText } from './generation.js';
+import { LABELS, legacyLabel } from './labels.js';
 import { filenameFrom, lastSegment, normalizeJob, jobPath } from './exports.js';
 import { normalizeSeamMedia, requestBody } from './seam.js';
 
@@ -309,6 +310,8 @@ export function normalizeTake(value) {
 		variant: text(value.variant) || 'A',
 		chosen: value.chosen === true || value.chosen === 1,
 		flag: value.flag === 'keep' || value.flag === 'reject' ? value.flag : null,
+		label: LABELS.includes(value.label) ? value.label : legacyLabel(value.chosen, value.flag),
+		shotRevision: Number.isInteger(value.shot_revision) && value.shot_revision > 0 ? value.shot_revision : 0,
 		profile: text(value.profile) || null,
 		promptText: text(value.prompt_text),
 		url: text(value.url) || null,
@@ -627,11 +630,8 @@ export function createClient(api, save) {
 		async listTakes(projectId) {
 			return mapped(await call(api, 'get', `${projectPath(projectId)}/takes`), (data) => list(data.takes, normalizeTake));
 		},
-		async chooseTake(projectId, takeId, chosen) {
-			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/choose`, { chosen }), pickTake);
-		},
-		async flagTake(projectId, takeId, flag) {
-			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/flag`, { flag }), pickTake);
+		async labelTake(projectId, takeId, label) {
+			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/label`, { label }), pickTake);
 		},
 		async deleteTake(projectId, takeId) {
 			return mapped(await call(api, 'delete', takePath(projectId, takeId)), (data) => (text(data.deleted) ? { deleted: data.deleted } : null));

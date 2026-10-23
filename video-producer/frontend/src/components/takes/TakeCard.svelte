@@ -2,16 +2,27 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, secs } from '../../lib/state.svelte.js';
-	import { useTake, promoteToFinal, retryTake, cancelTake, flagTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable } from '../../lib/production.svelte.js';
+	import { labelTake, promoteToFinal, retryTake, cancelTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable } from '../../lib/production.svelte.js';
 	import { FAILURE_CODES, isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { extractable, extractAtPlayhead, seamState } from '../../lib/seam.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { canLabel, labelOf, toggledLabel } from '../../lib/labels.js';
+	import { isStale } from '../../lib/shots.js';
 	import Icon from '../Icon.svelte';
 
 	let { take, clip } = $props();
 
 	const active = $derived(clip?.take === take.id);
+	const label = $derived(labelOf(take));
+	const stale = $derived(isStale(take, clip));
+	const labelTone = { final: 'border-signal text-signal', candidate: 'border-success/60 text-success', rejected: 'border-danger/60 text-danger', draft: 'border-line-strong text-fg-muted' };
+	const choices = $derived([
+		{ id: 'rejected', text: t('generation.card.rejectShort'), aria: t('generation.card.reject', { variant: take.variant }), tip: t('generation.card.rejectTip') },
+		{ id: 'candidate', text: t('generation.card.candidateShort'), aria: t('generation.card.candidate', { variant: take.variant }), tip: t('generation.card.candidateTip') },
+		{ id: 'final', text: t('generation.card.finalShort'), aria: t('generation.card.final', { variant: take.variant }), tip: label === 'final' ? t('generation.card.finalHeldTip') : t('generation.card.finalLabelTip') }
+	]);
+	const lockedTip = $derived(t('generation.card.finalLockedTip'));
 	const inCompare = $derived(!!ui.compare?.includes(take.id));
 	const previewed = $derived(ui.preview?.kind === 'result' && ui.preview.id === take.id);
 	const flying = $derived(isInFlight(take));
@@ -77,12 +88,16 @@
 		<div class="min-w-0 flex-1 space-y-0.5 text-xs leading-4">
 			<div class="flex items-center gap-1.5">
 				<span class="truncate font-medium text-fg">{qualityText()}</span>
+				<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[label]}">{t(`generation.label.${label}`)}</span>
 				{#if take.status !== 'done'}
 					<span class="ml-auto flex shrink-0 items-center gap-1 {tone}"><span class="h-1.5 w-1.5 rounded-full {dot}"></span>{stateText(take.status)}</span>
 				{:else if take.durationS}
 					<span class="vp-tc ml-auto shrink-0 text-fg-subtle">{secs(take.durationS)}</span>
 				{/if}
 			</div>
+			{#if stale}
+				<div class="flex items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></div>
+			{/if}
 			<div class="truncate text-fg-muted">{modeText()}</div>
 			<div class="truncate text-fg-subtle"><span class="vp-tc">{resolution}</span>{#if parent}{' · ' + t('generation.card.from', { variant: parent.variant })}{/if}</div>
 			<div class="vp-tc truncate text-fg-subtle">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>
@@ -113,16 +128,6 @@
 				props={{ icon: hostIconName('compare'), label: t('generation.card.compare', { variant: take.variant }), tooltip: t('generation.card.compareTip'), size: 'xs', class: 'vp-toggle', ariaPressed: inCompare, onclick: () => toggleCompare(take.id) }}
 			/>
 		{/if}
-		{#if take.status === 'done'}
-			<HostUi
-				name="IconButton"
-				props={{ icon: 'star', label: t('generation.card.keep', { variant: take.variant }), tooltip: t('generation.card.keepTip'), size: 'xs', class: 'vp-toggle', ariaPressed: take.flag === 'keep', onclick: () => flagTake(take, 'keep') }}
-			/>
-			<HostUi
-				name="IconButton"
-				props={{ icon: hostIconName('thumb-down'), label: t('generation.card.reject', { variant: take.variant }), tooltip: t('generation.card.rejectTip'), size: 'xs', class: 'vp-toggle', ariaPressed: take.flag === 'reject', onclick: () => flagTake(take, 'reject') }}
-			/>
-		{/if}
 		{#if clip && extractable(take)}
 			<HostUi
 				name="IconButton"
@@ -133,7 +138,7 @@
 			<HostUi name="IconButton" props={{ icon: 'info', label: t('generation.card.details', { variant: take.variant }), tooltip: t('generation.card.detailsTip'), size: 'xs', onclick: () => showDetails(take) }} />
 		{/if}
 		<HostUi name="IconButton" props={{ icon: 'trash', label: t('generation.card.delete', { variant: take.variant }), tooltip: t('generation.card.deleteTip'), size: 'xs', onclick: () => deleteTake(take) }} />
-		<span class="ml-auto flex shrink-0 items-center gap-0.5">
+		<span class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-0.5">
 			{#if flying}
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => cancelTake(take) }}>{t('generation.card.cancel')}</HostUi>
 			{:else if take.status === 'failed'}
@@ -144,14 +149,26 @@
 						<button type="button" class="h-6 whitespace-nowrap rounded px-1.5 text-xs font-medium text-signal hover:bg-surface-2" onclick={() => promoteToFinal(take.id)}>{t('generation.card.makeFinal')}</button>
 					</HostUi>
 				{/if}
-				{#if active}
-					<span class="flex items-center gap-1 whitespace-nowrap px-1.5 text-xs text-signal"><Icon name="check" class="h-3.5 w-3.5" />{t('generation.card.used')}</span>
-				{:else}
-					<HostUi name="Tooltip" props={{ text: t('generation.card.chooseTip') }}>
-						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', disabled: !clip, onclick: () => useTake(clip, take.id) }}>{t('generation.card.choose')}</HostUi>
-					</HostUi>
-				{/if}
 			{/if}
 		</span>
 	</div>
+	{#if !flying}
+		<div class="flex items-center gap-1 border-t border-line px-1.5 py-1" role="group" aria-label={t('generation.card.labels', { variant: take.variant })}>
+			{#each choices as c (c.id)}
+				{@const allowed = c.id === 'final' ? canLabel(take, 'final') && Boolean(clip) : canLabel(take, c.id)}
+				<HostUi name="Tooltip" props={{ text: !allowed && label === 'final' && c.id !== 'final' ? lockedTip : c.tip }}>
+					<button
+						type="button"
+						class="vp-toggle h-6 rounded px-2 text-xs font-medium disabled:cursor-default disabled:opacity-50 {label === c.id ? '' : 'text-fg-muted hover:bg-surface-2 hover:text-fg'}"
+						aria-pressed={label === c.id}
+						aria-label={c.aria}
+						disabled={!allowed}
+						onclick={() => labelTake(clip, take, toggledLabel(take, c.id))}
+					>
+						{#if c.id === 'final' && label === 'final'}<Icon name="check" class="-ml-0.5 mr-0.5 inline h-3 w-3" />{/if}{c.text}
+					</button>
+				</HostUi>
+			{/each}
+		</div>
+	{/if}
 </li>

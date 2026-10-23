@@ -2,7 +2,7 @@ import copy
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from . import catalog, core_bridge, models, presets, settings
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
@@ -303,6 +303,19 @@ def profile_of(doc: Mapping[str, Any]) -> str:
 def clip_of(doc: Mapping[str, Any], shot_id: str) -> Optional[Dict[str, Any]]:
     """The clip with this id, or None."""
     return next((clip for clip in doc.get("clips") or [] if clip.get("id") == shot_id), None)
+
+
+def shot_revision(doc: Mapping[str, Any], shot_id: str) -> int:
+    """How many times the shot was edited in its shot editor; 0 for a shot never edited or unknown."""
+    revision = (clip_of(doc, shot_id) or {}).get("revision")
+    return revision if isinstance(revision, int) and not isinstance(revision, bool) and revision > 0 else 0
+
+
+def excluded_references(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
+    """The ids of the global references the shot leaves out."""
+    overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
+    exclude = overrides.get("exclude") if isinstance(overrides, Mapping) else None
+    return {str(item) for item in exclude if isinstance(item, str)} if isinstance(exclude, list) else set()
 
 
 def _overlap(start: float, end: float, item: Mapping[str, Any]) -> float:
@@ -682,14 +695,15 @@ def guide_seconds(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> float:
 def reference_media(
     user: User, doc: Mapping[str, Any], shot_id: str, guides: Sequence[Mapping[str, Any]] = ()
 ) -> List[SentReference]:
-    """What a shot sends as references, within the per-kind limits: its 3D guide videos, its own references, then the global ones; each with its rank among the references of its kind."""
+    """What a shot sends as references, within the per-kind limits: its 3D guide videos, its own references, then the global ones it does not exclude; each with its rank among the references of its kind."""
     scoped, shared = [], []
+    excluded = excluded_references(doc, shot_id)
     for reference in doc.get("references") or []:
         scope = reference.get("scope")
         if isinstance(scope, Mapping) and scope.get("type") == "shot":
             if scope.get("shotId") == shot_id:
                 scoped.append(reference)
-        else:
+        elif reference.get("id") not in excluded:
             shared.append(reference)
     sent: List[SentReference] = []
     counts = {kind: 0 for kind in REFERENCE_LIMITS}

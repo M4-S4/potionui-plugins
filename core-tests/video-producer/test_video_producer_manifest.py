@@ -183,6 +183,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/media/resolve"),
         ("POST", f"{base}/media/uploaded"),
         ("GET", f"{base}/projects/{{project_id}}/takes"),
+        ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/label"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/choose"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/flag"),
         ("DELETE", f"{base}/projects/{{project_id}}/takes/{{take_id}}"),
@@ -1037,7 +1038,7 @@ def test_the_generation_hooks_loaded_by_the_core_end_the_take_of_their_generatio
     assert [fields["notification_type"] for fields in notified] == ["video-producer.take_failed"]
 
 
-def test_the_takes_routes_loaded_by_the_core_list_choose_flag_and_delete_a_take(loader, manifest, mock_db):
+def test_the_takes_routes_loaded_by_the_core_list_label_choose_flag_and_delete_a_take(loader, manifest, mock_db):
     _boot(loader, manifest)
     caller = {"user": _user("user-1")}
     app = _app(loader, manifest, caller)
@@ -1062,6 +1063,7 @@ def test_the_takes_routes_loaded_by_the_core_list_choose_flag_and_delete_a_take(
         )
         listed = client.get(f"{base}/projects/{project_id}/takes").json()["data"]["takes"]
         queue = client.get(f"{base}/projects/{project_id}/queue").json()["data"]
+        labelled = client.post(f"{base}/projects/{project_id}/takes/{take['id']}/label", json={"label": "rejected"})
         chosen = client.post(f"{base}/projects/{project_id}/takes/{take['id']}/choose", json={"chosen": True})
         flagged = client.post(f"{base}/projects/{project_id}/takes/{take['id']}/flag", json={"flag": "keep"})
         caller["user"] = _user("user-2")
@@ -1075,8 +1077,9 @@ def test_the_takes_routes_loaded_by_the_core_list_choose_flag_and_delete_a_take(
     ]
     assert "request" not in listed[0] and "user_id" not in listed[0]
     assert queue == {"takes": [], "slots": {"in_flight": 0, "max": 2}}
-    assert (chosen.status_code, chosen.json()["data"]["take"]["chosen"]) == (200, True)
-    assert (flagged.status_code, flagged.json()["data"]["take"]["flag"]) == (200, "keep")
+    assert (labelled.status_code, labelled.json()["data"]["take"]["label"]) == (200, "rejected")
+    assert (chosen.status_code, chosen.json()["data"]["take"]["chosen"], chosen.json()["data"]["take"]["label"]) == (200, True, "final")
+    assert (flagged.status_code, flagged.json()["data"]["take"]["label"]) == (200, "final")
     assert (foreign.status_code, foreign_cancel.status_code) == (404, 404)
     assert deleted.json() == {"success": True, "data": {"deleted": take["id"]}}
     assert takes.get_take(take["id"]) is None

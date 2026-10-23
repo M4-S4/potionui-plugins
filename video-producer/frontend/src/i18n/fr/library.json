@@ -214,5 +214,6 @@
 	"tpl.p1.name": "Mon survol drone",
 	"tpl.p1.description": "Survol haut, mouvement fluide.",
 	"tpl.p1.keywords": "drone, survol",
-	"tpl.p1.text": "Survol en drone au-dessus de {place}, mouvement fluide et lent, léger basculement vers {subject}."
+	"tpl.p1.text": "Survol en drone au-dessus de {place}, mouvement fluide et lent, léger basculement vers {subject}.",
+	"target.shot": "plan « {shot} »"
 }

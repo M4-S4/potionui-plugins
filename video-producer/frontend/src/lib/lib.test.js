@@ -74,9 +74,9 @@ test('keys: Alt combinations read the physical key, focus rules recognise fields
 	assert.ok(!isActivationTarget(null));
 });
 
-test('icons: 76 source editor icons, 28 missing names plus 10 vp- variants for the host, 6 aliases', () => {
-	assert.equal(Object.keys(paths).length, 76);
-	assert.equal(HOST_MISSING.length, 28);
+test('icons: 77 source editor icons, 29 missing names plus 10 vp- variants for the host, 6 aliases', () => {
+	assert.equal(Object.keys(paths).length, 77);
+	assert.equal(HOST_MISSING.length, 29);
 	assert.equal(HOST_VARIANTS.length, 10);
 	assert.equal(Object.keys(HOST_ALIASES).length, 6);
 	for (const name of [...HOST_MISSING, ...HOST_VARIANTS, ...Object.keys(HOST_ALIASES)]) assert.ok(paths[name], `${name} has no paths`);
@@ -88,8 +88,8 @@ test('icons: 76 source editor icons, 28 missing names plus 10 vp- variants for t
 	assert.equal(hostIconName('route'), 'route');
 	assert.equal(hostIconName('film'), 'film');
 	const registered = hostIcons().map(([name]) => name);
-	assert.equal(registered.length, 38);
-	assert.equal(new Set(registered).size, 38);
+	assert.equal(registered.length, 39);
+	assert.equal(new Set(registered).size, 39);
 	assert.ok(hostIcons().every(([, d]) => Array.isArray(d) && d.length > 0));
 });
 

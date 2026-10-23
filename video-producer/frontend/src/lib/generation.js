@@ -120,6 +120,8 @@ export function aggregate(takes) {
 	return { state: 'running', progress, step: running.find((t) => t.step)?.step ?? '', count: flying.length, running: running.length };
 }
 
+export const activityStep = (activity) => (activity?.state === 'running' ? activity.step || '' : '');
+
 export function parseResolution(value) {
 	const match = /^\s*(\d+)\s*[x×]\s*(\d+)\s*$/.exec(value ?? '');
 	return match ? { width: Number(match[1]), height: Number(match[2]) } : null;

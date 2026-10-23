@@ -6,6 +6,7 @@ import { resetTakes } from './takes.svelte.js';
 import { compileRules, conflictIds, namesCamera } from './rules.js';
 import { dropPlanControls } from './scene3d/doc.js';
 import { laneCode, laneFor, laneItemCount, newLaneId, removeLane } from './tracks.js';
+import { touch } from './shots.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -60,6 +61,7 @@ export const ui = $state({
 		quality: 'draft'
 	},
 	inspectorTab: 'video',
+	hideRejected: false,
 	quota: null,
 	storyProposal: null,
 	me: null,
@@ -350,12 +352,20 @@ export function promptOf(clip) {
 	return doc.prompts.find((p) => p.shotId === clip.id) ?? null;
 }
 
+export function promptEdited(prompt, before) {
+	if (!prompt?.shotId || String(prompt.text ?? '').trim() === String(before ?? '').trim()) return;
+	touch(doc.clips.find((c) => c.id === prompt.shotId));
+}
+
 export function setPrompt(clip, text) {
 	if (!clip) return null;
 	const p = promptOf(clip);
 	act(() => {
-		if (p) p.text = text;
-		else doc.prompts.push(newPrompt(clip, text));
+		if (p) {
+			const before = p.text;
+			p.text = text;
+			promptEdited(p, before);
+		} else doc.prompts.push(newPrompt(clip, text));
 	});
 	return promptOf(clip);
 }

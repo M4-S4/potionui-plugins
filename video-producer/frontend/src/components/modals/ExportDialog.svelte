@@ -1,4 +1,5 @@
 <script>
+	import { labelOf } from '../../lib/labels.js';
 	import { onDestroy, onMount } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatBytes, formatRelative, t } from '../../i18n/index.svelte.js';
@@ -56,7 +57,7 @@
 	const library = $derived(canShowLibrary());
 	const span = $derived(real ? 'whole' : extent);
 	const notFinal = $derived(doc.clips.filter((c) => c.stage === 'draft' || c.stage === 'todo'));
-	const pending = $derived(doc.clips.filter((c) => findTake(c.take)?.flag === 'reject').length);
+	const pending = $derived(doc.clips.filter((c) => c.take && labelOf(findTake(c.take)) === 'rejected').length);
 	const issues = $derived(allIssues().filter((i) => i.level === 'conflict').length);
 	const dur = $derived(span === 'range' && ui.range ? ui.range.out - ui.range.in : seqDuration());
 	const fileName = $derived(real ? videoFile(doc.name, res) : `${slugify(doc.name)}_${res}.${format === 'master' ? 'mov' : 'mp4'}`);

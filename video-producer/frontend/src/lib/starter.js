@@ -1,6 +1,7 @@
 import { ulid } from './ulid.js';
 import { migrateKeyframe } from './scene3d/camera.js';
 import { migrateTracks, newLaneId, newVideoTrack } from './tracks.js';
+import { migrateShots } from './shots.js';
 
 const SHOT_DURATION = 5;
 export const PROMPT_LANGUAGES = ['en', 'fr'];
@@ -170,7 +171,7 @@ export function migrate(doc) {
 	if (!isObject(doc)) return doc;
 	const scenes = Array.isArray(doc.scenes) ? doc.scenes : [];
 	const retired = new Set(scenes.filter((s) => isObject(s) && RETIRED_SCENES.includes(s.kind)).map((s) => s.id));
-	const next = migrateTracks(doc);
+	const next = migrateShots(migrateTracks(doc));
 	if (Array.isArray(doc.scenes)) next.scenes = scenes.filter((s) => isObject(s) && !RETIRED_SCENES.includes(s.kind));
 	if (Array.isArray(doc.plans3d)) next.plans3d = doc.plans3d.map((p) => migratePlan(p, retired));
 	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId));

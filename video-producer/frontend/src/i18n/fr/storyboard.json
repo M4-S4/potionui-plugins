@@ -22,5 +22,11 @@
 	"insertAfter": "Insérer un plan après",
 	"delete": "Supprimer le plan",
 	"newShot": "Nouveau plan",
-	"newShotHint": "ou découpez le synopsis à gauche"
+	"newShotHint": "ou découpez le synopsis à gauche",
+	"stale": "Prompt modifié",
+	"staleTip": "Le plan a été modifié après la génération de sa prise : générez de nouveaux brouillons pour suivre la modification",
+	"edit": "Modifier le plan {shot}",
+	"editTip": "Ouvrir l’éditeur de plan : prompt, durée, images, références et brouillons",
+	"editShort": "Modifier",
+	"noPrompt": "Aucune instruction"
 }

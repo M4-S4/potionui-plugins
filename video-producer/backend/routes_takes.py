@@ -37,11 +37,26 @@ def list_takes(project_id: str, user: User = Depends(get_current_active_user)) -
     return ok({"takes": [takes.public(take) for take in takes.list_takes(project_id)]})
 
 
+@router.post("/projects/{project_id}/takes/{take_id}/label")
+def label_take(
+    project_id: str, take_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
+    """Label a take draft, rejected, candidate or final; a final take is the only one of its shot."""
+    label = _object(body).get("label")
+    if label not in takes.LABELS:
+        _invalid(f"label must be one of: {', '.join(takes.LABELS)}.")
+    project = access.project_for(user, project_id)
+    take = access.take_in(project, take_id)
+    if label == takes.FINAL and take["status"] != "done":
+        fail(409, "take_not_done", "Only a finished take can be final.")
+    return ok({"take": takes.public(takes.set_label(take_id, label))})
+
+
 @router.post("/projects/{project_id}/takes/{take_id}/choose")
 def choose_take(
     project_id: str, take_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
-    """Keep a take for its shot, unkeeping the others, or unkeep it."""
+    """Former route: label a take final, the previous final turning candidate, or a final take candidate."""
     chosen = _object(body).get("chosen")
     if not isinstance(chosen, bool):
         _invalid("chosen must be true or false.")
@@ -56,7 +71,7 @@ def choose_take(
 def flag_take(
     project_id: str, take_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
-    """Flag a take as kept or rejected, or clear its flag."""
+    """Former route: keep labels a take candidate, reject rejected, and null takes a candidate or rejected take back to draft."""
     body = _object(body)
     if "flag" not in body or (body["flag"] is not None and body["flag"] not in takes.FLAGS):
         _invalid(f"flag must be one of: {', '.join(takes.FLAGS)}, or null.")

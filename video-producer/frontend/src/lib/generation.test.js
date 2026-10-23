@@ -249,11 +249,14 @@ test('normalizeTake: the take row of the contract becomes camelCase with safe de
 		finished_at: '2026-10-17T10:01:05Z'
 	});
 	assert.deepEqual(
-		[take.shotId, take.generationId, take.directorMode, take.chosen, take.flag, take.fileId, take.durationS, take.promptText, take.unitsReserved],
-		['s1', 'g1', 't2v', true, 'keep', '7', 5, 'A lighthouse', 0.83]
+		[take.shotId, take.generationId, take.directorMode, take.chosen, take.flag, take.label, take.shotRevision, take.fileId, take.durationS, take.promptText, take.unitsReserved],
+		['s1', 'g1', 't2v', true, 'keep', 'final', 0, '7', 5, 'A lighthouse', 0.83]
 	);
 	const odd = normalizeTake({ id: 't2', status: 'paused', director_mode: 'x', flag: 'maybe', quality: 'ultra' });
-	assert.deepEqual([odd.status, odd.directorMode, odd.flag, odd.quality, odd.kind, odd.variant, odd.generationId, odd.progress], ['queued', null, null, 'draft', 'render', 'A', null, null]);
+	assert.deepEqual([odd.status, odd.directorMode, odd.flag, odd.label, odd.quality, odd.kind, odd.variant, odd.generationId, odd.progress], ['queued', null, null, 'draft', 'draft', 'render', 'A', null, null]);
+	const labelled = normalizeTake({ id: 't3', label: 'rejected', chosen: true, flag: 'keep', shot_revision: 4 });
+	assert.deepEqual([labelled.label, labelled.shotRevision], ['rejected', 4]);
+	assert.deepEqual([normalizeTake({ id: 't4', label: 'best', flag: 'reject', shot_revision: -2 }).label, normalizeTake({ id: 't4', shot_revision: 1.5 }).shotRevision], ['rejected', 0]);
 	assert.equal(normalizeTake({ status: 'done' }), null);
 });
 
@@ -285,8 +288,7 @@ test('client: take, estimate, generation and queue routes with their bodies', as
 	const take = { id: 't1', status: 'queued' };
 	const responses = [
 		{ success: true, data: { takes: [take] } },
-		{ success: true, data: { take: { ...take, chosen: true } } },
-		{ success: true, data: { take: { ...take, flag: 'reject' } } },
+		{ success: true, data: { take: { ...take, label: 'final', chosen: true } } },
 		{ success: true, data: { deleted: 't1' } },
 		{ success: true, data: { take: { id: 't9', quality: 'final', kind: 'upscale', parent_take_id: 't1' } } },
 		{ success: true, data: { shots: [], vram: null, time: { seconds: 30, samples: 3 }, quota: null, cost: null, blocks: [], warnings: [] } },
@@ -304,8 +306,7 @@ test('client: take, estimate, generation and queue routes with their bodies', as
 		}
 	});
 	assert.equal((await client.listTakes('p1')).data[0].id, 't1');
-	assert.equal((await client.chooseTake('p1', 't1', true)).data.chosen, true);
-	assert.equal((await client.flagTake('p1', 't1', 'reject')).data.flag, 'reject');
+	assert.equal((await client.labelTake('p1', 't1', 'final')).data.label, 'final');
 	assert.deepEqual((await client.deleteTake('p1', 't1')).data, { deleted: 't1' });
 	assert.equal((await client.finalTake('p1', 't1', 'upscale', 'fhd1080')).data.parentTakeId, 't1');
 	const body = { shots: ['s1'], quality: 'draft', variants: 2, preset_id: WAN, model_id: null };
@@ -317,8 +318,7 @@ test('client: take, estimate, generation and queue routes with their bodies', as
 	assert.deepEqual((await client.queue('p1')).data.slots, { inFlight: 0, max: 2 });
 	assert.deepEqual(calls, [
 		['GET', '/projects/p1/takes', undefined],
-		['POST', '/projects/p1/takes/t1/choose', { chosen: true }],
-		['POST', '/projects/p1/takes/t1/flag', { flag: 'reject' }],
+		['POST', '/projects/p1/takes/t1/label', { label: 'final' }],
 		['DELETE', '/projects/p1/takes/t1', undefined],
 		['POST', '/projects/p1/takes/t1/final', { method: 'upscale', target: 'fhd1080' }],
 		['POST', '/projects/p1/estimate', body],

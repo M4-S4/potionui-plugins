@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatTime, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, toast, overlaps, itemsIn, secs, clipLabel } from '../../lib/state.svelte.js';
+	import { ui, doc, act, toast, overlaps, itemsIn, secs, clipLabel, promptEdited } from '../../lib/state.svelte.js';
 	import {
 		templates,
 		libraries,
@@ -42,14 +42,17 @@
 	}
 
 	const targetPrompt = $derived(target?.kind === 'prompt' ? doc.prompts.find((p) => p.id === target.id) : null);
+	const targetShot = $derived(target?.kind === 'shot' ? doc.clips.find((c) => c.id === target.id) : null);
 	const targetLabel = $derived(
 		target?.kind === 'direction'
 			? t('library.target.direction', { field: directionFields.find((f) => f.key === target.key)?.label ?? '' })
 			: targetPrompt
 				? t('library.target.prompt', { time: secs(targetPrompt.start) })
-				: t('library.target.none')
+				: targetShot
+					? t('library.target.shot', { shot: clipLabel(targetShot) })
+					: t('library.target.none')
 	);
-	const range = $derived(targetPrompt ? [targetPrompt.start, targetPrompt.start + targetPrompt.dur] : null);
+	const range = $derived(targetPrompt ? [targetPrompt.start, targetPrompt.start + targetPrompt.dur] : targetShot ? [targetShot.start, targetShot.start + targetShot.dur] : null);
 	const cameraLocked = $derived(range ? doc.controls.some((c) => overlaps(c.start, c.dur, range)) : false);
 	let mode = $state('append');
 
@@ -69,6 +72,7 @@
 
 	function suggestion() {
 		if (target?.kind === 'direction') return t('assistant.suggest.direction', { field: directionFields.find((f) => f.key === target.key)?.label ?? '' });
+		if (targetShot) return t('assistant.suggest.shot', { shot: clipLabel(targetShot) });
 		if (!targetPrompt) return t('assistant.suggest.library');
 		const shot = doc.clips.find((c) => c.id === targetPrompt.shotId);
 		return shot ? t('assistant.suggest.shot', { shot: clipLabel(shot) }) : t('assistant.suggest.promptAt', { time: secs(targetPrompt.start) });
@@ -85,7 +89,13 @@
 		if (!clean) return;
 		const merge = (old) => (mode === 'replace' || !old?.trim() ? clean : `${old.trim()} ${clean}`);
 		if (target?.kind === 'direction') act(() => (doc.direction[target.key] = merge(doc.direction[target.key])));
-		else if (targetPrompt) act(() => (targetPrompt.text = merge(targetPrompt.text)));
+		else if (targetPrompt)
+			act(() => {
+				const before = targetPrompt.text;
+				targetPrompt.text = merge(before);
+				promptEdited(targetPrompt, before);
+			});
+		else if (targetShot && target.returnTo?.draft) target.returnTo.draft.text = merge(target.returnTo.draft.text);
 		else if (!(await copyText(clean))) return toast(t('library.copyFailed'), 'warning');
 		templates.push({
 			id: ulid(),

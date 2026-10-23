@@ -121,6 +121,7 @@ def _create(
     variant: str,
     minutes: float,
     parent_take_id: Optional[str] = None,
+    revision: Optional[int] = None,
 ) -> Dict[str, Any]:
     size = models.parse_size(plan.resolution)
     take_id = core_bridge.generate_ulid()
@@ -140,6 +141,7 @@ def _create(
             "seed": seed,
             "resolution": plan.resolution,
             "variant": variant,
+            "shot_revision": revision,
             "profile": plan.profile,
             "prompt_text": plan.prompt_text,
             "width": size[0] if size else None,
@@ -155,7 +157,7 @@ def _create(
 
 
 async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation) -> List[Dict[str, Any]]:
-    """Create one take per shot and variant, each with its own seed, and hand what fits to the core."""
+    """Create the takes each shot asks for, one per variant with its own seed, and hand what fits to the core."""
     if evaluation.blocked:
         raise Blocked(evaluation.payload["blocks"])
     plans = evaluation.plans
@@ -172,9 +174,10 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
             seed=new_seed(),
             variant=letter,
             minutes=evaluation.minutes.get(plan.shot_id, 0.0) if reserve else 0.0,
+            revision=director.shot_revision(project["doc"], plan.shot_id),
         )
         for plan in plans.shots
-        for letter in next_variants(project["id"], plan.shot_id, plans.quality, evaluation.variants)
+        for letter in next_variants(project["id"], plan.shot_id, plans.quality, evaluation.count(plan.shot_id))
     ]
     await pump(owner)
     return [takes.get_take(take["id"]) for take in created]
@@ -541,6 +544,7 @@ async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         variant=source.get("variant") or variant_letter(0),
         minutes=minutes,
         parent_take_id=source["id"],
+        revision=source.get("shot_revision") if method == UPSCALE else director.shot_revision(project["doc"], source["shot_id"]),
     )
     await pump(owner)
     return takes.get_take(take["id"])
@@ -555,8 +559,10 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         if parent is None or parent["status"] != "done":
             raise TakeError(409, "take_not_done", "The take this one upscaled is no longer finished.")
         plan, preset_id, native = _upscale_plan(owner, parent, director.upscale_target(source))
+        revision = parent.get("shot_revision")
     else:
         plan, preset_id, native = _render_plan(owner, project, source, source["quality"])
+        revision = director.shot_revision(project["doc"], source["shot_id"])
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     take = _create(
         owner,
@@ -569,6 +575,7 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         variant=source.get("variant") or variant_letter(0),
         minutes=minutes,
         parent_take_id=source.get("parent_take_id"),
+        revision=revision,
     )
     await pump(owner)
     return takes.get_take(take["id"])

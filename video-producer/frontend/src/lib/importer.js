@@ -148,13 +148,25 @@ export function openLocalImport(kind = 'media') {
 	input.click();
 }
 
+export function pickLocalImage(onPicked) {
+	if (typeof document === 'undefined') return;
+	const input = document.createElement('input');
+	input.type = 'file';
+	input.accept = acceptFor(['image']);
+	input.onchange = () => importFiles(input.files, ['image'], { pick: onPicked });
+	input.click();
+}
+
+function refusal(rejected, target) {
+	const params = { count: rejected.length, name: rejected[0].name };
+	if (!rejected.every((f) => fileKind(f.name))) return t('project.upload.unsupported', params);
+	if (target?.pick) return t('project.upload.imageOnly', params);
+	return target ? t('timeline.toast.dropHint') : t('project.upload.audioOnly', params);
+}
+
 export function importFiles(files, kinds = LOCAL_KINDS.media, target = null) {
 	const { accepted, rejected } = sortFiles(files, kinds);
-	if (rejected.length) {
-		const params = { count: rejected.length, name: rejected[0].name };
-		const misplaced = rejected.every((f) => fileKind(f.name));
-		toast(misplaced ? (target ? t('timeline.toast.dropHint') : t('project.upload.audioOnly', params)) : t('project.upload.unsupported', params), 'warning');
-	}
+	if (rejected.length) toast(refusal(rejected, target), 'warning');
 	if (!accepted.length) return Promise.resolve();
 	const entries = trackUploads(accepted);
 	const run = chain.then(() => uploadAll(entries, kinds, target));
@@ -199,7 +211,10 @@ async function uploadAll(entries, kinds, target) {
 		placed.push(a.id);
 	}
 	addAssets(made);
-	if (target) await placeAll(placed, target);
+	if (target?.pick) {
+		report(made.length, present, 0);
+		if (placed.length) target.pick(placed[0]);
+	} else if (target) await placeAll(placed, target);
 	else report(made.length, present, 0);
 }
 

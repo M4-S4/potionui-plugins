@@ -233,7 +233,7 @@
 					</div>
 					<label class="space-y-1">
 						<span class="vp-label block">{t('modals.advanced.variants')}</span>
-						<input class="input vp-dense vp-tc w-full" type="number" min="1" max="4" bind:value={e.variants} />
+						<input class="input vp-dense vp-tc w-full" type="number" min="1" max="8" bind:value={e.variants} />
 					</label>
 				</div>
 				<div>
@@ -337,7 +337,7 @@
 				<div class="h-px bg-line"></div>
 				<h4 class="text-md font-semibold">{t('modals.advanced.delivery')}</h4>
 				<div class="grid grid-cols-2 gap-3">
-					<label class="space-y-1"><span class="vp-label block">{t('modals.advanced.variants')}</span><input class="input vp-dense vp-tc w-full" type="number" min="1" max="4" bind:value={e.variants} /></label>
+					<label class="space-y-1"><span class="vp-label block">{t('modals.advanced.variants')}</span><input class="input vp-dense vp-tc w-full" type="number" min="1" max="8" bind:value={e.variants} /></label>
 					<div class="space-y-1">
 						<span class="flex items-center gap-2"><label class="vp-label" for="vp-aw-naming">{t('modals.advanced.naming')}</label>{@render unsent()}</span>
 						<input id="vp-aw-naming" class="input vp-dense w-full disabled:opacity-50" disabled bind:value={e.naming} />

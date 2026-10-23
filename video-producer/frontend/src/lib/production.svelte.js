@@ -6,6 +6,8 @@ import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngi
 import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
 import { ulid } from './ulid.js';
+import { labelOf, marksOf, relabel } from './labels.js';
+import { generationCounts } from './shots.js';
 
 const AI_MODE = 'ai';
 const RENDER_MODE = 'render3d';
@@ -159,8 +161,9 @@ export function jobClips(range = productionRange()) {
 	return toMake.length ? toMake : inRange;
 }
 
-function requestBody(clips, quality, variants, option) {
-	const body = { shots: clips.map((c) => c.id), quality, variants, preset_id: option.preset, model_id: option.model };
+function requestBody(clips, quality, counts, option) {
+	const body = { shots: clips.map((c) => c.id), quality, variants: counts.variants, preset_id: option.preset, model_id: option.model };
+	if (Object.keys(counts.shot_variants).length) body.shot_variants = counts.shot_variants;
 	if (ui.production.mode === HYBRID_MODE) body.production = HYBRID_MODE;
 	return body;
 }
@@ -171,7 +174,7 @@ export function estimateRequest() {
 	const clips = jobClips();
 	if (!option || !clips.length) return null;
 	if (ui.dirty || project.status === 'saving') return { hold: true };
-	const body = requestBody(clips, ui.production.quality, Math.max(1, doc.engine.variants ?? 1), option);
+	const body = requestBody(clips, ui.production.quality, generationCounts(clips, doc.engine), option);
 	return { key: JSON.stringify([project.id, project.version, body]), projectId: project.id, body };
 }
 
@@ -291,14 +294,14 @@ export async function startGeneration(opts = {}) {
 	const clips = opts.clips ?? jobClips(range);
 	if (!option || !clips.length) return;
 	const quality = opts.quality ?? ui.production.quality;
-	const variants = Math.max(1, opts.variants ?? doc.engine.variants ?? 1);
+	const counts = generationCounts(clips, doc.engine, opts.variants);
 	run.starting = true;
 	updateProduction();
 	try {
 		const saved = await flushSave();
 		if (!saved || !project.id) return toast(t('generation.toast.saveFirst'), 'error');
 		const projectId = project.id;
-		const result = await getClient().generate(projectId, requestBody(clips, quality, variants, option));
+		const result = await getClient().generate(projectId, requestBody(clips, quality, counts, option));
 		if (projectId !== project.id) return;
 		if (!result.ok) return failed(result.error, t('generation.toast.startFailed'));
 		for (const take of result.data) upsertTake(take);
@@ -362,16 +365,26 @@ export async function retryTake(take) {
 	track();
 }
 
-export async function flagTake(take, flag) {
-	const next = take.flag === flag ? null : flag;
-	const before = take.flag;
-	patchTake(take.id, { flag: next });
-	const result = await getClient().flagTake(project.id, take.id, next);
-	if (result.ok) upsertTake(result.data);
-	else {
-		patchTake(take.id, { flag: before });
-		toast(t('generation.toast.actionFailed'), 'error');
-	}
+function applyLabels(changes) {
+	for (const [id, label] of Object.entries(changes)) patchTake(id, marksOf(label));
+}
+
+async function sendLabel(take, label) {
+	const before = Object.fromEntries(realTakesOf(take.shotId).map((x) => [x.id, labelOf(x)]));
+	applyLabels(relabel(takeStore.list, take.id, label));
+	const projectId = project.id;
+	const result = await getClient().labelTake(projectId, take.id, label);
+	if (projectId !== project.id) return;
+	if (result.ok) return void upsertTake(result.data);
+	applyLabels(before);
+	toast(t('generation.toast.actionFailed'), 'error');
+}
+
+export function labelTake(clip, take, label) {
+	if (!take) return;
+	if (label === 'final') return labelOf(take) === 'final' && clip?.take === take.id ? undefined : useTake(clip, take.id);
+	if (labelOf(take) === 'final' || labelOf(take) === label) return;
+	return sendLabel(take, label);
 }
 
 export async function deleteTake(take) {
@@ -430,14 +443,7 @@ function place(clip, take) {
 }
 
 function markChosen(take) {
-	for (const other of realTakesOf(take.shotId)) if (other.id !== take.id && other.chosen) other.chosen = false;
-	take.chosen = true;
-	const projectId = project.id;
-	getClient()
-		.chooseTake(projectId, take.id, true)
-		.then((result) => {
-			if (projectId === project.id && result.ok) upsertTake(result.data);
-		});
+	if (labelOf(take) !== 'final') sendLabel(take, 'final');
 }
 
 function applyDone(take) {
@@ -468,7 +474,7 @@ export function insertResult(id) {
 }
 
 export function assembleChosen() {
-	const chosen = takeStore.list.filter((x) => x.chosen && x.status === 'done' && x.url && doc.clips.some((c) => c.id === x.shotId));
+	const chosen = takeStore.list.filter((x) => labelOf(x) === 'final' && x.status === 'done' && x.url && doc.clips.some((c) => c.id === x.shotId));
 	if (!chosen.length) return toast(t('lib.toast.chooseFirst'), 'warning');
 	act(() => {
 		for (const take of chosen) place(doc.clips.find((c) => c.id === take.shotId), take);

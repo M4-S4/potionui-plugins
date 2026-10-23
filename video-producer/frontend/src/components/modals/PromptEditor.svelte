@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, promptIssues, globalPrompt, itemsIn, secs, deleteSelection, select, discardLast } from '../../lib/state.svelte.js';
+	import { ui, doc, act, promptIssues, globalPrompt, itemsIn, secs, deleteSelection, select, discardLast, promptEdited } from '../../lib/state.svelte.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -28,7 +28,11 @@
 	);
 
 	function saveIt() {
-		act(() => Object.assign(p, { text: draft.text.trim(), start: +draft.start, dur: +draft.dur, strength: +draft.strength }));
+		act(() => {
+			const before = p.text;
+			Object.assign(p, { text: draft.text.trim(), start: +draft.start, dur: +draft.dur, strength: +draft.strength });
+			promptEdited(p, before);
+		});
 		ui.modal = null;
 	}
 	function cancel() {

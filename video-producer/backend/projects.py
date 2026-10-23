@@ -42,6 +42,7 @@ NULLABLE_INTEGER = {"type": ["integer", "null"]}
 NULLABLE_TEXT = {"type": ["string", "null"]}
 NULLABLE_FLAG = {"type": ["boolean", "null"]}
 AUDIO_ROLES = ("Dialogue", "Musique", "Ambiance", "SFX")
+MAX_DRAFTS = 16
 
 
 def _enum(*values: Any) -> Dict[str, Any]:
@@ -76,6 +77,8 @@ def _tagged(tag: str, variants: Dict[str, Dict[str, Any]], nullable: bool = Fals
     }
 
 
+REFERENCE_OVERRIDES = _object({}, optional={"exclude": {**_array(ID), "uniqueItems": True}})
+
 HYBRID = _object({"continuite": NUMBER, "identite": NUMBER, "audio": NUMBER, "mouvement": NUMBER, "style": NUMBER})
 
 CLIP = _object(
@@ -97,7 +100,12 @@ CLIP = _object(
         "preset": TEXT,
         "flag": _enum("favori", "rejet", None),
     },
-    optional={"mute": FLAG},
+    optional={
+        "mute": FLAG,
+        "drafts": {"type": "integer", "minimum": 1, "maximum": MAX_DRAFTS},
+        "revision": {"type": "integer", "minimum": 0},
+        "referenceOverrides": REFERENCE_OVERRIDES,
+    },
 )
 
 AUDIO = _object(

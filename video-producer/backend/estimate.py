@@ -1,6 +1,6 @@
 import logging
 import statistics
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from . import core_bridge, director, limits, takes
@@ -31,6 +31,11 @@ class Order:
     model_id: Optional[str] = None
     label: Optional[str] = None
     production: str = director.AI
+    shot_variants: Mapping[str, int] = field(default_factory=dict)
+
+    def count(self, shot_id: str) -> int:
+        """How many takes the order asks for this shot: its own count, else the order's."""
+        return self.shot_variants.get(shot_id, self.variants)
 
 
 @dataclass
@@ -39,14 +44,23 @@ class Evaluation:
     variants: int
     minutes: Dict[str, float]
     payload: Dict[str, Any]
+    counts: Dict[str, int] = field(default_factory=dict)
 
     @property
     def blocked(self) -> bool:
         return bool(self.payload["blocks"])
 
+    def count(self, shot_id: str) -> int:
+        """How many takes to create for this shot."""
+        return self.counts.get(shot_id, self.variants)
+
+
+def _variant_count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= MAX_VARIANTS
+
 
 def parse_order(body: Any) -> Order:
-    """The shots, quality, variants, preset, model and production mode a body asks for; OrderError for a malformed one. The 3D render mode needs no preset."""
+    """The shots, quality, variants (one count for all, and optionally one per shot), preset, model and production mode a body asks for; OrderError for a malformed one. The 3D render mode needs no preset."""
     if not isinstance(body, dict):
         raise OrderError("The request body must be a JSON object.")
     shots = body.get("shots")
@@ -56,8 +70,13 @@ def parse_order(body: Any) -> Order:
     if quality not in QUALITIES:
         raise OrderError(f"quality must be one of: {', '.join(QUALITIES)}.")
     variants = body.get("variants")
-    if not isinstance(variants, int) or isinstance(variants, bool) or not 1 <= variants <= MAX_VARIANTS:
+    if not _variant_count(variants):
         raise OrderError(f"variants must be an integer from 1 to {MAX_VARIANTS}.")
+    shot_variants = body.get("shot_variants") or {}
+    if not isinstance(shot_variants, dict) or not all(
+        isinstance(shot, str) and shot and _variant_count(count) for shot, count in shot_variants.items()
+    ):
+        raise OrderError(f"shot_variants must map shot ids to integers from 1 to {MAX_VARIANTS}.")
     production = body.get("production", director.AI)
     if production not in director.PRODUCTIONS:
         raise OrderError(f"production must be one of: {', '.join(director.PRODUCTIONS)}.")
@@ -72,7 +91,14 @@ def parse_order(body: Any) -> Order:
     if label is not None and (not isinstance(label, str) or len(label) > LABEL_LIMIT):
         raise OrderError(f"label must be a string of at most {LABEL_LIMIT} characters.")
     return Order(
-        shots=list(shots), quality=quality, variants=variants, preset_id=preset_id, model_id=model_id, label=label, production=production
+        shots=list(shots),
+        quality=quality,
+        variants=variants,
+        preset_id=preset_id,
+        model_id=model_id,
+        label=label,
+        production=production,
+        shot_variants={shot: count for shot, count in shot_variants.items() if shot in shots},
     )
 
 
@@ -156,10 +182,10 @@ async def _vram(owner: User, plans: Plans) -> Tuple[Dict[str, Any], List[Dict[st
     return vram, []
 
 
-def _quota(owner: User, plans: Plans, minutes: Mapping[str, float], variants: int) -> Dict[str, Any]:
+def _quota(owner: User, plans: Plans, minutes: Mapping[str, float], counts: Mapping[str, int]) -> Dict[str, Any]:
     status = limits.gpu_minutes_status(owner.id)
     applies = plans.preset is not None and not plans.preset.cloud
-    needed = sum(minutes.values()) * variants if applies else 0.0
+    needed = sum(value * counts.get(shot_id, 1) for shot_id, value in minutes.items()) if applies else 0.0
     limited = status.get("limit") is not None and not status.get("exempt")
     remaining = status.get("remaining")
     blocks = bool(applies and limited and remaining is not None and needed > float(remaining) + 1e-9)
@@ -184,12 +210,12 @@ def quota_block(quota: Mapping[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _cost(caller: User, plans: Plans, variants: int) -> Optional[Dict[str, Any]]:
+def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dict[str, Any]]:
     if getattr(caller, "account_type", None) != AccountType.ADMIN:
         return None
     if plans.preset is None or not plans.preset.cloud or plans.model is None or not plans.shots:
         return None
-    shots = [{"task": plan.cloud_task, "params": dict(plan.cloud_params)} for plan in plans.shots for _ in range(variants)]
+    shots = [{"task": plan.cloud_task, "params": dict(plan.cloud_params)} for plan in plans.shots for _ in range(counts.get(plan.shot_id, 1))]
     try:
         result = core_bridge.estimate_cloud_cost(caller, plans.model["id"], shots)
     except PermissionError:
@@ -207,6 +233,7 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
     plans = director.build_plans(owner, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production)
     vram, vram_warnings = await _vram(owner, plans)
     backend_id = vram.get("backend_id") or (plans.model or {}).get("backend_id")
+    counts = {plan.shot_id: order.count(plan.shot_id) for plan in plans.shots}
     minutes: Dict[str, float] = {}
     work: Optional[float] = 0.0
     samples = 0
@@ -215,9 +242,9 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
         if index == 0:
             samples = count
         minutes[plan.shot_id] = take_minutes(plan.seconds, ratio)
-        work = None if ratio is None or work is None else work + ratio * plan.seconds * order.variants
+        work = None if ratio is None or work is None else work + ratio * plan.seconds * counts[plan.shot_id]
     seconds = round(work, 1) if work is not None and plans.shots else None
-    quota = _quota(owner, plans, minutes, order.variants)
+    quota = _quota(owner, plans, minutes, counts)
     blocks = list(plans.blocks) + ([quota_block(quota)] if quota["blocks"] else [])
     warnings = list(plans.warnings) + vram_warnings
     if plans.shots and seconds is None:
@@ -229,8 +256,8 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
         "vram": vram,
         "time": {"seconds": seconds, "samples": samples},
         "quota": quota,
-        "cost": _cost(caller, plans, order.variants),
+        "cost": _cost(caller, plans, counts),
         "blocks": blocks,
         "warnings": warnings,
     }
-    return Evaluation(plans=plans, variants=order.variants, minutes=minutes, payload=payload)
+    return Evaluation(plans=plans, variants=order.variants, minutes=minutes, payload=payload, counts=counts)

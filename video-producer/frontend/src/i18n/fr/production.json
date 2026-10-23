@@ -14,8 +14,6 @@
 	"count.references.other": "{count} références",
 	"count.controls.one": "{count} Control video",
 	"count.controls.other": "{count} Control video",
-	"count.variants.one": "{count} variante",
-	"count.variants.other": "{count} variantes",
 	"conflicts.one": "{count} contradiction de direction à vérifier",
 	"conflicts.other": "{count} contradictions de direction à vérifier",
 	"quality.label": "Qualité",
@@ -35,5 +33,7 @@
 	"queued.one": "{count} en file",
 	"queued.other": "{count} en file",
 	"generate": "Générer la sélection",
-	"prepareRender": "Placer les rendus 3D"
+	"prepareRender": "Placer les rendus 3D",
+	"count.takes.one": "{count} prise",
+	"count.takes.other": "{count} prises"
 }

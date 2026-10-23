@@ -155,8 +155,6 @@
 	"color.reset": "Réinitialiser",
 	"color.applyAll": "À tous les plans",
 	"color.appliedAll": "Réglages couleur appliqués à tous les plans",
-	"takes.final": "Finales",
-	"takes.drafts": "Brouillons",
 	"takes.empty": "Aucune prise générée pour ce plan.",
 	"takes.emptyHint": "Commencez par des brouillons rapides, puis passez la meilleure en final.",
 	"takes.more.one": "{count} brouillon de plus",
@@ -178,5 +176,6 @@
 	"frame.removedScene": "retirée",
 	"control.video": "Vidéo",
 	"control.noVideo": "Pas encore rendue",
-	"control.openPlan": "Ouvrir le plan 3D « {name} »"
+	"control.openPlan": "Ouvrir le plan 3D « {name} »",
+	"editShot": "Modifier le plan…"
 }

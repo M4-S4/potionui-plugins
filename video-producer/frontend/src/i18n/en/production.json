@@ -14,8 +14,6 @@
 	"count.references.other": "{count} references",
 	"count.controls.one": "{count} Control video",
 	"count.controls.other": "{count} Control videos",
-	"count.variants.one": "{count} variant",
-	"count.variants.other": "{count} variants",
 	"conflicts.one": "{count} direction conflict to check",
 	"conflicts.other": "{count} direction conflicts to check",
 	"quality.label": "Quality",
@@ -35,5 +33,7 @@
 	"queued.one": "{count} queued",
 	"queued.other": "{count} queued",
 	"generate": "Generate selection",
-	"prepareRender": "Place the 3D renders"
+	"prepareRender": "Place the 3D renders",
+	"count.takes.one": "{count} take",
+	"count.takes.other": "{count} takes"
 }

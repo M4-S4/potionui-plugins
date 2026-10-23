@@ -30,7 +30,8 @@
 		clipLabel,
 		sourceLength
 	} from '../../lib/state.svelte.js';
-	import { takesOf } from '../../lib/production.svelte.js';
+	import { takesOf, shotActivity } from '../../lib/production.svelte.js';
+	import { activityStep } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
 	import { audioPeaks } from '../../lib/sources.svelte.js';
@@ -668,6 +669,7 @@
 	{@const w = x(c.dur)}
 	{@const sel = isSel('clip', c.id)}
 	{@const takes = takesOf(c).length}
+	{@const activity = shotActivity(c.id)}
 	<div
 		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/40'} {reorder?.id === c.id ? 'opacity-60' : ''}"
 		style:left="{x(c.start)}px"
@@ -693,6 +695,20 @@
 			<span class="min-w-0 flex-1 truncate">{clipLabel(c)}</span>
 			{#if takes > 1 && w > 120}<span class="shrink-0 rounded-sm border border-current/40 px-1 text-2xs">{t('timeline.clip.takes', { count: takes })}</span>{/if}
 		</div>
+		{#if activity.state === 'running'}
+			{@const percent = Math.round(activity.progress)}
+			<div class="pointer-events-none absolute inset-x-0 bottom-0 top-5 flex flex-col justify-center gap-1 bg-black/60 px-1.5 text-white">
+				{#if w > 56}
+					<div class="flex items-center justify-between gap-1 text-2xs leading-3">
+						{#if w > 110}<span class="min-w-0 truncate">{activityStep(activity) || (activity.running ? t('generation.state.running') : t('lib.status.queued'))}</span>{/if}
+						{#if activity.running}<span class="vp-tc ml-auto shrink-0">{t('exports.percent', { value: percent })}</span>{/if}
+					</div>
+				{/if}
+				<div class="h-1 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label={t('generation.shotProgress', { shot: clipLabel(c) })} aria-valuemin="0" aria-valuemax="100" aria-valuenow={activity.running ? percent : undefined}>
+					<div class="h-full bg-white transition-[width] duration-150" style:width="{activity.progress}%"></div>
+				</div>
+			</div>
+		{/if}
 		{#if media?.kind === 'video' && (c.mute || w > 72)}
 			<button
 				type="button"

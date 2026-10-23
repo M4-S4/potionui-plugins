@@ -184,7 +184,7 @@ class World:
             projects = [tuple(row) for row in cursor.fetchall()]
             cursor.execute("SELECT project_id, version, label FROM video_producer_versions ORDER BY project_id, version")
             versions = [tuple(row) for row in cursor.fetchall()]
-            cursor.execute("SELECT id, status, chosen, flag FROM video_producer_takes ORDER BY id")
+            cursor.execute("SELECT id, status, chosen, flag, label FROM video_producer_takes ORDER BY id")
             rows = [tuple(row) for row in cursor.fetchall()]
             cursor.execute("SELECT id, status FROM video_producer_export_jobs ORDER BY id")
             exports = [tuple(row) for row in cursor.fetchall()]
@@ -292,6 +292,11 @@ ROUTES = {
     "GET /projects/{id}/queue": Route(
         success=lambda w: Call(f"/projects/{w.pid}/queue", check=lambda r: _data(r)["slots"]["max"] == 2),
         denied=lambda w: Call(f"/projects/{w.pid}/queue", status=404, code="project_not_found", who="user-2"),
+    ),
+    "POST /projects/{id}/takes/{take}/label": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "candidate"}, check=lambda r: _data(r)["take"]["label"] == "candidate"),
+        denied=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "final"}, 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "keep"}, 422, "invalid_request"),
     ),
     "POST /projects/{id}/takes/{take}/choose": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/choose", {"chosen": True}, check=lambda r: _data(r)["take"]["chosen"]),

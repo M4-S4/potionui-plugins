@@ -1,5 +1,7 @@
 from typing import Tuple
 
+from .takes import migrate_labels
+
 _COLUMNS = {
     "video_producer_projects": """
         id TEXT PRIMARY KEY,
@@ -137,6 +139,8 @@ _ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (
     ("video_producer_takes", "started_at", "TIMESTAMP"),
     ("video_producer_takes", "user_id", "TEXT"),
     ("video_producer_takes", "request", "TEXT"),
+    ("video_producer_takes", "label", "TEXT"),
+    ("video_producer_takes", "shot_revision", "INTEGER"),
 )
 
 _INDEXES = (
@@ -156,7 +160,7 @@ _INDEXES = (
 
 
 def create_tables() -> None:
-    """Create the plugin's tables, columns and indexes; safe to run on every boot."""
+    """Create the plugin's tables, columns and indexes, and label the takes stored before labels; safe to run on every boot."""
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:
@@ -168,3 +172,7 @@ def create_tables() -> None:
                 cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
         for index, table, columns in _INDEXES:
             cursor.execute(f"CREATE INDEX IF NOT EXISTS {index} ON {table} ({columns})")
+        cursor.execute("PRAGMA table_info(video_producer_takes)")
+        labelled = "label" in {row["name"] for row in cursor.fetchall()}
+    if labelled:
+        migrate_labels()

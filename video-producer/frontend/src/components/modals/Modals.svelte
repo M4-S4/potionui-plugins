@@ -11,6 +11,7 @@
 	import OpenProject from './OpenProject.svelte';
 	import VersionHistory from './VersionHistory.svelte';
 	import PromptEditor from './PromptEditor.svelte';
+	import ShotEditor from './ShotEditor.svelte';
 	import PromptLibrary from './PromptLibrary.svelte';
 	import AdvancedWorkshop from './AdvancedWorkshop.svelte';
 	import SoundDesign from './SoundDesign.svelte';
@@ -80,6 +81,8 @@
 {#key m}
 	{#if m?.type === 'prompt'}
 		<PromptEditor id={m.id} isNew={m.isNew} />
+	{:else if m?.type === 'shot'}
+		<ShotEditor id={m.id} draft={m.draft ?? null} baseline={m.baseline ?? null} />
 	{:else if m?.type === 'library'}
 		<PromptLibrary target={m.target} tab={m.tab} />
 	{:else if m?.type === 'advanced'}

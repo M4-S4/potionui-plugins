@@ -4,7 +4,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf, ensurePrompt } from '../../lib/state.svelte.js';
+	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf } from '../../lib/state.svelte.js';
 	import { takesOf, startGeneration, promoteToFinal, shotActivity } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -12,7 +12,10 @@
 	import { stages } from '../../lib/catalog.js';
 	import { seam } from '../../lib/continuity.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { shotStale } from '../../lib/shots.js';
+	import { activityStep } from '../../lib/generation.js';
 	import Icon from '../Icon.svelte';
+	import DraftsField from '../shots/DraftsField.svelte';
 
 	let size = $state('m');
 	let dragId = $state(null);
@@ -61,11 +64,11 @@
 		select('clip', c.id);
 		seek(c.start + 0.01);
 	}
-	function writePrompt(c) {
-		const { prompt, created } = ensurePrompt(c);
-		if (!prompt) return;
-		ui.modal = created ? { type: 'prompt', id: prompt.id, isNew: true } : { type: 'prompt', id: prompt.id };
+	function editShot(c) {
+		select('clip', c.id);
+		ui.modal = { type: 'shot', id: c.id };
 	}
+	const generatesFrom = (stage) => stage === 'todo' || stage === 'source';
 	function primary(c) {
 		select('clip', c.id);
 		if (c.stage === 'draft' && c.take) return promoteToFinal(c.take);
@@ -135,6 +138,7 @@
 				{@const sm = i > 0 ? seam(i) : null}
 				{@const activity = shotActivity(c.id)}
 				{@const busy = activity.state === 'running'}
+				{@const stale = shotStale(c, takes)}
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<article
 					animate:flip={{ duration: ms(220) }}
@@ -178,10 +182,13 @@
 								<Icon name="alert" class="h-3.5 w-3.5" />
 							</span>
 						{/if}
+						{#if stale}
+							<span class="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-warning-solid px-1.5 py-0.5 text-xs font-medium text-black" style:max-width="calc(100% - 4.75rem)" title={t('storyboard.staleTip')}><Icon name="pencil" class="h-3 w-3 shrink-0" /><span class="truncate">{t('storyboard.stale')}</span></span>
+						{/if}
 						<span class="vp-tc absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-white backdrop-blur-sm">{secs(c.dur)}</span>
 						{#if busy}
 							<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 backdrop-blur-[2px]" transition:fade={{ duration: ms(150) }}>
-								<span class="max-w-[90%] truncate text-xs text-white">{activity.step || (activity.running ? t('generation.state.running') : t('lib.status.queued'))}</span>
+								<span class="max-w-[90%] truncate text-xs text-white">{activityStep(activity) || (activity.running ? t('generation.state.running') : t('lib.status.queued'))}</span>
 								<div class="h-1 w-2/3 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label={t('generation.shotProgress', { shot: clipLabel(c) })} aria-valuemin="0" aria-valuemax="100" aria-valuenow={activity.running ? Math.round(activity.progress) : undefined}>
 									<div class="h-full bg-white transition-[width] duration-150" style:width="{activity.progress}%"></div>
 								</div>
@@ -204,16 +211,26 @@
 						<div class="flex items-center gap-2 px-1 text-xs">
 							<span class="flex items-center gap-1.5 {stages[c.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[c.stage].dot}"></span>{stages[c.stage].label}</span>
 							{#if takes.length}<span class="text-fg-subtle">{t('storyboard.takes', { count: takes.length })}</span>{/if}
+							<HostUi name="Tooltip" props={{ text: t('storyboard.editTip'), wrapperClass: 'ml-auto inline-flex' }}>
+								<button type="button" class="flex min-h-6 items-center gap-1 rounded px-1 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg" aria-label={t('storyboard.edit', { shot: clipLabel(c) })} onclick={(e) => (e.stopPropagation(), editShot(c))}>
+									<Icon name="pencil" class="h-3 w-3" />{#if size !== 's'}{t('storyboard.editShort')}{/if}
+								</button>
+							</HostUi>
 						</div>
-						<button
-							type="button"
-							class="mt-1 line-clamp-2 min-h-[32px] w-full px-1 text-left text-xs leading-4 {p?.text ? 'text-fg-muted hover:text-fg' : 'italic text-fg-subtle hover:text-fg-muted'}"
-							onclick={(e) => (e.stopPropagation(), writePrompt(c))}
-						>
-							{p?.text || t('storyboard.addPrompt')}
-						</button>
-						<div class="mt-2 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 {isSel(c) || busy ? 'opacity-100' : ''}">
+						{#if takes.length}
+							<p class="mt-1 line-clamp-2 min-h-[32px] w-full px-1 text-xs leading-4 {p?.text ? 'text-fg-muted' : 'italic text-fg-subtle'}">{p?.text || t('storyboard.noPrompt')}</p>
+						{:else}
+							<button
+								type="button"
+								class="mt-1 line-clamp-2 min-h-[32px] w-full px-1 text-left text-xs leading-4 {p?.text ? 'text-fg-muted hover:text-fg' : 'italic text-fg-subtle hover:text-fg-muted'}"
+								onclick={(e) => (e.stopPropagation(), editShot(c))}
+							>
+								{p?.text || t('storyboard.addPrompt')}
+							</button>
+						{/if}
+						<div class="mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 {isSel(c) || busy ? 'opacity-100' : ''}">
 							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName(primaryIcon[c.stage]), disabled: busy, onclick: (e) => (e.stopPropagation(), primary(c)) }}>{primaryLabel(c.stage)}</HostUi>
+							{#if generatesFrom(c.stage)}<DraftsField clips={[c]} label={false} disabled={busy} />{/if}
 							<div class="flex-1"></div>
 							<HostUi name="IconButton" props={{ icon: hostIconName('eye'), label: t('storyboard.inViewer'), size: 'xs', tooltip: t('storyboard.inViewer'), onclick: (e) => (e.stopPropagation(), inViewer(c)) }} />
 							<HostUi name="IconButton" props={{ icon: 'plus', label: t('storyboard.insertAfter'), size: 'xs', tooltip: t('storyboard.insertAfter'), onclick: (e) => (e.stopPropagation(), addShot(t('lib.default.shot'), '', 4, c.id)) }} />

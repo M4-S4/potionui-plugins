@@ -155,8 +155,6 @@
 	"color.reset": "Reset",
 	"color.applyAll": "To all shots",
 	"color.appliedAll": "Color settings applied to all shots",
-	"takes.final": "Final",
-	"takes.drafts": "Drafts",
 	"takes.empty": "No take generated for this shot yet.",
 	"takes.emptyHint": "Start with quick drafts, then make the best one final.",
 	"takes.more.one": "{count} more draft",
@@ -178,5 +176,6 @@
 	"frame.removedScene": "removed",
 	"control.video": "Video",
 	"control.noVideo": "Not rendered yet",
-	"control.openPlan": "Open the 3D shot “{name}”"
+	"control.openPlan": "Open the 3D shot “{name}”",
+	"editShot": "Edit shot…"
 }

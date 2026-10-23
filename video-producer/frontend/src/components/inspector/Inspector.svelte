@@ -20,7 +20,8 @@
 		globalPrompt,
 		clipLabel,
 		shotIdAt,
-		sourceLength
+		sourceLength,
+		promptEdited
 	} from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -62,6 +63,7 @@
 	import SeamAction from '../takes/SeamAction.svelte';
 	import Icon from '../Icon.svelte';
 	import TakesSection from './TakesSection.svelte';
+	import DraftsField from '../shots/DraftsField.svelte';
 	import ColorSection from './ColorSection.svelte';
 	import NumField from './NumField.svelte';
 	import SliderField from './SliderField.svelte';
@@ -162,6 +164,12 @@
 	const seamFrame = (shotId, kind) => framesOf(doc, shotId, kind).find((f) => f.assetId) ?? null;
 	const roleOption = (role) => (roleKind(role) === 'first' ? 'Début' : roleKind(role) === 'last' ? 'Fin' : role);
 
+	function editPrompt(p, text) {
+		const before = p.text;
+		p.text = text;
+		promptEdited(p, before);
+	}
+
 	function setScope(id) {
 		if (id === item.scope.type) return;
 		act(() => (item.scope = id === 'global' ? { type: 'global' } : { type: 'shot', shotId: shotIdAt(ui.playhead) ?? doc.clips[0]?.id ?? null }));
@@ -252,6 +260,10 @@
 				{:else if ui.inspectorTab === 'color'}
 					<ColorSection clip={item} />
 				{:else}
+					<div class="flex items-center gap-2">
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('pencil'), class: 'min-w-0 flex-1', onclick: () => (ui.modal = { type: 'shot', id: item.id }) }}>{t('inspector.editShot')}</HostUi>
+						<DraftsField clips={[item]} label={false} disabled={busy} />
+					</div>
 					{#if item.stage !== 'final' && item.stage !== 'source'}
 						{@const promote = item.stage === 'draft' && Boolean(take)}
 						<button
@@ -370,7 +382,7 @@
 				</HostUi>
 			{:else if s.kind === 'prompt'}
 				<section class="space-y-2">
-					<textarea class="input w-full text-sm" rows="5" value={item.text} onchange={(e) => act(() => (item.text = e.currentTarget.value))} placeholder={t('inspector.prompt.placeholder')} aria-label={t('inspector.prompt.text')}></textarea>
+					<textarea class="input w-full text-sm" rows="5" value={item.text} onchange={(e) => act(() => editPrompt(item, e.currentTarget.value))} placeholder={t('inspector.prompt.placeholder')} aria-label={t('inspector.prompt.text')}></textarea>
 					<div class="flex gap-1.5">
 						<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName('wand'), class: 'flex-1', onclick: () => (ui.modal = { type: 'library', target: { kind: 'prompt', id: item.id } }) }}>
 							{t('inspector.prompt.library')}

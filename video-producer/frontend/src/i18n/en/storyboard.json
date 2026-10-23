@@ -22,5 +22,11 @@
 	"insertAfter": "Insert a shot after",
 	"delete": "Delete the shot",
 	"newShot": "New shot",
-	"newShotHint": "or break down the synopsis on the left"
+	"newShotHint": "or break down the synopsis on the left",
+	"stale": "Prompt modified",
+	"staleTip": "The shot was edited after its take was generated: generate new drafts to follow the edit",
+	"edit": "Edit shot {shot}",
+	"editTip": "Open the shot editor: prompt, duration, frames, references and drafts",
+	"editShort": "Edit",
+	"noPrompt": "No instruction"
 }

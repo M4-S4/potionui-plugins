@@ -29,6 +29,8 @@
 	import Icon from '../Icon.svelte';
 	import InfoTip from '../shell/InfoTip.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
+	import DraftsField from '../shots/DraftsField.svelte';
+	import { takeCount } from '../../lib/shots.js';
 
 	const p = $derived(ui.production);
 	const ready = $derived(readiness());
@@ -80,7 +82,7 @@
 	const vramText = $derived(vram && !vram.unknown && vram.estimateGb != null ? t('production.estimate.vramShort', { value: one(vram.estimateGb) }) : '—');
 	const estLines = $derived.by(() => {
 		if (!est) return [estimateState.loading ? t('generation.estimate.loading') : t('generation.estimate.pending')];
-		const lines = [t('generation.estimate.scope', { shots: t('production.count.shots', { count: clips.length }), variants: t('production.count.variants', { count: doc.engine.variants ?? 1 }), res: resolutions })];
+		const lines = [t('generation.estimate.scope', { shots: t('production.count.shots', { count: clips.length }), variants: t('production.count.takes', { count: takeCount(clips, doc.engine) }), res: resolutions })];
 		lines.push(est.time.seconds != null ? t('generation.estimate.time', { duration: fmtDuration(est.time.seconds), engine: engineLabel(), count: est.time.samples }) : t('generation.estimate.timeUnknown', { engine: engineLabel() }));
 		if (!cloud) {
 			if (!vram || vram.unknown || vram.estimateGb == null) lines.push(t('generation.estimate.vramUnknown'));
@@ -156,6 +158,7 @@
 	<HostUi name="Tooltip" props={{ text: p.quality === 'draft' ? t('production.quality.draftTip', { resolution: draftRes }) : t('production.quality.finalTip', { resolution: finalRes }) }}>
 		<HostUi name="SegmentedControl" props={{ items: qualities, selected: p.quality, variant: 'toggle', ariaLabel: t('production.quality.label'), onSelect: (id) => (ui.production.quality = id) }} />
 	</HostUi>
+	{#if p.mode !== 'render3d'}<DraftsField {clips} label={false} disabled={busy || !clips.length} />{/if}
 	<select class="vp-popup" bind:value={ui.production.mode} disabled={busy} aria-label={t('production.mode.label')}>
 		{#each PRODUCTION_MODES as m (m)}<option value={m}>{modeLabel(m)}</option>{/each}
 	</select>

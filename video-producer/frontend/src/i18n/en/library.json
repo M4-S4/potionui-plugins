@@ -214,5 +214,6 @@
 	"tpl.p1.name": "My drone flyover",
 	"tpl.p1.description": "High flyover, fluid movement.",
 	"tpl.p1.keywords": "drone, flyover",
-	"tpl.p1.text": "Drone flyover above {place}, slow fluid movement, slight tilt toward {subject}."
+	"tpl.p1.text": "Drone flyover above {place}, slow fluid movement, slight tilt toward {subject}.",
+	"target.shot": "shot “{shot}”"
 }

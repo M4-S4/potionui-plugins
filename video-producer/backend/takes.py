@@ -12,6 +12,12 @@ ACTIVE = ("queued", "running")
 
 FLAGS = ("keep", "reject")
 
+LABELS = ("draft", "rejected", "candidate", "final")
+
+DRAFT, REJECTED, CANDIDATE, FINAL = LABELS
+
+_FLAG_OF = {CANDIDATE: "keep", REJECTED: "reject"}
+
 CALIBRATION_ROWS = 20
 
 COLUMNS = (
@@ -36,6 +42,8 @@ COLUMNS = (
     "variant",
     "chosen",
     "flag",
+    "label",
+    "shot_revision",
     "profile",
     "prompt_text",
     "file_path",
@@ -75,6 +83,8 @@ PUBLIC = (
     "variant",
     "chosen",
     "flag",
+    "label",
+    "shot_revision",
     "profile",
     "prompt_text",
     "file_path",
@@ -107,8 +117,26 @@ def now() -> str:
     return _now()
 
 
+def legacy_label(chosen: Any, flag: Any) -> str:
+    """The label a take kept before labels: final when chosen, candidate when kept, rejected when rejected, else draft."""
+    if chosen:
+        return FINAL
+    return {"keep": CANDIDATE, "reject": REJECTED}.get(flag, DRAFT)
+
+
+def initial_label(quality: Any) -> str:
+    """The label a new take starts with: candidate at final quality, draft otherwise."""
+    return CANDIDATE if quality == "final" else DRAFT
+
+
+def _marks(label: str) -> Dict[str, Any]:
+    return {"label": label, "chosen": int(label == FINAL), "flag": _FLAG_OF.get(label)}
+
+
 def _take(row: Any) -> Dict[str, Any]:
     take = {column: row[column] for column in COLUMNS}
+    if take["label"] not in LABELS:
+        take["label"] = legacy_label(take["chosen"], take["flag"])
     take["chosen"] = bool(take["chosen"])
     take["units_reserved"] = float(take["units_reserved"] or 0)
     take["request"] = json.loads(take["request"]) if take["request"] else None
@@ -153,6 +181,9 @@ def create_take(fields: Dict[str, Any]) -> Dict[str, Any]:
     take = {column: None for column in COLUMNS}
     take.update({"id": generate_ulid(), "status": "queued", "chosen": False, "units_reserved": 0.0, "created_at": _now()})
     take.update({key: value for key, value in fields.items() if key in COLUMNS})
+    if take["label"] not in LABELS:
+        take["label"] = legacy_label(take["chosen"], take["flag"]) if take["chosen"] or take["flag"] else initial_label(take["quality"])
+    take.update(_marks(take["label"]))
     values = {**take, "chosen": int(bool(take["chosen"])), "request": json.dumps(take["request"]) if take["request"] else None}
     with db.get_cursor() as cursor:
         cursor.execute(
@@ -247,30 +278,64 @@ def settle(take_id: str, status: str, **fields: Any) -> bool:
     return _update(take_id, {**fields, "status": status}, _ACTIVE_SQL)
 
 
-def choose(take_id: str, chosen: bool) -> Optional[Dict[str, Any]]:
-    """Mark a take as the one kept for its shot, unmarking the others, or unmark it."""
+def set_label(take_id: str, label: str) -> Optional[Dict[str, Any]]:
+    """Label a take; a final take becomes the only one of its shot, the previous final turning candidate."""
     from src.plugin_api import db
 
     take = get_take(take_id)
     if take is None:
         return None
+    marks = _marks(label)
     with db.get_cursor() as cursor:
-        if chosen:
+        if label == FINAL:
+            demoted = _marks(CANDIDATE)
             cursor.execute(
-                f"UPDATE {TAKES} SET chosen = 0 WHERE project_id = ? AND shot_id = ? AND id != ?",
-                (take["project_id"], take["shot_id"], take_id),
+                f"UPDATE {TAKES} SET label = ?, chosen = ?, flag = ? "
+                "WHERE project_id = ? AND shot_id = ? AND id != ? AND (label = ? OR chosen = 1)",
+                (demoted["label"], demoted["chosen"], demoted["flag"], take["project_id"], take["shot_id"], take_id, FINAL),
             )
-        cursor.execute(f"UPDATE {TAKES} SET chosen = ? WHERE id = ?", (int(chosen), take_id))
+        cursor.execute(
+            f"UPDATE {TAKES} SET label = ?, chosen = ?, flag = ? WHERE id = ?",
+            (marks["label"], marks["chosen"], marks["flag"], take_id),
+        )
     return get_take(take_id)
+
+
+def choose(take_id: str, chosen: bool) -> Optional[Dict[str, Any]]:
+    """The former choose: final when chosen; unchoosing a final take makes it candidate and leaves the others alone."""
+    take = get_take(take_id)
+    if take is None:
+        return None
+    if chosen:
+        return set_label(take_id, FINAL)
+    return set_label(take_id, CANDIDATE) if take["label"] == FINAL else take
 
 
 def set_flag(take_id: str, flag: Optional[str]) -> Optional[Dict[str, Any]]:
-    """Flag a take as kept or rejected, or clear its flag."""
+    """The former flag: keep makes a take candidate and reject rejected; clearing the flag of a candidate or rejected take makes it draft; a final take stays final unless rejected."""
+    take = get_take(take_id)
+    if take is None:
+        return None
+    if flag == "reject":
+        return set_label(take_id, REJECTED)
+    if take["label"] == FINAL:
+        return take
+    if flag == "keep":
+        return set_label(take_id, CANDIDATE)
+    return set_label(take_id, DRAFT) if take["label"] in (CANDIDATE, REJECTED) else take
+
+
+def migrate_labels() -> int:
+    """Label the takes stored before labels from their former marks; returns how many were labelled."""
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:
-        cursor.execute(f"UPDATE {TAKES} SET flag = ? WHERE id = ?", (flag, take_id))
-    return get_take(take_id)
+        cursor.execute(
+            f"UPDATE {TAKES} SET label = CASE WHEN chosen = 1 THEN ? WHEN flag = 'keep' THEN ? "
+            "WHEN flag = 'reject' THEN ? ELSE ? END WHERE label IS NULL OR label NOT IN (?, ?, ?, ?)",
+            (FINAL, CANDIDATE, REJECTED, DRAFT, *LABELS),
+        )
+        return cursor.rowcount
 
 
 def delete_take(take_id: str) -> bool:
