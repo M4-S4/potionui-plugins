@@ -355,6 +355,24 @@ class _Inputs:
         return index
 
 
+def sound_chain(item: Mapping[str, Any], lane: Mapping[str, Any], origin: float = 0.0) -> List[str]:
+    """The filters that play an audio item at its place in a mix starting at origin seconds on the timeline: its part of the source, its gain with its track's volume and its fades, the part before origin cut off."""
+    dur = float(item["dur"])
+    start = float(item.get("start") or 0)
+    gain = float(item.get("gain") or 0) + float(lane.get("vol") or 0)
+    skipped = max(origin - start, 0.0)
+    return [
+        f"atrim=start={num(item.get('srcIn') or 0)}:duration={num(dur)}",
+        "asetpts=PTS-STARTPTS",
+        f"aresample={SAMPLE_RATE}",
+        "aformat=sample_fmts=fltp:channel_layouts=stereo",
+        f"volume={num(gain)}dB",
+        *_fades(item, dur, "afade"),
+        *([f"atrim=start={num(skipped)}", "asetpts=PTS-STARTPTS"] if skipped > EPSILON else []),
+        f"adelay=delays={round(max(start - origin, 0.0) * 1000)}:all=1",
+    ]
+
+
 def _lanes(doc: Mapping[str, Any], sounds: Mapping[str, str], inputs: _Inputs) -> Tuple[List[str], List[str]]:
     """The chains of the audio items heard in the mix, each from its own input, and their labels."""
     chains: List[str] = []
@@ -362,20 +380,9 @@ def _lanes(doc: Mapping[str, Any], sounds: Mapping[str, str], inputs: _Inputs) -
     for item, lane in audible(doc):
         if item["id"] not in sounds:
             continue
-        dur = float(item["dur"])
         source = inputs.sound(sounds[item["id"]])
-        gain = float(item.get("gain") or 0) + float(lane.get("vol") or 0)
-        chain = [
-            f"atrim=start={num(item.get('srcIn') or 0)}:duration={num(dur)}",
-            "asetpts=PTS-STARTPTS",
-            f"aresample={SAMPLE_RATE}",
-            "aformat=sample_fmts=fltp:channel_layouts=stereo",
-            f"volume={num(gain)}dB",
-            *_fades(item, dur, "afade"),
-            f"adelay=delays={round(float(item.get('start') or 0) * 1000)}:all=1",
-        ]
         label = f"[m{len(labels)}]"
-        chains.append(f"[{source}:a]{','.join(chain)}{label}")
+        chains.append(f"[{source}:a]{','.join(sound_chain(item, lane))}{label}")
         labels.append(label)
     return chains, labels
 

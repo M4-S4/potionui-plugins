@@ -2,17 +2,21 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, asset, clipLabel, globalPrompt, promptIssues, relayout, secs, sourceLength } from '../../lib/state.svelte.js';
-	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine } from '../../lib/production.svelte.js';
+	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf } from '../../lib/production.svelte.js';
 	import { PROFILES, optionKey, presetProfiles } from '../../lib/generation.js';
 	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
 	import { families, refTypeLabel } from '../../lib/references.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { applyShotDraft, inputsChanged, shotDraft, shotReferences } from '../../lib/shots.js';
+	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
+	import { laneTitle } from '../../lib/tracks.js';
 	import { ulid } from '../../lib/ulid.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import ImagePicker from '../shots/ImagePicker.svelte';
+	import AudioPicker from '../shots/AudioPicker.svelte';
+	import SoundNote from '../shots/SoundNote.svelte';
 
 	let { id, draft: kept = null, baseline: keptBaseline = null } = $props();
 
@@ -32,7 +36,7 @@
 
 	const baseline = initialBaseline();
 	let draft = $state(initialDraft());
-	let adding = $state(false);
+	let adding = $state(null);
 
 	const takes = $derived(clip ? takesOf(clip) : []);
 	const family = (space) => families.find((f) => f.id === space) ?? null;
@@ -49,6 +53,11 @@
 		return option ? presetProfiles(option.info) : [...PROFILES];
 	});
 	const ownEngine = $derived(Object.keys(draft.engine).length > 0);
+	const isSound = (r) => asset(r.assetId)?.kind === 'audio';
+	const lanes = $derived(clip ? referenceLanes(doc, clip, draft.excludeLanes) : []);
+	const behavior = $derived(clip ? soundBehaviorOf({ ...clip, engine: draft.engine }) : null);
+	const soundWindow = $derived(clip ? (behavior === CONDITION ? conditionWindow(doc, { ...clip, dur: +draft.dur }) : muxWindow({ ...clip, dur: +draft.dur })) : [0, 0]);
+	const sounding = $derived(lanes.some((x) => !x.excluded) || draft.own.some(isSound) || inherited.some((x) => !x.excluded && isSound(x.reference)));
 
 	function pickEngine(key) {
 		const { preset, model, backend, ...rest } = draft.engine;
@@ -72,10 +81,21 @@
 	}
 
 	function addOwn(assetId) {
-		adding = false;
+		adding = null;
 		if (!assetId) return;
 		const a = asset(assetId);
 		draft.own = [...draft.own, { id: ulid(), name: a?.name || t('lib.default.reference', { type: refTypeLabel(IDENTITY_TYPES[0]) }), space: 'identite', type: IDENTITY_TYPES[0], assetId, role: 'Identité' }];
+	}
+
+	function addSound(assetId) {
+		adding = null;
+		if (!assetId) return;
+		const a = asset(assetId);
+		draft.own = [...draft.own, { id: ulid(), name: a?.name || t('lib.default.reference', { type: refTypeLabel(SOUND_TYPES[0]) }), space: SOUND_SPACE, type: SOUND_TYPES[0], assetId, role: SOUND_ROLE }];
+	}
+
+	function toggleLane(laneId, on) {
+		draft.excludeLanes = on ? [...draft.excludeLanes, laneId] : draft.excludeLanes.filter((x) => x !== laneId);
 	}
 
 	function removeOwn(refId) {
@@ -139,7 +159,11 @@
 										{#if thumb}<img src={thumb} alt="" class="h-7 w-12 shrink-0 rounded object-cover" />{:else}<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name={f?.icon ?? 'bookmark'} class="h-3.5 w-3.5 text-fg-muted" /></span>{/if}
 										<span class="min-w-0 flex-1">
 											<span class="block truncate text-fg {excluded ? 'line-through' : ''}">{r.name}</span>
-											<span class="block truncate text-fg-subtle">{f?.label ?? r.space} · {refTypeLabel(r.type)}{r.assetId ? '' : ` · ${t('modals.shot.noMedia')}`}</span>
+											<span class="block truncate text-fg-subtle">{f?.label ?? r.space} · {refTypeLabel(r.type)}{r.assetId ? '' : ` · ${t('modals.shot.noMedia')}`}{isSound(r) && asset(r.assetId)?.srcDur ? ` · ${secs(asset(r.assetId).srcDur)}` : ''}</span>
+											{#if isSound(r) && asset(r.assetId)?.src && !excluded}
+												<!-- svelte-ignore a11y_media_has_caption -->
+												<audio class="mt-1 h-7 w-full" controls preload="metadata" src={asset(r.assetId).src} aria-label={t('modals.shot.listen', { name: r.name })}></audio>
+											{/if}
 										</span>
 										<label class="flex shrink-0 items-center gap-1.5 text-fg-muted">
 											<input type="checkbox" checked={excluded} onchange={(e) => toggleExclude(r.id, e.currentTarget.checked)} aria-label={t('modals.shot.excludeLabel', { name: r.name })} />
@@ -155,27 +179,41 @@
 					<div class="space-y-1">
 						<div class="flex items-center justify-between gap-2">
 							<span class="text-xs font-medium text-fg-muted">{t('modals.shot.own')}</span>
-							<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => (adding = !adding) }}>{t('modals.shot.addReference')}</HostUi>
+							<span class="flex items-center gap-1">
+								<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => (adding = adding === 'image' ? null : 'image') }}>{t('modals.shot.addReference')}</HostUi>
+								<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => (adding = adding === 'sound' ? null : 'sound') }}>{t('modals.shot.addSound')}</HostUi>
+							</span>
 						</div>
-						{#if adding}
+						{#if adding === 'image'}
 							<ImagePicker title={t('modals.shot.newReference')} onpick={addOwn} removable={false} compact />
+						{:else if adding === 'sound'}
+							<AudioPicker title={t('modals.shot.newSound')} onpick={addSound} removable={false} />
 						{/if}
 						{#if draft.own.length}
 							<ul class="divide-y divide-line rounded-lg border border-line-strong">
 								{#each draft.own as r (r.id)}
 									{@const f = family(r.space)}
 									{@const thumb = r.assetId ? assetThumb(asset(r.assetId)) : null}
-									<li class="flex items-center gap-2 px-2 py-1.5 text-xs">
-										{#if thumb}<img src={thumb} alt="" class="h-7 w-12 shrink-0 rounded object-cover" />{:else}<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name={f?.icon ?? 'bookmark'} class="h-3.5 w-3.5 text-fg-muted" /></span>{/if}
-										<input class="input vp-dense min-w-0 flex-1" bind:value={r.name} aria-label={t('modals.shot.referenceName')} />
-										{#if r.space === 'identite'}
-											<select class="vp-popup shrink-0" bind:value={r.type} aria-label={t('modals.shot.referenceType', { name: r.name })}>
-												{#each IDENTITY_TYPES as type (type)}<option value={type}>{refTypeLabel(type)}</option>{/each}
-											</select>
-										{:else}
-											<span class="shrink-0 text-fg-subtle">{f?.label ?? r.space} · {refTypeLabel(r.type)}</span>
+									<li class="space-y-1 px-2 py-1.5 text-xs">
+										<div class="flex items-center gap-2">
+											{#if thumb}<img src={thumb} alt="" class="h-7 w-12 shrink-0 rounded object-cover" />{:else}<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name={f?.icon ?? 'bookmark'} class="h-3.5 w-3.5 text-fg-muted" /></span>{/if}
+											<input class="input vp-dense min-w-0 flex-1" bind:value={r.name} aria-label={t('modals.shot.referenceName')} />
+											{#if r.space === 'identite' || r.space === SOUND_SPACE}
+												<select class="vp-popup shrink-0" bind:value={r.type} aria-label={t('modals.shot.referenceType', { name: r.name })}>
+													{#each r.space === SOUND_SPACE ? SOUND_TYPES : IDENTITY_TYPES as type (type)}<option value={type}>{refTypeLabel(type)}</option>{/each}
+												</select>
+											{:else}
+												<span class="shrink-0 text-fg-subtle">{f?.label ?? r.space} · {refTypeLabel(r.type)}</span>
+											{/if}
+											<HostUi name="IconButton" props={{ icon: 'trash', label: t('modals.shot.removeReference', { name: r.name }), tooltip: t('modals.shot.removeReferenceTip'), size: 'xs', onclick: () => removeOwn(r.id) }} />
+										</div>
+										{#if isSound(r) && asset(r.assetId)?.src}
+											<div class="flex items-center gap-2 pl-14">
+												<!-- svelte-ignore a11y_media_has_caption -->
+												<audio class="h-7 min-w-0 flex-1" controls preload="metadata" src={asset(r.assetId).src} aria-label={t('modals.shot.listen', { name: r.name })}></audio>
+												{#if asset(r.assetId).srcDur}<span class="vp-tc shrink-0 text-fg-subtle">{secs(asset(r.assetId).srcDur)}</span>{/if}
+											</div>
 										{/if}
-										<HostUi name="IconButton" props={{ icon: 'trash', label: t('modals.shot.removeReference', { name: r.name }), tooltip: t('modals.shot.removeReferenceTip'), size: 'xs', onclick: () => removeOwn(r.id) }} />
 									</li>
 								{/each}
 							</ul>
@@ -183,6 +221,30 @@
 							<p class="text-xs text-fg-subtle">{t('modals.shot.noOwn')}</p>
 						{/if}
 					</div>
+					<div class="space-y-1">
+						<div class="text-xs font-medium text-fg-muted">{t('modals.shot.tracks')}</div>
+						{#if lanes.length}
+							<ul class="divide-y divide-line rounded-lg border border-line-strong">
+								{#each lanes as { lane, excluded } (lane.id)}
+									{@const portion = trackPortion(doc, lane.id, soundWindow)}
+									<li class="flex items-center gap-2 px-2 py-1.5 text-xs {excluded ? 'opacity-60' : ''}">
+										<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name="wave" class="h-3.5 w-3.5 text-fg-muted" /></span>
+										<span class="min-w-0 flex-1">
+											<span class="block truncate text-fg {excluded ? 'line-through' : ''}">{laneTitle(doc.lanes, lane)}</span>
+											<span class="block truncate text-fg-subtle">{portion.length ? t('modals.shot.trackPortion', { count: portion.length, start: secs(soundWindow[0]), end: secs(soundWindow[1]) }) : t('modals.shot.trackSilent', { start: secs(soundWindow[0]), end: secs(soundWindow[1]) })}</span>
+										</span>
+										<label class="flex shrink-0 items-center gap-1.5 text-fg-muted">
+											<input type="checkbox" checked={excluded} onchange={(e) => toggleLane(lane.id, e.currentTarget.checked)} aria-label={t('modals.shot.excludeLabel', { name: laneTitle(doc.lanes, lane) })} />
+											{t('modals.shot.exclude')}
+										</label>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="text-xs text-fg-subtle">{t('modals.shot.noTracks')}</p>
+						{/if}
+					</div>
+					{#if sounding && behavior}<SoundNote {behavior} />{/if}
 				</section>
 			</div>
 

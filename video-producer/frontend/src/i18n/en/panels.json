@@ -165,5 +165,8 @@
 	"queue.prioritizeTip": "Move to the head of the queue",
 	"queue.prioritizeNo": "Already first, or already handed to the engine",
 	"queue.cancel": "Cancel take {variant}",
-	"queue.cancelTip": "Cancel"
+	"queue.cancelTip": "Cancel",
+	"dock.engine.margin": "Margin of the reference tracks",
+	"dock.engine.marginUnit": "seconds before and after the shot",
+	"dock.engine.marginHint": "Widens the part of a reference track that guides MiniMax H3. A track mixed onto the take is always cut to the shot."
 }

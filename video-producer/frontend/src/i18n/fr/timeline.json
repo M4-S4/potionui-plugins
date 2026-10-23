@@ -88,5 +88,6 @@
 	"block.editTip": "Double-cliquez pour éditer",
 	"block.percent": "{value} %",
 	"drop.here": "Déposer à {time}",
-	"drop.refused": "Non accepté sur cette piste"
+	"drop.refused": "Non accepté sur cette piste",
+	"lane.reference": "Référence pour la génération"
 }

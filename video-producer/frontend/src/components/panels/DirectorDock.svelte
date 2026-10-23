@@ -4,10 +4,12 @@
 	import { formatTime, t } from '../../i18n/index.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { ui, doc, select, secs, globalPrompt, allIssues, itemsIn, productionRange, act, clipLabel } from '../../lib/state.svelte.js';
-	import { takesOf, assembleChosen, supportedProfiles, engineLabel, currentEngine, engineGroups, selectEngine, setProjectQuality, openEngineSettings } from '../../lib/production.svelte.js';
+	import { takesOf, assembleChosen, supportedProfiles, engineLabel, currentEngine, engineGroups, selectEngine, setProjectQuality, openEngineSettings, soundBehaviorOf } from '../../lib/production.svelte.js';
 	import { takeStore, flyingTakes } from '../../lib/takes.svelte.js';
 	import { projectQuality, hasOwnEngine } from '../../lib/engine.js';
 	import { projectDrafts } from '../../lib/shots.js';
+	import { MAX_MARGIN, SOUND_SPACE, referenceMargin, setReferenceMargin } from '../../lib/sound.js';
+	import SoundNote from '../shots/SoundNote.svelte';
 	import { seams, matchToPrevious, seamTip } from '../../lib/continuity.svelte.js';
 	import { directionFields, stages } from '../../lib/catalog.js';
 	import { families, addReference, attachToRange } from '../../lib/references.js';
@@ -292,6 +294,14 @@
 					<DraftsField id="vp-dock-engine-drafts" value={projectDrafts(doc.engine)} onchange={(n) => act(() => (doc.engine.variants = n))} label={false} />
 				</div>
 			</div>
+			<div class="space-y-1">
+				<label class="vp-label block" for="vp-dock-engine-margin">{t('panels.dock.engine.margin')}</label>
+				<div class="flex items-center gap-2">
+					<input id="vp-dock-engine-margin" class="input vp-dense vp-tc w-20" type="number" min="0" max={MAX_MARGIN} step="0.5" value={referenceMargin(doc.engine)} onchange={(e) => act(() => setReferenceMargin(doc.engine, e.currentTarget.value))} />
+					<span class="text-xs text-fg-muted">{t('panels.dock.engine.marginUnit')}</span>
+				</div>
+				<p class="text-xs text-fg-subtle">{t('panels.dock.engine.marginHint')}</p>
+			</div>
 			<p class="text-xs text-fg-subtle">{t('panels.dock.engine.hint')}</p>
 			{#if overridden}
 				<p class="flex items-center gap-1.5 text-xs text-fg-muted"><Icon name="info" class="h-3.5 w-3.5 shrink-0" />{t('panels.dock.engine.overridden', { count: overridden })}</p>
@@ -324,7 +334,9 @@
 	{:else if ui.dockTab === 'references'}
 		<div class="flex flex-col gap-4 p-3">
 			<p class="text-xs text-fg-subtle">{t('panels.dock.refs.intro')}</p>
-			{#if !supported.includes('Ref2VA')}
+			{#if ui.refSpace === SOUND_SPACE}
+				<SoundNote behavior={soundBehaviorOf({})} />
+			{:else if !supported.includes('Ref2VA')}
 				<HostUi name="Tooltip" props={{ text: t('generation.refs.why', { engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
 					<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.refs.notSent')}</HostUi>
 				</HostUi>

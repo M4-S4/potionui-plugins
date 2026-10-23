@@ -201,5 +201,18 @@
 	"shot.seed": "Seed",
 	"shot.seedRandom": "Random",
 	"shot.seedPick": "Pick a seed",
-	"shot.seedHint": "With a seed, the first take of each run uses it and the next ones the seeds after it: generating again gives the same takes."
+	"shot.seedHint": "With a seed, the first take of each run uses it and the next ones the seeds after it: generating again gives the same takes.",
+	"shot.pickSound": "Choose the sound: {slot}",
+	"shot.noSound": "No sound",
+	"shot.projectSounds": "Sounds of the project",
+	"shot.noProjectSound": "The project has no sound yet.",
+	"shot.removeSound": "Remove the sound",
+	"shot.listen": "Listen to {name}",
+	"shot.addSound": "Add a sound",
+	"shot.newSound": "Sound reference",
+	"shot.tracks": "Reference tracks",
+	"shot.trackPortion.one": "{count} clip between {start} and {end}",
+	"shot.trackPortion.other": "{count} clips between {start} and {end}",
+	"shot.trackSilent": "Nothing between {start} and {end}: nothing is sent",
+	"shot.noTracks": "No audio track is checked as a reference for the generation."
 }

@@ -2,13 +2,15 @@ import { formatNumber, t } from '../i18n/index.svelte.js';
 import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs, onRestore } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
-import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
+import { PROFILES, aggregate, canUpscale, engineOptions, isH3, isInFlight, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
 import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
 import { finalsToSync, labelOf, marksOf, relabel } from './labels.js';
 import { generationCounts } from './shots.js';
-import { projectQuality, shotEngineOf } from './engine.js';
+import { effectiveEngine, projectQuality, shotEngineOf } from './engine.js';
+import { audioBehavior, shotSound } from './sound.js';
 import { prioritized } from './queue.js';
+import { laneTitle } from './tracks.js';
 
 const AI_MODE = 'ai';
 const RENDER_MODE = 'render3d';
@@ -16,7 +18,7 @@ const HYBRID_MODE = 'render3d_ai';
 const generates = (mode) => mode === AI_MODE || mode === HYBRID_MODE;
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
-const INFO_WARNINGS = ['time_unknown', 'vram_unknown'];
+const INFO_WARNINGS = ['time_unknown', 'vram_unknown', 'audio_condition'];
 
 export const estimateState = $state({ key: null, data: null, loading: false, error: null });
 export const queueState = $state({ slots: null, elsewhere: null, positions: {} });
@@ -56,6 +58,24 @@ export function engineGroups() {
 
 export function currentEngine() {
 	return optionFor(engineChoices(), doc.engine);
+}
+
+function soundEngine(clip) {
+	const engine = effectiveEngine(clip, doc);
+	const option = optionFor(engineChoices(), engine);
+	const preset = option ? { ...option.info, cloud: option.kind === 'cloud' || option.info.cloud } : null;
+	const profile = ui.production.mode === HYBRID_MODE ? (isH3(preset) ? 'Ref2VA' : 'FL2VA') : engine.profile;
+	return { preset, profile };
+}
+
+export function soundOf(clip) {
+	const { preset, profile } = soundEngine(clip);
+	return shotSound(doc, clip, preset, profile);
+}
+
+export function soundBehaviorOf(clip) {
+	const { preset, profile } = soundEngine(clip);
+	return audioBehavior(preset, profile);
 }
 
 export function presetById(id) {
@@ -188,6 +208,15 @@ function baseNoteText(note) {
 	if (code === 'layout_lora_missing') return t('generation.block.layoutLoraMissing', { file: data.file ?? '' });
 	if (code === 'layout_no_frame') return t('generation.warn.layoutNoFrame', { shot: shotName(data.shot_id) });
 	if (code === 'layout_guide_short') return t('generation.warn.layoutGuideShort', { shot: shotName(data.shot_id), covered: data.covered ?? '—', needed: data.needed ?? '—' });
+	if (code === 'audio_condition') return t('generation.warn.audioCondition', { shot: shotName(data.shot_id) });
+	if (code === 'audio_mux') return t('generation.warn.audioMux', { shot: shotName(data.shot_id) });
+	if (code === 'audio_ignored') return t('generation.warn.audioIgnored', { shot: shotName(data.shot_id) });
+	if (code === 'audio_track_muted') return t('generation.warn.audioTrackMuted', { shot: shotName(data.shot_id), lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
+	if (code === 'audio_track_empty') return t('generation.warn.audioTrackEmpty', { shot: shotName(data.shot_id), lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
+	if (code === 'audio_only_references') return t('generation.block.audioOnly', { shot: shotName(data.shot_id) });
+	if (code === 'audio_ffmpeg_missing') return t('generation.block.audioFfmpeg');
+	if (code === 'audio_source_missing') return t('generation.block.audioSource', { shot: shotName(data.shot_id) });
+	if (code === 'audio_cut_failed' || code === 'audio_store_failed') return t('generation.block.audioCut', { shot: shotName(data.shot_id) });
 	return note?.message || code || '';
 }
 

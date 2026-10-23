@@ -4,6 +4,7 @@
 	import { ui, doc, asset, select, secs } from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { families, addReference, refTypeLabel, refRoleLabel } from '../../lib/references.js';
+	import { SOUND_SPACE } from '../../lib/sound.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { realThumb } from '../../lib/media.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
@@ -108,7 +109,13 @@
 									</div>
 									<div class="px-1 pb-0.5 pt-2">
 										<div class="truncate text-sm font-medium">{r.name}</div>
-										<div class="truncate text-xs text-fg-subtle">{r.file ? t('references.roleFile', { role: refRoleLabel(r.role), file: r.file }) : refRoleLabel(r.role)}</div>
+										<div class="truncate text-xs text-fg-subtle">{r.file ? t('references.roleFile', { role: refRoleLabel(r.role), file: r.file }) : refRoleLabel(r.role)}{a?.kind === 'audio' ? ` · ${a.srcDur ? secs(a.srcDur) : a.name}` : ''}</div>
+										{#if a?.kind === 'audio' && a.src}
+											<!-- svelte-ignore a11y_media_has_caption, a11y_no_noninteractive_element_interactions, a11y_click_events_have_key_events -->
+											<audio class="mt-1.5 h-8 w-full" controls preload="metadata" src={a.src} aria-label={t('references.listen', { name: r.name })} onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}></audio>
+										{:else if r.space === SOUND_SPACE}
+											<div class="mt-1 text-xs text-warning">{t('references.noSound')}</div>
+										{/if}
 									</div>
 								</div>
 							</li>

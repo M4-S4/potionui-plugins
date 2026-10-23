@@ -88,5 +88,6 @@
 	"block.editTip": "Double-click to edit",
 	"block.percent": "{value}%",
 	"drop.here": "Drop at {time}",
-	"drop.refused": "Not accepted on this track"
+	"drop.refused": "Not accepted on this track",
+	"lane.reference": "Reference for the generation"
 }

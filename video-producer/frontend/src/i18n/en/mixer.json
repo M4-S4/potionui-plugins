@@ -45,5 +45,8 @@
 	"master": "Master",
 	"masterInfo": "Stereo · −14 LUFS target",
 	"masterOut": "Master output",
-	"masterVolume": "Master volume"
+	"masterVolume": "Master volume",
+	"reference": "Reference for the generation: {name}",
+	"referenceShort": "Ref.",
+	"referenceTip": "Reference for the generation: the part of the track under each shot goes with its generation."
 }

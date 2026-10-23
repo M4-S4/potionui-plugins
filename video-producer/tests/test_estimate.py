@@ -20,7 +20,7 @@ def _codes(notes):
     return [item["code"] for item in notes]
 
 
-WAN_DRAFT = {"preset_id": presets.WAN, "model_id": None, "profile": "FL2VA", "quality": "draft"}
+WAN_DRAFT = {"preset_id": presets.WAN, "model_id": None, "profile": "FL2VA", "quality": "draft", "audio": None}
 LTX_DRAFT = {**WAN_DRAFT, "preset_id": presets.LTX_2_5}
 
 

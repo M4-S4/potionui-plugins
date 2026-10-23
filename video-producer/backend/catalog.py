@@ -123,6 +123,13 @@ def fps_locked(variables: Optional[Mapping[str, Any]], fields: Mapping[str, Any]
     return declared or (bool(fields) and "fps" not in fields)
 
 
+def audio_mux(variables: Optional[Mapping[str, Any]]) -> bool:
+    """True when a preset's director mode takes an audio track, which the plugin lays onto the finished video."""
+    composition = director_of(variables).get("modes") or {}
+    director = composition.get("director") if isinstance(composition, Mapping) else None
+    return isinstance(director, Mapping) and director.get("audio") is True
+
+
 def director_modes(variables: Optional[Mapping[str, Any]]) -> List[str]:
     """The composition modes a preset offers in any of its preset modes."""
     director = director_of(variables)
@@ -208,6 +215,7 @@ def _preset(description: Any, upscaler: bool, cloud_backends: List[Dict[str, Any
         "fps_locked": fps_locked(variables, fields) if director else False,
         "limits": preset_limits(variables),
         "director_modes": director_modes(variables),
+        "audio_mux": audio_mux(variables),
         "profiles": profiles(description.id, variables, modes),
         "driver": driver,
         "backend_id": preset_backend_id(description, driver, cloud_backends),

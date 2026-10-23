@@ -27,8 +27,11 @@
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
-	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel } from '../../lib/production.svelte.js';
-	import { refRoleLabel } from '../../lib/references.js';
+	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel, soundBehaviorOf } from '../../lib/production.svelte.js';
+	import { refRoleLabel, refTypeLabel } from '../../lib/references.js';
+	import { SOUND_SPACE, SOUND_TYPES, isReferenceLane, setReferenceLane } from '../../lib/sound.js';
+	import AudioPicker from '../shots/AudioPicker.svelte';
+	import SoundNote from '../shots/SoundNote.svelte';
 	import { commandById } from '../../lib/commands.js';
 	import {
 		currentPlan,
@@ -527,12 +530,27 @@
 						<span class="text-xs text-fg-muted">{t('inspector.field.name')}</span>
 						<input class="input vp-dense w-full" value={item.name} onchange={(e) => act(() => (item.name = e.currentTarget.value))} />
 					</label>
-					<label class="flex items-center gap-2">
-						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
-						<select class="input vp-dense min-w-0 flex-1" value={item.role} onchange={(e) => act(() => (item.role = e.currentTarget.value))}>
-							{#each ['Identité', 'Style', 'Décor', 'Objet', 'Décor 3D', 'Mouvement', 'Caméra'] as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
-						</select>
-					</label>
+					{#if item.space === SOUND_SPACE}
+						<label class="flex items-center gap-2">
+							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.type')}</span>
+							<select class="input vp-dense min-w-0 flex-1" value={item.type} onchange={(e) => act(() => (item.type = e.currentTarget.value))}>
+								{#each SOUND_TYPES as type (type)}<option value={type}>{refTypeLabel(type)}</option>{/each}
+							</select>
+						</label>
+						<div class="space-y-1">
+							<span class="text-xs text-fg-muted">{t('inspector.reference.sound')}</span>
+							<AudioPicker title={item.name} value={item.assetId} onpick={(id) => act(() => (item.assetId = id))} />
+						</div>
+						{@const shot = item.scope?.type === 'shot' ? doc.clips.find((c) => c.id === item.scope.shotId) : (doc.clips.find((c) => c.id === shotIdAt(ui.playhead)) ?? doc.clips[0])}
+						{#if item.assetId && shot}<SoundNote behavior={soundBehaviorOf(shot)} />{/if}
+					{:else}
+						<label class="flex items-center gap-2">
+							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
+							<select class="input vp-dense min-w-0 flex-1" value={item.role} onchange={(e) => act(() => (item.role = e.currentTarget.value))}>
+								{#each ['Identité', 'Style', 'Décor', 'Objet', 'Décor 3D', 'Mouvement', 'Caméra'] as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
+							</select>
+						</label>
+					{/if}
 					{#if item.file}<div class="text-xs text-fg-subtle">{t('inspector.reference.file', { file: item.file })}</div>{/if}
 					<div class="vp-label pt-1">{t('inspector.field.scope')}</div>
 					<HostUi name="SegmentedControl" props={{ items: scopes, selected: item.scope.type === 'global' ? 'global' : 'shot', variant: 'toggle', fullWidth: true, ariaLabel: t('inspector.field.scope'), onSelect: setScope }} />
@@ -558,6 +576,11 @@
 							{#each ['Dialogue', 'Musique', 'Ambiance', 'SFX'] as r (r)}<option value={r}>{audioRoleLabel(r)}</option>{/each}
 						</select>
 					</label>
+					<div class="flex min-h-6 items-center justify-between gap-2 text-xs text-fg-muted">
+						<label for="vp-lane-reference">{t('inspector.lane.reference')}</label>
+						<HostUi name="Switch" props={{ id: 'vp-lane-reference', checked: isReferenceLane(item), size: 'lg', label: t('inspector.lane.reference'), onchange: (v) => act(() => setReferenceLane(item, v)) }} />
+					</div>
+					{#if isReferenceLane(item)}<p class="text-xs text-fg-subtle">{t('inspector.lane.referenceHint')}</p>{/if}
 				</section>
 				{#each item.inserts as fx, i (i)}
 					<section class="space-y-2 rounded-lg border border-line-strong p-2.5">

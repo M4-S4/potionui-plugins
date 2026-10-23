@@ -8,6 +8,7 @@
 	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { laneCode, videoTrack } from '../../lib/tracks.js';
+	import { isReferenceLane, setReferenceLane } from '../../lib/sound.js';
 	import Icon from '../Icon.svelte';
 
 	const roles = ['Dialogue', 'Musique', 'Ambiance', 'SFX'];
@@ -175,6 +176,15 @@
 			<button type="button" class="vp-toggle h-6 rounded-sm bg-surface-2 text-xs font-semibold {l.mute ? '!text-warning' : 'text-fg-muted hover:text-fg'}" aria-pressed={l.mute} aria-label={t('mixer.mute', { name: l.name })} onclick={() => (l.mute = !l.mute)}>{t('mixer.muteShort')}</button>
 			<button type="button" class="vp-toggle h-6 rounded-sm bg-surface-2 text-xs font-semibold {l.solo ? '!text-signal' : 'text-fg-muted hover:text-fg'}" aria-pressed={l.solo} aria-label={t('mixer.solo', { name: l.name })} onclick={() => (l.solo = !l.solo)}>{t('mixer.soloShort')}</button>
 		</div>
+		<HostUi name="Tooltip" props={{ text: t('mixer.referenceTip'), wrapperClass: 'flex w-full' }}>
+			<button
+				type="button"
+				class="vp-toggle flex h-6 w-full items-center justify-center gap-1 rounded-sm bg-surface-2 text-xs font-semibold {isReferenceLane(l) ? '!text-signal' : 'text-fg-muted hover:text-fg'}"
+				aria-pressed={isReferenceLane(l)}
+				aria-label={t('mixer.reference', { name: l.name })}
+				onclick={() => act(() => setReferenceLane(l, !isReferenceLane(l)))}
+			><Icon name="sparkles" class="h-3 w-3" />{t('mixer.referenceShort')}</button>
+		</HostUi>
 		<HostUi name="Tooltip" props={{ text: t('mixer.auto.tip'), wrapperClass: 'flex w-full' }}>
 			<button type="button" class="vp-sim w-full justify-center" aria-label={t('mixer.auto.label', { mode: autoLabel(l.automation) })} onclick={() => (l.automation = autoNext[l.automation] ?? 'off')}>
 				<span class="h-1.5 w-1.5 rounded-full {l.automation === 'write' ? 'bg-danger' : l.automation === 'read' ? 'bg-success' : 'bg-fg-disabled'}"></span>

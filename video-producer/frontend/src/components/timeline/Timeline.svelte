@@ -48,6 +48,7 @@
 	import { fileDrop } from '../../lib/filedrop.js';
 	import { rowKinds } from '../../lib/upload.js';
 	import { laneAudible, laneCode, videoTrack } from '../../lib/tracks.js';
+	import { isReferenceLane } from '../../lib/sound.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from '../shell/Dropdown.svelte';
 
@@ -489,6 +490,7 @@
 							>
 						{/if}
 						{#if row.lane}
+							{#if isReferenceLane(row.lane)}<span class="flex h-6 w-4 items-center justify-center text-signal" role="img" title={t('timeline.lane.reference')} aria-label={t('timeline.lane.reference')} data-reference-lane><Icon name="sparkles" class="h-3 w-3" /></span>{/if}
 							<button
 								type="button"
 								class="h-6 w-6 rounded-sm text-2xs font-semibold {row.lane.mute ? 'bg-warning text-black' : 'bg-surface-2 text-fg-muted hover:text-fg'}"

@@ -5,7 +5,7 @@
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
 	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf } from '../../lib/state.svelte.js';
-	import { takesOf, startGeneration, promoteToFinal, shotActivity, shotEngineText } from '../../lib/production.svelte.js';
+	import { takesOf, startGeneration, promoteToFinal, shotActivity, shotEngineText, soundOf } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { clipThumb } from '../../lib/media.js';
@@ -16,6 +16,7 @@
 	import { activityStep } from '../../lib/generation.js';
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
+	import SoundNote from '../shots/SoundNote.svelte';
 
 	let size = $state('m');
 	let dragId = $state(null);
@@ -140,6 +141,7 @@
 				{@const busy = activity.state === 'running'}
 				{@const stale = shotStale(c, takes)}
 				{@const ownEngine = shotEngineText(c)}
+				{@const sound = soundOf(c)}
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<article
 					animate:flip={{ duration: ms(220) }}
@@ -217,6 +219,7 @@
 									<span class="flex items-center text-signal" role="img" aria-label={ownEngine} data-own-engine><Icon name="sliders" class="h-3.5 w-3.5" /></span>
 								</HostUi>
 							{/if}
+							{#if sound?.behavior}<span class="inline-flex" data-shot-sound={sound.behavior}><SoundNote behavior={sound.behavior} compact /></span>{/if}
 							<HostUi name="Tooltip" props={{ text: t('storyboard.editTip'), wrapperClass: 'ml-auto inline-flex' }}>
 								<button type="button" class="flex min-h-6 items-center gap-1 rounded px-1 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg" aria-label={t('storyboard.edit', { shot: clipLabel(c) })} onclick={(e) => (e.stopPropagation(), editShot(c))}>
 									<Icon name="pencil" class="h-3 w-3" />{#if size !== 's'}{t('storyboard.editShort')}{/if}
