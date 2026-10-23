@@ -30,10 +30,11 @@
 		clipLabel,
 		sourceLength
 	} from '../../lib/state.svelte.js';
-	import { takesOf, shotActivity, shotEngineText, shotDurationLimit } from '../../lib/production.svelte.js';
+	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
+	import { overrunsTake } from '../../lib/shots.js';
 	import { audioPeaks } from '../../lib/sources.svelte.js';
 	import { roleColor, stages, frameRoleLabel } from '../../lib/catalog.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -291,7 +292,10 @@
 				}
 				relayout();
 				if (limit) setDragText(range.by === 'engine' ? t('timeline.drag.engineLimitAt', { dur: secs(range.max) }) : t('timeline.drag.sourceLimitAt', { dur: secs(range.by === 'source' ? max : range.max) }), true);
-				else setDragText(t('timeline.drag.rippled', { dur: secs(c.dur) }), false);
+				else setDragText(overrunsTake(range.take, d0, c.dur) ? t('timeline.drag.beyondTake', { dur: secs(c.dur) }) : t('timeline.drag.rippled', { dur: secs(c.dur) }), false);
+			},
+			onEnd: () => {
+				if (edge === 'end' && fitShot(c, d0)) relayout();
 			}
 		});
 	}

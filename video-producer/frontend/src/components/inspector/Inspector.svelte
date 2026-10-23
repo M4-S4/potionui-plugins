@@ -27,7 +27,7 @@
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
-	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit } from '../../lib/production.svelte.js';
+	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { refRoleLabel, refTypeLabel } from '../../lib/references.js';
 	import { SOUND_SPACE, SOUND_TYPES, isReferenceLane, setReferenceLane } from '../../lib/sound.js';
 	import AudioPicker from '../shots/AudioPicker.svelte';
@@ -105,7 +105,9 @@
 	const busy = $derived(s?.kind === 'clip' && item ? shotActivity(item.id).state === 'running' : false);
 	const set = (k, v) => (item[k] = v);
 	const setClipDur = (v) => {
+		const before = item.dur;
 		item.dur = round(clamp(v, 0.4, shotDurationLimit(item).max), 0.04);
+		fitShot(item, before);
 		relayout();
 	};
 	const setClipIn = (v) => {

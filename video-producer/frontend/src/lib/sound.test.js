@@ -185,7 +185,7 @@ test('shot editor: the draft carries the excluded tracks and saving one marks th
 	assert.deepEqual(before.excludeLanes, []);
 	const after = { ...before, excludeLanes: ['A1'] };
 	assert.equal(inputsChanged(before, after), true);
-	assert.deepEqual(applyShotDraft(doc, clip, before, after, { makeId: () => 'x', engine: doc.engine }), { changed: true, resized: false });
+	assert.deepEqual(applyShotDraft(doc, clip, before, after, { makeId: () => 'x', engine: doc.engine }), { changed: true, resized: false, released: null });
 	assert.deepEqual(clip.referenceOverrides, { excludeLanes: ['A1'] });
 	assert.equal(clip.revision, 1);
 });

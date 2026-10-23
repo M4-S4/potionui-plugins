@@ -184,6 +184,7 @@
 	"shot.noOwn": "No reference of its own.",
 	"shot.durationMax": "At most {max} with the media of the shot.",
 	"shot.durationEngine": "At most {max} with the engine of the shot.",
+	"shot.durationBeyondTake": "Longer than its take ({take}): the shot goes back to be generated and the take stays in its history as a draft.",
 	"shot.draftsHint": "Generated at once by the Generate buttons of the shot.",
 	"shot.engine": "Engine",
 	"shot.staleWarning": "The takes of the shot will be marked “Prompt modified”",

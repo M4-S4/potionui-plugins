@@ -18,7 +18,7 @@ import {
 	addShot,
 	proposeShots
 } from './state.svelte.js';
-import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy } from './production.svelte.js';
+import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy, fitShot } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
 import { openGallery, openImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
@@ -87,7 +87,11 @@ const nudgeTrim = (edge) => () => {
 			s.dur -= at - s.start;
 			if ('srcIn' in s) s.srcIn += at - s.start;
 			s.start = at;
-		} else if (edge === 'end' && at > s.start) s.dur = at - s.start;
+		} else if (edge === 'end' && at > s.start) {
+			const before = s.dur;
+			s.dur = at - s.start;
+			if (doc.clips.includes(s)) fitShot(s, before);
+		}
 	});
 };
 

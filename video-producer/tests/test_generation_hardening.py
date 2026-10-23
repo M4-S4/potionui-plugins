@@ -771,6 +771,24 @@ def test_the_clamp_of_the_h3_preset_is_its_own_maximum(client, core, make_projec
     ]
 
 
+def test_a_shot_lengthened_past_its_take_is_generated_again_at_its_new_duration(client, core, make_project):
+    core.use_h3()
+    released = {"id": "s1", "start": 0, "dur": 8, "assetId": None, "take": None, "srcIn": 0, "stage": "todo"}
+    assets = [{"id": "gen-t1", "kind": "video", "name": "Take", "generated": True, "srcDur": 4.375}]
+    project = make_project(clips=[released], assets=assets, direction={"mode": "Hybrid AV"})
+
+    estimated = _estimate(client, project["id"], preset_id=presets.MINIMAX_H3)
+
+    assert estimated["shots"][0]["seconds"] == 8.0
+    assert not [warning for warning in estimated["warnings"] if warning["code"] == "duration_clamped"]
+
+    core.use_wan()
+    wan = make_project(clips=[released], assets=assets)
+    (take,) = _generate(client, wan["id"], shots=["s1"])
+    assert take["duration_s"] == 8.0
+    assert takes.get_take(take["id"])["request"]["form_data"]["video_director"]["settings"]["duration"] == 8.0
+
+
 def _no_shots(core):
     return {"shots": []}, "no_shots"
 

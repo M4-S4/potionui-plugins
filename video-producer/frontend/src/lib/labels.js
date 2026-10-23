@@ -24,6 +24,8 @@ export function relabel(takes, takeId, label) {
 	return changes;
 }
 
+export const releasedLabel = (take) => (take && (labelOf(take) === 'final' || labelOf(take) === 'candidate') ? 'draft' : null);
+
 export function canLabel(take, label) {
 	if (!take || !LABELS.includes(label)) return false;
 	if (label === 'final') return take.status === 'done' && Boolean(take.url);
