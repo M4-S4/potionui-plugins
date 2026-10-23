@@ -56,6 +56,7 @@ DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
 
 GUIDE = "guide"
 REFERENCE = "reference"
+SCENE_PICTURE = "scene"
 
 LABELS = {"image": "Picture", "video": "Video", "audio": "Audio"}
 
@@ -71,6 +72,7 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "define_motion": "{label} is the source of the motion of [Shot 1].",
         "define_audio": "{label} is a reference sound for [Shot 1].",
         "define_guide": "{label} is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1].",
+        "define_scene": "{label} shows the scene itself: keep its look, colours and lighting.",
         "summary": "[reference generation] A {seconds}-second shot made from the description below and its references.",
         "summary_camera": "[reference generation] A {seconds}-second shot made from the description below, with its camera movement taken from {videos}.",
         "keep_character": "<Subject {subject}> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.",
@@ -78,6 +80,7 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "keep_motion": "{label} (motion of [Shot 1]): attribute_transfer - its motion is carried over to the subjects of the shot.",
         "keep_audio": "{label} (sound of [Shot 1]): reference - its voice or sound serves as a reference.",
         "keep_guide": "{label} (camera path of [Shot 1]): weak_reference - camera movement only, not the look: only the direction, amplitude and speed of its camera move are followed; its content, colours, textures, blurred or stretched patches, holes and black borders are not reproduced.",
+        "keep_scene": "{label} (look of the scene of [Shot 1]): partially_preserved - keeps the look, the colours and the lighting of the scene; the framing follows the camera path.",
         "cite_setting": "The shot takes place in <Subject {subject}>.",
         "cite_character": "<Subject {subject}> appears in the shot.",
         "camera": "The camera {moves} over the whole shot.",
@@ -110,6 +113,7 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "define_motion": "{label} est la source du mouvement de [Shot 1].",
         "define_audio": "{label} est un son de référence pour [Shot 1].",
         "define_guide": "{label} est un rendu 3D de prévisualisation, grossier, de la scène, utilisé seulement comme source de la trajectoire de caméra de [Shot 1].",
+        "define_scene": "{label} montre la scène elle-même : garder son aspect, ses couleurs et sa lumière.",
         "summary": "[reference generation] Un plan de {seconds} secondes fait d'après la description ci-dessous et ses références.",
         "summary_camera": "[reference generation] Un plan de {seconds} secondes fait d'après la description ci-dessous, dont le mouvement de caméra vient de {videos}.",
         "keep_character": "<Subject {subject}> (appears in [Shot 1]): fully_preserved - garde l'identité et l'apparence.",
@@ -117,6 +121,7 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "keep_motion": "{label} (mouvement de [Shot 1]): attribute_transfer - son mouvement est repris par les sujets du plan.",
         "keep_audio": "{label} (son de [Shot 1]): reference - sa voix ou son son sert de référence.",
         "keep_guide": "{label} (trajectoire de caméra de [Shot 1]): weak_reference - mouvement de caméra seulement, pas l'aspect : seuls le sens, l'amplitude et la vitesse de son mouvement de caméra sont suivis ; son contenu, ses couleurs, ses textures, ses zones floues ou étirées, ses trous et ses bords noirs ne sont pas reproduits.",
+        "keep_scene": "{label} (aspect de la scène de [Shot 1]): partially_preserved - garde l'aspect, les couleurs et la lumière de la scène ; le cadrage suit la trajectoire de caméra.",
         "cite_setting": "Le plan se déroule dans <Subject {subject}>.",
         "cite_character": "<Subject {subject}> apparaît dans le plan.",
         "camera": "La caméra {moves} sur toute la durée du plan.",
@@ -253,8 +258,8 @@ class SentReference:
 
     @property
     def role(self) -> str:
-        if self.origin == GUIDE:
-            return GUIDE
+        if self.origin in (GUIDE, SCENE_PICTURE):
+            return self.origin
         if self.kind == "audio":
             return "audio"
         return ROLES_BY_SPACE.get(str((self.item or {}).get("space")), "setting")
@@ -692,10 +697,37 @@ def guide_seconds(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> float:
     return float(guide.get("dur") or 0)
 
 
+def _scene_of(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    scene_id = (_plan3d(doc, guide.get("planId")) or {}).get("sceneId")
+    return next((scene for scene in doc.get("scenes") or [] if scene_id and scene.get("id") == scene_id), None)
+
+
+def scene_picture(user: User, doc: Mapping[str, Any], guide: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """The picture the splat scene of a 3D guide was built from: its image asset, or the frame its scene job took from a video; None for an imported scene or a picture no longer readable."""
+    scene = _scene_of(doc, guide)
+    if scene is None or scene.get("kind") != "splat" or scene.get("status") != "done":
+        return None
+    asset = _asset(doc, scene.get("sourceAssetId"))
+    if asset is None:
+        return None
+    if asset.get("kind") == "image":
+        resolved = _resolve(user, asset)
+        if resolved is None or resolved["media_type"] != "image":
+            return None
+        return {"value": resolved["value"], "media_type": "image", "scene_id": scene["id"]}
+    from .scene3d import jobs
+
+    job = jobs.get_job(str(scene["jobId"])) if scene.get("jobId") else None
+    value = (job or {}).get("source_value")
+    if not value or core_bridge.upload_item(user.id, str(value)) is None:
+        return None
+    return {"value": str(value), "media_type": "image", "scene_id": scene["id"]}
+
+
 def reference_media(
     user: User, doc: Mapping[str, Any], shot_id: str, guides: Sequence[Mapping[str, Any]] = ()
 ) -> List[SentReference]:
-    """What a shot sends as references, within the per-kind limits: its 3D guide videos, its own references, then the global ones it does not exclude; each with its rank among the references of its kind."""
+    """What a shot sends as references, within the per-kind limits: its 3D guide videos, the picture the scene of the first one was built from, its own references, then the global ones it does not exclude; each with its rank among the references of its kind."""
     scoped, shared = [], []
     excluded = excluded_references(doc, shot_id)
     for reference in doc.get("references") or []:
@@ -708,8 +740,14 @@ def reference_media(
     sent: List[SentReference] = []
     counts = {kind: 0 for kind in REFERENCE_LIMITS}
 
-    def add(origin: str, asset_id: Any, item: Optional[Mapping[str, Any]] = None, wanted: Optional[str] = None) -> None:
-        resolved = _resolve(user, _asset(doc, asset_id))
+    def add(
+        origin: str,
+        asset_id: Any,
+        item: Optional[Mapping[str, Any]] = None,
+        wanted: Optional[str] = None,
+        resolved: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        resolved = resolved if resolved is not None else _resolve(user, _asset(doc, asset_id))
         if resolved is None or any(entry.value == resolved["value"] for entry in sent):
             return
         kind = resolved["media_type"]
@@ -720,6 +758,11 @@ def reference_media(
 
     for guide in guides:
         add(GUIDE, guide.get("assetId"), guide, "video")
+    for entry in [entry for entry in sent if entry.origin == GUIDE]:
+        picture = scene_picture(user, doc, entry.item or {})
+        if picture is not None:
+            add(SCENE_PICTURE, None, {"sceneId": picture["scene_id"], "controlId": (entry.item or {}).get("id")}, "image", picture)
+            break
     for reference in [*scoped, *shared]:
         add(REFERENCE, reference.get("assetId"), reference)
     return sent
