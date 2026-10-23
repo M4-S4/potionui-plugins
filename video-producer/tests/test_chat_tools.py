@@ -73,6 +73,7 @@ def test_each_tool_is_built_without_arguments_and_scoped_to_the_mode(tool, name,
 
     assert (instance.name, instance.requires_approval, instance.modes) == (name, approval, ["video-producer"])
     assert instance.group == "Video Producer"
+    assert instance.context_group == "core"
     assert instance.description and instance.hint and instance.user_description and instance.icon
     assert instance.parameters["type"] == "object"
     assert set(instance.parameters["required"]) <= set(instance.parameters["properties"])
