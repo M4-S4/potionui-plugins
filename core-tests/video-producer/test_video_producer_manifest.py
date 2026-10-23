@@ -565,7 +565,7 @@ async def test_the_core_runs_the_three_writing_tools_for_approval_and_the_check_
     applied = await executor.execute_tool_confirmed("vp_write_shot_prompt", owner, calls["vp_write_shot_prompt"])
     assert applied.success and json.loads(applied.data)["version"] == 2
     outside, _ = await executor._execute_tool("vp_write_shot_prompt", owner, calls["vp_write_shot_prompt"], allowed_tools=["vp_check_continuity"])
-    assert not outside.success and "not enabled for this session" in outside.error
+    assert not outside.success and outside.error == "Tool 'vp_write_shot_prompt' is unavailable; do not call it again. Use: vp_check_continuity."
 
 
 async def test_the_core_reports_the_plugins_error_codes_untouched_for_a_model_that_misuses_the_tools(loader, manifest, mock_db, chat):
@@ -640,7 +640,7 @@ async def test_the_core_flags_a_write_as_stale_when_the_prompt_changed_after_its
 def test_disabling_the_plugin_takes_its_mode_and_its_tools_away_from_the_core(chat):
     assert chat.modes.get(CHAT_MODE) is not None and len(chat.tools.get_all()) == 4
 
-    chat.plugins._unregister_chat_extensions(PLUGIN_ID)
+    chat.plugins._rollback_partial_enable(PLUGIN_ID)
 
     assert chat.modes.get(CHAT_MODE) is None
     assert chat.tools.get_all() == [] and chat.tools.get("vp_write_shot_prompt") is None

@@ -142,64 +142,53 @@ test('upload: a cancelled file is skipped and an aborted one ends cancelled', as
 	assert.equal(q.states.get('b').status, 'cancelled');
 });
 
-class FakeRequest {
-	static made = [];
-	constructor({ status = 200, body = '', progress = [], fail = false } = {}) {
-		Object.assign(this, { status, body, progress, fail, headers: {}, upload: {}, aborted: false });
-		FakeRequest.made.push(this);
-	}
-	open(method, path) {
-		this.method = method;
-		this.path = path;
-	}
-	setRequestHeader(name, value) {
-		this.headers[name] = value;
-	}
-	send(form) {
-		this.form = form;
-		queueMicrotask(() => {
-			if (this.aborted) return;
-			for (const [loaded, total] of this.progress) this.upload.onprogress?.({ lengthComputable: true, loaded, total });
-			if (this.fail) return this.onerror();
-			this.responseText = this.body;
-			this.onload();
-		});
-	}
-	abort() {
-		this.aborted = true;
-		this.onabort();
-	}
+function hostApi(answer, seen = []) {
+	return {
+		seen,
+		async fetchRawFromApp(path, init) {
+			seen.push([path, init]);
+			return answer(init);
+		}
+	};
 }
 
-test('coreUpload: posts the form to PotionUI with the token and the cookies, and reports the progress', async () => {
-	const seen = [];
-	const request = new FakeRequest({ body: JSON.stringify({ success: true, data: { filename: '9b1c.mp4', url: '/api/media/uploads/9b1c.mp4' } }), progress: [[5, 20], [20, 20]] });
-	const result = await coreUpload({ getToken: () => 'tok' }, '/api/media/upload', 'FORM', { onProgress: (p) => seen.push(p), createRequest: () => request });
+test('coreUpload: posts the form to PotionUI through the host fetch and reports the progress', async () => {
+	const progress = [];
+	const api = hostApi((init) => {
+		init.onUploadProgress(5, 20);
+		init.onUploadProgress(20, 20);
+		init.onUploadProgress(3, 0);
+		return new Response(JSON.stringify({ success: true, data: { filename: '9b1c.mp4', url: '/api/media/uploads/9b1c.mp4' } }), { status: 200 });
+	});
+	const controller = new AbortController();
+	const result = await coreUpload(api, '/api/media/upload', 'FORM', { onProgress: (p) => progress.push(p), signal: controller.signal });
 	assert.deepEqual(result, { ok: true, data: { filename: '9b1c.mp4', url: '/api/media/uploads/9b1c.mp4' } });
-	assert.deepEqual([request.method, request.path, request.form, request.withCredentials], ['POST', '/api/media/upload', 'FORM', true]);
-	assert.deepEqual(request.headers, { Authorization: 'Bearer tok' });
-	assert.deepEqual(seen, [25, 100]);
+	const [[path, init]] = api.seen;
+	assert.deepEqual([path, init.method, init.body, init.signal], ['/api/media/upload', 'POST', 'FORM', controller.signal]);
+	assert.equal('headers' in init, false);
+	assert.deepEqual(progress, [25, 100]);
 });
 
 test('coreUpload: an error answer, a lost connection and an abort become failures', async () => {
-	const refused = await coreUpload({}, '/u', null, { createRequest: () => new FakeRequest({ status: 403, body: JSON.stringify({ detail: { success: false, error: 'storage_limit', message: 'full' } }) }) });
+	const answer = (status, body) => hostApi(() => new Response(body, { status }));
+	const refused = await coreUpload(answer(403, JSON.stringify({ detail: { success: false, error: 'storage_limit', message: 'full' } })), '/u', null);
 	assert.deepEqual([refused.ok, refused.error.status, refused.error.code, refused.error.message], [false, 403, 'storage_limit', 'full']);
-	const hostRefusal = await coreUpload({}, '/u', null, { createRequest: () => new FakeRequest({ status: 400, body: JSON.stringify({ detail: { error: 'upload_failed', message: 'Only image, video, and audio files are allowed' } }) }) });
+	const hostRefusal = await coreUpload(answer(400, JSON.stringify({ detail: { error: 'upload_failed', message: 'Only image, video, and audio files are allowed' } })), '/u', null);
 	assert.equal(hostRefusal.error.code, 'upload_failed');
-	const tooLarge = await coreUpload({}, '/u', null, { createRequest: () => new FakeRequest({ status: 413, body: '<html>' }) });
+	const tooLarge = await coreUpload(answer(413, '<html>'), '/u', null);
 	assert.deepEqual([tooLarge.error.status, tooLarge.error.code], [413, 'unknown']);
-	const lost = await coreUpload({}, '/u', null, { createRequest: () => new FakeRequest({ fail: true }) });
+	const expired = await coreUpload(answer(401, JSON.stringify({ detail: 'Not authenticated' })), '/u', null);
+	assert.deepEqual([expired.error.status, expired.error.code], [401, 'unauthorized']);
+	const lost = await coreUpload(hostApi(() => Promise.reject(new TypeError('Network Error'))), '/u', null);
 	assert.equal(lost.error.code, 'network_error');
-	const controller = new AbortController();
-	const pending = coreUpload({}, '/u', null, { signal: controller.signal, createRequest: () => new FakeRequest() });
-	controller.abort();
-	assert.equal((await pending).error.code, 'aborted');
+	const aborted = await coreUpload(hostApi(() => Promise.reject(new DOMException('The operation was aborted', 'AbortError'))), '/u', null);
+	assert.equal(aborted.error.code, 'aborted');
 	const early = new AbortController();
 	early.abort();
-	const before = FakeRequest.made.length;
-	assert.equal((await coreUpload({}, '/u', null, { signal: early.signal, createRequest: () => new FakeRequest() })).error.code, 'aborted');
-	assert.equal(FakeRequest.made.at(-1).form, undefined);
-	assert.equal(FakeRequest.made.length, before + 1);
+	const untouched = hostApi(() => new Response('{}'));
+	assert.equal((await coreUpload(untouched, '/u', null, { signal: early.signal })).error.code, 'aborted');
+	assert.deepEqual(untouched.seen, []);
+	assert.equal((await coreUpload({ getToken: () => 'tok' }, '/u', null)).error.code, 'no_api');
 });
 
 test('client: an uploaded file is resolved by its stored name', async () => {
