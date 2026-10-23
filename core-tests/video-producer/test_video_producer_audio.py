@@ -31,6 +31,7 @@ director = _plugin_module("backend.director")
 core_bridge = _plugin_module("backend.core_bridge")
 catalog = _plugin_module("backend.catalog")
 presets = _plugin_module("backend.presets")
+soundtrack = _plugin_module("backend.soundtrack")
 
 
 def _preset(folder, preset_id):
@@ -132,3 +133,9 @@ def test_the_minimax_h3_reference_mode_takes_no_audio_track_in_its_document(h3):
     refs = h3.vars["video_director"]["preset_mode_overrides"]["refs"]["modes"]["director"]
 
     assert refs["audio"] is False
+
+
+def test_the_plugin_writes_a_guided_sound_at_the_rate_the_minimax_h3_generator_encodes_without_resampling():
+    from src.pipelines.pipes.generator.video_minimax_h3.audio import AUDIO_SAMPLE_RATE
+
+    assert soundtrack.H3_RATE == AUDIO_SAMPLE_RATE
