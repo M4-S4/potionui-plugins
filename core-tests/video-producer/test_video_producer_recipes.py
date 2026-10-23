@@ -48,6 +48,7 @@ RECIPE_PRESETS = {
 WITHOUT_SMOKE = {"vp-minimax-h3-12gb", "vp-minimax-h3-fast-12gb"}
 WITH_SMOKE = sorted(set(RECIPE_PRESETS) - WITHOUT_SMOKE)
 SMOKE_TIMEOUTS = {"vp-wan22-14b-lightning-12gb": 600, "vp-wan22-14b-i2v": 600}
+COLD_SMOKE_SECONDS_ON_8_GB = {"vp-wan21-t2v-1-3b-8gb": 64, "vp-wan22-ti2v-5b-8gb": 111}
 PATH_HINTS = {
     presets.WAN21_T2V_1_3B_8GB: "video-producer/Wan2.1-T2V-1.3B-8GB",
     presets.WAN22_TI2V_5B_8GB: "video-producer/Wan2.2-TI2V-5B-8GB",
@@ -256,6 +257,12 @@ def test_the_lightning_recipe_downloads_the_lora_of_each_expert_the_preset_selec
 @pytest.mark.parametrize("recipe_id", WITH_SMOKE)
 def test_a_14b_smoke_gets_more_time_and_the_others_keep_the_default(recipe_id):
     assert _recipe(recipe_id).smoke.timeout_seconds == SMOKE_TIMEOUTS.get(recipe_id, DEFAULT_SMOKE_TIMEOUT_SECONDS)
+
+
+@pytest.mark.parametrize(("recipe_id", "seconds"), sorted(COLD_SMOKE_SECONDS_ON_8_GB.items()))
+def test_an_8_gb_smoke_keeps_the_default_because_its_cold_run_leaves_half_of_it_to_spare(recipe_id, seconds):
+    assert recipe_id not in SMOKE_TIMEOUTS
+    assert seconds * 1.5 <= DEFAULT_SMOKE_TIMEOUT_SECONDS == _recipe(recipe_id).smoke.timeout_seconds
 
 
 @pytest.mark.parametrize("recipe_id", WITH_SMOKE)
