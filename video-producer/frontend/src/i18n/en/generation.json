@@ -39,6 +39,8 @@
 	"mode.flf": "first and last frames",
 	"mode.refs": "references",
 	"card.upscale": "Final quality · upscale",
+	"card.qualityFinal": "Final quality",
+	"card.qualityDraft": "Draft quality",
 	"card.from": "from {variant}",
 	"card.seed": "Seed {seed}",
 	"card.preview": "Preview take {variant}",
@@ -163,7 +165,5 @@
 	"block.forShots": "{shots}: {text}",
 	"ownEngine.tip": "Own engine: {details}",
 	"ownEngine.seed": "seed {seed}",
-	"refs.notSent": "Not sent with this engine",
-	"card.qualityFinal": "Final quality",
-	"card.qualityDraft": "Draft quality"
+	"refs.notSent": "Not sent with this engine"
 }
