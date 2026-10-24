@@ -89,6 +89,19 @@ REFERENCE_OVERRIDES = _object(
     {}, optional={"exclude": {**_array(ID), "uniqueItems": True}, "excludeLanes": {**_array(ID), "uniqueItems": True}}
 )
 
+STATS = {"type": "array", "items": NUMBER, "minItems": MATCH_STATS, "maxItems": MATCH_STATS}
+
+COLOR_MATCH = _object(
+    {
+        "anchor": _enum(*MATCH_ANCHORS),
+        "anchorId": REF,
+        "assetId": REF,
+        "strength": {"type": "number", "minimum": 0, "maximum": 100},
+        "source": STATS,
+        "target": STATS,
+    }
+)
+
 SHOT_ENGINE = _object(
     {},
     optional={
@@ -102,19 +115,6 @@ SHOT_ENGINE = _object(
 )
 
 HYBRID = _object({"continuite": NUMBER, "identite": NUMBER, "audio": NUMBER, "mouvement": NUMBER, "style": NUMBER})
-
-STATS = {"type": "array", "items": NUMBER, "minItems": MATCH_STATS, "maxItems": MATCH_STATS}
-
-COLOR_MATCH = _object(
-    {
-        "anchor": _enum(*MATCH_ANCHORS),
-        "anchorId": REF,
-        "assetId": REF,
-        "strength": {"type": "number", "minimum": 0, "maximum": 100},
-        "source": STATS,
-        "target": STATS,
-    }
-)
 
 CLIP = _object(
     {
