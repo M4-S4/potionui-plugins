@@ -26,7 +26,6 @@ import {
 } from './options.js';
 import { emptyDoc, migrate } from './starter.js';
 import { chainState } from './chain.js';
-import { shotMarks } from './player.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -263,7 +262,7 @@ test('options: deleting a shot of a project whose engine keeps options leaves th
 	doc.prompts.splice(0, 1);
 
 	assert.equal(optionCount(doc.engine, doc.engine.preset), 1);
-	assert.deepEqual(shotMarks(doc.clips, 15).map((m) => m.id), ['a', 'c']);
+	assert.deepEqual(doc.clips.map((c) => [c.id, c.start, c.dur]), [['a', 0, 5], ['c', 10, 5]]);
 	assert.equal(chainState(doc, 1), null);
 });
 
