@@ -23,5 +23,7 @@
 	"empty.allHint": "Add an identity, a 3D set or a motion guide: global references go with every generation.",
 	"empty.family": "No references in “{family}”.",
 	"listen": "Listen to {name}",
-	"noSound": "No sound attached: choose one in the Inspector."
+	"noSound": "No sound attached: choose one in the Inspector.",
+	"noImage": "No image attached: choose one in the Inspector.",
+	"noVideo": "No video attached: choose one in the Inspector."
 }

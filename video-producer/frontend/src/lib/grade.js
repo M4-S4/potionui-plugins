@@ -87,3 +87,10 @@ export function drawGraded(g, img, width, height, steps) {
 	const data = g.getImageData(0, 0, width, height).data;
 	return native ? data : gradePixels(data, steps);
 }
+
+export function lumaHistogram(data, bins = 64) {
+	const counts = new Array(bins).fill(0);
+	for (let i = 0; i < data.length; i += 4) counts[Math.min(bins - 1, Math.floor(((0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) * bins) / 256))]++;
+	const max = Math.max(...counts);
+	return counts.map((v) => (max ? v / max : 0));
+}

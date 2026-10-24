@@ -3,10 +3,9 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, asset, select, secs } from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { families, addReference, refTypeLabel, refRoleLabel } from '../../lib/references.js';
-	import { SOUND_SPACE } from '../../lib/sound.js';
+	import { families, addReference, refMediaKind, refTypeLabel, refRoleLabel } from '../../lib/references.js';
 	import { mountHostSlot } from '../../lib/host.js';
-	import { realThumb } from '../../lib/media.js';
+	import { assetThumb } from '../../lib/media.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
 	import Icon from '../Icon.svelte';
 
@@ -79,7 +78,8 @@
 					<ul class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
 						{#each g.refs as r (r.id)}
 							{@const a = r.assetId ? asset(r.assetId) : null}
-							{@const thumb = realThumb(a)}
+							{@const thumb = assetThumb(a)}
+							{@const kind = refMediaKind(r.space, r.type)}
 							{@const f = fam(r.space)}
 							{@const shot = shotOf(r)}
 							<li>
@@ -113,8 +113,10 @@
 										{#if a?.kind === 'audio' && a.src}
 											<!-- svelte-ignore a11y_media_has_caption, a11y_no_noninteractive_element_interactions, a11y_click_events_have_key_events -->
 											<audio class="mt-1.5 h-8 w-full" controls preload="metadata" src={a.src} aria-label={t('references.listen', { name: r.name })} onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}></audio>
-										{:else if r.space === SOUND_SPACE}
+										{:else if kind === 'audio'}
 											<div class="mt-1 text-xs text-warning">{t('references.noSound')}</div>
+										{:else if !a}
+											<div class="mt-1 text-xs text-warning">{kind === 'video' ? t('references.noVideo') : t('references.noImage')}</div>
 										{/if}
 									</div>
 								</div>

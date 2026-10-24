@@ -1,7 +1,8 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, asset, clipAt, tc, seqDuration, addAssetToTimeline, clipLabel, promptOf } from '../../lib/state.svelte.js';
+	import { ui, doc, asset, clipAt, tc, seqDuration, clipLabel, promptOf } from '../../lib/state.svelte.js';
+	import { addToTimeline } from '../../lib/importer.js';
 	import { insertResult, startGeneration, findTake, shotActivity, engineLabel } from '../../lib/production.svelte.js';
 	import { togglePlay, seek } from '../../lib/playback.svelte.js';
 	import { clipFilter, fadeOpacity } from '../../lib/look.js';
@@ -71,7 +72,7 @@
 		ui.compare = null;
 	}
 	function addPreviewToCut() {
-		addAssetToTimeline(previewAsset.id);
+		addToTimeline(previewAsset.id);
 		ui.preview = null;
 	}
 </script>

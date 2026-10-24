@@ -14,7 +14,7 @@
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
-	import ImagePicker from '../shots/ImagePicker.svelte';
+	import MediaPicker from '../shots/MediaPicker.svelte';
 	import AudioPicker from '../shots/AudioPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 
@@ -189,7 +189,7 @@
 							</span>
 						</div>
 						{#if adding === 'image'}
-							<ImagePicker title={t('modals.shot.newReference')} onpick={addOwn} removable={false} compact />
+							<MediaPicker title={t('modals.shot.newReference')} onpick={addOwn} removable={false} compact />
 						{:else if adding === 'sound'}
 							<AudioPicker title={t('modals.shot.newSound')} onpick={addSound} removable={false} />
 						{/if}
@@ -265,8 +265,8 @@
 				<section class="space-y-1.5">
 					<div class="vp-section-title">{t('inspector.section.frames')}</div>
 					<div class="grid grid-cols-2 gap-2">
-						<ImagePicker title={t('inspector.frames.first')} value={draft.first} onpick={(v) => (draft.first = v)} />
-						<ImagePicker title={t('inspector.frames.last')} value={draft.last} onpick={(v) => (draft.last = v)} />
+						<MediaPicker title={t('inspector.frames.first')} value={draft.first} onpick={(v) => (draft.first = v)} />
+						<MediaPicker title={t('inspector.frames.last')} value={draft.last} onpick={(v) => (draft.last = v)} />
 					</div>
 				</section>
 				<section class="space-y-1.5">

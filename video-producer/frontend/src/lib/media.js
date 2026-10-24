@@ -1,5 +1,5 @@
 import { asset } from './state.svelte.js';
-import { videoThumb } from './sources.svelte.js';
+import { videoFrame, videoThumb } from './sources.svelte.js';
 import { findTake } from './production.svelte.js';
 
 export function realThumb(a) {
@@ -21,6 +21,12 @@ export function clipThumb(c) {
 	const a = asset(c?.assetId);
 	if (!a || a.kind === 'audio') return null;
 	return realThumb(a);
+}
+
+export function shotFrame(c) {
+	const a = asset(c?.assetId);
+	if (!a || a.kind === 'audio') return null;
+	return videoFrame(a, c.srcIn ?? 0) ?? assetThumb(a);
 }
 
 export function assetThumb(a) {

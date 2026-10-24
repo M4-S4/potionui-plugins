@@ -42,6 +42,19 @@ export function laneItemCount(doc, id) {
 	return (doc.audio ?? []).filter((item) => item.lane === id).length;
 }
 
+export const SOUND_FALLBACK = 8;
+
+export const soundSpan = (srcDur) => (Number.isFinite(srcDur) && srcDur > 0 ? srcDur : SOUND_FALLBACK);
+
+export const newSound = (assetId, lane, start, srcDur) => ({ id: ulid(), assetId, lane, start, dur: soundSpan(srcDur), srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 });
+
+export function fitSounds(doc, assetId, srcDur) {
+	if (!(Number.isFinite(srcDur) && srcDur > 0)) return [];
+	const fitted = (doc.audio ?? []).filter((item) => item.assetId === assetId && item.srcIn === 0 && item.dur === SOUND_FALLBACK);
+	for (const item of fitted) item.dur = srcDur;
+	return fitted;
+}
+
 export function removeLane(doc, id) {
 	const index = doc.lanes.findIndex((lane) => lane.id === id);
 	if (index < 0) return null;

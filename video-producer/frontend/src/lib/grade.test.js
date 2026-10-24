@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { drawGraded, filterOf, gradePixels, lookSteps } from './grade.js';
+import { readFileSync } from 'node:fs';
+import { drawGraded, filterOf, gradePixels, lookSteps, lumaHistogram } from './grade.js';
 
 const pixel = (r, g, b) => new Uint8ClampedArray([r, g, b, 255]);
 
@@ -60,4 +61,26 @@ test('drawGraded: the canvas filter when the browser has it, else the same grade
 	const older = fakeContext(false);
 	assert.deepEqual([...drawGraded(older.context, {}, 48, 27, steps)], [150, 150, 150, 255]);
 	assert.deepEqual(older.calls, [['drawImage', 0, 0, 48, 27]]);
+});
+
+test('lumaHistogram: 64 bins of the Rec. 709 luma, scaled to the fullest bin', () => {
+	const data = new Uint8ClampedArray([0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 255]);
+	const bins = lumaHistogram(data);
+	assert.equal(bins.length, 64);
+	assert.equal(bins[0], 1);
+	assert.equal(bins[63], 0.5);
+	assert.equal(bins[13], 0.5);
+	assert.equal(bins.reduce((sum, v) => sum + v, 0), 2);
+	assert.deepEqual(lumaHistogram(new Uint8ClampedArray(0)), new Array(64).fill(0));
+});
+
+test('color preview: presets and histogram take a picture of the shot, its frame at the in point first, never the video file', () => {
+	const section = readFileSync(new URL('../components/inspector/ColorSection.svelte', import.meta.url), 'utf8');
+	const media = readFileSync(new URL('./media.js', import.meta.url), 'utf8');
+	assert.match(section, /const picture = \$derived\(shotFrame\(clip\)\);/);
+	assert.match(section, /img\.src = picture;/);
+	assert.match(section, /<img src=\{picture\}/);
+	assert.doesNotMatch(section, /src=\{a\.src\}|img\.src = a\.src/);
+	assert.match(section, /bins = lumaHistogram\(drawGraded\(g, img, 160, 90, steps\)\);/);
+	assert.match(media, /return videoFrame\(a, c\.srcIn \?\? 0\) \?\? assetThumb\(a\);/);
 });

@@ -1,13 +1,13 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, addAssetToTimeline, addFrame, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, addFrame, secs } from '../../lib/state.svelte.js';
 	import { audioRoleLabel } from '../../lib/catalog.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { mountHostSlot } from '../../lib/host.js';
-	import { importFiles, openImport, openLocalImport } from '../../lib/importer.js';
+	import { addToTimeline, importFiles, openImport, openLocalImport } from '../../lib/importer.js';
 	import { fileDrop } from '../../lib/filedrop.js';
 	import { LOCAL_KINDS } from '../../lib/upload.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
@@ -162,7 +162,7 @@
 			</dl>
 			<div class="flex gap-1.5">
 				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('eye'), class: 'flex-1', onclick: () => (ui.preview = { kind: 'asset', id: cur.id }) }}>{t('panels.media.preview')}</HostUi>
-				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'plus', class: 'flex-1', onclick: () => addAssetToTimeline(cur.id) }}>{t('panels.media.toCut')}</HostUi>
+				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'plus', class: 'flex-1', onclick: () => addToTimeline(cur.id) }}>{t('panels.media.toCut')}</HostUi>
 			</div>
 			{#if cur.kind !== 'audio'}
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'image', class: 'w-full', onclick: () => addFrame(cur.id) }}>{t('panels.media.useAsFrame')}</HostUi>

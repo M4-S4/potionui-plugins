@@ -84,5 +84,7 @@
 	"upload.imageOnly.one": "“{name}” cannot be used here: only images are accepted.",
 	"upload.imageOnly.other": "{count} files cannot be used here: only images are accepted.",
 	"upload.soundOnly.one": "“{name}” cannot be used here: only audio files are accepted.",
-	"upload.soundOnly.other": "{count} files cannot be used here: only audio files are accepted."
+	"upload.soundOnly.other": "{count} files cannot be used here: only audio files are accepted.",
+	"upload.videoOnly.one": "“{name}” cannot be used here: only videos are accepted.",
+	"upload.videoOnly.other": "{count} files cannot be used here: only videos are accepted."
 }

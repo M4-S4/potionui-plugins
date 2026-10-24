@@ -4,9 +4,14 @@ const THUMB_WIDTH = 480;
 const PEAK_RATE = 50;
 const DECODE_RATE = 8000;
 const TIMEOUT = 20000;
+const SEEK_FLOOR = 0.001;
+const FRAME_STEP = 0.04;
+const KEPT_FRAMES = 24;
 
 const thumbs = new SvelteMap();
+const frames = new SvelteMap();
 const peaks = new SvelteMap();
+const wanted = new Map();
 const busy = new Set();
 
 function withTimeout(start) {
@@ -38,7 +43,7 @@ function releaseMedia(el) {
 	el.load();
 }
 
-function captureFrame(src, duration) {
+function captureFrame(src, duration, at = null) {
 	return withTimeout((finish) => {
 		const video = document.createElement('video');
 		video.muted = true;
@@ -50,7 +55,7 @@ function captureFrame(src, duration) {
 		};
 		video.onloadedmetadata = () => {
 			const length = Number.isFinite(video.duration) ? video.duration : duration;
-			video.currentTime = Math.min(1, (length || 0) / 2);
+			video.currentTime = at === null ? Math.min(1, (length || 0) / 2) : Math.max(SEEK_FLOOR, at);
 		};
 		video.onseeked = () => {
 			const w = video.videoWidth;
@@ -94,6 +99,33 @@ export function videoThumb(a) {
 	const known = thumbs.get(a.src);
 	if (known !== undefined) return known || null;
 	resolveVideoThumb(a);
+	return null;
+}
+
+const frameKey = (src, at) => `${src}|${at}`;
+
+async function resolveFrames(src, duration) {
+	const key = `frame|${src}`;
+	if (busy.has(key)) return;
+	busy.add(key);
+	for (let at = wanted.get(src); at !== undefined && !frames.has(frameKey(src, at)); at = wanted.get(src)) {
+		const url = await captureFrame(src, duration, at);
+		frames.set(frameKey(src, at), url ?? '');
+		for (const old of frames.keys()) {
+			if (frames.size <= KEPT_FRAMES) break;
+			frames.delete(old);
+		}
+	}
+	busy.delete(key);
+}
+
+export function videoFrame(a, at) {
+	if (!a?.src || a.kind !== 'video' || typeof document === 'undefined') return null;
+	const time = +(Math.round(Math.max(0, Number(at) || 0) / FRAME_STEP) * FRAME_STEP).toFixed(3);
+	const known = frames.get(frameKey(a.src, time));
+	if (known !== undefined) return known || null;
+	wanted.set(a.src, time);
+	resolveFrames(a.src, a.srcDur);
 	return null;
 }
 

@@ -28,9 +28,10 @@
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
 	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
-	import { refRoleLabel, refTypeLabel } from '../../lib/references.js';
-	import { SOUND_SPACE, SOUND_TYPES, isReferenceLane, setReferenceLane } from '../../lib/sound.js';
+	import { refMediaKind, refRoleLabel, refTypeLabel, typesOf } from '../../lib/references.js';
+	import { isReferenceLane, setReferenceLane } from '../../lib/sound.js';
 	import AudioPicker from '../shots/AudioPicker.svelte';
+	import MediaPicker from '../shots/MediaPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import { commandById } from '../../lib/commands.js';
 	import {
@@ -527,18 +528,19 @@
 					<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'trash', class: 'w-full', onclick: deleteSelection }}>{t('inspector.marker.delete')}</HostUi>
 				</section>
 			{:else if s.kind === 'reference'}
+				{@const refKind = refMediaKind(item.space, item.type)}
 				<section class="space-y-2">
 					<label class="block space-y-1">
 						<span class="text-xs text-fg-muted">{t('inspector.field.name')}</span>
 						<input class="input vp-dense w-full" value={item.name} onchange={(e) => act(() => (item.name = e.currentTarget.value))} />
 					</label>
-					{#if item.space === SOUND_SPACE}
-						<label class="flex items-center gap-2">
-							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.type')}</span>
-							<select class="input vp-dense min-w-0 flex-1" value={item.type} onchange={(e) => act(() => (item.type = e.currentTarget.value))}>
-								{#each SOUND_TYPES as type (type)}<option value={type}>{refTypeLabel(type)}</option>{/each}
-							</select>
-						</label>
+					<label class="flex items-center gap-2">
+						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.type')}</span>
+						<select class="input vp-dense min-w-0 flex-1" value={item.type} onchange={(e) => act(() => (item.type = e.currentTarget.value))}>
+							{#each typesOf(item.space) as type (type)}<option value={type}>{refTypeLabel(type)}</option>{/each}
+						</select>
+					</label>
+					{#if refKind === 'audio'}
 						<div class="space-y-1">
 							<span class="text-xs text-fg-muted">{t('inspector.reference.sound')}</span>
 							<AudioPicker title={item.name} value={item.assetId} onpick={(id) => act(() => (item.assetId = id))} />
@@ -546,6 +548,10 @@
 						{@const shot = item.scope?.type === 'shot' ? doc.clips.find((c) => c.id === item.scope.shotId) : (doc.clips.find((c) => c.id === shotIdAt(ui.playhead)) ?? doc.clips[0])}
 						{#if item.assetId && shot}<SoundNote behavior={soundBehaviorOf(shot)} />{/if}
 					{:else}
+						<div class="space-y-1">
+							<span class="text-xs text-fg-muted">{refKind === 'video' ? t('inspector.reference.video') : t('inspector.reference.image')}</span>
+							<MediaPicker kind={refKind ?? 'image'} title={item.name} value={item.assetId} onpick={(id) => act(() => (item.assetId = id))} />
+						</div>
 						<label class="flex items-center gap-2">
 							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
 							<select class="input vp-dense min-w-0 flex-1" value={item.role} onchange={(e) => act(() => (item.role = e.currentTarget.value))}>

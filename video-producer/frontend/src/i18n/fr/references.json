@@ -23,5 +23,7 @@
 	"empty.allHint": "Ajoutez une identité, un décor 3D ou un guide de mouvement : les références globales accompagnent toutes les générations.",
 	"empty.family": "Aucune référence dans « {family} ».",
 	"listen": "Écouter {name}",
-	"noSound": "Aucun son attaché : choisissez-en un dans l’Inspecteur."
+	"noSound": "Aucun son attaché : choisissez-en un dans l’Inspecteur.",
+	"noImage": "Aucune image attachée : choisissez-en une dans l’Inspecteur.",
+	"noVideo": "Aucune vidéo attachée : choisissez-en une dans l’Inspecteur."
 }
