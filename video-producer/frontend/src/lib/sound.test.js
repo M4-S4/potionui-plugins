@@ -14,11 +14,15 @@ import {
 	audioBehavior,
 	conditionWindow,
 	excludedLanesOf,
+	followLane,
+	hasOwnReference,
+	isReferenceItem,
 	isReferenceLane,
 	muxWindow,
 	referenceLanes,
 	referenceMargin,
 	setExcludedLanes,
+	setReferenceItem,
 	setReferenceLane,
 	setReferenceMargin,
 	shotSound,
@@ -83,6 +87,24 @@ test('reference track: the flag is a boolean set on the lane and removed when un
 	assert.equal('reference' in l, false);
 });
 
+test('reference clip: its own flag wins over its track, and without one it follows the track', () => {
+	const on = lane('A1', { reference: true });
+	const off = lane('A2');
+	const clip = item('x', 'A1', 0, 1);
+	assert.equal(isReferenceItem(clip, on), true);
+	assert.equal(isReferenceItem(clip, off), false);
+	setReferenceItem(clip, on, false);
+	assert.equal(clip.reference, false);
+	assert.equal(isReferenceItem(clip, on), false);
+	setReferenceItem(clip, on, true);
+	assert.equal(hasOwnReference(clip), false);
+	setReferenceItem(clip, off, true);
+	assert.deepEqual([clip.reference, isReferenceItem(clip, off), isReferenceItem(clip, null)], [true, true, true]);
+	followLane(clip);
+	assert.equal('reference' in clip, false);
+	assert.equal(isReferenceItem({ reference: 'yes' }, on), true);
+});
+
 test('portion of a track: the items of that track crossing the interval, clipped to it, in time order', () => {
 	const doc = soundDoc();
 	assert.deepEqual(
@@ -134,6 +156,64 @@ test('sound of a shot: its own sounds then the global ones, its reference tracks
 
 	assert.equal(shotSound(doc, doc.clips[0], { audioMux: false }, 'FL2VA').sends, false);
 	assert.equal(shotSound({ ...doc, references: [], lanes: [lane('A1')] }, doc.clips[0], { audioMux: true }, 'FL2VA'), null);
+});
+
+function clipsDoc() {
+	const doc = soundDoc({ references: [] });
+	doc.lanes.push(lane('A4'));
+	doc.audio = [
+		item('a', 'A1', 1, 2),
+		{ ...item('b', 'A1', 3, 3), reference: false },
+		{ ...item('c', 'A3', 2, 3), reference: true },
+		item('d', 'A3', 6, 2),
+		{ ...item('e', 'A2', 2, 3), reference: false },
+		{ ...item('f', 'A4', 9, 1), reference: true }
+	];
+	return doc;
+}
+
+test('reference clips: a track sends the clips set or left as a reference under the shot, and a clip switched off says nothing', () => {
+	const doc = clipsDoc();
+	const clip = doc.clips[0];
+	assert.deepEqual(
+		trackPortion(doc, 'A1', [2, 5]).map(({ item: i, from, to }) => [i.id, from, to]),
+		[['a', 2, 3]]
+	);
+	assert.deepEqual(
+		trackPortion(doc, 'A3', [2, 5]).map(({ item: i }) => i.id),
+		['c']
+	);
+	assert.deepEqual(trackPortion(doc, 'A2', [2, 5]), []);
+	assert.deepEqual(
+		referenceLanes(doc, clip, [], [2, 5]).map((x) => x.lane.id),
+		['A1', 'A3']
+	);
+	assert.deepEqual(
+		referenceLanes(doc, clip, [], [3.5, 5]).map((x) => x.lane.id),
+		['A3']
+	);
+	assert.deepEqual(
+		referenceLanes(doc, clip, [], [6.5, 7]).map((x) => x.lane.id),
+		['A1', 'A2']
+	);
+
+	const mixed = shotSound(doc, clip, { audioMux: true }, 'FL2VA');
+	assert.deepEqual([mixed.lanes, mixed.warnings, mixed.sends], [['A1', 'A3'], [], true]);
+	doc.engine.referenceMargin = 4;
+	const guided = shotSound(doc, clip, { audioMux: true }, 'Ref2VA');
+	assert.deepEqual(guided.window, [0, 9]);
+	assert.deepEqual([guided.lanes, guided.warnings], [['A1', 'A3'], []]);
+	doc.engine.referenceMargin = 0;
+
+	doc.lanes[2].mute = true;
+	doc.audio[0].reference = false;
+	const muted = shotSound(doc, clip, { audioMux: true }, 'FL2VA');
+	assert.deepEqual([muted.lanes, muted.warnings, muted.sends], [[], [{ code: 'audio_track_muted', laneId: 'A3' }], false]);
+	doc.audio[2].reference = false;
+	assert.equal(shotSound(doc, clip, { audioMux: true }, 'Ref2VA'), null);
+	assert.equal(shotSound(doc, clip, { audioMux: false }, 'FL2VA'), null);
+	doc.audio[5].start = 3;
+	assert.deepEqual(shotSound(doc, clip, { audioMux: false }, 'FL2VA').behavior, IGNORED);
 });
 
 test('a shot leaves out a global sound by its reference id and a reference track by its lane id', () => {
@@ -195,6 +275,7 @@ test('the pages say how the sound of a shot is taken: the shot editor, the Story
 	assert.match(source('../components/modals/ShotEditor.svelte'), /<SoundNote \{behavior\} \/>/);
 	assert.match(source('../components/storyboard/StoryboardView.svelte'), /<SoundNote behavior=\{sound\.behavior\} compact \/>/);
 	assert.match(source('../components/inspector/Inspector.svelte'), /setReferenceLane\(item, v\)/);
+	assert.match(source('../components/inspector/Inspector.svelte'), /checked: isReferenceItem\(item, audioLane\)/);
 	assert.match(source('../components/mixer/Console.svelte'), /setReferenceLane\(l, !isReferenceLane\(l\)\)/);
 	assert.match(source('../components/panels/DirectorDock.svelte'), /setReferenceMargin\(doc\.engine, e\.currentTarget\.value\)/);
 	const production = source('./production.svelte.js');

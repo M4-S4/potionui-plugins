@@ -251,7 +251,7 @@ The Inspector follows the selection and its title tells what is selected: **Vide
 
 The other items have their own panel:
 
-- **Audio clip:** its track, start, duration, gain, fades, and a button that opens its strip in the console.
+- **Audio clip:** its track, start, duration, gain, its **Reference for the generation** switch, fades, the **Slices** section (chapter 13), and a button that opens its strip in the console.
 - **Title:** the text, the subtitle, the start and the duration.
 - **Shot prompt:** the text, the **Library & assistant** link, the **Editor** button, the warnings about the direction, the start, the duration, the influence, and the global direction that applies.
 - **Reference frame:** the image (picked among the images of the project, which a new project does not have), the position, the role (start, end, transition, identity, style), the strength of its influence and, for a capture of a 3D scene, the scene it comes from.
@@ -595,6 +595,7 @@ Two things send sound with the generation of a shot:
 
 - **Sound references** (Director IA › References, family **Sound**; or **Add a sound** in the shot editor): a voice, a music or an ambience, global or for one shot, which a shot can exclude like any reference (chapter 4).
 - **Reference tracks**: the audio tracks you check **Reference for the generation**, with the switch of the Inspector of the track or the **Ref.** button of its strip in the console. A small sparkles icon next to the track name on the timeline marks them. At each generation, the part of the track under the shot is cut on the server, its clips mixed with their gain, their fades and the volume of the track, silence where nothing plays, and sent with the shot. A shot can leave a track out with **Exclude** in its shot editor. A muted track, or one soloed away, sends nothing, and neither does a track with no clip under the shot: the estimate says so. With MiniMax H3 in Ref2VA, a track whose part under the shot is silent (its loudest moment at −60 dB or below) is not sent either, and the other sounds take its place.
+- **Reference clips**: each audio clip has its own **Reference for the generation** switch in its Inspector. Left alone, the clip follows its track. Set, it wins over the track: a clip switched on is sent even from a track that is not a reference track, a clip switched off is never sent, even from a reference track. **Follow track A1** gives the choice back to the track. A sparkles icon before the name of a clip on the timeline marks each clip that is sent. Only the clips sent, under the shot, are cut, mixed, measured for silence and sent; a reference track whose clips under the shot are all switched off sends nothing and says nothing.
 
 What the engine does with this sound depends on it, and the shot editor, the Storyboard card and the estimate say which:
 
@@ -605,6 +606,12 @@ What the engine does with this sound depends on it, and the shot editor, the Sto
 | Wan, cloud models and the other engines | Nothing is sent. The tracks still play in your edit and in the exported video. | "Ignored by this engine: the sound stays in the edit only." |
 
 The cut files are stored once per shot and per generation in your library, as WAV files named after the shot ("vp-sound-shot-01-a1.wav", "vp-sound-shot-01-mix.wav"; with MiniMax H3 in Ref2VA, the sound references are also stored again at the rate the model reads, "vp-sound-shot-01-sound1.wav"), so that every draft of the shot uses the same sound. A take made with a mixed sound plays it in the viewer like any take. Captures, in the dark and light themes of the English interface: the **Sound** references in `docs/screenshots/sound-references.png`, the shot editor in `docs/screenshots/shot-editor-sound.png`, the reference tracks in the console and the Inspector in `docs/screenshots/lane-reference.png`, the Storyboard cards in `docs/screenshots/sound-cards.png`.
+
+### Slices of a sound
+
+To choose which seconds of a long sound go with the generation, cut it into slices. Select an audio clip, set **Length** in the **Slices** section of its Inspector (5 s by default, from 1 to 60 s; the length is kept by the page for every clip until you reload it, and is not saved in the project) and click **Slice**, or use **Cut › Slice the clip into 5.0 s slices** (Ctrl+Shift+B). The clip becomes consecutive clips of that length on the same track, the last one shorter (or up to 0.1 s longer, so that no sliver is left over): each slice goes on from the same place in the file, with the same gain and the same **Reference for the generation** setting; there is no fade at the inner cuts, and the fades of the clip stay on its first and last slices. A clip makes at most 200 slices at a time. Each slice then has its own switch.
+
+**Join** (or **Cut › Join the slices**, Ctrl+Alt+B) puts the slices of the selected clip back together: the clips of the same file on the same track that follow on from one another, on the timeline as in the file (within 0.025 s). Slices whose **Reference for the generation** setting or gain differs stay apart, so that a join never changes what you hear nor what goes with a generation: twelve slices of which the 3rd, 7th and 8th are switched off become five clips. A joined clip keeps the fade in of its first slice and the fade out of its last. **Edit › Undo** (Ctrl+Z) undoes a slicing or a join.
 
 ### Your audio files
 
@@ -722,6 +729,7 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Ctrl+Alt+1 | Side panel |
 | Space | Play / pause |
 | Ctrl+B | Split at playhead |
+| Ctrl+Shift+B, Ctrl+Alt+B | Slice the selected audio clip into slices of the length set in the Inspector, Join its slices |
 | Ctrl+D | Duplicate |
 | Backspace, Delete | Delete (a selected audio track: delete it after a confirmation) |
 | A, R, B | Select tool, Range tool, Blade tool |
@@ -823,7 +831,7 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 | shot editor | éditeur de plan | The window that gathers the prompt, duration, frames, references, drafts and engine of a shot (chapter 4). |
 | own engine | moteur propre | The engine, profile, quality or seed that a shot sets for itself in its shot editor, instead of the project's (chapter 4). |
 | sound reference | référence sonore | A voice, a music or an ambience of the **Sound** family of references, sent with the generation of a shot (chapter 13). |
-| reference track | piste de référence | An audio track checked **Reference for the generation**: its part under each shot goes with the generation (chapter 13). |
+| reference track | piste de référence | An audio track checked **Reference for the generation**: its part under each shot goes with the generation, except the clips switched off on their own (chapter 13). |
 | mixed onto the take | mixé sur la prise | Laid onto the finished take as its soundtrack, without guiding the picture: what LTX does with the sound of a shot (chapter 13). |
 | generation queue | file de génération | Your takes waiting for the engine or in progress, in the order they run, shared by all your projects; the **Queue** tab of Director IA (chapter 8). |
 | Prompt modified | Prompt modifié | The mark of a take made before the last edit of its shot (chapter 4). |

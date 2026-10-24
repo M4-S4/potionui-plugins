@@ -138,7 +138,8 @@ AUDIO = _object(
         "fadeIn": NUMBER,
         "fadeOut": NUMBER,
         "gain": NUMBER,
-    }
+    },
+    optional={"reference": FLAG},
 )
 
 TITLE = _object({"id": ID, "text": TEXT, "sub": TEXT, "start": NUMBER, "dur": NUMBER})

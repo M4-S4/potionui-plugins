@@ -420,10 +420,23 @@ def reference_margin(doc: Mapping[str, Any]) -> float:
     return float(min(max(margin, 0.0), MAX_MARGIN))
 
 
-def reference_lanes(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
-    """The audio tracks checked as a reference for the generation that the shot does not leave out, in track order."""
+def item_reference(item: Mapping[str, Any], lane: Mapping[str, Any]) -> bool:
+    """Whether an audio item is sent as a reference for the generation: its own flag when it sets one, else its track's."""
+    flag = item.get("reference")
+    return flag if isinstance(flag, bool) else lane.get("reference") is True
+
+
+def reference_lanes(doc: Mapping[str, Any], shot_id: str, start: float, end: float) -> List[Dict[str, Any]]:
+    """The audio tracks a shot takes a reference sound from between start and end that it does not leave out, in track order: each track with an item sent as a reference there, and each track checked as a reference with nothing at all there, which the shot says is empty."""
     excluded = excluded_lanes(doc, shot_id)
-    return [lane for lane in doc.get("lanes") or [] if lane.get("reference") is True and lane.get("id") not in excluded]
+    lanes = []
+    for lane in doc.get("lanes") or []:
+        if lane.get("id") in excluded:
+            continue
+        heard = _items_under(doc, lane.get("id"), start, end)
+        if any(item_reference(item, lane) for item in heard) or (not heard and lane.get("reference") is True):
+            lanes.append(lane)
+    return lanes
 
 
 def _any_solo(doc: Mapping[str, Any]) -> bool:
@@ -436,8 +449,7 @@ def lane_heard(doc: Mapping[str, Any], lane: Mapping[str, Any]) -> bool:
     return not lane.get("mute") and (not _any_solo(doc) or lane.get("solo") is True)
 
 
-def lane_items(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
-    """The audio items of a track that play between start and end on the timeline, in time order."""
+def _items_under(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
     items = [
         item
         for item in doc.get("audio") or []
@@ -446,6 +458,12 @@ def lane_items(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -
         and _overlap(start, end, item) > EPSILON
     ]
     return sorted(items, key=lambda item: float(item.get("start") or 0))
+
+
+def lane_items(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
+    """The audio items of a track that play between start and end on the timeline and are sent as a reference, in time order."""
+    lane = next((lane for lane in doc.get("lanes") or [] if lane.get("id") == lane_id), {})
+    return [item for item in _items_under(doc, lane_id, start, end) if item_reference(item, lane)]
 
 
 def _asset_kind(doc: Mapping[str, Any], asset_id: Any) -> Optional[str]:
@@ -486,7 +504,7 @@ def _track_lanes(
     silent: Collection[str] = (),
 ) -> List[str]:
     lanes: List[str] = []
-    for lane in reference_lanes(doc, shot_id):
+    for lane in reference_lanes(doc, shot_id, start, end):
         if not lane_heard(doc, lane):
             warnings.append(
                 note("audio_track_muted", "The reference track is muted: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
@@ -525,9 +543,9 @@ def _audio_note(behavior: str, shot_id: str) -> Dict[str, Any]:
     return note("audio_ignored", "This engine ignores the sound of the shot.", shot_id=shot_id)
 
 
-def _ignored_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
+def _ignored_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
     shot_id = clip["id"]
-    if not audio_references(doc, shot_id) and not reference_lanes(doc, shot_id):
+    if not audio_references(doc, shot_id) and not reference_lanes(doc, shot_id, *mux_window(clip, seconds)):
         return None
     warnings.append(_audio_note(IGNORED, shot_id))
     return ShotAudio(behavior=IGNORED, start=0.0, end=0.0)
@@ -537,9 +555,9 @@ def mux_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, w
     """What a shot mixes onto its take: the part of its reference tracks under it and its audio references, or None when it has neither."""
     shot_id = clip["id"]
     references = [str(reference["assetId"]) for reference in audio_references(doc, shot_id)]
-    if not references and not reference_lanes(doc, shot_id):
-        return None
     start, end = mux_window(clip, seconds)
+    if not references and not reference_lanes(doc, shot_id, start, end):
+        return None
     lanes = _track_lanes(doc, shot_id, start, end, warnings)
     if not lanes and not references:
         return None
@@ -1387,7 +1405,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
 def _shot_mux(context: _Context, clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
     if audio_behavior(context.preset, context.profile) == MUX:
         return mux_audio(context.doc, clip, seconds, warnings)
-    return _ignored_audio(context.doc, clip, warnings)
+    return _ignored_audio(context.doc, clip, seconds, warnings)
 
 
 def _applies(item: Mapping[str, Any], task: str) -> bool:
@@ -1503,7 +1521,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     if director_mode == "t2v" and context.profile == FL2VA:
         warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
     _guide_warnings(doc, clip, warnings, refs=False)
-    audio = _ignored_audio(doc, clip, warnings)
+    audio = _ignored_audio(doc, clip, seconds, warnings)
     params = {"duration_s": seconds, "resolution": resolution, "aspect_ratio": aspect}
     return ShotPlan(
         shot_id=shot_id,

@@ -82,6 +82,8 @@
 	"trim.start": "Ajuster le début",
 	"trim.end": "Ajuster la fin",
 	"audio.label": "Clip audio {name}, {dur}",
+	"audio.labelReference": "Clip audio {name}, {dur}, référence pour la génération",
+	"audio.reference": "Référence pour la génération",
 	"kind.prompt": "Instruction locale",
 	"kind.title": "Titre",
 	"kind.control": "Control video",

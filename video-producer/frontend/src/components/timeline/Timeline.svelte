@@ -49,7 +49,7 @@
 	import { fileDrop } from '../../lib/filedrop.js';
 	import { rowKinds } from '../../lib/upload.js';
 	import { laneAudible, laneCode, videoTrack } from '../../lib/tracks.js';
-	import { isReferenceLane } from '../../lib/sound.js';
+	import { isReferenceItem, isReferenceLane } from '../../lib/sound.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from '../shell/Dropdown.svelte';
 
@@ -756,6 +756,7 @@
 	{@const w = x(a.dur)}
 	{@const peaks = audioPeaks(src)}
 	{@const sel = isSel('audio', a.id)}
+	{@const reference = isReferenceItem(a, row.lane)}
 	<div
 		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/30'} {laneAudible(doc, row.lane) ? '' : 'opacity-40'}"
 		style:left="{x(a.start)}px"
@@ -764,13 +765,16 @@
 		onpointerdown={(e) => moveBlock(e, 'audio', a)}
 		role="button"
 		tabindex="0"
-		aria-label={t('timeline.audio.label', { name: src?.name ?? '', dur: secs(a.dur) })}
+		aria-label={reference ? t('timeline.audio.labelReference', { name: src?.name ?? '', dur: secs(a.dur) }) : t('timeline.audio.label', { name: src?.name ?? '', dur: secs(a.dur) })}
 		onkeydown={(e) => e.key === 'Enter' && select('audio', a.id)}
 	>
 		<svg class="absolute inset-x-0 bottom-0" width={w} height="22" aria-hidden="true">
 			<polygon points={src?.src ? (peaks ? peakWaveform(peaks, w, 22, a.srcIn, pps) : '') : waveform(a.assetId, w, 22, a.srcIn, pps, src?.synth)} fill="rgb(var(--{row.color}))" opacity="0.85" />
 		</svg>
-		<div class="absolute left-1.5 top-0.5 truncate text-xs font-medium text-fg">{src?.name}</div>
+		<div class="absolute left-1.5 top-0.5 flex items-center gap-1 text-xs font-medium text-fg">
+			{#if reference}<span class="flex shrink-0 text-signal" role="img" title={t('timeline.audio.reference')} aria-label={t('timeline.audio.reference')} data-reference-item><Icon name="sparkles" class="h-3 w-3" /></span>{/if}
+			<span class="truncate">{src?.name}</span>
+		</div>
 		{@render fades(a, 'audio', w, 30, true)}
 		<button
 			type="button"
