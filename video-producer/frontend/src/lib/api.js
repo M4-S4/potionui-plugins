@@ -2,6 +2,7 @@ import { progressText } from './generation.js';
 import { LABELS, legacyLabel } from './labels.js';
 import { filenameFrom, lastSegment, normalizeJob, jobPath } from './exports.js';
 import { normalizeSeamMedia, requestBody } from './seam.js';
+import { normalizeFrameSource } from './chain.js';
 
 const CODE_BY_STATUS = {
 	400: 'invalid_request',
@@ -640,6 +641,13 @@ export function createClient(api, save) {
 		},
 		async seamFrame(projectId, shotId, source) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/seam-frame`, requestBody(source)), (data) => normalizeSeamMedia(data.media));
+		},
+		async endFrame(projectId, shotId) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/end-frame`, {}), (data) => {
+				const media = normalizeSeamMedia(data.media);
+				const source = normalizeFrameSource(data.source);
+				return media && source ? { media, source } : null;
+			});
 		},
 		async sceneFromImage(projectId, body) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/scenes/from-image`, body), (data) => normalizeSceneJob(data.job));

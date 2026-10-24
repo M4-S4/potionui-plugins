@@ -3,6 +3,8 @@
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, globalPrompt, itemsIn, productionRange, secs, select } from '../../lib/state.svelte.js';
 	import { promptLanguageOf } from '../../lib/starter.js';
+	import { chainOn, ignoresFirstFrame, setChain } from '../../lib/chain.js';
+	import { engineOptions, optionFor } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { allCommands } from '../../lib/commands.js';
 	import { frameRoleLabel } from '../../lib/catalog.js';
@@ -24,6 +26,7 @@
 	let { version = null, setLanguage = () => {} } = $props();
 
 	const m = $derived(ui.modal);
+	const projectEngine = $derived(optionFor(engineOptions(ui.me), doc.engine));
 	const close = () => (ui.modal = null);
 
 	const recap = $derived.by(() => {
@@ -213,6 +216,14 @@
 						<HostUi name="SegmentedControl" props={{ items: languages, selected: promptLanguage, onSelect: setPromptLanguage, ariaLabel: t('project.promptLanguage.label'), variant: 'toggle' }} />
 					</div>
 					<p class="text-xs text-fg-subtle">{t('project.promptLanguage.help')}</p>
+				</div>
+				<div class="space-y-1">
+					<div class="flex items-center justify-between gap-3">
+						<label for="vp-project-chain" class="vp-label">{t('shell.properties.chain')}</label>
+						<HostUi name="Switch" props={{ id: 'vp-project-chain', checked: chainOn(doc), size: 'lg', label: t('shell.properties.chain'), onchange: (v) => act(() => setChain(doc, v)) }} />
+					</div>
+					<p class="text-xs text-fg-subtle">{t('shell.properties.chainHelp')}</p>
+					{#if chainOn(doc) && ignoresFirstFrame(projectEngine)}<p class="text-xs text-warning">{t('shell.properties.chainTextOnly', { engine: projectEngine.label })}</p>{/if}
 				</div>
 			</div>
 		</Modal>

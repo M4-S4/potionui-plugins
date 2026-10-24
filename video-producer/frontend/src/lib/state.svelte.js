@@ -116,6 +116,14 @@ export function onRestore(listener) {
 	restoreListeners.add(listener);
 	return () => restoreListeners.delete(listener);
 }
+const addedListeners = new Set();
+export function onShotsAdded(listener) {
+	addedListeners.add(listener);
+	return () => addedListeners.delete(listener);
+}
+function shotsAdded(clips) {
+	for (const listener of addedListeners) listener(clips);
+}
 export const history = {
 	get canUndo() {
 		return past.length > 0;
@@ -529,6 +537,7 @@ export function addShot(label = t('lib.default.shot'), prompt = '', dur = 4, aft
 		doc.clips.splice(i, 0, c);
 		relayout();
 		if (prompt) doc.prompts.push(newPrompt(c, prompt));
+		shotsAdded([c]);
 	});
 	select('clip', c.id);
 	return c;
@@ -557,12 +566,15 @@ export function acceptProposal() {
 	const list = (ui.storyProposal ?? []).filter((x) => x.keep);
 	if (!list.length) return;
 	act(() => {
+		const added = [];
 		for (const sp of list) {
 			const c = newClip({ label: sp.label, dur: sp.dur });
 			doc.clips.push(c);
 			relayout();
 			doc.prompts.push(newPrompt(c, sp.prompt));
+			added.push(c);
 		}
+		shotsAdded(added);
 	});
 	ui.storyProposal = null;
 	toast(t('lib.toast.shotsAdded', { count: list.length }), 'success');
