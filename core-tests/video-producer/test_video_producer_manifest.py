@@ -192,15 +192,20 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/takes/{{take_id}}/cancel"),
         ("POST", f"{base}/takes/{{take_id}}/retry"),
         ("POST", f"{base}/projects/{{project_id}}/estimate"),
+        ("POST", f"{base}/projects/{{project_id}}/prompts"),
         ("POST", f"{base}/projects/{{project_id}}/generate"),
         ("GET", f"{base}/projects/{{project_id}}/queue"),
         ("GET", f"{base}/projects/{{project_id}}/exports"),
         ("GET", f"{base}/projects/{{project_id}}/exports/{{fmt}}"),
         ("POST", f"{base}/projects/{{project_id}}/exports/video"),
+        ("GET", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/keyframes"),
+        ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/keyframes"),
+        ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/keyframes/estimate"),
         ("GET", f"{base}/exports/{{job_id}}"),
         ("GET", f"{base}/exports/{{job_id}}/file"),
         ("DELETE", f"{base}/exports/{{job_id}}"),
         ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/seam-frame"),
+        ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/end-frame"),
         ("POST", f"{base}/projects/{{project_id}}/scenes/from-image"),
         ("GET", f"{base}/projects/{{project_id}}/scenes/jobs"),
         ("POST", f"{base}/projects/{{project_id}}/scenes/jobs/{{job_id}}/cancel"),
@@ -1077,7 +1082,7 @@ def test_the_takes_routes_loaded_by_the_core_list_label_choose_flag_and_delete_a
         (take["id"], "/api/media/generations/gen-1/1.mp4", "done")
     ]
     assert "request" not in listed[0] and "user_id" not in listed[0]
-    assert queue == {"takes": [], "slots": {"in_flight": 0, "max": 2}, "elsewhere": {"waiting": 0, "in_flight": 0}}
+    assert queue == {"takes": [], "keyframes": [], "slots": {"in_flight": 0, "max": 2}, "elsewhere": {"waiting": 0, "in_flight": 0}}
     assert (labelled.status_code, labelled.json()["data"]["take"]["label"]) == (200, "rejected")
     assert (chosen.status_code, chosen.json()["data"]["take"]["chosen"], chosen.json()["data"]["take"]["label"]) == (200, True, "final")
     assert (flagged.status_code, flagged.json()["data"]["take"]["label"]) == (200, "final")

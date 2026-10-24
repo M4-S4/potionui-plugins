@@ -1,3 +1,5 @@
+import { applyLut } from './match.js';
+
 export function lookSteps(clip) {
 	if (!clip) return [];
 	const steps = [];
@@ -50,7 +52,8 @@ function operation([name, value]) {
 
 const unit = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-export function gradePixels(data, steps) {
+export function gradePixels(data, steps, lut = null) {
+	if (lut) applyLut(data, lut);
 	if (!steps.length || steps.some(([, value]) => !Number.isFinite(value))) return data;
 	const ops = steps.map(operation);
 	for (let i = 0; i < data.length; i += 4) {
@@ -80,12 +83,13 @@ export function gradePixels(data, steps) {
 	return data;
 }
 
-export function drawGraded(g, img, width, height, steps) {
-	const native = 'filter' in g;
+export function drawGraded(g, img, width, height, steps, lut = null) {
+	const native = !lut && 'filter' in g;
 	if (native) g.filter = filterOf(steps);
+	else if ('filter' in g) g.filter = 'none';
 	g.drawImage(img, 0, 0, width, height);
 	const data = g.getImageData(0, 0, width, height).data;
-	return native ? data : gradePixels(data, steps);
+	return native ? data : gradePixels(data, steps, lut);
 }
 
 export function lumaHistogram(data, bins = 64) {

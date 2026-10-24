@@ -11,7 +11,11 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { mediaFailure, mediaFormat } from '../../lib/playable.js';
 	import { frameDuration } from '../../lib/timebase.js';
+	import { lutOf } from '../../lib/match.js';
+	import MatchCanvas from './MatchCanvas.svelte';
 	import Icon from '../Icon.svelte';
+
+	let { player = false } = $props();
 
 	let w = $state(0);
 	let h = $state(0);
@@ -25,9 +29,9 @@
 
 	const title = $derived(doc.titles.find((x) => time >= x.start && time < x.start + x.dur));
 
-	const previewAsset = $derived(ui.preview?.kind === 'asset' ? asset(ui.preview.id) : null);
-	const previewResult = $derived(ui.preview?.kind === 'result' ? findTake(ui.preview.id) : null);
-	const compareRes = $derived(ui.compare ? ui.compare.map((id) => findTake(id)).filter(Boolean) : []);
+	const previewAsset = $derived(!player && ui.preview?.kind === 'asset' ? asset(ui.preview.id) : null);
+	const previewResult = $derived(!player && ui.preview?.kind === 'result' ? findTake(ui.preview.id) : null);
+	const compareRes = $derived(!player && ui.compare ? ui.compare.map((id) => findTake(id)).filter(Boolean) : []);
 	const localPrompt = $derived(clip ? promptOf(clip) : null);
 	const mode = $derived(compareRes.length === 2 ? 'compare' : previewResult ? 'result' : previewAsset ? 'asset' : 'sequence');
 	const bare = $derived(mode === 'sequence' && !(clip && a));
@@ -38,6 +42,8 @@
 	const liveVideo = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'video' ? a.src : null);
 	const liveImage = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'image' ? a.src : null);
 	let video = $state();
+	let picture = $state();
+	const lut = $derived(mode === 'sequence' && clip ? lutOf(clip) : null);
 	let failed = $state({});
 	const mark = (src, el, withSize = false) => {
 		const reason = mediaFailure(el, { video: withSize });
@@ -173,11 +179,13 @@
 							<div class="text-md font-medium text-fg">{clipLabel(clip)}</div>
 							<p class="max-w-md text-sm text-fg-muted">{localPrompt?.text || t('viewer.placeholderHint')}</p>
 						{/if}
-						<div class="mt-1">
-							<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'sparkles', disabled: busy, onclick: () => startGeneration({ clips: [clip], quality: 'draft' }) }}>
-								{t('viewer.generateDrafts')} <span class="opacity-60">{engineLabel()}</span>
-							</HostUi>
-						</div>
+						{#if !player}
+							<div class="mt-1">
+								<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'sparkles', disabled: busy, onclick: () => startGeneration({ clips: [clip], quality: 'draft' }) }}>
+									{t('viewer.generateDrafts')} <span class="opacity-60">{engineLabel()}</span>
+								</HostUi>
+							</div>
+						{/if}
 					</div>
 				{:else if liveVideo && failed[liveVideo]}
 					{@render cannotPlay(failed[liveVideo], a.name, liveVideo)}
@@ -196,9 +204,11 @@
 							onerror={(e) => mark(liveVideo, e.currentTarget)}
 							onloadedmetadata={(e) => mark(liveVideo, e.currentTarget, true)}
 						></video>
+						{#if lut && video}<MatchCanvas source={video} {lut} filter={clipFilter(clip)} fade={fadeOpacity(clip, time)} />{/if}
 					{/key}
 				{:else if liveImage}
-					<img src={liveImage} alt={a.name} class="h-full w-full object-contain" style:opacity={fadeOpacity(clip, time)} style:filter={clipFilter(clip)} />
+					<img bind:this={picture} src={liveImage} alt={a.name} class="h-full w-full object-contain" style:opacity={fadeOpacity(clip, time)} style:filter={clipFilter(clip)} />
+					{#if lut && picture}<MatchCanvas source={picture} {lut} filter={clipFilter(clip)} fade={fadeOpacity(clip, time)} />{/if}
 				{:else if clip && a}
 					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center text-white/70">
 						<Icon name="film" class="h-7 w-7" />
@@ -258,8 +268,10 @@
 			/>
 		</div>
 		<div class="flex items-center justify-end gap-2">
-			<span class="vp-tc mr-1 text-md text-fg">{tc(ui.playhead, doc.fps)}</span>
-			<span class="vp-tc hidden text-xs text-fg-subtle min-[1500px]:inline">{t('viewer.total', { tc: tc(seqDuration(), doc.fps) })}</span>
+			{#if !player}
+				<span class="vp-tc mr-1 text-md text-fg">{tc(ui.playhead, doc.fps)}</span>
+				<span class="vp-tc hidden text-xs text-fg-subtle min-[1500px]:inline">{t('viewer.total', { tc: tc(seqDuration(), doc.fps) })}</span>
+			{/if}
 			<HostUi
 				name="IconButton"
 				props={{ icon: 'grid', label: t('viewer.guides'), size: 'sm', class: 'vp-h7 vp-toggle', ariaPressed: ui.guides, kbd: key('guides'), onclick: () => (ui.guides = !ui.guides) }}

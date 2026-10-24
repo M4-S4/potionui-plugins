@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, asset, clipLabel, globalPrompt, promptIssues, relayout, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, act, asset, clipLabel, promptIssues, relayout, secs } from '../../lib/state.svelte.js';
 	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf, shotDurationLimit, settleRelease } from '../../lib/production.svelte.js';
 	import { PROFILES, optionKey, presetProfiles } from '../../lib/generation.js';
 	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
@@ -17,6 +17,9 @@
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import AudioPicker from '../shots/AudioPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
+	import CastField from '../shots/CastField.svelte';
+	import ComposedPrompt from '../shots/ComposedPrompt.svelte';
+	import KeyframeCandidates from '../shots/KeyframeCandidates.svelte';
 
 	let { id, draft: kept = null, baseline: keptBaseline = null } = $props();
 
@@ -59,6 +62,12 @@
 	const behavior = $derived(clip ? soundBehaviorOf({ ...clip, engine: draft.engine }) : null);
 	const soundWindow = $derived(clip ? (behavior === CONDITION ? conditionWindow(doc, { ...clip, dur: +draft.dur }) : muxWindow({ ...clip, dur: +draft.dur })) : [0, 0]);
 	const sounding = $derived(lanes.some((x) => !x.excluded) || draft.own.some(isSound) || inherited.some((x) => !x.excluded && isSound(x.reference)));
+	const source = $derived.by(() => {
+		const copy = $state.snapshot(doc);
+		const shot = copy.clips.find((c) => c.id === id);
+		if (shot && baseline) applyShotDraft(copy, shot, baseline, $state.snapshot(draft), { makeId: ulid, maxDur: limit.max, engine: copy.engine });
+		return copy;
+	});
 
 	function pickEngine(key) {
 		const { preset, model, backend, ...rest } = draft.engine;
@@ -141,10 +150,12 @@
 							<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{issue.text}</HostUi>
 						{/if}
 					{/each}
-					<details class="rounded-lg border border-line-strong p-2.5 text-xs">
-						<summary class="-mb-1 -mt-1 min-h-6 cursor-pointer py-1 font-medium text-fg-muted">{t('modals.prompt.global')}</summary>
-						<p class="mt-1.5 leading-5 text-fg-subtle">{globalPrompt()}</p>
-					</details>
+				</section>
+
+				<section class="space-y-1.5" aria-labelledby="{textId}-cast">
+					<span id="{textId}-cast" class="vp-section-title">{t('modals.shot.cast')}</span>
+					<CastField cast={draft.cast} text={draft.text} onchange={(cast) => (draft.cast = cast)} />
+					<ComposedPrompt {source} shotId={id} />
 				</section>
 
 				<section class="space-y-2" aria-labelledby="{textId}-refs">
@@ -250,6 +261,7 @@
 					</div>
 					{#if sounding && behavior}<SoundNote {behavior} />{/if}
 				</section>
+				<KeyframeCandidates {clip} {draft} onaccept={(role, assetId) => (draft[role] = assetId)} />
 			</div>
 
 			<div class="space-y-4">

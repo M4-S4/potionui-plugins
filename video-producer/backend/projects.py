@@ -47,6 +47,10 @@ REFERENCE_SPACES = ("identite", "decors3d", "mouvement", "son")
 MAX_REFERENCE_MARGIN = 10
 MAX_DRAFTS = 16
 SEED_LIMIT = 2**31 - 1
+MATCH_ANCHORS = ("keyframe", "reference", "previous")
+MATCH_STATS = 6
+LOUDNESS_TARGETS = ("web", "broadcast")
+MAX_CROSSFADE = 2
 
 
 def _enum(*values: Any) -> Dict[str, Any]:
@@ -85,6 +89,19 @@ REFERENCE_OVERRIDES = _object(
     {}, optional={"exclude": {**_array(ID), "uniqueItems": True}, "excludeLanes": {**_array(ID), "uniqueItems": True}}
 )
 
+STATS = {"type": "array", "items": NUMBER, "minItems": MATCH_STATS, "maxItems": MATCH_STATS}
+
+COLOR_MATCH = _object(
+    {
+        "anchor": _enum(*MATCH_ANCHORS),
+        "anchorId": REF,
+        "assetId": REF,
+        "strength": {"type": "number", "minimum": 0, "maximum": 100},
+        "source": STATS,
+        "target": STATS,
+    }
+)
+
 SHOT_ENGINE = _object(
     {},
     optional={
@@ -98,6 +115,26 @@ SHOT_ENGINE = _object(
 )
 
 HYBRID = _object({"continuite": NUMBER, "identite": NUMBER, "audio": NUMBER, "mouvement": NUMBER, "style": NUMBER})
+
+IDS = {**_array(ID), "uniqueItems": True}
+
+CAST = _object({}, optional={"characters": IDS, "place": REF})
+
+CHARACTER = _object({"id": ID, "label": TEXT, "text": TEXT, "props": TEXT, "references": IDS})
+
+PLACE = _object({"id": ID, "label": TEXT, "text": TEXT, "references": IDS})
+
+BIBLE = _object({"characters": _array(CHARACTER), "places": _array(PLACE)})
+
+OPTION_LORA = _object({"model": ID, "strength": NUMBER})
+
+PRESET_OPTIONS = {
+    "type": "object",
+    "propertyNames": {"minLength": 1},
+    "additionalProperties": {"anyOf": [{"type": ["string", "number", "boolean"]}, _array(OPTION_LORA)]},
+}
+
+ENGINE_OPTIONS = {"type": "object", "propertyNames": {"minLength": 1}, "additionalProperties": PRESET_OPTIONS}
 
 CLIP = _object(
     {
@@ -120,10 +157,13 @@ CLIP = _object(
     },
     optional={
         "mute": FLAG,
+        "match": COLOR_MATCH,
+        "deflicker": FLAG,
         "drafts": {"type": "integer", "minimum": 1, "maximum": MAX_DRAFTS},
         "revision": {"type": "integer", "minimum": 0},
         "referenceOverrides": REFERENCE_OVERRIDES,
         "engine": SHOT_ENGINE,
+        "cast": CAST,
     },
 )
 
@@ -138,7 +178,8 @@ AUDIO = _object(
         "fadeIn": NUMBER,
         "fadeOut": NUMBER,
         "gain": NUMBER,
-    }
+    },
+    optional={"reference": FLAG},
 )
 
 TITLE = _object({"id": ID, "text": TEXT, "sub": TEXT, "start": NUMBER, "dur": NUMBER})
@@ -280,8 +321,12 @@ ENGINE = _object(
         "naming": TEXT,
         "autoInsert": FLAG,
         "referenceMargin": {"type": "number", "minimum": 0, "maximum": MAX_REFERENCE_MARGIN},
+        "options": ENGINE_OPTIONS,
+        "keyframes": _object({}, optional={"preset": ID, "model": REF}),
     },
 )
+
+FRAME_OF = _object({"shotId": ID, "takeId": REF, "assetId": ID, "at": NULLABLE_NUMBER})
 
 ASSET = _object(
     {
@@ -307,7 +352,8 @@ ASSET = _object(
         "transcript": NULLABLE_TEXT,
         "character": NULLABLE_TEXT,
         "lipSync": NULLABLE_FLAG,
-    }
+    },
+    optional={"frameOf": FRAME_OF},
 )
 
 DOC_SCHEMA: Dict[str, Any] = {
@@ -342,11 +388,17 @@ DOC_SCHEMA: Dict[str, Any] = {
             "scenes": _array(SCENE),
             "lanes": _array(LANE),
             "aux": _array(AUX),
-            "master": _object({"vol": NUMBER}),
+            "master": _object(
+                {"vol": NUMBER},
+                optional={
+                    "loudness": _enum(*LOUDNESS_TARGETS),
+                    "crossfade": {"type": "number", "minimum": 0, "maximum": MAX_CROSSFADE},
+                },
+            ),
             "engine": ENGINE,
             "assets": _array(ASSET),
         },
-        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID},
+        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID, "firstFromPrevious": FLAG, "bible": BIBLE},
     ),
 }
 
@@ -425,8 +477,33 @@ def _retired_set(reference: Any) -> bool:
     return isinstance(reference, dict) and reference.get("space") == SET_SPACE and reference.get("type") in RETIRED_SET_TYPES
 
 
+def _card_ids(doc: Dict[str, Any], kind: str) -> Set[Any]:
+    bible = doc.get("bible")
+    cards = bible.get(kind) if isinstance(bible, dict) else None
+    return {card.get("id") for card in cards if isinstance(card, dict)} if isinstance(cards, list) else set()
+
+
+def _cast(clip: Any, characters: Set[Any], places: Set[Any]) -> Any:
+    cast = clip.get("cast") if isinstance(clip, dict) else None
+    if not isinstance(cast, dict):
+        return clip
+    kept = dict(cast)
+    listed = cast.get("characters")
+    if isinstance(listed, list):
+        known = [item for item in listed if item in characters]
+        if known != listed:
+            kept["characters"] = known
+        if not known:
+            kept.pop("characters")
+    if cast.get("place") is not None and cast["place"] not in places:
+        kept.pop("place")
+    if kept == cast:
+        return clip
+    return {**clip, "cast": kept} if kept else {key: value for key, value in clip.items() if key != "cast"}
+
+
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: without the keys, simulated scenes and simulated 3D guides earlier versions of the page wrote, the plans 3D that cited those scenes unlinked, the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, and the old orbit keyframes turned into positions; the same object when nothing changes."""
+    """A document in the current schema: without the keys, simulated scenes and simulated 3D guides earlier versions of the page wrote, the plans 3D that cited those scenes unlinked, the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the old orbit keyframes turned into positions, and the cast of each shot cleared of the bible cards that no longer exist; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -453,6 +530,11 @@ def migrate(doc: Any) -> Any:
         migrated = [_plan(plan, dropped) for plan in plans]
         if any(new is not old for new, old in zip(migrated, plans)):
             changes["plans3d"] = migrated
+    clips = doc.get("clips")
+    if isinstance(clips, list):
+        cast = [_cast(clip, _card_ids(doc, "characters"), _card_ids(doc, "places")) for clip in clips]
+        if any(new is not old for new, old in zip(cast, clips)):
+            changes["clips"] = cast
     if not changes and not any(key in doc for key in RETIRED_KEYS):
         return doc
     return {**{key: value for key, value in doc.items() if key not in RETIRED_KEYS}, **changes}

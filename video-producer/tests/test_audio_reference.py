@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import math
 import shutil
 import struct
@@ -9,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import core_bridge, director, estimate, presets, soundtrack, takes, tracker
+from backend import core_bridge, director, estimate, generation, presets, soundtrack, takes, tracker
 from backend.director import TrackCut
 from backend.projects import DocError, validate_doc
 
@@ -170,6 +171,47 @@ def slow_peaks(monkeypatch):
     monkeypatch.setattr(soundtrack, "peak", peak)
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "ffmpeg")
     return state
+
+
+@pytest.fixture
+def uploads(monkeypatch):
+    saved = []
+
+    async def save(user, path):
+        saved.append((Path(path).name, hashlib.sha256(Path(path).read_bytes()).hexdigest()))
+        return {"value": f"uploads/{Path(path).name}", "media_type": "audio", "original_filename": Path(path).name, "origin": None}
+
+    monkeypatch.setattr(core_bridge, "save_user_media", save)
+    return saved
+
+
+@pytest.fixture
+def ffmpeg_runs(monkeypatch):
+    state = {"running": 0, "most": 0}
+    assemble = soundtrack.assemble
+
+    async def counted(command, *args, **kwargs):
+        state["running"] += 1
+        state["most"] = max(state["most"], state["running"])
+        try:
+            return await assemble(command, *args, **kwargs)
+        finally:
+            state["running"] -= 1
+
+    monkeypatch.setattr(soundtrack, "assemble", counted)
+    return state
+
+
+def _shots_doc(make_doc, count, **options):
+    doc = _doc(
+        make_doc,
+        [_item("v", "A1", 0, 8), _item("m", "A2", 0, 8, asset="music")],
+        reference_lanes=("A1", "A2"),
+        **options,
+    )
+    doc["clips"] = [{**doc["clips"][0], "id": f"s{index}", "start": 2 * (index - 1), "dur": 2, "label": f"Shot {index}"} for index in range(1, count + 1)]
+    doc["prompts"] = [{**doc["prompts"][0], "id": f"p{index}", "shotId": f"s{index}"} for index in range(1, count + 1)]
+    return doc
 
 
 @pytest.fixture
@@ -969,6 +1011,102 @@ def test_a_measure_goes_on_when_its_estimate_is_dropped_and_the_next_estimate_aw
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+@pytest.mark.parametrize("preset", [presets.MINIMAX_H3, presets.LTX_2_5], ids=["guided", "mixed"])
+def test_the_sounds_of_the_shots_are_cut_four_at_a_time_into_the_uploads_and_requests_of_one_cut_after_the_other(
+    core, make_doc, sounds, uploads, ffmpeg_runs, export_storage, monkeypatch, preset
+):
+    if preset == presets.MINIMAX_H3:
+        core.use_h3()
+    else:
+        core.use_ltx25()
+    _media(core)
+    references = [HERO, {"id": "s-rain", "assetId": "rain", "space": "son", "type": "Ambiance", "scope": {"type": "shot", "shotId": "s2"}}]
+    doc = _shots_doc(make_doc, 4, references=references, assets=("voice", "music", "rain", "hero"), mode="Ref2VA" if preset == presets.MINIMAX_H3 else "FL2VA")
+    planned = director.build_plans(core.users["user-1"], doc, ["s1", "s2", "s3", "s4"], preset, "draft").shots
+    project = {"id": "p-1", "doc": doc}
+    runs = {}
+    for slots in (1, 4):
+        monkeypatch.setattr(soundtrack, "MEASURES", slots)
+        plans = copy.deepcopy(planned)
+        uploads.clear()
+        ffmpeg_runs["most"] = 0
+        asyncio.run(soundtrack.attach_all(core.users["user-1"], project, plans))
+        forms = [plan.request["form_data"].get("references") or plan.request["form_data"]["video_director"]["audio"] for plan in plans]
+        runs[slots] = (list(uploads), forms, ffmpeg_runs["most"])
+
+    assert runs[4][:2] == runs[1][:2] and (runs[1][2], runs[4][2]) == (1, 4)
+    names = [name for name, _ in runs[4][0]]
+    if preset == presets.MINIMAX_H3:
+        assert names == [f"vp-sound-shot-0{index}-{suffix}.wav" for index in range(1, 5) for suffix in (("a1", "a2", "sound1") if index == 2 else ("a1", "a2"))]
+        assert runs[4][1][1] == ["uploads/vp-sound-shot-02-sound1.wav", "uploads/vp-sound-shot-02-a1.wav", "uploads/vp-sound-shot-02-a2.wav", "uploads/hero.png"]
+    else:
+        assert names == [f"vp-sound-shot-0{index}-mix.wav" for index in range(1, 5)]
+        assert runs[4][1][1] == [director.mux_entry("uploads/vp-sound-shot-02-mix.wav", 2.0)]
+    assert list((export_storage / "video_producer" / "audio" / "user-1").iterdir()) == []
+
+
+@pytest.fixture
+def failing_cuts(monkeypatch, tmp_path):
+    state = {"started": [], "cancelled": [], "delays": {}, "failures": {}}
+
+    async def cut(ffmpeg, sources, lanes, start, end, name, references=(), rate=48000):
+        state["started"].append(name)
+        try:
+            await asyncio.sleep(state["delays"].get(name, 0.01))
+        except asyncio.CancelledError:
+            state["cancelled"].append(name)
+            raise
+        if name in state["failures"]:
+            raise soundtrack.SoundError(state["failures"][name], f"{name} failed.")
+        path = sources.folder / f"{name}.wav"
+        _tone(path, 0.05)
+        return path
+
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "ffmpeg")
+    monkeypatch.setattr(soundtrack, "cut", cut)
+    return state
+
+
+def test_the_first_sound_that_fails_in_the_order_of_the_shots_blocks_and_nothing_from_it_on_is_stored(core, make_doc, sounds, uploads, failing_cuts, export_storage):
+    core.use_h3()
+    _media(core)
+    doc = _shots_doc(make_doc, 4, references=[HERO], assets=("voice", "music", "hero"), mode="Ref2VA")
+    plans = director.build_plans(core.users["user-1"], doc, ["s1", "s2", "s3", "s4"], presets.MINIMAX_H3, "draft").shots
+    failing_cuts["delays"] = {"vp-sound-shot-02-a2": 0.3, "vp-sound-shot-04-a1": 0.0}
+    failing_cuts["failures"] = {"vp-sound-shot-02-a2": "audio_cut_failed", "vp-sound-shot-04-a1": "audio_source_missing"}
+
+    with pytest.raises(generation.Blocked) as caught:
+        asyncio.run(generation.with_sound(core.users["user-1"], {"id": "p-1", "doc": doc}, plans))
+
+    assert caught.value.blocks == [{"code": "audio_cut_failed", "message": "vp-sound-shot-02-a2 failed.", "data": {"shot_id": "s2"}}]
+    assert [name for name, _ in uploads] == ["vp-sound-shot-01-a1.wav", "vp-sound-shot-01-a2.wav", "vp-sound-shot-02-a1.wav"]
+    assert len(failing_cuts["started"]) == 8 and plans[0].request["form_data"]["references"][0] == "uploads/vp-sound-shot-01-a1.wav"
+    assert plans[1].request["form_data"]["references"][0] == "track:A1"
+    assert list((export_storage / "video_producer" / "audio" / "user-1").iterdir()) == []
+
+
+def test_a_generation_dropped_while_its_sounds_are_cut_stops_the_cuts_and_leaves_no_work_folder(core, make_doc, sounds, uploads, failing_cuts, export_storage):
+    core.use_h3()
+    _media(core)
+    doc = _shots_doc(make_doc, 4, references=[HERO], assets=("voice", "music", "hero"), mode="Ref2VA")
+    plans = director.build_plans(core.users["user-1"], doc, ["s1", "s2", "s3", "s4"], presets.MINIMAX_H3, "draft").shots
+    failing_cuts["delays"] = {f"vp-sound-shot-0{index}-{lane}": 5.0 for index in range(1, 5) for lane in ("a1", "a2")}
+
+    async def dropped():
+        task = asyncio.ensure_future(soundtrack.attach_all(core.users["user-1"], {"id": "p-1", "doc": doc}, plans))
+        while len(failing_cuts["started"]) < soundtrack.MEASURES:
+            await asyncio.sleep(0.005)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(dropped())
+
+    assert len(failing_cuts["started"]) == 4 and sorted(failing_cuts["cancelled"]) == sorted(failing_cuts["started"])
+    assert uploads == [] and list((export_storage / "video_producer" / "audio" / "user-1").iterdir()) == []
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_a_generation_and_its_retry_never_send_the_cut_of_a_silent_track(client, core, make_doc, make_project, levels, measured, stored, export_storage):
     core.use_h3()
     _media(core)
@@ -1029,3 +1167,161 @@ def test_the_presets_say_whether_their_director_mode_takes_an_audio_track(core):
     assert catalog.audio_mux(core.use_ltx25().vars) and catalog.audio_mux(core.use_h3().vars)
     assert not catalog.audio_mux(core.use_wan().vars)
     assert not catalog.audio_mux({})
+
+
+def _slices_doc(make_doc, mode="FL2VA", **lanes):
+    return _doc(
+        make_doc,
+        [
+            _item("inherit", "A1", 1, 2.5),
+            _item("off", "A1", 3.5, 2, reference=False),
+            _item("on", "A2", 2, 3, asset="music", reference=True),
+            _item("plain", "A2", 0, 2, asset="music"),
+            _item("quiet", "A3", 2, 3, asset="rain", reference=False),
+        ],
+        reference_lanes=("A1", "A3"),
+        references=[HERO],
+        assets=("voice", "music", "rain", "hero"),
+        mode=mode,
+        **lanes,
+    )
+
+
+def test_an_item_flag_wins_over_its_track_and_an_item_without_one_follows_its_track(make_doc):
+    doc = _slices_doc(make_doc)
+
+    assert [item["id"] for item in director.lane_items(doc, "A1", 0, 10)] == ["inherit"]
+    assert [item["id"] for item in director.lane_items(doc, "A2", 0, 10)] == ["on"]
+    assert director.lane_items(doc, "A3", 0, 10) == []
+    assert [lane["id"] for lane in director.reference_lanes(doc, "s1", 2, 5)] == ["A1", "A2"]
+    assert [lane["id"] for lane in director.reference_lanes(doc, "s1", 3.6, 5)] == ["A2"]
+    assert [lane["id"] for lane in director.reference_lanes(doc, "s1", 6, 9)] == ["A1", "A3"]
+    assert director.item_reference({"reference": True}, {}) and not director.item_reference({"reference": False}, {"reference": True})
+    assert director.item_reference({}, {"reference": True}) and not director.item_reference({"reference": "yes"}, {})
+
+
+def test_ref2va_sends_only_the_items_set_or_left_as_a_reference_and_the_tracks_they_make(core, make_doc):
+    core.use_h3()
+    _media(core)
+    doc = _slices_doc(make_doc, mode="Ref2VA")
+
+    plans = _plans(core, doc, presets.MINIMAX_H3)
+
+    (plan,) = plans.shots
+    assert plan.request["form_data"]["references"] == ["track:A1", "track:A2", "uploads/hero.png"]
+    assert plan.audio.lanes == ["A1", "A2"]
+    assert plans.track_cuts == [TrackCut("s1", "A1", 2.0, 5.0), TrackCut("s1", "A2", 2.0, 5.0)]
+    assert _codes(plans) == ["audio_condition"]
+    inputs, graph = soundtrack.mix_graph(doc, plan.audio.lanes, 2.0, 5.0, {key: f"/{key}.wav" for key in ("inherit", "off", "on", "plain", "quiet")})
+    assert inputs == ["-i", "/inherit.wav", "-i", "/on.wav"]
+    assert graph.count("amix=inputs=3") == 1
+
+    for item in doc["audio"]:
+        item["reference"] = False
+    (alone,) = _plans(core, doc, presets.MINIMAX_H3).shots
+    assert alone.request["form_data"]["references"] == ["uploads/hero.png"] and alone.audio is None
+
+
+def test_a_mixed_shot_mixes_only_the_items_sent_and_its_take_follows_the_same_rule(core, make_doc):
+    core.use_ltx25()
+    _media(core)
+    doc = _slices_doc(make_doc)
+
+    plans = _plans(core, doc, presets.LTX_2_5)
+
+    (plan,) = plans.shots
+    assert (plan.audio.behavior, plan.audio.lanes) == ("mux", ["A1", "A2"])
+    assert _codes(plans) == ["audio_mux"]
+    inputs, _ = soundtrack.mix_graph(doc, plan.audio.lanes, 2.0, 5.0, {key: f"/{key}.wav" for key in ("inherit", "off", "on", "plain", "quiet")})
+    assert inputs == ["-i", "/inherit.wav", "-i", "/on.wav"]
+
+    doc["audio"][0]["reference"] = False
+    doc["audio"][2].pop("reference")
+    plans = _plans(core, doc, presets.LTX_2_5)
+    assert plans.shots[0].audio is None and _sound(plans) == []
+
+
+def test_the_track_warnings_follow_the_items_sent(core, make_doc):
+    core.use_ltx25()
+    _media(core)
+    doc = _slices_doc(make_doc, A2={"mute": True})
+    doc["lanes"][3]["reference"] = True
+
+    plans = _plans(core, doc, presets.LTX_2_5)
+
+    assert [(warning["code"], warning["data"].get("lane_id")) for warning in _sound(plans)] == [
+        ("audio_track_muted", "A2"),
+        ("audio_track_empty", "A4"),
+        ("audio_mux", None),
+    ]
+    assert plans.shots[0].audio.lanes == ["A1"]
+
+    core.use_wan()
+    lone = _doc(make_doc, [_item("later", "A2", 8, 2, asset="music", reference=True)], reference_lanes=())
+    assert _sound(_plans(core, lone, presets.WAN)) == []
+    lone["audio"][0]["start"] = 3
+    assert _codes(_plans(core, lone, presets.WAN)) == ["audio_ignored"]
+
+
+def test_the_measure_of_a_track_and_its_cache_key_read_only_the_items_sent(core, make_doc, slow_peaks, sounds, export_storage):
+    _media(core)
+    user = core.users["user-1"]
+    doc = _doc(make_doc, [_item("v", "A1", 2, 3), _item("m", "A1", 2, 3, asset="music", reference=False)], reference_lanes=("A1",))
+    cut = TrackCut("s1", "A1", 2.0, 5.0)
+    sources = soundtrack._Sources(user, doc, "p-1", None)
+
+    signature = sources.signature("A1", 2.0, 5.0)
+    assert [part for part in signature if part.startswith("library:")] == ["library:uploads/voice.wav"]
+
+    asyncio.run(soundtrack.silent_lanes(user, "p-1", doc, [cut]))
+    (command,) = slow_peaks["calls"]
+    assert [command[index + 1] for index, part in enumerate(command) if part == "-i"] == [str(sounds["voice"])]
+
+    doc["audio"][1].pop("reference")
+    assert soundtrack._Sources(user, doc, "p-1", None).signature("A1", 2.0, 5.0) != signature
+    doc["audio"][0]["reference"] = False
+    doc["audio"][1]["reference"] = False
+    assert soundtrack._Sources(user, doc, "p-1", None).signature("A1", 2.0, 5.0) is None
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_a_track_whose_loud_item_is_switched_off_is_measured_silent_under_a_guided_shot(core, make_doc, levels, measured, export_storage):
+    _media(core)
+    user = core.users["user-1"]
+    doc = _doc(make_doc, [_item("v", "A1", 2, 3, reference=False), _item("s", "A1", 0, 12, asset="stem")], assets=("voice", "stem"))
+    cut = TrackCut("s1", "A1", 2.0, 5.0)
+
+    assert asyncio.run(soundtrack.silent_lanes(user, "p-1", doc, [cut])) == {"s1": ["A1"]}
+    assert asyncio.run(soundtrack.track_peak(shutil.which("ffmpeg"), soundtrack._Sources(user, doc, "p-1", export_storage), cut)) <= -90
+
+    doc["audio"][0].pop("reference")
+    assert asyncio.run(soundtrack.silent_lanes(user, "p-1", doc, [cut])) == {}
+    assert len(measured) == 3
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_attaching_a_mixed_shot_leaves_the_items_switched_off_out_of_the_mix(core, make_doc, sounds, stored, export_storage):
+    core.use_ltx25()
+    _media(core)
+    doc = _doc(make_doc, [_item("v", "A1", 2, 1, reference=False), _item("m", "A2", 3, 2, asset="music", reference=True)], reference_lanes=("A1",))
+    (plan,) = _plans(core, doc, presets.LTX_2_5).shots
+    assert plan.audio.lanes == ["A2"]
+
+    asyncio.run(soundtrack.attach(core.users["user-1"], {"id": "p-1", "doc": doc}, plan))
+
+    samples = _samples(stored[0])
+    assert len(samples) == 3 * RATE
+    assert _rms(samples, 0.1, 0.9) < 1e-4
+    assert _rms(samples, 1.1, 2.9) == pytest.approx(0.5 / math.sqrt(2) * 10 ** (-2 / 20), rel=0.05)
+
+
+def test_the_schema_takes_an_optional_reference_flag_on_an_audio_item(make_doc):
+    doc = _doc(make_doc, [_item("v", "A1", 2, 3, reference=False), _item("w", "A2", 5, 1, reference=True), _item("x", "A3", 6, 1)])
+
+    validate_doc(doc)
+
+    for value in ("yes", 1, None):
+        broken = copy.deepcopy(doc)
+        broken["audio"][0]["reference"] = value
+        with pytest.raises(DocError):
+            validate_doc(broken)

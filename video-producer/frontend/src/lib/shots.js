@@ -1,6 +1,7 @@
 import { labelOf } from './labels.js';
 import { SEAM_STRENGTH, frameTime, framesOf } from './seam.js';
 import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
+import { castOf, migrateCast, sameCast, setCast } from './bible.js';
 
 export const MIN_DRAFTS = 1;
 export const MAX_DRAFTS = 8;
@@ -115,7 +116,8 @@ export function inputsChanged(before, after) {
 		before.last !== after.last ||
 		!sameList([...before.exclude].sort(), [...after.exclude].sort()) ||
 		!sameList([...(before.excludeLanes ?? [])].sort(), [...(after.excludeLanes ?? [])].sort()) ||
-		!sameList(before.own.map((r) => `${r.id}:${r.assetId}:${r.type}`), after.own.map((r) => `${r.id}:${r.assetId}:${r.type}`))
+		!sameList(before.own.map((r) => `${r.id}:${r.assetId}:${r.type}`), after.own.map((r) => `${r.id}:${r.assetId}:${r.type}`)) ||
+		!sameCast(before.cast, after.cast)
 	);
 }
 
@@ -130,6 +132,11 @@ function migrateClip(clip) {
 		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next) }).filter(([, list]) => list.length);
 		if (kept.length) next.referenceOverrides = Object.fromEntries(kept);
 		else delete next.referenceOverrides;
+	}
+	if ('cast' in next) {
+		const cast = migrateCast(next.cast);
+		if (cast) next.cast = cast;
+		else delete next.cast;
 	}
 	return next;
 }
@@ -177,7 +184,8 @@ export function shotDraft(doc, clip, engine) {
 		excludeLanes: excludedLanesOf(clip),
 		own: shotReferences(doc, clip).own.map(ownCopy),
 		drafts: draftsOf(clip, engine),
-		engine: shotEngineOf(clip)
+		engine: shotEngineOf(clip),
+		cast: castOf(clip)
 	};
 }
 
@@ -229,6 +237,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	writeReferences(doc, clip, draft.own);
 	if (draft.drafts !== before.drafts || Number.isInteger(clip.drafts)) clip.drafts = count(draft.drafts) ?? projectDrafts(engine);
 	if ('engine' in draft) setShotEngine(clip, draft.engine);
+	if ('cast' in draft) setCast(clip, draft.cast);
 	const released = resized ? releaseOverrun(doc, clip, was) : null;
 	if (changed) touch(clip);
 	return { changed, resized, released };

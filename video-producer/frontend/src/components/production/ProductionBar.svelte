@@ -1,10 +1,10 @@
 <script>
 	import { untrack } from 'svelte';
-	import { fade } from 'svelte/transition';
+	import { fade, fly } from 'svelte/transition';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, secs, allIssues, fmtDuration } from '../../lib/state.svelte.js';
+	import { ui, doc, act, secs, allIssues, fmtDuration } from '../../lib/state.svelte.js';
 	import {
 		readiness,
 		startGeneration,
@@ -17,6 +17,9 @@
 		engineGroups,
 		engineLabel,
 		selectEngine,
+		setProjectQuality,
+		supportedProfiles,
+		soundGuides,
 		backendName,
 		estimateRequest,
 		scheduleEstimate,
@@ -25,8 +28,13 @@
 	import { PRODUCTION_MODES, modeLabel } from '../../lib/catalog.js';
 	import { aspectOf, draftResolution, finalResolution } from '../../lib/generation.js';
 	import { commandById } from '../../lib/commands.js';
+	import { hasOwnEngine } from '../../lib/engine.js';
+	import { fitInline } from '../../lib/barfit.js';
+	import { optionCount } from '../../lib/options.js';
+	import { MAX_MARGIN, referenceMargin, setReferenceMargin } from '../../lib/sound.js';
 	import { announcer } from '../../lib/announce.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { overlayLayer } from '../../lib/host.js';
 	import Icon from '../Icon.svelte';
 	import InfoTip from '../shell/InfoTip.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
@@ -109,6 +117,41 @@
 		return parts.join(' · ');
 	});
 
+	const profileItems = $derived(supportedProfiles().map((m) => ({ id: m, label: m })));
+	const showProfile = $derived(profileItems.length > 1 || !profileItems.some((m) => m.id === doc.direction.mode));
+	const guided = $derived(soundGuides());
+	const own = $derived(doc.clips.filter(hasOwnEngine).length);
+	const setCount = $derived(optionCount(doc.engine, engine?.preset));
+	const editTip = $derived(engine ? t('production.editEngineTip', { engine: engine.label }) : t('production.editEngine'));
+	const MORE = 'engine-more';
+	let room = $state(0);
+	let widths = $state({ engine: 184, profile: 220, margin: 128, own: 64, label: 88 });
+	const fit = $derived(
+		fitInline(room, [
+			{ id: 'engine', width: widths.engine, rank: 1 },
+			{ id: 'profile', width: widths.profile, rank: 2, show: showProfile },
+			{ id: 'margin', width: widths.margin, rank: 3, show: guided },
+			{ id: 'own', width: widths.own, rank: 4, show: own > 0 },
+			{ id: 'edit', width: 28, rank: 0, pinned: true },
+			{ id: 'label', width: widths.label, rank: 5, folds: false }
+		])
+	);
+	const moreOpen = $derived(ui.menuOpen === MORE && fit.overflow.length > 0);
+
+	function profileHint(m) {
+		if (m === 'FL2VA') return t('production.profile.fl2va');
+		if (m === 'Ref2VA') return t('production.profile.ref2va');
+		return t('production.profile.hybrid');
+	}
+
+	function setProfile(m) {
+		if (m !== doc.direction.mode) act(() => (doc.direction.mode = m));
+	}
+
+	function setMargin(value) {
+		act(() => setReferenceMargin(doc.engine, value));
+	}
+
 	const voice = announcer();
 	let spoken = $state('');
 
@@ -159,28 +202,42 @@
 	<div class="vp-divider"></div>
 
 	<HostUi name="Tooltip" props={{ text: p.quality === 'draft' ? t('production.quality.draftTip', { resolution: draftRes }) : t('production.quality.finalTip', { resolution: finalRes }) }}>
-		<HostUi name="SegmentedControl" props={{ items: qualities, selected: p.quality, variant: 'toggle', ariaLabel: t('production.quality.label'), onSelect: (id) => (ui.production.quality = id) }} />
+		<HostUi name="SegmentedControl" props={{ items: qualities, selected: p.quality, variant: 'toggle', ariaLabel: t('production.quality.label'), onSelect: setProjectQuality }} />
 	</HostUi>
 	{#if p.mode !== 'render3d'}<DraftsField {clips} label={false} disabled={busy || !clips.length} />{/if}
 	<select class="vp-popup" bind:value={ui.production.mode} disabled={busy} aria-label={t('production.mode.label')}>
 		{#each PRODUCTION_MODES as m (m)}<option value={m}>{modeLabel(m)}</option>{/each}
 	</select>
-	<HostUi name="Tooltip" props={{ text: engineTip, wrapperClass: 'hidden items-center min-[1400px]:inline-flex' }}>
-		<select class="vp-popup max-w-48" value={engine?.key ?? ''} disabled={!groups.length} aria-label={t('production.engine.label')} onchange={(e) => selectEngine(e.currentTarget.value)}>
-			{#if !engine}<option value="" disabled>{groups.length ? engineLabel() : t('generation.engine.none')}</option>{/if}
-			{#each groups as g (g.label)}
-				<optgroup label={g.label}>
-					{#each g.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
-				</optgroup>
-			{/each}
-		</select>
-	</HostUi>
-	<HostUi
-		name="IconButton"
-		props={{ icon: hostIconName('sliders'), label: t('production.engineSettings'), tooltip: t('production.engineSettings'), size: 'sm', class: 'vp-h7', onclick: openEngineSettings }}
-	/>
 
-	<div class="flex-1"></div>
+	<div class="vp-divider"></div>
+
+	<div class="flex min-w-0 flex-1 items-center gap-2" role="group" aria-label={t('production.engine.group')} bind:clientWidth={room} data-vp-engine>
+		{#if fit.inline.has('engine')}<span class="inline-flex shrink-0" bind:offsetWidth={widths.engine}>{@render engineSelect(false)}</span>{/if}
+		{#if fit.inline.has('profile')}<span class="inline-flex shrink-0" bind:offsetWidth={widths.profile}>{@render profilePicker()}</span>{/if}
+		{#if fit.inline.has('margin')}<span class="inline-flex shrink-0" bind:offsetWidth={widths.margin}>{@render marginField()}</span>{/if}
+		{#if fit.inline.has('own')}<span class="inline-flex shrink-0" bind:offsetWidth={widths.own}>{@render ownShots()}</span>{/if}
+		<HostUi name="Tooltip" props={{ text: editTip, kbd: commandById('engine')?.key, wrapperClass: 'inline-flex shrink-0' }}>
+			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: hostIconName('sliders'), class: 'h-7 px-2', ariaLabel: t('production.editEngine'), onclick: () => openEngineSettings(engine?.preset) }}>
+				{#if fit.inline.has('label')}<span bind:offsetWidth={widths.label} class="inline-flex items-center gap-1.5 whitespace-nowrap">{t('production.editEngine')}{#if setCount}<span class="vp-tc rounded-sm bg-surface-3 px-1 text-2xs text-fg-muted">{setCount}</span>{/if}</span>{/if}
+			</HostUi>
+		</HostUi>
+		{#if fit.overflow.length}
+			<div class="relative shrink-0" data-vp-menu>
+				<HostUi name="IconButton" props={{ icon: hostIconName('dots'), label: t('production.more'), tooltip: t('production.more'), size: 'sm', class: 'vp-h7', ariaExpanded: moreOpen, onclick: () => (ui.menuOpen = moreOpen ? null : MORE) }} />
+				{#if moreOpen}
+					<div class="vp-menu left-0 top-8 w-72" role="dialog" aria-label={t('production.more')} use:overlayLayer in:fly={{ y: -4, duration: ms(120) }}>
+						<div class="space-y-3 p-2">
+							{#if fit.overflow.includes('engine')}<div class="space-y-1"><span class="vp-label block">{t('production.engine.label')}</span>{@render engineSelect(true)}</div>{/if}
+							{#if fit.overflow.includes('profile')}<div class="space-y-1"><span class="vp-label block">{t('production.profile.label')}</span>{@render profilePicker()}</div>{/if}
+							{#if fit.overflow.includes('margin')}<div class="space-y-1"><span class="vp-label block">{t('production.margin.label')}</span>{@render marginField()}</div>{/if}
+							{#if fit.overflow.includes('own')}{@render ownShots()}{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
+
 	<HostUi name="IconButton" props={{ icon: hostIconName('list'), label: t('production.queueLabel'), tooltip: queueTip, kbd: commandById('queue')?.key, size: 'sm', class: 'vp-h7', onclick: openQueue }} />
 
 	<div class="sr-only" aria-live="polite">{spoken}</div>
@@ -233,3 +290,38 @@
 		{/if}
 	</div>
 </div>
+
+{#snippet engineSelect(wide)}
+	<HostUi name="Tooltip" props={{ text: engineTip, wrapperClass: wide ? 'flex w-full' : 'inline-flex min-w-0 items-center' }}>
+		<select class="vp-popup {wide ? 'w-full' : 'max-w-48'}" value={engine?.key ?? ''} disabled={!groups.length} aria-label={t('production.engine.label')} onchange={(e) => selectEngine(e.currentTarget.value)}>
+			{#if !engine}<option value="" disabled>{groups.length ? engineLabel() : t('generation.engine.none')}</option>{/if}
+			{#each groups as g (g.label)}
+				<optgroup label={g.label}>
+					{#each g.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
+				</optgroup>
+			{/each}
+		</select>
+	</HostUi>
+{/snippet}
+
+{#snippet profilePicker()}
+	<HostUi name="Tooltip" props={{ text: profileHint(doc.direction.mode), wrapperClass: 'inline-flex' }}>
+		<HostUi name="SegmentedControl" props={{ items: profileItems, selected: doc.direction.mode, variant: 'toggle', ariaLabel: t('production.profile.label'), onSelect: setProfile }} />
+	</HostUi>
+{/snippet}
+
+{#snippet marginField()}
+	<HostUi name="Tooltip" props={{ text: t('production.margin.tip'), wrapperClass: 'inline-flex' }}>
+		<label class="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted">
+			<span>{t('production.margin.short')}</span>
+			<input class="input vp-dense vp-tc w-14" type="number" min="0" max={MAX_MARGIN} step="0.5" value={referenceMargin(doc.engine)} aria-label={t('production.margin.label')} onchange={(e) => setMargin(e.currentTarget.value)} />
+			<span>{t('production.margin.unit')}</span>
+		</label>
+	</HostUi>
+{/snippet}
+
+{#snippet ownShots()}
+	<HostUi name="Tooltip" props={{ text: t('production.own.tip'), wrapperClass: 'inline-flex' }}>
+		<span class="inline-flex min-h-6 items-center gap-1 whitespace-nowrap text-xs text-fg-muted"><Icon name="sliders" class="h-3 w-3" />{t('production.own', { count: own })}</span>
+	</HostUi>
+{/snippet}

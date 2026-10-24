@@ -81,6 +81,6 @@ test('color preview: presets and histogram take a picture of the shot, its frame
 	assert.match(section, /img\.src = picture;/);
 	assert.match(section, /<img src=\{picture\}/);
 	assert.doesNotMatch(section, /src=\{a\.src\}|img\.src = a\.src/);
-	assert.match(section, /bins = lumaHistogram\(drawGraded\(g, img, 160, 90, steps\)\);/);
+	assert.match(section, /bins = lumaHistogram\(drawGraded\(g, img, 160, 90, steps, lut\)\);/);
 	assert.match(media, /return videoFrame\(a, c\.srcIn \?\? 0\) \?\? assetThumb\(a\);/);
 });

@@ -2,6 +2,8 @@ import { ulid } from './ulid.js';
 import { migrateKeyframe } from './scene3d/camera.js';
 import { migrateTracks, newLaneId, newVideoTrack } from './tracks.js';
 import { migrateShots } from './shots.js';
+import { migrateBible } from './bible.js';
+import { migrateOptions } from './options.js';
 
 const SHOT_DURATION = 5;
 export const PROMPT_LANGUAGES = ['en', 'fr'];
@@ -152,5 +154,7 @@ export function migrate(doc) {
 	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId));
 	if (Array.isArray(doc.references)) next.references = doc.references.filter((r) => !retiredSet(r) || r.assetId).map((r) => (retiredSet(r) ? { ...r, type: CAPTURE } : r));
 	if (Array.isArray(doc.controls)) next.controls = doc.controls.filter((c) => !simulatedGuide(c));
+	if ('bible' in doc) next.bible = migrateBible(doc.bible);
+	if (isObject(doc.engine)) next.engine = migrateOptions(doc.engine);
 	return next;
 }

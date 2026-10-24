@@ -2,7 +2,7 @@ from typing import Any, Dict, NoReturn, Optional
 
 from fastapi import APIRouter, Body, Depends
 
-from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, limits, projects, settings
+from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, keyframes, limits, projects, settings
 from .core_bridge import AccountType, User, get_current_active_user
 from .responses import fail, ok
 
@@ -27,7 +27,7 @@ def _ffmpeg() -> bool:
 
 @router.get("/me")
 def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The signed-in user's locale, last project, role, quota, engines, video presets and features, ffmpeg, and the plugin settings."""
+    """The signed-in user's locale, last project, role, quota, engines, video presets (with the options the project may set in each mode the Video Director runs them in) and features, the presets that edit a start image from several pictures, ffmpeg, and the plugin settings."""
     video_presets = catalog.video_presets(user)
     return ok(
         {
@@ -39,6 +39,7 @@ def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
             "plugin": {"id": PLUGIN_ID, "version": PLUGIN_VERSION},
             "engines": catalog.video_engines(),
             "presets": video_presets,
+            "keyframe_presets": [preset.summary() for preset in keyframes.edit_presets(user)],
             "features": {"upscaler": any(preset["upscaler"] for preset in video_presets)},
             "upscale_targets": list(catalog.UPSCALE_TARGETS),
             "ffmpeg": _ffmpeg(),

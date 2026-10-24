@@ -2,6 +2,8 @@ import { progressText } from './generation.js';
 import { LABELS, legacyLabel } from './labels.js';
 import { filenameFrom, lastSegment, normalizeJob, jobPath } from './exports.js';
 import { normalizeSeamMedia, requestBody } from './seam.js';
+import { normalizeFrameSource } from './chain.js';
+import { normalizeKeyframeEstimate, normalizeKeyframePreset } from './keyframes.js';
 
 const CODE_BY_STATUS = {
 	400: 'invalid_request',
@@ -233,6 +235,54 @@ function normalizeResolution(value) {
 	return { value: value.value, label: text(value.label) || value.value };
 }
 
+const FIELD_LIMITS = ['min', 'max', 'step', 'strength_min', 'strength_max', 'strength_step', 'strength_default', 'max_items', 'max_length'];
+
+function normalizeChoice(value) {
+	if (!isObject(value) || typeof value.value !== 'string') return null;
+	return { value: value.value, label: text(value.label) || value.value };
+}
+
+function normalizeReaction(value) {
+	return isObject(value) && isObject(value.then) && value.when !== undefined ? { when: value.when, then: value.then } : null;
+}
+
+export function normalizeField(value) {
+	if (!isObject(value) || !text(value.name) || !text(value.type)) return null;
+	const limits = isObject(value.limits) ? value.limits : {};
+	return {
+		name: value.name,
+		type: value.type,
+		label: text(value.label) || null,
+		group: strings(value.group),
+		audience: value.audience === 'advanced' ? 'advanced' : 'simple',
+		gate: text(value.gate) || null,
+		default: value.default === undefined ? null : value.default,
+		required: value.required === true,
+		limits: {
+			...Object.fromEntries(FIELD_LIMITS.filter((key) => number(limits[key]) !== null).map((key) => [key, number(limits[key])])),
+			...(text(limits.model_type) ? { model_type: limits.model_type } : {})
+		},
+		reactions: list(value.reactions, normalizeReaction) ?? [],
+		options: list(value.options, normalizeChoice) ?? [],
+		recommended: strings(value.recommended)
+	};
+}
+
+function modeOptions(modes) {
+	if (!isObject(modes)) return {};
+	return Object.fromEntries(
+		Object.entries(modes)
+			.filter(([, mode]) => isObject(mode) && Array.isArray(mode.options))
+			.map(([name, mode]) => [name, list(mode.options, normalizeField)])
+	);
+}
+
+export function normalizeModelEntry(value) {
+	if (!isObject(value) || !text(value.id)) return null;
+	const file = text(value.filename).replaceAll('\\', '/').split('/').pop() || null;
+	return { id: value.id, ref: `model:${value.id}`, name: text(value.custom_name) || text(value.name) || file || value.id, file };
+}
+
 export function normalizePreset(value) {
 	if (!isObject(value) || !text(value.id)) return null;
 	const modes = Array.isArray(value.modes) ? strings(value.modes) : isObject(value.modes) ? Object.keys(value.modes) : [];
@@ -254,7 +304,9 @@ export function normalizePreset(value) {
 		limits: { defaultDuration: number(limits.default_duration), maxDuration: number(limits.max_duration) },
 		directorModes,
 		audioMux: value.audio_mux === true,
-		profiles: Array.isArray(value.profiles) ? strings(value.profiles) : null
+		profiles: Array.isArray(value.profiles) ? strings(value.profiles) : null,
+		presetModes: strings(value.video_director?.preset_modes),
+		options: modeOptions(value.modes)
 	};
 }
 
@@ -273,6 +325,7 @@ export function normalizeMe(data) {
 		lastProjectId: text(me.last_project_id) || null,
 		engines: list(me.engines, normalizeEngine) ?? [],
 		presets: list(me.presets, normalizePreset) ?? [],
+		keyframePresets: list(me.keyframe_presets, normalizeKeyframePreset) ?? [],
 		features: { upscaler: features.upscaler === true },
 		upscaleTargets: strings(me.upscale_targets),
 		ffmpeg: typeof me.ffmpeg === 'boolean' ? me.ffmpeg : null,
@@ -296,7 +349,7 @@ export function normalizeTake(value) {
 		shotId: text(value.shot_id) || null,
 		generationId: idText(value.generation_id),
 		quality: value.quality === 'final' ? 'final' : 'draft',
-		kind: value.kind === 'upscale' ? 'upscale' : 'render',
+		kind: ['upscale', 'keyframe'].includes(value.kind) ? value.kind : 'render',
 		parentTakeId: text(value.parent_take_id) || null,
 		presetId: text(value.preset_id) || null,
 		mode: text(value.mode) || null,
@@ -335,6 +388,25 @@ export function normalizeTake(value) {
 function normalizeNote(value) {
 	if (!isObject(value) || !text(value.code)) return null;
 	return { code: value.code, message: text(value.message), data: isObject(value.data) ? value.data : null };
+}
+
+const ENGINE_FAMILIES = ['h3', 'ltx', 'wan', 'cloud', 'other'];
+
+function normalizeComposed(value) {
+	if (!isObject(value) || !text(value.shot_id)) return null;
+	return {
+		shotId: value.shot_id,
+		presetId: text(value.preset_id) || null,
+		profile: text(value.profile) || null,
+		engine: ENGINE_FAMILIES.includes(value.engine) ? value.engine : 'other',
+		prompt: text(value.prompt),
+		warnings: list(value.warnings, normalizeNote) ?? []
+	};
+}
+
+export function normalizePrompts(value) {
+	if (!isObject(value)) return null;
+	return { prompts: list(value.prompts, normalizeComposed) ?? [], blocks: list(value.blocks, normalizeNote) ?? [] };
 }
 
 function normalizeShotEstimate(value) {
@@ -511,6 +583,7 @@ const projectPath = (id) => `/projects/${encodeURIComponent(id)}`;
 const renderPath = (projectId, renderId) => `${projectPath(projectId)}/renders/${encodeURIComponent(renderId)}`;
 const takePath = (projectId, takeId) => `${projectPath(projectId)}/takes/${encodeURIComponent(takeId)}`;
 const pickTake = (data) => normalizeTake(data.take);
+const keyframePath = (projectId, shotId) => `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/keyframes`;
 
 export async function downloadFrom(api, path, filename, save) {
 	if (typeof api?.download === 'function') {
@@ -554,6 +627,20 @@ export async function coreUpload(api, path, form, { onProgress = () => {}, signa
 	};
 	try {
 		return await settle(await api.fetchRawFromApp(path, { method: 'POST', body: form, signal: signal ?? undefined, onUploadProgress }));
+	} catch (err) {
+		return thrown(err);
+	}
+}
+
+export const MODEL_LIST_LIMIT = 200;
+
+export async function coreModels(api, presetId, modelType, signal = null) {
+	if (typeof api?.fetchRawFromApp !== 'function') return failure(0, 'no_api');
+	const query = new URLSearchParams({ limit: String(MODEL_LIST_LIMIT) });
+	if (modelType) query.set('model_type', modelType);
+	try {
+		const result = await settle(await api.fetchRawFromApp(`/api/presets/${encodeURIComponent(presetId)}/models?${query}`, { method: 'GET', signal: signal ?? undefined }));
+		return mapped(result, (data) => list(data.models, normalizeModelEntry));
 	} catch (err) {
 		return thrown(err);
 	}
@@ -610,6 +697,9 @@ export function createClient(api, save) {
 		async estimate(projectId, body, signal) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/estimate`, body, signal), normalizeEstimate);
 		},
+		async prompts(projectId, body, signal) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/prompts`, body, signal), normalizePrompts);
+		},
 		async generate(projectId, body) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/generate`, body), (data) => list(data.takes, normalizeTake));
 		},
@@ -624,6 +714,15 @@ export function createClient(api, save) {
 		},
 		async queue(projectId) {
 			return mapped(await call(api, 'get', `${projectPath(projectId)}/queue`), normalizeQueue);
+		},
+		async keyframes(projectId, shotId) {
+			return mapped(await call(api, 'get', keyframePath(projectId, shotId)), (data) => list(data.takes, normalizeTake));
+		},
+		async estimateKeyframes(projectId, shotId, body, signal) {
+			return mapped(await call(api, 'post', `${keyframePath(projectId, shotId)}/estimate`, body, signal), normalizeKeyframeEstimate);
+		},
+		async generateKeyframes(projectId, shotId, body) {
+			return mapped(await call(api, 'post', keyframePath(projectId, shotId), body), (data) => list(data.takes, normalizeTake));
 		},
 		async exportVideo(projectId, body) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/exports/video`, body), (data) => normalizeJob(data.job));
@@ -640,6 +739,13 @@ export function createClient(api, save) {
 		},
 		async seamFrame(projectId, shotId, source) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/seam-frame`, requestBody(source)), (data) => normalizeSeamMedia(data.media));
+		},
+		async endFrame(projectId, shotId) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/end-frame`, {}), (data) => {
+				const media = normalizeSeamMedia(data.media);
+				const source = normalizeFrameSource(data.source);
+				return media && source ? { media, source } : null;
+			});
 		},
 		async sceneFromImage(projectId, body) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/scenes/from-image`, body), (data) => normalizeSceneJob(data.job));
@@ -682,6 +788,9 @@ export function createClient(api, save) {
 		},
 		async uploadedMedia(filename) {
 			return mapped(await call(api, 'post', '/media/uploaded', { filename }), (data) => normalizeMedia(data.media));
+		},
+		presetModels(presetId, modelType, signal) {
+			return coreModels(api, presetId, modelType, signal);
 		}
 	};
 }

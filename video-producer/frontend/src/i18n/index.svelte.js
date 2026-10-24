@@ -36,6 +36,8 @@ import enAssistant from './en/assistant.json';
 import frAssistant from './fr/assistant.json';
 import enExports from './en/exports.json';
 import frExports from './fr/exports.json';
+import enKeyframes from './en/keyframes.json';
+import frKeyframes from './fr/keyframes.json';
 import {
 	DEFAULT_LOCALE,
 	LOCALES,
@@ -72,7 +74,8 @@ const DICTIONARIES = {
 		project: enProject,
 		generation: enGeneration,
 		assistant: enAssistant,
-		exports: enExports
+		exports: enExports,
+		keyframes: enKeyframes
 	}),
 	fr: mergeDomains({
 		shell: frShell,
@@ -93,7 +96,8 @@ const DICTIONARIES = {
 		project: frProject,
 		generation: frGeneration,
 		assistant: frAssistant,
-		exports: frExports
+		exports: frExports,
+		keyframes: frKeyframes
 	})
 };
 const reported = new Set();

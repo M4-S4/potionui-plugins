@@ -13,6 +13,8 @@
 		round,
 		secs,
 		bladeAt,
+		sliceAudio,
+		joinAudio,
 		duplicateSelection,
 		deleteSelection,
 		deleteLane,
@@ -29,7 +31,7 @@
 	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
 	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { refMediaKind, refRoleLabel, refTypeLabel, typesOf } from '../../lib/references.js';
-	import { isReferenceLane, setReferenceLane } from '../../lib/sound.js';
+	import { followLane, hasOwnReference, isReferenceItem, isReferenceLane, joinPlan, setReferenceItem, setReferenceLane } from '../../lib/sound.js';
 	import AudioPicker from '../shots/AudioPicker.svelte';
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
@@ -61,13 +63,16 @@
 	} from '../../lib/scene.svelte.js';
 	import { FOCAL_RANGE, ROLL_RANGE, distance, dollyCamera, pose } from '../../lib/scene3d/camera.js';
 	import { hostIconName } from '../../lib/icons.js';
-	import { clipSoundAudible, laneCode, laneItemCount, laneTitle, videoTrack } from '../../lib/tracks.js';
+	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
 	import Tabs from '../shell/Tabs.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import Icon from '../Icon.svelte';
 	import TakesSection from './TakesSection.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
+	import CastField from '../shots/CastField.svelte';
+	import { instructionOf, setCast } from '../../lib/bible.js';
+	import { touch } from '../../lib/shots.js';
 	import ColorSection from './ColorSection.svelte';
 	import NumField from './NumField.svelte';
 	import SliderField from './SliderField.svelte';
@@ -124,6 +129,29 @@
 	const plan = $derived(ui.workspace === 'scene' && (!s || s.kind === 'plan3d') ? currentPlan() : null);
 	const cameraPanel = $derived(!item && ui.workspace === 'scene' && doc.scenes.length > 0);
 	const gain = (v) => `${formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'exceptZero' })} dB`;
+	const audio = $derived(s?.kind === 'audio' && item ? item : null);
+	const audioLane = $derived(audio ? (doc.lanes.find((l) => l.id === audio.lane) ?? null) : null);
+	const cuts = $derived(audio ? sliceCuts(audio.dur, sliceLength(ui.sliceSeconds)) : []);
+	const join = $derived(audio ? joinPlan(doc, audio) : null);
+
+	function referenceHint(item, lane) {
+		if (hasOwnReference(item)) return item.reference ? t('inspector.audio.referenceOn') : t('inspector.audio.referenceOff');
+		const name = laneTitle(doc.lanes, lane);
+		return isReferenceLane(lane) ? t('inspector.audio.referenceLane', { lane: name }) : t('inspector.audio.referenceNone', { lane: name });
+	}
+
+	function sliceHint() {
+		if (cuts === null) return t('inspector.audio.sliceTooMany', { max: MAX_SLICES });
+		if (!cuts.length) return t('inspector.audio.sliceTooShort', { dur: secs(sliceLength(ui.sliceSeconds)) });
+		return t('inspector.audio.sliceHint', { count: cuts.length + 1, last: secs(audio.dur - cuts.at(-1)) });
+	}
+
+	function joinHint() {
+		if (!join || join.chain.length < 2) return t('inspector.audio.joinNone');
+		if (join.runs.length === 1) return t('inspector.audio.joinHint', { count: join.chain.length });
+		if (join.runs.length === join.chain.length) return t('inspector.audio.joinApart', { count: join.chain.length });
+		return t('inspector.audio.joinSome', { count: join.chain.length, items: join.runs.length });
+	}
 
 	const shown = $derived(shownCamera());
 	const sceneDepth = $derived.by(() => {
@@ -174,6 +202,19 @@
 		const before = p.text;
 		p.text = text;
 		promptEdited(p, before);
+	}
+
+	function recast(clip, cast) {
+		act(() => {
+			setCast(clip, cast);
+			touch(clip);
+		});
+	}
+
+	function openBible() {
+		ui.workspace = 'director';
+		ui.dockTab = 'direction';
+		ui.sidebarOpen = true;
 	}
 
 	function setScope(id) {
@@ -308,6 +349,10 @@
 						{/if}
 					</section>
 					<section class="space-y-2">
+						<div class="vp-section-title">{t('inspector.section.cast')}</div>
+						<CastField cast={item.cast} text={instructionOf(doc, item)} onchange={(cast) => recast(item, cast)} onopen={openBible} />
+					</section>
+					<section class="space-y-2">
 						<div class="vp-section-title">{t('inspector.section.frames')}</div>
 						<div class="grid grid-cols-2 gap-2">
 							{#each [['first', t('inspector.frames.first')], ['last', t('inspector.frames.last')]] as [kind, title] (kind)}
@@ -382,7 +427,29 @@
 					<NumField label={t('inspector.field.duration')} value={item.dur} min={0.3} max={(asset(item.assetId)?.srcDur ?? Infinity) - item.srcIn} step={0.04} unit="s" onchange={(v) => set('dur', v)} />
 					<SliderField label={t('inspector.field.gain')} value={item.gain} min={-30} max={12} step={0.5} format={gain} onchange={(v) => set('gain', v)} />
 				</section>
+				<section class="space-y-2">
+					<div class="flex min-h-6 items-center justify-between gap-2 text-xs text-fg-muted">
+						<label for="vp-audio-reference">{t('inspector.audio.reference')}</label>
+						<HostUi
+							name="Switch"
+							props={{ id: 'vp-audio-reference', checked: isReferenceItem(item, audioLane), size: 'lg', label: t('inspector.audio.reference'), onchange: (v) => act(() => setReferenceItem(item, audioLane, v)) }}
+						/>
+					</div>
+					<p class="text-xs text-fg-subtle">{referenceHint(item, audioLane)}</p>
+					{#if hasOwnReference(item)}
+						<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', class: 'w-full', onclick: () => act(() => followLane(item)) }}>{t('inspector.audio.followLane', { lane: laneCode(doc.lanes, item.lane) })}</HostUi>
+					{/if}
+				</section>
 				{@render fadeFields(false)}
+				<section class="space-y-2">
+					<div class="vp-section-title">{t('inspector.section.slices')}</div>
+					<NumField label={t('inspector.field.sliceLength')} value={ui.sliceSeconds} min={SLICE_MIN} max={SLICE_MAX} step={0.5} unit="s" undoable={false} onchange={(v) => (ui.sliceSeconds = sliceLength(v))} />
+					<div class="grid grid-cols-2 gap-1.5">
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'scissors', disabled: !cuts?.length, onclick: () => sliceAudio() }}>{t('inspector.audio.slice')}</HostUi>
+						<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('link'), disabled: !join?.runs.some((r) => r.length > 1), onclick: joinAudio }}>{t('inspector.audio.join')}</HostUi>
+					</div>
+					<p class="text-xs text-fg-subtle">{sliceHint()} {joinHint()}</p>
+				</section>
 				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('sliders'), class: 'w-full', onclick: () => ((ui.workspace = 'mixer'), select('lane', item.lane)) }}>
 					{t('inspector.openStrip', { lane: laneCode(doc.lanes, item.lane) })}
 				</HostUi>

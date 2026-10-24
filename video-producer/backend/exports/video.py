@@ -11,7 +11,7 @@ import psutil
 
 from .. import core_bridge, director, takes
 from ..core_bridge import User
-from . import media, slug
+from . import levels, match, media, slug
 from .common import asset_of, fps_of, seq_duration, timing_error
 
 logger = logging.getLogger("plugins.video-producer")
@@ -89,6 +89,16 @@ ENCODER = (*VIDEO_ENCODER, "-c:a", "aac", "-b:a", "192k", *AUDIO_LAYOUT, "-movfl
 PART_ENCODER = (*VIDEO_ENCODER, "-c:a", "pcm_f32le", *AUDIO_LAYOUT)
 
 LANES_ENCODER = ("-c:a", "pcm_f32le", *AUDIO_LAYOUT)
+
+OPTION_SPECIAL = "\\':"
+
+GRAPH_SPECIAL = "\\'[],;"
+
+CROSSFADE_LIMIT = 2.0
+
+MIN_CROSSFADE = 0.02
+
+CROSSFADE_CURVE = "qsin"
 
 DELIVERY = (
     "-c:v", "libx264", "-crf", "26", "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
@@ -197,6 +207,27 @@ def _look(clip: Mapping[str, Any]) -> List[str]:
     if clip.get("temperature"):
         filters.append(f"colortemperature=temperature={num(6500 - clip['temperature'] * 20)}:pl=1")
     return filters
+
+
+def _escaped(text: str, special: str) -> str:
+    return "".join("\\" + c if c in special else c for c in text)
+
+
+def filter_value(text: str) -> str:
+    """A text as the value of a filter option inside a filter graph: escaped for the option, then for the graph."""
+    return _escaped(_escaped(text, OPTION_SPECIAL), GRAPH_SPECIAL)
+
+
+def filter_path(path: Any, cwd: Optional[str] = None) -> str:
+    """A file as the value of a filter option inside a filter graph: named as reach names it, with forward slashes, then escaped for the option and for the graph, so that a drive letter, a quote or a comma reads as part of the name."""
+    return filter_value(reach(path, cwd).replace(os.sep, "/"))
+
+
+def _match(clip: Mapping[str, Any], options: Mapping[str, Any], cwd: Optional[str]) -> List[str]:
+    path = (options.get("cubes") or {}).get(clip.get("id"))
+    if path is None:
+        return []
+    return [f"lut3d=file={filter_path(path, cwd)}:interp=trilinear"]
 
 
 def _fades(item: Mapping[str, Any], dur: float, name: str) -> List[str]:
@@ -376,16 +407,117 @@ def sound_chain(item: Mapping[str, Any], lane: Mapping[str, Any], origin: float 
     ]
 
 
+def crossfade_of(doc: Mapping[str, Any]) -> float:
+    """The length in seconds of the crossfade between neighbouring audio items of a lane, from the master's setting and at most CROSSFADE_LIMIT; 0 for hard cuts."""
+    master = doc.get("master")
+    value = master.get("crossfade") if isinstance(master, Mapping) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not value >= MIN_CROSSFADE:
+        return 0.0
+    return min(float(value), CROSSFADE_LIMIT)
+
+
+@dataclass(frozen=True)
+class Heard:
+    """An audio item heard in the mix with its lane, the seconds of its source it also plays before and after its own span to crossfade with its neighbours, and the gap to the next one, which it plays on so that the next one starts on time."""
+
+    item: Mapping[str, Any]
+    lane: Mapping[str, Any]
+    head: float = 0.0
+    tail: float = 0.0
+    gap: float = 0.0
+
+
+def _tail_room(doc: Mapping[str, Any], item: Mapping[str, Any]) -> float:
+    length = (asset_of(doc, item.get("assetId")) or {}).get("srcDur")
+    if isinstance(length, bool) or not isinstance(length, (int, float)) or not length > 0:
+        return float("inf")
+    return max(float(length) - float(item.get("srcIn") or 0) - float(item["dur"]), 0.0)
+
+
+def _overlap(doc: Mapping[str, Any], before: Mapping[str, Any], after: Mapping[str, Any], fade: float) -> Tuple[float, float]:
+    """How much of the source past the cut the item before and the item after play to crossfade: half the crossfade on each side, the rest taken from the other side when one source has too little, the whole at most half of either item."""
+    length = min(fade, float(before["dur"]) / 2, float(after["dur"]) / 2)
+    head_room, tail_room = max(float(after.get("srcIn") or 0), 0.0), _tail_room(doc, before)
+    head = min(length / 2, head_room)
+    tail = min(length - head, tail_room)
+    return tail, min(length - tail, head_room)
+
+
+def _gap(before: Mapping[str, Any], after: Mapping[str, Any]) -> float:
+    return float(after.get("start") or 0) - float(before.get("start") or 0) - float(before["dur"])
+
+
+def runs(doc: Mapping[str, Any], sounds: Mapping[str, str]) -> List[List[Heard]]:
+    """The audio items heard in the mix that have a file, in runs that crossfade, in the order of their first item: neighbours on one lane, the end of one within half a frame of the start of the next; one item alone when it has no neighbour or the crossfade is off."""
+    playing = [(item, lane) for item, lane in audible(doc) if item["id"] in sounds]
+    fade = crossfade_of(doc)
+    if fade <= 0:
+        return [[Heard(item, lane)] for item, lane in playing]
+    slack = 0.5 / fps_of(doc)
+    by_lane: Dict[str, List[int]] = {}
+    for index, (item, _) in enumerate(playing):
+        by_lane.setdefault(item["lane"], []).append(index)
+    groups: List[List[int]] = []
+    for indexes in by_lane.values():
+        indexes.sort(key=lambda index: float(playing[index][0].get("start") or 0))
+        group = [indexes[0]]
+        for index in indexes[1:]:
+            before, after = playing[group[-1]][0], playing[index][0]
+            if abs(_gap(before, after)) <= slack + EPSILON and sum(_overlap(doc, before, after, fade)) >= MIN_CROSSFADE:
+                group.append(index)
+            else:
+                groups.append(group)
+                group = [index]
+        groups.append(group)
+    groups.sort(key=lambda group: group[0])
+    result: List[List[Heard]] = []
+    for group in groups:
+        sides = [_overlap(doc, playing[a][0], playing[b][0], fade) for a, b in zip(group, group[1:])]
+        heads, tails = [0.0] + [head for _, head in sides], [tail for tail, _ in sides] + [0.0]
+        gaps = [_gap(playing[a][0], playing[b][0]) for a, b in zip(group, group[1:])] + [0.0]
+        result.append([Heard(*playing[index], heads[k], tails[k], gaps[k]) for k, index in enumerate(group)])
+    return result
+
+
+def _crossfaded(run: Sequence[Heard], sources: Sequence[int], label: str) -> List[str]:
+    """The chains of a run of neighbours: each item played with its extra source and without its own fade where it crossfades, every pair joined by acrossfade, the whole set at the start of its first item."""
+    chains: List[str] = []
+    name = label.strip("[]")
+    last = len(run) - 1
+    for k, (heard, source) in enumerate(zip(run, sources)):
+        item = heard.item
+        dur = float(item["dur"]) + heard.head + heard.tail + heard.gap
+        stretched = {
+            **item,
+            "start": float(item.get("start") or 0) - heard.head,
+            "srcIn": float(item.get("srcIn") or 0) - heard.head,
+            "dur": dur,
+            "fadeIn": item.get("fadeIn") if k == 0 else 0,
+            "fadeOut": item.get("fadeOut") if k == last else 0,
+        }
+        steps = [step for step in sound_chain(stretched, heard.lane) if not step.startswith("adelay=")]
+        chains.append(f"[{source}:a]{','.join([*steps, f'apad=whole_dur={num(dur)}'])}[{name}x{k}]")
+    joined = f"[{name}x0]"
+    for k in range(1, len(run)):
+        length = run[k - 1].tail + run[k].head
+        chains.append(f"{joined}[{name}x{k}]acrossfade=d={num(length)}:c1={CROSSFADE_CURVE}:c2={CROSSFADE_CURVE}[{name}j{k}]")
+        joined = f"[{name}j{k}]"
+    start = float(run[0].item.get("start") or 0)
+    chains.append(f"{joined}adelay=delays={round(max(start, 0.0) * 1000)}:all=1{label}")
+    return chains
+
+
 def _lanes(doc: Mapping[str, Any], sounds: Mapping[str, str], inputs: _Inputs) -> Tuple[List[str], List[str]]:
-    """The chains of the audio items heard in the mix, each from its own input, and their labels."""
+    """The chains of the audio items heard in the mix, each from its own input, neighbours crossfaded when the master asks for it, and their labels."""
     chains: List[str] = []
     labels: List[str] = []
-    for item, lane in audible(doc):
-        if item["id"] not in sounds:
-            continue
-        source = inputs.sound(sounds[item["id"]])
+    for run in runs(doc, sounds):
+        sources = [inputs.sound(sounds[heard.item["id"]]) for heard in run]
         label = f"[m{len(labels)}]"
-        chains.append(f"[{source}:a]{','.join(sound_chain(item, lane))}{label}")
+        if len(run) == 1:
+            chains.append(f"[{sources[0]}:a]{','.join(sound_chain(run[0].item, run[0].lane))}{label}")
+        else:
+            chains.extend(_crossfaded(run, sources, label))
         labels.append(label)
     return chains, labels
 
@@ -425,6 +557,8 @@ def _assembly(
                     f"trim=start={num(shot.start)}:duration={length}",
                     "setpts=PTS-STARTPTS",
                     f"fps={fps}",
+                    *(["deflicker"] if not shot.still and shot.clip.get("deflicker") is True else []),
+                    *_match(shot.clip, options, cwd),
                     _fit(fmt, width, height),
                     "setsar=1",
                     "format=yuv420p",
@@ -557,13 +691,16 @@ def build_command(
     return _command(paths, inputs, ENCODER, total, fps_of(doc))
 
 
-def convert_command(ffmpeg: str, mezzanine: Path, final: Path, size: Tuple[int, int], fps: Any) -> List[str]:
-    """The ffmpeg run that writes the delivery file from the mezzanine with the host converter's settings: H.264 at crf 26 with the slow preset, AAC at 96 kb/s, an MP4 that plays while it downloads."""
+def convert_command(
+    ffmpeg: str, mezzanine: Path, final: Path, size: Tuple[int, int], fps: Any, audio_filter: Optional[str] = None
+) -> List[str]:
+    """The ffmpeg run that writes the delivery file from the mezzanine with the host converter's settings: H.264 at crf 26 with the slow preset, AAC at 96 kb/s, an MP4 that plays while it downloads; the sound through audio_filter when given."""
     rate = num(fps)
     return [
         ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
         "-i", str(mezzanine), "-map", "0:v:0", "-map", "0:a:0?",
         "-vf", f"scale='min({size[0]},iw)':-2:flags=lanczos,fps={rate}", "-r", rate, "-map_metadata", "-1",
+        *(["-af", audio_filter] if audio_filter else []),
         *DELIVERY, str(final),
     ]
 
@@ -605,8 +742,8 @@ async def assemble(
     on_process: Optional[Callable[[Any], Any]] = None,
     cwd: Optional[str] = None,
     code: str = "ffmpeg_failed",
-) -> None:
-    """Run one ffmpeg command from the folder cwd, reporting the share of the running time written; raises ExportError(code) when it fails, and kills it when it writes nothing new for STALL_SECONDS more than a second before the end."""
+) -> str:
+    """Run one ffmpeg command from the folder cwd, reporting the share of the running time written, and return what it wrote on stderr; raises ExportError(code) when it fails, and kills it when it writes nothing new for STALL_SECONDS more than a second before the end."""
     try:
         process = await asyncio.create_subprocess_exec(
             *command, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, cwd=cwd
@@ -644,6 +781,7 @@ async def assemble(
         raise ExportError(code, f"ffmpeg wrote nothing new for {num(STALL_SECONDS / 60)} minutes and was stopped.")
     if returncode != 0:
         raise ExportError(code, last_line(stderr) or f"ffmpeg stopped with code {returncode}.")
+    return stderr
 
 
 def _progress(report: Callable[[float, str], bool], start: float, width: float, ceiling: float = ASSEMBLE_SHARE) -> Callable[[float], None]:
@@ -669,14 +807,20 @@ async def _premix(
     total: float,
     on_process: Optional[Callable[[Any], Any]],
 ) -> Tuple[Mapping[str, Any], Mapping[str, str]]:
-    """The document and sounds the last run mixes: as they are with at most MIX_INPUTS audio items, else each run of that many items mixed first into a file of its own, heard as one item."""
+    """The document and sounds the last run mixes: as they are with at most MIX_INPUTS audio items, else each batch of at most that many items mixed first into a file of its own, heard as one item, a run of crossfading neighbours kept in one batch unless it alone is longer."""
     playing = [item for item, _ in audible(doc) if item["id"] in sounds]
     if len(playing) <= MIX_INPUTS:
         return doc, sounds
     cwd = common_folder([sounds[item["id"]] for item in playing])
+    batches: List[List[Mapping[str, Any]]] = [[]]
+    for run in runs(doc, sounds):
+        for piece in [run] if len(run) <= MIX_INPUTS else [[heard] for heard in run]:
+            if len(batches[-1]) + len(piece) > MIX_INPUTS:
+                batches.append([])
+            batches[-1].extend(heard.item for heard in piece)
     mixes: Dict[str, str] = {}
-    for number, first in enumerate(range(0, len(playing), MIX_INPUTS)):
-        group = {**doc, "audio": playing[first:first + MIX_INPUTS]}
+    for number, batch in enumerate(batches):
+        group = {**doc, "audio": batch}
         inputs = _Inputs(cwd=cwd)
         chains, labels = _lanes(group, sounds, inputs)
         mix = "anull" if len(labels) == 1 else f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0"
@@ -760,10 +904,19 @@ async def discard(path: Path) -> bool:
 
 
 async def discard_work(folder: Path) -> None:
-    """Delete what only the assembly needs: the filter graphs, the parts, the audio premixes and the local copies of the sources."""
-    for pattern in ("graph*.txt", "part-*.mkv", "lanes-*.wav", f"{core_bridge.SOURCE_PREFIX}*"):
+    """Delete what only the assembly needs: the filter graphs, the parts, the audio premixes, the color match LUTs and the local copies of the sources."""
+    for pattern in ("graph*.txt", "part-*.mkv", "lanes-*.wav", "match-*.cube", f"{core_bridge.SOURCE_PREFIX}*"):
         for path in folder.glob(pattern):
             await discard(path)
+
+
+async def loudness_filter(
+    ffmpeg: str, mezzanine: Path, target: float, total: float, on_process: Optional[Callable[[Any], Any]] = None
+) -> Optional[str]:
+    """The second loudnorm pass for the mezzanine's sound, from a first ffmpeg run that measures it; None for a silent mix; raises ExportError(transcode_failed)."""
+    stderr = await assemble(levels.measure_command(ffmpeg, mezzanine, target), total, None, on_process, None, "transcode_failed")
+    measured = levels.parse(stderr)
+    return None if measured is None else levels.normalize_filter(target, measured, SAMPLE_RATE)
 
 
 async def convert(
@@ -775,13 +928,16 @@ async def convert(
     total: float,
     report: Callable[[float, str], bool],
     on_process: Optional[Callable[[Any], Any]] = None,
+    loudness: Optional[float] = None,
 ) -> None:
-    """Write the delivery file from the mezzanine, reporting the transcode step from ASSEMBLE_SHARE to TRANSCODE_END; raises ExportError(transcode_failed)."""
+    """Write the delivery file from the mezzanine, its sound brought to the loudness target in LUFS when given, reporting the transcode step from ASSEMBLE_SHARE to TRANSCODE_END; raises ExportError(transcode_failed)."""
 
     def converted(share: float) -> None:
         report(ASSEMBLE_SHARE + share * (TRANSCODE_END - ASSEMBLE_SHARE), "transcode")
 
-    await assemble(convert_command(ffmpeg, mezzanine, final, size, fps), total, converted, on_process, None, "transcode_failed")
+    audio_filter = None if loudness is None else await loudness_filter(ffmpeg, mezzanine, loudness, total, on_process)
+    command = convert_command(ffmpeg, mezzanine, final, size, fps, audio_filter)
+    await assemble(command, total, converted, on_process, None, "transcode_failed")
     if not final.exists() or final.stat().st_size == 0:
         raise ExportError("transcode_failed", "ffmpeg wrote an empty video.")
 
@@ -853,6 +1009,7 @@ async def render(
             "format": job["format"],
             "resolution": job["resolution"],
             "stills": [clip_id for clip_id, entry in shots.items() if entry is not None and entry["still"]],
+            "cubes": await asyncio.to_thread(match.write_cubes, doc, folder),
             **await asyncio.to_thread(inspect, shots),
         }
         paths = {
@@ -872,7 +1029,7 @@ async def render(
     if not report(ASSEMBLE_SHARE, "transcode"):
         raise cancelled()
     try:
-        await convert(ffmpeg, mezzanine, final, size, fps_of(doc), total, report, on_process)
+        await convert(ffmpeg, mezzanine, final, size, fps_of(doc), total, report, on_process, levels.target_of(doc))
     finally:
         await discard(mezzanine)
     if not report(TRANSCODE_END, "store"):

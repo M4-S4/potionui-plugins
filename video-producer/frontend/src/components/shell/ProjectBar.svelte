@@ -2,7 +2,8 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatTime, t } from '../../i18n/index.svelte.js';
 	import { ui, doc } from '../../lib/state.svelte.js';
-	import { commandById, save, shortcutLabel } from '../../lib/commands.js';
+	import { commandById, save } from '../../lib/commands.js';
+	import { WORKSPACES, isPlayer } from '../../lib/workspaces.js';
 	import { chat } from '../../lib/host.js';
 	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { project } from '../../lib/project.svelte.js';
@@ -11,16 +12,9 @@
 	import Icon from '../Icon.svelte';
 	import Dropdown from './Dropdown.svelte';
 
-	const workspaces = [
-		{ id: 'media', icon: 'image', keys: 'ctrl+1' },
-		{ id: 'director', icon: 'sparkles', keys: 'ctrl+2' },
-		{ id: 'storyboard', icon: 'grid', keys: 'ctrl+3' },
-		{ id: 'scene', icon: 'cube', keys: 'ctrl+4' },
-		{ id: 'mixer', icon: 'sliders', keys: 'ctrl+5' }
-	];
-
 	function workspaceLabel(id) {
 		if (id === 'media') return t('shell.workspace.media');
+		if (id === 'play') return t('shell.workspace.play');
 		if (id === 'director') return t('shell.workspace.director');
 		if (id === 'storyboard') return t('shell.workspace.storyboard');
 		if (id === 'scene') return t('shell.workspace.scene');
@@ -35,9 +29,15 @@
 	const savedTime = $derived(project.savedAt ? formatTime(project.savedAt) : null);
 	const sceneWork = $derived(scenesBusy() || Boolean(sceneState.render));
 	const saveState = $derived(project.status === 'saving' ? 'saving' : project.status === 'error' ? 'error' : ui.dirty ? 'dirty' : 'saved');
+	const player = $derived(isPlayer(ui.workspace));
 
 	function nameChanged() {
 		if (!doc.name.trim()) doc.name = t('lib.default.project');
+	}
+
+	function pick(e, id) {
+		ui.workspace = id;
+		if (e.detail > 0) e.currentTarget.blur();
 	}
 </script>
 
@@ -50,7 +50,8 @@
 				label: t('shell.project.showSidebar'),
 				size: 'sm',
 				class: 'vp-h7 vp-toggle',
-				ariaPressed: ui.sidebarOpen,
+				ariaPressed: ui.sidebarOpen && !player,
+				disabled: player,
 				tooltip: commandById('sidebar')?.label,
 				kbd: commandById('sidebar')?.key,
 				onclick: () => (ui.sidebarOpen = !ui.sidebarOpen)
@@ -78,12 +79,10 @@
 	</div>
 
 	<div class="vp-seg-lg" role="tablist" aria-label={t('shell.workspace.group')}>
-		{#each workspaces as w (w.id)}
-			<HostUi name="Tooltip" props={{ text: workspaceLabel(w.id), kbd: shortcutLabel(w.keys), wrapperClass: 'flex' }}>
-				<button type="button" role="tab" aria-selected={ui.workspace === w.id} onclick={() => (ui.workspace = w.id)}>
-					<Icon name={w.icon} class="h-3.5 w-3.5" />{workspaceLabel(w.id)}{#if w.id === 'scene' && sceneWork}<span class="h-1.5 w-1.5 rounded-full bg-signal" aria-label={t('shell.workspace.sceneBusy')}></span>{/if}
-				</button>
-			</HostUi>
+		{#each WORKSPACES as w (w.id)}
+			<button type="button" role="tab" aria-selected={ui.workspace === w.id} onclick={(e) => pick(e, w.id)}>
+				<Icon name={w.icon} class="h-3.5 w-3.5" />{workspaceLabel(w.id)}{#if w.id === 'scene' && sceneWork}<span class="h-1.5 w-1.5 rounded-full bg-signal" aria-label={t('shell.workspace.sceneBusy')}></span>{/if}
+			</button>
 		{/each}
 	</div>
 
@@ -110,7 +109,8 @@
 				label: t('shell.project.showInspector'),
 				size: 'sm',
 				class: 'vp-h7 vp-toggle',
-				ariaPressed: ui.inspectorOpen,
+				ariaPressed: ui.inspectorOpen && !player,
+				disabled: player,
 				tooltip: commandById('inspector')?.label,
 				kbd: commandById('inspector')?.key,
 				onclick: () => (ui.inspectorOpen = !ui.inspectorOpen)

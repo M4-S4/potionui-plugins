@@ -2,6 +2,7 @@ import { t } from '../i18n/index.svelte.js';
 import { doc, ui, act, toast, round, secs, clipLabel, allIssues, ruleText } from './state.svelte.js';
 import { project, openProject, savedSnapshot, markSaved } from './project.svelte.js';
 import { promptLanguageOf } from './starter.js';
+import { bibleContext } from './bible.js';
 import { seams } from './continuity.svelte.js';
 import { chat } from './host.js';
 import { ulid } from './ulid.js';
@@ -34,7 +35,8 @@ const seamTexts = {
 	camera_change: (n) => n.from && n.to && t('assistant.seam.camera_change', { from: n.from, to: n.to }),
 	lum: (n) => n.from && n.to && t('assistant.seam.lum', { from: n.from, to: n.to }),
 	warm: (n) => n.from && n.to && t('assistant.seam.warm', { from: n.from, to: n.to }),
-	identity: (n) => n.from && n.to && t('assistant.seam.identity', { from: n.from, to: n.to })
+	identity: (n) => n.from && n.to && t('assistant.seam.identity', { from: n.from, to: n.to }),
+	cast_unnamed: (n, i) => n.shot && i.labels.length && t('assistant.seam.cast_unnamed', { shot: n.shot, labels: i.labels.join(', ') })
 };
 
 const fixTexts = {
@@ -45,7 +47,8 @@ const fixTexts = {
 	camera_change: (n) => n.to && t('assistant.fix.camera_change', { to: n.to }),
 	lum: () => t('assistant.fix.lum'),
 	warm: () => t('assistant.fix.warm'),
-	identity: () => t('assistant.fix.identity')
+	identity: () => t('assistant.fix.identity'),
+	cast_unnamed: () => t('assistant.fix.cast_unnamed')
 };
 
 export function reviewText(seam, issue) {
@@ -69,6 +72,7 @@ export function contextSnapshot() {
 		range: ui.range ? { in: ui.range.in, out: ui.range.out } : null,
 		synopsis: doc.synopsis,
 		direction: $state.snapshot(doc.direction),
+		bible: bibleContext(doc),
 		production: { target: p.target, mode: p.mode, quality: p.quality, state: p.state, progress: Math.round(p.progress), queue: p.queue.length },
 		shots: shotsContext(doc, clipLabel),
 		issues: issuesContext(allIssues()),

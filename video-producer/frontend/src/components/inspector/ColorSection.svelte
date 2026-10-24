@@ -4,9 +4,11 @@
 	import { doc, asset, act, toast } from '../../lib/state.svelte.js';
 	import { colorPresets, colorPresetLabel, clipFilter } from '../../lib/look.js';
 	import { drawGraded, lookSteps, lumaHistogram } from '../../lib/grade.js';
+	import { lutOf } from '../../lib/match.js';
 	import { shotFrame } from '../../lib/media.js';
 	import { matchToPrevious, seam } from '../../lib/continuity.svelte.js';
 	import SliderField from './SliderField.svelte';
+	import MatchSection from './MatchSection.svelte';
 	import Icon from '../Icon.svelte';
 
 	let { clip } = $props();
@@ -38,6 +40,7 @@
 			return;
 		}
 		const steps = lookSteps(clip);
+		const lut = lutOf(clip);
 		let alive = true;
 		const img = new Image();
 		img.onload = () => {
@@ -48,7 +51,7 @@
 			const g = c.getContext('2d', { willReadFrequently: true });
 			if (!g) return;
 			try {
-				bins = lumaHistogram(drawGraded(g, img, 160, 90, steps));
+				bins = lumaHistogram(drawGraded(g, img, 160, 90, steps, lut));
 			} catch {
 				bins = [];
 			}
@@ -84,6 +87,8 @@
 			<span class="text-signal">{t('inspector.color.match')}</span>
 		</button>
 	{/if}
+
+	{#key clip.id}<MatchSection {clip} />{/key}
 
 	<section class="space-y-1.5">
 		<div class="vp-section-title">{t('inspector.color.presets')}</div>
