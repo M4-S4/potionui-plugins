@@ -77,6 +77,7 @@ export function applyMe(me) {
 		lastProjectId: me?.lastProjectId ?? null,
 		engines: me?.engines ?? [],
 		presets: me?.presets ?? [],
+		keyframePresets: me?.keyframePresets ?? [],
 		features: me?.features ?? { upscaler: false },
 		upscaleTargets: me?.upscaleTargets ?? [],
 		ffmpeg: me?.ffmpeg ?? null,

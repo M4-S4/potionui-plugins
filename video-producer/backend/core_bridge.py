@@ -66,6 +66,7 @@ __all__ = [
     "VideoTranscodeError",
     "bind_director_media",
     "cancel_generation",
+    "cloud_edit_models",
     "cloud_model",
     "cloud_video_models",
     "describe_preset",
@@ -120,6 +121,10 @@ _COPY_CHUNK = 1 << 20
 _FILE_UNAVAILABLE = "ModelFileUnavailable"
 
 _PATH_VARIABLE = re.compile(r"\{\{\s*paths\.(preset|_shared)\s*\}\}")
+
+EDIT_TASK = "img_edit"
+
+REFERENCE_ROLE = "reference"
 
 _STORED_STATE_KEYS = ("backend_id", "started_at", "duration_ms", "error_code", "error_user_message", "error_message", "error_detail")
 
@@ -494,6 +499,22 @@ def cloud_video_models(backend_id: str) -> List[Dict[str, Any]]:
     ]
 
 
+def _params(spec: Any) -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": param.name,
+            "kind": param.kind,
+            "values": list(param.values),
+            "minimum": param.minimum,
+            "maximum": param.maximum,
+            "step": param.step,
+            "default": param.default,
+            "tasks": sorted(param.tasks),
+        }
+        for param in spec.params
+    ]
+
+
 def cloud_model(model_id: str) -> Optional[Dict[str, Any]]:
     """An enabled cloud video model with its parameters and media inputs, or None. Temporary: reads the container."""
     resolved = api_hooks.get_container().cloud_capabilities.resolve(model_id)
@@ -503,21 +524,34 @@ def cloud_model(model_id: str) -> Optional[Dict[str, Any]]:
     return {
         **_cloud_summary(model_id, resolved.entry),
         "backend_id": resolved.backend_id,
-        "params": [
-            {
-                "name": param.name,
-                "kind": param.kind,
-                "values": list(param.values),
-                "minimum": param.minimum,
-                "maximum": param.maximum,
-                "step": param.step,
-                "default": param.default,
-                "tasks": sorted(param.tasks),
-            }
-            for param in spec.params
-        ],
+        "params": _params(spec),
         "inputs": [{"role": media.role, "tasks": sorted(media.tasks)} for media in spec.inputs],
     }
+
+
+def _reference_limit(spec: Any) -> int:
+    limits = [
+        int(getattr(media, "max_items", 0) or 0)
+        for media in spec.inputs
+        if media.role == REFERENCE_ROLE and (not media.tasks or EDIT_TASK in media.tasks)
+    ]
+    return max(limits, default=0)
+
+
+def cloud_edit_models(backend_id: str) -> List[Dict[str, Any]]:
+    """The models turned on in a cloud backend's catalog that edit a picture from reference pictures, with their parameters and the most references they take. Temporary: reads the container."""
+    repository = api_hooks.get_container().cloud_catalog.repository
+    return [
+        {
+            "id": entry.model_id,
+            "name": entry.label,
+            "provider_model_id": entry.provider_model_id,
+            "params": _params(entry.spec),
+            "max_images": _reference_limit(entry.spec),
+        }
+        for entry in repository.list_enabled(backend_id)
+        if entry.model_id and EDIT_TASK in (entry.tasks or [])
+    ]
 
 
 def _option(item: Any) -> Optional[Dict[str, str]]:
@@ -586,6 +620,7 @@ def _describe_fields(fields: Any, roots: Mapping[str, str], out: Dict[str, Dict[
                 "default": form_field.default,
                 "options": _options(configuration, roots),
                 "recommendations": _recommendations(configuration),
+                **({"multi": True, "max_items": configuration.get("max_items")} if configuration.get("multi") else {}),
             }
         if isinstance(form_field.children, list):
             _describe_fields(form_field.children, roots, out)
@@ -599,7 +634,7 @@ def preset_driver(preset_id: str) -> Optional[str]:
 
 
 def preset_form_fields(preset_id: str, mode: str) -> Optional[Dict[str, Dict[str, Any]]]:
-    """Type, required flag, default, options and recommended files (SHA-256, file name) of each field of a preset mode, or None. Temporary: reads the container."""
+    """Type, required flag, default, options and recommended files (SHA-256, file name) of each field of a preset mode, with the most items a multiple field takes, or None. Temporary: reads the container."""
     repository = api_hooks.get_container().file_preset_repository
     template = repository.find_preset_by_id(preset_id)
     if template is None or mode not in (template.modes or {}):

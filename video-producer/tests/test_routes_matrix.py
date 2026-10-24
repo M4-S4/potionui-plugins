@@ -21,6 +21,8 @@ README = PLUGIN_ROOT / "README.md"
 REFERENCE = PLUGIN_ROOT / "tests" / "fixtures" / "exports" / "reference-project.json"
 SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4}]
 ORDER = {"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.WAN}
+EDIT_PRESET = "01M31Y6WNM07EHAXXCDV1QVJVX"
+KEYFRAMES = {"preset_id": EDIT_PRESET, "references": [{"asset_id": "still", "role": "setting"}]}
 TAKE_FIELDS = ("shot_id", "generation_id", "file_id", "file_path", "status", "quality", "kind", "chosen")
 LIVENESS = {"GET /health"}
 DOCUMENTED = re.compile(r"`(GET|POST|PUT|DELETE|PATCH) (/[^`?\s]*)")
@@ -143,6 +145,17 @@ class World:
         if end:
             asyncio.run(tracker.Tracker().tick())
         return takes.get_take(take["id"])
+
+    def keyframes(self):
+        from src.plugin_api import FieldDescription, ModeDescription, PresetDescription
+
+        pictures = {"type": "image", "required": True, "default": None, "options": [], "recommendations": [], "multi": True, "max_items": 10}
+        form = {"source_image": FieldDescription(type="image", required=True, multi=True)}
+        self.core.descriptions[EDIT_PRESET] = PresetDescription(
+            id=EDIT_PRESET, name="Qwen-Image-2.1", modes={"edit": ModeDescription(default_form="custom", forms={"custom": form})}, engine="native"
+        )
+        self.core.fields[(EDIT_PRESET, "edit")] = {"source_image": pictures}
+        return KEYFRAMES
 
     def waiting(self):
         fields = {"project_id": self.pid, "shot_id": "s2", "user_id": "user-1", "quality": "draft", "kind": "render"}
@@ -296,6 +309,23 @@ ROUTES = {
     "GET /projects/{id}/queue": Route(
         success=lambda w: Call(f"/projects/{w.pid}/queue", check=lambda r: _data(r)["slots"]["max"] == 2),
         denied=lambda w: Call(f"/projects/{w.pid}/queue", status=404, code="project_not_found", who="user-2"),
+    ),
+    "GET /projects/{id}/shots/{shot}/keyframes": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes", check=lambda r: _data(r)["takes"] == []),
+        denied=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes", status=404, code="project_not_found", who="user-2"),
+    ),
+    "POST /projects/{id}/shots/{shot}/keyframes/estimate": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes/estimate", w.keyframes(), check=lambda r: _data(r)["blocks"] == []),
+        denied=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes/estimate", KEYFRAMES, 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes/estimate", {**KEYFRAMES, "count": 9}, 422, "invalid_request"),
+    ),
+    "POST /projects/{id}/shots/{shot}/keyframes": Route(
+        success=lambda w: Call(
+            f"/projects/{w.pid}/shots/s1/keyframes", w.keyframes(), 202,
+            check=lambda r: [take["kind"] for take in _data(r)["takes"]] == ["keyframe", "keyframe"],
+        ),
+        denied=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes", KEYFRAMES, 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes", {**KEYFRAMES, "role": "middle"}, 422, "invalid_request"),
     ),
     "POST /projects/{id}/takes/{take}/label": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "candidate"}, check=lambda r: _data(r)["take"]["label"] == "candidate"),
