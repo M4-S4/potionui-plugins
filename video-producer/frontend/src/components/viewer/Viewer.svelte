@@ -246,12 +246,15 @@
 	</div>
 
 	<div class="grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-t border-line px-3">
-		<div class="flex items-center gap-2">
+		<div class="flex min-w-0 items-center gap-2">
 			<HostUi
 				name="IconButton"
 				props={{ icon: hostIconName(ui.muted ? 'volume-x' : 'volume'), label: ui.muted ? t('viewer.unmute') : t('viewer.mute'), size: 'sm', class: 'vp-h7', tooltip: t('viewer.monitor'), onclick: () => (ui.muted = !ui.muted) }}
 			/>
 			<input class="vp-slider w-24" type="range" min="0" max="1" step="0.01" bind:value={ui.monitorVol} aria-label={t('viewer.monitor')} />
+			{#if player && clip}
+				<span class="ml-1 min-w-0 truncate text-sm text-fg-muted">{t('viewer.shot', { index: doc.clips.indexOf(clip) + 1, count: doc.clips.length, name: clipLabel(clip) })}</span>
+			{/if}
 		</div>
 		<div class="flex items-center gap-1">
 			<HostUi name="IconButton" props={{ icon: hostIconName('skip-back'), label: t('viewer.toStart'), size: 'sm', class: 'vp-h7', tooltip: t('viewer.start'), kbd: t('viewer.kbd.home'), onclick: () => seek(0) }} />
@@ -268,10 +271,8 @@
 			/>
 		</div>
 		<div class="flex items-center justify-end gap-2">
-			{#if !player}
-				<span class="vp-tc mr-1 text-md text-fg">{tc(ui.playhead, doc.fps)}</span>
-				<span class="vp-tc hidden text-xs text-fg-subtle min-[1500px]:inline">{t('viewer.total', { tc: tc(seqDuration(), doc.fps) })}</span>
-			{/if}
+			<span class="vp-tc mr-1 text-md text-fg">{tc(ui.playhead, doc.fps)}</span>
+			<span class="vp-tc hidden text-xs text-fg-subtle min-[1500px]:inline">{t('viewer.total', { tc: tc(seqDuration(), doc.fps) })}</span>
 			<HostUi
 				name="IconButton"
 				props={{ icon: 'grid', label: t('viewer.guides'), size: 'sm', class: 'vp-h7 vp-toggle', ariaPressed: ui.guides, kbd: key('guides'), onclick: () => (ui.guides = !ui.guides) }}
