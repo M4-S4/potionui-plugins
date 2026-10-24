@@ -1,4 +1,4 @@
-import { laneAudible } from './tracks.js';
+import { joinRuns, laneAudible, sliceChain } from './tracks.js';
 import { excludedLanesOf, excludedOf, isGlobal, ownsReference } from './shots.js';
 
 export { excludedLanesOf, setExcludedLanes } from './shots.js';
@@ -32,10 +32,29 @@ export function setReferenceLane(lane, on) {
 	else delete lane.reference;
 }
 
-export function referenceLanes(doc, clip, excluded = excludedLanesOf(clip)) {
-	const skip = new Set(excluded);
-	return (doc?.lanes ?? []).filter(isReferenceLane).map((lane) => ({ lane, excluded: skip.has(lane.id) }));
+export const hasOwnReference = (item) => typeof item?.reference === 'boolean';
+
+export const isReferenceItem = (item, lane) => (hasOwnReference(item) ? item.reference : isReferenceLane(lane));
+
+export function setReferenceItem(item, lane, on) {
+	if (on === isReferenceLane(lane)) delete item.reference;
+	else item.reference = on;
 }
+
+export function followLane(item) {
+	delete item.reference;
+}
+
+const laneOf = (doc, laneId) => (doc?.lanes ?? []).find((lane) => lane.id === laneId) ?? null;
+
+export function joinPlan(doc, item) {
+	const lane = laneOf(doc, item.lane);
+	const chain = sliceChain(doc, item);
+	return { chain, runs: joinRuns(chain, (a, b) => isReferenceItem(a, lane) === isReferenceItem(b, lane) && a.gain === b.gain) };
+}
+
+const itemsUnder = (doc, laneId, [start, end]) =>
+	(doc?.audio ?? []).filter((item) => item.lane === laneId && item.dur > EPSILON && Math.min(end, item.start + item.dur) - Math.max(start, item.start) > EPSILON);
 
 export function conditionWindow(doc, clip) {
 	const margin = referenceMargin(doc?.engine);
@@ -44,9 +63,20 @@ export function conditionWindow(doc, clip) {
 
 export const muxWindow = (clip) => [clip.start, clip.start + clip.dur];
 
+export function referenceLanes(doc, clip, excluded = excludedLanesOf(clip), window = conditionWindow(doc, clip)) {
+	const skip = new Set(excluded);
+	return (doc?.lanes ?? [])
+		.filter((lane) => {
+			const heard = itemsUnder(doc, lane.id, window);
+			return heard.some((item) => isReferenceItem(item, lane)) || (!heard.length && isReferenceLane(lane));
+		})
+		.map((lane) => ({ lane, excluded: skip.has(lane.id) }));
+}
+
 export function trackPortion(doc, laneId, [start, end]) {
-	return (doc?.audio ?? [])
-		.filter((item) => item.lane === laneId && item.dur > EPSILON && Math.min(end, item.start + item.dur) - Math.max(start, item.start) > EPSILON)
+	const lane = laneOf(doc, laneId);
+	return itemsUnder(doc, laneId, [start, end])
+		.filter((item) => isReferenceItem(item, lane))
 		.sort((a, b) => a.start - b.start)
 		.map((item) => ({ item, from: Math.max(start, item.start), to: Math.min(end, item.start + item.dur) }));
 }
@@ -68,11 +98,13 @@ export function audioBehavior(preset, profile) {
 
 export function shotSound(doc, clip, preset, profile) {
 	if (!clip) return null;
-	const references = soundReferences(doc, clip);
-	const lanes = referenceLanes(doc, clip).filter((x) => !x.excluded).map((x) => x.lane);
-	if (!references.length && !lanes.length) return null;
 	const behavior = audioBehavior(preset, profile);
 	const window = behavior === CONDITION ? conditionWindow(doc, clip) : muxWindow(clip);
+	const references = soundReferences(doc, clip);
+	const lanes = referenceLanes(doc, clip, excludedLanesOf(clip), window)
+		.filter((x) => !x.excluded)
+		.map((x) => x.lane);
+	if (!references.length && !lanes.length) return null;
 	const sent = [];
 	const warnings = [];
 	for (const lane of lanes) {

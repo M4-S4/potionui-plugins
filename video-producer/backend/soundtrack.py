@@ -84,7 +84,7 @@ def mix_graph(
     references: Sequence[str] = (),
     seek: bool = False,
 ) -> Tuple[List[str], str]:
-    """The inputs and the filter graph of one cut: the items of the tracks heard between start and end, each with its gain and fades at its place, read from the start of its source or, with seek, for a measure only, from its seek point, the references from their beginning, over silence that lasts the whole cut."""
+    """The inputs and the filter graph of one cut: the items of the tracks sent as a reference between start and end, each with its gain and fades at its place, read from the start of its source or, with seek, for a measure only, from its seek point, the references from their beginning, over silence that lasts the whole cut."""
     length = num(end - start)
     inputs: List[str] = []
     graph = [f"anullsrc=r={SAMPLE_RATE}:cl=stereo,atrim=duration={length}[bed]"]

@@ -25,6 +25,8 @@
 	"cmd.tool-range": "Outil Plage",
 	"cmd.tool-blade": "Outil Lame",
 	"cmd.blade": "Couper à la tête de lecture",
+	"cmd.audio-slice": "Découper le clip en tranches de {dur}",
+	"cmd.audio-join": "Recoller les tranches",
 	"cmd.trim-start": "Ajuster le début à la tête",
 	"cmd.trim-end": "Ajuster la fin à la tête",
 	"cmd.duration": "Modifier la durée…",

@@ -62,8 +62,8 @@ function eventFor(spec, mac, flip = null) {
 	return { key: on.shift && key.length === 1 ? key.toUpperCase() : (named ?? key), code, ctrlKey: on.ctrl, metaKey: on.meta, altKey: on.alt, shiftKey: on.shift };
 }
 
-test('shortcuts: 33 commands carry a shortcut, each one different, and the others show none', () => {
-	assert.equal(commands.length, 98);
+test('shortcuts: 35 commands carry a shortcut, each one different, and the others show none', () => {
+	assert.equal(commands.length, 100);
 	assert.deepEqual(
 		bound.map((c) => c.id),
 		[
@@ -84,6 +84,8 @@ test('shortcuts: 33 commands carry a shortcut, each one different, and the other
 			'tool-range',
 			'tool-blade',
 			'blade',
+			'audio-slice',
+			'audio-join',
 			'trim-start',
 			'trim-end',
 			'in',

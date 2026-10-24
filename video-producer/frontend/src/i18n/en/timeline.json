@@ -82,6 +82,8 @@
 	"trim.start": "Trim the start",
 	"trim.end": "Trim the end",
 	"audio.label": "Audio clip {name}, {dur}",
+	"audio.labelReference": "Audio clip {name}, {dur}, reference for the generation",
+	"audio.reference": "Reference for the generation",
 	"kind.prompt": "Shot prompt",
 	"kind.title": "Title",
 	"kind.control": "Control video",

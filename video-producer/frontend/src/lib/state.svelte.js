@@ -5,7 +5,8 @@ import { ulid } from './ulid.js';
 import { resetTakes } from './takes.svelte.js';
 import { compileRules, conflictIds, namesCamera } from './rules.js';
 import { dropPlanControls } from './scene3d/doc.js';
-import { laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane } from './tracks.js';
+import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, sliceItem, sliceLength } from './tracks.js';
+import { joinPlan } from './sound.js';
 import { touch } from './shots.js';
 import sharedRules from './rules.json';
 
@@ -27,6 +28,7 @@ export const ui = $state({
 	loop: false,
 	pxPerSec: 34,
 	snapping: true,
+	sliceSeconds: SLICE_SECONDS,
 	tool: 'select',
 	range: null,
 	consoleH: typeof window === 'undefined' ? 420 : Math.min(window.innerHeight - 370, Math.max(330, Math.round(window.innerHeight * 0.56))),
@@ -306,6 +308,46 @@ export function bladeAt(time = ui.playhead) {
 		relayout();
 	});
 	toast(t('lib.toast.shotSplit'));
+}
+
+function selectedAudio() {
+	const s = ui.selection;
+	return s?.kind === 'audio' ? (doc.audio.find((x) => x.id === s.id) ?? null) : null;
+}
+
+export function sliceAudio(seconds = ui.sliceSeconds) {
+	const a = selectedAudio();
+	if (!a) return toast(t('lib.toast.selectAudio'), 'warning');
+	const n = sliceLength(seconds);
+	const parts = sliceItem($state.snapshot(a), n);
+	if (parts === null) return toast(t('lib.toast.sliceTooMany', { dur: secs(n), max: MAX_SLICES }), 'warning');
+	if (!parts.length) return toast(t('lib.toast.sliceTooShort', { dur: secs(n) }), 'warning');
+	act(() => {
+		Object.assign(a, parts[0]);
+		doc.audio.splice(doc.audio.indexOf(a) + 1, 0, ...parts.slice(1));
+	});
+	toast(t('lib.toast.sliced', { count: parts.length, dur: secs(n) }));
+}
+
+export function joinAudio() {
+	const a = selectedAudio();
+	if (!a) return toast(t('lib.toast.selectAudio'), 'warning');
+	const { chain, runs } = joinPlan(doc, a);
+	if (chain.length < 2) return toast(t('lib.toast.joinNone'), 'warning');
+	if (runs.length === chain.length) return toast(t('lib.toast.joinApart'), 'warning');
+	let kept = a;
+	act(() => {
+		for (const run of runs.filter((r) => r.length > 1)) {
+			const [first, ...rest] = run;
+			const merged = joined(run.map((x) => $state.snapshot(x)));
+			if (!('reference' in merged)) delete first.reference;
+			Object.assign(first, merged);
+			removeWhere(doc.audio, (x) => rest.includes(x));
+			if (rest.includes(a)) kept = first;
+		}
+	});
+	if (kept !== a) ui.selection = { kind: 'audio', id: kept.id };
+	toast(runs.length === 1 ? t('lib.toast.joined', { count: chain.length }) : t('lib.toast.joinedApart', { count: chain.length, items: runs.length }));
 }
 
 export function markerLabel(kind) {

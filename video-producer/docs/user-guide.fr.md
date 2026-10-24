@@ -251,7 +251,7 @@ L’inspecteur suit la sélection et son titre dit ce qui est sélectionné : **
 
 Les autres éléments ont leur propre panneau :
 
-- **Clip audio :** sa piste, son début, sa durée, son gain, ses fondus, et un bouton qui ouvre sa tranche dans la console.
+- **Clip audio :** sa piste, son début, sa durée, son gain, son interrupteur **Référence pour la génération**, ses fondus, la section **Tranches** (chapitre 13), et un bouton qui ouvre sa tranche dans la console.
 - **Titre :** le texte, le sous-titre, le début et la durée.
 - **Instruction locale :** le texte, le lien **Bibliothèque & assistant**, le bouton **Éditeur**, les avertissements sur la direction, le début, la durée, l’influence, et la direction globale appliquée.
 - **Frame de référence :** l’image (choisie parmi les images du projet, qu’un nouveau projet n’a pas), la position, le rôle (début, fin, transition, identité, style), l’intensité de son influence et, pour une capture d’une scène 3D, la scène d’où elle vient.
@@ -596,6 +596,7 @@ Deux choses envoient du son avec la génération d’un plan :
 
 - **Les références sonores** (Director IA › Références, famille **Son** ; ou **Ajouter un son** dans l’éditeur de plan) : une voix, une musique ou une ambiance, globale ou propre à un plan, qu’un plan peut exclure comme toute référence (chapitre 4).
 - **Les pistes de référence** : les pistes audio que vous cochez **Référence pour la génération**, avec l’interrupteur de l’inspecteur de la piste ou le bouton **Réf.** de sa tranche dans la console. Une petite icône d’étincelles à côté du nom de la piste, sur la timeline, les signale. À chaque génération, la portion de la piste sous le plan est découpée sur le serveur, ses clips mixés avec leur gain, leurs fondus et le volume de la piste, du silence là où rien ne joue, et envoyée avec le plan. Un plan peut écarter une piste avec **Exclure** dans son éditeur de plan. Une piste muette, ou écartée par un solo, n’envoie rien, pas plus qu’une piste sans clip sous le plan : l’estimation le dit. Avec MiniMax H3 en Ref2VA, une piste silencieuse sous le plan (son passage le plus fort à −60 dB ou moins) n’est pas envoyée non plus, et les autres sons prennent sa place.
+- **Les clips de référence** : chaque clip audio a son propre interrupteur **Référence pour la génération** dans son inspecteur. Laissé tel quel, le clip suit sa piste. Réglé, il l’emporte sur la piste : un clip activé est envoyé même depuis une piste qui n’est pas une piste de référence, un clip désactivé n’est jamais envoyé, même depuis une piste de référence. **Suivre la piste A1** rend le choix à la piste. Une icône d’étincelles devant le nom d’un clip, sur la timeline, signale chaque clip envoyé. Seuls les clips envoyés, sous le plan, sont découpés, mixés, mesurés pour le silence et envoyés ; une piste de référence dont tous les clips sous le plan sont désactivés n’envoie rien et ne dit rien.
 
 Ce que le moteur fait de ce son dépend de lui, et l’éditeur de plan, la carte du Storyboard et l’estimation disent lequel s’applique :
 
@@ -606,6 +607,12 @@ Ce que le moteur fait de ce son dépend de lui, et l’éditeur de plan, la cart
 | Wan, modèles cloud et autres moteurs | Rien n’est envoyé. Les pistes jouent toujours dans votre montage et dans la vidéo exportée. | « Ignoré par ce moteur : le son reste seulement dans le montage. » |
 
 Les fichiers découpés sont enregistrés une fois par plan et par génération dans votre bibliothèque, en WAV nommés d’après le plan (« vp-sound-shot-01-a1.wav », « vp-sound-shot-01-mix.wav » ; avec MiniMax H3 en Ref2VA, les références sonores sont aussi réenregistrées au taux que lit le modèle, « vp-sound-shot-01-sound1.wav »), pour que tous les brouillons du plan utilisent le même son. Une prise faite avec un son mixé le joue dans le visualiseur comme toute prise. Captures, en thèmes sombre et clair de l’interface anglaise : les références **Son** dans `docs/screenshots/sound-references.png`, l’éditeur de plan dans `docs/screenshots/shot-editor-sound.png`, les pistes de référence dans la console et l’inspecteur dans `docs/screenshots/lane-reference.png`, les cartes du Storyboard dans `docs/screenshots/sound-cards.png`.
+
+### Découper un son en tranches
+
+Pour choisir quelles secondes d’un long son accompagnent la génération, découpez-le en tranches. Sélectionnez un clip audio, réglez **Durée** dans la section **Tranches** de son inspecteur (5 s par défaut, de 1 à 60 s ; la page garde cette durée pour tous les clips jusqu’à ce que vous la rechargiez, et elle n’est pas enregistrée dans le projet) et cliquez sur **Découper**, ou passez par **Montage › Découper le clip en tranches de 5,0 s** (Ctrl+Shift+B). Le clip devient des clips consécutifs de cette durée sur la même piste, le dernier plus court (ou plus long de 0,1 s au plus, pour ne pas laisser de miette) : chaque tranche reprend le fichier là où la précédente s’arrête, avec le même gain et le même réglage **Référence pour la génération** ; il n’y a pas de fondu aux coupes intérieures, et les fondus du clip restent sur sa première et sa dernière tranche. Un clip donne au plus 200 tranches à la fois. Chaque tranche a ensuite son propre interrupteur.
+
+**Recoller** (ou **Montage › Recoller les tranches**, Ctrl+Alt+B) rassemble les tranches du clip sélectionné : les clips du même fichier sur la même piste qui se suivent, sur la timeline comme dans le fichier (à 0,025 s près). Les tranches dont le réglage **Référence pour la génération** ou le gain diffère restent à part, pour que recoller ne change jamais ce que vous entendez ni ce qui accompagne une génération : douze tranches dont la 3e, la 7e et la 8e sont désactivées donnent cinq clips. Un clip recollé garde le fondu d’entrée de sa première tranche et le fondu de sortie de sa dernière. **Édition › Annuler** (Ctrl+Z) annule un découpage ou un recollage.
 
 ### Vos fichiers audio
 
@@ -723,6 +730,7 @@ Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pou
 | Ctrl+Alt+1 | Panneau latéral |
 | Espace | Lecture / pause |
 | Ctrl+B | Couper à la tête de lecture |
+| Ctrl+Shift+B, Ctrl+Alt+B | Découper le clip audio sélectionné en tranches de la durée réglée dans l’inspecteur, Recoller ses tranches |
 | Ctrl+D | Dupliquer |
 | Retour arrière, Suppr | Supprimer (une piste audio sélectionnée : la supprimer après confirmation) |
 | A, R, B | Outil Sélection, Outil Plage, Outil Lame |
@@ -824,7 +832,7 @@ L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video
 | éditeur de plan | shot editor | La fenêtre qui réunit l’instruction, la durée, les images clés, les références, les brouillons et le moteur d’un plan (chapitre 4). |
 | moteur propre | own engine | Le moteur, le profil, la qualité ou la graine qu’un plan fixe lui-même dans son éditeur de plan, à la place de ceux du projet (chapitre 4). |
 | référence sonore | sound reference | Une voix, une musique ou une ambiance de la famille de références **Son**, envoyée avec la génération d’un plan (chapitre 13). |
-| piste de référence | reference track | Une piste audio cochée **Référence pour la génération** : sa portion sous chaque plan accompagne la génération (chapitre 13). |
+| piste de référence | reference track | Une piste audio cochée **Référence pour la génération** : sa portion sous chaque plan accompagne la génération, sauf les clips désactivés un à un (chapitre 13). |
 | mixé sur la prise | mixed onto the take | Posé sur la prise terminée comme bande-son, sans guider l’image : ce que LTX fait du son d’un plan (chapitre 13). |
 | file de génération | generation queue | Vos prises qui attendent le moteur ou sont en cours, dans l’ordre où elles passent, partagées par tous vos projets ; l’onglet **File** de Director IA (chapitre 8). |
 | Prompt modifié | Prompt modified | La marque d’une prise faite avant la dernière modification de son plan (chapitre 4). |
