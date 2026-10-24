@@ -550,6 +550,16 @@ Une alerte n’apparaît que lorsque deux plans voisins ne se raccordent pas : �
 
 La mesure est faite sur de vraies images, pour chaque plan qui en a une. Le projet de départ n’en a pas encore, et le Storyboard indique alors « Aucun raccord à calculer : les plans n’ont pas encore d’image. » Un pourcentage de ressemblance entre deux plans générés peut aussi apparaître dans les alertes (« Identité à vérifier entre … et … (similarité 78 %) ») : il est simulé (chapitre 17). La couleur, elle, est réelle.
 
+### Raccord auto
+
+**Raccord auto**, dans l’onglet **Couleur** de l’inspecteur, corrige la couleur d’une prise d’après une image d’**Ancre** plutôt que d’après le plan précédent. L’ancre proposée est l’image de début du plan (son image clé), puis une autre image clé du plan, une référence image propre au plan, la dernière image du plan précédent et enfin une référence du projet : raccorder chaque plan au précédent accumule la dérive, ce que rappelle la page quand vous choisissez cette ancre. La liste **Ancre** reste modifiable ; changer d’ancre refait la mesure.
+
+1. La page mesure, en CIELAB, la moyenne et l’écart type de la luminance et des deux axes de couleur sur l’ancre et sur trois images de la prise (à 15, 50 et 85 % du plan).
+2. Elle en tire un transfert statistique (méthode de Reinhard, en Lab), l’applique avec l’**Intensité** choisie (80 % par défaut) et affiche l’écart avant et après, en ΔE, avec le sens de la dérive (« prise plus chaude », « prise plus sombre »…). Les vignettes **Ancre**, **Prise** et **Raccordée** permettent de comparer.
+3. À l’export, le raccord est cuit en LUT 3D (33³ points, fichier `.cube`) appliquée par ffmpeg avant le cadrage et avant les réglages fins. Le visualiseur et les vignettes montrent la même LUT (WebGL, ou calcul sur la page quand WebGL manque), pas un filtre CSS.
+
+Si la prise du plan change, le raccord n’est plus appliqué et l’onglet demande de **Mesurer à nouveau**. **Retirer** supprime le raccord. **Réduire le scintillement à l’export** ajoute le filtre `deflicker` de ffmpeg au plan ; il n’agit que dans la vidéo exportée.
+
 ### Ce que regarde la mesure
 
 Pour chaque paire de plans voisins, la page compare la fin du premier avec le début du second :
@@ -663,13 +673,14 @@ Choisissez un format, une résolution et l’étendue, puis cliquez sur **Export
 - **Résolution.** 720p, 1080p ou 4K ; la fenêtre démarre sur la résolution de votre projet. Le petit côté de l’image fait 720, 1080 ou 2160 pixels. Pour un projet 16:9, une vidéo web fait 1280×720, 1920×1080 ou 3840×2160, et une vidéo pour les réseaux sociaux 720×1280, 1080×1920 ou 2160×3840.
 - **Étendue.** Les vidéos web et réseaux sociaux rendent toujours la **Séquence entière**. **Plage** est grisée, et quand vous avez tracé une plage la fenêtre dit « Les exports web et réseaux sociaux rendent la séquence entière. »
 - **Stems audio par rôle.** L’interrupteur est simulé et ne change rien aux vidéos web et réseaux sociaux.
+- **Son.** **Niveau** : **Tel que mixé** (par défaut), **Web et réseaux · −14 LUFS** ou **Diffusion EBU R128 · −23 LUFS**. Le serveur mesure d’abord le mixage (`loudnorm`, premier passage), puis applique un seul gain au mixage entier (second passage, mode linéaire) : la dynamique ne change pas, et le gain s’arrête avant que les crêtes vraies dépassent −1 dBTP, quitte à rester un peu sous la cible. **Fondu enchaîné entre clips voisins** : **Aucun**, 0,25 s, 0,5 s ou 1 s. Deux clips d’une même piste qui se touchent (à une demi-image près) se fondent l’un dans l’autre (`acrossfade`, puissance constante), centrés sur la coupe et pris dans la matière qui dépasse de chaque côté, sans décaler le second. Ces deux réglages sont enregistrés dans le projet. La fenêtre indique aussi combien de plans ont un raccord couleur cuit en LUT, et ceux dont la prise a changé depuis.
 
 Sous les choix, la fenêtre montre le nom du fichier (le nom du projet dont les espaces deviennent des tirets bas, puis la résolution, par exemple `Aube_sur_le_port_1080p.mp4`), sa cadence et son format d’image et la note « Rendu sur le serveur avec ffmpeg ».
 
 Ce que contient la vidéo :
 
-- Les plans dans l’ordre du projet, avec les réglages de **Couleur** (exposition, contraste, saturation, température) et les fondus de chaque plan. Un plan sans fichier que le serveur peut trouver, et chaque vide entre deux plans, est noir et silencieux. Une image placée comme plan est tenue pendant la durée du plan.
-- Le son de la vidéo propre à chaque plan, avec les fondus du plan, sauf si le plan ou la piste V1 est muet ou qu’une autre piste est en solo, et vos pistes audio avec leur gain, le fader de leur piste, muet et solo, et leurs fondus (la règle du chapitre 13, la même que dans le visualiseur). Les pistes sont additionnées telles quelles, sans niveau automatique.
+- Les plans dans l’ordre du projet, avec leur **Raccord auto** (LUT 3D), les réglages de **Couleur** (exposition, contraste, saturation, température) et les fondus de chaque plan. Un plan sans fichier que le serveur peut trouver, et chaque vide entre deux plans, est noir et silencieux. Une image placée comme plan est tenue pendant la durée du plan.
+- Le son de la vidéo propre à chaque plan, avec les fondus du plan, sauf si le plan ou la piste V1 est muet ou qu’une autre piste est en solo, et vos pistes audio avec leur gain, le fader de leur piste, muet et solo, et leurs fondus (la règle du chapitre 13, la même que dans le visualiseur). Les pistes sont additionnées telles quelles ; le niveau final et les fondus enchaînés ne s’appliquent que si vous les choisissez dans **Son**.
 - Pas dans la vidéo : les titres et les marqueurs, les sous-titres (toujours un fichier à part, voir plus bas), et le panoramique, l’égaliseur, le compresseur, le filtre, les envois, l’automation et le fader master de la console. Ce que vous entendez dans la console avec eux n’est pas ce que contient le fichier.
 
 Si votre admin n’a pas installé ffmpeg sur le serveur, l’onglet Vidéo dit « ffmpeg est absent du serveur : les exports web et réseaux sociaux en ont besoin. » (avec un lien **Lire le guide** pour un admin, et « Demandez à un administrateur de l’installer. » pour les autres) et **Exporter** est désactivé pour les formats web et réseaux sociaux.

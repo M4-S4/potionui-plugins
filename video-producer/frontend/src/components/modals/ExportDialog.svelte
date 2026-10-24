@@ -2,8 +2,9 @@
 	import { labelOf } from '../../lib/labels.js';
 	import { onDestroy, onMount } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
-	import { formatBytes, formatRelative, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, seqDuration, secs, allIssues, clipLabel } from '../../lib/state.svelte.js';
+	import { formatBytes, formatNumber, formatRelative, t } from '../../i18n/index.svelte.js';
+	import { ui, doc, act, seqDuration, secs, allIssues, clipLabel } from '../../lib/state.svelte.js';
+	import { activeTransfer, matchStale } from '../../lib/match.js';
 	import { EXCHANGE } from '../../lib/exchange.js';
 	import { README_HREF, RESOLUTIONS, VIDEO_FORMATS, exchangeFile, historyOf, isJobActive, isRealFormat, slugify, videoFile } from '../../lib/exports.js';
 	import {
@@ -68,6 +69,16 @@
 		edl: { label: 'EDL CMX 3600', ext: EXCHANGE.edl.ext }
 	};
 	const exchangePreview = $derived(tab === 'exchange' ? exchangeText(exchange).slice(0, 900) : '');
+	const matchedShots = $derived(doc.clips.filter((c) => activeTransfer(c)).length);
+	const staleShots = $derived(doc.clips.filter((c) => matchStale(c)).length);
+	const CROSSFADES = [0, 0.25, 0.5, 1];
+
+	function setSound(key, value) {
+		act(() => {
+			if (value) doc.master[key] = value;
+			else delete doc.master[key];
+		});
+	}
 
 	function formatLabel(id) {
 		if (id === 'master') return t('modals.export.formatMaster');
@@ -193,6 +204,30 @@
 				<label for="vp-export-stems">{t('modals.export.stems')}</label>
 				<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>
 			</div>
+			{#if real}
+				<section class="space-y-2" aria-labelledby="vp-export-sound">
+					<div id="vp-export-sound" class="vp-section-title">{t('modals.export.sound')}</div>
+					<div class="grid grid-cols-2 gap-3">
+						<label class="space-y-1">
+							<span class="vp-label">{t('modals.export.loudness')}</span>
+							<select class="input vp-dense w-full" value={doc.master.loudness ?? ''} disabled={running} onchange={(e) => setSound('loudness', e.currentTarget.value)}>
+								<option value="">{t('modals.export.loudnessOff')}</option>
+								<option value="web">{t('modals.export.loudnessWeb')}</option>
+								<option value="broadcast">{t('modals.export.loudnessBroadcast')}</option>
+							</select>
+						</label>
+						<label class="space-y-1">
+							<span class="vp-label">{t('modals.export.crossfade')}</span>
+							<select class="input vp-dense w-full" value={String(doc.master.crossfade ?? 0)} disabled={running} onchange={(e) => setSound('crossfade', +e.currentTarget.value)}>
+								{#each CROSSFADES as v (v)}<option value={String(v)}>{v ? t('modals.export.crossfadeValue', { value: formatNumber(v, { maximumFractionDigits: 2 }) }) : t('modals.export.crossfadeOff')}</option>{/each}
+							</select>
+						</label>
+					</div>
+					{#if doc.master.loudness}<p class="text-xs text-fg-subtle">{t('modals.export.soundNote')}</p>{/if}
+					{#if matchedShots}<p class="flex gap-1.5 text-xs text-fg-muted"><Icon name="link" class="h-3.5 w-3.5 shrink-0" />{t('modals.export.matched', { count: matchedShots })}</p>{/if}
+					{#if staleShots}<p class="flex gap-1.5 text-xs text-fg"><Icon name="alert" class="h-3.5 w-3.5 shrink-0 text-warning" />{t('modals.export.matchStale', { count: staleShots })}</p>{/if}
+				</section>
+			{/if}
 			<div class="rounded-lg border border-line-strong p-3 text-xs text-fg-muted">
 				<div class="mb-1 text-sm text-fg">{fileName}</div>
 				{t('modals.export.fileInfo', { fps: doc.fps, aspect: format === 'social' ? '9:16' : doc.aspect })}{stems ? ` · ${t('modals.export.fileStems')}` : ''}{real ? ` · ${t('exports.real')}` : ''}

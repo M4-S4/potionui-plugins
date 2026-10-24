@@ -549,6 +549,16 @@ An alert appears only when two neighbor shots do not match: "“Shot” is brigh
 
 The measure is made on real images, for each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A similarity percentage between two generated shots can also appear in the alerts ("Check the identity between … and … (similarity 78 %)"): it is simulated (chapter 17). Color is real.
 
+### Auto match
+
+**Auto match**, in the **Color** tab of the Inspector, corrects the color of a take from an **Anchor** image rather than from the previous shot. The anchor offered is the start frame of the shot (its key frame), then another key frame of the shot, an image reference of the shot, the last frame of the previous shot and last a reference of the project: matching each shot to the previous one adds up drift, which the page recalls when you pick that anchor. The **Anchor** list stays editable; another anchor measures again.
+
+1. The page measures, in CIELAB, the mean and the spread of the lightness and of both color axes on the anchor and on three images of the take (at 15, 50 and 85 % of the shot).
+2. It derives a statistical transfer from them (Reinhard's method, in Lab), applies it at the chosen **Strength** (80 % by default) and shows the gap before and after, in ΔE, with the way the take drifts ("take warmer", "take darker"…). The **Anchor**, **Take** and **Matched** thumbnails let you compare.
+3. On export, the match is baked into a 3D LUT (33³ points, a `.cube` file) that ffmpeg applies before the framing and before the fine adjustments. The viewer and the thumbnails show the same LUT (WebGL, or a computation on the page when WebGL is missing), not a CSS filter.
+
+When the take of the shot changes, the match is no longer applied and the tab asks to **Measure again**. **Remove** deletes the match. **Reduce flicker on export** adds ffmpeg's `deflicker` filter to the shot; it only acts in the exported video.
+
 ### What the measure looks at
 
 For each pair of neighbor shots the page compares the end of the first with the start of the second:
@@ -662,13 +672,14 @@ Pick a format, a resolution and the extent, then click **Export**.
 - **Resolution.** 720p, 1080p or 4K; the window starts on the resolution of your project. The short side of the picture is 720, 1080 or 2160 pixels. For a 16:9 project a web video is 1280×720, 1920×1080 or 3840×2160, and a social video is 720×1280, 1080×1920 or 2160×3840.
 - **Extent.** The web and social videos always render the **Whole sequence**. **Range** is greyed, and when you have drawn a range the window says "Web and social exports render the whole sequence."
 - **Audio stems by role.** The switch is simulated and does nothing for the web and social videos.
+- **Sound.** **Level**: **As mixed** (the default), **Web and social · −14 LUFS** or **Broadcast EBU R128 · −23 LUFS**. The server first measures the mix (`loudnorm`, first pass), then applies one gain to the whole mix (second pass, linear mode): the dynamics do not change, and the gain stops before true peaks pass −1 dBTP, even if that leaves the mix a little under the target. **Crossfade between neighbouring clips**: **None**, 0.25 s, 0.5 s or 1 s. Two clips of one track that touch (within half a frame) fade into each other (`acrossfade`, equal power), centered on the cut and taken from the media past each side, without moving the second. Both settings are saved with the project. The window also says how many shots have a color match baked into a LUT, and which ones changed take since.
 
 Under the choices the window shows the name of the file (the project name with spaces turned into underscores, then the resolution, for example `Dawn_at_the_harbour_1080p.mp4`), its frame rate and aspect ratio and the note "Rendered on the server with ffmpeg".
 
 What the video holds:
 
-- The shots in the order of the project, with the **Color** settings (exposure, contrast, saturation, temperature) and the fades of each shot. A shot with no file that the server can find, and every gap between shots, is black and silent. An image placed as a shot is held for the length of the shot.
-- The sound of each shot's own video, with the fades of the shot, unless the shot or the track V1 is muted or another track is soloed, and your audio tracks with their gain, the fader of their track, mute and solo, and their fades (the rule of chapter 13, the same as in the viewer). The tracks are added together as they are, without automatic leveling.
+- The shots in the order of the project, with their **Auto match** (3D LUT), the **Color** settings (exposure, contrast, saturation, temperature) and the fades of each shot. A shot with no file that the server can find, and every gap between shots, is black and silent. An image placed as a shot is held for the length of the shot.
+- The sound of each shot's own video, with the fades of the shot, unless the shot or the track V1 is muted or another track is soloed, and your audio tracks with their gain, the fader of their track, mute and solo, and their fades (the rule of chapter 13, the same as in the viewer). The tracks are added together as they are; the final level and the crossfades only apply when you pick them under **Sound**.
 - Not in the video: the titles and markers, the subtitles (always a separate file, see below), and the pan, equalizer, compressor, filter, sends, automation and master fader of the console. What you hear in the console with those is not what the file holds.
 
 If your admin has not installed ffmpeg on the server, the Video tab says "ffmpeg is missing on the server: web and social exports need it." (with a **Read the guide** link for an admin, and "Ask an administrator to install it." for anyone else) and **Export** is disabled for the web and social formats.
