@@ -79,8 +79,28 @@ export function sliceCuts(dur, seconds) {
 	return cuts;
 }
 
+export function shotCuts(item, clips) {
+	const end = item.start + item.dur;
+	const bounds = (clips ?? []).flatMap((clip) => [clip.start, clip.start + clip.dur]).sort((a, b) => a - b);
+	const cuts = [];
+	for (const at of bounds) {
+		if (exact(at - item.start) < SLICE_EDGE || exact(end - at) < SLICE_EDGE) continue;
+		const offset = exact(at - item.start);
+		if (cuts.length && exact(offset - cuts.at(-1)) < SLICE_EDGE) cuts[cuts.length - 1] = offset;
+		else cuts.push(offset);
+	}
+	return cuts.length >= MAX_SLICES ? null : cuts;
+}
+
 export function sliceItem(item, seconds, makeId = ulid) {
-	const cuts = sliceCuts(item.dur, seconds);
+	return sliceAt(item, sliceCuts(item.dur, seconds), makeId);
+}
+
+export function shotSlices(item, clips, makeId = ulid) {
+	return sliceAt(item, shotCuts(item, clips), makeId);
+}
+
+function sliceAt(item, cuts, makeId) {
 	if (!cuts?.length) return cuts;
 	const edges = [0, ...cuts, item.dur];
 	const last = edges.length - 2;

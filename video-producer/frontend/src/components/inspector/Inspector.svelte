@@ -15,6 +15,7 @@
 		bladeAt,
 		sliceAudio,
 		joinAudio,
+		sliceOnShots,
 		duplicateSelection,
 		deleteSelection,
 		deleteLane,
@@ -63,7 +64,7 @@
 	} from '../../lib/scene.svelte.js';
 	import { FOCAL_RANGE, ROLL_RANGE, distance, dollyCamera, pose } from '../../lib/scene3d/camera.js';
 	import { hostIconName } from '../../lib/icons.js';
-	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
+	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, shotCuts, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
 	import Tabs from '../shell/Tabs.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
@@ -133,6 +134,9 @@
 	const audioLane = $derived(audio ? (doc.lanes.find((l) => l.id === audio.lane) ?? null) : null);
 	const cuts = $derived(audio ? sliceCuts(audio.dur, sliceLength(ui.sliceSeconds)) : []);
 	const join = $derived(audio ? joinPlan(doc, audio) : null);
+	const onShots = $derived(audio ? shotCuts(audio, doc.clips) : []);
+	const laneShots = $derived(s?.kind === 'lane' && item ? doc.audio.filter((x) => x.lane === item.id).map((x) => shotCuts(x, doc.clips)) : []);
+	const laneSliced = $derived(laneShots.filter((x) => x?.length));
 
 	function referenceHint(item, lane) {
 		if (hasOwnReference(item)) return item.reference ? t('inspector.audio.referenceOn') : t('inspector.audio.referenceOff');
@@ -151,6 +155,17 @@
 		if (join.runs.length === 1) return t('inspector.audio.joinHint', { count: join.chain.length });
 		if (join.runs.length === join.chain.length) return t('inspector.audio.joinApart', { count: join.chain.length });
 		return t('inspector.audio.joinSome', { count: join.chain.length, items: join.runs.length });
+	}
+
+	function shotsHint() {
+		if (onShots === null) return t('inspector.audio.shotsTooMany', { max: MAX_SLICES });
+		if (!onShots.length) return t('inspector.audio.shotsNone');
+		return t('inspector.audio.shotsHint', { count: onShots.length + 1 });
+	}
+
+	function laneShotsHint() {
+		if (!laneSliced.length) return laneShots.includes(null) ? t('inspector.lane.shotsTooMany', { max: MAX_SLICES }) : t('inspector.lane.shotsNone');
+		return t('inspector.lane.shotsHint', { count: laneSliced.length, slices: laneSliced.reduce((n, x) => n + x.length + 1, 0) });
 	}
 
 	const shown = $derived(shownCamera());
@@ -449,6 +464,8 @@
 						<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('link'), disabled: !join?.runs.some((r) => r.length > 1), onclick: joinAudio }}>{t('inspector.audio.join')}</HostUi>
 					</div>
 					<p class="text-xs text-fg-subtle">{sliceHint()} {joinHint()}</p>
+					<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'scissors', class: 'w-full', disabled: !onShots?.length, onclick: sliceOnShots }}>{t('inspector.audio.shots')}</HostUi>
+					<p class="text-xs text-fg-subtle">{shotsHint()}</p>
 				</section>
 				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('sliders'), class: 'w-full', onclick: () => ((ui.workspace = 'mixer'), select('lane', item.lane)) }}>
 					{t('inspector.openStrip', { lane: laneCode(doc.lanes, item.lane) })}
@@ -656,6 +673,11 @@
 						<HostUi name="Switch" props={{ id: 'vp-lane-reference', checked: isReferenceLane(item), size: 'lg', label: t('inspector.lane.reference'), onchange: (v) => act(() => setReferenceLane(item, v)) }} />
 					</div>
 					{#if isReferenceLane(item)}<p class="text-xs text-fg-subtle">{t('inspector.lane.referenceHint')}</p>{/if}
+				</section>
+				<section class="space-y-2">
+					<div class="vp-section-title">{t('inspector.section.slices')}</div>
+					<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'scissors', class: 'w-full', disabled: !laneSliced.length, onclick: sliceOnShots }}>{t('inspector.audio.shots')}</HostUi>
+					<p class="text-xs text-fg-subtle">{laneShotsHint()}</p>
 				</section>
 				{#each item.inserts as fx, i (i)}
 					<section class="space-y-2 rounded-lg border border-line-strong p-2.5">

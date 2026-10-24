@@ -234,5 +234,13 @@
 	"audio.joinHint": "Recoller refait un seul clip de ses {count} tranches.",
 	"audio.joinApart": "Ses {count} tranches diffèrent par leur réglage Référence ou leur gain : rien à recoller.",
 	"audio.joinSome": "Recoller fait {items} clips de ses {count} tranches : celles dont le réglage Référence ou le gain diffère restent à part.",
+	"audio.shots": "Découper sur les plans",
+	"audio.shotsHint": "Coupe ce clip aux bornes des plans qui le recouvrent : {count} tranches, une par plan, ce qui dépasse des plans restant à part.",
+	"audio.shotsNone": "Aucune borne de plan ne tombe dans ce clip.",
+	"audio.shotsTooMany": "Les plans le couperaient en plus de {max} tranches.",
+	"lane.shotsHint.one": "Coupe {count} clip de cette piste aux bornes des plans : {slices} tranches.",
+	"lane.shotsHint.other": "Coupe {count} clips de cette piste aux bornes des plans : {slices} tranches.",
+	"lane.shotsNone": "Aucune borne de plan ne tombe dans les clips de cette piste.",
+	"lane.shotsTooMany": "Les plans couperaient ses clips en plus de {max} tranches chacun.",
 	"section.cast": "Distribution"
 }

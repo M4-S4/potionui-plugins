@@ -9,6 +9,7 @@ import {
 	bladeAt,
 	sliceAudio,
 	joinAudio,
+	sliceOnShots,
 	addMarker,
 	addAudioLane,
 	toast,
@@ -190,6 +191,7 @@ export const menus = [
 			command('blade', () => bladeAt(), { keys: 'mod+b' }),
 			command('audio-slice', () => sliceAudio(), { keys: 'shift+mod+b', vars: () => ({ dur: secs(ui.sliceSeconds) }) }),
 			command('audio-join', joinAudio, { keys: 'alt+mod+b' }),
+			command('audio-slice-shots', sliceOnShots),
 			command('trim-start', nudgeTrim('start'), { keys: 'alt+[' }),
 			command('trim-end', nudgeTrim('end'), { keys: 'alt+]' }),
 			command('duration', () => (ui.inspectorOpen = true))

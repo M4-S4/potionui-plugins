@@ -27,6 +27,7 @@
 	"cmd.blade": "Split at playhead",
 	"cmd.audio-slice": "Slice the clip into {dur} slices",
 	"cmd.audio-join": "Join the slices",
+	"cmd.audio-slice-shots": "Slice on the shots",
 	"cmd.trim-start": "Trim start to playhead",
 	"cmd.trim-end": "Trim end to playhead",
 	"cmd.duration": "Change duration…",

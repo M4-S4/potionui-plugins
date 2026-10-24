@@ -5,7 +5,7 @@ import { ulid } from './ulid.js';
 import { resetTakes } from './takes.svelte.js';
 import { compileRules, conflictIds, namesCamera } from './rules.js';
 import { dropPlanControls } from './scene3d/doc.js';
-import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, sliceItem, sliceLength } from './tracks.js';
+import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
 import { joinPlan } from './sound.js';
 import { touch } from './shots.js';
 import sharedRules from './rules.json';
@@ -335,6 +335,27 @@ export function sliceAudio(seconds = ui.sliceSeconds) {
 		doc.audio.splice(doc.audio.indexOf(a) + 1, 0, ...parts.slice(1));
 	});
 	toast(t('lib.toast.sliced', { count: parts.length, dur: secs(n) }));
+}
+
+export function sliceOnShots() {
+	const s = ui.selection;
+	const lane = s?.kind === 'lane' ? (doc.lanes.find((l) => l.id === s.id) ?? null) : null;
+	const items = lane ? doc.audio.filter((x) => x.lane === lane.id) : [selectedAudio()].filter(Boolean);
+	if (!lane && !items.length) return toast(t('lib.toast.selectAudioOrLane'), 'warning');
+	const planned = items.map((a) => ({ a, parts: shotSlices($state.snapshot(a), doc.clips) }));
+	const done = planned.filter((x) => x.parts?.length);
+	const skipped = planned.filter((x) => x.parts === null).length;
+	if (!done.length) return toast(skipped ? t('lib.toast.shotSliceTooMany', { max: MAX_SLICES }) : t('lib.toast.shotSliceNone'), 'warning');
+	act(() => {
+		for (const { a, parts } of done) {
+			Object.assign(a, parts[0]);
+			doc.audio.splice(doc.audio.indexOf(a) + 1, 0, ...parts.slice(1));
+		}
+	});
+	const slices = done.reduce((n, x) => n + x.parts.length, 0);
+	if (!lane) return toast(t('lib.toast.shotSliced', { count: slices }));
+	const params = { lane: laneCode(doc.lanes, lane.id), count: done.length, slices, max: MAX_SLICES };
+	toast(skipped ? t('lib.toast.shotSlicedLaneSkipped', params) : t('lib.toast.shotSlicedLane', params));
 }
 
 export function joinAudio() {

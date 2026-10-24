@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { JOIN_TOLERANCE, MAX_SLICES, SLICE_MAX, SLICE_MIN, SLICE_SECONDS, continues, joined, sliceChain, sliceCuts, sliceItem, sliceLength } from './tracks.js';
+import { JOIN_TOLERANCE, MAX_SLICES, SLICE_MAX, SLICE_MIN, SLICE_SECONDS, continues, joined, shotCuts, shotSlices, sliceChain, sliceCuts, sliceItem, sliceLength } from './tracks.js';
 import { isReferenceItem, joinPlan } from './sound.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -159,4 +159,78 @@ test('the page slices and joins the selected audio clip through act(), from the 
 	const timeline = source('../components/timeline/Timeline.svelte');
 	assert.match(timeline, /\{@const reference = isReferenceItem\(a, row\.lane\)\}/);
 	assert.match(timeline, /\{#if reference\}<span class="flex shrink-0 text-signal" role="img"[^>]*data-reference-item><Icon name="sparkles"/);
+});
+
+const shot = (id, start, dur) => ({ id, start, dur });
+const spans = (parts) => parts.map((x) => [x.start, x.dur, x.srcIn]);
+
+test('slicing on the shots: one slice per shot over the clip, cut exactly at the edges of V1, with the rules of the slices of N seconds', () => {
+	const clips = [shot('s1', 0, 4), shot('s2', 4, 5), shot('s3', 9, 3)];
+	const item = sound('a', 2, 9, { srcIn: 1, gain: -3, fadeIn: 0.4, fadeOut: 0.6, reference: true });
+	assert.deepEqual(shotCuts(item, clips), [2, 7]);
+	const parts = shotSlices(item, clips, ids());
+	assert.deepEqual(shape(parts), [
+		['a', 2, 2, 1, 0.4, 0],
+		['new-1', 4, 5, 3, 0, 0],
+		['new-2', 9, 2, 8, 0, 0.6]
+	]);
+	for (const part of parts) assert.deepEqual([part.lane, part.assetId, part.gain, part.reference], ['A1', 'stem', -3, true]);
+	assert.deepEqual([parts[1].start, parts[2].start], [clips[1].start, clips[2].start]);
+	assert.deepEqual(joined(parts), item);
+	const doc = { lanes: [lane('A1', { reference: true })], audio: shotSlices(sound('b', 0, 12), clips, ids()) };
+	assert.deepEqual(
+		doc.audio.map((x) => ['reference' in x, isReferenceItem(x, doc.lanes[0])]),
+		[
+			[false, true],
+			[false, true],
+			[false, true]
+		]
+	);
+	doc.audio[1].reference = false;
+	assert.deepEqual(
+		joinPlan(doc, doc.audio[0]).runs.map((run) => run.length),
+		[1, 1, 1]
+	);
+});
+
+test('slicing on the shots: edges closer than 0.1 s make one cut at the later one, a gap or what lies past the last shot is a slice of its own', () => {
+	assert.deepEqual(shotCuts(sound('a', 0, 7), [shot('s1', 0, 3.98), shot('s2', 4, 3)]), [4]);
+	assert.deepEqual(shotCuts(sound('a', 0, 7), [shot('s1', 0, 4.03), shot('s2', 4, 3)]), [4.03]);
+	assert.deepEqual(spans(shotSlices(sound('a', 0, 8), [shot('s1', 0, 4), shot('s2', 5, 3)], ids())), [
+		[0, 4, 0],
+		[4, 1, 4],
+		[5, 3, 5]
+	]);
+	assert.deepEqual(spans(shotSlices(sound('a', 1, 6), [shot('s1', 0, 4), shot('s2', 4, 0.05), shot('s3', 4.05, 4)], ids())), [
+		[1, 3.05, 0],
+		[4.05, 2.95, 3.05]
+	]);
+	assert.deepEqual(spans(shotSlices(sound('a', 6, 6), [shot('s1', 0, 4), shot('s2', 4, 4)], ids())), [
+		[6, 2, 0],
+		[8, 4, 2]
+	]);
+});
+
+test('slicing on the shots: nothing to cut inside one shot, past the last shot or within 0.1 s of an edge of the clip, and more than 200 slices are refused', () => {
+	const clips = [shot('s1', 0, 4), shot('s2', 4, 4)];
+	assert.deepEqual(shotCuts(sound('a', 1, 2), clips), []);
+	assert.deepEqual(shotCuts(sound('a', 9, 3), clips), []);
+	assert.deepEqual(shotCuts(sound('a', 3.95, 3), clips), []);
+	assert.deepEqual(shotCuts(sound('a', 1, 3.05), clips), []);
+	assert.deepEqual(shotCuts(sound('a', 0, 10), []), []);
+	assert.deepEqual(shotSlices(sound('a', 1, 2), clips, ids()), []);
+	const many = Array.from({ length: 250 }, (_, i) => shot(`s${i}`, i, 1));
+	assert.equal(shotCuts(sound('a', 0, 250), many), null);
+	assert.equal(shotSlices(sound('a', 0, 250), many, ids()), null);
+	assert.equal(shotCuts(sound('a', 0, 200), many).length, MAX_SLICES - 1);
+});
+
+test('the page slices on the shots the selected audio clip or every clip of the selected track, through act(), from the Inspector and the command search', () => {
+	const state = source('./state.svelte.js');
+	assert.match(state, /export function sliceOnShots\(\)[\s\S]*?doc\.audio\.filter\(\(x\) => x\.lane === lane\.id\)[\s\S]*?shotSlices\(\$state\.snapshot\(a\), doc\.clips\)[\s\S]*?act\(\(\) => \{\n\t\tfor \(const \{ a, parts \} of done\)/);
+	assert.match(source('./commands.js'), /command\('audio-slice-shots', sliceOnShots\)/);
+	const inspector = source('../components/inspector/Inspector.svelte');
+	assert.equal(inspector.match(/onclick: sliceOnShots/g).length, 2);
+	assert.match(inspector, /shotCuts\(audio, doc\.clips\)/);
+	assert.match(inspector, /doc\.audio\.filter\(\(x\) => x\.lane === item\.id\)\.map\(\(x\) => shotCuts\(x, doc\.clips\)\)/);
 });

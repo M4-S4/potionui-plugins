@@ -234,5 +234,13 @@
 	"audio.joinHint": "Join puts its {count} slices back into one clip.",
 	"audio.joinApart": "Its {count} slices differ by their Reference setting or their gain: nothing to join.",
 	"audio.joinSome": "Join makes {items} clips of its {count} slices: those whose Reference setting or gain differs stay apart.",
+	"audio.shots": "Slice on the shots",
+	"audio.shotsHint": "Cuts this clip at the edges of the shots over it: {count} slices, one per shot, with what lies outside the shots kept apart.",
+	"audio.shotsNone": "No shot edge falls inside this clip.",
+	"audio.shotsTooMany": "The shots would cut it into more than {max} slices.",
+	"lane.shotsHint.one": "Cuts {count} clip of this track at the edges of the shots: {slices} slices.",
+	"lane.shotsHint.other": "Cuts {count} clips of this track at the edges of the shots: {slices} slices.",
+	"lane.shotsNone": "No shot edge falls inside the clips of this track.",
+	"lane.shotsTooMany": "The shots would cut its clips into more than {max} slices each.",
 	"section.cast": "Cast"
 }
