@@ -413,12 +413,13 @@ def crossfade_of(doc: Mapping[str, Any]) -> float:
 
 @dataclass(frozen=True)
 class Heard:
-    """An audio item heard in the mix with its lane, and the seconds of its source it also plays before and after its own span to crossfade with its neighbours."""
+    """An audio item heard in the mix with its lane, the seconds of its source it also plays before and after its own span to crossfade with its neighbours, and the gap to the next one, which it plays on so that the next one starts on time."""
 
     item: Mapping[str, Any]
     lane: Mapping[str, Any]
     head: float = 0.0
     tail: float = 0.0
+    gap: float = 0.0
 
 
 def _tail_room(doc: Mapping[str, Any], item: Mapping[str, Any]) -> float:
@@ -437,6 +438,10 @@ def _overlap(doc: Mapping[str, Any], before: Mapping[str, Any], after: Mapping[s
     return tail, min(length - tail, head_room)
 
 
+def _gap(before: Mapping[str, Any], after: Mapping[str, Any]) -> float:
+    return float(after.get("start") or 0) - float(before.get("start") or 0) - float(before["dur"])
+
+
 def runs(doc: Mapping[str, Any], sounds: Mapping[str, str]) -> List[List[Heard]]:
     """The audio items heard in the mix that have a file, in runs that crossfade, in the order of their first item: neighbours on one lane, the end of one within half a frame of the start of the next; one item alone when it has no neighbour or the crossfade is off."""
     playing = [(item, lane) for item, lane in audible(doc) if item["id"] in sounds]
@@ -453,8 +458,7 @@ def runs(doc: Mapping[str, Any], sounds: Mapping[str, str]) -> List[List[Heard]]
         group = [indexes[0]]
         for index in indexes[1:]:
             before, after = playing[group[-1]][0], playing[index][0]
-            gap = float(after.get("start") or 0) - float(before.get("start") or 0) - float(before["dur"])
-            if abs(gap) <= slack + EPSILON and sum(_overlap(doc, before, after, fade)) >= MIN_CROSSFADE:
+            if abs(_gap(before, after)) <= slack + EPSILON and sum(_overlap(doc, before, after, fade)) >= MIN_CROSSFADE:
                 group.append(index)
             else:
                 groups.append(group)
@@ -465,7 +469,8 @@ def runs(doc: Mapping[str, Any], sounds: Mapping[str, str]) -> List[List[Heard]]
     for group in groups:
         sides = [_overlap(doc, playing[a][0], playing[b][0], fade) for a, b in zip(group, group[1:])]
         heads, tails = [0.0] + [head for _, head in sides], [tail for tail, _ in sides] + [0.0]
-        result.append([Heard(*playing[index], heads[k], tails[k]) for k, index in enumerate(group)])
+        gaps = [_gap(playing[a][0], playing[b][0]) for a, b in zip(group, group[1:])] + [0.0]
+        result.append([Heard(*playing[index], heads[k], tails[k], gaps[k]) for k, index in enumerate(group)])
     return result
 
 
@@ -476,7 +481,7 @@ def _crossfaded(run: Sequence[Heard], sources: Sequence[int], label: str) -> Lis
     last = len(run) - 1
     for k, (heard, source) in enumerate(zip(run, sources)):
         item = heard.item
-        dur = float(item["dur"]) + heard.head + heard.tail
+        dur = float(item["dur"]) + heard.head + heard.tail + heard.gap
         stretched = {
             **item,
             "start": float(item.get("start") or 0) - heard.head,

@@ -19,6 +19,7 @@
 	const gaps = $derived(clip.match && !stale ? matchGaps(clip.match) : null);
 	const lut = $derived(lutOf(clip));
 	const busy = $derived(matchState.busy === clip.id);
+	const measuring = $derived(Boolean(matchState.busy));
 	const picture = $derived(shotFrame(clip));
 	const anchorPicture = $derived(anchorThumb(chosen));
 	const id = $props.id();
@@ -81,7 +82,7 @@
 	{:else}
 		<label class="block space-y-1">
 			<span class="text-xs text-fg-muted">{t('inspector.match.anchor')}</span>
-			<select class="input vp-dense w-full" value={anchorKey(chosen)} disabled={busy} onchange={(e) => pick(e.currentTarget.value)}>
+			<select class="input vp-dense w-full" value={anchorKey(chosen)} disabled={measuring} onchange={(e) => pick(e.currentTarget.value)}>
 				{#if clip.match && !stored}<option value="" disabled>{t('inspector.match.anchorGone')}</option>{/if}
 				{#each anchors as anchor (anchorKey(anchor))}<option value={anchorKey(anchor)}>{anchor.label}</option>{/each}
 			</select>
@@ -119,7 +120,7 @@
 			<SliderField label={t('inspector.match.strength')} value={clip.match.strength} min={0} max={100} format={strength} onchange={(v) => (clip.match.strength = v)} />
 		{/if}
 
-		<HostUi name="Button" props={{ variant: clip.match && !stale ? 'secondary' : 'primary', size: 'xs', class: 'w-full justify-center', icon: 'sparkles', disabled: busy || !chosen, onclick: () => autoMatch(clip, chosen) }}>
+		<HostUi name="Button" props={{ variant: clip.match && !stale ? 'secondary' : 'primary', size: 'xs', class: 'w-full justify-center', icon: 'sparkles', disabled: measuring || !chosen, onclick: () => autoMatch(clip, chosen) }}>
 			{busy ? t('inspector.match.measuring') : clip.match ? t('inspector.match.remeasure') : t('inspector.match.run')}
 		</HostUi>
 	{/if}

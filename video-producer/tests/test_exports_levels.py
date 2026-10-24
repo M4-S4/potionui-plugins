@@ -239,9 +239,10 @@ def _window(samples, start, end):
 
 @pytest.mark.requires_ffmpeg
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
-async def test_a_crossfaded_item_keeps_its_place_on_the_timeline_to_the_sample(make_doc, tmp_path):
+@pytest.mark.parametrize("start", [1.0, 1.02, 0.98], ids=["touching", "a gap of half a frame", "an overlap of half a frame"])
+async def test_a_crossfaded_item_keeps_its_place_on_the_timeline_to_the_sample(make_doc, tmp_path, start):
     first, second = _tone(tmp_path, "a.wav", 440, 2), _tone(tmp_path, "b.wav", 660, 3)
-    doc = _doc(make_doc, [{"start": 0, "dur": 1, "assetId": "sa"}, {"start": 1, "dur": 1, "srcIn": 0.5, "assetId": "sb"}], {"crossfade": 0.4}, srcs={"sa": 2, "sb": 3})
+    doc = _doc(make_doc, [{"start": 0, "dur": 1, "assetId": "sa"}, {"start": start, "dur": 1, "srcIn": 0.5, "assetId": "sb"}], {"crossfade": 0.4}, srcs={"sa": 2, "sb": 3})
     sounds = {"u0": str(first), "u1": str(second)}
     inputs = video._Inputs(cwd=str(tmp_path))
     chains, labels = video._lanes(doc, sounds, inputs)
@@ -254,15 +255,16 @@ async def test_a_crossfaded_item_keeps_its_place_on_the_timeline_to_the_sample(m
     await video.assemble(video._command(run, inputs.args, video.LANES_ENCODER, 2.0, maps=("[aout]",)), 2.0, None, None, str(tmp_path))
 
     mix, a, b = _samples(output), _samples(first), _samples(second)
-    assert len(mix) == pytest.approx(2 * 48000, abs=2)
+    assert [len(group) for group in video.runs(doc, sounds)] == [2]
+    assert len(mix) == pytest.approx(min(start + 1, 2.0) * 48000, abs=2)
     assert max(abs(x - y) for x, y in zip(_window(mix, 0.1, 0.75), _window(a, 0.1, 0.75))) < 1e-4
-    assert max(abs(x - y) for x, y in zip(_window(mix, 1.25, 1.95), _window(b, 0.75, 1.45))) < 1e-4
+    assert max(abs(x - y) for x, y in zip(_window(mix, 1.3, 1.9), _window(b, 1.3 - start + 0.5, 1.9 - start + 0.5))) < 1e-4
     middle = _window(mix, 0.95, 1.05)
 
     def share(signal):
         return sum(x * y for x, y in zip(middle, signal)) / sum(y * y for y in signal)
 
-    assert 0.5 < share(_window(a, 0.95, 1.05)) < 0.9 and 0.5 < share(_window(b, 0.45, 0.55)) < 0.9
+    assert 0.5 < share(_window(a, 0.95, 1.05)) < 0.9 and 0.5 < share(_window(b, 0.95 - start + 0.5, 1.05 - start + 0.5)) < 0.9
 
 
 def _loudness(path):

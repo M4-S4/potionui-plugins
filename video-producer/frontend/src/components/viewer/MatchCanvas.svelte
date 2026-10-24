@@ -3,10 +3,12 @@
 
 	const MAX_WIDTH = 1920;
 
-	let { source, lut, filter = 'none', opacity = 1, onlive = () => {} } = $props();
+	let { source, lut, filter = 'none', fade = 1 } = $props();
 	let canvas = $state();
+	let live = $state(false);
 	let renderer = null;
 	let broken = false;
+	const look = $derived([filter === 'none' ? '' : filter, fade < 1 ? `brightness(${Math.max(0, fade)})` : ''].filter(Boolean).join(' ') || 'none');
 
 	function paint() {
 		if (broken || !canvas || !source || !lut) return;
@@ -16,24 +18,25 @@
 		renderer ??= lutRenderer(canvas);
 		if (!renderer) {
 			broken = true;
-			return onlive(false);
+			live = false;
+			return;
 		}
 		const width = Math.min(w, renderer.gpu ? MAX_WIDTH : FALLBACK_WIDTH);
 		const height = Math.max(1, Math.round((width * h) / w));
 		if (canvas.width !== width || canvas.height !== height) [canvas.width, canvas.height] = [width, height];
 		try {
 			renderer.draw(source, lut);
-			onlive(true);
+			live = true;
 		} catch {
 			broken = true;
-			onlive(false);
+			live = false;
 		}
 	}
 
 	$effect(() => {
 		const el = source;
 		if (!el || !lut || !canvas) return;
-		const video = 'requestVideoFrameCallback' in el || 'videoWidth' in el;
+		const video = 'videoWidth' in el;
 		let alive = true;
 		let handle = 0;
 		const watch = () => {
@@ -57,8 +60,7 @@
 	$effect(() => () => {
 		renderer?.dispose();
 		renderer = null;
-		onlive(false);
 	});
 </script>
 
-<canvas bind:this={canvas} class="pointer-events-none absolute inset-0 h-full w-full object-contain" style:filter style:opacity aria-hidden="true"></canvas>
+<canvas bind:this={canvas} class="pointer-events-none absolute inset-0 h-full w-full object-contain" style:filter={look} style:visibility={live ? 'visible' : 'hidden'} aria-hidden="true"></canvas>

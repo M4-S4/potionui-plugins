@@ -159,7 +159,11 @@ test('the viewer and the inspector preview a matched shot through its LUT, never
 	assert.match(viewer, /const lut = \$derived\(mode === 'sequence' && clip \? lutOf\(clip\) : null\);/);
 	assert.match(viewer, /<MatchCanvas source=\{video\} \{lut\}/);
 	assert.match(viewer, /<MatchCanvas source=\{picture\} \{lut\}/);
-	assert.match(source('../components/viewer/MatchCanvas.svelte'), /renderer\.draw\(source, lut\)/);
+	assert.doesNotMatch(viewer, /style:opacity=\{lut/);
+	const canvas = source('../components/viewer/MatchCanvas.svelte');
+	assert.match(canvas, /renderer\.draw\(source, lut\)/);
+	assert.match(canvas, /style:visibility=\{live \? 'visible' : 'hidden'\}/);
+	assert.match(source('../components/inspector/ColorSection.svelte'), /\{#key clip\.id\}<MatchSection \{clip\} \/>\{\/key\}/);
 	assert.match(source('../components/inspector/MatchSection.svelte'), /drawGraded\(g, img, canvas\.width, canvas\.height, \[\], current\)/);
 	assert.match(source('./lutgl.js'), /texImage3D\(gl\.TEXTURE_3D, 0, gl\.RGBA8, lut\.size, lut\.size, lut\.size/);
 });

@@ -88,7 +88,7 @@
 		</button>
 	{/if}
 
-	<MatchSection {clip} />
+	{#key clip.id}<MatchSection {clip} />{/key}
 
 	<section class="space-y-1.5">
 		<div class="vp-section-title">{t('inspector.color.presets')}</div>
