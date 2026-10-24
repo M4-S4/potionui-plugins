@@ -99,6 +99,16 @@ SHOT_ENGINE = _object(
 
 HYBRID = _object({"continuite": NUMBER, "identite": NUMBER, "audio": NUMBER, "mouvement": NUMBER, "style": NUMBER})
 
+IDS = {**_array(ID), "uniqueItems": True}
+
+CAST = _object({}, optional={"characters": IDS, "place": REF})
+
+CHARACTER = _object({"id": ID, "label": TEXT, "text": TEXT, "props": TEXT, "references": IDS})
+
+PLACE = _object({"id": ID, "label": TEXT, "text": TEXT, "references": IDS})
+
+BIBLE = _object({"characters": _array(CHARACTER), "places": _array(PLACE)})
+
 CLIP = _object(
     {
         "id": ID,
@@ -124,6 +134,7 @@ CLIP = _object(
         "revision": {"type": "integer", "minimum": 0},
         "referenceOverrides": REFERENCE_OVERRIDES,
         "engine": SHOT_ENGINE,
+        "cast": CAST,
     },
 )
 
@@ -346,7 +357,7 @@ DOC_SCHEMA: Dict[str, Any] = {
             "engine": ENGINE,
             "assets": _array(ASSET),
         },
-        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID},
+        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID, "bible": BIBLE},
     ),
 }
 
@@ -425,8 +436,33 @@ def _retired_set(reference: Any) -> bool:
     return isinstance(reference, dict) and reference.get("space") == SET_SPACE and reference.get("type") in RETIRED_SET_TYPES
 
 
+def _card_ids(doc: Dict[str, Any], kind: str) -> Set[Any]:
+    bible = doc.get("bible")
+    cards = bible.get(kind) if isinstance(bible, dict) else None
+    return {card.get("id") for card in cards if isinstance(card, dict)} if isinstance(cards, list) else set()
+
+
+def _cast(clip: Any, characters: Set[Any], places: Set[Any]) -> Any:
+    cast = clip.get("cast") if isinstance(clip, dict) else None
+    if not isinstance(cast, dict):
+        return clip
+    kept = dict(cast)
+    listed = cast.get("characters")
+    if isinstance(listed, list):
+        known = [item for item in listed if item in characters]
+        if known != listed:
+            kept["characters"] = known
+        if not known:
+            kept.pop("characters")
+    if cast.get("place") is not None and cast["place"] not in places:
+        kept.pop("place")
+    if kept == cast:
+        return clip
+    return {**clip, "cast": kept} if kept else {key: value for key, value in clip.items() if key != "cast"}
+
+
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: without the keys, simulated scenes and simulated 3D guides earlier versions of the page wrote, the plans 3D that cited those scenes unlinked, the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, and the old orbit keyframes turned into positions; the same object when nothing changes."""
+    """A document in the current schema: without the keys, simulated scenes and simulated 3D guides earlier versions of the page wrote, the plans 3D that cited those scenes unlinked, the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the old orbit keyframes turned into positions, and the cast of each shot cleared of the bible cards that no longer exist; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -453,6 +489,11 @@ def migrate(doc: Any) -> Any:
         migrated = [_plan(plan, dropped) for plan in plans]
         if any(new is not old for new, old in zip(migrated, plans)):
             changes["plans3d"] = migrated
+    clips = doc.get("clips")
+    if isinstance(clips, list):
+        cast = [_cast(clip, _card_ids(doc, "characters"), _card_ids(doc, "places")) for clip in clips]
+        if any(new is not old for new, old in zip(cast, clips)):
+            changes["clips"] = cast
     if not changes and not any(key in doc for key in RETIRED_KEYS):
         return doc
     return {**{key: value for key, value in doc.items() if key not in RETIRED_KEYS}, **changes}

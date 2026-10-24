@@ -21,6 +21,7 @@ README = PLUGIN_ROOT / "README.md"
 REFERENCE = PLUGIN_ROOT / "tests" / "fixtures" / "exports" / "reference-project.json"
 SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4}]
 ORDER = {"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.WAN}
+PROMPTS = {"shots": ["s1"], "preset_id": presets.WAN}
 TAKE_FIELDS = ("shot_id", "generation_id", "file_id", "file_path", "status", "quality", "kind", "chosen")
 LIVENESS = {"GET /health"}
 DOCUMENTED = re.compile(r"`(GET|POST|PUT|DELETE|PATCH) (/[^`?\s]*)")
@@ -282,6 +283,11 @@ ROUTES = {
     "GET /projects/{id}/takes": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes", check=lambda r: w.done["id"] in [t["id"] for t in _data(r)["takes"]]),
         denied=lambda w: Call(f"/projects/{w.pid}/takes", status=404, code="project_not_found", who="user-2"),
+    ),
+    "POST /projects/{id}/prompts": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/prompts", PROMPTS, check=lambda r: [item["shot_id"] for item in _data(r)["prompts"]] == ["s1"]),
+        denied=lambda w: Call(f"/projects/{w.pid}/prompts", PROMPTS, 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/prompts", {**PROMPTS, "shots": "s1"}, 422, "invalid_request"),
     ),
     "POST /projects/{id}/estimate": Route(
         success=lambda w: Call(f"/projects/{w.pid}/estimate", ORDER, check=lambda r: _data(r)["blocks"] == []),

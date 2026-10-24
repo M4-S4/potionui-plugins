@@ -1,0 +1,14 @@
+[
+	{ "label": "la Femme Rousse", "text": "LA FEMME ROUSSE longe le quai.", "found": true },
+	{ "label": "Hélène", "text": "helene sourit.", "found": true },
+	{ "label": "Helene", "text": "Hélène sourit.", "found": true },
+	{ "label": "the red-haired  woman", "text": "The red-haired woman\nwaits.", "found": true },
+	{ "label": "Mara", "text": "La maraude commence.", "found": false },
+	{ "label": "Mara", "text": "Mara's lantern.", "found": true },
+	{ "label": "Mara", "text": "", "found": false },
+	{ "label": "l’enfant", "text": "L’ENFANT court.", "found": true },
+	{ "label": "Zoë", "text": "zoe et Zoé", "found": true },
+	{ "label": "R2 (droid)", "text": "Le r2 (droid) roule.", "found": true },
+	{ "label": "Ann", "text": "Anna danse.", "found": false },
+	{ "label": "   ", "text": "Anything.", "found": false }
+]

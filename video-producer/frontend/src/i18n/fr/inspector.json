@@ -183,5 +183,6 @@
 	"reference.image": "Image",
 	"reference.video": "Vidéo",
 	"lane.reference": "Référence pour la génération",
-	"lane.referenceHint": "La portion de cette piste sous chaque plan accompagne sa génération : comme guide avec MiniMax H3 en Ref2VA, mixée sur la prise avec les autres moteurs."
+	"lane.referenceHint": "La portion de cette piste sous chaque plan accompagne sa génération : comme guide avec MiniMax H3 en Ref2VA, mixée sur la prise avec les autres moteurs.",
+	"section.cast": "Distribution"
 }

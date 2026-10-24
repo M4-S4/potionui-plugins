@@ -178,5 +178,7 @@
 	"block.audioOnly": "{shot} : Ref2VA demande une image ou une vidéo à côté du son du plan.",
 	"block.audioFfmpeg": "ffmpeg n’est pas disponible sur ce serveur : le son des plans ne peut pas être découpé.",
 	"block.audioSource": "{shot} : un son qu’il envoie ne peut plus être lu.",
-	"block.audioCut": "{shot} : le son du plan n’a pas pu être découpé ou enregistré."
+	"block.audioCut": "{shot} : le son du plan n’a pas pu être découpé ou enregistré.",
+	"warn.bibleLabelMissing": "« {shot} » : l’instruction ne nomme pas {labels}, distribué dans le plan.",
+	"warn.promptTooLong": "« {shot} » : le prompt prend environ {tokens} jetons, plus que les {limit} que lit le moteur ; sa fin risque d’être ignorée."
 }

@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from src.plugin_api.chat import BaseTool, ToolApprovalPreview, ToolContext, ToolResult
 
-from .. import projects
+from .. import bible, projects
 from ..catalog import FL2VA
 from ..core_bridge import generate_ulid
 from ..director import profile_of, shot_frames, shot_revision
@@ -273,6 +273,18 @@ def _shot_issues(doc: Mapping[str, Any], clip: Mapping[str, Any], label: str, te
                 f"“{label}” lasts {_seconds(duration)} s; a generated shot lasts {MIN_DURATION_S} to {MAX_DURATION_S} s.",
                 f"Trim the shot or split it into shots of {MIN_DURATION_S} to {MAX_DURATION_S} s.",
                 shot_id=shot_id,
+            )
+        )
+    missing = bible.missing_labels(text, bible.cast_of(doc, clip)[0]) if text.strip() else []
+    if missing:
+        names = ", ".join(f"“{name}”" for name in missing)
+        issues.append(
+            _issue(
+                "cast_unnamed",
+                f"“{label}” does not name {names}, cast in the shot.",
+                "Name each character cast in the shot by its label, so that the engine ties the words of the bible to it.",
+                shot_id=shot_id,
+                labels=missing,
             )
         )
     if fl2va and shot_frames(doc, shot_id)[0] is None:
@@ -653,7 +665,8 @@ class CheckContinuityTool(_VideoProducerTool):
         return (
             "Check the continuity of the Video Producer project open on the page: shots without an instruction, FL2VA "
             "shots without a first frame, camera moves that change between consecutive shots, durations outside "
-            f"{MIN_DURATION_S} to {MAX_DURATION_S} seconds and instructions that contradict the direction, merged with "
+            f"{MIN_DURATION_S} to {MAX_DURATION_S} seconds, instructions that contradict the direction and instructions "
+            "that do not name a character cast in the shot from the bible, merged with "
             "the color and identity seams the page measured. Read-only; the page lists the result for the user."
         )
 

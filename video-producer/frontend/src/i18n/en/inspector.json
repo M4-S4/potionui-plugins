@@ -183,5 +183,6 @@
 	"reference.image": "Image",
 	"reference.video": "Video",
 	"lane.reference": "Reference for the generation",
-	"lane.referenceHint": "The part of this track under each shot goes with its generation: as a guide with MiniMax H3 in Ref2VA, mixed onto the take with the other engines."
+	"lane.referenceHint": "The part of this track under each shot goes with its generation: as a guide with MiniMax H3 in Ref2VA, mixed onto the take with the other engines.",
+	"section.cast": "Cast"
 }

@@ -68,6 +68,9 @@
 	import Icon from '../Icon.svelte';
 	import TakesSection from './TakesSection.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
+	import CastField from '../shots/CastField.svelte';
+	import { instructionOf, setCast } from '../../lib/bible.js';
+	import { touch } from '../../lib/shots.js';
 	import ColorSection from './ColorSection.svelte';
 	import NumField from './NumField.svelte';
 	import SliderField from './SliderField.svelte';
@@ -174,6 +177,19 @@
 		const before = p.text;
 		p.text = text;
 		promptEdited(p, before);
+	}
+
+	function recast(clip, cast) {
+		act(() => {
+			setCast(clip, cast);
+			touch(clip);
+		});
+	}
+
+	function openBible() {
+		ui.workspace = 'director';
+		ui.dockTab = 'direction';
+		ui.sidebarOpen = true;
 	}
 
 	function setScope(id) {
@@ -306,6 +322,10 @@
 								{/if}
 							</div>
 						{/if}
+					</section>
+					<section class="space-y-2">
+						<div class="vp-section-title">{t('inspector.section.cast')}</div>
+						<CastField cast={item.cast} text={instructionOf(doc, item)} onchange={(cast) => recast(item, cast)} onopen={openBible} />
 					</section>
 					<section class="space-y-2">
 						<div class="vp-section-title">{t('inspector.section.frames')}</div>

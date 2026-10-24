@@ -175,7 +175,7 @@ function fieldNames(fields) {
 
 const minutes = (v) => formatNumber(v ?? 0, { maximumFractionDigits: 1 });
 
-function noteText(note) {
+export function noteText(note) {
 	const text = baseNoteText(note);
 	const shots = Array.isArray(note?.data?.shot_ids) ? note.data.shot_ids.map(shotName) : [];
 	return shots.length ? t('generation.block.forShots', { shots: shots.join(', '), text }) : text;
@@ -218,6 +218,8 @@ function baseNoteText(note) {
 	if (code === 'audio_ffmpeg_missing') return t('generation.block.audioFfmpeg');
 	if (code === 'audio_source_missing') return t('generation.block.audioSource', { shot: shotName(data.shot_id) });
 	if (code === 'audio_cut_failed' || code === 'audio_store_failed') return t('generation.block.audioCut', { shot: shotName(data.shot_id) });
+	if (code === 'bible_label_missing') return t('generation.warn.bibleLabelMissing', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });
+	if (code === 'prompt_too_long') return t('generation.warn.promptTooLong', { shot: shotName(data.shot_id), tokens: data.tokens ?? '—', limit: data.limit ?? '—' });
 	return note?.message || code || '';
 }
 

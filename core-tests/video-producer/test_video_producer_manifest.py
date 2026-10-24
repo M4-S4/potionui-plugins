@@ -192,6 +192,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/takes/{{take_id}}/cancel"),
         ("POST", f"{base}/takes/{{take_id}}/retry"),
         ("POST", f"{base}/projects/{{project_id}}/estimate"),
+        ("POST", f"{base}/projects/{{project_id}}/prompts"),
         ("POST", f"{base}/projects/{{project_id}}/generate"),
         ("GET", f"{base}/projects/{{project_id}}/queue"),
         ("GET", f"{base}/projects/{{project_id}}/exports"),
