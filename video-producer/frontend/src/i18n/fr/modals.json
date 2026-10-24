@@ -261,5 +261,18 @@
 	"engine.lora.remove": "Retirer ce LoRA",
 	"engine.lora.strength": "Force",
 	"engine.lora.pick": "LoRA",
-	"engine.time": "{asked} pas au lieu de {base} : chaque prise est comptée à environ {ratio}× le temps."
+	"engine.time": "{asked} pas au lieu de {base} : chaque prise est comptée à environ {ratio}× le temps.",
+	"shot.cast": "Distribution",
+	"shot.castCharacters": "Personnages",
+	"shot.castPlace": "Lieu",
+	"shot.castNoPlace": "Aucun lieu",
+	"shot.castEmpty": "La bible n’a encore aucune fiche : ajoutez des personnages et des lieux dans Director IA › Direction.",
+	"shot.castOpen": "Ouvrir la bible",
+	"shot.castMissing": "L’instruction ne nomme pas {labels} : écrivez l’étiquette visuelle de chaque personnage distribué.",
+	"shot.composed": "Prompt envoyé au moteur",
+	"shot.composedNone": "Choisissez un moteur de génération pour voir le prompt.",
+	"shot.composedUnsaved": "Le prompt s’affiche une fois le projet enregistré.",
+	"shot.composedLoading": "Composition du prompt…",
+	"shot.composedError": "Le prompt n’a pas pu être composé.",
+	"shot.composedHint": "L’instruction, la distribution tirée de la bible et la direction globale, au format du moteur du plan, avec vos modifications non enregistrées."
 }

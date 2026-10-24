@@ -200,5 +200,6 @@
 	"audio.joinNone": "Aucune tranche du même son ne le prolonge sur la piste.",
 	"audio.joinHint": "Recoller refait un seul clip de ses {count} tranches.",
 	"audio.joinApart": "Ses {count} tranches diffèrent par leur réglage Référence ou leur gain : rien à recoller.",
-	"audio.joinSome": "Recoller fait {items} clips de ses {count} tranches : celles dont le réglage Référence ou le gain diffère restent à part."
+	"audio.joinSome": "Recoller fait {items} clips de ses {count} tranches : celles dont le réglage Référence ou le gain diffère restent à part.",
+	"section.cast": "Distribution"
 }

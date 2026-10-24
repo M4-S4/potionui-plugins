@@ -19,6 +19,7 @@
 	import TakeCard from '../takes/TakeCard.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import QueuePanel from './QueuePanel.svelte';
+	import BibleSection from './BibleSection.svelte';
 	import Icon from '../Icon.svelte';
 	import { labelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
 
@@ -73,7 +74,7 @@
 		seek(c.start);
 	}
 
-	const kindIcons = { identity: 'user', lum: 'palette', warm: 'palette', camera_change: 'camera', fl2va_no_frame: 'image', no_instruction: 'sparkles', conflict: 'sparkles', duration: 'range' };
+	const kindIcons = { identity: 'user', lum: 'palette', warm: 'palette', camera_change: 'camera', fl2va_no_frame: 'image', no_instruction: 'sparkles', conflict: 'sparkles', duration: 'range', cast_unnamed: 'user' };
 </script>
 
 <PanelHeader icon="sparkles" title={t('panels.dock.title')} border={false}>
@@ -239,6 +240,7 @@
 				</div>
 			{/each}
 		</div>
+		<BibleSection />
 	{:else if ui.dockTab === 'references'}
 		<div class="flex flex-col gap-4 p-3">
 			<p class="text-xs text-fg-subtle">{t('panels.dock.refs.intro')}</p>

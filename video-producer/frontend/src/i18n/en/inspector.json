@@ -200,5 +200,6 @@
 	"audio.joinNone": "No slice of the same sound follows on from it on the track.",
 	"audio.joinHint": "Join puts its {count} slices back into one clip.",
 	"audio.joinApart": "Its {count} slices differ by their Reference setting or their gain: nothing to join.",
-	"audio.joinSome": "Join makes {items} clips of its {count} slices: those whose Reference setting or gain differs stay apart."
+	"audio.joinSome": "Join makes {items} clips of its {count} slices: those whose Reference setting or gain differs stay apart.",
+	"section.cast": "Cast"
 }

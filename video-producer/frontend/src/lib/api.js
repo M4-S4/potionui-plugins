@@ -390,6 +390,25 @@ function normalizeNote(value) {
 	return { code: value.code, message: text(value.message), data: isObject(value.data) ? value.data : null };
 }
 
+const ENGINE_FAMILIES = ['h3', 'ltx', 'wan', 'cloud', 'other'];
+
+function normalizeComposed(value) {
+	if (!isObject(value) || !text(value.shot_id)) return null;
+	return {
+		shotId: value.shot_id,
+		presetId: text(value.preset_id) || null,
+		profile: text(value.profile) || null,
+		engine: ENGINE_FAMILIES.includes(value.engine) ? value.engine : 'other',
+		prompt: text(value.prompt),
+		warnings: list(value.warnings, normalizeNote) ?? []
+	};
+}
+
+export function normalizePrompts(value) {
+	if (!isObject(value)) return null;
+	return { prompts: list(value.prompts, normalizeComposed) ?? [], blocks: list(value.blocks, normalizeNote) ?? [] };
+}
+
 function normalizeShotEstimate(value) {
 	if (!isObject(value) || !text(value.shot_id)) return null;
 	return {
@@ -677,6 +696,9 @@ export function createClient(api, save) {
 		},
 		async estimate(projectId, body, signal) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/estimate`, body, signal), normalizeEstimate);
+		},
+		async prompts(projectId, body, signal) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/prompts`, body, signal), normalizePrompts);
 		},
 		async generate(projectId, body) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/generate`, body), (data) => list(data.takes, normalizeTake));

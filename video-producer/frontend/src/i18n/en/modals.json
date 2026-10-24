@@ -261,5 +261,18 @@
 	"engine.lora.remove": "Remove this LoRA",
 	"engine.lora.strength": "Strength",
 	"engine.lora.pick": "LoRA",
-	"engine.time": "{asked} steps instead of {base}: each take is counted at about {ratio}× the time."
+	"engine.time": "{asked} steps instead of {base}: each take is counted at about {ratio}× the time.",
+	"shot.cast": "Cast",
+	"shot.castCharacters": "Characters",
+	"shot.castPlace": "Place",
+	"shot.castNoPlace": "No place",
+	"shot.castEmpty": "The bible has no card yet: add characters and places in Director IA › Direction.",
+	"shot.castOpen": "Open the bible",
+	"shot.castMissing": "The instruction does not name {labels}: write the visual tag of each character cast in the shot.",
+	"shot.composed": "Prompt sent to the engine",
+	"shot.composedNone": "Choose a generation engine to see the prompt.",
+	"shot.composedUnsaved": "The prompt shows once the project is saved.",
+	"shot.composedLoading": "Composing the prompt…",
+	"shot.composedError": "The prompt could not be composed.",
+	"shot.composedHint": "The instruction, the cast from the bible and the global direction, in the format of the shot’s engine, with your unsaved changes."
 }

@@ -120,7 +120,12 @@
 	const list = $derived(templates.filter((x) => inLib(x, lib) && (!cat || x.cat === cat) && (!q || norm(`${tplName(x)} ${tplDescription(x)} ${tplKeywords(x).join(' ')}`).includes(norm(q)))));
 	let currentId = $state('t1');
 	const current = $derived(templates.find((x) => x.id === currentId));
-	let vars = $state(defaultVars());
+	function initialCast() {
+		if (target?.returnTo?.draft) return target.returnTo.draft.cast ?? null;
+		const shotId = target?.kind === 'shot' ? target.id : target?.kind === 'prompt' ? doc.prompts.find((p) => p.id === target.id)?.shotId : null;
+		return doc.clips.find((c) => c.id === shotId)?.cast ?? null;
+	}
+	let vars = $state(defaultVars(initialCast()));
 	const tVars = $derived(current ? missingVars(tplText(current)) : []);
 	let edited = $state(null);
 	const preview = $derived(edited ?? (current ? fillVars(tplText(current), vars) : ''));

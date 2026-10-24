@@ -13,6 +13,8 @@ MAX_ISSUE_CHARS = 200
 MAX_SHOTS = 40
 MAX_ISSUES = 20
 MAX_SEAM_LINES = 20
+MAX_CARDS = 12
+MAX_LABEL_CHARS = 60
 
 NOT_OPEN = "Video Producer: the page is not open on a project this turn, so there is no project context."
 
@@ -25,6 +27,8 @@ DIRECTION_NAMES = (
     ("palette", "palette"),
     ("rythme", "rhythm"),
 )
+
+BIBLE_KINDS = (("characters", "character"), ("places", "place"))
 
 
 def _cap(text: Any, limit: int) -> str:
@@ -109,6 +113,26 @@ def _direction(page: Mapping[str, Any]) -> List[str]:
     return lines
 
 
+def _bible(page: Mapping[str, Any]) -> List[str]:
+    bible = page.get("bible") if isinstance(page.get("bible"), dict) else {}
+    cards = [(kind, card) for key, kind in BIBLE_KINDS for card in _dicts(bible.get(key)) if _cap(card.get("label"), MAX_LABEL_CHARS)]
+    if not cards:
+        return []
+    lines = ["Bible (repeated word for word in the prompt of each shot that casts it; name a cast character by its label):"]
+    for kind, card in cards[:MAX_CARDS]:
+        words = _cap(card.get("text"), MAX_FIELD_CHARS)
+        lines.append(f'  {kind} "{_cap(card.get("label"), MAX_LABEL_CHARS)}"' + (f": {words}" if words else ""))
+    if len(cards) > MAX_CARDS:
+        lines.append(f"  … {len(cards) - MAX_CARDS} more.")
+    return lines
+
+
+def _cast(shot: Mapping[str, Any]) -> str:
+    listed = shot.get("cast")
+    cast = [_cap(label, MAX_LABEL_CHARS) for label in listed if isinstance(label, str) and label.strip()] if isinstance(listed, list) else []
+    return f"; cast: {', '.join(cast)}" if cast else ""
+
+
 def _shot_line(index: int, shot: Mapping[str, Any], labels: Dict[Any, str]) -> str:
     start = _number(shot.get("start"))
     end = start + _number(shot.get("dur"))
@@ -117,7 +141,7 @@ def _shot_line(index: int, shot: Mapping[str, Any], labels: Dict[Any, str]) -> s
     instruction = f'prompt: "{prompt}"' if prompt else "no prompt"
     return (
         f'  {index}. [{shot.get("id") or "?"}] "{labels[shot.get("id")]}" {_seconds(start)}–{_seconds(end)} s, '
-        f"{_cap(shot.get('stage'), 20) or 'todo'}{take}, frames {_frames(shot)}; {instruction}"
+        f"{_cap(shot.get('stage'), 20) or 'todo'}{take}, frames {_frames(shot)}; {instruction}{_cast(shot)}"
     )
 
 
@@ -199,6 +223,7 @@ def build_context(context_metadata: Optional[Dict[str, Any]], session: Any, user
         _where(page, shots, labels),
         f"Synopsis: {_cap(page.get('synopsis'), MAX_SYNOPSIS_CHARS) or '(empty)'}",
         *_direction(page),
+        *_bible(page),
     ]
     tail = [*_issues(page, labels), *_seams(page, labels), *_production(page)]
     budget = MAX_BLOCK_CHARS - len("\n".join(head)) - min(len("\n".join(tail)), MAX_TAIL_CHARS) - 2

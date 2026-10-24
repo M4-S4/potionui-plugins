@@ -1,4 +1,5 @@
 import { touch } from './shots.js';
+import { castLabels } from './bible.js';
 
 export const PROMPT_LIMIT = 300;
 export const LABEL_LIMIT = 34;
@@ -35,7 +36,8 @@ export function shotsContext(doc, labelOf) {
 			prompt: clipped(p?.text),
 			hasFirstFrame: hasFrame(doc, c.id, FIRST_ROLES),
 			hasLastFrame: hasFrame(doc, c.id, LAST_ROLES),
-			take: c.take ?? null
+			take: c.take ?? null,
+			cast: castLabels(doc, c)
 		};
 	});
 }
@@ -118,6 +120,7 @@ export function reviewFrom(result, now = Date.now()) {
 					fix: isText(i.fix) ? i.fix.trim() : '',
 					shotId: isText(i.shot_id) ? i.shot_id : null,
 					rule: isText(i.rule) ? i.rule : null,
+					labels: Array.isArray(i.labels) ? i.labels.filter((x) => isText(x) && x.trim()) : [],
 					measured: !SIMULATED_KINDS.includes(i.kind) && (i.measured === true || MEASURED_KINDS.includes(i.kind)),
 					simulated: SIMULATED_KINDS.includes(i.kind)
 				}))
