@@ -164,11 +164,15 @@ export function durationLimit(doc, clip, engineMax = null) {
 
 export const overrunsTake = (take, before, dur) => take !== null && dur > before + 1e-6 && dur > take + TAKE_SLACK;
 
-export function releaseOverrun(doc, clip, before) {
-	if (!overrunsTake(durationLimit(doc, clip).take, before, clip.dur)) return null;
+export function releaseShot(clip) {
 	const released = { take: clip.take ?? null };
 	Object.assign(clip, { assetId: null, take: null, srcIn: 0, stage: 'todo' });
 	return released;
+}
+
+export function releaseOverrun(doc, clip, before) {
+	if (!overrunsTake(durationLimit(doc, clip).take, before, clip.dur)) return null;
+	return releaseShot(clip);
 }
 const promptFor = (doc, clip) => (doc.prompts ?? []).find((p) => p.shotId === clip.id) ?? null;
 const frameAsset = (doc, clip, kind) => framesOf(doc, clip.id, kind).find((f) => f.assetId)?.assetId ?? null;
