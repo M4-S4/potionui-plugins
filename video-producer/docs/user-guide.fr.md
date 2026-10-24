@@ -42,7 +42,7 @@ Les huit étapes fonctionnent pour de vrai, et vos projets sont enregistrés au 
 La page compte cinq niveaux de commandes, du plus large au plus local, autour d’un panneau de gauche, d’une zone centrale, de l’inspecteur et de la timeline :
 
 - **Barre de menus.** Dix menus, dans cet ordre : **Video Producer**, **Fichier**, **Édition**, **Montage**, **Plan**, **Production**, **Audio**, **Présentation**, **Fenêtre**, **Aide**. Le menu **Video Producer** contient **À propos de Video Producer**, **Préférences…**, **Raccourcis clavier** et **Rechercher une commande…**. Un menu n’affiche « … » que si la commande ouvre une fenêtre qui demande une saisie, et une coche devant un état activé.
-- **Barre projet.** À gauche, le bouton qui affiche ou masque le panneau latéral, le nom du projet (cliquez dessus pour renommer le projet) et son état d’enregistrement (« Enregistrement… », « Enregistré à » et l’heure, « Modifié · cliquer pour enregistrer » ou « Non enregistré — réessayer » ; chapitre 5). Au milieu, le sélecteur d’espaces : **Médias**, **Director IA**, **Storyboard**, **Scène 3D**, **Mixage**. À droite, **Importer** (un menu avec **Depuis la bibliothèque…** et **Depuis l’ordinateur…**, chapitre 6), **Exporter**, **Assistant** (il ouvre le chat PotionUI, chapitre 10), un bouton de recherche des commandes et le bouton qui affiche ou masque l’inspecteur.
+- **Barre projet.** À gauche, le bouton qui affiche ou masque le panneau latéral, le nom du projet (cliquez dessus pour renommer le projet) et son état d’enregistrement (« Enregistrement… », « Enregistré à » et l’heure, « Modifié · cliquer pour enregistrer » ou « Non enregistré — réessayer » ; chapitre 5). Au milieu, le sélecteur d’espaces : **Médias**, **Lecture**, **Director IA**, **Storyboard**, **Scène 3D**, **Mixage**. À droite, **Importer** (un menu avec **Depuis la bibliothèque…** et **Depuis l’ordinateur…**, chapitre 6), **Exporter**, **Assistant** (il ouvre le chat PotionUI, chapitre 10), un bouton de recherche des commandes et le bouton qui affiche ou masque l’inspecteur.
 - **Barre Production.** Elle cible ce qu’il faut générer et porte le seul bouton principal de la page, **Générer la sélection** (chapitre 8).
 - **En-têtes de zone et barre d’outils de la timeline.** Un titre et des compteurs à gauche, de petites icônes à droite.
 - **Contenu.** De petits boutons qui apparaissent au survol ou à la sélection.
@@ -61,15 +61,15 @@ Les dix menus regroupent toutes les commandes de la page. La recherche de comman
 | **Production** | Direction globale, Découper le synopsis en plans, Contrôle de continuité, Générer la sélection, Qualité brouillon et finale, la file de génération, Annuler la génération, Résultats et prises, Assembler les prises choisies, Réglages du moteur. |
 | **Audio** | Ajouter une piste audio, Importer un son de la bibliothèque, Importer un son depuis l’ordinateur, Console de mixage, Voix et dialogues et l’atelier Sound design. |
 | **Présentation** | Lecture, boucle, plein écran, guides de cadrage, Comparer les prises, Scope de luminance, Indicateurs audio, zoom de la timeline, Magnétisme. |
-| **Fenêtre** | Les cinq espaces, les espaces de références, Panneau latéral, Inspecteur, Assistant PotionUI, Bibliothèque de prompts, Index de la timeline, Tâches en arrière-plan. |
+| **Fenêtre** | Les six espaces, les espaces de références, Panneau latéral, Inspecteur, Assistant PotionUI, Bibliothèque de prompts, Index de la timeline, Tâches en arrière-plan. |
 | **Aide** | Prise en main, Raccourcis clavier, Rechercher une fonctionnalité, Fonctions simulées. |
 
 ### Les zones de la page
 
-- **Panneau de gauche.** Il change avec l’espace (chapitre 4). Affichez-le ou masquez-le avec le premier bouton de la barre projet ou avec Ctrl+Alt+1.
+- **Panneau de gauche.** Il change avec l’espace (chapitre 4) ; **Lecture** n’en a pas. Affichez-le ou masquez-le avec le premier bouton de la barre projet ou avec Ctrl+Alt+1.
 - **Centre.** Le visualiseur, les cartes du storyboard, la planche de références ou la vue 3D, selon l’espace.
 - **Inspecteur.** À droite. Il suit la sélection (chapitre 7). Il démarre masqué quand la fenêtre fait moins de 1360 pixels de large : ouvrez-le avec le dernier bouton de la barre projet, ou sélectionnez quelque chose, ce qui l’ouvre.
-- **Timeline.** En bas. Dans **Mixage**, la console de mixage prend sa place et un bouton ramène la timeline. Glissez la fine ligne au-dessus de la barre Production pour lui donner plus ou moins de hauteur.
+- **Timeline.** En bas. Dans **Mixage**, la console de mixage prend sa place et un bouton ramène la timeline ; dans **Lecture**, une barre de position la remplace. Glissez la fine ligne au-dessus de la barre Production pour lui donner plus ou moins de hauteur.
 - **Barre d’état.** Tout en bas, de gauche à droite : le rappel de la langue (`EN` ou `FR` ; cliquez dessus pour ouvrir les Préférences), le nombre de plans avec la durée, la résolution et le format d’image, l’outil actif, la sélection, la plage. À droite : le nombre de points de direction à vérifier (cliquez dessus pour ouvrir l’onglet **Direction**), le nombre de prises dans la file de génération (cliquez dessus pour ouvrir l’onglet **File**), le magnétisme et, si votre admin vous a fixé une limite, votre **Quota GPU**, les minutes utilisées ce mois-ci rapportées à cette limite (les fournisseurs cloud sont facturés à part).
 
 Le visualiseur a sa propre barre de transport : volume de contrôle, retour au début, image précédente et suivante, lecture, boucle, le timecode, guides de cadrage, format d’image, résolution et plein écran. Quand vous prévisualisez une prise, une comparaison ou un média source, une pastille en haut du visualiseur vous ramène à la séquence avec **Revenir à la séquence**.
@@ -78,11 +78,20 @@ La timeline a une barre d’outils et une rangée par type d’élément. La bar
 
 ## 4. Les espaces de travail
 
-Chaque espace change le panneau de gauche et le centre. L’inspecteur, à droite, suit votre sélection dans tous. **Fenêtre › Index de la timeline** liste les prompts, frames, marqueurs et Control video avec leur position, et **Fenêtre › Tâches en arrière-plan** montre la génération en cours et la file.
+Chaque espace change le panneau de gauche et le centre. L’inspecteur, à droite, suit votre sélection dans tous, sauf **Lecture**, qui ne garde que le visualiseur. **Fenêtre › Index de la timeline** liste les prompts, frames, marqueurs et Control video avec leur position, et **Fenêtre › Tâches en arrière-plan** montre la génération en cours et la file.
 
 ### Médias
 
 Les médias du projet dans un seul panneau. Un nouveau projet n’en a aucun : le panneau indique « Aucun média dans ce projet. » et propose **Bibliothèque** et **Depuis l’ordinateur**, comme les deux boutons d’import de son en-tête et le menu **Importer** de la barre projet ; vous pouvez aussi y déposer des fichiers. Le chapitre 6 explique comment faire entrer vos images, vidéos et fichiers audio. Filtrez avec les pastilles de collections (**Toutes**, **Images**, **Vidéos**, **Audio**, **Générés**), cherchez par nom sans vous soucier des accents, double-cliquez pour prévisualiser, glissez vers la timeline. Pour un élément sélectionné, le panneau indique sa durée, son format, sa collection et son origine, et propose **Prévisualiser**, **Au montage** et, pour les images et les vidéos, **Utiliser comme frame à la tête de lecture**. Le centre est le visualiseur.
+
+### Lecture
+
+Le montage de V1 lu en grand, pour le regarder comme il sera exporté. Lecture n’a ni panneau latéral, ni inspecteur, ni barre Production : le visualiseur prend toute la largeur avec sa barre de transport (volume de contrôle, retour au début, image précédente et suivante, lecture, boucle, guides de cadrage, format d’image, résolution et plein écran), et une barre de position remplace la timeline. Vous entendez le même mixage que dans les autres espaces : le son des plans de V1 et les pistes audio, avec leurs muets, solos, faders et effets.
+
+- **Barre de position.** À gauche, le timecode de la tête de lecture et le plan qu’elle lit (« Plan 2/6 · Le port ») ; à droite, la durée du montage. En dessous, un bloc par plan, la part déjà lue en couleur pleine et le plan sous la tête de lecture plus marqué. Cliquez ou glissez n’importe où sur la barre pour déplacer la tête de lecture. Une plage d’entrée et de sortie s’affiche en bande.
+- **Boucle.** Boucle activée, la lecture reprend au début à la fin du montage, ou au point d’entrée à la fin de la plage s’il y en a une. C’est la même chose dans tous les espaces.
+- **Clavier.** Espace lance et arrête la lecture, les flèches avancent ou reculent d’une image (1 s avec Shift), Home revient au début et Fin va à la fin. Les mêmes touches agissent quand la barre de position a le focus (Tab, ou un clic dessus).
+- Un plan encore sans média montre son nom et son instruction, sans le bouton **Générer des brouillons**. L’aperçu d’une prise ou d’un média source reste dans l’espace où vous l’avez ouvert : Lecture montre toujours le montage. Les boutons du panneau latéral et de l’inspecteur de la barre projet sont grisés ; les panneaux reviennent dans les autres espaces.
 
 ### Director IA
 
@@ -752,9 +761,9 @@ Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pou
 | F, U, Alt+Retour arrière | Favori, Retirer la marque, Rejeter |
 | Flèche gauche, Flèche droite | Déplacer la tête de lecture d’une image, soit 1/fps du projet (1 s avec Shift) |
 | Flèche gauche, Flèche droite (Storyboard) | Sélectionner le plan précédent ou suivant |
-| Home | Aller au début |
+| Home, Fin | Aller au début, Aller à la fin |
 
-Les raccourcis à une lettre (A, R, B, I, O, M, N, F et U) peuvent être désactivés dans **Video Producer › Préférences…**, réglage **Raccourcis à une touche**, activé par défaut. Espace, Retour arrière, Suppr, les flèches et Home n’en dépendent pas.
+Les raccourcis à une lettre (A, R, B, I, O, M, N, F et U) peuvent être désactivés dans **Video Producer › Préférences…**, réglage **Raccourcis à une touche**, activé par défaut. Espace, Retour arrière, Suppr, les flèches, Home et Fin n’en dépendent pas.
 
 Quand les raccourcis fonctionnent :
 

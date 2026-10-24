@@ -251,6 +251,7 @@ export const menus = [
 	menu('window', [
 		[
 			command('ws-media', ws('media')),
+			command('ws-play', ws('play')),
 			command('ws-director', ws('director')),
 			command('ws-story', ws('storyboard')),
 			command('ws-scene', ws('scene')),
@@ -356,6 +357,7 @@ function arrow(forward, whole) {
 const fixedBindings = [
 	{ spec: 'delete', run: () => deleteSelection(), repeat: true },
 	{ spec: 'home', run: () => seek(0) },
+	{ spec: 'end', run: () => seek(seqDuration()) },
 	{ spec: 'arrowleft', run: arrow(false, false), repeat: true },
 	{ spec: 'arrowright', run: arrow(true, false), repeat: true },
 	{ spec: 'shift+arrowleft', run: arrow(false, true), repeat: true },

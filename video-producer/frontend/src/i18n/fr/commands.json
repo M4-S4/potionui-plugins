@@ -79,6 +79,7 @@
 	"cmd.zoom-out": "Zoom arrière timeline",
 	"cmd.snap": "Magnétisme",
 	"cmd.ws-media": "Médias",
+	"cmd.ws-play": "Lecture",
 	"cmd.ws-director": "Director IA",
 	"cmd.ws-story": "Storyboard",
 	"cmd.ws-scene": "Scène 3D",
