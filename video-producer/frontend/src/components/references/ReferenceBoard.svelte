@@ -82,11 +82,12 @@
 							{@const kind = refMediaKind(r.space, r.type)}
 							{@const f = fam(r.space)}
 							{@const shot = shotOf(r)}
-							<li>
+							{@const playable = a?.kind === 'audio' && a.src}
+							<li class="rounded-xl border bg-surface-1 p-2 transition-[border-color,box-shadow] duration-150 {isSel(r) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'}">
 								<div
 									role="button"
 									tabindex="0"
-									class="group w-full rounded-xl border bg-surface-1 p-2 text-left transition-[border-color,box-shadow] duration-150 {isSel(r) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'}"
+									class="group w-full text-left"
 									draggable={!!a?.src}
 									ondragstart={(e) => a?.src && e.dataTransfer.setData('text/x-asset', a.id)}
 									onclick={() => select('reference', r.id)}
@@ -110,16 +111,19 @@
 									<div class="px-1 pb-0.5 pt-2">
 										<div class="truncate text-sm font-medium">{r.name}</div>
 										<div class="truncate text-xs text-fg-subtle">{r.file ? t('references.roleFile', { role: refRoleLabel(r.role), file: r.file }) : refRoleLabel(r.role)}{a?.kind === 'audio' ? ` · ${a.srcDur ? secs(a.srcDur) : a.name}` : ''}</div>
-										{#if a?.kind === 'audio' && a.src}
-											<!-- svelte-ignore a11y_media_has_caption, a11y_no_noninteractive_element_interactions, a11y_click_events_have_key_events -->
-											<audio class="mt-1.5 h-8 w-full" controls preload="metadata" src={a.src} aria-label={t('references.listen', { name: r.name })} onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}></audio>
-										{:else if kind === 'audio'}
+										{#if kind === 'audio' && !playable}
 											<div class="mt-1 text-xs text-warning">{t('references.noSound')}</div>
 										{:else if !a}
 											<div class="mt-1 text-xs text-warning">{kind === 'video' ? t('references.noVideo') : t('references.noImage')}</div>
 										{/if}
 									</div>
 								</div>
+								{#if playable}
+									<div class="px-1 pb-0.5">
+										<!-- svelte-ignore a11y_media_has_caption -->
+										<audio class="mt-1 h-8 w-full" controls preload="metadata" src={a.src} aria-label={t('references.listen', { name: r.name })}></audio>
+									</div>
+								{/if}
 							</li>
 						{/each}
 					</ul>
