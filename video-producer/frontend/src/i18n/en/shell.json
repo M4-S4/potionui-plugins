@@ -29,6 +29,7 @@
 	"project.showInspector": "Show the inspector",
 	"workspace.group": "Workspaces",
 	"workspace.media": "Media",
+	"workspace.play": "Play",
 	"workspace.director": "Director IA",
 	"workspace.storyboard": "Storyboard",
 	"workspace.scene": "3D scene",

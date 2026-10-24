@@ -42,7 +42,7 @@ All eight steps work for real, and your projects are saved as you work (chapter 
 The page has five levels of controls, from the widest to the most local, around a left panel, a center area, the Inspector and the timeline:
 
 - **Menu bar.** Ten menus, in this order: **Video Producer**, **File**, **Edit**, **Cut**, **Shot**, **Production**, **Audio**, **View**, **Window**, **Help**. The **Video Producer** menu holds **About Video Producer**, **Preferences…**, **Keyboard shortcuts** and **Search commands…**. A menu shows "…" only when the command opens a window that asks for something, and a check mark in front of a state that is on.
-- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import** (a menu with **From the library…** and **From this computer…**, chapter 6), **Export**, **Assistant** (it opens the PotionUI chat, chapter 10), a search button for the commands and the button that shows or hides the Inspector.
+- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Play**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import** (a menu with **From the library…** and **From this computer…**, chapter 6), **Export**, **Assistant** (it opens the PotionUI chat, chapter 10), a search button for the commands and the button that shows or hides the Inspector.
 - **Production bar.** It targets what to generate and holds the only main button of the page, **Generate selection** (chapter 8).
 - **Area headers and the timeline toolbar.** A title and counters on the left, small icons on the right.
 - **Content.** Small buttons that appear when you hover or select.
@@ -61,15 +61,15 @@ The ten menus group all the commands of the page. The command search (**Search c
 | **Production** | Global direction, Split synopsis into shots, Continuity check, Generate selection, Draft and Final quality, the generation queue, Cancel the generation, Results and takes, Assemble chosen takes, Engine settings. |
 | **Audio** | Add audio track, Import audio from the library, Import audio from this computer, Mixing console, Voice and dialogue and the sound design workshop. |
 | **View** | Play, loop, full screen, framing guides, Compare takes, Luminance scope, Audio meters, timeline zoom, Snapping. |
-| **Window** | The five workspaces, the reference spaces, Side panel, Inspector, PotionUI assistant, Prompt library, Timeline index, Background tasks. |
+| **Window** | The six workspaces, the reference spaces, Side panel, Inspector, PotionUI assistant, Prompt library, Timeline index, Background tasks. |
 | **Help** | Getting started, Keyboard shortcuts, Search features, Simulated features. |
 
 ### The areas of the page
 
-- **Left panel.** It changes with the workspace (chapter 4). Show or hide it with the first button of the project bar or with Ctrl+Alt+1.
+- **Left panel.** It changes with the workspace (chapter 4); **Play** has none. Show or hide it with the first button of the project bar or with Ctrl+Alt+1.
 - **Center.** The viewer, the storyboard cards, the board of references or the 3D view, depending on the workspace.
 - **Inspector.** On the right. It follows the selection (chapter 7). It starts hidden when the window is narrower than 1360 pixels: open it with the last button of the project bar, or select something, which opens it.
-- **Timeline.** At the bottom. In **Mix**, the mixing console takes its place and a button brings the timeline back. Drag the thin line above the Production bar to give it more or less height.
+- **Timeline.** At the bottom. In **Mix**, the mixing console takes its place and a button brings the timeline back; in **Play**, a position bar replaces it. Drag the thin line above the Production bar to give it more or less height.
 - **Status bar.** At the very bottom, from left to right: the language reminder (`EN` or `FR`; click it to open the Preferences), the number of shots with the duration, the resolution and the aspect ratio, the active tool, the selection, the range. On the right: the number of direction points to check (click it to open the **Direction** tab), the number of takes in the generation queue (click it to open the **Queue** tab), snapping and, when your admin has set a limit for you, your **GPU quota**, the minutes used this month out of that limit (cloud providers are billed separately).
 
 The viewer has its own transport bar: monitor volume, go to the start, previous and next frame, play, loop, the timecode, framing guides, aspect ratio, resolution and full screen. When you preview a take, a comparison or a source media, a pill at the top of the viewer brings you **Back to the sequence**.
@@ -78,11 +78,20 @@ The timeline has a toolbar and one row per kind of item. The toolbar holds **Und
 
 ## 4. Workspaces
 
-Each workspace changes the left panel and the center. The Inspector on the right follows your selection in all of them. **Window › Timeline index** lists the prompts, frames, markers and Control videos with their time, and **Window › Background tasks** shows the generation in progress and the queue.
+Each workspace changes the left panel and the center. The Inspector on the right follows your selection in all of them but **Play**, which keeps only the viewer. **Window › Timeline index** lists the prompts, frames, markers and Control videos with their time, and **Window › Background tasks** shows the generation in progress and the queue.
 
 ### Media
 
 The media of the project in one panel. A new project has none: the panel says "No media in this project." and offers **Library** and **From computer**, like the two import buttons of its header and the **Import** menu of the project bar; you can also drop files on it. Chapter 6 explains how to bring in your images, videos and audio files. Filter with the collection pills (**All**, **Images**, **Videos**, **Audio**, **Generated**), search by name without worrying about accents, double-click to preview, drag to the timeline. For a selected item the panel shows its duration, format, collection and origin, and the buttons **Preview**, **Add to cut** and, for images and videos, **Use as frame at the playhead**. The center is the viewer.
+
+### Play
+
+The cut of V1 played full size, to watch it as it will be exported. Play has no side panel, no Inspector and no Production bar: the viewer takes the whole width with its transport bar (monitor volume, go to the start, previous and next frame, play, loop, framing guides, aspect ratio, resolution and full screen), and a position bar replaces the timeline. You hear the same mix as in the other workspaces: the sound of the V1 shots and the audio tracks, with their mute, solo, faders and effects.
+
+- **Position bar.** On the left, the timecode of the playhead and the shot it plays ("Shot 2/6 · Harbour"); on the right, the length of the cut. Below, one block per shot, the part already played in full color and the shot under the playhead stronger. Click or drag anywhere on the bar to move the playhead. An In and Out range shows as a band.
+- **Loop.** With **Loop** on, playback starts again from the beginning at the end of the cut, or from the In point at the end of the range when there is one. This is the same in every workspace.
+- **Keyboard.** Space plays and pauses, the arrows move by one frame (1 s with Shift), Home goes to the start and End to the end. The same keys work when the position bar has the focus (Tab, or a click on it).
+- A shot with no media yet shows its name and prompt, without the **Generate drafts** button. A preview of a take or of a source media stays in the workspace where you opened it: Play always shows the cut. The side panel and Inspector buttons of the project bar are greyed out; the panels come back in the other workspaces.
 
 ### Director IA
 
@@ -733,9 +742,9 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | F, U, Alt+Backspace | Favorite, Remove flag, Reject |
 | Left arrow, Right arrow | Move the playhead by one frame, 1/fps of the project (1 s with Shift) |
 | Left arrow, Right arrow (Storyboard) | Select the previous or next shot |
-| Home | Go to the start |
+| Home, End | Go to the start, Go to the end |
 
-The single-letter shortcuts (A, R, B, I, O, M, N, F and U) can be turned off in **Video Producer › Preferences…**, setting **Single-key shortcuts**, which is on by default. Space, Backspace, Delete, the arrows and Home do not depend on it.
+The single-letter shortcuts (A, R, B, I, O, M, N, F and U) can be turned off in **Video Producer › Preferences…**, setting **Single-key shortcuts**, which is on by default. Space, Backspace, Delete, the arrows, Home and End do not depend on it.
 
 When the shortcuts work:
 
