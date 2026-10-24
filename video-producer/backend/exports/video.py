@@ -218,11 +218,16 @@ def filter_value(text: str) -> str:
     return _escaped(_escaped(text, OPTION_SPECIAL), GRAPH_SPECIAL)
 
 
+def filter_path(path: Any, cwd: Optional[str] = None) -> str:
+    """A file as the value of a filter option inside a filter graph: named as reach names it, with forward slashes, then escaped for the option and for the graph, so that a drive letter, a quote or a comma reads as part of the name."""
+    return filter_value(reach(path, cwd).replace(os.sep, "/"))
+
+
 def _match(clip: Mapping[str, Any], options: Mapping[str, Any], cwd: Optional[str]) -> List[str]:
     path = (options.get("cubes") or {}).get(clip.get("id"))
     if path is None:
         return []
-    return [f"lut3d=file={filter_value(reach(path, cwd).replace(os.sep, '/'))}:interp=trilinear"]
+    return [f"lut3d=file={filter_path(path, cwd)}:interp=trilinear"]
 
 
 def _fades(item: Mapping[str, Any], dur: float, name: str) -> List[str]:

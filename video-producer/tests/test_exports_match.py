@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -199,6 +200,41 @@ def test_a_filter_value_is_escaped_for_the_option_then_for_the_graph(text, escap
     assert video.filter_value(text) == escaped
 
 
+@pytest.mark.skipif(os.name != "nt", reason="drive letters and backslashes exist on Windows only")
+def test_a_windows_path_is_named_with_forward_slashes_and_its_drive_escaped():
+    assert video.filter_path("C:\\Jobs\\a b\\m'1.cube") == "C\\\\:/Jobs/a b/m\\\\\\'1.cube"
+
+
+@pytest.mark.requires_ffmpeg
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
+@pytest.mark.parametrize("relative", [False, True], ids=["absolute", "relative"])
+async def test_the_export_reads_a_lut_whose_path_has_a_drive_spaces_quotes_and_graph_characters(relative, make_doc, tmp_path):
+    folder = tmp_path / "job a b,c;d[e]'f"
+    folder.mkdir()
+    size = _board(FIXTURE["colors"], tmp_path / "colors.png")
+    case = FIXTURE["cases"][0]
+    doc = make_doc(clips=[{"id": "c1", "assetId": "a1", "dur": 0.2, "match": case["match"]}], aspect="1:1")
+    doc["resolution"] = "720p"
+    files = {"c1": {"name": "colors.png", "path": str(tmp_path / "colors.png"), "still": True}}
+    cubes = match.write_cubes(doc, folder)
+    options = {"format": "web", "resolution": "720p", "stills": ["c1"], "audio": {}, "blind": [], "lengths": {}, "cubes": cubes}
+    output = folder / "mezzanine.mp4"
+    ffmpeg = shutil.which("ffmpeg")
+    paths = {"ffmpeg": ffmpeg, "graph_option": video.graph_option(ffmpeg), "output": str(output), "graph": str(folder / "graph.txt"), "audio": {}}
+
+    if relative:
+        await video.assemble_sequence(doc, files, options, {**paths, "cwd": str(tmp_path)}, folder, lambda progress, step: True)
+    else:
+        (folder / "graph.txt").write_text(video.filter_graph(doc, files, options, paths), encoding="utf-8")
+        await video.assemble(video.build_command(doc, files, options, paths), 0.2)
+
+    named = video.filter_path(cubes["c1"], str(tmp_path) if relative else None)
+    assert named.startswith("./job a b\\,c" if relative else video.filter_value(str(folder.anchor).replace(os.sep, "/")))
+    assert f"lut3d=file={named}:" in (folder / "graph.txt").read_text(encoding="utf-8")
+    mean, _, worst = _gap(_blocks(_rgb(output, size), size[0], len(FIXTURE["colors"])), case["preview"])
+    assert mean < 3 and worst <= 8
+
+
 def test_the_schema_and_the_export_agree_on_the_color_and_sound_settings():
     assert projects.MATCH_STATS == match.STATS
     assert set(projects.LOUDNESS_TARGETS) == set(levels.TARGETS)
@@ -222,7 +258,7 @@ def test_ffmpeg_reads_the_cube_as_the_page_previews_it(case, tmp_path):
     cube = tmp_path / "m.cube"
     cube.write_text(match.cube(match.transfer(case["match"])), encoding="ascii")
 
-    raw = _rgb(tmp_path / "colors.png", size, "format=rgb24", f"lut3d=file={cube}:interp=trilinear")
+    raw = _rgb(tmp_path / "colors.png", size, "format=rgb24", f"lut3d=file={video.filter_path(cube)}:interp=trilinear")
 
     mean, _, worst = _gap(_blocks(raw, size[0], len(FIXTURE["colors"])), case["preview"])
     assert worst <= 1.0 and mean <= 0.6
@@ -276,7 +312,7 @@ def test_a_take_with_a_cast_matched_through_ffmpeg_lands_on_its_anchor(tmp_path)
     cube = tmp_path / "m.cube"
     cube.write_text(match.cube(match.transfer(_match(**stats))), encoding="ascii")
 
-    raw = _rgb(tmp_path / "take.png", size, "format=rgb24", f"lut3d=file={cube}:interp=trilinear")
+    raw = _rgb(tmp_path / "take.png", size, "format=rgb24", f"lut3d=file={video.filter_path(cube)}:interp=trilinear")
 
     after = _stats(_blocks(raw, size[0], 64))
     assert _delta(stats["source"], stats["target"]) > 15
