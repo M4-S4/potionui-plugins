@@ -7,7 +7,7 @@ from typing import Any, Callable, NamedTuple, Optional
 import pytest
 from fastapi.routing import APIRoute
 
-from backend import core_bridge, presets, settings, takes, tracker
+from backend import chain, core_bridge, presets, settings, takes, tracker
 from backend.api import router
 from backend.exports import jobs, video
 from backend.scene3d import files as scene_files
@@ -25,6 +25,7 @@ TAKE_FIELDS = ("shot_id", "generation_id", "file_id", "file_path", "status", "qu
 LIVENESS = {"GET /health"}
 DOCUMENTED = re.compile(r"`(GET|POST|PUT|DELETE|PATCH) (/[^`?\s]*)")
 ANONYMOUS = "anonymous"
+END_SHOT = "01M5R0CLIP0000000000000002"
 
 
 def _shape(path: str) -> str:
@@ -85,6 +86,10 @@ class World:
         monkeypatch.setattr(core_bridge, "preset_driver", lambda preset_id: None)
         monkeypatch.setattr(core_bridge, "extract_frame", self._extract_frame)
         monkeypatch.setattr(core_bridge, "upload_item", self._upload_item)
+        monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, folder: Path(folder) / "source.mp4")
+        monkeypatch.setattr(core_bridge, "probe_video", lambda path: None)
+        monkeypatch.setattr(core_bridge, "save_user_media", self._save_user_media)
+        monkeypatch.setattr(chain, "run", self._run)
         monkeypatch.setattr(core_bridge, "resolve_media", self._resolve_as_owner(core.resolve_media))
         core.add_media({"kind": "library", "item_id": "item-1"}, "uploads/still.png", media_type="image")
         core.add_media({"kind": "library", "item_id": "item-user-1"}, "uploads/upload.png", media_type="image")
@@ -104,6 +109,14 @@ class World:
     @staticmethod
     async def _extract_frame(user, ref, at="last"):
         return {"value": "uploads/frame.png", "media_type": "image", "original_filename": "frame.png", "origin": None}
+
+    @staticmethod
+    async def _run(command):
+        Path(command[-1]).write_bytes(b"png")
+
+    @staticmethod
+    async def _save_user_media(user, path):
+        return {"value": "uploads/frame.png", "media_type": "image", "original_filename": Path(path).name, "origin": None}
 
     @staticmethod
     async def _assemble(command, total, on_progress=None, on_process=None, cwd=None, code="ffmpeg_failed"):
@@ -377,6 +390,14 @@ ROUTES = {
         invalid=lambda w: Call(
             f"/projects/{w.pid}/shots/s2/seam-frame", {"source": {"take_id": w.done["id"], "at": -1}}, 422, "invalid_request"
         ),
+    ),
+    "POST /projects/{id}/shots/{shot}/end-frame": Route(
+        success=lambda w: Call(
+            f"/projects/{w.reference['id']}/shots/{END_SHOT}/end-frame",
+            check=lambda r: (_data(r)["source"]["at"], _data(r)["media"]["filename"]) == (4.6, "1-frame-4.6s.png"),
+        ),
+        denied=lambda w: Call(f"/projects/{w.reference['id']}/shots/{END_SHOT}/end-frame", status=404, code="project_not_found", who="user-2"),
+        invalid=lambda w: Call(f"/projects/{w.reference['id']}/shots/nope/end-frame", status=404, code="shot_not_found"),
     ),
     "POST /projects/{id}/scenes/from-image": Route(
         success=lambda w: Call(

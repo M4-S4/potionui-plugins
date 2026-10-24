@@ -284,6 +284,8 @@ ENGINE = _object(
     },
 )
 
+FRAME_OF = _object({"shotId": ID, "takeId": REF, "assetId": ID, "at": NULLABLE_NUMBER})
+
 ASSET = _object(
     {
         "id": ID,
@@ -308,7 +310,8 @@ ASSET = _object(
         "transcript": NULLABLE_TEXT,
         "character": NULLABLE_TEXT,
         "lipSync": NULLABLE_FLAG,
-    }
+    },
+    optional={"frameOf": FRAME_OF},
 )
 
 DOC_SCHEMA: Dict[str, Any] = {
@@ -347,7 +350,7 @@ DOC_SCHEMA: Dict[str, Any] = {
             "engine": ENGINE,
             "assets": _array(ASSET),
         },
-        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID},
+        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID, "firstFromPrevious": FLAG},
     ),
 }
 
