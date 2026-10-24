@@ -25,6 +25,8 @@ import {
 	validOption
 } from './options.js';
 import { emptyDoc, migrate } from './starter.js';
+import { chainState } from './chain.js';
+import { shotMarks } from './player.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -240,6 +242,29 @@ test('options: the options of the open project read, count and save through its 
 	setPresetOptions(engine, LTX, live({ steps: 12 }));
 	assert.deepEqual(optionsOf(engine, LTX), { steps: 12 });
 	assert.deepEqual(Object.keys(engine.options).sort(), [H3, LTX].sort());
+});
+
+test('options: deleting a shot of a project whose engine keeps options leaves the Production bar and the cut readable', async () => {
+	const live = await reactive();
+	const doc = live({
+		fps: 25,
+		engine: { preset: H3, quality: 'draft', options: { [H3]: { speed_profile: 'quality' } } },
+		clips: [
+			{ id: 'a', start: 0, dur: 5, stage: 'todo' },
+			{ id: 'b', start: 5, dur: 5, stage: 'todo' },
+			{ id: 'c', start: 10, dur: 5, stage: 'todo' }
+		],
+		prompts: [{ id: 'p', shotId: 'b', start: 5, dur: 5, text: 'Street flare' }],
+		frames: [],
+		assets: []
+	});
+
+	doc.clips.splice(1, 1);
+	doc.prompts.splice(0, 1);
+
+	assert.equal(optionCount(doc.engine, doc.engine.preset), 1);
+	assert.deepEqual(shotMarks(doc.clips, 15).map((m) => m.id), ['a', 'c']);
+	assert.equal(chainState(doc, 1), null);
 });
 
 test('options: opening a project drops malformed options and keeps the rest', () => {
