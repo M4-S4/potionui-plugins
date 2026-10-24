@@ -25,6 +25,7 @@ import {
 	soundReferences,
 	trackPortion
 } from './sound.js';
+import { typesOf } from './refmedia.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const lane = (id, extra = {}) => ({ id, name: id, role: 'Dialogue', vol: 0, pan: 0, mute: false, solo: false, ...extra });
@@ -56,7 +57,7 @@ test('sound space: a new reference family with its voice, music and ambience typ
 	assert.deepEqual(SOUND_TYPES, ['Voix', 'Musique', 'Ambiance']);
 	const references = source('./references.js');
 	assert.match(references, /id: SOUND_SPACE,\n\t\ticon: 'wave'/);
-	assert.match(references, /\[SOUND_SPACE\]: SOUND_TYPES/);
+	assert.deepEqual(typesOf(SOUND_SPACE), SOUND_TYPES);
 	assert.match(references, /if \(type === 'Voix'\) return t\('lib\.refType\.voice'\)/);
 });
 

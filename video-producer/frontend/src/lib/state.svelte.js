@@ -5,7 +5,7 @@ import { ulid } from './ulid.js';
 import { resetTakes } from './takes.svelte.js';
 import { compileRules, conflictIds, namesCamera } from './rules.js';
 import { dropPlanControls } from './scene3d/doc.js';
-import { laneCode, laneFor, laneItemCount, newLaneId, removeLane } from './tracks.js';
+import { laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane } from './tracks.js';
 import { touch } from './shots.js';
 import sharedRules from './rules.json';
 
@@ -326,7 +326,7 @@ export function addAssetToTimeline(assetId, at = null) {
 		let laneId = null;
 		act(() => {
 			laneId = laneForRole(a.role ?? 'Musique').id;
-			doc.audio.push({ id: ulid(), assetId, lane: laneId, start: round(at ?? ui.playhead, 0.04), dur: Math.min(a.srcDur ?? 8, 8), srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 });
+			doc.audio.push(newSound(assetId, laneId, round(at ?? ui.playhead, 0.04), a.srcDur));
 		});
 		toast(t('lib.toast.addedToLane', { name: a.name, lane: laneCode(doc.lanes, laneId) }));
 		return;

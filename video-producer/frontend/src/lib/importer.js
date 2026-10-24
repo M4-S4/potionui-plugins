@@ -6,8 +6,7 @@ import { openHostModal } from './host.js';
 import { probeMedia } from './sources.svelte.js';
 import { LOCAL_KINDS, acceptFor, fileKind, importQueue, sortFiles, uploadForm } from './upload.js';
 import { trackUploads, updateUpload } from './uploads.svelte.js';
-import { ulid } from './ulid.js';
-import { laneCode } from './tracks.js';
+import { fitSounds, laneCode, newSound } from './tracks.js';
 
 const KINDS = { media: ['image', 'video'], audio: ['audio'] };
 const probing = new Map();
@@ -159,12 +158,10 @@ export function pickLocalMedia(kind, onPicked) {
 	input.click();
 }
 
-export const pickLocalImage = (onPicked) => pickLocalMedia('image', onPicked);
-
 function refusal(rejected, target) {
 	const params = { count: rejected.length, name: rejected[0].name };
 	if (!rejected.every((f) => fileKind(f.name))) return t('project.upload.unsupported', params);
-	if (target?.pick) return target.kind === 'audio' ? t('project.upload.soundOnly', params) : t('project.upload.imageOnly', params);
+	if (target?.pick) return target.kind === 'audio' ? t('project.upload.soundOnly', params) : target.kind === 'video' ? t('project.upload.videoOnly', params) : t('project.upload.imageOnly', params);
 	return target ? t('timeline.toast.dropHint') : t('project.upload.audioOnly', params);
 }
 
@@ -225,13 +222,19 @@ async function uploadAll(entries, kinds, target) {
 async function placeAll(ids, target) {
 	let at = target.at;
 	for (const id of ids) {
-		await probeAsset(id).catch(() => {});
-		const end = placeAsset(id, target.row, at);
+		const end = await placeAsset(id, target.row, at);
 		if (end !== null) at = end;
 	}
 }
 
-export function placeAsset(id, row, at) {
+export async function addToTimeline(id, at = null) {
+	const start = at ?? ui.playhead;
+	if (asset(id)?.kind === 'audio') await probeAsset(id).catch(() => {});
+	addAssetToTimeline(id, start);
+}
+
+export async function placeAsset(id, row, at) {
+	await probeAsset(id).catch(() => {});
 	const a = asset(id);
 	if (!a) return null;
 	const start = round(at, 0.04);
@@ -240,10 +243,10 @@ export function placeAsset(id, row, at) {
 		return start;
 	}
 	if (row.lane && a.kind === 'audio') {
-		const dur = Math.min(8, a.srcDur ?? 8);
-		act(() => doc.audio.push({ id: ulid(), assetId: id, lane: row.id, start, dur, srcIn: 0, fadeIn: 0.5, fadeOut: 0.5, gain: -6 }));
+		const item = newSound(id, row.id, start, a.srcDur);
+		act(() => doc.audio.push(item));
 		toast(t('timeline.toast.dropped', { name: a.name, lane: laneCode(doc.lanes, row.id) }));
-		return start + dur;
+		return start + item.dur;
 	}
 	if (row.id === 'v1' && a.kind !== 'audio') {
 		addAssetToTimeline(id, start);
@@ -276,7 +279,10 @@ async function probe(id, a) {
 	probed.add(id);
 	const target = asset(id);
 	if (!info || !target) return;
-	if (info.srcDur !== null) target.srcDur = info.srcDur;
+	if (info.srcDur !== null) {
+		target.srcDur = info.srcDur;
+		if (target.kind === 'audio') fitSounds(doc, id, info.srcDur);
+	}
 	if (info.width && info.height) {
 		target.width = info.width;
 		target.height = info.height;

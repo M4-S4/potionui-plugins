@@ -3,13 +3,16 @@
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { doc, asset, act, toast } from '../../lib/state.svelte.js';
 	import { colorPresets, colorPresetLabel, clipFilter } from '../../lib/look.js';
-	import { drawGraded, lookSteps } from '../../lib/grade.js';
+	import { drawGraded, lookSteps, lumaHistogram } from '../../lib/grade.js';
+	import { shotFrame } from '../../lib/media.js';
 	import { matchToPrevious, seam } from '../../lib/continuity.svelte.js';
 	import SliderField from './SliderField.svelte';
 	import Icon from '../Icon.svelte';
 
 	let { clip } = $props();
 	const a = $derived(asset(clip.assetId));
+	const picture = $derived(shotFrame(clip));
+	const visual = $derived(Boolean(a && a.kind !== 'audio' && (a.src || picture)));
 	const idx = $derived(doc.clips.indexOf(clip));
 	const sm = $derived(idx > 0 ? seam(idx) : null);
 	const colorIssue = $derived(sm?.issues.some((x) => x.fix));
@@ -30,7 +33,7 @@
 
 	let bins = $state([]);
 	$effect(() => {
-		if (!a?.src) {
+		if (!picture) {
 			bins = [];
 			return;
 		}
@@ -44,13 +47,13 @@
 			c.height = 90;
 			const g = c.getContext('2d', { willReadFrequently: true });
 			if (!g) return;
-			const d = drawGraded(g, img, 160, 90, steps);
-			const h = new Array(64).fill(0);
-			for (let i = 0; i < d.length; i += 4) h[Math.min(63, Math.floor((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 4))]++;
-			const max = Math.max(...h);
-			bins = h.map((v) => (max ? v / max : 0));
+			try {
+				bins = lumaHistogram(drawGraded(g, img, 160, 90, steps));
+			} catch {
+				bins = [];
+			}
 		};
-		img.src = a.src;
+		img.src = picture;
 		return () => {
 			alive = false;
 			img.onload = null;
@@ -58,7 +61,7 @@
 	});
 </script>
 
-{#if !a?.src}
+{#if !visual}
 	<p class="rounded-lg border border-dashed border-line-hover p-3 text-xs text-fg-muted">{t('inspector.color.pending')}</p>
 {:else}
 	<section class="space-y-1.5">
@@ -92,7 +95,11 @@
 					aria-pressed={clip.preset === name}
 					onclick={() => apply(name)}
 				>
-					<img src={a.src} alt="" class="aspect-video w-full object-cover" style:filter={clipFilter({ ...clip, ...colorPresets[name] })} />
+					{#if picture}
+						<img src={picture} alt="" class="aspect-video w-full object-cover" style:filter={clipFilter({ ...clip, ...colorPresets[name] })} />
+					{:else}
+						<span class="block aspect-video w-full bg-surface-3"></span>
+					{/if}
 					<span class="block truncate px-1 py-0.5 text-2xs text-fg-muted">{colorPresetLabel(name)}</span>
 				</button>
 			{/each}

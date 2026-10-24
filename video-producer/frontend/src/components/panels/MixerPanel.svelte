@@ -1,8 +1,8 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, addAssetToTimeline, secs } from '../../lib/state.svelte.js';
-	import { openImport, openLocalImport } from '../../lib/importer.js';
+	import { ui, doc, secs } from '../../lib/state.svelte.js';
+	import { addToTimeline, openImport, openLocalImport } from '../../lib/importer.js';
 	import { roleColor, audioRoleLabel } from '../../lib/catalog.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import Icon from '../Icon.svelte';
@@ -50,7 +50,7 @@
 							size: 'xs',
 							class: 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
 							tooltip: t('panels.mixer.addAtPlayheadTip'),
-							onclick: () => addAssetToTimeline(s.id)
+							onclick: () => addToTimeline(s.id)
 						}}
 					/>
 				</li>

@@ -1,7 +1,8 @@
 import { t } from '../i18n/index.svelte.js';
 import { ui, doc, act, select, toast, productionRange, secs, clipAt, overlaps } from './state.svelte.js';
 import { ulid } from './ulid.js';
-import { SOUND_ROLE, SOUND_SPACE, SOUND_TYPES } from './sound.js';
+import { SOUND_ROLE, SOUND_SPACE } from './sound.js';
+import { refMediaKind, typesOf } from './refmedia.js';
 
 export const families = [
 	{
@@ -57,10 +58,9 @@ export const families = [
 		}
 	}
 ];
-const types = { identite: ['Personnage', 'Décor', 'Objet', 'Style'], decors3d: ['Capture 3D'], mouvement: ['Control video', 'Trajectoire'], [SOUND_SPACE]: SOUND_TYPES };
 const roles = { identite: 'Identité', decors3d: 'Décor 3D', mouvement: 'Mouvement', [SOUND_SPACE]: SOUND_ROLE };
 
-export const typesOf = (space) => types[space] ?? [];
+export { refMediaKind, typesOf };
 
 export function refTypeLabel(type) {
 	if (type === 'Personnage') return t('lib.refType.character');
@@ -95,7 +95,7 @@ export function openReferences(space = 'all') {
 }
 
 export function addReference(space = ui.refSpace === 'all' ? 'identite' : ui.refSpace) {
-	const type = types[space][0];
+	const type = typesOf(space)[0];
 	const r = { id: ulid(), name: t('lib.default.reference', { type: refTypeLabel(type) }), space, type, assetId: null, role: roles[space], scope: { type: 'global' } };
 	act(() => doc.references.push(r));
 	select('reference', r.id);
