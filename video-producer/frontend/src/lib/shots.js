@@ -2,6 +2,7 @@ import { labelOf } from './labels.js';
 import { SEAM_STRENGTH, frameTime, framesOf } from './seam.js';
 import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
 import { castOf, migrateCast, sameCast, setCast } from './bible.js';
+import { migrateReferencePrompt, referencePromptOf, sameReferencePrompt, setReferencePrompt } from './refprompt.js';
 
 export const MIN_DRAFTS = 1;
 export const MAX_DRAFTS = 8;
@@ -117,7 +118,8 @@ export function inputsChanged(before, after) {
 		!sameList([...before.exclude].sort(), [...after.exclude].sort()) ||
 		!sameList([...(before.excludeLanes ?? [])].sort(), [...(after.excludeLanes ?? [])].sort()) ||
 		!sameList(before.own.map((r) => `${r.id}:${r.assetId}:${r.type}`), after.own.map((r) => `${r.id}:${r.assetId}:${r.type}`)) ||
-		!sameCast(before.cast, after.cast)
+		!sameCast(before.cast, after.cast) ||
+		!sameReferencePrompt(before.referencePrompt, after.referencePrompt)
 	);
 }
 
@@ -132,6 +134,11 @@ function migrateClip(clip) {
 		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next) }).filter(([, list]) => list.length);
 		if (kept.length) next.referenceOverrides = Object.fromEntries(kept);
 		else delete next.referenceOverrides;
+	}
+	if ('referencePrompt' in next) {
+		const override = migrateReferencePrompt(next.referencePrompt);
+		if (override) next.referencePrompt = override;
+		else delete next.referencePrompt;
 	}
 	if ('cast' in next) {
 		const cast = migrateCast(next.cast);
@@ -185,7 +192,8 @@ export function shotDraft(doc, clip, engine) {
 		own: shotReferences(doc, clip).own.map(ownCopy),
 		drafts: draftsOf(clip, engine),
 		engine: shotEngineOf(clip),
-		cast: castOf(clip)
+		cast: castOf(clip),
+		referencePrompt: referencePromptOf(clip)
 	};
 }
 
@@ -238,6 +246,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	if (draft.drafts !== before.drafts || Number.isInteger(clip.drafts)) clip.drafts = count(draft.drafts) ?? projectDrafts(engine);
 	if ('engine' in draft) setShotEngine(clip, draft.engine);
 	if ('cast' in draft) setCast(clip, draft.cast);
+	if ('referencePrompt' in draft) setReferencePrompt(clip, draft.referencePrompt);
 	const released = resized ? releaseOverrun(doc, clip, was) : null;
 	if (changed) touch(clip);
 	return { changed, resized, released };

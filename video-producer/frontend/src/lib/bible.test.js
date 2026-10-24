@@ -170,8 +170,8 @@ test('bible: the prompts route answer is normalized', () => {
 	});
 	assert.deepEqual(data, {
 		prompts: [
-			{ shotId: 's1', presetId: 'p', profile: 'FL2VA', engine: 'ltx', prompt: 'Hello.', warnings: [{ code: 'prompt_too_long', message: 'm', data: { tokens: 600 } }] },
-			{ shotId: 's2', presetId: null, profile: null, engine: 'other', prompt: '', warnings: [] }
+			{ shotId: 's1', presetId: 'p', profile: 'FL2VA', engine: 'ltx', prompt: 'Hello.', reference: null, warnings: [{ code: 'prompt_too_long', message: 'm', data: { tokens: 600 } }] },
+			{ shotId: 's2', presetId: null, profile: null, engine: 'other', prompt: '', reference: null, warnings: [] }
 		],
 		blocks: [{ code: 'no_preset', message: 'm', data: null }]
 	});

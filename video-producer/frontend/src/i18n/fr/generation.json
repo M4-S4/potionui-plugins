@@ -179,5 +179,7 @@
 	"block.audioCut": "{shot} : le son du plan n’a pas pu être découpé ou enregistré.",
 	"warn.optionInvalid": "{engine} : ces options ne correspondent plus à leur champ et sont laissées de côté : {fields}.",
 	"warn.bibleLabelMissing": "« {shot} » : l’instruction ne nomme pas {labels}, distribué dans le plan.",
-	"warn.promptTooLong": "« {shot} » : le prompt prend environ {tokens} jetons, plus que les {limit} que lit le moteur ; sa fin risque d’être ignorée."
+	"warn.promptTooLong": "« {shot} » : le prompt prend environ {tokens} jetons, plus que les {limit} que lit le moteur ; sa fin risque d’être ignorée.",
+	"warn.referenceChanged": "« {shot} » : ses références ou sa distribution ont changé depuis le remplacement de la partie du prompt qui en est tirée ; le texte remplacé part toujours.",
+	"warn.referenceIgnored": "« {shot} » : la partie du prompt tirée de ses références a été remplacée pour un autre moteur ; c’est la partie composée qui part."
 }
