@@ -110,12 +110,11 @@ def _require_quota(owner: User, minutes: float) -> bool:
 
 
 async def with_sound(owner: User, project: Mapping[str, Any], plans: List[ShotPlan]) -> None:
-    """Cut and store the sound each plan sends, once per plan; Blocked when one cannot be."""
-    for plan in plans:
-        try:
-            await soundtrack.attach(owner, project, plan)
-        except soundtrack.SoundError as exc:
-            raise Blocked([note(exc.code, exc.message, shot_id=plan.shot_id)]) from None
+    """Cut and store the sound each plan sends, once per plan, the cuts of all of them at most soundtrack.MEASURES at a time; Blocked by the first that cannot be, in the order of the plans."""
+    try:
+        await soundtrack.attach_all(owner, project, plans)
+    except soundtrack.SoundError as exc:
+        raise Blocked([note(exc.code, exc.message, shot_id=exc.shot_id)]) from None
 
 
 def _create(
