@@ -109,6 +109,16 @@ PLACE = _object({"id": ID, "label": TEXT, "text": TEXT, "references": IDS})
 
 BIBLE = _object({"characters": _array(CHARACTER), "places": _array(PLACE)})
 
+OPTION_LORA = _object({"model": ID, "strength": NUMBER})
+
+PRESET_OPTIONS = {
+    "type": "object",
+    "propertyNames": {"minLength": 1},
+    "additionalProperties": {"anyOf": [{"type": ["string", "number", "boolean"]}, _array(OPTION_LORA)]},
+}
+
+ENGINE_OPTIONS = {"type": "object", "propertyNames": {"minLength": 1}, "additionalProperties": PRESET_OPTIONS}
+
 CLIP = _object(
     {
         "id": ID,
@@ -149,7 +159,8 @@ AUDIO = _object(
         "fadeIn": NUMBER,
         "fadeOut": NUMBER,
         "gain": NUMBER,
-    }
+    },
+    optional={"reference": FLAG},
 )
 
 TITLE = _object({"id": ID, "text": TEXT, "sub": TEXT, "start": NUMBER, "dur": NUMBER})
@@ -291,8 +302,12 @@ ENGINE = _object(
         "naming": TEXT,
         "autoInsert": FLAG,
         "referenceMargin": {"type": "number", "minimum": 0, "maximum": MAX_REFERENCE_MARGIN},
+        "options": ENGINE_OPTIONS,
+        "keyframes": _object({}, optional={"preset": ID, "model": REF}),
     },
 )
+
+FRAME_OF = _object({"shotId": ID, "takeId": REF, "assetId": ID, "at": NULLABLE_NUMBER})
 
 ASSET = _object(
     {
@@ -318,7 +333,8 @@ ASSET = _object(
         "transcript": NULLABLE_TEXT,
         "character": NULLABLE_TEXT,
         "lipSync": NULLABLE_FLAG,
-    }
+    },
+    optional={"frameOf": FRAME_OF},
 )
 
 DOC_SCHEMA: Dict[str, Any] = {
@@ -357,7 +373,7 @@ DOC_SCHEMA: Dict[str, Any] = {
             "engine": ENGINE,
             "assets": _array(ASSET),
         },
-        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID, "bible": BIBLE},
+        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID, "firstFromPrevious": FLAG, "bible": BIBLE},
     ),
 }
 

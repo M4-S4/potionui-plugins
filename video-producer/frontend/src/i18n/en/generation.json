@@ -99,8 +99,6 @@
 	"toast.loadFailed": "The takes of this project could not be loaded.",
 	"toast.failed.one": "{count} take failed",
 	"toast.failed.other": "{count} takes failed",
-	"profile.badge": "{profiles}: MiniMax H3 only",
-	"profile.why": "{engine} cannot generate {profiles}: reference images (Ref2VA) and generated sound (Hybrid AV) need MiniMax H3.",
 	"refs.why": "References are sent only with the Ref2VA profile on MiniMax H3; {engine} ignores them.",
 	"shotProgress": "Generation progress of “{shot}”",
 	"tasks.takes.one": "{count} take in progress",
@@ -179,6 +177,7 @@
 	"block.audioFfmpeg": "ffmpeg is not available on this server: the sound of the shots cannot be cut.",
 	"block.audioSource": "{shot}: a sound it sends can no longer be read.",
 	"block.audioCut": "{shot}: its sound could not be cut or stored.",
+	"warn.optionInvalid": "{engine}: these options no longer fit their field and are left out: {fields}.",
 	"warn.bibleLabelMissing": "“{shot}”: the instruction does not name {labels}, cast in the shot.",
 	"warn.promptTooLong": "“{shot}”: the prompt takes about {tokens} tokens, more than the {limit} the engine reads; its end may be ignored."
 }

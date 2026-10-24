@@ -198,6 +198,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "plugin": {"id": "video-producer", "version": "0.1.0"},
             "engines": [],
             "presets": [],
+            "keyframe_presets": [],
             "features": {"upscaler": False},
             "upscale_targets": ["hd720", "fhd1080", "qhd1440", "uhd2160"],
             "ffmpeg": False,
@@ -520,6 +521,7 @@ def test_me_describes_a_video_director_preset_with_its_modes_fields_and_director
                         "text_encoder": {"type": "model", "required": True, "multi": False},
                         "fps": {"type": "slider", "required": False, "multi": False},
                     },
+                    "options": [],
                 }
             },
             "video_director": WAN_DIRECTOR,
@@ -604,7 +606,7 @@ def test_me_lists_the_presets_of_the_signed_in_user(app, client, make_user, stor
 
     client.get(ME_URL)
 
-    assert catalog.asked == ["user-9"]
+    assert catalog.asked and set(catalog.asked) == {"user-9"}
 
 
 def test_me_lists_no_preset_and_logs_when_the_presets_cannot_be_read(client, store, no_container, catalog, caplog):
@@ -865,6 +867,66 @@ def test_me_gives_h3_its_three_profiles_and_its_locked_frame_rate(client, store,
     assert (preset["fps"], preset["fps_locked"]) == (24, True)
     assert preset["resolutions"] == [{"value": "1344x768", "label": "1344x768"}]
     assert preset["limits"] == {"default_duration": 5, "default_fps": 24, "max_duration": 15}
+
+
+def _spec(type, **details):
+    return {"type": type, "required": False, "default": None, "options": [], "recommendations": [], "label": None, "group": [], "audience": "simple", "hidden": False, "gate": None, "limits": {}, "reactions": [], "bound": False, **details}
+
+
+def test_me_lists_the_options_a_project_may_set_in_each_mode_the_director_runs(client, store, no_container, catalog):
+    catalog.presets = [_h3()]
+    speed = [{"label": "Quality (24 steps)", "value": "quality"}, {"label": "Turbo", "value": "turbo"}]
+    reaction = {"when": {"field": "speed_profile", "equals": "turbo"}, "then": {"set_value": 4}}
+    catalog.fields[(presets.MINIMAX_H3, "video")] = {
+        "speed_profile": _spec("select", label="Speed", default="quality", options=speed),
+        "seed": _spec("seed", default=-1),
+        "quantity": _spec("stepper", default=1),
+        "resolution": _spec("resolution", options=[_option("1344x768")]),
+        "steps": _spec("slider", label="Steps", default=24, group=["Advanced", "Sampling"], audience="advanced", limits={"min": 2, "max": 100, "step": 1}, reactions=[reaction]),
+        "model": _spec("model", required=True, recommendations=[{"sha256": "abc", "filename": "dit.safetensors"}, {"sha256": "def", "filename": None}]),
+        "hidden_tab_model": _spec("model", hidden=True),
+        "media": _spec("image"),
+    }
+    catalog.fields[(presets.MINIMAX_H3, "refs")] = {"steps": _spec("slider", default=20), "references": _spec("media")}
+    catalog.fields[(presets.MINIMAX_H3, "upscale")] = {"steps": _spec("slider", default=10)}
+
+    modes = client.get(ME_URL).json()["data"]["presets"][0]["modes"]
+
+    assert [option["name"] for option in modes["video"]["options"]] == ["speed_profile", "seed", "steps", "model"]
+    assert modes["video"]["options"][0] == {
+        "name": "speed_profile",
+        "type": "select",
+        "label": "Speed",
+        "group": [],
+        "audience": "simple",
+        "gate": None,
+        "default": "quality",
+        "required": False,
+        "limits": {},
+        "reactions": [],
+        "options": speed,
+    }
+    assert modes["video"]["options"][2]["reactions"] == [reaction]
+    assert (modes["video"]["options"][2]["group"], modes["video"]["options"][2]["limits"]) == (["Advanced", "Sampling"], {"min": 2, "max": 100, "step": 1})
+    assert modes["video"]["options"][3]["recommended"] == ["dit.safetensors"]
+    assert [option["name"] for option in modes["refs"]["options"]] == ["steps"]
+    assert "options" not in modes["upscale"]
+
+
+def test_me_leaves_the_model_of_a_cloud_preset_to_the_production_bar(client, store, no_container, catalog):
+    catalog.presets = [_openrouter_video()]
+    for mode in ("txt2video", "img2video"):
+        catalog.fields[(presets.OPENROUTER_VIDEO, mode)] = {
+            "seed": _spec("seed", default=-1),
+            "model": _spec("model", required=True),
+            "aspect_ratio": _spec("select"),
+            "generate_audio": _spec("checkbox", bound=True),
+        }
+
+    modes = client.get(ME_URL).json()["data"]["presets"][0]["modes"]
+
+    assert [option["name"] for option in modes["txt2video"]["options"]] == ["seed"]
+    assert [option["name"] for option in modes["img2video"]["options"]] == ["seed"]
 
 
 def test_me_offers_ref2va_only_with_the_h3_refs_mode(client, store, no_container, catalog):

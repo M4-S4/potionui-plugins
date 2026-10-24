@@ -3,7 +3,7 @@
 	import { formatNumber } from '../../i18n/index.svelte.js';
 	import { checkpoint } from '../../lib/state.svelte.js';
 
-	let { label, value, min = -Infinity, max = Infinity, step = 0.1, unit = '', onchange, disabled = false, hint = '' } = $props();
+	let { label, value, min = -Infinity, max = Infinity, step = 0.1, unit = '', onchange, disabled = false, hint = '', undoable = true } = $props();
 	const id = $props.id();
 	const digits = $derived(Number.isInteger(step) ? 0 : step < 0.1 ? 2 : 1);
 
@@ -15,7 +15,7 @@
 		const raw = String(e.currentTarget.value).replace(/\s/g, '').replace(',', '.').replace('−', '-');
 		const v = Math.min(max, Math.max(min, parseFloat(raw)));
 		if (Number.isFinite(v) && v !== value) {
-			checkpoint();
+			if (undoable) checkpoint();
 			onchange(v);
 		}
 		e.currentTarget.value = fmt(value);

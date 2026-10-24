@@ -3,7 +3,7 @@ import logging
 import secrets
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple
 
-from . import core_bridge, director, estimate, limits, models, notifications, projects, settings, soundtrack, takes
+from . import core_bridge, director, engine_options, estimate, limits, models, notifications, projects, settings, soundtrack, takes
 from .core_bridge import AccountType, GenerationNotFoundException, IdempotencyKeyConflict, User
 from .director import DirectorError, ShotPlan, note
 from .estimate import Evaluation
@@ -110,15 +110,14 @@ def _require_quota(owner: User, minutes: float) -> bool:
 
 
 async def with_sound(owner: User, project: Mapping[str, Any], plans: List[ShotPlan]) -> None:
-    """Cut and store the sound each plan sends, once per plan; Blocked when one cannot be."""
-    for plan in plans:
-        try:
-            await soundtrack.attach(owner, project, plan)
-        except soundtrack.SoundError as exc:
-            raise Blocked([note(exc.code, exc.message, shot_id=plan.shot_id)]) from None
+    """Cut and store the sound each plan sends, once per plan, the cuts of all of them at most soundtrack.MEASURES at a time; Blocked by the first that cannot be, in the order of the plans."""
+    try:
+        await soundtrack.attach_all(owner, project, plans)
+    except soundtrack.SoundError as exc:
+        raise Blocked([note(exc.code, exc.message, shot_id=exc.shot_id)]) from None
 
 
-def _create(
+def create(
     owner: User,
     project_id: str,
     plan: ShotPlan,
@@ -132,6 +131,7 @@ def _create(
     parent_take_id: Optional[str] = None,
     revision: Optional[int] = None,
 ) -> Dict[str, Any]:
+    """Store one take of a plan, with the GPU minutes it reserves."""
     size = models.parse_size(plan.resolution)
     take_id = core_bridge.generate_ulid()
     takes.create_take(
@@ -173,7 +173,7 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
     reserve = bool(quota["applies"]) and reserves(quota)
     await with_sound(owner, project, evaluation.plans.shots)
     created = [
-        _create(
+        create(
             owner,
             project["id"],
             plan,
@@ -274,7 +274,8 @@ def _notify(take: Mapping[str, Any], done: bool, message: str = "") -> None:
     name = _project_name(take["project_id"])
     quality = "final" if take.get("quality") == "final" else "draft"
     variant = f" {take['variant']}" if take.get("variant") else ""
-    text = f"{name}: the {quality} take{variant} is ready." if done else f"{name}: the {quality} take{variant} failed."
+    subject = f"start image candidate{variant}" if take.get("kind") == takes.KEYFRAME else f"{quality} take{variant}"
+    text = f"{name}: the {subject} is ready." if done else f"{name}: the {subject} failed."
     core_bridge.notify(
         user_id=take.get("user_id"),
         notification_type=notifications.TAKE_DONE if done else notifications.TAKE_FAILED,
@@ -309,13 +310,13 @@ def cancel_local(take: Mapping[str, Any]) -> bool:
     return True
 
 
-def _video(files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    videos = [
+def _output(files: List[Dict[str, Any]], kind: str) -> Optional[Dict[str, Any]]:
+    found = [
         item
         for item in files
-        if str(item.get("file_type") or "").lower() == "video" or str(item.get("mime_type") or "").lower().startswith("video/")
+        if str(item.get("file_type") or "").lower() == kind or str(item.get("mime_type") or "").lower().startswith(f"{kind}/")
     ]
-    return videos[0] if videos else None
+    return found[0] if found else None
 
 
 def _adjust(take: Mapping[str, Any], duration_ms: Optional[int]) -> None:
@@ -338,23 +339,25 @@ def state_duration_ms(state: Mapping[str, Any]) -> Optional[int]:
 
 
 def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -> bool:
-    """End a take whose generation completed: its video, thumbnail, calibration, quota adjustment and notification."""
+    """End a take whose generation completed: its video (its image for a start image candidate), thumbnail, calibration, quota adjustment and notification."""
     try:
         files = core_bridge.list_generation_files(user, take["generation_id"])
     except GenerationNotFoundException:
         return fail_take(take, "generation_not_found", "The generation of this take is no longer available.")
-    video = _video(files)
-    if video is None:
-        return fail_take(take, "no_output", "The generation finished without a video.")
+    keyframe = take.get("kind") == takes.KEYFRAME
+    output = _output(files, "image" if keyframe else "video")
+    if output is None:
+        missing = "an image" if keyframe else "a video"
+        return fail_take(take, "no_output", f"The generation finished without {missing}.")
     backend_id = state.get("backend_id") or take.get("backend_id")
     fields = {
-        "file_path": video.get("file_path"),
-        "file_id": None if video.get("id") is None else str(video["id"]),
-        "thumb_path": video.get("thumbnail_medium"),
-        "width": video.get("width") or take.get("width"),
-        "height": video.get("height") or take.get("height"),
-        "duration_s": video.get("duration_seconds") or take.get("duration_s"),
-        "fps": video.get("fps") or take.get("fps"),
+        "file_path": output.get("file_path"),
+        "file_id": None if output.get("id") is None else str(output["id"]),
+        "thumb_path": output.get("thumbnail_medium"),
+        "width": output.get("width") or take.get("width"),
+        "height": output.get("height") or take.get("height"),
+        "duration_s": output.get("duration_seconds") or take.get("duration_s"),
+        "fps": output.get("fps") or take.get("fps"),
         "backend_id": backend_id,
         "progress": 100.0,
         "step": None,
@@ -364,9 +367,9 @@ def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
     if not takes.settle(take["id"], "done", **fields):
         return False
     duration_ms = state_duration_ms(state)
-    seconds = float(take.get("duration_s") or 0)
+    seconds = 1.0 if keyframe else float(take.get("duration_s") or 0)
     if duration_ms and backend_id and seconds > 0 and take.get("resolution") and take.get("preset_id"):
-        takes.add_calibration(take["preset_id"], backend_id, take["resolution"], seconds, duration_ms)
+        takes.add_calibration(take["preset_id"], backend_id, take["resolution"], seconds * engine_options.take_scale(take), duration_ms)
     _adjust(take, duration_ms)
     takes.close_jobs(take["id"])
     _notify(take, done=True)
@@ -536,6 +539,8 @@ def _upscale_plan(owner: User, source: Mapping[str, Any], target: str) -> Tuple[
 
 async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, Any], method: str, target: str) -> Dict[str, Any]:
     """A final take of a finished take: upscaled by SeedVR2 or MiniMax-H3, or rendered again at the largest size."""
+    if source.get("kind") == takes.KEYFRAME:
+        raise TakeError(409, "keyframe_take", "A start image candidate has no final take: use it as a frame of its shot.")
     if source["status"] != "done":
         raise TakeError(409, "take_not_done", "Only a finished take can be made final.")
     plan, preset_id, native = (
@@ -543,7 +548,7 @@ async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, An
     )
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     await with_sound(owner, project, [plan])
-    take = _create(
+    take = create(
         owner,
         project["id"],
         plan,
@@ -575,7 +580,7 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         revision = director.shot_revision(project["doc"], source["shot_id"])
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     await with_sound(owner, project, [plan])
-    take = _create(
+    take = create(
         owner,
         project["id"],
         plan,

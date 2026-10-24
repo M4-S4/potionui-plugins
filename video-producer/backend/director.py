@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, models, presets, settings
+from . import bible, catalog, core_bridge, engine_options, models, presets, settings
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -261,6 +261,7 @@ class ShotPlan:
     backend_id: Optional[str] = None
     seed: Optional[int] = None
     audio: Optional[ShotAudio] = None
+    work_scale: float = 1.0
 
     @property
     def needs_audio(self) -> bool:
@@ -420,10 +421,23 @@ def reference_margin(doc: Mapping[str, Any]) -> float:
     return float(min(max(margin, 0.0), MAX_MARGIN))
 
 
-def reference_lanes(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
-    """The audio tracks checked as a reference for the generation that the shot does not leave out, in track order."""
+def item_reference(item: Mapping[str, Any], lane: Mapping[str, Any]) -> bool:
+    """Whether an audio item is sent as a reference for the generation: its own flag when it sets one, else its track's."""
+    flag = item.get("reference")
+    return flag if isinstance(flag, bool) else lane.get("reference") is True
+
+
+def reference_lanes(doc: Mapping[str, Any], shot_id: str, start: float, end: float) -> List[Dict[str, Any]]:
+    """The audio tracks a shot takes a reference sound from between start and end that it does not leave out, in track order: each track with an item sent as a reference there, and each track checked as a reference with nothing at all there, which the shot says is empty."""
     excluded = excluded_lanes(doc, shot_id)
-    return [lane for lane in doc.get("lanes") or [] if lane.get("reference") is True and lane.get("id") not in excluded]
+    lanes = []
+    for lane in doc.get("lanes") or []:
+        if lane.get("id") in excluded:
+            continue
+        heard = _items_under(doc, lane.get("id"), start, end)
+        if any(item_reference(item, lane) for item in heard) or (not heard and lane.get("reference") is True):
+            lanes.append(lane)
+    return lanes
 
 
 def _any_solo(doc: Mapping[str, Any]) -> bool:
@@ -436,8 +450,7 @@ def lane_heard(doc: Mapping[str, Any], lane: Mapping[str, Any]) -> bool:
     return not lane.get("mute") and (not _any_solo(doc) or lane.get("solo") is True)
 
 
-def lane_items(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
-    """The audio items of a track that play between start and end on the timeline, in time order."""
+def _items_under(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
     items = [
         item
         for item in doc.get("audio") or []
@@ -446,6 +459,12 @@ def lane_items(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -
         and _overlap(start, end, item) > EPSILON
     ]
     return sorted(items, key=lambda item: float(item.get("start") or 0))
+
+
+def lane_items(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
+    """The audio items of a track that play between start and end on the timeline and are sent as a reference, in time order."""
+    lane = next((lane for lane in doc.get("lanes") or [] if lane.get("id") == lane_id), {})
+    return [item for item in _items_under(doc, lane_id, start, end) if item_reference(item, lane)]
 
 
 def _asset_kind(doc: Mapping[str, Any], asset_id: Any) -> Optional[str]:
@@ -486,7 +505,7 @@ def _track_lanes(
     silent: Collection[str] = (),
 ) -> List[str]:
     lanes: List[str] = []
-    for lane in reference_lanes(doc, shot_id):
+    for lane in reference_lanes(doc, shot_id, start, end):
         if not lane_heard(doc, lane):
             warnings.append(
                 note("audio_track_muted", "The reference track is muted: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
@@ -525,9 +544,9 @@ def _audio_note(behavior: str, shot_id: str) -> Dict[str, Any]:
     return note("audio_ignored", "This engine ignores the sound of the shot.", shot_id=shot_id)
 
 
-def _ignored_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
+def _ignored_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
     shot_id = clip["id"]
-    if not audio_references(doc, shot_id) and not reference_lanes(doc, shot_id):
+    if not audio_references(doc, shot_id) and not reference_lanes(doc, shot_id, *mux_window(clip, seconds)):
         return None
     warnings.append(_audio_note(IGNORED, shot_id))
     return ShotAudio(behavior=IGNORED, start=0.0, end=0.0)
@@ -537,9 +556,9 @@ def mux_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, w
     """What a shot mixes onto its take: the part of its reference tracks under it and its audio references, or None when it has neither."""
     shot_id = clip["id"]
     references = [str(reference["assetId"]) for reference in audio_references(doc, shot_id)]
-    if not references and not reference_lanes(doc, shot_id):
-        return None
     start, end = mux_window(clip, seconds)
+    if not references and not reference_lanes(doc, shot_id, start, end):
+        return None
     lanes = _track_lanes(doc, shot_id, start, end, warnings)
     if not lanes and not references:
         return None
@@ -1197,6 +1216,21 @@ def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Op
     return form
 
 
+def project_options(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> engine_options.Chosen:
+    """The options the project sets for the preset of a plan, a warning naming those that no longer fit their field and are left out."""
+    chosen = engine_options.chosen(context.doc, context.preset.id, fields, context.preset.cloud)
+    if chosen.invalid:
+        warning = note(
+            "engine_option_invalid",
+            f"Some options of {context.preset.name} no longer fit their field and are left out: {', '.join(chosen.invalid)}.",
+            preset_id=context.preset.id,
+            fields=list(chosen.invalid),
+        )
+        if warning not in warnings:
+            warnings.append(warning)
+    return chosen
+
+
 def layout_preset(preset: Preset) -> bool:
     """True for a preset that runs the Layout-To-Render IC-LoRA: LTX-2.5, whose director mode takes IC-LoRA."""
     composition = catalog.director_of(preset.variables).get("modes") or {}
@@ -1317,6 +1351,8 @@ def _layout_plan(
     resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if audio is not None and audio.behavior == MUX else ())
     request["form_data"].update(resolved.values)
     request["form_data"].update(distilled_form(fields, resolved))
+    chosen = project_options(context, fields, warnings)
+    request["form_data"].update(chosen.values)
     return ShotPlan(
         shot_id=shot_id,
         profile=context.profile,
@@ -1327,9 +1363,11 @@ def _layout_plan(
         fps=fps,
         prompt_text=prompt,
         request=request,
-        missing_models=list(resolved.missing),
+        missing_models=[name for name in resolved.missing if name not in chosen.values],
         guides=[str(guide.get("id"))],
+        seed=chosen.seed,
         audio=audio,
+        work_scale=engine_options.work_scale(fields, request["form_data"]),
     )
 
 
@@ -1422,6 +1460,8 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
             warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
     resolved = models.resolve_models(preset.id, mode, director_mode, fields, (AUDIO_VAE,) if mixed else ())
     request["form_data"].update(resolved.values)
+    chosen = project_options(context, fields, warnings)
+    request["form_data"].update(chosen.values)
     return ShotPlan(
         shot_id=shot_id,
         profile=context.profile,
@@ -1432,16 +1472,18 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         fps=fps,
         prompt_text=prompt,
         request=request,
-        missing_models=list(resolved.missing),
+        missing_models=[name for name in resolved.missing if name not in chosen.values],
         guides=[str(guide.get("id")) for guide in guides],
+        seed=chosen.seed,
         audio=audio,
+        work_scale=engine_options.work_scale(fields, request["form_data"]),
     )
 
 
 def _shot_mux(context: _Context, clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
     if audio_behavior(context.preset, context.profile) == MUX:
         return mux_audio(context.doc, clip, seconds, warnings)
-    return _ignored_audio(context.doc, clip, warnings)
+    return _ignored_audio(context.doc, clip, seconds, warnings)
 
 
 def _applies(item: Mapping[str, Any], task: str) -> bool:
@@ -1549,6 +1591,8 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         form["resolution"] = resolution
     if "aspect_ratio" in fields and aspect is not None:
         form["aspect_ratio"] = str(aspect)
+    chosen = project_options(context, fields, warnings)
+    form.update(chosen.values)
     request = _request(preset.id, task, prompt, form)
     director_mode = "t2v"
     if first_media is not None:
@@ -1558,7 +1602,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     if director_mode == "t2v" and context.profile == FL2VA:
         warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
     _guide_warnings(doc, clip, warnings, refs=False)
-    audio = _ignored_audio(doc, clip, warnings)
+    audio = _ignored_audio(doc, clip, seconds, warnings)
     params = {"duration_s": seconds, "resolution": resolution, "aspect_ratio": aspect}
     return ShotPlan(
         shot_id=shot_id,
@@ -1573,6 +1617,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         model_id=model["id"],
         cloud_task=task,
         cloud_params={key: value for key, value in params.items() if value is not None},
+        seed=chosen.seed,
         audio=audio,
     )
 
@@ -1624,7 +1669,7 @@ def build_plans(
     overrides: bool = False,
     silent: Optional[Mapping[str, Collection[str]]] = None,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
+    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
     if production == RENDER_3D:
         return build_renders(doc, shot_ids, quality)
     silent = silent or {}
@@ -1643,7 +1688,7 @@ def build_plans(
     for key, ids, part in parts:
         _merge(plans, part, ids, own=key != project)
     for plan in plans.shots:
-        plan.seed = shot_engine(doc, plan.shot_id).get("seed")
+        plan.seed = shot_engine(doc, plan.shot_id).get("seed", plan.seed)
     order = {shot_id: index for index, shot_id in enumerate(dict.fromkeys(shot_ids))}
     plans.shots.sort(key=lambda plan: order[plan.shot_id])
     return plans

@@ -2,6 +2,7 @@ import { t } from '../i18n/index.svelte.js';
 import { ui, doc, asset, seqDuration, clamp, toast } from './state.svelte.js';
 import { mediaFailure } from './playable.js';
 import { clipSoundAudible, laneAudible } from './tracks.js';
+import { advance } from './player.js';
 
 export const meters = $state({ lanes: {}, video: 0, master: [0, 0] });
 
@@ -37,14 +38,9 @@ export function seek(t) {
 function frame(now) {
 	const dt = Math.min(0.5, (now - last) / 1000);
 	last = now;
-	let t = ui.playhead + dt;
-	if (ui.loop && ui.range && t >= ui.range.out) t = ui.range.in;
-	const end = seqDuration();
-	if (t >= end) {
-		ui.playhead = end;
-		return pause();
-	}
-	ui.playhead = t;
+	const next = advance(ui.playhead, dt, { loop: ui.loop, range: ui.range, end: seqDuration() });
+	ui.playhead = next.t;
+	if (next.stop) return pause();
 	updateAudio();
 	if (ui.playing) raf = requestAnimationFrame(frame);
 }

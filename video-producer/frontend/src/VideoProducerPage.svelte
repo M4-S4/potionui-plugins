@@ -14,6 +14,7 @@
 	import { needsProbe, probeAsset } from './lib/importer.js';
 	import { dispose as disposePlayback } from './lib/playback.svelte.js';
 	import { handleKeydown } from './lib/commands.js';
+	import { isPlayer } from './lib/workspaces.js';
 	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
 	import { startAssistant } from './lib/assistant.svelte.js';
 	import { disposeScenes, pollScenes, scenesBusy } from './lib/scene.svelte.js';
@@ -28,6 +29,7 @@
 	import Modals from './components/modals/Modals.svelte';
 	import LeftPanel from './components/panels/LeftPanel.svelte';
 	import Viewer from './components/viewer/Viewer.svelte';
+	import PlayBar from './components/viewer/PlayBar.svelte';
 	import SceneViewer from './components/scene/SceneViewer.svelte';
 	import StoryboardView from './components/storyboard/StoryboardView.svelte';
 	import ReferenceBoard from './components/references/ReferenceBoard.svelte';
@@ -58,6 +60,8 @@
 	});
 	const refBoard = $derived(ui.workspace === 'director' && ui.dockTab === 'references' && !ui.preview && !ui.compare);
 	const center = $derived(ui.workspace === 'scene' ? 'scene' : ui.workspace === 'storyboard' ? 'story' : refBoard ? 'refs' : 'viewer');
+	const player = $derived(isPlayer(ui.workspace));
+	const columns = $derived(player ? 'minmax(0, 1fr)' : `${ui.sidebarOpen ? '300px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '304px' : '0px'}`);
 
 	$effect(() => {
 		ui.bottomView = ui.workspace === 'mixer' ? 'console' : 'timeline';
@@ -190,12 +194,12 @@
 			</div>
 		</div>
 	{:else}
-		<div class="grid min-h-0 flex-1 overflow-hidden" style="grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto auto">
+		<div class="grid min-h-0 flex-1 overflow-hidden" style="grid-template-columns: minmax(0, 1fr)" style:grid-template-rows={player ? 'auto auto minmax(0, 1fr) auto auto' : 'auto auto minmax(0, 1fr) auto auto auto'}>
 			<MenuBar />
 			<ProjectBar />
 
-			<main class="grid min-h-0 overflow-hidden border-t border-line" style:grid-template-columns={`${ui.sidebarOpen ? '300px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '304px' : '0px'}`}>
-				<LeftPanel />
+			<main class="grid min-h-0 overflow-hidden border-t border-line" style:grid-template-columns={columns}>
+				{#if !player}<LeftPanel />{/if}
 				{#key center}
 					<div class="grid min-h-0 min-w-0" in:fade={{ duration: ms(160) }}>
 						{#if center === 'scene'}
@@ -205,25 +209,29 @@
 						{:else if center === 'refs'}
 							<ReferenceBoard />
 						{:else}
-							<Viewer />
+							<Viewer {player} />
 						{/if}
 					</div>
 				{/key}
-				<Inspector />
+				{#if !player}<Inspector />{/if}
 			</main>
 
-			<div>
-				<Splitter />
-				<ProductionBar />
-			</div>
+			{#if player}
+				<PlayBar />
+			{:else}
+				<div>
+					<Splitter />
+					<ProductionBar />
+				</div>
 
-			<section class="min-h-0 overflow-hidden" style:height={`${ui[bottomKey()]}px`} aria-label={ui.bottomView === 'console' ? t('shell.layout.console') : t('shell.layout.timeline')}>
-				{#if ui.bottomView === 'console'}
-					<Console />
-				{:else}
-					<Timeline />
-				{/if}
-			</section>
+				<section class="min-h-0 overflow-hidden" style:height={`${ui[bottomKey()]}px`} aria-label={ui.bottomView === 'console' ? t('shell.layout.console') : t('shell.layout.timeline')}>
+					{#if ui.bottomView === 'console'}
+						<Console />
+					{:else}
+						<Timeline />
+					{/if}
+				</section>
+			{/if}
 
 			<StatusBar />
 		</div>
@@ -716,6 +724,63 @@
 		}
 		.vp-root .vp-splitter:hover .vp-splitter-grip {
 			background-color: rgb(var(--signal));
+		}
+
+		.vp-root .vp-playbar {
+			display: flex;
+			flex-direction: column;
+			gap: 0.25rem;
+			border-top: 1px solid rgb(var(--line));
+			background-color: rgb(var(--surface-1));
+			padding: 0.375rem 0.75rem 0.5rem;
+		}
+		.vp-root .vp-playbar-track {
+			position: relative;
+			height: 1.5rem;
+			cursor: pointer;
+			touch-action: none;
+		}
+		.vp-root .vp-playbar-rail {
+			position: absolute;
+			inset: 7px 0;
+			overflow: hidden;
+			border-radius: 2px;
+			background-color: rgb(var(--surface-3));
+		}
+		.vp-root .vp-playbar-played {
+			position: absolute;
+			inset: 0;
+		}
+		.vp-root .vp-playbar-shot {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			background-color: rgb(var(--viz-1) / 0.35);
+			box-shadow: inset 2px 0 0 rgb(var(--surface-1));
+		}
+		.vp-root .vp-playbar-current {
+			background-color: rgb(var(--viz-1) / 0.55);
+		}
+		.vp-root .vp-playbar-played .vp-playbar-shot {
+			background-color: rgb(var(--viz-1));
+		}
+		.vp-root .vp-playbar-range {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			border-inline: 1px solid rgb(var(--signal));
+			background-color: rgb(var(--signal) / 0.25);
+		}
+		.vp-root .vp-playbar-head {
+			pointer-events: none;
+			position: absolute;
+			top: 50%;
+			height: 0.875rem;
+			width: 0.875rem;
+			transform: translate(-50%, -50%);
+			border-radius: 9999px;
+			background-color: rgb(var(--fg));
+			box-shadow: var(--shadow-floating);
 		}
 
 		.vp-root .vp-tabs {

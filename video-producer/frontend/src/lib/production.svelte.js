@@ -2,13 +2,14 @@ import { formatNumber, t } from '../i18n/index.svelte.js';
 import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs, onRestore } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
-import { PROFILES, aggregate, canUpscale, engineOptions, isH3, isInFlight, migrateEngine, optionFor, presetProfiles, progressText, takeAsset } from './generation.js';
+import { PROFILES, aggregate, canUpscale, engineOptions, isH3, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
 import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
 import { finalsToSync, labelOf, marksOf, relabel, releasedLabel } from './labels.js';
 import { durationLimit, generationCounts, releaseOverrun } from './shots.js';
 import { effectiveEngine, projectQuality, shotEngineOf } from './engine.js';
-import { audioBehavior, shotSound } from './sound.js';
+import { CONDITION, audioBehavior, shotSound } from './sound.js';
+import { fieldTitle, presetFields } from './options.js';
 import { prioritized } from './queue.js';
 import { laneTitle } from './tracks.js';
 
@@ -120,15 +121,22 @@ export function shotEngineText(clip) {
 
 export function setProjectQuality(quality) {
 	const next = quality === 'final' ? 'final' : 'draft';
-	act(() => (doc.engine.quality = next));
+	if (doc.engine.quality !== next) act(() => (doc.engine.quality = next));
 	ui.production.quality = next;
 }
 
-export function openEngineSettings() {
-	ui.workspace = 'director';
-	ui.dockTab = 'direction';
-	ui.dockFocus = 'engine';
-	ui.modal = null;
+export function openEngineSettings(preset = null) {
+	ui.menuOpen = null;
+	ui.modal = { type: 'engine', preset: typeof preset === 'string' && preset ? preset : null };
+}
+
+export function soundGuides() {
+	return [{}, ...doc.clips].some((clip) => soundBehaviorOf(clip) === CONDITION);
+}
+
+function optionNames(presetId, names) {
+	const fields = presetFields(presetById(presetId));
+	return names.map((name) => fieldTitle(fields.find((f) => f.name === name) ?? { name })).join(', ');
 }
 
 export function openQueue() {
@@ -220,6 +228,7 @@ function baseNoteText(note) {
 	if (code === 'audio_cut_failed' || code === 'audio_store_failed') return t('generation.block.audioCut', { shot: shotName(data.shot_id) });
 	if (code === 'bible_label_missing') return t('generation.warn.bibleLabelMissing', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });
 	if (code === 'prompt_too_long') return t('generation.warn.promptTooLong', { shot: shotName(data.shot_id), tokens: data.tokens ?? '—', limit: data.limit ?? '—' });
+	if (code === 'engine_option_invalid') return t('generation.warn.optionInvalid', { engine: presetLabel(presetById(data.preset_id)) || engineOptionLabel(data.preset_id, null), fields: optionNames(data.preset_id, Array.isArray(data.fields) ? data.fields : []) });
 	return note?.message || code || '';
 }
 

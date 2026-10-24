@@ -104,7 +104,7 @@ def parse_order(body: Any) -> Order:
 
 
 def calibrated_ratio(preset_id: str, backend_id: Optional[str], resolution: Optional[str]) -> Tuple[Optional[float], int]:
-    """Seconds of work per second of video measured for a preset at a resolution, and how many measures back it."""
+    """Seconds of work per second of video measured for a preset at a resolution at the steps of its defaults, and how many measures back it."""
     if not resolution:
         return None, 0
     rows = [(seconds, duration_ms) for seconds, duration_ms in takes.calibration(preset_id, backend_id, resolution) if seconds > 0]
@@ -120,12 +120,13 @@ def take_minutes(seconds: float, ratio: Optional[float]) -> float:
 
 
 def plan_minutes(plan: ShotPlan, preset_id: str, backend_id: Optional[str] = None) -> float:
-    """The GPU minutes one take of a plan reserves."""
+    """The GPU minutes one take of a plan reserves, longer or shorter with the steps its options ask for."""
     ratio, _ = calibrated_ratio(preset_id, backend_id, plan.resolution)
-    return take_minutes(plan.seconds, ratio)
+    return take_minutes(plan.seconds * plan.work_scale, ratio)
 
 
-def _unknown_vram(backend_id: Optional[str] = None) -> Dict[str, Any]:
+def unknown_vram(backend_id: Optional[str] = None) -> Dict[str, Any]:
+    """The memory estimate of a run that could not be previewed."""
     return {
         "estimate_gb": None,
         "free_gb": None,
@@ -141,12 +142,13 @@ def _number(value: Any) -> Optional[float]:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
-async def _plan_vram(owner: User, plan: ShotPlan) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+async def plan_vram(owner: User, plan: ShotPlan) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """The memory one take of a plan needs against what its backend offers, with the warnings to show."""
     try:
         result = await core_bridge.preview_memory(owner, plan.request_for())
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not preview the memory of a take", exc_info=True)
-        return _unknown_vram(), [note("vram_unknown", "The memory a take needs could not be estimated.")]
+        return unknown_vram(), [note("vram_unknown", "The memory a take needs could not be estimated.")]
     estimate = _number((result.get("estimate") or {}).get("checkpoint_estimate_gb"))
     device = result.get("device") or {}
     free, total = _number(device.get("free_gb")), _number(device.get("total_gb"))
@@ -182,14 +184,14 @@ async def _plan_vram(owner: User, plan: ShotPlan) -> Tuple[Dict[str, Any], List[
 async def _vram(owner: User, plans: Plans) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """The memory of the most demanding local preset of the run, previewed once per preset, with the warnings of every preset."""
     if any(block["code"] == "missing_models" for block in plans.blocks):
-        return _unknown_vram(), []
+        return unknown_vram(), []
     firsts: Dict[str, ShotPlan] = {}
     for plan in plans.shots:
         if not plan.cloud:
             firsts.setdefault(plan.preset_id, plan)
     if not firsts:
-        return _unknown_vram(), []
-    results = [await _plan_vram(owner, plan) for plan in firsts.values()]
+        return unknown_vram(), []
+    results = [await plan_vram(owner, plan) for plan in firsts.values()]
     vram = max(results, key=lambda result: (result[0]["streams"], result[0]["estimate_gb"] or 0.0))[0]
     warnings: List[Dict[str, Any]] = []
     for _, found in results:
@@ -226,7 +228,8 @@ def quota_block(quota: Mapping[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _model_cost(caller: User, model_id: str, shots: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def model_cost(caller: User, model_id: str, shots: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """What some runs on a cloud model cost, for an administrator; None for anyone else."""
     try:
         result = core_bridge.estimate_cloud_cost(caller, model_id, shots)
     except PermissionError:
@@ -256,7 +259,7 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
             by_model.setdefault(plan.model_id, []).extend(
                 {"task": plan.cloud_task, "params": dict(plan.cloud_params)} for _ in range(counts.get(plan.shot_id, 1))
             )
-    costs = [cost for cost in (_model_cost(caller, model_id, shots) for model_id, shots in by_model.items()) if cost is not None]
+    costs = [cost for cost in (model_cost(caller, model_id, shots) for model_id, shots in by_model.items()) if cost is not None]
     if not costs:
         return None
     if len(costs) == 1:
@@ -267,7 +270,7 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
 
 
 async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order, project_id: str = "") -> Evaluation:
-    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape; the reference tracks a guided shot would send silent are left out."""
+    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape, the time and the minutes following the steps the options of each shot ask for; the reference tracks a guided shot would send silent are left out."""
     plans = await soundtrack.heard_plans(
         owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production, overrides=True
     )
@@ -280,8 +283,8 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
         ratio, count = calibrated_ratio(plan.preset_id, plan.backend_id or vram.get("backend_id"), plan.resolution)
         if index == 0:
             samples = count
-        minutes[plan.shot_id] = take_minutes(plan.seconds, ratio)
-        work = None if ratio is None or work is None else work + ratio * plan.seconds * counts[plan.shot_id]
+        minutes[plan.shot_id] = take_minutes(plan.seconds * plan.work_scale, ratio)
+        work = None if ratio is None or work is None else work + ratio * plan.seconds * plan.work_scale * counts[plan.shot_id]
     seconds = round(work, 1) if work is not None and plans.shots else None
     quota = _quota(owner, plans, minutes, counts)
     blocks = list(plans.blocks) + ([quota_block(quota)] if quota["blocks"] else [])

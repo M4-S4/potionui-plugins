@@ -16,7 +16,7 @@ const commands = calls.map((call, i) => {
 const bound = commands.filter((c) => c.spec);
 const specs = bound.map((c) => c.spec);
 const SYMBOL = /^[^a-z0-9\s]$/;
-const FIXED = ['delete', 'home', 'arrowleft', 'arrowright', 'shift+arrowleft', 'shift+arrowright'];
+const FIXED = ['delete', 'home', 'end', 'arrowleft', 'arrowright', 'shift+arrowleft', 'shift+arrowright'];
 
 const BROWSER = [
 	'mod+n',
@@ -62,8 +62,8 @@ function eventFor(spec, mac, flip = null) {
 	return { key: on.shift && key.length === 1 ? key.toUpperCase() : (named ?? key), code, ctrlKey: on.ctrl, metaKey: on.meta, altKey: on.alt, shiftKey: on.shift };
 }
 
-test('shortcuts: 33 commands carry a shortcut, each one different, and the others show none', () => {
-	assert.equal(commands.length, 98);
+test('shortcuts: 35 commands carry a shortcut, each one different, and the others show none', () => {
+	assert.equal(commands.length, 101);
 	assert.deepEqual(
 		bound.map((c) => c.id),
 		[
@@ -84,6 +84,8 @@ test('shortcuts: 33 commands carry a shortcut, each one different, and the other
 			'tool-range',
 			'tool-blade',
 			'blade',
+			'audio-slice',
+			'audio-join',
 			'trim-start',
 			'trim-end',
 			'in',
@@ -168,8 +170,8 @@ function names(locale) {
 }
 
 const GUIDE_FIXED = {
-	'user-guide.md': ['Esc', 'Delete', 'Left arrow', 'Right arrow', 'Home'],
-	'user-guide.fr.md': ['Échap', 'Suppr', 'Flèche gauche', 'Flèche droite', 'Home']
+	'user-guide.md': ['Esc', 'Delete', 'Left arrow', 'Right arrow', 'Home', 'End'],
+	'user-guide.fr.md': ['Échap', 'Suppr', 'Flèche gauche', 'Flèche droite', 'Home', 'Fin']
 };
 
 for (const [file, locale] of [
@@ -192,7 +194,7 @@ test('shortcuts: the two guides have the same section heading numbering and the 
 	assert.match(en.heading, /^## 16\. Keyboard shortcuts$/);
 	assert.match(fr.heading, /^## 16\. Raccourcis clavier$/);
 	assert.equal(en.rows.length, fr.rows.length);
-	const normal = (keys) => keys.replace(/Retour arrière/g, 'Backspace').replace(/Espace/g, 'Space').replace(/Échap/g, 'Esc').replace(/Suppr/g, 'Delete').replace(/Flèche gauche/g, 'Left arrow').replace(/Flèche droite/g, 'Right arrow');
+	const normal = (keys) => keys.replace(/Retour arrière/g, 'Backspace').replace(/Espace/g, 'Space').replace(/Échap/g, 'Esc').replace(/Suppr/g, 'Delete').replace(/Flèche gauche/g, 'Left arrow').replace(/Flèche droite/g, 'Right arrow').replace(/Fin/g, 'End');
 	assert.deepEqual(
 		fr.rows.map(([keys]) => normal(keys)),
 		en.rows.map(([keys]) => keys)

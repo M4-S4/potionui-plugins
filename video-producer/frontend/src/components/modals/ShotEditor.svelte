@@ -19,6 +19,7 @@
 	import SoundNote from '../shots/SoundNote.svelte';
 	import CastField from '../shots/CastField.svelte';
 	import ComposedPrompt from '../shots/ComposedPrompt.svelte';
+	import KeyframeCandidates from '../shots/KeyframeCandidates.svelte';
 
 	let { id, draft: kept = null, baseline: keptBaseline = null } = $props();
 
@@ -260,6 +261,7 @@
 					</div>
 					{#if sounding && behavior}<SoundNote {behavior} />{/if}
 				</section>
+				<KeyframeCandidates {clip} {draft} onaccept={(role, assetId) => (draft[role] = assetId)} />
 			</div>
 
 			<div class="space-y-4">

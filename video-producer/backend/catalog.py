@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List, Mapping, Optional
 
-from . import core_bridge, models, presets
+from . import core_bridge, engine_options, models, presets
 from .core_bridge import CLOUD_ENGINE, User
 
 logger = logging.getLogger("plugins.video-producer")
@@ -19,6 +19,8 @@ HYBRID_AV = "Hybrid AV"
 PROFILES = (FL2VA, REF2VA, HYBRID_AV)
 
 REFS_MODE = "refs"
+
+CLOUD_MODES = ("txt2video", "img2video")
 
 DEFAULT_FPS = 24
 
@@ -154,6 +156,18 @@ def profiles(preset_id: str, variables: Optional[Mapping[str, Any]], modes: List
     return [FL2VA, *([REF2VA] if REFS_MODE in modes else []), HYBRID_AV]
 
 
+def run_modes(preset_id: str, variables: Optional[Mapping[str, Any]], modes: List[str], engine: Optional[str]) -> List[str]:
+    """The preset modes the Video Director runs a preset in: its main mode, its References mode when it runs Ref2VA, and the text and image modes of a cloud preset."""
+    if not director_of(variables):
+        return []
+    wanted = [main_mode(variables, modes)]
+    if REF2VA in profiles(preset_id, variables, modes):
+        wanted.append(REFS_MODE)
+    if engine == CLOUD_ENGINE:
+        wanted.extend(CLOUD_MODES)
+    return [mode for mode in dict.fromkeys(wanted) if mode in modes]
+
+
 def _fields(mode: Any) -> Dict[str, Any]:
     forms = mode.forms or {}
     fields = forms.get(mode.default_form)
@@ -193,6 +207,8 @@ def _preset(description: Any, upscaler: bool, cloud_backends: List[Dict[str, Any
     director = director_of(variables)
     main = main_mode(variables, modes) if director else None
     fields = models.form_fields(description.id, main) if main else {}
+    run = run_modes(description.id, variables, modes, description.engine)
+    cloud = description.engine == CLOUD_ENGINE
     driver = _driver(description.id)
     return {
         "id": description.id,
@@ -202,7 +218,15 @@ def _preset(description: Any, upscaler: bool, cloud_backends: List[Dict[str, Any
         "requires": description.requires,
         "profile": memory_profile(variables),
         "modes": {
-            name: {"default_form": mode.default_form, "fields": _fields(mode)}
+            name: {
+                "default_form": mode.default_form,
+                "fields": _fields(mode),
+                **(
+                    {"options": engine_options.editable_fields(fields if name == main else models.form_fields(description.id, name), cloud)}
+                    if name in run
+                    else {}
+                ),
+            }
             for name, mode in (description.modes or {}).items()
         },
         VIDEO_DIRECTOR: variables.get(VIDEO_DIRECTOR),

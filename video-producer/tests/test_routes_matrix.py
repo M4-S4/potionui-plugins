@@ -7,7 +7,7 @@ from typing import Any, Callable, NamedTuple, Optional
 import pytest
 from fastapi.routing import APIRoute
 
-from backend import core_bridge, presets, settings, takes, tracker
+from backend import chain, core_bridge, presets, settings, takes, tracker
 from backend.api import router
 from backend.exports import jobs, video
 from backend.scene3d import files as scene_files
@@ -22,10 +22,13 @@ REFERENCE = PLUGIN_ROOT / "tests" / "fixtures" / "exports" / "reference-project.
 SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4}]
 ORDER = {"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.WAN}
 PROMPTS = {"shots": ["s1"], "preset_id": presets.WAN}
+EDIT_PRESET = "01M31Y6WNM07EHAXXCDV1QVJVX"
+KEYFRAMES = {"preset_id": EDIT_PRESET, "references": [{"asset_id": "still", "role": "setting"}]}
 TAKE_FIELDS = ("shot_id", "generation_id", "file_id", "file_path", "status", "quality", "kind", "chosen")
 LIVENESS = {"GET /health"}
 DOCUMENTED = re.compile(r"`(GET|POST|PUT|DELETE|PATCH) (/[^`?\s]*)")
 ANONYMOUS = "anonymous"
+END_SHOT = "01M5R0CLIP0000000000000002"
 
 
 def _shape(path: str) -> str:
@@ -86,6 +89,10 @@ class World:
         monkeypatch.setattr(core_bridge, "preset_driver", lambda preset_id: None)
         monkeypatch.setattr(core_bridge, "extract_frame", self._extract_frame)
         monkeypatch.setattr(core_bridge, "upload_item", self._upload_item)
+        monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, folder: Path(folder) / "source.mp4")
+        monkeypatch.setattr(core_bridge, "probe_video", lambda path: None)
+        monkeypatch.setattr(core_bridge, "save_user_media", self._save_user_media)
+        monkeypatch.setattr(chain, "run", self._run)
         monkeypatch.setattr(core_bridge, "resolve_media", self._resolve_as_owner(core.resolve_media))
         core.add_media({"kind": "library", "item_id": "item-1"}, "uploads/still.png", media_type="image")
         core.add_media({"kind": "library", "item_id": "item-user-1"}, "uploads/upload.png", media_type="image")
@@ -105,6 +112,14 @@ class World:
     @staticmethod
     async def _extract_frame(user, ref, at="last"):
         return {"value": "uploads/frame.png", "media_type": "image", "original_filename": "frame.png", "origin": None}
+
+    @staticmethod
+    async def _run(command):
+        Path(command[-1]).write_bytes(b"png")
+
+    @staticmethod
+    async def _save_user_media(user, path):
+        return {"value": "uploads/frame.png", "media_type": "image", "original_filename": Path(path).name, "origin": None}
 
     @staticmethod
     async def _assemble(command, total, on_progress=None, on_process=None, cwd=None, code="ffmpeg_failed"):
@@ -144,6 +159,17 @@ class World:
         if end:
             asyncio.run(tracker.Tracker().tick())
         return takes.get_take(take["id"])
+
+    def keyframes(self):
+        from src.plugin_api import FieldDescription, ModeDescription, PresetDescription
+
+        pictures = {"type": "image", "required": True, "default": None, "options": [], "recommendations": [], "multi": True, "max_items": 10}
+        form = {"source_image": FieldDescription(type="image", required=True, multi=True)}
+        self.core.descriptions[EDIT_PRESET] = PresetDescription(
+            id=EDIT_PRESET, name="Qwen-Image-2.1", modes={"edit": ModeDescription(default_form="custom", forms={"custom": form})}, engine="native"
+        )
+        self.core.fields[(EDIT_PRESET, "edit")] = {"source_image": pictures}
+        return KEYFRAMES
 
     def waiting(self):
         fields = {"project_id": self.pid, "shot_id": "s2", "user_id": "user-1", "quality": "draft", "kind": "render"}
@@ -303,6 +329,23 @@ ROUTES = {
         success=lambda w: Call(f"/projects/{w.pid}/queue", check=lambda r: _data(r)["slots"]["max"] == 2),
         denied=lambda w: Call(f"/projects/{w.pid}/queue", status=404, code="project_not_found", who="user-2"),
     ),
+    "GET /projects/{id}/shots/{shot}/keyframes": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes", check=lambda r: _data(r)["takes"] == []),
+        denied=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes", status=404, code="project_not_found", who="user-2"),
+    ),
+    "POST /projects/{id}/shots/{shot}/keyframes/estimate": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes/estimate", w.keyframes(), check=lambda r: _data(r)["blocks"] == []),
+        denied=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes/estimate", KEYFRAMES, 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes/estimate", {**KEYFRAMES, "count": 9}, 422, "invalid_request"),
+    ),
+    "POST /projects/{id}/shots/{shot}/keyframes": Route(
+        success=lambda w: Call(
+            f"/projects/{w.pid}/shots/s1/keyframes", w.keyframes(), 202,
+            check=lambda r: [take["kind"] for take in _data(r)["takes"]] == ["keyframe", "keyframe"],
+        ),
+        denied=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes", KEYFRAMES, 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/shots/s1/keyframes", {**KEYFRAMES, "role": "middle"}, 422, "invalid_request"),
+    ),
     "POST /projects/{id}/takes/{take}/label": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "candidate"}, check=lambda r: _data(r)["take"]["label"] == "candidate"),
         denied=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/label", {"label": "final"}, 404, "project_not_found", "user-2"),
@@ -383,6 +426,14 @@ ROUTES = {
         invalid=lambda w: Call(
             f"/projects/{w.pid}/shots/s2/seam-frame", {"source": {"take_id": w.done["id"], "at": -1}}, 422, "invalid_request"
         ),
+    ),
+    "POST /projects/{id}/shots/{shot}/end-frame": Route(
+        success=lambda w: Call(
+            f"/projects/{w.reference['id']}/shots/{END_SHOT}/end-frame",
+            check=lambda r: (_data(r)["source"]["at"], _data(r)["media"]["filename"]) == (4.6, "1-frame-4.6s.png"),
+        ),
+        denied=lambda w: Call(f"/projects/{w.reference['id']}/shots/{END_SHOT}/end-frame", status=404, code="project_not_found", who="user-2"),
+        invalid=lambda w: Call(f"/projects/{w.reference['id']}/shots/nope/end-frame", status=404, code="shot_not_found"),
     ),
     "POST /projects/{id}/scenes/from-image": Route(
         success=lambda w: Call(

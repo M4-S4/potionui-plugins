@@ -2,7 +2,7 @@ from typing import Any, Dict, NoReturn
 
 from fastapi import APIRouter, Body, Depends
 
-from . import access, catalog, generation, takes, tracker
+from . import access, catalog, generation, keyframes, takes, tracker
 from .core_bridge import User, get_current_active_user
 from .generation import Blocked, TakeError
 from .responses import fail, ok
@@ -18,6 +18,10 @@ def _object(body: Any) -> Dict[str, Any]:
     if not isinstance(body, dict):
         _invalid("The request body must be a JSON object.")
     return body
+
+
+def _keyframe_not_final() -> NoReturn:
+    fail(409, "keyframe_take", "A start image candidate cannot be final: use it as a frame of its shot.")
 
 
 def blocked(exc: Blocked) -> NoReturn:
@@ -47,6 +51,8 @@ def label_take(
         _invalid(f"label must be one of: {', '.join(takes.LABELS)}.")
     project = access.project_for(user, project_id)
     take = access.take_in(project, take_id)
+    if label == takes.FINAL and take["kind"] == takes.KEYFRAME:
+        _keyframe_not_final()
     if label == takes.FINAL and take["status"] != "done":
         fail(409, "take_not_done", "Only a finished take can be final.")
     return ok({"take": takes.public(takes.set_label(take_id, label))})
@@ -62,6 +68,8 @@ def choose_take(
         _invalid("chosen must be true or false.")
     project = access.project_for(user, project_id)
     take = access.take_in(project, take_id)
+    if chosen and take["kind"] == takes.KEYFRAME:
+        _keyframe_not_final()
     if chosen and take["status"] != "done":
         fail(409, "take_not_done", "Only a finished take can be kept.")
     return ok({"take": takes.public(takes.choose(take_id, chosen))})
@@ -131,10 +139,11 @@ async def cancel_take(take_id: str, user: User = Depends(get_current_active_user
 
 @router.post("/takes/{take_id}/retry", status_code=202)
 async def retry_take(take_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """Start a new take like a failed or cancelled one, with the same shot, seed, quality and preset."""
+    """Start a new take like a failed or cancelled one, with the same shot, seed, quality and preset; a start image candidate with the same request."""
     source, project = access.take_for(user, take_id)
+    again = keyframes.retry if source["kind"] == takes.KEYFRAME else generation.retry
     try:
-        take = await generation.retry(access.owner_of(user, project), project, source)
+        take = await again(access.owner_of(user, project), project, source)
     except Blocked as exc:
         blocked(exc)
     except TakeError as exc:

@@ -35,5 +35,19 @@
 	"prepareRender": "Placer les rendus 3D",
 	"count.takes.one": "{count} prise",
 	"count.takes.other": "{count} prises",
-	"engineSettings": "Réglages du moteur"
+	"engine.group": "Réglages du moteur de génération",
+	"profile.label": "Profil",
+	"profile.fl2va": "FL2VA : continuité entre les images de départ et d’arrivée.",
+	"profile.ref2va": "Ref2VA : préserver l’identité des références pendant l’action.",
+	"profile.hybrid": "Hybrid AV : la bande son, le rythme et le dialogue guident l’image.",
+	"margin.label": "Marge des pistes de référence",
+	"margin.short": "Marge",
+	"margin.unit": "s",
+	"margin.tip": "Secondes d’une piste de référence gardées avant et après le plan pour guider MiniMax H3. Une piste mixée sur la prise est toujours coupée au plan.",
+	"own.one": "{count} moteur propre",
+	"own.other": "{count} moteurs propres",
+	"own.tip": "Plans qui fixent leur propre moteur, profil, qualité ou graine dans leur éditeur de plan : ces réglages passent avant ceux du projet.",
+	"editEngine": "Modifier le moteur",
+	"editEngineTip": "Toutes les options de {engine}, gardées avec le projet",
+	"more": "Autres réglages du moteur"
 }

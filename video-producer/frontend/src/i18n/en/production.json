@@ -35,5 +35,19 @@
 	"prepareRender": "Place the 3D renders",
 	"count.takes.one": "{count} take",
 	"count.takes.other": "{count} takes",
-	"engineSettings": "Engine settings"
+	"engine.group": "Generation engine settings",
+	"profile.label": "Profile",
+	"profile.fl2va": "FL2VA: continuity between the start and end images.",
+	"profile.ref2va": "Ref2VA: keep the identity of the references during the action.",
+	"profile.hybrid": "Hybrid AV: the soundtrack, rhythm and dialogue drive the picture.",
+	"margin.label": "Margin of the reference tracks",
+	"margin.short": "Margin",
+	"margin.unit": "s",
+	"margin.tip": "Seconds of a reference track kept before and after the shot to guide MiniMax H3. A track mixed onto the take is always cut to the shot.",
+	"own.one": "{count} own engine",
+	"own.other": "{count} own engines",
+	"own.tip": "Shots that set their own engine, profile, quality or seed in their shot editor: those settings come before the project's.",
+	"editEngine": "Edit Engine",
+	"editEngineTip": "Every option of {engine}, kept with the project",
+	"more": "More engine settings"
 }

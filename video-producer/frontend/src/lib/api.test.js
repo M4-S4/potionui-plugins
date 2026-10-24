@@ -195,6 +195,30 @@ test('client: export and seam frame routes, bodies and normalized payloads', asy
 	]);
 });
 
+test('client: the end frame of a shot, with where it was taken', async () => {
+	const media = { kind: 'library', item_id: 'i8', url: '/api/media/uploads/e.png', filename: '1-frame-4.2s.png', width: 832, height: 480, media_type: 'image' };
+	const api = hostApi([
+		{ success: true, data: { media, source: { shotId: 's1', takeId: 't1', assetId: 'gen-t1', at: 4.2 } } },
+		{ success: true, data: { media, source: { shotId: 's1', takeId: null, assetId: 'imp', at: 'end' } } },
+		{ success: true, data: { media } },
+		httpError(409, { detail: { success: false, error: 'no_media', message: 'none' } })
+	]);
+	const client = createClient(api);
+	assert.deepEqual((await client.endFrame('p1', 's1')).data, {
+		media: { itemId: 'i8', url: '/api/media/uploads/e.png', filename: '1-frame-4.2s.png', width: 832, height: 480 },
+		source: { shotId: 's1', takeId: 't1', assetId: 'gen-t1', at: 4.2 }
+	});
+	assert.deepEqual((await client.endFrame('p1', 's1')).data.source, { shotId: 's1', takeId: null, assetId: 'imp', at: null });
+	assert.equal((await client.endFrame('p1', 's1')).error.code, 'invalid_response');
+	assert.equal((await client.endFrame('p1', 's 1')).error.code, 'no_media');
+	assert.deepEqual(api.calls.map(([method, path]) => [method, path]), [
+		['POST', '/projects/p1/shots/s1/end-frame'],
+		['POST', '/projects/p1/shots/s1/end-frame'],
+		['POST', '/projects/p1/shots/s1/end-frame'],
+		['POST', '/projects/p1/shots/s%201/end-frame']
+	]);
+});
+
 test('downloadFrom: the host download first, its HTTP errors normalized', async () => {
 	const asked = [];
 	const ok = await downloadFrom({ download: async (path, name) => asked.push([path, name]) }, '/projects/p1/exports/edl', 'Aube.edl', () => assert.fail('no fallback'));
