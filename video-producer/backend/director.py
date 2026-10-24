@@ -2,7 +2,7 @@ import copy
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from . import catalog, core_bridge, models, presets, settings
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
@@ -298,6 +298,14 @@ class ShotPlan:
 
 
 @dataclass(frozen=True)
+class TrackCut:
+    shot_id: str
+    lane_id: str
+    start: float
+    end: float
+
+
+@dataclass(frozen=True)
 class SentReference:
     value: str
     kind: str
@@ -329,6 +337,7 @@ class Plans:
     renders: List[Dict[str, Any]] = field(default_factory=list)
     blocks: List[Dict[str, Any]] = field(default_factory=list)
     warnings: List[Dict[str, Any]] = field(default_factory=list)
+    track_cuts: List[TrackCut] = field(default_factory=list)
 
 
 def find_preset(user: User, preset_id: str, video: bool = True) -> Optional[Preset]:
@@ -469,7 +478,12 @@ def audio_behavior(preset: Preset, profile: Optional[str]) -> str:
 
 
 def _track_lanes(
-    doc: Mapping[str, Any], shot_id: str, start: float, end: float, warnings: List[Dict[str, Any]]
+    doc: Mapping[str, Any],
+    shot_id: str,
+    start: float,
+    end: float,
+    warnings: List[Dict[str, Any]],
+    silent: Collection[str] = (),
 ) -> List[str]:
     lanes: List[str] = []
     for lane in reference_lanes(doc, shot_id):
@@ -480,6 +494,10 @@ def _track_lanes(
         elif not lane_items(doc, lane["id"], start, end):
             warnings.append(
                 note("audio_track_empty", "The reference track has no sound under the shot: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
+            )
+        elif lane["id"] in silent:
+            warnings.append(
+                note("audio_track_silent", "The reference track is silent under the shot: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
             )
         else:
             lanes.append(str(lane["id"]))
@@ -1093,7 +1111,9 @@ class _Context:
     draft_setting: str
     production: str = AI
     layout_lora: Optional[str] = None
+    silent: Mapping[str, Collection[str]] = field(default_factory=dict)
     fields: Dict[str, models.Fields] = field(default_factory=dict)
+    cuts: List[TrackCut] = field(default_factory=list)
 
     def mode_fields(self, mode: str) -> models.Fields:
         if mode not in self.fields:
@@ -1279,7 +1299,8 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     audio: Optional[ShotAudio] = None
     if context.profile == REF2VA:
         window = condition_window(doc, clip, seconds)
-        tracks = _track_lanes(doc, shot_id, *window, warnings)
+        tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
+        context.cuts.extend(TrackCut(shot_id, lane_id, *window) for lane_id in tracks)
         sent = reference_media(context.user, doc, shot_id, fresh_guides(doc, clip), tracks)
         if not sent:
             raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
@@ -1525,6 +1546,7 @@ def _engine_of(
 def _merge(plans: Plans, part: Plans, shot_ids: Sequence[str], own: bool) -> None:
     plans.shots.extend(part.shots)
     plans.renders.extend(part.renders)
+    plans.track_cuts.extend(part.track_cuts)
     for kind in ("blocks", "warnings"):
         target = getattr(plans, kind)
         for item in getattr(part, kind):
@@ -1545,20 +1567,22 @@ def build_plans(
     profile: Optional[str] = None,
     production: str = AI,
     overrides: bool = False,
+    silent: Optional[Mapping[str, Collection[str]]] = None,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots."""
+    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
     if production == RENDER_3D:
         return build_renders(doc, shot_ids, quality)
+    silent = silent or {}
     if not overrides:
-        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, production)
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, production, silent)
     project = (preset_id, quality, model_id, profile)
     groups: Dict[Tuple[str, str, Optional[str], Optional[str]], List[str]] = {}
     for shot_id in dict.fromkeys(shot_ids):
         if clip_of(doc, shot_id) is not None:
             groups.setdefault(_engine_of(doc, shot_id, *project, production), []).append(shot_id)
     if not groups:
-        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, production)
-    parts = [(key, ids, _build(user, doc, ids, *key, production)) for key, ids in groups.items()]
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, production, silent)
+    parts = [(key, ids, _build(user, doc, ids, *key, production, silent)) for key, ids in groups.items()]
     main = next((part for key, _, part in parts if key == project), parts[0][2])
     plans = Plans(preset=main.preset, model=main.model, quality=quality, profile=main.profile, production=production)
     for key, ids, part in parts:
@@ -1579,6 +1603,7 @@ def _build(
     model_id: Optional[str],
     profile: Optional[str],
     production: str,
+    silent: Mapping[str, Collection[str]],
 ) -> Plans:
     if production == RENDER_3D_AI:
         profile = REF2VA
@@ -1636,7 +1661,9 @@ def _build(
         draft_setting=str(settings.get_setting("draft_resolution")),
         production=production,
         layout_lora=lora,
+        silent=silent,
     )
+    plans.track_cuts = context.cuts
     missing: List[str] = []
     for clip in clips:
         try:

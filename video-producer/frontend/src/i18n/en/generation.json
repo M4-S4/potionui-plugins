@@ -174,6 +174,7 @@
 	"warn.audioIgnored": "{shot}: its sound is ignored by this engine.",
 	"warn.audioTrackMuted": "{shot}: the reference track {lane} is muted, nothing of it is sent.",
 	"warn.audioTrackEmpty": "{shot}: the reference track {lane} has no sound under the shot, nothing of it is sent.",
+	"warn.audioTrackSilent": "{shot}: the reference track {lane} is silent under the shot, nothing of it is sent.",
 	"block.audioOnly": "{shot}: Ref2VA needs a picture or a video next to its sound.",
 	"block.audioFfmpeg": "ffmpeg is not available on this server: the sound of the shots cannot be cut.",
 	"block.audioSource": "{shot}: a sound it sends can no longer be read.",

@@ -26,7 +26,7 @@ async def estimate_takes(
     """What the takes of some shots would need in memory, time, GPU minutes and money, and what blocks them."""
     order = _order(body)
     project = access.project_for(user, project_id)
-    evaluation = await estimate.evaluate(user, access.owner_of(user, project), project["doc"], order)
+    evaluation = await estimate.evaluate(user, access.owner_of(user, project), project["doc"], order, project["id"])
     return ok(evaluation.payload)
 
 
@@ -38,7 +38,7 @@ async def generate_takes(
     order = _order(body)
     project = access.project_for(user, project_id)
     owner = access.owner_of(user, project)
-    evaluation = await estimate.evaluate(user, owner, project["doc"], order)
+    evaluation = await estimate.evaluate(user, owner, project["doc"], order, project["id"])
     try:
         created = await generation.start(owner, project, evaluation)
     except Blocked as exc:

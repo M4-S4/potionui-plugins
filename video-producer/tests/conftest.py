@@ -202,6 +202,14 @@ def tracker_reset():
     tracker.TRACKER.stop()
 
 
+@pytest.fixture(autouse=True)
+def peak_cache_reset():
+    yield
+    from backend import soundtrack
+
+    soundtrack._PEAKS.clear()
+
+
 WAN_ID = "01KX47WANVIDEO0000000000TV"
 H3_ID = "01KX47H3MINIMAX000000000VA"
 LTX25_ID = "01KX47LTX25VIDEO00000000TV"

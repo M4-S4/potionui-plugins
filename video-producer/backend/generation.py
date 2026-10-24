@@ -515,11 +515,11 @@ def _checked(plan: ShotPlan, preset_id: str, native: bool, owner: User, backend_
     return minutes if _require_quota(owner, minutes) else 0.0
 
 
-def _render_plan(
+async def _render_plan(
     owner: User, project: Mapping[str, Any], source: Mapping[str, Any], quality: str
 ) -> Tuple[ShotPlan, str, bool]:
-    plans = director.build_plans(
-        owner, project["doc"], [source["shot_id"]], source["preset_id"], quality, source.get("model_id"), source.get("profile")
+    plans = await soundtrack.heard_plans(
+        owner, project["id"], project["doc"], [source["shot_id"]], source["preset_id"], quality, source.get("model_id"), source.get("profile")
     )
     if plans.blocks:
         raise Blocked(plans.blocks)
@@ -539,7 +539,7 @@ async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, An
     if source["status"] != "done":
         raise TakeError(409, "take_not_done", "Only a finished take can be made final.")
     plan, preset_id, native = (
-        _upscale_plan(owner, source, target) if method == UPSCALE else _render_plan(owner, project, source, "final")
+        _upscale_plan(owner, source, target) if method == UPSCALE else await _render_plan(owner, project, source, "final")
     )
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     await with_sound(owner, project, [plan])
@@ -571,7 +571,7 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         plan, preset_id, native = _upscale_plan(owner, parent, director.upscale_target(source))
         revision = parent.get("shot_revision")
     else:
-        plan, preset_id, native = _render_plan(owner, project, source, source["quality"])
+        plan, preset_id, native = await _render_plan(owner, project, source, source["quality"])
         revision = director.shot_revision(project["doc"], source["shot_id"])
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     await with_sound(owner, project, [plan])
