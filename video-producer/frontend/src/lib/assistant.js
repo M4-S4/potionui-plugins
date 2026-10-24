@@ -42,6 +42,10 @@ export function shotsContext(doc, labelOf) {
 	});
 }
 
+export function productionContext(production, queued) {
+	return { target: production.target, mode: production.mode, quality: production.quality, state: production.state, progress: Math.round(production.progress), queue: queued };
+}
+
 export function issuesContext(issues) {
 	return issues.map((i) => ({ shotId: i.prompt?.shotId ?? null, level: i.level, text: i.text }));
 }
