@@ -3,6 +3,7 @@ import { LABELS, legacyLabel } from './labels.js';
 import { filenameFrom, lastSegment, normalizeJob, jobPath } from './exports.js';
 import { normalizeSeamMedia, requestBody } from './seam.js';
 import { normalizeFrameSource } from './chain.js';
+import { normalizeKeyframeEstimate, normalizeKeyframePreset } from './keyframes.js';
 
 const CODE_BY_STATUS = {
 	400: 'invalid_request',
@@ -274,6 +275,7 @@ export function normalizeMe(data) {
 		lastProjectId: text(me.last_project_id) || null,
 		engines: list(me.engines, normalizeEngine) ?? [],
 		presets: list(me.presets, normalizePreset) ?? [],
+		keyframePresets: list(me.keyframe_presets, normalizeKeyframePreset) ?? [],
 		features: { upscaler: features.upscaler === true },
 		upscaleTargets: strings(me.upscale_targets),
 		ffmpeg: typeof me.ffmpeg === 'boolean' ? me.ffmpeg : null,
@@ -297,7 +299,7 @@ export function normalizeTake(value) {
 		shotId: text(value.shot_id) || null,
 		generationId: idText(value.generation_id),
 		quality: value.quality === 'final' ? 'final' : 'draft',
-		kind: value.kind === 'upscale' ? 'upscale' : 'render',
+		kind: ['upscale', 'keyframe'].includes(value.kind) ? value.kind : 'render',
 		parentTakeId: text(value.parent_take_id) || null,
 		presetId: text(value.preset_id) || null,
 		mode: text(value.mode) || null,
@@ -512,6 +514,7 @@ const projectPath = (id) => `/projects/${encodeURIComponent(id)}`;
 const renderPath = (projectId, renderId) => `${projectPath(projectId)}/renders/${encodeURIComponent(renderId)}`;
 const takePath = (projectId, takeId) => `${projectPath(projectId)}/takes/${encodeURIComponent(takeId)}`;
 const pickTake = (data) => normalizeTake(data.take);
+const keyframePath = (projectId, shotId) => `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/keyframes`;
 
 export async function downloadFrom(api, path, filename, save) {
 	if (typeof api?.download === 'function') {
@@ -625,6 +628,15 @@ export function createClient(api, save) {
 		},
 		async queue(projectId) {
 			return mapped(await call(api, 'get', `${projectPath(projectId)}/queue`), normalizeQueue);
+		},
+		async keyframes(projectId, shotId) {
+			return mapped(await call(api, 'get', keyframePath(projectId, shotId)), (data) => list(data.takes, normalizeTake));
+		},
+		async estimateKeyframes(projectId, shotId, body, signal) {
+			return mapped(await call(api, 'post', `${keyframePath(projectId, shotId)}/estimate`, body, signal), normalizeKeyframeEstimate);
+		},
+		async generateKeyframes(projectId, shotId, body) {
+			return mapped(await call(api, 'post', keyframePath(projectId, shotId), body), (data) => list(data.takes, normalizeTake));
 		},
 		async exportVideo(projectId, body) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/exports/video`, body), (data) => normalizeJob(data.job));

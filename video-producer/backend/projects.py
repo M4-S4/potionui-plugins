@@ -281,6 +281,7 @@ ENGINE = _object(
         "naming": TEXT,
         "autoInsert": FLAG,
         "referenceMargin": {"type": "number", "minimum": 0, "maximum": MAX_REFERENCE_MARGIN},
+        "keyframes": _object({}, optional={"preset": ID, "model": REF}),
     },
 )
 

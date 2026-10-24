@@ -16,6 +16,8 @@ LABELS = ("draft", "rejected", "candidate", "final")
 
 DRAFT, REJECTED, CANDIDATE, FINAL = LABELS
 
+KEYFRAME = "keyframe"
+
 _FLAG_OF = {CANDIDATE: "keep", REJECTED: "reject"}
 
 CALIBRATION_ROWS = 20
@@ -108,6 +110,8 @@ PUBLIC = (
 _ACTIVE_SQL = "status IN ('queued', 'running')"
 
 _WAITING_SQL = "status = 'queued' AND generation_id IS NULL"
+
+_VIDEO_SQL = f"COALESCE(kind, '') != '{KEYFRAME}'"
 
 _QUEUE_ORDER = "priority DESC, created_at, id"
 
@@ -214,9 +218,19 @@ def take_for_generation(generation_id: str) -> Optional[Dict[str, Any]]:
     return _fetch_one(f"{_SELECT} WHERE generation_id = ? ORDER BY created_at DESC LIMIT 1", (generation_id,))
 
 
-def list_takes(project_id: str) -> List[Dict[str, Any]]:
-    """The takes of a project, oldest first."""
-    return _fetch_all(f"{_SELECT} WHERE project_id = ? ORDER BY created_at, id", (project_id,))
+def list_takes(project_id: str, keyframes: bool = False) -> List[Dict[str, Any]]:
+    """The video takes of a project, oldest first, with the start and end image candidates when keyframes is True."""
+    kinds = "" if keyframes else f" AND {_VIDEO_SQL}"
+    return _fetch_all(f"{_SELECT} WHERE project_id = ?{kinds} ORDER BY created_at, id", (project_id,))
+
+
+def list_keyframes(project_id: str, shot_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """The start and end image candidates of a project, or of one of its shots, oldest first."""
+    if shot_id is None:
+        return _fetch_all(f"{_SELECT} WHERE project_id = ? AND kind = ? ORDER BY created_at, id", (project_id, KEYFRAME))
+    return _fetch_all(
+        f"{_SELECT} WHERE project_id = ? AND shot_id = ? AND kind = ? ORDER BY created_at, id", (project_id, shot_id, KEYFRAME)
+    )
 
 
 def list_active(project_id: Optional[str] = None) -> List[Dict[str, Any]]:
