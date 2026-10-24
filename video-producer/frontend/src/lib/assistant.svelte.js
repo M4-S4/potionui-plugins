@@ -6,7 +6,8 @@ import { bibleContext } from './bible.js';
 import { seams } from './continuity.svelte.js';
 import { chat } from './host.js';
 import { ulid } from './ulid.js';
-import { applyPrompts, issuesContext, promptChanges, promptPlan, proposalFrom, reviewCount, reviewFrom, seamsContext, shotsContext } from './assistant.js';
+import { flyingTakes } from './takes.svelte.js';
+import { applyPrompts, issuesContext, productionContext, promptChanges, promptPlan, proposalFrom, reviewCount, reviewFrom, seamsContext, shotsContext } from './assistant.js';
 
 export const review = $state({ current: null });
 
@@ -60,7 +61,6 @@ export function reviewFix(seam, issue) {
 }
 
 export function contextSnapshot() {
-	const p = ui.production;
 	return {
 		projectId: project.id,
 		projectVersion: project.version,
@@ -73,7 +73,7 @@ export function contextSnapshot() {
 		synopsis: doc.synopsis,
 		direction: $state.snapshot(doc.direction),
 		bible: bibleContext(doc),
-		production: { target: p.target, mode: p.mode, quality: p.quality, state: p.state, progress: Math.round(p.progress), queue: p.queue.length },
+		production: productionContext(ui.production, flyingTakes().length),
 		shots: shotsContext(doc, clipLabel),
 		issues: issuesContext(allIssues()),
 		seams: seamsContext(seams())

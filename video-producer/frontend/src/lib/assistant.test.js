@@ -9,6 +9,7 @@ import {
 	issuesContext,
 	promptChanges,
 	promptPlan,
+	productionContext,
 	proposalFrom,
 	reviewCount,
 	reviewFrom,
@@ -55,6 +56,12 @@ test('shotsContext: one entry per shot with its prompt bounded, its frames and i
 	assert.equal(shots[1].prompt.length, PROMPT_LIMIT);
 	assert.equal(shots[1].hasFirstFrame, false, 'a frame without an asset does not count');
 	assert.deepEqual([shots[2].promptId, shots[2].prompt, shots[2].hasFirstFrame, shots[2].hasLastFrame, shots[2].take], [null, '', false, false, null]);
+});
+
+test('productionContext counts the takes in flight, the production state having no queue of its own', () => {
+	const production = { target: 'clip', mode: 'ai', state: 'ready', progress: 41.6, running: 0, step: '', lastCount: 0, quality: 'draft' };
+	assert.deepEqual(productionContext(production, 3), { target: 'clip', mode: 'ai', quality: 'draft', state: 'ready', progress: 42, queue: 3 });
+	assert.equal(productionContext(production, 0).queue, 0);
 });
 
 test('issuesContext and seamsContext keep only what the backend reads', () => {
