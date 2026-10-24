@@ -53,8 +53,11 @@ def _codes(warnings):
     return [item["code"] for item in warnings]
 
 
+COMPOSER_CODES = ("bible_label_missing", "prompt_too_long", "reference_prompt_changed", "reference_prompt_ignored")
+
+
 def _composer(warnings):
-    return [item for item in warnings if item["code"] in ("bible_label_missing", "prompt_too_long")]
+    return [item for item in warnings if item["code"] in COMPOSER_CODES]
 
 
 def _sections(prompt):
@@ -349,7 +352,17 @@ def test_the_prompts_route_composes_the_unsaved_document_it_is_given(core, clien
 
     assert stored.status_code == 200
     assert stored.json()["data"] == {
-        "prompts": [{"shot_id": "s1", "preset_id": presets.WAN, "profile": "FL2VA", "engine": "wan", "prompt": WALK, "warnings": [NO_FRAME]}],
+        "prompts": [
+            {
+                "shot_id": "s1",
+                "preset_id": presets.WAN,
+                "profile": "FL2VA",
+                "engine": "wan",
+                "prompt": WALK,
+                "reference": {"layout": "cast", "composed": {"cast": ""}, "sent": {"cast": ""}, "overridden": False, "changed": False, "ignored": False},
+                "warnings": [NO_FRAME],
+            }
+        ],
         "blocks": [],
     }
     (item,) = unsaved.json()["data"]["prompts"]
@@ -444,3 +457,164 @@ def test_the_assistant_reads_the_bible_and_the_cast_of_each_shot():
     assert 'prompt: "She walks."; cast: the red-haired woman, the harbour at dawn' in block
     assert "No label" not in block
     assert "Bible" not in build_context({"video_producer": {**page, "bible": {}}}, None, "user-1")
+
+
+def _replace(doc, layout, parts, base):
+    doc["clips"][0]["referencePrompt"] = {"layout": layout, "parts": dict(parts), "base": dict(base)}
+    return doc
+
+
+CAST_TEXT = f"{WOMAN_LINE}\n{HARBOUR_LINE}"
+
+
+def test_wan_reports_the_part_made_from_the_cast_and_sends_a_replacement_as_it_is_in_its_place(core, make_doc):
+    core.use_wan()
+    composed, _ = _plan(core, _doc(make_doc, direction={"univers": "A fishing village."}), presets.WAN)
+    doc = _replace(_doc(make_doc, direction={"univers": "A fishing village."}), "cast", {"cast": "A tall woman, red hair"}, {"cast": CAST_TEXT})
+
+    plan, warnings = _plan(core, doc, presets.WAN)
+
+    assert composed.reference.summary() == {
+        "layout": "cast",
+        "composed": {"cast": CAST_TEXT},
+        "sent": {"cast": CAST_TEXT},
+        "overridden": False,
+        "changed": False,
+        "ignored": False,
+    }
+    assert plan.prompt_text == "A tall woman, red hair\nThe red-haired woman walks along the quay.\nA fishing village."
+    assert plan.request["form_data"]["video_director"]["segments"][0]["prompt"] == plan.prompt_text
+    assert (plan.reference.overridden, plan.reference.changed, plan.reference.sent) == (True, False, {"cast": "A tall woman, red hair"})
+    assert _composer(warnings) == []
+
+
+def test_ltx_sends_a_replaced_cast_after_the_action_in_its_paragraph(core, make_doc):
+    core.use_ltx25()
+    composed = " ".join([WOMAN_LINE, HARBOUR_LINE])
+    doc = _replace(_doc(make_doc, direction={"palette": "Cold blues"}), "cast", {"cast": "She wears a navy raincoat"}, {"cast": composed})
+
+    plan, _ = _plan(core, doc, presets.LTX_2_5)
+
+    assert plan.reference.composed == {"cast": composed}
+    assert plan.prompt_text == f"{WALK} She wears a navy raincoat Cold blues."
+
+
+def test_h3_takes_replaced_subject_definitions_even_without_a_cast_and_drops_an_emptied_one(core, make_doc):
+    core.use_h3()
+    added = _replace(_doc(make_doc, cast=None), "subjects", {"subject_definitions": "<Subject 1> is a woman in a navy raincoat."}, {"subject_definitions": ""})
+    emptied = _replace(_doc(make_doc, cast={"characters": ["c-woman"]}), "subjects", {"subject_definitions": ""}, {"subject_definitions": WOMAN_SUBJECT})
+
+    first, warnings = _plan(core, added, presets.MINIMAX_H3)
+    second, _ = _plan(core, emptied, presets.MINIMAX_H3)
+
+    assert first.prompt_text == f"subject_definitions: <Subject 1> is a woman in a navy raincoat.\n\n{WALK}"
+    assert _composer(warnings) == []
+    assert second.prompt_text == WALK
+    assert second.reference.composed == {"subject_definitions": WOMAN_SUBJECT}
+
+
+def test_ref2va_replaces_its_definitions_retention_lines_and_citations_and_keeps_the_rest(core, make_doc):
+    core.use_h3()
+    references = [{"id": "r1", "assetId": "hero", "space": "identite", "scope": {"type": "global"}}]
+    doc = _doc(make_doc, cast={"place": "p-harbour"}, assets=[_hero(core)], references=references, direction={"mode": "Ref2VA"})
+    composed, _ = _plan(core, copy.deepcopy(doc), presets.MINIMAX_H3)
+    parts = {
+        "subject_definitions": "<Subject 1> is the daughter of the fisherman in <Picture 1>.",
+        "retention_analysis": "<Subject 1> (appears in [Shot 1]): fully_preserved - keeps her face.",
+        "citations": "<Subject 1> walks in the mist.",
+    }
+
+    plan, warnings = _plan(core, _replace(doc, "refs", parts, composed.reference.composed), presets.MINIMAX_H3)
+    sections, before = _sections(plan.prompt_text), _sections(composed.prompt_text)
+
+    assert composed.reference.composed == {
+        "subject_definitions": "<Subject 1> is the character shown in <Picture 1>. <Subject 2> is the setting, the harbour at dawn: Wet cobblestones, moored boats, low mist.",
+        "retention_analysis": "<Subject 1> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.",
+        "citations": "<Subject 1> appears in the shot. The shot takes place in <Subject 2>.",
+    }
+    assert sections["subject_definitions"] == parts["subject_definitions"]
+    assert sections["retention_analysis"] == parts["retention_analysis"]
+    assert sections["detailed_description"] == f"[Shot 1] {WALK} <Subject 1> walks in the mist."
+    kept = ("summary", "overall_soundscape", "non_diegetic_music")
+    assert {name: sections[name] for name in kept} == {name: before[name] for name in kept}
+    assert plan.request["form_data"]["references"] == ["uploads/hero.png"]
+    assert _composer(warnings) == []
+
+
+def test_a_replacement_says_when_the_composed_part_changed_since_and_is_still_sent(core, make_doc):
+    core.use_wan()
+    doc = _replace(_doc(make_doc), "cast", {"cast": "My own words."}, {"cast": WOMAN_LINE})
+
+    plan, warnings = _plan(core, doc, presets.WAN)
+
+    assert plan.prompt_text.startswith("My own words.\n")
+    assert plan.reference.changed is True
+    assert _composer(warnings) == [
+        {
+            "code": "reference_prompt_changed",
+            "message": "The references or the cast of the shot changed since it replaced the part of its prompt made from them: its own text is still sent.",
+            "data": {"shot_id": "s1"},
+        }
+    ]
+
+
+def test_a_replacement_written_for_another_engine_is_not_sent(core, make_doc):
+    core.use_wan()
+    doc = _replace(_doc(make_doc), "refs", {"subject_definitions": "x", "retention_analysis": "y", "citations": "z"}, {"subject_definitions": "x"})
+
+    plan, warnings = _plan(core, doc, presets.WAN)
+
+    assert plan.prompt_text == "\n".join([WOMAN_LINE, HARBOUR_LINE, WALK])
+    assert (plan.reference.overridden, plan.reference.ignored) == (False, True)
+    assert _composer(warnings) == [
+        {
+            "code": "reference_prompt_ignored",
+            "message": "The shot replaced the part of its prompt made from its references for another engine: the composed part is sent.",
+            "data": {"shot_id": "s1", "layout": "cast"},
+        }
+    ]
+
+
+def test_the_length_check_reads_the_prompt_that_is_really_sent(core, make_doc):
+    core.use_wan()
+    long = {**WOMAN, "text": "A woman with copper hair. " * 90}
+    shortened = _replace(_doc(make_doc, characters=(long,)), "cast", {"cast": "A woman."}, {"cast": "stale"})
+    lengthened = _replace(_doc(make_doc), "cast", {"cast": "A woman with copper hair. " * 90}, {"cast": CAST_TEXT})
+
+    _, short_warnings = _plan(core, shortened, presets.WAN)
+    _, long_warnings = _plan(core, lengthened, presets.WAN)
+
+    assert "prompt_too_long" not in [item["code"] for item in short_warnings]
+    assert "prompt_too_long" in [item["code"] for item in long_warnings]
+
+
+def test_the_schema_accepts_a_replaced_part_and_refuses_a_malformed_one(make_doc):
+    validate_doc(_replace(_doc(make_doc), "refs", {"subject_definitions": "x", "citations": "y"}, {}))
+    for bad in (
+        {"layout": "prose", "parts": {}, "base": {}},
+        {"layout": "cast", "parts": {"summary": "x"}, "base": {}},
+        {"layout": "cast", "parts": {"cast": 3}, "base": {}},
+        {"layout": "cast", "parts": {"cast": "x"}},
+    ):
+        doc = _doc(make_doc)
+        doc["clips"][0]["referencePrompt"] = bad
+        with pytest.raises(DocError):
+            validate_doc(doc)
+
+
+def test_the_prompts_route_reports_the_composed_and_the_sent_part_of_an_unsaved_replacement(core, client, make_doc, make_project):
+    core.use_wan()
+    project = make_project(doc=_doc(make_doc))
+    edited = _replace(_doc(make_doc), "cast", {"cast": "My own words."}, {"cast": CAST_TEXT})
+
+    (item,) = _post(client, project["id"], {"shots": ["s1"], "preset_id": presets.WAN, "doc": edited}).json()["data"]["prompts"]
+
+    assert item["reference"] == {
+        "layout": "cast",
+        "composed": {"cast": CAST_TEXT},
+        "sent": {"cast": "My own words."},
+        "overridden": True,
+        "changed": False,
+        "ignored": False,
+    }
+    assert item["prompt"] == f"My own words.\n{WALK}"

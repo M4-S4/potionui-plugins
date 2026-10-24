@@ -21,6 +21,23 @@ PLACES = "places"
 WAN_TOKENS = 512
 CHARS_PER_TOKEN = 4
 
+REFS_LAYOUT = "refs"
+SUBJECTS_LAYOUT = "subjects"
+CAST_LAYOUT = "cast"
+
+SUBJECT_DEFINITIONS = "subject_definitions"
+RETENTION = "retention_analysis"
+CITATIONS = "citations"
+CAST_PART = "cast"
+
+LAYOUTS: Dict[str, Tuple[str, ...]] = {
+    REFS_LAYOUT: (SUBJECT_DEFINITIONS, RETENTION, CITATIONS),
+    SUBJECTS_LAYOUT: (SUBJECT_DEFINITIONS,),
+    CAST_LAYOUT: (CAST_PART,),
+}
+
+PARTS = (SUBJECT_DEFINITIONS, RETENTION, CITATIONS, CAST_PART)
+
 TEXT: Dict[str, Dict[str, str]] = {
     "en": {
         "named": "{label}: {description}",
@@ -51,6 +68,46 @@ class Card:
     text: str
     props: str = ""
     references: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ReferencePart:
+    layout: str
+    composed: Dict[str, str]
+    sent: Dict[str, str]
+    overridden: bool = False
+    changed: bool = False
+    ignored: bool = False
+
+    def summary(self) -> Dict[str, Any]:
+        """The part as the prompts route reports it."""
+        return {
+            "layout": self.layout,
+            "composed": dict(self.composed),
+            "sent": dict(self.sent),
+            "overridden": self.overridden,
+            "changed": self.changed,
+            "ignored": self.ignored,
+        }
+
+
+def _part(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def reference_part(clip: Mapping[str, Any], layout: str, composed: Mapping[str, str]) -> ReferencePart:
+    """The part of a shot's prompt made from its references and its cast, in the layout of its engine: the composed text, or the text the shot sets for itself in that layout, sent as it is, with whether the composed text changed since it was replaced; a replacement written for another layout is not sent."""
+    override = clip.get("referencePrompt")
+    parts = override.get("parts") if isinstance(override, Mapping) else None
+    if not isinstance(parts, Mapping):
+        return ReferencePart(layout, dict(composed), dict(composed))
+    if override.get("layout") != layout:
+        return ReferencePart(layout, dict(composed), dict(composed), ignored=True)
+    base = override.get("base") if isinstance(override.get("base"), Mapping) else {}
+    names = LAYOUTS[layout]
+    sent = {name: _part(parts.get(name)) for name in names}
+    changed = any(_part(base.get(name)) != composed[name] for name in names)
+    return ReferencePart(layout, dict(composed), sent, overridden=True, changed=changed)
 
 
 def _clean(value: Any) -> str:

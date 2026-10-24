@@ -228,6 +228,8 @@ function baseNoteText(note) {
 	if (code === 'audio_cut_failed' || code === 'audio_store_failed') return t('generation.block.audioCut', { shot: shotName(data.shot_id) });
 	if (code === 'bible_label_missing') return t('generation.warn.bibleLabelMissing', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });
 	if (code === 'prompt_too_long') return t('generation.warn.promptTooLong', { shot: shotName(data.shot_id), tokens: data.tokens ?? '—', limit: data.limit ?? '—' });
+	if (code === 'reference_prompt_changed') return t('generation.warn.referenceChanged', { shot: shotName(data.shot_id) });
+	if (code === 'reference_prompt_ignored') return t('generation.warn.referenceIgnored', { shot: shotName(data.shot_id) });
 	if (code === 'engine_option_invalid') return t('generation.warn.optionInvalid', { engine: presetLabel(presetById(data.preset_id)) || engineOptionLabel(data.preset_id, null), fields: optionNames(data.preset_id, Array.isArray(data.fields) ? data.fields : []) });
 	return note?.message || code || '';
 }

@@ -19,6 +19,7 @@
 	import SoundNote from '../shots/SoundNote.svelte';
 	import CastField from '../shots/CastField.svelte';
 	import ComposedPrompt from '../shots/ComposedPrompt.svelte';
+	import ReferencePrompt from '../shots/ReferencePrompt.svelte';
 	import KeyframeCandidates from '../shots/KeyframeCandidates.svelte';
 
 	let { id, draft: kept = null, baseline: keptBaseline = null } = $props();
@@ -40,6 +41,7 @@
 	const baseline = initialBaseline();
 	let draft = $state(initialDraft());
 	let adding = $state(null);
+	let composed = $state(null);
 
 	const takes = $derived(clip ? takesOf(clip) : []);
 	const family = (space) => families.find((f) => f.id === space) ?? null;
@@ -155,7 +157,12 @@
 				<section class="space-y-1.5" aria-labelledby="{textId}-cast">
 					<span id="{textId}-cast" class="vp-section-title">{t('modals.shot.cast')}</span>
 					<CastField cast={draft.cast} text={draft.text} onchange={(cast) => (draft.cast = cast)} />
-					<ComposedPrompt {source} shotId={id} />
+				</section>
+
+				<section class="space-y-1.5" aria-labelledby="{textId}-reference">
+					<span id="{textId}-reference" class="vp-section-title">{t('modals.shot.reference.title')}</span>
+					<ReferencePrompt reference={composed?.reference ?? null} value={draft.referencePrompt ?? null} onchange={(value) => (draft.referencePrompt = value)} />
+					<ComposedPrompt {source} shotId={id} bind:current={composed} />
 				</section>
 
 				<section class="space-y-2" aria-labelledby="{textId}-refs">

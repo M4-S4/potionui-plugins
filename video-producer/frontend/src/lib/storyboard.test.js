@@ -187,7 +187,8 @@ test('shot editor: the draft reads the prompt, the frames, the references and th
 		own: [{ id: 'o1', name: 'Hat', space: 'identite', type: 'Objet', assetId: 'img2', role: 'Identité' }],
 		drafts: 2,
 		engine: {},
-		cast: { characters: [], place: null }
+		cast: { characters: [], place: null },
+		referencePrompt: null
 	});
 });
 

@@ -262,6 +262,7 @@ class ShotPlan:
     seed: Optional[int] = None
     audio: Optional[ShotAudio] = None
     work_scale: float = 1.0
+    reference: Optional[bible.ReferencePart] = None
 
     @property
     def needs_audio(self) -> bool:
@@ -617,25 +618,42 @@ def direction_lines(doc: Mapping[str, Any]) -> List[str]:
     return [text for text in (str(direction.get(name) or "").strip() for name in DIRECTION_FIELDS) if text]
 
 
-def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> str:
-    """The shot's instruction, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, re-announced after the action in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines."""
+def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> Tuple[str, bible.ReferencePart]:
+    """The shot's prompt and the part of it made from its cast: the instruction, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, re-announced after the action in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines. A part the shot replaces for itself goes as it is in the same place."""
     instruction = shot_instruction(doc, clip)
-    plain = [line for line in [instruction, *direction_lines(doc)] if line]
+    direction = direction_lines(doc)
+    plain = [line for line in [instruction, *direction] if line]
     characters, place = bible.cast_of(doc, clip)
-    cast = [*characters, *([place] if place is not None else [])]
-    if not cast:
-        return "\n".join(plain)
     language = _language(doc)
     if engine == bible.H3:
+        cast = [*characters, *([place] if place is not None else [])]
         subjects = " ".join(bible.definition(card, index, language) for index, card in enumerate(cast, 1))
-        return "\n\n".join(part for part in (f"subject_definitions: {subjects}", "\n".join(plain)) if part)
+        reference = bible.reference_part(clip, bible.SUBJECTS_LAYOUT, {bible.SUBJECT_DEFINITIONS: subjects})
+        part = reference.sent[bible.SUBJECT_DEFINITIONS]
+        return "\n\n".join(text for text in (f"subject_definitions: {part}" if part else "", "\n".join(plain)) if text), reference
     described = bible.prose(characters, place, language)
+    reference = bible.reference_part(clip, bible.CAST_LAYOUT, {bible.CAST_PART: (" " if engine == bible.LTX else "\n").join(described)})
+    part = reference.sent[bible.CAST_PART]
+    if not part:
+        return "\n".join(plain), reference
     if engine == bible.LTX:
-        return " ".join(_sentence(line) for line in [instruction, *described, *direction_lines(doc)] if line)
-    return "\n".join([*described, *plain])
+        return " ".join([*([_sentence(instruction)] if instruction else []), part, *(_sentence(line) for line in direction)]), reference
+    return "\n".join([part, *plain]), reference
 
 
-def _bible_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], prompt: str, engine: str, warnings: List[Dict[str, Any]]) -> None:
+def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> str:
+    """The prompt of a shot outside MiniMax-H3's reference mode, as compose_shot writes it."""
+    return compose_shot(doc, clip, engine)[0]
+
+
+def _bible_warnings(
+    doc: Mapping[str, Any],
+    clip: Mapping[str, Any],
+    prompt: str,
+    engine: str,
+    warnings: List[Dict[str, Any]],
+    reference: Optional[bible.ReferencePart] = None,
+) -> None:
     characters, _ = bible.cast_of(doc, clip)
     missing = bible.missing_labels(shot_instruction(doc, clip), characters)
     if missing:
@@ -656,6 +674,23 @@ def _bible_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], prompt: str
                 shot_id=clip["id"],
                 tokens=tokens,
                 limit=limit,
+            )
+        )
+    if reference is not None and reference.ignored:
+        warnings.append(
+            note(
+                "reference_prompt_ignored",
+                "The shot replaced the part of its prompt made from its references for another engine: the composed part is sent.",
+                shot_id=clip["id"],
+                layout=reference.layout,
+            )
+        )
+    elif reference is not None and reference.overridden and reference.changed:
+        warnings.append(
+            note(
+                "reference_prompt_changed",
+                "The references or the cast of the shot changed since it replaced the part of its prompt made from them: its own text is still sent.",
+                shot_id=clip["id"],
             )
         )
 
@@ -792,7 +827,12 @@ def camera_sentences(doc: Mapping[str, Any], guide: SentReference) -> List[str]:
 
 
 def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> str:
-    """The six-section document of MiniMax-H3's reference mode: what each reference is, the task, how much of each is kept, the shot itself with the move of its 3D guides spelled out, its sound and its score. A reference linked to a card of the bible is defined with the card's words; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line."""
+    """The six-section document of MiniMax-H3's reference mode, as compose_refs writes it."""
+    return compose_refs(doc, clip, sent, seconds)[0]
+
+
+def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> Tuple[str, bible.ReferencePart]:
+    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself with the move of its 3D guides spelled out, its sound and its score. A reference linked to a card of the bible is defined with the card's words; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places."""
     language = _language(doc)
     text = REFS_TEXT[language]
     definitions: List[str] = []
@@ -829,23 +869,30 @@ def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[
         if guides
         else text["summary"].format(seconds=seconds_text)
     )
-    shot = [shot_instruction(doc, clip), *citations]
+    reference = bible.reference_part(
+        clip,
+        bible.REFS_LAYOUT,
+        {bible.SUBJECT_DEFINITIONS: " ".join(definitions), bible.RETENTION: "\n".join(retention), bible.CITATIONS: " ".join(citations)},
+    )
+    parts = reference.sent
+    instruction = shot_instruction(doc, clip)
+    shot = [*([_sentence(instruction)] if instruction else []), parts[bible.CITATIONS]]
     for guide in guides:
-        shot += camera_sentences(doc, guide)
+        shot += [_sentence(line) for line in camera_sentences(doc, guide)]
     if guides:
         shot.append(text["override"])
     style = " ".join(_sentence(line) for line in direction_lines(doc))
-    body = " ".join(_sentence(line) for line in shot if line)
+    body = " ".join(line for line in shot if line)
     description = " ".join(part for part in (style, f"[Shot 1] {body}".rstrip()) if part)
     sections = [
-        ("subject_definitions", " ".join(definitions)),
+        ("subject_definitions", parts[bible.SUBJECT_DEFINITIONS]),
         ("summary", summary),
-        ("retention_analysis", "\n".join(retention)),
+        ("retention_analysis", parts[bible.RETENTION]),
         ("detailed_description", description),
         ("overall_soundscape", text["soundscape"]),
         ("non_diegetic_music", "N/A"),
     ]
-    return "\n\n".join(f"{name}: {content}" for name, content in sections)
+    return "\n\n".join(f"{name}: {content}" for name, content in sections), reference
 
 
 def aspect_of(doc: Mapping[str, Any]) -> float:
@@ -1329,8 +1376,8 @@ def _layout_plan(
             )
         )
     engine = bible.family(preset.id, preset.cloud)
-    prompt = shot_prompt(doc, clip, engine)
-    _bible_warnings(doc, clip, prompt, engine, warnings)
+    prompt, reference = compose_shot(doc, clip, engine)
+    _bible_warnings(doc, clip, prompt, engine, warnings, reference)
     audio = _shot_mux(context, clip, seconds, warnings)
     document = layout_document(prompt, fps, seconds, resolution, str(context.layout_lora), video["value"])
     request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
@@ -1368,6 +1415,7 @@ def _layout_plan(
         seed=chosen.seed,
         audio=audio,
         work_scale=engine_options.work_scale(fields, request["form_data"]),
+        reference=reference,
     )
 
 
@@ -1425,14 +1473,14 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
                 )
         if context.production == RENDER_3D_AI and not guides:
             warnings.append(_render_missing(clip))
-        prompt = refs_prompt(doc, clip, sent, seconds)
+        prompt, reference = compose_refs(doc, clip, sent, seconds)
     else:
         _guide_warnings(doc, clip, warnings, refs=layout)
         if layout:
             warnings.append(_render_missing(clip))
-        prompt = shot_prompt(doc, clip, engine)
+        prompt, reference = compose_shot(doc, clip, engine)
         audio = _shot_mux(context, clip, seconds, warnings)
-    _bible_warnings(doc, clip, prompt, engine, warnings)
+    _bible_warnings(doc, clip, prompt, engine, warnings, reference)
     capabilities = catalog.director_of(preset.variables)
     document = _document(prompt, fps, seconds, resolution)
     mixed = audio is not None and audio.behavior == MUX
@@ -1477,6 +1525,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         seed=chosen.seed,
         audio=audio,
         work_scale=engine_options.work_scale(fields, request["form_data"]),
+        reference=reference,
     )
 
 
@@ -1580,8 +1629,8 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
             note("duration_clamped", f"The shot is longer than the {longest:g} s the model allows.", shot_id=shot_id, max=longest)
         )
     fps = preset.fps
-    prompt = shot_prompt(doc, clip, bible.CLOUD)
-    _bible_warnings(doc, clip, prompt, bible.CLOUD, warnings)
+    prompt, reference = compose_shot(doc, clip, bible.CLOUD)
+    _bible_warnings(doc, clip, prompt, bible.CLOUD, warnings, reference)
     form: Dict[str, Any] = {
         "seed": -1,
         "model": f"{models.MODEL_REF}{model['id']}",
@@ -1619,6 +1668,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         cloud_params={key: value for key, value in params.items() if value is not None},
         seed=chosen.seed,
         audio=audio,
+        reference=reference,
     )
 
 

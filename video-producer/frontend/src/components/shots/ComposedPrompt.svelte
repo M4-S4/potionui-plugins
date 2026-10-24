@@ -5,10 +5,10 @@
 	import { project, getClient } from '../../lib/project.svelte.js';
 	import { currentEngine, engineOptionLabel, noteText } from '../../lib/production.svelte.js';
 
-	let { source, shotId } = $props();
+	let { source, shotId, current = $bindable(null) } = $props();
 
 	const DELAY = 400;
-	const LIVE_CHECKS = ['bible_label_missing'];
+	const ELSEWHERE = ['bible_label_missing', 'reference_prompt_changed', 'reference_prompt_ignored'];
 	const composed = $state({ loading: false, data: null, error: null });
 
 	const option = $derived(currentEngine());
@@ -18,8 +18,12 @@
 			: null
 	);
 	const item = $derived(composed.data?.prompts.find((p) => p.shotId === shotId) ?? null);
-	const warnings = $derived((item?.warnings ?? []).filter((w) => !LIVE_CHECKS.includes(w.code)));
+	const warnings = $derived((item?.warnings ?? []).filter((w) => !ELSEWHERE.includes(w.code)));
 	const blocks = $derived(item ? [] : (composed.data?.blocks ?? []));
+
+	$effect(() => {
+		current = item;
+	});
 
 	$effect(() => {
 		const payload = body;

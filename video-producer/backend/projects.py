@@ -7,6 +7,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import best_match
 
 from . import settings
+from .bible import LAYOUTS, PARTS
 from .catalog import PROFILES
 from .core_bridge import generate_ulid
 
@@ -126,6 +127,10 @@ PLACE = _object({"id": ID, "label": TEXT, "text": TEXT, "references": IDS})
 
 BIBLE = _object({"characters": _array(CHARACTER), "places": _array(PLACE)})
 
+PROMPT_PARTS = _object({}, optional={name: TEXT for name in PARTS})
+
+REFERENCE_PROMPT = _object({"layout": _enum(*LAYOUTS), "parts": PROMPT_PARTS, "base": PROMPT_PARTS})
+
 OPTION_LORA = _object({"model": ID, "strength": NUMBER})
 
 PRESET_OPTIONS = {
@@ -164,6 +169,7 @@ CLIP = _object(
         "referenceOverrides": REFERENCE_OVERRIDES,
         "engine": SHOT_ENGINE,
         "cast": CAST,
+        "referencePrompt": REFERENCE_PROMPT,
     },
 )
 

@@ -391,6 +391,23 @@ function normalizeNote(value) {
 }
 
 const ENGINE_FAMILIES = ['h3', 'ltx', 'wan', 'cloud', 'other'];
+const REFERENCE_LAYOUTS = ['refs', 'subjects', 'cast'];
+
+function promptParts(value) {
+	return Object.fromEntries(Object.entries(isObject(value) ? value : {}).filter(([, part]) => typeof part === 'string'));
+}
+
+function normalizeReference(value) {
+	if (!isObject(value) || !REFERENCE_LAYOUTS.includes(value.layout)) return null;
+	return {
+		layout: value.layout,
+		composed: promptParts(value.composed),
+		sent: promptParts(value.sent),
+		overridden: value.overridden === true,
+		changed: value.changed === true,
+		ignored: value.ignored === true
+	};
+}
 
 function normalizeComposed(value) {
 	if (!isObject(value) || !text(value.shot_id)) return null;
@@ -400,6 +417,7 @@ function normalizeComposed(value) {
 		profile: text(value.profile) || null,
 		engine: ENGINE_FAMILIES.includes(value.engine) ? value.engine : 'other',
 		prompt: text(value.prompt),
+		reference: normalizeReference(value.reference),
 		warnings: list(value.warnings, normalizeNote) ?? []
 	};
 }
