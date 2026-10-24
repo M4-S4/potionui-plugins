@@ -355,15 +355,18 @@ class _Inputs:
         return index
 
 
-def sound_chain(item: Mapping[str, Any], lane: Mapping[str, Any], origin: float = 0.0) -> List[str]:
-    """The filters that play an audio item at its place in a mix starting at origin seconds on the timeline: its part of the source, its gain with its track's volume and its fades, the part before origin cut off."""
+def sound_chain(item: Mapping[str, Any], lane: Mapping[str, Any], origin: float = 0.0, seek: float = 0.0) -> List[str]:
+    """The filters that play an audio item at its place in a mix starting at origin seconds on the timeline: its part of the source, its gain with its track's volume and its fades, the part before origin cut off. Seek is the time of the source its input was sought to: the filters then take the source from there, timed as the whole item."""
     dur = float(item["dur"])
     start = float(item.get("start") or 0)
     gain = float(item.get("gain") or 0) + float(lane.get("vol") or 0)
     skipped = max(origin - start, 0.0)
+    src_in = float(item.get("srcIn") or 0)
+    head = max(seek - src_in, 0.0) if seek else 0.0
+    trim = max(src_in - seek, 0.0) if seek else src_in
     return [
-        f"atrim=start={num(item.get('srcIn') or 0)}:duration={num(dur)}",
-        "asetpts=PTS-STARTPTS",
+        f"atrim=start={num(trim)}:duration={num(dur - head)}",
+        f"asetpts=PTS-STARTPTS+{num(head)}/TB" if head > EPSILON else "asetpts=PTS-STARTPTS",
         f"aresample={SAMPLE_RATE}",
         "aformat=sample_fmts=fltp:channel_layouts=stereo",
         f"volume={num(gain)}dB",

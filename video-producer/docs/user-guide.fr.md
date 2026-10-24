@@ -317,7 +317,7 @@ Ce qui avertit seulement, sans bloquer :
 - un plan plus long que ce que le moteur permet : « “Plan 2” dépasse la durée permise par ce moteur : il sera coupé à 15 s. » ;
 - un plan dont le son est mixé sur la prise : « “Plan 2” : le son du plan sera mixé sur la prise, pas utilisé comme guide. » (chapitre 13) ;
 - un plan dont le moteur ignore le son : « “Plan 2” : le son du plan est ignoré par ce moteur. » ;
-- une piste de référence qui n’envoie rien : « “Plan 2” : la piste de référence A2 · Musique est muette, rien n’en est envoyé. » ou « … n’a aucun son sous le plan, rien n’en est envoyé. »
+- une piste de référence qui n’envoie rien : « “Plan 2” : la piste de référence A2 · Musique est muette, rien n’en est envoyé. », « … n’a aucun son sous le plan, rien n’en est envoyé. » ou, avec MiniMax H3 en Ref2VA, « … est silencieuse sous le plan, rien n’en est envoyé. »
 
 Trois remarques n’apparaissent que dans l’infobulle de l’estimation : « La mémoire nécessaire n’a pas pu être estimée. », « Aucun temps mesuré pour ce moteur et cette résolution. » et, avec MiniMax H3 en Ref2VA, « “Plan 2” : le son du plan conditionne la génération. » Quand quelque chose bloque la génération, l’infobulle liste les avertissements sous les blocages. Une capture de l’infobulle, avec un plan dont le son est mixé sur la prise et une piste de référence muette sous lui, se trouve dans `docs/screenshots/estimate-sound.png`.
 
@@ -595,7 +595,7 @@ L’inspecteur d’un plan dit pourquoi son son n’est pas entendu : « La pist
 Deux choses envoient du son avec la génération d’un plan :
 
 - **Les références sonores** (Director IA › Références, famille **Son** ; ou **Ajouter un son** dans l’éditeur de plan) : une voix, une musique ou une ambiance, globale ou propre à un plan, qu’un plan peut exclure comme toute référence (chapitre 4).
-- **Les pistes de référence** : les pistes audio que vous cochez **Référence pour la génération**, avec l’interrupteur de l’inspecteur de la piste ou le bouton **Réf.** de sa tranche dans la console. Une petite icône d’étincelles à côté du nom de la piste, sur la timeline, les signale. À chaque génération, la portion de la piste sous le plan est découpée sur le serveur, ses clips mixés avec leur gain, leurs fondus et le volume de la piste, du silence là où rien ne joue, et envoyée avec le plan. Un plan peut écarter une piste avec **Exclure** dans son éditeur de plan. Une piste muette, ou écartée par un solo, n’envoie rien, pas plus qu’une piste sans clip sous le plan : l’estimation le dit.
+- **Les pistes de référence** : les pistes audio que vous cochez **Référence pour la génération**, avec l’interrupteur de l’inspecteur de la piste ou le bouton **Réf.** de sa tranche dans la console. Une petite icône d’étincelles à côté du nom de la piste, sur la timeline, les signale. À chaque génération, la portion de la piste sous le plan est découpée sur le serveur, ses clips mixés avec leur gain, leurs fondus et le volume de la piste, du silence là où rien ne joue, et envoyée avec le plan. Un plan peut écarter une piste avec **Exclure** dans son éditeur de plan. Une piste muette, ou écartée par un solo, n’envoie rien, pas plus qu’une piste sans clip sous le plan : l’estimation le dit. Avec MiniMax H3 en Ref2VA, une piste silencieuse sous le plan (son passage le plus fort à −60 dB ou moins) n’est pas envoyée non plus, et les autres sons prennent sa place.
 
 Ce que le moteur fait de ce son dépend de lui, et l’éditeur de plan, la carte du Storyboard et l’estimation disent lequel s’applique :
 

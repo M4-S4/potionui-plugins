@@ -213,6 +213,7 @@ function baseNoteText(note) {
 	if (code === 'audio_ignored') return t('generation.warn.audioIgnored', { shot: shotName(data.shot_id) });
 	if (code === 'audio_track_muted') return t('generation.warn.audioTrackMuted', { shot: shotName(data.shot_id), lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
 	if (code === 'audio_track_empty') return t('generation.warn.audioTrackEmpty', { shot: shotName(data.shot_id), lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
+	if (code === 'audio_track_silent') return t('generation.warn.audioTrackSilent', { shot: shotName(data.shot_id), lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
 	if (code === 'audio_only_references') return t('generation.block.audioOnly', { shot: shotName(data.shot_id) });
 	if (code === 'audio_ffmpeg_missing') return t('generation.block.audioFfmpeg');
 	if (code === 'audio_source_missing') return t('generation.block.audioSource', { shot: shotName(data.shot_id) });

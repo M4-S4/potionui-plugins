@@ -317,7 +317,7 @@ What only warns, without blocking:
 - a shot longer than the engine allows: "“Shot 2” is longer than this engine allows: it will be cut to 15 s.";
 - a shot whose sound is mixed onto the take: "“Shot 2”: its sound will be mixed onto the take, not used as a guide." (chapter 13);
 - a shot whose sound the engine ignores: "“Shot 2”: its sound is ignored by this engine.";
-- a reference track that sends nothing: "“Shot 2”: the reference track A2 · Music is muted, nothing of it is sent." or "… has no sound under the shot, nothing of it is sent."
+- a reference track that sends nothing: "“Shot 2”: the reference track A2 · Music is muted, nothing of it is sent.", "… has no sound under the shot, nothing of it is sent." or, with MiniMax H3 in Ref2VA, "… is silent under the shot, nothing of it is sent."
 
 Three notes appear only in the estimate tooltip: "Memory use could not be estimated.", "No time measured yet for this engine and resolution." and, with MiniMax H3 in Ref2VA, "“Shot 2”: its sound guides the generation." When something blocks the generation, the tooltip lists the warnings under the blocks. A capture of the tooltip, with a shot whose sound is mixed onto the take and a reference track silent under it, is in `docs/screenshots/estimate-sound.png`.
 
@@ -594,7 +594,7 @@ The Inspector of a shot says why its sound is not heard: "Track V1 is muted…" 
 Two things send sound with the generation of a shot:
 
 - **Sound references** (Director IA › References, family **Sound**; or **Add a sound** in the shot editor): a voice, a music or an ambience, global or for one shot, which a shot can exclude like any reference (chapter 4).
-- **Reference tracks**: the audio tracks you check **Reference for the generation**, with the switch of the Inspector of the track or the **Ref.** button of its strip in the console. A small sparkles icon next to the track name on the timeline marks them. At each generation, the part of the track under the shot is cut on the server, its clips mixed with their gain, their fades and the volume of the track, silence where nothing plays, and sent with the shot. A shot can leave a track out with **Exclude** in its shot editor. A muted track, or one soloed away, sends nothing, and neither does a track with no clip under the shot: the estimate says so.
+- **Reference tracks**: the audio tracks you check **Reference for the generation**, with the switch of the Inspector of the track or the **Ref.** button of its strip in the console. A small sparkles icon next to the track name on the timeline marks them. At each generation, the part of the track under the shot is cut on the server, its clips mixed with their gain, their fades and the volume of the track, silence where nothing plays, and sent with the shot. A shot can leave a track out with **Exclude** in its shot editor. A muted track, or one soloed away, sends nothing, and neither does a track with no clip under the shot: the estimate says so. With MiniMax H3 in Ref2VA, a track whose part under the shot is silent (its loudest moment at −60 dB or below) is not sent either, and the other sounds take its place.
 
 What the engine does with this sound depends on it, and the shot editor, the Storyboard card and the estimate say which:
 

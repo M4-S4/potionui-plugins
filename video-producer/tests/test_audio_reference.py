@@ -3,19 +3,32 @@ import copy
 import math
 import shutil
 import struct
+import subprocess
 import wave
 from pathlib import Path
 
 import pytest
 
-from backend import core_bridge, director, presets, soundtrack, takes
+from backend import core_bridge, director, estimate, presets, soundtrack, takes, tracker
+from backend.director import TrackCut
 from backend.projects import DocError, validate_doc
 
 BASE = "/api/plugins/video-producer"
 RATE = 48000
 HAS_FFMPEG = bool(shutil.which("ffmpeg"))
 SHOT = {"id": "s1", "start": 2, "dur": 3, "label": "Harbour"}
-LIBRARY = {"voice": "lib-voice", "music": "lib-music", "hero": "lib-hero", "rain": "lib-rain", "wind": "lib-wind"}
+LIBRARY = {
+    "voice": "lib-voice",
+    "music": "lib-music",
+    "hero": "lib-hero",
+    "rain": "lib-rain",
+    "wind": "lib-wind",
+    "stem": "lib-stem",
+    "choir": "lib-choir",
+    "step": "lib-step",
+}
+SILENT = {"code": "audio_track_silent", "message": "The reference track is silent under the shot: nothing of it is sent."}
+HERO = {"id": "r-hero", "assetId": "hero", "scope": {"type": "global"}}
 
 
 def _tone(path: Path, seconds: float, frequency: float = 440.0, amplitude: float = 0.5) -> Path:
@@ -29,6 +42,18 @@ def _tone(path: Path, seconds: float, frequency: float = 440.0, amplitude: float
             value = int(amplitude * 32767 * math.sin(2 * math.pi * frequency * index / RATE))
             data += struct.pack("<hh", value, value)
         handle.writeframes(bytes(data))
+    return path
+
+
+def _ffmpeg_wav(path: Path, seconds: float, expression: str) -> Path:
+    subprocess.run(
+        [
+            shutil.which("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", f"aevalsrc=exprs={expression}|{expression}:s={RATE}:d={seconds}",
+            "-c:a", "pcm_s16le", str(path),
+        ],
+        check=True,
+    )
     return path
 
 
@@ -97,6 +122,54 @@ def sounds(tmp_path, monkeypatch):
 
     monkeypatch.setattr(core_bridge, "local_media_file", local)
     return files
+
+
+@pytest.fixture
+def levels(tmp_path, monkeypatch):
+    folder = tmp_path / "levels"
+    folder.mkdir()
+    files = {
+        "voice": _ffmpeg_wav(folder / "voice.wav", 8.0, "0.5*sin(2*PI*440*t)"),
+        "stem": _ffmpeg_wav(folder / "stem.wav", 12.0, "if(gte(t\\,6)\\,0.3*sin(2*PI*550*t)\\,0)"),
+        "choir": _ffmpeg_wav(folder / "choir.wav", 8.0, "0.0018*sin(2*PI*330*t)"),
+        "step": _ffmpeg_wav(folder / "step.wav", 8.0, "if(between(t\\,1.5\\,1.51)\\,0.01*sin(2*PI*1000*t)\\,0)"),
+    }
+
+    def local(kind, value, target):
+        return files.get(Path(value).stem)
+
+    monkeypatch.setattr(core_bridge, "local_media_file", local)
+    return files
+
+
+@pytest.fixture
+def measured(monkeypatch):
+    commands = []
+    run = soundtrack.peak
+
+    async def counted(command):
+        commands.append(command)
+        return await run(command)
+
+    monkeypatch.setattr(soundtrack, "peak", counted)
+    return commands
+
+
+@pytest.fixture
+def slow_peaks(monkeypatch):
+    state = {"running": 0, "most": 0, "calls": []}
+
+    async def peak(command):
+        state["calls"].append(command)
+        state["running"] += 1
+        state["most"] = max(state["most"], state["running"])
+        await asyncio.sleep(0.05)
+        state["running"] -= 1
+        return -91.0
+
+    monkeypatch.setattr(soundtrack, "peak", peak)
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "ffmpeg")
+    return state
 
 
 @pytest.fixture
@@ -316,6 +389,108 @@ def test_a_track_soloed_away_is_not_heard_and_a_shot_can_leave_a_track_out(core,
     doc["clips"][0]["referenceOverrides"] = {"excludeLanes": ["A1"]}
     (plan,) = _plans(core, doc, presets.LTX_2_5).shots
     assert plan.audio.lanes == ["A2"]
+
+
+def test_a_guided_shot_leaves_out_a_track_found_silent_under_it_and_numbers_the_other_sounds_without_a_gap(core, make_doc):
+    core.use_h3()
+    _media(core)
+    doc = _doc(
+        make_doc,
+        [_item("a", "A1", 2, 3), _item("b", "A2", 2, 3, asset="music"), _item("c", "A3", 2, 3, asset="rain")],
+        reference_lanes=("A1", "A2", "A3"),
+        references=[HERO],
+        assets=("voice", "music", "rain", "hero"),
+        mode="Ref2VA",
+    )
+
+    plans = _plans(core, doc, presets.MINIMAX_H3, silent={"s1": ["A2"], "s2": ["A1"]})
+
+    (plan,) = plans.shots
+    assert plan.request["form_data"]["references"] == ["track:A1", "track:A3", "uploads/hero.png"]
+    assert plan.audio.lanes == ["A1", "A3"] and plan.summary()["audio"]["lanes"] == ["A1", "A3"]
+    assert "<Audio 1> is a reference sound for [Shot 1]." in plan.prompt_text
+    assert "<Audio 2> is a reference sound for [Shot 1]." in plan.prompt_text
+    assert "<Audio 3>" not in plan.prompt_text and "<Picture 1>" in plan.prompt_text
+    assert _sound(plans) == [
+        {**SILENT, "data": {"shot_id": "s1", "lane_id": "A2"}},
+        {"code": "audio_condition", "message": "The sound of the shot guides the generation.", "data": {"shot_id": "s1"}},
+    ]
+    assert plans.track_cuts == [TrackCut("s1", "A1", 2.0, 5.0), TrackCut("s1", "A3", 2.0, 5.0)]
+
+
+def test_a_silent_track_frees_its_place_for_the_next_sound_before_the_references_are_ranked(core, make_doc):
+    core.use_h3()
+    _media(core)
+    references = [
+        {"id": "s-voice", "assetId": "voice", "space": "son", "type": "Voix", "scope": {"type": "shot", "shotId": "s1"}},
+        {"id": "s-hero", "assetId": "hero", "scope": {"type": "shot", "shotId": "s1"}},
+        {"id": "g-rain", "assetId": "rain", "space": "son", "type": "Ambiance", "scope": {"type": "global"}},
+    ]
+    doc = _doc(
+        make_doc,
+        [_item("a", "A1", 2, 3, asset="music"), _item("b", "A2", 2, 3, asset="music")],
+        reference_lanes=("A1", "A2"),
+        references=references,
+        assets=("voice", "music", "hero", "rain"),
+        mode="Ref2VA",
+    )
+    assert _plans(core, doc, presets.MINIMAX_H3).shots[0].request["form_data"]["references"] == [
+        "uploads/voice.wav", "uploads/hero.png", "track:A1", "track:A2",
+    ]
+
+    (plan,) = _plans(core, doc, presets.MINIMAX_H3, silent={"s1": ["A1"]}).shots
+
+    assert plan.request["form_data"]["references"] == ["uploads/voice.wav", "uploads/hero.png", "track:A2", "uploads/rain.wav"]
+    assert (plan.audio.lanes, plan.audio.references) == (["A2"], ["voice", "rain"])
+    assert "<Audio 3> is a reference sound for [Shot 1]." in plan.prompt_text and "<Audio 4>" not in plan.prompt_text
+
+
+def test_the_tracks_a_guided_shot_would_cut_are_listed_past_the_limit_on_sounds_and_when_the_shot_is_blocked(core, make_doc):
+    core.use_h3()
+    _media(core)
+    references = [
+        {"id": name, "assetId": name, "space": "son", "type": "Voix", "scope": {"type": "shot", "shotId": "s1"}}
+        for name in ("voice", "music", "rain")
+    ] + [HERO]
+    full = _doc(make_doc, [_item("a", "A1", 2, 3)], references=references, assets=("voice", "music", "rain", "hero"), mode="Ref2VA")
+    full["engine"]["referenceMargin"] = 1
+    assert _plans(core, full, presets.MINIMAX_H3).track_cuts == [TrackCut("s1", "A1", 1.0, 6.0)]
+
+    only = _doc(make_doc, [_item("a", "A1", 2, 3), _item("b", "A2", 2, 3, asset="music")], reference_lanes=("A1", "A2"), mode="Ref2VA")
+    plans = _plans(core, only, presets.MINIMAX_H3)
+    assert [block["code"] for block in plans.blocks] == ["audio_only_references"]
+    assert plans.track_cuts == [TrackCut("s1", "A1", 2.0, 5.0), TrackCut("s1", "A2", 2.0, 5.0)]
+
+    some = _plans(core, only, presets.MINIMAX_H3, silent={"s1": ["A1"]})
+    assert [block["code"] for block in some.blocks] == ["audio_only_references"]
+    none = _plans(core, only, presets.MINIMAX_H3, silent={"s1": ["A1", "A2"]})
+    assert [block["code"] for block in none.blocks] == ["no_references"]
+    assert none.track_cuts == [] and _codes(none) == ["audio_track_silent", "audio_track_silent"]
+
+
+def test_a_guided_shot_whose_tracks_are_all_silent_goes_like_a_shot_without_sound(core, make_doc):
+    core.use_h3()
+    _media(core)
+    doc = _doc(make_doc, [_item("a", "A1", 2, 3)], references=[HERO], assets=("voice", "hero"), mode="Ref2VA")
+
+    plans = _plans(core, doc, presets.MINIMAX_H3, silent={"s1": ["A1"]})
+
+    (plan,) = plans.shots
+    assert plans.blocks == [] and plan.audio is None and not plan.needs_audio
+    assert plan.request["form_data"]["references"] == ["uploads/hero.png"]
+    assert "<Audio" not in plan.prompt_text
+    assert _sound(plans) == [{**SILENT, "data": {"shot_id": "s1", "lane_id": "A1"}}]
+
+
+def test_a_mixed_shot_takes_no_measure_and_mixes_its_tracks_as_before(core, make_doc):
+    core.use_ltx25()
+    _media(core)
+    doc = _doc(make_doc, [_item("a", "A1", 2, 3)])
+
+    plans = _plans(core, doc, presets.LTX_2_5, silent={"s1": ["A1"]})
+
+    (plan,) = plans.shots
+    assert plans.track_cuts == [] and plan.audio.lanes == ["A1"] and _codes(plans) == ["audio_mux"]
 
 
 def test_ltx_2_5_lays_the_sound_of_the_shot_onto_its_take_through_a_director_document(core, make_doc):
@@ -560,6 +735,261 @@ def test_a_sound_that_cannot_be_stored_blocks_the_generation_and_creates_no_take
     assert response.status_code == 409
     assert response.json()["detail"]["data"]["blocks"] == [{"code": "audio_store_failed", "message": "Upload quota reached", "data": {"shot_id": "s1"}}]
     assert core.submitted == []
+
+
+def test_the_peak_command_reads_the_cut_graph_at_the_rate_it_is_written_and_writes_nothing():
+    assert soundtrack.peak_command("ffmpeg", ["-i", "/v.wav"], "g[aout]", 3.5, 32000) == [
+        "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "info", "-nostats",
+        "-i", "/v.wav",
+        "-filter_complex", "g[aout];[aout]aresample=32000,volumedetect[peak]",
+        "-map", "[peak]",
+        "-t", "3.5",
+        "-f", "null", "-",
+    ]
+
+
+def test_the_measured_peaks_are_kept_for_the_cuts_last_used(monkeypatch):
+    monkeypatch.setattr(soundtrack, "PEAK_CACHE", 2)
+    soundtrack._remember(("user-1", "graph-0"), -0.0)
+    soundtrack._remember(("user-1", "graph-1"), -1.0)
+    assert soundtrack._recall(("user-1", "graph-0")) == -0.0
+    soundtrack._remember(("user-1", "graph-2"), -2.0)
+
+    assert soundtrack._PEAKS == {("user-1", "graph-0"): -0.0, ("user-1", "graph-2"): -2.0}
+    assert soundtrack._recall(("user-1", "graph-1")) is None
+
+
+def test_a_cut_deep_into_an_item_reads_its_source_from_a_whole_second_before_what_it_keeps(make_doc):
+    late = _item("late", "A1", 21.01, 400, srcIn=3.5, gain=-3, fadeIn=2, fadeOut=30)
+    trimmed = _item("trimmed", "A1", 21, 300, srcIn=100.25, fadeIn=1.5)
+    near = _item("near", "A1", 0, 30)
+    doc = _doc(make_doc, [late], A1={"vol": -2})
+
+    inputs, graph = soundtrack.mix_graph(doc, ["A1"], 380.37, 387.37, {"late": "/late.wav"})
+
+    assert inputs == ["-ss", "361.5", "-i", "/late.wav"]
+    assert graph.split(";")[1] == (
+        "[0:a]atrim=start=0:duration=42,asetpts=PTS-STARTPTS+358/TB,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+        "volume=-5dB,afade=t=in:st=0:d=2,afade=t=out:st=370:d=30,atrim=start=359.36,asetpts=PTS-STARTPTS,adelay=delays=0:all=1[m0]"
+    )
+    assert soundtrack.seek_point(trimmed, 21.0) == 99.25
+    assert soundtrack.sound_chain(trimmed, {}, 21.0, 99.25)[:2] == ["atrim=start=1:duration=300", "asetpts=PTS-STARTPTS"]
+    assert [soundtrack.seek_point(near, origin) for origin in (5.0, 10.99, 11.0)] == [0.0, 0.0, 10.0]
+    assert soundtrack.sound_chain(late, {"vol": -2}, 380.37) == soundtrack.sound_chain(late, {"vol": -2}, 380.37, 0.0)
+    assert soundtrack.sound_chain(late, {}, 0.0)[:2] == ["atrim=start=3.5:duration=400", "asetpts=PTS-STARTPTS"]
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+@pytest.mark.parametrize(
+    "suffix, codec",
+    [("wav", ["-c:a", "pcm_s16le"]), ("mp3", ["-c:a", "libmp3lame", "-q:a", "2"]), ("m4a", ["-c:a", "aac", "-b:a", "160k"])],
+    ids=["wav", "mp3-vbr", "aac"],
+)
+def test_a_cut_read_from_its_seek_point_is_the_very_cut_read_from_the_start_of_its_source(core, make_doc, tmp_path, monkeypatch, suffix, codec):
+    _media(core)
+    chirp = "0.3*sin(2*PI*(220+3*t)*t)+0.05*sin(2*PI*1234*t+sin(t))"
+    source = tmp_path / f"stem.{suffix}"
+    subprocess.run(
+        [shutil.which("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-f", "lavfi",
+         "-i", f"aevalsrc=exprs={chirp}|{chirp}:s=44100:d=70", *codec, str(source)],
+        check=True,
+    )
+    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, target: source)
+    doc = _doc(make_doc, [_item("late", "A1", 1.01, 66, srcIn=2.25, gain=-3, fadeIn=2, fadeOut=20)], A1={"vol": -2})
+    sources = soundtrack._Sources(core.users["user-1"], doc, "p-1", tmp_path)
+    ffmpeg = shutil.which("ffmpeg")
+    commands = []
+    assemble = soundtrack.assemble
+
+    async def recorded(command, *args, **kwargs):
+        commands.append(command)
+        return await assemble(command, *args, **kwargs)
+
+    monkeypatch.setattr(soundtrack, "assemble", recorded)
+
+    for start, end in ((40.37, 44.37), (55.0, 70.0)):
+        for rate in (soundtrack.H3_RATE, 48000):
+            sought = asyncio.run(soundtrack.cut(ffmpeg, sources, ["A1"], start, end, f"sought-{start}-{rate}", rate=rate))
+            monkeypatch.setattr(soundtrack, "SEEK_FROM", math.inf)
+            whole = asyncio.run(soundtrack.cut(ffmpeg, sources, ["A1"], start, end, f"whole-{start}-{rate}", rate=rate))
+            monkeypatch.setattr(soundtrack, "SEEK_FROM", 10.0)
+
+            assert "-ss" in commands[-2] and "-ss" not in commands[-1]
+            assert max(map(abs, _samples(sought, rate))) > 0.05
+            assert sought.read_bytes() == whole.read_bytes()
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_ffmpeg_reads_the_peak_of_a_track_cut_as_it_is_mixed_and_a_sparse_or_discreet_sound_is_not_silent(core, make_doc, tmp_path, levels, export_storage):
+    _media(core)
+    doc = _doc(
+        make_doc,
+        [
+            _item("v", "A1", 0, 8),
+            _item("s", "A2", 0, 12, asset="stem"),
+            _item("c", "A3", 0, 8, asset="choir"),
+            _item("p", "A4", 0, 8, asset="step"),
+            _item("q", "A1", 9, 8, gain=-30),
+        ],
+        reference_lanes=("A1", "A2", "A3", "A4"),
+        assets=("voice", "stem", "choir", "step"),
+        A1={"vol": -30},
+        A2={"vol": -2},
+        A3={"vol": 0},
+        A4={"vol": 0},
+    )
+    sources = soundtrack._Sources(core.users["user-1"], doc, "p-1", tmp_path)
+    ffmpeg = shutil.which("ffmpeg")
+
+    def level(lane, start, end):
+        return asyncio.run(soundtrack.track_peak(ffmpeg, sources, TrackCut("s1", lane, start, end)))
+
+    assert level("A1", 2, 5) == pytest.approx(-36.0, abs=0.3)
+    assert level("A1", 10, 13) == pytest.approx(-66.0, abs=0.5)
+    assert level("A2", 2, 5) <= -90
+    assert level("A2", 5, 8) == pytest.approx(-12.5, abs=0.3)
+    assert level("A3", 2, 5) == pytest.approx(-54.9, abs=0.3)
+    assert level("A4", 0, 3) == pytest.approx(-40.0, abs=0.5)
+
+    cuts = [TrackCut("s1", lane, start, end) for lane, start, end in (("A1", 2, 5), ("A1", 10, 13), ("A2", 2, 5), ("A2", 5, 8), ("A3", 2, 5), ("A4", 0, 3))]
+    silent = asyncio.run(soundtrack.silent_lanes(core.users["user-1"], "p-1", doc, [TrackCut(f"shot-{index}", cut.lane_id, cut.start, cut.end) for index, cut in enumerate(cuts)]))
+    assert silent == {"shot-1": ["A1"], "shot-2": ["A2"]}
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_the_estimate_measures_each_guided_track_once_leaves_out_the_silent_one_and_keeps_the_discreet_one(core, make_doc, levels, measured, export_storage):
+    core.use_h3()
+    _media(core)
+    user = core.users["user-1"]
+    doc = _doc(
+        make_doc,
+        [_item("v", "A1", 2, 3), _item("s", "A2", 0, 12, asset="stem"), _item("c", "A3", 2, 3, asset="choir")],
+        reference_lanes=("A1", "A2", "A3"),
+        references=[HERO],
+        assets=("voice", "stem", "choir", "hero"),
+        mode="Ref2VA",
+        A3={"vol": 0},
+    )
+    order = estimate.parse_order({"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.MINIMAX_H3})
+
+    evaluation = asyncio.run(estimate.evaluate(user, user, doc, order, "p-1"))
+
+    (plan,) = evaluation.plans.shots
+    assert plan.request["form_data"]["references"] == ["track:A1", "track:A3", "uploads/hero.png"]
+    assert evaluation.payload["shots"][0]["audio"] == {"behavior": "condition", "lanes": ["A1", "A3"], "references": 0}
+    assert {**SILENT, "data": {"shot_id": "s1", "lane_id": "A2"}} in evaluation.payload["warnings"]
+    assert "<Audio 2> is a reference sound for [Shot 1]." in plan.prompt_text and "<Audio 3>" not in plan.prompt_text
+    assert len(measured) == 3
+    work = export_storage / "video_producer" / "audio" / "user-1"
+    assert list(work.iterdir()) == []
+
+    shutil.rmtree(work)
+    again = asyncio.run(estimate.evaluate(user, user, doc, order, "p-1"))
+    assert again.payload["warnings"] == evaluation.payload["warnings"] and len(measured) == 3
+    assert not work.exists()
+
+    doc["audio"][2]["gain"] = -10
+    quieter = asyncio.run(estimate.evaluate(user, user, doc, order, "p-1"))
+    assert len(measured) == 4
+    assert quieter.plans.shots[0].request["form_data"]["references"] == ["track:A1", "uploads/hero.png"]
+    assert [warning["data"]["lane_id"] for warning in quieter.payload["warnings"] if warning["code"] == "audio_track_silent"] == ["A2", "A3"]
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_a_track_whose_cut_cannot_be_measured_is_kept_and_a_mixed_shot_measures_nothing(core, make_doc, levels, measured, monkeypatch, export_storage):
+    _media(core)
+    user = core.users["user-1"]
+    doc = _doc(make_doc, [_item("s", "A1", 0, 12, asset="stem")], references=[HERO], assets=("stem", "hero"), mode="Ref2VA")
+    cut = TrackCut("s1", "A1", 2.0, 5.0)
+    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, target: None)
+
+    assert asyncio.run(soundtrack.silent_lanes(user, "p-1", doc, [cut])) == {}
+    assert measured == []
+    assert asyncio.run(soundtrack.peak([shutil.which("ffmpeg"), "-hide_banner", "-i", str(export_storage / "gone.wav"), "-f", "null", "-"])) is None
+    measured.clear()
+
+    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, target: levels.get(Path(value).stem))
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: None)
+    assert asyncio.run(soundtrack.silent_lanes(user, "p-1", doc, [cut])) == {}
+
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: shutil.which("ffmpeg"))
+    core.use_ltx25()
+    doc["direction"]["mode"] = "FL2VA"
+    order = estimate.parse_order({"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.LTX_2_5})
+    evaluation = asyncio.run(estimate.evaluate(user, user, doc, order, "p-1"))
+    assert evaluation.plans.shots[0].audio.lanes == ["A1"] and measured == []
+    assert "audio_track_silent" not in [warning["code"] for warning in evaluation.payload["warnings"]]
+
+
+def test_overlapping_estimates_share_each_measure_and_at_most_four_run_at_a_time(core, make_doc, sounds, slow_peaks, export_storage):
+    _media(core)
+    user = core.users["user-1"]
+    doc = _doc(make_doc, [_item("v", "A1", 0, 8)], reference_lanes=("A1",))
+    cuts = [TrackCut(f"s{index}", "A1", index * 0.5, index * 0.5 + 3) for index in range(10)]
+
+    async def both():
+        return await asyncio.gather(*(soundtrack.silent_lanes(user, "p-1", doc, cuts) for _ in range(2)))
+
+    first, second = asyncio.run(both())
+
+    assert first == second == {f"s{index}": ["A1"] for index in range(10)}
+    assert len(slow_peaks["calls"]) == 10 and slow_peaks["most"] == soundtrack.MEASURES == 4
+    assert soundtrack._RUNNING == {} and list((export_storage / "video_producer" / "audio" / "user-1").iterdir()) == []
+
+
+def test_a_measure_goes_on_when_its_estimate_is_dropped_and_the_next_estimate_awaits_it(core, make_doc, sounds, slow_peaks, export_storage):
+    _media(core)
+    user = core.users["user-1"]
+    doc = _doc(make_doc, [_item("v", "A1", 0, 8)], reference_lanes=("A1",))
+    cuts = [TrackCut(f"s{index}", "A1", index * 0.5, index * 0.5 + 3) for index in range(6)]
+
+    async def dropped_then_again():
+        dropped = asyncio.ensure_future(soundtrack.silent_lanes(user, "p-1", doc, cuts))
+        while not slow_peaks["calls"]:
+            await asyncio.sleep(0.005)
+        dropped.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await dropped
+        running = len(soundtrack._RUNNING)
+        return running, await soundtrack.silent_lanes(user, "p-1", doc, cuts)
+
+    running, silent = asyncio.run(dropped_then_again())
+
+    assert running == 6 and silent == {f"s{index}": ["A1"] for index in range(6)}
+    assert len(slow_peaks["calls"]) == 6 and len(soundtrack._PEAKS) == 6
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_a_generation_and_its_retry_never_send_the_cut_of_a_silent_track(client, core, make_doc, make_project, levels, measured, stored, export_storage):
+    core.use_h3()
+    _media(core)
+    doc = _doc(
+        make_doc,
+        [_item("v", "A1", 2, 3), _item("s", "A2", 0, 12, asset="stem")],
+        reference_lanes=("A1", "A2"),
+        references=[HERO],
+        assets=("voice", "stem", "hero"),
+        mode="Ref2VA",
+    )
+    project = make_project(doc=doc)
+
+    response = client.post(f"{BASE}/projects/{project['id']}/generate", json={"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.MINIMAX_H3})
+
+    assert response.status_code == 202, response.text
+    (take,) = takes.list_takes(project["id"])
+    assert take["request"]["form_data"]["references"] == ["uploads/vp-sound-shot-01-a1.wav", "uploads/hero.png"]
+    assert "<Audio 1>" in take["prompt_text"] and "<Audio 2>" not in take["prompt_text"]
+    assert [path.name for path in stored] == ["vp-sound-shot-01-a1.wav"] and len(measured) == 2
+
+    soundtrack._PEAKS.clear()
+    core.fail(take["generation_id"])
+    asyncio.run(tracker.Tracker().tick())
+    retried = client.post(f"{BASE}/takes/{take['id']}/retry")
+
+    assert retried.status_code == 202, retried.text
+    again = takes.get_take(retried.json()["data"]["take"]["id"])
+    assert again["request"]["form_data"]["references"] == ["uploads/vp-sound-shot-01-a1.wav", "uploads/hero.png"]
+    assert [path.name for path in stored] == ["vp-sound-shot-01-a1.wav"] * 2 and len(measured) == 4
 
 
 def test_the_schema_takes_the_sound_space_a_reference_track_its_margin_and_the_tracks_a_shot_leaves_out(make_doc):

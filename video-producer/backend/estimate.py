@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import core_bridge, director, limits, takes
+from . import core_bridge, director, limits, soundtrack, takes
 from .core_bridge import AccountType, User
 from .director import Plans, ShotPlan, note
 
@@ -266,10 +266,10 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
     return {"total_usd": _total(costs) if known else None, "known": known, "message": message}
 
 
-async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order) -> Evaluation:
-    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape."""
-    plans = director.build_plans(
-        owner, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production, overrides=True
+async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order, project_id: str = "") -> Evaluation:
+    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape; the reference tracks a guided shot would send silent are left out."""
+    plans = await soundtrack.heard_plans(
+        owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production, overrides=True
     )
     vram, vram_warnings = await _vram(owner, plans)
     counts = {plan.shot_id: order.count(plan.shot_id) for plan in plans.shots}
