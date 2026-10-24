@@ -1,0 +1,41 @@
+id: "deepseek-provider"
+name: "DeepSeek"
+version: "0.1.0"
+description: "Use DeepSeek models for the assistant and every LLM feature. Adds a DeepSeek type to Admin → LLM / Assistant → Add configuration: paste a DeepSeek API key and pick deepseek-flash or deepseek-v4-pro."
+author: "M4-S4"
+license: "GPL-3.0"
+type: "backend-only"
+category: "backends"
+
+capabilities:
+  - "llm-provider"
+
+llm_providers:
+  - type: "deepseek"
+    label: "DeepSeek"
+    backend: "backend.client:DeepSeekClient"
+    default_base_url: "https://api.deepseek.com"
+
+settings:
+  - name: "thinking"
+    type: "select"
+    label: "Thinking"
+    description: "Auto lets DeepSeek reason before it answers when a request offers no tools (prompt enhancement, plain generation) and turns reasoning off as soon as tools are involved, because DeepSeek refuses tool conversations whose earlier reasoning is not sent back. Off never reasons."
+    default: "auto"
+    options:
+      - value: "auto"
+        label: "Auto"
+      - value: "off"
+        label: "Off"
+  - name: "reasoning_effort"
+    type: "select"
+    label: "Reasoning effort"
+    description: "How hard DeepSeek reasons when thinking is on. Reasoning counts toward the configuration's Max Tokens."
+    default: "high"
+    options:
+      - value: "low"
+        label: "Low"
+      - value: "high"
+        label: "High"
+      - value: "max"
+        label: "Max"
