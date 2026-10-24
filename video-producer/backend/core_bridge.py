@@ -123,6 +123,14 @@ _PATH_VARIABLE = re.compile(r"\{\{\s*paths\.(preset|_shared)\s*\}\}")
 
 _STORED_STATE_KEYS = ("backend_id", "started_at", "duration_ms", "error_code", "error_user_message", "error_message", "error_detail")
 
+GATE_FIELD = "gate"
+
+REGISTRY_FIELDS = ("sampler", "schedule")
+
+FIELD_LIMITS = ("min", "max", "step", "strength_min", "strength_max", "strength_step", "strength_default", "max_items", "max_length")
+
+REACTION_ACTIONS = ("set_value", "set_visibility", "set_disabled")
+
 
 @dataclass(frozen=True)
 class PresetState:
@@ -576,19 +584,102 @@ def _recommendations(configuration: Mapping[str, Any]) -> List[Dict[str, Optiona
     return found
 
 
-def _describe_fields(fields: Any, roots: Mapping[str, str], out: Dict[str, Dict[str, Any]]) -> None:
+@dataclass(frozen=True)
+class _Scope:
+    group: Sequence[str] = ()
+    advanced: bool = False
+    hidden: bool = False
+    gate: Optional[str] = None
+
+
+def _registry_options(kind: str, configuration: Mapping[str, Any]) -> List[Dict[str, str]]:
+    try:
+        from src.plugin_api import sampling as api_sampling
+
+        registry = api_sampling.sampler_registry if kind == "sampler" else api_sampling.schedule_registry
+        found = registry.select(
+            family=configuration.get("family") or None,
+            include=configuration.get("include") or None,
+            exclude=configuration.get("exclude") or None,
+        )
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not list the %s options", kind, exc_info=True)
+        return []
+    return [{"value": str(entry.key), "label": str(entry.label or entry.key)} for entry in found]
+
+
+def _number_or_none(value: Any) -> Optional[float]:
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _limits(configuration: Mapping[str, Any]) -> Dict[str, Any]:
+    limits = {key: _number_or_none(configuration.get(key)) for key in FIELD_LIMITS}
+    found: Dict[str, Any] = {key: value for key, value in limits.items() if value is not None}
+    if isinstance(configuration.get("model_type"), str):
+        found["model_type"] = configuration["model_type"]
+    return found
+
+
+def _reactions(reactions: Any) -> List[Dict[str, Any]]:
+    found = []
+    for reaction in reactions or []:
+        reaction = _plain(reaction)
+        when, then = (reaction.get("when"), reaction.get("then")) if isinstance(reaction, Mapping) else (None, None)
+        if isinstance(then, Mapping) and when is not None:
+            kept = {key: then[key] for key in REACTION_ACTIONS if key in then and then[key] is not None}
+            if kept:
+                found.append({"when": _plain(when), "then": _plain(kept)})
+    return found
+
+
+def _plain(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(exclude_none=True)
+    if isinstance(value, Mapping):
+        return {str(key): _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return value if value is None or isinstance(value, (str, int, float, bool)) else str(value)
+
+
+def _describe_fields(fields: Any, roots: Mapping[str, str], out: Dict[str, Dict[str, Any]], scope: _Scope = _Scope()) -> None:
     for form_field in fields or []:
+        configuration = getattr(form_field, "configuration", None) or {}
+        label = getattr(form_field, "label", None)
+        inner = _Scope(
+            group=scope.group,
+            advanced=scope.advanced or getattr(form_field, "audience", None) == "advanced",
+            hidden=scope.hidden
+            or getattr(form_field, "visible", None) is False
+            or getattr(form_field, "hidden_when_video_director", False) is True,
+            gate=scope.gate,
+        )
         if form_field.name and form_field.name not in out:
-            configuration = form_field.configuration or {}
+            kind = form_field.type
+            options = _registry_options(kind, configuration) if kind in REGISTRY_FIELDS else _options(configuration, roots)
             out[form_field.name] = {
-                "type": form_field.type,
+                "type": kind,
                 "required": bool(form_field.required),
                 "default": form_field.default,
-                "options": _options(configuration, roots),
+                "options": options,
                 "recommendations": _recommendations(configuration),
+                "label": str(label) if label else None,
+                "group": list(scope.group),
+                "audience": "advanced" if inner.advanced else "simple",
+                "hidden": inner.hidden,
+                "gate": scope.gate,
+                "limits": _limits(configuration),
+                "reactions": _reactions(getattr(form_field, "reactions", None)),
+                "bound": bool(getattr(form_field, "capability", None)),
             }
         if isinstance(form_field.children, list):
-            _describe_fields(form_field.children, roots, out)
+            if form_field.name and form_field.type == GATE_FIELD:
+                child = _Scope(group=inner.group, advanced=inner.advanced, hidden=inner.hidden, gate=form_field.name)
+            elif not form_field.name and label:
+                child = _Scope(group=[*inner.group, str(label)], advanced=inner.advanced, hidden=inner.hidden, gate=inner.gate)
+            else:
+                child = inner
+            _describe_fields(form_field.children, roots, out, child)
 
 
 def preset_driver(preset_id: str) -> Optional[str]:
@@ -599,7 +690,7 @@ def preset_driver(preset_id: str) -> Optional[str]:
 
 
 def preset_form_fields(preset_id: str, mode: str) -> Optional[Dict[str, Dict[str, Any]]]:
-    """Type, required flag, default, options and recommended files (SHA-256, file name) of each field of a preset mode, or None. Temporary: reads the container."""
+    """Type, required flag, default, options and recommended files (SHA-256, file name) of each field of a preset mode, with its label, the labels of the tabs and sections around it, its audience, whether the form hides it, the gate it sits in, its limits and its reactions; or None. Temporary: reads the container."""
     repository = api_hooks.get_container().file_preset_repository
     template = repository.find_preset_by_id(preset_id)
     if template is None or mode not in (template.modes or {}):

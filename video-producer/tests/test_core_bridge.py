@@ -774,6 +774,14 @@ def test_the_fields_of_a_mode_carry_their_options_and_recommended_files(monkeypa
             {"value": "640x640", "label": "640x640"},
         ],
         "recommendations": [],
+        "label": None,
+        "group": [],
+        "audience": "simple",
+        "hidden": False,
+        "gate": None,
+        "limits": {},
+        "reactions": [],
+        "bound": False,
     }
     assert fields["model"]["recommendations"] == [
         {"sha256": "abc", "filename": "dit.safetensors"},
@@ -782,6 +790,105 @@ def test_the_fields_of_a_mode_carry_their_options_and_recommended_files(monkeypa
     assert fields["model"]["required"] is True
     assert fields["target"]["type"] == "select"
     assert fields["target"]["options"] == [{"value": "hd", "label": "HD"}, {"value": "2k", "label": "2k"}]
+
+
+def _described(name, type="slider", **attributes):
+    return SimpleNamespace(
+        name=name,
+        type=type,
+        required=attributes.pop("required", False),
+        default=attributes.pop("default", None),
+        configuration=attributes.pop("configuration", None),
+        children=attributes.pop("children", None),
+        **attributes,
+    )
+
+
+def test_the_fields_of_a_mode_carry_their_label_groups_audience_gate_limits_and_reactions(monkeypatch, tmp_path):
+    steps = _described(
+        "steps",
+        label="Steps",
+        default=24,
+        configuration={"min": 1, "max": 100, "step": 1, "placeholder": "x"},
+        reactions=[{"when": {"field": "speed_profile", "equals": "distilled"}, "then": {"set_value": 8, "set_disabled": False, "update_options": []}}],
+    )
+    sampler = _described("sampler", type="sampler", label="Sampler", configuration={"family": "ltx", "exclude": ["lcm"]})
+    loras = _described(
+        "loras", type="lora_picker", configuration={"model_type": "lora", "strength_min": -10.0, "strength_max": 10.0, "max_items": 10}
+    )
+    hidden = _described("i2v_model", type="model", visible=None)
+    strength = _described("detail", label="Detail strength", default=0.5)
+    gate = _described("detailer", type="gate", label="Detailer", default=False, children=[strength])
+    advanced = _described(None, type="tab", label="Advanced", audience="advanced", children=[
+        _described(None, type="section", label="Sampling", children=[steps, _described(None, type="row", children=[sampler])]),
+        gate,
+    ])
+    i2v_tab = _described(None, type="tab", label="I2V", visible=False, children=[hidden])
+    lora_tab = _described(None, type="tab", label="LoRA", children=[loras])
+    director = _described("video_director_only", type="checkbox", hidden_when_video_director=True)
+    bound = _described("generate_audio", type="checkbox", capability={"model_field": "model", "param": "generate_audio"})
+    form = _form("custom", [_described(None, type="tabs", children=[advanced, i2v_tab, lora_tab]), director, bound], default=True)
+    template = SimpleNamespace(path=str(tmp_path), modes={"video": SimpleNamespace(forms=[form])})
+    _templates(monkeypatch, template, tmp_path)
+    asked = []
+
+    def registry(kind, configuration):
+        asked.append((kind, dict(configuration)))
+        return [{"value": "euler", "label": "Euler"}, {"value": "euler_ancestral", "label": "Euler ancestral"}]
+
+    monkeypatch.setattr(core_bridge, "_registry_options", registry)
+
+    fields = core_bridge.preset_form_fields("01ABC", "video")
+
+    assert list(fields) == ["steps", "sampler", "detailer", "detail", "i2v_model", "loras", "video_director_only", "generate_audio"]
+    assert {key: fields["steps"][key] for key in ("label", "group", "audience", "hidden", "gate", "limits", "default")} == {
+        "label": "Steps",
+        "group": ["Advanced", "Sampling"],
+        "audience": "advanced",
+        "hidden": False,
+        "gate": None,
+        "limits": {"min": 1, "max": 100, "step": 1},
+        "default": 24,
+    }
+    assert fields["steps"]["reactions"] == [
+        {"when": {"field": "speed_profile", "equals": "distilled"}, "then": {"set_value": 8, "set_disabled": False}}
+    ]
+    assert fields["sampler"]["options"] == [{"value": "euler", "label": "Euler"}, {"value": "euler_ancestral", "label": "Euler ancestral"}]
+    assert asked == [("sampler", {"family": "ltx", "exclude": ["lcm"]})]
+    assert (fields["detailer"]["gate"], fields["detail"]["gate"], fields["detail"]["group"]) == (None, "detailer", ["Advanced"])
+    assert fields["i2v_model"]["hidden"] is True
+    assert fields["loras"]["limits"] == {"strength_min": -10.0, "strength_max": 10.0, "max_items": 10, "model_type": "lora"}
+    assert (fields["loras"]["audience"], fields["loras"]["group"]) == ("simple", ["LoRA"])
+    assert fields["video_director_only"]["hidden"] is True
+    assert (fields["generate_audio"]["bound"], fields["steps"]["bound"]) == (True, False)
+
+
+def test_the_options_of_a_sampler_come_from_the_registry_and_none_when_it_cannot_be_read(monkeypatch):
+    calls = []
+
+    class Registry:
+        def __init__(self, name):
+            self.name = name
+
+        def select(self, family=None, include=None, exclude=None):
+            calls.append((self.name, family, include, exclude))
+            if self.name == "broken":
+                raise RuntimeError("no registry")
+            return [SimpleNamespace(key="euler", label="Euler"), SimpleNamespace(key="beta", label=None)]
+
+    import src.plugin_api as plugin_api
+
+    monkeypatch.setattr(
+        plugin_api, "sampling", SimpleNamespace(sampler_registry=Registry("samplers"), schedule_registry=Registry("broken")), raising=False
+    )
+    monkeypatch.setitem(__import__("sys").modules, "src.plugin_api.sampling", plugin_api.sampling)
+
+    assert core_bridge._registry_options("sampler", {"family": "wan", "include": ["euler"]}) == [
+        {"value": "euler", "label": "Euler"},
+        {"value": "beta", "label": "beta"},
+    ]
+    assert core_bridge._registry_options("schedule", {}) == []
+    assert calls == [("samplers", "wan", ["euler"], None), ("broken", None, None, None)]
 
 
 def test_an_unknown_preset_or_mode_has_no_fields(monkeypatch, tmp_path):

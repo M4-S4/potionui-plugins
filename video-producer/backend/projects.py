@@ -99,6 +99,16 @@ SHOT_ENGINE = _object(
 
 HYBRID = _object({"continuite": NUMBER, "identite": NUMBER, "audio": NUMBER, "mouvement": NUMBER, "style": NUMBER})
 
+OPTION_LORA = _object({"model": ID, "strength": NUMBER})
+
+PRESET_OPTIONS = {
+    "type": "object",
+    "propertyNames": {"minLength": 1},
+    "additionalProperties": {"anyOf": [{"type": ["string", "number", "boolean"]}, _array(OPTION_LORA)]},
+}
+
+ENGINE_OPTIONS = {"type": "object", "propertyNames": {"minLength": 1}, "additionalProperties": PRESET_OPTIONS}
+
 CLIP = _object(
     {
         "id": ID,
@@ -280,6 +290,7 @@ ENGINE = _object(
         "naming": TEXT,
         "autoInsert": FLAG,
         "referenceMargin": {"type": "number", "minimum": 0, "maximum": MAX_REFERENCE_MARGIN},
+        "options": ENGINE_OPTIONS,
     },
 )
 

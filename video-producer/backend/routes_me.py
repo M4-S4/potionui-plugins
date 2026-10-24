@@ -27,7 +27,7 @@ def _ffmpeg() -> bool:
 
 @router.get("/me")
 def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The signed-in user's locale, last project, role, quota, engines, video presets and features, ffmpeg, and the plugin settings."""
+    """The signed-in user's locale, last project, role, quota, engines, video presets (with the options the project may set in each mode the Video Director runs them in) and features, ffmpeg, and the plugin settings."""
     video_presets = catalog.video_presets(user)
     return ok(
         {

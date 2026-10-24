@@ -1,14 +1,11 @@
 <script>
-	import { untrack } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatTime, t } from '../../i18n/index.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { ui, doc, select, secs, globalPrompt, allIssues, itemsIn, productionRange, act, clipLabel } from '../../lib/state.svelte.js';
-	import { takesOf, assembleChosen, supportedProfiles, engineLabel, currentEngine, engineGroups, selectEngine, setProjectQuality, openEngineSettings, soundBehaviorOf } from '../../lib/production.svelte.js';
+	import { ui, doc, select, secs, globalPrompt, allIssues, itemsIn, productionRange, clipLabel } from '../../lib/state.svelte.js';
+	import { takesOf, assembleChosen, supportedProfiles, engineLabel, openEngineSettings, soundBehaviorOf } from '../../lib/production.svelte.js';
 	import { takeStore, flyingTakes } from '../../lib/takes.svelte.js';
-	import { projectQuality, hasOwnEngine } from '../../lib/engine.js';
-	import { projectDrafts } from '../../lib/shots.js';
-	import { MAX_MARGIN, SOUND_SPACE, referenceMargin, setReferenceMargin } from '../../lib/sound.js';
+	import { SOUND_SPACE } from '../../lib/sound.js';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import { seams, matchToPrevious, seamTip } from '../../lib/continuity.svelte.js';
 	import { directionFields, stages } from '../../lib/catalog.js';
@@ -21,12 +18,9 @@
 	import Tabs from '../shell/Tabs.svelte';
 	import TakeCard from '../takes/TakeCard.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
-	import DraftsField from '../shots/DraftsField.svelte';
 	import QueuePanel from './QueuePanel.svelte';
 	import Icon from '../Icon.svelte';
 	import { labelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
-
-	const modes = ['FL2VA', 'Ref2VA', 'Hybrid AV'];
 
 	function fromScene() {
 		ui.workspace = 'scene';
@@ -47,26 +41,7 @@
 	const rejected = $derived(rejectedCount(takeStore.list));
 	const shown = $derived(doc.clips.map((c) => [c, visibleTakes(takesOf(c), ui.hideRejected)]).filter(([, list]) => list.length));
 	const supported = $derived(supportedProfiles());
-	const unsupported = $derived(modes.filter((m) => !supported.includes(m)));
-	const engine = $derived(currentEngine());
-	const groups = $derived(engineGroups());
-	const overridden = $derived(doc.clips.filter(hasOwnEngine).length);
 	const queued = $derived(flyingTakes().length);
-	const qualities = $derived([
-		{ id: 'draft', label: t('lib.stage.draft') },
-		{ id: 'final', label: t('lib.stage.final') }
-	]);
-	let engineSection = $state(null);
-
-	$effect(() => {
-		if (ui.dockFocus !== 'engine' || ui.dockTab !== 'direction' || !engineSection) return;
-		const section = engineSection;
-		untrack(() => (ui.dockFocus = null));
-		requestAnimationFrame(() => {
-			section.scrollIntoView?.({ block: 'start' });
-			(section.querySelector('select') ?? section.querySelector('button'))?.focus({ preventScroll: true });
-		});
-	});
 
 	const tabs = $derived([
 		{ id: 'direction', label: t('panels.dock.tab.direction'), dot: issues.length > 0 || seamIssues.length > 0 || checkedCount > 0 },
@@ -77,12 +52,6 @@
 	const allFamilies = $derived([{ id: 'all', label: t('panels.dock.refs.all'), icon: 'bookmark', hint: '' }, ...families]);
 	const refFamily = $derived(families.find((f) => f.id === ui.refSpace) ?? null);
 	const refCount = $derived(refFamily ? doc.references.filter((r) => r.space === refFamily.id).length : doc.references.length);
-
-	function modeHint(m) {
-		if (m === 'FL2VA') return t('panels.dock.mode.fl2va');
-		if (m === 'Ref2VA') return t('panels.dock.mode.ref2va');
-		return t('panels.dock.mode.hybrid');
-	}
 
 	function openPrompt(p) {
 		select('prompt', p.id);
@@ -110,7 +79,7 @@
 <PanelHeader icon="sparkles" title={t('panels.dock.title')} border={false}>
 	<HostUi
 		name="IconButton"
-		props={{ icon: 'settings', label: t('panels.dock.settings'), size: 'sm', class: 'vp-h7', tooltip: t('panels.dock.settingsTip'), onclick: openEngineSettings }}
+		props={{ icon: 'settings', label: t('panels.dock.settings'), size: 'sm', class: 'vp-h7', tooltip: t('panels.dock.settingsTip'), onclick: () => openEngineSettings() }}
 	/>
 </PanelHeader>
 
@@ -241,71 +210,10 @@
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'sparkles', class: 'w-full', onclick: () => suggest(t('assistant.suggest.continuity')) }}>{t('assistant.check')}</HostUi>
 		</div>
 
-		<section id="vp-dock-engine" class="space-y-3 border-t border-line px-3 pb-1 pt-3" aria-labelledby="vp-dock-engine-title" bind:this={engineSection}>
-			<div class="flex items-center gap-1.5">
-				<Icon name="sliders" class="h-3.5 w-3.5 text-fg-subtle" />
-				<span id="vp-dock-engine-title" class="vp-section-title">{t('panels.dock.engine.title')}</span>
-			</div>
-			<div class="space-y-1">
-				<label class="vp-label block" for="vp-dock-engine-select">{t('panels.dock.engine.engine')}</label>
-				{#if groups.length}
-					<select id="vp-dock-engine-select" class="vp-popup w-full" value={engine?.key ?? ''} onchange={(e) => selectEngine(e.currentTarget.value)}>
-						{#if !engine}<option value="" disabled>{engineLabel()}</option>{/if}
-						{#each groups as g (g.label)}
-							<optgroup label={g.label}>
-								{#each g.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
-							</optgroup>
-						{/each}
-					</select>
-				{:else}
-					<p class="rounded-lg border border-dashed border-line-hover p-2 text-xs text-fg-muted">
-						{t('generation.engine.empty')}
-						{#if ui.isAdmin}<a class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" href="/admin?tab=plugins">{t('generation.engine.settings')}</a>{/if}
-					</p>
-				{/if}
-			</div>
-			<div class="space-y-1">
-				<div class="vp-label">{t('panels.dock.profile')}</div>
-				<HostUi
-					name="SegmentedControl"
-					props={{
-						variant: 'toggle',
-						fullWidth: true,
-						ariaLabel: t('panels.dock.profileGroup'),
-						items: modes.map((m) => ({ id: m, label: m, disabled: !supported.includes(m) })),
-						selected: doc.direction.mode,
-						onSelect: (m) => act(() => (doc.direction.mode = m))
-					}}
-				/>
-				<p class="pt-1 text-xs text-fg-subtle">{modeHint(doc.direction.mode)}</p>
-				{#if unsupported.length}
-					<HostUi name="Tooltip" props={{ text: t('generation.profile.why', { profiles: unsupported.join(', '), engine: engineLabel() }), wrapperClass: 'inline-flex' }}>
-						<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.profile.badge', { profiles: unsupported.join(' · ') })}</HostUi>
-					</HostUi>
-				{/if}
-			</div>
-			<div class="grid grid-cols-[1fr_auto] items-end gap-3">
-				<div class="min-w-0 space-y-1">
-					<div class="vp-label">{t('panels.dock.engine.quality')}</div>
-					<HostUi name="SegmentedControl" props={{ items: qualities, selected: projectQuality(doc.engine), variant: 'toggle', fullWidth: true, ariaLabel: t('panels.dock.engine.quality'), onSelect: setProjectQuality }} />
-				</div>
-				<div class="space-y-1">
-					<label class="vp-label block" for="vp-dock-engine-drafts">{t('panels.dock.engine.drafts')}</label>
-					<DraftsField id="vp-dock-engine-drafts" value={projectDrafts(doc.engine)} onchange={(n) => act(() => (doc.engine.variants = n))} label={false} />
-				</div>
-			</div>
-			<div class="space-y-1">
-				<label class="vp-label block" for="vp-dock-engine-margin">{t('panels.dock.engine.margin')}</label>
-				<div class="flex items-center gap-2">
-					<input id="vp-dock-engine-margin" class="input vp-dense vp-tc w-20" type="number" min="0" max={MAX_MARGIN} step="0.5" value={referenceMargin(doc.engine)} onchange={(e) => act(() => setReferenceMargin(doc.engine, e.currentTarget.value))} />
-					<span class="text-xs text-fg-muted">{t('panels.dock.engine.marginUnit')}</span>
-				</div>
-				<p class="text-xs text-fg-subtle">{t('panels.dock.engine.marginHint')}</p>
-			</div>
-			<p class="text-xs text-fg-subtle">{t('panels.dock.engine.hint')}</p>
-			{#if overridden}
-				<p class="flex items-center gap-1.5 text-xs text-fg-muted"><Icon name="info" class="h-3.5 w-3.5 shrink-0" />{t('panels.dock.engine.overridden', { count: overridden })}</p>
-			{/if}
+		<section id="vp-dock-engine" class="flex items-center gap-2 border-t border-line px-3 py-2.5" aria-label={t('panels.dock.engine.title')}>
+			<Icon name="sliders" class="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+			<p class="min-w-0 flex-1 text-xs text-fg-muted">{t('panels.dock.engine.moved')}</p>
+			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', class: 'shrink-0', onclick: () => openEngineSettings() }}>{t('panels.dock.engine.open')}</HostUi>
 		</section>
 
 		<div class="mt-3 border-t border-line">

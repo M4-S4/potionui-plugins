@@ -55,7 +55,7 @@
 	"cmd.cancel-generation": "Cancel the generation",
 	"cmd.results": "Results and takes",
 	"cmd.assemble": "Assemble chosen takes",
-	"cmd.engine": "Engine settings…",
+	"cmd.engine": "Edit Engine…",
 	"cmd.audio-add": "Add audio track",
 	"cmd.audio-import": "Import audio from the library…",
 	"cmd.audio-import-local": "Import audio from this computer…",

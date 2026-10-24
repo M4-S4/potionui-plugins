@@ -233,6 +233,54 @@ function normalizeResolution(value) {
 	return { value: value.value, label: text(value.label) || value.value };
 }
 
+const FIELD_LIMITS = ['min', 'max', 'step', 'strength_min', 'strength_max', 'strength_step', 'strength_default', 'max_items', 'max_length'];
+
+function normalizeChoice(value) {
+	if (!isObject(value) || typeof value.value !== 'string') return null;
+	return { value: value.value, label: text(value.label) || value.value };
+}
+
+function normalizeReaction(value) {
+	return isObject(value) && isObject(value.then) && value.when !== undefined ? { when: value.when, then: value.then } : null;
+}
+
+export function normalizeField(value) {
+	if (!isObject(value) || !text(value.name) || !text(value.type)) return null;
+	const limits = isObject(value.limits) ? value.limits : {};
+	return {
+		name: value.name,
+		type: value.type,
+		label: text(value.label) || null,
+		group: strings(value.group),
+		audience: value.audience === 'advanced' ? 'advanced' : 'simple',
+		gate: text(value.gate) || null,
+		default: value.default === undefined ? null : value.default,
+		required: value.required === true,
+		limits: {
+			...Object.fromEntries(FIELD_LIMITS.filter((key) => number(limits[key]) !== null).map((key) => [key, number(limits[key])])),
+			...(text(limits.model_type) ? { model_type: limits.model_type } : {})
+		},
+		reactions: list(value.reactions, normalizeReaction) ?? [],
+		options: list(value.options, normalizeChoice) ?? [],
+		recommended: strings(value.recommended)
+	};
+}
+
+function modeOptions(modes) {
+	if (!isObject(modes)) return {};
+	return Object.fromEntries(
+		Object.entries(modes)
+			.filter(([, mode]) => isObject(mode) && Array.isArray(mode.options))
+			.map(([name, mode]) => [name, list(mode.options, normalizeField)])
+	);
+}
+
+export function normalizeModelEntry(value) {
+	if (!isObject(value) || !text(value.id)) return null;
+	const file = text(value.filename).replaceAll('\\', '/').split('/').pop() || null;
+	return { id: value.id, ref: `model:${value.id}`, name: text(value.custom_name) || text(value.name) || file || value.id, file };
+}
+
 export function normalizePreset(value) {
 	if (!isObject(value) || !text(value.id)) return null;
 	const modes = Array.isArray(value.modes) ? strings(value.modes) : isObject(value.modes) ? Object.keys(value.modes) : [];
@@ -254,7 +302,9 @@ export function normalizePreset(value) {
 		limits: { defaultDuration: number(limits.default_duration), maxDuration: number(limits.max_duration) },
 		directorModes,
 		audioMux: value.audio_mux === true,
-		profiles: Array.isArray(value.profiles) ? strings(value.profiles) : null
+		profiles: Array.isArray(value.profiles) ? strings(value.profiles) : null,
+		presetModes: strings(value.video_director?.preset_modes),
+		options: modeOptions(value.modes)
 	};
 }
 
@@ -559,6 +609,20 @@ export async function coreUpload(api, path, form, { onProgress = () => {}, signa
 	}
 }
 
+export const MODEL_LIST_LIMIT = 200;
+
+export async function coreModels(api, presetId, modelType, signal = null) {
+	if (typeof api?.fetchRawFromApp !== 'function') return failure(0, 'no_api');
+	const query = new URLSearchParams({ limit: String(MODEL_LIST_LIMIT) });
+	if (modelType) query.set('model_type', modelType);
+	try {
+		const result = await settle(await api.fetchRawFromApp(`/api/presets/${encodeURIComponent(presetId)}/models?${query}`, { method: 'GET', signal: signal ?? undefined }));
+		return mapped(result, (data) => list(data.models, normalizeModelEntry));
+	} catch (err) {
+		return thrown(err);
+	}
+}
+
 export function createClient(api, save) {
 	return {
 		async me() {
@@ -682,6 +746,9 @@ export function createClient(api, save) {
 		},
 		async uploadedMedia(filename) {
 			return mapped(await call(api, 'post', '/media/uploaded', { filename }), (data) => normalizeMedia(data.media));
+		},
+		presetModels(presetId, modelType, signal) {
+			return coreModels(api, presetId, modelType, signal);
 		}
 	};
 }

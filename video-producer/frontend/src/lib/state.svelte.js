@@ -16,7 +16,6 @@ export const doc = $state(emptyDoc(t));
 export const ui = $state({
 	workspace: 'storyboard',
 	dockTab: 'direction',
-	dockFocus: null,
 	refSpace: 'all',
 	sidebarOpen: true,
 	inspectorOpen: typeof window === 'undefined' || window.innerWidth >= 1360,

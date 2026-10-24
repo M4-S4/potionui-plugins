@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import catalog, core_bridge, models, presets, settings
+from . import catalog, core_bridge, engine_options, models, presets, settings
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -261,6 +261,7 @@ class ShotPlan:
     backend_id: Optional[str] = None
     seed: Optional[int] = None
     audio: Optional[ShotAudio] = None
+    work_scale: float = 1.0
 
     @property
     def needs_audio(self) -> bool:
@@ -1147,6 +1148,21 @@ def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Op
     return form
 
 
+def project_options(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> engine_options.Chosen:
+    """The options the project sets for the preset of a plan, a warning naming those that no longer fit their field and are left out."""
+    chosen = engine_options.chosen(context.doc, context.preset.id, fields, context.preset.cloud)
+    if chosen.invalid:
+        warning = note(
+            "engine_option_invalid",
+            f"Some options of {context.preset.name} no longer fit their field and are left out: {', '.join(chosen.invalid)}.",
+            preset_id=context.preset.id,
+            fields=list(chosen.invalid),
+        )
+        if warning not in warnings:
+            warnings.append(warning)
+    return chosen
+
+
 def layout_preset(preset: Preset) -> bool:
     """True for a preset that runs the Layout-To-Render IC-LoRA: LTX-2.5, whose director mode takes IC-LoRA."""
     composition = catalog.director_of(preset.variables).get("modes") or {}
@@ -1265,6 +1281,8 @@ def _layout_plan(
     resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if audio is not None and audio.behavior == MUX else ())
     request["form_data"].update(resolved.values)
     request["form_data"].update(distilled_form(fields, resolved))
+    chosen = project_options(context, fields, warnings)
+    request["form_data"].update(chosen.values)
     return ShotPlan(
         shot_id=shot_id,
         profile=context.profile,
@@ -1275,9 +1293,11 @@ def _layout_plan(
         fps=fps,
         prompt_text=prompt,
         request=request,
-        missing_models=list(resolved.missing),
+        missing_models=[name for name in resolved.missing if name not in chosen.values],
         guides=[str(guide.get("id"))],
+        seed=chosen.seed,
         audio=audio,
+        work_scale=engine_options.work_scale(fields, request["form_data"]),
     )
 
 
@@ -1368,6 +1388,8 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
             warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
     resolved = models.resolve_models(preset.id, mode, director_mode, fields, (AUDIO_VAE,) if mixed else ())
     request["form_data"].update(resolved.values)
+    chosen = project_options(context, fields, warnings)
+    request["form_data"].update(chosen.values)
     return ShotPlan(
         shot_id=shot_id,
         profile=context.profile,
@@ -1378,9 +1400,11 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         fps=fps,
         prompt_text=prompt,
         request=request,
-        missing_models=list(resolved.missing),
+        missing_models=[name for name in resolved.missing if name not in chosen.values],
         guides=[str(guide.get("id")) for guide in guides],
+        seed=chosen.seed,
         audio=audio,
+        work_scale=engine_options.work_scale(fields, request["form_data"]),
     )
 
 
@@ -1494,6 +1518,8 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         form["resolution"] = resolution
     if "aspect_ratio" in fields and aspect is not None:
         form["aspect_ratio"] = str(aspect)
+    chosen = project_options(context, fields, warnings)
+    form.update(chosen.values)
     request = _request(preset.id, task, prompt, form)
     director_mode = "t2v"
     if first_media is not None:
@@ -1518,6 +1544,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         model_id=model["id"],
         cloud_task=task,
         cloud_params={key: value for key, value in params.items() if value is not None},
+        seed=chosen.seed,
         audio=audio,
     )
 
@@ -1569,7 +1596,7 @@ def build_plans(
     overrides: bool = False,
     silent: Optional[Mapping[str, Collection[str]]] = None,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
+    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
     if production == RENDER_3D:
         return build_renders(doc, shot_ids, quality)
     silent = silent or {}
@@ -1588,7 +1615,7 @@ def build_plans(
     for key, ids, part in parts:
         _merge(plans, part, ids, own=key != project)
     for plan in plans.shots:
-        plan.seed = shot_engine(doc, plan.shot_id).get("seed")
+        plan.seed = shot_engine(doc, plan.shot_id).get("seed", plan.seed)
     order = {shot_id: index for index, shot_id in enumerate(dict.fromkeys(shot_ids))}
     plans.shots.sort(key=lambda plan: order[plan.shot_id])
     return plans

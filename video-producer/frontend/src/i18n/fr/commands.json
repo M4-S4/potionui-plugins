@@ -55,7 +55,7 @@
 	"cmd.cancel-generation": "Annuler la génération",
 	"cmd.results": "Résultats et prises",
 	"cmd.assemble": "Assembler les prises choisies",
-	"cmd.engine": "Réglages du moteur…",
+	"cmd.engine": "Modifier le moteur…",
 	"cmd.audio-add": "Ajouter une piste audio",
 	"cmd.audio-import": "Importer un son de la bibliothèque…",
 	"cmd.audio-import-local": "Importer un son depuis l’ordinateur…",
