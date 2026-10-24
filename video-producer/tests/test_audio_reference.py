@@ -759,23 +759,30 @@ def test_the_measured_peaks_are_kept_for_the_cuts_last_used(monkeypatch):
     assert soundtrack._recall(("user-1", "graph-1")) is None
 
 
-def test_a_cut_deep_into_an_item_reads_its_source_from_a_whole_second_before_what_it_keeps(make_doc):
+def test_a_cut_reads_its_sources_from_the_start_and_only_a_measure_deep_into_an_item_seeks(make_doc):
     late = _item("late", "A1", 21.01, 400, srcIn=3.5, gain=-3, fadeIn=2, fadeOut=30)
     trimmed = _item("trimmed", "A1", 21, 300, srcIn=100.25, fadeIn=1.5)
     near = _item("near", "A1", 0, 30)
     doc = _doc(make_doc, [late], A1={"vol": -2})
 
     inputs, graph = soundtrack.mix_graph(doc, ["A1"], 380.37, 387.37, {"late": "/late.wav"})
+    measured, measuring = soundtrack.mix_graph(doc, ["A1"], 380.37, 387.37, {"late": "/late.wav"}, seek=True)
 
-    assert inputs == ["-ss", "361.5", "-i", "/late.wav"]
+    assert inputs == ["-i", "/late.wav"]
     assert graph.split(";")[1] == (
+        "[0:a]atrim=start=3.5:duration=400,asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+        "volume=-5dB,afade=t=in:st=0:d=2,afade=t=out:st=370:d=30,atrim=start=359.36,asetpts=PTS-STARTPTS,adelay=delays=0:all=1[m0]"
+    )
+    assert measured == ["-ss", "361.5", "-i", "/late.wav"]
+    assert measuring.split(";")[1] == (
         "[0:a]atrim=start=0:duration=42,asetpts=PTS-STARTPTS+358/TB,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
         "volume=-5dB,afade=t=in:st=0:d=2,afade=t=out:st=370:d=30,atrim=start=359.36,asetpts=PTS-STARTPTS,adelay=delays=0:all=1[m0]"
     )
+    assert measuring.split(";")[0::2] == graph.split(";")[0::2]
     assert soundtrack.seek_point(trimmed, 21.0) == 99.25
     assert soundtrack.sound_chain(trimmed, {}, 21.0, 99.25)[:2] == ["atrim=start=1:duration=300", "asetpts=PTS-STARTPTS"]
     assert [soundtrack.seek_point(near, origin) for origin in (5.0, 10.99, 11.0)] == [0.0, 0.0, 10.0]
-    assert soundtrack.sound_chain(late, {"vol": -2}, 380.37) == soundtrack.sound_chain(late, {"vol": -2}, 380.37, 0.0)
+    assert soundtrack.sound_chain(late, {}, 0.0) == soundtrack.sound_chain(late, {}, 0.0, 0.0)
     assert soundtrack.sound_chain(late, {}, 0.0)[:2] == ["atrim=start=3.5:duration=400", "asetpts=PTS-STARTPTS"]
 
 
@@ -785,7 +792,7 @@ def test_a_cut_deep_into_an_item_reads_its_source_from_a_whole_second_before_wha
     [("wav", ["-c:a", "pcm_s16le"]), ("mp3", ["-c:a", "libmp3lame", "-q:a", "2"]), ("m4a", ["-c:a", "aac", "-b:a", "160k"])],
     ids=["wav", "mp3-vbr", "aac"],
 )
-def test_a_cut_read_from_its_seek_point_is_the_very_cut_read_from_the_start_of_its_source(core, make_doc, tmp_path, monkeypatch, suffix, codec):
+def test_the_peak_measured_from_the_seek_point_is_the_peak_of_the_cut_sent_which_reads_from_the_start(core, make_doc, tmp_path, monkeypatch, suffix, codec):
     _media(core)
     chirp = "0.3*sin(2*PI*(220+3*t)*t)+0.05*sin(2*PI*1234*t+sin(t))"
     source = tmp_path / f"stem.{suffix}"
@@ -799,24 +806,26 @@ def test_a_cut_read_from_its_seek_point_is_the_very_cut_read_from_the_start_of_i
     sources = soundtrack._Sources(core.users["user-1"], doc, "p-1", tmp_path)
     ffmpeg = shutil.which("ffmpeg")
     commands = []
-    assemble = soundtrack.assemble
+    assemble, peak = soundtrack.assemble, soundtrack.peak
 
-    async def recorded(command, *args, **kwargs):
+    async def cut(command, *args, **kwargs):
         commands.append(command)
         return await assemble(command, *args, **kwargs)
 
-    monkeypatch.setattr(soundtrack, "assemble", recorded)
+    async def measure(command):
+        commands.append(command)
+        return await peak(command)
+
+    monkeypatch.setattr(soundtrack, "assemble", cut)
+    monkeypatch.setattr(soundtrack, "peak", measure)
 
     for start, end in ((40.37, 44.37), (55.0, 70.0)):
-        for rate in (soundtrack.H3_RATE, 48000):
-            sought = asyncio.run(soundtrack.cut(ffmpeg, sources, ["A1"], start, end, f"sought-{start}-{rate}", rate=rate))
-            monkeypatch.setattr(soundtrack, "SEEK_FROM", math.inf)
-            whole = asyncio.run(soundtrack.cut(ffmpeg, sources, ["A1"], start, end, f"whole-{start}-{rate}", rate=rate))
-            monkeypatch.setattr(soundtrack, "SEEK_FROM", 10.0)
+        level = asyncio.run(soundtrack.track_peak(ffmpeg, sources, TrackCut("s1", "A1", start, end)))
+        sent = asyncio.run(soundtrack.cut(ffmpeg, sources, ["A1"], start, end, f"cut-{start}", rate=soundtrack.H3_RATE))
+        heard = 20 * math.log10(max(map(abs, _samples(sent, soundtrack.H3_RATE))))
 
-            assert "-ss" in commands[-2] and "-ss" not in commands[-1]
-            assert max(map(abs, _samples(sought, rate))) > 0.05
-            assert sought.read_bytes() == whole.read_bytes()
+        assert "-ss" in commands[-2] and "-ss" not in commands[-1]
+        assert heard > -30 and abs(level - heard) <= 0.5
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")

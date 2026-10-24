@@ -63,7 +63,7 @@ def work_base() -> Path:
 
 
 def seek_point(item: Mapping[str, Any], origin: float) -> float:
-    """The time of its source an item is read from in a cut that starts at origin: a whole number of seconds into the item and at least SEEK_PREROLL before what the cut keeps, so that the decoder has settled and the resampling and the fades fall on the very samples of a read from the start; 0, a read from the start, when it would skip less than SEEK_FROM seconds."""
+    """The time of its source an item is read from when the peak of a cut that starts at origin is measured: a whole number of seconds into the item and at least SEEK_PREROLL before what the cut keeps, so that the decoder has settled and the resampling and the fades fall where a read from the start puts them; 0, a read from the start, when it would skip less than SEEK_FROM seconds."""
     skipped = max(origin - float(item.get("start") or 0), 0.0)
     seek = float(item.get("srcIn") or 0) + math.floor(skipped - SEEK_PREROLL)
     return seek if seek >= SEEK_FROM else 0.0
@@ -76,15 +76,16 @@ def mix_graph(
     end: float,
     sounds: Mapping[str, str],
     references: Sequence[str] = (),
+    seek: bool = False,
 ) -> Tuple[List[str], str]:
-    """The inputs and the filter graph of one cut: the items of the tracks heard between start and end, each with its gain and fades at its place and read from its seek point, the references from their beginning, over silence that lasts the whole cut."""
+    """The inputs and the filter graph of one cut: the items of the tracks heard between start and end, each with its gain and fades at its place, read from the start of its source or, with seek, for a measure only, from its seek point, the references from their beginning, over silence that lasts the whole cut."""
     length = num(end - start)
     inputs: List[str] = []
     graph = [f"anullsrc=r={SAMPLE_RATE}:cl=stereo,atrim=duration={length}[bed]"]
     labels: List[str] = []
 
-    def add(path: str, chain: List[str], seek: float = 0.0) -> None:
-        inputs.extend([*(["-ss", num(seek)] if seek else []), "-i", path])
+    def add(path: str, chain: List[str], point: float = 0.0) -> None:
+        inputs.extend([*(["-ss", num(point)] if point else []), "-i", path])
         label = f"[m{len(labels)}]"
         graph.append(f"[{len(labels)}:a]{','.join(chain)}{label}")
         labels.append(label)
@@ -93,8 +94,8 @@ def mix_graph(
     for lane_id in lanes:
         for item in director.lane_items(doc, lane_id, start, end):
             if item["id"] in sounds:
-                seek = seek_point(item, start)
-                add(sounds[item["id"]], sound_chain(item, by_id.get(lane_id) or {}, start, seek), seek)
+                point = seek_point(item, start) if seek else 0.0
+                add(sounds[item["id"]], sound_chain(item, by_id.get(lane_id) or {}, start, point), point)
     for path in references:
         add(path, [f"atrim=duration={length}", "asetpts=PTS-STARTPTS", LAYOUT])
     if labels:
@@ -177,7 +178,7 @@ class _Sources:
                 sounds[item["id"]] = f"{found.kind}:{found.value}"
         if not sounds:
             return None
-        inputs, graph = mix_graph(self.doc, [lane_id], start, end, sounds)
+        inputs, graph = mix_graph(self.doc, [lane_id], start, end, sounds, seek=True)
         return (*inputs, graph)
 
     def items(self, lanes: Sequence[str], start: float, end: float) -> Dict[str, str]:
@@ -274,12 +275,12 @@ def _recall(key: Tuple[Any, ...]) -> Optional[float]:
 
 
 async def track_peak(ffmpeg: str, sources: _Sources, cut: TrackCut) -> Optional[float]:
-    """The peak level in dBFS of the cut of one guided track, mixed and resampled as attach writes it; None when it cannot be read."""
+    """The peak level in dBFS of the cut of one guided track, mixed and resampled as attach writes it but each item read from its seek point; None when it cannot be read."""
     try:
         sounds = await asyncio.to_thread(sources.items, [cut.lane_id], cut.start, cut.end)
     except SoundError:
         return None
-    inputs, graph = mix_graph(sources.doc, [cut.lane_id], cut.start, cut.end, sounds)
+    inputs, graph = mix_graph(sources.doc, [cut.lane_id], cut.start, cut.end, sounds, seek=True)
     return await peak(peak_command(ffmpeg, inputs, graph, cut.end - cut.start, H3_RATE))
 
 
