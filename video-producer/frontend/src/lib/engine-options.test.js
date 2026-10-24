@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { compileModule } from 'svelte/compiler';
 import { MODEL_LIST_LIMIT, coreModels, createClient, normalizeField, normalizePreset } from './api.js';
 import { fitInline } from './barfit.js';
 import {
@@ -24,8 +25,15 @@ import {
 	validOption
 } from './options.js';
 import { emptyDoc, migrate } from './starter.js';
+import { chainState } from './chain.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+
+async function reactive() {
+	const code = compileModule('export function live(value) { const state = $state(value); return state; }', { generate: 'client', filename: 'live.svelte.js' }).js.code;
+	const module = code.replace(`'svelte/internal/client'`, JSON.stringify(import.meta.resolve('svelte/internal/client')));
+	return (await import(`data:text/javascript,${encodeURIComponent(module)}`)).live;
+}
 const H3 = '01KX47H3MINIMAX000000000VA';
 const LTX = '01KX47LTX25VIDEO00000000TV';
 const recipe = (index) =>
@@ -220,6 +228,44 @@ test('options: the project keeps the options of each preset apart, and a preset 
 	assert.equal(optionCount({}, LTX), 0);
 });
 
+test('options: the options of the open project read, count and save through its $state document', async () => {
+	const live = await reactive();
+	const engine = live({ quality: 'draft', preset: H3, options: { [H3]: { speed_profile: 'quality', loras: [{ model: 'model:l1', strength: 0.5 }] } } });
+
+	assert.deepEqual(optionsOf(engine, H3), { speed_profile: 'quality', loras: [{ model: 'model:l1', strength: 0.5 }] });
+	assert.equal(optionCount(engine, H3), 2);
+	const copy = optionsOf(engine, H3);
+	copy.loras[0].strength = 2;
+	assert.equal(engine.options[H3].loras[0].strength, 0.5);
+
+	setPresetOptions(engine, LTX, live({ steps: 12 }));
+	assert.deepEqual(optionsOf(engine, LTX), { steps: 12 });
+	assert.deepEqual(Object.keys(engine.options).sort(), [H3, LTX].sort());
+});
+
+test('options: deleting a shot of a project whose engine keeps options leaves the Production bar and the cut readable', async () => {
+	const live = await reactive();
+	const doc = live({
+		fps: 25,
+		engine: { preset: H3, quality: 'draft', options: { [H3]: { speed_profile: 'quality' } } },
+		clips: [
+			{ id: 'a', start: 0, dur: 5, stage: 'todo' },
+			{ id: 'b', start: 5, dur: 5, stage: 'todo' },
+			{ id: 'c', start: 10, dur: 5, stage: 'todo' }
+		],
+		prompts: [{ id: 'p', shotId: 'b', start: 5, dur: 5, text: 'Street flare' }],
+		frames: [],
+		assets: []
+	});
+
+	doc.clips.splice(1, 1);
+	doc.prompts.splice(0, 1);
+
+	assert.equal(optionCount(doc.engine, doc.engine.preset), 1);
+	assert.deepEqual(doc.clips.map((c) => [c.id, c.start, c.dur]), [['a', 0, 5], ['c', 10, 5]]);
+	assert.equal(chainState(doc, 1), null);
+});
+
 test('options: opening a project drops malformed options and keeps the rest', () => {
 	const engine = {
 		quality: 'draft',
@@ -274,6 +320,32 @@ test('production bar: what does not fit goes to the More menu, by rank, the Edit
 	assert.deepEqual(at(0), [['edit'], ['engine', 'profile', 'own']]);
 });
 
+test('production bar: the engine and the profile never leave the bar, the generate label, the range and the notice give way first', () => {
+	const items = [
+		{ id: 'engine', width: 192, min: 112, rank: 3, keep: true },
+		{ id: 'profile', width: 220, min: 96, rank: 4, keep: true },
+		{ id: 'margin', width: 128, rank: 6 },
+		{ id: 'own', width: 64, rank: 7, show: false },
+		{ id: 'edit', width: 28, rank: 0, pinned: true },
+		{ id: 'label', width: 88, rank: 8, folds: false },
+		{ id: 'go', width: 120, rank: 1, outside: true },
+		{ id: 'scope', width: 104, rank: 2, outside: true },
+		{ id: 'notice', width: 200, rank: 5, outside: true }
+	];
+	const at = (budget) => {
+		const fit = fitInline(budget, items);
+		return [[...fit.inline].sort(), [...fit.wide].sort(), fit.overflow];
+	};
+
+	assert.deepEqual(at(1112), [['edit', 'engine', 'go', 'label', 'margin', 'notice', 'profile', 'scope'], ['engine', 'profile'], []]);
+	assert.deepEqual(at(1111), [['edit', 'engine', 'go', 'margin', 'notice', 'profile', 'scope'], ['engine', 'profile'], []]);
+	assert.deepEqual(at(700), [['edit', 'engine', 'go', 'label', 'profile', 'scope'], ['engine'], ['margin']]);
+	assert.deepEqual(at(500), [['edit', 'engine', 'go', 'profile'], ['engine'], ['margin']]);
+	assert.deepEqual(at(400), [['edit', 'engine', 'profile', 'scope'], [], ['margin']]);
+	assert.deepEqual(at(0), [['edit', 'engine', 'profile'], [], ['margin']]);
+	for (const budget of [0, 200, 400, 800, 1600]) assert.ok(['engine', 'profile'].every((id) => fitInline(budget, items).inline.has(id)), String(budget));
+});
+
 test('client: the models a field can take come from the PotionUI preset model list', async () => {
 	const seen = [];
 	const api = {
@@ -299,10 +371,15 @@ test('pages: the engine settings live in the Production bar and the Edit Engine 
 	const bar = source('../components/production/ProductionBar.svelte');
 	assert.match(bar, /const profileItems = \$derived\(supportedProfiles\(\)\.map\(\(m\) => \(\{ id: m, label: m \}\)\)\);/);
 	assert.doesNotMatch(bar, /disabled: !supported/);
-	assert.match(bar, /\{ id: 'margin', width: widths\.margin, rank: 3, show: guided \}/);
+	assert.match(bar, /\{ id: 'margin', width: widths\.margin, rank: 6, show: guided \}/);
+	assert.match(bar, /\{ id: 'engine', width: ENGINE_WIDE, min: ENGINE_MIN, rank: 3, keep: true \}/);
+	assert.match(bar, /\{ id: 'profile', width: widths\.profile, min: widths\.compact, rank: 4, keep: true, show: showProfile \}/);
+	assert.doesNotMatch(bar, /fit\.overflow\.includes\('(engine|profile)'\)/);
+	assert.doesNotMatch(bar, /hostIconName\('dots'\)/);
 	assert.match(bar, /onSelect: setProjectQuality/);
 	assert.match(bar, /onclick: \(\) => openEngineSettings\(engine\?\.preset\)/);
-	assert.match(bar, /bind:clientWidth=\{room\}/);
+	assert.match(bar, /use:watch=\{'room'\} data-vp-engine/);
+	assert.match(bar, /observer \?\?= new ResizeObserver\(measure\);/);
 	assert.doesNotMatch(bar, /min-\[1400px\]/);
 
 	const dock = source('../components/panels/DirectorDock.svelte');

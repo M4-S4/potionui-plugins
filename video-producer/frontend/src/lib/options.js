@@ -17,6 +17,7 @@ const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 const whole = (value) => isNumber(value) && Number.isInteger(value);
 const within = (value, low, high) => (!isNumber(low) || value >= low) && (!isNumber(high) || value <= high);
 const modelRef = (value) => typeof value === 'string' && value.startsWith(MODEL_REF) && value.length > MODEL_REF.length;
+const copy = (value) => JSON.parse(JSON.stringify(value));
 
 export function integral(field) {
 	const { step, min } = field?.limits ?? {};
@@ -175,14 +176,14 @@ export function fieldTitle(field) {
 
 export function optionsOf(engine, presetId) {
 	const chosen = isObject(engine?.options) && presetId ? engine.options[presetId] : null;
-	return isObject(chosen) ? structuredClone(chosen) : {};
+	return isObject(chosen) ? copy(chosen) : {};
 }
 
 export function setPresetOptions(engine, presetId, values) {
 	if (!engine || !presetId) return;
 	const kept = isObject(values) ? values : {};
 	const options = isObject(engine.options) ? { ...engine.options } : {};
-	if (Object.keys(kept).length) options[presetId] = structuredClone(kept);
+	if (Object.keys(kept).length) options[presetId] = copy(kept);
 	else delete options[presetId];
 	if (Object.keys(options).length) engine.options = options;
 	else delete engine.options;

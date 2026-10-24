@@ -1,10 +1,32 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { parse } from 'svelte/compiler';
 import { SOUND_SPACE, SOUND_TYPES } from './sound.js';
 import { refMediaKind, typesOf } from './refmedia.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+
+const CHILDREN = ['fragment', 'nodes', 'consequent', 'alternate', 'body', 'fallback', 'pending', 'then', 'catch'];
+const attribute = (node, name) => node.attributes?.find((a) => a.type === 'Attribute' && a.name === name);
+const literal = (node, name) => {
+	const value = attribute(node, name)?.value;
+	return Array.isArray(value) && value.length === 1 && value[0].type === 'Text' ? value[0].data : null;
+};
+const drags = (node) => Boolean(attribute(node, 'draggable')) && literal(node, 'draggable') !== 'false';
+const scrubs = (node) => (['audio', 'video'].includes(node.name) && Boolean(attribute(node, 'controls'))) || (node.name === 'input' && literal(node, 'type') === 'range');
+
+function draggedControls(node, inside = false, found = []) {
+	if (Array.isArray(node)) {
+		for (const child of node) draggedControls(child, inside, found);
+		return found;
+	}
+	if (!node || typeof node !== 'object') return found;
+	const element = node.type === 'RegularElement';
+	if (element && inside && scrubs(node)) found.push(node.name);
+	for (const key of CHILDREN) if (key in node) draggedControls(node[key], inside || (element && drags(node)), found);
+	return found;
+}
 
 test('typesOf: the types of each reference family, in their order, none for an unknown family', () => {
 	assert.deepEqual(typesOf('identite'), ['Personnage', 'Décor', 'Objet', 'Style']);
@@ -52,4 +74,13 @@ test('the reference editor offers the types of every family and the media its ty
 	const board = source('../components/references/ReferenceBoard.svelte');
 	assert.match(board, /\{@const thumb = assetThumb\(a\)\}/);
 	assert.match(board, /\{@const kind = refMediaKind\(r\.space, r\.type\)\}/);
+});
+
+test('pages: no player or slider sits inside an element that drags, so its cursor follows the pointer instead of the drag', () => {
+	const files = ['../VideoProducerPage.svelte', ...readdirSync(new URL('../components', import.meta.url), { recursive: true }).filter((f) => f.endsWith('.svelte')).map((f) => `../components/${f.replaceAll('\\', '/')}`)];
+	const caught = Object.fromEntries(files.map((file) => [file, draggedControls(parse(source(file), { modern: true }).fragment)]).filter(([, found]) => found.length));
+
+	assert.deepEqual(caught, {});
+	assert.ok(files.length > 50);
+	assert.deepEqual(draggedControls(parse('<li draggable="true"><audio controls></audio></li><div draggable="false"><input type="range" /></div>', { modern: true }).fragment), ['audio']);
 });

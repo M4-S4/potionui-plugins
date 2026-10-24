@@ -1060,15 +1060,14 @@
 			height: 1rem;
 			min-width: 0;
 			max-width: 220px;
-			flex-wrap: wrap;
 			align-items: center;
 			justify-content: flex-end;
-			gap: 0.25rem 0.375rem;
+			gap: 0.375rem;
 			overflow: hidden;
 		}
 		.vp-root .vp-notice-text {
-			min-width: 100px;
-			flex: 1 1 0%;
+			min-width: 0;
+			flex: 0 1 auto;
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
