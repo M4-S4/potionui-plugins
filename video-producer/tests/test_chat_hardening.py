@@ -814,7 +814,7 @@ async def test_the_kinds_and_rules_the_server_emits_are_all_translated_by_the_pa
 def test_every_kind_the_server_can_emit_has_a_translation_in_both_languages():
     english = json.loads((PAGE_I18N / "en" / "assistant.json").read_text(encoding="utf-8"))
     french = json.loads((PAGE_I18N / "fr" / "assistant.json").read_text(encoding="utf-8"))
-    emitted = {"no_instruction", "conflict", "duration", "fl2va_no_frame", "camera_change", *tools.PAGE_FIXES}
+    emitted = {"no_instruction", "conflict", "duration", "fl2va_no_frame", "cast_unnamed", "camera_change", *tools.PAGE_FIXES}
 
     for kind in emitted:
         for table in (english, french):
