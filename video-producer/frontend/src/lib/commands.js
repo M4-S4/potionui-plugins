@@ -21,7 +21,7 @@ import {
 	proposeShots,
 	secs
 } from './state.svelte.js';
-import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy, fitShot } from './production.svelte.js';
+import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy, fitShot, setProjectQuality } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
 import { openGallery, openImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
@@ -211,8 +211,8 @@ export const menus = [
 		[command('dir-global', director), command('synopsis', synopsis), command('continuity', director)],
 		[
 			command('generate', () => startGeneration(), { keys: 'mod+g' }),
-			command('draft', () => (ui.production.quality = 'draft'), { check: () => ui.production.quality === 'draft' }),
-			command('final', () => (ui.production.quality = 'final'), { check: () => ui.production.quality === 'final' }),
+			command('draft', () => setProjectQuality('draft'), { check: () => ui.production.quality === 'draft' }),
+			command('final', () => setProjectQuality('final'), { check: () => ui.production.quality === 'final' }),
 			command('queue', openQueue, { keys: 'alt+mod+g' }),
 			command('cancel-generation', cancelRunning)
 		],

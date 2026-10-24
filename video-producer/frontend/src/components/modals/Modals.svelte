@@ -14,6 +14,7 @@
 	import VersionHistory from './VersionHistory.svelte';
 	import PromptEditor from './PromptEditor.svelte';
 	import ShotEditor from './ShotEditor.svelte';
+	import EngineEditor from './EngineEditor.svelte';
 	import PromptLibrary from './PromptLibrary.svelte';
 	import SoundDesign from './SoundDesign.svelte';
 	import ExportDialog from './ExportDialog.svelte';
@@ -85,6 +86,8 @@
 		<PromptEditor id={m.id} isNew={m.isNew} />
 	{:else if m?.type === 'shot'}
 		<ShotEditor id={m.id} draft={m.draft ?? null} baseline={m.baseline ?? null} />
+	{:else if m?.type === 'engine'}
+		<EngineEditor preset={m.preset ?? null} />
 	{:else if m?.type === 'library'}
 		<PromptLibrary target={m.target} tab={m.tab} />
 	{:else if m?.type === 'sound'}

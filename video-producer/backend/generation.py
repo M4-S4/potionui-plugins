@@ -3,7 +3,7 @@ import logging
 import secrets
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple
 
-from . import core_bridge, director, estimate, limits, models, notifications, projects, settings, soundtrack, takes
+from . import core_bridge, director, engine_options, estimate, limits, models, notifications, projects, settings, soundtrack, takes
 from .core_bridge import AccountType, GenerationNotFoundException, IdempotencyKeyConflict, User
 from .director import DirectorError, ShotPlan, note
 from .estimate import Evaluation
@@ -369,7 +369,7 @@ def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
     duration_ms = state_duration_ms(state)
     seconds = 1.0 if keyframe else float(take.get("duration_s") or 0)
     if duration_ms and backend_id and seconds > 0 and take.get("resolution") and take.get("preset_id"):
-        takes.add_calibration(take["preset_id"], backend_id, take["resolution"], seconds, duration_ms)
+        takes.add_calibration(take["preset_id"], backend_id, take["resolution"], seconds * engine_options.take_scale(take), duration_ms)
     _adjust(take, duration_ms)
     takes.close_jobs(take["id"])
     _notify(take, done=True)

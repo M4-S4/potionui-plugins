@@ -104,7 +104,7 @@ def parse_order(body: Any) -> Order:
 
 
 def calibrated_ratio(preset_id: str, backend_id: Optional[str], resolution: Optional[str]) -> Tuple[Optional[float], int]:
-    """Seconds of work per second of video measured for a preset at a resolution, and how many measures back it."""
+    """Seconds of work per second of video measured for a preset at a resolution at the steps of its defaults, and how many measures back it."""
     if not resolution:
         return None, 0
     rows = [(seconds, duration_ms) for seconds, duration_ms in takes.calibration(preset_id, backend_id, resolution) if seconds > 0]
@@ -120,9 +120,9 @@ def take_minutes(seconds: float, ratio: Optional[float]) -> float:
 
 
 def plan_minutes(plan: ShotPlan, preset_id: str, backend_id: Optional[str] = None) -> float:
-    """The GPU minutes one take of a plan reserves."""
+    """The GPU minutes one take of a plan reserves, longer or shorter with the steps its options ask for."""
     ratio, _ = calibrated_ratio(preset_id, backend_id, plan.resolution)
-    return take_minutes(plan.seconds, ratio)
+    return take_minutes(plan.seconds * plan.work_scale, ratio)
 
 
 def unknown_vram(backend_id: Optional[str] = None) -> Dict[str, Any]:
@@ -270,7 +270,7 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
 
 
 async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order, project_id: str = "") -> Evaluation:
-    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape; the reference tracks a guided shot would send silent are left out."""
+    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape, the time and the minutes following the steps the options of each shot ask for; the reference tracks a guided shot would send silent are left out."""
     plans = await soundtrack.heard_plans(
         owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production, overrides=True
     )
@@ -283,8 +283,8 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
         ratio, count = calibrated_ratio(plan.preset_id, plan.backend_id or vram.get("backend_id"), plan.resolution)
         if index == 0:
             samples = count
-        minutes[plan.shot_id] = take_minutes(plan.seconds, ratio)
-        work = None if ratio is None or work is None else work + ratio * plan.seconds * counts[plan.shot_id]
+        minutes[plan.shot_id] = take_minutes(plan.seconds * plan.work_scale, ratio)
+        work = None if ratio is None or work is None else work + ratio * plan.seconds * plan.work_scale * counts[plan.shot_id]
     seconds = round(work, 1) if work is not None and plans.shots else None
     quota = _quota(owner, plans, minutes, counts)
     blocks = list(plans.blocks) + ([quota_block(quota)] if quota["blocks"] else [])

@@ -99,8 +99,6 @@
 	"toast.loadFailed": "Les prises de ce projet n’ont pas pu être chargées.",
 	"toast.failed.one": "{count} prise en échec",
 	"toast.failed.other": "{count} prises en échec",
-	"profile.badge": "{profiles} : MiniMax H3 seulement",
-	"profile.why": "{engine} ne sait pas générer {profiles} : les images de référence (Ref2VA) et le son généré (Hybrid AV) demandent MiniMax H3.",
 	"refs.why": "Les références ne partent qu’avec le profil Ref2VA sur MiniMax H3 ; {engine} les ignore.",
 	"shotProgress": "Progression de la génération de « {shot} »",
 	"tasks.takes.one": "{count} prise en cours",
@@ -178,5 +176,6 @@
 	"block.audioOnly": "{shot} : Ref2VA demande une image ou une vidéo à côté du son du plan.",
 	"block.audioFfmpeg": "ffmpeg n’est pas disponible sur ce serveur : le son des plans ne peut pas être découpé.",
 	"block.audioSource": "{shot} : un son qu’il envoie ne peut plus être lu.",
-	"block.audioCut": "{shot} : le son du plan n’a pas pu être découpé ou enregistré."
+	"block.audioCut": "{shot} : le son du plan n’a pas pu être découpé ou enregistré.",
+	"warn.optionInvalid": "{engine} : ces options ne correspondent plus à leur champ et sont laissées de côté : {fields}."
 }

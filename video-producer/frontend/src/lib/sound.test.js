@@ -271,13 +271,13 @@ test('shot editor: the draft carries the excluded tracks and saving one marks th
 	assert.equal(clip.revision, 1);
 });
 
-test('the pages say how the sound of a shot is taken: the shot editor, the Storyboard card, the Inspector, the console and the Engine section', () => {
+test('the pages say how the sound of a shot is taken: the shot editor, the Storyboard card, the Inspector, the console and the Production bar', () => {
 	assert.match(source('../components/modals/ShotEditor.svelte'), /<SoundNote \{behavior\} \/>/);
 	assert.match(source('../components/storyboard/StoryboardView.svelte'), /<SoundNote behavior=\{sound\.behavior\} compact \/>/);
 	assert.match(source('../components/inspector/Inspector.svelte'), /setReferenceLane\(item, v\)/);
 	assert.match(source('../components/inspector/Inspector.svelte'), /checked: isReferenceItem\(item, audioLane\)/);
 	assert.match(source('../components/mixer/Console.svelte'), /setReferenceLane\(l, !isReferenceLane\(l\)\)/);
-	assert.match(source('../components/panels/DirectorDock.svelte'), /setReferenceMargin\(doc\.engine, e\.currentTarget\.value\)/);
+	assert.match(source('../components/production/ProductionBar.svelte'), /act\(\(\) => setReferenceMargin\(doc\.engine, value\)\)/);
 	const production = source('./production.svelte.js');
 	for (const code of ['audio_condition', 'audio_mux', 'audio_ignored', 'audio_track_muted', 'audio_track_empty', 'audio_track_silent', 'audio_only_references', 'audio_ffmpeg_missing', 'audio_source_missing']) {
 		assert.match(production, new RegExp(`code === '${code}'`));
