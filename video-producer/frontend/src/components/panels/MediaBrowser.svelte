@@ -8,6 +8,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { addToTimeline, importFiles, openImport, openLocalImport } from '../../lib/importer.js';
+	import { deleteAsset } from '../../lib/assets.svelte.js';
 	import { fileDrop } from '../../lib/filedrop.js';
 	import { LOCAL_KINDS } from '../../lib/upload.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
@@ -120,6 +121,9 @@
 									<div class="flex h-full items-center justify-center text-fg-muted"><Icon name={a.kind !== 'audio' ? 'film' : a.role === 'Dialogue' ? 'mic' : 'music'} class="h-6 w-6" /></div>
 								{/if}
 								{#if a.srcDur !== null}<span class="vp-tc absolute bottom-1 right-1 rounded-sm bg-black/60 px-1 text-2xs text-white">{secs(a.srcDur)}</span>{/if}
+								<span class="absolute right-1 top-1 rounded-md bg-black/60 text-white opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+									<HostUi name="IconButton" props={{ icon: 'trash', label: t('panels.media.deleteNamed', { name: a.name }), size: 'xs', tooltip: t('panels.media.deleteTip'), onclick: (e) => (e.stopPropagation(), deleteAsset(a.id)) }} />
+								</span>
 								{#if a.generated}
 									<span class="absolute left-1 top-1 flex items-center gap-1 rounded-sm bg-black/60 px-1 text-2xs text-white"><span class="h-1.5 w-1.5 rounded-full {a.quality === 'final' ? 'bg-success-solid' : 'bg-signal-solid'}"></span>{a.quality === 'final' ? t('lib.stage.final') : t('lib.stage.draft')}</span>
 								{:else if a.origin}
@@ -143,6 +147,7 @@
 			<div class="flex items-center gap-2">
 				<span class="truncate text-sm font-medium">{cur.name}</span>
 				<span class="ml-auto shrink-0"><HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{kindLabel(cur.kind)}</HostUi></span>
+				<HostUi name="IconButton" props={{ icon: 'trash', label: t('panels.media.delete'), size: 'xs', tooltip: t('panels.media.deleteTip'), onclick: () => deleteAsset(cur.id) }} />
 			</div>
 			<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
 				{#if cur.srcDur !== null}

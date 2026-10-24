@@ -496,11 +496,15 @@ export function shotDurationLimit(clip) {
 	return durationLimit(doc, clip, option?.info.limits.maxDuration ?? null);
 }
 
-export function settleRelease(clip, released) {
-	if (!clip || !released) return;
-	const take = takeById(released.take);
+export function releaseTake(released) {
+	const take = takeById(released?.take);
 	const label = releasedLabel(take);
 	if (label) sendLabel(take, label);
+}
+
+export function settleRelease(clip, released) {
+	if (!clip || !released) return;
+	releaseTake(released);
 	toast(t('lib.toast.takeReleased', { shot: clipLabel(clip) }));
 }
 
