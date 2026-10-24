@@ -11,6 +11,8 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { mediaFailure, mediaFormat } from '../../lib/playable.js';
 	import { frameDuration } from '../../lib/timebase.js';
+	import { lutOf } from '../../lib/match.js';
+	import MatchCanvas from './MatchCanvas.svelte';
 	import Icon from '../Icon.svelte';
 
 	let w = $state(0);
@@ -38,6 +40,9 @@
 	const liveVideo = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'video' ? a.src : null);
 	const liveImage = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'image' ? a.src : null);
 	let video = $state();
+	let picture = $state();
+	let matched = $state(false);
+	const lut = $derived(mode === 'sequence' && clip ? lutOf(clip) : null);
 	let failed = $state({});
 	const mark = (src, el, withSize = false) => {
 		const reason = mediaFailure(el, { video: withSize });
@@ -191,14 +196,16 @@
 							playsinline
 							preload="auto"
 							aria-label={a.name}
-							style:opacity={fadeOpacity(clip, time)}
+							style:opacity={lut && matched ? 0 : fadeOpacity(clip, time)}
 							style:filter={clipFilter(clip)}
 							onerror={(e) => mark(liveVideo, e.currentTarget)}
 							onloadedmetadata={(e) => mark(liveVideo, e.currentTarget, true)}
 						></video>
+						{#if lut && video}<MatchCanvas source={video} {lut} filter={clipFilter(clip)} opacity={fadeOpacity(clip, time)} onlive={(v) => (matched = v)} />{/if}
 					{/key}
 				{:else if liveImage}
-					<img src={liveImage} alt={a.name} class="h-full w-full object-contain" style:opacity={fadeOpacity(clip, time)} style:filter={clipFilter(clip)} />
+					<img bind:this={picture} src={liveImage} alt={a.name} class="h-full w-full object-contain" style:opacity={lut && matched ? 0 : fadeOpacity(clip, time)} style:filter={clipFilter(clip)} />
+					{#if lut && picture}<MatchCanvas source={picture} {lut} filter={clipFilter(clip)} opacity={fadeOpacity(clip, time)} onlive={(v) => (matched = v)} />{/if}
 				{:else if clip && a}
 					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center text-white/70">
 						<Icon name="film" class="h-7 w-7" />

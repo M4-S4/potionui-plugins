@@ -47,6 +47,10 @@ REFERENCE_SPACES = ("identite", "decors3d", "mouvement", "son")
 MAX_REFERENCE_MARGIN = 10
 MAX_DRAFTS = 16
 SEED_LIMIT = 2**31 - 1
+MATCH_ANCHORS = ("keyframe", "reference", "previous")
+MATCH_STATS = 6
+LOUDNESS_TARGETS = ("web", "broadcast")
+MAX_CROSSFADE = 2
 
 
 def _enum(*values: Any) -> Dict[str, Any]:
@@ -99,6 +103,19 @@ SHOT_ENGINE = _object(
 
 HYBRID = _object({"continuite": NUMBER, "identite": NUMBER, "audio": NUMBER, "mouvement": NUMBER, "style": NUMBER})
 
+STATS = {"type": "array", "items": NUMBER, "minItems": MATCH_STATS, "maxItems": MATCH_STATS}
+
+COLOR_MATCH = _object(
+    {
+        "anchor": _enum(*MATCH_ANCHORS),
+        "anchorId": REF,
+        "assetId": REF,
+        "strength": {"type": "number", "minimum": 0, "maximum": 100},
+        "source": STATS,
+        "target": STATS,
+    }
+)
+
 CLIP = _object(
     {
         "id": ID,
@@ -120,6 +137,8 @@ CLIP = _object(
     },
     optional={
         "mute": FLAG,
+        "match": COLOR_MATCH,
+        "deflicker": FLAG,
         "drafts": {"type": "integer", "minimum": 1, "maximum": MAX_DRAFTS},
         "revision": {"type": "integer", "minimum": 0},
         "referenceOverrides": REFERENCE_OVERRIDES,
@@ -342,7 +361,13 @@ DOC_SCHEMA: Dict[str, Any] = {
             "scenes": _array(SCENE),
             "lanes": _array(LANE),
             "aux": _array(AUX),
-            "master": _object({"vol": NUMBER}),
+            "master": _object(
+                {"vol": NUMBER},
+                optional={
+                    "loudness": _enum(*LOUDNESS_TARGETS),
+                    "crossfade": {"type": "number", "minimum": 0, "maximum": MAX_CROSSFADE},
+                },
+            ),
             "engine": ENGINE,
             "assets": _array(ASSET),
         },

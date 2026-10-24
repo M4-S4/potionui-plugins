@@ -1,6 +1,7 @@
 import { t } from '../i18n/index.svelte.js';
 import { doc, asset, act, toast, clamp, round, clipLabel } from './state.svelte.js';
 import { drawGraded, filterOf, lookSteps } from './grade.js';
+import { lutOf } from './match.js';
 import { realThumb } from './media.js';
 import { findTake } from './production.svelte.js';
 import { takeStore } from './takes.svelte.js';
@@ -9,7 +10,7 @@ import { seamPick, seamSourceOf } from './continuity.js';
 const stats = $state({});
 const pending = new Set();
 
-function measure(key, src, steps) {
+function measure(key, src, steps, lut) {
 	if (!src) return null;
 	if (pending.has(key)) return stats[key] ?? null;
 	pending.add(key);
@@ -20,7 +21,7 @@ function measure(key, src, steps) {
 		c.height = 27;
 		const g = c.getContext('2d', { willReadFrequently: true });
 		if (!g) return;
-		const d = drawGraded(g, img, 48, 27, steps);
+		const d = drawGraded(g, img, 48, 27, steps, lut);
 		let r = 0;
 		let gr = 0;
 		let b = 0;
@@ -42,8 +43,9 @@ function measure(key, src, steps) {
 function measured(clip, a, src) {
 	const steps = lookSteps(clip);
 	const filter = filterOf(steps);
-	const key = `${a?.id}|${src}|${filter}`;
-	return stats[key] ?? measure(key, src, steps);
+	const lut = lutOf(clip);
+	const key = `${a?.id}|${src}|${filter}|${lut?.key ?? ''}`;
+	return stats[key] ?? measure(key, src, steps, lut);
 }
 
 export function colorOf(clip) {
