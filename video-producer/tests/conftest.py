@@ -208,6 +208,8 @@ def peak_cache_reset():
     from backend import soundtrack
 
     soundtrack._PEAKS.clear()
+    soundtrack._RUNNING.clear()
+    soundtrack._SLOTS.clear()
 
 
 WAN_ID = "01KX47WANVIDEO0000000000TV"

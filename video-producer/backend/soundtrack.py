@@ -1,11 +1,14 @@
 import asyncio
+import copy
 import logging
+import math
 import os
 import re
 import shutil
 import tempfile
+from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from . import core_bridge, director, takes
 from .core_bridge import User
@@ -24,15 +27,25 @@ ENCODER = ("-c:a", "pcm_s16le", "-ac", "2")
 
 LAYOUT = f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo"
 
+SEEK_FROM = 10.0
+
+SEEK_PREROLL = 1.0
+
 SILENCE_DB = -60.0
 
 PEAK_SECONDS = 60.0
 
-PEAK_CACHE = 512
+PEAK_CACHE = 4096
+
+MEASURES = 4
 
 PEAK = re.compile(r"max_volume:\s*(-?(?:inf|\d+(?:\.\d+)?))\s*dB")
 
 _PEAKS: Dict[Tuple[Any, ...], float] = {}
+
+_RUNNING: Dict[Tuple[Any, ...], Tuple[asyncio.AbstractEventLoop, "asyncio.Task[Optional[float]]"]] = {}
+
+_SLOTS: List[Tuple[asyncio.AbstractEventLoop, asyncio.Semaphore]] = []
 
 
 class SoundError(Exception):
@@ -49,6 +62,13 @@ def work_base() -> Path:
     return core_bridge.storage_directory() / "video_producer" / "audio"
 
 
+def seek_point(item: Mapping[str, Any], origin: float) -> float:
+    """The time of its source an item is read from in a cut that starts at origin: a whole number of seconds into the item and at least SEEK_PREROLL before what the cut keeps, so that the decoder has settled and the resampling and the fades fall on the very samples of a read from the start; 0, a read from the start, when it would skip less than SEEK_FROM seconds."""
+    skipped = max(origin - float(item.get("start") or 0), 0.0)
+    seek = float(item.get("srcIn") or 0) + math.floor(skipped - SEEK_PREROLL)
+    return seek if seek >= SEEK_FROM else 0.0
+
+
 def mix_graph(
     doc: Mapping[str, Any],
     lanes: Sequence[str],
@@ -57,14 +77,14 @@ def mix_graph(
     sounds: Mapping[str, str],
     references: Sequence[str] = (),
 ) -> Tuple[List[str], str]:
-    """The inputs and the filter graph of one cut: the items of the tracks heard between start and end, each with its gain and fades at its place, the references from their beginning, over silence that lasts the whole cut."""
+    """The inputs and the filter graph of one cut: the items of the tracks heard between start and end, each with its gain and fades at its place and read from its seek point, the references from their beginning, over silence that lasts the whole cut."""
     length = num(end - start)
     inputs: List[str] = []
     graph = [f"anullsrc=r={SAMPLE_RATE}:cl=stereo,atrim=duration={length}[bed]"]
     labels: List[str] = []
 
-    def add(path: str, chain: List[str]) -> None:
-        inputs.extend(["-i", path])
+    def add(path: str, chain: List[str], seek: float = 0.0) -> None:
+        inputs.extend([*(["-ss", num(seek)] if seek else []), "-i", path])
         label = f"[m{len(labels)}]"
         graph.append(f"[{len(labels)}:a]{','.join(chain)}{label}")
         labels.append(label)
@@ -73,7 +93,8 @@ def mix_graph(
     for lane_id in lanes:
         for item in director.lane_items(doc, lane_id, start, end):
             if item["id"] in sounds:
-                add(sounds[item["id"]], sound_chain(item, by_id.get(lane_id) or {}, start))
+                seek = seek_point(item, start)
+                add(sounds[item["id"]], sound_chain(item, by_id.get(lane_id) or {}, start, seek), seek)
     for path in references:
         add(path, [f"atrim=duration={length}", "asetpts=PTS-STARTPTS", LAYOUT])
     if labels:
@@ -132,6 +153,12 @@ class _Sources:
             found = media.locate(asset, self.takes, self.resolver) if asset else None
             self.found[key] = found if found and found.kind else None
         return self.found[key]
+
+    def into(self, folder: Path) -> "_Sources":
+        """The same sources, copying what must be copied into another folder."""
+        sources = copy.copy(self)
+        sources.folder, sources.cache = folder, {}
+        return sources
 
     def path(self, asset_id: Any) -> Optional[str]:
         key = str(asset_id)
@@ -239,6 +266,13 @@ def _remember(key: Tuple[Any, ...], level: float) -> None:
         _PEAKS.pop(next(iter(_PEAKS)))
 
 
+def _recall(key: Tuple[Any, ...]) -> Optional[float]:
+    level = _PEAKS.pop(key, None)
+    if level is not None:
+        _PEAKS[key] = level
+    return level
+
+
 async def track_peak(ffmpeg: str, sources: _Sources, cut: TrackCut) -> Optional[float]:
     """The peak level in dBFS of the cut of one guided track, mixed and resampled as attach writes it; None when it cannot be read."""
     try:
@@ -249,41 +283,74 @@ async def track_peak(ffmpeg: str, sources: _Sources, cut: TrackCut) -> Optional[
     return await peak(peak_command(ffmpeg, inputs, graph, cut.end - cut.start, H3_RATE))
 
 
+def _slots() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    if not _SLOTS or _SLOTS[0][0] is not loop:
+        _SLOTS[:] = [(loop, asyncio.Semaphore(MEASURES))]
+    return _SLOTS[0][1]
+
+
+async def _measure(ffmpeg: str, sources: _Sources, owner: User, cut: TrackCut, key: Tuple[Any, ...]) -> Optional[float]:
+    folder: Optional[Path] = None
+    try:
+        async with _slots():
+            base = work_base() / owner.id
+            base.mkdir(parents=True, exist_ok=True)
+            folder = Path(tempfile.mkdtemp(dir=base))
+            level = await track_peak(ffmpeg, sources.into(folder), cut)
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not measure the reference track %s of shot %s", cut.lane_id, cut.shot_id, exc_info=True)
+        return None
+    finally:
+        if folder is not None:
+            await asyncio.to_thread(shutil.rmtree, folder, True)
+    if level is not None:
+        _remember(key, level)
+    return level
+
+
+def _shared(key: Tuple[Any, ...], start: Callable[[], Awaitable[Optional[float]]]) -> "asyncio.Task[Optional[float]]":
+    loop = asyncio.get_running_loop()
+    held = _RUNNING.get(key)
+    if held is not None and held[0] is loop and not held[1].done():
+        return held[1]
+    task = loop.create_task(start())
+    _RUNNING[key] = (loop, task)
+
+    def forget(done: "asyncio.Task[Optional[float]]") -> None:
+        if _RUNNING.get(key, (None, None))[1] is done:
+            del _RUNNING[key]
+
+    task.add_done_callback(forget)
+    return task
+
+
 async def silent_lanes(owner: User, project_id: str, doc: Mapping[str, Any], cuts: Sequence[TrackCut]) -> Dict[str, List[str]]:
-    """The reference tracks each guided shot would send silent, their cut peaking at SILENCE_DB or below, each cut measured once per owner, media and graph, in a work folder made only when one must be; a track whose cut cannot be measured is kept, and fails at the cut as before."""
+    """The reference tracks each guided shot would send silent, their cut peaking at SILENCE_DB or below. A cut is measured once per owner, media and graph: a measure already made is read from memory, one under way for another request is awaited rather than run again, and at most MEASURES run at a time, each in a work folder of its own, finishing even when the request that started it is gone. A track whose cut cannot be measured is kept, and fails at the cut as before."""
     ffmpeg = core_bridge.find_ffmpeg() if cuts else None
     if not ffmpeg:
         return {}
     ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     silent: Dict[str, List[str]] = {}
-    folder: Optional[Path] = None
     try:
         sources = _Sources(owner, doc, project_id, None)
-        keys: Dict[TrackCut, Tuple[Any, ...]] = {}
-        for cut in cuts:
-            signature = await asyncio.to_thread(sources.signature, cut.lane_id, cut.start, cut.end)
-            if signature is not None:
-                keys[cut] = (owner.id, *signature)
-        levels = {key: _PEAKS[key] for key in keys.values() if key in _PEAKS}
-        missing = {key: cut for cut, key in keys.items() if key not in levels}
-        if missing:
-            base = work_base() / owner.id
-            base.mkdir(parents=True, exist_ok=True)
-            folder = sources.folder = Path(tempfile.mkdtemp(dir=base))
-        for key, cut in missing.items():
-            level = await track_peak(ffmpeg, sources, cut)
+        signatures = await asyncio.to_thread(lambda: [sources.signature(cut.lane_id, cut.start, cut.end) for cut in cuts])
+        keys = {cut: (owner.id, *signature) for cut, signature in zip(cuts, signatures) if signature is not None}
+        levels: Dict[Tuple[Any, ...], float] = {}
+        for key in keys.values():
+            level = _recall(key)
             if level is not None:
                 levels[key] = level
-                _remember(key, level)
+        missing = {key: cut for cut, key in keys.items() if key not in levels}
+        tasks = {key: _shared(key, partial(_measure, ffmpeg, sources, owner, cut, key)) for key, cut in missing.items()}
+        found = await asyncio.gather(*(asyncio.shield(task) for task in tasks.values()))
+        levels.update((key, level) for key, level in zip(tasks, found) if level is not None)
         for cut, key in keys.items():
             level = levels.get(key)
             if level is not None and level <= SILENCE_DB:
                 silent.setdefault(cut.shot_id, []).append(cut.lane_id)
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not measure the reference tracks of the guided shots", exc_info=True)
-    finally:
-        if folder is not None:
-            await asyncio.to_thread(shutil.rmtree, folder, True)
     return silent
 
 

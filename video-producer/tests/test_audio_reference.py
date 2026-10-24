@@ -156,6 +156,23 @@ def measured(monkeypatch):
 
 
 @pytest.fixture
+def slow_peaks(monkeypatch):
+    state = {"running": 0, "most": 0, "calls": []}
+
+    async def peak(command):
+        state["calls"].append(command)
+        state["running"] += 1
+        state["most"] = max(state["most"], state["running"])
+        await asyncio.sleep(0.05)
+        state["running"] -= 1
+        return -91.0
+
+    monkeypatch.setattr(soundtrack, "peak", peak)
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "ffmpeg")
+    return state
+
+
+@pytest.fixture
 def stored(monkeypatch, tmp_path):
     saved = []
 
@@ -731,12 +748,75 @@ def test_the_peak_command_reads_the_cut_graph_at_the_rate_it_is_written_and_writ
     ]
 
 
-def test_the_measured_peaks_are_kept_for_the_last_cuts_only(monkeypatch):
+def test_the_measured_peaks_are_kept_for_the_cuts_last_used(monkeypatch):
     monkeypatch.setattr(soundtrack, "PEAK_CACHE", 2)
-    for index in range(3):
-        soundtrack._remember(("user-1", f"graph-{index}"), -float(index))
+    soundtrack._remember(("user-1", "graph-0"), -0.0)
+    soundtrack._remember(("user-1", "graph-1"), -1.0)
+    assert soundtrack._recall(("user-1", "graph-0")) == -0.0
+    soundtrack._remember(("user-1", "graph-2"), -2.0)
 
-    assert soundtrack._PEAKS == {("user-1", "graph-1"): -1.0, ("user-1", "graph-2"): -2.0}
+    assert soundtrack._PEAKS == {("user-1", "graph-0"): -0.0, ("user-1", "graph-2"): -2.0}
+    assert soundtrack._recall(("user-1", "graph-1")) is None
+
+
+def test_a_cut_deep_into_an_item_reads_its_source_from_a_whole_second_before_what_it_keeps(make_doc):
+    late = _item("late", "A1", 21.01, 400, srcIn=3.5, gain=-3, fadeIn=2, fadeOut=30)
+    trimmed = _item("trimmed", "A1", 21, 300, srcIn=100.25, fadeIn=1.5)
+    near = _item("near", "A1", 0, 30)
+    doc = _doc(make_doc, [late], A1={"vol": -2})
+
+    inputs, graph = soundtrack.mix_graph(doc, ["A1"], 380.37, 387.37, {"late": "/late.wav"})
+
+    assert inputs == ["-ss", "361.5", "-i", "/late.wav"]
+    assert graph.split(";")[1] == (
+        "[0:a]atrim=start=0:duration=42,asetpts=PTS-STARTPTS+358/TB,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+        "volume=-5dB,afade=t=in:st=0:d=2,afade=t=out:st=370:d=30,atrim=start=359.36,asetpts=PTS-STARTPTS,adelay=delays=0:all=1[m0]"
+    )
+    assert soundtrack.seek_point(trimmed, 21.0) == 99.25
+    assert soundtrack.sound_chain(trimmed, {}, 21.0, 99.25)[:2] == ["atrim=start=1:duration=300", "asetpts=PTS-STARTPTS"]
+    assert [soundtrack.seek_point(near, origin) for origin in (5.0, 10.99, 11.0)] == [0.0, 0.0, 10.0]
+    assert soundtrack.sound_chain(late, {"vol": -2}, 380.37) == soundtrack.sound_chain(late, {"vol": -2}, 380.37, 0.0)
+    assert soundtrack.sound_chain(late, {}, 0.0)[:2] == ["atrim=start=3.5:duration=400", "asetpts=PTS-STARTPTS"]
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+@pytest.mark.parametrize(
+    "suffix, codec",
+    [("wav", ["-c:a", "pcm_s16le"]), ("mp3", ["-c:a", "libmp3lame", "-q:a", "2"]), ("m4a", ["-c:a", "aac", "-b:a", "160k"])],
+    ids=["wav", "mp3-vbr", "aac"],
+)
+def test_a_cut_read_from_its_seek_point_is_the_very_cut_read_from_the_start_of_its_source(core, make_doc, tmp_path, monkeypatch, suffix, codec):
+    _media(core)
+    chirp = "0.3*sin(2*PI*(220+3*t)*t)+0.05*sin(2*PI*1234*t+sin(t))"
+    source = tmp_path / f"stem.{suffix}"
+    subprocess.run(
+        [shutil.which("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-f", "lavfi",
+         "-i", f"aevalsrc=exprs={chirp}|{chirp}:s=44100:d=70", *codec, str(source)],
+        check=True,
+    )
+    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, target: source)
+    doc = _doc(make_doc, [_item("late", "A1", 1.01, 66, srcIn=2.25, gain=-3, fadeIn=2, fadeOut=20)], A1={"vol": -2})
+    sources = soundtrack._Sources(core.users["user-1"], doc, "p-1", tmp_path)
+    ffmpeg = shutil.which("ffmpeg")
+    commands = []
+    assemble = soundtrack.assemble
+
+    async def recorded(command, *args, **kwargs):
+        commands.append(command)
+        return await assemble(command, *args, **kwargs)
+
+    monkeypatch.setattr(soundtrack, "assemble", recorded)
+
+    for start, end in ((40.37, 44.37), (55.0, 70.0)):
+        for rate in (soundtrack.H3_RATE, 48000):
+            sought = asyncio.run(soundtrack.cut(ffmpeg, sources, ["A1"], start, end, f"sought-{start}-{rate}", rate=rate))
+            monkeypatch.setattr(soundtrack, "SEEK_FROM", math.inf)
+            whole = asyncio.run(soundtrack.cut(ffmpeg, sources, ["A1"], start, end, f"whole-{start}-{rate}", rate=rate))
+            monkeypatch.setattr(soundtrack, "SEEK_FROM", 10.0)
+
+            assert "-ss" in commands[-2] and "-ss" not in commands[-1]
+            assert max(map(abs, _samples(sought, rate))) > 0.05
+            assert sought.read_bytes() == whole.read_bytes()
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
@@ -839,6 +919,44 @@ def test_a_track_whose_cut_cannot_be_measured_is_kept_and_a_mixed_shot_measures_
     evaluation = asyncio.run(estimate.evaluate(user, user, doc, order, "p-1"))
     assert evaluation.plans.shots[0].audio.lanes == ["A1"] and measured == []
     assert "audio_track_silent" not in [warning["code"] for warning in evaluation.payload["warnings"]]
+
+
+def test_overlapping_estimates_share_each_measure_and_at_most_four_run_at_a_time(core, make_doc, sounds, slow_peaks, export_storage):
+    _media(core)
+    user = core.users["user-1"]
+    doc = _doc(make_doc, [_item("v", "A1", 0, 8)], reference_lanes=("A1",))
+    cuts = [TrackCut(f"s{index}", "A1", index * 0.5, index * 0.5 + 3) for index in range(10)]
+
+    async def both():
+        return await asyncio.gather(*(soundtrack.silent_lanes(user, "p-1", doc, cuts) for _ in range(2)))
+
+    first, second = asyncio.run(both())
+
+    assert first == second == {f"s{index}": ["A1"] for index in range(10)}
+    assert len(slow_peaks["calls"]) == 10 and slow_peaks["most"] == soundtrack.MEASURES == 4
+    assert soundtrack._RUNNING == {} and list((export_storage / "video_producer" / "audio" / "user-1").iterdir()) == []
+
+
+def test_a_measure_goes_on_when_its_estimate_is_dropped_and_the_next_estimate_awaits_it(core, make_doc, sounds, slow_peaks, export_storage):
+    _media(core)
+    user = core.users["user-1"]
+    doc = _doc(make_doc, [_item("v", "A1", 0, 8)], reference_lanes=("A1",))
+    cuts = [TrackCut(f"s{index}", "A1", index * 0.5, index * 0.5 + 3) for index in range(6)]
+
+    async def dropped_then_again():
+        dropped = asyncio.ensure_future(soundtrack.silent_lanes(user, "p-1", doc, cuts))
+        while not slow_peaks["calls"]:
+            await asyncio.sleep(0.005)
+        dropped.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await dropped
+        running = len(soundtrack._RUNNING)
+        return running, await soundtrack.silent_lanes(user, "p-1", doc, cuts)
+
+    running, silent = asyncio.run(dropped_then_again())
+
+    assert running == 6 and silent == {f"s{index}": ["A1"] for index in range(6)}
+    assert len(slow_peaks["calls"]) == 6 and len(soundtrack._PEAKS) == 6
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
