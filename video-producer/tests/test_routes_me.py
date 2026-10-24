@@ -198,6 +198,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "plugin": {"id": "video-producer", "version": "0.1.0"},
             "engines": [],
             "presets": [],
+            "keyframe_presets": [],
             "features": {"upscaler": False},
             "upscale_targets": ["hd720", "fhd1080", "qhd1440", "uhd2160"],
             "ffmpeg": False,
@@ -605,7 +606,7 @@ def test_me_lists_the_presets_of_the_signed_in_user(app, client, make_user, stor
 
     client.get(ME_URL)
 
-    assert catalog.asked == ["user-9"]
+    assert catalog.asked and set(catalog.asked) == {"user-9"}
 
 
 def test_me_lists_no_preset_and_logs_when_the_presets_cannot_be_read(client, store, no_container, catalog, caplog):

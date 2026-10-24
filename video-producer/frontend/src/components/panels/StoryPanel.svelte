@@ -105,7 +105,7 @@
 			<ul class="space-y-1.5">
 				{#each issues as i, n (n)}
 					<li>
-						<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: i.kind === 'identity' ? 'user' : hostIconName('palette'), live: 'off' }}>
+						<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: i.kind === 'identity' ? 'user' : i.kind.startsWith('chain_') ? hostIconName('image') : hostIconName('palette'), live: 'off' }}>
 							<div class="text-xs text-fg-muted">{i.text}</div>
 							<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
 								{#if i.fix}<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => matchToPrevious(i.clip)}>{t('panels.story.matchColor')}</button>{/if}

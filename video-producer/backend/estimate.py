@@ -125,7 +125,8 @@ def plan_minutes(plan: ShotPlan, preset_id: str, backend_id: Optional[str] = Non
     return take_minutes(plan.seconds * plan.work_scale, ratio)
 
 
-def _unknown_vram(backend_id: Optional[str] = None) -> Dict[str, Any]:
+def unknown_vram(backend_id: Optional[str] = None) -> Dict[str, Any]:
+    """The memory estimate of a run that could not be previewed."""
     return {
         "estimate_gb": None,
         "free_gb": None,
@@ -141,12 +142,13 @@ def _number(value: Any) -> Optional[float]:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
-async def _plan_vram(owner: User, plan: ShotPlan) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+async def plan_vram(owner: User, plan: ShotPlan) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """The memory one take of a plan needs against what its backend offers, with the warnings to show."""
     try:
         result = await core_bridge.preview_memory(owner, plan.request_for())
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not preview the memory of a take", exc_info=True)
-        return _unknown_vram(), [note("vram_unknown", "The memory a take needs could not be estimated.")]
+        return unknown_vram(), [note("vram_unknown", "The memory a take needs could not be estimated.")]
     estimate = _number((result.get("estimate") or {}).get("checkpoint_estimate_gb"))
     device = result.get("device") or {}
     free, total = _number(device.get("free_gb")), _number(device.get("total_gb"))
@@ -182,14 +184,14 @@ async def _plan_vram(owner: User, plan: ShotPlan) -> Tuple[Dict[str, Any], List[
 async def _vram(owner: User, plans: Plans) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """The memory of the most demanding local preset of the run, previewed once per preset, with the warnings of every preset."""
     if any(block["code"] == "missing_models" for block in plans.blocks):
-        return _unknown_vram(), []
+        return unknown_vram(), []
     firsts: Dict[str, ShotPlan] = {}
     for plan in plans.shots:
         if not plan.cloud:
             firsts.setdefault(plan.preset_id, plan)
     if not firsts:
-        return _unknown_vram(), []
-    results = [await _plan_vram(owner, plan) for plan in firsts.values()]
+        return unknown_vram(), []
+    results = [await plan_vram(owner, plan) for plan in firsts.values()]
     vram = max(results, key=lambda result: (result[0]["streams"], result[0]["estimate_gb"] or 0.0))[0]
     warnings: List[Dict[str, Any]] = []
     for _, found in results:
@@ -226,7 +228,8 @@ def quota_block(quota: Mapping[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _model_cost(caller: User, model_id: str, shots: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def model_cost(caller: User, model_id: str, shots: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """What some runs on a cloud model cost, for an administrator; None for anyone else."""
     try:
         result = core_bridge.estimate_cloud_cost(caller, model_id, shots)
     except PermissionError:
@@ -256,7 +259,7 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
             by_model.setdefault(plan.model_id, []).extend(
                 {"task": plan.cloud_task, "params": dict(plan.cloud_params)} for _ in range(counts.get(plan.shot_id, 1))
             )
-    costs = [cost for cost in (_model_cost(caller, model_id, shots) for model_id, shots in by_model.items()) if cost is not None]
+    costs = [cost for cost in (model_cost(caller, model_id, shots) for model_id, shots in by_model.items()) if cost is not None]
     if not costs:
         return None
     if len(costs) == 1:

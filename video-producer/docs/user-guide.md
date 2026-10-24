@@ -42,7 +42,7 @@ All eight steps work for real, and your projects are saved as you work (chapter 
 The page has five levels of controls, from the widest to the most local, around a left panel, a center area, the Inspector and the timeline:
 
 - **Menu bar.** Ten menus, in this order: **Video Producer**, **File**, **Edit**, **Cut**, **Shot**, **Production**, **Audio**, **View**, **Window**, **Help**. The **Video Producer** menu holds **About Video Producer**, **Preferences…**, **Keyboard shortcuts** and **Search commands…**. A menu shows "…" only when the command opens a window that asks for something, and a check mark in front of a state that is on.
-- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import** (a menu with **From the library…** and **From this computer…**, chapter 6), **Export**, **Assistant** (it opens the PotionUI chat, chapter 10), a search button for the commands and the button that shows or hides the Inspector.
+- **Project bar.** On the left, the button that shows or hides the side panel, the project name (click it to rename the project) and its save state ("Saving…", "Saved at" and the time, "Modified · click to save" or "Not saved — retry"; chapter 5). In the middle, the workspace selector: **Media**, **Play**, **Director IA**, **Storyboard**, **3D scene**, **Mix**. On the right, **Import** (a menu with **From the library…** and **From this computer…**, chapter 6), **Export**, **Assistant** (it opens the PotionUI chat, chapter 10), a search button for the commands and the button that shows or hides the Inspector.
 - **Production bar.** It targets what to generate and holds the only main button of the page, **Generate selection** (chapter 8).
 - **Area headers and the timeline toolbar.** A title and counters on the left, small icons on the right.
 - **Content.** Small buttons that appear when you hover or select.
@@ -61,15 +61,15 @@ The ten menus group all the commands of the page. The command search (**Search c
 | **Production** | Global direction, Split synopsis into shots, Continuity check, Generate selection, Draft and Final quality, the generation queue, Cancel the generation, Results and takes, Assemble chosen takes, Edit Engine. |
 | **Audio** | Add audio track, Import audio from the library, Import audio from this computer, Mixing console, Voice and dialogue and the sound design workshop. |
 | **View** | Play, loop, full screen, framing guides, Compare takes, Luminance scope, Audio meters, timeline zoom, Snapping. |
-| **Window** | The five workspaces, the reference spaces, Side panel, Inspector, PotionUI assistant, Prompt library, Timeline index, Background tasks. |
+| **Window** | The six workspaces, the reference spaces, Side panel, Inspector, PotionUI assistant, Prompt library, Timeline index, Background tasks. |
 | **Help** | Getting started, Keyboard shortcuts, Search features, Simulated features. |
 
 ### The areas of the page
 
-- **Left panel.** It changes with the workspace (chapter 4). Show or hide it with the first button of the project bar or with Ctrl+Alt+1.
+- **Left panel.** It changes with the workspace (chapter 4); **Play** has none. Show or hide it with the first button of the project bar or with Ctrl+Alt+1.
 - **Center.** The viewer, the storyboard cards, the board of references or the 3D view, depending on the workspace.
 - **Inspector.** On the right. It follows the selection (chapter 7). It starts hidden when the window is narrower than 1360 pixels: open it with the last button of the project bar, or select something, which opens it.
-- **Timeline.** At the bottom. In **Mix**, the mixing console takes its place and a button brings the timeline back. Drag the thin line above the Production bar to give it more or less height.
+- **Timeline.** At the bottom. In **Mix**, the mixing console takes its place and a button brings the timeline back; in **Play**, a position bar replaces it. Drag the thin line above the Production bar to give it more or less height.
 - **Status bar.** At the very bottom, from left to right: the language reminder (`EN` or `FR`; click it to open the Preferences), the number of shots with the duration, the resolution and the aspect ratio, the active tool, the selection, the range. On the right: the number of direction points to check (click it to open the **Direction** tab), the number of takes in the generation queue (click it to open the **Queue** tab), snapping and, when your admin has set a limit for you, your **GPU quota**, the minutes used this month out of that limit (cloud providers are billed separately).
 
 The viewer has its own transport bar: monitor volume, go to the start, previous and next frame, play, loop, the timecode, framing guides, aspect ratio, resolution and full screen. When you preview a take, a comparison or a source media, a pill at the top of the viewer brings you **Back to the sequence**.
@@ -78,11 +78,20 @@ The timeline has a toolbar and one row per kind of item. The toolbar holds **Und
 
 ## 4. Workspaces
 
-Each workspace changes the left panel and the center. The Inspector on the right follows your selection in all of them. **Window › Timeline index** lists the prompts, frames, markers and Control videos with their time, and **Window › Background tasks** shows the generation in progress and the queue.
+Each workspace changes the left panel and the center. The Inspector on the right follows your selection in all of them but **Play**, which keeps only the viewer. **Window › Timeline index** lists the prompts, frames, markers and Control videos with their time, and **Window › Background tasks** shows the generation in progress and the queue.
 
 ### Media
 
 The media of the project in one panel. A new project has none: the panel says "No media in this project." and offers **Library** and **From computer**, like the two import buttons of its header and the **Import** menu of the project bar; you can also drop files on it. Chapter 6 explains how to bring in your images, videos and audio files. Filter with the collection pills (**All**, **Images**, **Videos**, **Audio**, **Generated**), search by name without worrying about accents, double-click to preview, drag to the timeline. For a selected item the panel shows its duration, format, collection and origin, and the buttons **Preview**, **Add to cut** and, for images and videos, **Use as frame at the playhead**. The center is the viewer.
+
+### Play
+
+The cut of V1 played full size, to watch it as it will be exported. Play has no side panel, no Inspector and no Production bar: the viewer takes the whole width with its transport bar (monitor volume, go to the start, previous and next frame, play, loop, framing guides, aspect ratio, resolution and full screen), and a position bar replaces the timeline. You hear the same mix as in the other workspaces: the sound of the V1 shots and the audio tracks, with their mute, solo, faders and effects.
+
+- **Position bar.** On the left, the timecode of the playhead and the shot it plays ("Shot 2/6 · Harbour"); on the right, the length of the cut. Below, one block per shot, the part already played in full color and the shot under the playhead stronger. Click or drag anywhere on the bar to move the playhead. An In and Out range shows as a band.
+- **Loop.** With **Loop** on, playback starts again from the beginning at the end of the cut, or from the In point at the end of the range when there is one. This is the same in every workspace.
+- **Keyboard.** Space plays and pauses, the arrows move by one frame (1 s with Shift), Home goes to the start and End to the end. The same keys work when the position bar has the focus (Tab, or a click on it).
+- A shot with no media yet shows its name and prompt, without the **Generate drafts** button. A preview of a take or of a source media stays in the workspace where you opened it: Play always shows the cut. The side panel and Inspector buttons of the project bar are greyed out; the panels come back in the other workspaces.
 
 ### Director IA
 
@@ -107,6 +116,7 @@ In the center: one card per shot, in order, with its number, its duration, its n
 - **Duration**, at most the length of the media of the shot when it has one ("At most 5.0 s with the media of the shot.").
 - **Frames**: the **First frame** and the **Last frame**. Click one to pick an image of the project, or **Library** or **From computer** to import one (chapter 6); **Remove** takes it off.
 - **References**. **Inherited from the project** lists the global references, each with an **Exclude** box: an excluded reference is not sent with this shot, and the other shots keep it. **This shot only** lists the references of the shot, with their name and type; **Add to the shot** adds one from an image (of the project, the library or your computer), and the trash icon removes one. The line at the top counts the references the shot sends ("2 references for this shot"). An engine sends at most 9 images, 3 videos and 3 audio files per shot (chapter 8): the excluded ones leave room for the next ones. **Add a sound** adds a sound reference of the shot only (a sound of the project, **Library** or **From computer**), with its type, **Voice**, **Music** or **Ambience**; sounds show their length and a player. **Reference tracks** lists the audio tracks checked **Reference for the generation** (chapter 13), each with what it holds under the shot ("1 clip between 0.0 s and 5.0 s", or "Nothing between …: nothing is sent") and an **Exclude** box that leaves the track out for this shot only. The last line says what the engine of the shot does with its sound: "Guides the generation: MiniMax H3 follows this sound.", "Will be mixed onto the take, not used as a guide." or "Ignored by this engine: the sound stays in the edit only."
+- **Start image from the references** (folded until the shot has candidates): an image model edits the Identity and 3D set pictures of the shot into its start image, or its end image, which the video engine then animates. Pick the **Image model** (the presets of your instance that edit from several pictures: Qwen-Image-2.1, FLUX 3 Klein, Qwen-Image Edit 2511, or Nano Banana in Gemini Images; the choice is kept for the project), **Start image** or **End image**, and 2 to 4 **Candidates**. **Pictures sent, in this order** shows what goes, numbered: the set first (a 3D capture used as the start image, the picture of the 3D scene, the 3D set references), then the characters, objects and styles; the first picture is the one edited and gives its frame to the image, and those past the limit of the model are dimmed. The line below gives the time (once a candidate of this model was measured), the memory and the GPU quota, or the cost for an admin. **Make 2 candidates for the start image** starts them; each one is a candidate A, B… of the shot, which waits in the queue like a take. On a finished one, **Use as start** or **Use as end** puts it in the **Frames** of the window (save the shot to keep it), the thumbs-down icon rejects it, and the trash icon deletes it (its image stays in your history). A failed candidate has **Retry**. When the model chosen for the project is no longer installed or assigned to you, the section says so and asks for another one.
 - **Drafts**: how many drafts the Generate buttons of the shot make at once (chapter 8).
 - **Engine**: what the shot generates with. Each field starts on the value of the project: **As the project (Wan 2.1 / 2.2)** for the engine, **As the project (FL2VA)** for the profile, **As the Production bar** for the quality, **Random** for the seed. Pick another value to give it to this shot only: **Preset or model** (the engines of the Production bar pop-up), **Profile** (the ones the chosen engine cannot generate are greyed), **Quality** (**Draft** or **Final**, whatever the bar says) and **Seed** (the arrows button picks one). With a seed, the first take of each generation takes it and the next ones the seeds after it, so generating again gives the same takes. **Back to the project** clears them all. A retry or a **Make final** keeps the engine and the seed of its take.
 
@@ -251,7 +261,7 @@ The Inspector follows the selection and its title tells what is selected: **Vide
 
 The other items have their own panel:
 
-- **Audio clip:** its track, start, duration, gain, fades, and a button that opens its strip in the console.
+- **Audio clip:** its track, start, duration, gain, its **Reference for the generation** switch, fades, the **Slices** section (chapter 13), and a button that opens its strip in the console.
 - **Title:** the text, the subtitle, the start and the duration.
 - **Shot prompt:** the text, the **Library & assistant** link, the **Editor** button, the warnings about the direction, the start, the duration, the influence, and the global direction that applies.
 - **Reference frame:** the image (picked among the images of the project, which a new project does not have), the position, the role (start, end, transition, identity, style), the strength of its influence and, for a capture of a 3D scene, the scene it comes from.
@@ -552,13 +562,23 @@ A **seam frame** is an image taken from a take and set as the first or last fram
 
 When you click it:
 
-1. The page saves the project and asks the server for the last image of a take of the previous shot: the take chosen for that shot or, if none is chosen, its most recent finished take. The button reads "Extracting the image…" meanwhile.
+1. The page saves the project and asks the server for the image at the end of the previous shot's cut: the last image that shot shows in your edit, at its in point plus its duration, from the take placed on it (its final or chosen take) or from its imported video. After a still, it is the still itself. The button reads "Extracting the image…" meanwhile.
 2. The image is saved in your library as a PNG, added to the media of the project and set as the **First frame** of the shot, with full influence, at the start of the shot. You see it in the **Frames** row of the timeline and in the Inspector. The page says "Last image of “Shot 1” set as the first frame of “Shot 2”" with an **Undo** button.
 3. Nothing is generated and the takes you already have do not change: the next take you generate for the shot starts from that frame. The frame only guides the generation; it is not drawn into an exported video.
 
 If the shot already has a first frame, a window asks "Replace the first frame?" ("“Shot 2” already has a first frame. The new image replaces it; you can undo."). **Replace** swaps it and **Keep the current one** changes nothing. The replaced image stays in the media of the project. **Undo** in the message, or **Edit › Undo**, brings the previous frame back.
 
-The action is greyed, with the explanation "“Shot 1” has no finished take yet.", while the previous shot has no finished take with a file, and it is not offered for the first shot of the film.
+The action is greyed, with the explanation "“Shot 1” has no take or video yet.", while nothing is placed on the previous shot, and it is not offered for the first shot of the film.
+
+### New shots start from the previous one
+
+When you add a shot after another one (**Shot**, **New shot** and **Insert a shot after** in the Storyboard, the **New shot** command, or **Add N shots at the end** for a breakdown, yours or the assistant's), the new shot takes as its **First frame** the image at the end of the previous shot's cut, as if you had clicked **Use the previous shot’s last frame**. The page says "First frame of “Shot 3”: the last frame of “Shot 2”", with **Undo**. Splitting a shot at the playhead and duplicating a shot do not do it.
+
+- **The previous shot has no take or video yet.** Nothing is set. As soon as a take arrives on it, the seam proposes the frame: "“Shot 2” now has an image: its last frame can open “Shot 3”", with **Use the previous shot’s last frame**, in Storyboard › **Continuity**, in Director IA › **To check** and on the card of the shot. This lasts while the new shot has no take of its own.
+- **You keep control.** The frame is an ordinary first frame: change it or remove it in the shot editor (**First frame**) or in the Inspector.
+- **The previous shot changes afterwards** (another take placed, another final, a trim of its in point or of its duration, the shots reordered): the first frame is never replaced behind your back. The seam says "The first frame of “Shot 3” is out of date: “Shot 2” changed after its last frame was taken" and its button becomes **Use the new last frame**, which takes the new image at once, without asking to replace. A first frame you chose yourself is never marked out of date.
+- **To turn it off**, open **File › Project properties…** and switch off **Start each new shot from the previous one**. The option belongs to the project and is on in every project, including older ones. Off, new shots start without a first frame and the seam proposes nothing; first frames already taken still say when they are out of date.
+- **An engine that generates from text only** (the Wan 12 GB and 8 GB presets in text-to-video) does not use first frames. The project properties say so under the option, and the estimate warns for each shot: "This engine generates from text only: the frames linked to “Shot 3” will not be used."
 
 ### Extract a frame at the playhead
 
@@ -598,6 +618,7 @@ Two things send sound with the generation of a shot:
 
 - **Sound references** (Director IA › References, family **Sound**; or **Add a sound** in the shot editor): a voice, a music or an ambience, global or for one shot, which a shot can exclude like any reference (chapter 4).
 - **Reference tracks**: the audio tracks you check **Reference for the generation**, with the switch of the Inspector of the track or the **Ref.** button of its strip in the console. A small sparkles icon next to the track name on the timeline marks them. At each generation, the part of the track under the shot is cut on the server, its clips mixed with their gain, their fades and the volume of the track, silence where nothing plays, and sent with the shot. A shot can leave a track out with **Exclude** in its shot editor. A muted track, or one soloed away, sends nothing, and neither does a track with no clip under the shot: the estimate says so. With MiniMax H3 in Ref2VA, a track whose part under the shot is silent (its loudest moment at −60 dB or below) is not sent either, and the other sounds take its place.
+- **Reference clips**: each audio clip has its own **Reference for the generation** switch in its Inspector. Left alone, the clip follows its track. Set, it wins over the track: a clip switched on is sent even from a track that is not a reference track, a clip switched off is never sent, even from a reference track. **Follow track A1** gives the choice back to the track. A sparkles icon before the name of a clip on the timeline marks each clip that is sent. Only the clips sent, under the shot, are cut, mixed, measured for silence and sent; a reference track whose clips under the shot are all switched off sends nothing and says nothing.
 
 What the engine does with this sound depends on it, and the shot editor, the Storyboard card and the estimate say which:
 
@@ -608,6 +629,12 @@ What the engine does with this sound depends on it, and the shot editor, the Sto
 | Wan, cloud models and the other engines | Nothing is sent. The tracks still play in your edit and in the exported video. | "Ignored by this engine: the sound stays in the edit only." |
 
 The cut files are stored once per shot and per generation in your library, as WAV files named after the shot ("vp-sound-shot-01-a1.wav", "vp-sound-shot-01-mix.wav"; with MiniMax H3 in Ref2VA, the sound references are also stored again at the rate the model reads, "vp-sound-shot-01-sound1.wav"), so that every draft of the shot uses the same sound. A take made with a mixed sound plays it in the viewer like any take. Captures, in the dark and light themes of the English interface: the **Sound** references in `docs/screenshots/sound-references.png`, the shot editor in `docs/screenshots/shot-editor-sound.png`, the reference tracks in the console and the Inspector in `docs/screenshots/lane-reference.png`, the Storyboard cards in `docs/screenshots/sound-cards.png`.
+
+### Slices of a sound
+
+To choose which seconds of a long sound go with the generation, cut it into slices. Select an audio clip, set **Length** in the **Slices** section of its Inspector (5 s by default, from 1 to 60 s; the length is kept by the page for every clip until you reload it, and is not saved in the project) and click **Slice**, or use **Cut › Slice the clip into 5.0 s slices** (Ctrl+Shift+B). The clip becomes consecutive clips of that length on the same track, the last one shorter (or up to 0.1 s longer, so that no sliver is left over): each slice goes on from the same place in the file, with the same gain and the same **Reference for the generation** setting; there is no fade at the inner cuts, and the fades of the clip stay on its first and last slices. A clip makes at most 200 slices at a time. Each slice then has its own switch.
+
+**Join** (or **Cut › Join the slices**, Ctrl+Alt+B) puts the slices of the selected clip back together: the clips of the same file on the same track that follow on from one another, on the timeline as in the file (within 0.025 s). Slices whose **Reference for the generation** setting or gain differs stay apart, so that a join never changes what you hear nor what goes with a generation: twelve slices of which the 3rd, 7th and 8th are switched off become five clips. A joined clip keeps the fade in of its first slice and the fade out of its last. **Edit › Undo** (Ctrl+Z) undoes a slicing or a join.
 
 ### Your audio files
 
@@ -725,6 +752,7 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Ctrl+Alt+1 | Side panel |
 | Space | Play / pause |
 | Ctrl+B | Split at playhead |
+| Ctrl+Shift+B, Ctrl+Alt+B | Slice the selected audio clip into slices of the length set in the Inspector, Join its slices |
 | Ctrl+D | Duplicate |
 | Backspace, Delete | Delete (a selected audio track: delete it after a confirmation) |
 | A, R, B | Select tool, Range tool, Blade tool |
@@ -736,9 +764,9 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | F, U, Alt+Backspace | Favorite, Remove flag, Reject |
 | Left arrow, Right arrow | Move the playhead by one frame, 1/fps of the project (1 s with Shift) |
 | Left arrow, Right arrow (Storyboard) | Select the previous or next shot |
-| Home | Go to the start |
+| Home, End | Go to the start, Go to the end |
 
-The single-letter shortcuts (A, R, B, I, O, M, N, F and U) can be turned off in **Video Producer › Preferences…**, setting **Single-key shortcuts**, which is on by default. Space, Backspace, Delete, the arrows and Home do not depend on it.
+The single-letter shortcuts (A, R, B, I, O, M, N, F and U) can be turned off in **Video Producer › Preferences…**, setting **Single-key shortcuts**, which is on by default. Space, Backspace, Delete, the arrows, Home and End do not depend on it.
 
 When the shortcuts work:
 
@@ -798,7 +826,7 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **A shot is black or silent in the video.** The server found no file for that shot (media removed from your library or gallery), or the file has no soundtrack, or its sound is muted: the shot or the track V1 is muted, or an audio track is soloed without V1 (chapter 13). The sound of the console's pan, equalizer, compressor, filter, sends and automation is not in the file (chapter 14).
 - **An FCPXML, OpenTimelineIO or EDL file does not find its media.** The paths in the file are paths on the PotionUI server. Copy the media to your editing computer and relink them in your software (chapter 14).
 - **"This export no longer exists." or "The video is not ready yet."** when you download: the export was deleted, or it is still running. Export again, or wait for the end of the card.
-- **A seam frame is refused.** "This shot has no previous shot." (the first shot cannot take one); "“Shot 1” has no finished take yet." or "The previous shot has no finished take with a file." (generate and choose a take for the previous shot first); "The image could not be extracted from the take." or "The image could not be extracted: try again." (try again, and tell your admin if it persists); "The project could not be saved: no image extracted." (the project must be saved first: see the save state in the project bar).
+- **A seam frame is refused.** "This shot has no previous shot." (the first shot cannot take one); "“Shot 1” has no take or video yet." or "The previous shot has no take or video to take a frame from." (generate and choose a take for the previous shot first); "ffmpeg is missing on the server: the last frame cannot be taken." (tell your admin); "The image could not be extracted from the take." or "The image could not be extracted: try again." (try again, and tell your admin if it persists); "The project could not be saved: no image extracted." (the project must be saved first: see the save state in the project bar).
 - **The project bar says "Not saved — retry".** The last save failed: the connection dropped, or the server refused the project. A message tells which. Click the save state or the **Retry** button of the message to try again. Your changes stay in the page and the next change tries again too. Until a save works, opening another project or restoring a version asks you to confirm before it drops those changes. If the message says that the content was refused or that the project is too large, ask your admin: reloading the page would lose the changes that are not saved.
 - **"Project reloaded: it changed elsewhere".** The project was saved from another tab, window or device after you opened it, so the page loaded the saved version. The changes you had not saved in this page are lost. Work on a project in one place at a time; **File › Version history…** brings back an earlier state.
 - **"This project was deleted elsewhere".** The project was deleted from another tab or device while it was open here. The page opened your most recently modified project, or created the starter project. The changes you had not saved are lost.
@@ -826,7 +854,7 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 | shot editor | éditeur de plan | The window that gathers the prompt, duration, frames, references, drafts and engine of a shot (chapter 4). |
 | own engine | moteur propre | The engine, profile, quality or seed that a shot sets for itself in its shot editor, instead of the project's (chapter 4). |
 | sound reference | référence sonore | A voice, a music or an ambience of the **Sound** family of references, sent with the generation of a shot (chapter 13). |
-| reference track | piste de référence | An audio track checked **Reference for the generation**: its part under each shot goes with the generation (chapter 13). |
+| reference track | piste de référence | An audio track checked **Reference for the generation**: its part under each shot goes with the generation, except the clips switched off on their own (chapter 13). |
 | mixed onto the take | mixé sur la prise | Laid onto the finished take as its soundtrack, without guiding the picture: what LTX does with the sound of a shot (chapter 13). |
 | generation queue | file de génération | Your takes waiting for the engine or in progress, in the order they run, shared by all your projects; the **Queue** tab of Director IA (chapter 8). |
 | Prompt modified | Prompt modifié | The mark of a take made before the last edit of its shot (chapter 4). |

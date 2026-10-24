@@ -5,6 +5,8 @@ import { realThumb } from './media.js';
 import { findTake } from './production.svelte.js';
 import { takeStore } from './takes.svelte.js';
 import { seamPick, seamSourceOf } from './continuity.js';
+import { chainState } from './chain.js';
+import { chainBusy } from './chain.svelte.js';
 
 const stats = $state({});
 const pending = new Set();
@@ -88,6 +90,9 @@ export function seam(i) {
 	const id = identityScore(a, b);
 	out.measured = !out.pending || id != null;
 	if (id != null && id < 0.85) out.issues.push({ kind: 'identity', text: t('lib.continuity.identity', { from: clipLabel(a), to: clipLabel(b), score: Math.round(id * 100) }), fix: false });
+	const chain = chainState(doc, i);
+	if (chain?.state === 'stale') out.issues.push({ kind: 'chain_stale', text: t('lib.chain.stale', { shot: clipLabel(b), previous: clipLabel(a) }), fix: false });
+	if (chain?.state === 'offer' && !chainBusy(b.id)) out.issues.push({ kind: 'chain_offer', text: t('lib.chain.offer', { shot: clipLabel(b), previous: clipLabel(a) }), fix: false });
 	return out;
 }
 

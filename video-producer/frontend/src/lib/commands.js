@@ -7,6 +7,8 @@ import {
 	deleteSelection,
 	duplicateSelection,
 	bladeAt,
+	sliceAudio,
+	joinAudio,
 	addMarker,
 	addAudioLane,
 	toast,
@@ -16,7 +18,8 @@ import {
 	act,
 	clipAt,
 	addShot,
-	proposeShots
+	proposeShots,
+	secs
 } from './state.svelte.js';
 import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy, fitShot, setProjectQuality } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
@@ -37,7 +40,7 @@ export function shortcutLabel(spec) {
 	return formatShortcut(spec, { mac: IS_MAC, names: { space: t('commands.kbd.space'), backspace: t('commands.kbd.backspace') } });
 }
 
-function command(id, run, { keys = null, check = null, global = false, press = null, repeat = false } = {}) {
+function command(id, run, { keys = null, check = null, global = false, press = null, repeat = false, vars = null } = {}) {
 	return {
 		id,
 		run,
@@ -48,7 +51,7 @@ function command(id, run, { keys = null, check = null, global = false, press = n
 		repeat,
 		menuId: null,
 		get label() {
-			return t(`commands.cmd.${id}`);
+			return t(`commands.cmd.${id}`, vars?.());
 		},
 		get key() {
 			return keys ? shortcutLabel(keys) : '';
@@ -185,6 +188,8 @@ export const menus = [
 		],
 		[
 			command('blade', () => bladeAt(), { keys: 'mod+b' }),
+			command('audio-slice', () => sliceAudio(), { keys: 'shift+mod+b', vars: () => ({ dur: secs(ui.sliceSeconds) }) }),
+			command('audio-join', joinAudio, { keys: 'alt+mod+b' }),
 			command('trim-start', nudgeTrim('start'), { keys: 'alt+[' }),
 			command('trim-end', nudgeTrim('end'), { keys: 'alt+]' }),
 			command('duration', () => (ui.inspectorOpen = true))
@@ -246,6 +251,7 @@ export const menus = [
 	menu('window', [
 		[
 			command('ws-media', ws('media')),
+			command('ws-play', ws('play')),
 			command('ws-director', ws('director')),
 			command('ws-story', ws('storyboard')),
 			command('ws-scene', ws('scene')),
@@ -351,6 +357,7 @@ function arrow(forward, whole) {
 const fixedBindings = [
 	{ spec: 'delete', run: () => deleteSelection(), repeat: true },
 	{ spec: 'home', run: () => seek(0) },
+	{ spec: 'end', run: () => seek(seqDuration()) },
 	{ spec: 'arrowleft', run: arrow(false, false), repeat: true },
 	{ spec: 'arrowright', run: arrow(true, false), repeat: true },
 	{ spec: 'shift+arrowleft', run: arrow(false, true), repeat: true },

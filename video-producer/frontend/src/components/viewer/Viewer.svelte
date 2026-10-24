@@ -13,6 +13,8 @@
 	import { frameDuration } from '../../lib/timebase.js';
 	import Icon from '../Icon.svelte';
 
+	let { player = false } = $props();
+
 	let w = $state(0);
 	let h = $state(0);
 	const ratios = { '16:9': 16 / 9, '2.39:1': 2.39, '9:16': 9 / 16, '1:1': 1, '4:5': 0.8 };
@@ -25,9 +27,9 @@
 
 	const title = $derived(doc.titles.find((x) => time >= x.start && time < x.start + x.dur));
 
-	const previewAsset = $derived(ui.preview?.kind === 'asset' ? asset(ui.preview.id) : null);
-	const previewResult = $derived(ui.preview?.kind === 'result' ? findTake(ui.preview.id) : null);
-	const compareRes = $derived(ui.compare ? ui.compare.map((id) => findTake(id)).filter(Boolean) : []);
+	const previewAsset = $derived(!player && ui.preview?.kind === 'asset' ? asset(ui.preview.id) : null);
+	const previewResult = $derived(!player && ui.preview?.kind === 'result' ? findTake(ui.preview.id) : null);
+	const compareRes = $derived(!player && ui.compare ? ui.compare.map((id) => findTake(id)).filter(Boolean) : []);
 	const localPrompt = $derived(clip ? promptOf(clip) : null);
 	const mode = $derived(compareRes.length === 2 ? 'compare' : previewResult ? 'result' : previewAsset ? 'asset' : 'sequence');
 	const bare = $derived(mode === 'sequence' && !(clip && a));
@@ -173,11 +175,13 @@
 							<div class="text-md font-medium text-fg">{clipLabel(clip)}</div>
 							<p class="max-w-md text-sm text-fg-muted">{localPrompt?.text || t('viewer.placeholderHint')}</p>
 						{/if}
-						<div class="mt-1">
-							<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'sparkles', disabled: busy, onclick: () => startGeneration({ clips: [clip], quality: 'draft' }) }}>
-								{t('viewer.generateDrafts')} <span class="opacity-60">{engineLabel()}</span>
-							</HostUi>
-						</div>
+						{#if !player}
+							<div class="mt-1">
+								<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'sparkles', disabled: busy, onclick: () => startGeneration({ clips: [clip], quality: 'draft' }) }}>
+									{t('viewer.generateDrafts')} <span class="opacity-60">{engineLabel()}</span>
+								</HostUi>
+							</div>
+						{/if}
 					</div>
 				{:else if liveVideo && failed[liveVideo]}
 					{@render cannotPlay(failed[liveVideo], a.name, liveVideo)}
@@ -258,8 +262,10 @@
 			/>
 		</div>
 		<div class="flex items-center justify-end gap-2">
-			<span class="vp-tc mr-1 text-md text-fg">{tc(ui.playhead, doc.fps)}</span>
-			<span class="vp-tc hidden text-xs text-fg-subtle min-[1500px]:inline">{t('viewer.total', { tc: tc(seqDuration(), doc.fps) })}</span>
+			{#if !player}
+				<span class="vp-tc mr-1 text-md text-fg">{tc(ui.playhead, doc.fps)}</span>
+				<span class="vp-tc hidden text-xs text-fg-subtle min-[1500px]:inline">{t('viewer.total', { tc: tc(seqDuration(), doc.fps) })}</span>
+			{/if}
 			<HostUi
 				name="IconButton"
 				props={{ icon: 'grid', label: t('viewer.guides'), size: 'sm', class: 'vp-h7 vp-toggle', ariaPressed: ui.guides, kbd: key('guides'), onclick: () => (ui.guides = !ui.guides) }}

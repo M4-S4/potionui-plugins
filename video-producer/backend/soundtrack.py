@@ -6,13 +6,14 @@ import os
 import re
 import shutil
 import tempfile
+import time
 from functools import partial
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from . import core_bridge, director, takes
 from .core_bridge import User
-from .director import CONDITION, MUX, TRACK_PREFIX, Plans, ShotPlan, TrackCut
+from .director import MUX, TRACK_PREFIX, Plans, ShotPlan, TrackCut
 from .exports import media
 from .exports.common import asset_of
 from .exports.video import SAMPLE_RATE, ExportError, assemble, kill_tree, last_line, num, sound_chain
@@ -39,6 +40,10 @@ PEAK_CACHE = 4096
 
 MEASURES = 4
 
+REMOVE_TRIES = 5
+
+REMOVE_PAUSE = 0.2
+
 PEAK = re.compile(r"max_volume:\s*(-?(?:inf|\d+(?:\.\d+)?))\s*dB")
 
 _PEAKS: Dict[Tuple[Any, ...], float] = {}
@@ -49,12 +54,13 @@ _SLOTS: List[Tuple[asyncio.AbstractEventLoop, asyncio.Semaphore]] = []
 
 
 class SoundError(Exception):
-    """The sound of a shot that could not be cut or stored."""
+    """The sound of a shot that could not be cut or stored, with that shot when it is known."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, shot_id: Optional[str] = None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.shot_id = shot_id
 
 
 def work_base() -> Path:
@@ -78,7 +84,7 @@ def mix_graph(
     references: Sequence[str] = (),
     seek: bool = False,
 ) -> Tuple[List[str], str]:
-    """The inputs and the filter graph of one cut: the items of the tracks heard between start and end, each with its gain and fades at its place, read from the start of its source or, with seek, for a measure only, from its seek point, the references from their beginning, over silence that lasts the whole cut."""
+    """The inputs and the filter graph of one cut: the items of the tracks sent as a reference between start and end, each with its gain and fades at its place, read from the start of its source or, with seek, for a measure only, from its seek point, the references from their beginning, over silence that lasts the whole cut."""
     length = num(end - start)
     inputs: List[str] = []
     graph = [f"anullsrc=r={SAMPLE_RATE}:cl=stereo,atrim=duration={length}[bed]"]
@@ -381,35 +387,89 @@ def _lane_code(doc: Mapping[str, Any], lane_id: str) -> str:
     return f"a{index + 1}" if index is not None else "track"
 
 
-async def attach(owner: User, project: Mapping[str, Any], plan: ShotPlan) -> None:
-    """Cut the sound a plan sends, store each cut once as the owner's upload and put it in the plan's request: for a guided shot, each reference track in place of its placeholder and each sound reference in place of its file, both at the 32 kHz MiniMax-H3 encodes without resampling; for a mixed shot, one mix of the tracks and the audio references as the mux entry of its director document; raises SoundError."""
+def _jobs(ffmpeg: str, doc: Mapping[str, Any], plan: ShotPlan) -> List[Tuple[str, Callable[..., Awaitable[Path]]]]:
     audio = plan.audio
-    if not plan.needs_audio or audio is None:
+    if audio is None:
+        return []
+    if audio.behavior == MUX:
+        mix = partial(cut, ffmpeg=ffmpeg, lanes=audio.lanes, start=audio.start, end=audio.end, name=_file_name(doc, plan, "mix"), references=audio.references)
+        return [(MUX, mix)]
+    tracks = [
+        (
+            f"{TRACK_PREFIX}{lane_id}",
+            partial(cut, ffmpeg=ffmpeg, lanes=[lane_id], start=audio.start, end=audio.end, name=_file_name(doc, plan, _lane_code(doc, lane_id)), rate=H3_RATE),
+        )
+        for lane_id in audio.lanes
+    ]
+    sounds = [
+        (audio.sent[asset_id], partial(convert, ffmpeg=ffmpeg, asset_id=asset_id, name=_file_name(doc, plan, f"sound{index}"), rate=H3_RATE))
+        for index, asset_id in enumerate(audio.references, start=1)
+    ]
+    return tracks + sounds
+
+
+def _apply(plan: ShotPlan, stored: Mapping[str, str]) -> None:
+    form = plan.request["form_data"]
+    if plan.audio is not None and plan.audio.behavior == MUX:
+        form["video_director"]["audio"] = [director.mux_entry(stored[MUX], plan.audio.length)]
+    else:
+        form["references"] = [stored.get(value, value) for value in form.get("references") or []]
+
+
+async def _bounded(run: Callable[..., Awaitable[Path]], sources: _Sources) -> Path:
+    async with _slots():
+        return await run(sources=sources)
+
+
+def _remove(folder: Path) -> None:
+    for _ in range(REMOVE_TRIES):
+        shutil.rmtree(folder, True)
+        if not folder.exists():
+            return
+        time.sleep(REMOVE_PAUSE)
+
+
+async def attach(owner: User, project: Mapping[str, Any], plan: ShotPlan) -> None:
+    """Cut the sound a plan sends, store each cut once as the owner's upload and put it in the plan's request, as attach_all does for one plan; raises SoundError."""
+    await attach_all(owner, project, [plan])
+
+
+async def attach_all(owner: User, project: Mapping[str, Any], plans: Sequence[ShotPlan]) -> None:
+    """Cut the sound each plan sends, store each cut once as the owner's upload and put it in the plan's request: for a guided shot, each reference track in place of its placeholder and each sound reference in place of its file, both at the 32 kHz MiniMax-H3 encodes without resampling; for a mixed shot, one mix of the tracks and the audio references as the mux entry of its director document. The cuts of all the plans run at most MEASURES at a time, each in a work folder of its own, while their files are stored and put in the requests in the order of the plans and of what each sends, so that the uploads and the requests are those of one cut after the other. Raises the SoundError of the first cut or store that fails in that order, with its shot, after stopping the cuts still running and removing every work folder: nothing from the failing step on is stored."""
+    sounding = [plan for plan in plans if plan.needs_audio]
+    if not sounding:
         return
     ffmpeg = core_bridge.find_ffmpeg()
     if not ffmpeg:
-        raise SoundError("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shot cannot be cut.")
+        raise SoundError("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shot cannot be cut.", sounding[0].shot_id)
     ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     doc = project["doc"]
     base = work_base() / owner.id
     base.mkdir(parents=True, exist_ok=True)
-    folder = Path(tempfile.mkdtemp(dir=base))
+    sources = _Sources(owner, doc, project["id"], None)
+    work: List[Tuple[ShotPlan, Path, List[Tuple[str, "asyncio.Task[Path]"]]]] = []
     try:
-        sources = _Sources(owner, doc, project["id"], folder)
-        form = plan.request["form_data"]
-        if audio.behavior == CONDITION:
-            stored = {}
-            for lane_id in audio.lanes:
-                name = _file_name(doc, plan, _lane_code(doc, lane_id))
-                path = await cut(ffmpeg, sources, [lane_id], audio.start, audio.end, name, rate=H3_RATE)
-                stored[f"{TRACK_PREFIX}{lane_id}"] = await _store(owner, path)
-            for index, asset_id in enumerate(audio.references, start=1):
-                path = await convert(ffmpeg, sources, asset_id, _file_name(doc, plan, f"sound{index}"), H3_RATE)
-                stored[audio.sent[asset_id]] = await _store(owner, path)
-            form["references"] = [stored.get(value, value) for value in form.get("references") or []]
-        elif audio.behavior == MUX:
-            path = await cut(ffmpeg, sources, audio.lanes, audio.start, audio.end, _file_name(doc, plan, "mix"), audio.references)
-            value = await _store(owner, path)
-            form["video_director"]["audio"] = [director.mux_entry(value, audio.length)]
+        for plan in sounding:
+            folder = Path(tempfile.mkdtemp(dir=base))
+            tasks: List[Tuple[str, "asyncio.Task[Path]"]] = []
+            work.append((plan, folder, tasks))
+            for index, (key, run) in enumerate(_jobs(ffmpeg, doc, plan)):
+                place = folder / str(index)
+                place.mkdir()
+                tasks.append((key, asyncio.ensure_future(_bounded(run, sources.into(place)))))
+        for plan, folder, tasks in work:
+            stored: Dict[str, str] = {}
+            for key, task in tasks:
+                try:
+                    stored[key] = await _store(owner, await asyncio.shield(task))
+                except SoundError as exc:
+                    raise SoundError(exc.code, exc.message, plan.shot_id) from None
+            _apply(plan, stored)
+            await asyncio.to_thread(_remove, folder)
     finally:
-        await asyncio.to_thread(shutil.rmtree, folder, True)
+        running = [task for _, _, tasks in work for _, task in tasks]
+        for task in running:
+            task.cancel()
+        await asyncio.gather(*running, return_exceptions=True)
+        for _, folder, _ in work:
+            await asyncio.to_thread(_remove, folder)

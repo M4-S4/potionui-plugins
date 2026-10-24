@@ -1,28 +1,21 @@
 import { t } from '../i18n/index.svelte.js';
 import { doc, ui, act, toast, undo, clipLabel, secs } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone } from './project.svelte.js';
-import { findTake } from './production.svelte.js';
-import { realTakesOf, takeStore } from './takes.svelte.js';
 import { confirm } from './host.js';
 import { PREVIOUS_LAST, framesOf, placeSeamFrame, playheadPick, previousShot, seamAsset } from './seam.js';
+import { chainSource } from './chain.js';
+import { chainBusy, chainOf, takeEndFrame } from './chain.svelte.js';
 
 export const seamState = $state({ busy: null });
 
 export const extractable = (take) => Boolean(take && take.status === 'done' && take.generationId && take.fileId !== null && take.fileId !== undefined);
 
-export function previousTake(clip) {
-	const prev = clip ? previousShot(doc, clip.id) : null;
-	if (!prev) return null;
-	const chosen = findTake(prev.take);
-	if (extractable(chosen)) return chosen;
-	return [...realTakesOf(prev.id)].reverse().find(extractable) ?? null;
-}
-
 export function seamOffer(clip) {
 	const prev = clip ? previousShot(doc, clip.id) : null;
 	if (!prev) return null;
-	const ready = !takeStore.loaded || Boolean(previousTake(clip));
-	return { previous: prev, ready, busy: seamState.busy === clip.id, reason: ready ? '' : t('lib.seam.noPreviousTake', { shot: clipLabel(prev) }) };
+	const ready = Boolean(chainSource(doc, prev));
+	const stale = chainOf(clip)?.state === 'stale';
+	return { previous: prev, ready, stale, busy: seamState.busy === clip.id || chainBusy(clip.id), reason: ready ? '' : t('lib.chain.noMedia', { shot: clipLabel(prev) }) };
 }
 
 function errorText(error) {
@@ -47,24 +40,25 @@ export async function replaceAllowed(clip, kinds) {
 	return confirm({ ...replaceText(clip, taken), variant: 'warning', confirmLabel: t('lib.seam.replace'), cancelLabel: t('lib.seam.keep') });
 }
 
-function doneText(clip, kind, source, previous) {
-	if (source === PREVIOUS_LAST) return t('lib.seam.added', { shot: clipLabel(clip), previous: clipLabel(previous) });
+function doneText(clip, kind, source) {
 	return kind === 'first' ? t('lib.seam.extractedFirst', { shot: clipLabel(clip), time: secs(source.at) }) : t('lib.seam.extractedLast', { shot: clipLabel(clip), time: secs(source.at) });
 }
 
 export async function useSeamFrame(clip, source = PREVIOUS_LAST) {
 	if (!clip || seamState.busy) return;
-	const fromTake = source !== PREVIOUS_LAST;
-	const previous = previousShot(doc, clip.id);
-	if (!fromTake && !previous) return toast(t('lib.seam.noPrevious'), 'warning');
-	const kind = fromTake ? source.kind : 'first';
+	if (source === PREVIOUS_LAST) {
+		if (!previousShot(doc, clip.id)) return toast(t('lib.seam.noPrevious'), 'warning');
+		if (chainOf(clip)?.state === 'stale' || (await replaceAllowed(clip, 'first'))) await takeEndFrame(clip);
+		return;
+	}
+	const kind = source.kind;
 	if (!(await replaceAllowed(clip, kind))) return;
 	seamState.busy = clip.id;
 	try {
 		const saved = await flushSave();
 		if (!saved || !project.id) return toast(t('lib.seam.saveFirst'), 'error');
 		const projectId = project.id;
-		const result = await getClient().seamFrame(projectId, clip.id, fromTake ? { takeId: source.takeId, at: source.at } : PREVIOUS_LAST);
+		const result = await getClient().seamFrame(projectId, clip.id, { takeId: source.takeId, at: source.at });
 		if (projectId !== project.id) return;
 		if (!result.ok) {
 			if (result.error.code === 'project_not_found') return projectGone(projectId);
@@ -73,7 +67,7 @@ export async function useSeamFrame(clip, source = PREVIOUS_LAST) {
 		const target = doc.clips.find((c) => c.id === clip.id);
 		if (!target) return;
 		act(() => placeSeamFrame(doc, target, kind, seamAsset(result.data, t('lib.seam.assetName', { shot: clipLabel(target) }))));
-		toast(doneText(target, kind, source, previous), 'success', { label: t('shell.toast.undo'), run: undo });
+		toast(doneText(target, kind, source), 'success', { label: t('shell.toast.undo'), run: undo });
 	} finally {
 		seamState.busy = null;
 	}

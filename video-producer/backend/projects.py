@@ -148,7 +148,8 @@ AUDIO = _object(
         "fadeIn": NUMBER,
         "fadeOut": NUMBER,
         "gain": NUMBER,
-    }
+    },
+    optional={"reference": FLAG},
 )
 
 TITLE = _object({"id": ID, "text": TEXT, "sub": TEXT, "start": NUMBER, "dur": NUMBER})
@@ -291,8 +292,11 @@ ENGINE = _object(
         "autoInsert": FLAG,
         "referenceMargin": {"type": "number", "minimum": 0, "maximum": MAX_REFERENCE_MARGIN},
         "options": ENGINE_OPTIONS,
+        "keyframes": _object({}, optional={"preset": ID, "model": REF}),
     },
 )
+
+FRAME_OF = _object({"shotId": ID, "takeId": REF, "assetId": ID, "at": NULLABLE_NUMBER})
 
 ASSET = _object(
     {
@@ -318,7 +322,8 @@ ASSET = _object(
         "transcript": NULLABLE_TEXT,
         "character": NULLABLE_TEXT,
         "lipSync": NULLABLE_FLAG,
-    }
+    },
+    optional={"frameOf": FRAME_OF},
 )
 
 DOC_SCHEMA: Dict[str, Any] = {
@@ -357,7 +362,7 @@ DOC_SCHEMA: Dict[str, Any] = {
             "engine": ENGINE,
             "assets": _array(ASSET),
         },
-        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID},
+        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID, "firstFromPrevious": FLAG},
     ),
 }
 
