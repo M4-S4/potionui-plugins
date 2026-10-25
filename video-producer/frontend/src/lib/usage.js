@@ -1,5 +1,6 @@
 import { roleKind } from './seam.js';
 import { releaseShot } from './shots.js';
+import { markRemoved, takeOfAsset } from './removedtakes.js';
 
 export const USE_KINDS = ['shots', 'sounds', 'references', 'edges', 'frames'];
 
@@ -32,5 +33,6 @@ export function removeAsset(doc, id) {
 	drop(doc.audio, uses.sounds);
 	drop(doc.frames, [...uses.edges, ...uses.frames]);
 	const [asset] = doc.assets.splice(index, 1);
+	markRemoved(doc, takeOfAsset(asset));
 	return { asset, uses, released };
 }

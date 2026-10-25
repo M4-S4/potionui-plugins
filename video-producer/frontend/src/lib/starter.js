@@ -3,6 +3,7 @@ import { migrateTracks, newLaneId, newVideoTrack } from './tracks.js';
 import { migrateShots } from './shots.js';
 import { migrateBible } from './bible.js';
 import { migrateOptions } from './options.js';
+import { removedIds } from './removedtakes.js';
 
 const SHOT_DURATION = 5;
 export const PROMPT_LANGUAGES = ['en', 'fr'];
@@ -188,5 +189,10 @@ export function migrate(doc) {
 	for (const key of RETIRED_KEYS) delete next[key];
 	if ('bible' in doc) next.bible = migrateBible(doc.bible);
 	if (isObject(doc.engine)) next.engine = migrateOptions(doc.engine);
+	if ('removedTakes' in doc) {
+		const removed = removedIds(doc.removedTakes);
+		if (removed.length) next.removedTakes = removed;
+		else delete next.removedTakes;
+	}
 	return next;
 }
