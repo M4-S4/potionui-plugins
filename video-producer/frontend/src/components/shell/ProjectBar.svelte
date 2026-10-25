@@ -1,8 +1,8 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatTime, t } from '../../i18n/index.svelte.js';
-	import { ui, doc } from '../../lib/state.svelte.js';
-	import { commandById, save } from '../../lib/commands.js';
+	import { ui, doc, bandView } from '../../lib/state.svelte.js';
+	import { commandById, save, toggleSidebar } from '../../lib/commands.js';
 	import { WORKSPACES, isPlayer } from '../../lib/workspaces.js';
 	import { chat } from '../../lib/host.js';
 	import { openImport, openLocalImport } from '../../lib/importer.js';
@@ -50,11 +50,11 @@
 				label: t('shell.project.showSidebar'),
 				size: 'sm',
 				class: 'vp-h7 vp-toggle',
-				ariaPressed: ui.sidebarOpen && !player,
+				ariaPressed: (bandView() ? ui.storyOpen : ui.sidebarOpen) && !player,
 				disabled: player,
 				tooltip: commandById('sidebar')?.label,
 				kbd: commandById('sidebar')?.key,
-				onclick: () => (ui.sidebarOpen = !ui.sidebarOpen)
+				onclick: toggleSidebar
 			}}
 		/>
 		<div class="flex min-w-0 flex-col">

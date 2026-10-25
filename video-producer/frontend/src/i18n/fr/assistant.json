@@ -47,5 +47,6 @@
 	"suggest.library": "Aide-moi à écrire un prompt pour ce projet.",
 	"suggest.sound": "Aide-moi à écrire un brief sonore : {type}, de {start} à {end}.",
 	"seam.cast_unnamed": "« {shot} » ne nomme pas {labels}, distribué dans le plan.",
-	"fix.cast_unnamed": "Nommez chaque personnage distribué par son étiquette visuelle."
+	"fix.cast_unnamed": "Nommez chaque personnage distribué par son étiquette visuelle.",
+	"suggest.split": "Découpe mon synopsis en plans, calés sur les parties du morceau."
 }

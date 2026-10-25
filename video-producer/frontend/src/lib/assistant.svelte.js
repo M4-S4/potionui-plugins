@@ -127,7 +127,10 @@ export function applyProposal(result) {
 	if (!proposal.length) return { status: 'noop' };
 	ui.storyProposal = proposal;
 	ui.workspace = 'storyboard';
-	ui.sidebarOpen = true;
+	if (ui.storyView === 'band') {
+		ui.storyOpen = true;
+		ui.storyTab = 'cut';
+	} else ui.sidebarOpen = true;
 	toast(t('assistant.toast.proposal', { count: proposal.length }), 'success');
 	return { status: 'applied' };
 }

@@ -47,5 +47,6 @@
 	"suggest.library": "Help me write a prompt for this project.",
 	"suggest.sound": "Help me write a sound brief: {type}, from {start} to {end}.",
 	"seam.cast_unnamed": "“{shot}” does not name {labels}, cast in the shot.",
-	"fix.cast_unnamed": "Name each character cast in the shot by its visual tag."
+	"fix.cast_unnamed": "Name each character cast in the shot by its visual tag.",
+	"suggest.split": "Break my synopsis down into shots, timed on the parts of the song."
 }
