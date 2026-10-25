@@ -5,7 +5,6 @@ export const STREAK_WARN = 0.03;
 export const STREAK_SHOWN = 0.005;
 export const LIVE_CELL = 16;
 export const CAPTURE_CELL = 8;
-export const LIVE_STRIDE = 4;
 const OCCLUDER = 0.5;
 const ROW = 10;
 const LOW_PASS = 0.3;
@@ -89,7 +88,7 @@ export function streakTable(forEachSplat, source, upsideDown = false) {
 	return { data: data.subarray(0, n * ROW), count: n };
 }
 
-export function streakShare(table, pose, width, height, cell = CAPTURE_CELL, stride = 1) {
+export function streakShare(table, pose, width, height, cell = CAPTURE_CELL) {
 	const f = height / 2 / Math.tan(((pose.fov ?? 50) * Math.PI) / 360);
 	const v = view(pose);
 	const gw = Math.ceil(width / cell);
@@ -104,7 +103,7 @@ export function streakShare(table, pose, width, height, cell = CAPTURE_CELL, str
 			streak[k] = stretched;
 		}
 	};
-	for (let i = 0; i < count; i += stride) {
+	for (let i = 0; i < count; i++) {
 		const row = i * ROW;
 		if (!project(data, row, v, f, p)) continue;
 		const [u, w, z, a0, b, c0] = p;

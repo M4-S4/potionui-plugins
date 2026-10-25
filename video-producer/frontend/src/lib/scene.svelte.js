@@ -7,7 +7,7 @@ import { ulid } from './ulid.js';
 import { placeSeamFrame, seamAsset } from './seam.js';
 import { replaceAllowed } from './seam.svelte.js';
 import { FOCAL_RANGE, atSource, boundCamera, fitsFrame, focalToFov, holesMatter, lowestFocal, projectSize, sourceView } from './scene3d/camera.js';
-import { CAPTURE_CELL, LIVE_CELL, LIVE_STRIDE } from './scene3d/streaks.js';
+import { CAPTURE_CELL, LIVE_CELL } from './scene3d/streaks.js';
 import { plyView } from './scene3d/files.js';
 import { RUNNING, createPoller, jobScene, lostScene, orphanJobs, reusableScene } from './scene3d/jobs.js';
 
@@ -84,10 +84,10 @@ export function seedCamera(scene) {
 	ui.scene.seeded = scene.id;
 }
 
-function streaksAt(scene, cam, size, cell, stride) {
+function streaksAt(scene, cam, size, cell) {
 	if (!stage || !holesMatter(scene) || sceneState.loadedId !== scene?.id) return null;
 	try {
-		return stage.streaks(fovFor(cam, size), sourceOf(scene), size.width, size.height, cell, stride);
+		return stage.streaks(fovFor(cam, size), sourceOf(scene), size.width, size.height, cell);
 	} catch {
 		return null;
 	}
@@ -99,7 +99,7 @@ export function measureStreaks(scene) {
 	streakTimer = setTimeout(() => {
 		streakTimer = null;
 		if (closed || sceneLocked() || stage?.busy) return;
-		sceneState.streaks = streaksAt(scene, freeCamera(), captureSize(), LIVE_CELL, LIVE_STRIDE);
+		sceneState.streaks = streaksAt(scene, freeCamera(), captureSize(), LIVE_CELL);
 	}, STREAK_DELAY);
 }
 
@@ -432,7 +432,7 @@ export async function takeCapture(scene) {
 		const st = await syncStage(scene);
 		if (!st) throw new Error('load');
 		const shot = await st.capture(fovFor(cam, size), size.width, size.height);
-		return { sceneId: scene.id, url: shot.url, coverage: shot.coverage, streaks: streaksAt(scene, cam, size, CAPTURE_CELL, 1), ...size };
+		return { sceneId: scene.id, url: shot.url, coverage: shot.coverage, streaks: streaksAt(scene, cam, size, CAPTURE_CELL), ...size };
 	} catch {
 		toast(t('scene.toast.captureFailed'), 'error');
 		return null;

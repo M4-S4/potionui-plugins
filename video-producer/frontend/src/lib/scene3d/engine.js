@@ -204,14 +204,14 @@ export function createStage({ onLost } = {}) {
 			request();
 		},
 		refresh: request,
-		streaks(pose, source, width, height, cell, stride) {
+		streaks(pose, source, width, height, cell) {
 			if (!content) return null;
 			const key = JSON.stringify([source.pos, source.target, source.roll ?? 0]);
 			if (streakCache?.content !== content || streakCache.key !== key) {
 				const splat = content.splat;
 				streakCache = { content, key, table: streakTable((each) => splat.forEachSplat(each), source, true) };
 			}
-			return streakShare(streakCache.table, pose, width, height, cell, stride);
+			return streakShare(streakCache.table, pose, width, height, cell);
 		},
 		capture(pose, width, height) {
 			return exclusive(async () => {

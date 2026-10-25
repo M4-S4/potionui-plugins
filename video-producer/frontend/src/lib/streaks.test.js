@@ -49,8 +49,8 @@ test('streaks: none at the source view, ribbons along the source rays stretch on
 	const flat = streakTable(splats({ ribbon: false }), SOURCE);
 	assert.ok(streakShare(flat, posed(orbitCamera(SOURCE, 12, 0)), 640, 360, 8) < 0.002, 'flat wall');
 	assert.equal(streakLevel(null), 'ok');
-	const sampled = streakShare(table, posed(orbitCamera(SOURCE, 12, 0)), 640, 360, 16, 4);
-	assert.ok(Math.abs(sampled - turned) < 0.02, `sampled ${sampled} against ${turned}`);
+	const live = streakShare(table, posed(orbitCamera(SOURCE, 12, 0)), 640, 360, 16);
+	assert.ok(Math.abs(live - turned) < 0.02, `live ${live} against ${turned}`);
 });
 
 test('streaks: a splat file stored upside down, as the stage turns it, measures the same as its upright twin', () => {
