@@ -103,5 +103,8 @@
 	"kbd.backspace": "Retour arrière",
 	"kbd.escape": "Échap",
 	"cmd.scene-new": "Nouvelle scène 3D depuis une image…",
-	"cmd.scene-import": "Importer un splat ou un fichier Blender…"
+	"cmd.scene-import": "Importer un splat ou un fichier Blender…",
+	"cmd.story-window": "Synopsis et découpage",
+	"cmd.story-view": "Storyboard en bande",
+	"cmd.shot-editor": "Éditeur de plan…"
 }

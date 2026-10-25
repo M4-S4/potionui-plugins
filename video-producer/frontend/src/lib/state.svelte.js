@@ -8,6 +8,8 @@ import { dropPlanControls } from './scene3d/doc.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
 import { joinPlan } from './sound.js';
 import { touch } from './shots.js';
+import { setCast } from './bible.js';
+import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -65,6 +67,13 @@ export const ui = $state({
 	hideRejected: false,
 	quota: null,
 	storyProposal: null,
+	storyView: 'band',
+	storyOpen: false,
+	storyTab: 'cut',
+	storyMethod: 'phrases',
+	storyAvg: 4,
+	storyAt: 'end',
+	seamCompare: null,
 	me: null,
 	isAdmin: false
 });
@@ -90,6 +99,8 @@ export function applyMe(me) {
 
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const round = (v, s = 0.1) => +(Math.round(v / s) * s).toFixed(3);
+
+export const bandView = () => ui.workspace === 'storyboard' && ui.storyView === 'band';
 
 export const bottomKey = () => (ui.bottomView === 'console' ? 'consoleH' : ui.workspace === 'storyboard' ? 'storyH' : 'timelineH');
 
@@ -186,7 +197,7 @@ const LINKED = ['prompts', 'frames', 'controls', 'plans3d'];
 
 export function select(kind, id) {
 	ui.selection = kind ? { kind, id } : null;
-	if (kind && ui.workspace !== 'mixer') ui.inspectorOpen = true;
+	if (kind && ui.workspace !== 'mixer' && !bandView()) ui.inspectorOpen = true;
 }
 export function selected() {
 	const s = ui.selection;
@@ -615,24 +626,20 @@ export function moveClip(from, to) {
 	});
 }
 
-export function proposeShots() {
-	const sentences = doc.synopsis
-		.split(/(?<=[.!?])\s+/)
-		.map((x) => x.trim())
-		.filter(Boolean);
-	ui.storyProposal = sentences.map((text, i) => {
-		const head = text.replace(/[.!?]$/, '').split(/[:,]/)[0].trim();
-		return { id: ulid(), keep: true, n: i + 1, label: head.length > 34 ? head.slice(0, 32) + '…' : head, prompt: text, dur: Math.max(3, Math.min(7, Math.round(text.length / 14))) };
-	});
+export function proposeShots(method = ui.storyMethod) {
+	const how = typeof method === 'string' ? method : ui.storyMethod;
+	ui.storyProposal = how === 'music' ? onMusic(doc.synopsis, musicParts(doc), { avg: ui.storyAvg }, doc.bible, ulid) : byPhrases(doc.synopsis, doc.bible, ulid);
 }
-export function acceptProposal() {
+export function acceptProposal(at = 'end') {
 	const list = (ui.storyProposal ?? []).filter((x) => x.keep);
 	if (!list.length) return;
+	const index = insertIndex(doc.clips, typeof at === 'string' ? at : 'end', ui.selection?.kind === 'clip' ? ui.selection.id : null);
+	const added = [];
 	act(() => {
-		const added = [];
-		for (const sp of list) {
+		for (const [j, sp] of list.entries()) {
 			const c = newClip({ label: sp.label, dur: sp.dur });
-			doc.clips.push(c);
+			if (sp.cast) setCast(c, sp.cast);
+			doc.clips.splice(index + j, 0, c);
 			relayout();
 			doc.prompts.push(newPrompt(c, sp.prompt));
 			added.push(c);
@@ -640,6 +647,7 @@ export function acceptProposal() {
 		shotsAdded(added);
 	});
 	ui.storyProposal = null;
+	if (added.length && bandView()) select('clip', added[0].id);
 	toast(t('lib.toast.shotsAdded', { count: list.length }), 'success');
 }
 
@@ -650,7 +658,7 @@ export function replaceDoc(next) {
 	Object.assign(doc, incoming);
 	past.length = 0;
 	future.length = 0;
-	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, dirty: false });
+	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, dirty: false });
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0 });
 	resetTakes();
 	Object.assign(ui.scene, { current: null, keyframe: null, seeded: null });

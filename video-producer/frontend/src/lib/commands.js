@@ -20,8 +20,11 @@ import {
 	clipAt,
 	addShot,
 	proposeShots,
+	bandView,
 	secs
 } from './state.svelte.js';
+import { compareSeam, cycleTake, labelPreviewed, nudgeDuration, previewed, selectedShot, shiftShot, stepShot as bandStep } from './band.svelte.js';
+import { BAND_STEP } from './band.js';
 import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy, fitShot, setProjectQuality } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
 import { openGallery, openImport, openLocalImport } from './importer.js';
@@ -106,6 +109,7 @@ const mixer = () => {
 const refs = (space) => () => openReferences(space);
 const takes = () => {
 	if (ui.selection?.kind !== 'clip') return toast(t('lib.toast.selectShotForTakes'), 'warning');
+	if (bandView()) return cycleTake(0);
 	ui.inspectorOpen = true;
 };
 const promote = () => {
@@ -134,6 +138,25 @@ const director = () => {
 const synopsis = () => {
 	ui.workspace = 'storyboard';
 	proposeShots();
+	if (ui.storyView === 'band') {
+		ui.storyOpen = true;
+		ui.storyTab = 'cut';
+	}
+};
+const storyWindow = () => {
+	if (ui.workspace !== 'storyboard') {
+		ui.workspace = 'storyboard';
+		if (ui.storyView === 'band') ui.storyOpen = true;
+		else ui.sidebarOpen = true;
+		return;
+	}
+	if (ui.storyView === 'band') ui.storyOpen = !ui.storyOpen;
+	else ui.sidebarOpen = !ui.sidebarOpen;
+};
+const shotEditor = () => {
+	const c = selectedShot();
+	if (!c) return toast(t('lib.toast.selectShot'), 'warning');
+	ui.modal = { type: 'shot', id: c.id };
 };
 const scopes = () => {
 	ui.inspectorOpen = true;
@@ -205,12 +228,12 @@ export const menus = [
 	]),
 	menu('clip', [
 		[command('new-shot', newShot), command('info', () => (ui.inspectorOpen = !ui.inspectorOpen)), command('reveal', ws('media'))],
-		[command('takes', takes), command('promote', promote, { keys: 'shift+mod+g' })],
+		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('promote', promote, { keys: 'shift+mod+g' })],
 		[command('color', scopes), command('match', match), command('keyframes', ws('scene'))],
 		[command('fav', flag('favori'), { keys: 'f' }), command('reject', flag('rejet'), { keys: 'alt+backspace' }), command('unflag', flag(null), { keys: 'u' })]
 	]),
 	menu('production', [
-		[command('dir-global', director), command('synopsis', synopsis), command('continuity', director)],
+		[command('dir-global', director), command('synopsis', synopsis), command('story-window', storyWindow, { keys: 'd', check: () => ui.storyOpen && bandView() }), command('continuity', director)],
 		[
 			command('generate', () => startGeneration(), { keys: 'mod+g' }),
 			command('draft', () => setProjectQuality('draft'), { check: () => ui.production.quality === 'draft' }),
@@ -257,7 +280,8 @@ export const menus = [
 			command('ws-director', ws('director')),
 			command('ws-story', ws('storyboard')),
 			command('ws-scene', ws('scene')),
-			command('ws-mixer', ws('mixer'))
+			command('ws-mixer', ws('mixer')),
+			command('story-view', () => (ui.storyView = ui.storyView === 'band' ? 'grid' : 'band'), { check: () => ui.storyView === 'band' })
 		],
 		[
 			command('ref-all', refs('all')),
@@ -268,7 +292,7 @@ export const menus = [
 			command('scene-import', sceneImport)
 		],
 		[
-			command('sidebar', () => (ui.sidebarOpen = !ui.sidebarOpen), { keys: 'ctrl+mod+1', check: () => ui.sidebarOpen }),
+			command('sidebar', toggleSidebar, { keys: 'ctrl+mod+1', check: () => (bandView() ? ui.storyOpen : ui.sidebarOpen) }),
 			command('inspector', () => (ui.inspectorOpen = !ui.inspectorOpen), { check: () => ui.inspectorOpen }),
 			command('assistant', () => chat.open(), { keys: 'mod+j', check: () => chat.isOpen(), press: () => chat.toggle() }),
 			command('library', modal('library', { target: null })),
@@ -290,6 +314,11 @@ export function commandById(id) {
 
 export function runCommand(id) {
 	commandById(id)?.run();
+}
+
+export function toggleSidebar() {
+	if (bandView()) ui.storyOpen = !ui.storyOpen;
+	else ui.sidebarOpen = !ui.sidebarOpen;
 }
 
 export async function createProject() {
@@ -338,7 +367,9 @@ function escape() {
 	else if (ui.preview || ui.compare) {
 		ui.preview = null;
 		ui.compare = null;
-	} else select(null);
+	} else if (ui.seamCompare) ui.seamCompare = null;
+	else if (ui.storyOpen && bandView()) ui.storyOpen = false;
+	else select(null);
 }
 
 function stepShot(forward) {
@@ -351,6 +382,7 @@ function stepShot(forward) {
 
 function arrow(forward, whole) {
 	return () => {
+		if (bandView()) return bandStep(forward ? 1 : -1);
 		if (ui.workspace === 'storyboard') return stepShot(forward);
 		seek(ui.playhead + (forward ? 1 : -1) * (whole ? 1 : frameDuration(doc.fps)));
 	};
@@ -360,6 +392,14 @@ const fixedBindings = [
 	{ spec: 'delete', run: () => deleteSelection(), repeat: true },
 	{ spec: 'home', run: () => seek(0) },
 	{ spec: 'end', run: () => seek(seqDuration()) },
+	{ spec: 'arrowup', run: () => cycleTake(-1), repeat: true, when: bandView },
+	{ spec: 'arrowdown', run: () => cycleTake(1), repeat: true, when: bandView },
+	{ spec: 'shift+mod+arrowleft', run: () => shiftShot(-1), repeat: true, when: () => ui.workspace === 'storyboard' },
+	{ spec: 'shift+mod+arrowright', run: () => shiftShot(1), repeat: true, when: () => ui.workspace === 'storyboard' },
+	{ spec: '<', run: () => nudgeDuration(-BAND_STEP), repeat: true, when: bandView },
+	{ spec: '>', run: () => nudgeDuration(BAND_STEP), repeat: true, when: bandView },
+	{ spec: 'shift+r', run: () => compareSeam(), when: bandView },
+	{ spec: 'enter', run: () => labelPreviewed('final'), when: () => bandView() && Boolean(previewed()) && !isActivationTarget(document.activeElement) },
 	{ spec: 'arrowleft', run: arrow(false, false), repeat: true },
 	{ spec: 'arrowright', run: arrow(true, false), repeat: true },
 	{ spec: 'shift+arrowleft', run: arrow(false, true), repeat: true },
@@ -387,6 +427,7 @@ export function handleKeydown(e, root) {
 	}
 	const hit = findShortcut(e, keymap, IS_MAC);
 	if (!hit) return;
+	if (hit.when && !hit.when()) return;
 	if (!hit.global && (isTypingTarget(target) || ui.modal || ui.paletteOpen)) return;
 	if (hit.single && !ui.singleKeyShortcuts) return;
 	if (hit.spec === 'space' && isActivationTarget(target)) return;

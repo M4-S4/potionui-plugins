@@ -112,6 +112,32 @@ Le champ **Personnages et identité** de la direction globale fonctionne comme a
 
 ### Storyboard
 
+Le Storyboard a deux vues, choisies par **Grille** et **Bande** dans son en-tête (Fenêtre › Storyboard en bande) ; il s’ouvre sur la bande.
+
+#### La bande
+
+La bande montre les plans à l’échelle du temps : le rythme du montage se lit d’un coup d’œil. En haut, une vue d’ensemble fine de toute la séquence : chaque plan dans la couleur de son étape, un plan en échec en rouge, un plan en cours hachuré, un trait orange sur un raccord à vérifier, les plans en pointillé d’un découpage proposé et la fenêtre visible ; cliquez ou glissez dessus pour faire défiler la bande. Dessous, alignés sur le même temps :
+
+- **Morceau** : la règle et les parties du morceau, c’est-à-dire les repères (M) posés dessus ;
+- **V1 · Plans** : un bloc par plan, aussi large que sa durée, avec la vignette de sa prise répétée sur le bloc, ou ses images de début et de fin autour d’une zone hachurée tant qu’il n’a pas de prise. Le bloc porte son numéro, la progression d’une prise en cours (ou **En file**), **Échec** quand sa dernière prise a échoué, **Prompt modifié** ou **Aucune instruction**, sa durée, l’icône réglages d’un moteur propre, l’icône d’onde de son son et sa distribution. Un repère sur la jonction de deux plans montre le raccord : vert quand il est mesuré, orange quand il demande un regard, avec les problèmes dans son infobulle ; cliquez dessus pour comparer les deux plans au moniteur ;
+- **Prises** : jusqu’à quatre prises empilées sous chaque plan, la finale en haut, puis les candidates, les brouillons et les rejetées (hachurées), puis les prises en cours, en file ou en échec ; celles du plan choisi affichent leur lettre et leur étiquette. Cliquez sur une prise pour la voir au moniteur ;
+- **Musique** : la forme d’onde des clips des pistes Musique ;
+- **Sons de référence** : sous chaque plan, ce qu’il envoie à son moteur comme son de référence (pistes de référence et références sonores), en vert quand le moteur le suit, en gris quand il est mixé sur la prise.
+
+Glissez un plan pour le déplacer ; glissez son bord droit pour changer sa durée : les plans suivants suivent, le morceau reste en place, le magnétisme cale la coupe sur les bords des plans et des sons, les repères et la tête de lecture, et l’infobulle dit où tombe la coupe. Ctrl et la molette zooment autour du pointeur ; **−**, **+**, le curseur et **Ajuster** font de même dans l’en-tête, qui porte aussi le magnétisme et **Plan**. Un double clic sur un plan ouvre l’éditeur de plan.
+
+Sous la bande, le **moniteur** lit le montage comme le visualiseur, avec la fin du plan précédent à sa gauche et le début du plan suivant à sa droite, chacun avec le repère de son raccord. Avec une prise choisie dans la pile, ou avec les flèches haut et bas, le moniteur montre cette prise hors montage, avec **Rejetée**, **Candidate** et **Finale**, et Entrée l’utilise. Avec un raccord choisi, le moniteur compare côte à côte la dernière image du plan précédent et la première image du plan, avec les problèmes et leurs actions (**Raccorder la couleur**, **Utiliser la dernière image du plan précédent**). À côté du moniteur, l’**édition rapide** du plan choisi : son nom, son instruction (une modification marque les prises **Prompt modifié**, comme dans l’éditeur de plan), sa durée, son moteur, son nombre de brouillons, ses images clés, sa distribution et son son, **Générer N brouillons** et **Éditeur de plan**. Le panneau de gauche et la timeline sont masqués dans cette vue, puisque la bande porte leurs pistes ; l’inspecteur se ferme à l’ouverture de la bande et revient par le bouton Inspecteur.
+
+#### Synopsis et découpage
+
+**Synopsis et découpage**, dans l’en-tête de la bande (D, Production › Synopsis et découpage, ou le bouton du panneau de gauche), ouvre une fenêtre sous la bande, qui reste utilisable. Elle a trois onglets :
+
+- **Découpage** : le synopsis, les noms de la bible qu’il contient, et trois méthodes. **Par phrases** est le découpage d’avant (une phrase, un plan de 3 à 7 s). **Sur le morceau** remplit les parties du morceau à la longueur moyenne choisie (2 à 8 s) et y répartit les phrases dans l’ordre ; il faut un morceau sur une piste Musique. **Assistant** le demande à l’assistant PotionUI, dont la proposition revient dans la même liste. Chaque plan proposé peut être gardé ou non, renommé, recevoir une autre instruction, être raccourci ou allongé, coupé en deux, fusionné avec le suivant, déplacé et retiré ; il reçoit les personnages et le lieu de la bible que nomme sa phrase. Les plans proposés apparaissent en pointillé sur la bande et dans la vue d’ensemble, à leur durée et à leur place, avant que rien ne change. **Insérer** les place à la fin ou après le plan choisi ; **Ajouter N plans** (Ctrl+Entrée) les ajoute, et Annuler les retire.
+- **À produire** : les brouillons restants et les plans à passer en final, avec **Générer leurs brouillons**, les prises dans la file et les plans à faire, chacun avec **Voir**.
+- **À vérifier** : les raccords à vérifier (avec leurs actions), les prises en échec (**Réessayer**), les plans dont l’instruction a changé après leurs prises (**Générer de nouveaux brouillons**) et les plans sans instruction (**Écrire l’instruction**), chacun avec **Voir**. Le bouton de l’en-tête en donne le nombre.
+
+#### La grille
+
 À gauche : le **Synopsis** (une phrase devient un plan) et **Proposer un découpage**. Le **Découpage proposé** liste les plans : cochez ceux à garder, renommez-les et cliquez sur **Ajouter N plans à la fin**. Le découpage de ce bouton est simple : il se contente de couper le synopsis en phrases (son infobulle dit « Coupe par phrases ; demandez le vrai découpage à l’assistant »). L’assistant fait un vrai découpage et remplit la même liste (chapitre 10). Puis **À produire**, avec **Brouillons restants** et **Passage en final** (le nombre de plans et la durée qu’il reste à faire pour chacun), et **Continuité**, qui liste les raccords de couleur à vérifier, chacun avec **Raccorder la couleur** et **Utiliser la dernière image du plan précédent** (chapitre 12).
 
 Au centre : une carte par plan, dans l’ordre, avec son numéro, sa durée, son nom, son étape (**Source**, **À générer**, **Brouillon** ou **Final**), son nombre de prises, **Modifier** et son instruction locale. **Modifier** ouvre l’éditeur de plan (plus bas). Sur un plan sans prise, cliquer sur l’instruction ouvre aussi l’éditeur de plan ; dès que le plan a une prise, son instruction est seulement affichée, pour qu’un clic ne change pas ce dont les prises sont parties. Quand le plan a été modifié après sa prise, la vignette porte **Prompt modifié** (la prise posée sur le plan, ou toutes les prises quand aucune n’y est posée, est plus ancienne que la modification). Une icône de curseurs après le nombre de prises dit que le plan fixe son propre moteur ; survolez-la pour le détail (« Moteur propre : LTX-2.5 · Final · graine 42 »). Le bloc du plan sur la timeline porte la même icône. Une icône de forme d’onde dit que le plan envoie du son avec sa génération (une référence sonore ou une piste de référence, chapitre 13) ; survolez-la pour lire ce qu’en fait son moteur : en vert, « Conditionne la génération : MiniMax H3 suit ce son. » ; en gris, « Sera mixé sur la prise, pas utilisé comme guide. » ; en ambre, « Ignoré par ce moteur : le son reste seulement dans le montage. » Glissez une carte pour la déplacer. Les boutons d’une carte apparaissent au survol ou quand la carte est sélectionnée : le bouton principal suit l’étape, **Générer**, **Passer en final**, **Voir les prises** ou **Régénérer** ; à côté de **Générer**, le nombre de brouillons du plan (×1 à ×8, chapitre 8) ; et trois icônes montrent le plan dans le visualiseur, insèrent un plan après lui et le suppriment. Tant qu’une prise du plan est en cours, la carte montre son étape et sa progression, comme le bloc du plan sur la timeline, et le bouton est désactivé. L’en-tête compte les plans par étape, en ajoute un avec **Plan** et règle la taille des vignettes ; une tuile **Nouveau plan** à la fin fait la même chose. Dans cet espace, les flèches gauche et droite déplacent la sélection vers le plan précédent ou suivant.
@@ -789,8 +815,15 @@ Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pou
 | Flèche gauche, Flèche droite | Déplacer la tête de lecture d’une image, soit 1/fps du projet (1 s avec Shift) |
 | Flèche gauche, Flèche droite (Storyboard) | Sélectionner le plan précédent ou suivant |
 | Home, Fin | Aller au début, Aller à la fin |
+| D | Synopsis et découpage (le panneau de gauche dans la grille) |
+| T, E | Les prises du plan choisi (au moniteur dans la bande), Éditeur de plan |
+| Flèche haut, Flèche bas (Storyboard) | Dans la bande : prise précédente ou suivante du plan au moniteur |
+| Entrée (Storyboard) | Dans la bande, avec une prise au moniteur : utiliser la prise |
+| <, > (Storyboard) | Dans la bande : raccourcir, allonger le plan choisi de 0,5 s |
+| Ctrl+Shift+Flèche gauche, Ctrl+Shift+Flèche droite (Storyboard) | Avancer ou reculer le plan choisi d’une place |
+| Shift+R (Storyboard) | Dans la bande : comparer le raccord avec le plan précédent |
 
-Les raccourcis à une lettre (A, R, B, I, O, M, N, F et U) peuvent être désactivés dans **Video Producer › Préférences…**, réglage **Raccourcis à une touche**, activé par défaut. Espace, Retour arrière, Suppr, les flèches, Home et Fin n’en dépendent pas.
+Les raccourcis à une lettre (A, R, B, I, O, M, N, F, U, D, T et E) peuvent être désactivés dans **Video Producer › Préférences…**, réglage **Raccourcis à une touche**, activé par défaut. Espace, Retour arrière, Suppr, les flèches, Home et Fin n’en dépendent pas.
 
 Quand les raccourcis fonctionnent :
 
