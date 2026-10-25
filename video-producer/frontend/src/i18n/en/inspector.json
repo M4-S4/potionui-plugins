@@ -171,8 +171,6 @@
 	"takes.more.one": "{count} more draft",
 	"takes.more.other": "{count} more drafts",
 	"takes.note": "Drafts in {res} to judge the motion · Make final upscales the take or renders it again in {final} with the same seed.",
-	"frame.fromScene": "Captured in the 3D scene “{scene}”",
-	"frame.removedScene": "removed",
 	"editShot": "Edit shot…",
 	"field.type": "Type",
 	"reference.sound": "Sound",

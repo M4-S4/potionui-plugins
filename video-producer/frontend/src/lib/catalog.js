@@ -89,11 +89,6 @@ export const roleColor = {
 	Frames: 'viz-7'
 };
 
-export function sceneLabel(scene) {
-	if (scene?.kind === 'splat') return t('lib.scene.splat');
-	return t('lib.scene.splatfile', { format: String(scene?.format ?? 'ply').toUpperCase() });
-}
-
 export function audioRoleLabel(role) {
 	if (role === 'Dialogue') return t('lib.audioRole.dialogue');
 	if (role === 'Musique') return t('lib.audioRole.music');

@@ -215,7 +215,6 @@ WAN_ID = "01KX47WANVIDEO0000000000TV"
 H3_ID = "01KX47H3MINIMAX000000000VA"
 LTX25_ID = "01KX47LTX25VIDEO00000000TV"
 SEEDVR2_ID = "01KXB7C553THYMSMKY1QSYESFM"
-SPLAT_ID = "01KX47GSP4TQ0000000000SP3D"
 OPENROUTER_ID = "01M3SV8HJTGT3JPPH2BA5MP6PR"
 
 WAN_RESOLUTIONS = (
@@ -379,15 +378,6 @@ def seedvr2_image_fields():
         "diffusion_model": _model("diffusion_model", sha256=None, filename="seedvr2_ema_3b_fp16.safetensors"),
         "vae": _model("seedvr2_vae", sha256=None, filename="ema_vae_fp16.safetensors"),
         "prompt_embedding": _model("prompt_embedding", sha256=None, filename="pos_emb.pt"),
-    }
-
-
-def splat_fields():
-    return {
-        "source_image": _plain("image", required=True),
-        "detail": _plain("select", "standard", ("standard", "high")),
-        "seed": _plain("seed", -1),
-        "depth_model": _model("depth_model", sha256="moge-sha"),
     }
 
 
@@ -558,29 +548,6 @@ class FakeCore:
             category="utility",
             variables=SEEDVR2_VARS,
         )
-
-    def use_splat(self):
-        return self.add_preset(SPLAT_ID, "Image to Splat", {"img2splat": splat_fields()}, category="3d")
-
-    def complete_splat(self, generation_id, file_path=None, duration_ms=30000, **extra):
-        self.states[generation_id] = {
-            "id": generation_id,
-            "status": "completed",
-            "progress": 1.0,
-            "backend_id": "b-local",
-            "started_at": "2026-10-19T10:00:00+00:00",
-            "duration_ms": duration_ms,
-        }
-        self.files[generation_id] = [
-            {"id": "file-0", "file_type": "IMAGE", "file_path": f"generations/2026-10-19/{generation_id}/preview.png"},
-            {
-                "id": f"file-{generation_id}",
-                "file_type": "splat",
-                "splat_format": "ply",
-                "file_path": file_path or f"generations/2026-10-19/{generation_id}/scene.ply",
-                **extra,
-            },
-        ]
 
     def use_openrouter(self, model=None):
         model = model or cloud_model()
@@ -805,67 +772,6 @@ def make_project(project_db, make_doc):
         return projects.create_project(user_id, doc if doc is not None else make_doc(**parts))
 
     return make
-
-
-GAUSSIAN_PROPERTIES = (
-    "x", "y", "z", "f_dc_0", "f_dc_1", "f_dc_2", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3",
-)
-VIEW_COMMENT = "potionui_view fov_y=48.5 aspect=1.7778 depth=4.0 width=832 height=468 convention=opencv"
-
-
-class SceneSamples:
-    @staticmethod
-    def ply(count=2, comment=VIEW_COMMENT, properties=GAUSSIAN_PROPERTIES, header_format="binary_little_endian", short=False):
-        lines = ["ply", f"format {header_format} 1.0"]
-        if comment:
-            lines.append(f"comment {comment}")
-        lines.append(f"element vertex {count}")
-        lines += [f"property float {name}" for name in properties]
-        lines.append("end_header")
-        body = bytes(4 * len(properties) * count)
-        return ("\n".join(lines) + "\n").encode("ascii") + (body[:-1] if short else body)
-
-    @staticmethod
-    def spz(count=3, magic=b"NGSP"):
-        import gzip
-        import struct
-
-        return gzip.compress(magic + struct.pack("<IIBBBB", 2, count, 0, 12, 0, 0) + bytes(9 * count))
-
-    @staticmethod
-    def splat(count=2):
-        return bytes(32 * count)
-
-    @staticmethod
-    def jpeg(width=64, height=36, color=(200, 80, 40)):
-        import io
-
-        from PIL import Image
-
-        buffer = io.BytesIO()
-        Image.new("RGB", (width, height), color).save(buffer, format="JPEG", quality=90)
-        return buffer.getvalue()
-
-    @staticmethod
-    def png(width=64, height=36):
-        import io
-
-        from PIL import Image
-
-        buffer = io.BytesIO()
-        Image.new("RGB", (width, height), (10, 120, 200)).save(buffer, format="PNG")
-        return buffer.getvalue()
-
-    @staticmethod
-    def data_url(data, kind="png"):
-        import base64
-
-        return f"data:image/{kind};base64,{base64.b64encode(data).decode('ascii')}"
-
-
-@pytest.fixture
-def samples():
-    return SceneSamples
 
 
 class MediaStore:

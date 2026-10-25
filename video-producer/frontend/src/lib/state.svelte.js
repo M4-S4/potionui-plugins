@@ -51,7 +51,6 @@ export const ui = $state({
 	mediaQuery: '',
 	mediaCollection: 'all',
 	mixerFilter: 'Tous',
-	scene: { current: null, pos: [0, 0, 0], target: [0, 0, -4], focal: 35, roll: 0, seeded: null },
 	production: {
 		target: 'clip',
 		state: 'ready',
@@ -642,7 +641,6 @@ export function replaceDoc(next) {
 	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, dirty: false });
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0 });
 	resetTakes();
-	Object.assign(ui.scene, { current: null, seeded: null });
 	if (ui.playhead > seqDuration()) ui.playhead = 0;
 }
 

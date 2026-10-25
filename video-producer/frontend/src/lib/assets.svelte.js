@@ -9,8 +9,7 @@ function useText(kind, count) {
 	if (kind === 'sounds') return t('lib.media.use.sounds', { count });
 	if (kind === 'references') return t('lib.media.use.references', { count });
 	if (kind === 'edges') return t('lib.media.use.edges', { count });
-	if (kind === 'frames') return t('lib.media.use.frames', { count });
-	return t('lib.media.use.scenes', { count });
+	return t('lib.media.use.frames', { count });
 }
 
 function deleteText(a, uses) {

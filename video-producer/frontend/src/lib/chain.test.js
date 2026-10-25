@@ -193,8 +193,6 @@ test('wiring: every path that adds shots tells the chain, inside the same undo s
 	const chain = source('./chain.svelte.js');
 	assert.match(chain, /^onShotsAdded\(chainShots\);$/m);
 	assert.match(source('./seam.svelte.js'), /from '\.\/chain\.svelte\.js';/);
-	assert.match(source('./scene.svelte.js'), /from '\.\/seam\.svelte\.js';/);
-	assert.match(source('../VideoProducerPage.svelte'), /from '\.\/lib\/scene\.svelte\.js';/);
 });
 
 test('wiring: the seam says a stale first frame and offers one, and its button takes the end frame', () => {

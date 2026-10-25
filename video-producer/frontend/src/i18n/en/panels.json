@@ -110,7 +110,6 @@
 	"mixer.roles": "Roles",
 	"mixer.lanes.one": "{count} track",
 	"mixer.lanes.other": "{count} tracks",
-	"dock.refs.reframe": "Reframe a shot from 3D…",
 	"dock.tab.queue": "Queue",
 	"dock.engine.title": "Engine",
 	"queue.title": "Generation queue",

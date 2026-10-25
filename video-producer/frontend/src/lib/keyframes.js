@@ -1,5 +1,4 @@
 import { optionKey } from './generation.js';
-import { roleKind } from './seam.js';
 import { isGlobal } from './shots.js';
 
 export const KEYFRAME = 'keyframe';
@@ -77,16 +76,6 @@ const imageAsset = (doc, id) => {
 	return found?.kind === 'image' ? found : null;
 };
 
-function savedFirstFrame(doc, shotId) {
-	return (doc.frames ?? []).find((f) => f.shotId === shotId && roleKind(f.role) === 'first' && f.assetId) ?? null;
-}
-
-function scenePicture(doc, saved, first) {
-	if (!saved?.sceneId || saved.assetId !== first) return null;
-	const scene = (doc.scenes ?? []).find((s) => s.id === saved.sceneId);
-	return scene?.kind === 'splat' && scene.status === 'done' ? imageAsset(doc, scene.sourceAssetId) : null;
-}
-
 export const pictureRole = (reference) => (reference.space === 'decors3d' ? 'setting' : (TYPE_ROLES[reference.type] ?? 'character'));
 
 export function draftPictures(doc, clip, draft, role = 'first') {
@@ -96,11 +85,8 @@ export function draftPictures(doc, clip, draft, role = 'first') {
 		if (!asset || found.some((p) => p.assetId === asset.id)) return;
 		found.push({ assetId: asset.id, role: pictureRole, name: name || '', origin });
 	};
-	const saved = savedFirstFrame(doc, clip.id);
 	const first = imageAsset(doc, draft.first);
-	if (first && (role === 'last' || (saved?.assetId === draft.first && saved.sceneId))) add(first, 'frame', '', 'frame');
-	const scene = scenePicture(doc, saved, draft.first);
-	if (scene) add(scene, 'setting', '', 'scene');
+	if (first && role === 'last') add(first, 'frame', '', 'frame');
 	const skip = new Set(draft.exclude ?? []);
 	const shared = (doc.references ?? []).filter((r) => isGlobal(r) && !skip.has(r.id));
 	for (const reference of [...(draft.own ?? []), ...shared]) {

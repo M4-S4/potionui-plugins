@@ -201,16 +201,14 @@ export function shotDraft(doc, clip, engine) {
 	};
 }
 
-function placeFrame(doc, clip, kind, assetId, makeId, sceneId = null) {
+function placeFrame(doc, clip, kind, assetId, makeId) {
 	const existing = framesOf(doc, clip.id, kind);
 	if (!assetId) {
 		for (const f of existing) doc.frames.splice(doc.frames.indexOf(f), 1);
 		return;
 	}
 	const fields = { shotId: clip.id, time: frameTime(clip, kind), assetId, role: kind, strength: existing[0]?.strength ?? SEAM_STRENGTH };
-	if (sceneId) fields.sceneId = sceneId;
 	if (existing.length) {
-		if (existing[0].assetId !== assetId && !sceneId) delete existing[0].sceneId;
 		Object.assign(existing[0], fields);
 		for (const extra of existing.slice(1)) doc.frames.splice(doc.frames.indexOf(extra), 1);
 	} else doc.frames.push({ id: makeId(), ...fields });
@@ -243,8 +241,8 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 		prompt.text = text;
 		if (covered) prompt.dur = dur;
 	} else if (text) doc.prompts.push({ id: makeId(), shotId: clip.id, start: clip.start, dur, strength: 75, text });
-	if (resized || before.first !== draft.first) placeFrame(doc, clip, 'first', draft.first, makeId, draft.captures?.[draft.first]);
-	if (resized || before.last !== draft.last) placeFrame(doc, clip, 'last', draft.last, makeId, draft.captures?.[draft.last]);
+	if (resized || before.first !== draft.first) placeFrame(doc, clip, 'first', draft.first, makeId);
+	if (resized || before.last !== draft.last) placeFrame(doc, clip, 'last', draft.last, makeId);
 	setExcluded(clip, draft.exclude);
 	if ('excludeLanes' in draft) setExcludedLanes(clip, draft.excludeLanes);
 	writeReferences(doc, clip, draft.own);

@@ -17,7 +17,6 @@
 	import { isPlayer } from './lib/workspaces.js';
 	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
 	import { startAssistant } from './lib/assistant.svelte.js';
-	import { disposeScenes, pollScenes, scenesBusy } from './lib/scene.svelte.js';
 	import MenuBar from './components/shell/MenuBar.svelte';
 	import ProjectBar from './components/shell/ProjectBar.svelte';
 	import StatusBar from './components/shell/StatusBar.svelte';
@@ -105,10 +104,6 @@
 		for (const a of doc.assets) if (needsProbe(a)) untrack(() => probeAsset(a.id));
 	});
 
-	$effect(() => {
-		if (phase === 'ready' && scenesBusy()) untrack(pollScenes);
-	});
-
 	function refuseStrayFiles(e) {
 		if (e.defaultPrevented || !hasFiles(e.dataTransfer)) return;
 		e.preventDefault();
@@ -132,7 +127,6 @@
 			saveSeq += 1;
 			document.removeEventListener('visibilitychange', onvisibility);
 			stopProduction();
-			disposeScenes();
 			disposeExports();
 			flushSave();
 			disposeProject();
@@ -270,9 +264,6 @@
 		.vp-root [data-focus-ring]:focus {
 			outline: 2px solid rgb(var(--signal));
 			outline-offset: 2px;
-		}
-		.vp-root .vp-scene-surface:focus-visible {
-			outline-offset: -2px;
 		}
 		.vp-root .input:focus-visible,
 		.vp-root .vp-modal:focus-visible,

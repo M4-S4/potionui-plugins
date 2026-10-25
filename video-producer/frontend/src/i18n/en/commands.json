@@ -102,6 +102,5 @@
 	"kbd.escape": "Esc",
 	"cmd.story-window": "Synopsis and breakdown",
 	"cmd.story-view": "Storyboard as a band",
-	"cmd.shot-editor": "Shot editor…",
-	"cmd.reframe": "Reframe from 3D…"
+	"cmd.shot-editor": "Shot editor…"
 }

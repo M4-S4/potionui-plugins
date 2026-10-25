@@ -1054,25 +1054,3 @@ def test_the_transcode_types_are_the_ones_the_core_exports():
     assert core_bridge.TranscodeSpec is media.TranscodeSpec
     assert core_bridge.VideoTranscodeError is media.VideoTranscodeError
     assert issubclass(core_bridge.FfmpegUnavailableError, core_bridge.VideoTranscodeError)
-
-
-def test_probe_splat_reads_a_splat_with_the_core_probe(tmp_path, samples):
-    path = tmp_path / "scene.ply"
-    path.write_bytes(samples.ply(count=4))
-
-    info = core_bridge.probe_splat(path)
-
-    assert (info["format"], info["count"]) == ("ply", 4)
-    assert (info["view"]["fov_y"], info["view"]["aspect"], info["view"]["depth"]) == (48.5, 1.7778, 4.0)
-
-
-def test_probe_splat_refuses_a_bad_splat_without_naming_its_path(tmp_path, samples):
-    path = tmp_path / "secret-folder" / "scene.ply"
-    path.parent.mkdir()
-    path.write_bytes(samples.ply(header_format="ascii"))
-
-    with pytest.raises(core_bridge.MediaRefError) as caught:
-        core_bridge.probe_splat(path)
-
-    assert caught.value.code == "unsupported_media"
-    assert "not binary_little_endian" in str(caught.value) and "secret-folder" not in str(caught.value)

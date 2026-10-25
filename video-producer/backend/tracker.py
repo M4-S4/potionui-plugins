@@ -1,24 +1,21 @@
 import asyncio
 import logging
 import threading
-import time
 from typing import Any, Dict, Optional
 
-from . import core_bridge, generation, scene3d, takes
-from .scene3d import jobs as scene_jobs
+from . import core_bridge, generation, takes
 from .core_bridge import GenerationNotFoundException
 
 logger = logging.getLogger("plugins.video-producer")
 
 BUSY_INTERVAL = 2.0
 IDLE_INTERVAL = 10.0
-SWEEP_INTERVAL = 600.0
 
 _UNREADABLE = object()
 
 
 class Tracker:
-    """Follows the takes and splat jobs in flight on the application loop and hands the queued takes to the core."""
+    """Follows the takes in flight on the application loop and hands the queued takes to the core."""
 
     def __init__(self) -> None:
         self._future: Any = None
@@ -52,29 +49,17 @@ class Tracker:
         self._stop = None
 
     async def run(self, stop: threading.Event) -> None:
-        """Check the takes every 2 s while some are queued or running, else every 10 s, and sweep the scene storage every 10 minutes, until stopped."""
-        swept = time.monotonic()
+        """Check the takes every 2 s while some are queued or running, else every 10 s, until stopped."""
         while not stop.is_set():
             try:
                 busy = await self.tick()
             except Exception:
                 logger.exception("[VIDEO-PRODUCER] The take tracker failed a round")
                 busy = False
-            if time.monotonic() - swept >= SWEEP_INTERVAL:
-                swept = time.monotonic()
-                await self.sweep()
             await asyncio.sleep(BUSY_INTERVAL if busy else IDLE_INTERVAL)
 
-    async def sweep(self) -> int:
-        """Sweep the abandoned work files and the orphan scene files off the event loop; returns how many it deleted."""
-        try:
-            return await asyncio.to_thread(scene3d.sweep)
-        except Exception:
-            logger.warning("[VIDEO-PRODUCER] Could not sweep the scene storage", exc_info=True)
-            return 0
-
     async def tick(self) -> bool:
-        """One round: follow each generation in flight, hand queued takes to the core, then follow the splat jobs; True while takes or splat jobs remain active."""
+        """One round: follow each generation in flight, then hand queued takes to the core; True while takes remain active."""
         users: Dict[Optional[str], Any] = {}
 
         def owner(user_id: Optional[str]) -> Any:
@@ -105,8 +90,7 @@ class Tracker:
             user = owner(user_id)
             if user is not None and user is not _UNREADABLE:
                 await generation.pump(user)
-        scenes = await scene_jobs.follow(owner, _UNREADABLE)
-        return bool(takes.list_active()) or scenes
+        return bool(takes.list_active())
 
 
 TRACKER = Tracker()

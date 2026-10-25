@@ -168,7 +168,7 @@ function editorDoc() {
 	return {
 		clips: [{ id: 's1', start: 0, dur: 4, srcIn: 0, take: null }, { id: 's2', start: 4, dur: 4, srcIn: 0, take: null }],
 		prompts: [{ id: 'p1', shotId: 's1', start: 0, dur: 4, strength: 75, text: 'A lighthouse.' }],
-		frames: [{ id: 'f1', shotId: 's1', time: 0, assetId: 'img1', role: 'Début', strength: 75, sceneId: 'sc1' }],
+		frames: [{ id: 'f1', shotId: 's1', time: 0, assetId: 'img1', role: 'Début', strength: 75 }],
 		references: [{ id: 'g1', name: 'Hero', space: 'identite', type: 'Personnage', assetId: 'img1', role: 'Identité', scope: { type: 'global' } }, { id: 'o1', name: 'Hat', space: 'identite', type: 'Objet', assetId: 'img2', role: 'Identité', scope: { type: 'shot', shotId: 's1' } }],
 		engine: { variants: 2 }
 	};
@@ -208,7 +208,7 @@ test('shot editor: saving writes every field and bumps the revision only when wh
 	assert.deepEqual(result, { changed: true, resized: true, released: null });
 	assert.equal(revisionOf(clip), 1);
 	assert.deepEqual([doc.prompts[0].text, doc.prompts[0].dur, clip.dur], ['A lighthouse at dusk.', 5, 5]);
-	assert.deepEqual(doc.frames.map((f) => [f.role, f.assetId, f.time, f.sceneId ?? null]), [['first', 'img1', 0, 'sc1'], ['last', 'img3', 4.96, null]]);
+	assert.deepEqual(doc.frames.map((f) => [f.role, f.assetId, f.time]), [['first', 'img1', 0], ['last', 'img3', 4.96]]);
 	assert.deepEqual(clip.referenceOverrides, { exclude: ['g1'] });
 	assert.deepEqual(doc.references.map((r) => [r.id, r.scope.type]), [['g1', 'global'], ['o2', 'shot']]);
 });
@@ -226,19 +226,6 @@ test('shot editor: the duration stays within the media, a removed frame goes, an
 	const kept = shotDraft(doc, first, doc.engine);
 	applyShotDraft(doc, first, kept, { ...kept, first: null }, { makeId: () => 'x', engine: doc.engine });
 	assert.deepEqual(doc.frames, []);
-});
-
-test('shot editor: a capture of the 3D reframing tool keeps its scene on the frame it fills, a picked image gets none', () => {
-	const doc = editorDoc();
-	const clip = doc.clips[1];
-	const before = shotDraft(doc, clip, doc.engine);
-
-	applyShotDraft(doc, clip, before, { ...before, first: 'cap1', last: 'cap2', captures: { cap1: 'sc2', cap2: 'sc2' } }, { makeId: () => `f${doc.frames.length + 1}`, engine: doc.engine });
-	assert.deepEqual(doc.frames.filter((f) => f.shotId === 's2').map((f) => [f.role, f.assetId, f.sceneId ?? null]), [['first', 'cap1', 'sc2'], ['last', 'cap2', 'sc2']]);
-
-	const again = shotDraft(doc, clip, doc.engine);
-	applyShotDraft(doc, clip, again, { ...again, first: 'img2', captures: { cap1: 'sc2' } }, { makeId: () => 'x', engine: doc.engine });
-	assert.deepEqual(doc.frames.filter((f) => f.shotId === 's2').map((f) => [f.role, f.assetId, f.sceneId ?? null]), [['first', 'img2', null], ['last', 'cap2', 'sc2']]);
 });
 
 function takeDoc() {

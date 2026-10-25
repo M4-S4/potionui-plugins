@@ -110,13 +110,8 @@ def _rich(doc):
             "assetId": "01M535B4GTVIDEO00000000000",
             "role": "first",
             "strength": 100,
-            "sceneId": "01M535B4GTSCENE00000000000",
         }
     )
-    doc["scenes"] += [
-        _splat_scene(),
-        {"id": "01M535B4GTSCENEFILE0000000", "kind": "splatfile", "name": "set.spz", "fileId": "01M535B4GTFILE00000000000", "format": "spz", "view": None},
-    ]
     doc["references"] += [
         {
             "id": "01M535B4GTREF0000000000000",
@@ -185,13 +180,12 @@ def test_a_document_using_every_collection_is_valid(starter):
     validate_doc(_rich(starter))
 
 
-def test_the_reference_project_with_its_splat_scene_is_valid_and_current():
+def test_the_reference_project_is_valid_and_current():
     doc = _fixture("exports/reference-project")["doc"]
 
     assert validate_doc(doc) == canonical(doc)
     assert migrate(doc) is doc
-    assert [scene["kind"] for scene in doc["scenes"]] == ["splat"]
-    assert "controls" not in doc and "plans3d" not in doc
+    assert not {"scenes", "controls", "plans3d"} & set(doc)
 
 
 def test_an_audio_asset_from_sound_design_and_a_video_asset_without_audio_fields_are_valid(starter):
@@ -377,56 +371,38 @@ def test_an_asset_outside_the_contract_is_refused(starter, asset, path):
 
 
 @pytest.mark.parametrize(
-    "item, path",
-    [
-        ({"id": "s", "kind": "file", "name": "set.ply", "file": "C:/set.ply"}, "$.scenes[0].kind"),
-        ({"id": "s", "kind": "sample", "name": "Sample"}, "$.scenes[0].kind"),
-        ({"id": "s", "kind": "url", "name": "Sample"}, "$.scenes[0].kind"),
-        ({key: value for key, value in _splat_scene().items() if key != "view"}, "$.scenes[0]"),
-        (_splat_scene(status="cancelled"), "$.scenes[0].status"),
-        (_splat_scene(count=1.5), "$.scenes[0].count"),
-        (_splat_scene(view={"fov": 50, "aspect": 1.5}), "$.scenes[0].view"),
-        (_splat_scene(view={"fov": 50, "aspect": 1.5, "depth": 4, "width": 832}), "$.scenes[0].view"),
-        ({"id": "s", "kind": "splatfile", "name": "set.ply", "fileId": "f", "format": "obj", "view": None}, "$.scenes[0].format"),
-        ({"id": "s", "kind": "splatfile", "name": "set.ply", "fileId": None, "format": "ply", "view": None}, "$.scenes[0].fileId"),
-        ({"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f", "cameras": []}, "$.scenes[0].kind"),
-    ],
-)
-def test_a_scene_follows_its_kind(starter, item, path):
-    starter["scenes"] = [item]
-
-    assert str(_error(starter)).startswith(f"{path}: ")
-
-
-@pytest.mark.parametrize(
     "scene",
     [
-        _splat_scene(status="queued", progress=0, fileId=None, count=None, view=None),
-        _splat_scene(
-            status="failed", sourceAssetId=None, sourceTime=None, jobId=None, fileId=None, count=None, view=None, error="The GPU ran out of memory."
-        ),
-        {"id": "s", "kind": "splatfile", "name": "set.splat", "fileId": "f", "format": "splat", "view": {"fov": 50, "aspect": 0.5625, "depth": 3}},
+        _splat_scene(),
+        {"id": "s", "kind": "splatfile", "name": "set.spz", "fileId": "f", "format": "spz", "view": None},
+        {"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f", "cameras": []},
+        {"id": "s", "kind": "sample", "name": "Sample"},
     ],
 )
-def test_each_scene_kind_of_the_contract_is_valid(starter, scene):
+def test_a_3d_scene_of_any_kind_is_no_longer_part_of_the_schema_and_the_migration_drops_it(starter, scene):
     starter["scenes"] = [scene]
 
-    validate_doc(starter)
+    assert _error(starter).code == "invalid_doc"
+    migrated = migrate(starter)
+    assert "scenes" not in migrated
+    validate_doc(migrated)
 
 
 FRAME_ITEM = {"id": "f", "shotId": None, "time": 0, "assetId": None, "role": "first", "strength": 100}
 
 
-def test_the_scene_of_a_frame_is_an_optional_id_or_null(starter):
-    starter["frames"] = [dict(FRAME_ITEM)]
-    validate_doc(starter)
+def test_the_scene_of_a_frame_is_no_longer_part_of_the_schema_and_the_migration_forgets_it(starter):
+    starter["frames"] = [{**FRAME_ITEM, "sceneId": "01M535B4GTSCENE00000000000"}, {**FRAME_ITEM, "id": "g", "sceneId": None}, {**FRAME_ITEM, "id": "h"}]
+    before = copy.deepcopy(starter)
 
-    for value, valid in (("", False), (None, True), ("01M535B4GTID", True)):
-        starter["frames"][0]["sceneId"] = value
-        if valid:
-            validate_doc(starter)
-        else:
-            assert str(_error(starter)).startswith("$.frames[0].sceneId: ")
+    assert _error(starter).code == "invalid_doc"
+    migrated = migrate(starter)
+
+    assert starter == before
+    assert migrated["frames"] == [FRAME_ITEM, {**FRAME_ITEM, "id": "g"}, {**FRAME_ITEM, "id": "h"}]
+    assert migrated["frames"][2] is starter["frames"][2]
+    validate_doc(migrated)
+    assert migrate(migrated) is migrated
 
 
 LEGACY_SCENES = [
@@ -436,7 +412,7 @@ LEGACY_SCENES = [
 ]
 
 
-def test_migrating_drops_the_simulated_scenes_the_blender_scenes_and_the_3d_shots_with_their_old_keyframes(starter):
+def test_migrating_drops_every_3d_scene_simulated_imported_or_built_and_the_3d_shots_with_their_old_keyframes(starter):
     legacy = copy.deepcopy(starter)
     legacy["scenes"] = [*LEGACY_SCENES, _splat_scene()]
     legacy["plans3d"] = [
@@ -455,8 +431,7 @@ def test_migrating_drops_the_simulated_scenes_the_blender_scenes_and_the_3d_shot
     migrated = migrate(legacy)
 
     assert legacy == before
-    assert migrated["scenes"] == [_splat_scene()]
-    assert "plans3d" not in migrated
+    assert "scenes" not in migrated and "plans3d" not in migrated
     validate_doc(migrated)
     assert migrate(migrated) is migrated
 
@@ -633,30 +608,14 @@ def test_migrating_turns_the_3d_set_role_into_the_set_role_whatever_the_family_a
     assert migrate(migrated) is migrated
 
 
-def test_migrating_a_document_with_empty_3d_shots_and_control_videos_drops_the_two_keys_and_nothing_else(starter):
-    starter["scenes"] = []
-
+def test_migrating_a_document_with_empty_3d_scenes_shots_and_control_videos_drops_the_three_keys_and_nothing_else(starter):
     assert migrate(starter) is starter
-    assert migrate({**starter, "plans3d": [], "controls": []}) == starter
+    assert migrate({**starter, "scenes": [], "plans3d": [], "controls": []}) == starter
     validate_doc(starter)
 
 
-def test_a_document_without_its_scenes_is_valid_and_migrated_as_it_is(starter):
-    del starter["scenes"]
-
-    assert migrate(starter) is starter
-    assert validate_doc(starter) == canonical(starter)
-    assert "scenes" not in json.loads(canonical(starter))
-
-
-def test_the_scenes_when_they_are_there_are_still_checked(starter):
-    starter["scenes"] = None
-
-    assert str(_error(starter)).startswith("$.scenes: ")
-
-
-@pytest.mark.parametrize("key", ["controls", "plans3d"])
-def test_the_3d_shots_and_control_videos_are_no_longer_part_of_the_schema_and_the_migration_drops_them(starter, key):
+@pytest.mark.parametrize("key", ["controls", "plans3d", "scenes"])
+def test_the_3d_scenes_shots_and_control_videos_are_no_longer_part_of_the_schema_and_the_migration_drops_them(starter, key):
     starter[key] = []
 
     assert _error(starter).code == "invalid_doc"
@@ -664,10 +623,9 @@ def test_the_3d_shots_and_control_videos_are_no_longer_part_of_the_schema_and_th
     validate_doc(migrate(starter))
 
 
-def test_a_project_stored_without_its_scenes_is_read_and_saved_without_them(project_db, store, starter):
+def test_a_project_stored_without_any_3d_key_is_read_and_saved_as_it_is(project_db, store, starter):
     from backend import projects
 
-    del starter["scenes"]
     created = projects.create_project("user-1", starter)
     starter["synopsis"] = "Two hikers climb at dawn."
     saved = projects.save_project(created["id"], starter, created["version"])
@@ -676,22 +634,25 @@ def test_a_project_stored_without_its_scenes_is_read_and_saved_without_them(proj
     assert projects.get_project(created["id"])["doc"] == starter
 
 
-def test_an_older_project_is_stored_without_its_3d_shots_and_control_videos_with_its_scenes_and_its_guide_as_a_mouvement_reference(project_db, store):
+def test_an_older_project_is_stored_without_its_3d_scenes_shots_and_control_videos_its_frames_without_their_scene_and_its_guide_as_a_mouvement_reference(project_db, store):
     from backend import projects
 
     doc = _fixture("exports/reference-project")["doc"]
     shot = doc["clips"][2]["id"]
     video = next(asset["id"] for asset in doc["assets"] if asset["kind"] == "video" and not asset["id"].startswith("gen-"))
+    scene = _splat_scene()
     older = {
         **doc,
-        "plans3d": [{"id": "plan", "shotId": shot, "sceneId": doc["scenes"][0]["id"], "name": "Orbit", "start": 9.2, "dur": 3, "keyframes": []}],
+        "scenes": [scene],
+        "frames": [*doc["frames"], {**FRAME_ITEM, "shotId": shot, "sceneId": scene["id"]}],
+        "plans3d": [{"id": "plan", "shotId": shot, "sceneId": scene["id"], "name": "Orbit", "start": 9.2, "dur": 3, "keyframes": []}],
         "controls": [_control("guide", video, shot_id=shot), _control("simulated", None)],
     }
     created = projects.create_project("user-1", older)
     stored = projects.get_project(created["id"])["doc"]
 
-    assert "controls" not in stored and "plans3d" not in stored
-    assert stored["scenes"] == doc["scenes"]
+    assert not {"scenes", "controls", "plans3d"} & set(stored)
+    assert stored["frames"] == [*doc["frames"], {**FRAME_ITEM, "shotId": shot}]
     assert stored["references"] == [
         *doc["references"],
         {"id": "guide", "name": "Guide guide", "space": "mouvement", "type": "Control video", "assetId": video, "role": "Mouvement", "scope": {"type": "shot", "shotId": shot}},
@@ -704,14 +665,8 @@ def test_migrating_a_document_already_in_the_new_shape_returns_it_as_it_is(start
     assert migrate(rich) is rich
 
 
-def test_migrating_leaves_malformed_scenes_to_the_validation(starter):
-    starter["scenes"] = {"kind": "sample"}
-
-    assert migrate(starter) is starter
-
-
-def test_migrating_drops_malformed_3d_shots_and_control_videos_instead_of_refusing_the_document(starter):
-    migrated = migrate({**starter, "plans3d": [3, {"id": "p", "keyframes": "none"}], "controls": {"id": "c"}})
+def test_migrating_drops_malformed_3d_scenes_shots_and_control_videos_instead_of_refusing_the_document(starter):
+    migrated = migrate({**starter, "scenes": {"kind": "sample"}, "plans3d": [3, {"id": "p", "keyframes": "none"}], "controls": {"id": "c"}})
 
     assert migrated == starter
     validate_doc(migrated)
