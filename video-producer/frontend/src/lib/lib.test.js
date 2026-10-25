@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
 import { isUlid, ulid, ulidTime } from './ulid.js';
-import { emptyDoc, migrate, newAsset, promptLanguageOf, starterDoc } from './starter.js';
+import { SCENE_LISTS, absentLists, emptyDoc, migrate, newAsset, promptLanguageOf, starterDoc, storedDoc } from './starter.js';
 import { laneCode } from './tracks.js';
 import {
 	activateOnKey,
@@ -278,6 +278,27 @@ test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D 
 	assert.deepEqual(bare, { name: 'Bare' }, 'the input is not changed');
 	const fresh = emptyDoc(translator('en', []));
 	assert.deepEqual(migrate(fresh), fresh);
+});
+
+test('3D lists: a document without them opens with them empty and is saved without them while they stay empty; one with them keeps them untouched', () => {
+	const t = translator('en', []);
+	const stored = migrate(emptyDoc(t));
+	for (const key of SCENE_LISTS) delete stored[key];
+	const absent = absentLists(stored);
+	assert.deepEqual(absent, ['controls', 'plans3d', 'scenes']);
+	const opened = migrate({ ...emptyDoc(t), ...stored });
+	for (const key of SCENE_LISTS) assert.deepEqual(opened[key], [], key);
+	assert.deepEqual(storedDoc(opened, absent), stored);
+	assert.ok(SCENE_LISTS.every((key) => key in opened), 'the open document is not changed');
+	opened.scenes.push({ id: 's1', kind: 'splatfile', name: 'Room', fileId: 'f1', format: 'ply', view: null });
+	assert.deepEqual(Object.keys(storedDoc(opened, absent)).filter((key) => SCENE_LISTS.includes(key)), ['scenes']);
+	const fixture = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tests', 'fixtures', 'exports', 'reference-project.json');
+	const project = JSON.parse(readFileSync(fixture, 'utf-8')).doc;
+	assert.ok(SCENE_LISTS.every((key) => project[key].length));
+	assert.deepEqual(absentLists(project), []);
+	const reopened = storedDoc(migrate({ ...emptyDoc(t), ...project }), absentLists(project));
+	for (const key of SCENE_LISTS) assert.deepEqual(reopened[key], project[key], key);
+	assert.deepEqual(absentLists(null), SCENE_LISTS);
 });
 
 test('newAsset: every field of the persisted asset contract, null when it does not apply', () => {

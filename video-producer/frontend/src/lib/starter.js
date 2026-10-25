@@ -158,3 +158,15 @@ export function migrate(doc) {
 	if (isObject(doc.engine)) next.engine = migrateOptions(doc.engine);
 	return next;
 }
+
+export const SCENE_LISTS = ['controls', 'plans3d', 'scenes'];
+
+export const absentLists = (stored) => SCENE_LISTS.filter((key) => !isObject(stored) || !(key in stored));
+
+export function storedDoc(snapshot, absent) {
+	const empty = absent.filter((key) => Array.isArray(snapshot[key]) && !snapshot[key].length);
+	if (!empty.length) return snapshot;
+	const kept = { ...snapshot };
+	for (const key of empty) delete kept[key];
+	return kept;
+}

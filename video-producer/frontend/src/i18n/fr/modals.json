@@ -153,7 +153,7 @@
 	"capture.reference": "Référence",
 	"capture.firstHint": "La capture devient la première image du plan : la génération part de ce nouvel angle (FL2VA).",
 	"capture.lastHint": "La capture devient la dernière image du plan : la génération finit sur cet angle (FL2VA).",
-	"capture.referenceHint": "La capture devient une référence Décor 3D du plan : elle garde le décor cohérent, le cadrage venant toujours du prompt (Ref2VA).",
+	"capture.referenceHint": "La capture devient une référence Décors du plan : elle garde le décor cohérent, le cadrage venant toujours du prompt (Ref2VA).",
 	"capture.cancel": "Annuler",
 	"capture.save": "Enregistrer la capture",
 	"capture.saving": "Enregistrement…",

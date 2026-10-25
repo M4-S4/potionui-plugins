@@ -153,7 +153,7 @@
 	"capture.reference": "Reference",
 	"capture.firstHint": "The capture becomes the first frame of the shot: the generation starts from this new angle (FL2VA).",
 	"capture.lastHint": "The capture becomes the last frame of the shot: the generation ends on this angle (FL2VA).",
-	"capture.referenceHint": "The capture becomes a 3D set reference of the shot: it keeps the set consistent, while the framing still comes from the prompt (Ref2VA).",
+	"capture.referenceHint": "The capture becomes a Sets reference of the shot: it keeps the set consistent, while the framing still comes from the prompt (Ref2VA).",
 	"capture.cancel": "Cancel",
 	"capture.save": "Save the capture",
 	"capture.saving": "Saving…",

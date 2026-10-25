@@ -387,11 +387,8 @@ DOC_SCHEMA: Dict[str, Any] = {
             "titles": _array(TITLE),
             "prompts": _array(PROMPT),
             "frames": _array(FRAME),
-            "controls": _array(CONTROL),
-            "plans3d": _array(PLAN3D),
             "markers": _array(MARKER),
             "references": _array(REFERENCE),
-            "scenes": _array(SCENE),
             "lanes": _array(LANE),
             "aux": _array(AUX),
             "master": _object(
@@ -404,7 +401,16 @@ DOC_SCHEMA: Dict[str, Any] = {
             "engine": ENGINE,
             "assets": _array(ASSET),
         },
-        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID, "firstFromPrevious": FLAG, "bible": BIBLE},
+        optional={
+            "video": VIDEO_TRACK,
+            "profiles": _array(PROFILE),
+            "hybrid": HYBRID,
+            "firstFromPrevious": FLAG,
+            "bible": BIBLE,
+            "controls": _array(CONTROL),
+            "plans3d": _array(PLAN3D),
+            "scenes": _array(SCENE),
+        },
     ),
 }
 

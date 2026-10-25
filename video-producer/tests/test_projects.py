@@ -661,6 +661,50 @@ def test_migrating_the_document_of_a_user_with_scenes_and_empty_plans_3d_keeps_i
     validate_doc(starter)
 
 
+SCENE_COLLECTIONS = ("controls", "plans3d", "scenes")
+
+
+@pytest.mark.parametrize("keys", [("controls",), ("plans3d",), ("scenes",), SCENE_COLLECTIONS])
+def test_a_document_without_its_3d_collections_is_valid_and_migrated_as_it_is(starter, keys):
+    for key in keys:
+        del starter[key]
+
+    assert migrate(starter) is starter
+    assert validate_doc(starter) == canonical(starter)
+    assert not any(key in json.loads(canonical(starter)) for key in keys)
+
+
+@pytest.mark.parametrize("key", SCENE_COLLECTIONS)
+def test_a_3d_collection_that_is_there_is_still_checked(starter, key):
+    starter[key] = None
+
+    assert str(_error(starter)).startswith(f"$.{key}: ")
+
+
+def test_a_project_stored_without_its_3d_collections_is_read_and_saved_without_them(project_db, store, starter):
+    from backend import projects
+
+    for key in SCENE_COLLECTIONS:
+        del starter[key]
+    created = projects.create_project("user-1", starter)
+    starter["synopsis"] = "Two hikers climb at dawn."
+    saved = projects.save_project(created["id"], starter, created["version"])
+
+    assert saved["version"] == 2
+    assert projects.get_project(created["id"])["doc"] == starter
+
+
+def test_the_3d_collections_of_a_stored_project_come_back_untouched(project_db, store):
+    from backend import projects
+
+    doc = _fixture("exports/reference-project")["doc"]
+    created = projects.create_project("user-1", doc)
+    stored = projects.get_project(created["id"])["doc"]
+
+    assert {key: stored[key] for key in SCENE_COLLECTIONS} == {key: doc[key] for key in SCENE_COLLECTIONS}
+    assert all(stored[key] for key in SCENE_COLLECTIONS)
+
+
 def test_migrating_a_document_already_in_the_new_shape_returns_it_as_it_is(starter):
     rich = _rich(starter)
 

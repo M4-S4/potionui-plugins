@@ -89,7 +89,7 @@
 	"toast.captureFailed": "The capture could not be made.",
 	"toast.capturedFirst": "Capture set as the first frame of “{shot}”",
 	"toast.capturedLast": "Capture set as the last frame of “{shot}”",
-	"toast.capturedRef": "Capture added as a 3D set reference of “{shot}”",
+	"toast.capturedRef": "Capture added as a Sets reference of “{shot}”",
 	"toast.noKeys": "This 3D shot has no camera path yet.",
 	"toast.short": "A reference video needs at least {min}: lengthen the 3D shot.",
 	"toast.rendered": "Reference video ready: {name}",

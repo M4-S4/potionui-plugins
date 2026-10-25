@@ -87,7 +87,7 @@
 	"cmd.ws-mixer": "Mix",
 	"cmd.ref-all": "References",
 	"cmd.ref-identity": "References · Images and identity",
-	"cmd.ref-3d": "References · 3D sets",
+	"cmd.ref-3d": "References · Sets",
 	"cmd.ref-motion": "References · Motion guides",
 	"cmd.sidebar": "Side panel",
 	"cmd.inspector": "Inspector",

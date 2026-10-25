@@ -89,7 +89,7 @@
 	"toast.captureFailed": "La capture n’a pas pu être faite.",
 	"toast.capturedFirst": "Capture placée en première image de « {shot} »",
 	"toast.capturedLast": "Capture placée en dernière image de « {shot} »",
-	"toast.capturedRef": "Capture ajoutée comme référence Décor 3D de « {shot} »",
+	"toast.capturedRef": "Capture ajoutée comme référence Décors de « {shot} »",
 	"toast.noKeys": "Ce plan 3D n’a pas encore de trajectoire de caméra.",
 	"toast.short": "Une vidéo de référence dure au moins {min} : allongez le plan 3D.",
 	"toast.rendered": "Vidéo de référence prête : {name}",
