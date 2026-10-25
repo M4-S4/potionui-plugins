@@ -201,7 +201,7 @@ def _production(page: Mapping[str, Any]) -> List[str]:
     field = lambda key, limit, default: _cap(production.get(key), limit) or default
     return [
         f"Production: {field('state', 20, 'ready')}, {field('progress', 10, '0')}% "
-        f"({field('mode', 20, '?')} mode, {field('quality', 20, '?')} quality, "
+        f"({field('quality', 20, '?')} quality, "
         f"target {field('target', 20, '?')}, {field('queue', 10, '0')} queued)."
     ]
 

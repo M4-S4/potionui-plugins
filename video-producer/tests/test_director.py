@@ -856,19 +856,8 @@ def test_the_shot_prompt_outside_ref2va_is_the_instruction_then_the_direction_wi
     assert plan.prompt_text == "The hut at dawn.\nA harbour."
 
 
-def test_a_scene3d_control_with_neither_a_3d_shot_nor_a_video_is_not_a_guide(core, make_doc):
-    core.use_wan()
-    simulated = {"id": "simulated", "shotId": "s1", "start": 0, "dur": 4, "stale": False, "planId": None, "assetId": None}
-    legacy = {"id": "legacy", "shotId": None, "start": 0, "dur": 4, "stale": True}
-    doc = _guided(core, make_doc, [simulated, legacy, _guide("planned", None)], direction={"mode": "FL2VA"})
-
-    assert [guide["id"] for guide in director.shot_guides(doc, doc["clips"][0])] == ["planned"]
-    doc["controls"] = doc["controls"][:2]
-    assert director.shot_guides(doc, doc["clips"][0]) == []
-
-
 @pytest.mark.parametrize("stale", [False, True])
-def test_a_3d_guide_gives_no_warning_and_no_reference_outside_the_3d_render_mode(core, make_doc, stale):
+def test_a_3d_guide_gives_no_warning_and_no_reference(core, make_doc, stale):
     core.use_wan()
     doc = _guided(core, make_doc, [_guide("c1", "orbit", stale=stale)], direction={"mode": "FL2VA"})
 
@@ -899,29 +888,3 @@ def test_ltx_2_5_runs_a_shot_with_a_3d_guide_from_its_first_frame_without_any_ic
     document = plan.request["form_data"]["video_director"]
     assert (plan.director_mode, document["mode"], plans.blocks, plans.warnings) == ("i2v", "i2v", [], [])
     assert "ic_lora" not in document and {"speed_profile", "steps", "cfg", "sampler"}.isdisjoint(plan.request["form_data"])
-
-
-def test_the_production_modes_are_the_ai_and_the_3d_render_ones():
-    assert director.PRODUCTIONS == ("ai", "render3d")
-
-
-def test_the_3d_render_mode_gives_each_shot_its_latest_fresh_render_without_a_preset(core, make_doc):
-    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly"), _guide("c3", "walk", stale=True), _guide("c4", "missing")])
-    doc["clips"].append({**doc["clips"][0], "id": "s2", "start": 4})
-
-    plans = director.build_plans(core.users["user-1"], doc, ["s1", "s2", "nowhere"], None, "draft", production="render3d")
-
-    assert (plans.preset, plans.production, plans.shots, plans.blocks) == (None, "render3d", [], [])
-    assert plans.renders == [{"shot_id": "s1", "control_id": "c2", "plan_id": "plan-c2", "asset_id": "dolly"}]
-    assert [(warning["code"], warning["data"]) for warning in plans.warnings] == [
-        ("stale_guide", {"shot_id": "s1", "control_id": "c3"}),
-        ("render_missing", {"shot_id": "s2"}),
-    ]
-
-
-def test_the_3d_render_mode_without_any_render_or_shot_is_blocked(core, make_doc):
-    doc = _guided(core, make_doc, [])
-    user = core.users["user-1"]
-
-    assert [block["code"] for block in director.build_plans(user, doc, ["s1"], None, "draft", production="render3d").blocks] == ["no_render"]
-    assert [block["code"] for block in director.build_plans(user, doc, [], None, "draft", production="render3d").blocks] == ["no_shots"]

@@ -53,7 +53,6 @@
 					: t('library.target.none')
 	);
 	const range = $derived(targetPrompt ? [targetPrompt.start, targetPrompt.start + targetPrompt.dur] : targetShot ? [targetShot.start, targetShot.start + targetShot.dur] : null);
-	const cameraLocked = $derived(range ? doc.controls.some((c) => overlaps(c.start, c.dur, range)) : false);
 	let mode = $state('append');
 
 	const tabs = $derived([
@@ -163,8 +162,7 @@
 				acting: custom.acting || optionLabel(parts.acting, promptLocale())
 			},
 			vars,
-			profile,
-			cameraLocked
+			profile
 		)
 	);
 	const aText = $derived(aEdited ?? composed);
@@ -175,7 +173,6 @@
 		if (profile === 'FL2VA') out.push({ ok: scope ? scope.frames.length >= 1 : false, text: t('library.need.frames') });
 		if (profile === 'Ref2VA') out.push({ ok: doc.references.some((r) => r.role === 'Identité'), text: t('library.need.identity') });
 		if (profile === 'Hybrid AV') out.push({ ok: range ? doc.audio.some((a) => overlaps(a.start, a.dur, range)) : false, text: t('library.need.audio') });
-		if (cameraLocked) out.push({ ok: true, text: t('library.need.control') });
 		return out;
 	});
 	const profileHint = $derived(profile === 'FL2VA' ? t('library.profile.fl2va') : profile === 'Ref2VA' ? t('library.profile.ref2va') : t('library.profile.hybrid'));
@@ -301,23 +298,20 @@
 					<span class="text-xs text-fg-subtle">{profileHint}</span>
 				</div>
 				{#each Object.entries(assistantParts) as [k, options], i (k)}
-					{@const locked = k === 'camera' && cameraLocked}
 					<div>
 						<div class="mb-1.5 flex items-center gap-2">
 							<span class="flex h-4 w-4 items-center justify-center rounded-sm bg-surface-3 text-2xs font-semibold">{i + 1}</span>
 							<span class="text-sm font-medium">{partLabel(k)}</span>
-							{#if locked}<HostUi name="Badge" props={{ variant: 'neutral', size: 'md', class: '!border-viz-8/50' }}>{t('library.lockedByControl')}</HostUi>{/if}
 						</div>
-						<div class="flex flex-wrap gap-1.5" class:opacity-50={locked}>
+						<div class="flex flex-wrap gap-1.5">
 							{#each options as o (o)}
-								<button type="button" class="vp-pill" aria-pressed={parts[k] === o && !custom[k]} onclick={() => pick(k, o)} disabled={locked}>{optionLabel(o)}</button>
+								<button type="button" class="vp-pill" aria-pressed={parts[k] === o && !custom[k]} onclick={() => pick(k, o)}>{optionLabel(o)}</button>
 							{/each}
 							<input
 								class="input vp-dense w-40 !rounded-full"
 								placeholder={t('library.other')}
 								bind:value={custom[k]}
 								oninput={() => (aEdited = null)}
-								disabled={locked}
 								aria-label={t('library.customLabel', { part: partLabel(k) })}
 							/>
 						</div>

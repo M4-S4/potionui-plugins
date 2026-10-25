@@ -184,6 +184,15 @@ def _rich(doc):
             "role": "Mouvement",
             "scope": None,
         },
+        {
+            "id": "01M535B4GTCONTROL000000000",
+            "name": "Guide 3D",
+            "space": "mouvement",
+            "type": "Control video",
+            "assetId": "01M535B4GTVIDEO00000000000",
+            "role": "Mouvement",
+            "scope": {"type": "shot", "shotId": clip["id"]},
+        },
     ]
     doc["lanes"][0]["inserts"].append({"type": "filter", "on": True, "cutoff": 8000})
     doc["lanes"][1]["automation"] = "write"
@@ -622,6 +631,7 @@ def test_migrating_turns_the_retired_3d_set_references_into_captures_when_they_h
         reference("other-space", "identite", "Gaussian Splat", None),
         hut,
     ]
+    rich["controls"] = []
     before = copy.deepcopy(rich)
 
     migrated = migrate(rich)
@@ -637,6 +647,54 @@ def test_migrating_turns_the_retired_3d_set_references_into_captures_when_they_h
     ]
     assert migrated["references"][0] == {**rich["references"][0], "type": "Capture 3D"}
     assert migrated["references"][-1] is hut
+    validate_doc(migrated)
+    assert migrate(migrated) is migrated
+
+
+def _control(control_id, asset_id, shot_id=None, start=0, dur=5, source="scene3d"):
+    return {
+        "id": control_id,
+        "shotId": shot_id,
+        "name": f"Guide {control_id}",
+        "start": start,
+        "dur": dur,
+        "guidance": 65,
+        "source": source,
+        "stale": False,
+        "planId": None,
+        "assetId": asset_id,
+    }
+
+
+def test_migrating_adds_the_video_of_each_3d_guide_once_as_a_mouvement_reference_of_the_shot_it_covers(starter):
+    video = "01M535B4GTVIDEO00000000000"
+    starter["assets"] = [
+        {**_audio_asset(), "id": video, "kind": "video", "role": None, "synth": None},
+        {**_audio_asset(), "id": "still", "kind": "image", "role": None, "synth": None},
+    ]
+    second = starter["clips"][1]["id"]
+    starter["controls"] = [
+        _control("linked", video, shot_id=second),
+        _control("overlapping", video, start=4, dur=4),
+        _control("imported", video, source="import"),
+        _control("picture", "still"),
+        _control("gone", "missing"),
+        _control("outside", video, start=90, dur=4),
+        _control("unknown-shot", video, shot_id="nowhere"),
+        _control("already", video),
+    ]
+    starter["references"] = [{"id": "already", "name": "Mine", "space": "identite", "type": "Personnage", "assetId": video, "role": "Identité", "scope": None}]
+    before = copy.deepcopy(starter)
+
+    migrated = migrate(starter)
+
+    assert starter == before
+    assert migrated["controls"] is starter["controls"]
+    assert migrated["references"][0] is starter["references"][0]
+    assert migrated["references"][1:] == [
+        {"id": "linked", "name": "Guide linked", "space": "mouvement", "type": "Control video", "assetId": video, "role": "Mouvement", "scope": {"type": "shot", "shotId": second}},
+        {"id": "overlapping", "name": "Guide overlapping", "space": "mouvement", "type": "Control video", "assetId": video, "role": "Mouvement", "scope": {"type": "shot", "shotId": second}},
+    ]
     validate_doc(migrated)
     assert migrate(migrated) is migrated
 

@@ -126,7 +126,6 @@
 	"block.noReferences": "“{shot}” has no reference: Ref2VA needs at least one for this shot.",
 	"block.sourceUnavailable": "The video of the source take is no longer available.",
 	"block.upscaleUnsupported": "Upscaling this take needs SeedVR2: ask an administrator to install it, or render the take again at full resolution.",
-	"warn.staleGuide": "The reference video of “{shot}” is out of date: render it again in 3D scene.",
 	"label.draft": "Draft",
 	"label.rejected": "Rejected",
 	"label.candidate": "Candidate",

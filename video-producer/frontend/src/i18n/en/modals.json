@@ -5,8 +5,6 @@
 	"count.frames.other": "{count} frames",
 	"count.references.one": "{count} reference",
 	"count.references.other": "{count} references",
-	"count.controls.one": "{count} Control video",
-	"count.controls.other": "{count} Control videos",
 	"prompt.titleNew": "New shot prompt",
 	"prompt.titleEdit": "Edit shot prompt",
 	"prompt.subtitle": "Adds to the global direction",

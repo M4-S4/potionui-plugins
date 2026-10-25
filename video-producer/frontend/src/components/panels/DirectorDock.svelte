@@ -119,7 +119,7 @@
 					<div class="min-w-0">
 						<div class="font-medium text-fg">{t('panels.dock.guide.refs')}</div>
 						<div class="text-fg-subtle">
-							{t('panels.dock.count.refs', { count: scope.references.length })} · {t('panels.dock.count.frames', { count: scope.frames.length })} · {t('panels.dock.count.controls', { count: scope.controls.length })}
+							{t('panels.dock.count.refs', { count: scope.references.length })} · {t('panels.dock.count.frames', { count: scope.frames.length })}
 						</div>
 					</div>
 				</li>
@@ -135,7 +135,7 @@
 					<ul class="mt-1.5 space-y-2">
 						{#each issues as i, n (n)}
 							<li class="flex gap-1.5 text-xs text-fg-muted">
-								<Icon name={i.level === 'control' ? 'route' : 'sparkles'} class="mt-px h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+								<Icon name="sparkles" class="mt-px h-3.5 w-3.5 shrink-0 text-fg-subtle" />
 								<span>
 									{i.text}
 									<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => openPrompt(i.prompt)}>{t('panels.dock.issuePrompt', { time: secs(i.prompt.start) })}</button>

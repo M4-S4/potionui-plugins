@@ -42,8 +42,6 @@ function scene() {
 			{ id: 'r-own', name: 'Red hat', space: 'identite', type: 'Objet', assetId: 'hat', scope: { type: 'shot', shotId: 's1' } }
 		],
 		frames: [],
-		controls: [],
-		plans3d: [],
 		scenes: [],
 		clips: [{ id: 's1', start: 0, dur: 4 }]
 	};
@@ -112,15 +110,23 @@ test('the start image is the framing of the end image, and of a new start image 
 	assert.equal(draftPictures(doc, doc.clips[0], draft, 'last')[0].role, 'frame');
 });
 
-test('the picture a fresh 3D scene of the shot was built from is sent as a set', () => {
+test('the picture the scene of a captured start image was built from is sent as a set, right after the capture', () => {
 	const doc = scene();
 	doc.scenes = [{ id: 'sc1', kind: 'splat', status: 'done', sourceAssetId: 'source' }];
-	doc.plans3d = [{ id: 'p1', sceneId: 'sc1' }];
-	doc.controls = [{ id: 'g1', source: 'scene3d', planId: 'p1', assetId: 'clip', shotId: 's1', stale: false, start: 0, dur: 4 }];
+	doc.frames = [{ id: 'f1', shotId: 's1', time: 0, assetId: 'capture', role: 'first', strength: 100, sceneId: 'sc1' }];
+	const scenePicture = (draft) => draftPictures(doc, doc.clips[0], draft).find((p) => p.origin === 'scene') ?? null;
 
-	assert.deepEqual(draftPictures(doc, doc.clips[0], draftOf(doc))[0], { assetId: 'source', role: 'setting', name: '', origin: 'scene' });
-	doc.controls[0].stale = true;
-	assert.equal(draftPictures(doc, doc.clips[0], draftOf(doc))[0].assetId, 'cafe');
+	const pictures = draftPictures(doc, doc.clips[0], draftOf(doc, { first: 'capture' }));
+	assert.deepEqual(pictures.slice(0, 2), [
+		{ assetId: 'capture', role: 'frame', name: '', origin: 'frame' },
+		{ assetId: 'source', role: 'setting', name: '', origin: 'scene' }
+	]);
+	assert.equal(scenePicture(draftOf(doc, { first: 'street' })), null);
+	doc.scenes[0].status = 'running';
+	assert.equal(scenePicture(draftOf(doc, { first: 'capture' })), null);
+	doc.scenes[0].status = 'done';
+	delete doc.frames[0].sceneId;
+	assert.equal(scenePicture(draftOf(doc, { first: 'capture' })), null);
 });
 
 test('the body names the preset, model, role, count, prompt and pictures, the count kept from 2 to 4', () => {

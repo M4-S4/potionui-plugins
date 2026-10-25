@@ -20,8 +20,7 @@
 	const summary = $derived(
 		[
 			t('modals.count.frames', { count: ctx.frames.length }),
-			t('modals.count.references', { count: ctx.references.length }),
-			ctx.controls.length ? t('modals.count.controls', { count: ctx.controls.length }) : ''
+			t('modals.count.references', { count: ctx.references.length })
 		]
 			.filter(Boolean)
 			.join(' · ')
@@ -69,7 +68,7 @@
 						<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{issue.text}</HostUi>
 					{:else}
 						<div class="flex gap-2 rounded-lg border border-line-hover p-2 text-xs text-fg-muted">
-							<Icon name={issue.level === 'control' ? 'route' : 'alert'} class="mt-px h-3.5 w-3.5 shrink-0" />{issue.text}
+							<Icon name="alert" class="mt-px h-3.5 w-3.5 shrink-0" />{issue.text}
 						</div>
 					{/if}
 				{/each}

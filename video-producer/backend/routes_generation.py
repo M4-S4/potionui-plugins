@@ -34,7 +34,7 @@ async def estimate_takes(
 async def generate_takes(
     project_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
-    """Start one take per shot and variant, the ones past max_parallel_jobs waiting in the queue; in the 3D render mode, answer the rendered guides the shots take instead."""
+    """Start one take per shot and variant, the ones past max_parallel_jobs waiting in the queue."""
     order = _order(body)
     project = access.project_for(user, project_id)
     owner = access.owner_of(user, project)
@@ -44,7 +44,7 @@ async def generate_takes(
     except Blocked as exc:
         blocked(exc)
     tracker.ensure_running()
-    return ok({"takes": [takes.public(take) for take in created], "renders": evaluation.payload["renders"]})
+    return ok({"takes": [takes.public(take) for take in created]})
 
 
 @router.get("/projects/{project_id}/queue")

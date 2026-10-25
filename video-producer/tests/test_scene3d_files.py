@@ -23,7 +23,7 @@ def _write(tmp_path, name, data):
 def test_a_3dgs_ply_gives_its_gaussian_count_and_the_source_view_of_its_header_comment(tmp_path, samples):
     probe = formats.probe("ply", _write(tmp_path, "scene.ply", samples.ply(count=5)))
 
-    assert (probe.format, probe.count, probe.cameras) == ("ply", 5, None)
+    assert (probe.format, probe.count) == ("ply", 5)
     assert probe.view == {"fov": 48.5, "aspect": 1.7778, "depth": 4.0}
 
 
@@ -117,100 +117,18 @@ def test_a_splat_file_whose_first_gaussians_have_a_position_or_a_scale_that_is_n
     with pytest.raises(FormatError, match="not a finite number"):
         formats.probe("splat", _write(tmp_path, "scene.splat", _gaussian() * 2 + record))
 
-
-BLENDER_SCENE = {
-    "asset": {"version": "2.0"},
-    "nodes": [
-        {"name": "camera", "camera": 0},
-        {"name": "rig", "children": [2]},
-        {"camera": 1},
-        {"name": "still", "camera": 2},
-        {"name": "set", "mesh": 0},
-        {"camera": 9},
-    ],
-    "cameras": [
-        {"type": "perspective", "perspective": {"yfov": 0.6, "znear": 0.1}},
-        {"name": "crane-cam", "type": "perspective", "perspective": {"yfov": 0.7, "znear": 0.1}},
-        {"type": "perspective", "perspective": {"yfov": 0.5, "znear": 0.1}},
-    ],
-    "accessors": [{"max": [4.5]}, {"max": [2.0]}, {"count": 3}],
-    "animations": [
-        {"channels": [{"sampler": 0, "target": {"node": 0, "path": "translation"}}, {"sampler": 1, "target": {"node": 0, "path": "rotation"}}],
-         "samplers": [{"input": 0}, {"input": 1}]},
-        {"channels": [{"sampler": 0, "target": {"node": 1, "path": "translation"}}, {"sampler": 1, "target": {"node": 3, "path": "weights"}}],
-         "samplers": [{"input": 2}, {"input": 0}]},
-    ],
-}
-
-
-def test_a_glb_lists_its_cameras_and_whether_an_animation_moves_them_or_their_parent(tmp_path, samples):
-    probe = formats.probe("glb", _write(tmp_path, "set.glb", samples.glb(BLENDER_SCENE)))
-
-    assert (probe.format, probe.count, probe.view) == ("glb", None, None)
-    assert probe.cameras == [
-        {"name": "camera", "animated": True, "duration": 4.5},
-        {"name": "crane-cam", "animated": True, "duration": None},
-        {"name": "still", "animated": False, "duration": None},
-        {"name": "camera-5", "animated": False, "duration": None},
-    ]
-
-
-def test_a_glb_without_camera_has_an_empty_camera_list(tmp_path, samples):
-    assert formats.probe("glb", _write(tmp_path, "set.glb", samples.glb({"asset": {"version": "2.0"}}))).cameras == []
-
-
-@pytest.mark.parametrize(
-    "build, message",
-    [
-        (lambda s: b"PK\x03\x04" + bytes(40), "not a binary glTF"),
-        (lambda s: s.glb({"asset": {}}, version=1), "version 1"),
-        (lambda s: s.glb({"asset": {}}) + b"tail", "cut short"),
-        (lambda s: s.glb({"asset": {}})[:-4], "cut short"),
-        (lambda s: s.glb([1, 2]), "not an object"),
-        (lambda s: s.glb({"asset": {}}).replace(b'{"asset"', b'{"asset"'.replace(b"{", b"[")), "cannot be read"),
-    ],
-)
-def test_a_file_that_is_not_a_gltf_2_binary_is_refused(tmp_path, samples, build, message):
-    with pytest.raises(FormatError) as caught:
-        formats.probe("glb", _write(tmp_path, "set.glb", build(samples)))
-
-    assert message in str(caught.value)
-
-
-def _glb_of(payload):
-    payload += b" " * (-len(payload) % 4)
-    return b"glTF" + struct.pack("<II", 2, 20 + len(payload)) + struct.pack("<II", len(payload), formats.GLB_JSON) + payload
-
-
-DEEP_GLB = _glb_of(b'{"nodes":' + b"[" * 200000 + b"]" * 200000 + b"}")
-
-
-def test_a_glb_whose_json_nests_too_deep_is_refused_as_an_invalid_file(tmp_path):
-    with pytest.raises(FormatError, match="cannot be read"):
-        formats.probe("glb", _write(tmp_path, "deep.glb", DEEP_GLB))
-
-
-def test_a_glb_whose_json_chunk_is_over_64_mib_is_refused_before_it_is_read(tmp_path, samples, monkeypatch):
-    data = samples.glb({"asset": {"version": "2.0"}, "nodes": [{"name": "x" * 64}]})
-    assert formats.MAX_GLB_JSON == 64 * 1024 * 1024
-    monkeypatch.setattr(formats, "MAX_GLB_JSON", 32)
-
-    with pytest.raises(FormatError, match="JSON chunk of the glTF file is over"):
-        formats.probe("glb", _write(tmp_path, "big.glb", data))
-
-
 @pytest.mark.parametrize("error", [RecursionError("maximum recursion depth exceeded"), ValueError("bad value")])
 def test_a_recursion_or_value_error_while_reading_a_scene_file_is_a_format_error(tmp_path, samples, monkeypatch, error):
-    def glb_cameras(data):
+    def probe_splat(fmt, path):
         raise error
 
-    monkeypatch.setattr(formats, "glb_cameras", glb_cameras)
+    monkeypatch.setattr(formats, "probe_splat", probe_splat)
 
-    with pytest.raises(FormatError, match="not a .glb file that can be read"):
-        formats.probe("glb", _write(tmp_path, "set.glb", samples.glb({"asset": {}})))
+    with pytest.raises(FormatError, match="not a .ply file that can be read"):
+        formats.probe("ply", _write(tmp_path, "set.ply", samples.ply()))
 
 
-@pytest.mark.parametrize("name, fmt",[("Scene.PLY", "ply"), ("a.b.spz", "spz"), ("x.splat", "splat"), ("set.glb", "glb"), ("set.gltf", None), ("ply", None), ("", None)])
+@pytest.mark.parametrize("name, fmt", [("Scene.PLY", "ply"), ("a.b.spz", "spz"), ("x.splat", "splat"), ("set.glb", None), ("set.gltf", None), ("ply", None), ("", None)])
 def test_the_format_of_a_file_comes_from_its_extension(name, fmt):
     assert formats.format_of(name) == fmt
 
@@ -220,228 +138,39 @@ def project(make_project, export_storage):
     return make_project()
 
 
-def _upload(client, project_id, name, data, kind="splat"):
-    return client.post(f"{BASE}/projects/{project_id}/scene-files", files={"file": (name, data, "application/octet-stream")}, data={"kind": kind})
+def _url(project_id, file_id):
+    return f"{BASE}/projects/{project_id}/scene-files/{file_id}"
 
 
-def test_an_uploaded_ply_is_stored_under_its_id_with_its_count_and_view_and_served_back(client, project, samples, export_storage):
-    data = samples.ply(count=3)
+def test_a_stored_scene_file_is_served_back_through_its_project(client, project, samples, export_storage):
+    file_id = _stored(project["id"], samples, days=0)
 
-    response = _upload(client, project["id"], "Ridge scan.ply", data)
+    response = client.get(_url(project["id"], file_id))
 
-    assert response.status_code == 201, response.text
-    stored = response.json()["data"]["file"]
-    assert stored == {
-        "id": stored["id"],
-        "kind": "splat",
-        "format": "ply",
-        "name": "Ridge scan.ply",
-        "size": len(data),
-        "count": 3,
-        "view": {"fov": 48.5, "aspect": 1.7778, "depth": 4.0},
-        "cameras": None,
-        "url": f"{BASE}/projects/{project['id']}/scene-files/{stored['id']}",
-        "created_at": stored["created_at"],
-    }
-    folder = export_storage / "video_producer" / "scenes" / project["id"]
-    assert sorted(path.name for path in folder.iterdir()) == [f"{stored['id']}.ply", "work"]
-    assert list((folder / "work").iterdir()) == []
-    served = client.get(stored["url"])
-    assert served.status_code == 200 and served.content == data
-    assert served.headers["content-type"] == "application/octet-stream"
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/octet-stream"
+    assert response.content == samples.ply()
 
 
-@pytest.mark.parametrize("name, build, fmt, count", [("set.spz", lambda s: s.spz(count=9), "spz", 9), ("set.splat", lambda s: s.splat(count=3), "splat", 3)])
-def test_an_uploaded_spz_or_splat_file_has_a_count_and_no_view(client, project, samples, name, build, fmt, count):
-    stored = _upload(client, project["id"], name, build(samples)).json()["data"]["file"]
-
-    assert (stored["format"], stored["count"], stored["view"], stored["cameras"]) == (fmt, count, None, None)
-
-
-def test_an_uploaded_glb_lists_its_cameras_and_is_served_as_gltf_binary(client, project, samples):
-    response = _upload(client, project["id"], "set.glb", samples.glb(BLENDER_SCENE), kind="glb")
-
-    stored = response.json()["data"]["file"]
-    assert response.status_code == 201
-    assert (stored["kind"], stored["format"], stored["count"], stored["view"]) == ("glb", "glb", None, None)
-    assert stored["cameras"][0] == {"name": "camera", "animated": True, "duration": 4.5}
-    assert client.get(stored["url"]).headers["content-type"] == "model/gltf-binary"
-
-
-@pytest.mark.parametrize(
-    "name, kind, error",
-    [("set.glb", "splat", "unsupported_format"), ("set.ply", "glb", "unsupported_format"), ("set.obj", "splat", "unsupported_format"), ("set.ply", "splat", "invalid_file")],
-)
-def test_an_upload_of_the_wrong_kind_or_content_is_refused_and_leaves_nothing(client, project, export_storage, name, kind, error):
-    response = _upload(client, project["id"], name, b"glTF but not really, and not a ply either", kind=kind)
-
-    assert response.status_code == 422
-    assert response.json()["detail"]["error"] == error
-    assert files.list_project(project["id"]) == []
-    work = storage.work_folder(project["id"])
-    assert not work.exists() or list(work.iterdir()) == []
-
-
-def test_an_uploaded_glb_whose_json_nests_too_deep_answers_invalid_file_and_leaves_nothing(client, project):
-    response = _upload(client, project["id"], "deep.glb", DEEP_GLB, kind="glb")
-
-    assert (response.status_code, response.json()["detail"]["error"]) == (422, "invalid_file")
-    assert files.list_project(project["id"]) == []
-    assert not storage.project_folder(project["id"]).exists()
-
-
-def test_an_upload_over_the_size_limit_is_refused_while_it_streams_and_leaves_nothing(client, project, samples, monkeypatch):
-    monkeypatch.setattr(files, "MAX_BYTES", 100)
-
-    response = _upload(client, project["id"], "big.ply", samples.ply(count=4))
-
-    assert response.status_code == 413
-    assert response.json()["detail"]["error"] == "file_too_large"
-    assert files.list_project(project["id"]) == []
-    assert not storage.project_folder(project["id"]).exists()
-
-
-@pytest.fixture
-def unread(monkeypatch):
-    async def receive_upload(*args):
-        raise AssertionError("the body was read")
-
-    monkeypatch.setattr(files, "receive_upload", receive_upload)
-
-
-def test_an_upload_whose_content_length_is_over_the_limit_and_its_margin_is_refused_before_it_is_read(client, project, samples, monkeypatch, unread):
-    data = samples.ply(count=4)
-    monkeypatch.setattr(files, "MAX_BYTES", len(data))
-    monkeypatch.setattr(files, "MULTIPART_MARGIN", 10)
-
-    response = _upload(client, project["id"], "big.ply", data)
-
-    assert (response.status_code, response.json()["detail"]["error"]) == (413, "file_too_large")
-    assert (files.MAX_BYTES, files.MULTIPART_MARGIN) == (len(data), 10)
-
-
-def test_an_upload_without_a_content_length_is_refused_before_it_is_read(client, project, unread):
-    headers = {"content-type": "multipart/form-data; boundary=x"}
-
-    response = client.post(f"{BASE}/projects/{project['id']}/scene-files", content=iter([b"--x--"]), headers=headers)
-
-    assert (response.status_code, response.json()["detail"]["error"]) == (411, "length_required")
-
-
-def test_another_user_is_refused_before_the_upload_is_read(app, client, project, samples, make_user, unread):
-    from src.plugin_api import get_current_active_user
-
-    app.dependency_overrides[get_current_active_user] = lambda: make_user(user_id="user-2")
-
-    assert _upload(client, project["id"], "set.ply", samples.ply()).json()["detail"]["error"] == "project_not_found"
-
-
-def test_an_upload_is_written_once_in_the_work_folder_and_moved_into_place(client, project, samples, monkeypatch):
-    probed = []
-    probe = formats.probe
-
-    def spy(fmt, path):
-        probed.append((path.parent.name, path.name, path.stat().st_ino))
-        return probe(fmt, path)
-
-    monkeypatch.setattr(formats, "probe", spy)
-
-    stored = _upload(client, project["id"], "set.ply", samples.ply(count=3)).json()["data"]["file"]
-
-    ((folder, name, inode),) = probed
-    assert (folder, name) == ("work", f"upload-{stored['id']}.ply")
-    assert files.path_of(files.get_file(stored["id"])).stat().st_ino == inode
-
-
-def _multipart(*parts, boundary="vpboundary"):
-    body = b""
-    for headers, payload in parts:
-        body += f"--{boundary}\r\n{headers}\r\n\r\n".encode("utf-8") + payload + b"\r\n"
-    return body + f"--{boundary}--\r\n".encode("utf-8"), {"content-type": f"multipart/form-data; boundary={boundary}"}
-
-
-def _file_part(name="file", filename="set.ply", payload=b"ply"):
-    return f'Content-Disposition: form-data; name="{name}"; filename="{filename}"', payload
-
-
-def _field_part(name="kind", value=b"splat"):
-    return f'Content-Disposition: form-data; name="{name}"', value
-
-
-@pytest.mark.parametrize(
-    "parts, error, message",
-    [
-        ((_file_part(), _file_part(), _field_part()), "invalid_request", "one file"),
-        ((_file_part(name="scene"), _field_part()), "invalid_request", "one file"),
-        ((_file_part(filename="set.obj"), _field_part()), "unsupported_format", ".ply, .spz, .splat or .glb"),
-        ((_field_part(value=b"x" * 1025), _file_part()), "invalid_request", "longer than 1024 bytes"),
-        (tuple(_field_part(name=f"f{index}") for index in range(9)), "invalid_request", "too many fields"),
-        ((("Content-Disposition: form-data", b"splat"),), "invalid_request", "needs a name"),
-    ],
-)
-def test_a_form_with_more_than_one_file_an_unknown_file_or_oversized_fields_is_refused_and_leaves_nothing(client, project, parts, error, message):
-    body, headers = _multipart(*parts)
-
-    response = client.post(f"{BASE}/projects/{project['id']}/scene-files", content=body, headers=headers)
-
-    assert (response.status_code, response.json()["detail"]["error"]) == (422, error)
-    assert message in response.json()["detail"]["message"]
-    assert files.list_project(project["id"]) == []
-    work = storage.work_folder(project["id"])
-    assert not work.exists() or list(work.iterdir()) == []
-
-
-def test_a_form_cut_before_its_last_part_or_with_a_broken_boundary_is_an_invalid_request(client, project, samples):
-    body, headers = _multipart(_field_part(), _file_part(payload=samples.ply()))
-
-    for content in (body[: len(body) // 2], body.replace(b"--vpboundary\r\n", b"--vpboundary\rX", 1)):
-        response = client.post(f"{BASE}/projects/{project['id']}/scene-files", content=content, headers=headers)
-        assert (response.status_code, response.json()["detail"]["error"]) == (422, "invalid_request")
-    assert files.list_project(project["id"]) == []
-
-
-def test_the_kind_may_come_before_the_file_and_a_quoted_unicode_file_name_is_kept(client, project, samples):
-    body, headers = _multipart(_field_part(), _file_part(filename="Crête nord.ply", payload=samples.ply(count=2)))
-
-    response = client.post(f"{BASE}/projects/{project['id']}/scene-files", content=body, headers=headers)
-
-    assert response.status_code == 201, response.text
-    assert (response.json()["data"]["file"]["name"], response.json()["data"]["file"]["count"]) == ("Crête nord.ply", 2)
-
-
-@pytest.mark.parametrize("data", [{}, {"kind": "mesh"}])
-def test_an_upload_without_a_file_or_with_another_kind_is_an_invalid_request(client, project, data):
-    if data:
-        response = client.post(f"{BASE}/projects/{project['id']}/scene-files", files={"file": ("a.ply", b"x")}, data=data)
-    else:
-        response = client.post(f"{BASE}/projects/{project['id']}/scene-files", data={"kind": "splat"})
-
-    assert response.status_code == 422
-    assert response.json()["detail"]["error"] == "invalid_request"
-
-
-def test_another_user_cannot_upload_to_or_read_the_scene_files_of_a_project(app, client, project, samples, make_user):
+def test_another_user_cannot_read_the_scene_files_of_a_project(app, client, project, samples, make_user):
     from src.plugin_api import AccountType, get_current_active_user
 
-    stored = _upload(client, project["id"], "set.ply", samples.ply()).json()["data"]["file"]
+    file_id = _stored(project["id"], samples, days=0)
     app.dependency_overrides[get_current_active_user] = lambda: make_user(user_id="user-2")
 
-    assert _upload(client, project["id"], "set.ply", samples.ply()).status_code == 404
-    assert client.get(stored["url"]).json()["detail"]["error"] == "project_not_found"
+    assert client.get(_url(project["id"], file_id)).json()["detail"]["error"] == "project_not_found"
     app.dependency_overrides[get_current_active_user] = lambda: make_user(AccountType.ADMIN, user_id="admin-1")
-    assert client.get(stored["url"]).status_code == 200
-    admin = _upload(client, project["id"], "other.ply", samples.ply()).json()["data"]["file"]
-    assert files.get_file(admin["id"])["user_id"] == "user-1"
+    assert client.get(_url(project["id"], file_id)).status_code == 200
 
 
 def test_a_scene_file_is_read_only_through_its_own_project(client, project, make_project, samples):
     other = make_project()
-    stored = _upload(client, project["id"], "set.ply", samples.ply()).json()["data"]["file"]
+    file_id = _stored(project["id"], samples, days=0)
 
-    assert client.get(f"{BASE}/projects/{other['id']}/scene-files/{stored['id']}").json()["detail"]["error"] == "file_not_found"
-    assert client.get(f"{BASE}/projects/{project['id']}/scene-files/01M5NOTAFILE00000000000000").status_code == 404
-    files.path_of(files.get_file(stored["id"])).unlink()
-    assert client.get(stored["url"]).json()["detail"]["error"] == "file_not_found"
+    assert client.get(_url(other["id"], file_id)).json()["detail"]["error"] == "file_not_found"
+    assert client.get(_url(project["id"], "01M5NOTAFILE00000000000000")).status_code == 404
+    files.path_of(files.get_file(file_id)).unlink()
+    assert client.get(_url(project["id"], file_id)).json()["detail"]["error"] == "file_not_found"
 
 
 UNLIMITED = {"limit": None, "used": None, "remaining": None, "exempt": False, "resets_at": None}
@@ -458,54 +187,38 @@ def plan(monkeypatch):
     return statuses
 
 
-def test_an_upload_past_the_project_cap_is_refused_with_storage_full_and_leaves_nothing(client, project, samples, monkeypatch, plan):
-    first = samples.ply(count=2)
+def _refusal(project_id, owner_id, incoming):
+    with pytest.raises(storage.SceneError) as caught:
+        files.ensure_room(project_id, owner_id, incoming)
+    return caught.value
+
+
+def test_a_scene_file_past_the_project_cap_is_refused_with_storage_full(project, samples, monkeypatch, plan):
+    file_id = _stored(project["id"], samples, days=0)
+    size = files.get_file(file_id)["size"]
     assert files.PROJECT_MAX_BYTES == 20 * 1024 ** 3
-    monkeypatch.setattr(files, "PROJECT_MAX_BYTES", len(first) + 10)
-    assert _upload(client, project["id"], "first.ply", first).status_code == 201
+    monkeypatch.setattr(files, "PROJECT_MAX_BYTES", size + 10)
 
-    response = _upload(client, project["id"], "second.ply", samples.ply(count=2))
+    refused = _refusal(project["id"], "user-1", size)
 
-    assert (response.status_code, response.json()["detail"]["error"]) == (413, "storage_full")
-    assert response.json()["detail"]["data"] == {"limit": len(first) + 10, "used": len(first), "needed": len(first)}
-    assert len(files.list_project(project["id"])) == 1
-    assert list(storage.work_folder(project["id"]).iterdir()) == []
+    assert (refused.status_code, refused.error, refused.data) == (413, "storage_full", {"limit": size + 10, "used": size, "needed": size})
+    files.ensure_room(project["id"], "user-1", 10)
 
 
-def test_the_scene_files_of_the_owner_count_against_the_storage_plan(client, project, make_project, samples, plan):
-    data = samples.ply(count=2)
-    plan["storage_bytes"] = {"limit": 10**6, "used": 10**6 - 2 * len(data) + 1, "remaining": 2 * len(data) - 1}
+def test_the_scene_files_of_the_owner_count_against_the_storage_plan(project, make_project, samples, plan):
     other = make_project()
-    assert _upload(client, other["id"], "first.ply", data).status_code == 201
+    size = files.get_file(_stored(other["id"], samples, days=0))["size"]
+    plan["storage_bytes"] = {"limit": 10**6, "used": 10**6 - 2 * size + 1, "remaining": 2 * size - 1}
 
-    response = _upload(client, project["id"], "second.ply", data)
+    refused = _refusal(project["id"], "user-1", size)
 
-    assert (response.status_code, response.json()["detail"]["error"]) == (413, "storage_full")
-    assert response.json()["detail"]["data"] == {"remaining": len(data) - 1, "needed": len(data)}
-    assert files.list_project(project["id"]) == []
-
-
-def test_an_upload_to_a_full_plan_is_refused_before_it_is_read(client, project, samples, plan, unread):
-    plan["storage_bytes"] = {"limit": 100, "used": 100, "remaining": 0}
-
-    response = _upload(client, project["id"], "set.ply", samples.ply())
-
-    assert (response.status_code, response.json()["detail"]["error"]) == (413, "storage_full")
+    assert (refused.status_code, refused.error, refused.data) == (413, "storage_full", {"remaining": size - 1, "needed": size})
 
 
-def test_an_upload_larger_than_the_plan_allows_for_one_file_is_refused(client, project, samples, plan):
-    plan["upload_file_size"] = {"limit": 64, "used": 0, "remaining": 64}
-
-    response = _upload(client, project["id"], "set.ply", samples.ply())
-
-    assert (response.status_code, response.json()["detail"]["error"]) == (413, "file_too_large")
-    assert response.json()["detail"]["data"] == {"limit": 64}
-
-
-def test_an_exempt_or_unlimited_owner_only_meets_the_project_cap(client, project, samples, plan):
+def test_an_exempt_or_unlimited_owner_only_meets_the_project_cap(project, plan):
     plan["storage_bytes"] = {"limit": 100, "used": None, "remaining": None, "exempt": True}
 
-    assert _upload(client, project["id"], "set.ply", samples.ply()).status_code == 201
+    files.ensure_room(project["id"], "user-1", 10**6)
 
 
 def _scene(file_id):

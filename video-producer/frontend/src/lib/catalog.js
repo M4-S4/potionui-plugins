@@ -86,13 +86,11 @@ export const roleColor = {
 	Musique: 'viz-4',
 	Prompts: 'viz-5',
 	SFX: 'viz-6',
-	Frames: 'viz-7',
-	Guides: 'viz-8'
+	Frames: 'viz-7'
 };
 
 export function sceneLabel(scene) {
 	if (scene?.kind === 'splat') return t('lib.scene.splat');
-	if (scene?.kind === 'glb') return t('lib.scene.glb');
 	return t('lib.scene.splatfile', { format: String(scene?.format ?? 'ply').toUpperCase() });
 }
 
@@ -112,12 +110,4 @@ export function frameRoleLabel(role) {
 	if (role === 'Style') return t('lib.frameRole.style');
 	if (role === 'Capture 3D') return t('lib.frameRole.capture3d');
 	return role;
-}
-
-export const PRODUCTION_MODES = ['ai', 'render3d'];
-
-export function modeLabel(mode) {
-	if (mode === 'ai') return t('lib.mode.ai');
-	if (mode === 'render3d') return t('lib.mode.render3d');
-	return mode;
 }

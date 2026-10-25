@@ -5,8 +5,6 @@
 	"count.frames.other": "{count} frames",
 	"count.references.one": "{count} référence",
 	"count.references.other": "{count} références",
-	"count.controls.one": "{count} Control video",
-	"count.controls.other": "{count} Control video",
 	"prompt.titleNew": "Nouvelle instruction locale",
 	"prompt.titleEdit": "Éditer l’instruction locale",
 	"prompt.subtitle": "Complète la direction globale",

@@ -209,13 +209,8 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/projects/{{project_id}}/scenes/from-image"),
         ("GET", f"{base}/projects/{{project_id}}/scenes/jobs"),
         ("POST", f"{base}/projects/{{project_id}}/scenes/jobs/{{job_id}}/cancel"),
-        ("POST", f"{base}/projects/{{project_id}}/scene-files"),
         ("GET", f"{base}/projects/{{project_id}}/scene-files/{{file_id}}"),
         ("POST", f"{base}/projects/{{project_id}}/captures"),
-        ("POST", f"{base}/projects/{{project_id}}/renders"),
-        ("POST", f"{base}/projects/{{project_id}}/renders/{{render_id}}/frames"),
-        ("POST", f"{base}/projects/{{project_id}}/renders/{{render_id}}/finish"),
-        ("DELETE", f"{base}/projects/{{project_id}}/renders/{{render_id}}"),
     }
 
 
@@ -1709,14 +1704,14 @@ def test_every_export_seam_and_scene_route_loaded_by_the_core_depends_on_the_sig
     def depends_on_user(dependant):
         return any(item.call is get_current_active_user or depends_on_user(item) for item in dependant.dependencies)
 
-    scene_parts = ("/scenes/", "/scene-files", "/captures", "/renders")
+    scene_parts = ("/scenes/", "/scene-files", "/captures")
     guarded = [
         route
         for route in api.router.routes
         if "/exports" in route.path or route.path.endswith("/seam-frame") or any(part in route.path for part in scene_parts)
     ]
 
-    assert len(guarded) == 17
+    assert len(guarded) == 12
     assert all(depends_on_user(route.dependant) for route in guarded)
 
 

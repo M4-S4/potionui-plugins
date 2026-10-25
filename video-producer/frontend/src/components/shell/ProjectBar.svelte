@@ -8,7 +8,7 @@
 	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
-	import { sceneState, scenesBusy } from '../../lib/scene.svelte.js';
+	import { scenesBusy } from '../../lib/scene.svelte.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from './Dropdown.svelte';
 
@@ -27,7 +27,7 @@
 	]);
 	const tip = (id) => ({ text: commandById(id)?.label ?? '', kbd: commandById(id)?.key || undefined });
 	const savedTime = $derived(project.savedAt ? formatTime(project.savedAt) : null);
-	const sceneWork = $derived(scenesBusy() || Boolean(sceneState.render));
+	const sceneWork = $derived(scenesBusy());
 	const saveState = $derived(project.status === 'saving' ? 'saving' : project.status === 'error' ? 'error' : ui.dirty ? 'dirty' : 'saved');
 	const player = $derived(isPlayer(ui.workspace));
 

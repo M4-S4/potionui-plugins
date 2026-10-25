@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from backend import core_bridge, limits, tracker
-from backend.scene3d import files, jobs, storage
+from backend.scene3d import files, formats, jobs, storage
 
 BASE = "/api/plugins/video-producer"
 SPLAT_ID = "01KX47GSP4TQ0000000000SP3D"
@@ -464,9 +464,10 @@ def test_at_startup_a_job_the_core_never_took_fails_and_is_refunded(core, scene)
 def test_deleting_a_project_cancels_its_splat_jobs_and_deletes_its_scene_files_and_folder(client, core, scene, samples, export_storage):
     project, _ = scene
     job = _start(client, project).json()["data"]["job"]
-    upload = client.post(f"{BASE}/projects/{project['id']}/scene-files", files={"file": ("a.ply", samples.ply())}, data={"kind": "splat"})
-    assert upload.status_code == 201
-    render = client.post(f"{BASE}/projects/{project['id']}/renders", json={"width": 64, "height": 36, "fps": 24, "frames": 2}).json()["data"]["render"]
+    folder = storage.project_folder(project["id"])
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / files.stored_name("01M5STOREDFILE000000000000", "ply")).write_bytes(samples.ply())
+    files.add_file("01M5STOREDFILE000000000000", project["id"], "user-1", "splat", "a.ply", len(samples.ply()), formats.Probe(format="ply", count=2))
 
     assert client.delete(f"{BASE}/projects/{project['id']}").status_code == 200
 
@@ -475,7 +476,6 @@ def test_deleting_a_project_cancels_its_splat_jobs_and_deletes_its_scene_files_a
     assert jobs.get_job(job["id"]) is None and jobs.list_project(project["id"]) == []
     assert files.list_project(project["id"]) == []
     assert not (export_storage / "video_producer" / "scenes" / project["id"]).exists()
-    assert render["id"]
 
 
 def test_an_admin_deleting_a_project_cancels_its_splat_jobs_as_the_owner(app, client, core, scene, make_user):

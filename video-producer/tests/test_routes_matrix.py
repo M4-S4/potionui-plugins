@@ -11,7 +11,7 @@ from backend import chain, core_bridge, presets, settings, takes, tracker
 from backend.api import router
 from backend.exports import jobs, video
 from backend.scene3d import files as scene_files
-from backend.scene3d import renders, storage
+from backend.scene3d import storage
 from backend.scene3d.formats import Probe
 from src.plugin_api import get_current_active_user
 
@@ -62,7 +62,6 @@ class Call(NamedTuple):
     code: Optional[str] = None
     who: str = "user-1"
     check: Optional[Callable[[Any], bool]] = None
-    files: Optional[dict] = None
 
 
 class Route(NamedTuple):
@@ -188,12 +187,6 @@ class World:
         scene_files.add_file(file_id, self.pid, "user-1", "splat", "set.ply", len(self.ply), Probe(format="ply", count=2))
         return file_id
 
-    def render(self, done: bool = False) -> str:
-        render = renders.create(self.pid, "user-1", 64, 36, 24.0, 1, "Guide")
-        if done:
-            renders.add_frames(render, 0, [self.samples.jpeg()])
-        return render["id"]
-
     def job(self, done: bool = False) -> str:
         job = jobs.create_job(self.pid, "user-1", "web", "1080p")
         if done:
@@ -233,10 +226,7 @@ class World:
         else:
             user = self.make_user(user_id=call.who)
             self.app.dependency_overrides[get_current_active_user] = lambda: user
-        if call.files is not None:
-            options = {"files": call.files, "data": call.body or {}}
-        else:
-            options = {} if call.body is None else {"json": call.body}
+        options = {} if call.body is None else {"json": call.body}
         return self.client.request(method, f"{BASE}{call.path}", **options)
 
 
@@ -247,10 +237,6 @@ def _data(response):
 def _list_scene_jobs(w):
     job_id = w.scene_job()
     return Call(f"/projects/{w.pid}/scenes/jobs", check=lambda r: [job["id"] for job in _data(r)["jobs"]] == [job_id])
-
-
-def _upload(w, kind="splat", who="user-1", status=201, code=None, check=None):
-    return Call(f"/projects/{w.pid}/scene-files", {"kind": kind}, status, code, who, check, files={"file": ("set.ply", w.ply, "application/octet-stream")})
 
 
 def _get_me_of_another_user(w):
@@ -451,11 +437,6 @@ ROUTES = {
         success=lambda w: Call(f"/projects/{w.pid}/scenes/jobs/{w.scene_job()}/cancel", check=lambda r: _data(r)["job"]["status"] == "cancelled"),
         denied=lambda w: Call(f"/projects/{w.pid}/scenes/jobs/{w.scene_job()}/cancel", status=404, code="project_not_found", who="user-2"),
     ),
-    "POST /projects/{id}/scene-files": Route(
-        success=lambda w: _upload(w, check=lambda r: (_data(r)["file"]["format"], _data(r)["file"]["count"]) == ("ply", 2)),
-        denied=lambda w: _upload(w, who="user-2", status=404, code="project_not_found"),
-        invalid=lambda w: _upload(w, kind="mesh", status=422, code="invalid_request"),
-    ),
     "GET /projects/{id}/scene-files/{file}": Route(
         success=lambda w: Call(f"/projects/{w.pid}/scene-files/{w.scene_file()}", check=lambda r: r.content == w.ply),
         denied=lambda w: Call(f"/projects/{w.pid}/scene-files/{w.scene_file()}", status=404, code="project_not_found", who="user-2"),
@@ -464,24 +445,6 @@ ROUTES = {
         success=lambda w: Call(f"/projects/{w.pid}/captures", {"png": w.png, "name": "Capture"}, check=lambda r: _data(r)["media"]["item_id"] == "item-user-1"),
         denied=lambda w: Call(f"/projects/{w.pid}/captures", {"png": w.png, "name": "Capture"}, 404, "project_not_found", "user-2"),
         invalid=lambda w: Call(f"/projects/{w.pid}/captures", {"png": w.jpeg, "name": "Capture"}, 422, "invalid_request"),
-    ),
-    "POST /projects/{id}/renders": Route(
-        success=lambda w: Call(f"/projects/{w.pid}/renders", {"width": 64, "height": 36, "fps": 24, "frames": 2}, 201, check=lambda r: _data(r)["render"]["frames"] == 2),
-        denied=lambda w: Call(f"/projects/{w.pid}/renders", {"width": 64, "height": 36, "fps": 24, "frames": 2}, 404, "project_not_found", "user-2"),
-        invalid=lambda w: Call(f"/projects/{w.pid}/renders", {"width": 63, "height": 36, "fps": 24, "frames": 2}, 422, "invalid_request"),
-    ),
-    "POST /projects/{id}/renders/{render}/frames": Route(
-        success=lambda w: Call(f"/projects/{w.pid}/renders/{w.render()}/frames", {"start": 0, "images": [w.jpeg]}, check=lambda r: _data(r) == {"received": 1}),
-        denied=lambda w: Call(f"/projects/{w.pid}/renders/{w.render()}/frames", {"start": 0, "images": [w.jpeg]}, 404, "project_not_found", "user-2"),
-        invalid=lambda w: Call(f"/projects/{w.pid}/renders/{w.render()}/frames", {"start": 0, "images": [w.png]}, 422, "invalid_request"),
-    ),
-    "POST /projects/{id}/renders/{render}/finish": Route(
-        success=lambda w: Call(f"/projects/{w.pid}/renders/{w.render(done=True)}/finish", check=lambda r: _data(r)["media"]["media_type"] == "video"),
-        denied=lambda w: Call(f"/projects/{w.pid}/renders/{w.render(done=True)}/finish", status=404, code="project_not_found", who="user-2"),
-    ),
-    "DELETE /projects/{id}/renders/{render}": Route(
-        success=lambda w: Call(f"/projects/{w.pid}/renders/{w.render()}", check=lambda r: _data(r) == {}),
-        denied=lambda w: Call(f"/projects/{w.pid}/renders/{w.render()}", status=404, code="project_not_found", who="user-2"),
     ),
     "GET /me": Route(
         success=lambda w: Call("/me", check=lambda r: _data(r)["plugin"]["id"] == "video-producer"),

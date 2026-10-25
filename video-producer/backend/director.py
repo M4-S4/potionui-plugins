@@ -42,13 +42,6 @@ QUALITIES = ("draft", "final")
 
 SEED_RANGE = 2**31
 
-AI = "ai"
-RENDER_3D = "render3d"
-
-PRODUCTIONS = (AI, RENDER_3D)
-
-SCENE3D = "scene3d"
-
 REFERENCE = "reference"
 TRACK = "track"
 
@@ -258,9 +251,7 @@ class Plans:
     model: Optional[Dict[str, Any]]
     quality: str
     profile: str
-    production: str = AI
     shots: List[ShotPlan] = field(default_factory=list)
-    renders: List[Dict[str, Any]] = field(default_factory=list)
     blocks: List[Dict[str, Any]] = field(default_factory=list)
     warnings: List[Dict[str, Any]] = field(default_factory=list)
     track_cuts: List[TrackCut] = field(default_factory=list)
@@ -633,10 +624,6 @@ def _seconds_text(seconds: float, language: str) -> str:
     return text.replace(".", ",") if language == "fr" else text
 
 
-def _plan3d(doc: Mapping[str, Any], plan_id: Any) -> Optional[Dict[str, Any]]:
-    return next((plan for plan in doc.get("plans3d") or [] if plan_id and plan.get("id") == plan_id), None)
-
-
 def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> str:
     """The six-section document of MiniMax-H3's reference mode, as compose_refs writes it."""
     return compose_refs(doc, clip, sent, seconds)[0]
@@ -842,32 +829,8 @@ def bind_frames(
         return request, "i2v"
 
 
-def shot_guides(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[Dict[str, Any]]:
-    """The 3D guides of a shot: the scene3d controls with a 3D shot or a video linked to it, and those linked to no shot that overlap it."""
-    start = float(clip.get("start") or 0)
-    end = start + float(clip.get("dur") or 0)
-    return [
-        control
-        for control in doc.get("controls") or []
-        if control.get("source") == SCENE3D
-        and (control.get("planId") or control.get("assetId"))
-        and (control.get("shotId") == clip.get("id") or (not control.get("shotId") and _overlap(start, end, control) > 0))
-    ]
-
-
-def fresh_guides(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[Dict[str, Any]]:
-    """The 3D guides of a shot that are rendered and not stale."""
-    return [control for control in shot_guides(doc, clip) if control.get("assetId") and not control.get("stale")]
-
-
-def _scene_of(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-    scene_id = (_plan3d(doc, guide.get("planId")) or {}).get("sceneId")
-    return next((scene for scene in doc.get("scenes") or [] if scene_id and scene.get("id") == scene_id), None)
-
-
-def scene_picture(user: User, doc: Mapping[str, Any], guide: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-    """The picture the splat scene of a 3D guide was built from: its image asset, or the frame its scene job took from a video; None for an imported scene or a picture no longer readable."""
-    scene = _scene_of(doc, guide)
+def scene_picture(user: User, doc: Mapping[str, Any], scene: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The picture a splat scene was built from: its image asset, or the frame its scene job took from a video; None for another kind of scene, one not built yet or a picture no longer readable."""
     if scene is None or scene.get("kind") != "splat" or scene.get("status") != "done":
         return None
     asset = _asset(doc, scene.get("sourceAssetId"))
@@ -934,50 +897,6 @@ def reference_media(
 def shot_references(user: User, doc: Mapping[str, Any], shot_id: str) -> List[str]:
     """The media values of the shot's own references, then the global ones, within the per-kind limits."""
     return [entry.value for entry in reference_media(user, doc, shot_id)]
-
-
-def _guide_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> None:
-    for guide in shot_guides(doc, clip):
-        if guide.get("stale"):
-            warnings.append(
-                note("stale_guide", "The 3D guide of the shot is stale: render it again.", shot_id=clip["id"], control_id=guide.get("id"))
-            )
-
-
-def _render_of(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-    rendered = [guide for guide in fresh_guides(doc, clip) if _asset(doc, guide.get("assetId")) is not None]
-    if not rendered:
-        return None
-    guide = rendered[-1]
-    return {"shot_id": clip["id"], "control_id": guide.get("id"), "plan_id": guide.get("planId"), "asset_id": guide["assetId"]}
-
-
-def shot_renders(doc: Mapping[str, Any], clips: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
-    """The rendered 3D guide videos the shots would take as they are in the 3D render mode: shot, guide, plan 3D and asset."""
-    return [render for render in (_render_of(doc, clip) for clip in clips) if render is not None]
-
-
-def _render_missing(clip: Mapping[str, Any]) -> Dict[str, Any]:
-    return note("render_missing", "The shot has no up-to-date 3D render.", shot_id=clip["id"])
-
-
-def build_renders(doc: Mapping[str, Any], shot_ids: Sequence[str], quality: str) -> Plans:
-    """The 3D render mode: each shot with an up-to-date rendered guide takes its video as it is, without a generation."""
-    plans = Plans(preset=None, model=None, quality=quality, profile=profile_of(doc), production=RENDER_3D)
-    clips = [clip for clip in (clip_of(doc, shot_id) for shot_id in dict.fromkeys(shot_ids)) if clip is not None]
-    if not clips:
-        plans.blocks.append(note("no_shots", "Select at least one shot of the project."))
-        return plans
-    for clip in clips:
-        _guide_warnings(doc, clip, plans.warnings)
-        render = _render_of(doc, clip)
-        if render is None:
-            plans.warnings.append(_render_missing(clip))
-        else:
-            plans.renders.append(render)
-    if not plans.renders:
-        plans.blocks.append(note("no_render", "No selected shot has an up-to-date 3D render."))
-    return plans
 
 
 def _document(prompt: str, fps: float, seconds: float, resolution: Optional[str]) -> Dict[str, Any]:
@@ -1305,7 +1224,6 @@ def _engine_of(
 
 def _merge(plans: Plans, part: Plans, shot_ids: Sequence[str], own: bool) -> None:
     plans.shots.extend(part.shots)
-    plans.renders.extend(part.renders)
     plans.track_cuts.extend(part.track_cuts)
     for kind in ("blocks", "warnings"):
         target = getattr(plans, kind)
@@ -1325,13 +1243,10 @@ def build_plans(
     quality: str,
     model_id: Optional[str] = None,
     profile: Optional[str] = None,
-    production: str = AI,
     overrides: bool = False,
     silent: Optional[Mapping[str, Collection[str]]] = None,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
-    if production == RENDER_3D:
-        return build_renders(doc, shot_ids, quality)
+    """The generation request of each shot, with what blocks the run and what the user should know. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
     silent = silent or {}
     if not overrides:
         return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent)
@@ -1384,7 +1299,6 @@ def _build(
     if not clips:
         plans.blocks.append(note("no_shots", "Select at least one shot of the project."))
         return plans
-    plans.renders = shot_renders(doc, clips)
     context = _Context(
         user=user,
         doc=doc,

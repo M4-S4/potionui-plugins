@@ -3,12 +3,12 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, clipAt, clipLabel, secs } from '../../lib/state.svelte.js';
-	import { sceneState, sceneOf, currentPlan, shotOfPlan, saveCapture } from '../../lib/scene.svelte.js';
+	import { sceneState, sceneOf, saveCapture } from '../../lib/scene.svelte.js';
 	import Modal from './Modal.svelte';
 
 	const shot = $derived(sceneState.capture);
 	const scene = $derived(sceneOf(shot?.sceneId));
-	const initial = untrack(() => (ui.selection?.kind === 'clip' ? ui.selection.id : null) ?? clipAt(ui.playhead)?.id ?? shotOfPlan(currentPlan())?.id ?? doc.clips[0]?.id ?? '');
+	const initial = untrack(() => (ui.selection?.kind === 'clip' ? ui.selection.id : null) ?? clipAt(ui.playhead)?.id ?? doc.clips[0]?.id ?? '');
 	let clipId = $state(initial);
 	let usage = $state('first');
 

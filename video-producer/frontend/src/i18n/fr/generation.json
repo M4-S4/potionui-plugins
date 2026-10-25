@@ -126,7 +126,6 @@
 	"block.noReferences": "« {shot} » n’a pas de référence : Ref2VA en demande au moins une pour ce plan.",
 	"block.sourceUnavailable": "La vidéo de la prise source n’est plus disponible.",
 	"block.upscaleUnsupported": "Agrandir cette prise demande SeedVR2 : demandez à un administrateur de l’installer, ou générez la prise à nouveau en pleine résolution.",
-	"warn.staleGuide": "La vidéo de référence de « {shot} » n’est plus à jour : rendez-la à nouveau dans Scène 3D.",
 	"label.draft": "Brouillon",
 	"label.rejected": "Rejetée",
 	"label.candidate": "Candidate",

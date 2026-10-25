@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import core_bridge, director, limits, soundtrack, takes
+from . import core_bridge, limits, soundtrack, takes
 from .core_bridge import AccountType, User
 from .director import Plans, ShotPlan, note
 
@@ -31,7 +31,6 @@ class Order:
     preset_id: Optional[str]
     model_id: Optional[str] = None
     label: Optional[str] = None
-    production: str = director.AI
     shot_variants: Mapping[str, int] = field(default_factory=dict)
 
     def count(self, shot_id: str) -> int:
@@ -61,7 +60,7 @@ def _variant_count(value: Any) -> bool:
 
 
 def parse_order(body: Any) -> Order:
-    """The shots, quality, variants (one count for all, and optionally one per shot), preset, model and production mode a body asks for; OrderError for a malformed one. The 3D render mode needs no preset."""
+    """The shots, quality, variants (one count for all, and optionally one per shot), preset and model a body asks for; OrderError for a malformed one."""
     if not isinstance(body, dict):
         raise OrderError("The request body must be a JSON object.")
     shots = body.get("shots")
@@ -78,12 +77,8 @@ def parse_order(body: Any) -> Order:
         isinstance(shot, str) and shot and _variant_count(count) for shot, count in shot_variants.items()
     ):
         raise OrderError(f"shot_variants must map shot ids to integers from 1 to {MAX_VARIANTS}.")
-    production = body.get("production", director.AI)
-    if production not in director.PRODUCTIONS:
-        raise OrderError(f"production must be one of: {', '.join(director.PRODUCTIONS)}.")
     preset_id = body.get("preset_id")
-    rendered = production == director.RENDER_3D and preset_id is None
-    if not rendered and (not isinstance(preset_id, str) or not preset_id):
+    if not isinstance(preset_id, str) or not preset_id:
         raise OrderError("preset_id must be a preset id.")
     model_id = body.get("model_id")
     if model_id is not None and (not isinstance(model_id, str) or not model_id):
@@ -98,7 +93,6 @@ def parse_order(body: Any) -> Order:
         preset_id=preset_id,
         model_id=model_id,
         label=label,
-        production=production,
         shot_variants={shot: count for shot, count in shot_variants.items() if shot in shots},
     )
 
@@ -272,7 +266,7 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
 async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order, project_id: str = "") -> Evaluation:
     """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape, the time and the minutes following the steps the options of each shot ask for; the reference tracks a guided shot would send silent are left out."""
     plans = await soundtrack.heard_plans(
-        owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, production=order.production, overrides=True
+        owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, overrides=True
     )
     vram, vram_warnings = await _vram(owner, plans)
     counts = {plan.shot_id: order.count(plan.shot_id) for plan in plans.shots}
@@ -292,9 +286,7 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
     if plans.shots and seconds is None:
         warnings.append(note("time_unknown", "No take of this preset was measured at this resolution yet."))
     payload = {
-        "production": plans.production,
         "shots": [plan.summary() for plan in plans.shots],
-        "renders": list(plans.renders),
         "vram": vram,
         "time": {"seconds": seconds, "samples": samples},
         "quota": quota,

@@ -14,35 +14,28 @@ from .storage import SceneError
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
-JPEG_SIGNATURE = b"\xff\xd8\xff"
-
 MAX_CAPTURE_BYTES = 24 * storage.MIB
 
 BODY_LIMIT = MAX_CAPTURE_BYTES * 4 // 3 + 64 * 1024
 
 NAME_LIMIT = 80
 
-PREFIXES = {"png": ("data:image/png;base64,",), "jpeg": ("data:image/jpeg;base64,", "data:image/jpg;base64,")}
-
-SIGNATURES = {"png": PNG_SIGNATURE, "jpeg": JPEG_SIGNATURE}
+PREFIX = "data:image/png;base64,"
 
 
-def decode(data_url: Any, kind: str, limit: int) -> Optional[bytes]:
-    """The bytes of a base64 data URL of a PNG or a JPEG image, or None when it is not one or is over limit bytes."""
-    if not isinstance(data_url, str):
-        return None
-    prefix = next((prefix for prefix in PREFIXES[kind] if data_url.startswith(prefix)), None)
-    if prefix is None or (len(data_url) - len(prefix)) * 3 // 4 > limit + 3:
+def decode(data_url: Any, limit: int) -> Optional[bytes]:
+    """The bytes of a base64 data URL of a PNG image, or None when it is not one or is over limit bytes."""
+    if not isinstance(data_url, str) or not data_url.startswith(PREFIX) or (len(data_url) - len(PREFIX)) * 3 // 4 > limit + 3:
         return None
     try:
-        raw = base64.b64decode(data_url[len(prefix):], validate=True)
+        raw = base64.b64decode(data_url[len(PREFIX):], validate=True)
     except (binascii.Error, ValueError):
         return None
-    return raw if raw.startswith(SIGNATURES[kind]) and len(raw) <= limit else None
+    return raw if raw.startswith(PNG_SIGNATURE) and len(raw) <= limit else None
 
 
 def file_stem(name: Any, fallback: str) -> str:
-    """A safe file name for a capture or a render, without its extension, that never starts with a dash or a dot."""
+    """A safe file name for a capture, without its extension, that never starts with a dash or a dot."""
     stem = slug(str(name or "").strip() or fallback)[:NAME_LIMIT]
     while stem.startswith(("-", ".")):
         stem = slug(stem.lstrip("-.") or fallback)[:NAME_LIMIT]
@@ -63,7 +56,7 @@ async def store_media(owner: User, path: Path) -> Tuple[Dict[str, Any], Dict[str
     return stored, item
 
 
-def media(stored: Dict[str, Any], item: Dict[str, Any], media_type: str, **extra: Any) -> Dict[str, Any]:
+def media(stored: Dict[str, Any], item: Dict[str, Any], media_type: str) -> Dict[str, Any]:
     """A stored library file as the routes return it, in the shape the seam frame uses."""
     filename = basename(stored["value"])
     return {
@@ -74,7 +67,6 @@ def media(stored: Dict[str, Any], item: Dict[str, Any], media_type: str, **extra
         "filename": stored.get("original_filename") or item.get("filename") or filename,
         "width": item.get("width"),
         "height": item.get("height"),
-        **extra,
         "origin": {"kind": "library", "itemId": item["item_id"]},
     }
 

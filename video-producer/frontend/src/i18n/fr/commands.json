@@ -44,7 +44,6 @@
 	"cmd.promote": "Passer la prise en final",
 	"cmd.color": "Couleur du plan",
 	"cmd.match": "Raccorder la couleur au plan précédent",
-	"cmd.keyframes": "Images clés de caméra",
 	"cmd.fav": "Favori",
 	"cmd.reject": "Rejeter",
 	"cmd.unflag": "Retirer la marque",
@@ -103,7 +102,6 @@
 	"kbd.backspace": "Retour arrière",
 	"kbd.escape": "Échap",
 	"cmd.scene-new": "Nouvelle scène 3D depuis une image…",
-	"cmd.scene-import": "Importer un splat ou un fichier Blender…",
 	"cmd.story-window": "Synopsis et découpage",
 	"cmd.story-view": "Storyboard en bande",
 	"cmd.shot-editor": "Éditeur de plan…"

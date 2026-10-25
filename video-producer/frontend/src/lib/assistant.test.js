@@ -60,7 +60,7 @@ test('shotsContext: one entry per shot with its prompt bounded, its frames and i
 
 test('productionContext counts the takes in flight, the production state having no queue of its own', () => {
 	const production = { target: 'clip', mode: 'ai', state: 'ready', progress: 41.6, running: 0, step: '', lastCount: 0, quality: 'draft' };
-	assert.deepEqual(productionContext(production, 3), { target: 'clip', mode: 'ai', quality: 'draft', state: 'ready', progress: 42, queue: 3 });
+	assert.deepEqual(productionContext(production, 3), { target: 'clip', quality: 'draft', state: 'ready', progress: 42, queue: 3 });
 	assert.equal(productionContext(production, 0).queue, 0);
 });
 

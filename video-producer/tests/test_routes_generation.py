@@ -25,7 +25,7 @@ def test_the_estimate_route_answers_the_contract_shape(client, core, project):
 
     assert response.status_code == 200
     data = response.json()["data"]
-    assert set(data) == {"production", "shots", "renders", "vram", "time", "quota", "cost", "blocks", "warnings"}
+    assert set(data) == {"shots", "vram", "time", "quota", "cost", "blocks", "warnings"}
     assert [shot["shot_id"] for shot in data["shots"]] == ["s1", "s2"]
     assert set(data["vram"]) == {"estimate_gb", "free_gb", "total_gb", "budget_gb", "streams", "unknown", "backend_id"}
     assert set(data["quota"]) == {"limit", "used", "remaining", "exempt", "needed_minutes", "applies", "blocks"}
@@ -147,32 +147,3 @@ def test_the_queue_of_another_users_project_is_not_found(client, core, make_proj
     other = make_project(user_id="user-2", clips=SHOTS)
 
     assert client.get(f"{BASE}/projects/{other['id']}/queue").status_code == 404
-
-
-def _rendered_project(make_project, stale=False):
-    assets = [{"id": "guide", "kind": "video", "origin": {"kind": "library", "itemId": "lib-guide"}, "srcDur": 4.0}]
-    controls = [{"id": "c1", "shotId": "s1", "stale": stale, "planId": "p1", "assetId": "guide"}]
-    return make_project(clips=SHOTS, assets=assets, controls=controls)
-
-
-def test_generate_in_the_3d_render_mode_starts_nothing_and_answers_the_renders_the_shots_take(client, core, make_project):
-    project = _rendered_project(make_project)
-    order = {"shots": ["s1", "s2"], "quality": "draft", "variants": 1, "production": "render3d"}
-
-    estimated = client.post(f"{BASE}/projects/{project['id']}/estimate", json=order).json()["data"]
-    response = client.post(f"{BASE}/projects/{project['id']}/generate", json=order)
-
-    renders = [{"shot_id": "s1", "control_id": "c1", "plan_id": "p1", "asset_id": "guide"}]
-    assert (estimated["production"], estimated["renders"], estimated["shots"]) == ("render3d", renders, [])
-    assert response.status_code == 202
-    assert response.json()["data"] == {"takes": [], "renders": renders}
-    assert core.submitted == [] and takes.list_takes(project["id"]) == []
-
-
-def test_generate_in_the_3d_render_mode_without_a_fresh_render_answers_409(client, core, make_project):
-    project = _rendered_project(make_project, stale=True)
-
-    response = client.post(f"{BASE}/projects/{project['id']}/generate", json={"shots": ["s1"], "quality": "draft", "variants": 1, "production": "render3d"})
-
-    assert response.status_code == 409
-    assert [block["code"] for block in response.json()["detail"]["data"]["blocks"]] == ["no_render"]

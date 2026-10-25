@@ -43,7 +43,7 @@ export function shotsContext(doc, labelOf) {
 }
 
 export function productionContext(production, queued) {
-	return { target: production.target, mode: production.mode, quality: production.quality, state: production.state, progress: Math.round(production.progress), queue: queued };
+	return { target: production.target, quality: production.quality, state: production.state, progress: Math.round(production.progress), queue: queued };
 }
 
 export function issuesContext(issues) {

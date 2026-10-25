@@ -9,7 +9,7 @@ PLUGIN = Path(__file__).resolve().parents[1]
 I18N = PLUGIN / "frontend" / "src" / "i18n"
 SHOTS = PLUGIN / "docs" / "screenshots"
 DIST = PLUGIN / "frontend" / "dist" / "VideoProducerPage.js"
-SIMULATION_ORDER = ("identity", "lipSync", "voice", "console", "formats", "guidance")
+SIMULATION_ORDER = ("identity", "lipSync", "voice", "console", "formats")
 ALLOWED_COMMENTS = {("backend/exports/video.py", "# one frame of slack: a file can end a frame before its probed length")}
 
 
@@ -43,10 +43,10 @@ def _readme_section():
     return text[start:end] if end > 0 else text[start:]
 
 
-def test_the_page_dictionary_lists_exactly_the_six_simulations_in_both_languages():
+def test_the_page_dictionary_lists_exactly_the_five_simulations_in_both_languages():
     for lang in ("en", "fr"):
         shell = json.loads((I18N / lang / "shell.json").read_text(encoding="utf-8"))
-        assert len([key for key in shell if re.fullmatch(r"simulations\.\w+\.title", key)]) == 6
+        assert len([key for key in shell if re.fullmatch(r"simulations\.\w+\.title", key)]) == 5
         assert [title for title, _ in _simulations(lang)] and all(text for _, text in _simulations(lang))
 
 
@@ -63,7 +63,7 @@ def test_the_simulation_table_repeats_the_window_titles_and_texts_in_order(lang,
     rows = _table_rows(section())
     expected = _simulations(lang)
 
-    assert len(rows) == 6
+    assert len(rows) == 5
     assert [_norm(row[0]) for row in rows] == [_norm(title) for title, _ in expected]
     assert [_norm(row[1]) for row in rows] == [_norm(text) for _, text in expected]
 

@@ -44,7 +44,6 @@
 	"cmd.promote": "Make take final",
 	"cmd.color": "Shot color",
 	"cmd.match": "Match color to previous shot",
-	"cmd.keyframes": "Camera keyframes",
 	"cmd.fav": "Favorite",
 	"cmd.reject": "Reject",
 	"cmd.unflag": "Remove flag",
@@ -103,7 +102,6 @@
 	"kbd.backspace": "Backspace",
 	"kbd.escape": "Esc",
 	"cmd.scene-new": "New 3D scene from image…",
-	"cmd.scene-import": "Import a splat or Blender file…",
 	"cmd.story-window": "Synopsis and breakdown",
 	"cmd.story-view": "Storyboard as a band",
 	"cmd.shot-editor": "Shot editor…"

@@ -162,7 +162,8 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 			['D1', 'Délai']
 		]
 	);
-	for (const key of ['audio', 'frames', 'controls', 'plans3d', 'references', 'scenes', 'assets']) assert.deepEqual(fr[key], [], key);
+	for (const key of ['audio', 'frames', 'references', 'scenes', 'assets']) assert.deepEqual(fr[key], [], key);
+	assert.ok(!('controls' in fr) && !('plans3d' in fr), 'a new document has no 3D shot and no Control video');
 	assert.ok(!('results' in fr), 'the document has no results field');
 	const ids = [...fr.clips, ...fr.prompts, ...fr.titles, ...fr.markers].map((x) => x.id);
 	assert.ok(ids.every(isUlid));
@@ -222,7 +223,7 @@ test('readiness: a text-only engine that ignores a shot frame warns about that s
 	assert.deepEqual(missing, []);
 });
 
-test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D captures go, old camera keys become pos/target, simulated guides go, retired 3D set references become captures', () => {
+test('migrate: the simulated scenes go, empty 3D captures go, retired 3D set references become captures, and the 3D shots and Control videos pass through untouched', () => {
 	const old = {
 		name: 'Old',
 		scenes: [
@@ -255,21 +256,12 @@ test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D 
 	};
 	const doc = migrate(old);
 	assert.deepEqual(doc.scenes.map((s) => s.id), ['s1']);
-	assert.deepEqual(doc.plans3d.map((p) => p.sceneId), [null, 's1', null]);
+	assert.equal(doc.plans3d, old.plans3d, 'the 3D shots are no longer the page’s to migrate');
+	assert.equal(doc.controls, old.controls, 'the Control videos are no longer the page’s to migrate');
 	assert.deepEqual(doc.frames.map((f) => f.id), ['f2', 'f3']);
-	assert.deepEqual(doc.controls.map((c) => c.id), ['g2', 'g3', 'g4'], 'a scene3d guide with neither video nor 3D shot was simulated and goes');
-	assert.deepEqual(doc.controls[0], old.controls[1]);
 	assert.deepEqual(doc.references.map((r) => [r.id, r.type]), [['r2', 'Capture 3D'], ['r3', 'Personnage'], ['r4', 'Capture 3D']], 'the retired 3D set types become Capture 3D when they hold an image, and go otherwise');
 	assert.deepEqual({ ...doc.references[0], type: 'Gaussian Splat' }, old.references[1]);
 	assert.equal(old.references[1].type, 'Gaussian Splat');
-	const [p1, p2, p3] = doc.plans3d;
-	assert.deepEqual([p1.source, p1.preset, p1.amount, p1.camera], ['manual', null, null, null]);
-	assert.deepEqual([p3.source, p3.preset, p3.amount], ['trajectory', 'orbit', 12]);
-	assert.deepEqual(p2.keyframes, []);
-	const [k] = p1.keyframes;
-	assert.deepEqual([k.id, k.t, k.target, k.focal, k.roll], ['k1', 0, [0, 1.5, 0], 30, 0]);
-	assert.ok(Math.abs(k.pos[0] - 10) < 1e-6 && Math.abs(k.pos[1] - 1.5) < 1e-6 && Math.abs(k.pos[2]) < 1e-6);
-	assert.ok(!('az' in k));
 	assert.equal(old.scenes.length, 3, 'the input is not changed');
 	assert.deepEqual(migrate(doc), doc);
 	assert.equal(migrate(null), null);
@@ -280,12 +272,13 @@ test('migrate: the simulated scenes go, their 3D shots lose the scene, empty 3D 
 	assert.deepEqual(migrate(fresh), fresh);
 });
 
-test('3D lists: a document without them opens with them empty and is saved without them while they stay empty; one with them keeps them untouched', () => {
+test('3D lists: a document without scenes opens with them empty and is saved without them while they stay empty; the 3D shots and Control videos of a document come back untouched', () => {
 	const t = translator('en', []);
 	const stored = migrate(emptyDoc(t));
 	for (const key of SCENE_LISTS) delete stored[key];
 	const absent = absentLists(stored);
-	assert.deepEqual(absent, ['controls', 'plans3d', 'scenes']);
+	assert.deepEqual(SCENE_LISTS, ['scenes']);
+	assert.deepEqual(absent, ['scenes']);
 	const opened = migrate({ ...emptyDoc(t), ...stored });
 	for (const key of SCENE_LISTS) assert.deepEqual(opened[key], [], key);
 	assert.deepEqual(storedDoc(opened, absent), stored);
@@ -294,10 +287,11 @@ test('3D lists: a document without them opens with them empty and is saved witho
 	assert.deepEqual(Object.keys(storedDoc(opened, absent)).filter((key) => SCENE_LISTS.includes(key)), ['scenes']);
 	const fixture = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tests', 'fixtures', 'exports', 'reference-project.json');
 	const project = JSON.parse(readFileSync(fixture, 'utf-8')).doc;
-	assert.ok(SCENE_LISTS.every((key) => project[key].length));
+	const lists = ['controls', 'plans3d', 'scenes'];
+	assert.ok(lists.every((key) => project[key].length));
 	assert.deepEqual(absentLists(project), []);
 	const reopened = storedDoc(migrate({ ...emptyDoc(t), ...project }), absentLists(project));
-	for (const key of SCENE_LISTS) assert.deepEqual(reopened[key], project[key], key);
+	for (const key of lists) assert.deepEqual(reopened[key], project[key], key);
 	assert.deepEqual(absentLists(null), SCENE_LISTS);
 });
 
