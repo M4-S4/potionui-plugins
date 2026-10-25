@@ -223,13 +223,14 @@ test('readiness: a text-only engine that ignores a shot frame warns about that s
 	assert.deepEqual(missing, []);
 });
 
-test('migrate: the simulated scenes go, empty 3D captures go, retired 3D set references become captures, and the 3D shots and Control videos go', () => {
+test('migrate: the simulated and Blender scenes go, empty 3D captures go, retired 3D set references become captures, the 3D set role becomes the set role, and the 3D shots and Control videos go', () => {
 	const old = {
 		name: 'Old',
 		scenes: [
 			{ id: 'sample', kind: 'sample', name: 'Sample scene' },
 			{ id: 'file', kind: 'file', name: 'room.splat', file: '/data/room.splat' },
-			{ id: 's1', kind: 'splatfile', name: 'Room', fileId: 'f1', format: 'ply', view: null }
+			{ id: 's1', kind: 'splatfile', name: 'Room', fileId: 'f1', format: 'ply', view: null },
+			{ id: 'hut', kind: 'glb', name: 'hut.glb', fileId: 'f2', cameras: [] }
 		],
 		plans3d: [
 			{ id: 'p1', shotId: 'c1', sceneId: 'sample', name: 'Orbit', start: 0, dur: 5, keyframes: [{ id: 'k1', t: 0, az: 90, el: 0, dist: 10, focal: 30, height: 1.5 }] },
@@ -260,9 +261,10 @@ test('migrate: the simulated scenes go, empty 3D captures go, retired 3D set ref
 	assert.equal(old.plans3d.length, 3);
 	assert.deepEqual(doc.frames.map((f) => f.id), ['f2', 'f3']);
 	assert.deepEqual(doc.references.map((r) => [r.id, r.type]), [['r2', 'Capture 3D'], ['r3', 'Personnage'], ['r4', 'Capture 3D']], 'the retired 3D set types become Capture 3D when they hold an image, and go otherwise');
-	assert.deepEqual({ ...doc.references[0], type: 'Gaussian Splat' }, old.references[1]);
+	assert.deepEqual(doc.references.map((r) => r.role), ['Décor', 'Identité', ''], 'the 3D set role becomes the set role');
+	assert.deepEqual({ ...doc.references[0], type: 'Gaussian Splat', role: 'Décor 3D' }, old.references[1]);
 	assert.equal(old.references[1].type, 'Gaussian Splat');
-	assert.equal(old.scenes.length, 3, 'the input is not changed');
+	assert.equal(old.scenes.length, 4, 'the input is not changed');
 	assert.deepEqual(migrate(doc), doc);
 	assert.equal(migrate(null), null);
 	const bare = { name: 'Bare' };

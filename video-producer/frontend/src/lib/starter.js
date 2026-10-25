@@ -126,11 +126,19 @@ export function starterDoc(t, promptT = t, promptLanguage = DEFAULT_PROMPT_LANGU
 	return doc;
 }
 
-const RETIRED_SCENES = ['sample', 'file'];
+const RETIRED_SCENES = ['sample', 'file', 'glb'];
 const CAPTURE = 'Capture 3D';
 const RETIRED_SET_TYPES = ['Scène d’essai', "Scène d'essai", 'Gaussian Splat'];
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const retiredSet = (r) => isObject(r) && r.space === 'decors3d' && RETIRED_SET_TYPES.includes(r.type);
+const OLD_SET_ROLE = 'Décor 3D';
+const SET_ROLE = 'Décor';
+
+function currentReference(r) {
+	if (!isObject(r)) return r;
+	const next = retiredSet(r) ? { ...r, type: CAPTURE } : r;
+	return r.role === OLD_SET_ROLE ? { ...next, role: SET_ROLE } : next;
+}
 const RETIRED_KEYS = ['controls', 'plans3d'];
 const isNumber = (v) => typeof v === 'number';
 const span = (item) => {
@@ -172,7 +180,7 @@ export function migrate(doc) {
 	if (Array.isArray(doc.scenes)) next.scenes = doc.scenes.filter((s) => isObject(s) && !RETIRED_SCENES.includes(s.kind));
 	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId));
 	if (Array.isArray(doc.references)) {
-		const kept = doc.references.filter((r) => !retiredSet(r) || r.assetId).map((r) => (retiredSet(r) ? { ...r, type: CAPTURE } : r));
+		const kept = doc.references.filter((r) => !retiredSet(r) || r.assetId).map(currentReference);
 		next.references = [...kept, ...motionReferences(doc, kept)];
 	}
 	for (const key of RETIRED_KEYS) delete next[key];

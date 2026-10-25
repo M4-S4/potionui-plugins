@@ -16,13 +16,17 @@ _REASON_LIMIT = 300
 
 RETIRED_KEYS = ("results", "controls", "plans3d")
 
-RETIRED_SCENES = ("sample", "file")
+RETIRED_SCENES = ("sample", "file", "glb")
 
 CAPTURE_ROLE = "Capture 3D"
 
 GUIDE_SOURCE = "scene3d"
 
 SET_SPACE = "decors3d"
+
+SET_ROLE = "Décor"
+
+OLD_SET_ROLE = "Décor 3D"
 
 MOTION_SPACE = "mouvement"
 
@@ -217,8 +221,6 @@ VIEW = _object({"fov": NUMBER, "aspect": NUMBER, "depth": NUMBER})
 
 NULLABLE_VIEW = {**VIEW, "type": ["object", "null"]}
 
-GLB_CAMERA = _object({"name": TEXT, "animated": FLAG, "duration": NULLABLE_NUMBER})
-
 SCENE = _tagged(
     "kind",
     {
@@ -236,7 +238,6 @@ SCENE = _tagged(
             "error": NULLABLE_TEXT,
         },
         "splatfile": {"id": ID, "name": TEXT, "fileId": ID, "format": _enum("ply", "spz", "splat"), "view": NULLABLE_VIEW},
-        "glb": {"id": ID, "name": TEXT, "fileId": ID, "cameras": _array(GLB_CAMERA)},
     },
 )
 
@@ -422,6 +423,19 @@ def _retired_set(reference: Any) -> bool:
     return isinstance(reference, dict) and reference.get("space") == SET_SPACE and reference.get("type") in RETIRED_SET_TYPES
 
 
+def _old_role(reference: Any) -> bool:
+    return isinstance(reference, dict) and reference.get("role") == OLD_SET_ROLE
+
+
+def _current_reference(reference: Any) -> Any:
+    if not isinstance(reference, dict):
+        return reference
+    changes = {"type": CAPTURE_ROLE} if _retired_set(reference) else {}
+    if _old_role(reference):
+        changes["role"] = SET_ROLE
+    return {**reference, **changes} if changes else reference
+
+
 def _span(item: Dict[str, Any]) -> Tuple[float, float]:
     start = float(item["start"]) if _number(item.get("start")) else 0.0
     return start, start + (float(item["dur"]) if _number(item.get("dur")) else 0.0)
@@ -492,7 +506,7 @@ def _cast(clip: Any, characters: Set[Any], places: Set[Any]) -> Any:
 
 
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots and the Control videos), the simulated scenes and the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, and the cast of each shot cleared of the bible cards that no longer exist; the same object when nothing changes."""
+    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots and the Control videos), the simulated scenes, the Blender scenes and the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, and the cast of each shot cleared of the bible cards that no longer exist; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -503,12 +517,8 @@ def migrate(doc: Any) -> Any:
     if isinstance(frames, list) and any(_empty_capture(frame) for frame in frames):
         changes["frames"] = [frame for frame in frames if not _empty_capture(frame)]
     references = doc.get("references")
-    if isinstance(references, list) and any(_retired_set(reference) for reference in references):
-        changes["references"] = [
-            {**reference, "type": CAPTURE_ROLE} if _retired_set(reference) else reference
-            for reference in references
-            if not _retired_set(reference) or reference.get("assetId")
-        ]
+    if isinstance(references, list) and any(_retired_set(reference) or _old_role(reference) for reference in references):
+        changes["references"] = [_current_reference(reference) for reference in references if not _retired_set(reference) or reference.get("assetId")]
     kept = changes.get("references", references)
     motions = _motion_references(doc, kept) if isinstance(kept, list) else []
     if motions:

@@ -267,6 +267,35 @@ def test_the_sweep_deletes_the_scene_files_no_stored_version_cites_once_they_are
     assert files.collect_orphans() == 0
 
 
+def test_the_file_of_a_blender_scene_the_migration_drops_stays_while_a_stored_version_cites_it_and_the_versions_stay_as_stored(store, make_project, make_doc, export_storage, samples):
+    from backend import projects
+    from src.plugin_api import db
+
+    doc = make_doc()
+    project = make_project(doc=doc)
+    pid = project["id"]
+    cited = _stored(pid, samples)
+    older = projects.canonical({**doc, "scenes": [{"id": "sc-glb", "kind": "glb", "name": "hut.glb", "fileId": cited, "cameras": []}]})
+    with db.get_cursor() as cursor:
+        cursor.execute(f"UPDATE {projects.VERSIONS} SET doc = ? WHERE project_id = ? AND version = 1", (older, pid))
+        cursor.execute(f"UPDATE {projects.PROJECTS} SET doc = ? WHERE id = ?", (older, pid))
+
+    opened = projects.get_project(pid)
+    assert opened["doc"]["scenes"] == []
+    assert files.collect_orphans() == 0
+    projects.save_project(pid, opened["doc"], opened["version"])
+
+    assert files.collect_orphans() == 0
+    assert files.get_file(cited) is not None and files.path_of(files.get_file(cited)).is_file()
+    with db.get_cursor() as cursor:
+        cursor.execute(f"SELECT doc FROM {projects.VERSIONS} WHERE project_id = ? AND version = 1", (pid,))
+        assert cursor.fetchone()["doc"] == older
+        cursor.execute(f"DELETE FROM {projects.VERSIONS} WHERE project_id = ? AND version = 1", (pid,))
+
+    assert files.collect_orphans() == 1
+    assert files.get_file(cited) is None
+
+
 def test_a_scene_file_whose_last_citing_version_was_pruned_is_collected(store, make_project, make_doc, export_storage, samples):
     from backend import projects
 

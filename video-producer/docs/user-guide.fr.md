@@ -192,7 +192,7 @@ Une image ne montre qu’un côté des choses : la caméra reste donc dans la zo
 
 Si la carte graphique cesse d’afficher la vue 3D, la vue le signale : cliquez sur **Réessayer**. Si elle propose **Recharger la page**, le plugin a été mis à jour pendant que la page était ouverte.
 
-**Les projets faits avec une version antérieure** gardent leurs scènes. Une scène tirée d’une image d’une vidéo, ou un splat importé à l’époque, figure sous **Une scène existante** ; un splat importé sans vue d’origine se déplace librement, sans jauge, et une scène Blender n’est plus affichée. Les plans 3D et les Control video quittent un tel projet à son ouverture, mais la vidéo de référence de chaque plan 3D devient d’abord une référence **Guides de mouvement** du plan qu’elle guidait, de type Control video : avec le profil Ref2VA, MiniMax H3 reprend son mouvement dans le plan (chapitre 8).
+**Les projets faits avec une version antérieure** gardent leurs scènes. Une scène tirée d’une image d’une vidéo, ou un splat importé à l’époque, figure sous **Une scène existante** ; un splat importé sans vue d’origine se déplace librement, sans jauge, et une scène Blender quitte le projet à son ouverture. Les plans 3D et les Control video quittent un tel projet à son ouverture, mais la vidéo de référence de chaque plan 3D devient d’abord une référence **Guides de mouvement** du plan qu’elle guidait, de type Control video : avec le profil Ref2VA, MiniMax H3 reprend son mouvement dans le plan (chapitre 8).
 
 ### Mixage
 

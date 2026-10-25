@@ -192,7 +192,7 @@ A picture shows only one side of things, so the camera stays in the reliable zon
 
 If your graphics card drops the 3D view, the view says so: click **Try again**. If it offers **Reload the page**, the plugin was updated while the page was open.
 
-**Projects made with an earlier version** keep their scenes. A scene built from a frame of a video, or a splat imported then, is listed under **An existing scene**; an imported splat without a source view moves freely, without the gauge, and a Blender scene is no longer shown. The 3D shots and the Control videos leave such a project when it opens, but the reference video of each 3D shot first becomes a **Motion guides** reference of the shot it guided, of type Control video: with the Ref2VA profile, MiniMax H3 carries its motion over to the shot (chapter 8).
+**Projects made with an earlier version** keep their scenes. A scene built from a frame of a video, or a splat imported then, is listed under **An existing scene**; an imported splat without a source view moves freely, without the gauge, and a Blender scene leaves the project when it opens. The 3D shots and the Control videos leave such a project when it opens, but the reference video of each 3D shot first becomes a **Motion guides** reference of the shot it guided, of type Control video: with the Ref2VA profile, MiniMax H3 carries its motion over to the shot (chapter 8).
 
 ### Mix
 

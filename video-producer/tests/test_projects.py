@@ -116,13 +116,6 @@ def _rich(doc):
     doc["scenes"] += [
         _splat_scene(),
         {"id": "01M535B4GTSCENEFILE0000000", "kind": "splatfile", "name": "set.spz", "fileId": "01M535B4GTFILE00000000000", "format": "spz", "view": None},
-        {
-            "id": "01M535B4GTSCENEGLB00000000",
-            "kind": "glb",
-            "name": "hut.glb",
-            "fileId": "01M535B4GTFILE10000000000",
-            "cameras": [{"name": "camera", "animated": True, "duration": 4.5}, {"name": "still", "animated": False, "duration": None}],
-        },
     ]
     doc["references"] += [
         {
@@ -140,7 +133,7 @@ def _rich(doc):
             "space": "decors3d",
             "type": "Capture 3D",
             "assetId": "01M535B4GTVIDEO00000000000",
-            "role": "Décor 3D",
+            "role": "Décor",
             "scope": {"type": "shot", "shotId": clip["id"]},
         },
         {
@@ -396,11 +389,7 @@ def test_an_asset_outside_the_contract_is_refused(starter, asset, path):
         (_splat_scene(view={"fov": 50, "aspect": 1.5, "depth": 4, "width": 832}), "$.scenes[0].view"),
         ({"id": "s", "kind": "splatfile", "name": "set.ply", "fileId": "f", "format": "obj", "view": None}, "$.scenes[0].format"),
         ({"id": "s", "kind": "splatfile", "name": "set.ply", "fileId": None, "format": "ply", "view": None}, "$.scenes[0].fileId"),
-        (
-            {"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f", "cameras": [{"name": "camera", "animated": "yes", "duration": None}]},
-            "$.scenes[0].cameras[0].animated",
-        ),
-        ({"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f"}, "$.scenes[0]"),
+        ({"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f", "cameras": []}, "$.scenes[0].kind"),
     ],
 )
 def test_a_scene_follows_its_kind(starter, item, path):
@@ -417,7 +406,6 @@ def test_a_scene_follows_its_kind(starter, item, path):
             status="failed", sourceAssetId=None, sourceTime=None, jobId=None, fileId=None, count=None, view=None, error="The GPU ran out of memory."
         ),
         {"id": "s", "kind": "splatfile", "name": "set.splat", "fileId": "f", "format": "splat", "view": {"fov": 50, "aspect": 0.5625, "depth": 3}},
-        {"id": "s", "kind": "glb", "name": "hut.glb", "fileId": "f", "cameras": []},
     ],
 )
 def test_each_scene_kind_of_the_contract_is_valid(starter, scene):
@@ -444,10 +432,11 @@ def test_the_scene_of_a_frame_is_an_optional_id_or_null(starter):
 LEGACY_SCENES = [
     {"id": "sc-sample", "kind": "sample", "name": "Sample set"},
     {"id": "sc-file", "kind": "file", "name": "set.ply", "file": "C:/scenes/set.ply"},
+    {"id": "sc-glb", "kind": "glb", "name": "hut.glb", "fileId": "01M535B4GTFILE10000000000", "cameras": [{"name": "camera", "animated": True, "duration": 4.5}]},
 ]
 
 
-def test_migrating_drops_the_simulated_scenes_and_the_3d_shots_with_their_old_keyframes(starter):
+def test_migrating_drops_the_simulated_scenes_the_blender_scenes_and_the_3d_shots_with_their_old_keyframes(starter):
     legacy = copy.deepcopy(starter)
     legacy["scenes"] = [*LEGACY_SCENES, _splat_scene()]
     legacy["plans3d"] = [
@@ -612,7 +601,36 @@ def test_a_stored_project_is_read_through_the_migration(project_db, store, start
 
     stored = projects.get_project(created["id"])["doc"]
 
-    assert "controls" not in stored and stored["references"][0]["type"] == "Capture 3D"
+    assert "controls" not in stored
+    assert (stored["references"][0]["type"], stored["references"][0]["role"]) == ("Capture 3D", "Décor")
+
+
+def test_migrating_turns_the_3d_set_role_into_the_set_role_whatever_the_family_and_keeps_the_other_roles(starter):
+    def reference(reference_id, space, role):
+        return {"id": reference_id, "name": reference_id, "space": space, "type": "Capture 3D", "assetId": "a", "role": role, "scope": None}
+
+    starter["references"] = [
+        reference("set3d", "decors3d", "Décor 3D"),
+        reference("identity-set3d", "identite", "Décor 3D"),
+        reference("set", "decors3d", "Décor"),
+        reference("identity", "identite", "Identité"),
+        reference("empty", "decors3d", ""),
+    ]
+    before = copy.deepcopy(starter)
+
+    migrated = migrate(starter)
+
+    assert starter == before
+    assert [(item["id"], item["space"], item["role"]) for item in migrated["references"]] == [
+        ("set3d", "decors3d", "Décor"),
+        ("identity-set3d", "identite", "Décor"),
+        ("set", "decors3d", "Décor"),
+        ("identity", "identite", "Identité"),
+        ("empty", "decors3d", ""),
+    ]
+    assert migrated["references"][2] is starter["references"][2]
+    validate_doc(migrated)
+    assert migrate(migrated) is migrated
 
 
 def test_migrating_a_document_with_empty_3d_shots_and_control_videos_drops_the_two_keys_and_nothing_else(starter):

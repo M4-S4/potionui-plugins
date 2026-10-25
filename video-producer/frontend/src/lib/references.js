@@ -58,7 +58,7 @@ export const families = [
 		}
 	}
 ];
-const roles = { identite: 'Identité', decors3d: 'Décor 3D', mouvement: 'Mouvement', [SOUND_SPACE]: SOUND_ROLE };
+const roles = { identite: 'Identité', decors3d: 'Décor', mouvement: 'Mouvement', [SOUND_SPACE]: SOUND_ROLE };
 
 export { refMediaKind, typesOf };
 
@@ -81,7 +81,6 @@ export function refRoleLabel(role) {
 	if (role === 'Style') return t('lib.refRole.style');
 	if (role === 'Décor') return t('lib.refRole.set');
 	if (role === 'Objet') return t('lib.refRole.object');
-	if (role === 'Décor 3D') return t('lib.refRole.set3d');
 	if (role === 'Mouvement') return t('lib.refRole.motion');
 	if (role === 'Caméra') return t('lib.refRole.camera');
 	if (role === SOUND_ROLE) return t('lib.refRole.sound');
