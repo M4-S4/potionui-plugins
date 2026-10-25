@@ -26,6 +26,7 @@
 		storeCaptures
 	} from '../../lib/scene.svelte.js';
 	import { FOCAL_RANGE, ROLL_RANGE, lowestFocal } from '../../lib/scene3d/camera.js';
+	import { STREAK_SHOWN, STREAK_WARN } from '../../lib/scene3d/streaks.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
 	import SceneViewer from '../scene/SceneViewer.svelte';
@@ -196,8 +197,14 @@
 									<span class="absolute inset-0 flex items-center justify-center text-2xs text-fg-subtle">{t('modals.reframe.none')}</span>
 								{/if}
 							</div>
+							{#if shot?.assetId}
+								<p class="text-xs text-fg-subtle">{t('modals.reframe.original')}</p>
+							{/if}
 							{#if shot && empty(shot) > 0.005}
 								<p class="text-xs {empty(shot) > 0.03 ? 'text-warning' : 'text-fg-subtle'}">{t('modals.reframe.empty', { value: percent(empty(shot)) })}</p>
+							{/if}
+							{#if shot?.streaks != null && shot.streaks >= STREAK_SHOWN}
+								<p class="text-xs {shot.streaks > STREAK_WARN ? 'text-warning' : 'text-fg-subtle'}">{t('modals.reframe.streaks', { value: percent(shot.streaks) })}</p>
 							{/if}
 							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'camera', class: 'w-full', disabled: !ready || locked, onclick: () => take(usage) }}>{usage === 'first' ? t('modals.reframe.takeFirst') : t('modals.reframe.takeLast')}</HostUi>
 						</div>

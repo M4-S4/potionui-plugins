@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
 	FOCAL_RANGE,
+	atSource,
 	boundCamera,
 	deviation,
 	deviationLevel,
@@ -10,6 +11,7 @@ import {
 	dollyCamera,
 	focalToFov,
 	fovToFocal,
+	fitsFrame,
 	fromSpherical,
 	holesMatter,
 	horizontalFov,
@@ -254,4 +256,18 @@ test('reframing tool: the shot editor, the Director and the Shot menu open it, a
 	assert.doesNotMatch(read('../VideoProducerPage.svelte'), /SceneViewer|workspace === 'scene'/);
 	assert.match(read('./scene.svelte.js'), /import\('\.\/scene3d\/engine\.js'\)/);
 	assert.doesNotMatch(read('./scene.svelte.js'), /ui\.workspace/);
+});
+
+test('source view: only the exact source camera counts, and the source picture stands in for it only when it has the frame of the project', () => {
+	const source = { pos: [0, 0, 0], target: [0, 0, -4], focal: 26, roll: 0 };
+	assert.equal(atSource({ ...source, pos: [...source.pos], target: [...source.target] }, source), true);
+	assert.equal(atSource(orbitCamera(source, 0.5, 0), source), false);
+	assert.equal(atSource({ ...source, focal: 27 }, source), false);
+	assert.equal(atSource({ ...source, roll: 1 }, source), false);
+	assert.equal(atSource(dollyCamera(source, 0.99), source), false);
+	assert.equal(atSource(null, source), false);
+	assert.equal(fitsFrame({ width: 1280, height: 720 }, 16 / 9), true);
+	assert.equal(fitsFrame({ width: 1500, height: 1000 }, 16 / 9), false);
+	assert.equal(fitsFrame({ width: 0, height: 720 }, 16 / 9), false);
+	assert.equal(fitsFrame(null, 16 / 9), false);
 });

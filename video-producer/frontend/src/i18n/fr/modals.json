@@ -162,6 +162,8 @@
 	"reframe.clear": "Retirer cette capture",
 	"reframe.none": "Pas encore de capture",
 	"reframe.empty": "Environ {value} % de l’image est vide : des trous dans la scène.",
+	"reframe.original": "Vue d’origine : l’image source est reprise telle quelle.",
+	"reframe.streaks": "Environ {value} % de l’image en traînées : le premier plan s’étire, la prise le reprendra.",
 	"reframe.takeFirst": "Capturer la première image",
 	"reframe.takeLast": "Capturer la dernière image",
 	"reframe.toDraft": "Les captures vont dans l’éditeur de plan et sont enregistrées avec lui.",

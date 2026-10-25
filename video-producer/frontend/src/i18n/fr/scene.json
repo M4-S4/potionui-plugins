@@ -10,6 +10,7 @@
 	"sourceView": "Vue d’origine",
 	"gap": "{angle}° · {shift} % de la vue d’origine",
 	"holes": "Trous probables",
+	"streaks": "Traînées : {value} % de l’image",
 	"default.name": "Scène 3D",
 	"status.queued": "En attente dans la file de génération",
 	"status.running": "Construction de la scène",

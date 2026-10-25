@@ -162,6 +162,8 @@
 	"reframe.clear": "Remove this capture",
 	"reframe.none": "No capture yet",
 	"reframe.empty": "About {value} % of the frame is empty: holes in the scene.",
+	"reframe.original": "Source view: the source picture is used as it is.",
+	"reframe.streaks": "About {value} % of the frame is streaks: the foreground stretches, and the take will keep it.",
 	"reframe.takeFirst": "Capture the first frame",
 	"reframe.takeLast": "Capture the last frame",
 	"reframe.toDraft": "The captures go into the shot editor and are saved with it.",

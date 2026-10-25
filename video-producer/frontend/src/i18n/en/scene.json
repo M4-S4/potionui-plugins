@@ -10,6 +10,7 @@
 	"sourceView": "Source view",
 	"gap": "{angle}° · {shift} % from the source view",
 	"holes": "Holes likely",
+	"streaks": "Streaks: {value} % of the frame",
 	"default.name": "3D scene",
 	"status.queued": "Waiting in the generation queue",
 	"status.running": "Building the scene",
