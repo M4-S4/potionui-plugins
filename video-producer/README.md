@@ -727,7 +727,7 @@ A job that ends badly carries `error.code`: `ffmpeg_failed` (the assembly failed
 - Takes are ordinary PotionUI generations: their files and thumbnails stay in the user's history and gallery, under the user who owns the project, and the page plays them from `/api/media/generations/<generation id>/<file name>`. Deleting a take, or its project, in Video Producer does not delete the generation or its files. A user who deletes the generation from the gallery breaks the playback of the take.
 - Projects are rows of the database, not files (see Projects and media). Imported media are not copied: a project keeps a reference to the library item or to the generation file.
 - Seam frames and the copy of each export are library items of the user, and count in that user's storage plan.
-- The splat files that the former Reframe from 3D tool built are left under `video_producer/scenes/<project id>/`: nothing reads, sweeps or deletes them any more, deleting their project included. They stay on the disk, with the rows of their two tables (see Projects and media › Tables), until a cleanup removes them.
+- Earlier versions wrote the splat files of the former Reframe from 3D tool under `video_producer/scenes/<project id>/`. Nothing reads, writes or deletes that folder any more: an administrator can delete it by hand.
 
 ## Projects and media
 
@@ -744,7 +744,7 @@ The projects of every user are saved on the server, in the plugin's tables, as t
 | `video_producer_calibration` | One row per finished take, for the time estimate: `preset_id`, `backend_id`, `resolution`, `seconds`, `duration_ms`, `created_at`. See Generation › Time calibration. |
 | `video_producer_export_jobs` | One row per video export: `id`, `project_id`, `user_id`, `format`, `resolution`, `status`, `progress`, `step`, `file_name`, `file_size`, `media_item_id`, `media_url`, `error_code`, `error_message`, `created_at`, `started_at`, `finished_at`. See Exports › Tables. |
 
-Two more tables, `video_producer_scene_jobs` and `video_producer_scene_files`, are left from an earlier version, which built 3D scenes for its Reframe from 3D tool. They are still created at startup, but nothing reads or writes them any more, and deleting a project leaves their rows. A later cleanup will remove them, with the splat files they describe (see Storage and exports).
+Earlier versions also had `video_producer_scene_jobs` and `video_producer_scene_files`, for the 3D scenes of the former Reframe from 3D tool. Startup drops both tables, with their rows and indexes, from a database that still has them.
 
 The columns of the takes table beyond the first version (`director_mode`, `model_id`, `progress`, `step`, `variant`, `chosen`, `flag`, `profile`, `prompt_text`, `file_id`, `units_reserved`, `started_at`, `user_id`, `request`, `label`, `shot_revision`) are added at startup to a database that lacks them, and the takes without a label are then labelled from `chosen` and `flag` (see Generation › Labels).
 
