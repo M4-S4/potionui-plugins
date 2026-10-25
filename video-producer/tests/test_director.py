@@ -4,6 +4,7 @@ import pytest
 
 from backend import director, presets
 from backend.director import DirectorError
+from backend.projects import migrate
 
 SHOT = {"id": "s1", "start": 0, "dur": 4, "label": "Opening"}
 TEXT_ONLY_WARNING = {
@@ -724,11 +725,11 @@ def _video_asset(asset_id, item_id, seconds=4.0, kind="video"):
     return {"id": asset_id, "kind": kind, "name": asset_id, "origin": {"kind": "library", "itemId": item_id}, "srcDur": seconds}
 
 
-def _guide(control_id, asset_id, shot_id="s1", stale=False, start=0, dur=4):
-    return {"id": control_id, "shotId": shot_id, "start": start, "dur": dur, "stale": stale, "planId": f"plan-{control_id}", "assetId": asset_id}
+def _guide(control_id, asset_id, shot_id="s1"):
+    return {"id": control_id, "shotId": shot_id, "name": "Orbit", "start": 0, "dur": 4, "guidance": 65, "source": "scene3d", "stale": False, "planId": f"plan-{control_id}", "assetId": asset_id}
 
 
-def _guided(core, make_doc, controls, assets=(), references=(), direction=None, language="en", prompt="The hut at dawn."):
+def _guided(core, make_doc, assets=(), references=(), direction=None, language="en", prompt="The hut at dawn."):
     for item_id, value, kind in (
         ("lib-orbit", "uploads/orbit.mp4", "video"),
         ("lib-dolly", "uploads/dolly.mp4", "video"),
@@ -749,7 +750,6 @@ def _guided(core, make_doc, controls, assets=(), references=(), direction=None, 
         prompts=[{"id": "p", "shotId": "s1", "text": prompt}],
         assets=[*base, *assets],
         references=list(references),
-        controls=list(controls),
         direction={"mode": "Ref2VA", **(direction or {})},
         language=language,
     )
@@ -768,11 +768,10 @@ def _splat(scene_id="scene-1", source="hero"):
             "jobId": "j1", "fileId": "f1", "count": 10, "view": {"fov": 32, "aspect": 1.73, "depth": 4}, "error": None}
 
 
-def test_a_ref2va_shot_no_longer_sends_its_3d_guide_video_nor_the_picture_of_its_scene_and_names_no_camera_path(core, make_doc):
+def test_a_ref2va_shot_sends_its_motion_reference_and_not_the_picture_of_the_3d_scene_of_the_project_and_names_no_camera_path(core, make_doc):
     core.use_h3()
     references = [{"id": "r1", "assetId": "walk", "space": "mouvement", "scope": {"type": "shot", "shotId": "s1"}}]
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], references=references)
-    doc["plans3d"] = [{"id": "plan-c1", "shotId": "s1", "sceneId": "scene-1", "name": "Orbit", "start": 0, "dur": 4, "keyframes": []}]
+    doc = _guided(core, make_doc, references=references)
     doc["scenes"] = [_splat()]
 
     plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
@@ -791,19 +790,23 @@ def test_a_ref2va_shot_no_longer_sends_its_3d_guide_video_nor_the_picture_of_its
     assert "guides" not in plan.summary()
 
 
-def test_a_ref2va_shot_whose_only_reference_was_its_3d_guide_is_blocked_for_lack_of_references(core, make_doc):
+def test_an_older_ref2va_shot_whose_only_reference_was_its_3d_guide_gets_its_video_back_as_its_motion_reference(core, make_doc):
     core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
+    older = _guided(core, make_doc)
+    older["controls"] = [_guide("c1", "orbit")]
 
-    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
+    plans = _plans(core, migrate(older), preset_id=presets.MINIMAX_H3)
 
-    assert plans.shots == [] and [block["code"] for block in plans.blocks] == ["no_references"]
+    assert plans.blocks == []
+    (plan,) = plans.shots
+    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
+    assert _sections(plan.prompt_text)["subject_definitions"] == "<Video 1> is the source of the motion of [Shot 1]."
 
 
 def test_the_six_sections_keep_their_english_labels_and_markers_and_follow_the_prompt_language(core, make_doc):
     core.use_h3()
     references = [{"id": "r1", "assetId": "walk", "space": "mouvement", "scope": None}]
-    doc = _guided(core, make_doc, [], references=references, language="fr", prompt="La cabane à l'aube")
+    doc = _guided(core, make_doc, references=references, language="fr", prompt="La cabane à l'aube")
     doc["clips"][0]["dur"] = 4.5
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
@@ -828,7 +831,7 @@ def test_each_reference_of_a_ref2va_shot_is_defined_and_kept_by_its_space(core, 
         {"id": "r4", "assetId": "swim", "space": "decors3d", "scope": None},
     ]
     voice = {"id": "voice", "kind": "audio", "name": "voice", "origin": {"kind": "library", "itemId": "lib-voice"}}
-    doc = _guided(core, make_doc, [], references=references, assets=[voice])
+    doc = _guided(core, make_doc, references=references, assets=[voice])
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
 
@@ -849,37 +852,16 @@ def test_each_reference_of_a_ref2va_shot_is_defined_and_kept_by_its_space(core, 
 
 def test_the_shot_prompt_outside_ref2va_is_the_instruction_then_the_direction_without_any_section(core, make_doc):
     core.use_wan()
-    doc = _guided(core, make_doc, [], direction={"mode": "FL2VA", "univers": "A harbour."})
+    doc = _guided(core, make_doc, direction={"mode": "FL2VA", "univers": "A harbour."})
 
     (plan,) = _plans(core, doc).shots
 
     assert plan.prompt_text == "The hut at dawn.\nA harbour."
 
 
-@pytest.mark.parametrize("stale", [False, True])
-def test_a_3d_guide_gives_no_warning_and_no_reference(core, make_doc, stale):
-    core.use_wan()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit", stale=stale)], direction={"mode": "FL2VA"})
-
-    plans = _plans(core, doc)
-
-    (plan,) = plans.shots
-    assert "references" not in plan.request["form_data"] and plan.prompt_text == "The hut at dawn."
-    assert [warning["code"] for warning in plans.warnings] == ["fl2va_no_frame"]
-
-
-def test_a_3d_guide_on_a_cloud_shot_gives_no_warning(core, make_doc):
-    core.use_openrouter()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], direction={"mode": "FL2VA"})
-
-    plans = _plans(core, doc, preset_id=presets.OPENROUTER_VIDEO, model_id="cm-veo")
-
-    assert [warning["code"] for warning in plans.warnings] == ["fl2va_no_frame"]
-
-
-def test_ltx_2_5_runs_a_shot_with_a_3d_guide_from_its_first_frame_without_any_ic_lora(core, make_doc):
+def test_ltx_2_5_runs_a_shot_from_its_first_frame_without_any_ic_lora(core, make_doc):
     core.use_ltx25()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], direction={"mode": "FL2VA"})
+    doc = _guided(core, make_doc, direction={"mode": "FL2VA"})
     doc["frames"] = [_frame("f1", "hero", "first")]
 
     plans = _plans(core, doc, preset_id=presets.LTX_2_5)

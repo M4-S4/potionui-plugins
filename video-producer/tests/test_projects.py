@@ -113,20 +113,6 @@ def _rich(doc):
             "sceneId": "01M535B4GTSCENE00000000000",
         }
     )
-    doc["controls"].append(
-        {
-            "id": "01M535B4GTCONTROL000000000",
-            "shotId": None,
-            "name": "Guide 3D",
-            "start": 0,
-            "dur": 5,
-            "guidance": 65,
-            "source": "scene3d",
-            "stale": True,
-            "planId": "01M535B4GTPLAN000000000000",
-            "assetId": "01M535B4GTVIDEO00000000000",
-        }
-    )
     doc["scenes"] += [
         _splat_scene(),
         {"id": "01M535B4GTSCENEFILE0000000", "kind": "splatfile", "name": "set.spz", "fileId": "01M535B4GTFILE00000000000", "format": "spz", "view": None},
@@ -138,24 +124,6 @@ def _rich(doc):
             "cameras": [{"name": "camera", "animated": True, "duration": 4.5}, {"name": "still", "animated": False, "duration": None}],
         },
     ]
-    doc["plans3d"].append(
-        {
-            "id": "01M535B4GTPLAN000000000000",
-            "shotId": clip["id"],
-            "sceneId": "01M535B4GTSCENE00000000000",
-            "name": "Orbit",
-            "start": 0,
-            "dur": 5,
-            "source": "trajectory",
-            "preset": "orbit",
-            "amount": 10,
-            "camera": None,
-            "keyframes": [
-                {"id": "01M535B4GTKEY0000000000000", "t": 0, "pos": [-0.7, 0, 0], "target": [0, 0, -4], "focal": 30, "roll": 0},
-                {"id": "01M535B4GTKEY1000000000000", "t": 5, "pos": [0.7, 0, 0], "target": [0, 0, -4], "focal": 30, "roll": 0},
-            ],
-        }
-    )
     doc["references"] += [
         {
             "id": "01M535B4GTREF0000000000000",
@@ -224,14 +192,13 @@ def test_a_document_using_every_collection_is_valid(starter):
     validate_doc(_rich(starter))
 
 
-def test_the_reference_project_with_its_splat_scene_plan_3d_and_guide_is_valid_and_current():
+def test_the_reference_project_with_its_splat_scene_is_valid_and_current():
     doc = _fixture("exports/reference-project")["doc"]
 
     assert validate_doc(doc) == canonical(doc)
     assert migrate(doc) is doc
     assert [scene["kind"] for scene in doc["scenes"]] == ["splat"]
-    assert doc["plans3d"][0]["sceneId"] == doc["scenes"][0]["id"]
-    assert doc["controls"][0]["planId"] == doc["plans3d"][0]["id"]
+    assert "controls" not in doc and "plans3d" not in doc
 
 
 def test_an_audio_asset_from_sound_design_and_a_video_asset_without_audio_fields_are_valid(starter):
@@ -459,76 +426,19 @@ def test_each_scene_kind_of_the_contract_is_valid(starter, scene):
     validate_doc(starter)
 
 
-def _plan(**fields):
-    return {
-        "id": "p",
-        "shotId": None,
-        "sceneId": None,
-        "name": "Plan",
-        "start": 0,
-        "dur": 4,
-        "keyframes": [{"id": "k", "t": 0, "pos": [0, 1.5, 8], "target": [0, 1.5, 0], "focal": 35, "roll": 0}],
-        **fields,
-    }
-
-
-def _key(**fields):
-    return {"id": "k", "t": 0, "pos": [0, 1, 2], "target": [0, 0, 0], "focal": 35, "roll": 0, **fields}
-
-
-@pytest.mark.parametrize(
-    "fields",
-    [
-        {},
-        {"source": "manual", "preset": None, "amount": None, "camera": None},
-        {"source": "trajectory", "preset": "crane", "amount": 12.5, "camera": None},
-        {"source": "blender", "preset": None, "amount": None, "camera": "camera"},
-    ],
-)
-def test_a_plan_3d_may_say_where_its_keyframes_come_from(starter, fields):
-    starter["plans3d"] = [_plan(**fields)]
-
-    validate_doc(starter)
-
-
-@pytest.mark.parametrize(
-    "plan, path",
-    [
-        (_plan(source="sample"), "$.plans3d[0].source"),
-        (_plan(preset="spiral"), "$.plans3d[0].preset"),
-        (_plan(amount="10"), "$.plans3d[0].amount"),
-        (_plan(camera=3), "$.plans3d[0].camera"),
-        (_plan(keyframes=[_key(pos=[0, 1])]), "$.plans3d[0].keyframes[0].pos"),
-        (_plan(keyframes=[_key(pos=[0, 1, 2, 3])]), "$.plans3d[0].keyframes[0].pos"),
-        (_plan(keyframes=[_key(target=[0, "0", 0])]), "$.plans3d[0].keyframes[0].target[1]"),
-        (_plan(keyframes=[{key: value for key, value in _key().items() if key != "roll"}]), "$.plans3d[0].keyframes[0]"),
-        (_plan(keyframes=[{"id": "k", "t": 0, "az": 0, "el": 0, "dist": 8, "focal": 35, "height": 1.5, "roll": 0}]), "$.plans3d[0].keyframes[0]"),
-    ],
-)
-def test_a_plan_3d_outside_the_contract_is_refused(starter, plan, path):
-    starter["plans3d"] = [plan]
-
-    assert str(_error(starter)).startswith(f"{path}: ")
-
-
 FRAME_ITEM = {"id": "f", "shotId": None, "time": 0, "assetId": None, "role": "first", "strength": 100}
-CONTROL_ITEM = {"id": "c", "shotId": None, "name": "", "start": 0, "dur": 4, "guidance": 65, "source": "scene3d", "stale": False}
 
 
-@pytest.mark.parametrize(
-    "collection, item, key, wrong",
-    [("frames", FRAME_ITEM, "sceneId", ""), ("controls", CONTROL_ITEM, "planId", 3), ("controls", CONTROL_ITEM, "assetId", "")],
-)
-def test_the_scene_of_a_frame_and_the_plan_and_video_of_a_control_are_optional_ids_or_null(starter, collection, item, key, wrong):
-    starter[collection] = [dict(item)]
+def test_the_scene_of_a_frame_is_an_optional_id_or_null(starter):
+    starter["frames"] = [dict(FRAME_ITEM)]
     validate_doc(starter)
 
-    for value, valid in ((wrong, False), (None, True), ("01M535B4GTID", True)):
-        starter[collection][0][key] = value
+    for value, valid in (("", False), (None, True), ("01M535B4GTID", True)):
+        starter["frames"][0]["sceneId"] = value
         if valid:
             validate_doc(starter)
         else:
-            assert str(_error(starter)).startswith(f"$.{collection}[0].{key}: ")
+            assert str(_error(starter)).startswith("$.frames[0].sceneId: ")
 
 
 LEGACY_SCENES = [
@@ -537,37 +447,27 @@ LEGACY_SCENES = [
 ]
 
 
-def _legacy_plan(plan_id, scene_id):
-    return {
-        "id": plan_id,
-        "shotId": None,
-        "sceneId": scene_id,
-        "name": "Orbit",
-        "start": 0,
-        "dur": 5,
-        "keyframes": [
-            {"id": f"{plan_id}-k0", "t": 0, "az": 90, "el": 30, "dist": 10, "focal": 30, "height": 1.5},
-            {"id": f"{plan_id}-k1", "t": 5, "az": 0, "el": 0, "dist": 13, "focal": 50, "height": 0},
-        ],
-    }
-
-
-def test_migrating_drops_the_simulated_scenes_unlinks_their_plans_and_turns_orbit_keyframes_into_positions(starter):
+def test_migrating_drops_the_simulated_scenes_and_the_3d_shots_with_their_old_keyframes(starter):
     legacy = copy.deepcopy(starter)
     legacy["scenes"] = [*LEGACY_SCENES, _splat_scene()]
-    legacy["plans3d"] = [_legacy_plan("p1", "sc-sample"), _legacy_plan("p2", "sc-file"), _legacy_plan("p3", "01M535B4GTSCENE00000000000")]
+    legacy["plans3d"] = [
+        {
+            "id": "p1",
+            "shotId": None,
+            "sceneId": "sc-sample",
+            "name": "Orbit",
+            "start": 0,
+            "dur": 5,
+            "keyframes": [{"id": "p1-k0", "t": 0, "az": 90, "el": 30, "dist": 10, "focal": 30, "height": 1.5}],
+        }
+    ]
     before = copy.deepcopy(legacy)
 
     migrated = migrate(legacy)
 
     assert legacy == before
     assert migrated["scenes"] == [_splat_scene()]
-    assert [plan["sceneId"] for plan in migrated["plans3d"]] == [None, None, "01M535B4GTSCENE00000000000"]
-    assert migrated["plans3d"][0]["keyframes"] == [
-        {"id": "p1-k0", "t": 0, "pos": [8.660254, 6.5, 0.0], "target": [0, 1.5, 0], "focal": 30, "roll": 0},
-        {"id": "p1-k1", "t": 5, "pos": [0.0, 0.0, 13.0], "target": [0, 0, 0], "focal": 50, "roll": 0},
-    ]
-    assert [key["pos"] for key in migrated["plans3d"][2]["keyframes"]] == [[8.660254, 6.5, 0.0], [0.0, 0.0, 13.0]]
+    assert "plans3d" not in migrated
     validate_doc(migrated)
     assert migrate(migrated) is migrated
 
@@ -586,29 +486,34 @@ def test_migrating_drops_the_3d_captures_without_an_image_and_keeps_the_other_fr
     assert migrate(migrated) is migrated
 
 
-def test_migrating_drops_the_simulated_3d_guides_and_keeps_those_with_a_3d_shot_or_a_video(starter):
+def test_migrating_drops_every_control_video_once_each_3d_guide_with_a_video_is_a_mouvement_reference(starter):
     rich = _rich(starter)
-    guide = rich["controls"][0]
-    simulated = {**guide, "id": "simulated", "planId": None, "assetId": None}
-    legacy = {key: value for key, value in simulated.items() if key not in ("planId", "assetId")}
-    legacy["id"] = "legacy"
-    imported = {**simulated, "id": "imported", "source": "import"}
+    shot = rich["clips"][0]["id"]
+    video = "01M535B4GTVIDEO00000000000"
+    converted = _control("01M535B4GTCONTROL000000000", video, shot_id=shot)
+    simulated = _control("simulated", None)
     rich["controls"] = [
         simulated,
-        guide,
-        legacy,
+        converted,
+        {k: v for k, v in simulated.items() if k not in ("planId", "assetId")},
         {**simulated, "id": "planned", "planId": "01M535B4GTPLAN000000000000"},
-        {**simulated, "id": "rendered", "assetId": "01M535B4GTVIDEO00000000000"},
+        _control("rendered", video, shot_id=shot),
         {**simulated, "id": "empty", "planId": "", "assetId": ""},
-        imported,
+        _control("imported", video, shot_id=shot, source="import"),
     ]
+    rich["plans3d"] = [{"id": "01M535B4GTPLAN000000000000", "shotId": shot, "sceneId": None, "name": "Orbit", "start": 0, "dur": 5, "keyframes": []}]
     before = copy.deepcopy(rich)
 
     migrated = migrate(rich)
 
     assert rich == before
-    assert [control["id"] for control in migrated["controls"]] == ["01M535B4GTCONTROL000000000", "planned", "rendered", "imported"]
-    assert migrated["controls"][0] is guide
+    assert "controls" not in migrated and "plans3d" not in migrated
+    assert [(r["id"], r["type"]) for r in migrated["references"] if r["space"] == "mouvement"] == [
+        ("01M535B4GTREF2000000000000", "Trajectoire"),
+        ("01M535B4GTCONTROL000000000", "Control video"),
+        ("rendered", "Control video"),
+    ]
+    assert migrated["references"][-1] == {"id": "rendered", "name": "Guide rendered", "space": "mouvement", "type": "Control video", "assetId": video, "role": "Mouvement", "scope": {"type": "shot", "shotId": shot}}
     validate_doc(migrated)
     assert migrate(migrated) is migrated
 
@@ -631,7 +536,6 @@ def test_migrating_turns_the_retired_3d_set_references_into_captures_when_they_h
         reference("other-space", "identite", "Gaussian Splat", None),
         hut,
     ]
-    rich["controls"] = []
     before = copy.deepcopy(rich)
 
     migrated = migrate(rich)
@@ -689,7 +593,7 @@ def test_migrating_adds_the_video_of_each_3d_guide_once_as_a_mouvement_reference
     migrated = migrate(starter)
 
     assert starter == before
-    assert migrated["controls"] is starter["controls"]
+    assert "controls" not in migrated
     assert migrated["references"][0] is starter["references"][0]
     assert migrated["references"][1:] == [
         {"id": "linked", "name": "Guide linked", "space": "mouvement", "type": "Control video", "assetId": video, "role": "Mouvement", "scope": {"type": "shot", "shotId": second}},
@@ -708,42 +612,44 @@ def test_a_stored_project_is_read_through_the_migration(project_db, store, start
 
     stored = projects.get_project(created["id"])["doc"]
 
-    assert stored["controls"] == [] and stored["references"][0]["type"] == "Capture 3D"
+    assert "controls" not in stored and stored["references"][0]["type"] == "Capture 3D"
 
 
-def test_migrating_the_document_of_a_user_with_scenes_and_empty_plans_3d_keeps_it_as_it_is(starter):
+def test_migrating_a_document_with_empty_3d_shots_and_control_videos_drops_the_two_keys_and_nothing_else(starter):
     starter["scenes"] = []
-    starter["plans3d"] = []
 
     assert migrate(starter) is starter
+    assert migrate({**starter, "plans3d": [], "controls": []}) == starter
     validate_doc(starter)
 
 
-SCENE_COLLECTIONS = ("controls", "plans3d", "scenes")
-
-
-@pytest.mark.parametrize("keys", [("controls",), ("plans3d",), ("scenes",), SCENE_COLLECTIONS])
-def test_a_document_without_its_3d_collections_is_valid_and_migrated_as_it_is(starter, keys):
-    for key in keys:
-        del starter[key]
+def test_a_document_without_its_scenes_is_valid_and_migrated_as_it_is(starter):
+    del starter["scenes"]
 
     assert migrate(starter) is starter
     assert validate_doc(starter) == canonical(starter)
-    assert not any(key in json.loads(canonical(starter)) for key in keys)
+    assert "scenes" not in json.loads(canonical(starter))
 
 
-@pytest.mark.parametrize("key", SCENE_COLLECTIONS)
-def test_a_3d_collection_that_is_there_is_still_checked(starter, key):
-    starter[key] = None
+def test_the_scenes_when_they_are_there_are_still_checked(starter):
+    starter["scenes"] = None
 
-    assert str(_error(starter)).startswith(f"$.{key}: ")
+    assert str(_error(starter)).startswith("$.scenes: ")
 
 
-def test_a_project_stored_without_its_3d_collections_is_read_and_saved_without_them(project_db, store, starter):
+@pytest.mark.parametrize("key", ["controls", "plans3d"])
+def test_the_3d_shots_and_control_videos_are_no_longer_part_of_the_schema_and_the_migration_drops_them(starter, key):
+    starter[key] = []
+
+    assert _error(starter).code == "invalid_doc"
+    assert key not in migrate(starter)
+    validate_doc(migrate(starter))
+
+
+def test_a_project_stored_without_its_scenes_is_read_and_saved_without_them(project_db, store, starter):
     from backend import projects
 
-    for key in SCENE_COLLECTIONS:
-        del starter[key]
+    del starter["scenes"]
     created = projects.create_project("user-1", starter)
     starter["synopsis"] = "Two hikers climb at dawn."
     saved = projects.save_project(created["id"], starter, created["version"])
@@ -752,15 +658,26 @@ def test_a_project_stored_without_its_3d_collections_is_read_and_saved_without_t
     assert projects.get_project(created["id"])["doc"] == starter
 
 
-def test_the_3d_collections_of_a_stored_project_come_back_untouched(project_db, store):
+def test_an_older_project_is_stored_without_its_3d_shots_and_control_videos_with_its_scenes_and_its_guide_as_a_mouvement_reference(project_db, store):
     from backend import projects
 
     doc = _fixture("exports/reference-project")["doc"]
-    created = projects.create_project("user-1", doc)
+    shot = doc["clips"][2]["id"]
+    video = next(asset["id"] for asset in doc["assets"] if asset["kind"] == "video" and not asset["id"].startswith("gen-"))
+    older = {
+        **doc,
+        "plans3d": [{"id": "plan", "shotId": shot, "sceneId": doc["scenes"][0]["id"], "name": "Orbit", "start": 9.2, "dur": 3, "keyframes": []}],
+        "controls": [_control("guide", video, shot_id=shot), _control("simulated", None)],
+    }
+    created = projects.create_project("user-1", older)
     stored = projects.get_project(created["id"])["doc"]
 
-    assert {key: stored[key] for key in SCENE_COLLECTIONS} == {key: doc[key] for key in SCENE_COLLECTIONS}
-    assert all(stored[key] for key in SCENE_COLLECTIONS)
+    assert "controls" not in stored and "plans3d" not in stored
+    assert stored["scenes"] == doc["scenes"]
+    assert stored["references"] == [
+        *doc["references"],
+        {"id": "guide", "name": "Guide guide", "space": "mouvement", "type": "Control video", "assetId": video, "role": "Mouvement", "scope": {"type": "shot", "shotId": shot}},
+    ]
 
 
 def test_migrating_a_document_already_in_the_new_shape_returns_it_as_it_is(starter):
@@ -769,11 +686,17 @@ def test_migrating_a_document_already_in_the_new_shape_returns_it_as_it_is(start
     assert migrate(rich) is rich
 
 
-def test_migrating_leaves_malformed_scene_collections_to_the_validation(starter):
+def test_migrating_leaves_malformed_scenes_to_the_validation(starter):
     starter["scenes"] = {"kind": "sample"}
-    starter["plans3d"] = [3, {"id": "p", "keyframes": "none"}]
 
     assert migrate(starter) is starter
+
+
+def test_migrating_drops_malformed_3d_shots_and_control_videos_instead_of_refusing_the_document(starter):
+    migrated = migrate({**starter, "plans3d": [3, {"id": "p", "keyframes": "none"}], "controls": {"id": "c"}})
+
+    assert migrated == starter
+    validate_doc(migrated)
 
 
 @pytest.mark.parametrize(

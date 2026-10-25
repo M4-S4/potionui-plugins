@@ -33,17 +33,12 @@ function makeDoc() {
 			{ id: 'f4', shotId: 's2', time: 6, assetId: 'pic', role: 'Capture 3D', strength: 75, sceneId: 'sc1' },
 			{ id: 'f5', shotId: 's2', time: 4, assetId: 'other', role: 'début', strength: 100 }
 		],
-		controls: [
-			{ id: 'c1', shotId: 's1', name: 'Guide 3D', start: 0, dur: 4, guidance: 65, source: 'scene3d', stale: false, planId: 'p1', assetId: 'pic' },
-			{ id: 'c2', shotId: 's2', name: 'Control', start: 4, dur: 4, guidance: 65, source: 'import', stale: false, assetId: 'pic' },
-			{ id: 'c3', shotId: 's2', name: 'Other', start: 4, dur: 4, guidance: 65, source: 'import', stale: false, assetId: 'other' }
-		],
 		scenes: [{ id: 'sc1', kind: 'splat', name: 'Harbour', sourceAssetId: 'pic', sourceTime: null, status: 'done', progress: 1, jobId: null, fileId: 'file', count: 10, view: null, error: null }],
 		prompts: [{ id: 'p-s1', shotId: 's1', start: 0, dur: 4, strength: 75, text: 'Dawn over the harbour' }]
 	};
 }
 
-test('assetUses: every place that holds a media, first and last images apart from the other frames; the Control videos of an older document are not counted', () => {
+test('assetUses: every place that holds a media, first and last images apart from the other frames', () => {
 	const uses = assetUses(makeDoc(), 'pic');
 	assert.deepEqual(Object.keys(uses), USE_KINDS);
 	assert.deepEqual(ids(uses.shots), ['s1']);
@@ -57,7 +52,7 @@ test('assetUses: every place that holds a media, first and last images apart fro
 	assert.equal(useCount(assetUses({ assets: [] }, 'pic')), 0);
 });
 
-test('removeAsset: the shots, references and scenes that held the media stay, emptied; the sounds and frames that placed it go; the Control videos of an older document stay as they are', () => {
+test('removeAsset: the shots, references and scenes that held the media stay, emptied; the sounds and frames that placed it go', () => {
 	const doc = makeDoc();
 	const result = removeAsset(doc, 'pic');
 	assert.equal(result.asset.id, 'pic');
@@ -76,7 +71,6 @@ test('removeAsset: the shots, references and scenes that held the media stay, em
 		]
 	);
 	assert.deepEqual(ids(doc.frames), ['f5']);
-	assert.deepEqual(doc.controls, makeDoc().controls);
 	assert.equal(doc.scenes[0].sourceAssetId, null);
 	assert.equal(useCount(assetUses(doc, 'pic')), 0);
 });
@@ -87,7 +81,6 @@ test('removeAsset: an unused media leaves alone, an unknown one changes nothing'
 	doc.audio.pop();
 	doc.references.pop();
 	doc.frames.pop();
-	doc.controls.pop();
 	const before = JSON.stringify(doc);
 	assert.equal(removeAsset(doc, 'missing'), null);
 	assert.equal(JSON.stringify(doc), before);
@@ -102,7 +95,6 @@ test('removeAsset: what stays emptied survives the document migration, nothing i
 	removeAsset(doc, 'pic');
 	const next = migrate(doc);
 	assert.deepEqual(ids(next.references), ['r1', 'r2', 'r3']);
-	assert.deepEqual(ids(next.controls), ['c1', 'c2', 'c3']);
 	assert.deepEqual(ids(next.scenes), ['sc1']);
 	assert.deepEqual(ids(next.frames), ['f5']);
 	assert.equal(next.clips[0].stage, 'todo');
