@@ -103,5 +103,8 @@
 	"kbd.backspace": "Backspace",
 	"kbd.escape": "Esc",
 	"cmd.scene-new": "New 3D scene from image…",
-	"cmd.scene-import": "Import a splat or Blender file…"
+	"cmd.scene-import": "Import a splat or Blender file…",
+	"cmd.story-window": "Synopsis and breakdown",
+	"cmd.story-view": "Storyboard as a band",
+	"cmd.shot-editor": "Shot editor…"
 }

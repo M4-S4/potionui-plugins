@@ -17,6 +17,8 @@
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
+	import BandView from './BandView.svelte';
+	import ViewSwitch from './ViewSwitch.svelte';
 
 	let size = $state('m');
 	let dragId = $state(null);
@@ -109,6 +111,9 @@
 	}
 </script>
 
+{#if ui.storyView === 'band'}
+	<BandView />
+{:else}
 <section class="isolate flex min-w-0 flex-col bg-canvas" aria-label={t('storyboard.title')}>
 	<div class="flex h-10 shrink-0 items-center gap-3 border-b border-line px-4">
 		<span class="min-w-0 truncate text-sm font-semibold">{t('storyboard.title')}</span>
@@ -121,6 +126,7 @@
 			{/each}
 		</div>
 		<div class="flex shrink-0 items-center gap-3">
+			<ViewSwitch />
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => addShot() }}>{t('storyboard.addShot')}</HostUi>
 			<div class="vp-seg" role="group" aria-label={t('storyboard.size.group')}>
 				{#each sizes as s (s.id)}
@@ -259,3 +265,4 @@
 		</div>
 	</div>
 </section>
+{/if}

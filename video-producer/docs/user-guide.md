@@ -112,6 +112,32 @@ The **Characters and identity** field of the global direction works as before: i
 
 ### Storyboard
 
+The Storyboard has two views, chosen with **Grid** and **Band** in its header (Window › Storyboard as a band); it opens on the band.
+
+#### The band
+
+The band shows the shots to the time scale, so the rhythm of the cut can be read at a glance. At the top, a thin overview of the whole sequence: each shot in the color of its stage, a failed shot in red, a shot in progress striped, an orange tick on a seam to check, the dashed shots of a proposed breakdown and the visible window; click or drag it to scroll the band. Below it, aligned on the same time:
+
+- **Song**: the ruler and the parts of the song, which are the markers (M) placed on it;
+- **V1 · Shots**: one block per shot, as wide as its duration, with the thumbnail of its take repeated along the block, or its first and last frames around a hatched area while it has no take. The block carries its number, the progress of a take in progress (or **Queued**), **Failed** when its latest take failed, **Prompt modified** or **No instruction**, its duration, the sliders icon of an own engine, the waveform icon of its sound and its cast. A marker on the junction of two shots shows the seam: green when it is measured, orange with the issues in its tooltip when it needs a look; click it to compare the two shots in the monitor;
+- **Takes**: up to four takes stacked under each shot, the final on top, then the candidates, the drafts and the rejected takes (hatched), then the takes in progress, queued or failed; the takes of the selected shot show their letter and label. Click a take to see it in the monitor;
+- **Music**: the waveform of the clips of the Music tracks;
+- **Reference sounds**: under each shot, what it sends to its engine as a reference sound (reference tracks and sound references), green when the engine follows it, grey when it is mixed onto the take.
+
+Drag a shot to move it; drag its right edge to change its duration: the next shots follow, the song stays in place, the magnet snaps the cut to the edges of the shots and sounds, the markers and the playhead, and the tooltip says where the cut falls. Ctrl and the mouse wheel zoom around the pointer; **−**, **+**, the slider and **Fit** do the same in the header, which also holds the magnet and **Shot**. A double click on a shot opens the shot editor.
+
+Under the band, the **monitor** plays the cut like the viewer, with the end of the previous shot on its left and the start of the next shot on its right, each with the marker of its seam. With a take chosen in the stack, or with the Up and Down arrow keys, the monitor shows that take outside the cut, with **Rejected**, **Candidate** and **Final**, and Enter uses it. With a seam chosen, the monitor compares the last frame of the previous shot and the first frame of the shot side by side, with the issues and their actions (**Match color**, **Use the previous shot’s last frame**). Next to the monitor, the **quick edit** of the selected shot: its name, its prompt (a change marks the takes **Prompt modified**, as in the shot editor), its duration, its engine, its number of drafts, its key frames, its cast and its sound, **Generate N drafts** and **Shot editor**. The left panel and the timeline are hidden in this view, since the band holds their tracks; the Inspector closes when you open the band and comes back with the Inspector button.
+
+#### Synopsis and breakdown
+
+**Synopsis and breakdown** in the header of the band (D, Production › Synopsis and breakdown, or the left panel button) opens a window under the band, which stays in use. It has three tabs:
+
+- **Breakdown**: the synopsis, the names of the bible it contains, and three methods. **By sentence** is the former breakdown (one sentence, one shot of 3 to 7 s). **On the song** fills the parts of the song at the chosen average length (2 to 8 s) and spreads the sentences over them in order; it needs a song on a Music track. **Assistant** asks the PotionUI assistant, whose proposal comes back in the same list. Each proposed shot can be kept or not, renamed, given another prompt, made shorter or longer, split in two, merged with the next one, moved and removed; it takes the characters and the place of the bible its sentence names. The proposed shots appear dashed on the band and in the overview, at their duration and place, before anything changes. **Insert** places them at the end or after the selected shot; **Add N shots** (Ctrl+Enter) adds them, and Undo removes them.
+- **To produce**: the drafts left and the shots to move to final, with **Generate their drafts**, the takes in the queue and the shots to do, each with **Show**.
+- **To check**: the seams to check (with their actions), the failed takes (**Retry**), the shots whose prompt changed after their takes (**Generate new drafts**) and the shots without a prompt (**Write the prompt**), each with **Show**. The header button shows how many there are.
+
+#### The grid
+
 On the left: the **Synopsis** (one sentence becomes one shot) and **Propose a breakdown**. The **Proposed breakdown** lists the shots: tick the ones to keep, rename them and click **Add N shots at the end**. The breakdown of that button is simple: it only cuts the synopsis into sentences (its tooltip says "Sentence split; ask the assistant for a real breakdown"). The assistant makes a real breakdown and fills the same list (chapter 10). Then **To produce**, with **Drafts left** and **Move to final** (the number of shots and the footage still to do for each), and **Continuity**, which lists the color matches to check, each with **Match color** and **Use the previous shot’s last frame** (chapter 12).
 
 In the center: one card per shot, in order, with its number, its duration, its name, its stage (**Source**, **To generate**, **Draft** or **Final**), its number of takes, **Edit** and its shot prompt. **Edit** opens the shot editor (below). On a shot without takes, clicking the prompt opens the shot editor too; once the shot has a take, its prompt is only shown, so that a click does not change what the takes were made from. When the shot was edited after its take was made, the thumbnail carries **Prompt modified** (the take on the shot, or every take when none is on it, is older than the edit). A sliders icon after the number of takes says that the shot sets its own engine; hover it for the detail ("Own engine: LTX-2.5 · Final · seed 42"). The block of the shot on the timeline carries the same icon. A waveform icon says that the shot sends sound with its generation (a sound reference or a reference track, chapter 13); hover it to read what its engine does with it: green, "Guides the generation: MiniMax H3 follows this sound."; grey, "Will be mixed onto the take, not used as a guide."; amber, "Ignored by this engine: the sound stays in the edit only." Drag a card to move it. The buttons of a card appear when you hover it or select it: the main one follows the stage, **Generate**, **Make final**, **See takes** or **Regenerate**; next to **Generate**, the number of drafts of the shot (×1 to ×8, chapter 8); and three icons show the shot in the viewer, insert a shot after it and delete it. While a take of the shot is in progress, the card shows its step and progress, as the block of the shot does on the timeline, and the button is disabled. The header counts the shots per stage, adds one with **Shot** and sets the size of the thumbnails; a **New shot** tile at the end does the same. In this workspace, the Left and Right arrow keys move the selection to the previous or next shot.
@@ -788,8 +814,15 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Left arrow, Right arrow | Move the playhead by one frame, 1/fps of the project (1 s with Shift) |
 | Left arrow, Right arrow (Storyboard) | Select the previous or next shot |
 | Home, End | Go to the start, Go to the end |
+| D | Synopsis and breakdown (the left panel in the grid) |
+| T, E | The takes of the selected shot (in the monitor in the band), Shot editor |
+| Up arrow, Down arrow (Storyboard) | In the band: previous or next take of the shot in the monitor |
+| Enter (Storyboard) | In the band, with a take in the monitor: use the take |
+| <, > (Storyboard) | In the band: shorten, lengthen the selected shot by 0.5 s |
+| Ctrl+Shift+Left arrow, Ctrl+Shift+Right arrow (Storyboard) | Move the selected shot one place earlier or later |
+| Shift+R (Storyboard) | In the band: compare the seam with the previous shot |
 
-The single-letter shortcuts (A, R, B, I, O, M, N, F and U) can be turned off in **Video Producer › Preferences…**, setting **Single-key shortcuts**, which is on by default. Space, Backspace, Delete, the arrows, Home and End do not depend on it.
+The single-letter shortcuts (A, R, B, I, O, M, N, F, U, D, T and E) can be turned off in **Video Producer › Preferences…**, setting **Single-key shortcuts**, which is on by default. Space, Backspace, Delete, the arrows, Home and End do not depend on it.
 
 When the shortcuts work:
 

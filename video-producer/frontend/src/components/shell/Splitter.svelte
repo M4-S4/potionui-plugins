@@ -1,6 +1,6 @@
 <script>
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, clamp, bottomKey } from '../../lib/state.svelte.js';
+	import { ui, clamp, bottomKey, bandView } from '../../lib/state.svelte.js';
 	import { drag, cancelDrag } from '../../lib/timeline.js';
 
 	const limit = (h) => clamp(h, 160, window.innerHeight - 330);
@@ -22,6 +22,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
+	hidden={bandView()}
 	class="vp-splitter vp-touch-none"
 	role="separator"
 	aria-orientation="horizontal"

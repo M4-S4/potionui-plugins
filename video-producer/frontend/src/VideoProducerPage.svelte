@@ -7,7 +7,7 @@
 	import { disposeExports, resumeExports } from './lib/exports.svelte.js';
 	import { detectLocale, getLocale, has, setLocale, t } from './i18n/index.svelte.js';
 	import { ms } from './lib/motion.js';
-	import { ui, doc, applyMe, bottomKey, dispose as disposeState, toast } from './lib/state.svelte.js';
+	import { ui, doc, applyMe, bottomKey, bandView, dispose as disposeState, toast } from './lib/state.svelte.js';
 	import { project, bindClient, disposeProject, flushSave, noteChange, openLatestOrStarter } from './lib/project.svelte.js';
 	import { startProduction } from './lib/production.svelte.js';
 	import { setPluginRoot } from './lib/focus.js';
@@ -60,7 +60,22 @@
 	const refBoard = $derived(ui.workspace === 'director' && ui.dockTab === 'references' && !ui.preview && !ui.compare);
 	const center = $derived(ui.workspace === 'scene' ? 'scene' : ui.workspace === 'storyboard' ? 'story' : refBoard ? 'refs' : 'viewer');
 	const player = $derived(isPlayer(ui.workspace));
-	const columns = $derived(player ? 'minmax(0, 1fr)' : `${ui.sidebarOpen ? '300px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '304px' : '0px'}`);
+	const band = $derived(bandView());
+	const columns = $derived(player ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '300px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '304px' : '0px'}`);
+	let inspectorBefore = null;
+
+	$effect(() => {
+		const inBand = band;
+		untrack(() => {
+			if (inBand && inspectorBefore === null) {
+				inspectorBefore = ui.inspectorOpen;
+				ui.inspectorOpen = false;
+			} else if (!inBand && inspectorBefore !== null) {
+				ui.inspectorOpen = inspectorBefore;
+				inspectorBefore = null;
+			}
+		});
+	});
 
 	$effect(() => {
 		ui.bottomView = ui.workspace === 'mixer' ? 'console' : 'timeline';
@@ -220,7 +235,7 @@
 				{#if !player}<ProductionBar />{/if}
 			</div>
 
-			<section class="min-h-0 overflow-hidden" style:height={`${ui[bottomKey()]}px`} aria-label={ui.bottomView === 'console' ? t('shell.layout.console') : t('shell.layout.timeline')}>
+			<section class="min-h-0 overflow-hidden" style:height={`${ui[bottomKey()]}px`} hidden={band} aria-label={ui.bottomView === 'console' ? t('shell.layout.console') : t('shell.layout.timeline')}>
 				{#if ui.bottomView === 'console'}
 					<Console />
 				{:else}
