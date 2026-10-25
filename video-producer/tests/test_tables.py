@@ -21,15 +21,6 @@ _EXPECTED_COLUMNS = {
         "id", "project_id", "user_id", "format", "resolution", "status", "progress", "step", "file_name", "file_size",
         "media_item_id", "media_url", "error_code", "error_message", "created_at", "started_at", "finished_at",
     ],
-    "video_producer_scene_jobs": [
-        "id", "project_id", "scene_id", "user_id", "generation_id", "status", "progress", "source_asset_id", "source_time",
-        "source_value", "backend_id", "file_id", "splat_count", "view", "units_reserved", "request", "error_code",
-        "error_message", "created_at", "started_at", "finished_at",
-    ],
-    "video_producer_scene_files": [
-        "id", "project_id", "user_id", "kind", "format", "name", "stored_name", "size", "splat_count", "view", "cameras",
-        "job_id", "created_at",
-    ],
 }
 
 _EXPECTED_INDEXES = {
@@ -42,9 +33,6 @@ _EXPECTED_INDEXES = {
     "idx_video_producer_calibration_key": ("video_producer_calibration", ["preset_id", "backend_id", "resolution"]),
     "idx_video_producer_export_jobs_project": ("video_producer_export_jobs", ["project_id", "created_at"]),
     "idx_video_producer_export_jobs_status": ("video_producer_export_jobs", ["status", "created_at"]),
-    "idx_video_producer_scene_jobs_project": ("video_producer_scene_jobs", ["project_id", "created_at"]),
-    "idx_video_producer_scene_jobs_status": ("video_producer_scene_jobs", ["status", "created_at"]),
-    "idx_video_producer_scene_files_project": ("video_producer_scene_files", ["project_id", "created_at"]),
 }
 
 
@@ -78,8 +66,8 @@ def _indexes(db):
     return found
 
 
-def test_table_names_are_the_eight_plugin_tables():
-    assert len(TABLE_NAMES) == 8
+def test_table_names_are_the_six_plugin_tables():
+    assert len(TABLE_NAMES) == 6
     assert set(TABLE_NAMES) == set(_EXPECTED_COLUMNS)
     assert all(name.startswith("video_producer_") for name in TABLE_NAMES)
 
@@ -96,7 +84,7 @@ def test_tables_have_the_planned_columns(plugin_db):
     assert {table: _columns(plugin_db, table) for table in TABLE_NAMES} == _EXPECTED_COLUMNS
 
 
-def test_create_tables_creates_the_twelve_indexes(plugin_db):
+def test_create_tables_creates_the_nine_indexes(plugin_db):
     create_tables()
 
     assert _indexes(plugin_db) == _EXPECTED_INDEXES
@@ -105,9 +93,27 @@ def test_create_tables_creates_the_twelve_indexes(plugin_db):
 def test_every_index_name_carries_the_plugin_prefix(plugin_db):
     create_tables()
 
-    assert len(_indexes(plugin_db)) == 12
+    assert len(_indexes(plugin_db)) == 9
     assert all(name.startswith("idx_video_producer_") for name in _indexes(plugin_db))
 
+
+def test_create_tables_drops_the_scene_tables_of_the_retired_reframe_tool_and_keeps_the_projects(plugin_db):
+    create_tables()
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute("INSERT INTO video_producer_projects (id, user_id, name, doc) VALUES ('p-1', 'user-1', 'Harbour', '{}')")
+        cursor.execute("CREATE TABLE video_producer_scene_jobs (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, status TEXT NOT NULL)")
+        cursor.execute("CREATE INDEX idx_video_producer_scene_jobs_project ON video_producer_scene_jobs (project_id)")
+        cursor.execute("INSERT INTO video_producer_scene_jobs (id, project_id, status) VALUES ('j-1', 'p-1', 'done')")
+        cursor.execute("CREATE TABLE video_producer_scene_files (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, stored_name TEXT NOT NULL)")
+        cursor.execute("INSERT INTO video_producer_scene_files (id, project_id, stored_name) VALUES ('f-1', 'p-1', 'f-1.ply')")
+
+    create_tables()
+
+    assert _table_names(plugin_db) == set(TABLE_NAMES)
+    assert _indexes(plugin_db) == _EXPECTED_INDEXES
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute("SELECT id, name FROM video_producer_projects")
+        assert [tuple(row) for row in cursor.fetchall()] == [("p-1", "Harbour")]
 
 def test_a_second_create_tables_changes_nothing(plugin_db):
     create_tables()

@@ -81,47 +81,11 @@ _COLUMNS = {
         started_at TIMESTAMP,
         finished_at TIMESTAMP
     """,
-    "video_producer_scene_jobs": """
-        id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL,
-        scene_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        generation_id TEXT,
-        status TEXT NOT NULL,
-        progress REAL NOT NULL DEFAULT 0,
-        source_asset_id TEXT,
-        source_time REAL,
-        source_value TEXT,
-        backend_id TEXT,
-        file_id TEXT,
-        splat_count INTEGER,
-        view TEXT,
-        units_reserved REAL NOT NULL DEFAULT 0,
-        request TEXT,
-        error_code TEXT,
-        error_message TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        started_at TIMESTAMP,
-        finished_at TIMESTAMP
-    """,
-    "video_producer_scene_files": """
-        id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        format TEXT NOT NULL,
-        name TEXT NOT NULL,
-        stored_name TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        splat_count INTEGER,
-        view TEXT,
-        cameras TEXT,
-        job_id TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    """,
 }
 
 TABLE_NAMES = tuple(_COLUMNS)
+
+_RETIRED_TABLES = ("video_producer_scene_jobs", "video_producer_scene_files")
 
 _ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (
     ("video_producer_versions", "source_version", "INTEGER"),
@@ -154,19 +118,18 @@ _INDEXES = (
     ("idx_video_producer_calibration_key", "video_producer_calibration", "preset_id, backend_id, resolution"),
     ("idx_video_producer_export_jobs_project", "video_producer_export_jobs", "project_id, created_at"),
     ("idx_video_producer_export_jobs_status", "video_producer_export_jobs", "status, created_at"),
-    ("idx_video_producer_scene_jobs_project", "video_producer_scene_jobs", "project_id, created_at"),
-    ("idx_video_producer_scene_jobs_status", "video_producer_scene_jobs", "status, created_at"),
-    ("idx_video_producer_scene_files_project", "video_producer_scene_files", "project_id, created_at"),
 )
 
 
 def create_tables() -> None:
-    """Create the plugin's tables, columns and indexes, and label the takes stored before labels; safe to run on every boot."""
+    """Create the plugin's tables, columns and indexes, drop the retired tables, and label the takes stored before labels; safe to run on every boot."""
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:
         for name, columns in _COLUMNS.items():
             cursor.execute(f"CREATE TABLE IF NOT EXISTS {name} ({columns})")
+        for name in _RETIRED_TABLES:
+            cursor.execute(f"DROP TABLE IF EXISTS {name}")
         for table, column, column_type in _ADDED_COLUMNS:
             cursor.execute(f"PRAGMA table_info({table})")
             if column not in {row["name"] for row in cursor.fetchall()}:
