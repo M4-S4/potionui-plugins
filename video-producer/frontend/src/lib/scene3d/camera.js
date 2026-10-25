@@ -125,6 +125,14 @@ export function boundCamera(next, prev, source) {
 	return blend(prev, next, lo);
 }
 
+export function atSource(cam, source) {
+	if (!cam || !source) return false;
+	const depth = Math.max(distance(source.pos, source.target), EPS);
+	return distance(cam.pos, source.pos) <= depth * 1e-4 && distance(cam.target, source.target) <= depth * 1e-4 && Math.abs(cam.focal - source.focal) < 0.05 && Math.abs((cam.roll ?? 0) - (source.roll ?? 0)) < 0.05;
+}
+
+export const fitsFrame = (picture, aspect) => Boolean(picture?.width > 0 && picture?.height > 0 && aspect > 0 && Math.abs(picture.width / picture.height / aspect - 1) < 0.01);
+
 export const lowestFocal = (scene, source) => (holesMatter(scene) && source ? clamp(source.focal, FOCAL_RANGE[0], FOCAL_RANGE[1]) : FOCAL_RANGE[0]);
 
 export function holesMatter(scene) {

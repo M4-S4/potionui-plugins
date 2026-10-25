@@ -21,8 +21,10 @@
 		retryScene,
 		cancelScene,
 		sceneErrorText,
-		sceneProgress
+		sceneProgress,
+		measureStreaks
 	} from '../../lib/scene.svelte.js';
+	import { STREAK_SHOWN, streakLevel } from '../../lib/scene3d/streaks.js';
 	import { deviation, deviationLevel, distance, dollyCamera, focalToFov, holesMatter, horizontalFov, orbitCamera, panCamera, reach } from '../../lib/scene3d/camera.js';
 	import Icon from '../Icon.svelte';
 
@@ -50,6 +52,8 @@
 	const gap = $derived(source && holesMatter(scene) ? deviation(cam, source) : null);
 	const level = $derived(gap ? deviationLevel(gap) : 'ok');
 	const used = $derived(gap ? Math.min(1, reach(cam, source)) : 0);
+	const streaks = $derived(gap ? sceneState.streaks : null);
+	const stretched = $derived(streakLevel(streaks) === 'streaks');
 	const one = (v) => formatNumber(v, { maximumFractionDigits: 1 });
 	const hud = $derived(t('scene.hud', { focal: Math.round(cam.focal), fov: one(fov), hfov: one(horizontalFov(cam.focal)), roll: Math.round(cam.roll ?? 0) }));
 	const progress = $derived(sceneProgress(scene));
@@ -89,6 +93,7 @@
 	$effect(() => {
 		if (!live || !stage) return;
 		stage.setPose({ ...cam, fov });
+		untrack(() => measureStreaks(scene));
 	});
 
 	const move = (next) => moveCamera(scene, next);
@@ -230,10 +235,11 @@
 				<div class="pointer-events-none absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white" role="status">
 					<div class="flex items-center gap-2">
 						<span class="h-1 w-16 overflow-hidden rounded-full bg-white/20">
-							<span class="block h-full rounded-full {level === 'ok' ? 'bg-success' : 'bg-warning'}" style:width="{used * 100}%"></span>
+							<span class="block h-full rounded-full {level === 'ok' && !stretched ? 'bg-success' : 'bg-warning'}" style:width="{used * 100}%"></span>
 						</span>
 						<span class="vp-tc">{t('scene.gap', { angle: Math.round(gap.angle), shift: Math.round(gap.shift * 100) })}</span>
 					</div>
+					{#if streaks != null && streaks >= STREAK_SHOWN}<div class="vp-tc mt-0.5 {stretched ? 'text-warning' : 'text-white/80'}">{t('scene.streaks', { value: one(streaks * 100) })}</div>{/if}
 					{#if level !== 'ok'}<div class="mt-0.5 text-warning">{t('scene.holes')}</div>{/if}
 				</div>
 			{/if}

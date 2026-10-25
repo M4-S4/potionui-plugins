@@ -67,7 +67,7 @@ export function seamAsset(media, fallbackName) {
 }
 
 export function placeSeamFrame(doc, clip, kind, asset, makeId = ulid, sceneId = null) {
-	doc.assets.push(asset);
+	if (!doc.assets.some((a) => a.id === asset.id)) doc.assets.push(asset);
 	const existing = framesOf(doc, clip.id, kind);
 	const fields = { shotId: clip.id, time: frameTime(clip, kind), assetId: asset.id, role: kind, strength: SEAM_STRENGTH };
 	if (sceneId) fields.sceneId = sceneId;

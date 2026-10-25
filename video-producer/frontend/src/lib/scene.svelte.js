@@ -6,11 +6,13 @@ import { aspectOf } from './generation.js';
 import { ulid } from './ulid.js';
 import { placeSeamFrame, seamAsset } from './seam.js';
 import { replaceAllowed } from './seam.svelte.js';
-import { FOCAL_RANGE, boundCamera, focalToFov, holesMatter, lowestFocal, projectSize, sourceView } from './scene3d/camera.js';
+import { FOCAL_RANGE, atSource, boundCamera, fitsFrame, focalToFov, holesMatter, lowestFocal, projectSize, sourceView } from './scene3d/camera.js';
+import { CAPTURE_CELL, LIVE_CELL, LIVE_STRIDE } from './scene3d/streaks.js';
 import { plyView } from './scene3d/files.js';
 import { RUNNING, createPoller, jobScene, lostScene, orphanJobs, reusableScene } from './scene3d/jobs.js';
 
 const POLL_EVERY = 2000;
+const STREAK_DELAY = 250;
 
 export const sceneState = $state({
 	engine: 'idle',
@@ -21,7 +23,8 @@ export const sceneState = $state({
 	info: {},
 	capture: null,
 	progress: {},
-	saving: false
+	saving: false,
+	streaks: null
 });
 
 let stage = $state.raw(null);
@@ -30,6 +33,7 @@ let loadToken = 0;
 let loading = null;
 let deferred = false;
 let closed = false;
+let streakTimer = null;
 const submitting = new Set();
 const liveJobs = new Map();
 const poller = createPoller({ every: POLL_EVERY, run: tick, active: () => !closed && scenesBusy() });
@@ -78,6 +82,32 @@ export function seedCamera(scene) {
 	if (!scene.view && !sceneInfo(scene)) return;
 	setFreeCamera(sourceOf(scene));
 	ui.scene.seeded = scene.id;
+}
+
+function streaksAt(scene, cam, size, cell, stride) {
+	if (!stage || !holesMatter(scene) || sceneState.loadedId !== scene?.id) return null;
+	try {
+		return stage.streaks(fovFor(cam, size), sourceOf(scene), size.width, size.height, cell, stride);
+	} catch {
+		return null;
+	}
+}
+
+export function measureStreaks(scene) {
+	clearTimeout(streakTimer);
+	if (!scene || !holesMatter(scene)) return (sceneState.streaks = null);
+	streakTimer = setTimeout(() => {
+		streakTimer = null;
+		if (closed || sceneLocked() || stage?.busy) return;
+		sceneState.streaks = streaksAt(scene, freeCamera(), captureSize(), LIVE_CELL, LIVE_STRIDE);
+	}, STREAK_DELAY);
+}
+
+export function originalAt(scene, cam = freeCamera()) {
+	if (scene?.kind !== 'splat' || scene.sourceTime != null) return null;
+	const picture = asset(scene.sourceAssetId);
+	if (picture?.kind !== 'image' || !picture.src || !fitsFrame(picture, projectAspect())) return null;
+	return atSource(cam, sourceOf(scene)) ? picture : null;
 }
 
 export function moveCamera(scene, next) {
@@ -395,12 +425,14 @@ export async function takeCapture(scene) {
 	if (refuseWhileLocked()) return null;
 	const size = captureSize();
 	const cam = freeCamera();
+	const original = originalAt(scene, cam);
+	if (original) return { sceneId: scene.id, url: original.src, coverage: 1, streaks: 0, width: original.width, height: original.height, assetId: original.id };
 	sceneState.capture = { busy: true, sceneId: scene.id };
 	try {
 		const st = await syncStage(scene);
 		if (!st) throw new Error('load');
 		const shot = await st.capture(fovFor(cam, size), size.width, size.height);
-		return { sceneId: scene.id, url: shot.url, coverage: shot.coverage, ...size };
+		return { sceneId: scene.id, url: shot.url, coverage: shot.coverage, streaks: streaksAt(scene, cam, size, CAPTURE_CELL, 1), ...size };
 	} catch {
 		toast(t('scene.toast.captureFailed'), 'error');
 		return null;
@@ -432,6 +464,11 @@ export async function storeCaptures(clipId, shots, place = false) {
 		const stored = [];
 		for (const usage of taken) {
 			const shot = shots[usage];
+			const kept = shot.assetId ? asset(shot.assetId) : null;
+			if (kept) {
+				stored.push({ usage, sceneId: shot.sceneId, image: kept });
+				continue;
+			}
 			const name = captureName(sceneOf(shot.sceneId), clip);
 			const media = await storeCapture(projectId, shot.url, name);
 			if (projectId !== project.id) return null;
@@ -442,7 +479,7 @@ export async function storeCaptures(clipId, shots, place = false) {
 		act(() => {
 			for (const { usage, sceneId, image } of stored) {
 				if (place) placeSeamFrame(doc, target, usage, image, ulid, sceneId);
-				else doc.assets.push(image);
+				else if (!doc.assets.some((a) => a.id === image.id)) doc.assets.push(image);
 			}
 		});
 		if (place) toast(placedText(target, taken), 'success', { label: t('shell.toast.undo'), run: undo });
@@ -458,6 +495,8 @@ export async function storeCaptures(clipId, shots, place = false) {
 
 function resetScenes() {
 	closed = false;
+	clearTimeout(streakTimer);
+	sceneState.streaks = null;
 	poller.stop();
 	liveJobs.clear();
 	deferred = false;
@@ -468,6 +507,8 @@ function resetScenes() {
 
 export function disposeScenes() {
 	closed = true;
+	clearTimeout(streakTimer);
+	sceneState.streaks = null;
 	poller.stop();
 	deferred = false;
 	forgetLoaded();

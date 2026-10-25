@@ -109,3 +109,13 @@ test('placeSeamFrame: a frame captured in a 3D scene carries its sceneId, a late
 	const again = placeSeamFrame(doc, doc.clips[2], 'last', { id: 'cap2', kind: 'image' }, () => 'x', 's2');
 	assert.equal(again.sceneId, 's2');
 });
+
+test('placeSeamFrame: an image already in the project is placed again without a second copy of its asset', () => {
+	const doc = sampleDoc();
+	const picture = { id: 'kept', kind: 'image' };
+	doc.assets.push(picture);
+	const count = doc.assets.length;
+	placeSeamFrame(doc, doc.clips[2], 'first', picture, () => 'fk', 's1');
+	assert.equal(doc.assets.length, count);
+	assert.equal(framesOf(doc, 'c3', 'first')[0].assetId, 'kept');
+});

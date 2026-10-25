@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
+import { streakShare, streakTable } from './streaks.js';
 
 const SPLAT_TYPES = { ply: 'ply', spz: 'spz', splat: 'splat' };
 const COVERED_ALPHA = 128;
@@ -70,6 +71,7 @@ export function createStage({ onLost } = {}) {
 	let disposed = false;
 	let content = null;
 	let offline = null;
+	let streakCache = null;
 	let generation = 0;
 	let pendingClear = false;
 	let kill = null;
@@ -93,6 +95,7 @@ export function createStage({ onLost } = {}) {
 	}
 
 	function clear() {
+		streakCache = null;
 		if (!content) return;
 		scene.remove(content.root);
 		content.splat.dispose();
@@ -201,6 +204,15 @@ export function createStage({ onLost } = {}) {
 			request();
 		},
 		refresh: request,
+		streaks(pose, source, width, height, cell, stride) {
+			if (!content) return null;
+			const key = JSON.stringify([source.pos, source.target, source.roll ?? 0]);
+			if (streakCache?.content !== content || streakCache.key !== key) {
+				const splat = content.splat;
+				streakCache = { content, key, table: streakTable((each) => splat.forEachSplat(each), source, true) };
+			}
+			return streakShare(streakCache.table, pose, width, height, cell, stride);
+		},
 		capture(pose, width, height) {
 			return exclusive(async () => {
 				const { pixels: image, coverage } = await pixels(pose, width, height);
