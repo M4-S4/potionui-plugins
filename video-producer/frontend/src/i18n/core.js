@@ -9,7 +9,6 @@ export const DOMAINS = [
 	'viewer',
 	'timeline',
 	'references',
-	'scene',
 	'inspector',
 	'production',
 	'mixer',

@@ -829,27 +829,6 @@ def bind_frames(
         return request, "i2v"
 
 
-def scene_picture(user: User, doc: Mapping[str, Any], scene: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
-    """The picture a splat scene was built from: its image asset, or the frame its scene job took from a video; None for another kind of scene, one not built yet or a picture no longer readable."""
-    if scene is None or scene.get("kind") != "splat" or scene.get("status") != "done":
-        return None
-    asset = _asset(doc, scene.get("sourceAssetId"))
-    if asset is None:
-        return None
-    if asset.get("kind") == "image":
-        resolved = _resolve(user, asset)
-        if resolved is None or resolved["media_type"] != "image":
-            return None
-        return {"value": resolved["value"], "media_type": "image", "scene_id": scene["id"]}
-    from .scene3d import jobs
-
-    job = jobs.get_job(str(scene["jobId"])) if scene.get("jobId") else None
-    value = (job or {}).get("source_value")
-    if not value or core_bridge.upload_item(user.id, str(value)) is None:
-        return None
-    return {"value": str(value), "media_type": "image", "scene_id": scene["id"]}
-
-
 def reference_media(
     user: User,
     doc: Mapping[str, Any],

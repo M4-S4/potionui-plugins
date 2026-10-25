@@ -205,17 +205,14 @@ def test_the_edit_request_sends_the_shot_pictures_settings_first_with_its_prompt
     assert built.plan.resolution == "1360x768" and built.warnings == []
 
 
-def test_a_3d_capture_start_image_is_the_framing_and_the_end_image_starts_from_the_start_image(core, qwen, scene):
+def test_the_start_image_is_only_the_starting_point_of_the_end_image_a_former_3d_capture_included(core, qwen, scene):
     scene["frames"] = [{"id": "f1", "shotId": "s1", "time": 0, "assetId": "capture", "role": "first", "strength": 100, "sceneId": "sc1"}]
 
     first = _build(core, scene)
-    scene["frames"][0].pop("sceneId")
-    plain = _build(core, scene)
     last = _build(core, scene, role="last")
 
-    assert [picture.asset_id for picture in first.pictures] == ["capture", "cafe", "lea", "hat"]
-    assert "Image 1 is the framing of the shot: keep its camera angle, layout, light and colours." in first.plan.prompt_text
-    assert [picture.asset_id for picture in plain.pictures] == ["cafe", "lea", "hat"]
+    assert [picture.asset_id for picture in first.pictures] == ["cafe", "lea", "hat"]
+    assert "Image 1 is the framing of the shot" not in first.plan.prompt_text
     assert [picture.role for picture in last.pictures] == ["frame", "setting", "character", "object"]
     assert last.plan.prompt_text.startswith("The closing frame of a film shot")
     assert "Image 1 is the opening frame of the same shot" in last.plan.prompt_text

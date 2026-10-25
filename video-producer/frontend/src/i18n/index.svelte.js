@@ -6,7 +6,6 @@ import enStoryboard from './en/storyboard.json';
 import enViewer from './en/viewer.json';
 import enTimeline from './en/timeline.json';
 import enReferences from './en/references.json';
-import enScene from './en/scene.json';
 import enInspector from './en/inspector.json';
 import enProduction from './en/production.json';
 import enMixer from './en/mixer.json';
@@ -21,7 +20,6 @@ import frStoryboard from './fr/storyboard.json';
 import frViewer from './fr/viewer.json';
 import frTimeline from './fr/timeline.json';
 import frReferences from './fr/references.json';
-import frScene from './fr/scene.json';
 import frInspector from './fr/inspector.json';
 import frProduction from './fr/production.json';
 import frMixer from './fr/mixer.json';
@@ -64,7 +62,6 @@ const DICTIONARIES = {
 		viewer: enViewer,
 		timeline: enTimeline,
 		references: enReferences,
-		scene: enScene,
 		inspector: enInspector,
 		production: enProduction,
 		mixer: enMixer,
@@ -86,7 +83,6 @@ const DICTIONARIES = {
 		viewer: frViewer,
 		timeline: frTimeline,
 		references: frReferences,
-		scene: frScene,
 		inspector: frInspector,
 		production: frProduction,
 		mixer: frMixer,

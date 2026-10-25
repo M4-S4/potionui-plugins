@@ -102,6 +102,5 @@
 	"kbd.escape": "Échap",
 	"cmd.story-window": "Synopsis et découpage",
 	"cmd.story-view": "Storyboard en bande",
-	"cmd.shot-editor": "Éditeur de plan…",
-	"cmd.reframe": "Recadrer depuis la 3D…"
+	"cmd.shot-editor": "Éditeur de plan…"
 }

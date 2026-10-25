@@ -763,16 +763,10 @@ def _sections(prompt):
     return sections
 
 
-def _splat(scene_id="scene-1", source="hero"):
-    return {"id": scene_id, "kind": "splat", "name": "Bow", "sourceAssetId": source, "sourceTime": None, "status": "done", "progress": 100,
-            "jobId": "j1", "fileId": "f1", "count": 10, "view": {"fov": 32, "aspect": 1.73, "depth": 4}, "error": None}
-
-
-def test_a_ref2va_shot_sends_its_motion_reference_and_not_the_picture_of_the_3d_scene_of_the_project_and_names_no_camera_path(core, make_doc):
+def test_a_ref2va_shot_sends_its_motion_reference_and_names_no_camera_path(core, make_doc):
     core.use_h3()
     references = [{"id": "r1", "assetId": "walk", "space": "mouvement", "scope": {"type": "shot", "shotId": "s1"}}]
     doc = _guided(core, make_doc, references=references)
-    doc["scenes"] = [_splat()]
 
     plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
 

@@ -37,7 +37,6 @@
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import { commandById } from '../../lib/commands.js';
-	import { sceneOf } from '../../lib/scene.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, shotCuts, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
@@ -464,9 +463,6 @@
 							{#each ['Début', 'Fin', 'Transition', 'Identité', 'Style', ...(item.role === 'Capture 3D' ? ['Capture 3D'] : [])] as r (r)}<option value={r}>{frameRoleLabel(r)}</option>{/each}
 						</select>
 					</label>
-					{#if item.sceneId}
-						<div class="flex items-center gap-2 text-xs text-fg-muted"><Icon name="cube" class="h-3.5 w-3.5 shrink-0" />{t('inspector.frame.fromScene', { scene: sceneOf(item.sceneId)?.name ?? t('inspector.frame.removedScene') })}</div>
-					{/if}
 					<SliderField label={t('inspector.field.strength')} value={item.strength} unit=" %" onchange={(v) => set('strength', v)} />
 				</section>
 			{:else if s.kind === 'title'}

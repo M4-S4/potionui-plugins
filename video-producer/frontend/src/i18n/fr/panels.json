@@ -110,7 +110,6 @@
 	"mixer.roles": "Rôles",
 	"mixer.lanes.one": "{count} piste",
 	"mixer.lanes.other": "{count} pistes",
-	"dock.refs.reframe": "Recadrer un plan depuis la 3D…",
 	"dock.tab.queue": "File",
 	"dock.engine.title": "Moteur",
 	"queue.title": "File de génération",

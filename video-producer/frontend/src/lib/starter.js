@@ -78,7 +78,6 @@ function baseDoc(t, name, promptLanguage) {
 		frames: [],
 		markers: [],
 		references: [],
-		scenes: [],
 		assets: [],
 		lanes,
 		video: newVideoTrack(),
@@ -126,11 +125,15 @@ export function starterDoc(t, promptT = t, promptLanguage = DEFAULT_PROMPT_LANGU
 	return doc;
 }
 
-const RETIRED_SCENES = ['sample', 'file', 'glb'];
 const CAPTURE = 'Capture 3D';
 const RETIRED_SET_TYPES = ['Scène d’essai', "Scène d'essai", 'Gaussian Splat'];
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const retiredSet = (r) => isObject(r) && r.space === 'decors3d' && RETIRED_SET_TYPES.includes(r.type);
+const plainFrame = (f) => {
+	if (!isObject(f) || !('sceneId' in f)) return f;
+	const { sceneId, ...rest } = f;
+	return rest;
+};
 const OLD_SET_ROLE = 'Décor 3D';
 const SET_ROLE = 'Décor';
 
@@ -139,7 +142,7 @@ function currentReference(r) {
 	const next = retiredSet(r) ? { ...r, type: CAPTURE } : r;
 	return r.role === OLD_SET_ROLE ? { ...next, role: SET_ROLE } : next;
 }
-const RETIRED_KEYS = ['controls', 'plans3d'];
+const RETIRED_KEYS = ['controls', 'plans3d', 'scenes'];
 const isNumber = (v) => typeof v === 'number';
 const span = (item) => {
 	const start = isNumber(item.start) ? item.start : 0;
@@ -177,8 +180,7 @@ function motionReferences(doc, references) {
 export function migrate(doc) {
 	if (!isObject(doc)) return doc;
 	const next = migrateShots(migrateTracks(doc));
-	if (Array.isArray(doc.scenes)) next.scenes = doc.scenes.filter((s) => isObject(s) && !RETIRED_SCENES.includes(s.kind));
-	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId));
+	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId)).map(plainFrame);
 	if (Array.isArray(doc.references)) {
 		const kept = doc.references.filter((r) => !retiredSet(r) || r.assetId).map(currentReference);
 		next.references = [...kept, ...motionReferences(doc, kept)];
@@ -187,16 +189,4 @@ export function migrate(doc) {
 	if ('bible' in doc) next.bible = migrateBible(doc.bible);
 	if (isObject(doc.engine)) next.engine = migrateOptions(doc.engine);
 	return next;
-}
-
-export const SCENE_LISTS = ['scenes'];
-
-export const absentLists = (stored) => SCENE_LISTS.filter((key) => !isObject(stored) || !(key in stored));
-
-export function storedDoc(snapshot, absent) {
-	const empty = absent.filter((key) => Array.isArray(snapshot[key]) && !snapshot[key].length);
-	if (!empty.length) return snapshot;
-	const kept = { ...snapshot };
-	for (const key of empty) delete kept[key];
-	return kept;
 }

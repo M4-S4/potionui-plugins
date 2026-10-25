@@ -171,8 +171,6 @@
 	"takes.more.one": "{count} brouillon de plus",
 	"takes.more.other": "{count} brouillons de plus",
 	"takes.note": "Brouillons en {res} pour juger le mouvement · « Passer en final » agrandit la prise ou la génère à nouveau en {final} avec la même graine.",
-	"frame.fromScene": "Capturée dans la scène 3D « {scene} »",
-	"frame.removedScene": "retirée",
 	"editShot": "Modifier le plan…",
 	"field.type": "Type",
 	"reference.sound": "Son",

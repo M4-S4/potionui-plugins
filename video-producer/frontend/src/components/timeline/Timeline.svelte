@@ -530,9 +530,8 @@
 									{#if fthumb}
 									<img src={fthumb} alt="" class="h-5 w-7 rounded-sm object-cover" draggable="false" />
 								{:else}
-									<span class="flex h-5 w-7 items-center justify-center rounded-sm bg-surface-3 text-fg-muted"><Icon name={f.sceneId || f.role === 'Capture 3D' ? 'cube' : 'image'} class="h-3 w-3" /></span>
+									<span class="flex h-5 w-7 items-center justify-center rounded-sm bg-surface-3 text-fg-muted"><Icon name={f.role === 'Capture 3D' ? 'cube' : 'image'} class="h-3 w-3" /></span>
 								{/if}
-									{#if f.sceneId}<Icon name="cube" class="h-3 w-3 shrink-0 text-fg-muted" />{/if}
 									<span class="text-xs text-fg-muted">{frameRoleLabel(f.role)}</span>
 								</button>
 							{/each}

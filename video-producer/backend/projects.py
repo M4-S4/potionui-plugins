@@ -14,9 +14,7 @@ MAX_DOC_BYTES = 4 * 1024 * 1024
 
 _REASON_LIMIT = 300
 
-RETIRED_KEYS = ("results", "controls", "plans3d")
-
-RETIRED_SCENES = ("sample", "file", "glb")
+RETIRED_KEYS = ("results", "controls", "plans3d", "scenes")
 
 CAPTURE_ROLE = "Capture 3D"
 
@@ -200,7 +198,7 @@ TITLE = _object({"id": ID, "text": TEXT, "sub": TEXT, "start": NUMBER, "dur": NU
 PROMPT = _object({"id": ID, "shotId": REF, "start": NUMBER, "dur": NUMBER, "strength": NUMBER, "text": TEXT})
 
 FRAME = _object(
-    {"id": ID, "shotId": REF, "time": NUMBER, "assetId": REF, "role": TEXT, "strength": NUMBER}, optional={"sceneId": REF}
+    {"id": ID, "shotId": REF, "time": NUMBER, "assetId": REF, "role": TEXT, "strength": NUMBER}
 )
 
 MARKER = _object({"id": ID, "time": NUMBER, "label": TEXT, "kind": TEXT})
@@ -215,30 +213,6 @@ REFERENCE = _object(
         "role": TEXT,
         "scope": _tagged("type", {"global": {}, "shot": {"shotId": ID}}, nullable=True),
     }
-)
-
-VIEW = _object({"fov": NUMBER, "aspect": NUMBER, "depth": NUMBER})
-
-NULLABLE_VIEW = {**VIEW, "type": ["object", "null"]}
-
-SCENE = _tagged(
-    "kind",
-    {
-        "splat": {
-            "id": ID,
-            "name": TEXT,
-            "sourceAssetId": REF,
-            "sourceTime": NULLABLE_NUMBER,
-            "status": _enum("queued", "running", "done", "failed"),
-            "progress": NUMBER,
-            "jobId": REF,
-            "fileId": REF,
-            "count": NULLABLE_INTEGER,
-            "view": NULLABLE_VIEW,
-            "error": NULLABLE_TEXT,
-        },
-        "splatfile": {"id": ID, "name": TEXT, "fileId": ID, "format": _enum("ply", "spz", "splat"), "view": NULLABLE_VIEW},
-    },
 )
 
 INSERT = _tagged(
@@ -375,7 +349,6 @@ DOC_SCHEMA: Dict[str, Any] = {
             "hybrid": HYBRID,
             "firstFromPrevious": FLAG,
             "bible": BIBLE,
-            "scenes": _array(SCENE),
         },
     ),
 }
@@ -411,12 +384,16 @@ def _number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _retired_scene(scene: Any) -> bool:
-    return isinstance(scene, dict) and scene.get("kind") in RETIRED_SCENES
-
-
 def _empty_capture(frame: Any) -> bool:
     return isinstance(frame, dict) and frame.get("role") == CAPTURE_ROLE and not frame.get("assetId")
+
+
+def _captured_frame(frame: Any) -> bool:
+    return isinstance(frame, dict) and "sceneId" in frame
+
+
+def _plain_frame(frame: Any) -> Any:
+    return {key: value for key, value in frame.items() if key != "sceneId"} if _captured_frame(frame) else frame
 
 
 def _retired_set(reference: Any) -> bool:
@@ -506,16 +483,13 @@ def _cast(clip: Any, characters: Set[Any], places: Set[Any]) -> Any:
 
 
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots and the Control videos), the simulated scenes, the Blender scenes and the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, and the cast of each shot cleared of the bible cards that no longer exist; the same object when nothing changes."""
+    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, and the cast of each shot cleared of the bible cards that no longer exist; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
-    scenes = doc.get("scenes")
-    if isinstance(scenes, list) and any(_retired_scene(scene) for scene in scenes):
-        changes["scenes"] = [scene for scene in scenes if not _retired_scene(scene)]
     frames = doc.get("frames")
-    if isinstance(frames, list) and any(_empty_capture(frame) for frame in frames):
-        changes["frames"] = [frame for frame in frames if not _empty_capture(frame)]
+    if isinstance(frames, list) and any(_empty_capture(frame) or _captured_frame(frame) for frame in frames):
+        changes["frames"] = [_plain_frame(frame) for frame in frames if not _empty_capture(frame)]
     references = doc.get("references")
     if isinstance(references, list) and any(_retired_set(reference) or _old_role(reference) for reference in references):
         changes["references"] = [_current_reference(reference) for reference in references if not _retired_set(reference) or reference.get("assetId")]

@@ -30,10 +30,9 @@ function makeDoc() {
 			{ id: 'f1', shotId: 's1', time: 0, assetId: 'pic', role: 'first', strength: 100 },
 			{ id: 'f2', shotId: 's1', time: 4, assetId: 'pic', role: 'fin', strength: 100 },
 			{ id: 'f3', shotId: 's2', time: 5, assetId: 'pic', role: 'Transition', strength: 75 },
-			{ id: 'f4', shotId: 's2', time: 6, assetId: 'pic', role: 'Capture 3D', strength: 75, sceneId: 'sc1' },
+			{ id: 'f4', shotId: 's2', time: 6, assetId: 'pic', role: 'Capture 3D', strength: 75 },
 			{ id: 'f5', shotId: 's2', time: 4, assetId: 'other', role: 'début', strength: 100 }
 		],
-		scenes: [{ id: 'sc1', kind: 'splat', name: 'Harbour', sourceAssetId: 'pic', sourceTime: null, status: 'done', progress: 1, jobId: null, fileId: 'file', count: 10, view: null, error: null }],
 		prompts: [{ id: 'p-s1', shotId: 's1', start: 0, dur: 4, strength: 75, text: 'Dawn over the harbour' }]
 	};
 }
@@ -46,13 +45,12 @@ test('assetUses: every place that holds a media, first and last images apart fro
 	assert.deepEqual(ids(uses.references), ['r1', 'r2']);
 	assert.deepEqual(ids(uses.edges), ['f1', 'f2']);
 	assert.deepEqual(ids(uses.frames), ['f3', 'f4']);
-	assert.deepEqual(ids(uses.scenes), ['sc1']);
-	assert.equal(useCount(uses), 9);
+	assert.equal(useCount(uses), 8);
 	assert.equal(useCount(assetUses(makeDoc(), 'missing')), 0);
 	assert.equal(useCount(assetUses({ assets: [] }, 'pic')), 0);
 });
 
-test('removeAsset: the shots, references and scenes that held the media stay, emptied; the sounds and frames that placed it go', () => {
+test('removeAsset: the shots and references that held the media stay, emptied; the sounds and frames that placed it go', () => {
 	const doc = makeDoc();
 	const result = removeAsset(doc, 'pic');
 	assert.equal(result.asset.id, 'pic');
@@ -71,7 +69,6 @@ test('removeAsset: the shots, references and scenes that held the media stay, em
 		]
 	);
 	assert.deepEqual(ids(doc.frames), ['f5']);
-	assert.equal(doc.scenes[0].sourceAssetId, null);
 	assert.equal(useCount(assetUses(doc, 'pic')), 0);
 });
 
@@ -95,7 +92,6 @@ test('removeAsset: what stays emptied survives the document migration, nothing i
 	removeAsset(doc, 'pic');
 	const next = migrate(doc);
 	assert.deepEqual(ids(next.references), ['r1', 'r2', 'r3']);
-	assert.deepEqual(ids(next.scenes), ['sc1']);
 	assert.deepEqual(ids(next.frames), ['f5']);
 	assert.equal(next.clips[0].stage, 'todo');
 });
