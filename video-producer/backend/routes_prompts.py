@@ -9,8 +9,6 @@ from .responses import fail, ok
 
 router = APIRouter()
 
-COMPOSED = (director.AI, director.RENDER_3D_AI)
-
 
 def _invalid(message: str) -> NoReturn:
     fail(422, "invalid_request", message)
@@ -28,9 +26,6 @@ def _checked(body: Any) -> Dict[str, Any]:
     model_id = body.get("model_id")
     if model_id is not None and (not isinstance(model_id, str) or not model_id):
         _invalid("model_id must be a model id or null.")
-    production = body.get("production", director.AI)
-    if production not in COMPOSED:
-        _invalid(f"production must be one of: {', '.join(COMPOSED)}.")
     if "doc" in body and not isinstance(body["doc"], dict):
         _invalid("doc must be a project document.")
     return body
@@ -64,7 +59,6 @@ def compose_prompts(project_id: str, body: Any = Body(default=None), user: User 
         checked["preset_id"],
         "draft",
         checked.get("model_id"),
-        production=checked.get("production", director.AI),
         overrides=True,
     )
     return ok(

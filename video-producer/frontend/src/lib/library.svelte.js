@@ -191,14 +191,14 @@ const PREPOSITIONS = {
 	en: /^(in|on|at|under|over|inside|into|onto|near|by|behind|beside|between|across|along|through|toward|towards|around|above|below|before|after|facing)\s/i
 };
 
-export function composePrompt(parts, vars, profile, cameraLocked) {
+export function composePrompt(parts, vars, profile) {
 	const locale = promptLocale();
 	const lower = (s) => s.toLocaleLowerCase(locale);
 	const subject = vars.subject || `{${varToken('subject')}}`;
 	const place = vars.place || `{${varToken('place')}}`;
 	const where = (PREPOSITIONS[locale] ?? PREPOSITIONS.en).test(place) ? place : t('library.compose.inPlace', { place }, locale);
 	const bits = {
-		camera: parts.camera && !cameraLocked ? t('library.compose.cameraOn', { camera: lower(parts.camera), subject }, locale) : '',
+		camera: parts.camera ? t('library.compose.cameraOn', { camera: lower(parts.camera), subject }, locale) : '',
 		light: parts.light ? lower(parts.light) : '',
 		style: parts.style ? t('library.compose.style', { style: lower(parts.style) }, locale) : '',
 		acting: parts.acting

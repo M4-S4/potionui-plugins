@@ -10,8 +10,6 @@ function useText(kind, count) {
 	if (kind === 'references') return t('lib.media.use.references', { count });
 	if (kind === 'edges') return t('lib.media.use.edges', { count });
 	if (kind === 'frames') return t('lib.media.use.frames', { count });
-	if (kind === 'renders') return t('lib.media.use.renders', { count });
-	if (kind === 'controls') return t('lib.media.use.controls', { count });
 	return t('lib.media.use.scenes', { count });
 }
 

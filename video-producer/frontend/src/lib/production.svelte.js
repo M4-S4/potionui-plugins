@@ -2,8 +2,7 @@ import { formatNumber, t } from '../i18n/index.svelte.js';
 import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs, onRestore } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
-import { PROFILES, aggregate, canUpscale, engineOptions, isH3, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
-import { applyRenders, freshRender } from './scene.svelte.js';
+import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
 import { confirm, openHostModal } from './host.js';
 import { finalsToSync, labelOf, marksOf, relabel, releasedLabel } from './labels.js';
 import { durationLimit, generationCounts, releaseOverrun } from './shots.js';
@@ -13,10 +12,6 @@ import { fieldTitle, presetFields } from './options.js';
 import { prioritized } from './queue.js';
 import { laneTitle } from './tracks.js';
 
-const AI_MODE = 'ai';
-const RENDER_MODE = 'render3d';
-const HYBRID_MODE = 'render3d_ai';
-const generates = (mode) => mode === AI_MODE || mode === HYBRID_MODE;
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
 const INFO_WARNINGS = ['time_unknown', 'vram_unknown', 'audio_condition'];
@@ -65,8 +60,7 @@ function soundEngine(clip) {
 	const engine = effectiveEngine(clip, doc);
 	const option = optionFor(engineChoices(), engine);
 	const preset = option ? { ...option.info, cloud: option.kind === 'cloud' || option.info.cloud } : null;
-	const profile = ui.production.mode === HYBRID_MODE ? (isH3(preset) ? 'Ref2VA' : 'FL2VA') : engine.profile;
-	return { preset, profile };
+	return { preset, profile: engine.profile };
 }
 
 export function soundOf(clip) {
@@ -210,12 +204,6 @@ function baseNoteText(note) {
 	if (code === 'fl2va_no_frame') return t('generation.warn.noFrame', { shot: shotName(data.shot_id) });
 	if (code === 'text_only_preset') return t('generation.warn.textOnly', { shot: shotName(data.shot_id) });
 	if (code === 'duration_clamped') return t('generation.warn.durationClamped', { shot: shotName(data.shot_id), max: secs(Number(data.max) || 0) });
-	if (code === 'stale_guide') return t('generation.warn.staleGuide', { shot: shotName(data.shot_id) });
-	if (code === 'guide_needs_refs') return t('generation.warn.guideNeedsRefs', { shot: shotName(data.shot_id) });
-	if (code === 'refs_preset_needed') return t('generation.block.refsPresetNeeded');
-	if (code === 'layout_lora_missing') return t('generation.block.layoutLoraMissing', { file: data.file ?? '' });
-	if (code === 'layout_no_frame') return t('generation.warn.layoutNoFrame', { shot: shotName(data.shot_id) });
-	if (code === 'layout_guide_short') return t('generation.warn.layoutGuideShort', { shot: shotName(data.shot_id), covered: data.covered ?? '—', needed: data.needed ?? '—' });
 	if (code === 'audio_condition') return t('generation.warn.audioCondition', { shot: shotName(data.shot_id) });
 	if (code === 'audio_mux') return t('generation.warn.audioMux', { shot: shotName(data.shot_id) });
 	if (code === 'audio_ignored') return t('generation.warn.audioIgnored', { shot: shotName(data.shot_id) });
@@ -249,12 +237,11 @@ export function jobClips(range = productionRange()) {
 function requestBody(clips, quality, counts, option) {
 	const body = { shots: clips.map((c) => c.id), quality, variants: counts.variants, preset_id: option.preset, model_id: option.model };
 	if (Object.keys(counts.shot_variants).length) body.shot_variants = counts.shot_variants;
-	if (ui.production.mode === HYBRID_MODE) body.production = HYBRID_MODE;
 	return body;
 }
 
 export function estimateRequest() {
-	if (!project.id || !generates(ui.production.mode)) return null;
+	if (!project.id) return null;
 	const option = currentEngine();
 	const clips = jobClips();
 	if (!option || !clips.length) return null;
@@ -323,22 +310,13 @@ export function readiness(opts = {}) {
 	const warnings = [];
 	const notes = [];
 	const gaps = [];
-	const mode = ui.production.mode;
 	if (range[1] - range[0] <= 0.05) missing.push(t('lib.block.noRange'));
-	if (mode !== RENDER_MODE) {
-		if (!globalPrompt() && !items.prompts.length) missing.push(t('lib.block.noDirection'));
-		const empty = items.prompts.filter((p) => !p.text.trim());
-		if (empty.length) missing.push(t('lib.block.emptyPrompts', { count: empty.length }));
-	}
-	if (mode !== AI_MODE) {
-		const clips = opts.clips ?? jobClips(range);
-		const rendered = clips.filter((c) => freshRender(c.id));
-		if (!rendered.length) missing.push(items.plans3d.length ? t('lib.block.noRender3d') : t('lib.block.noPlan3d'));
-		else if (rendered.length < clips.length) warnings.push(t('lib.warn.unrendered', { count: clips.length - rendered.length }));
-	}
-	const noEngine = generates(mode) && !currentEngine();
+	if (!globalPrompt() && !items.prompts.length) missing.push(t('lib.block.noDirection'));
+	const empty = items.prompts.filter((p) => !p.text.trim());
+	if (empty.length) missing.push(t('lib.block.emptyPrompts', { count: empty.length }));
+	const noEngine = !currentEngine();
 	if (noEngine) missing.push(doc.engine?.preset ? t('generation.block.unavailable') : t('generation.block.noEngine'));
-	const est = !opts.clips && !noEngine && generates(mode) ? estimateState.data : null;
+	const est = !opts.clips && !noEngine ? estimateState.data : null;
 	const request = est ? estimateRequest() : null;
 	const fresh = Boolean(request && (request.hold || request.key === estimateState.key));
 	if (est && fresh) {
@@ -366,11 +344,6 @@ function failed(error, fallback) {
 }
 
 export async function startGeneration(opts = {}) {
-	if (ui.production.mode === RENDER_MODE) {
-		const { missing, range } = readiness(opts);
-		if (missing.length) return toast(missing[0], 'warning');
-		return applyRenders(opts.clips ?? jobClips(range));
-	}
 	if (run.starting) return;
 	if (!opts.clips && busy()) return toast(t('lib.toast.jobRunning'), 'warning');
 	const { missing, warnings, range } = readiness(opts);

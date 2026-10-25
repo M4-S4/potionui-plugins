@@ -19,8 +19,7 @@
 	import SoundDesign from './SoundDesign.svelte';
 	import ExportDialog from './ExportDialog.svelte';
 	import MakeFinal from './MakeFinal.svelte';
-	import SceneNew from './SceneNew.svelte';
-	import SceneCapture from './SceneCapture.svelte';
+	import ReframeTool from './ReframeTool.svelte';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import Icon from '../Icon.svelte';
 
@@ -56,16 +55,14 @@
 		[t('shell.simulations.lipSync.title'), t('shell.simulations.lipSync.text')],
 		[t('shell.simulations.voice.title'), t('shell.simulations.voice.text')],
 		[t('shell.simulations.console.title'), t('shell.simulations.console.text')],
-		[t('shell.simulations.formats.title'), t('shell.simulations.formats.text')],
-		[t('shell.simulations.guidance.title'), t('shell.simulations.guidance.text')]
+		[t('shell.simulations.formats.title'), t('shell.simulations.formats.text')]
 	]);
 
 	const timelineIndex = $derived(
 		[
 			...doc.prompts.map((p) => ['prompt', p, p.start, t('shell.kind.prompt'), p.text]),
 			...doc.frames.map((f) => ['frame', f, f.time, t('shell.kind.frame'), frameRoleLabel(f.role)]),
-			...doc.markers.map((x) => ['marker', x, x.time, t('shell.kind.marker'), x.label]),
-			...doc.controls.map((c) => ['control', c, c.start, t('shell.kind.control'), c.name])
+			...doc.markers.map((x) => ['marker', x, x.time, t('shell.kind.marker'), x.label])
 		].sort((a, b) => a[2] - b[2])
 	);
 
@@ -96,10 +93,8 @@
 		<ExportDialog tab={m.tab ?? 'video'} />
 	{:else if m?.type === 'final'}
 		<MakeFinal takeId={m.take} />
-	{:else if m?.type === 'scene-new'}
-		<SceneNew />
-	{:else if m?.type === 'capture'}
-		<SceneCapture />
+	{:else if m?.type === 'reframe'}
+		<ReframeTool id={m.id} returnTo={m.returnTo ?? null} />
 	{:else if m?.type === 'recap' && recap}
 		<Modal title={t('shell.recap.title')} subtitle="{secs(recap.range[0])} → {secs(recap.range[1])}" icon="list" width={640}>
 			<div class="space-y-3 p-4 text-sm">
@@ -126,7 +121,6 @@
 					<ul class="text-xs text-fg-muted">
 						{#each recap.it.references as r}<li>{r.name} · {refRoleLabel(r.role)} · {r.scope.type === 'global' ? t('shell.recap.scopeGlobal') : t('shell.recap.scopeLocal')}</li>{/each}
 						{#each recap.it.frames as f}<li>{t('shell.recap.frame', { role: frameRoleLabel(f.role), time: secs(f.time), strength: f.strength })}</li>{/each}
-						{#each recap.it.controls as c}<li>{t('shell.recap.control', { name: c.name, guidance: c.guidance })}</li>{/each}
 					</ul>
 				</section>
 			</div>

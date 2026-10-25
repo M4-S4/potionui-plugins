@@ -1,6 +1,6 @@
 import { t, tFor } from '../i18n/index.svelte.js';
 import { doc, ui, replaceDoc, toast } from './state.svelte.js';
-import { DEFAULT_PROMPT_LANGUAGE, emptyDoc, starterDoc } from './starter.js';
+import { DEFAULT_PROMPT_LANGUAGE, absentLists, emptyDoc, starterDoc, storedDoc } from './starter.js';
 import { pause } from './playback.svelte.js';
 import { confirm } from './host.js';
 
@@ -12,6 +12,7 @@ let client = null;
 let lastSavedJson = null;
 let timer = null;
 let inFlight = null;
+let absent = [];
 const loadListeners = new Set();
 
 export function onLoaded(listener) {
@@ -27,12 +28,13 @@ export function getClient() {
 	return client;
 }
 
-const currentJson = () => JSON.stringify($state.snapshot(doc));
+export const currentJson = () => JSON.stringify(storedDoc($state.snapshot(doc), absent));
 
 function loaded(p) {
 	if (ui.playing) pause();
 	clearTimeout(timer);
 	timer = null;
+	absent = absentLists(p.doc);
 	replaceDoc({ ...emptyDoc(t), ...p.doc });
 	Object.assign(project, { id: p.id, version: p.version, status: 'saved', savedAt: p.updatedAt, error: null });
 	lastSavedJson = currentJson();

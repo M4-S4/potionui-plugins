@@ -1,5 +1,4 @@
 import { ulid } from './ulid.js';
-import { migrateKeyframe } from './scene3d/camera.js';
 import { migrateTracks, newLaneId, newVideoTrack } from './tracks.js';
 import { migrateShots } from './shots.js';
 import { migrateBible } from './bible.js';
@@ -77,8 +76,6 @@ function baseDoc(t, name, promptLanguage) {
 		titles: [],
 		prompts: [],
 		frames: [],
-		controls: [],
-		plans3d: [],
 		markers: [],
 		references: [],
 		scenes: [],
@@ -134,27 +131,26 @@ const CAPTURE = 'Capture 3D';
 const RETIRED_SET_TYPES = ['Scène d’essai', "Scène d'essai", 'Gaussian Splat'];
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const retiredSet = (r) => isObject(r) && r.space === 'decors3d' && RETIRED_SET_TYPES.includes(r.type);
-const simulatedGuide = (c) => isObject(c) && c.source === 'scene3d' && !c.assetId && !c.planId;
-
-function migratePlan(plan, retired) {
-	if (!isObject(plan)) return plan;
-	const keyframes = Array.isArray(plan.keyframes) ? plan.keyframes.map(migrateKeyframe) : [];
-	const next = { source: 'manual', preset: null, amount: null, camera: null, ...plan, keyframes };
-	if (retired.has(next.sceneId)) next.sceneId = null;
-	return next;
-}
 
 export function migrate(doc) {
 	if (!isObject(doc)) return doc;
-	const scenes = Array.isArray(doc.scenes) ? doc.scenes : [];
-	const retired = new Set(scenes.filter((s) => isObject(s) && RETIRED_SCENES.includes(s.kind)).map((s) => s.id));
 	const next = migrateShots(migrateTracks(doc));
-	if (Array.isArray(doc.scenes)) next.scenes = scenes.filter((s) => isObject(s) && !RETIRED_SCENES.includes(s.kind));
-	if (Array.isArray(doc.plans3d)) next.plans3d = doc.plans3d.map((p) => migratePlan(p, retired));
+	if (Array.isArray(doc.scenes)) next.scenes = doc.scenes.filter((s) => isObject(s) && !RETIRED_SCENES.includes(s.kind));
 	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId));
 	if (Array.isArray(doc.references)) next.references = doc.references.filter((r) => !retiredSet(r) || r.assetId).map((r) => (retiredSet(r) ? { ...r, type: CAPTURE } : r));
-	if (Array.isArray(doc.controls)) next.controls = doc.controls.filter((c) => !simulatedGuide(c));
 	if ('bible' in doc) next.bible = migrateBible(doc.bible);
 	if (isObject(doc.engine)) next.engine = migrateOptions(doc.engine);
 	return next;
+}
+
+export const SCENE_LISTS = ['scenes'];
+
+export const absentLists = (stored) => SCENE_LISTS.filter((key) => !isObject(stored) || !(key in stored));
+
+export function storedDoc(snapshot, absent) {
+	const empty = absent.filter((key) => Array.isArray(snapshot[key]) && !snapshot[key].length);
+	if (!empty.length) return snapshot;
+	const kept = { ...snapshot };
+	for (const key of empty) delete kept[key];
+	return kept;
 }

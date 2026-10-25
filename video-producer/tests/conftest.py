@@ -1,5 +1,4 @@
 import importlib
-import json
 import sys
 from pathlib import Path
 
@@ -837,15 +836,6 @@ class SceneSamples:
     @staticmethod
     def splat(count=2):
         return bytes(32 * count)
-
-    @staticmethod
-    def glb(gltf, version=2):
-        import struct
-
-        payload = json.dumps(gltf).encode("utf-8")
-        payload += b" " * (-len(payload) % 4)
-        total = 12 + 8 + len(payload)
-        return b"glTF" + struct.pack("<II", version, total) + struct.pack("<II", len(payload), 0x4E4F534A) + payload
 
     @staticmethod
     def jpeg(width=64, height=36, color=(200, 80, 40)):

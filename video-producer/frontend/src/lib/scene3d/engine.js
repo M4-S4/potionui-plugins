@@ -1,6 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 
 const SPLAT_TYPES = { ply: 'ply', spz: 'spz', splat: 'splat' };
@@ -24,27 +22,6 @@ function applyPose(camera, pose, aspect) {
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
 	camera.updateMatrixWorld(true);
-}
-
-function disposeObject(root) {
-	root.traverse((node) => {
-		node.geometry?.dispose?.();
-		const materials = Array.isArray(node.material) ? node.material : node.material ? [node.material] : [];
-		for (const material of materials) {
-			for (const value of Object.values(material)) if (value?.isTexture) value.dispose();
-			material.dispose?.();
-		}
-	});
-}
-
-function animate(content, time) {
-	if (!content?.mixer) return;
-	for (const action of content.actions) {
-		action.paused = false;
-		action.enabled = true;
-	}
-	content.mixer.setTime(Math.max(0, time));
-	content.root.updateMatrixWorld(true);
 }
 
 function upright(src, width, height) {
@@ -77,11 +54,6 @@ export async function encode(pixels, width, height, type = 'image/png', quality)
 	return blobUrl(blob);
 }
 
-function discard(loaded) {
-	loaded?.splat?.dispose();
-	if (loaded?.gltf) disposeObject(loaded.gltf.scene);
-}
-
 export function createStage({ onLost } = {}) {
 	const canvas = document.createElement('canvas');
 	canvas.style.cssText = 'display:block;width:100%;height:100%;touch-action:none';
@@ -98,9 +70,7 @@ export function createStage({ onLost } = {}) {
 	let disposed = false;
 	let content = null;
 	let offline = null;
-	let environment = null;
 	let generation = 0;
-	let time = 0;
 	let pendingClear = false;
 	let kill = null;
 	const killed = new Promise((_, reject) => (kill = reject));
@@ -125,11 +95,8 @@ export function createStage({ onLost } = {}) {
 	function clear() {
 		if (!content) return;
 		scene.remove(content.root);
-		content.splat?.dispose();
-		if (content.gltf) disposeObject(content.gltf.scene);
-		content.mixer?.stopAllAction();
+		content.splat.dispose();
 		content = null;
-		scene.environment = null;
 	}
 
 	function fitClipping(bounds) {
@@ -141,13 +108,6 @@ export function createStage({ onLost } = {}) {
 			cam.far = far;
 			cam.updateProjectionMatrix();
 		}
-	}
-
-	function boundsOf(object) {
-		const box = new THREE.Box3().setFromObject(object, true);
-		if (box.isEmpty()) return { center: [0, 0, 0], radius: 1 };
-		const sphere = box.getBoundingSphere(new THREE.Sphere());
-		return { center: sphere.center.toArray(), radius: sphere.radius };
 	}
 
 	async function loadSplat(bytes, format) {
@@ -169,60 +129,6 @@ export function createStage({ onLost } = {}) {
 		return { root, splat, count: splat.packedSplats?.numSplats ?? null, bounds: sphere ? { center: sphere.center.toArray(), radius: sphere.radius } : { center: [0, 0, -4], radius: 4 } };
 	}
 
-	async function loadGltf(bytes) {
-		const buffer = bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-		const gltf = await new GLTFLoader().parseAsync(buffer, '');
-		const root = new THREE.Group();
-		root.add(gltf.scene);
-		let mixer = null;
-		const actions = [];
-		if (gltf.animations?.length) {
-			mixer = new THREE.AnimationMixer(gltf.scene);
-			for (const clip of gltf.animations) {
-				const action = mixer.clipAction(clip);
-				action.setLoop(THREE.LoopOnce, 1);
-				action.clampWhenFinished = true;
-				actions.push(action.play());
-			}
-			mixer.setTime(0);
-		}
-		root.updateMatrixWorld(true);
-		if (!environment) {
-			const pmrem = new THREE.PMREMGenerator(renderer);
-			environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-			pmrem.dispose();
-		}
-		return { root, gltf, mixer, actions, bounds: boundsOf(gltf.scene) };
-	}
-
-	function cameraObject(node) {
-		if (node?.isCamera) return node;
-		let found = null;
-		node?.traverse((child) => {
-			if (!found && child.isCamera) found = child;
-		});
-		return found;
-	}
-
-	async function sampleCamera(nodeIndex, times) {
-		if (!content?.gltf) return [];
-		const parser = content.gltf.parser;
-		const nodeDef = parser.json.nodes?.[nodeIndex];
-		const own = parser.json.cameras?.[nodeDef?.camera]?.perspective?.aspectRatio ?? null;
-		const cam = cameraObject(await parser.getDependency('node', nodeIndex));
-		if (!cam) return [];
-		const position = new THREE.Vector3();
-		const quaternion = new THREE.Quaternion();
-		const samples = times.map((t) => {
-			animate(content, t);
-			cam.getWorldPosition(position);
-			cam.getWorldQuaternion(quaternion);
-			return { t, pos: position.toArray(), quat: quaternion.toArray(), yfov: cam.fov, aspect: own };
-		});
-		animate(content, time);
-		return samples;
-	}
-
 	function offlineFor(width, height) {
 		if (offline && offline.width === width && offline.height === height) return offline.spark;
 		offline?.spark.dispose();
@@ -232,16 +138,15 @@ export function createStage({ onLost } = {}) {
 		return spark;
 	}
 
-	async function draw(pose, width, height, at) {
+	async function draw(pose, width, height) {
 		const spark = offlineFor(width, height);
 		applyPose(shot, pose, width / height);
-		animate(content, at);
 		await spark.update({ scene, camera: shot });
 		const raw = await spark.renderReadTarget({ scene, camera: shot });
 		return upright(raw, width, height);
 	}
 
-	const pixels = (pose, width, height, at = 0) => Promise.race([draw(pose, width, height, at), killed]);
+	const pixels = (pose, width, height) => Promise.race([draw(pose, width, height), killed]);
 
 	async function exclusive(task) {
 		busy += 1;
@@ -249,12 +154,9 @@ export function createStage({ onLost } = {}) {
 			return await task();
 		} finally {
 			busy -= 1;
-			if (!busy) {
-				if (pendingClear) {
-					pendingClear = false;
-					clear();
-				}
-				animate(content, time);
+			if (!busy && pendingClear) {
+				pendingClear = false;
+				clear();
 			}
 			request();
 		}
@@ -265,21 +167,19 @@ export function createStage({ onLost } = {}) {
 		get busy() {
 			return busy > 0;
 		},
-		async load({ kind, bytes, format }) {
+		async load({ bytes, format }) {
 			const mine = ++generation;
 			if (!busy) clear();
-			const loaded = kind === 'glb' ? await loadGltf(bytes) : await loadSplat(bytes, format);
+			const loaded = await loadSplat(bytes, format);
 			if (disposed || mine !== generation) {
-				discard(loaded);
+				loaded.splat.dispose();
 				return null;
 			}
 			clear();
 			pendingClear = false;
-			content = { kind, ...loaded };
+			content = loaded;
 			scene.add(content.root);
-			if (content.gltf) scene.environment = environment;
 			fitClipping(content.bounds);
-			animate(content, time);
 			request();
 			return { bounds: content.bounds, count: content.count ?? null };
 		},
@@ -289,15 +189,8 @@ export function createStage({ onLost } = {}) {
 			else clear();
 			request();
 		},
-		sampleCamera,
 		setPose(pose) {
 			applyPose(camera, pose, camera.aspect);
-			request();
-		},
-		setTime(at) {
-			time = Math.max(0, Number(at) || 0);
-			if (!content?.mixer || busy) return;
-			animate(content, time);
 			request();
 		},
 		resize(width, height) {
@@ -308,19 +201,10 @@ export function createStage({ onLost } = {}) {
 			request();
 		},
 		refresh: request,
-		capture(pose, width, height, at = 0) {
+		capture(pose, width, height) {
 			return exclusive(async () => {
-				const { pixels: image, coverage } = await pixels(pose, width, height, at);
+				const { pixels: image, coverage } = await pixels(pose, width, height);
 				return { url: await encode(image, width, height, 'image/png'), coverage };
-			});
-		},
-		async render(poses, width, height, { times = [], quality = 0.92, onFrame, signal } = {}) {
-			return exclusive(async () => {
-				for (let i = 0; i < poses.length; i++) {
-					if (signal?.aborted || disposed) throw new DOMException('aborted', 'AbortError');
-					const { pixels: image } = await pixels(poses[i], width, height, times[i] ?? 0);
-					await onFrame(i, await encode(image, width, height, 'image/jpeg', quality));
-				}
 			});
 		},
 		dispose() {
@@ -332,7 +216,6 @@ export function createStage({ onLost } = {}) {
 			clear();
 			offline?.spark.dispose();
 			live.dispose();
-			environment?.dispose();
 			renderer.dispose();
 			renderer.forceContextLoss();
 		}

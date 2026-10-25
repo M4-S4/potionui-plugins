@@ -1,8 +1,9 @@
 import re
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 
 from .. import core_bridge
 
@@ -12,9 +13,9 @@ MIB = 1024 * 1024
 
 GIB = 1024 * MIB
 
-RENDERS = "renders"
-
 WORK = "work"
+
+STALE_SECONDS = 3600
 
 
 class SceneError(Exception):
@@ -44,17 +45,12 @@ def scenes_base() -> Path:
 
 
 def project_folder(project_id: str) -> Path:
-    """The scene storage of one project: its splat and glb files, its renders and its work files."""
+    """The scene storage of one project: its splat files and its work files."""
     return scenes_base() / project_id
 
 
-def renders_folder(project_id: str) -> Path:
-    """The folders of the project's renders in progress."""
-    return project_folder(project_id) / RENDERS
-
-
 def work_folder(project_id: str) -> Path:
-    """The folder of the project's short-lived files: uploads being checked and captures being stored."""
+    """The folder of the project's short-lived files: splats being copied and captures being stored."""
     return project_folder(project_id) / WORK
 
 
@@ -72,3 +68,23 @@ def drop(path: Path) -> None:
         shutil.rmtree(path, ignore_errors=True)
     else:
         path.unlink(missing_ok=True)
+
+
+def sweep_work(max_age: float = STALE_SECONDS, now: Optional[float] = None) -> int:
+    """Delete the work files left without a write for more than an hour; returns how many it deleted."""
+    limit = (time.time() if now is None else now) - max_age
+    removed = 0
+    for project in folders(scenes_base()):
+        try:
+            entries = list(work_folder(project.name).iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                idle = entry.stat().st_mtime < limit
+            except OSError:
+                continue
+            if idle:
+                drop(entry)
+                removed += 1
+    return removed

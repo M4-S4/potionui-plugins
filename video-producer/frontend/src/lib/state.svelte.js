@@ -3,8 +3,7 @@ import { emptyDoc, migrate, newAsset, newClip, promptLanguageOf } from './starte
 import { confirm, toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
 import { resetTakes } from './takes.svelte.js';
-import { compileRules, conflictIds, namesCamera } from './rules.js';
-import { dropPlanControls } from './scene3d/doc.js';
+import { compileRules, conflictIds } from './rules.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
 import { joinPlan } from './sound.js';
 import { touch } from './shots.js';
@@ -52,10 +51,9 @@ export const ui = $state({
 	mediaQuery: '',
 	mediaCollection: 'all',
 	mixerFilter: 'Tous',
-	scene: { current: null, pos: [0, 0, 0], target: [0, 0, -4], focal: 35, roll: 0, keyframe: null, seeded: null, preset: 'orbit', amounts: { orbit: 10, dolly: 15, crane: 10 } },
+	scene: { current: null, pos: [0, 0, 0], target: [0, 0, -4], focal: 35, roll: 0, seeded: null },
 	production: {
 		target: 'clip',
-		mode: 'ai',
 		state: 'ready',
 		progress: 0,
 		running: 0,
@@ -192,8 +190,8 @@ export function toast(message, level = 'info', action) {
 	toastTimers.add(timer);
 }
 
-const collections = { clip: 'clips', audio: 'audio', title: 'titles', prompt: 'prompts', frame: 'frames', control: 'controls', plan3d: 'plans3d', marker: 'markers', reference: 'references' };
-const LINKED = ['prompts', 'frames', 'controls', 'plans3d'];
+const collections = { clip: 'clips', audio: 'audio', title: 'titles', prompt: 'prompts', frame: 'frames', marker: 'markers', reference: 'references' };
+const LINKED = ['prompts', 'frames'];
 
 export function select(kind, id) {
 	ui.selection = kind ? { kind, id } : null;
@@ -265,7 +263,6 @@ export function deleteSelection() {
 			dropLinked(removed.id);
 			relayout();
 		}
-		if (s.kind === 'plan3d') dropPlanControls(doc.controls, removed.id);
 	});
 	ui.selection = null;
 	toast(t('lib.toast.deleted'), 'info', { label: t('shell.toast.undo'), run: undo });
@@ -279,7 +276,6 @@ export function duplicateSelection() {
 	if (i < 0) return;
 	const copy = JSON.parse(JSON.stringify($state.snapshot(list[i])));
 	copy.id = ulid();
-	if (s.kind === 'plan3d') copy.keyframes = copy.keyframes.map((k) => ({ ...k, id: ulid() }));
 	act(() => {
 		if (s.kind === 'clip') {
 			list.splice(i + 1, 0, copy);
@@ -473,13 +469,6 @@ export function addFrame(assetId = clipAt(ui.playhead)?.assetId ?? null, time = 
 	toast(t('lib.toast.frameAdded'));
 }
 
-export function addControl() {
-	const c = { id: ulid(), shotId: shotIdAt(ui.playhead), name: t('lib.default.importedControl'), start: round(ui.playhead, 0.04), dur: 4, guidance: 60, source: 'import', stale: false };
-	act(() => doc.controls.push(c));
-	select('control', c.id);
-	toast(t('lib.toast.controlAdded'));
-}
-
 function newLane(role = 'Ambiance') {
 	const lane = {
 		id: newLaneId(),
@@ -552,8 +541,6 @@ export function itemsIn(range) {
 	return {
 		prompts: doc.prompts.filter((p) => inRange(p, overlaps(p.start, p.dur, range))),
 		frames: doc.frames.filter((f) => inRange(f, f.time >= range[0] && f.time <= range[1])),
-		controls: doc.controls.filter((c) => inRange(c, overlaps(c.start, c.dur, range))),
-		plans3d: doc.plans3d.filter((s) => inRange(s, overlaps(s.start, s.dur, range))),
 		references: doc.references.filter((r) => r.scope.type === 'global' || (r.scope.type === 'shot' && shots.has(r.scope.shotId)))
 	};
 }
@@ -575,18 +562,12 @@ const issueTexts = {
 };
 export const ruleText = (id) => issueTexts[id]?.() ?? null;
 
-function controlFor(p) {
-	return doc.controls.find((c) => (p.shotId && c.shotId ? c.shotId === p.shotId : overlaps(c.start, c.dur, [p.start, p.start + p.dur])));
-}
-
 export function promptIssues(p) {
 	if (!p) return [];
 	const g = globalPrompt();
 	const language = promptLanguageOf(doc.promptLanguage);
 	const out = [];
 	for (const id of conflictIds(rules, language, g, p.text)) out.push({ level: 'conflict', text: ruleText(id) ?? id });
-	const ctrl = controlFor(p);
-	if (ctrl && namesCamera(rules, language, p.text)) out.push({ level: 'control', text: t('lib.issue.controlCamera', { name: ctrl.name }) });
 	if (!p.text.trim()) out.push({ level: 'missing', text: t('lib.issue.emptyPrompt') });
 	return out;
 }
@@ -661,7 +642,7 @@ export function replaceDoc(next) {
 	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, dirty: false });
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0 });
 	resetTakes();
-	Object.assign(ui.scene, { current: null, keyframe: null, seeded: null });
+	Object.assign(ui.scene, { current: null, seeded: null });
 	if (ui.playhead > seqDuration()) ui.playhead = 0;
 }
 

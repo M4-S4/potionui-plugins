@@ -20,7 +20,7 @@
 	"empty.shot": "No reference on the timeline.",
 	"empty.shotIn": "No reference on the timeline in “{family}”.",
 	"empty.all": "No references in this project.",
-	"empty.allHint": "Add an identity, a 3D set or a motion guide: global references go with every generation.",
+	"empty.allHint": "Add an identity, a set or a motion guide: global references go with every generation.",
 	"empty.family": "No references in “{family}”.",
 	"listen": "Listen to {name}",
 	"noSound": "No sound attached: choose one in the Inspector.",

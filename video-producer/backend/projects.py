@@ -1,7 +1,7 @@
 import json
 import math
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import best_match
@@ -24,6 +24,12 @@ CAPTURE_ROLE = "Capture 3D"
 GUIDE_SOURCE = "scene3d"
 
 SET_SPACE = "decors3d"
+
+MOTION_SPACE = "mouvement"
+
+MOTION_TYPE = "Control video"
+
+MOTION_ROLE = "Mouvement"
 
 RETIRED_SET_TYPES = ("Scène d’essai", "Scène d'essai", "Gaussian Splat")
 
@@ -387,11 +393,8 @@ DOC_SCHEMA: Dict[str, Any] = {
             "titles": _array(TITLE),
             "prompts": _array(PROMPT),
             "frames": _array(FRAME),
-            "controls": _array(CONTROL),
-            "plans3d": _array(PLAN3D),
             "markers": _array(MARKER),
             "references": _array(REFERENCE),
-            "scenes": _array(SCENE),
             "lanes": _array(LANE),
             "aux": _array(AUX),
             "master": _object(
@@ -404,7 +407,16 @@ DOC_SCHEMA: Dict[str, Any] = {
             "engine": ENGINE,
             "assets": _array(ASSET),
         },
-        optional={"video": VIDEO_TRACK, "profiles": _array(PROFILE), "hybrid": HYBRID, "firstFromPrevious": FLAG, "bible": BIBLE},
+        optional={
+            "video": VIDEO_TRACK,
+            "profiles": _array(PROFILE),
+            "hybrid": HYBRID,
+            "firstFromPrevious": FLAG,
+            "bible": BIBLE,
+            "controls": _array(CONTROL),
+            "plans3d": _array(PLAN3D),
+            "scenes": _array(SCENE),
+        },
     ),
 }
 
@@ -483,6 +495,50 @@ def _retired_set(reference: Any) -> bool:
     return isinstance(reference, dict) and reference.get("space") == SET_SPACE and reference.get("type") in RETIRED_SET_TYPES
 
 
+def _span(item: Dict[str, Any]) -> Tuple[float, float]:
+    start = float(item["start"]) if _number(item.get("start")) else 0.0
+    return start, start + (float(item["dur"]) if _number(item.get("dur")) else 0.0)
+
+
+def _guided_shot(control: Dict[str, Any], clips: Any) -> Optional[str]:
+    shots = [clip for clip in clips if isinstance(clip, dict) and isinstance(clip.get("id"), str) and clip["id"]] if isinstance(clips, list) else []
+    if control.get("shotId"):
+        return control["shotId"] if any(clip["id"] == control["shotId"] for clip in shots) else None
+    start, end = _span(control)
+    covered = [(min(end, last) - max(start, first), clip["id"]) for clip in shots for first, last in [_span(clip)]]
+    best = max(covered, key=lambda pair: pair[0], default=None)
+    return best[1] if best is not None and best[0] > 0 else None
+
+
+def _motion_references(doc: Dict[str, Any], references: List[Any]) -> List[Dict[str, Any]]:
+    controls = doc.get("controls") if isinstance(doc.get("controls"), list) else []
+    assets = doc.get("assets") if isinstance(doc.get("assets"), list) else []
+    videos = {asset.get("id") for asset in assets if isinstance(asset, dict) and asset.get("kind") == "video"}
+    known = {reference.get("id") for reference in references if isinstance(reference, dict)}
+    added: List[Dict[str, Any]] = []
+    for control in controls:
+        if not isinstance(control, dict) or control.get("source") != GUIDE_SOURCE or control.get("assetId") not in videos:
+            continue
+        if not isinstance(control.get("id"), str) or not control["id"] or control["id"] in known:
+            continue
+        shot_id = _guided_shot(control, doc.get("clips"))
+        if shot_id is None:
+            continue
+        added.append(
+            {
+                "id": control["id"],
+                "name": control["name"] if isinstance(control.get("name"), str) else "",
+                "space": MOTION_SPACE,
+                "type": MOTION_TYPE,
+                "assetId": control["assetId"],
+                "role": MOTION_ROLE,
+                "scope": {"type": "shot", "shotId": shot_id},
+            }
+        )
+        known.add(control["id"])
+    return added
+
+
 def _card_ids(doc: Dict[str, Any], kind: str) -> Set[Any]:
     bible = doc.get("bible")
     cards = bible.get(kind) if isinstance(bible, dict) else None
@@ -509,7 +565,7 @@ def _cast(clip: Any, characters: Set[Any], places: Set[Any]) -> Any:
 
 
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: without the keys, simulated scenes and simulated 3D guides earlier versions of the page wrote, the plans 3D that cited those scenes unlinked, the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the old orbit keyframes turned into positions, and the cast of each shot cleared of the bible cards that no longer exist; the same object when nothing changes."""
+    """A document in the current schema: without the keys, simulated scenes and simulated 3D guides earlier versions of the page wrote, the plans 3D that cited those scenes unlinked, the empty 3D captures dropped, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the video of each 3D guide added once as a Mouvement reference of the shot it covers (the Control video itself kept as it is), the old orbit keyframes turned into positions, and the cast of each shot cleared of the bible cards that no longer exist; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -531,6 +587,10 @@ def migrate(doc: Any) -> Any:
             for reference in references
             if not _retired_set(reference) or reference.get("assetId")
         ]
+    kept = changes.get("references", references)
+    motions = _motion_references(doc, kept) if isinstance(kept, list) else []
+    if motions:
+        changes["references"] = [*kept, *motions]
     plans = doc.get("plans3d")
     if isinstance(plans, list):
         migrated = [_plan(plan, dropped) for plan in plans]

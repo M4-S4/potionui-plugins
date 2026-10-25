@@ -25,7 +25,6 @@
 		scheduleEstimate,
 		estimateState
 	} from '../../lib/production.svelte.js';
-	import { PRODUCTION_MODES, modeLabel } from '../../lib/catalog.js';
 	import { aspectOf, draftResolution, finalResolution } from '../../lib/generation.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hasOwnEngine } from '../../lib/engine.js';
@@ -59,7 +58,7 @@
 	const blocked = $derived(ready.missing.length > 0);
 	const notes = $derived(blocked ? [...ready.missing, ...ready.warnings] : ready.warnings);
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
-	const primary = $derived(p.mode === 'render3d' ? t('production.prepareRender') : t('production.generate'));
+	const primary = $derived(t('production.generate'));
 	const targets = $derived([
 		{ id: 'clip', label: t('production.target.clip') },
 		{ id: 'range', label: t('production.target.range') },
@@ -77,8 +76,7 @@
 			t('production.count.shots', { count: clips.length }),
 			t('production.count.prompts', { count: it.prompts.length }),
 			t('production.count.frames', { count: it.frames.length }),
-			t('production.count.references', { count: it.references.length }),
-			it.controls.length ? t('production.count.controls', { count: it.controls.length }) : ''
+			t('production.count.references', { count: it.references.length })
 		]
 			.filter(Boolean)
 			.join(' · ')
@@ -241,10 +239,7 @@
 	<HostUi name="Tooltip" props={{ text: p.quality === 'draft' ? t('production.quality.draftTip', { resolution: draftRes }) : t('production.quality.finalTip', { resolution: finalRes }) }}>
 		<HostUi name="SegmentedControl" props={{ items: qualities, selected: p.quality, variant: 'toggle', ariaLabel: t('production.quality.label'), onSelect: setProjectQuality }} />
 	</HostUi>
-	{#if p.mode !== 'render3d'}<DraftsField {clips} label={false} disabled={busy || !clips.length} />{/if}
-	<select class="vp-popup" bind:value={ui.production.mode} disabled={busy} aria-label={t('production.mode.label')}>
-		{#each PRODUCTION_MODES as m (m)}<option value={m}>{modeLabel(m)}</option>{/each}
-	</select>
+	<DraftsField {clips} label={false} disabled={busy || !clips.length} />
 
 	<div class="vp-divider"></div>
 
@@ -307,7 +302,7 @@
 			{#if ready.noEngine && ui.isAdmin}
 				<a class="vp-link-hit shrink-0 whitespace-nowrap text-xs text-fg underline decoration-signal underline-offset-2 hover:decoration-2" href="/admin?tab=plugins">{t('generation.engine.settings')}</a>
 			{/if}
-			{#if !ready.noEngine && p.mode !== 'render3d'}
+			{#if !ready.noEngine}
 				<InfoTip lines={estLines} wrapperClass="inline-flex shrink-0 items-center">
 					<span class="flex items-center gap-1.5 whitespace-nowrap text-xs transition-opacity {over ? 'text-warning' : 'text-fg-muted'} {estimateState.loading ? 'opacity-60' : ''}">
 						<Icon name={over ? 'alert' : 'history'} class="h-3.5 w-3.5" />

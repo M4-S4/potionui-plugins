@@ -81,16 +81,10 @@ function savedFirstFrame(doc, shotId) {
 	return (doc.frames ?? []).find((f) => f.shotId === shotId && roleKind(f.role) === 'first' && f.assetId) ?? null;
 }
 
-const overlap = (a, b) => a.start < b.start + b.dur && a.start + a.dur > b.start;
-
-function scenePicture(doc, clip) {
-	const guides = (doc.controls ?? []).filter((c) => c.source === 'scene3d' && c.assetId && !c.stale && (c.shotId === clip.id || (!c.shotId && overlap(clip, c))));
-	for (const guide of guides) {
-		const plan = (doc.plans3d ?? []).find((p) => p.id === guide.planId);
-		const scene = plan ? (doc.scenes ?? []).find((s) => s.id === plan.sceneId) : null;
-		if (scene?.kind === 'splat' && scene.status === 'done') return imageAsset(doc, scene.sourceAssetId);
-	}
-	return null;
+function scenePicture(doc, saved, first) {
+	if (!saved?.sceneId || saved.assetId !== first) return null;
+	const scene = (doc.scenes ?? []).find((s) => s.id === saved.sceneId);
+	return scene?.kind === 'splat' && scene.status === 'done' ? imageAsset(doc, scene.sourceAssetId) : null;
 }
 
 export const pictureRole = (reference) => (reference.space === 'decors3d' ? 'setting' : (TYPE_ROLES[reference.type] ?? 'character'));
@@ -105,7 +99,7 @@ export function draftPictures(doc, clip, draft, role = 'first') {
 	const saved = savedFirstFrame(doc, clip.id);
 	const first = imageAsset(doc, draft.first);
 	if (first && (role === 'last' || (saved?.assetId === draft.first && saved.sceneId))) add(first, 'frame', '', 'frame');
-	const scene = scenePicture(doc, clip);
+	const scene = scenePicture(doc, saved, draft.first);
 	if (scene) add(scene, 'setting', '', 'scene');
 	const skip = new Set(draft.exclude ?? []);
 	const shared = (doc.references ?? []).filter((r) => isGlobal(r) && !skip.has(r.id));

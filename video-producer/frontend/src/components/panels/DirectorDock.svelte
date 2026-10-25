@@ -11,6 +11,7 @@
 	import { directionFields, stages } from '../../lib/catalog.js';
 	import { families, addReference, attachToRange } from '../../lib/references.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { openReframe } from '../../lib/scene.svelte.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { review, reviewFix, reviewText, seamNames, suggest } from '../../lib/assistant.svelte.js';
 	import { reviewCount } from '../../lib/assistant.js';
@@ -23,10 +24,6 @@
 	import Icon from '../Icon.svelte';
 	import { labelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
 
-	function fromScene() {
-		ui.workspace = 'scene';
-		if (!doc.scenes.length) ui.modal = { type: 'scene-new' };
-	}
 	let open = $state({ univers: true, personnages: false, photographie: false, palette: true, rythme: false });
 
 	const chars = $derived(globalPrompt().length);
@@ -119,7 +116,7 @@
 					<div class="min-w-0">
 						<div class="font-medium text-fg">{t('panels.dock.guide.refs')}</div>
 						<div class="text-fg-subtle">
-							{t('panels.dock.count.refs', { count: scope.references.length })} · {t('panels.dock.count.frames', { count: scope.frames.length })} · {t('panels.dock.count.controls', { count: scope.controls.length })}
+							{t('panels.dock.count.refs', { count: scope.references.length })} · {t('panels.dock.count.frames', { count: scope.frames.length })}
 						</div>
 					</div>
 				</li>
@@ -135,7 +132,7 @@
 					<ul class="mt-1.5 space-y-2">
 						{#each issues as i, n (n)}
 							<li class="flex gap-1.5 text-xs text-fg-muted">
-								<Icon name={i.level === 'control' ? 'route' : 'sparkles'} class="mt-px h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+								<Icon name="sparkles" class="mt-px h-3.5 w-3.5 shrink-0 text-fg-subtle" />
 								<span>
 									{i.text}
 									<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => openPrompt(i.prompt)}>{t('panels.dock.issuePrompt', { time: secs(i.prompt.start) })}</button>
@@ -295,7 +292,7 @@
 			{/if}
 			<div class="flex flex-col gap-0.5">
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'w-full !justify-start', onclick: () => addReference() }}>{t('panels.dock.refs.add')}</HostUi>
-				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'cube', class: 'w-full !justify-start', onclick: fromScene }}>{t('panels.dock.refs.fromScene')}</HostUi>
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'cube', class: 'w-full !justify-start', onclick: openReframe }}>{t('panels.dock.refs.reframe')}</HostUi>
 			</div>
 			<p class="text-xs text-fg-subtle">{t('panels.dock.refs.dragHint')}</p>
 		</div>

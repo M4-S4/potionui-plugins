@@ -93,7 +93,7 @@ def test_the_block_describes_the_project_the_page_sent():
     assert '  - "Le pont" [shot-2] conflict: La direction globale demande une caméra stable et lente.' in lines
     assert "Continuity measured by the page (1):" in lines
     assert '  - "Arrivée" → "Le pont" lum: “Le pont” is brighter than the previous shot' in lines
-    assert lines[-1] == "Production: running, 40% (draft mode, draft quality, target selection, 2 queued)."
+    assert lines[-1] == "Production: running, 40% (draft quality, target selection, 2 queued)."
 
 
 def test_the_block_resolves_a_selected_prompt_to_its_shot_and_names_other_selections():

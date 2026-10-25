@@ -211,16 +211,6 @@ def test_a_shot_profile_replaces_the_project_one_for_that_shot_only(core, make_d
     assert plans.profile == "FL2VA"
 
 
-def test_a_shot_profile_is_ignored_in_the_3d_render_and_ai_mode(core, make_doc):
-    core.use_h3()
-    doc = _with_engines(make_doc(clips=SHOTS[:1]), s1={"profile": "Hybrid AV"})
-
-    plans = director.build_plans(core.users["user-1"], doc, ["s1"], presets.MINIMAX_H3, "draft", production="render3d_ai", overrides=True)
-
-    assert plans.profile == "Ref2VA"
-    assert all(block["code"] != "profile_unsupported" for block in plans.blocks)
-
-
 def test_the_blocks_of_a_shot_engine_name_its_shots(core, make_doc):
     core.use_wan()
     doc = _with_engines(make_doc(clips=SHOTS), s2={"preset": "gone"}, s3={"profile": "Ref2VA"})

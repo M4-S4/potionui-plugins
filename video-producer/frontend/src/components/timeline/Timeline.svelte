@@ -19,7 +19,6 @@
 		deleteSelection,
 		addPrompt,
 		addFrame,
-		addControl,
 		addAudioLane,
 		deleteLane,
 		act,
@@ -40,8 +39,6 @@
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { addTitle, commandById } from '../../lib/commands.js';
-	import { markStale, selectKey, editKey, relinkPlan } from '../../lib/scene.svelte.js';
-	import { retime } from '../../lib/scene3d/camera.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { wheelZoomFactor } from '../../lib/timebase.js';
@@ -55,7 +52,6 @@
 
 	const HEAD = 156;
 	const BLOCK_ROW = 31;
-	const KEY_BAND = 23;
 	let scroller = $state();
 	let viewW = $state(800);
 	let reorder = $state(null);
@@ -72,13 +68,10 @@
 	const ticks = $derived(Array.from({ length: Math.ceil(contentW / pps / step) + 1 }, (_, i) => i * step));
 	const key = (id) => commandById(id)?.key || undefined;
 
-	const keyed = $derived(doc.plans3d.some((p) => p.source !== 'blender' && p.keyframes.length));
 	const rows = $derived([
 		{ id: 'titles', label: t('timeline.row.titles'), icon: 'type', h: BLOCK_ROW, color: null },
 		{ id: 'prompts', label: t('timeline.row.prompts'), icon: 'sparkles', h: BLOCK_ROW, color: roleColor.Prompts },
 		{ id: 'frames', label: t('timeline.row.frames'), icon: 'image', h: 32, color: roleColor.Frames },
-		{ id: 'controls', label: t('timeline.row.controls'), icon: 'route', h: BLOCK_ROW, color: roleColor.Guides },
-		{ id: 'plans3d', label: t('timeline.row.plans3d'), icon: 'cube', h: keyed ? BLOCK_ROW + KEY_BAND : BLOCK_ROW, color: roleColor.Guides },
 		{ id: 'v1', label: t('timeline.row.video'), icon: 'film', h: 60, color: roleColor.Vidéo },
 		...doc.lanes.map((l) => ({ id: l.id, lane: l, label: t('timeline.row.lane', { id: laneCode(doc.lanes, l.id), name: l.name }), icon: l.role === 'Dialogue' ? 'mic' : l.role === 'Musique' ? 'music' : 'wave', h: 38, color: roleColor[l.role] }))
 	]);
@@ -92,7 +85,6 @@
 	const addItems = $derived([
 		{ label: t('timeline.add.prompt'), icon: 'sparkles', run: () => addPrompt() },
 		{ label: t('timeline.add.frame'), icon: 'image', run: () => addFrame() },
-		{ label: t('timeline.add.control'), icon: 'route', run: () => addControl() },
 		{ label: t('timeline.add.title'), icon: 'type', key: key('title'), run: () => addTitle() },
 		{ label: t('timeline.add.marker'), icon: 'bookmark', key: key('marker'), run: () => addMarker() },
 		{ label: t('timeline.add.lane'), icon: 'wave', key: key('audio-add'), run: addAudioLane }
@@ -168,12 +160,10 @@
 		const at = round(timeAt(e.clientX), 0.04);
 		if (row.id === 'prompts') addPrompt(at, 4);
 		if (row.id === 'frames') addFrame(undefined, at);
-		if (row.id === 'controls') addControl();
 	}
 
 	function relinkAfter(kind, item) {
-		if (kind === 'plan3d') relinkPlan(item);
-		else if ('shotId' in item) relink(item);
+		if ('shotId' in item) relink(item);
 	}
 
 	function moveBlock(e, kind, item) {
@@ -223,12 +213,7 @@
 				}
 				setDragText(limit ? t('timeline.drag.sourceLimit') : t('timeline.drag.duration', { dur: secs(item.dur) }), limit);
 			},
-			onEnd: () => {
-				relinkAfter(kind, item);
-				if (kind !== 'plan3d' || Math.abs(item.dur - d0) < 1e-6) return;
-				if (item.source === 'trajectory') item.keyframes = retime(item.keyframes, d0, item.dur);
-				markStale(item);
-			}
+			onEnd: () => relinkAfter(kind, item)
 		});
 	}
 
@@ -314,18 +299,6 @@
 		});
 	}
 
-	function keyDown(e, plan, k) {
-		selectKey(plan, k, false);
-		const t0 = k.t;
-		drag(e, {
-			onMove: (dx) => {
-				editKey(k, { t: round(clamp(t0 + dx / pps, 0, plan.dur), 0.04) });
-				plan.keyframes.sort((a, b) => a.t - b.t);
-				setDragText(t('timeline.drag.keyframe', { time: secs(plan.start + k.t) }));
-			}
-		});
-	}
-
 	function markerDown(e, m) {
 		const t0 = m.time;
 		drag(e, {
@@ -381,9 +354,7 @@
 
 	function blockKind(kind) {
 		if (kind === 'prompt') return t('timeline.kind.prompt');
-		if (kind === 'title') return t('timeline.kind.title');
-		if (kind === 'control') return t('timeline.kind.control');
-		return t('timeline.kind.plan3d');
+		return t('timeline.kind.title');
 	}
 
 	const flagIcon = { favori: 'star', rejet: 'thumb-down' };
@@ -564,25 +535,6 @@
 									{#if f.sceneId}<Icon name="cube" class="h-3 w-3 shrink-0 text-fg-muted" />{/if}
 									<span class="text-xs text-fg-muted">{frameRoleLabel(f.role)}</span>
 								</button>
-							{/each}
-						{:else if row.id === 'controls'}
-							{#each doc.controls as c (c.id)}
-								{@render block('control', c, c.name, row.color, c.stale ? [{ level: 'stale', text: t('timeline.control.stale') }] : [])}
-							{/each}
-						{:else if row.id === 'plans3d'}
-							{#each doc.plans3d as s (s.id)}
-								{@render block('plan3d', s, s.name, row.color, [], keyed ? KEY_BAND + 2 : null)}
-								{#each s.source === 'blender' ? [] : s.keyframes as k (k.id)}
-									<button
-										type="button"
-										tabindex="-1"
-										class="vp-touch-none absolute top-0 z-20 -ml-3 flex h-6 w-6 items-center justify-center"
-										style:left="{x(s.start + k.t)}px"
-										title={t('timeline.keyframe.tip', { time: secs(s.start + k.t) })}
-										aria-label={t('timeline.keyframe.label', { time: secs(s.start + k.t) })}
-										onpointerdown={(e) => keyDown(e, s, k)}
-									><span class="h-3 w-3 rotate-45 border {ui.scene.keyframe === k.id ? 'border-white bg-signal' : 'border-black/40 bg-fg'}"></span></button>
-								{/each}
 							{/each}
 						{:else if row.id === 'v1'}
 							{#each doc.clips as c (c.id)}
@@ -795,16 +747,14 @@
 	</div>
 {/snippet}
 
-{#snippet block(kind, item, label, color, issues = [], top = null)}
+{#snippet block(kind, item, label, color, issues = [])}
 	{@const sel = isSel(kind, item.id)}
 	{@const warn = issues.filter((i) => i.level !== 'missing')}
 	<div
 		class="vp-touch-none group absolute bottom-0.5 top-0.5 flex items-center gap-1 overflow-hidden rounded border px-2 text-xs {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-hover'} {color ? 'text-fg' : 'bg-surface-3 text-fg'}"
 		style:left="{x(item.start)}px"
-		style:top={top === null ? null : `${top}px`}
 		style:width="{Math.max(6, x(item.dur))}px"
-		style:background={color ? `rgb(var(--${color}) / ${kind === 'control' ? 0.22 : 0.3})` : null}
-		style:background-image={kind === 'control' ? `repeating-linear-gradient(135deg, transparent 0 6px, rgb(var(--${color}) / 0.25) 6px 8px)` : null}
+		style:background={color ? `rgb(var(--${color}) / 0.3)` : null}
 		onpointerdown={(e) => moveBlock(e, kind, item)}
 		ondblclick={() => kind === 'prompt' && (ui.modal = { type: 'prompt', id: item.id })}
 		role="button"
@@ -816,7 +766,6 @@
 		{#if warn.length}<Icon name="alert" class="h-3.5 w-3.5 shrink-0 text-warning" />{/if}
 		<span class="truncate {item.text === '' ? 'italic text-fg-muted' : ''}">{label}</span>
 		{#if kind === 'prompt'}<span class="ml-auto shrink-0 text-fg">{t('timeline.block.percent', { value: item.strength })}</span>{/if}
-		{#if kind === 'control'}<span class="ml-auto shrink-0 text-fg">{t('timeline.block.percent', { value: item.guidance })}</span>{/if}
 		<button
 			type="button"
 			tabindex="-1"

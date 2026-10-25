@@ -1,7 +1,6 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui } from '../../lib/state.svelte.js';
 	import { project, getClient } from '../../lib/project.svelte.js';
 	import { currentEngine, engineOptionLabel, noteText } from '../../lib/production.svelte.js';
 
@@ -14,7 +13,7 @@
 	const option = $derived(currentEngine());
 	const body = $derived(
 		option && project.id
-			? JSON.stringify({ shots: [shotId], preset_id: option.preset, model_id: option.model ?? null, production: ui.production.mode === 'render3d_ai' ? 'render3d_ai' : 'ai', doc: source })
+			? JSON.stringify({ shots: [shotId], preset_id: option.preset, model_id: option.model ?? null, doc: source })
 			: null
 	);
 	const item = $derived(composed.data?.prompts.find((p) => p.shotId === shotId) ?? null);

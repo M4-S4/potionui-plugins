@@ -10,10 +10,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const source = (file) => readFileSync(join(here, file), 'utf-8');
 const json = (locale, domain) => JSON.parse(source(`../i18n/${locale}/${domain}.json`));
 
-test('workspaces: Play sits between Media and Director IA, six workspaces in all', () => {
+test('workspaces: Play sits between Media and Director IA, five workspaces in all, the 3D scene being a tool of the shot editor', () => {
 	assert.deepEqual(
 		WORKSPACES.map((w) => w.id),
-		['media', 'play', 'director', 'storyboard', 'scene', 'mixer']
+		['media', 'play', 'director', 'storyboard', 'mixer']
 	);
 	assert.equal(PLAYER, 'play');
 	assert.ok(isPlayer('play'));

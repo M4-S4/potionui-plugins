@@ -1,5 +1,4 @@
 import copy
-import math
 
 import pytest
 
@@ -764,285 +763,62 @@ def _sections(prompt):
     return sections
 
 
-def _key(key_id, time, pos, target, focal):
-    return {"id": key_id, "t": time, "pos": list(pos), "target": list(target), "focal": focal, "roll": 0}
-
-
-def _plan3d(plan_id, start_pos, end_pos, start_target=(0, 0, -4), end_target=None, scene_id="scene-1", focal=(30, 30), dur=4):
-    return {
-        "id": plan_id,
-        "shotId": "s1",
-        "sceneId": scene_id,
-        "name": plan_id,
-        "start": 0,
-        "dur": dur,
-        "source": "trajectory",
-        "preset": None,
-        "amount": None,
-        "camera": None,
-        "keyframes": [_key("k1", 0, start_pos, start_target, focal[0]), _key("k2", dur, end_pos, end_target or start_target, focal[1])],
-    }
-
-
-def _around(degrees):
-    return (4 * math.sin(math.radians(degrees)), 0, -4 + 4 * math.cos(math.radians(degrees)))
-
-
-def _orbit(plan_id="plan-c1", degrees=10, scene_id="scene-1"):
-    return _plan3d(plan_id, _around(-degrees), _around(degrees), scene_id=scene_id)
-
-
 def _splat(scene_id="scene-1", source="hero"):
     return {"id": scene_id, "kind": "splat", "name": "Bow", "sourceAssetId": source, "sourceTime": None, "status": "done", "progress": 100,
             "jobId": "j1", "fileId": "f1", "count": 10, "view": {"fov": 32, "aspect": 1.73, "depth": 4}, "error": None}
 
 
-ORBIT_SENTENCES = (
-    "The camera arcs from left to right around the subject through about 20 degrees over the whole shot. "
-    "The move follows <Video 1> forward in time: the shot opens on the viewpoint of its first frame and ends on the viewpoint of its last frame, never in reverse. "
-    "This camera movement replaces any other camera movement mentioned above."
-)
-GUIDE_RETENTION = (
-    "<Video 1> (camera path of [Shot 1]): weak_reference - camera movement only, not the look: only the direction, amplitude and speed of its camera move are followed; "
-    "its content, colours, textures, blurred or stretched patches, holes and black borders are not reproduced."
-)
-
-
-def test_ref2va_sends_the_fresh_3d_guide_video_first_in_a_six_section_prompt_that_keeps_only_its_camera_movement(core, make_doc):
+def test_a_ref2va_shot_no_longer_sends_its_3d_guide_video_nor_the_picture_of_its_scene_and_names_no_camera_path(core, make_doc):
     core.use_h3()
-    references = [{"id": "r1", "assetId": "hero", "scope": {"type": "global"}}, {"id": "r2", "assetId": "walk", "scope": {"type": "shot", "shotId": "s1"}}]
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], references=references, direction={"univers": "A small harbour at dawn", "palette": "Cold blues."})
-    doc["plans3d"] = [_orbit()]
+    references = [{"id": "r1", "assetId": "walk", "space": "mouvement", "scope": {"type": "shot", "shotId": "s1"}}]
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], references=references)
+    doc["plans3d"] = [{"id": "plan-c1", "shotId": "s1", "sceneId": "scene-1", "name": "Orbit", "start": 0, "dur": 4, "keyframes": []}]
+    doc["scenes"] = [_splat()]
 
     plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
 
     assert plans.blocks == [] and plans.warnings == []
     (plan,) = plans.shots
-    form = plan.request["form_data"]
-    assert form["references"] == ["uploads/orbit.mp4", "uploads/walk.mp4", "uploads/hero.png"]
-    assert plan.prompt_text == "\n\n".join(
-        [
-            "subject_definitions: <Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]. "
-            "<Subject 1> is the character shown in <Video 2>. <Subject 2> is the character shown in <Picture 1>.",
-            "summary: [reference generation] A 4-second shot made from the description below, with its camera movement taken from <Video 1>.",
-            "retention_analysis: " + GUIDE_RETENTION + "\n"
-            "<Subject 1> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.\n"
-            "<Subject 2> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.",
-            "detailed_description: A small harbour at dawn. Cold blues. [Shot 1] The hut at dawn. "
-            "<Subject 1> appears in the shot. <Subject 2> appears in the shot. " + ORBIT_SENTENCES,
-            "overall_soundscape: The natural ambient sound of the place and the physical sounds of the action described above.",
-            "non_diegetic_music: N/A",
-        ]
-    )
-    assert plan.request["prompts"] == [{"positive": plan.prompt_text, "negative": ""}]
-    assert form["video_director"]["segments"][0]["prompt"] == plan.prompt_text
-    assert plan.guides == ["c1"]
-    assert plan.summary()["guides"] == ["c1"]
-    assert plans.renders == [{"shot_id": "s1", "control_id": "c1", "plan_id": "plan-c1", "asset_id": "orbit"}]
-
-
-SCENE_DEFINITION = "<Picture 1> shows the scene itself: keep its look, colours and lighting."
-SCENE_RETENTION = (
-    "<Picture 1> (look of the scene of [Shot 1]): partially_preserved - keeps the look, the colours and the lighting of the scene; "
-    "the framing follows the camera path."
-)
-
-
-def test_the_six_sections_come_in_order_and_the_picture_a_splat_scene_was_built_from_is_sent_for_its_look(core, make_doc):
-    core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
-    doc["plans3d"] = [_orbit()]
-    doc["scenes"] = [_splat()]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3, production="render3d_ai").shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/hero.png"]
-    sections = _sections(plan.prompt_text)
-    assert list(sections) == ["subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music"]
-    assert sections["subject_definitions"] == (
-        "<Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]. " + SCENE_DEFINITION
-    )
-    assert sections["retention_analysis"] == GUIDE_RETENTION + "\n" + SCENE_RETENTION
-    assert sections["detailed_description"] == "[Shot 1] The hut at dawn. " + ORBIT_SENTENCES
-    assert plan.guides == ["c1"]
-
-
-def test_the_scene_picture_is_sent_once_when_the_user_also_attached_it_as_a_reference(core, make_doc):
-    core.use_h3()
-    references = [{"id": "r1", "assetId": "hero", "scope": {"type": "global"}}]
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], references=references)
-    doc["plans3d"] = [_orbit()]
-    doc["scenes"] = [_splat()]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/hero.png"]
-    sections = _sections(plan.prompt_text)
-    assert SCENE_DEFINITION in sections["subject_definitions"]
-    assert "<Subject" not in sections["subject_definitions"]
-
-
-def test_a_scene_built_from_a_video_frame_sends_the_frame_its_scene_job_took(core, make_doc, media_store, monkeypatch):
-    from backend.scene3d import jobs
-
-    core.use_h3()
-    media_store.items["uploads/0001-frame.png"] = "item-frame"
-    monkeypatch.setattr(jobs, "get_job", lambda job_id: {"id": job_id, "source_value": "uploads/0001-frame.png"} if job_id == "j1" else None)
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
-    doc["plans3d"] = [_orbit()]
-    scene = _splat(source="walk")
-    scene["sourceTime"] = 1.5
-    doc["scenes"] = [scene]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/0001-frame.png"]
-    assert SCENE_DEFINITION in _sections(plan.prompt_text)["subject_definitions"]
-
-
-def test_a_scene_frame_no_longer_stored_is_not_sent_and_nothing_is_extracted(core, make_doc, media_store, monkeypatch):
-    from backend import core_bridge
-    from backend.scene3d import jobs
-
-    core.use_h3()
-    monkeypatch.setattr(jobs, "get_job", lambda job_id: {"id": job_id, "source_value": "uploads/0001-frame.png"})
-
-    async def refuse(*args, **kwargs):
-        raise AssertionError("planning a take must not extract a frame")
-
-    monkeypatch.setattr(core_bridge, "extract_frame", refuse)
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
-    doc["plans3d"] = [_orbit()]
-    doc["scenes"] = [_splat(source="walk")]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
-
-
-@pytest.mark.parametrize(
-    "scene",
-    [
-        {"id": "scene-1", "kind": "splatfile", "name": "Bow", "fileId": "f1", "format": "ply", "view": None},
-        {**_splat(), "status": "running"},
-        {**_splat(), "sourceAssetId": "gone"},
-    ],
-)
-def test_no_picture_is_sent_for_an_imported_unfinished_or_sourceless_scene(core, make_doc, scene):
-    core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
-    doc["plans3d"] = [_orbit()]
-    doc["scenes"] = [scene]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"]
-
-
-def test_no_scene_picture_is_sent_without_a_fresh_guide(core, make_doc):
-    core.use_h3()
-    references = [{"id": "r1", "assetId": "walk", "scope": {"type": "global"}}]
-    doc = _guided(core, make_doc, [_guide("c1", "orbit", stale=True)], references=references)
-    doc["plans3d"] = [_orbit()]
-    doc["scenes"] = [_splat()]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
     assert plan.request["form_data"]["references"] == ["uploads/walk.mp4"]
+    assert _sections(plan.prompt_text) == {
+        "subject_definitions": "<Video 1> is the source of the motion of [Shot 1].",
+        "summary": "[reference generation] A 4-second shot made from the description below and its references.",
+        "retention_analysis": "<Video 1> (motion of [Shot 1]): attribute_transfer - its motion is carried over to the subjects of the shot.",
+        "detailed_description": "[Shot 1] The hut at dawn.",
+        "overall_soundscape": "The natural ambient sound of the place and the physical sounds of the action described above.",
+        "non_diegetic_music": "N/A",
+    }
+    assert "guides" not in plan.summary()
 
 
-def test_the_scene_picture_reads_in_french(core, make_doc):
-    core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], language="fr")
-    doc["plans3d"] = [_orbit()]
-    doc["scenes"] = [_splat()]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    sections = _sections(plan.prompt_text)
-    assert sections["subject_definitions"].endswith("<Picture 1> montre la scène elle-même : garder son aspect, ses couleurs et sa lumière.")
-    assert sections["retention_analysis"].endswith(
-        "<Picture 1> (aspect de la scène de [Shot 1]): partially_preserved - garde l'aspect, les couleurs et la lumière de la scène ; "
-        "le cadrage suit la trajectoire de caméra."
-    )
-
-
-@pytest.mark.parametrize(
-    "plan, move",
-    [
-        (_orbit(degrees=10), "arcs from left to right around the subject through about 20 degrees"),
-        (_plan3d("plan-c1", (0.694593, 0, -0.060769), (-0.694593, 0, -0.060769)), "arcs from right to left around the subject through about 20 degrees"),
-        (_plan3d("plan-c1", (0, 0, 0), (0, 0, -0.6)), "pushes in toward the subject, closing about 15 % of the distance"),
-        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 1)), "pulls back from the subject, widening the distance by about 25 %"),
-        (_plan3d("plan-c1", (0, 0, 0), (0, 4 * math.sin(math.radians(10)), -4 + 4 * math.cos(math.radians(10)))), "rises through about 10 degrees, tilting down to keep the subject framed"),
-        (_plan3d("plan-c1", (0, 0, 0), (1, 0, 0), end_target=(1, 0, -4)), "trucks from left to right"),
-        (_plan3d("plan-c1", (0, 0, 0), (0, -0.5, 0), end_target=(0, -0.5, -4)), "pedestals down"),
-        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 0), end_target=(-4 * math.sin(math.radians(15)), 0, -4 * math.cos(math.radians(15)))), "pans from right to left through about 15 degrees"),
-        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 0), end_target=(0, 1, -4)), "tilts up through about 14 degrees"),
-        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 0), focal=(30, 50)), "zooms in"),
-        (_plan3d("plan-c1", (0, 0, 0), (0, 0, 0)), "stays still"),
-        (
-            _plan3d("plan-c1", (-0.694593, 0, -0.060769), (0.694593, 0, -0.060769), focal=(50, 30)),
-            "arcs from left to right around the subject through about 20 degrees and zooms out",
-        ),
-    ],
-)
-def test_the_prompt_spells_out_the_move_of_the_3d_shot_from_its_first_key_to_its_last(core, make_doc, plan, move):
+def test_a_ref2va_shot_whose_only_reference_was_its_3d_guide_is_blocked_for_lack_of_references(core, make_doc):
     core.use_h3()
     doc = _guided(core, make_doc, [_guide("c1", "orbit")])
-    doc["plans3d"] = [plan]
 
-    (shot,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
 
-    assert f"[Shot 1] The hut at dawn. The camera {move} over the whole shot. The move follows <Video 1> forward in time" in shot.prompt_text
-
-
-def test_the_keys_are_read_in_time_order_and_a_3d_shot_without_two_usable_keys_falls_back_to_following_the_video(core, make_doc):
-    core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly")])
-    shuffled = _orbit("plan-c1")
-    shuffled["keyframes"] = list(reversed(shuffled["keyframes"]))
-    broken = _orbit("plan-c2")
-    broken["keyframes"][1]["pos"] = [0, "x", 0]
-    broken["keyframes"].append(_key("k3", 5, (0, 0, -4), (0, 0, -4), 30))
-    doc["plans3d"] = [shuffled, broken]
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert _sections(plan.prompt_text)["detailed_description"] == (
-        "[Shot 1] The hut at dawn. "
-        "The camera arcs from left to right around the subject through about 20 degrees over the whole shot. "
-        "The move follows <Video 1> forward in time: the shot opens on the viewpoint of its first frame and ends on the viewpoint of its last frame, never in reverse. "
-        "The camera follows the camera path of <Video 2>. "
-        "The move follows <Video 2> forward in time: the shot opens on the viewpoint of its first frame and ends on the viewpoint of its last frame, never in reverse. "
-        "This camera movement replaces any other camera movement mentioned above."
-    )
-    assert _sections(plan.prompt_text)["summary"].endswith("with its camera movement taken from <Video 1> and <Video 2>.")
+    assert plans.shots == [] and [block["code"] for block in plans.blocks] == ["no_references"]
 
 
 def test_the_six_sections_keep_their_english_labels_and_markers_and_follow_the_prompt_language(core, make_doc):
     core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], language="fr", prompt="La cabane à l'aube")
-    doc["plans3d"] = [_orbit()]
+    references = [{"id": "r1", "assetId": "walk", "space": "mouvement", "scope": None}]
+    doc = _guided(core, make_doc, [], references=references, language="fr", prompt="La cabane à l'aube")
     doc["clips"][0]["dur"] = 4.5
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
 
     assert _sections(plan.prompt_text) == {
-        "subject_definitions": "<Video 1> est un rendu 3D de prévisualisation, grossier, de la scène, utilisé seulement comme source de la trajectoire de caméra de [Shot 1].",
-        "summary": "[reference generation] Un plan de 4,5 secondes fait d'après la description ci-dessous, dont le mouvement de caméra vient de <Video 1>.",
-        "retention_analysis": "<Video 1> (trajectoire de caméra de [Shot 1]): weak_reference - mouvement de caméra seulement, pas l'aspect : seuls le sens, l'amplitude et la vitesse "
-        "de son mouvement de caméra sont suivis ; son contenu, ses couleurs, ses textures, ses zones floues ou étirées, ses trous et ses bords noirs ne sont pas reproduits.",
-        "detailed_description": "[Shot 1] La cabane à l'aube. "
-        "La caméra décrit un arc de gauche à droite d'environ 20 degrés autour du sujet sur toute la durée du plan. "
-        "Le mouvement suit <Video 1> dans le sens du temps : le plan s'ouvre sur le point de vue de sa première image et se termine sur celui de sa dernière image, jamais à l'envers. "
-        "Ce mouvement de caméra remplace tout autre mouvement de caméra mentionné plus haut.",
+        "subject_definitions": "<Video 1> est la source du mouvement de [Shot 1].",
+        "summary": "[reference generation] Un plan de 4,5 secondes fait d'après la description ci-dessous et ses références.",
+        "retention_analysis": "<Video 1> (mouvement de [Shot 1]): attribute_transfer - son mouvement est repris par les sujets du plan.",
+        "detailed_description": "[Shot 1] La cabane à l'aube.",
         "overall_soundscape": "Le son ambiant naturel du lieu et les sons physiques de l'action décrite plus haut.",
         "non_diegetic_music": "N/A",
     }
 
 
-def test_each_reference_of_a_ref2va_shot_without_guide_is_defined_and_kept_by_its_space(core, make_doc):
+def test_each_reference_of_a_ref2va_shot_is_defined_and_kept_by_its_space(core, make_doc):
     core.use_h3()
     core.add_media({"kind": "library", "item_id": "lib-voice"}, "uploads/voice.wav", "audio")
     references = [
@@ -1071,21 +847,6 @@ def test_each_reference_of_a_ref2va_shot_without_guide_is_defined_and_kept_by_it
     }
 
 
-def test_a_reference_video_already_sent_as_a_guide_is_not_sent_twice_and_the_guides_keep_their_ranks(core, make_doc):
-    core.use_h3()
-    references = [{"id": "r1", "assetId": "orbit", "scope": {"type": "shot", "shotId": "s1"}}]
-    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly")], references=references)
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/dolly.mp4"]
-    assert _sections(plan.prompt_text)["subject_definitions"] == (
-        "<Video 1> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]. "
-        "<Video 2> is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1]."
-    )
-    assert plan.guides == ["c1", "c2"]
-
-
 def test_the_shot_prompt_outside_ref2va_is_the_instruction_then_the_direction_without_any_section(core, make_doc):
     core.use_wan()
     doc = _guided(core, make_doc, [], direction={"mode": "FL2VA", "univers": "A harbour."})
@@ -1095,97 +856,8 @@ def test_the_shot_prompt_outside_ref2va_is_the_instruction_then_the_direction_wi
     assert plan.prompt_text == "The hut at dawn.\nA harbour."
 
 
-def test_the_3d_guides_count_within_the_three_reference_videos_of_a_shot(core, make_doc):
-    core.use_h3()
-    references = [{"id": f"r{index}", "assetId": asset, "scope": {"type": "global"}} for index, asset in enumerate(("walk", "swim"))]
-    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly")], references=references)
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4", "uploads/dolly.mp4", "uploads/walk.mp4"]
-
-
-def test_a_stale_guide_is_left_out_with_a_warning_and_does_not_block(core, make_doc):
-    core.use_h3()
-    references = [{"id": "r1", "assetId": "hero", "scope": None}]
-    doc = _guided(core, make_doc, [_guide("c1", "orbit", stale=True)], references=references)
-
-    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
-
-    (plan,) = plans.shots
-    assert plan.request["form_data"]["references"] == ["uploads/hero.png"]
-    assert _sections(plan.prompt_text)["detailed_description"] == "[Shot 1] The hut at dawn. <Subject 1> appears in the shot." and plan.guides == []
-    assert plans.warnings == [
-        {"code": "stale_guide", "message": "The 3D guide of the shot is stale: render it again.", "data": {"shot_id": "s1", "control_id": "c1"}}
-    ]
-    assert plans.renders == []
-
-
-def test_a_guide_video_under_two_seconds_is_sent_with_a_warning(core, make_doc):
-    core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "short")], assets=[_video_asset("short", "lib-orbit", seconds=1.5)])
-
-    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
-
-    assert plans.shots[0].request["form_data"]["references"] == ["uploads/orbit.mp4"]
-    assert plans.warnings == [
-        {
-            "code": "guide_too_short",
-            "message": "The 3D guide video of the shot is shorter than the 2 s MiniMax-H3 reads.",
-            "data": {"shot_id": "s1", "control_id": "c1", "min": 2.0},
-        }
-    ]
-
-
-def test_a_guide_without_a_known_length_is_as_long_as_its_control(core, make_doc):
-    core.use_h3()
-    unknown = {**_video_asset("unknown", "lib-orbit"), "srcDur": None}
-    doc = _guided(core, make_doc, [_guide("c1", "unknown", dur=1.0)], assets=[unknown])
-
-    assert [warning["code"] for warning in _plans(core, doc, preset_id=presets.MINIMAX_H3).warnings] == ["guide_too_short"]
-
-
-def test_a_guide_linked_to_no_shot_counts_for_the_shots_it_overlaps_and_other_guides_are_ignored(core, make_doc):
-    core.use_h3()
-    controls = [
-        _guide("over", "orbit", shot_id=None, start=3, dur=5),
-        _guide("after", "dolly", shot_id=None, start=4, dur=2),
-        _guide("other", "walk", shot_id="s2"),
-        {**_guide("import", "swim"), "source": "import"},
-        _guide("unrendered", None),
-    ]
-    doc = _guided(core, make_doc, controls)
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"] and plan.guides == ["over"]
-
-
-def test_a_scene3d_control_with_neither_a_3d_shot_nor_a_video_is_not_a_guide(core, make_doc):
-    core.use_wan()
-    simulated = {"id": "simulated", "shotId": "s1", "start": 0, "dur": 4, "stale": False, "planId": None, "assetId": None}
-    legacy = {"id": "legacy", "shotId": None, "start": 0, "dur": 4, "stale": True}
-    doc = _guided(core, make_doc, [simulated, legacy, _guide("planned", None)], direction={"mode": "FL2VA"})
-
-    assert [guide["id"] for guide in director.shot_guides(doc, doc["clips"][0])] == ["planned"]
-    doc["controls"] = doc["controls"][:2]
-    assert director.shot_guides(doc, doc["clips"][0]) == []
-    assert [warning["code"] for warning in _plans(core, doc).warnings if warning["code"] != "fl2va_no_frame"] == []
-
-
-def test_a_guide_whose_media_is_not_a_video_is_not_sent_as_a_camera_reference(core, make_doc):
-    core.use_h3()
-    references = [{"id": "r1", "assetId": "walk", "scope": None}]
-    doc = _guided(core, make_doc, [_guide("c1", "hero"), _guide("c2", "gone")], references=references)
-
-    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
-
-    assert plan.request["form_data"]["references"] == ["uploads/walk.mp4"]
-    assert _sections(plan.prompt_text)["detailed_description"] == "[Shot 1] The hut at dawn. <Subject 1> appears in the shot." and plan.guides == []
-
-
 @pytest.mark.parametrize("stale", [False, True])
-def test_a_3d_guide_on_a_shot_generated_without_references_warns_that_only_ref2va_follows_it(core, make_doc, stale):
+def test_a_3d_guide_gives_no_warning_and_no_reference(core, make_doc, stale):
     core.use_wan()
     doc = _guided(core, make_doc, [_guide("c1", "orbit", stale=stale)], direction={"mode": "FL2VA"})
 
@@ -1193,288 +865,26 @@ def test_a_3d_guide_on_a_shot_generated_without_references_warns_that_only_ref2v
 
     (plan,) = plans.shots
     assert "references" not in plan.request["form_data"] and plan.prompt_text == "The hut at dawn."
-    assert [warning for warning in plans.warnings if warning["code"] != "fl2va_no_frame"] == [
-        {"code": "guide_needs_refs", "message": "The shot has a 3D guide video: only a Ref2VA preset follows it.", "data": {"shot_id": "s1"}}
-    ]
+    assert [warning["code"] for warning in plans.warnings] == ["fl2va_no_frame"]
 
 
-def test_a_3d_guide_on_a_cloud_shot_warns_that_only_ref2va_follows_it(core, make_doc):
+def test_a_3d_guide_on_a_cloud_shot_gives_no_warning(core, make_doc):
     core.use_openrouter()
     doc = _guided(core, make_doc, [_guide("c1", "orbit")], direction={"mode": "FL2VA"})
 
     plans = _plans(core, doc, preset_id=presets.OPENROUTER_VIDEO, model_id="cm-veo")
 
-    assert "guide_needs_refs" in [warning["code"] for warning in plans.warnings]
+    assert [warning["code"] for warning in plans.warnings] == ["fl2va_no_frame"]
 
 
-def test_the_3d_render_and_ai_mode_runs_ref2va_whatever_the_project_profile(core, make_doc):
-    core.use_h3()
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")], direction={"mode": "FL2VA"})
-
-    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3, production="render3d_ai")
-
-    (plan,) = plans.shots
-    assert (plans.profile, plans.production, plan.director_mode, plan.preset_mode) == ("Ref2VA", "render3d_ai", "refs", "refs")
-    assert plan.request["form_data"]["references"] == ["uploads/orbit.mp4"] and plans.warnings == []
-
-
-def test_the_3d_render_and_ai_mode_warns_about_a_shot_without_a_rendered_guide(core, make_doc):
-    core.use_h3()
-    doc = _guided(core, make_doc, [], references=[{"id": "r1", "assetId": "hero", "scope": None}])
-
-    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3, production="render3d_ai")
-
-    assert plans.warnings == [{"code": "render_missing", "message": "The shot has no up-to-date 3D render.", "data": {"shot_id": "s1"}}]
-    assert plans.shots[0].request["form_data"]["references"] == ["uploads/hero.png"]
-
-
-@pytest.mark.parametrize("preset_id", [presets.MINIMAX_H3_12GB, presets.WAN, presets.LTX_2])
-def test_the_3d_render_and_ai_mode_needs_a_minimax_h3_preset_with_its_refs_mode_or_ltx_2_5(core, make_doc, preset_id):
-    core.use_wan()
-    core.use_h3_variant(presets.MINIMAX_H3_12GB, "MiniMax-H3 (12 GB)")
-    ltx = core.use_ltx25()
-    core.add_preset(presets.LTX_2, "LTX-2 / 2.3", {"video": core.fields[(presets.LTX_2_5, "video")]}, variables=ltx.vars)
-    doc = _guided(core, make_doc, [_guide("c1", "orbit")])
-
-    plans = _plans(core, doc, preset_id=preset_id, production="render3d_ai")
-
-    assert plans.shots == []
-    assert plans.blocks == [
-        {
-            "code": "refs_preset_needed",
-            "message": "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode, or LTX-2.5.",
-            "data": {"preset_id": preset_id},
-        }
-    ]
-
-
-LAYOUT_LORA_REF = f"model:id-{director.LAYOUT_LORA}"
-HERO_FIRST = {
-    "id": "bound-first-seg-1",
-    "role": "first",
-    "segment_id": "seg-1",
-    "at": 0.0,
-    "strength": 1.0,
-    "media": {"path": "uploads/hero.png", "relative_path": "uploads/hero.png", "type": "image"},
-}
-NO_FRAME_WARNING = {
-    "code": "layout_no_frame",
-    "message": "The shot has no first frame: LTX-2.5 keeps the look of its 3D render.",
-    "data": {"shot_id": "s1"},
-}
-
-
-def _layout_doc(core, make_doc, controls, first=True, fps=24, frames=97):
+def test_ltx_2_5_runs_a_shot_with_a_3d_guide_from_its_first_frame_without_any_ic_lora(core, make_doc):
     core.use_ltx25()
-    doc = _guided(core, make_doc, controls, direction={"mode": "FL2VA"})
-    for asset in doc["assets"]:
-        if asset["kind"] == "video":
-            asset["fps"] = fps
-            asset["srcDur"] = frames / 24
-    if first:
-        doc["frames"] = [_frame("f1", "hero", "first")]
-    return doc
-
-
-def _layout(reference):
-    return [
-        {
-            "id": "ic-layout",
-            "lora": {"model": LAYOUT_LORA_REF, "strength": 1.0},
-            "reference": {"path": reference, "relative_path": reference, "type": "video"},
-            "strength": 1.0,
-        }
-    ]
-
-
-def test_the_3d_render_and_ai_mode_on_ltx_2_5_sends_the_3d_guide_to_the_layout_to_render_ic_lora_and_the_first_frame_for_the_look(core, make_doc):
-    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
-
-    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
-
-    assert (plans.blocks, plans.warnings, plans.profile, plans.production) == ([], [], "FL2VA", "render3d_ai")
-    (plan,) = plans.shots
-    assert (plan.director_mode, plan.preset_mode, plan.seconds, plan.resolution, plan.fps) == ("director", "video", 4.0, "832x480", 24)
-    assert plan.request == {
-        "preset_id": presets.LTX_2_5,
-        "mode": "video",
-        "prompts": [{"positive": "The hut at dawn.", "negative": ""}],
-        "form_data": {
-            "seed": -1,
-            "resolution": "832x480",
-            "fps": 24,
-            "video_director": {
-                "schema_version": 1,
-                "mode": "director",
-                "settings": {"fps": 24, "duration": 4.0, "resolution": "832x480", "seed": -1},
-                "segments": [{"id": "seg-1", "prompt": "The hut at dawn.", "negative_prompt": "", "start": 0.0, "end": 4.0}],
-                "media": [HERO_FIRST],
-                "ic_lora": _layout("uploads/orbit.mp4"),
-            },
-            "model": "model:id-ltx25-sha",
-            "text_encoder": "model:id-gemma4_text_encoder-sha",
-            "video_vae": "model:id-ltx25_video_vae-sha",
-            "speed_profile": "distilled",
-            "steps": 8,
-            "cfg": 1.0,
-            "sampler": "euler_ancestral",
-        },
-    }
-    assert plan.guides == ["c1"] and plan.summary()["guides"] == ["c1"]
-    assert plans.renders == [{"shot_id": "s1", "control_id": "c1", "plan_id": "plan-c1", "asset_id": "orbit"}]
-
-
-def test_the_3d_render_mode_gives_each_shot_its_latest_fresh_render_without_a_preset(core, make_doc):
-    doc = _guided(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly"), _guide("c3", "walk", stale=True), _guide("c4", "missing")])
-    doc["clips"].append({**doc["clips"][0], "id": "s2", "start": 4})
-
-    plans = director.build_plans(core.users["user-1"], doc, ["s1", "s2", "nowhere"], None, "draft", production="render3d")
-
-    assert (plans.preset, plans.production, plans.shots, plans.blocks) == (None, "render3d", [], [])
-    assert plans.renders == [{"shot_id": "s1", "control_id": "c2", "plan_id": "plan-c2", "asset_id": "dolly"}]
-    assert [(warning["code"], warning["data"]) for warning in plans.warnings] == [
-        ("stale_guide", {"shot_id": "s1", "control_id": "c3"}),
-        ("render_missing", {"shot_id": "s2"}),
-    ]
-
-
-def test_the_3d_render_mode_without_any_render_or_shot_is_blocked(core, make_doc):
-    doc = _guided(core, make_doc, [])
-    user = core.users["user-1"]
-
-    assert [block["code"] for block in director.build_plans(user, doc, ["s1"], None, "draft", production="render3d").blocks] == ["no_render"]
-    assert [block["code"] for block in director.build_plans(user, doc, [], None, "draft", production="render3d").blocks] == ["no_shots"]
-
-
-@pytest.mark.parametrize("guidance", [0, 40, 65, 130])
-def test_the_reference_and_the_lora_stay_at_full_strength_whatever_the_guidance_of_the_control(core, make_doc, guidance):
-    doc = _layout_doc(core, make_doc, [{**_guide("c1", "orbit"), "guidance": guidance}])
-
-    (plan,) = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai").shots
-
-    assert plan.request["form_data"]["video_director"]["ic_lora"] == _layout("uploads/orbit.mp4")
-
-
-@pytest.mark.parametrize("frames, snapped", [(1, 1), (2, 1), (48, 49), (69, 65), (70, 73), (72, 73), (96, 97), (97, 97)])
-def test_ltx_snaps_a_frame_count_to_the_nearest_one_plus_eight_k(frames, snapped):
-    assert director.snapped_frames(frames) == snapped
-
-
-def test_a_guide_video_rendered_before_the_one_plus_eight_k_rule_warns_that_it_leaves_the_end_of_the_shot_free(core, make_doc):
-    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")], frames=96)
-
-    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
-
-    assert plans.warnings == [
-        {
-            "code": "layout_guide_short",
-            "message": "The 3D guide video conditions 89 of the 97 frames of the shot: render it again.",
-            "data": {"shot_id": "s1", "control_id": "c1", "covered": 89, "needed": 97},
-        }
-    ]
-    assert plans.shots[0].request["form_data"]["video_director"]["ic_lora"] == _layout("uploads/orbit.mp4")
-
-
-@pytest.mark.parametrize("length, rate", [(None, 24), (4.0, None), (0, 24)])
-def test_a_guide_video_of_unknown_length_or_frame_rate_gives_no_coverage_warning(length, rate):
-    assert director.guide_coverage({"srcDur": length, "fps": rate}, 4.0, 24) is None
-
-
-def test_a_layout_shot_without_a_first_frame_warns_that_it_keeps_the_look_of_its_3d_render(core, make_doc):
-    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")], first=False)
-
-    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
-
-    assert plans.blocks == [] and plans.warnings == [NO_FRAME_WARNING]
-    document = plans.shots[0].request["form_data"]["video_director"]
-    assert (document["mode"], document["media"], document["ic_lora"]) == ("director", [], _layout("uploads/orbit.mp4"))
-
-
-def test_the_layout_takes_the_latest_fresh_guide_and_the_preset_frame_rate_when_its_video_has_none(core, make_doc):
-    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit"), _guide("c2", "dolly"), _guide("c3", "walk", stale=True)], fps=None)
-
-    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
-
-    (plan,) = plans.shots
-    document = plan.request["form_data"]["video_director"]
-    assert document["ic_lora"] == _layout("uploads/dolly.mp4")
-    assert (plan.fps, document["settings"]["fps"], plan.request["form_data"]["fps"], plan.guides) == (25, 25, 25, ["c2"])
-    assert [(warning["code"], warning["data"]) for warning in plans.warnings] == [("stale_guide", {"shot_id": "s1", "control_id": "c3"})]
-
-
-@pytest.mark.parametrize("controls", [[_guide("c1", "walk", stale=True)], [_guide("c1", "hero")], []])
-def test_without_a_fresh_guide_video_ltx_2_5_runs_the_shot_from_its_first_frame_and_warns(core, make_doc, controls):
-    doc = _layout_doc(core, make_doc, controls)
-
-    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
-
-    (plan,) = plans.shots
-    document = plan.request["form_data"]["video_director"]
-    assert (plan.director_mode, document["mode"], plan.fps, plan.guides) == ("i2v", "i2v", 25, [])
-    assert "ic_lora" not in document
-    codes = [warning["code"] for warning in plans.warnings]
-    assert codes == [*(["stale_guide"] if controls and controls[0]["stale"] else []), "render_missing"]
-
-
-def test_the_layout_to_render_ic_lora_not_installed_blocks_with_its_file_and_repository(core, make_doc):
-    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
-    core.missing.add(director.LAYOUT_LORA)
-
-    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
-
-    assert plans.shots == []
-    assert plans.blocks == [
-        {
-            "code": "layout_lora_missing",
-            "message": "Install the Layout-To-Render IC-LoRA ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors "
-            "(Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render on Hugging Face) to run LTX-2.5 in the 3D render + AI mode.",
-            "data": {"file": "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors", "repo": "Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"},
-        }
-    ]
-
-
-def test_ltx_2_5_outside_the_3d_render_and_ai_mode_leaves_its_3d_guide_out(core, make_doc):
-    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
+    doc = _guided(core, make_doc, [_guide("c1", "orbit")], direction={"mode": "FL2VA"})
+    doc["frames"] = [_frame("f1", "hero", "first")]
 
     plans = _plans(core, doc, preset_id=presets.LTX_2_5)
 
     (plan,) = plans.shots
-    assert (plan.director_mode, plan.guides) == ("i2v", [])
-    assert "ic_lora" not in plan.request["form_data"]["video_director"]
-    assert [warning["code"] for warning in plans.warnings] == ["guide_needs_refs"]
-
-
-def test_a_layout_shot_whose_first_frame_cannot_be_bound_still_runs_with_its_guide(core, make_doc, monkeypatch):
-    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
-
-    def refuse(*args, **kwargs):
-        raise director.DirectorBindingError("role_unsupported", "no first frame here")
-
-    monkeypatch.setattr(director.core_bridge, "bind_director_media", refuse)
-
-    plans = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai")
-
-    document = plans.shots[0].request["form_data"]["video_director"]
-    assert (document["media"], document["ic_lora"], plans.warnings) == ([], _layout("uploads/orbit.mp4"), [NO_FRAME_WARNING])
-
-
-@pytest.mark.parametrize(
-    "filename, options",
-    [
-        ("ltx-2.5-22b-dev-transformer-bf16.safetensors", ("balanced", "distilled", "quality", "custom")),
-        ("ltx-2.5-22b-distilled-transformer-bf16.safetensors", ("balanced", "quality", "custom")),
-        (None, ("balanced", "distilled", "quality", "custom")),
-    ],
-)
-def test_a_layout_shot_keeps_the_preset_speed_profile_unless_its_dit_is_distilled_and_the_mode_offers_the_distilled_profile(
-    core, make_doc, filename, options
-):
-    doc = _layout_doc(core, make_doc, [_guide("c1", "orbit")])
-    fields = core.fields[(presets.LTX_2_5, "video")]
-    fields["model"]["recommendations"] = [{"sha256": "ltx25-sha", "filename": filename}]
-    fields["speed_profile"]["options"] = [{"value": value, "label": value} for value in options]
-
-    form = _plans(core, doc, preset_id=presets.LTX_2_5, production="render3d_ai").shots[0].request["form_data"]
-
-    assert {"speed_profile", "steps", "cfg", "sampler"}.isdisjoint(form)
-    assert form["model"] == "model:id-ltx25-sha"
+    document = plan.request["form_data"]["video_director"]
+    assert (plan.director_mode, document["mode"], plans.blocks, plans.warnings) == ("i2v", "i2v", [], [])
+    assert "ic_lora" not in document and {"speed_profile", "steps", "cfg", "sampler"}.isdisjoint(plan.request["form_data"])

@@ -44,7 +44,6 @@
 	"cmd.promote": "Make take final",
 	"cmd.color": "Shot color",
 	"cmd.match": "Match color to previous shot",
-	"cmd.keyframes": "Camera keyframes",
 	"cmd.fav": "Favorite",
 	"cmd.reject": "Reject",
 	"cmd.unflag": "Remove flag",
@@ -83,11 +82,10 @@
 	"cmd.ws-play": "Play",
 	"cmd.ws-director": "Director IA",
 	"cmd.ws-story": "Storyboard",
-	"cmd.ws-scene": "3D scene",
 	"cmd.ws-mixer": "Mix",
 	"cmd.ref-all": "References",
 	"cmd.ref-identity": "References · Images and identity",
-	"cmd.ref-3d": "References · 3D sets",
+	"cmd.ref-3d": "References · Sets",
 	"cmd.ref-motion": "References · Motion guides",
 	"cmd.sidebar": "Side panel",
 	"cmd.inspector": "Inspector",
@@ -102,9 +100,8 @@
 	"kbd.space": "Space",
 	"kbd.backspace": "Backspace",
 	"kbd.escape": "Esc",
-	"cmd.scene-new": "New 3D scene from image…",
-	"cmd.scene-import": "Import a splat or Blender file…",
 	"cmd.story-window": "Synopsis and breakdown",
 	"cmd.story-view": "Storyboard as a band",
-	"cmd.shot-editor": "Shot editor…"
+	"cmd.shot-editor": "Shot editor…",
+	"cmd.reframe": "Reframe from 3D…"
 }

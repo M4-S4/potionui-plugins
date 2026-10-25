@@ -66,7 +66,7 @@ class Tracker:
             await asyncio.sleep(BUSY_INTERVAL if busy else IDLE_INTERVAL)
 
     async def sweep(self) -> int:
-        """Sweep the abandoned renders and the orphan scene files off the event loop; returns how many it deleted."""
+        """Sweep the abandoned work files and the orphan scene files off the event loop; returns how many it deleted."""
         try:
             return await asyncio.to_thread(scene3d.sweep)
         except Exception:
