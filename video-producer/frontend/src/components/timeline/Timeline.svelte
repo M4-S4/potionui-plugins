@@ -295,7 +295,7 @@
 				if (ui.drag) ui.drag.at = r.at;
 				setDragText(t('timeline.drag.frame', { time: secs(f.time) }));
 			},
-			onEnd: () => relinkAfter(f)
+			onEnd: () => relinkAfter('frame', f)
 		});
 	}
 
