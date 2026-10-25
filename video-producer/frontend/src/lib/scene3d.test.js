@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
+	FOCAL_RANGE,
+	boundCamera,
 	deviation,
 	deviationLevel,
 	distance,
@@ -10,14 +13,16 @@ import {
 	fromSpherical,
 	holesMatter,
 	horizontalFov,
+	lowestFocal,
 	orbitCamera,
 	panCamera,
 	projectSize,
+	reach,
 	sourceView,
 	spherical
 } from './scene3d/camera.js';
 import { plyHeader, plyView } from './scene3d/files.js';
-import { createPoller, jobScene, lostScene, orphanJobs } from './scene3d/jobs.js';
+import { createPoller, jobScene, lostScene, orphanJobs, reusableScene } from './scene3d/jobs.js';
 
 const near = (actual, expected, eps = 1e-6) => assert.ok(Math.abs(actual - expected) <= eps, `${actual} is not ${expected}`);
 const nearVec = (actual, expected, eps = 1e-6) => expected.forEach((v, i) => near(actual[i], v, eps));
@@ -65,6 +70,46 @@ test('deviation from the source view: the angle seen from the pivot and the push
 	assert.equal(deviationLevel({ angle: 2, shift: 0.05 }), 'ok');
 	assert.equal(deviationLevel({ angle: 16, shift: 0 }), 'holes');
 	assert.equal(deviationLevel({ angle: 0, shift: 0.3 }), 'holes');
+});
+
+test('reliable zone: the camera stops on its border, 15° around the source view or 25 % of its distance, and comes back from outside only toward it', () => {
+	const { az, el, dist } = spherical(source);
+	const far = { ...source, pos: fromSpherical(source.target, az + 40, el, dist) };
+	const held = boundCamera(far, source, source);
+	near(reach(held, source), 1, 1e-4);
+	near(deviation(held, source).angle, 15, 1e-3);
+	const inside = orbitCamera(source, 5, 0);
+	assert.deepEqual(boundCamera(inside, source, source), inside);
+	const pushed = boundCamera(dollyCamera(source, 0.5), source, source);
+	near(deviation(pushed, source).shift, 0.25, 1e-4);
+	const outside = { ...source, pos: fromSpherical(source.target, az + 30, el, dist) };
+	const closer = { ...source, pos: fromSpherical(source.target, az + 20, el, dist) };
+	assert.deepEqual(boundCamera(closer, outside, source), closer);
+	assert.deepEqual(boundCamera(far, outside, source), outside);
+});
+
+test('reliable zone: no focal length wider than the source picture for a scene that has one, the whole range otherwise', () => {
+	const view = sourceView({ kind: 'splat', view: { fov: 60, aspect: 16 / 9, depth: 4 } }, null);
+	assert.equal(lowestFocal({ kind: 'splat', view: { fov: 60, aspect: 16 / 9, depth: 4 } }, view), view.focal);
+	assert.equal(lowestFocal({ kind: 'splat', view: { fov: 170, aspect: 1, depth: 4 } }, { focal: 2 }), FOCAL_RANGE[0]);
+	assert.equal(lowestFocal({ kind: 'splatfile', view: null }, view), FOCAL_RANGE[0]);
+	assert.equal(lowestFocal(null, null), FOCAL_RANGE[0]);
+});
+
+test('reusable scene: a picture already lifted is not built again, a finished scene first, then one in progress, then a failed one to retry', () => {
+	const scenes = [
+		{ id: 'a', kind: 'splat', sourceAssetId: 'img', sourceTime: null, status: 'failed' },
+		{ id: 'b', kind: 'splat', sourceAssetId: 'img', sourceTime: null, status: 'running' },
+		{ id: 'c', kind: 'splat', sourceAssetId: 'img', sourceTime: null, status: 'done', fileId: 'f1' },
+		{ id: 'd', kind: 'splat', sourceAssetId: 'clip', sourceTime: 1.5, status: 'done', fileId: 'f2' },
+		{ id: 'e', kind: 'splatfile', fileId: 'f3' }
+	];
+	assert.equal(reusableScene(scenes, 'img').id, 'c');
+	assert.equal(reusableScene(scenes.slice(0, 2), 'img').id, 'b');
+	assert.equal(reusableScene(scenes.slice(0, 1), 'img').id, 'a');
+	assert.equal(reusableScene(scenes, 'clip'), null, 'a frame of a video is another picture');
+	assert.equal(reusableScene(scenes, 'other'), null);
+	assert.equal(reusableScene(scenes, null), null);
 });
 
 test('source view: the source camera at the origin looks at (0, 0, −depth) with the fov of VIEW; a scene without a view frames its bounds', () => {
@@ -222,4 +267,16 @@ test('polling: one chain at a time, however often it is armed, stopped for good 
 	await timers.fire();
 	assert.equal(timers.pending.size, 0, 'a run that returns false ends the chain');
 	assert.equal(quiet.armed, false);
+});
+
+test('reframing tool: the shot editor, the Director and the Shot menu open it, and only its viewer loads the 3D engine', () => {
+	const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf-8');
+	assert.match(read('../components/modals/ShotEditor.svelte'), /ui\.modal = \{ type: 'reframe', id, returnTo: \{ type: 'shot', id, draft: \$state\.snapshot\(draft\), baseline \} \};/);
+	assert.match(read('../components/modals/Modals.svelte'), /<ReframeTool id=\{m\.id\} returnTo=\{m\.returnTo \?\? null\} \/>/);
+	assert.match(read('../components/panels/DirectorDock.svelte'), /onclick: openReframe \}\}>\{t\('panels\.dock\.refs\.reframe'\)\}/);
+	assert.match(read('./commands.js'), /command\('reframe', openReframe\)/);
+	assert.match(read('../components/modals/ReframeTool.svelte'), /<SceneViewer \{scene\} \/>/);
+	assert.doesNotMatch(read('../VideoProducerPage.svelte'), /SceneViewer|workspace === 'scene'/);
+	assert.match(read('./scene.svelte.js'), /import\('\.\/scene3d\/engine\.js'\)/);
+	assert.doesNotMatch(read('./scene.svelte.js'), /ui\.workspace/);
 });

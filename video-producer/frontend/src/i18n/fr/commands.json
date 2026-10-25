@@ -82,7 +82,6 @@
 	"cmd.ws-play": "Lecture",
 	"cmd.ws-director": "Director IA",
 	"cmd.ws-story": "Storyboard",
-	"cmd.ws-scene": "Scène 3D",
 	"cmd.ws-mixer": "Mixage",
 	"cmd.ref-all": "Références",
 	"cmd.ref-identity": "Références · Images et identité",
@@ -101,8 +100,8 @@
 	"kbd.space": "Espace",
 	"kbd.backspace": "Retour arrière",
 	"kbd.escape": "Échap",
-	"cmd.scene-new": "Nouvelle scène 3D depuis une image…",
 	"cmd.story-window": "Synopsis et découpage",
 	"cmd.story-view": "Storyboard en bande",
-	"cmd.shot-editor": "Éditeur de plan…"
+	"cmd.shot-editor": "Éditeur de plan…",
+	"cmd.reframe": "Recadrer depuis la 3D…"
 }

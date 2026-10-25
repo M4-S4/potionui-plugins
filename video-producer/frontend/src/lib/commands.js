@@ -31,6 +31,7 @@ import { openGallery, openImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
 import { matchToPrevious } from './continuity.svelte.js';
 import { openReferences } from './references.js';
+import { openReframe } from './scene.svelte.js';
 import { togglePlay, seek } from './playback.svelte.js';
 import { chat, confirm } from './host.js';
 import { detectMac, findShortcut, formatShortcut, hostOverlayOpen, isActivationTarget, isSingleKey, isTypingTarget } from './keyboard.js';
@@ -162,10 +163,6 @@ const scopes = () => {
 	ui.inspectorTab = 'color';
 };
 const cancelRunning = () => (busy() ? cancelGeneration() : toast(t('lib.toast.noRunning')));
-const sceneNew = () => {
-	ui.workspace = 'scene';
-	ui.modal = { type: 'scene-new' };
-};
 
 export const menus = [
 	menu('app', [
@@ -223,7 +220,7 @@ export const menus = [
 	]),
 	menu('clip', [
 		[command('new-shot', newShot), command('info', () => (ui.inspectorOpen = !ui.inspectorOpen)), command('reveal', ws('media'))],
-		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('promote', promote, { keys: 'shift+mod+g' })],
+		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('reframe', openReframe), command('promote', promote, { keys: 'shift+mod+g' })],
 		[command('color', scopes), command('match', match)],
 		[command('fav', flag('favori'), { keys: 'f' }), command('reject', flag('rejet'), { keys: 'alt+backspace' }), command('unflag', flag(null), { keys: 'u' })]
 	]),
@@ -274,7 +271,6 @@ export const menus = [
 			command('ws-play', ws('play')),
 			command('ws-director', ws('director')),
 			command('ws-story', ws('storyboard')),
-			command('ws-scene', ws('scene')),
 			command('ws-mixer', ws('mixer')),
 			command('story-view', () => (ui.storyView = ui.storyView === 'band' ? 'grid' : 'band'), { check: () => ui.storyView === 'band' })
 		],
@@ -282,8 +278,7 @@ export const menus = [
 			command('ref-all', refs('all')),
 			command('ref-identity', refs('identite')),
 			command('ref-3d', refs('decors3d')),
-			command('ref-motion', refs('mouvement')),
-			command('scene-new', sceneNew)
+			command('ref-motion', refs('mouvement'))
 		],
 		[
 			command('sidebar', toggleSidebar, { keys: 'ctrl+mod+1', check: () => (bandView() ? ui.storyOpen : ui.sidebarOpen) }),

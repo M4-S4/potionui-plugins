@@ -29,7 +29,6 @@
 	import Modals from './components/modals/Modals.svelte';
 	import LeftPanel from './components/panels/LeftPanel.svelte';
 	import Viewer from './components/viewer/Viewer.svelte';
-	import SceneViewer from './components/scene/SceneViewer.svelte';
 	import StoryboardView from './components/storyboard/StoryboardView.svelte';
 	import ReferenceBoard from './components/references/ReferenceBoard.svelte';
 	import Inspector from './components/inspector/Inspector.svelte';
@@ -58,7 +57,7 @@
 		return loadError?.status >= 500 ? t('shell.error.server_error') : t('shell.error.unknown');
 	});
 	const refBoard = $derived(ui.workspace === 'director' && ui.dockTab === 'references' && !ui.preview && !ui.compare);
-	const center = $derived(ui.workspace === 'scene' ? 'scene' : ui.workspace === 'storyboard' ? 'story' : refBoard ? 'refs' : 'viewer');
+	const center = $derived(ui.workspace === 'storyboard' ? 'story' : refBoard ? 'refs' : 'viewer');
 	const player = $derived(isPlayer(ui.workspace));
 	const band = $derived(bandView());
 	const columns = $derived(player ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '300px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '304px' : '0px'}`);
@@ -216,9 +215,7 @@
 				{#if !player}<LeftPanel />{/if}
 				{#key center}
 					<div class="grid min-h-0 min-w-0" in:fade={{ duration: ms(160) }}>
-						{#if center === 'scene'}
-							<SceneViewer />
-						{:else if center === 'story'}
+						{#if center === 'story'}
 							<StoryboardView />
 						{:else if center === 'refs'}
 							<ReferenceBoard />

@@ -129,6 +129,10 @@
 	function openLibrary() {
 		ui.modal = { type: 'library', target: { kind: 'shot', id, returnTo: { type: 'shot', id, draft: $state.snapshot(draft), baseline } } };
 	}
+
+	function openReframe() {
+		ui.modal = { type: 'reframe', id, returnTo: { type: 'shot', id, draft: $state.snapshot(draft), baseline } };
+	}
 </script>
 
 {#if clip && baseline}
@@ -287,6 +291,7 @@
 						<MediaPicker title={t('inspector.frames.first')} value={draft.first} onpick={(v) => (draft.first = v)} />
 						<MediaPicker title={t('inspector.frames.last')} value={draft.last} onpick={(v) => (draft.last = v)} />
 					</div>
+					<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'cube', class: 'w-full', onclick: openReframe }}>{t('modals.shot.reframe')}</HostUi>
 				</section>
 				<section class="space-y-1.5">
 					<div class="vp-section-title">{t('generation.drafts.label')}</div>

@@ -32,7 +32,6 @@
 	"workspace.play": "Play",
 	"workspace.director": "Director IA",
 	"workspace.storyboard": "Storyboard",
-	"workspace.scene": "3D scene",
 	"workspace.mixer": "Mix",
 	"layout.timeline": "Timeline",
 	"layout.console": "Mixing console",
@@ -80,7 +79,7 @@
 	"window.close": "Close",
 	"window.simulated": "Simulated",
 	"about.subtitle": "PotionUI plugin · version {version}",
-	"about.body": "Editing, AI sequence generation, art direction, sound design and 3D scene preparation, in one workspace.",
+	"about.body": "Editing, AI sequence generation, art direction, sound design and reframing from 3D, in one workspace.",
 	"about.credits": "Colors and type: PotionUI tokens.",
 	"shortcuts.title": "Keyboard shortcuts",
 	"index.title": "Timeline index",
@@ -107,7 +106,7 @@
 	"tour.delivery.text": "File › Export: video, FCPXML / OTIO / EDL, subtitles.",
 	"simulations.title": "Simulated features",
 	"simulations.subtitle": "What really works and what is simulated",
-	"simulations.intro": "Editing, selection, the inspector, fades, the prompt library, the assistant, conflict checks, AI generation and takes, exports, the 3D scene (scenes built from an image, the camera and captures) and the console work for real. The following are simulated and carry the {badge} badge:",
+	"simulations.intro": "Editing, selection, the inspector, fades, the prompt library, the assistant, conflict checks, AI generation and takes, exports, the reframing from 3D (scenes built from an image, the camera and captures) and the console work for real. The following are simulated and carry the {badge} badge:",
 	"simulations.identity.title": "Identity score",
 	"simulations.identity.text": "The identity similarity between two shots, in the continuity check and in the assistant’s review, is simulated. The color match really analyzes the images.",
 	"simulations.lipSync.title": "Lip sync",
@@ -150,8 +149,5 @@
 	"error.not_found": "Video Producer is not available on this server. Ask an administrator.",
 	"error.server_error": "The server could not complete the request.",
 	"error.unavailable": "The service is unavailable for now. Try again later.",
-	"error.unknown": "Something went wrong.",
-	"status.building.one": "Building {count} 3D scene · {value} %",
-	"status.building.other": "Building {count} 3D scenes · {value} %",
-	"workspace.sceneBusy": "Work in progress"
+	"error.unknown": "Something went wrong."
 }

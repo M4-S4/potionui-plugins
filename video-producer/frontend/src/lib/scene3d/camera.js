@@ -103,6 +103,30 @@ export function deviationLevel({ angle, shift }) {
 	return 'ok';
 }
 
+export function reach(cam, source) {
+	const { angle, shift } = deviation(cam, source);
+	return Math.max(angle / WARN_ANGLE, shift / WARN_SHIFT);
+}
+
+const blend = (from, to, k) => ({ ...to, pos: from.pos.map((v, i) => v + (to.pos[i] - v) * k), target: from.target.map((v, i) => v + (to.target[i] - v) * k) });
+
+export function boundCamera(next, prev, source) {
+	const ahead = reach(next, source);
+	if (ahead <= 1) return next;
+	const behind = reach(prev, source);
+	if (behind > 1) return ahead < behind ? next : prev;
+	let lo = 0;
+	let hi = 1;
+	for (let i = 0; i < 24; i++) {
+		const mid = (lo + hi) / 2;
+		if (reach(blend(prev, next, mid), source) <= 1) lo = mid;
+		else hi = mid;
+	}
+	return blend(prev, next, lo);
+}
+
+export const lowestFocal = (scene, source) => (holesMatter(scene) && source ? clamp(source.focal, FOCAL_RANGE[0], FOCAL_RANGE[1]) : FOCAL_RANGE[0]);
+
 export function holesMatter(scene) {
 	return Boolean(scene?.view);
 }

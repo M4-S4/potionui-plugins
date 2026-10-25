@@ -32,7 +32,6 @@
 	"workspace.play": "Lecture",
 	"workspace.director": "Director IA",
 	"workspace.storyboard": "Storyboard",
-	"workspace.scene": "Scène 3D",
 	"workspace.mixer": "Mixage",
 	"layout.timeline": "Timeline",
 	"layout.console": "Console de mixage",
@@ -80,7 +79,7 @@
 	"window.close": "Fermer",
 	"window.simulated": "Simulé",
 	"about.subtitle": "Plugin PotionUI · version {version}",
-	"about.body": "Montage audiovisuel, génération de séquences par IA, direction artistique, création sonore et préparation de scènes 3D, dans un même espace.",
+	"about.body": "Montage audiovisuel, génération de séquences par IA, direction artistique, création sonore et recadrage depuis la 3D, dans un même espace.",
 	"about.credits": "Couleurs et typographie : tokens PotionUI.",
 	"shortcuts.title": "Raccourcis clavier",
 	"index.title": "Index de la timeline",
@@ -107,7 +106,7 @@
 	"tour.delivery.text": "Fichier › Exporter : vidéo, FCPXML / OTIO / EDL, sous-titres.",
 	"simulations.title": "Fonctions simulées",
 	"simulations.subtitle": "Ce qui fonctionne réellement et ce qui est simulé",
-	"simulations.intro": "Le montage, la sélection, l’inspecteur, les fondus, la bibliothèque de prompts, l’assistant, les contradictions, la génération IA et les prises, les exports, la scène 3D (scènes tirées d’une image, caméra et captures) et la console fonctionnent réellement. Les éléments suivants sont simulés et portent le badge {badge} :",
+	"simulations.intro": "Le montage, la sélection, l’inspecteur, les fondus, la bibliothèque de prompts, l’assistant, les contradictions, la génération IA et les prises, les exports, le recadrage depuis la 3D (scènes tirées d’une image, caméra et captures) et la console fonctionnent réellement. Les éléments suivants sont simulés et portent le badge {badge} :",
 	"simulations.identity.title": "Score d’identité",
 	"simulations.identity.text": "La similarité d’identité entre deux plans, dans le contrôle des raccords et dans la revue de l’assistant, est simulée. Le raccord couleur, lui, analyse réellement les images.",
 	"simulations.lipSync.title": "Synchronisation labiale",
@@ -150,8 +149,5 @@
 	"error.not_found": "Video Producer n’est pas disponible sur ce serveur. Demandez à un administrateur.",
 	"error.server_error": "Le serveur n’a pas pu traiter la requête.",
 	"error.unavailable": "Le service est indisponible pour l’instant. Réessayez plus tard.",
-	"error.unknown": "Une erreur est survenue.",
-	"status.building.one": "Construction de {count} scène 3D · {value} %",
-	"status.building.other": "Construction de {count} scènes 3D · {value} %",
-	"workspace.sceneBusy": "Travail en cours"
+	"error.unknown": "Une erreur est survenue."
 }

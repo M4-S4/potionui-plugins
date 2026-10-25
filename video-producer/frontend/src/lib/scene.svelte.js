@@ -1,14 +1,14 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, toast, undo, clamp, asset, clipLabel, onRestore } from './state.svelte.js';
+import { ui, doc, act, toast, undo, clamp, asset, clipAt, clipLabel, onRestore } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { pause } from './playback.svelte.js';
 import { aspectOf } from './generation.js';
 import { ulid } from './ulid.js';
 import { placeSeamFrame, seamAsset } from './seam.js';
 import { replaceAllowed } from './seam.svelte.js';
-import { focalToFov, projectSize, sourceView } from './scene3d/camera.js';
+import { FOCAL_RANGE, boundCamera, focalToFov, holesMatter, lowestFocal, projectSize, sourceView } from './scene3d/camera.js';
 import { plyView } from './scene3d/files.js';
-import { RUNNING, createPoller, jobScene, lostScene, orphanJobs } from './scene3d/jobs.js';
+import { RUNNING, createPoller, jobScene, lostScene, orphanJobs, reusableScene } from './scene3d/jobs.js';
 
 const POLL_EVERY = 2000;
 
@@ -45,9 +45,8 @@ export function sceneOf(id) {
 	return id ? (shownScenes().find((s) => s.id === id) ?? null) : null;
 }
 
-export function currentScene() {
-	return sceneOf(ui.scene.current) ?? shownScenes()[0] ?? null;
-}
+export const currentScene = () => sceneOf(ui.scene.current);
+export const sceneFor = (assetId) => reusableScene(doc.scenes ?? [], assetId);
 
 export function sceneReady(scene) {
 	if (!viewable(scene)) return false;
@@ -81,8 +80,14 @@ export function seedCamera(scene) {
 	ui.scene.seeded = scene.id;
 }
 
-export function resetToSource() {
-	const scene = currentScene();
+export function moveCamera(scene, next) {
+	if (!scene) return;
+	const source = sourceOf(scene);
+	const cam = { ...next, focal: clamp(next.focal, lowestFocal(scene, source), FOCAL_RANGE[1]) };
+	setFreeCamera(holesMatter(scene) ? boundCamera(cam, freeCamera(), source) : cam);
+}
+
+export function resetToSource(scene) {
 	if (!scene) return;
 	if (ui.playing) pause();
 	setFreeCamera(sourceOf(scene));
@@ -94,15 +99,15 @@ function refuseWhileLocked() {
 	return true;
 }
 
-export function showScene(scene) {
-	if (!scene) return;
-	if (!sceneLocked()) ui.scene.current = scene.id;
-	ui.workspace = 'scene';
-}
-
 export function pickScene(id) {
 	if (ui.scene.current === id || refuseWhileLocked()) return;
 	ui.scene.current = id;
+}
+
+export function openReframe() {
+	const shot = (ui.selection?.kind === 'clip' ? doc.clips.find((c) => c.id === ui.selection.id) : null) ?? clipAt(ui.playhead);
+	if (!shot) return toast(t('lib.toast.selectShot'), 'warning');
+	ui.modal = { type: 'reframe', id: shot.id };
 }
 
 export function loadEngine() {
@@ -354,8 +359,8 @@ export function createSceneFromImage({ assetId, time = null, name = '' }) {
 		if (!Array.isArray(doc.scenes)) doc.scenes = [];
 		doc.scenes.push(scene);
 	});
-	showScene(scene);
-	return submit(scene.id);
+	submit(scene.id);
+	return scene;
 }
 
 export function retryScene(scene) {
@@ -378,51 +383,31 @@ export async function cancelScene(scene) {
 	else toast(t('scene.toast.cancelFailed'), 'error');
 }
 
-export async function removeScene(scene) {
-	if (!scene || refuseWhileLocked()) return;
-	if (sceneBusy(scene)) await cancelScene(scene);
-	if (refuseWhileLocked()) return;
-	act(() => {
-		const i = doc.scenes.indexOf(scene);
-		if (i >= 0) doc.scenes.splice(i, 1);
-	});
-	if (ui.scene.current === scene.id) ui.scene.current = null;
-	if (sceneState.loadedId === scene.id) forgetLoaded();
-	toast(t('scene.toast.removed', { name: scene.name }), 'info', { label: t('shell.toast.undo'), run: undo });
-}
-
 function captureName(scene, clip) {
 	return t('scene.capture.assetName', { scene: scene?.name ?? t('scene.default.name'), shot: clipLabel(clip) });
 }
 
-export async function prepareCapture() {
-	const scene = currentScene();
+export async function takeCapture(scene) {
 	if (!sceneReady(scene)) {
-		sceneState.capture = null;
-		return toast(t('scene.toast.notReady'), 'warning');
+		toast(t('scene.toast.notReady'), 'warning');
+		return null;
 	}
-	if (refuseWhileLocked()) return;
+	if (refuseWhileLocked()) return null;
 	const size = captureSize();
 	const cam = freeCamera();
-	sceneState.capture = { busy: true, sceneId: scene.id, url: null, coverage: null, ...size };
+	sceneState.capture = { busy: true, sceneId: scene.id };
 	try {
 		const st = await syncStage(scene);
 		if (!st) throw new Error('load');
 		const shot = await st.capture(fovFor(cam, size), size.width, size.height);
-		if (sceneState.capture?.sceneId === scene.id) sceneState.capture = { busy: false, sceneId: scene.id, url: shot.url, coverage: shot.coverage, ...size };
+		return { sceneId: scene.id, url: shot.url, coverage: shot.coverage, ...size };
 	} catch {
-		if (sceneState.capture?.sceneId === scene.id) sceneState.capture = null;
 		toast(t('scene.toast.captureFailed'), 'error');
+		return null;
 	} finally {
+		sceneState.capture = null;
 		release();
 	}
-}
-
-export function openCapture() {
-	if (!sceneReady(currentScene())) return toast(t('scene.toast.notReady'), 'warning');
-	if (refuseWhileLocked()) return;
-	ui.modal = { type: 'capture' };
-	prepareCapture();
 }
 
 async function storeCapture(projectId, url, name) {
@@ -431,34 +416,41 @@ async function storeCapture(projectId, url, name) {
 	return result.data;
 }
 
-export async function saveCapture(clipId, usage) {
-	const shot = sceneState.capture;
+function placedText(clip, usages) {
+	if (usages.length > 1) return t('scene.toast.capturedBoth', { shot: clipLabel(clip) });
+	return usages[0] === 'first' ? t('scene.toast.capturedFirst', { shot: clipLabel(clip) }) : t('scene.toast.capturedLast', { shot: clipLabel(clip) });
+}
+
+export async function storeCaptures(clipId, shots, place = false) {
 	const clip = doc.clips.find((c) => c.id === clipId);
-	if (!shot?.url || !clip || sceneState.saving) return false;
-	const scene = sceneOf(shot.sceneId);
-	if (usage !== 'reference' && !(await replaceAllowed(clip, usage))) return false;
+	const taken = ['first', 'last'].filter((usage) => shots[usage]?.url);
+	if (!clip || !taken.length || sceneState.saving) return null;
+	if (place && !(await replaceAllowed(clip, taken))) return null;
 	const projectId = project.id;
-	const name = captureName(scene, clip);
 	sceneState.saving = true;
 	try {
-		const media = await storeCapture(projectId, shot.url, name);
-		if (projectId !== project.id) return false;
+		const stored = [];
+		for (const usage of taken) {
+			const shot = shots[usage];
+			const name = captureName(sceneOf(shot.sceneId), clip);
+			const media = await storeCapture(projectId, shot.url, name);
+			if (projectId !== project.id) return null;
+			stored.push({ usage, sceneId: shot.sceneId, image: seamAsset(media, name) });
+		}
 		const target = doc.clips.find((c) => c.id === clipId);
-		if (!target) return false;
+		if (!target) return null;
 		act(() => {
-			const image = seamAsset(media, name);
-			if (usage === 'reference') {
-				doc.assets.push(image);
-				doc.references.push({ id: ulid(), name, space: 'decors3d', type: 'Capture 3D', assetId: image.id, role: '', scope: { type: 'shot', shotId: target.id } });
-			} else placeSeamFrame(doc, target, usage, image, ulid, scene?.id ?? null);
+			for (const { usage, sceneId, image } of stored) {
+				if (place) placeSeamFrame(doc, target, usage, image, ulid, sceneId);
+				else doc.assets.push(image);
+			}
 		});
-		const done = usage === 'reference' ? t('scene.toast.capturedRef', { shot: clipLabel(target) }) : usage === 'first' ? t('scene.toast.capturedFirst', { shot: clipLabel(target) }) : t('scene.toast.capturedLast', { shot: clipLabel(target) });
-		toast(done, 'success', { label: t('shell.toast.undo'), run: undo });
-		return true;
+		if (place) toast(placedText(target, taken), 'success', { label: t('shell.toast.undo'), run: undo });
+		return stored;
 	} catch (err) {
 		if (err?.code === 'project_not_found') projectGone(projectId);
 		else toast(err?.code === 'storage_full' ? t('scene.error.storage') : t('scene.toast.captureFailed'), 'error');
-		return false;
+		return null;
 	} finally {
 		sceneState.saving = false;
 	}

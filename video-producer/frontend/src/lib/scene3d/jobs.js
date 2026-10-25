@@ -7,6 +7,12 @@ export function jobScene(scenes, job, pending = null) {
 	return scene;
 }
 
+export function reusableScene(scenes, assetId) {
+	if (!assetId) return null;
+	const built = scenes.filter((s) => s?.kind === 'splat' && s.sourceAssetId === assetId && s.sourceTime == null);
+	return built.find((s) => s.status === 'done' && s.fileId) ?? built.find((s) => RUNNING.includes(s.status)) ?? built[0] ?? null;
+}
+
 export function lostScene(scene, jobs) {
 	return scene.jobId ? !jobs.some((j) => j.id === scene.jobId) : !jobs.some((j) => j.sceneId === scene.id);
 }

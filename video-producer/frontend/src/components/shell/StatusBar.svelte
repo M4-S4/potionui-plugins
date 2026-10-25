@@ -2,7 +2,6 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, selected, seqDuration, secs, allIssues } from '../../lib/state.svelte.js';
-	import { sceneBusy, sceneProgress } from '../../lib/scene.svelte.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import { openQueue } from '../../lib/production.svelte.js';
 	import Icon from '../Icon.svelte';
@@ -10,7 +9,6 @@
 	const sel = $derived(selected());
 	const issues = $derived(allIssues().filter((i) => i.level !== 'missing'));
 	const ratio = $derived(ui.quota?.limit > 0 ? Math.min(1, ui.quota.used / ui.quota.limit) : 0);
-	const building = $derived((doc.scenes ?? []).filter(sceneBusy));
 	const queued = $derived(flyingTakes().length);
 	const language = $derived(getLocale() === 'fr' ? t('shell.locale.fr') : t('shell.locale.en'));
 
@@ -53,11 +51,6 @@
 	{#if issues.length}
 		<button type="button" class="flex h-6 items-center gap-1 text-warning hover:underline" onclick={directionIssues}>
 			<Icon name="alert" class="h-3 w-3" />{t('shell.status.issues', { count: issues.length })}
-		</button>
-	{/if}
-	{#if building.length}
-		<button type="button" class="flex h-6 items-center gap-1 text-signal hover:underline" onclick={() => (ui.workspace = 'scene')}>
-			<Icon name="cube" class="h-3 w-3" />{t('shell.status.building', { count: building.length, value: Math.round(building.reduce((sum, s) => sum + sceneProgress(s), 0) / building.length) })}
 		</button>
 	{/if}
 	{#if queued}

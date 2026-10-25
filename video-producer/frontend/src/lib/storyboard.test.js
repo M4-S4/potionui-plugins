@@ -228,6 +228,19 @@ test('shot editor: the duration stays within the media, a removed frame goes, an
 	assert.deepEqual(doc.frames, []);
 });
 
+test('shot editor: a capture of the 3D reframing tool keeps its scene on the frame it fills, a picked image gets none', () => {
+	const doc = editorDoc();
+	const clip = doc.clips[1];
+	const before = shotDraft(doc, clip, doc.engine);
+
+	applyShotDraft(doc, clip, before, { ...before, first: 'cap1', last: 'cap2', captures: { cap1: 'sc2', cap2: 'sc2' } }, { makeId: () => `f${doc.frames.length + 1}`, engine: doc.engine });
+	assert.deepEqual(doc.frames.filter((f) => f.shotId === 's2').map((f) => [f.role, f.assetId, f.sceneId ?? null]), [['first', 'cap1', 'sc2'], ['last', 'cap2', 'sc2']]);
+
+	const again = shotDraft(doc, clip, doc.engine);
+	applyShotDraft(doc, clip, again, { ...again, first: 'img2', captures: { cap1: 'sc2' } }, { makeId: () => 'x', engine: doc.engine });
+	assert.deepEqual(doc.frames.filter((f) => f.shotId === 's2').map((f) => [f.role, f.assetId, f.sceneId ?? null]), [['first', 'img2', null], ['last', 'cap2', 'sc2']]);
+});
+
 function takeDoc() {
 	const doc = editorDoc();
 	doc.assets = [

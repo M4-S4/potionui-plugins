@@ -19,8 +19,7 @@
 	import SoundDesign from './SoundDesign.svelte';
 	import ExportDialog from './ExportDialog.svelte';
 	import MakeFinal from './MakeFinal.svelte';
-	import SceneNew from './SceneNew.svelte';
-	import SceneCapture from './SceneCapture.svelte';
+	import ReframeTool from './ReframeTool.svelte';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import Icon from '../Icon.svelte';
 
@@ -94,10 +93,8 @@
 		<ExportDialog tab={m.tab ?? 'video'} />
 	{:else if m?.type === 'final'}
 		<MakeFinal takeId={m.take} />
-	{:else if m?.type === 'scene-new'}
-		<SceneNew />
-	{:else if m?.type === 'capture'}
-		<SceneCapture />
+	{:else if m?.type === 'reframe'}
+		<ReframeTool id={m.id} returnTo={m.returnTo ?? null} />
 	{:else if m?.type === 'recap' && recap}
 		<Modal title={t('shell.recap.title')} subtitle="{secs(recap.range[0])} → {secs(recap.range[1])}" icon="list" width={640}>
 			<div class="space-y-3 p-4 text-sm">

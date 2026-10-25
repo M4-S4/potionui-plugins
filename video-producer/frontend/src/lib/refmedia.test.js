@@ -55,7 +55,7 @@ test('the server sends a reference as its own media and reads its role from the 
 	const director = source('../../../backend/director.py');
 	assert.match(director, /ROLES_BY_SPACE = \{"identite": "character", "decors3d": "setting", "mouvement": "motion"\}/);
 	assert.match(director, /"define_motion": "\{label\} is the source of the motion of \[Shot 1\]\."/);
-	assert.match(source('./scene.svelte.js'), /space: 'decors3d', type: 'Capture 3D', assetId: image\.id/);
+	assert.match(source('./scene.svelte.js'), /if \(place\) placeSeamFrame\(doc, target, usage, image, ulid, sceneId\);/);
 });
 
 test('the reference editor offers the types of every family and the media its type takes', () => {

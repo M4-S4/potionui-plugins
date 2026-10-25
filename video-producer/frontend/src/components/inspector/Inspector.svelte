@@ -37,8 +37,7 @@
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import { commandById } from '../../lib/commands.js';
-	import { currentScene, sceneOf, sourceOf, freeCamera, setFreeCamera, resetToSource } from '../../lib/scene.svelte.js';
-	import { FOCAL_RANGE, ROLL_RANGE, distance, dollyCamera } from '../../lib/scene3d/camera.js';
+	import { sceneOf } from '../../lib/scene.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, shotCuts, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
@@ -101,7 +100,6 @@
 	const frameImages = $derived(doc.assets.filter((x) => x.kind !== 'audio' && assetThumb(x)));
 	const fadeMax = $derived(item?.dur ? item.dur / 2 : 0);
 	const issues = $derived(s?.kind === 'prompt' ? promptIssues(item) : []);
-	const cameraPanel = $derived(!item && ui.workspace === 'scene' && doc.scenes.length > 0);
 	const gain = (v) => `${formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'exceptZero' })} dB`;
 	const audio = $derived(s?.kind === 'audio' && item ? item : null);
 	const audioLane = $derived(audio ? (doc.lanes.find((l) => l.id === audio.lane) ?? null) : null);
@@ -141,17 +139,6 @@
 		return t('inspector.lane.shotsHint', { count: laneSliced.length, slices: laneSliced.reduce((n, x) => n + x.length + 1, 0) });
 	}
 
-	const shown = $derived(freeCamera());
-	const sceneDepth = $derived.by(() => {
-		const scene = currentScene();
-		const source = scene ? sourceOf(scene) : null;
-		return source ? distance(source.pos, source.target) : 4;
-	});
-	const camFields = $derived([
-		{ k: 'focal', label: t('inspector.camera.focal'), min: FOCAL_RANGE[0], max: FOCAL_RANGE[1], step: 1, unit: ' mm', value: shown.focal },
-		{ k: 'roll', label: t('inspector.camera.roll'), min: ROLL_RANGE[0], max: ROLL_RANGE[1], step: 1, unit: '°', value: shown.roll ?? 0 },
-		{ k: 'dist', label: t('inspector.camera.dist'), min: +(sceneDepth * 0.05).toFixed(2), max: Math.max(1, +(sceneDepth * 4).toFixed(1)), step: 0.01, unit: '', value: distance(shown.pos, shown.target) }
-	]);
 	const flags = $derived([
 		{ id: 'none', label: t('inspector.flag.none') },
 		{ id: 'favori', label: t('inspector.flag.favorite') },
@@ -167,11 +154,6 @@
 		[t('inspector.empty.keyAssistant'), commandById('assistant')?.key],
 		[t('inspector.empty.keyCommands'), commandById('palette')?.key]
 	]);
-
-	function camSet(k, v) {
-		const base = freeCamera();
-		setFreeCamera(k === 'dist' ? dollyCamera(base, v / Math.max(1e-6, distance(base.pos, base.target)), 1e-3) : { ...base, [k]: v });
-	}
 
 	const seamFrame = (shotId, kind) => framesOf(doc, shotId, kind).find((f) => f.assetId) ?? null;
 	const roleOption = (role) => (roleKind(role) === 'first' ? 'Début' : roleKind(role) === 'last' ? 'Fin' : role);
@@ -203,8 +185,8 @@
 
 <aside class="flex min-h-0 flex-col overflow-hidden border-l border-line bg-surface-1" aria-label={t('inspector.title')} class:invisible={!ui.inspectorOpen}>
 	<div class="vp-panel-head border-b border-line">
-		<Icon name={item ? icons[s.kind] : cameraPanel ? 'camera' : 'info'} class="h-4 w-4 text-fg-muted" />
-		<span class="truncate text-sm font-semibold">{item ? kindTitle(s.kind) : cameraPanel ? t('inspector.camera.title') : t('inspector.title')}</span>
+		<Icon name={item ? icons[s.kind] : 'info'} class="h-4 w-4 text-fg-muted" />
+		<span class="truncate text-sm font-semibold">{item ? kindTitle(s.kind) : t('inspector.title')}</span>
 		<div class="flex-1"></div>
 		<HostUi
 			name="IconButton"
@@ -225,9 +207,7 @@
 		/>
 	{/if}
 	<div class="min-h-0 flex-1 space-y-4 overflow-auto p-3">
-		{#if cameraPanel}
-			{@render camera()}
-		{:else if !item}
+		{#if !item}
 			<div class="space-y-3">
 				<div class="text-sm font-medium">{doc.name}</div>
 				<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
@@ -626,15 +606,5 @@
 		<NumField label={t('inspector.field.fadeIn')} value={item.fadeIn} min={0} max={fadeMax} step={0.04} unit="s" onchange={(v) => set('fadeIn', v)} />
 		<NumField label={t('inspector.field.fadeOut')} value={item.fadeOut} min={0} max={fadeMax} step={0.04} unit="s" onchange={(v) => set('fadeOut', v)} />
 		<p class="text-xs text-fg-subtle">{video ? t('inspector.fades.video') : t('inspector.fades.audio')}</p>
-	</section>
-{/snippet}
-
-{#snippet camera()}
-	<section class="space-y-2">
-		<div class="vp-section-title">{t('inspector.camera.title')}</div>
-		{#each camFields as f (f.k)}
-			<SliderField label={f.label} value={f.value} min={f.min} max={f.max} step={f.step} unit={f.unit} onchange={(v) => camSet(f.k, v)} />
-		{/each}
-		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: hostIconName('target'), class: 'w-full', onclick: resetToSource }}>{t('scene.sourceView')}</HostUi>
 	</section>
 {/snippet}

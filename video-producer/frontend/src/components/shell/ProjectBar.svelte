@@ -8,7 +8,6 @@
 	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
-	import { scenesBusy } from '../../lib/scene.svelte.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from './Dropdown.svelte';
 
@@ -17,7 +16,6 @@
 		if (id === 'play') return t('shell.workspace.play');
 		if (id === 'director') return t('shell.workspace.director');
 		if (id === 'storyboard') return t('shell.workspace.storyboard');
-		if (id === 'scene') return t('shell.workspace.scene');
 		return t('shell.workspace.mixer');
 	}
 
@@ -27,7 +25,6 @@
 	]);
 	const tip = (id) => ({ text: commandById(id)?.label ?? '', kbd: commandById(id)?.key || undefined });
 	const savedTime = $derived(project.savedAt ? formatTime(project.savedAt) : null);
-	const sceneWork = $derived(scenesBusy());
 	const saveState = $derived(project.status === 'saving' ? 'saving' : project.status === 'error' ? 'error' : ui.dirty ? 'dirty' : 'saved');
 	const player = $derived(isPlayer(ui.workspace));
 
@@ -81,7 +78,7 @@
 	<div class="vp-seg-lg" role="tablist" aria-label={t('shell.workspace.group')}>
 		{#each WORKSPACES as w (w.id)}
 			<button type="button" role="tab" aria-selected={ui.workspace === w.id} onclick={(e) => pick(e, w.id)}>
-				<Icon name={w.icon} class="h-3.5 w-3.5" />{workspaceLabel(w.id)}{#if w.id === 'scene' && sceneWork}<span class="h-1.5 w-1.5 rounded-full bg-signal" aria-label={t('shell.workspace.sceneBusy')}></span>{/if}
+				<Icon name={w.icon} class="h-3.5 w-3.5" />{workspaceLabel(w.id)}
 			</button>
 		{/each}
 	</div>
