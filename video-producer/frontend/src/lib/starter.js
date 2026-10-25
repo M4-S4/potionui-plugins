@@ -126,18 +126,64 @@ export function starterDoc(t, promptT = t, promptLanguage = DEFAULT_PROMPT_LANGU
 	return doc;
 }
 
-const RETIRED_SCENES = ['sample', 'file'];
+const RETIRED_SCENES = ['sample', 'file', 'glb'];
 const CAPTURE = 'Capture 3D';
 const RETIRED_SET_TYPES = ['Scène d’essai', "Scène d'essai", 'Gaussian Splat'];
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const retiredSet = (r) => isObject(r) && r.space === 'decors3d' && RETIRED_SET_TYPES.includes(r.type);
+const OLD_SET_ROLE = 'Décor 3D';
+const SET_ROLE = 'Décor';
+
+function currentReference(r) {
+	if (!isObject(r)) return r;
+	const next = retiredSet(r) ? { ...r, type: CAPTURE } : r;
+	return r.role === OLD_SET_ROLE ? { ...next, role: SET_ROLE } : next;
+}
+const RETIRED_KEYS = ['controls', 'plans3d'];
+const isNumber = (v) => typeof v === 'number';
+const span = (item) => {
+	const start = isNumber(item.start) ? item.start : 0;
+	return [start, start + (isNumber(item.dur) ? item.dur : 0)];
+};
+
+function guidedShot(control, clips) {
+	const shots = Array.isArray(clips) ? clips.filter((c) => isObject(c) && typeof c.id === 'string' && c.id) : [];
+	if (control.shotId) return shots.some((c) => c.id === control.shotId) ? control.shotId : null;
+	const [start, end] = span(control);
+	let best = null;
+	for (const clip of shots) {
+		const [first, last] = span(clip);
+		const covered = Math.min(end, last) - Math.max(start, first);
+		if (!best || covered > best.covered) best = { covered, id: clip.id };
+	}
+	return best && best.covered > 0 ? best.id : null;
+}
+
+function motionReferences(doc, references) {
+	const videos = new Set((Array.isArray(doc.assets) ? doc.assets : []).filter((a) => isObject(a) && a.kind === 'video').map((a) => a.id));
+	const known = new Set(references.filter(isObject).map((r) => r.id));
+	const added = [];
+	for (const control of Array.isArray(doc.controls) ? doc.controls : []) {
+		if (!isObject(control) || control.source !== 'scene3d' || !videos.has(control.assetId)) continue;
+		if (typeof control.id !== 'string' || !control.id || known.has(control.id)) continue;
+		const shotId = guidedShot(control, doc.clips);
+		if (shotId === null) continue;
+		added.push({ id: control.id, name: typeof control.name === 'string' ? control.name : '', space: 'mouvement', type: 'Control video', assetId: control.assetId, role: 'Mouvement', scope: { type: 'shot', shotId } });
+		known.add(control.id);
+	}
+	return added;
+}
 
 export function migrate(doc) {
 	if (!isObject(doc)) return doc;
 	const next = migrateShots(migrateTracks(doc));
 	if (Array.isArray(doc.scenes)) next.scenes = doc.scenes.filter((s) => isObject(s) && !RETIRED_SCENES.includes(s.kind));
 	if (Array.isArray(doc.frames)) next.frames = doc.frames.filter((f) => !(isObject(f) && f.role === CAPTURE && !f.assetId));
-	if (Array.isArray(doc.references)) next.references = doc.references.filter((r) => !retiredSet(r) || r.assetId).map((r) => (retiredSet(r) ? { ...r, type: CAPTURE } : r));
+	if (Array.isArray(doc.references)) {
+		const kept = doc.references.filter((r) => !retiredSet(r) || r.assetId).map(currentReference);
+		next.references = [...kept, ...motionReferences(doc, kept)];
+	}
+	for (const key of RETIRED_KEYS) delete next[key];
 	if ('bible' in doc) next.bible = migrateBible(doc.bible);
 	if (isObject(doc.engine)) next.engine = migrateOptions(doc.engine);
 	return next;

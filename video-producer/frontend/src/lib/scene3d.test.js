@@ -153,36 +153,11 @@ test('PLY header: the potionui_view comment gives the source view; anything else
 	assert.equal(plyHeader(new TextEncoder().encode('ply\nno end')), null);
 });
 
-const gltf = {
-	asset: { version: '2.0' },
-	cameras: [
-		{ type: 'perspective', name: 'Lens', perspective: { yfov: 0.7, znear: 0.1 } },
-		{ type: 'orthographic', orthographic: { xmag: 1, ymag: 1, znear: 0.1, zfar: 10 } }
-	],
-	nodes: [{ name: 'Set' }, { name: 'Camera', camera: 0 }, { camera: 0 }, { name: 'Camera', camera: 0 }, { name: 'Top', camera: 1 }],
-	accessors: [{ count: 49, type: 'SCALAR', componentType: 5126, min: [0], max: [2.0416667] }],
-	animations: [{ samplers: [{ input: 0, output: 0 }], channels: [{ sampler: 0, target: { node: 1, path: 'translation' } }] }]
-};
-
-function glb(json) {
-	const text = new TextEncoder().encode(JSON.stringify(json));
-	const size = Math.ceil(text.length / 4) * 4;
-	const out = new Uint8Array(20 + size).fill(0x20, 20);
-	const view = new DataView(out.buffer);
-	view.setUint32(0, 0x46546c67, true);
-	view.setUint32(4, 2, true);
-	view.setUint32(8, out.length, true);
-	view.setUint32(12, size, true);
-	view.setUint32(16, 0x4e4f534a, true);
-	out.set(text, 20);
-	return out;
-}
-
 test('scene jobs: a scene follows only its own job, a job still being submitted is not overwritten by an older one, lost and orphan jobs are found', () => {
 	const scenes = [
 		{ id: 's1', kind: 'splat', status: 'running', jobId: 'j2' },
 		{ id: 's2', kind: 'splat', status: 'queued', jobId: null },
-		{ id: 's3', kind: 'glb' }
+		{ id: 's3', kind: 'splatfile' }
 	];
 	assert.equal(jobScene(scenes, { id: 'j2', sceneId: 's1' }), scenes[0]);
 	assert.equal(jobScene(scenes, { id: 'j1', sceneId: 's1', status: 'failed' }), null, 'an earlier failed attempt no longer overwrites the retry');

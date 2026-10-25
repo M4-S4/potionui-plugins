@@ -223,13 +223,14 @@ test('readiness: a text-only engine that ignores a shot frame warns about that s
 	assert.deepEqual(missing, []);
 });
 
-test('migrate: the simulated scenes go, empty 3D captures go, retired 3D set references become captures, and the 3D shots and Control videos pass through untouched', () => {
+test('migrate: the simulated and Blender scenes go, empty 3D captures go, retired 3D set references become captures, the 3D set role becomes the set role, and the 3D shots and Control videos go', () => {
 	const old = {
 		name: 'Old',
 		scenes: [
 			{ id: 'sample', kind: 'sample', name: 'Sample scene' },
 			{ id: 'file', kind: 'file', name: 'room.splat', file: '/data/room.splat' },
-			{ id: 's1', kind: 'splatfile', name: 'Room', fileId: 'f1', format: 'ply', view: null }
+			{ id: 's1', kind: 'splatfile', name: 'Room', fileId: 'f1', format: 'ply', view: null },
+			{ id: 'hut', kind: 'glb', name: 'hut.glb', fileId: 'f2', cameras: [] }
 		],
 		plans3d: [
 			{ id: 'p1', shotId: 'c1', sceneId: 'sample', name: 'Orbit', start: 0, dur: 5, keyframes: [{ id: 'k1', t: 0, az: 90, el: 0, dist: 10, focal: 30, height: 1.5 }] },
@@ -256,13 +257,14 @@ test('migrate: the simulated scenes go, empty 3D captures go, retired 3D set ref
 	};
 	const doc = migrate(old);
 	assert.deepEqual(doc.scenes.map((s) => s.id), ['s1']);
-	assert.equal(doc.plans3d, old.plans3d, 'the 3D shots are no longer the page’s to migrate');
-	assert.equal(doc.controls, old.controls, 'the Control videos are no longer the page’s to migrate');
+	assert.ok(!('plans3d' in doc) && !('controls' in doc), 'the 3D shots and the Control videos go');
+	assert.equal(old.plans3d.length, 3);
 	assert.deepEqual(doc.frames.map((f) => f.id), ['f2', 'f3']);
 	assert.deepEqual(doc.references.map((r) => [r.id, r.type]), [['r2', 'Capture 3D'], ['r3', 'Personnage'], ['r4', 'Capture 3D']], 'the retired 3D set types become Capture 3D when they hold an image, and go otherwise');
-	assert.deepEqual({ ...doc.references[0], type: 'Gaussian Splat' }, old.references[1]);
+	assert.deepEqual(doc.references.map((r) => r.role), ['Décor', 'Identité', ''], 'the 3D set role becomes the set role');
+	assert.deepEqual({ ...doc.references[0], type: 'Gaussian Splat', role: 'Décor 3D' }, old.references[1]);
 	assert.equal(old.references[1].type, 'Gaussian Splat');
-	assert.equal(old.scenes.length, 3, 'the input is not changed');
+	assert.equal(old.scenes.length, 4, 'the input is not changed');
 	assert.deepEqual(migrate(doc), doc);
 	assert.equal(migrate(null), null);
 	const bare = { name: 'Bare' };
@@ -272,7 +274,39 @@ test('migrate: the simulated scenes go, empty 3D captures go, retired 3D set ref
 	assert.deepEqual(migrate(fresh), fresh);
 });
 
-test('3D lists: a document without scenes opens with them empty and is saved without them while they stay empty; the 3D shots and Control videos of a document come back untouched', () => {
+test('migrate: the video of each 3D guide becomes once a Mouvement reference of the shot it covers before the Control videos go, as on the server', () => {
+	const guide = (id, assetId, extra = {}) => ({ id, shotId: null, name: `Guide ${id}`, start: 0, dur: 5, guidance: 65, source: 'scene3d', stale: false, planId: null, assetId, ...extra });
+	const old = {
+		clips: [
+			{ id: 's1', start: 0, dur: 4 },
+			{ id: 's2', start: 4, dur: 4 }
+		],
+		assets: [
+			{ id: 'v', kind: 'video' },
+			{ id: 'still', kind: 'image' }
+		],
+		references: [{ id: 'already', name: 'Mine', space: 'identite', type: 'Personnage', assetId: 'v', role: 'Identité', scope: null }],
+		controls: [
+			guide('linked', 'v', { shotId: 's2' }),
+			guide('overlapping', 'v', { start: 4, dur: 4 }),
+			guide('imported', 'v', { source: 'import' }),
+			guide('picture', 'still'),
+			guide('gone', 'missing'),
+			guide('outside', 'v', { start: 90, dur: 4 }),
+			guide('unknown-shot', 'v', { shotId: 'nowhere' }),
+			guide('already', 'v')
+		],
+		plans3d: []
+	};
+	const doc = migrate(old);
+	const motion = (id, shotId) => ({ id, name: `Guide ${id}`, space: 'mouvement', type: 'Control video', assetId: 'v', role: 'Mouvement', scope: { type: 'shot', shotId } });
+	assert.deepEqual(doc.references, [old.references[0], motion('linked', 's2'), motion('overlapping', 's2')]);
+	assert.ok(!('controls' in doc) && !('plans3d' in doc));
+	assert.equal(old.controls.length, 8, 'the input is not changed');
+	assert.deepEqual(migrate(doc), doc);
+});
+
+test('3D lists: a document without scenes opens with them empty and is saved without them while they stay empty; the scenes of a document come back untouched', () => {
 	const t = translator('en', []);
 	const stored = migrate(emptyDoc(t));
 	for (const key of SCENE_LISTS) delete stored[key];
@@ -287,11 +321,10 @@ test('3D lists: a document without scenes opens with them empty and is saved wit
 	assert.deepEqual(Object.keys(storedDoc(opened, absent)).filter((key) => SCENE_LISTS.includes(key)), ['scenes']);
 	const fixture = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tests', 'fixtures', 'exports', 'reference-project.json');
 	const project = JSON.parse(readFileSync(fixture, 'utf-8')).doc;
-	const lists = ['controls', 'plans3d', 'scenes'];
-	assert.ok(lists.every((key) => project[key].length));
+	assert.ok(project.scenes.length);
 	assert.deepEqual(absentLists(project), []);
 	const reopened = storedDoc(migrate({ ...emptyDoc(t), ...project }), absentLists(project));
-	for (const key of lists) assert.deepEqual(reopened[key], project[key], key);
+	assert.deepEqual(reopened.scenes, project.scenes);
 	assert.deepEqual(absentLists(null), SCENE_LISTS);
 });
 

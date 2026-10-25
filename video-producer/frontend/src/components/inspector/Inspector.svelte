@@ -519,7 +519,7 @@
 						<label class="flex items-center gap-2">
 							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
 							<select class="input vp-dense min-w-0 flex-1" value={item.role} onchange={(e) => act(() => (item.role = e.currentTarget.value))}>
-								{#each ['Identité', 'Style', 'Décor', 'Objet', 'Décor 3D', 'Mouvement', 'Caméra'] as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
+								{#each ['Identité', 'Style', 'Décor', 'Objet', 'Mouvement', 'Caméra'] as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
 							</select>
 						</label>
 					{/if}

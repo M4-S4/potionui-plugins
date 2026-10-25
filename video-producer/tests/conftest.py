@@ -758,7 +758,6 @@ _SHAPES = {
     "prompts": {"shotId": None, "start": 0, "dur": 4, "strength": 75, "text": ""},
     "frames": {"shotId": None, "time": 0, "assetId": None, "role": "Transition", "strength": 75},
     "references": {"name": "", "space": "identite", "type": "image", "assetId": None, "role": "Identité", "scope": None},
-    "controls": {"shotId": None, "name": "Guide 3D", "start": 0, "dur": 4, "guidance": 65, "source": "scene3d", "stale": False},
     "assets": {
         "kind": "image",
         "name": "",
@@ -785,12 +784,12 @@ _SHAPES = {
 def make_doc():
     import json
 
-    def make(clips=(), prompts=(), frames=(), references=(), assets=(), controls=(), direction=None, aspect="16:9", language="en"):
+    def make(clips=(), prompts=(), frames=(), references=(), assets=(), direction=None, aspect="16:9", language="en"):
         doc = json.loads((PLUGIN_ROOT / "tests" / "fixtures" / "empty_doc.json").read_text(encoding="utf-8"))
         doc["aspect"] = aspect
         doc["promptLanguage"] = language
         doc["direction"] = {**doc["direction"], **(direction or {})}
-        parts = {"clips": clips, "prompts": prompts, "frames": frames, "references": references, "assets": assets, "controls": controls}
+        parts = {"clips": clips, "prompts": prompts, "frames": frames, "references": references, "assets": assets}
         for kind, items in parts.items():
             doc[kind] = [{**_SHAPES[kind], **item} for item in items]
         return doc
