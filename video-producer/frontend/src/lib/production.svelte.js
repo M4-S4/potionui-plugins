@@ -11,6 +11,7 @@ import { CONDITION, audioBehavior, shotSound } from './sound.js';
 import { fieldTitle, presetFields } from './options.js';
 import { prioritized } from './queue.js';
 import { laneTitle } from './tracks.js';
+import { clearRemoved, isRemoved, pruneRemoved } from './removedtakes.js';
 
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
@@ -542,6 +543,7 @@ function ensureTakeAsset(take) {
 function place(clip, take) {
 	const id = ensureTakeAsset(take);
 	if (!clip || !id) return false;
+	clearRemoved(doc, take.id);
 	clip.assetId = id;
 	clip.take = take.id;
 	clip.srcIn = 0;
@@ -554,7 +556,7 @@ function markChosen(take) {
 }
 
 function applyDone(take) {
-	if (take.status !== 'done' || !take.url || asset(`gen-${take.id}`)) return false;
+	if (take.status !== 'done' || !take.url || asset(`gen-${take.id}`) || isRemoved(doc, take.id)) return false;
 	const clip = doc.clips.find((c) => c.id === take.shotId);
 	if (clip && (clip.stage === 'todo' || take.quality === 'final')) {
 		place(clip, take);
@@ -690,7 +692,7 @@ function track() {
 }
 
 function applyAll() {
-	let changed = false;
+	let changed = pruneRemoved(doc, takeStore.list);
 	for (const take of takeStore.list) changed = applyDone(take) || changed;
 	return changed;
 }

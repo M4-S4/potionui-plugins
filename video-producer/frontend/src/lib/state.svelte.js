@@ -150,6 +150,7 @@ export function checkpoint() {
 }
 function restore(json) {
 	const d = JSON.parse(json);
+	for (const k of Object.keys(doc)) if (!(k in d)) delete doc[k];
 	for (const k of Object.keys(d)) doc[k] = d[k];
 	for (const listener of restoreListeners) listener();
 }
