@@ -206,11 +206,6 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("DELETE", f"{base}/exports/{{job_id}}"),
         ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/seam-frame"),
         ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/end-frame"),
-        ("POST", f"{base}/projects/{{project_id}}/scenes/from-image"),
-        ("GET", f"{base}/projects/{{project_id}}/scenes/jobs"),
-        ("POST", f"{base}/projects/{{project_id}}/scenes/jobs/{{job_id}}/cancel"),
-        ("GET", f"{base}/projects/{{project_id}}/scene-files/{{file_id}}"),
-        ("POST", f"{base}/projects/{{project_id}}/captures"),
     }
 
 
@@ -1698,20 +1693,15 @@ def test_the_plugin_drafts_the_wan_presets_at_832x480_and_finishes_them_at_the_l
         assert models.model_fields(fields) == (["text_encoder", "vae", "t2v_high_noise_model"], ["t2v_low_noise_model"]), preset_id
 
 
-def test_every_export_seam_and_scene_route_loaded_by_the_core_depends_on_the_signed_in_user(loader, manifest):
+def test_every_export_and_seam_route_loaded_by_the_core_depends_on_the_signed_in_user(loader, manifest):
     api = loader.load_plugin_module(manifest, "backend.api")
 
     def depends_on_user(dependant):
         return any(item.call is get_current_active_user or depends_on_user(item) for item in dependant.dependencies)
 
-    scene_parts = ("/scenes/", "/scene-files", "/captures")
-    guarded = [
-        route
-        for route in api.router.routes
-        if "/exports" in route.path or route.path.endswith("/seam-frame") or any(part in route.path for part in scene_parts)
-    ]
+    guarded = [route for route in api.router.routes if "/exports" in route.path or route.path.endswith("/seam-frame")]
 
-    assert len(guarded) == 12
+    assert len(guarded) == 7
     assert all(depends_on_user(route.dependant) for route in guarded)
 
 

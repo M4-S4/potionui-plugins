@@ -10,9 +10,6 @@ from fastapi.routing import APIRoute
 from backend import chain, core_bridge, presets, settings, takes, tracker
 from backend.api import router
 from backend.exports import jobs, video
-from backend.scene3d import files as scene_files
-from backend.scene3d import storage
-from backend.scene3d.formats import Probe
 from src.plugin_api import get_current_active_user
 
 BASE = "/api/plugins/video-producer"
@@ -71,15 +68,10 @@ class Route(NamedTuple):
 
 
 class World:
-    def __init__(self, app, client, core, store, make_user, make_project, monkeypatch, samples):
+    def __init__(self, app, client, core, store, make_user, make_project, monkeypatch):
         self.app, self.client, self.core, self.store, self.make_user = app, client, core, store, make_user
-        self.samples = samples
-        self.ply = samples.ply(count=2)
-        self.jpeg = samples.data_url(samples.jpeg(), "jpeg")
-        self.png = samples.data_url(samples.png(), "png")
         core.use_wan()
         core.use_seedvr2()
-        core.use_splat()
         monkeypatch.setattr(video, "assemble", self._assemble)
         monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
         monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe")
@@ -174,19 +166,6 @@ class World:
         fields = {"project_id": self.pid, "shot_id": "s2", "user_id": "user-1", "quality": "draft", "kind": "render"}
         return [takes.create_take(fields) for _ in range(2)][-1]
 
-    def scene_job(self) -> str:
-        response = self.client.post(f"{BASE}/projects/{self.pid}/scenes/from-image", json={"sceneId": "sc-1", "assetId": "still", "time": None})
-        assert response.status_code == 202, response.text
-        return response.json()["data"]["job"]["id"]
-
-    def scene_file(self) -> str:
-        file_id = core_bridge.generate_ulid()
-        folder = storage.project_folder(self.pid)
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / scene_files.stored_name(file_id, "ply")).write_bytes(self.ply)
-        scene_files.add_file(file_id, self.pid, "user-1", "splat", "set.ply", len(self.ply), Probe(format="ply", count=2))
-        return file_id
-
     def job(self, done: bool = False) -> str:
         job = jobs.create_job(self.pid, "user-1", "web", "1080p")
         if done:
@@ -212,13 +191,7 @@ class World:
             rows = [tuple(row) for row in cursor.fetchall()]
             cursor.execute("SELECT id, status FROM video_producer_export_jobs ORDER BY id")
             exports = [tuple(row) for row in cursor.fetchall()]
-            cursor.execute("SELECT id, status FROM video_producer_scene_jobs ORDER BY id")
-            scene_jobs = [tuple(row) for row in cursor.fetchall()]
-            cursor.execute("SELECT id FROM video_producer_scene_files ORDER BY id")
-            scenes = [tuple(row) for row in cursor.fetchall()]
-        base = storage.scenes_base()
-        disk = sorted(str(path.relative_to(base)) for path in base.rglob("*")) if base.exists() else []
-        return projects, versions, rows, exports, scene_jobs, scenes, disk, dict(self.store), len(self.core.submitted), len(self.core.cancelled)
+        return projects, versions, rows, exports, dict(self.store), len(self.core.submitted), len(self.core.cancelled)
 
     def send(self, method: str, call: Call):
         if call.who == ANONYMOUS:
@@ -234,9 +207,7 @@ def _data(response):
     return response.json()["data"]
 
 
-def _list_scene_jobs(w):
-    job_id = w.scene_job()
-    return Call(f"/projects/{w.pid}/scenes/jobs", check=lambda r: [job["id"] for job in _data(r)["jobs"]] == [job_id])
+
 
 
 def _get_me_of_another_user(w):
@@ -421,31 +392,6 @@ ROUTES = {
         denied=lambda w: Call(f"/projects/{w.reference['id']}/shots/{END_SHOT}/end-frame", status=404, code="project_not_found", who="user-2"),
         invalid=lambda w: Call(f"/projects/{w.reference['id']}/shots/nope/end-frame", status=404, code="shot_not_found"),
     ),
-    "POST /projects/{id}/scenes/from-image": Route(
-        success=lambda w: Call(
-            f"/projects/{w.pid}/scenes/from-image", {"sceneId": "sc-1", "assetId": "still", "time": None, "name": "Still"}, 202,
-            check=lambda r: _data(r)["job"]["status"] == "queued",
-        ),
-        denied=lambda w: Call(f"/projects/{w.pid}/scenes/from-image", {"sceneId": "sc-1", "assetId": "still", "time": None}, 404, "project_not_found", "user-2"),
-        invalid=lambda w: Call(f"/projects/{w.pid}/scenes/from-image", {"sceneId": "sc-1", "assetId": "still", "time": -1}, 422, "invalid_request"),
-    ),
-    "GET /projects/{id}/scenes/jobs": Route(
-        success=_list_scene_jobs,
-        denied=lambda w: Call(f"/projects/{w.pid}/scenes/jobs", status=404, code="project_not_found", who="user-2"),
-    ),
-    "POST /projects/{id}/scenes/jobs/{job}/cancel": Route(
-        success=lambda w: Call(f"/projects/{w.pid}/scenes/jobs/{w.scene_job()}/cancel", check=lambda r: _data(r)["job"]["status"] == "cancelled"),
-        denied=lambda w: Call(f"/projects/{w.pid}/scenes/jobs/{w.scene_job()}/cancel", status=404, code="project_not_found", who="user-2"),
-    ),
-    "GET /projects/{id}/scene-files/{file}": Route(
-        success=lambda w: Call(f"/projects/{w.pid}/scene-files/{w.scene_file()}", check=lambda r: r.content == w.ply),
-        denied=lambda w: Call(f"/projects/{w.pid}/scene-files/{w.scene_file()}", status=404, code="project_not_found", who="user-2"),
-    ),
-    "POST /projects/{id}/captures": Route(
-        success=lambda w: Call(f"/projects/{w.pid}/captures", {"png": w.png, "name": "Capture"}, check=lambda r: _data(r)["media"]["item_id"] == "item-user-1"),
-        denied=lambda w: Call(f"/projects/{w.pid}/captures", {"png": w.png, "name": "Capture"}, 404, "project_not_found", "user-2"),
-        invalid=lambda w: Call(f"/projects/{w.pid}/captures", {"png": w.jpeg, "name": "Capture"}, 422, "invalid_request"),
-    ),
     "GET /me": Route(
         success=lambda w: Call("/me", check=lambda r: _data(r)["plugin"]["id"] == "video-producer"),
         denied=_get_me_of_another_user,
@@ -459,8 +405,8 @@ ROUTES = {
 
 
 @pytest.fixture
-def world(app, client, core, store, export_storage, media_store, make_user, make_project, monkeypatch, samples):
-    return World(app, client, core, store, make_user, make_project, monkeypatch, samples)
+def world(app, client, core, store, export_storage, media_store, make_user, make_project, monkeypatch):
+    return World(app, client, core, store, make_user, make_project, monkeypatch)
 
 
 def _check(response, call):

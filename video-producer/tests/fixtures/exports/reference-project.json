@@ -143,26 +143,6 @@
     "frames": [],
     "markers": [],
     "references": [],
-    "scenes": [
-      {
-        "id": "01M5R0SCENEHARBOUR0000000S",
-        "kind": "splat",
-        "name": "Harbour",
-        "sourceAssetId": "01M5R0SRCHARBOURWIDE00000V",
-        "sourceTime": 2.0,
-        "status": "done",
-        "progress": 100,
-        "jobId": "01M5R0SCENEJOB00000000000J",
-        "fileId": "01M5R0SCENEFILE0000000000F",
-        "count": 786432,
-        "view": {
-          "fov": 47.2,
-          "aspect": 1.7778,
-          "depth": 4.0
-        },
-        "error": null
-      }
-    ],
     "lanes": [
       {
         "id": "A1",

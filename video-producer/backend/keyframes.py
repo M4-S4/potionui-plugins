@@ -46,7 +46,6 @@ SET_SPACE = "decors3d"
 TYPE_ROLES = {"Personnage": CHARACTER, "Décor": SETTING, "Objet": OBJECT, "Style": STYLE}
 
 REFERENCE = "reference"
-SCENE = "scene"
 
 TEXT: Dict[str, Dict[str, str]] = {
     "en": {
@@ -382,7 +381,7 @@ def _frame_base(doc: Mapping[str, Any], shot_id: str, role: str) -> Optional[Map
     first, _ = director.shot_frames(doc, shot_id)
     if first is None:
         return None
-    return first if role == LAST or first.get("sceneId") else None
+    return first if role == LAST else None
 
 
 def _shot_references(doc: Mapping[str, Any], shot_id: str) -> List[Mapping[str, Any]]:
@@ -401,7 +400,7 @@ def _shot_references(doc: Mapping[str, Any], shot_id: str) -> List[Mapping[str, 
 
 
 def default_pictures(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], role: str) -> List[Picture]:
-    """What a shot sends to make its start or end image: its start image (for the end image, or when it is a 3D capture), the picture the scene of that capture was built from, then its Décors and Identité pictures, its own before the global ones it does not exclude; settings before characters, objects and styles."""
+    """What a shot sends to make its start or end image: its start image (for the end image), then its Décors and Identité pictures, its own before the global ones it does not exclude; settings before characters, objects and styles."""
     found: List[Picture] = []
 
     def add(picture: Optional[Picture]) -> None:
@@ -411,11 +410,6 @@ def default_pictures(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any]
     base = _frame_base(doc, clip["id"], role)
     if base is not None:
         add(_picture(user, doc, base.get("assetId"), FRAME, "", FRAME))
-    first, _ = director.shot_frames(doc, clip["id"])
-    scene_id = (first or {}).get("sceneId")
-    scene = director.scene_picture(user, doc, next((item for item in doc.get("scenes") or [] if scene_id and item.get("id") == scene_id), None))
-    if scene is not None:
-        add(Picture(value=scene["value"], role=SETTING, name="", origin=SCENE))
     for reference in _shot_references(doc, clip["id"]):
         add(_picture(user, doc, reference.get("assetId"), _role_of(reference), str(reference.get("name") or ""), REFERENCE))
     rank = {value: index for index, value in enumerate(PICTURE_ROLES)}

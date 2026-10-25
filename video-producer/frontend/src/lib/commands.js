@@ -31,7 +31,6 @@ import { openGallery, openImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
 import { matchToPrevious } from './continuity.svelte.js';
 import { openReferences } from './references.js';
-import { openReframe } from './scene.svelte.js';
 import { togglePlay, seek } from './playback.svelte.js';
 import { chat, confirm } from './host.js';
 import { detectMac, findShortcut, formatShortcut, hostOverlayOpen, isActivationTarget, isSingleKey, isTypingTarget } from './keyboard.js';
@@ -220,7 +219,7 @@ export const menus = [
 	]),
 	menu('clip', [
 		[command('new-shot', newShot), command('info', () => (ui.inspectorOpen = !ui.inspectorOpen)), command('reveal', ws('media'))],
-		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('reframe', openReframe), command('promote', promote, { keys: 'shift+mod+g' })],
+		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('promote', promote, { keys: 'shift+mod+g' })],
 		[command('color', scopes), command('match', match)],
 		[command('fav', flag('favori'), { keys: 'f' }), command('reject', flag('rejet'), { keys: 'alt+backspace' }), command('unflag', flag(null), { keys: 'u' })]
 	]),
