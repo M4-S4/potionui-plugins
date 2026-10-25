@@ -217,7 +217,6 @@
 	"frameRole.capture3d": "3D capture",
 	"mode.ai": "AI generation",
 	"mode.render3d": "3D render",
-	"mode.render3dAi": "3D render + AI",
 	"block.noRender3d": "No fresh 3D render for the shots of the range: render the reference video of their 3D shots.",
 	"warn.unrendered.one": "{count} shot has no fresh 3D render.",
 	"warn.unrendered.other": "{count} shots have no fresh 3D render.",

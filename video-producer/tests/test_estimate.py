@@ -21,7 +21,6 @@ def _codes(notes):
 
 
 WAN_DRAFT = {"preset_id": presets.WAN, "model_id": None, "profile": "FL2VA", "quality": "draft", "audio": None}
-LTX_DRAFT = {**WAN_DRAFT, "preset_id": presets.LTX_2_5}
 
 
 def test_a_native_estimate_has_the_contract_shape(core, make_doc):
@@ -32,8 +31,8 @@ def test_a_native_estimate_has_the_contract_shape(core, make_doc):
 
     assert payload["production"] == "ai"
     assert payload["shots"] == [
-        {"shot_id": "s1", "director_mode": "t2v", "seconds": 4.0, "resolution": "832x480", "fps": 16, "guides": [], **WAN_DRAFT},
-        {"shot_id": "s2", "director_mode": "t2v", "seconds": 6.0, "resolution": "832x480", "fps": 16, "guides": [], **WAN_DRAFT},
+        {"shot_id": "s1", "director_mode": "t2v", "seconds": 4.0, "resolution": "832x480", "fps": 16, **WAN_DRAFT},
+        {"shot_id": "s2", "director_mode": "t2v", "seconds": 6.0, "resolution": "832x480", "fps": 16, **WAN_DRAFT},
     ]
     assert payload["renders"] == []
     assert payload["vram"] == {
@@ -290,8 +289,8 @@ def test_take_minutes_fall_back_to_ten_seconds_of_work_per_second():
         ({"shots": ["s1"], "quality": "draft", "variants": 1}, "preset_id must be a preset id."),
         ({"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": "p", "model_id": 3}, "model_id must be a model id or null."),
         ({"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": "p", "label": "x" * 201}, "label must be a string of at most 200 characters."),
-        ({"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": "p", "production": "Rendu 3D"}, "production must be one of: ai, render3d, render3d_ai."),
-        ({"shots": ["s1"], "quality": "draft", "variants": 1, "production": "render3d_ai"}, "preset_id must be a preset id."),
+        ({"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": "p", "production": "Rendu 3D"}, "production must be one of: ai, render3d."),
+        ({"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": "p", "production": "render3d_ai"}, "production must be one of: ai, render3d."),
         ({"shots": ["s1"], "quality": "draft", "variants": 1, "production": "render3d", "preset_id": 3}, "preset_id must be a preset id."),
     ],
 )
@@ -308,7 +307,7 @@ def test_an_order_keeps_what_it_asks_for():
     assert order == Order(shots=[], quality="final", variants=3, preset_id="p", model_id=None, label="Pass 2", production="ai")
 
 
-@pytest.mark.parametrize("production, preset_id", [("ai", "p"), ("render3d", None), ("render3d", "p"), ("render3d_ai", "p")])
+@pytest.mark.parametrize("production, preset_id", [("ai", "p"), ("render3d", None), ("render3d", "p")])
 def test_an_order_names_its_production_mode_and_the_3d_render_needs_no_preset(production, preset_id):
     body = {"shots": ["s1"], "quality": "draft", "variants": 1, "production": production}
     if preset_id is not None:
@@ -344,40 +343,6 @@ def test_the_3d_render_estimate_is_blocked_when_no_shot_has_a_fresh_render(core,
 
     assert _codes(payload["blocks"]) == ["no_render"]
     assert _codes(payload["warnings"]) == ["stale_guide", "render_missing", "render_missing"]
-
-
-def test_the_3d_render_and_ai_estimate_is_blocked_without_a_refs_preset(core, make_doc):
-    core.use_wan()
-
-    payload = _evaluate(core, _guided_doc(make_doc), production="render3d_ai").payload
-
-    assert payload["production"] == "render3d_ai"
-    assert payload["blocks"] == [
-        {
-            "code": "refs_preset_needed",
-            "message": "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode, or LTX-2.5.",
-            "data": {"preset_id": presets.WAN},
-        }
-    ]
-    assert payload["shots"] == [] and payload["quota"]["needed_minutes"] == 0.0
-
-
-def test_the_3d_render_and_ai_estimate_on_ltx_2_5_lists_a_director_shot_with_its_guide(core, make_doc):
-    core.use_ltx25()
-    core.add_media({"kind": "library", "item_id": "lib-guide"}, "uploads/guide.mp4", "video")
-
-    payload = _evaluate(core, _guided_doc(make_doc), preset_id=presets.LTX_2_5, production="render3d_ai").payload
-
-    assert (payload["production"], payload["blocks"]) == ("render3d_ai", [])
-    assert payload["shots"] == [
-        {"shot_id": "s1", "director_mode": "director", "seconds": 4.0, "resolution": "832x480", "fps": 25, "guides": ["c1"], **LTX_DRAFT},
-        {"shot_id": "s2", "director_mode": "t2v", "seconds": 6.0, "resolution": "832x480", "fps": 25, "guides": [], **LTX_DRAFT},
-    ]
-    assert [(item["code"], item["data"]["shot_id"]) for item in payload["warnings"] if "shot_id" in (item.get("data") or {})] == [
-        ("layout_no_frame", "s1"),
-        ("render_missing", "s2"),
-        ("fl2va_no_frame", "s2"),
-    ]
 
 
 @pytest.mark.parametrize(

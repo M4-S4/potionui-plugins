@@ -114,11 +114,10 @@ export function frameRoleLabel(role) {
 	return role;
 }
 
-export const PRODUCTION_MODES = ['ai', 'render3d', 'render3d_ai'];
+export const PRODUCTION_MODES = ['ai', 'render3d'];
 
 export function modeLabel(mode) {
 	if (mode === 'ai') return t('lib.mode.ai');
 	if (mode === 'render3d') return t('lib.mode.render3d');
-	if (mode === 'render3d_ai') return t('lib.mode.render3dAi');
 	return mode;
 }

@@ -217,7 +217,6 @@
 	"frameRole.capture3d": "Capture 3D",
 	"mode.ai": "Génération IA",
 	"mode.render3d": "Rendu 3D",
-	"mode.render3dAi": "Rendu 3D + IA",
 	"block.noRender3d": "Aucun rendu 3D à jour pour les plans de la plage : rendez la vidéo de référence de leurs plans 3D.",
 	"warn.unrendered.one": "{count} plan n’a pas de rendu 3D à jour.",
 	"warn.unrendered.other": "{count} plans n’ont pas de rendu 3D à jour.",

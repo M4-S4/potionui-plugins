@@ -2,7 +2,7 @@ import { formatNumber, t } from '../i18n/index.svelte.js';
 import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs, onRestore } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
-import { PROFILES, aggregate, canUpscale, engineOptions, isH3, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
+import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
 import { applyRenders, freshRender } from './scene.svelte.js';
 import { confirm, openHostModal } from './host.js';
 import { finalsToSync, labelOf, marksOf, relabel, releasedLabel } from './labels.js';
@@ -15,8 +15,7 @@ import { laneTitle } from './tracks.js';
 
 const AI_MODE = 'ai';
 const RENDER_MODE = 'render3d';
-const HYBRID_MODE = 'render3d_ai';
-const generates = (mode) => mode === AI_MODE || mode === HYBRID_MODE;
+const generates = (mode) => mode === AI_MODE;
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
 const INFO_WARNINGS = ['time_unknown', 'vram_unknown', 'audio_condition'];
@@ -65,8 +64,7 @@ function soundEngine(clip) {
 	const engine = effectiveEngine(clip, doc);
 	const option = optionFor(engineChoices(), engine);
 	const preset = option ? { ...option.info, cloud: option.kind === 'cloud' || option.info.cloud } : null;
-	const profile = ui.production.mode === HYBRID_MODE ? (isH3(preset) ? 'Ref2VA' : 'FL2VA') : engine.profile;
-	return { preset, profile };
+	return { preset, profile: engine.profile };
 }
 
 export function soundOf(clip) {
@@ -211,11 +209,6 @@ function baseNoteText(note) {
 	if (code === 'text_only_preset') return t('generation.warn.textOnly', { shot: shotName(data.shot_id) });
 	if (code === 'duration_clamped') return t('generation.warn.durationClamped', { shot: shotName(data.shot_id), max: secs(Number(data.max) || 0) });
 	if (code === 'stale_guide') return t('generation.warn.staleGuide', { shot: shotName(data.shot_id) });
-	if (code === 'guide_needs_refs') return t('generation.warn.guideNeedsRefs', { shot: shotName(data.shot_id) });
-	if (code === 'refs_preset_needed') return t('generation.block.refsPresetNeeded');
-	if (code === 'layout_lora_missing') return t('generation.block.layoutLoraMissing', { file: data.file ?? '' });
-	if (code === 'layout_no_frame') return t('generation.warn.layoutNoFrame', { shot: shotName(data.shot_id) });
-	if (code === 'layout_guide_short') return t('generation.warn.layoutGuideShort', { shot: shotName(data.shot_id), covered: data.covered ?? '—', needed: data.needed ?? '—' });
 	if (code === 'audio_condition') return t('generation.warn.audioCondition', { shot: shotName(data.shot_id) });
 	if (code === 'audio_mux') return t('generation.warn.audioMux', { shot: shotName(data.shot_id) });
 	if (code === 'audio_ignored') return t('generation.warn.audioIgnored', { shot: shotName(data.shot_id) });
@@ -249,7 +242,6 @@ export function jobClips(range = productionRange()) {
 function requestBody(clips, quality, counts, option) {
 	const body = { shots: clips.map((c) => c.id), quality, variants: counts.variants, preset_id: option.preset, model_id: option.model };
 	if (Object.keys(counts.shot_variants).length) body.shot_variants = counts.shot_variants;
-	if (ui.production.mode === HYBRID_MODE) body.production = HYBRID_MODE;
 	return body;
 }
 

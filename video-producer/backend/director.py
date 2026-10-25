@@ -44,25 +44,12 @@ SEED_RANGE = 2**31
 
 AI = "ai"
 RENDER_3D = "render3d"
-RENDER_3D_AI = "render3d_ai"
 
-PRODUCTIONS = (AI, RENDER_3D, RENDER_3D_AI)
+PRODUCTIONS = (AI, RENDER_3D)
 
 SCENE3D = "scene3d"
 
-GUIDE_MIN_SECONDS = 2.0
-
-LAYOUT_LORA = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"
-LAYOUT_REPO = "Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"
-LAYOUT_ID = "ic-layout"
-MAX_FPS = 60
-LTX_FRAME_STEP = 8
-DISTILLED = "distilled"
-DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
-
-GUIDE = "guide"
 REFERENCE = "reference"
-SCENE_PICTURE = "scene"
 TRACK = "track"
 
 TRACK_PREFIX = "track:"
@@ -79,93 +66,34 @@ EPSILON = 1e-6
 
 LABELS = {"image": "Picture", "video": "Video", "audio": "Audio"}
 
-STILL = 0.02
-MIN_SHIFT = 0.03
-MIN_DEGREES = 1.0
-MIN_ZOOM = 0.05
-
 REFS_TEXT: Dict[str, Dict[str, str]] = {
     "en": {
         "define_character": "<Subject {subject}> is the character shown in {label}.",
         "define_setting": "<Subject {subject}> is the setting shown in {label}.",
         "define_motion": "{label} is the source of the motion of [Shot 1].",
         "define_audio": "{label} is a reference sound for [Shot 1].",
-        "define_guide": "{label} is a rough 3D preview render of the scene, used only as the source of the camera path of [Shot 1].",
-        "define_scene": "{label} shows the scene itself: keep its look, colours and lighting.",
         "summary": "[reference generation] A {seconds}-second shot made from the description below and its references.",
-        "summary_camera": "[reference generation] A {seconds}-second shot made from the description below, with its camera movement taken from {videos}.",
         "keep_character": "<Subject {subject}> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.",
         "keep_setting": "<Subject {subject}> (appears in [Shot 1]): partially_preserved - keeps the place, the subjects, the light and the colours; the framing follows the camera move.",
         "keep_motion": "{label} (motion of [Shot 1]): attribute_transfer - its motion is carried over to the subjects of the shot.",
         "keep_audio": "{label} (sound of [Shot 1]): reference - its voice or sound serves as a reference.",
-        "keep_guide": "{label} (camera path of [Shot 1]): weak_reference - camera movement only, not the look: only the direction, amplitude and speed of its camera move are followed; its content, colours, textures, blurred or stretched patches, holes and black borders are not reproduced.",
-        "keep_scene": "{label} (look of the scene of [Shot 1]): partially_preserved - keeps the look, the colours and the lighting of the scene; the framing follows the camera path.",
         "cite_setting": "The shot takes place in <Subject {subject}>.",
         "cite_character": "<Subject {subject}> appears in the shot.",
-        "camera": "The camera {moves} over the whole shot.",
-        "camera_unknown": "The camera follows the camera path of {label}.",
-        "forward": "The move follows {label} forward in time: the shot opens on the viewpoint of its first frame and ends on the viewpoint of its last frame, never in reverse.",
-        "override": "This camera movement replaces any other camera movement mentioned above.",
-        "and": "and",
         "soundscape": "The natural ambient sound of the place and the physical sounds of the action described above.",
-        "arc_right": "arcs from left to right around the subject through about {amount} degrees",
-        "arc_left": "arcs from right to left around the subject through about {amount} degrees",
-        "crane_up": "rises through about {amount} degrees, tilting down to keep the subject framed",
-        "crane_down": "lowers through about {amount} degrees, tilting up to keep the subject framed",
-        "push_in": "pushes in toward the subject, closing about {amount} % of the distance",
-        "pull_out": "pulls back from the subject, widening the distance by about {amount} %",
-        "truck_right": "trucks from left to right",
-        "truck_left": "trucks from right to left",
-        "pedestal_up": "pedestals up",
-        "pedestal_down": "pedestals down",
-        "pan_right": "pans from left to right through about {amount} degrees",
-        "pan_left": "pans from right to left through about {amount} degrees",
-        "tilt_up": "tilts up through about {amount} degrees",
-        "tilt_down": "tilts down through about {amount} degrees",
-        "zoom_in": "zooms in",
-        "zoom_out": "zooms out",
-        "static": "stays still",
     },
     "fr": {
         "define_character": "<Subject {subject}> est le personnage montré par {label}.",
         "define_setting": "<Subject {subject}> est le décor montré par {label}.",
         "define_motion": "{label} est la source du mouvement de [Shot 1].",
         "define_audio": "{label} est un son de référence pour [Shot 1].",
-        "define_guide": "{label} est un rendu 3D de prévisualisation, grossier, de la scène, utilisé seulement comme source de la trajectoire de caméra de [Shot 1].",
-        "define_scene": "{label} montre la scène elle-même : garder son aspect, ses couleurs et sa lumière.",
         "summary": "[reference generation] Un plan de {seconds} secondes fait d'après la description ci-dessous et ses références.",
-        "summary_camera": "[reference generation] Un plan de {seconds} secondes fait d'après la description ci-dessous, dont le mouvement de caméra vient de {videos}.",
         "keep_character": "<Subject {subject}> (appears in [Shot 1]): fully_preserved - garde l'identité et l'apparence.",
         "keep_setting": "<Subject {subject}> (appears in [Shot 1]): partially_preserved - garde le lieu, les sujets, la lumière et les couleurs ; le cadrage suit le mouvement de caméra.",
         "keep_motion": "{label} (mouvement de [Shot 1]): attribute_transfer - son mouvement est repris par les sujets du plan.",
         "keep_audio": "{label} (son de [Shot 1]): reference - sa voix ou son son sert de référence.",
-        "keep_guide": "{label} (trajectoire de caméra de [Shot 1]): weak_reference - mouvement de caméra seulement, pas l'aspect : seuls le sens, l'amplitude et la vitesse de son mouvement de caméra sont suivis ; son contenu, ses couleurs, ses textures, ses zones floues ou étirées, ses trous et ses bords noirs ne sont pas reproduits.",
-        "keep_scene": "{label} (aspect de la scène de [Shot 1]): partially_preserved - garde l'aspect, les couleurs et la lumière de la scène ; le cadrage suit la trajectoire de caméra.",
         "cite_setting": "Le plan se déroule dans <Subject {subject}>.",
         "cite_character": "<Subject {subject}> apparaît dans le plan.",
-        "camera": "La caméra {moves} sur toute la durée du plan.",
-        "camera_unknown": "La caméra suit la trajectoire de caméra de {label}.",
-        "forward": "Le mouvement suit {label} dans le sens du temps : le plan s'ouvre sur le point de vue de sa première image et se termine sur celui de sa dernière image, jamais à l'envers.",
-        "override": "Ce mouvement de caméra remplace tout autre mouvement de caméra mentionné plus haut.",
-        "and": "et",
         "soundscape": "Le son ambiant naturel du lieu et les sons physiques de l'action décrite plus haut.",
-        "arc_right": "décrit un arc de gauche à droite d'environ {amount} degrés autour du sujet",
-        "arc_left": "décrit un arc de droite à gauche d'environ {amount} degrés autour du sujet",
-        "crane_up": "s'élève d'environ {amount} degrés en basculant vers le bas pour garder le sujet cadré",
-        "crane_down": "descend d'environ {amount} degrés en basculant vers le haut pour garder le sujet cadré",
-        "push_in": "avance vers le sujet en réduisant la distance d'environ {amount} %",
-        "pull_out": "recule depuis le sujet en augmentant la distance d'environ {amount} %",
-        "truck_right": "se déplace latéralement de gauche à droite",
-        "truck_left": "se déplace latéralement de droite à gauche",
-        "pedestal_up": "monte verticalement",
-        "pedestal_down": "descend verticalement",
-        "pan_right": "fait un panoramique de gauche à droite d'environ {amount} degrés",
-        "pan_left": "fait un panoramique de droite à gauche d'environ {amount} degrés",
-        "tilt_up": "bascule vers le haut d'environ {amount} degrés",
-        "tilt_down": "bascule vers le bas d'environ {amount} degrés",
-        "zoom_in": "fait un zoom avant",
-        "zoom_out": "fait un zoom arrière",
-        "static": "reste immobile",
     },
 }
 
@@ -254,7 +182,6 @@ class ShotPlan:
     cloud_params: Dict[str, Any] = field(default_factory=dict)
     missing_models: List[str] = field(default_factory=list)
     seeded: bool = True
-    guides: List[str] = field(default_factory=list)
     preset_id: str = ""
     quality: str = "draft"
     cloud: bool = False
@@ -270,14 +197,13 @@ class ShotPlan:
         return self.audio is not None and self.audio.behavior in (CONDITION, MUX) and bool(self.audio.lanes or self.audio.references)
 
     def summary(self) -> Dict[str, Any]:
-        """The shot as the estimate reports it, with the 3D guides sent as its camera references."""
+        """The shot as the estimate reports it."""
         return {
             "shot_id": self.shot_id,
             "director_mode": self.director_mode,
             "seconds": self.seconds,
             "resolution": self.resolution,
             "fps": self.fps,
-            "guides": list(self.guides),
             "preset_id": self.preset_id,
             "model_id": self.model_id,
             "profile": self.profile,
@@ -321,8 +247,6 @@ class SentReference:
 
     @property
     def role(self) -> str:
-        if self.origin in (GUIDE, SCENE_PICTURE):
-            return self.origin
         if self.kind == "audio":
             return "audio"
         return ROLES_BY_SPACE.get(str((self.item or {}).get("space")), "setting")
@@ -704,126 +628,13 @@ def _sentence(text: str) -> str:
     return text if text[-1:] in ".!?…»\"'" else f"{text}."
 
 
-def _listed(items: Sequence[str], conjunction: str) -> str:
-    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} {conjunction} {items[-1]}"
-
-
 def _seconds_text(seconds: float, language: str) -> str:
     text = f"{seconds:g}"
     return text.replace(".", ",") if language == "fr" else text
 
 
-def _point(value: Any) -> Optional[List[float]]:
-    if isinstance(value, Sequence) and not isinstance(value, str) and len(value) == 3:
-        if all(isinstance(item, (int, float)) and not isinstance(item, bool) and math.isfinite(item) for item in value):
-            return [float(item) for item in value]
-    return None
-
-
-def _sub(a: Sequence[float], b: Sequence[float]) -> List[float]:
-    return [x - y for x, y in zip(a, b)]
-
-
-def _dot(a: Sequence[float], b: Sequence[float]) -> float:
-    return sum(x * y for x, y in zip(a, b))
-
-
-def _length(a: Sequence[float]) -> float:
-    return math.sqrt(_dot(a, a))
-
-
-def _unit(a: Sequence[float]) -> Optional[List[float]]:
-    size = _length(a)
-    return [x / size for x in a] if size > 1e-9 else None
-
-
-def _cross(a: Sequence[float], b: Sequence[float]) -> List[float]:
-    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
-
-
-def _heading(vector: Sequence[float]) -> float:
-    return math.degrees(math.atan2(vector[0], -vector[2]))
-
-
-def _elevation(vector: Sequence[float]) -> float:
-    return math.degrees(math.asin(max(-1.0, min(1.0, vector[1] / _length(vector)))))
-
-
-def _turn(start: float, end: float) -> float:
-    return (end - start + 180.0) % 360.0 - 180.0
-
-
-def _keys(plan: Mapping[str, Any]) -> List[Dict[str, Any]]:
-    keys = []
-    for key in plan.get("keyframes") or []:
-        pos, target, time = _point(key.get("pos")), _point(key.get("target")), key.get("t")
-        if pos and target and _length(_sub(target, pos)) > 1e-9 and isinstance(time, (int, float)) and not isinstance(time, bool):
-            focal = key.get("focal")
-            keys.append({"t": float(time), "pos": pos, "target": target, "focal": focal if isinstance(focal, (int, float)) else None})
-    return sorted(keys, key=lambda key: key["t"])
-
-
-def camera_move(plan: Mapping[str, Any]) -> Optional[List[Tuple[str, Optional[float]]]]:
-    """The camera move of a 3D shot from its first key to its last, as clauses with their amount in degrees or percent; None without two usable keys."""
-    keys = _keys(plan)
-    if len(keys) < 2:
-        return None
-    first, last = keys[0], keys[-1]
-    offset = _sub(first["pos"], first["target"])
-    distance = _length(offset)
-    forward = _unit(_sub(first["target"], first["pos"]))
-    if forward is None:
-        return None
-    right = _unit(_cross(forward, [0.0, 1.0, 0.0])) or [1.0, 0.0, 0.0]
-    up = _cross(right, forward)
-    moved = _sub(last["pos"], first["pos"])
-    clauses: List[Tuple[str, Optional[float]]] = []
-    if _length(_sub(last["target"], first["target"])) <= STILL * distance:
-        reached = _sub(last["pos"], first["target"])
-        arc = _turn(math.degrees(math.atan2(offset[0], offset[2])), math.degrees(math.atan2(reached[0], reached[2])))
-        rise = _elevation(reached) - _elevation(offset) if _length(reached) > 1e-9 else 0.0
-        ratio = _length(reached) / distance
-        if abs(arc) >= MIN_DEGREES:
-            clauses.append(("arc_right" if _dot(moved, right) > 0 else "arc_left", abs(arc)))
-        if abs(rise) >= MIN_DEGREES:
-            clauses.append(("crane_up" if rise > 0 else "crane_down", abs(rise)))
-        if abs(1 - ratio) >= MIN_SHIFT:
-            clauses.append(("push_in" if ratio < 1 else "pull_out", abs(1 - ratio) * 100))
-    elif _length(moved) <= STILL * distance:
-        facing = _sub(last["target"], last["pos"])
-        pan = _turn(_heading(forward), _heading(facing))
-        tilt = _elevation(facing) - _elevation(forward)
-        if abs(pan) >= MIN_DEGREES:
-            clauses.append(("pan_right" if pan > 0 else "pan_left", abs(pan)))
-        if abs(tilt) >= MIN_DEGREES:
-            clauses.append(("tilt_up" if tilt > 0 else "tilt_down", abs(tilt)))
-    else:
-        side, lift, ahead = (_dot(moved, axis) / distance for axis in (right, up, forward))
-        if abs(side) >= MIN_SHIFT:
-            clauses.append(("truck_right" if side > 0 else "truck_left", None))
-        if abs(lift) >= MIN_SHIFT:
-            clauses.append(("pedestal_up" if lift > 0 else "pedestal_down", None))
-        if abs(ahead) >= MIN_SHIFT:
-            clauses.append(("push_in" if ahead > 0 else "pull_out", abs(ahead) * 100))
-    if first["focal"] and last["focal"] and abs(last["focal"] / first["focal"] - 1) >= MIN_ZOOM:
-        clauses.append(("zoom_in" if last["focal"] > first["focal"] else "zoom_out", None))
-    return clauses or [("static", None)]
-
-
 def _plan3d(doc: Mapping[str, Any], plan_id: Any) -> Optional[Dict[str, Any]]:
     return next((plan for plan in doc.get("plans3d") or [] if plan_id and plan.get("id") == plan_id), None)
-
-
-def camera_sentences(doc: Mapping[str, Any], guide: SentReference) -> List[str]:
-    """What the camera of a shot does along a 3D guide, in the project's prompt language: the move read from its 3D shot, then the order it is played in."""
-    text = REFS_TEXT[_language(doc)]
-    move = camera_move(_plan3d(doc, (guide.item or {}).get("planId")) or {})
-    if move is None:
-        described = text["camera_unknown"].format(label=guide.label)
-    else:
-        clauses = [text[name].format(amount=max(1, round(amount)) if amount is not None else "") for name, amount in move]
-        described = text["camera"].format(moves=_listed(clauses, text["and"]))
-    return [described, text["forward"].format(label=guide.label)]
 
 
 def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> str:
@@ -832,7 +643,7 @@ def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[
 
 
 def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> Tuple[str, bible.ReferencePart]:
-    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself with the move of its 3D guides spelled out, its sound and its score. A reference linked to a card of the bible is defined with the card's words; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places."""
+    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself, its sound and its score. A reference linked to a card of the bible is defined with the card's words; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places."""
     language = _language(doc)
     text = REFS_TEXT[language]
     definitions: List[str] = []
@@ -862,13 +673,7 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
             subject += 1
             definitions.append(bible.definition(card, subject, language))
             citations.append(text["cite_character" if card.kind == bible.CHARACTERS else "cite_setting"].format(subject=subject))
-    guides = [entry for entry in sent if entry.origin == GUIDE]
-    seconds_text = _seconds_text(seconds, language)
-    summary = (
-        text["summary_camera"].format(seconds=seconds_text, videos=_listed([guide.label for guide in guides], text["and"]))
-        if guides
-        else text["summary"].format(seconds=seconds_text)
-    )
+    summary = text["summary"].format(seconds=_seconds_text(seconds, language))
     reference = bible.reference_part(
         clip,
         bible.REFS_LAYOUT,
@@ -877,10 +682,6 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
     parts = reference.sent
     instruction = shot_instruction(doc, clip)
     shot = [*([_sentence(instruction)] if instruction else []), parts[bible.CITATIONS]]
-    for guide in guides:
-        shot += [_sentence(line) for line in camera_sentences(doc, guide)]
-    if guides:
-        shot.append(text["override"])
     style = " ".join(_sentence(line) for line in direction_lines(doc))
     body = " ".join(line for line in shot if line)
     description = " ".join(part for part in (style, f"[Shot 1] {body}".rstrip()) if part)
@@ -1059,15 +860,6 @@ def fresh_guides(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[Dict[s
     return [control for control in shot_guides(doc, clip) if control.get("assetId") and not control.get("stale")]
 
 
-def guide_seconds(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> float:
-    """How long the video of a 3D guide lasts: its asset's length when known, else the guide's."""
-    asset = _asset(doc, guide.get("assetId")) or {}
-    length = asset.get("srcDur")
-    if isinstance(length, (int, float)) and not isinstance(length, bool) and length > 0:
-        return float(length)
-    return float(guide.get("dur") or 0)
-
-
 def _scene_of(doc: Mapping[str, Any], guide: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     scene_id = (_plan3d(doc, guide.get("planId")) or {}).get("sceneId")
     return next((scene for scene in doc.get("scenes") or [] if scene_id and scene.get("id") == scene_id), None)
@@ -1099,10 +891,9 @@ def reference_media(
     user: User,
     doc: Mapping[str, Any],
     shot_id: str,
-    guides: Sequence[Mapping[str, Any]] = (),
     tracks: Sequence[str] = (),
 ) -> List[SentReference]:
-    """What a shot sends as references, within the per-kind limits: its 3D guide videos, the picture the scene of the first one was built from, its own references, the cut of each of its reference tracks (a track: placeholder until the cut is stored), then the global ones it does not exclude; each with its rank among the references of its kind."""
+    """What a shot sends as references, within the per-kind limits: its own references, the cut of each of its reference tracks (a track: placeholder until the cut is stored), then the global ones it does not exclude; each with its rank among the references of its kind."""
     scoped, shared = [], []
     excluded = excluded_references(doc, shot_id)
     for reference in doc.get("references") or []:
@@ -1131,13 +922,6 @@ def reference_media(
         counts[kind] += 1
         sent.append(SentReference(resolved["value"], kind, counts[kind], origin, dict(item) if item is not None else None))
 
-    for guide in guides:
-        add(GUIDE, guide.get("assetId"), guide, "video")
-    for entry in [entry for entry in sent if entry.origin == GUIDE]:
-        picture = scene_picture(user, doc, entry.item or {})
-        if picture is not None:
-            add(SCENE_PICTURE, None, {"sceneId": picture["scene_id"], "controlId": (entry.item or {}).get("id")}, "image", picture)
-            break
     for reference in scoped:
         add(REFERENCE, reference.get("assetId"), reference)
     for lane_id in tracks:
@@ -1152,14 +936,8 @@ def shot_references(user: User, doc: Mapping[str, Any], shot_id: str) -> List[st
     return [entry.value for entry in reference_media(user, doc, shot_id)]
 
 
-def _guide_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], warnings: List[Dict[str, Any]], refs: bool) -> None:
-    guides = shot_guides(doc, clip)
-    if guides and not refs:
-        warnings.append(
-            note("guide_needs_refs", "The shot has a 3D guide video: only a Ref2VA preset follows it.", shot_id=clip["id"])
-        )
-        return
-    for guide in guides:
+def _guide_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> None:
+    for guide in shot_guides(doc, clip):
         if guide.get("stale"):
             warnings.append(
                 note("stale_guide", "The 3D guide of the shot is stale: render it again.", shot_id=clip["id"], control_id=guide.get("id"))
@@ -1191,7 +969,7 @@ def build_renders(doc: Mapping[str, Any], shot_ids: Sequence[str], quality: str)
         plans.blocks.append(note("no_shots", "Select at least one shot of the project."))
         return plans
     for clip in clips:
-        _guide_warnings(doc, clip, plans.warnings, refs=True)
+        _guide_warnings(doc, clip, plans.warnings)
         render = _render_of(doc, clip)
         if render is None:
             plans.warnings.append(_render_missing(clip))
@@ -1225,8 +1003,6 @@ class _Context:
     profile: str
     model: Optional[Dict[str, Any]]
     draft_setting: str
-    production: str = AI
-    layout_lora: Optional[str] = None
     silent: Mapping[str, Collection[str]] = field(default_factory=dict)
     fields: Dict[str, models.Fields] = field(default_factory=dict)
     cuts: List[TrackCut] = field(default_factory=list)
@@ -1278,153 +1054,8 @@ def project_options(context: _Context, fields: models.Fields, warnings: List[Dic
     return chosen
 
 
-def layout_preset(preset: Preset) -> bool:
-    """True for a preset that runs the Layout-To-Render IC-LoRA: LTX-2.5, whose director mode takes IC-LoRA."""
-    composition = catalog.director_of(preset.variables).get("modes") or {}
-    capabilities = composition.get("director") if isinstance(composition, Mapping) else None
-    return preset.id in presets.LAYOUT_PRESETS and isinstance(capabilities, Mapping) and bool(capabilities.get("ic_lora"))
-
-
-def layout_lora() -> Optional[str]:
-    """The installed Layout-To-Render IC-LoRA as model:<id>, or None."""
-    try:
-        model_id = core_bridge.installed_model_for_file(LAYOUT_LORA)
-    except Exception:
-        logger.warning("[VIDEO-PRODUCER] Could not look up the model file %s", LAYOUT_LORA, exc_info=True)
-        return None
-    return f"{models.MODEL_REF}{model_id}" if model_id else None
-
-
-def layout_guide(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
-    """The latest up-to-date 3D guide of a shot whose video resolves, with that video."""
-    for guide in reversed(fresh_guides(doc, clip)):
-        resolved = _resolve(user, _asset(doc, guide.get("assetId")))
-        if resolved is not None and resolved["media_type"] == "video":
-            return guide, resolved
-    return None
-
-
-def _layout_fps(preset: Preset, fields: models.Fields, asset: Optional[Mapping[str, Any]]) -> float:
-    fps = (asset or {}).get("fps")
-    if "fps" in fields and isinstance(fps, (int, float)) and not isinstance(fps, bool) and 0 < fps <= MAX_FPS:
-        return fps
-    return preset.fps
-
-
-def snapped_frames(frames: int) -> int:
-    """The 1 + 8k frame count LTX gives a clip of this many frames: the nearest, the lower one on a tie."""
-    return 1 + LTX_FRAME_STEP * max(0, math.ceil((frames - 1) / LTX_FRAME_STEP - 0.5))
-
-
-def guide_coverage(asset: Optional[Mapping[str, Any]], seconds: float, fps: float) -> Optional[Tuple[int, int]]:
-    """How many frames of the shot a 3D guide video conditions and how many the shot has, when the video is too short; None when it covers the shot or its length is unknown."""
-    length, rate = (asset or {}).get("srcDur"), (asset or {}).get("fps")
-    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 for value in (length, rate)):
-        return None
-    covered = (round(length * rate) - 1) // LTX_FRAME_STEP * LTX_FRAME_STEP + 1
-    needed = snapped_frames(math.floor(seconds * fps + 0.5))
-    return (covered, needed) if covered < needed else None
-
-
-def distilled_form(fields: models.Fields, resolved: models.ResolvedModels) -> Dict[str, Any]:
-    """The Distilled speed profile Lightricks runs Layout-To-Render with (8 steps, CFG 1, euler_ancestral), for the fields the mode has, when the DiT in use is a distilled file and the mode offers that profile; empty otherwise."""
-    options = [option.get("value") for option in (fields.get("speed_profile") or {}).get("options") or []]
-    if DISTILLED not in options or DISTILLED not in resolved.files.get(models.MODEL_FIELD, "").lower():
-        return {}
-    return {name: value for name, value in {"speed_profile": DISTILLED, **DISTILLED_RECIPE}.items() if name in fields}
-
-
-def layout_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str) -> Dict[str, Any]:
-    """A director document of one segment whose IC-LoRA entry takes a 3D guide video as its reference, the LoRA and the reference both at strength 1: below 1 the reference tokens are no longer clean and LTX-2.5 copies the render instead of following it."""
-    document = _document(prompt, fps, seconds, resolution)
-    document["mode"] = "director"
-    document["segments"][0].update(start=0.0, end=seconds)
-    document["ic_lora"] = [
-        {
-            "id": LAYOUT_ID,
-            "lora": {"model": lora, "strength": 1.0},
-            "reference": {"path": video, "relative_path": video, "type": "video"},
-            "strength": 1.0,
-        }
-    ]
-    return document
-
-
-def _layout_plan(
-    context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]], guide: Mapping[str, Any], video: Mapping[str, Any]
-) -> ShotPlan:
-    preset, doc, shot_id = context.preset, context.doc, clip["id"]
-    mode = preset.main_mode
-    if mode is None or mode not in preset.modes:
-        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
-    fields = context.mode_fields(mode)
-    resolution = _native_size(context, fields)
-    seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
-    asset = _asset(doc, guide.get("assetId"))
-    fps = _layout_fps(preset, fields, asset)
-    _guide_warnings(doc, clip, warnings, refs=True)
-    coverage = guide_coverage(asset, seconds, fps)
-    if coverage is not None:
-        warnings.append(
-            note(
-                "layout_guide_short",
-                f"The 3D guide video conditions {coverage[0]} of the {coverage[1]} frames of the shot: render it again.",
-                shot_id=shot_id,
-                control_id=guide.get("id"),
-                covered=coverage[0],
-                needed=coverage[1],
-            )
-        )
-    engine = bible.family(preset.id, preset.cloud)
-    prompt, reference = compose_shot(doc, clip, engine)
-    _bible_warnings(doc, clip, prompt, engine, warnings, reference)
-    audio = _shot_mux(context, clip, seconds, warnings)
-    document = layout_document(prompt, fps, seconds, resolution, str(context.layout_lora), video["value"])
-    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
-    first_media = _frame_media(context.user, doc, shot_frames(doc, shot_id)[0])
-    bound = False
-    if first_media is not None:
-        try:
-            request = core_bridge.bind_director_media(
-                request, "first", first_media, segment_id=SEGMENT_ID, capabilities=catalog.director_of(preset.variables)
-            )
-            bound = True
-        except DirectorBindingError:
-            logger.warning("[VIDEO-PRODUCER] Could not bind the first frame of shot %s", shot_id, exc_info=True)
-    if not bound:
-        warnings.append(
-            note("layout_no_frame", "The shot has no first frame: LTX-2.5 keeps the look of its 3D render.", shot_id=shot_id)
-        )
-    resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if audio is not None and audio.behavior == MUX else ())
-    request["form_data"].update(resolved.values)
-    request["form_data"].update(distilled_form(fields, resolved))
-    chosen = project_options(context, fields, warnings)
-    request["form_data"].update(chosen.values)
-    return ShotPlan(
-        shot_id=shot_id,
-        profile=context.profile,
-        director_mode="director",
-        preset_mode=mode,
-        seconds=seconds,
-        resolution=resolution,
-        fps=fps,
-        prompt_text=prompt,
-        request=request,
-        missing_models=[name for name in resolved.missing if name not in chosen.values],
-        guides=[str(guide.get("id"))],
-        seed=chosen.seed,
-        audio=audio,
-        work_scale=engine_options.work_scale(fields, request["form_data"]),
-        reference=reference,
-    )
-
-
 def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
     preset, doc, shot_id = context.preset, context.doc, clip["id"]
-    layout = context.layout_lora is not None
-    guided = layout_guide(context.user, doc, clip) if layout else None
-    if guided is not None:
-        return _layout_plan(context, clip, warnings, *guided)
     mode = REFS_MODE if context.profile == REF2VA else preset.main_mode
     if mode is None or mode not in preset.modes:
         raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
@@ -1433,14 +1064,13 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
     fps = preset.fps
     sent: List[SentReference] = []
-    guides: List[Dict[str, Any]] = []
     audio: Optional[ShotAudio] = None
     engine = bible.family(preset.id, preset.cloud)
     if context.profile == REF2VA:
         window = condition_window(doc, clip, seconds)
         tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
         context.cuts.extend(TrackCut(shot_id, lane_id, *window) for lane_id in tracks)
-        sent = reference_media(context.user, doc, shot_id, fresh_guides(doc, clip), tracks)
+        sent = reference_media(context.user, doc, shot_id, tracks)
         if not sent:
             raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
         if all(entry.kind == "audio" for entry in sent):
@@ -1458,26 +1088,8 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
                 references=[str((entry.item or {}).get("assetId")) for entry in sounds if entry.origin == REFERENCE],
                 sent={str((entry.item or {}).get("assetId")): entry.value for entry in sounds if entry.origin == REFERENCE},
             )
-        guides = [entry.item or {} for entry in sent if entry.origin == GUIDE]
-        _guide_warnings(doc, clip, warnings, refs=True)
-        for guide in guides:
-            if guide_seconds(doc, guide) < GUIDE_MIN_SECONDS:
-                warnings.append(
-                    note(
-                        "guide_too_short",
-                        f"The 3D guide video of the shot is shorter than the {GUIDE_MIN_SECONDS:g} s MiniMax-H3 reads.",
-                        shot_id=shot_id,
-                        control_id=guide.get("id"),
-                        min=GUIDE_MIN_SECONDS,
-                    )
-                )
-        if context.production == RENDER_3D_AI and not guides:
-            warnings.append(_render_missing(clip))
         prompt, reference = compose_refs(doc, clip, sent, seconds)
     else:
-        _guide_warnings(doc, clip, warnings, refs=layout)
-        if layout:
-            warnings.append(_render_missing(clip))
         prompt, reference = compose_shot(doc, clip, engine)
         audio = _shot_mux(context, clip, seconds, warnings)
     _bible_warnings(doc, clip, prompt, engine, warnings, reference)
@@ -1521,7 +1133,6 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         prompt_text=prompt,
         request=request,
         missing_models=[name for name in resolved.missing if name not in chosen.values],
-        guides=[str(guide.get("id")) for guide in guides],
         seed=chosen.seed,
         audio=audio,
         work_scale=engine_options.work_scale(fields, request["form_data"]),
@@ -1650,7 +1261,6 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         )
     if director_mode == "t2v" and context.profile == FL2VA:
         warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
-    _guide_warnings(doc, clip, warnings, refs=False)
     audio = _ignored_audio(doc, clip, seconds, warnings)
     params = {"duration_s": seconds, "resolution": resolution, "aspect_ratio": aspect}
     return ShotPlan(
@@ -1683,12 +1293,12 @@ def _cloud_model(model_id: Optional[str]) -> Optional[Dict[str, Any]]:
 
 
 def _engine_of(
-    doc: Mapping[str, Any], shot_id: str, preset_id: str, quality: str, model_id: Optional[str], profile: Optional[str], production: str
+    doc: Mapping[str, Any], shot_id: str, preset_id: str, quality: str, model_id: Optional[str], profile: Optional[str]
 ) -> Tuple[str, str, Optional[str], Optional[str]]:
     chosen = shot_engine(doc, shot_id)
     if "preset" in chosen:
         preset_id, model_id = chosen["preset"], chosen["model"]
-    if production == AI and "profile" in chosen:
+    if "profile" in chosen:
         profile = chosen["profile"]
     return preset_id, chosen.get("quality", quality), model_id, profile
 
@@ -1719,22 +1329,22 @@ def build_plans(
     overrides: bool = False,
     silent: Optional[Mapping[str, Collection[str]]] = None,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead; in the 3D render + AI mode, a Ref2VA run on a MiniMax-H3 preset with its refs mode, or on LTX-2.5 a director run whose Layout-To-Render IC-LoRA takes the 3D guide video as its reference. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
+    """The generation request of each shot, with what blocks the run and what the user should know; in the 3D render mode, the rendered guide each shot takes instead. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
     if production == RENDER_3D:
         return build_renders(doc, shot_ids, quality)
     silent = silent or {}
     if not overrides:
-        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, production, silent)
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent)
     project = (preset_id, quality, model_id, profile)
     groups: Dict[Tuple[str, str, Optional[str], Optional[str]], List[str]] = {}
     for shot_id in dict.fromkeys(shot_ids):
         if clip_of(doc, shot_id) is not None:
-            groups.setdefault(_engine_of(doc, shot_id, *project, production), []).append(shot_id)
+            groups.setdefault(_engine_of(doc, shot_id, *project), []).append(shot_id)
     if not groups:
-        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, production, silent)
-    parts = [(key, ids, _build(user, doc, ids, *key, production, silent)) for key, ids in groups.items()]
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent)
+    parts = [(key, ids, _build(user, doc, ids, *key, silent)) for key, ids in groups.items()]
     main = next((part for key, _, part in parts if key == project), parts[0][2])
-    plans = Plans(preset=main.preset, model=main.model, quality=quality, profile=main.profile, production=production)
+    plans = Plans(preset=main.preset, model=main.model, quality=quality, profile=main.profile)
     for key, ids, part in parts:
         _merge(plans, part, ids, own=key != project)
     for plan in plans.shots:
@@ -1752,39 +1362,13 @@ def _build(
     quality: str,
     model_id: Optional[str],
     profile: Optional[str],
-    production: str,
     silent: Mapping[str, Collection[str]],
 ) -> Plans:
-    if production == RENDER_3D_AI:
-        profile = REF2VA
     profile = profile if profile in PROFILES else profile_of(doc)
     preset = find_preset(user, preset_id)
-    plans = Plans(preset=preset, model=None, quality=quality, profile=profile, production=production)
+    plans = Plans(preset=preset, model=None, quality=quality, profile=profile)
     if preset is None:
         plans.blocks.append(note("no_preset", "The preset is not available to you.", preset_id=preset_id))
-        return plans
-    lora: Optional[str] = None
-    if production == RENDER_3D_AI and layout_preset(preset):
-        plans.profile = profile = FL2VA
-        lora = layout_lora()
-        if lora is None:
-            plans.blocks.append(
-                note(
-                    "layout_lora_missing",
-                    f"Install the Layout-To-Render IC-LoRA {LAYOUT_LORA} ({LAYOUT_REPO} on Hugging Face) to run LTX-2.5 in the 3D render + AI mode.",
-                    file=LAYOUT_LORA,
-                    repo=LAYOUT_REPO,
-                )
-            )
-            return plans
-    elif production == RENDER_3D_AI and (preset.id not in presets.MINIMAX_H3_PRESETS or REFS_MODE not in preset.modes):
-        plans.blocks.append(
-            note(
-                "refs_preset_needed",
-                "The 3D render + AI mode needs a MiniMax-H3 preset with its References mode, or LTX-2.5.",
-                preset_id=preset.id,
-            )
-        )
         return plans
     if profile not in preset.profiles:
         plans.blocks.append(
@@ -1809,8 +1393,6 @@ def _build(
         profile=profile,
         model=plans.model,
         draft_setting=str(settings.get_setting("draft_resolution")),
-        production=production,
-        layout_lora=lora,
         silent=silent,
     )
     plans.track_cuts = context.cuts
