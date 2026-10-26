@@ -60,3 +60,28 @@ test('shortcuts flow: Ctrl+Y leaves a text field and an open window to the brows
 	assert.ok(press('y'));
 	assert.equal(doc.name, 'After');
 });
+
+test('shortcuts flow: Escape closes a take preview first, then the monitor of the Review, then a seam', () => {
+	const escape = () => handleKeydown({ key: 'Escape', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, target: undefined, preventDefault() {} }, null);
+	Object.assign(ui, { modal: null, paletteOpen: false, hostModal: false, menuOpen: null, preview: { kind: 'result', id: 't1' }, compare: null, reviewMonitor: true, seamCompare: 's2' });
+	escape();
+	assert.equal(ui.preview, null);
+	assert.equal(ui.reviewMonitor, true);
+	escape();
+	assert.equal(ui.reviewMonitor, false);
+	assert.equal(ui.seamCompare, 's2');
+	escape();
+	assert.equal(ui.seamCompare, null);
+});
+
+test('shortcuts flow: Ctrl+Z undoes the drag of a slider that keeps the focus, and stays with a text field', () => {
+	replaceDoc({ ...emptyDoc((key) => key), name: 'Before' });
+	Object.assign(ui, { modal: null, paletteOpen: false, hostModal: false });
+	act(() => (doc.name = 'After'));
+	assert.equal(press('z', { target: { tagName: 'INPUT', type: 'text' } }), false);
+	assert.equal(doc.name, 'After');
+	assert.ok(press('z', { target: { tagName: 'INPUT', type: 'range' } }));
+	assert.equal(doc.name, 'Before');
+	assert.ok(press('y', { target: { tagName: 'INPUT', type: 'range' } }));
+	assert.equal(doc.name, 'After');
+});

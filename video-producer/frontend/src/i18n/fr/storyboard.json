@@ -79,6 +79,7 @@
 	"band.endOf": "Fin de {n}",
 	"band.startOf": "Début de {n}",
 	"band.close": "Fermer",
+	"band.grade": "Couleur du plan {n}",
 	"band.ghostTip": "Proposé : {name} · {dur}",
 	"band.takeTip": "Prise {variant} · {label}",
 	"band.previewing": "Prise {variant} · {n} / {count}",

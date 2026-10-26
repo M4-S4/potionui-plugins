@@ -79,6 +79,7 @@
 	"band.endOf": "End of {n}",
 	"band.startOf": "Start of {n}",
 	"band.close": "Close",
+	"band.grade": "Shot {n} color",
 	"band.ghostTip": "Proposed: {name} · {dur}",
 	"band.takeTip": "Take {variant} · {label}",
 	"band.previewing": "Take {variant} · {n} / {count}",

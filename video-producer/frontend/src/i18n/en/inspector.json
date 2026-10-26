@@ -120,6 +120,7 @@
 	"color.matchPrevious": "Match the previous shot",
 	"color.match": "Match",
 	"color.presets": "Presets",
+	"color.preset": "Preset",
 	"color.fine": "Fine adjustments",
 	"color.exposure": "Exposure",
 	"color.exposureValue": "{value} EV",

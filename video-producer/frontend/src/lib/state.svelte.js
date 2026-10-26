@@ -75,6 +75,7 @@ export const ui = $state({
 	storyAvg: 4,
 	storyAt: 'end',
 	seamCompare: null,
+	reviewMonitor: false,
 	me: null,
 	isAdmin: false
 });
@@ -652,7 +653,7 @@ export function replaceDoc(next) {
 	Object.assign(doc, incoming);
 	past.length = 0;
 	future.length = 0;
-	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, dirty: false });
+	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, dirty: false });
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0 });
 	resetTakes();
 	if (ui.playhead > seqDuration()) ui.playhead = 0;

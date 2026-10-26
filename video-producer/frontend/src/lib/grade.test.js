@@ -76,11 +76,13 @@ test('lumaHistogram: 64 bins of the Rec. 709 luma, scaled to the fullest bin', (
 
 test('color preview: presets and histogram take a picture of the shot, its frame at the in point first, never the video file', () => {
 	const section = readFileSync(new URL('../components/inspector/ColorSection.svelte', import.meta.url), 'utf8');
+	const controls = readFileSync(new URL('../components/inspector/ColorControls.svelte', import.meta.url), 'utf8');
 	const media = readFileSync(new URL('./media.js', import.meta.url), 'utf8');
 	assert.match(section, /const picture = \$derived\(shotFrame\(clip\)\);/);
 	assert.match(section, /img\.src = picture;/);
-	assert.match(section, /<img src=\{picture\}/);
-	assert.doesNotMatch(section, /src=\{a\.src\}|img\.src = a\.src/);
+	assert.match(controls, /const picture = \$derived\(shotFrame\(clip\)\);/);
+	assert.match(controls, /<img src=\{picture\}/);
+	for (const source of [section, controls]) assert.doesNotMatch(source, /src=\{a\.src\}|img\.src = a\.src/);
 	assert.match(section, /bins = lumaHistogram\(drawGraded\(g, img, 160, 90, steps, lut\)\);/);
 	assert.match(media, /return videoFrame\(a, c\.srcIn \?\? 0\) \?\? assetThumb\(a\);/);
 });

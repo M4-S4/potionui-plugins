@@ -75,7 +75,7 @@ test('monitor: the viewer grades the placed take of a preview and of each side o
 
 test('monitor: the seam of the band and its side thumbnails show each image through the grade of its own shot', () => {
 	const band = source('../components/storyboard/BandMonitor.svelte');
-	assert.match(band, /\[\[lastSrc, t\('storyboard\.band\.endOf', \{ n: num\(index - 1\) \}\), prev\], \[firstSrc, t\('storyboard\.band\.startOf', \{ n: num\(index\) \}\), clip\]\] as \[src, caption, shot\], k \(caption\)\}\n\t+\{@const look = lutOf\(shot\)\}/);
+	assert.match(band, /\[\[lastSrc, t\('storyboard\.band\.endOf', \{ n: num\(index - 1\) \}\), prev, index - 1\], \[firstSrc, t\('storyboard\.band\.startOf', \{ n: num\(index\) \}\), clip, index\]\] as \[src, caption, shot, at\], k \(caption\)\}\n\t+\{@const look = lutOf\(shot\)\}/);
 	assert.match(band, /<img bind:this=\{stills\[k\]\} \{src\} alt="" class="h-full w-full object-cover" style:filter=\{clipFilter\(shot\)\} \/>/);
 	assert.match(band, /\{#if src && look && stills\[k\]\}<MatchCanvas source=\{stills\[k\]\} lut=\{look\} filter=\{clipFilter\(shot\)\} cover \/>\{\/if\}/);
 	assert.match(band, /\{#if src\}<img \{src\} alt="" class="h-full w-full object-cover" style:filter=\{clipFilter\(shot\)\} \/>\{\/if\}<\/span>/);
@@ -84,12 +84,35 @@ test('monitor: the seam of the band and its side thumbnails show each image thro
 	assert.match(canvas, /class="pointer-events-none absolute inset-0 h-full w-full \{cover \? 'object-cover' : 'object-contain'\}"/);
 });
 
+test('monitor: the seam of the band carries the color controls of both its shots, folded by default, without the button that applies to every shot', () => {
+	const band = source('../components/storyboard/BandMonitor.svelte');
+	assert.match(band, /let grading = \$state\(\[false, false\]\);/);
+	assert.match(band, /const roomy = \$derived\(w >= 1150\);\n\tconst beside = \$derived\(roomy \|\| grading\.some\(Boolean\)\);\n\tconst gradeColumn = \$derived\(roomy \? '240px' : 'minmax\(180px, 200px\)'\);/);
+	assert.match(band, /style:grid-template-columns=\{beside \? `\$\{gradeColumn\} minmax\(0, 300px\) minmax\(0, 300px\) \$\{gradeColumn\}` : 'repeat\(2, minmax\(0, 300px\)\)'\}/);
+	assert.match(band, /style:grid-template-areas=\{beside \? '"grade0 still0 still1 grade1" "grade0 seam seam grade1"' : '"still0 still1" "grade0 grade1" "seam seam"'\}/);
+	assert.match(band, /<div class="relative aspect-video w-full overflow-hidden rounded [^\n]*style:grid-area="still\{k\}">/);
+	assert.match(band, /<div class="min-w-0 \{beside \? 'overflow-y-auto' : ''\}" style:grid-area="grade\{k\}" style:max-height=\{beside \? `\$\{Math\.max\(160, h - 64\)\}px` : null\} data-seam-grade=\{shot\.id\}>/);
+	assert.match(band, /<div class="flex min-w-0" style:grid-area="seam"><SeamPanel \{clip\} title=\{false\} compare=\{false\} \/><\/div>/);
+	assert.match(band, /aria-expanded=\{grading\[k\]\}\n\t+aria-controls="\{id\}-grade-\{k\}"\n\t+onclick=\{\(\) => \(grading\[k\] = !grading\[k\]\)\}/);
+	assert.match(band, /\{t\('storyboard\.band\.grade', \{ n: num\(at\) \}\)\}<\/span>\n\t+<span class="shrink-0 truncate text-fg" style:max-width="50%">\{colorPresetLabel\(shot\.preset\)\}<\/span>/);
+	assert.match(band, /\{#if grading\[k\]\}\n\t+<div id="\{id\}-grade-\{k\}" class="mt-1 space-y-3 rounded-lg border border-line-strong bg-surface-1 p-2\.5">\n\t+<ColorControls clip=\{shot\} compact all=\{false\} \/>/);
+	assert.match(band, /<div class="flex min-h-0 flex-col overflow-auto bg-canvas p-3">\n\t+<div class="m-auto flex w-full flex-col items-center gap-2">/);
+	assert.doesNotMatch(band, /h-\[168px\] w-\[300px\]/);
+	const controls = source('../components/inspector/ColorControls.svelte');
+	assert.match(controls, /let \{ clip, compact = false, all = true \} = \$props\(\);/);
+	assert.match(controls, /<select class="vp-popup min-w-0 flex-1" value=\{clip\.preset\} onchange=\{\(e\) => apply\(e\.currentTarget\.value\)\}>\n\t+\{#if !\(clip\.preset in colorPresets\)\}<option value=\{clip\.preset\} disabled>\{colorPresetLabel\(clip\.preset\)\}<\/option>\{\/if\}/);
+	assert.match(controls, /\{#if !compact\}<div class="vp-section-title">\{t\('inspector\.color\.fine'\)\}<\/div>\{\/if\}/);
+	assert.match(controls, /onclick: \(\) => apply\('Original'\) \}\}>\{t\('inspector\.color\.reset'\)\}<\/HostUi>\n\t+\{#if all\}<HostUi name="Button"[^\n]*onclick: applyAll \}\}>\{t\('inspector\.color\.applyAll'\)\}<\/HostUi>\{\/if\}/);
+	assert.match(source('../components/inspector/ColorSection.svelte'), /\{#key clip\.id\}<MatchSection \{clip\} \/>\{\/key\}\n\n\t<ColorControls \{clip\} \/>\n\{\/if\}/);
+	for (const locale of ['en', 'fr']) assert.match(JSON.parse(source(`../i18n/${locale}/storyboard.json`))['band.grade'], /\{n\}/);
+});
+
 test('monitor: every color change of a shot brings that shot to the monitor', () => {
-	const color = source('../components/inspector/ColorSection.svelte');
+	const color = source('../components/inspector/ColorControls.svelte');
 	assert.match(color, /function set\(k, v\) \{\n\t\tclip\[k\] = v;\n\t\tshowShot\(clip\);\n\t\}/);
 	assert.match(color, /function apply\(name\) \{\n\t\tact\(\(\) => Object\.assign\(clip, colorPresets\[name\], \{ preset: name \}\)\);\n\t\tshowShot\(clip\);\n\t\}/);
 	assert.match(color, /act\(\(\) => doc\.clips\.forEach\(\(c\) => Object\.assign\(c, p\)\)\);\n\t\tshowShot\(clip\);/);
-	assert.match(color, /onclick=\{\(\) => matchToPrevious\(clip\)\}/);
+	assert.match(source('../components/inspector/ColorSection.svelte'), /onclick=\{\(\) => matchToPrevious\(clip\)\}/);
 	const matching = source('../components/inspector/MatchSection.svelte');
 	assert.match(matching, /function setStrength\(v\) \{\n\t\tclip\.match\.strength = v;\n\t\tshowShot\(clip\);\n\t\}/);
 	assert.match(matching, /format=\{strength\} onchange=\{setStrength\}/);

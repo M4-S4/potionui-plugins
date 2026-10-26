@@ -158,7 +158,7 @@ test('shortcuts: the key handler looks every key up in the table of the commands
 	assert.match(source, /get aliasKey\(\) \{\n\t\t\treturn alias \? shortcutLabel\(alias\) : '';\n\t\t\}/);
 	assert.match(readFileSync(join(here, '../components/modals/Modals.svelte'), 'utf-8'), /<kbd class="vp-kbd text-xs">\{c\.key\}<\/kbd>\{#if c\.alias\}<kbd class="vp-kbd text-xs">\{c\.aliasKey\}<\/kbd>\{\/if\}/);
 	assert.match(handler, /if \(hit\.when && !hit\.when\(\)\) return;/);
-	assert.match(handler, /!hit\.global && \(isTypingTarget\(target\) \|\| ui\.modal \|\| ui\.paletteOpen\)/);
+	assert.match(handler, /!hit\.global && \(isTypingTarget\(target, e\) \|\| ui\.modal \|\| ui\.paletteOpen\)/);
 	assert.match(handler, /hit\.single && !ui\.singleKeyShortcuts/);
 	assert.match(handler, /e\.repeat && !hit\.repeat/);
 	assert.doesNotMatch(source, /withMod|sidebarCombo|1 \/ 25/);
