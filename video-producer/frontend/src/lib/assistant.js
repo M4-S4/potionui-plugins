@@ -1,5 +1,6 @@
 import { touch } from './shots.js';
 import { castLabels } from './bible.js';
+import { labelOf as takeLabel } from './labels.js';
 
 export const PROMPT_LIMIT = 300;
 export const LABEL_LIMIT = 34;
@@ -8,6 +9,9 @@ const FIRST_ROLES = ['first', 'début', 'debut'];
 const LAST_ROLES = ['last', 'fin'];
 const MEASURED_KINDS = ['lum', 'warm'];
 const SIMULATED_KINDS = ['identity'];
+export const PAGE_TOOLS = ['vp_add_shots', 'vp_update_shots', 'vp_delete_shots', 'vp_generate', 'vp_label_take', 'vp_assemble', 'vp_export_video'];
+export const LIVE_TOOLS = ['vp_add_shots', 'vp_update_shots', 'vp_label_take', 'vp_assemble'];
+const TAKE_TOOLS = ['vp_generate', 'vp_label_take', 'vp_update_shots'];
 
 export function clipped(value, limit = PROMPT_LIMIT) {
 	const text = String(value ?? '');
@@ -23,9 +27,10 @@ export function promptFor(doc, shotId) {
 	return (doc?.prompts ?? []).find((p) => p.shotId === shotId) ?? null;
 }
 
-export function shotsContext(doc, labelOf) {
+export function shotsContext(doc, labelOf, takesOf = () => []) {
 	return (doc.clips ?? []).map((c) => {
 		const p = promptFor(doc, c.id);
+		const takes = takesOf(c.id);
 		return {
 			id: c.id,
 			label: labelOf(c),
@@ -37,13 +42,28 @@ export function shotsContext(doc, labelOf) {
 			hasFirstFrame: hasFrame(doc, c.id, FIRST_ROLES),
 			hasLastFrame: hasFrame(doc, c.id, LAST_ROLES),
 			take: c.take ?? null,
+			takes: takes.length,
+			final: takes.find((x) => takeLabel(x) === 'final')?.variant ?? null,
 			cast: castLabels(doc, c)
 		};
 	});
 }
 
-export function productionContext(production, queued) {
-	return { target: production.target, quality: production.quality, state: production.state, progress: Math.round(production.progress), queue: queued };
+export function productionContext(production, queued, engine = null) {
+	return { target: production.target, quality: production.quality, state: production.state, progress: Math.round(production.progress), queue: queued, engine };
+}
+
+export function changePlan({ tool, result, projectId, version }) {
+	if (!result || result.status === 'pending_approval') return { status: 'noop' };
+	if (!projectId || result.project_id !== projectId) return { status: 'stale' };
+	const pull = Number.isInteger(result.version) && result.version > version ? result.version : 0;
+	const takes = TAKE_TOOLS.includes(tool);
+	const exported = tool === 'vp_export_video' && isText(result.job_id);
+	return pull || takes || exported ? { status: 'applied', pull, takes, exported } : { status: 'noop' };
+}
+
+export function startedTakes(tool, result) {
+	return tool === 'vp_generate' && Array.isArray(result?.takes) ? result.takes.length : 0;
 }
 
 export function issuesContext(issues) {

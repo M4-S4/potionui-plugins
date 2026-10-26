@@ -224,7 +224,7 @@ Votre admin limite le nombre de versions conservées par projet (50 par défaut)
 
 ### Quand le projet a changé ailleurs
 
-Si vous ouvrez le même projet dans deux onglets, deux fenêtres ou sur deux appareils, la page qui enregistre en second est partie d’une version périmée et le serveur refuse son enregistrement. Cette page charge alors la version enregistrée du projet et affiche « Projet rechargé : il a été modifié ailleurs ». Les modifications que vous n’aviez pas enregistrées dans cette page sont perdues, et rien n’est fusionné. Travaillez sur un projet à un seul endroit à la fois. **Fichier › Historique des versions…** permet de retrouver un état antérieur si besoin.
+Si vous ouvrez le même projet dans deux onglets, deux fenêtres ou sur deux appareils, ou si l’assistant le modifie pendant que vous travaillez (chapitre 10), la page qui enregistre en second est partie d’une version périmée et le serveur refuse son enregistrement. Cette page lit alors la version enregistrée et la fusionne avec la sienne : ce qui n’a changé que d’un côté est gardé, et quand les deux côtés ont changé la même chose (le même nom, la même durée), la page garde votre version. Elle affiche « Les modifications enregistrées ailleurs ont été fusionnées dans le projet », ou combien de vos changements elle a gardés à la place des autres, et Ctrl+Z annule la fusion. **Fichier › Historique des versions…** permet de retrouver un état antérieur si besoin. Dans le cas rare où la page n’a rien pour comparer, elle charge la version enregistrée et affiche « Projet rechargé : il a été modifié ailleurs » : les modifications que vous n’aviez pas enregistrées dans cette page sont alors perdues.
 
 ### Quand le projet a été supprimé ailleurs
 
@@ -453,12 +453,17 @@ Chaque ligne montre aussi la prise dont elle part (« Prise A · 832×480 »), *
 
 ## 10. Assistant
 
-L’assistant est le chat PotionUI, qui travaille dans son propre mode pour cette page, **Video Producer assistant**. Il lit votre projet et dispose de quatre outils, les actions qu’il peut lancer : écrire l’instruction d’un plan, corriger les contradictions entre la direction globale et les instructions locales, découper votre synopsis en plans, et vérifier la continuité entre les plans. Il propose et vous décidez : pour les trois outils qui écrivent ou proposent quelque chose, le chat affiche une carte d’approbation avec un aperçu, et rien ne se passe dans votre projet tant que vous n’avez pas cliqué sur **Approve**.
+L’assistant est le chat PotionUI, qui travaille dans son propre mode pour cette page, **Video Producer assistant**. Il lit votre projet et peut piloter toute la page avec ses treize outils, les actions qu’il peut lancer : lire le projet en détail ; ajouter, modifier, réordonner et supprimer des plans ; écrire leur instruction locale et corriger les contradictions avec la direction globale ; découper votre synopsis en plans ; distribuer les plans depuis la bible et leur donner des images et des références ; vérifier la continuité ; générer des prises, les suivre, les étiqueter, assembler le montage et exporter la vidéo.
+
+Deux sortes de modifications :
+
+- **Ce qui coûte ou ne se rattrape pas attend votre accord.** Réécrire une instruction locale, supprimer des plans, générer des prises et proposer un découpage du synopsis affichent une carte d’approbation avec un aperçu, et rien ne se passe dans votre projet tant que vous n’avez pas cliqué sur **Approve**.
+- **Le reste se fait tout de suite.** Ajouter et modifier des plans, étiqueter une prise, assembler et exporter sont enregistrés dès que l’assistant les lance, la page les montre au fur et à mesure, et Ctrl+Z (ou **Annuler** sur le message « Projet modifié par l’assistant ») annule chacun d’eux.
 
 ### Avant de commencer
 
 - Votre admin doit configurer un modèle de langage dans PotionUI (Admin › LLM / Assistant) et vous l’attribuer. Il doit savoir appeler des outils, et un serveur de modèle local réglé pour l’assistant (le `llama-server` de llama.cpp ou Ollama, avec les réglages du guide d’administration) ou un fournisseur en ligne comme OpenAI est le choix le plus sûr : le modèle intégré à PotionUI a manqué de mémoire, ou était trop petit pour appeler les outils, sur une carte graphique de 12 Go lors de nos essais. Sans modèle, le chat indique qu’il est indisponible (voir « Si cela ne fonctionne pas » plus bas).
-- L’assistant lit votre projet tel que la page le montre, mais il écrit dans le projet tel qu’il est enregistré sur le serveur. Attendez « Enregistré à » dans la barre projet avant d’approuver une modification.
+- L’assistant travaille sur votre projet tel qu’il est enregistré sur le serveur. La page enregistre vos modifications quand vous envoyez un message, si bien que l’assistant voit ce que vous voyez, et ses modifications reviennent dans la page et se fusionnent avec ce que vous saisissez entre-temps (voir « Ce qu’elle change, et ce qu’elle ne change pas »).
 - Gardez la page Video Producer ouverte pendant que vous discutez : l’assistant ne connaît votre projet que tant que la page est ouverte dessus.
 
 ### Ouvrir l’assistant
@@ -475,15 +480,15 @@ Le chat est une fenêtre de PotionUI : ses boutons (**Tools**, **New chat**, **A
 - l’endroit où vous êtes : l’espace, la tête de lecture (et le plan qu’elle survole), votre sélection et la plage ;
 - le synopsis et la direction globale : les cinq champs et le profil H3 ;
 - la bible : l’étiquette visuelle et les mots de chaque fiche ;
-- les plans dans l’ordre de la timeline : nom, début et fin, étape, présence d’une prise, présence d’une première et d’une dernière frame, le début de leur instruction locale et les étiquettes qu’ils distribuent ;
+- les plans dans l’ordre de la timeline : numéro, nom, début et fin, étape, nombre de prises et celle qui est finale, présence d’une première et d’une dernière frame, le début de leur instruction locale et les étiquettes qu’ils distribuent ;
 - les contradictions que la page signale entre une instruction locale et la direction, et les raccords de couleur et d’identité qu’elle a mesurés entre plans voisins ;
-- l’état de la production : cible, qualité, progression et file.
+- l’état de la production : cible, qualité, progression, file et moteur de la barre Production.
 
-Le résumé est du texte et il reste court : 40 plans au maximum, 800 caractères du synopsis, 240 de chaque champ de la direction et 160 de chaque instruction locale, si bien qu’un texte plus long est coupé dans ce que lit l’assistant. Il ne contient ni vos images, ni vos vidéos, ni vos prises, références ou pistes audio, et l’assistant ne voit aucune image. Si vous quittez la page Video Producer, le résumé s’arrête : l’assistant dit que la page n’est pas ouverte et vous demande d’ouvrir un projet.
+Le résumé est du texte et il reste court : 40 plans au maximum, 800 caractères du synopsis, 240 de chaque champ de la direction et 160 de chaque instruction locale, si bien qu’un texte plus long est coupé dans ce que lit l’assistant. Il ne contient ni vos images, ni vos vidéos, ni vos références ou pistes audio, et l’assistant ne voit aucune image. Quand il lui en faut plus, l’assistant lit lui-même le projet (l’outil **Read project**) : les instructions locales en entier, les prises de chaque plan avec leur lettre et leur étiquette, les références, et les noms de vos médias, qu’il peut utiliser comme images et comme références. Si vous quittez la page Video Producer, le résumé s’arrête : l’assistant dit que la page n’est pas ouverte et vous demande d’ouvrir un projet.
 
-### Quatre demandes à essayer
+### Demandes à essayer
 
-Vous écrivez à l’assistant dans votre langue. Les exemples ci-dessous n’en sont que des exemples ; sélectionnez d’abord un plan et l’assistant sait duquel vous parlez.
+Vous écrivez à l’assistant dans votre langue. Les exemples ci-dessous n’en sont que des exemples ; sélectionnez d’abord un plan et l’assistant sait duquel vous parlez. Vous pouvez désigner un plan par son nom ou par son numéro dans la timeline (« le plan 3 »).
 
 #### Demande 1 : écrire l’instruction d’un plan
 
@@ -517,6 +522,35 @@ Par exemple : « Vérifie les raccords entre mes plans et dis-moi quoi corriger.
 3. Ce qu’elle cherche : un plan sans prompt ; une instruction locale qui contredit la direction globale ; un plan de moins de 2 s ou de plus de 15 s ; un plan en profil FL2VA sans première image ; une instruction locale qui ne nomme pas un personnage que le plan distribue depuis la bible ; un mouvement de caméra qui change entre deux plans ; un saut de luminosité ou de température de couleur (la page les mesure sur les images, les images de raccord des plans quand ils en ont et leurs vignettes sinon, et la ligne porte le badge **Mesuré** ; chapitre 12) ; et un point de ressemblance entre deux prises. Ce dernier vient du score de ressemblance, qui reste simulé (chapitre 17), sa ligne porte donc le badge gris **Simulé** à la place. Les plans qui viennent d’une source sont ignorés.
 4. **Fermer la vérification** (la croix de la section) retire la liste. Redemandez pour la rafraîchir.
 
+#### Demande 5 : ajouter, modifier et ordonner des plans
+
+Par exemple : « Ajoute deux plans après “Les goélands” : un gros plan sur les mains de Mara, 3 s, et un plan large du quai, 5 s, avec Mara sur le quai. » Ou : « Fais durer le plan 2 six secondes, mets “Sortie” au début et distribue Mara dedans. »
+
+1. Le chat montre l’outil qu’il lance (**Add shots**, **Update shots**). Pas de carte : la modification est enregistrée tout de suite et les plans apparaissent dans la page pendant que l’assistant répond encore. La page dit « Projet modifié par l’assistant », avec **Annuler**.
+2. Un nouveau plan arrive « À générer », avec son instruction locale. Changer la durée d’un plan déplace son instruction, ses images et les plans qui le suivent, comme l’éditeur de plan ; une prise devenue trop courte quitte le plan, qui repasse « À générer ».
+3. L’assistant peut aussi donner à un plan une première ou une dernière image et lui attacher des références, parmi les médias de votre projet (« Prends l’image “Portail” comme première image du plan 3 »), régler le nombre de prises par lancement, et activer ou couper le départ depuis la dernière image du plan précédent.
+4. Ctrl+Z annule la modification, et la page enregistre le plan tel qu’il était. Pour changer l’instruction locale d’un plan existant, l’assistant passe par la demande 1, avec sa carte.
+
+#### Demande 6 : supprimer des plans
+
+Par exemple : « Supprime les plans “Sortie” et “Générique”. » La carte **Delete shots** les liste avec leur plage de temps et le début de leur instruction. **Approve** les supprime avec leurs instructions, leurs images et leurs références propres, et les plans suivants remontent ; leurs prises restent dans le projet. Ctrl+Z les fait revenir.
+
+#### Demande 7 : générer et suivre les prises
+
+Par exemple : « Génère un brouillon des plans 1 à 3. » L’assistant prend le moteur de la barre Production et le nombre de prises de chaque plan, sauf si vous en donnez un (« deux prises chacun »).
+
+1. La carte **Generate takes** montre les plans, le nombre de prises, la qualité, le moteur, les minutes GPU nécessaires et ce qui reste de vos minutes du mois, et le temps estimé. Rien ne démarre avant que vous cliquiez sur **Approve**.
+2. Quand une prise ne peut pas démarrer (un modèle à installer, des minutes épuisées, un profil que le moteur ne sait pas faire), l’assistant dit pourquoi et n’affiche pas de carte.
+3. Après **Approve**, la page dit « 3 prises lancées par l’assistant », avec **Afficher**, et la barre Production montre la progression, comme pour une génération que vous lancez. Demandez « Où en sont mes prises ? » et l’assistant lit la file : les prises en cours ou en attente, leur place, les minutes restantes et les derniers exports.
+
+#### Demande 8 : choisir les prises finales
+
+Par exemple : « Passe la prise B des “Goélands” en finale. » (La lettre est celle de la carte de la prise.) Une prise finale est posée sur son plan dans le montage, comme **Utiliser cette prise**, et l’ancienne finale du plan devient candidate. L’assistant peut aussi étiqueter une prise **Rejetée** ou **Candidate**. Ctrl+Z retire la prise finale du plan. Une prise finale le reste tant que vous ou l’assistant n’avez pas passé une autre prise du plan en finale.
+
+#### Demande 9 : assembler et exporter
+
+Par exemple : « Mets les prises finales dans le montage et exporte la vidéo pour le web. » L’assistant pose chaque prise finale sur son plan, comme **Assembler les prises choisies**, vous dit quels plans n’ont pas encore de prise finale, puis lance l’export (web, ou réseaux sociaux en 9:16 ; à la résolution du projet sauf si vous en demandez une autre). La page dit « Export lancé par l’assistant », avec **Afficher**, qui ouvre la fenêtre d’export : téléchargez-y la vidéo quand elle est prête. L’export tourne sur le processeur du serveur, pas sur la carte graphique.
+
 ### Les suggestions qui saisissent la demande à votre place
 
 Trois endroits de la page ouvrent le chat avec une demande déjà saisie. Vous pouvez la lire, la modifier, puis appuyer sur Entrée : rien n’est envoyé à votre place.
@@ -529,10 +563,11 @@ Si vous aviez déjà saisi quelque chose dans la zone de saisie du chat, votre t
 
 ### Ce qu’elle change, et ce qu’elle ne change pas
 
-- Elle écrit des instructions locales (demandes 1 et 2) et propose des plans (demande 3). Elle ne lance jamais de génération, ne choisit pas de prise, ne passe pas un plan en final, n’ajoute, ne déplace ni ne supprime de plan toute seule, et ne modifie ni le synopsis, ni la direction globale, ni les références, ni les titres, ni l’audio. Pour un champ de la direction ou pour un brief sonore, elle répond en texte seulement : copiez vous-même ce qui vous plaît.
+- Elle écrit des instructions locales (demandes 1 et 2), propose des plans (demande 3), ajoute, modifie, ordonne et supprime des plans (demandes 5 et 6), génère des prises (demande 7), les étiquette (demande 8), assemble et exporte (demande 9). Elle ne modifie ni le synopsis, ni la direction globale, ni les fiches de la bible, ni les titres, ni la couleur, ni le son ou le mixage, ne choisit pas le moteur, ne lance pas la passe finale du film et n’importe pas de médias : demandez-le-lui et elle répond en texte, et vous le faites dans la page.
 - **Proposer un découpage** et **Production › Découper le synopsis en plans…** ne sont pas l’assistant : ils se contentent de couper le synopsis en phrases, un plan par phrase. **Production › Contrôle de continuité** ouvre Director AI sur la vue **Revue** avec son panneau de gauche, où **À vérifier** liste ce que la page a trouvé, et n’appelle pas l’assistant.
-- Chaque modification approuvée est une nouvelle version de votre projet : **Fichier › Historique des versions…** la montre avec le mot « Assistant ». Quand la page a appliqué la modification elle-même, **Édition › Annuler** agit dessus comme sur vos propres modifications.
-- Si vous aviez saisi dans la même instruction locale sans l’avoir encore enregistrée quand vous avez approuvé, la page recharge le projet pour montrer la version de l’assistant (« Projet rechargé avec les modifications de l’assistant ») : cette saisie et votre historique d’annulation sont perdus. Attendez « Enregistré à » avant d’approuver.
+- Chaque modification de l’assistant est une nouvelle version de votre projet : **Fichier › Historique des versions…** la montre avec le mot « Assistant ». Dans la page, **Édition › Annuler** (Ctrl+Z) l’annule comme vos propres modifications, un appel d’outil à la fois.
+- Si vous modifiez le projet pendant que l’assistant travaille, les deux modifications sont gardées. Quand vous et l’assistant avez changé la même chose (le même nom, la même durée), votre version l’emporte, et le message le dit : « Projet modifié par l’assistant ; 1 de vos changements a été gardé à la place du sien ».
+- Une génération, une étiquette dans les prises et un export ne sont pas dans le projet : Ctrl+Z ne les annule pas. Annulez une prise dans la file, et supprimez un export dans la fenêtre d’export.
 - L’assistant écrit les instructions locales dans la langue des prompts du projet (chapitre 15) et vous répond dans votre langue. Il ne traduit jamais ce que vous avez écrit. Les contrôles de contradiction ne lisent que les textes écrits dans la langue des prompts.
 - La liste **À vérifier** et la proposition n’apparaissent qu’une fois, quand la réponse arrive. Elles disparaissent quand vous quittez la page ou ouvrez un autre projet, et rouvrir une ancienne conversation ne les ramène pas : redemandez.
 - Les messages de l’assistant disent « prompt » pour ce que ce guide appelle l’instruction locale.
@@ -540,10 +575,13 @@ Si vous aviez déjà saisi quelque chose dans la zone de saisie du chat, votre t
 ### Si cela ne fonctionne pas
 
 - **« Chat is currently unavailable ».** Aucun modèle de langage ne vous est attribué. Demandez à votre admin d’en ajouter un dans Admin › LLM / Assistant et de vous l’attribuer. (Un admin lit « No enabled LLM configurations » à la place.)
-- **L’assistant répond mais n’affiche jamais de carte, ou dit qu’il ne peut pas agir.** Le bouton **Tools** de la zone de saisie du chat est désactivé : survolez-le, il indique « Tools OFF » ; cliquez dessus pour activer les outils, et vérifiez que les quatre outils du groupe Video Producer sont cochés dans sa liste. Votre admin a aussi pu les désactiver pour le modèle, ou le modèle peut ne pas savoir appeler des outils : essayez-en un autre.
+- **L’assistant répond mais n’affiche jamais de carte, ou dit qu’il ne peut pas agir.** Le bouton **Tools** de la zone de saisie du chat est désactivé : survolez-le, il indique « Tools OFF » ; cliquez dessus pour activer les outils, et vérifiez que les outils du groupe Video Producer sont cochés dans sa liste. Votre admin a aussi pu les désactiver pour le modèle, ou le modèle peut ne pas savoir appeler des outils : essayez-en un autre.
 - **L’assistant ne semble pas connaître votre projet, ou l’en-tête dit « Started in … ».** La conversation a été commencée dans un autre mode. Cliquez sur **start a new chat** depuis la page Video Producer.
 - **L’assistant dit que la page n’est pas ouverte sur un projet.** Ouvrez un projet dans Video Producer, gardez la page ouverte et redemandez.
 - **Une carte est Failed et cite `version_conflict`, `project_not_found` ou `shot_not_found`.** Le projet a été enregistré ailleurs au moment précis de l’enregistrement, a été supprimé, ou n’a plus ce plan. Laissez la page recharger le projet (**Fichier › Ouvrir…**), puis cliquez sur **Retry** sur la carte ou redemandez. L’assistant le dit lui-même dans le chat.
+- **L’assistant dit `blocked`, ou que les prises ne peuvent pas démarrer.** La raison suit : des modèles à installer, les minutes GPU du mois épuisées, un profil que le moteur ne sait pas faire, aucun moteur dans la barre Production. C’est le même blocage que dans la barre Production (chapitre 8).
+- **L’assistant dit que plusieurs prises ont la même lettre (`ambiguous_take`).** Un plan a une prise brouillon et une prise finale de même lettre. Précisez laquelle (« le brouillon B »), ou demandez-lui de lire d’abord les prises du plan.
+- **Avec une petite fenêtre de contexte, l’assistant charge d’abord les outils de production.** Sous 24 576 jetons de contexte, PotionUI n’envoie les outils qui génèrent, suivent, étiquettent, assemblent et exportent que quand l’assistant les demande : le chat montre un premier appel **use_tools**, puis le vrai. C’est normal.
 - **Vous avez approuvé et le chat dit « L’assistant a modifié un autre projet que celui ouvert ici. »** La réponse concernait un autre projet que celui que vous avez ouvert maintenant. Ouvrez celui-là, ou redemandez ici.
 - **« Impossible de recharger le projet. Rouvrez-le pour voir les modifications de l’assistant. »** La modification de l’assistant est enregistrée, mais la page n’a pas pu la recharger : rouvrez le projet (**Fichier › Ouvrir…**).
 - **La suggestion n’est pas apparue dans la zone de saisie.** Vous aviez déjà saisi un brouillon, ou votre PotionUI ne sait pas remplir la zone (il l’ouvre alors vide). Saisissez ou collez la demande.
@@ -850,7 +888,7 @@ Les raccourcis à une lettre (A, R, B, I, O, M, N, F, U, D, T et E) peuvent êtr
 
 Quand les raccourcis fonctionnent :
 
-- Seulement quand le focus est sur la page et pas dans un champ de texte. Avec un champ de texte actif, une fenêtre ouverte (sélecteur ou confirmation PotionUI compris) ou la recherche de commande ouverte, les autres raccourcis sont inactifs ; Échap, Ctrl+K et Ctrl+/ agissent toujours. Tant que le chat PotionUI est ouvert, les raccourcis de la page sont inactifs.
+- Seulement quand le focus est sur la page et pas dans un champ de texte. Avec un champ de texte actif, une fenêtre ouverte (sélecteur ou confirmation PotionUI compris) ou la recherche de commande ouverte, les autres raccourcis sont inactifs ; Échap, Ctrl+K et Ctrl+/ agissent toujours. Tant que le chat PotionUI est ouvert, les raccourcis de la page sont inactifs, sauf Annuler et Rétablir (Ctrl+Z, Ctrl+Maj+Z, Ctrl+Y) hors d’un champ de texte, pour annuler une modification de l’assistant sans fermer le chat.
 - Une combinaison n’agit qu’avec exactement ses touches. Ctrl+Shift+I et Ctrl+Shift+J (sur un Mac Option+Commande+I, J ou K) restent aux outils de développement du navigateur, et Alt+Flèche gauche continue de revenir en arrière. La page ne prend jamais les combinaisons qui gèrent les onglets et les fenêtres du navigateur (Ctrl+N, Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+1 à Ctrl+9), sa barre d’adresse (Ctrl+L), sa recherche dans la page (Ctrl+F) ni le presse-papiers (Ctrl+C, Ctrl+V) : pour les espaces de travail, un nouveau projet ou un nouveau titre, utilisez le menu, les boutons ou le sélecteur d’espaces. Sous Linux, Chrome et Firefox gardent Alt+1 à Alt+8 pour leurs onglets : les vues de Director AI s’ouvrent alors depuis le menu **Fenêtre** ou le sommaire.
 - Une touche maintenue enfoncée ne répète pas une commande qui bascule quelque chose (Espace, M, N, F, U, Ctrl+S, Ctrl+G, Ctrl+D et les autres). Annuler, Rétablir, Supprimer et les flèches se répètent.
 - Sur un Mac, Ctrl+K dans un champ de texte reste à l’éditeur de texte ; la recherche de commande se fait avec ⌘K. Le / de Ctrl+/ demande Shift sur certaines dispositions de clavier, comme la disposition française : la page l’accepte dans les deux cas.
@@ -865,7 +903,7 @@ Certaines parties gardent leur interface mais ne font pas la vraie chose. Elles 
 
 Le badge **Simulé** apparaît dans l’en-tête de la fenêtre **Atelier Sound design** (intitulée **Voix et dialogues** pour une voix) ; à côté des formats **Fichier maître · ProRes 422** et **Archive · H.265** quand l’un d’eux est choisi, à côté des stems audio et, quand un format simulé est choisi, dans le pied de l’onglet **Vidéo** de la fenêtre d’export (« Rendu simulé : maître et archive ») ; sur le bouton d’automation des tranches de la console ; et sur la ligne d’identité de la vérification de l’assistant (chapitre 10).
 
-Tout le reste fonctionne pour de vrai : la génération elle-même (les moteurs activés par votre admin, l’estimation, les prises avec leur progression, l’annulation et la reprise, les finals par agrandissement ou nouveau rendu, le quota et les notifications), les projets enregistrés, **Fichier › Ouvrir…**, **Fichier › Historique des versions…** et **Fichier › Nouveau projet…**, l’import de vos images, vidéos et fichiers audio avec leurs vignettes et leur lecture, le montage sur la timeline (ajustement des plans, fondus, coupe, magnétisme, plage, marqueurs, annuler et rétablir), la sélection et l’inspecteur, le Storyboard (le bouton **Proposer un découpage** est une simple coupe par phrases, pas une simulation), l’assistant PotionUI avec ses quatre outils (chapitre 10), la bibliothèque de prompts et le compositeur, le contrôle des contradictions de direction, le raccord de couleur, la console de mixage qui joue vos fichiers audio, les images de raccord, les vidéos web et réseaux sociaux (des fichiers MP4 que ffmpeg assemble sur le serveur) et les fichiers FCPXML, OpenTimelineIO, EDL et SRT, qui sont de vrais fichiers.
+Tout le reste fonctionne pour de vrai : la génération elle-même (les moteurs activés par votre admin, l’estimation, les prises avec leur progression, l’annulation et la reprise, les finals par agrandissement ou nouveau rendu, le quota et les notifications), les projets enregistrés, **Fichier › Ouvrir…**, **Fichier › Historique des versions…** et **Fichier › Nouveau projet…**, l’import de vos images, vidéos et fichiers audio avec leurs vignettes et leur lecture, le montage sur la timeline (ajustement des plans, fondus, coupe, magnétisme, plage, marqueurs, annuler et rétablir), la sélection et l’inspecteur, le Storyboard (le bouton **Proposer un découpage** est une simple coupe par phrases, pas une simulation), l’assistant PotionUI avec ses treize outils (chapitre 10), la bibliothèque de prompts et le compositeur, le contrôle des contradictions de direction, le raccord de couleur, la console de mixage qui joue vos fichiers audio, les images de raccord, les vidéos web et réseaux sociaux (des fichiers MP4 que ffmpeg assemble sur le serveur) et les fichiers FCPXML, OpenTimelineIO, EDL et SRT, qui sont de vrais fichiers.
 
 La fenêtre **Fonctions simulées** liste cinq éléments. Pour chacun, le tableau donne ce que dit la fenêtre et ce qui est réel à côté.
 
@@ -879,7 +917,7 @@ La fenêtre **Fonctions simulées** liste cinq éléments. Pour chacun, le table
 
 L’**Atelier avancé** des versions précédentes a disparu, avec ses réglages que le moteur n’utilisait pas. Ce qui agissait est maintenant dans la barre Production et la fenêtre **Edit Engine** (moteur, profil, qualité, brouillons par plan), résumés sur la ligne **Moteur** de Director AI, et dans l’éditeur de plan (moteur, profil, qualité et graine d’un plan). Les réglages retirés étaient : cohérence entre fenêtres, verrouillage de l’identité des personnages, priorité au guide de mouvement, les fenêtres de génération avec leur longueur et leur chevauchement, la résolution finale, la graine, les étapes, le guidage (CFG), les LoRAs, la piste qui guide la performance, la synchronisation labiale, le rythme du montage, le décalage audio / image, le nommage des résultats, les post-traitements, l’insertion automatique de la variante A, et les poids du Hybrid builder avec ses profils enregistrés. Un projet fait avant garde leurs valeurs, que rien ne lit ; un preset n’expose que les contrôles qu’il déclare ; MiniMax H3, par exemple, n’a ni guidage ni prompt négatif. La graine d’une prise est tirée par le serveur et affichée sur sa carte, sauf si le plan fixe la sienne, et les résolutions suivent les règles du brouillon et du final du chapitre 8.
 
-L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video Producer assistant, qui écrit les instructions de plan, corrige les contradictions avec la direction globale, découpe un synopsis en plans et vérifie la continuité, et vous approuvez chaque changement avant qu’il touche le projet (chapitre 10). Le seul point simulé de ce qu’il montre est la ressemblance d’identité entre deux prises.
+L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video Producer assistant, qui pilote la page des plans jusqu’à l’export ; vous approuvez ce qui réécrit une instruction, supprime des plans ou consomme des minutes GPU, et Ctrl+Z annule le reste (chapitre 10). Le seul point simulé de ce qu’il montre est la ressemblance d’identité entre deux prises.
 
 ## 18. Dépannage
 

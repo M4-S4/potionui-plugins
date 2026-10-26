@@ -4,7 +4,6 @@
 	"toast.prompt": "Prompt de « {shot} » mis à jour par l’assistant",
 	"toast.fixed.one": "{count} prompt réécrit par l’assistant",
 	"toast.fixed.other": "{count} prompts réécrits par l’assistant",
-	"toast.reloaded": "Projet rechargé avec les modifications de l’assistant",
 	"toast.reloadFailed": "Impossible de recharger le projet. Rouvrez-le pour voir les modifications de l’assistant.",
 	"toast.proposal.one": "{count} plan proposé dans Storyboard",
 	"toast.proposal.other": "{count} plans proposés dans Storyboard",
@@ -48,5 +47,11 @@
 	"suggest.sound": "Aide-moi à écrire un brief sonore : {type}, de {start} à {end}.",
 	"seam.cast_unnamed": "« {shot} » ne nomme pas {labels}, distribué dans le plan.",
 	"fix.cast_unnamed": "Nommez chaque personnage distribué par son étiquette visuelle.",
-	"suggest.split": "Découpe mon synopsis en plans, calés sur les parties du morceau."
+	"suggest.split": "Découpe mon synopsis en plans, calés sur les parties du morceau.",
+	"toast.changed": "Projet modifié par l’assistant",
+	"toast.changedKept.one": "Projet modifié par l’assistant ; {count} de vos changements a été gardé à la place du sien",
+	"toast.changedKept.other": "Projet modifié par l’assistant ; {count} de vos changements ont été gardés à la place des siens",
+	"toast.takes.one": "{count} prise lancée par l’assistant",
+	"toast.takes.other": "{count} prises lancées par l’assistant",
+	"toast.export": "Export lancé par l’assistant"
 }

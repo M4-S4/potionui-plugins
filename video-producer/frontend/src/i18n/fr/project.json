@@ -86,5 +86,8 @@
 	"upload.soundOnly.one": "« {name} » ne peut pas servir ici : seuls les fichiers audio sont acceptés.",
 	"upload.soundOnly.other": "{count} fichiers ne peuvent pas servir ici : seuls les fichiers audio sont acceptés.",
 	"upload.videoOnly.one": "« {name} » ne peut pas servir ici : seules les vidéos sont acceptées.",
-	"upload.videoOnly.other": "{count} fichiers ne peuvent pas servir ici : seules les vidéos sont acceptées."
+	"upload.videoOnly.other": "{count} fichiers ne peuvent pas servir ici : seules les vidéos sont acceptées.",
+	"toast.merged": "Les modifications enregistrées ailleurs ont été fusionnées dans le projet",
+	"toast.mergedKept.one": "Modifications enregistrées ailleurs fusionnées ; {count} de vos changements a été gardé à leur place",
+	"toast.mergedKept.other": "Modifications enregistrées ailleurs fusionnées ; {count} de vos changements ont été gardés à leur place"
 }

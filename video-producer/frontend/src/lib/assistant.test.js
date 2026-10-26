@@ -2,8 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	LABEL_LIMIT,
+	LIVE_TOOLS,
+	PAGE_TOOLS,
 	PROMPT_LIMIT,
 	applyPrompts,
+	changePlan,
 	clipped,
 	editedPrompts,
 	issuesContext,
@@ -14,7 +17,8 @@ import {
 	reviewCount,
 	reviewFrom,
 	seamsContext,
-	shotsContext
+	shotsContext,
+	startedTakes
 } from './assistant.js';
 
 function sampleDoc() {
@@ -51,7 +55,7 @@ test('clipped: text over the limit ends with an ellipsis and keeps the limit', (
 
 test('shotsContext: one entry per shot with its prompt bounded, its frames and its take', () => {
 	const shots = shotsContext(sampleDoc(), (c) => c.label || 'Shot');
-	assert.deepEqual(shots[0], { id: 'c1', label: 'Ridge', start: 0, dur: 4, stage: 'draft', promptId: 'p1', prompt: 'Wide shot of the ridge at dawn.', hasFirstFrame: true, hasLastFrame: true, take: 't1', cast: [] });
+	assert.deepEqual(shots[0], { id: 'c1', label: 'Ridge', start: 0, dur: 4, stage: 'draft', promptId: 'p1', prompt: 'Wide shot of the ridge at dawn.', hasFirstFrame: true, hasLastFrame: true, take: 't1', takes: 0, final: null, cast: [] });
 	assert.equal(shots[1].label, 'Shot');
 	assert.equal(shots[1].prompt.length, PROMPT_LIMIT);
 	assert.equal(shots[1].hasFirstFrame, false, 'a frame without an asset does not count');
@@ -60,8 +64,46 @@ test('shotsContext: one entry per shot with its prompt bounded, its frames and i
 
 test('productionContext counts the takes in flight, the production state having no queue of its own', () => {
 	const production = { target: 'clip', mode: 'ai', state: 'ready', progress: 41.6, running: 0, step: '', lastCount: 0, quality: 'draft' };
-	assert.deepEqual(productionContext(production, 3), { target: 'clip', quality: 'draft', state: 'ready', progress: 42, queue: 3 });
+	assert.deepEqual(productionContext(production, 3), { target: 'clip', quality: 'draft', state: 'ready', progress: 42, queue: 3, engine: null });
 	assert.equal(productionContext(production, 0).queue, 0);
+	assert.equal(productionContext(production, 0, 'Wan 2.1').engine, 'Wan 2.1');
+});
+
+test('shotsContext counts the takes of each shot and names its final one', () => {
+	const takes = { c1: [{ id: 't1', variant: 'A', label: 'candidate' }, { id: 't2', variant: 'B', label: 'final' }], c2: [{ id: 't3', variant: 'A', chosen: false }] };
+	const shots = shotsContext(sampleDoc(), (c) => c.label, (id) => takes[id] ?? []);
+	assert.deepEqual(
+		shots.map((s) => [s.takes, s.final]),
+		[
+			[2, 'B'],
+			[1, null],
+			[0, null]
+		]
+	);
+});
+
+test('changePlan pulls the saved version the assistant reached, refreshes the takes it touched and follows its export', () => {
+	const base = { projectId: 'P', version: 4 };
+	assert.deepEqual(changePlan({ ...base, tool: 'vp_add_shots', result: { project_id: 'P', version: 5 } }), { status: 'applied', pull: 5, takes: false, exported: false });
+	assert.deepEqual(changePlan({ ...base, tool: 'vp_add_shots', result: { project_id: 'P', version: 4 } }), { status: 'noop' });
+	assert.deepEqual(changePlan({ ...base, tool: 'vp_label_take', result: { project_id: 'P', label: 'rejected' } }), { status: 'applied', pull: 0, takes: true, exported: false });
+	assert.deepEqual(changePlan({ ...base, tool: 'vp_generate', result: { project_id: 'P', takes: [{ id: 't1' }] } }), { status: 'applied', pull: 0, takes: true, exported: false });
+	assert.deepEqual(changePlan({ ...base, tool: 'vp_export_video', result: { project_id: 'P', job_id: 'j1' } }), { status: 'applied', pull: 0, takes: false, exported: true });
+	assert.deepEqual(changePlan({ ...base, tool: 'vp_delete_shots', result: { status: 'pending_approval', project_id: 'P' } }), { status: 'noop' });
+	assert.deepEqual(changePlan({ ...base, tool: 'vp_add_shots', result: { project_id: 'Q', version: 9 } }), { status: 'stale' });
+	assert.deepEqual(changePlan({ projectId: null, version: 0, tool: 'vp_add_shots', result: { project_id: 'P', version: 1 } }), { status: 'stale' });
+});
+
+test('startedTakes counts only the takes a generation started', () => {
+	assert.equal(startedTakes('vp_generate', { takes: [{}, {}] }), 2);
+	assert.equal(startedTakes('vp_assemble', { takes: [{}] }), 0);
+	assert.equal(startedTakes('vp_generate', null), 0);
+});
+
+test('the page follows every tool that changes the project, and pulls live only those that run without approval', () => {
+	assert.deepEqual(PAGE_TOOLS, ['vp_add_shots', 'vp_update_shots', 'vp_delete_shots', 'vp_generate', 'vp_label_take', 'vp_assemble', 'vp_export_video']);
+	assert.ok(LIVE_TOOLS.every((tool) => PAGE_TOOLS.includes(tool)));
+	assert.ok(!LIVE_TOOLS.includes('vp_delete_shots') && !LIVE_TOOLS.includes('vp_generate'));
 });
 
 test('issuesContext and seamsContext keep only what the backend reads', () => {

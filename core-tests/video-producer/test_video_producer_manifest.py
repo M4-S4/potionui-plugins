@@ -17,9 +17,11 @@ from jsonschema import Draft202012Validator
 from src.features.chat.context_builder import ChatContextBuilder
 from src.features.chat.modes.registry import ChatModeRegistry
 from src.features.chat.tool_dispatcher import ToolCallDispatcher
+from src.features.llm import context_budget
 from src.features.llm.tools.base import serialize_approval_preview
 from src.features.llm.tools.executor import ToolExecutor
 from src.features.llm.tools.registry import ToolRegistry
+from src.features.llm.tools.use_tools import deferred_tool_groups, use_tools_schema
 from src.features.notifications.types import NotificationTypeRegistry
 from src.features.plans.guard import LimitGuard, PlanSettings
 from src.features.plans.records import Plan, PlanLimit, PlanSubject
@@ -372,7 +374,23 @@ CHAT_TOOLS = {
     "vp_fix_conflicts": ("FixConflictsTool", True),
     "vp_split_synopsis": ("SplitSynopsisTool", True),
     "vp_check_continuity": ("CheckContinuityTool", False),
+    "vp_get_project": ("ReadProjectTool", False),
+    "vp_add_shots": ("AddShotsTool", False),
+    "vp_update_shots": ("UpdateShotsTool", False),
+    "vp_delete_shots": ("DeleteShotsTool", True),
+    "vp_generate": ("GenerateTool", True),
+    "vp_status": ("StatusTool", False),
+    "vp_label_take": ("LabelTakeTool", False),
+    "vp_assemble": ("AssembleTool", False),
+    "vp_export_video": ("ExportVideoTool", False),
 }
+FIRST_TOOLS = ("vp_write_shot_prompt", "vp_fix_conflicts", "vp_split_synopsis", "vp_check_continuity")
+PRODUCTION_TOOLS = ("vp_generate", "vp_status", "vp_label_take", "vp_assemble", "vp_export_video")
+UP_FRONT = [name for name in CHAT_TOOLS if name not in PRODUCTION_TOOLS]
+
+
+def _module(name):
+    return "tools" if name in FIRST_TOOLS else "control"
 
 
 @pytest.fixture
@@ -389,29 +407,29 @@ def chat(manifest, tmp_path):
     return SimpleNamespace(tools=tools, modes=modes, plugins=plugins)
 
 
-def test_the_manifest_declares_the_assistant_mode_and_its_four_tools(manifest):
+def test_the_manifest_declares_the_assistant_mode_and_its_tools(manifest):
     [mode] = manifest.chat_modes
 
     assert (mode["id"], mode["name"], mode["icon"]) == (CHAT_MODE, "Video Producer assistant", "film")
     assert mode["description"]
     assert mode["default_route_prefixes"] == [f"/plugins/{PLUGIN_ID}"]
-    assert mode["tools"] == list(CHAT_TOOLS)
+    assert mode["tools"] == UP_FRONT
     assert mode["context_contributor"] == "backend.chat.context.build_context"
     assert mode["system_prompt_file"] is None and "{{TOOL_HINTS}}" in mode["system_prompt"]
     assert mode["admin_only"] is False
     assert [(tool["class"], tool["modes"]) for tool in manifest.tools] == [
-        (f"backend.chat.tools:{class_name}", [CHAT_MODE]) for class_name, _ in CHAT_TOOLS.values()
+        (f"backend.chat.{_module(name)}:{class_name}", [CHAT_MODE]) for name, (class_name, _) in CHAT_TOOLS.items()
     ]
 
 
-def test_the_cores_registration_loads_the_four_tools_inside_the_plugin_package(chat):
+def test_the_cores_registration_loads_the_tools_inside_the_plugin_package(chat):
     registered = {tool.name: tool for tool in chat.tools.get_all()}
 
     assert list(registered) == list(CHAT_TOOLS)
     assert all(name.startswith("vp_") for name in registered)
     for name, (class_name, approval) in CHAT_TOOLS.items():
         tool = registered[name]
-        assert (type(tool).__name__, type(tool).__module__) == (class_name, f"{PACKAGE}.backend.chat.tools")
+        assert (type(tool).__name__, type(tool).__module__) == (class_name, f"{PACKAGE}.backend.chat.{_module(name)}")
         assert tool.requires_approval is approval
         assert tool.modes == [CHAT_MODE]
         assert chat.tools.source_of(name) == PLUGIN_ID
@@ -435,7 +453,7 @@ def test_the_mode_loaded_by_the_core_resolves_its_prompt_and_its_context(chat):
         [f"/plugins/{PLUGIN_ID}"],
         False,
     )
-    assert mode.tool_names == list(CHAT_TOOLS)
+    assert mode.tool_names == UP_FRONT
     assert mode.context_contributor is context.build_context
     hints = "\n".join(f"- {tool.name}: {tool.hint}" for tool in chat.tools.get_for_mode(mode))
     prompt = chat.modes.resolve_system_prompt(mode, hints, list(CHAT_TOOLS))
@@ -477,7 +495,7 @@ async def test_the_tools_loaded_by_the_core_write_and_check_a_stored_project(loa
     assert projects.get_project(created["id"])["version"] == 2
 
 
-def test_the_parameters_of_the_four_tools_are_valid_json_schemas_the_model_can_follow(chat):
+def test_the_parameters_of_the_tools_are_valid_json_schemas_the_model_can_follow(chat):
     for tool in chat.tools.get_all():
         Draft202012Validator.check_schema(tool.parameters)
         function = tool.to_schema()["function"]
@@ -492,8 +510,8 @@ def test_every_tool_of_the_manifest_belongs_to_a_declared_mode_and_every_mode_to
     owned = {tool.name for tool in chat.tools.get_all()}
 
     assert {mode_id for tool in manifest.tools for mode_id in tool["modes"]} == {mode["id"]}
-    assert set(mode["tools"]) == owned
-    assert len(owned) == len(manifest.tools) == 4
+    assert set(mode["tools"]) <= owned and owned - set(mode["tools"]) == set(PRODUCTION_TOOLS)
+    assert len(owned) == len(manifest.tools) == len(CHAT_TOOLS)
     assert all(chat.tools.source_of(name) == PLUGIN_ID for name in owned)
 
 
@@ -547,7 +565,7 @@ async def test_the_core_runs_the_three_writing_tools_for_approval_and_the_check_
 
     outcome = {name: await executor._execute_tool(name, owner, arguments) for name, arguments in calls.items()}
 
-    assert {name: pending for name, (result, pending) in outcome.items()} == {name: approval for name, (_, approval) in CHAT_TOOLS.items()}
+    assert {name: pending for name, (result, pending) in outcome.items()} == {name: CHAT_TOOLS[name][1] for name in FIRST_TOOLS}
     assert all(result.success for result, _ in outcome.values())
     assert projects.get_project(created["id"])["version"] == 1
     kinds = {name: result.preview.kind if result.preview else None for name, (result, _) in outcome.items()}
@@ -634,8 +652,21 @@ async def test_the_core_flags_a_write_as_stale_when_the_prompt_changed_after_its
     assert (before, after) == (False, True)
 
 
+def test_a_small_context_window_sends_the_editing_tools_and_defers_the_production_ones_behind_use_tools(chat):
+    mode = chat.modes.require(CHAT_MODE)
+    tools = chat.tools.get_for_mode(mode)
+
+    compact = deferred_tool_groups(tools, context_budget.TOOL_TIER_COMPACT, mode.core_groups, always_core=mode.tool_names)
+    standard = deferred_tool_groups(tools, context_budget.TOOL_TIER_STANDARD, mode.core_groups, always_core=mode.tool_names)
+
+    assert compact == {"vp_production": list(PRODUCTION_TOOLS)} and standard == {}
+    assert "'vp_production': vp_generate, vp_status" in use_tools_schema(compact)["function"]["description"]
+    up_front = [tool for tool in tools if tool.name not in PRODUCTION_TOOLS]
+    assert sum(len(json.dumps(tool.to_schema())) for tool in up_front) <= 8500
+
+
 def test_disabling_the_plugin_takes_its_mode_and_its_tools_away_from_the_core(chat):
-    assert chat.modes.get(CHAT_MODE) is not None and len(chat.tools.get_all()) == 4
+    assert chat.modes.get(CHAT_MODE) is not None and len(chat.tools.get_all()) == len(CHAT_TOOLS)
 
     chat.plugins._rollback_partial_enable(PLUGIN_ID)
 

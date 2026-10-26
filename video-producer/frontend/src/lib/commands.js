@@ -36,7 +36,7 @@ import { openFinalPass } from './finalpass.svelte.js';
 import { openReferences } from './references.js';
 import { togglePlay, seek } from './playback.svelte.js';
 import { chat, confirm } from './host.js';
-import { detectMac, findShortcut, formatShortcut, hostOverlayOpen, isActivationTarget, isSingleKey, isTypingTarget } from './keyboard.js';
+import { detectMac, findShortcut, formatShortcut, hostModalOpen, hostOverlayOpen, isActivationTarget, isSingleKey, isTypingTarget } from './keyboard.js';
 import { frameDuration } from './timebase.js';
 import { closeTopLayer } from './focus.js';
 
@@ -412,7 +412,7 @@ const fixedBindings = [
 
 const keymap = [
 	...allCommands.flatMap((c) =>
-		[c.keys, c.alias].filter(Boolean).map((spec) => ({ spec, run: c.press, global: c.global, repeat: c.repeat, single: isSingleKey(spec) }))
+		[c.keys, c.alias].filter(Boolean).map((spec) => ({ spec, id: c.id, run: c.press, global: c.global, repeat: c.repeat, single: isSingleKey(spec) }))
 	),
 	...fixedBindings
 ];
@@ -421,10 +421,13 @@ function hasModifier(e) {
 	return e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
 }
 
+const OVER_CHAT = ['undo', 'redo'];
+const overChat = (e) => OVER_CHAT.includes(findShortcut(e, keymap, IS_MAC)?.id) && !hostModalOpen() && !isTypingTarget(e.target);
+
 export function handleKeydown(e, root) {
 	const target = e.target;
 	if (target && target !== document.body && root && !root.contains(target)) return;
-	if (ui.hostModal || hostOverlayOpen()) return;
+	if (ui.hostModal || (hostOverlayOpen() && !overChat(e))) return;
 	if (e.key === 'Escape') {
 		if (!hasModifier(e)) escape();
 		return;

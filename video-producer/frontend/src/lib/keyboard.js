@@ -4,6 +4,7 @@ const MAC_KEYS = { backspace: '⌫', plus: '+', minus: '−' };
 const PC_KEYS = { plus: '+', minus: '−' };
 const ACTIVATION = 'button, [role="button"], a, [role="tab"], [role="menuitem"], input, textarea, select, [contenteditable="true"]';
 const HOST_OVERLAY = '[aria-modal="true"]:not(.vp-modal), button.ai-chat-trigger[aria-pressed="true"]';
+const HOST_MODAL = '[aria-modal="true"]:not(.vp-modal):not(.chat-shell)';
 const KEY_ALIASES = { space: ' ', plus: '+', minus: '-' };
 const SYMBOL = /^[^a-z0-9\s]$/;
 
@@ -90,6 +91,10 @@ export function isActivationTarget(el) {
 
 export function hostOverlayOpen(doc = typeof document === 'undefined' ? undefined : document) {
 	return !!doc?.querySelector(HOST_OVERLAY);
+}
+
+export function hostModalOpen(doc = typeof document === 'undefined' ? undefined : document) {
+	return !!doc?.querySelector(HOST_MODAL);
 }
 
 export function focusables(root) {
