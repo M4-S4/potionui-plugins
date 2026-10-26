@@ -259,7 +259,7 @@
 	"shot.dialogue.add": "Réplique",
 	"shot.dialogue.count": "{words} / {limit} mots",
 	"shot.dialogue.tooLong": "Trop de mots pour la durée du plan : environ {limit} tiennent à un débit naturel.",
-	"shot.dialogue.hint": "MiniMax-H3 et LTX disent les répliques en synchronisant les lèvres, avec la voix et la langue du personnage fixées dans la bible ; les autres moteurs les ignorent.",
+	"shot.dialogue.hint": "MiniMax H3 et LTX disent les répliques en synchronisant les lèvres, avec la voix et la langue du personnage fixées dans la bible ; les autres moteurs les ignorent.",
 	"shot.composed": "Prompt envoyé au moteur",
 	"shot.composedNone": "Choisissez un moteur de génération pour voir le prompt.",
 	"shot.composedUnsaved": "Le prompt s’affiche une fois le projet enregistré.",

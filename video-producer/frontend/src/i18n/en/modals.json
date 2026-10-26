@@ -259,7 +259,7 @@
 	"shot.dialogue.add": "Line",
 	"shot.dialogue.count": "{words} / {limit} words",
 	"shot.dialogue.tooLong": "Too many words for the length of the shot: about {limit} fit at a natural pace.",
-	"shot.dialogue.hint": "MiniMax-H3 and LTX speak the lines with lip sync, in the voice and language of the character set in the bible; the other engines leave them out.",
+	"shot.dialogue.hint": "MiniMax H3 and LTX speak the lines with lip sync, in the voice and language of the character set in the bible; the other engines leave them out.",
 	"shot.composed": "Prompt sent to the engine",
 	"shot.composedNone": "Choose a generation engine to see the prompt.",
 	"shot.composedUnsaved": "The prompt shows once the project is saved.",
