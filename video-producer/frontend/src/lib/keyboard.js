@@ -6,6 +6,8 @@ const ACTIVATION = 'button, [role="button"], a, [role="tab"], [role="menuitem"],
 const HOST_OVERLAY = '[aria-modal="true"]:not(.vp-modal), button.ai-chat-trigger[aria-pressed="true"]';
 const KEY_ALIASES = { space: ' ', plus: '+', minus: '-' };
 const SYMBOL = /^[^a-z0-9\s]$/;
+const CONTROL_INPUTS = ['range', 'checkbox', 'radio', 'color', 'button'];
+const STEP_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'];
 
 export function detectMac(nav = typeof navigator === 'undefined' ? undefined : navigator) {
 	const platform = nav?.userAgentData?.platform || nav?.platform || '';
@@ -80,8 +82,15 @@ export function activateOnKey(e, handler) {
 	return true;
 }
 
-export function isTypingTarget(el) {
-	return !!el && (el.isContentEditable === true || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+export function isTypingTarget(el, e = null) {
+	if (!el) return false;
+	if (el.isContentEditable === true) return true;
+	if (el.tagName === 'INPUT' && CONTROL_INPUTS.includes(el.type) && (e?.ctrlKey || e?.metaKey)) return false;
+	return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+}
+
+export function isStepKey(e) {
+	return STEP_KEYS.includes(e?.key) && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey;
 }
 
 export function isActivationTarget(el) {

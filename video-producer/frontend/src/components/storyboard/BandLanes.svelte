@@ -20,7 +20,8 @@
 	import { CONDITION, MUX } from '../../lib/sound.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { MUSIC_ROLE, displayStart, lastFailure, musicEnd, sections, seamStatus, stackOrder } from '../../lib/band.js';
-	import { compareSeam, pickShot, previewTake, proposalLayout, selectedShot } from '../../lib/band.svelte.js';
+	import { compareSeam, pickShot, proposalLayout, selectedShot } from '../../lib/band.svelte.js';
+	import { previewTake } from '../../lib/monitor.svelte.js';
 	import Icon from '../Icon.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import ChainChip from './ChainChip.svelte';

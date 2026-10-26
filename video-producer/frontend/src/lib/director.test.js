@@ -141,12 +141,32 @@ test('director: the summary leads to the four views and the engine, the center s
 
 test('director: the Review lists the takes with their cards and compares them in the viewer, never generating by itself', () => {
 	const review = read('../components/director/ReviewView.svelte');
-	assert.match(review, /const watching = \$derived\(ui\.compare\?\.length === 2 \|\| ui\.preview\?\.kind === 'result'\);/);
-	assert.match(review, /\{#if watching\}\n\t\t<div class="grid min-h-0 shrink-0 border-b border-line" style:height="46%">\n\t\t\t<Viewer \/>/);
+	assert.match(review, /const taking = \$derived\(ui\.compare\?\.length === 2 \|\| ui\.preview\?\.kind === 'result'\);\n\tconst watching = \$derived\(ui\.reviewMonitor \|\| taking\);/);
+	assert.match(review, /\{#if watching\}\n\t\t<div class="relative grid min-h-0 shrink-0 border-b border-line" style:height="46%">\n\t\t\t<Viewer \/>/);
 	assert.match(review, /<TakeCard \{take\} clip=\{c\} \/>/);
 	assert.match(review, /onclick: assembleChosen/);
 	assert.doesNotMatch(review, /startGeneration/);
 	for (const file of ['../components/inspector/Inspector.svelte', '../components/inspector/TakesSection.svelte', '../components/storyboard/ShotQuickEdit.svelte', '../components/storyboard/StoryboardView.svelte', '../components/viewer/Viewer.svelte']) assert.doesNotMatch(read(file), /startGeneration/, file);
+});
+
+test('director: in the Review, a click in the block of a shot or on one of its takes chooses the shot, which shows plainly, and the monitor stays open on the cut once open', () => {
+	const review = read('../components/director/ReviewView.svelte');
+	assert.match(review, /const pick = \(c\) => pickShot\(c, clipAt\(ui\.playhead\)\?\.id !== c\.id\);/);
+	assert.match(review, /function choose\(e, c\) \{\n\t\tif \(e\.target\.closest\?\.\('button, a, input, select, textarea, label'\)\) return;\n\t\tpick\(c\);\n\t\}/);
+	assert.match(review, /<div role="presentation" class="px-4 py-3" onclick=\{\(e\) => choose\(e, c\)\}>/);
+	assert.match(review, /<button type="button" class="mb-2 flex min-h-7 cursor-pointer items-center gap-2 rounded px-1\.5 text-left transition-colors hover:bg-surface-2"[^>]*onclick=\{\(\) => pick\(c\)\}>/);
+	assert.match(review, /aria-current=\{isSel\(c\) \? 'true' : undefined\}>\n\t+\{#if isSel\(c\)\}<span class="absolute inset-y-0 left-0 w-0\.5 bg-signal" aria-hidden="true"><\/span>\{\/if\}/);
+	assert.match(review, /\$effect\(\(\) => \{\n\t\tif \(taking\) ui\.reviewMonitor = true;\n\t\}\);\n\t\$effect\(\(\) => \(\) => \(ui\.reviewMonitor = false\)\);/);
+	assert.match(review, /function closeMonitor\(\) \{\n\t\tui\.preview = null;\n\t\tui\.compare = null;\n\t\tui\.reviewMonitor = false;\n\t\}/);
+	assert.match(review, /label: t\('panels\.director\.review\.closeMonitor'\)[^\n]*onclick: closeMonitor/);
+	assert.match(review, /onclick=\{\(\) => openSeam\(c\)\}/);
+	assert.doesNotMatch(review, /function openSeam|select\('clip'/);
+	const card = read('../components/takes/TakeCard.svelte');
+	assert.match(card, /onclick=\{\(\) => previewTake\(take\)\}/);
+	assert.doesNotMatch(card, /ui\.preview = /);
+	assert.match(read('../components/storyboard/BandLanes.svelte'), /import \{ previewTake \} from '\.\.\/\.\.\/lib\/monitor\.svelte\.js';/);
+	assert.match(read('./commands.js'), /\} else if \(ui\.reviewMonitor\) ui\.reviewMonitor = false;\n\telse if \(ui\.seamCompare\) ui\.seamCompare = null;/);
+	for (const locale of ['en', 'fr']) assert.ok(JSON.parse(read(`../i18n/${locale}/panels.json`))['director.review.closeMonitor'], locale);
 });
 
 test('director: Alt+1 to Alt+4 open the views, the old dock and its tabs are gone, Draft is grey and Edit Engine keeps its English name', () => {

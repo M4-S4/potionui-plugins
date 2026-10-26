@@ -4,6 +4,7 @@ import { takesOf, findTake, shotDurationLimit, settleRelease, labelTake } from '
 import { applyShotDraft, shotDraft, shotStale } from './shots.js';
 import { identityTakes, seam } from './continuity.svelte.js';
 import { seek } from './playback.svelte.js';
+import { previewTake } from './monitor.svelte.js';
 import { ulid } from './ulid.js';
 import { BAND_STEP, ghostLayout, insertIndex, lastFailure, previewable } from './band.js';
 
@@ -55,15 +56,6 @@ export function shiftShot(delta) {
 	const from = doc.clips.indexOf(clip);
 	const to = Math.max(0, Math.min(doc.clips.length - 1, from + delta));
 	if (from !== to) moveClip(from, to);
-}
-
-export function previewTake(take) {
-	if (!take || take.status !== 'done' || !take.url) return;
-	const clip = doc.clips.find((c) => c.id === take.shotId);
-	if (clip && selectedShot()?.id !== clip.id) select('clip', clip.id);
-	ui.seamCompare = null;
-	ui.compare = null;
-	ui.preview = { kind: 'result', id: take.id };
 }
 
 export function cycleTake(delta) {

@@ -7,6 +7,7 @@
 	import { takeThumb } from '../../lib/media.js';
 	import { extractable, extractAtPlayhead, seamState } from '../../lib/seam.svelte.js';
 	import { waitText } from '../../lib/chain.svelte.js';
+	import { previewTake } from '../../lib/monitor.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { canLabel, labelOf, toggledLabel } from '../../lib/labels.js';
 	import { isStale } from '../../lib/shots.js';
@@ -63,16 +64,11 @@
 	const dot = $derived(take.status === 'failed' ? 'bg-danger' : take.status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
 	const errorText = $derived(FAILURE_CODES.includes(take.errorCode) ? t(`generation.failed.${take.errorCode}`, { id: take.generationId ?? '—' }) : take.errorMessage || t('generation.card.error', { code: take.errorCode ?? '—' }));
 	const finalTip = $derived(upscaleAvailable(take) ? t('generation.card.finalTip') : t('generation.block.upscaleUnsupported'));
-
-	function preview() {
-		ui.preview = { kind: 'result', id: take.id };
-		ui.compare = null;
-	}
 </script>
 
 <li class="overflow-hidden rounded-lg border transition-colors {active ? 'border-signal ring-1 ring-signal' : previewed || inCompare ? 'border-signal/60' : 'border-line-strong hover:border-line-hover'}">
 	<div class="flex gap-2.5 p-1.5">
-		<button type="button" class="relative aspect-video w-28 shrink-0 overflow-hidden rounded bg-surface-3 disabled:cursor-default" disabled={!done} aria-label={t('generation.card.preview', { variant: take.variant })} onclick={preview}>
+		<button type="button" class="relative aspect-video w-28 shrink-0 overflow-hidden rounded bg-surface-3 disabled:cursor-default" disabled={!done} aria-label={t('generation.card.preview', { variant: take.variant })} onclick={() => previewTake(take)}>
 			{#if thumb}
 				<img src={thumb} alt="" class="h-full w-full object-cover" />
 			{:else}

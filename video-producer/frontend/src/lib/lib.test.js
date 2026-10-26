@@ -16,6 +16,7 @@ import {
 	isActivationKey,
 	isActivationTarget,
 	isSingleKey,
+	isStepKey,
 	isTypingTarget,
 	matchShortcut,
 	parseShortcut,
@@ -69,6 +70,18 @@ test('keys: Alt combinations read the physical key, focus rules recognise fields
 	assert.ok(isTypingTarget({ tagName: 'DIV', isContentEditable: true }));
 	assert.ok(!isTypingTarget({ tagName: 'BUTTON' }));
 	assert.ok(!isTypingTarget(null));
+	assert.ok(isTypingTarget({ tagName: 'INPUT', type: 'range' }, { key: 'ArrowLeft', ctrlKey: false, metaKey: false }));
+	assert.ok(!isTypingTarget({ tagName: 'INPUT', type: 'range' }, { key: 'z', ctrlKey: true, metaKey: false }));
+	assert.ok(!isTypingTarget({ tagName: 'INPUT', type: 'checkbox' }, { key: 'z', ctrlKey: false, metaKey: true }));
+	assert.ok(isTypingTarget({ tagName: 'INPUT', type: 'text' }, { key: 'z', ctrlKey: true, metaKey: false }));
+	assert.ok(isTypingTarget({ tagName: 'SELECT' }, { key: 'z', ctrlKey: true, metaKey: false }));
+	for (const key of ['ArrowLeft', 'ArrowUp', 'Home', 'End', 'PageDown']) assert.ok(isStepKey({ key }), key);
+	assert.ok(!isStepKey({ key: 'ArrowRight', repeat: true }));
+	assert.ok(!isStepKey({ key: 'z', ctrlKey: true }));
+	assert.ok(!isStepKey({ key: 'ArrowLeft', metaKey: true }));
+	assert.ok(!isStepKey({ key: 'Tab' }));
+	assert.ok(!isStepKey(null));
+	assert.match(readFileSync(new URL('../components/inspector/SliderField.svelte', import.meta.url), 'utf8'), /onpointerdown=\{\(\) => checkpoint\(\)\} onkeydown=\{\(e\) => isStepKey\(e\) && checkpoint\(\)\}/);
 	assert.ok(isActivationTarget({ closest: (selector) => (selector.includes('[role="tab"]') ? {} : null) }));
 	assert.ok(!isActivationTarget({ closest: () => null }));
 	assert.ok(!isActivationTarget(null));

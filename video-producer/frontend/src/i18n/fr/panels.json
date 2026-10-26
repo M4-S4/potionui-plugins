@@ -153,6 +153,7 @@
 	"director.review.failed": "Échec de la dernière prise",
 	"director.review.seam": "Raccord {from} → {to}",
 	"director.review.seamCompare": "Comparer fin et début",
+	"director.review.closeMonitor": "Fermer le moniteur",
 	"director.review.finals.one": "{count} plan avec une finale sur {total}",
 	"director.review.finals.other": "{count} plans avec une finale sur {total}",
 	"director.direction.subtitle": "{chars} / {max} car. · ajoutée au prompt de chaque plan",

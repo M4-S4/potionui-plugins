@@ -1,8 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, select, secs, clipLabel } from '../../lib/state.svelte.js';
-	import { seek } from '../../lib/playback.svelte.js';
+	import { ui, doc, secs, clipAt, clipLabel } from '../../lib/state.svelte.js';
 	import { takesOf, assembleChosen } from '../../lib/production.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { stages } from '../../lib/catalog.js';
@@ -10,6 +9,7 @@
 	import { labelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
 	import { shotStale } from '../../lib/shots.js';
 	import { sections } from '../../lib/band.js';
+	import { openSeam, pickShot } from '../../lib/band.svelte.js';
 	import { REVIEW_FILTERS, VIEW_ICONS, reviewCounts, reviewShots, reviewState } from '../../lib/director.js';
 	import { commandById } from '../../lib/commands.js';
 	import { mountHostSlot } from '../../lib/host.js';
@@ -31,7 +31,8 @@
 	const withFinal = $derived(counts.final);
 	const end = $derived(doc.clips.reduce((m, c) => Math.max(m, c.start + c.dur), 0));
 	const parts = $derived(sections(doc.markers, end));
-	const watching = $derived(ui.compare?.length === 2 || ui.preview?.kind === 'result');
+	const taking = $derived(ui.compare?.length === 2 || ui.preview?.kind === 'result');
+	const watching = $derived(ui.reviewMonitor || taking);
 	const isSel = (c) => ui.selection?.kind === 'clip' && ui.selection.id === c.id;
 	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const partOf = (c) => parts.find((p) => c.start >= p.start && c.start < p.end)?.label ?? '';
@@ -44,16 +45,22 @@
 		return t('panels.director.review.filter.all');
 	}
 
-	function pick(c) {
-		select('clip', c.id);
-		seek(c.start);
+	$effect(() => {
+		if (taking) ui.reviewMonitor = true;
+	});
+	$effect(() => () => (ui.reviewMonitor = false));
+
+	const pick = (c) => pickShot(c, clipAt(ui.playhead)?.id !== c.id);
+
+	function choose(e, c) {
+		if (e.target.closest?.('button, a, input, select, textarea, label')) return;
+		pick(c);
 	}
 
-	function openSeam(c) {
-		ui.workspace = 'storyboard';
-		ui.storyView = 'band';
-		pick(c);
-		ui.seamCompare = c.id;
+	function closeMonitor() {
+		ui.preview = null;
+		ui.compare = null;
+		ui.reviewMonitor = false;
 	}
 
 	const noShots = $derived({
@@ -83,8 +90,11 @@
 	</ZoneHeader>
 
 	{#if watching}
-		<div class="grid min-h-0 shrink-0 border-b border-line" style:height="46%">
+		<div class="relative grid min-h-0 shrink-0 border-b border-line" style:height="46%">
 			<Viewer />
+			<div class="absolute right-2 top-2 z-20">
+				<HostUi name="IconButton" props={{ icon: hostIconName('x'), label: t('panels.director.review.closeMonitor'), tooltip: t('panels.director.review.closeMonitor'), kbd: t('commands.kbd.escape'), size: 'sm', class: 'vp-h7', onclick: closeMonitor }} />
+			</div>
 		</div>
 	{/if}
 
@@ -110,26 +120,29 @@
 						<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => openSeam(c)}>{t('panels.director.review.seamCompare')}</button>
 					</div>
 				{/if}
-				<section class="border-b border-line px-4 py-3 {isSel(c) ? 'bg-surface-1' : ''}" aria-label={clipLabel(c)}>
-					<button type="button" class="mb-2 flex min-h-7 w-full items-center gap-2 text-left" onclick={() => pick(c)}>
-						<span class="vp-tc text-xs text-fg-subtle">{num(c)}</span>
-						<span class="min-w-0 truncate text-sm font-medium">{clipLabel(c)}</span>
-						<span class="flex shrink-0 items-center gap-1 text-xs {stages[c.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[c.stage].dot}"></span>{stages[c.stage].label}</span>
-						<span class="vp-tc shrink-0 text-xs text-fg-subtle">{secs(c.start)} → {secs(c.start + c.dur)}</span>
-						{#if partOf(c)}<span class="shrink-0 truncate text-xs text-fg-subtle">{partOf(c)}</span>{/if}
-						<span class="flex-1"></span>
-						{#if state.failed}<span class="flex shrink-0 items-center gap-1 text-xs text-danger"><Icon name="alert" class="h-3 w-3" />{t('panels.director.review.failed')}</span>{/if}
-						{#if stale}<span class="flex shrink-0 items-center gap-1 text-xs text-warning"><Icon name="pencil" class="h-3 w-3" />{t('storyboard.stale')}</span>{/if}
-					</button>
-					{#if list.length}
-						<ul class="grid gap-2" style:grid-template-columns="repeat(auto-fill, minmax(300px, 1fr))">
-							{#each list as take (take.id)}
-								<TakeCard {take} clip={c} />
-							{/each}
-						</ul>
-					{:else}
-						<p class="text-xs text-fg-subtle">{t('panels.director.review.noTakes', { key: commandById('generate')?.key ?? '' })}</p>
-					{/if}
+				<section class="relative border-b border-line {isSel(c) ? 'bg-surface-1' : ''}" aria-label={clipLabel(c)} aria-current={isSel(c) ? 'true' : undefined}>
+					{#if isSel(c)}<span class="absolute inset-y-0 left-0 w-0.5 bg-signal" aria-hidden="true"></span>{/if}
+					<div role="presentation" class="px-4 py-3" onclick={(e) => choose(e, c)}>
+						<button type="button" class="mb-2 flex min-h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-left transition-colors hover:bg-surface-2" style:margin-inline="-0.375rem" style:width="calc(100% + 0.75rem)" onclick={() => pick(c)}>
+							<span class="vp-tc text-xs text-fg-subtle">{num(c)}</span>
+							<span class="min-w-0 truncate text-sm font-medium">{clipLabel(c)}</span>
+							<span class="flex shrink-0 items-center gap-1 text-xs {stages[c.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[c.stage].dot}"></span>{stages[c.stage].label}</span>
+							<span class="vp-tc shrink-0 text-xs text-fg-subtle">{secs(c.start)} → {secs(c.start + c.dur)}</span>
+							{#if partOf(c)}<span class="shrink-0 truncate text-xs text-fg-subtle">{partOf(c)}</span>{/if}
+							<span class="flex-1"></span>
+							{#if state.failed}<span class="flex shrink-0 items-center gap-1 text-xs text-danger"><Icon name="alert" class="h-3 w-3" />{t('panels.director.review.failed')}</span>{/if}
+							{#if stale}<span class="flex shrink-0 items-center gap-1 text-xs text-warning"><Icon name="pencil" class="h-3 w-3" />{t('storyboard.stale')}</span>{/if}
+						</button>
+						{#if list.length}
+							<ul class="grid gap-2" style:grid-template-columns="repeat(auto-fill, minmax(300px, 1fr))">
+								{#each list as take (take.id)}
+									<TakeCard {take} clip={c} />
+								{/each}
+							</ul>
+						{:else}
+							<p class="text-xs text-fg-subtle">{t('panels.director.review.noTakes', { key: commandById('generate')?.key ?? '' })}</p>
+						{/if}
+					</div>
 				</section>
 			{/each}
 		{/if}

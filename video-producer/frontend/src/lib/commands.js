@@ -371,7 +371,8 @@ function escape() {
 	else if (ui.preview || ui.compare) {
 		ui.preview = null;
 		ui.compare = null;
-	} else if (ui.seamCompare) ui.seamCompare = null;
+	} else if (ui.reviewMonitor) ui.reviewMonitor = false;
+	else if (ui.seamCompare) ui.seamCompare = null;
 	else if (ui.storyOpen && bandView()) ui.storyOpen = false;
 	else select(null);
 }
@@ -432,7 +433,7 @@ export function handleKeydown(e, root) {
 	const hit = findShortcut(e, keymap, IS_MAC);
 	if (!hit) return;
 	if (hit.when && !hit.when()) return;
-	if (!hit.global && (isTypingTarget(target) || ui.modal || ui.paletteOpen)) return;
+	if (!hit.global && (isTypingTarget(target, e) || ui.modal || ui.paletteOpen)) return;
 	if (hit.single && !ui.singleKeyShortcuts) return;
 	if (hit.spec === 'space' && isActivationTarget(target)) return;
 	e.preventDefault();

@@ -153,6 +153,7 @@
 	"director.review.failed": "Latest take failed",
 	"director.review.seam": "Seam {from} → {to}",
 	"director.review.seamCompare": "Compare end and start",
+	"director.review.closeMonitor": "Close the monitor",
 	"director.review.finals.one": "{count} shot with a final out of {total}",
 	"director.review.finals.other": "{count} shots with a final out of {total}",
 	"director.direction.subtitle": "{chars} / {max} chars · added to the prompt of every shot",

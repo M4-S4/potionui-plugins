@@ -1,6 +1,7 @@
 <script>
 	import { formatNumber } from '../../i18n/index.svelte.js';
 	import { checkpoint } from '../../lib/state.svelte.js';
+	import { isStepKey } from '../../lib/keyboard.js';
 
 	let { label, value, min = 0, max = 100, step = 1, unit = '', onchange, format = null } = $props();
 	const id = $props.id();
@@ -12,5 +13,5 @@
 		<label for={id} class="text-xs text-fg-muted">{label}</label>
 		<span class="vp-tc text-xs text-fg">{shown}</span>
 	</div>
-	<input {id} class="vp-slider" type="range" {min} {max} {step} {value} onpointerdown={() => checkpoint()} onkeydown={() => checkpoint()} oninput={(e) => onchange(+e.currentTarget.value)} />
+	<input {id} class="vp-slider" type="range" {min} {max} {step} {value} onpointerdown={() => checkpoint()} onkeydown={(e) => isStepKey(e) && checkpoint()} oninput={(e) => onchange(+e.currentTarget.value)} />
 </div>
