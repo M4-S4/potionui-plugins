@@ -4,6 +4,7 @@
 	import { ui, doc, act, asset, select, toast, clipLabel } from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { CHARACTERS, PLACES, addCard, cardsOf, labelOf, newCard, shotsCasting, usable } from '../../lib/bible.js';
+	import { DEFAULT_LANGUAGE, LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
 	import { VIEW_ICONS, cardImages, castWhereCited, citedWithout, isCast, recast, unnamedIn } from '../../lib/director.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
@@ -22,6 +23,13 @@
 	const places = $derived(cardsOf(doc, PLACES).length);
 	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const numbers = (list) => list.map(num).join(', ');
+
+	function setLanguage(name) {
+		act(() => {
+			if (name === DEFAULT_LANGUAGE) delete doc.dialogueLanguage;
+			else doc.dialogueLanguage = name;
+		});
+	}
 
 	function add(kind) {
 		const card = newCard(kind, ulid());
@@ -62,6 +70,12 @@
 	<ZoneHeader icon={ui.sidebarOpen ? VIEW_ICONS.bible : null} title={commandById('view-bible')?.label}>
 		{#snippet lead()}<DirectorViews />{/snippet}
 		<span class="min-w-0 flex-1 truncate text-xs text-fg-subtle">{t('panels.director.sum.bible', { characters, places })}</span>
+		<label class="flex shrink-0 items-center gap-1.5 text-xs text-fg-muted" title={t('panels.director.bible.languageTip')}>
+			{t('panels.director.bible.language')}
+			<select class="vp-popup" value={spokenLanguage(doc, null)} onchange={(e) => setLanguage(e.currentTarget.value)}>
+				{#each LANGUAGES as name (name)}<option value={name}>{t(`lib.language.${name}`)}</option>{/each}
+			</select>
+		</label>
 		{#each groups as g (g.kind)}
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'shrink-0', onclick: () => add(g.kind) }}>{g.add}</HostUi>
 		{/each}

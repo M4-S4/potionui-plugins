@@ -158,6 +158,12 @@ test('sound of a shot: its own sounds then the global ones, its reference tracks
 	assert.equal(shotSound({ ...doc, references: [], lanes: [lane('A1')] }, doc.clips[0], { audioMux: true }, 'FL2VA'), null);
 });
 
+test('sound of a shot: the voice of a character of the bible is a sample for Ref2VA, never a sound mixed onto a take', () => {
+	const doc = soundDoc({ bible: { characters: [{ id: 'c-woman', label: 'the woman', text: '', props: '', references: [], voiceRef: 's-voice' }], places: [] } });
+	assert.deepEqual(shotSound(doc, doc.clips[0], { audioMux: true }, 'FL2VA').references.map((r) => r.id), ['g-rain']);
+	assert.deepEqual(shotSound(doc, doc.clips[0], { audioMux: true }, 'Ref2VA').references.map((r) => r.id), ['s-voice', 'g-rain']);
+});
+
 function clipsDoc() {
 	const doc = soundDoc({ references: [] });
 	doc.lanes.push(lane('A4'));

@@ -9,7 +9,7 @@ import { EXPORT_ERROR_CODES } from '../lib/exports.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, '..');
-const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.', 'generation.failed.', 'exports.error.', 'generation.label.', 'generation.labels.group.', 'keyframes.note.', 'keyframes.state.', 'keyframes.pictureRole.'];
+const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.', 'generation.failed.', 'exports.error.', 'generation.label.', 'generation.labels.group.', 'keyframes.note.', 'keyframes.state.', 'keyframes.pictureRole.', 'lib.language.'];
 const PLURAL_SUFFIX = /\.(zero|one|two|few|many|other)$/;
 const SKIPPED_DIRS = new Set(['dist', 'node_modules']);
 

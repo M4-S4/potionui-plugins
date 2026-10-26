@@ -1,5 +1,6 @@
 import { joinRuns, laneAudible, sliceChain } from './tracks.js';
 import { excludedLanesOf, excludedOf, isGlobal, ownsReference } from './shots.js';
+import { voiceReferences } from './bible.js';
 
 export { excludedLanesOf, setExcludedLanes } from './shots.js';
 
@@ -100,7 +101,8 @@ export function shotSound(doc, clip, preset, profile) {
 	if (!clip) return null;
 	const behavior = audioBehavior(preset, profile);
 	const window = behavior === CONDITION ? conditionWindow(doc, clip) : muxWindow(clip);
-	const references = soundReferences(doc, clip);
+	const voices = voiceReferences(doc);
+	const references = soundReferences(doc, clip).filter((r) => behavior === CONDITION || !voices.has(r.id));
 	const lanes = referenceLanes(doc, clip, excludedLanesOf(clip), window)
 		.filter((x) => !x.excluded)
 		.map((x) => x.lane);

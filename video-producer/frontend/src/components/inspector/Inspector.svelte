@@ -47,7 +47,8 @@
 	import TakesSection from './TakesSection.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import CastField from '../shots/CastField.svelte';
-	import { instructionOf, setCast } from '../../lib/bible.js';
+	import { CHARACTERS, cardsOf, instructionOf, labelOf, setCast } from '../../lib/bible.js';
+	import { linesOf } from '../../lib/dialogue.js';
 	import { touch } from '../../lib/shots.js';
 	import ColorSection from './ColorSection.svelte';
 	import NumField from './NumField.svelte';
@@ -169,6 +170,11 @@
 			setCast(clip, cast);
 			touch(clip);
 		});
+	}
+
+	function speakerName(id) {
+		const card = id ? cardsOf(doc, CHARACTERS).find((c) => c.id === id) : null;
+		return labelOf(card) || t('modals.shot.dialogue.unnamed');
 	}
 
 	function openBible() {
@@ -307,6 +313,15 @@
 					<section class="space-y-2">
 						<div class="vp-section-title">{t('inspector.section.cast')}</div>
 						<CastField cast={item.cast} text={instructionOf(doc, item)} onchange={(cast) => recast(item, cast)} onopen={openBible} />
+					</section>
+					<section class="space-y-2">
+						<div class="vp-section-title">{t('inspector.section.dialogue')}</div>
+						{#each linesOf(item).filter((l) => l.text.trim()) as line (line.id)}
+							<p class="text-xs text-fg-muted"><span class="font-medium text-fg">{speakerName(line.speaker)}</span>{line.offscreen ? t('inspector.dialogue.offscreen') : ''} — {line.text}</p>
+						{:else}
+							<p class="text-xs text-fg-subtle">{t('inspector.dialogue.none')}</p>
+						{/each}
+						<button type="button" class="vp-link-hit text-xs text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => (ui.modal = { type: 'shot', id: item.id })}>{t('inspector.dialogue.edit')}</button>
 					</section>
 					<section class="space-y-2">
 						<div class="vp-section-title">{t('inspector.section.frames')}</div>

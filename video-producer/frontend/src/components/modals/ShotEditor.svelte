@@ -18,6 +18,7 @@
 	import AudioPicker from '../shots/AudioPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import CastField from '../shots/CastField.svelte';
+	import DialogueField from '../shots/DialogueField.svelte';
 	import ComposedPrompt from '../shots/ComposedPrompt.svelte';
 	import ReferencePrompt from '../shots/ReferencePrompt.svelte';
 	import KeyframeCandidates from '../shots/KeyframeCandidates.svelte';
@@ -157,6 +158,11 @@
 				<section class="space-y-1.5" aria-labelledby="{textId}-cast">
 					<span id="{textId}-cast" class="vp-section-title">{t('modals.shot.cast')}</span>
 					<CastField cast={draft.cast} text={draft.text} onchange={(cast) => (draft.cast = cast)} />
+				</section>
+
+				<section class="space-y-1.5" aria-labelledby="{textId}-dialogue">
+					<span id="{textId}-dialogue" class="vp-section-title">{t('modals.shot.dialogue.title')}</span>
+					<DialogueField lines={draft.dialogue ?? []} cast={draft.cast} seconds={+draft.dur} onchange={(lines) => (draft.dialogue = lines)} />
 				</section>
 
 				<section class="space-y-1.5" aria-labelledby="{textId}-reference">

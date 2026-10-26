@@ -201,5 +201,9 @@
 	"lane.shotsNone": "Aucune borne de plan ne tombe dans les clips de cette piste.",
 	"lane.shotsTooMany": "Les plans couperaient ses clips en plus de {max} tranches chacun.",
 	"section.cast": "Distribution",
+	"section.dialogue": "Dialogue",
+	"dialogue.offscreen": " (hors champ)",
+	"dialogue.none": "Aucune réplique.",
+	"dialogue.edit": "Modifier le dialogue…",
 	"takes.drafts": "Brouillons de ce plan"
 }

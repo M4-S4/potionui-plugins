@@ -3,6 +3,7 @@ export const PLACES = 'places';
 export const KINDS = [CHARACTERS, PLACES];
 export const SPACES = { [CHARACTERS]: 'identite', [PLACES]: 'decors3d' };
 export const LABEL_MAX = 60;
+export const VOICE_SPACE = 'son';
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isId = (value) => typeof value === 'string' && value.length > 0;
@@ -20,8 +21,22 @@ export function newCard(kind, id, extra = {}) {
 function migrateCard(card, kind) {
 	if (!isObject(card) || !isId(card.id)) return null;
 	const next = { id: card.id, label: words(card.label), text: words(card.text), references: idList(card.references) };
-	return kind === CHARACTERS ? { ...next, props: words(card.props) } : next;
+	if (kind !== CHARACTERS) return next;
+	const character = { ...next, props: words(card.props) };
+	if (typeof card.voice === 'string' && card.voice) character.voice = card.voice;
+	if (isId(card.language)) character.language = card.language;
+	if (isId(card.voiceRef)) character.voiceRef = card.voiceRef;
+	return character;
 }
+
+export function setVoice(card, field, value) {
+	if (typeof value === 'string' && value) card[field] = value;
+	else delete card[field];
+}
+
+export const voiceReferences = (doc) => new Set(cardsOf(doc, CHARACTERS).map((card) => card.voiceRef).filter(isId));
+
+export const voiceChoices = (doc) => (doc?.references ?? []).filter((r) => r.space === VOICE_SPACE);
 
 export function migrateBible(bible) {
 	const source = isObject(bible) ? bible : {};
@@ -102,6 +117,7 @@ export function removeCard(doc, kind, id) {
 	if (i < 0) return false;
 	list.splice(i, 1);
 	for (const clip of doc.clips ?? []) {
+		if (kind === CHARACTERS) for (const line of Array.isArray(clip.dialogue) ? clip.dialogue : []) if (line?.speaker === id) line.speaker = null;
 		const cast = castOf(clip);
 		if (kind === CHARACTERS) cast.characters = cast.characters.filter((x) => x !== id);
 		else if (cast.place === id) cast.place = null;
