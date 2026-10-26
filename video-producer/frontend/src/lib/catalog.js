@@ -19,8 +19,8 @@ export const stages = {
 		get label() {
 			return t('lib.stage.draft');
 		},
-		tone: 'text-signal',
-		dot: 'bg-signal'
+		tone: 'text-fg-muted',
+		dot: 'bg-fg-muted'
 	},
 	final: {
 		get label() {

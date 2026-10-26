@@ -172,17 +172,21 @@ test('workshop: the advanced workshop, its commands, the local window queue and 
 	const production = source('./production.svelte.js');
 	assert.doesNotMatch(production, /queueWindow|generateQueue|production\.queue/);
 	assert.doesNotMatch(source('./state.svelte.js'), /queue: \[\]/);
-	for (const path of ['../components/panels/DirectorDock.svelte', '../components/production/ProductionBar.svelte', '../components/modals/Modals.svelte']) {
+	for (const path of ['../components/director/DirectorSummary.svelte', '../components/production/ProductionBar.svelte', '../components/modals/Modals.svelte']) {
 		assert.doesNotMatch(source(path), /type: 'advanced'|AdvancedWorkshop|doc\.hybrid|doc\.profiles/, path);
 	}
 	assert.doesNotMatch(source('./starter.js'), /hybrid|profiles:/);
 });
 
-test('queue: the dock lists the queue in a tab next to Results, and the Production bar opens it', () => {
-	const dock = source('../components/panels/DirectorDock.svelte');
-	assert.match(dock, /\{ id: 'results', label: t\('panels\.dock\.tab\.results'\), badge: takeCount \|\| null \},\n\t\t\{ id: 'queue', label: t\('panels\.dock\.tab\.queue'\), badge: queued \|\| null \}/);
-	assert.match(dock, /\{:else if ui\.dockTab === 'queue'\}\n\t\t<QueuePanel \/>/);
-	assert.match(source('../components/production/ProductionBar.svelte'), /onclick: openQueue/);
+test('queue: the queue opens as a list under the queue button of the Production bar, from the bar, the status bar and the Production menu', () => {
+	const bar = source('../components/production/ProductionBar.svelte');
+	assert.match(bar, /const queueOpen = \$derived\(ui\.menuOpen === QUEUE_MENU\);/);
+	assert.match(bar, /onclick: \(\) => \(ui\.menuOpen = queueOpen \? null : QUEUE_MENU\)/);
+	assert.match(bar, /\{#if queueOpen\}\n\t\t\t<div class="vp-menu overflow-auto"[^>]*role="dialog"[^>]*>\n\t\t\t\t<QueuePanel \/>/);
+	const production = source('./production.svelte.js');
+	assert.match(production, /export function openQueue\(\) \{\n\tif \(!generates\(\)\) ui\.workspace = 'director';\n\tui\.menuOpen = QUEUE_MENU;\n\}/);
+	assert.match(source('../components/shell/StatusBar.svelte'), /data-vp-menu onclick=\{openQueue\}/);
+	assert.doesNotMatch(source('./state.svelte.js'), /dockTab/);
 	const panel = source('../components/panels/QueuePanel.svelte');
 	assert.match(panel, /const ordered = \$derived\(queueOrder\(takeStore\.list\)\);/);
 	assert.match(panel, /onclick: \(\) => prioritizeTake\(take\)/);

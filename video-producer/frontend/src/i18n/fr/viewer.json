@@ -11,7 +11,6 @@
 	"sourceMedia": "· média source",
 	"addToCut": "Ajouter au montage",
 	"placeholderHint": "Plan à générer : ajoutez une instruction locale dans la piste Prompts.",
-	"generateDrafts": "Générer des brouillons",
 	"end": "Fin de la séquence",
 	"mute": "Couper le son",
 	"unmute": "Rétablir le son",

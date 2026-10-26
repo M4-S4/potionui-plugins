@@ -36,7 +36,6 @@
 	"shotName": "Shot name",
 	"at": "at {time}",
 	"promoteTake": "Make take {variant} final",
-	"generateDrafts": "Generate drafts",
 	"engineOn": "On {engine}",
 	"section.duration": "Duration and source",
 	"section.fades": "Fades",
@@ -168,8 +167,6 @@
 	"match.exportNote": "The match is baked into a 3D LUT applied on export, before the fine adjustments.",
 	"takes.empty": "No take generated for this shot yet.",
 	"takes.emptyHint": "Start with quick drafts, then make the best one final.",
-	"takes.more.one": "{count} more draft",
-	"takes.more.other": "{count} more drafts",
 	"takes.note": "Drafts in {res} to judge the motion · Make final upscales the take or renders it again in {final} with the same seed.",
 	"editShot": "Edit shot…",
 	"field.type": "Type",
@@ -203,5 +200,6 @@
 	"lane.shotsHint.other": "Cuts {count} clips of this track at the edges of the shots: {slices} slices.",
 	"lane.shotsNone": "No shot edge falls inside the clips of this track.",
 	"lane.shotsTooMany": "The shots would cut its clips into more than {max} slices each.",
-	"section.cast": "Cast"
+	"section.cast": "Cast",
+	"takes.drafts": "Drafts of this shot"
 }

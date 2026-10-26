@@ -4,12 +4,12 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, act, secs, allIssues, fmtDuration } from '../../lib/state.svelte.js';
+	import { ui, doc, act, secs, allIssues, fmtDuration, openDirector } from '../../lib/state.svelte.js';
 	import {
 		readiness,
 		startGeneration,
 		cancelGeneration,
-		openQueue,
+		QUEUE_MENU,
 		openEngineSettings,
 		openResults,
 		jobClips,
@@ -38,6 +38,7 @@
 	import InfoTip from '../shell/InfoTip.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
+	import QueuePanel from '../panels/QueuePanel.svelte';
 	import { takeCount } from '../../lib/shots.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 
@@ -162,6 +163,7 @@
 		])
 	);
 	const moreOpen = $derived(ui.menuOpen === MORE && fit.overflow.length > 0);
+	const queueOpen = $derived(ui.menuOpen === QUEUE_MENU);
 
 	$effect(() => {
 		for (const key of GIVES) if (space[key] > 0) widths[key] = space[key];
@@ -207,8 +209,7 @@
 	}
 
 	function directionIssues() {
-		ui.workspace = 'director';
-		ui.dockTab = 'direction';
+		openDirector('direction');
 	}
 </script>
 
@@ -272,7 +273,14 @@
 		{/if}
 	</div>
 
-	<HostUi name="IconButton" props={{ icon: hostIconName('list'), label: t('production.queueLabel'), tooltip: queueTip, kbd: commandById('queue')?.key, size: 'sm', class: 'vp-h7', onclick: openQueue }} />
+	<div class="relative shrink-0" data-vp-menu>
+		<HostUi name="IconButton" props={{ icon: hostIconName('list'), label: t('production.queueLabel'), tooltip: queueTip, kbd: commandById('queue')?.key, size: 'sm', class: 'vp-h7', ariaExpanded: queueOpen, onclick: () => (ui.menuOpen = queueOpen ? null : QUEUE_MENU) }} />
+		{#if queueOpen}
+			<div class="vp-menu overflow-auto" style:right="0" style:bottom="2.25rem" style:width="22rem" style:max-height="60vh" role="dialog" aria-label={t('panels.queue.title')} use:overlayLayer in:fly={{ y: 4, duration: ms(120) }}>
+				<QueuePanel />
+			</div>
+		{/if}
+	</div>
 
 	<div class="sr-only" aria-live="polite">{spoken}</div>
 	<div class="flex shrink-0 items-center gap-2">

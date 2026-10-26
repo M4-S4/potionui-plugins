@@ -36,7 +36,6 @@
 	"shotName": "Nom du plan",
 	"at": "à {time}",
 	"promoteTake": "Passer la prise {variant} en final",
-	"generateDrafts": "Générer des brouillons",
 	"engineOn": "Sur {engine}",
 	"section.duration": "Durée et source",
 	"section.fades": "Fondus",
@@ -168,8 +167,6 @@
 	"match.exportNote": "Le raccord est cuit en LUT 3D appliquée à l’export, avant les réglages fins.",
 	"takes.empty": "Aucune prise générée pour ce plan.",
 	"takes.emptyHint": "Commencez par des brouillons rapides, puis passez la meilleure en final.",
-	"takes.more.one": "{count} brouillon de plus",
-	"takes.more.other": "{count} brouillons de plus",
 	"takes.note": "Brouillons en {res} pour juger le mouvement · « Passer en final » agrandit la prise ou la génère à nouveau en {final} avec la même graine.",
 	"editShot": "Modifier le plan…",
 	"field.type": "Type",
@@ -203,5 +200,6 @@
 	"lane.shotsHint.other": "Coupe {count} clips de cette piste aux bornes des plans : {slices} tranches.",
 	"lane.shotsNone": "Aucune borne de plan ne tombe dans les clips de cette piste.",
 	"lane.shotsTooMany": "Les plans couperaient ses clips en plus de {max} tranches chacun.",
-	"section.cast": "Distribution"
+	"section.cast": "Distribution",
+	"takes.drafts": "Brouillons de ce plan"
 }

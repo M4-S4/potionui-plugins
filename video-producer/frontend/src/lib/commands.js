@@ -21,7 +21,9 @@ import {
 	addShot,
 	proposeShots,
 	bandView,
-	secs
+	secs,
+	openDirector,
+	directorView
 } from './state.svelte.js';
 import { compareSeam, cycleTake, labelPreviewed, nudgeDuration, previewed, selectedShot, shiftShot, stepShot as bandStep } from './band.svelte.js';
 import { BAND_STEP } from './band.js';
@@ -130,10 +132,13 @@ const gallery = () => {
 	ui.mediaCollection = 'all';
 	openGallery();
 };
-const director = () => {
-	ui.workspace = 'director';
-	ui.dockTab = 'direction';
+const director = () => openDirector('direction');
+const continuity = () => {
+	openDirector('review');
+	ui.sidebarOpen = true;
 };
+const view = (id) => () => openDirector(id);
+const isView = (id) => () => ui.workspace === 'director' && directorView() === id;
 const synopsis = () => {
 	ui.workspace = 'storyboard';
 	proposeShots();
@@ -224,7 +229,7 @@ export const menus = [
 		[command('fav', flag('favori'), { keys: 'f' }), command('reject', flag('rejet'), { keys: 'alt+backspace' }), command('unflag', flag(null), { keys: 'u' })]
 	]),
 	menu('production', [
-		[command('dir-global', director), command('synopsis', synopsis), command('story-window', storyWindow, { keys: 'd', check: () => ui.storyOpen && bandView() }), command('continuity', director)],
+		[command('dir-global', director), command('synopsis', synopsis), command('story-window', storyWindow, { keys: 'd', check: () => ui.storyOpen && bandView() }), command('continuity', continuity)],
 		[
 			command('generate', () => startGeneration(), { keys: 'mod+g' }),
 			command('draft', () => setProjectQuality('draft'), { check: () => ui.production.quality === 'draft' }),
@@ -267,11 +272,17 @@ export const menus = [
 	menu('window', [
 		[
 			command('ws-media', ws('media')),
-			command('ws-play', ws('play')),
-			command('ws-director', ws('director')),
 			command('ws-story', ws('storyboard')),
+			command('ws-director', ws('director')),
 			command('ws-mixer', ws('mixer')),
+			command('ws-play', ws('play')),
 			command('story-view', () => (ui.storyView = ui.storyView === 'band' ? 'grid' : 'band'), { check: () => ui.storyView === 'band' })
+		],
+		[
+			command('view-review', view('review'), { keys: 'alt+1', check: isView('review') }),
+			command('view-direction', view('direction'), { keys: 'alt+2', check: isView('direction') }),
+			command('view-bible', view('bible'), { keys: 'alt+3', check: isView('bible') }),
+			command('view-references', view('references'), { keys: 'alt+4', check: isView('references') })
 		],
 		[
 			command('ref-all', refs('all')),

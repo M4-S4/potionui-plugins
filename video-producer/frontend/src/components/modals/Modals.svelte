@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, globalPrompt, itemsIn, productionRange, secs, select } from '../../lib/state.svelte.js';
+	import { ui, doc, act, globalPrompt, itemsIn, productionRange, secs, select, openDirector } from '../../lib/state.svelte.js';
 	import { promptLanguageOf } from '../../lib/starter.js';
 	import { chainOn, ignoresFirstFrame, setChain } from '../../lib/chain.js';
 	import { engineOptions, optionFor } from '../../lib/generation.js';
@@ -40,7 +40,7 @@
 
 	const tour = $derived([
 		[t('shell.tour.project.title'), t('shell.tour.project.text'), () => (ui.modal = { type: 'project' })],
-		[t('shell.tour.direction.title'), t('shell.tour.direction.text'), () => ((ui.workspace = 'director'), (ui.dockTab = 'direction'), close())],
+		[t('shell.tour.direction.title'), t('shell.tour.direction.text'), () => (openDirector('direction'), close())],
 		[t('shell.tour.references.title'), t('shell.tour.references.text'), () => (openReferences(), close())],
 		[t('shell.tour.shots.title'), t('shell.tour.shots.text'), () => ((ui.workspace = 'storyboard'), close())],
 		[t('shell.tour.drafts.title'), t('shell.tour.drafts.text'), () => ((ui.production.quality = 'draft'), close())],

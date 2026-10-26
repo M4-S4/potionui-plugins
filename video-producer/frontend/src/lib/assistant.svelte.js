@@ -1,5 +1,5 @@
 import { t } from '../i18n/index.svelte.js';
-import { doc, ui, act, toast, round, secs, clipLabel, allIssues, ruleText } from './state.svelte.js';
+import { doc, ui, act, toast, round, secs, clipLabel, allIssues, ruleText, openDirector } from './state.svelte.js';
 import { project, openProject, savedSnapshot, markSaved } from './project.svelte.js';
 import { promptLanguageOf } from './starter.js';
 import { bibleContext } from './bible.js';
@@ -86,8 +86,7 @@ export function suggest(text) {
 }
 
 export function showReview() {
-	ui.workspace = 'director';
-	ui.dockTab = 'direction';
+	openDirector();
 	ui.sidebarOpen = true;
 }
 
@@ -142,7 +141,7 @@ export function applyReview(result) {
 	if (!next) return { status: 'noop' };
 	review.current = next;
 	const count = reviewCount(review.current);
-	const visible = ui.workspace === 'director' && ui.dockTab === 'direction' && ui.sidebarOpen;
+	const visible = ui.workspace === 'director' && ui.sidebarOpen;
 	const message = count ? t('assistant.toast.review', { count }) : t('assistant.toast.reviewClear');
 	toast(message, count ? 'warning' : 'success', visible ? undefined : { label: t('assistant.toast.show'), run: showReview });
 	return { status: 'applied' };

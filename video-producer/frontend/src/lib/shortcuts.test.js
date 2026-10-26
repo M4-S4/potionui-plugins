@@ -62,8 +62,8 @@ function eventFor(spec, mac, flip = null) {
 	return { key: on.shift && key.length === 1 ? key.toUpperCase() : (named ?? key), code, ctrlKey: on.ctrl, metaKey: on.meta, altKey: on.alt, shiftKey: on.shift };
 }
 
-test('shortcuts: 38 commands carry a shortcut, each one different, and the others show none', () => {
-	assert.equal(commands.length, 101);
+test('shortcuts: 42 commands carry a shortcut, each one different, and the others show none', () => {
+	assert.equal(commands.length, 105);
 	assert.deepEqual(
 		bound.map((c) => c.id),
 		[
@@ -103,6 +103,10 @@ test('shortcuts: 38 commands carry a shortcut, each one different, and the other
 			'queue',
 			'play',
 			'snap',
+			'view-review',
+			'view-direction',
+			'view-bible',
+			'view-references',
 			'sidebar',
 			'assistant'
 		]
@@ -119,7 +123,7 @@ test('shortcuts: none belongs to the browser, none opens its developer tools, no
 	for (const spec of specs) {
 		assert.ok(!BROWSER.includes(spec), `${spec} belongs to the browser`);
 		const { key, mods } = parseShortcut(spec);
-		if (/^[0-9]$/.test(key)) assert.equal(spec, 'ctrl+mod+1', `${spec} is a digit combination`);
+		if (/^[0-9]$/.test(key)) assert.ok(spec === 'ctrl+mod+1' || /^alt\+[1-4]$/.test(spec), `${spec} is a digit combination`);
 		if (mods.has('mod') && mods.has('alt')) assert.ok(!['i', 'j', 'k', 'c', 'u'].includes(key), `${spec} is a developer tools combination on a Mac`);
 		if (mods.has('mod') && mods.has('shift')) assert.ok(!['i', 'j', 'c', 'k', 'm'].includes(key), `${spec} is a developer tools combination`);
 	}

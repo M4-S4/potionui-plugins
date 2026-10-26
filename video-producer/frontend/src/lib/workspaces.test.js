@@ -10,10 +10,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const source = (file) => readFileSync(join(here, file), 'utf-8');
 const json = (locale, domain) => JSON.parse(source(`../i18n/${locale}/${domain}.json`));
 
-test('workspaces: Play sits between Media and Director IA, five workspaces in all, the 3D scene being a tool of the shot editor', () => {
+test('workspaces: Media, Storyboard, Director AI, Mix and Play, in this order, five workspaces in all', () => {
 	assert.deepEqual(
 		WORKSPACES.map((w) => w.id),
-		['media', 'play', 'director', 'storyboard', 'mixer']
+		['media', 'storyboard', 'director', 'mixer', 'play']
 	);
 	assert.equal(PLAYER, 'play');
 	assert.ok(isPlayer('play'));
@@ -49,19 +49,23 @@ test('workspaces: every workspace and its command have a label in both languages
 	}
 	assert.equal(json('en', 'shell')['workspace.play'], 'Play');
 	assert.equal(json('fr', 'shell')['workspace.play'], 'Lecture');
+	for (const locale of ['en', 'fr']) assert.equal(json(locale, 'shell')['workspace.director'], 'Director AI');
 });
 
-test('workspaces: Play keeps the viewer with the splitter and the timeline under it, without the side panels and the Production bar', () => {
+test('workspaces: Play keeps the viewer with the splitter and the timeline under it, without the side panels; only Director AI and Storyboard show the Production bar', () => {
 	const page = source('../VideoProducerPage.svelte');
 	assert.match(page, /const player = \$derived\(isPlayer\(ui\.workspace\)\);/);
 	assert.match(page, /\{#if !player\}<LeftPanel \/>\{\/if\}/);
-	assert.match(page, /\{#if !player\}<Inspector \/>\{\/if\}/);
+	assert.match(page, /\{#if !player\}<RightPanel \/>\{\/if\}/);
 	assert.match(page, /<Viewer \{player\} \/>/);
-	assert.match(page, /<div>\s*<Splitter \/>\s*\{#if !player\}<ProductionBar \/>\{\/if\}\s*<\/div>/);
+	assert.match(page, /<div>\s*\{#if !bare\}<Splitter \/>\{\/if\}\s*\{#if generates\(\)\}<ProductionBar \/>\{\/if\}\s*<\/div>/);
+	assert.match(page, /const bare = \$derived\(band \|\| ui\.workspace === 'director'\);/);
+	assert.match(source('state.svelte.js'), /export const generates = \(\) => ui\.workspace === 'director' \|\| ui\.workspace === 'storyboard';/);
 	const bottom = page.slice(page.indexOf('<Splitter />'), page.indexOf('<StatusBar />'));
 	assert.match(bottom, /<section class="min-h-0 overflow-hidden" style:height=\{`\$\{ui\[bottomKey\(\)\]\}px`\}/);
 	assert.match(bottom, /\{#if ui\.bottomView === 'console'\}\s*<Console \/>\s*\{:else\}\s*<Timeline \/>/);
-	assert.equal(bottom.match(/player/g)?.length, 1);
+	assert.equal(bottom.match(/player/g), null);
+	assert.match(bottom, /hidden=\{bare\}/);
 	assert.doesNotMatch(page, /PlayBar|vp-playbar/);
 	assert.ok(!existsSync(join(here, '../components/viewer/PlayBar.svelte')));
 	assert.match(source('state.svelte.js'), /export const bottomKey = \(\) => \(ui\.bottomView === 'console' \? 'consoleH' : ui\.workspace === 'storyboard' \? 'storyH' : 'timelineH'\);/);
@@ -69,13 +73,13 @@ test('workspaces: Play keeps the viewer with the splitter and the timeline under
 	assert.equal(bar.match(/disabled: player,/g)?.length, 2);
 });
 
-test('workspaces: the viewer of Play shows the cut with its timecode and the shot under the playhead, never a preview, a comparison or a generation button', () => {
+test('workspaces: the viewer of Play shows the cut with its timecode and the shot under the playhead, never a preview or a comparison, and no viewer has a generation button', () => {
 	const viewer = source('../components/viewer/Viewer.svelte');
 	assert.match(viewer, /let \{ player = false \} = \$props\(\);/);
 	assert.match(viewer, /const previewAsset = \$derived\(!player && /);
 	assert.match(viewer, /const previewResult = \$derived\(!player && /);
 	assert.match(viewer, /const compareRes = \$derived\(!player && /);
-	assert.match(viewer, /\{#if !player\}\s*<div class="mt-1">\s*<HostUi name="Button" props=\{\{[^}]*startGeneration/);
+	assert.doesNotMatch(viewer, /startGeneration/);
 	assert.match(viewer, /\{#if player && clip\}\s*<span class="ml-1 min-w-0 truncate text-sm text-fg-muted">\{t\('viewer\.shot', \{ index: doc\.clips\.indexOf\(clip\) \+ 1, count: doc\.clips\.length, name: clipLabel\(clip\) \}\)\}<\/span>/);
 	assert.match(viewer, /\n\t\t\t<span class="vp-tc mr-1 text-md text-fg">\{tc\(ui\.playhead, doc\.fps\)\}<\/span>/);
 	for (const locale of ['en', 'fr']) assert.ok(json(locale, 'viewer').shot, `${locale}: viewer.shot is missing`);

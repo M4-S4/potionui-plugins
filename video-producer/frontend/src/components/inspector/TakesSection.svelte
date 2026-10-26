@@ -2,10 +2,9 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc } from '../../lib/state.svelte.js';
-	import { takesOf, startGeneration, shotActivity, currentEngine, engineLabel } from '../../lib/production.svelte.js';
+	import { takesOf, currentEngine } from '../../lib/production.svelte.js';
 	import { aspectOf, draftResolution, finalResolution } from '../../lib/generation.js';
 	import { labelGroups, rejectedCount } from '../../lib/labels.js';
-	import { draftsOf } from '../../lib/shots.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import TakeCard from '../takes/TakeCard.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
@@ -15,7 +14,6 @@
 	const groups = $derived(labelGroups(takes, ui.hideRejected));
 	const rejected = $derived(rejectedCount(takes));
 	const engine = $derived(currentEngine());
-	const running = $derived(shotActivity(clip.id).state === 'running');
 	const aspect = $derived(aspectOf(doc.aspect, doc.resolution));
 	const draftRes = $derived(draftResolution(engine?.info, ui.me?.settings?.draftResolution, aspect));
 	const finalRes = $derived(finalResolution(engine?.info, aspect));
@@ -45,10 +43,7 @@
 
 <div class="space-y-1.5 rounded-lg bg-surface-2/60 p-2.5">
 	<div class="flex items-center gap-2">
-		<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'sparkles', class: 'min-w-0 flex-1', disabled: running || !engine, onclick: () => startGeneration({ clips: [clip], quality: 'draft' }) }}>
-			<span class="flex-1 truncate text-left">{t('inspector.takes.more', { count: draftsOf(clip, doc.engine) })}</span>
-			<span class="max-w-28 truncate text-fg-muted">{engineLabel()}</span>
-		</HostUi>
+		<span class="min-w-0 flex-1 text-xs text-fg-muted">{t('inspector.takes.drafts')}</span>
 		<DraftsField clips={[clip]} label={false} />
 	</div>
 	{#if draftRes && finalRes}<p class="text-xs text-fg-muted">{t('inspector.takes.note', { res: draftRes.replace('x', '×'), final: finalRes.replace('x', '×') })}</p>{/if}

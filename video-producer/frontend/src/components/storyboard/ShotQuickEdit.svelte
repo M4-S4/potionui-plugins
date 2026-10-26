@@ -2,10 +2,9 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, secs, clipLabel, promptOf } from '../../lib/state.svelte.js';
-	import { takesOf, shotActivity, startGeneration, engineChoices, engineGroups, engineLabel, soundOf, shotDurationLimit } from '../../lib/production.svelte.js';
+	import { takesOf, engineChoices, engineGroups, engineLabel, soundOf, shotDurationLimit } from '../../lib/production.svelte.js';
 	import { optionKey } from '../../lib/generation.js';
 	import { shotEngineOf } from '../../lib/engine.js';
-	import { draftsOf } from '../../lib/shots.js';
 	import { castLabels } from '../../lib/bible.js';
 	import { seamImage } from '../../lib/seam.js';
 	import { stages } from '../../lib/catalog.js';
@@ -24,7 +23,6 @@
 	const index = $derived(doc.clips.indexOf(clip));
 	const takes = $derived(takesOf(clip));
 	const done = $derived(takes.filter((x) => x.status === 'done').length);
-	const running = $derived(shotActivity(clip.id).state === 'running');
 	const own = $derived(shotEngineOf(clip));
 	const key = $derived(own.preset ? optionKey(own.preset, own.model ?? null) : '');
 	const known = $derived(key ? engineChoices().some((o) => o.key === key) : true);
@@ -34,7 +32,6 @@
 	const sound = $derived(soundOf(clip));
 	const first = $derived(seamImage(doc, clip.id, 'first'));
 	const last = $derived(seamImage(doc, clip.id, 'last'));
-	const drafts = $derived(draftsOf(clip, doc.engine));
 	const changed = $derived(editing && done > 0 && text.trim() !== prompt.trim());
 
 	$effect(() => {
@@ -141,7 +138,6 @@
 	</div>
 
 	<div class="flex items-center gap-2">
-		<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'sparkles', disabled: running, onclick: () => startGeneration({ clips: [clip], quality: 'draft' }) }}>{t('storyboard.quick.generate', { count: drafts })}</HostUi>
 		<div class="flex-1"></div>
 		<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: hostIconName('pencil'), onclick: editor }}>{t('storyboard.quick.editor')}</HostUi>
 	</div>
