@@ -107,5 +107,7 @@
 	"cmd.view-review": "Revue",
 	"cmd.view-direction": "Direction",
 	"cmd.view-bible": "Bible",
-	"cmd.view-references": "Références"
+	"cmd.view-references": "Références",
+	"cmd.pick-all": "Choisir tous les plans",
+	"cmd.clear-picked": "Vider la sélection de plans"
 }

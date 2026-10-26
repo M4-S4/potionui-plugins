@@ -149,5 +149,10 @@
 	"error.not_found": "Video Producer n’est pas disponible sur ce serveur. Demandez à un administrateur.",
 	"error.server_error": "Le serveur n’a pas pu traiter la requête.",
 	"error.unavailable": "Le service est indisponible pour l’instant. Réessayez plus tard.",
-	"error.unknown": "Une erreur est survenue."
+	"error.unknown": "Une erreur est survenue.",
+	"shortcuts.click": "clic",
+	"shortcuts.pickToggle": "Ajouter le plan à la sélection, ou l’en retirer",
+	"shortcuts.pickRange": "Choisir les plans du plan choisi jusqu’à celui-ci",
+	"shortcuts.pickAdd": "Ajouter ces plans à la sélection",
+	"shortcuts.clearPicked": "Vider la sélection"
 }

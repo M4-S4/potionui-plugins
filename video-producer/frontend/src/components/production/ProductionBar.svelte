@@ -4,7 +4,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, act, secs, allIssues, fmtDuration, openDirector } from '../../lib/state.svelte.js';
+	import { ui, doc, act, secs, allIssues, fmtDuration, openDirector, pickedClips, clearPicked } from '../../lib/state.svelte.js';
 	import {
 		readiness,
 		startGeneration,
@@ -59,11 +59,14 @@
 	const blocked = $derived(ready.missing.length > 0);
 	const notes = $derived(blocked ? [...ready.missing, ...ready.warnings] : ready.warnings);
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
-	const primary = $derived(t('production.generate'));
+	const picked = $derived(pickedClips().length);
+	const primary = $derived(busy ? t('production.enqueue') : t('production.generate'));
+	const primaryTip = $derived(busy ? t('production.enqueueTip') : t('production.generate'));
 	const targets = $derived([
 		{ id: 'clip', label: t('production.target.clip') },
 		{ id: 'range', label: t('production.target.range') },
-		{ id: 'sequence', label: t('production.target.sequence') }
+		{ id: 'sequence', label: t('production.target.sequence') },
+		...(picked ? [{ id: 'picked', label: t('production.target.picked', { count: picked }) }] : [])
 	]);
 	const qualities = $derived([
 		{ id: 'draft', label: t('lib.stage.draft') },
@@ -157,9 +160,9 @@
 			{ id: 'own', width: widths.own, rank: 7, show: own > 0 },
 			{ id: 'edit', width: 28, rank: 0, pinned: true },
 			{ id: 'label', width: widths.label, rank: 8, folds: false },
-			{ id: 'go', width: widths.go, rank: 1, outside: true, show: !busy },
+			{ id: 'go', width: widths.go, rank: 1, outside: true },
 			{ id: 'scope', width: widths.scope, rank: 2, outside: true },
-			{ id: 'notice', width: widths.notice, rank: 5, outside: true, show: !busy && notes.length > 0 }
+			{ id: 'notice', width: widths.notice, rank: 5, outside: true, show: notes.length > 0 }
 		])
 	);
 	const moreOpen = $derived(ui.menuOpen === MORE && fit.overflow.length > 0);
@@ -204,6 +207,8 @@
 	});
 
 	function pick(id) {
+		if (id === 'picked') return;
+		clearPicked();
 		p.target = id;
 		if (id === 'range' && !ui.range) ui.range = { in: ready.range[0], out: ready.range[1] };
 	}
@@ -214,7 +219,7 @@
 </script>
 
 <div class="flex h-11 items-center gap-2 border-b border-line bg-surface-1 px-3" role="region" aria-label={t('production.region')}>
-	<HostUi name="SegmentedControl" props={{ items: targets, selected: p.target, variant: 'toggle', ariaLabel: t('production.target.label'), onSelect: pick }} />
+	<HostUi name="SegmentedControl" props={{ items: targets, selected: picked ? 'picked' : p.target, variant: 'toggle', ariaLabel: t('production.target.label'), onSelect: pick }} />
 	<span class="flex shrink-0" use:watch={'scope'}>
 		{#if fit.inline.has('scope')}
 			<HostUi name="Tooltip" props={{ text: scope, wrapperClass: 'flex shrink-0' }}>
@@ -240,7 +245,7 @@
 	<HostUi name="Tooltip" props={{ text: p.quality === 'draft' ? t('production.quality.draftTip', { resolution: draftRes }) : t('production.quality.finalTip', { resolution: finalRes }) }}>
 		<HostUi name="SegmentedControl" props={{ items: qualities, selected: p.quality, variant: 'toggle', ariaLabel: t('production.quality.label'), onSelect: setProjectQuality }} />
 	</HostUi>
-	<DraftsField {clips} label={false} disabled={busy || !clips.length} />
+	<DraftsField {clips} label={false} disabled={!clips.length} />
 
 	<div class="vp-divider"></div>
 
@@ -295,17 +300,17 @@
 				</div>
 			</div>
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', onclick: cancelGeneration }}>{t('production.cancel')}</HostUi>
-		{:else}
-			{#if status === 'done'}
-				<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', onclick: openResults }}>
-					<Icon name="check" class="h-3.5 w-3.5 text-success" />{t('production.ready', { count: p.lastCount })}
-				</HostUi>
-			{/if}
-			{#if notes.length}
-				<InfoTip lines={notes} wrapperClass="flex shrink-0">
-					<span class="vp-notice text-xs text-warning"><Icon name="alert" class="h-3.5 w-3.5 shrink-0" /><span class="vp-notice-text" use:watch={'notice'}>{#if fit.inline.has('notice')}{notes[0]}{/if}</span></span>
-				</InfoTip>
-			{/if}
+		{:else if status === 'done'}
+			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', onclick: openResults }}>
+				<Icon name="check" class="h-3.5 w-3.5 text-success" />{t('production.ready', { count: p.lastCount })}
+			</HostUi>
+		{/if}
+		{#if notes.length}
+			<InfoTip lines={notes} wrapperClass="flex shrink-0">
+				<span class="vp-notice text-xs text-warning"><Icon name="alert" class="h-3.5 w-3.5 shrink-0" /><span class="vp-notice-text" use:watch={'notice'}>{#if fit.inline.has('notice')}{notes[0]}{/if}</span></span>
+			</InfoTip>
+		{/if}
+		{#if !busy}
 			{#if gapClip}<SeamAction clip={gapClip} variant="icon" />{/if}
 			{#if ready.noEngine && ui.isAdmin}
 				<a class="vp-link-hit shrink-0 whitespace-nowrap text-xs text-fg underline decoration-signal underline-offset-2 hover:decoration-2" href="/admin?tab=plugins">{t('generation.engine.settings')}</a>
@@ -326,12 +331,12 @@
 					</span>
 				</InfoTip>
 			{/if}
-			<HostUi name="Tooltip" props={{ text: primary, kbd: commandById('generate')?.key }}>
-				<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: 'sparkles', class: 'h-8 px-3.5', ariaLabel: primary, disabled: blocked, onclick: () => startGeneration() }}>
-					<span class="-ml-1.5 whitespace-nowrap" class:pl-1.5={fit.inline.has('go')} use:watch={'go'}>{#if fit.inline.has('go')}{primary}{/if}</span>
-				</HostUi>
-			</HostUi>
 		{/if}
+		<HostUi name="Tooltip" props={{ text: primaryTip, kbd: commandById('generate')?.key }}>
+			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: 'sparkles', class: 'h-8 px-3.5', ariaLabel: primary, disabled: blocked, onclick: () => startGeneration() }}>
+				<span class="-ml-1.5 whitespace-nowrap" class:pl-1.5={fit.inline.has('go')} use:watch={'go'} data-generate={busy ? 'enqueue' : 'start'}>{#if fit.inline.has('go')}{primary}{/if}</span>
+			</HostUi>
+		</HostUi>
 	</div>
 </div>
 

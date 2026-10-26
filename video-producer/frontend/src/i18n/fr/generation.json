@@ -253,5 +253,11 @@
 	"warn.dialogueSpeakerUnknown": "« {shot} » : une réplique cite un personnage que la bible n’a plus ; une voix sans nom la dit.",
 	"warn.dialogueSpeakerNotCast": "« {shot} » : {labels} parle à l’écran sans être distribué dans le plan.",
 	"warn.dialogueTooLong": "« {shot} » : {words} mots de dialogue, plus que les {limit} que le plan porte à un débit naturel.",
-	"warn.dialogueVoiceNotSent": "« {shot} » : la voix de {labels} n’est pas parmi les références envoyées ; le moteur l’invente."
+	"warn.dialogueVoiceNotSent": "« {shot} » : la voix de {labels} n’est pas parmi les références envoyées ; le moteur l’invente.",
+	"toast.queued.one": "{count} plan ajouté à la file",
+	"toast.queued.other": "{count} plans ajoutés à la file",
+	"toast.queuedAgain.one": "{count} plan ajouté à la file, en variante de plus",
+	"toast.queuedAgain.other": "{count} plans ajoutés à la file, dont {again} en variante de plus",
+	"toast.queueUndone.one": "{count} prise retirée de la file",
+	"toast.queueUndone.other": "{count} prises retirées de la file"
 }

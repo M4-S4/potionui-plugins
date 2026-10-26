@@ -20,9 +20,10 @@ test('advance: the loop goes back to the In point at the end of the range, and t
 	assert.deepEqual(advance(9.8, 0.5, { loop: true, range: { in: 2, out: 12 }, end: 10 }), { t: 10, stop: true });
 });
 
-test('playback: every frame of the clock goes through advance, and End seeks to the end of the cut', () => {
+test('playback: every frame of the clock goes through advance, and End seeks to the end of the cut outside the Storyboard', () => {
 	const playback = source('playback.svelte.js');
 	assert.match(playback, /const next = advance\(ui\.playhead, dt, \{ loop: ui\.loop, range: ui\.range, end: seqDuration\(\) \}\);\n\tui\.playhead = next\.t;\n\tif \(next\.stop\) return pause\(\);/);
 	const commands = source('commands.js');
-	assert.match(commands, /\{ spec: 'home', run: \(\) => seek\(0\) \},\n\t\{ spec: 'end', run: \(\) => seek\(seqDuration\(\)\) \},/);
+	assert.match(commands, /\{ spec: 'home', run: edge\(false\) \},\n\t\{ spec: 'end', run: edge\(true\) \},/);
+	assert.match(commands, /if \(ui\.workspace !== 'storyboard'\) return seek\(last \? seqDuration\(\) : 0\);/);
 });

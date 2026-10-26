@@ -149,5 +149,10 @@
 	"error.not_found": "Video Producer is not available on this server. Ask an administrator.",
 	"error.server_error": "The server could not complete the request.",
 	"error.unavailable": "The service is unavailable for now. Try again later.",
-	"error.unknown": "Something went wrong."
+	"error.unknown": "Something went wrong.",
+	"shortcuts.click": "click",
+	"shortcuts.pickToggle": "Add the shot to the selection, or take it out",
+	"shortcuts.pickRange": "Pick every shot from the chosen one to this one",
+	"shortcuts.pickAdd": "Add those shots to the selection",
+	"shortcuts.clearPicked": "Clear the selection"
 }

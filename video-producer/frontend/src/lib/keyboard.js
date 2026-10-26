@@ -82,6 +82,13 @@ export function activateOnKey(e, handler) {
 	return true;
 }
 
+export function pickMode(e, mac = detectMac()) {
+	const mod = mac ? e.metaKey : e.ctrlKey;
+	if (mod && e.shiftKey) return 'add';
+	if (mod) return 'toggle';
+	return e.shiftKey ? 'range' : null;
+}
+
 export function isTypingTarget(el, e = null) {
 	if (!el) return false;
 	if (el.isContentEditable === true) return true;

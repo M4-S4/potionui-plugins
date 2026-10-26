@@ -107,5 +107,7 @@
 	"cmd.view-review": "Review",
 	"cmd.view-direction": "Direction",
 	"cmd.view-bible": "Bible",
-	"cmd.view-references": "References"
+	"cmd.view-references": "References",
+	"cmd.pick-all": "Pick every shot",
+	"cmd.clear-picked": "Clear the selection of shots"
 }

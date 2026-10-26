@@ -253,5 +253,11 @@
 	"warn.dialogueSpeakerUnknown": "“{shot}”: a line names a character the bible no longer has; an unnamed voice says it.",
 	"warn.dialogueSpeakerNotCast": "“{shot}”: {labels} speak on screen without being cast in the shot.",
 	"warn.dialogueTooLong": "“{shot}”: {words} words of dialogue, more than the {limit} the shot carries at a natural pace.",
-	"warn.dialogueVoiceNotSent": "“{shot}”: the voice of {labels} is not among the references sent; the engine invents it."
+	"warn.dialogueVoiceNotSent": "“{shot}”: the voice of {labels} is not among the references sent; the engine invents it.",
+	"toast.queued.one": "{count} shot added to the queue",
+	"toast.queued.other": "{count} shots added to the queue",
+	"toast.queuedAgain.one": "{count} shot added to the queue, as one more variant",
+	"toast.queuedAgain.other": "{count} shots added to the queue, {again} of them as one more variant",
+	"toast.queueUndone.one": "{count} take taken out of the queue",
+	"toast.queueUndone.other": "{count} takes taken out of the queue"
 }

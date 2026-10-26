@@ -23,9 +23,11 @@ import {
 	bandView,
 	secs,
 	openDirector,
-	directorView
+	directorView,
+	pickAll,
+	clearPicked
 } from './state.svelte.js';
-import { compareSeam, cycleTake, labelPreviewed, nudgeDuration, previewed, selectedShot, shiftShot, stepShot as bandStep } from './band.svelte.js';
+import { compareSeam, cycleTake, labelPreviewed, nudgeDuration, pickShot, previewed, selectedShot, shiftShot, stepShot as bandStep } from './band.svelte.js';
 import { BAND_STEP } from './band.js';
 import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy, fitShot, setProjectQuality } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
@@ -46,7 +48,20 @@ export function shortcutLabel(spec) {
 	return formatShortcut(spec, { mac: IS_MAC, names: { space: t('commands.kbd.space'), backspace: t('commands.kbd.backspace') } });
 }
 
-function command(id, run, { keys = null, alias = null, check = null, global = false, press = null, repeat = false, vars = null } = {}) {
+export function clickLabel(mods) {
+	return formatShortcut(`${mods}+click`, { mac: IS_MAC, names: { click: t('shell.shortcuts.click') } });
+}
+
+export function pointerShortcuts() {
+	return [
+		{ id: 'pick-toggle', label: t('shell.shortcuts.pickToggle'), key: clickLabel('mod') },
+		{ id: 'pick-range', label: t('shell.shortcuts.pickRange'), key: clickLabel('shift') },
+		{ id: 'pick-add', label: t('shell.shortcuts.pickAdd'), key: clickLabel('shift+mod') },
+		{ id: 'clear-picked', label: t('shell.shortcuts.clearPicked'), key: t('commands.kbd.escape') }
+	];
+}
+
+function command(id, run, { keys = null, alias = null, check = null, global = false, claim = false, typing = false, press = null, repeat = false, vars = null } = {}) {
 	return {
 		id,
 		run,
@@ -54,6 +69,8 @@ function command(id, run, { keys = null, alias = null, check = null, global = fa
 		alias,
 		check,
 		global,
+		claim,
+		typing,
 		press: press ?? run,
 		repeat,
 		menuId: null,
@@ -127,6 +144,10 @@ const match = () => {
 	const c = ui.selection?.kind === 'clip' ? selected() : clipAt(ui.playhead);
 	if (!c || doc.clips.indexOf(c) === 0) return toast(t('lib.toast.selectFollowingShot'), 'warning');
 	matchToPrevious(c);
+};
+const pickEvery = () => {
+	ui.workspace = 'storyboard';
+	pickAll();
 };
 const newShot = () => {
 	ui.workspace = 'storyboard';
@@ -229,14 +250,15 @@ export const menus = [
 	]),
 	menu('clip', [
 		[command('new-shot', newShot), command('info', () => (ui.inspectorOpen = !ui.inspectorOpen)), command('reveal', ws('media'))],
-		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('promote', promote, { keys: 'shift+mod+g' })],
+		[command('pick-all', pickEvery), command('clear-picked', clearPicked)],
+		[command('takes', takes, { keys: 't' }), command('shot-editor', shotEditor, { keys: 'e' }), command('promote', promote, { keys: 'shift+mod+g', claim: true })],
 		[command('color', scopes), command('match', match)],
 		[command('fav', flag('favori'), { keys: 'f' }), command('reject', flag('rejet'), { keys: 'alt+backspace' }), command('unflag', flag(null), { keys: 'u' })]
 	]),
 	menu('production', [
 		[command('dir-global', director), command('synopsis', synopsis), command('story-window', storyWindow, { keys: 'd', check: () => ui.storyOpen && bandView() }), command('continuity', continuity)],
 		[
-			command('generate', () => startGeneration(), { keys: 'mod+g' }),
+			command('generate', () => startGeneration(), { keys: 'mod+g', claim: true, typing: true }),
 			command('draft', () => setProjectQuality('draft'), { check: () => ui.production.quality === 'draft' }),
 			command('final', () => setProjectQuality('final'), { check: () => ui.production.quality === 'final' }),
 			command('queue', openQueue, { keys: 'alt+mod+g' }),
@@ -377,28 +399,49 @@ function escape() {
 	else select(null);
 }
 
-function stepShot(forward) {
-	const i = doc.clips.findIndex((c) => c.id === ui.selection?.id);
-	const next = doc.clips[Math.max(0, Math.min(doc.clips.length - 1, i < 0 ? 0 : i + (forward ? 1 : -1)))];
+function goToShot(next) {
 	if (!next) return;
 	select('clip', next.id);
 	seek(next.start + 0.01);
 }
 
+function stepShot(delta) {
+	const i = doc.clips.findIndex((c) => c.id === ui.selection?.id);
+	goToShot(doc.clips[Math.max(0, Math.min(doc.clips.length - 1, i < 0 ? 0 : i + delta))]);
+}
+
+function gridColumns() {
+	const grid = document.querySelector('[data-story-grid]');
+	return grid ? Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length) : 1;
+}
+
 function arrow(forward, whole) {
 	return () => {
 		if (bandView()) return bandStep(forward ? 1 : -1);
-		if (ui.workspace === 'storyboard') return stepShot(forward);
+		if (ui.workspace === 'storyboard') return stepShot(forward ? 1 : -1);
 		seek(ui.playhead + (forward ? 1 : -1) * (whole ? 1 : frameDuration(doc.fps)));
+	};
+}
+
+function vertical(delta) {
+	return () => (bandView() ? cycleTake(delta) : stepShot(delta * gridColumns()));
+}
+
+function edge(last) {
+	return () => {
+		if (ui.workspace !== 'storyboard') return seek(last ? seqDuration() : 0);
+		const clip = last ? doc.clips.at(-1) : doc.clips[0];
+		if (bandView()) pickShot(clip);
+		else goToShot(clip);
 	};
 }
 
 const fixedBindings = [
 	{ spec: 'delete', run: () => deleteSelection(), repeat: true },
-	{ spec: 'home', run: () => seek(0) },
-	{ spec: 'end', run: () => seek(seqDuration()) },
-	{ spec: 'arrowup', run: () => cycleTake(-1), repeat: true, when: bandView },
-	{ spec: 'arrowdown', run: () => cycleTake(1), repeat: true, when: bandView },
+	{ spec: 'home', run: edge(false) },
+	{ spec: 'end', run: edge(true) },
+	{ spec: 'arrowup', run: vertical(-1), repeat: true, when: () => ui.workspace === 'storyboard' },
+	{ spec: 'arrowdown', run: vertical(1), repeat: true, when: () => ui.workspace === 'storyboard' },
 	{ spec: 'shift+mod+arrowleft', run: () => shiftShot(-1), repeat: true, when: () => ui.workspace === 'storyboard' },
 	{ spec: 'shift+mod+arrowright', run: () => shiftShot(1), repeat: true, when: () => ui.workspace === 'storyboard' },
 	{ spec: '<', run: () => nudgeDuration(-BAND_STEP), repeat: true, when: bandView },
@@ -413,7 +456,7 @@ const fixedBindings = [
 
 const keymap = [
 	...allCommands.flatMap((c) =>
-		[c.keys, c.alias].filter(Boolean).map((spec) => ({ spec, run: c.press, global: c.global, repeat: c.repeat, single: isSingleKey(spec) }))
+		[c.keys, c.alias].filter(Boolean).map((spec) => ({ spec, run: c.press, global: c.global, claim: c.claim, typing: c.typing, repeat: c.repeat, single: isSingleKey(spec) }))
 	),
 	...fixedBindings
 ];
@@ -422,21 +465,28 @@ function hasModifier(e) {
 	return e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
 }
 
+const claimed = keymap.filter((binding) => binding.claim);
+
 export function handleKeydown(e, root) {
 	const target = e.target;
-	if (target && target !== document.body && root && !root.contains(target)) return;
-	if (ui.hostModal || hostOverlayOpen()) return;
+	if ((target && target !== document.body && root && !root.contains(target)) || ui.hostModal || hostOverlayOpen()) {
+		if (findShortcut(e, claimed, IS_MAC)) e.preventDefault();
+		return;
+	}
 	if (e.key === 'Escape') {
 		if (!hasModifier(e)) escape();
 		return;
 	}
 	const hit = findShortcut(e, keymap, IS_MAC);
 	if (!hit) return;
+	if (hit.claim) e.preventDefault();
 	if (hit.when && !hit.when()) return;
-	if (!hit.global && (isTypingTarget(target, e) || ui.modal || ui.paletteOpen)) return;
+	const fromField = hit.typing && isTypingTarget(target, e) && !ui.modal && !ui.paletteOpen;
+	if (!fromField && !hit.global && (isTypingTarget(target, e) || ui.modal || ui.paletteOpen)) return;
 	if (hit.single && !ui.singleKeyShortcuts) return;
 	if (hit.spec === 'space' && isActivationTarget(target)) return;
 	e.preventDefault();
 	if (e.repeat && !hit.repeat) return;
+	if (fromField) target.blur();
 	hit.run();
 }

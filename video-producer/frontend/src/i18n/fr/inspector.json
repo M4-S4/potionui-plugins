@@ -206,5 +206,6 @@
 	"dialogue.offscreen": " (hors champ)",
 	"dialogue.none": "Aucune réplique.",
 	"dialogue.edit": "Modifier le dialogue…",
-	"takes.drafts": "Brouillons de ce plan"
+	"takes.drafts": "Brouillons de ce plan",
+	"kind.picked": "Sélection"
 }

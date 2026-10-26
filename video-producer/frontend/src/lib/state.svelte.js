@@ -10,6 +10,7 @@ import { touch } from './shots.js';
 import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
 import { viewOf } from './director.js';
+import { picking, pruned } from './picking.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -27,6 +28,7 @@ export const ui = $state({
 	inspectorOpen: typeof window === 'undefined' || window.innerWidth >= 1360,
 	bottomView: 'timeline',
 	selection: null,
+	picked: [],
 	playhead: 1.6,
 	playing: false,
 	loop: false,
@@ -166,6 +168,7 @@ function restore(json) {
 	const d = JSON.parse(json);
 	for (const k of Object.keys(doc)) if (!(k in d)) delete doc[k];
 	for (const k of Object.keys(d)) doc[k] = d[k];
+	if (ui.picked.length) ui.picked = pruned(doc.clips.map((c) => c.id), ui.picked);
 	for (const listener of restoreListeners) listener();
 }
 export function undo() {
@@ -191,8 +194,8 @@ export function act(fn) {
 const HOST_LEVELS = { info: 'info', success: 'success', warning: 'warning', error: 'error', sim: 'info' };
 const toastTimers = new Set();
 
-export function toast(message, level = 'info', action) {
-	const duration = level === 'sim' ? 4200 : 2800;
+export function toast(message, level = 'info', action, hold = null) {
+	const duration = hold ?? (level === 'sim' ? 4200 : 2800);
 	if (!action && hostToast(HOST_LEVELS[level] ?? 'info', message, duration)) return;
 	const id = ulid();
 	ui.toasts.push({ id, message, level, action });
@@ -209,7 +212,32 @@ const LINKED = ['prompts', 'frames'];
 
 export function select(kind, id) {
 	ui.selection = kind ? { kind, id } : null;
+	if (ui.picked.length) ui.picked = [];
 	if (kind && ui.workspace !== 'mixer' && !bandView()) ui.inspectorOpen = true;
+}
+export function pickedClips() {
+	if (ui.picked.length < 2) return [];
+	const ids = new Set(ui.picked);
+	const clips = doc.clips.filter((c) => ids.has(c.id));
+	return clips.length < 2 ? [] : clips;
+}
+export const isPicked = (id) => ui.picked.length > 1 && ui.picked.includes(id);
+export function pickClip(id, mode) {
+	const order = doc.clips.map((c) => c.id);
+	const active = ui.selection?.kind === 'clip' ? ui.selection.id : null;
+	const next = picking(order, pruned(order, ui.picked), active, id, mode);
+	ui.selection = next.active ? { kind: 'clip', id: next.active } : null;
+	ui.picked = next.picked;
+	if (next.active && ui.workspace !== 'mixer' && !bandView()) ui.inspectorOpen = true;
+}
+export function pickAll() {
+	if (!doc.clips.length) return;
+	const active = ui.selection?.kind === 'clip' && doc.clips.some((c) => c.id === ui.selection.id) ? ui.selection.id : doc.clips[0].id;
+	ui.selection = { kind: 'clip', id: active };
+	ui.picked = doc.clips.length > 1 ? doc.clips.map((c) => c.id) : [];
+}
+export function clearPicked() {
+	ui.picked = [];
 }
 export function selected() {
 	const s = ui.selection;
@@ -267,6 +295,8 @@ export function relayout() {
 export function deleteSelection() {
 	const s = ui.selection;
 	if (s?.kind === 'lane') return deleteLane(s.id);
+	const picked = pickedClips();
+	if (picked.length) return deleteShots(picked);
 	if (!s) return;
 	const list = listOf(s.kind);
 	const i = list.findIndex((x) => x.id === s.id);
@@ -280,6 +310,19 @@ export function deleteSelection() {
 	});
 	ui.selection = null;
 	toast(t('lib.toast.deleted'), 'info', { label: t('shell.toast.undo'), run: undo });
+}
+
+function deleteShots(clips) {
+	act(() => {
+		for (const c of clips) {
+			doc.clips.splice(doc.clips.indexOf(c), 1);
+			dropLinked(c.id);
+		}
+		relayout();
+	});
+	ui.selection = null;
+	ui.picked = [];
+	toast(t('lib.toast.shotsDeleted', { count: clips.length }), 'info', { label: t('shell.toast.undo'), run: undo });
 }
 
 export function duplicateSelection() {
@@ -549,6 +592,15 @@ export const overlaps = (s, d, [a, b]) => s < b && s + d > a;
 export function shotsIn(range) {
 	return doc.clips.filter((c) => overlaps(c.start, c.dur, range));
 }
+export function itemsOf(clips) {
+	const shots = new Set(clips.map((c) => c.id));
+	const near = (start, end) => clips.some((c) => start < c.start + c.dur && end > c.start);
+	return {
+		prompts: doc.prompts.filter((p) => (p.shotId ? shots.has(p.shotId) : near(p.start, p.start + p.dur))),
+		frames: doc.frames.filter((f) => (f.shotId ? shots.has(f.shotId) : clips.some((c) => f.time >= c.start && f.time <= c.start + c.dur))),
+		references: doc.references.filter((r) => r.scope.type === 'global' || (r.scope.type === 'shot' && shots.has(r.scope.shotId)))
+	};
+}
 export function itemsIn(range) {
 	const shots = new Set(shotsIn(range).map((c) => c.id));
 	const inRange = (item, byTime) => (item.shotId ? shots.has(item.shotId) : byTime);
@@ -653,7 +705,7 @@ export function replaceDoc(next) {
 	Object.assign(doc, incoming);
 	past.length = 0;
 	future.length = 0;
-	Object.assign(ui, { selection: null, preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, dirty: false });
+	Object.assign(ui, { selection: null, picked: [], preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, dirty: false });
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0 });
 	resetTakes();
 	if (ui.playhead > seqDuration()) ui.playhead = 0;

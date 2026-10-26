@@ -63,7 +63,7 @@ function eventFor(spec, mac, flip = null) {
 }
 
 test('shortcuts: 42 commands carry a shortcut, each one different, and the others show none', () => {
-	assert.equal(commands.length, 106);
+	assert.equal(commands.length, 108);
 	assert.deepEqual(
 		bound.map((c) => c.id),
 		[
@@ -154,7 +154,7 @@ test('shortcuts: every shortcut that is shown fires with exactly its keys and wi
 test('shortcuts: the key handler looks every key up in the table of the commands, with the guards the guides describe', () => {
 	const handler = source.slice(source.indexOf('export function handleKeydown'));
 	assert.match(handler, /findShortcut\(e, keymap, IS_MAC\)/);
-	assert.match(source, /\.\.\.allCommands\.flatMap\(\(c\) =>\n\t\t\[c\.keys, c\.alias\]\.filter\(Boolean\)\.map\(\(spec\) => \(\{ spec, run: c\.press, global: c\.global, repeat: c\.repeat, single: isSingleKey\(spec\) \}\)\)\n\t\),/);
+	assert.match(source, /\.\.\.allCommands\.flatMap\(\(c\) =>\n\t\t\[c\.keys, c\.alias\]\.filter\(Boolean\)\.map\(\(spec\) => \(\{ spec, run: c\.press, global: c\.global, claim: c\.claim, typing: c\.typing, repeat: c\.repeat, single: isSingleKey\(spec\) \}\)\)\n\t\),/);
 	assert.match(source, /get aliasKey\(\) \{\n\t\t\treturn alias \? shortcutLabel\(alias\) : '';\n\t\t\}/);
 	assert.match(readFileSync(join(here, '../components/modals/Modals.svelte'), 'utf-8'), /<kbd class="vp-kbd text-xs">\{c\.key\}<\/kbd>\{#if c\.alias\}<kbd class="vp-kbd text-xs">\{c\.aliasKey\}<\/kbd>\{\/if\}/);
 	assert.match(handler, /if \(hit\.when && !hit\.when\(\)\) return;/);
@@ -185,8 +185,8 @@ function names(locale) {
 }
 
 const GUIDE_FIXED = {
-	'user-guide.md': ['Esc', 'Delete', 'Left arrow', 'Right arrow', 'Home', 'End', 'Up arrow', 'Down arrow', 'Enter', '<', '>', 'Ctrl+Shift+Left arrow', 'Ctrl+Shift+Right arrow', 'Shift+R'],
-	'user-guide.fr.md': ['Échap', 'Suppr', 'Flèche gauche', 'Flèche droite', 'Home', 'Fin', 'Flèche haut', 'Flèche bas', 'Entrée', '<', '>', 'Ctrl+Shift+Flèche gauche', 'Ctrl+Shift+Flèche droite', 'Shift+R']
+	'user-guide.md': ['Esc', 'Delete', 'Left arrow', 'Right arrow', 'Home', 'End', 'Up arrow', 'Down arrow', 'Enter', '<', '>', 'Ctrl+Shift+Left arrow', 'Ctrl+Shift+Right arrow', 'Shift+R', 'Ctrl+click', 'Shift+click', 'Ctrl+Shift+click'],
+	'user-guide.fr.md': ['Échap', 'Suppr', 'Flèche gauche', 'Flèche droite', 'Home', 'Fin', 'Flèche haut', 'Flèche bas', 'Entrée', '<', '>', 'Ctrl+Shift+Flèche gauche', 'Ctrl+Shift+Flèche droite', 'Shift+R', 'Ctrl+clic', 'Shift+clic', 'Ctrl+Shift+clic']
 };
 
 for (const [file, locale] of [
@@ -209,7 +209,7 @@ test('shortcuts: the two guides have the same section heading numbering and the 
 	assert.match(en.heading, /^## 16\. Keyboard shortcuts$/);
 	assert.match(fr.heading, /^## 16\. Raccourcis clavier$/);
 	assert.equal(en.rows.length, fr.rows.length);
-	const normal = (keys) => keys.replace(/Retour arrière/g, 'Backspace').replace(/Espace/g, 'Space').replace(/Échap/g, 'Esc').replace(/Suppr/g, 'Delete').replace(/Flèche gauche/g, 'Left arrow').replace(/Flèche droite/g, 'Right arrow').replace(/Flèche haut/g, 'Up arrow').replace(/Flèche bas/g, 'Down arrow').replace(/Entrée/g, 'Enter').replace(/Fin/g, 'End');
+	const normal = (keys) => keys.replace(/Retour arrière/g, 'Backspace').replace(/Espace/g, 'Space').replace(/Échap/g, 'Esc').replace(/Suppr/g, 'Delete').replace(/Flèche gauche/g, 'Left arrow').replace(/Flèche droite/g, 'Right arrow').replace(/Flèche haut/g, 'Up arrow').replace(/Flèche bas/g, 'Down arrow').replace(/Entrée/g, 'Enter').replace(/Fin/g, 'End').replace(/clic\b/g, 'click').replace(/\(plans\)/g, '(shots)');
 	assert.deepEqual(
 		fr.rows.map(([keys]) => normal(keys)),
 		en.rows.map(([keys]) => keys)

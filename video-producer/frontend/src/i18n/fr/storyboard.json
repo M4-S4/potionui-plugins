@@ -155,5 +155,17 @@
 	"check.write": "Écrire l’instruction",
 	"check.none": "Rien à vérifier : raccords cohérents, instructions écrites, aucune prise en échec.",
 	"band.emptyKey": "{key} ouvre Synopsis et découpage",
-	"quick.noneTitle": "Aucun plan choisi"
+	"quick.noneTitle": "Aucun plan choisi",
+	"pick.picked": "Choisi",
+	"pick.count.one": "{count} plan choisi",
+	"pick.count.other": "{count} plans choisis",
+	"pick.chip.one": "{count} choisi",
+	"pick.chip.other": "{count} choisis",
+	"pick.clear": "Vider la sélection",
+	"pick.clearTip": "Vider la sélection de plans ({key})",
+	"pick.only": "Choisir « {shot} » seul",
+	"pick.generateHint": "{key} ou Générer la sélection, dans la barre Production, met ces plans en file dans l’ordre du montage, même pendant que d’autres prises tournent.",
+	"pick.running.one": "{count} d’entre eux a déjà une prise en route : il en recevra une variante de plus.",
+	"pick.running.other": "{count} d’entre eux ont déjà une prise en route : chacun en recevra une variante de plus.",
+	"pick.hint": "{toggle} ajoute ou retire un plan, {range} choisit tous les plans jusqu’à celui-là, {esc} vide la sélection."
 }

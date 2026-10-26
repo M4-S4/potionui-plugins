@@ -6,7 +6,7 @@
 	import { chainOn, ignoresFirstFrame, setChain } from '../../lib/chain.js';
 	import { engineOptions, optionFor } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { allCommands } from '../../lib/commands.js';
+	import { allCommands, pointerShortcuts } from '../../lib/commands.js';
 	import { frameRoleLabel } from '../../lib/catalog.js';
 	import { openReferences, refRoleLabel } from '../../lib/references.js';
 	import Modal from './Modal.svelte';
@@ -146,6 +146,12 @@
 					<div class="flex break-inside-avoid items-center justify-between gap-3 py-1 text-sm">
 						<dt class="text-fg-muted">{c.label}</dt>
 						<dd class="flex shrink-0 gap-1"><kbd class="vp-kbd text-xs">{c.key}</kbd>{#if c.alias}<kbd class="vp-kbd text-xs">{c.aliasKey}</kbd>{/if}</dd>
+					</div>
+				{/each}
+				{#each pointerShortcuts() as p (p.id)}
+					<div class="flex break-inside-avoid items-center justify-between gap-3 py-1 text-sm" data-pointer-shortcut={p.id}>
+						<dt class="text-fg-muted">{p.label}</dt>
+						<dd class="flex shrink-0 gap-1"><kbd class="vp-kbd text-xs">{p.key}</kbd></dd>
 					</div>
 				{/each}
 			</dl>
