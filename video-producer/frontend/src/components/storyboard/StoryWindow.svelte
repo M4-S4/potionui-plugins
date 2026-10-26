@@ -13,6 +13,7 @@
 	import { bandChecks, compareSeam, pickShot, selectedShot } from '../../lib/band.svelte.js';
 	import { ulid } from '../../lib/ulid.js';
 	import SeamFix from './SeamFix.svelte';
+	import FinalPassButton from '../production/FinalPassButton.svelte';
 	import Icon from '../Icon.svelte';
 
 	const proposal = $derived(ui.storyProposal);
@@ -202,6 +203,7 @@
 					<span class="text-fg-subtle">{t('panels.story.toFinal')}</span>
 					<span class="vp-tc text-sm text-fg">{footage(open)}</span>
 					<span class="text-fg-subtle">{t('panels.story.sequenceHint')}</span>
+					<span class="mt-1"><FinalPassButton variant="secondary" /></span>
 				</div>
 				<div class="flex flex-col items-start gap-1 rounded-lg border border-line-strong p-2.5">
 					<span class="text-fg-subtle">{t('storyboard.story.queue')}</span>

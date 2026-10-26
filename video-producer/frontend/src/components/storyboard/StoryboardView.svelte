@@ -24,6 +24,7 @@
 	import SeamPanel from './SeamPanel.svelte';
 	import ViewSwitch from './ViewSwitch.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
+	import FinalPassButton from '../production/FinalPassButton.svelte';
 
 	let size = $state('m');
 	let dragId = $state(null);
@@ -151,6 +152,7 @@
 					<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: hostIconName('palette'), onclick: matchAll }}>{t('storyboard.matchAll', { count: colorFixes })}</HostUi>
 				</HostUi>
 			{/if}
+			<FinalPassButton />
 			<ViewSwitch />
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => addShot() }}>{t('storyboard.addShot')}</HostUi>
 			<div class="vp-seg" role="group" aria-label={t('storyboard.size.group')}>

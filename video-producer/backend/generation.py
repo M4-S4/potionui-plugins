@@ -3,7 +3,7 @@ import logging
 import secrets
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple
 
-from . import chaining, core_bridge, director, engine_options, estimate, limits, models, notifications, projects, settings, soundtrack, takes
+from . import chaining, core_bridge, director, engine_options, estimate, limits, models, notifications, presets, projects, settings, soundtrack, takes
 from .core_bridge import AccountType, GenerationNotFoundException, IdempotencyKeyConflict, User
 from .director import DirectorError, ShotPlan, note
 from .estimate import Evaluation
@@ -20,8 +20,9 @@ TRACEBACK = "Traceback (most recent call last)"
 
 UPSCALE = "upscale"
 RENDER = "render"
+GUIDED = "guided"
 
-METHODS = (UPSCALE, RENDER)
+METHODS = (UPSCALE, RENDER, GUIDED)
 
 RETRYABLE = ("failed", "cancelled")
 
@@ -544,26 +545,59 @@ async def _render_plan(
     return plans.shots[0], plans.shots[0].preset_id, not plans.shots[0].cloud
 
 
-def _upscale_plan(owner: User, source: Mapping[str, Any], target: str) -> Tuple[ShotPlan, str, bool]:
+def _upscale_plan(owner: User, source: Mapping[str, Any], target: str, own_mode: bool = True) -> Tuple[ShotPlan, str, bool]:
     try:
-        plan = director.build_upscale(owner, source, target)
+        plan = director.build_upscale(owner, source, target, own_mode)
     except DirectorError as exc:
         raise Blocked([exc.note()]) from None
     return plan, plan.request["preset_id"], True
 
 
-async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, Any], method: str, target: str) -> Dict[str, Any]:
-    """A final take of a finished take: upscaled by SeedVR2 or MiniMax-H3, or rendered again at the largest size."""
+async def _guided_plan(owner: User, project: Mapping[str, Any], source: Mapping[str, Any]) -> Tuple[ShotPlan, str, bool]:
+    try:
+        sound = await asyncio.to_thread(director.draft_sound, owner, project["doc"], source)
+        plan = director.build_guided(owner, project["doc"], source, sound)
+    except DirectorError as exc:
+        raise Blocked([exc.note()]) from None
+    return plan, plan.request["preset_id"], True
+
+
+async def final_plan(
+    owner: User, project: Mapping[str, Any], source: Mapping[str, Any], method: str, target: str, own_mode: bool = True
+) -> Tuple[ShotPlan, str, bool]:
+    """The plan of the final take of a finished take, its preset and whether a native backend runs it: upscaled by SeedVR2 or, unless own_mode is False, the Upscale mode of its MiniMax-H3 preset; rendered again by LTX-2.5 following its video; or rendered again at the largest size. TakeError for a take that cannot be final, Blocked when the plan cannot be made."""
     if source.get("kind") == takes.KEYFRAME:
         raise TakeError(409, "keyframe_take", "A start image candidate has no final take: use it as a frame of its shot.")
     if source["status"] != "done":
         raise TakeError(409, "take_not_done", "Only a finished take can be made final.")
-    plan, preset_id, native = (
-        _upscale_plan(owner, source, target) if method == UPSCALE else await _render_plan(owner, project, source, "final")
-    )
-    minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
-    await with_sound(owner, project, [plan])
-    take = create(
+    if method == UPSCALE:
+        return _upscale_plan(owner, source, target, own_mode)
+    if method == GUIDED:
+        return await _guided_plan(owner, project, source)
+    return await _render_plan(owner, project, source, "final")
+
+
+async def with_first(owner: User, pairs: List[Tuple[Mapping[str, Any], ShotPlan]]) -> None:
+    """Bind the first frame of the video of its take to each guided plan that has none yet, stored as the owner's upload; Blocked by the first that cannot be, in the order of the plans."""
+    for source, plan in pairs:
+        if not director.is_guided(plan) or director.has_first(plan):
+            continue
+        ref = {"kind": "history", "generation_id": str(source.get("generation_id")), "file_id": str(source.get("file_id"))}
+        try:
+            stored = await core_bridge.extract_frame(owner, ref, at=0.0)
+            director.bind_first(owner, plan, {"value": stored["value"], "media_type": "image"})
+        except DirectorError as exc:
+            raise Blocked([exc.note()]) from None
+        except Exception:
+            logger.warning("[VIDEO-PRODUCER] Could not take the first frame of take %s", source.get("id"), exc_info=True)
+            raise Blocked([note("guided_frame_failed", "The first frame of the take could not be taken.", shot_id=plan.shot_id)]) from None
+
+
+def create_final(
+    owner: User, project: Mapping[str, Any], source: Mapping[str, Any], method: str, plan: ShotPlan, preset_id: str, minutes: float
+) -> Dict[str, Any]:
+    """Store the final take of a finished take: its seed and letter, linked to it, the revision of the shot when it is rendered again, the revision of the take when it follows or enlarges its video."""
+    return create(
         owner,
         project["id"],
         plan,
@@ -574,8 +608,17 @@ async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         variant=source.get("variant") or variant_letter(0),
         minutes=minutes,
         parent_take_id=source["id"],
-        revision=source.get("shot_revision") if method == UPSCALE else director.shot_revision(project["doc"], source["shot_id"]),
+        revision=director.shot_revision(project["doc"], source["shot_id"]) if method == RENDER else source.get("shot_revision"),
     )
+
+
+async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, Any], method: str, target: str) -> Dict[str, Any]:
+    """A final take of a finished take: upscaled by SeedVR2 or MiniMax-H3, rendered again by LTX-2.5 following its video, or rendered again at the largest size."""
+    plan, preset_id, native = await final_plan(owner, project, source, method, target)
+    minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
+    await with_sound(owner, project, [plan])
+    await with_first(owner, [(source, plan)])
+    take = create_final(owner, project, source, method, plan, preset_id, minutes)
     await pump(owner)
     return takes.get_take(take["id"])
 
@@ -585,11 +628,18 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
     if source["status"] not in RETRYABLE:
         raise TakeError(409, "take_not_retryable", "Only a failed or cancelled take can be retried.")
     found: Dict[str, chaining.Wait] = {}
+    parent = None
     if source["kind"] == UPSCALE:
         parent = takes.get_take(source.get("parent_take_id") or "")
         if parent is None or parent["status"] != "done":
             raise TakeError(409, "take_not_done", "The take this one upscaled is no longer finished.")
-        plan, preset_id, native = _upscale_plan(owner, parent, director.upscale_target(source))
+        plan, preset_id, native = _upscale_plan(owner, parent, director.upscale_target(source), source.get("preset_id") != presets.SEEDVR2)
+        revision = parent.get("shot_revision")
+    elif source["kind"] == GUIDED:
+        parent = takes.get_take(source.get("parent_take_id") or "")
+        if parent is None or parent["status"] != "done":
+            raise TakeError(409, "take_not_done", "The take this one followed is no longer finished.")
+        plan, preset_id, native = await _guided_plan(owner, project, parent)
         revision = parent.get("shot_revision")
     else:
         found = chaining.waits(project["id"], project["doc"], [source["shot_id"]])
@@ -597,6 +647,8 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         revision = director.shot_revision(project["doc"], source["shot_id"])
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     await with_sound(owner, project, [plan])
+    if parent is not None:
+        await with_first(owner, [(parent, plan)])
     take = create(
         owner,
         project["id"],

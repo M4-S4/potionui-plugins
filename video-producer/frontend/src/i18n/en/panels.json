@@ -54,7 +54,7 @@
 	"story.toProduce": "To produce",
 	"story.draftsLeft": "Drafts left",
 	"story.toFinal": "Move to final",
-	"story.sequenceHint": "Choose “Sequence” in the Production bar to generate everything at once.",
+	"story.sequenceHint": "Final film makes each shot final from its Final take; “Sequence” with Final in the Production bar renders everything again.",
 	"story.allDone": "Every shot is final or comes from a source.",
 	"story.noShots": "No shots yet: write the synopsis and propose a breakdown, or add a shot in the Storyboard.",
 	"story.continuity": "Continuity",

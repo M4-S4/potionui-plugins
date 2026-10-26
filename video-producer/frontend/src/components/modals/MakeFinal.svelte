@@ -6,6 +6,7 @@
 	import { makeFinal, upscaleAvailable, findTake, presetById } from '../../lib/production.svelte.js';
 	import { UPSCALE_TARGETS, aspectOf, finalResolution, upscaleTargetFor, upscalesItself } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
+	import { guidedReady, guidedResolution } from '../../lib/finalpass.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
 
@@ -18,6 +19,8 @@
 	const h3 = $derived(upscalesItself(take?.presetId));
 	const renderRes = $derived((finalResolution(presetById(take?.presetId), aspectOf(doc.aspect, doc.resolution)) ?? take?.resolution ?? '—').replace('x', '×'));
 	let target = $state(untrack(() => upscaleTargetFor(doc.resolution, ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS)));
+	const guided = $derived(guidedReady());
+	const guidedRes = $derived(guidedResolution());
 	let sending = $state(false);
 
 	const close = () => (ui.modal = null);
@@ -32,7 +35,7 @@
 
 	async function send(method) {
 		if (!take || sending) return;
-		const message = method === 'upscale' ? t('generation.final.startedUpscale', { target: targetLabel(target) }) : t('generation.final.startedRender', { res: renderRes });
+		const message = method === 'upscale' ? t('generation.final.startedUpscale', { target: targetLabel(target) }) : method === 'guided' ? t('generation.final.startedGuided', { res: guidedRes }) : t('generation.final.startedRender', { res: renderRes });
 		sending = true;
 		const ok = await makeFinal(take.id, method, target);
 		sending = false;
@@ -43,7 +46,7 @@
 </script>
 
 {#if take}
-	<Modal title={t('generation.final.title', { shot: clipLabel(clip), variant: take.variant })} subtitle={t('generation.final.subtitle', { res: (take.resolution ?? '—').replace('x', '×'), seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })} icon="arrow-up" width={480}>
+	<Modal title={t('generation.final.title', { shot: clipLabel(clip), variant: take.variant })} subtitle={t('generation.final.subtitle', { res: (take.resolution ?? '—').replace('x', '×'), seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })} icon="arrow-up" width={guided ? 600 : 480}>
 		<div class="space-y-4 p-4">
 			<div class="flex items-center gap-3">
 				{#if takeThumb(take)}<img src={takeThumb(take)} alt="" class="aspect-video w-28 shrink-0 rounded object-cover" />{/if}
@@ -62,10 +65,14 @@
 					props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.final.target'), items: targets.map((id) => ({ id, label: targetLabel(id), disabled: !canUpscale })), selected: target, onSelect: (id) => (target = id) }}
 				/>
 			</section>
+			{#if guided}<p class="text-xs text-fg-subtle">{t('generation.final.guidedHint', { res: guidedRes })}</p>{/if}
 			<p class="text-xs text-fg-subtle">{t('generation.final.renderHint', { res: renderRes })}</p>
 		</div>
 		{#snippet footer()}
-			<HostUi name="Button" props={{ variant: canUpscale ? 'secondary' : 'primary', size: 'sm', class: 'mr-auto', disabled: sending, onclick: () => send('render') }}>{t('generation.final.render')}</HostUi>
+			<HostUi name="Button" props={{ variant: canUpscale ? 'secondary' : 'primary', size: 'sm', class: guided ? '' : 'mr-auto', disabled: sending, onclick: () => send('render') }}>{t('generation.final.render')}</HostUi>
+		{#if guided}
+			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', class: 'mr-auto', disabled: sending, onclick: () => send('guided') }}>{t('generation.final.guided')}</HostUi>
+		{/if}
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', onclick: close }}>{t('generation.final.cancel')}</HostUi>
 			{#if canUpscale}
 				<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('arrow-up'), disabled: sending, onclick: () => send('upscale') }}>{t('generation.final.upscaleAction', { target: targetLabel(target) })}</HostUi>

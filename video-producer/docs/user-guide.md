@@ -58,7 +58,7 @@ The ten menus group all the commands of the page. The command search (**Search c
 | **Edit** | Undo, Redo, Copy, Paste, Duplicate, Delete, Search media. |
 | **Cut** | The three tools, Split at playhead, trims, Change duration, in and out points, Clear range, Add marker, Add title, Fade in and out. |
 | **Shot** | New shot, Info, Show source, Shot takes, Shot editor, Make take final, Shot color, Match color to previous shot, Favorite, Reject, Remove flag. |
-| **Production** | Global direction, Split synopsis into shots, Continuity check, Generate selection, Draft and Final quality, the generation queue, Cancel the generation, Results and takes, Assemble chosen takes, Edit Engine. |
+| **Production** | Global direction, Split synopsis into shots, Continuity check, Generate selection, Draft and Final quality, the generation queue, Cancel the generation, Results and takes, Assemble chosen takes, Make the film final, Edit Engine. |
 | **Audio** | Add audio track, Import audio from the library, Import audio from this computer, Mixing console, Voice and dialogue and the sound design workshop. |
 | **View** | Play, loop, full screen, framing guides, Compare takes, Luminance scope, Audio meters, timeline zoom, Snapping. |
 | **Window** | The five workspaces, Storyboard as a band, the four views of Director AI, the reference spaces, Side panel, Inspector, PotionUI assistant, Prompt library, Timeline index, Background tasks. |
@@ -422,14 +422,34 @@ Projects made before the labels keep their marks: a chosen take is **Final**, a 
 
 ### Make final
 
-**Make final** on a draft card (also the button of a Storyboard card, **Make take A final** in the Inspector, **Shot › Make take final** and Ctrl+Shift+G) opens the window "Make final · Shot 2 · A" with the line "Draft in 832×480 · seed 123456". It offers two ways:
+**Make final** on a draft card (also the button of a Storyboard card, **Make take A final** in the Inspector, **Shot › Make take final** and Ctrl+Shift+G) opens the window "Make final · Shot 2 · A" with the line "Draft in 832×480 · seed 123456". It offers two ways, and a third when your administrator has set up the guided render:
 
 - **Upscale** is the default. The engine enlarges the take as it is: the picture and the motion do not change, and it is the fastest way. Wan, LTX, MiniMax H3 Fast and VDN, MiniMax H3 (12 GB) and MiniMax H3 Fast (12 GB), and cloud takes go through SeedVR2 ("SeedVR2 enlarges this take as it is: fastest, the motion does not change."); a take of the base MiniMax H3 preset uses the upscale mode of its own preset ("MiniMax H3 enlarges this take with its own upscale mode: the motion does not change."). Pick the **Target resolution**: 720p, 1080p, 1440p or 4K (the window starts on the resolution of your project), then click "Upscale to 1080p".
 - **Re-render at full resolution** generates the shot again at the largest resolution of the engine, with the same seed: "slower, the result may differ slightly."
+- **Guided render** renders the shot again with LTX-2.5 at its largest size (1280×720 in 16:9), following this take: "same motion and framing, new detail." It starts from the first frame of the shot, or of the take when the shot has none or was edited since, and lays the sound of the take on the new one. It is experimental: slower than an upscale, and the look can drift from the take. The button only shows when LTX-2.5 and its Layout-To-Render IC-LoRA are installed and assigned to you.
 
 When no upscaler is assigned to you, the window shows the badge **Upscaler not available** and the explanation "Upscaling this take needs SeedVR2: ask an administrator to install it, or render the take again at full resolution." (the **Make final** button of that take card shows the same sentence as its tooltip), the resolutions are greyed and only the re-render is offered. A take of the base MiniMax H3 preset does not need SeedVR2, as long as its preset is assigned to you. An upscale takes time: on a 12 GB graphics card, the upscale of a 5-second Wan draft to 1080p took about two and a half hours. A capture of this window, in the dark and light themes of the English interface, is in `docs/screenshots/make-final.png`.
 
-The new take is a **Final** one ("Final quality" or "Final quality · upscale" on its card) that says which draft it comes from ("from A"). You get "Upscale to 1080p started" or "Render at 1280×720 started", the final appears on the card list when it ends, and it is put on the shot ("Final version ready and applied to the shot"). A final uses GPU minutes like any take and is checked against your quota.
+The new take is a **Final** one ("Final quality", "Final quality · upscale" or "Final quality · guided" on its card) that says which draft it comes from ("from A"). You get "Upscale to 1080p started", "Render at 1280×720 started" or "Guided render at 1280×720 started", the final appears on the card list when it ends, and it is put on the shot ("Final version ready and applied to the shot"). A final uses GPU minutes like any take and is checked against your quota.
+
+### Make the film final
+
+Once each shot of the Storyboard has its **Final** take, make the whole film final in one go: **Production › Make the film final…**, or **Final film** in the header of the Storyboard (band and grid), at the bottom of the **Review** view of Director AI, and on the **Move to final** card of **Synopsis and breakdown › To produce**. The button gives the shots at final quality out of the generated shots ("Final film 3/8"), a spinner while final takes run, and a check once the whole film is final.
+
+The window "Make the film final" works like **Make final**, for every shot at once. Each shot starts from its Final take, which serves as the reference: its motion and framing are kept. Choose once:
+
+- the **Method**: **Upscale** (the default), **Guided render** or **Render again**, each with its explanation and what becomes of the sound ("Sound: the sound of each take is kept.");
+- for an upscale, the **Target resolution** and, when the film has takes of the base MiniMax H3 preset, the **Upscaler**: **Automatic** (that preset upscales its own takes, SeedVR2 the others) or **SeedVR2 for all**.
+
+The project keeps your choice for the next time. Then the window lists the shots with their state:
+
+- **To make final**: its Final take is a draft;
+- **Already final**: it is skipped, unless you turn on **Redo the shots already final (N)**, which makes them final again from their draft (they then read **To redo**);
+- **Generating** with its percentage, or **Queued**: a final of the shot is already on its way, and it is skipped;
+- **No Final take**: the shot has no finished take labelled Final yet. The window names these shots ("2 shots have no Final take yet (04, 07): they stay as they are in the film.") and its button becomes **Go without the missing shots (N)**, so that the film never goes final incomplete without saying so;
+- **Imported source**: a shot made of an imported video is always skipped.
+
+Each row also shows the take it starts from ("Take A · 832×480"), **Prompt modified** when the shot was edited after it, and "Last final failed" or "Last final cancelled" when its last final failed or was cancelled. Under the list, the estimate of the whole pass: the time when it was measured, the memory, the GPU minutes against your quota, and the reasons that block it, each with its shots. **Make N shots final** starts every final at once ("Final pass started: 8 takes"); they wait in the queue like any take, and the Production bar shows their progress. Open the window again to follow them: "3 final takes in progress" with a progress bar, and **Cancel the pass (3)**, which stops the final takes still queued or running ("Final pass cancelled: 3 takes stopped"). Each finished final goes on its shot and becomes **Final**, and the draft stays in the takes of the shot, as a **Candidate**.
 
 ## 10. Assistant
 

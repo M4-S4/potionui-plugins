@@ -7,7 +7,7 @@ from jsonschema.exceptions import best_match
 
 from . import settings
 from .bible import LAYOUTS, PARTS
-from .catalog import PROFILES
+from .catalog import PROFILES, UPSCALE_TARGETS
 from .core_bridge import generate_ulid
 
 MAX_DOC_BYTES = 4 * 1024 * 1024
@@ -35,6 +35,10 @@ MOTION_ROLE = "Mouvement"
 RETIRED_SET_TYPES = ("Scène d’essai", "Scène d'essai", "Gaussian Splat")
 
 REMOVED_TAKES = "removedTakes"
+
+FINAL_PASS = "finalPass"
+
+FINAL_PASS_CHOICES = {"method": ("upscale", "guided", "render"), "target": UPSCALE_TARGETS, "upscaler": ("auto", "seedvr2")}
 
 PROJECTS = "video_producer_projects"
 VERSIONS = "video_producer_versions"
@@ -136,6 +140,8 @@ CHARACTER = _object(
 PLACE = _object({"id": ID, "label": TEXT, "text": TEXT, "references": IDS})
 
 BIBLE = _object({"characters": _array(CHARACTER), "places": _array(PLACE)})
+
+FINAL_PASS_SCHEMA = _object({}, optional={key: _enum(*values) for key, values in FINAL_PASS_CHOICES.items()})
 
 PROMPT_PARTS = _object({}, optional={name: TEXT for name in PARTS})
 
@@ -360,6 +366,7 @@ DOC_SCHEMA: Dict[str, Any] = {
             "bible": BIBLE,
             "dialogueLanguage": TEXT,
             REMOVED_TAKES: IDS,
+            FINAL_PASS: FINAL_PASS_SCHEMA,
         },
     ),
 }
@@ -516,8 +523,14 @@ def _removed_takes(value: Any) -> List[str]:
     return list(dict.fromkeys(item for item in value if isinstance(item, str) and item)) if isinstance(value, list) else []
 
 
+def _final_pass(value: Any) -> Dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {key: value[key] for key, choices in FINAL_PASS_CHOICES.items() if value.get(key) in choices}
+
+
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, a shot's own firstFromPrevious dropped when it is not a boolean, and the takes whose video the user removed kept as distinct ids, the key dropped when none is left; the same object when nothing changes."""
+    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, a shot's own firstFromPrevious dropped when it is not a boolean, the takes whose video the user removed kept as distinct ids, the key dropped when none is left, and the choice of the film's final pass kept to the values it knows, dropped when none is left; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -528,6 +541,12 @@ def migrate(doc: Any) -> Any:
             dropped.add(REMOVED_TAKES)
         elif removed != doc[REMOVED_TAKES]:
             changes[REMOVED_TAKES] = removed
+    if FINAL_PASS in doc:
+        chosen = _final_pass(doc[FINAL_PASS])
+        if not chosen:
+            dropped.add(FINAL_PASS)
+        elif chosen != doc[FINAL_PASS]:
+            changes[FINAL_PASS] = chosen
     frames = doc.get("frames")
     if isinstance(frames, list) and any(_empty_capture(frame) or _captured_frame(frame) for frame in frames):
         changes["frames"] = [_plain_frame(frame) for frame in frames if not _empty_capture(frame)]

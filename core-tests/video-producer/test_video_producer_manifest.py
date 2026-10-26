@@ -206,6 +206,8 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("DELETE", f"{base}/exports/{{job_id}}"),
         ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/seam-frame"),
         ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/end-frame"),
+        ("POST", f"{base}/projects/{{project_id}}/final-pass/estimate"),
+        ("POST", f"{base}/projects/{{project_id}}/final-pass"),
     }
 
 

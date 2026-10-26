@@ -32,6 +32,7 @@ import { createProject as createProjectOnServer, flushSave } from './project.sve
 import { openGallery, openImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
 import { matchToPrevious } from './continuity.svelte.js';
+import { openFinalPass } from './finalpass.svelte.js';
 import { openReferences } from './references.js';
 import { togglePlay, seek } from './playback.svelte.js';
 import { chat, confirm } from './host.js';
@@ -241,7 +242,7 @@ export const menus = [
 			command('queue', openQueue, { keys: 'alt+mod+g' }),
 			command('cancel-generation', cancelRunning)
 		],
-		[command('results', openResults), command('assemble', assembleChosen)],
+		[command('results', openResults), command('assemble', assembleChosen), command('final-pass', openFinalPass)],
 		[command('engine', openEngineSettings)]
 	]),
 	menu('audio', [

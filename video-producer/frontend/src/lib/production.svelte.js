@@ -399,6 +399,11 @@ export async function makeFinal(takeId, method, target) {
 	return true;
 }
 
+export function followTakes(list) {
+	for (const take of list) upsertTake(take);
+	track();
+}
+
 export async function cancelTake(take) {
 	const result = await getClient().cancelTake(take.id);
 	if (!result.ok) {

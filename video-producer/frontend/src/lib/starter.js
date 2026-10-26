@@ -4,6 +4,7 @@ import { migrateShots } from './shots.js';
 import { migrateBible } from './bible.js';
 import { migrateOptions } from './options.js';
 import { removedIds } from './removedtakes.js';
+import { migratePass } from './finalpass.js';
 
 const SHOT_DURATION = 5;
 export const PROMPT_LANGUAGES = ['en', 'fr'];
@@ -193,6 +194,11 @@ export function migrate(doc) {
 		const removed = removedIds(doc.removedTakes);
 		if (removed.length) next.removedTakes = removed;
 		else delete next.removedTakes;
+	}
+	if ('finalPass' in doc) {
+		const pass = migratePass(doc.finalPass);
+		if (pass) next.finalPass = pass;
+		else delete next.finalPass;
 	}
 	return next;
 }

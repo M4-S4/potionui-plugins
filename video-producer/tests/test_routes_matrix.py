@@ -333,6 +333,26 @@ ROUTES = {
         ),
         invalid=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}/final", {"method": "upscale", "target": "8k"}, 422, "invalid_request"),
     ),
+    "POST /projects/{id}/final-pass/estimate": Route(
+        success=lambda w: Call(
+            f"/projects/{w.pid}/final-pass/estimate", {"takes": [w.done["id"]], "method": "upscale", "target": "fhd1080"},
+            check=lambda r: [shot["take_id"] for shot in _data(r)["shots"]] == [w.done["id"]] and _data(r)["blocks"] == [],
+        ),
+        denied=lambda w: Call(
+            f"/projects/{w.pid}/final-pass/estimate", {"takes": [w.done["id"]], "method": "upscale", "target": "fhd1080"}, 404, "project_not_found", "user-2"
+        ),
+        invalid=lambda w: Call(f"/projects/{w.pid}/final-pass/estimate", {"takes": [], "method": "upscale", "target": "fhd1080"}, 422, "invalid_request"),
+    ),
+    "POST /projects/{id}/final-pass": Route(
+        success=lambda w: Call(
+            f"/projects/{w.pid}/final-pass", {"takes": [w.done["id"]], "method": "upscale", "target": "fhd1080"}, 202,
+            check=lambda r: [(take["kind"], take["parent_take_id"]) for take in _data(r)["takes"]] == [("upscale", w.done["id"])],
+        ),
+        denied=lambda w: Call(
+            f"/projects/{w.pid}/final-pass", {"takes": [w.done["id"]], "method": "upscale", "target": "fhd1080"}, 404, "project_not_found", "user-2"
+        ),
+        invalid=lambda w: Call(f"/projects/{w.pid}/final-pass", {"takes": [w.done["id"]], "method": "upscale", "target": "8k"}, 422, "invalid_request"),
+    ),
     "DELETE /projects/{id}/takes/{take}": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}", check=lambda r: _data(r) == {"deleted": w.done["id"]}),
         denied=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}", status=404, code="project_not_found", who="user-2"),

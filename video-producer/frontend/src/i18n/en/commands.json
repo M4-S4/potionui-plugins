@@ -57,6 +57,7 @@
 	"cmd.cancel-generation": "Cancel the generation",
 	"cmd.results": "Results and takes",
 	"cmd.assemble": "Assemble chosen takes",
+	"cmd.final-pass": "Make the film final…",
 	"cmd.engine": "Edit Engine…",
 	"cmd.audio-add": "Add audio track",
 	"cmd.audio-import": "Import audio from the library…",
