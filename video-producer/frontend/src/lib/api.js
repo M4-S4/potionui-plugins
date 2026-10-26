@@ -299,7 +299,7 @@ export function normalizeMe(data) {
 		engines: list(me.engines, normalizeEngine) ?? [],
 		presets: list(me.presets, normalizePreset) ?? [],
 		keyframePresets: list(me.keyframe_presets, normalizeKeyframePreset) ?? [],
-		features: { upscaler: features.upscaler === true },
+		features: { upscaler: features.upscaler === true, guided: features.guided === true },
 		upscaleTargets: strings(me.upscale_targets),
 		ffmpeg: typeof me.ffmpeg === 'boolean' ? me.ffmpeg : null,
 		settings: { draftResolution: text(settings.draft_resolution) || null, maxParallelJobs: number(settings.max_parallel_jobs) }
@@ -322,7 +322,7 @@ export function normalizeTake(value) {
 		shotId: text(value.shot_id) || null,
 		generationId: idText(value.generation_id),
 		quality: value.quality === 'final' ? 'final' : 'draft',
-		kind: ['upscale', 'keyframe'].includes(value.kind) ? value.kind : 'render',
+		kind: ['upscale', 'guided', 'keyframe'].includes(value.kind) ? value.kind : 'render',
 		parentTakeId: text(value.parent_take_id) || null,
 		presetId: text(value.preset_id) || null,
 		mode: text(value.mode) || null,
@@ -450,6 +450,26 @@ export function normalizeEstimate(value) {
 		blocks: list(value.blocks, normalizeNote) ?? [],
 		warnings: list(value.warnings, normalizeNote) ?? []
 	};
+}
+
+function normalizePassShot(value) {
+	if (!isObject(value) || !text(value.shot_id) || !text(value.take_id)) return null;
+	return {
+		shotId: value.shot_id,
+		takeId: value.take_id,
+		method: text(value.method) || null,
+		presetId: text(value.preset_id) || null,
+		mode: text(value.mode) || null,
+		resolution: text(value.resolution) || null,
+		seconds: number(value.seconds),
+		minutes: number(value.minutes, 0),
+		sound: value.sound === true
+	};
+}
+
+export function normalizePassEstimate(value) {
+	const estimate = normalizeEstimate(value);
+	return estimate ? { ...estimate, shots: list(value.shots, normalizePassShot) ?? [] } : null;
 }
 
 export function normalizeQueue(value) {
@@ -643,6 +663,12 @@ export function createClient(api, save) {
 		},
 		async finalTake(projectId, takeId, method, target) {
 			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/final`, { method, target }), pickTake);
+		},
+		async finalPassEstimate(projectId, body, signal) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/final-pass/estimate`, body, signal), normalizePassEstimate);
+		},
+		async finalPass(projectId, body) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/final-pass`, body), (data) => list(data.takes, normalizeTake));
 		},
 		async estimate(projectId, body, signal) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/estimate`, body, signal), normalizeEstimate);

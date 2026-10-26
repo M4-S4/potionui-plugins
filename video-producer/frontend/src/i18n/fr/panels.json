@@ -54,7 +54,7 @@
 	"story.toProduce": "À produire",
 	"story.draftsLeft": "Brouillons restants",
 	"story.toFinal": "Passage en final",
-	"story.sequenceHint": "Choisissez « Séquence » dans la barre Production pour tout générer d’un coup.",
+	"story.sequenceHint": "Film final passe chaque plan en final depuis sa prise Finale ; « Séquence » et Final dans la barre Production génèrent tout à nouveau.",
 	"story.allDone": "Tous les plans sont en version finale ou issus de sources.",
 	"story.noShots": "Aucun plan : écrivez le synopsis puis proposez un découpage, ou ajoutez un plan dans le Storyboard.",
 	"story.continuity": "Continuité",

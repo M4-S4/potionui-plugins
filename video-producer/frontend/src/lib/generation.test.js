@@ -29,7 +29,7 @@ const SEEDVR2 = '01KXB7C553THYMSMKY1QSYESFM';
 const rawMe = {
 	is_admin: true,
 	settings: { draft_resolution: '832x480', max_parallel_jobs: 2 },
-	features: { upscaler: true },
+	features: { upscaler: true, guided: true },
 	upscale_targets: ['hd720', 'fhd1080', 'qhd1440', 'uhd2160'],
 	engines: [
 		{ id: 'native', name: 'Local Generation', kind: 'local', driver: 'native.local', execution_device: 'cuda:0', vram_total_gb: 24, vram_free_gb: 20.5, is_default: true },
@@ -90,10 +90,10 @@ test('normalizeMe: engines, presets, features, upscale targets and settings come
 	assert.deepEqual([wan.video, wan.cloud, wan.fps, wan.fpsLocked, wan.limits.maxDuration, wan.modes], [true, false, 16, false, 10, ['video']]);
 	assert.deepEqual(me.presets.find((p) => p.id === SEEDVR2).video, false);
 	assert.deepEqual(me.presets.find((p) => p.id === H3_FAST).profiles, null);
-	assert.deepEqual(me.features, { upscaler: true });
+	assert.deepEqual(me.features, { upscaler: true, guided: true });
 	assert.deepEqual(me.upscaleTargets, ['hd720', 'fhd1080', 'qhd1440', 'uhd2160']);
 	assert.deepEqual(me.settings, { draftResolution: '832x480', maxParallelJobs: 2 });
-	assert.deepEqual([normalizeMe({}).engines, normalizeMe({}).presets, normalizeMe({}).features], [[], [], { upscaler: false }]);
+	assert.deepEqual([normalizeMe({}).engines, normalizeMe({}).presets, normalizeMe({}).features], [[], [], { upscaler: false, guided: false }]);
 });
 
 test('engine popup: one entry per native video preset on the first native backend, one per enabled cloud model under its backend', () => {

@@ -15,9 +15,11 @@
 	import StoryWindow from './StoryWindow.svelte';
 	import ViewSwitch from './ViewSwitch.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
+	import FinalPassButton from '../production/FinalPassButton.svelte';
 	import Icon from '../Icon.svelte';
 
 	let lanes = $state();
+	let countsEl = $state();
 	const sel = $derived(selectedShot());
 	const counts = $derived(Object.keys(stages).map((k) => [k, doc.clips.filter((c) => c.stage === k).length]));
 	const running = $derived(doc.clips.filter((c) => shotActivity(c.id).state === 'running').length);
@@ -43,7 +45,7 @@
 
 <section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label={t('storyboard.title')}>
 	<ZoneHeader icon="grid" title={t('storyboard.title')} subtitle={t('storyboard.summary', { count: doc.clips.length, duration: secs(total) })}>
-		<div class="flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
+		<div bind:this={countsEl} class="flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
 			{#each counts as [k, n] (k)}
 				<span class="flex shrink-0 items-center gap-1.5 text-xs {n ? 'text-fg-muted' : 'text-fg-subtle'}" title={t('storyboard.stageCount', { stage: stages[k].label, n })}>
 					<span class="h-1.5 w-1.5 rounded-full {stages[k].dot} {n ? '' : 'opacity-40'}"></span>{stages[k].label}<span class="vp-tc text-fg">{n}</span>
@@ -52,6 +54,7 @@
 			{#if running}<span class="flex shrink-0 items-center gap-1 text-xs text-signal"><Icon name="sparkles" class="h-3 w-3" />{t('storyboard.band.running', { count: running })}</span>{/if}
 			{#if failed}<span class="flex shrink-0 items-center gap-1 text-xs text-danger"><Icon name="alert" class="h-3 w-3" />{t('storyboard.band.failedCount', { count: failed })}</span>{/if}
 		</div>
+		<FinalPassButton room={countsEl} />
 		<HostUi name="Tooltip" props={{ text: t('storyboard.story.tip'), kbd: key('story-window'), wrapperClass: 'inline-flex shrink-0' }}>
 			<button type="button" class="vp-toggle flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg" aria-pressed={ui.storyOpen} onclick={() => (ui.storyOpen = !ui.storyOpen)}>
 				<Icon name="book" class="h-3.5 w-3.5" />{t('storyboard.story.title')}

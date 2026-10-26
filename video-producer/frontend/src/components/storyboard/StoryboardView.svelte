@@ -20,6 +20,7 @@
 	import BandView from './BandView.svelte';
 	import ViewSwitch from './ViewSwitch.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
+	import FinalPassButton from '../production/FinalPassButton.svelte';
 
 	let size = $state('m');
 	let dragId = $state(null);
@@ -122,6 +123,7 @@
 			{/each}
 		</div>
 		<div class="flex shrink-0 items-center gap-3">
+			<FinalPassButton />
 			<ViewSwitch />
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => addShot() }}>{t('storyboard.addShot')}</HostUi>
 			<div class="vp-seg" role="group" aria-label={t('storyboard.size.group')}>

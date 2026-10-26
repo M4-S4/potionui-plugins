@@ -38,6 +38,15 @@ UPSCALE_SHORT_SIDES = {"hd720": 720, "fhd1080": 1080, "qhd1440": 1440, "uhd2160"
 H3_TARGET_SIZES = {"hd720": "hd", "fhd1080": "hd", "qhd1440": "2k", "uhd2160": "2k"}
 H3_TARGET_BACK = {"hd": "fhd1080", "2k": "qhd1440"}
 
+GUIDE_LORA = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"
+GUIDE_REPO = "Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"
+GUIDE_ID = "ic-guide"
+GUIDED_MODES = ("i2v", "flf")
+MAX_FPS = 60
+LTX_FRAME_STEP = 8
+DISTILLED = "distilled"
+DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
+
 QUALITIES = ("draft", "final")
 
 SEED_RANGE = 2**31
@@ -1363,10 +1372,10 @@ def upscale_target(take: Mapping[str, Any]) -> str:
     return H3_TARGET_BACK.get(str(form.get("target_size")), "fhd1080")
 
 
-def build_upscale(user: User, source: Mapping[str, Any], target: str) -> ShotPlan:
-    """The final take of a finished take upscaled: a MiniMax-H3 preset's own Upscale mode for its takes, SeedVR2 otherwise."""
+def build_upscale(user: User, source: Mapping[str, Any], target: str, own_mode: bool = True) -> ShotPlan:
+    """The final take of a finished take upscaled: a MiniMax-H3 preset's own Upscale mode for its takes unless own_mode is False, SeedVR2 otherwise."""
     source_preset = source.get("preset_id")
-    own = find_preset(user, str(source_preset), video=False) if source_preset in presets.MINIMAX_H3_PRESETS else None
+    own = find_preset(user, str(source_preset), video=False) if own_mode and source_preset in presets.MINIMAX_H3_PRESETS else None
     h3 = own is not None and H3_UPSCALE_MODE in own.modes
     preset_id = own.id if h3 else presets.SEEDVR2
     mode = H3_UPSCALE_MODE if h3 else SEEDVR2_MODE
@@ -1407,3 +1416,180 @@ def build_upscale(user: User, source: Mapping[str, Any], target: str) -> ShotPla
         missing_models=list(resolved.missing),
         seeded=False,
     )
+
+
+def guide_lora() -> Optional[str]:
+    """The installed Layout-To-Render IC-LoRA as model:<id>, or None."""
+    try:
+        model_id = core_bridge.installed_model_for_file(GUIDE_LORA)
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not look up the model file %s", GUIDE_LORA, exc_info=True)
+        return None
+    return f"{models.MODEL_REF}{model_id}" if model_id else None
+
+
+def guided_preset(user: User) -> Optional[Preset]:
+    """The preset a guided final runs on, when the user may run it: LTX-2.5, whose director mode takes an IC-LoRA."""
+    for preset_id in presets.GUIDED_PRESETS:
+        preset = find_preset(user, preset_id)
+        composition = catalog.director_of(preset.variables).get("modes") if preset is not None else None
+        capabilities = composition.get("director") if isinstance(composition, Mapping) else None
+        if isinstance(capabilities, Mapping) and capabilities.get("ic_lora"):
+            return preset
+    return None
+
+
+def guided_ready(user: User) -> bool:
+    """True when the user can make guided finals: the preset is theirs and the IC-LoRA is installed."""
+    return guided_preset(user) is not None and guide_lora() is not None
+
+
+def guided_frames(seconds: float, fps: float) -> int:
+    """The 1 + 8k frame count LTX renders closest to a video of this length at this rate, the lower one on a tie, so that the final keeps the length of its draft within half a step."""
+    frames = max(1, round(seconds * fps))
+    return 1 + LTX_FRAME_STEP * max(0, math.ceil((frames - 1) / LTX_FRAME_STEP - 0.5))
+
+
+def distilled_form(fields: models.Fields, resolved: models.ResolvedModels) -> Dict[str, Any]:
+    """The Distilled speed profile Lightricks runs its IC-LoRAs with (8 steps, CFG 1, euler_ancestral), for the fields the mode has, when the DiT in use is a distilled file and the mode offers that profile; empty otherwise."""
+    options = [option.get("value") for option in (fields.get("speed_profile") or {}).get("options") or []]
+    if DISTILLED not in options or DISTILLED not in resolved.files.get(models.MODEL_FIELD, "").lower():
+        return {}
+    return {name: value for name, value in {"speed_profile": DISTILLED, **DISTILLED_RECIPE}.items() if name in fields}
+
+
+def guided_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes a draft video as its reference, the LoRA and the reference both at strength 1: below 1 LTX-2.5 copies the reference instead of following it."""
+    document = _document(prompt, fps, seconds, resolution)
+    document["mode"] = "director"
+    document["segments"][0].update(start=0.0, end=seconds)
+    document["ic_lora"] = [
+        {
+            "id": GUIDE_ID,
+            "lora": {"model": lora, "strength": 1.0},
+            "reference": {"path": video, "relative_path": video, "type": "video"},
+            "strength": 1.0,
+        }
+    ]
+    return document
+
+
+def is_guided(plan: ShotPlan) -> bool:
+    """True for the plan of a guided final."""
+    document = plan.request.get("form_data", {}).get("video_director")
+    return isinstance(document, Mapping) and any(entry.get("id") == GUIDE_ID for entry in document.get("ic_lora") or [])
+
+
+def take_asset(doc: Mapping[str, Any], take_id: Any) -> Optional[Dict[str, Any]]:
+    """The asset of the project that holds the video of a take, or None."""
+    return next((asset for asset in doc.get("assets") or [] if take_id and asset.get("resultId") == take_id), None)
+
+
+def draft_sound(user: User, doc: Mapping[str, Any], source: Mapping[str, Any]) -> bool:
+    """True when the video of a finished take has a sound the project can mix again: its asset is in the project and ffprobe hears an audio stream in its file on this server."""
+    if take_asset(doc, source.get("id")) is None:
+        return False
+    try:
+        path = core_bridge.media_file_path("history", source_video(user, source)["value"])
+        probe = core_bridge.probe_video(path) if path else None
+    except DirectorError:
+        return False
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not read the sound of take %s", source.get("id"), exc_info=True)
+        return False
+    return bool(probe is not None and probe.has_audio)
+
+
+def _guided_aspect(doc: Mapping[str, Any], source: Mapping[str, Any]) -> float:
+    width, height = source.get("width"), source.get("height")
+    if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+        return width / height
+    return aspect_of(doc)
+
+
+def _guided_fps(preset: Preset, fields: models.Fields, source: Mapping[str, Any]) -> float:
+    fps = source.get("fps")
+    if "fps" in fields and isinstance(fps, (int, float)) and not isinstance(fps, bool) and 0 < fps <= MAX_FPS:
+        return float(fps)
+    return preset.fps
+
+
+def guided_first(user: User, doc: Mapping[str, Any], source: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """The picture a guided final starts from when the project still has it: the shot's first frame, when the take started from it and the shot was not edited since; None otherwise, the first frame of the take's video being taken instead."""
+    revision = source.get("shot_revision") if isinstance(source.get("shot_revision"), int) else 0
+    if source.get("director_mode") not in GUIDED_MODES or revision < shot_revision(doc, str(source["shot_id"])):
+        return None
+    return _frame_media(user, doc, shot_frames(doc, str(source["shot_id"]))[0])
+
+
+def has_first(plan: ShotPlan) -> bool:
+    """True when the request of a plan starts from a picture."""
+    document = plan.request.get("form_data", {}).get("video_director") or {}
+    return any(isinstance(entry, Mapping) and str(entry.get("role") or "") == "first" for entry in document.get("media") or [])
+
+
+def bind_first(user: User, plan: ShotPlan, media: Mapping[str, Any]) -> None:
+    """Bind a picture as the first frame of a guided plan; DirectorError when the preset refuses it."""
+    preset = guided_preset(user)
+    try:
+        plan.request = core_bridge.bind_director_media(
+            plan.request, "first", media, segment_id=SEGMENT_ID, capabilities=catalog.director_of(preset.variables) if preset else None
+        )
+    except DirectorBindingError:
+        raise DirectorError("guided_frame_failed", "The first frame of the take could not be used.", shot_id=plan.shot_id) from None
+
+
+def build_guided(user: User, doc: Mapping[str, Any], source: Mapping[str, Any], sound: bool = False) -> ShotPlan:
+    """The final take of a finished take rendered again by LTX-2.5 following its video through the Layout-To-Render IC-LoRA: the largest size of the preset, the frame rate of the take and its length cut to the frames LTX renders, the shot's prompt in the LTX form and the project's options for the preset; with sound, the sound of the take mixed onto the new one. It starts from the picture guided_first gives, else from the first frame of the take's video, bound later."""
+    preset = guided_preset(user)
+    if preset is None:
+        raise DirectorError("guided_unavailable", "LTX-2.5 is not available to you: a guided final needs it.", preset_id=presets.LTX_2_5)
+    lora = guide_lora()
+    if lora is None:
+        raise DirectorError(
+            "guide_lora_missing",
+            f"Install the Layout-To-Render IC-LoRA {GUIDE_LORA} ({GUIDE_REPO} on Hugging Face) for guided finals.",
+            file=GUIDE_LORA,
+            repo=GUIDE_REPO,
+        )
+    shot_id = str(source["shot_id"])
+    clip = clip_of(doc, shot_id)
+    if clip is None:
+        raise DirectorError("shot_not_found", "The shot of this take is no longer in the project.", shot_id=shot_id)
+    mode = preset.main_mode
+    if mode is None or mode not in preset.modes:
+        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.", preset_id=preset.id)
+    fields = models.form_fields(preset.id, mode)
+    fps = _guided_fps(preset, fields, source)
+    length = float(source.get("duration_s") or 0) or _wanted_seconds(clip, preset)
+    seconds = round(guided_frames(length, fps) / fps, 6)
+    resolution = final_resolution(models.resolution_options(fields), _guided_aspect(doc, source)) or (fields.get("resolution") or {}).get("default")
+    prompt, reference = compose_shot(doc, clip, bible.family(preset.id, False))
+    document = guided_document(prompt, fps, seconds, resolution, lora, source_video(user, source)["value"])
+    asset = take_asset(doc, source.get("id")) if sound else None
+    audio = ShotAudio(behavior=MUX, start=0.0, end=seconds, references=[str(asset["id"])]) if asset is not None else None
+    plan = ShotPlan(
+        shot_id=shot_id,
+        profile=source.get("profile"),
+        director_mode="director",
+        preset_mode=mode,
+        seconds=seconds,
+        resolution=resolution,
+        fps=fps,
+        prompt_text=prompt,
+        request=_request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps)),
+        audio=audio,
+        reference=reference,
+    )
+    first = guided_first(user, doc, source)
+    if first is not None:
+        bind_first(user, plan, first)
+    resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if audio is not None else ())
+    form = plan.request["form_data"]
+    form.update(resolved.values)
+    form.update(distilled_form(fields, resolved))
+    chosen = engine_options.chosen(doc, preset.id, fields, preset.cloud)
+    form.update(chosen.values)
+    plan.missing_models = [name for name in resolved.missing if name not in chosen.values]
+    plan.work_scale = engine_options.work_scale(fields, form)
+    return plan

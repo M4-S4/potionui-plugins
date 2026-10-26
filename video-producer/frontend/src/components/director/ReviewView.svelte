@@ -20,6 +20,7 @@
 	import DirectorViews from './DirectorViews.svelte';
 	import FilterPills from '../shell/FilterPills.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
+	import FinalPassButton from '../production/FinalPassButton.svelte';
 	import Icon from '../Icon.svelte';
 
 	const counts = $derived(reviewCounts(doc.clips, takeStore.list));
@@ -138,6 +139,7 @@
 		<div class="flex h-10 shrink-0 items-center gap-2 border-t border-line px-4">
 			<span class="text-xs text-fg-muted">{t('panels.director.review.finals', { count: withFinal, total: doc.clips.length })}</span>
 			<div class="flex-1"></div>
+			<FinalPassButton />
 			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('layers'), disabled: !chosen, onclick: assembleChosen }}>{t('panels.dock.results.assemble', { count: chosen })}</HostUi>
 		</div>
 	{/if}

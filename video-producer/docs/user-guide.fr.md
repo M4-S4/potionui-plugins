@@ -58,7 +58,7 @@ Les dix menus regroupent toutes les commandes de la page. La recherche de comman
 | **Édition** | Annuler, Rétablir, Copier, Coller, Dupliquer, Supprimer, Rechercher un média. |
 | **Montage** | Les trois outils, Couper à la tête de lecture, les ajustements du début et de la fin, Modifier la durée, points d’entrée et de sortie, Effacer la plage, Ajouter un marqueur, Ajouter un titre, Fondus d’entrée et de sortie. |
 | **Plan** | Nouveau plan, Informations, Afficher la source, Prises du plan, Éditeur de plan, Passer la prise en final, Couleur du plan, Raccorder la couleur au plan précédent, Favori, Rejeter, Retirer la marque. |
-| **Production** | Direction globale, Découper le synopsis en plans, Contrôle de continuité, Générer la sélection, Qualité brouillon et finale, la file de génération, Annuler la génération, Résultats et prises, Assembler les prises choisies, Edit Engine. |
+| **Production** | Direction globale, Découper le synopsis en plans, Contrôle de continuité, Générer la sélection, Qualité brouillon et finale, la file de génération, Annuler la génération, Résultats et prises, Assembler les prises choisies, Passer le film en final, Edit Engine. |
 | **Audio** | Ajouter une piste audio, Importer un son de la bibliothèque, Importer un son depuis l’ordinateur, Console de mixage, Voix et dialogues et l’atelier Sound design. |
 | **Présentation** | Lecture, boucle, plein écran, guides de cadrage, Comparer les prises, Scope de luminance, Indicateurs audio, zoom de la timeline, Magnétisme. |
 | **Fenêtre** | Les cinq espaces, Storyboard en bande, les quatre vues de Director AI, les espaces de références, Panneau latéral, Inspecteur, Assistant PotionUI, Bibliothèque de prompts, Index de la timeline, Tâches en arrière-plan. |
@@ -419,14 +419,34 @@ Les projets faits avant les étiquettes gardent leurs marques : une prise choisi
 
 ### Passer en final
 
-**Passer en final** sur une carte brouillon (aussi le bouton d’une carte du Storyboard, **Passer la prise A en final** dans l’inspecteur, **Plan › Passer la prise en final** et Ctrl+Shift+G) ouvre la fenêtre « Passer en final · Plan 2 · A » avec la ligne « Brouillon en 832×480 · graine 123456 ». Elle propose deux voies :
+**Passer en final** sur une carte brouillon (aussi le bouton d’une carte du Storyboard, **Passer la prise A en final** dans l’inspecteur, **Plan › Passer la prise en final** et Ctrl+Shift+G) ouvre la fenêtre « Passer en final · Plan 2 · A » avec la ligne « Brouillon en 832×480 · graine 123456 ». Elle propose deux voies, et une troisième quand votre administrateur a installé le rendu guidé :
 
 - **Agrandissement** est la voie par défaut. Le moteur agrandit la prise telle quelle : l’image et le mouvement ne changent pas, et c’est le plus rapide. Les prises de Wan, LTX, MiniMax H3 Fast et VDN, MiniMax H3 (12 GB) et MiniMax H3 Fast (12 GB), et des modèles cloud passent par SeedVR2 (« SeedVR2 agrandit cette prise telle quelle : le plus rapide, le mouvement ne change pas. ») ; une prise du preset MiniMax H3 de base utilise le mode d’agrandissement de son propre preset (« MiniMax H3 agrandit cette prise avec son propre mode d’agrandissement : le mouvement ne change pas. »). Choisissez la **Résolution cible** : 720p, 1080p, 1440p ou 4K (la fenêtre part de la résolution de votre projet), puis cliquez sur « Agrandir en 1080p ».
 - **Générer à nouveau en pleine résolution** génère le plan à nouveau à la plus grande résolution du moteur, avec la même graine : « plus lent, le résultat peut légèrement différer. »
+- **Rendu guidé** refait le plan avec LTX-2.5 à sa plus grande taille (1280×720 en 16:9) en suivant cette prise : « même mouvement, même cadrage, plus de détail. » Il part de la première image du plan, ou de celle de la prise quand le plan n’en a pas ou a été modifié depuis, et repose le son de la prise sur la nouvelle. Il est expérimental : plus lent qu’un agrandissement, et l’aspect peut s’écarter de la prise. Le bouton n’apparaît que si LTX-2.5 et son IC-LoRA Layout-To-Render sont installés et vous sont attribués.
 
 Quand aucun agrandisseur ne vous est attribué, la fenêtre affiche le badge **Agrandisseur indisponible** et l’explication « Agrandir cette prise demande SeedVR2 : demandez à un administrateur de l’installer, ou générez la prise à nouveau en pleine résolution. » (le bouton **Passer en final** de cette carte de prise affiche la même phrase en infobulle), les résolutions sont grisées et seul le nouveau rendu est proposé. Une prise du preset MiniMax H3 de base n’a pas besoin de SeedVR2, tant que son preset vous est attribué. Un agrandissement prend du temps : sur une carte graphique de 12 Go, l’agrandissement en 1080p d’un brouillon Wan de 5 secondes a pris environ deux heures et demie. Une capture de cette fenêtre, dans les thèmes sombre et clair de l’interface en anglais, se trouve dans `docs/screenshots/make-final.png`.
 
-La nouvelle prise est une prise **Final** (« Qualité finale » ou « Qualité finale · agrandie » sur sa carte) qui dit de quel brouillon elle vient (« issue de A »). Vous obtenez « Agrandissement en 1080p lancé » ou « Rendu en 1280×720 lancé », le final apparaît dans la liste de cartes quand il se termine, et il est mis sur le plan (« Version finale prête et appliquée au plan »). Un final consomme des minutes GPU comme toute prise et est vérifié par rapport à votre quota.
+La nouvelle prise est une prise **Final** (« Qualité finale », « Qualité finale · agrandie » ou « Qualité finale · guidée » sur sa carte) qui dit de quel brouillon elle vient (« issue de A »). Vous obtenez « Agrandissement en 1080p lancé », « Rendu en 1280×720 lancé » ou « Rendu guidé en 1280×720 lancé », le final apparaît dans la liste de cartes quand il se termine, et il est mis sur le plan (« Version finale prête et appliquée au plan »). Un final consomme des minutes GPU comme toute prise et est vérifié par rapport à votre quota.
+
+### Passer le film en final
+
+Quand chaque plan du Storyboard a sa prise **Finale**, passez tout le film en final d’un coup : **Production › Passer le film en final…**, ou **Film final** dans l’en-tête du Storyboard (bande et grille), en bas de la vue **Revue** de Director AI, et sur la carte **Passage en final** de **Synopsis et découpage › À produire**. Le bouton donne les plans en qualité finale sur les plans générés (« Film final 3/8 »), une roue pendant que des finales tournent, et une coche quand tout le film est en final.
+
+La fenêtre « Passer le film en final » fait comme **Passer en final**, pour tous les plans à la fois. Chaque plan part de sa prise Finale, qui sert de référence : son mouvement et son cadrage sont gardés. Choisissez une fois :
+
+- la **Méthode** : **Agrandir** (par défaut), **Rendu guidé** ou **Nouveau rendu**, chacune avec son explication et ce que devient le son (« Son : le son de chaque prise est gardé. ») ;
+- pour un agrandissement, la **Résolution cible** et, quand le film a des prises du preset MiniMax H3 de base, l’**Agrandisseur** : **Automatique** (ce preset agrandit ses propres prises, SeedVR2 les autres) ou **SeedVR2 pour tout**.
+
+Le projet garde votre choix pour la fois suivante. La fenêtre liste ensuite les plans avec leur état :
+
+- **À passer** : sa prise Finale est un brouillon ;
+- **Déjà en final** : il est sauté, sauf si vous activez **Refaire les plans déjà en final (N)**, qui les repasse en final depuis leur brouillon (ils indiquent alors **À refaire**) ;
+- **En cours** avec son pourcentage, ou **En file** : une finale du plan est déjà en route, et il est sauté ;
+- **Pas de prise Finale** : le plan n’a pas encore de prise terminée étiquetée Finale. La fenêtre nomme ces plans (« 2 plans n’ont pas encore de prise Finale (04, 07) : ils restent tels quels dans le film. ») et son bouton devient **Lancer sans les plans manquants (N)**, pour que le film ne passe jamais en final incomplet sans le dire ;
+- **Source importée** : un plan fait d’une vidéo importée est toujours sauté.
+
+Chaque ligne montre aussi la prise dont elle part (« Prise A · 832×480 »), **Prompt modifié** quand le plan a été modifié après elle, et « Dernière finale en échec » ou « Dernière finale annulée » quand sa dernière finale a échoué ou a été annulée. Sous la liste, l’estimation de tout le lot : le temps quand il a été mesuré, la mémoire, les minutes GPU face à votre quota, et les raisons qui le bloquent, chacune avec ses plans. **Passer N plans en final** lance toutes les finales d’un coup (« Passage en final lancé : 8 prises ») ; elles attendent dans la file comme toute prise, et la barre Production montre leur progression. Rouvrez la fenêtre pour les suivre : « 3 prises finales en cours » avec une barre de progression, et **Annuler le lot (3)**, qui arrête les prises finales encore en file ou en cours (« Passage en final annulé : 3 prises arrêtées »). Chaque finale terminée est posée sur son plan et devient **Finale**, et le brouillon reste dans les prises du plan, comme **Candidate**.
 
 ## 10. Assistant
 

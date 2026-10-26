@@ -1,0 +1,11 @@
+[
+  {"value": {"method": "upscale", "target": "fhd1080", "upscaler": "auto"}, "expected": {"method": "upscale", "target": "fhd1080", "upscaler": "auto"}},
+  {"value": {"method": "guided"}, "expected": {"method": "guided"}},
+  {"value": {"method": "render", "target": "8k", "upscaler": "rtx", "redo": true}, "expected": {"method": "render"}},
+  {"value": {"target": "uhd2160", "upscaler": "seedvr2"}, "expected": {"target": "uhd2160", "upscaler": "seedvr2"}},
+  {"value": {}, "expected": null},
+  {"value": {"method": "remaster"}, "expected": null},
+  {"value": null, "expected": null},
+  {"value": "upscale", "expected": null},
+  {"value": ["upscale"], "expected": null}
+]

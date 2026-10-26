@@ -39,6 +39,7 @@
 
 	function qualityText() {
 		if (take.kind === 'upscale') return t('generation.card.upscale');
+		if (take.kind === 'guided') return t('generation.card.guided');
 		return take.quality === 'final' ? t('generation.card.qualityFinal') : t('generation.card.qualityDraft');
 	}
 

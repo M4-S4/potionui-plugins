@@ -2,7 +2,7 @@ from typing import Any, Dict, NoReturn, Optional
 
 from fastapi import APIRouter, Body, Depends
 
-from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, keyframes, limits, projects, settings
+from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, director, keyframes, limits, projects, settings
 from .core_bridge import AccountType, User, get_current_active_user
 from .responses import fail, ok
 
@@ -40,7 +40,7 @@ def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
             "engines": catalog.video_engines(),
             "presets": video_presets,
             "keyframe_presets": [preset.summary() for preset in keyframes.edit_presets(user)],
-            "features": {"upscaler": any(preset["upscaler"] for preset in video_presets)},
+            "features": {"upscaler": any(preset["upscaler"] for preset in video_presets), "guided": director.guided_ready(user)},
             "upscale_targets": list(catalog.UPSCALE_TARGETS),
             "ffmpeg": _ffmpeg(),
         }

@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.plugin_api.limits as api_limits
-from backend import core_bridge, presets, projects
+from backend import core_bridge, director, presets, projects
 from src.plugin_api import AccountType, FieldDescription, ModeDescription, PresetDescription, get_current_active_user
 from src.plugin_api.cloud import CLOUD_ENGINE
 from src.plugin_api.limits import LimitStatus
@@ -199,7 +199,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "engines": [],
             "presets": [],
             "keyframe_presets": [],
-            "features": {"upscaler": False},
+            "features": {"upscaler": False, "guided": False},
             "upscale_targets": ["hd720", "fhd1080", "qhd1440", "uhd2160"],
             "ffmpeg": False,
         },
@@ -954,13 +954,31 @@ def test_me_gives_a_cloud_preset_the_modes_of_all_its_preset_modes(client, store
 
 def test_me_turns_the_upscaler_feature_on_with_seedvr2(client, store, no_container, catalog):
     catalog.presets = [_wan()]
-    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False}
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "guided": False}
 
     catalog.presets = [_wan(), _seedvr2()]
     data = client.get(ME_URL).json()["data"]
 
-    assert data["features"] == {"upscaler": True}
+    assert data["features"] == {"upscaler": True, "guided": False}
     assert data["upscale_targets"] == ["hd720", "fhd1080", "qhd1440", "uhd2160"]
+
+
+def test_me_turns_the_guided_feature_on_with_ltx_2_5_and_its_layout_to_render_ic_lora(client, store, no_container, catalog, monkeypatch):
+    ltx = _description(
+        presets.LTX_2_5,
+        "LTX-2.5",
+        vars={"video_director": {"preset_modes": ["video"], "modes": {"t2v": {}, "director": {"ic_lora": True}}}},
+        modes={"video": _mode()},
+    )
+    catalog.presets = [_wan(), ltx]
+    monkeypatch.setattr(core_bridge, "installed_model_for_file", lambda filename: None)
+    assert client.get(ME_URL).json()["data"]["features"]["guided"] is False
+
+    monkeypatch.setattr(core_bridge, "installed_model_for_file", lambda filename: "lora-1" if filename == director.GUIDE_LORA else None)
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "guided": True}
+
+    catalog.presets = [_wan()]
+    assert client.get(ME_URL).json()["data"]["features"]["guided"] is False
 
 
 def _cloud_preset(preset_id=presets.OPENROUTER_VIDEO, name="OpenRouter Video"):
