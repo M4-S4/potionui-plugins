@@ -2,6 +2,17 @@ import { isInFlight, sortTakes } from './generation.js';
 
 export const takeStore = $state({ projectId: null, list: [], loaded: false });
 
+const listeners = new Set();
+
+export function onTake(listener) {
+	listeners.add(listener);
+	return () => listeners.delete(listener);
+}
+
+function told(take, live) {
+	for (const listener of listeners) listener(take, live);
+}
+
 export function resetTakes(projectId = null) {
 	takeStore.projectId = projectId;
 	takeStore.list = [];
@@ -12,6 +23,7 @@ export function setTakes(projectId, list) {
 	takeStore.projectId = projectId;
 	takeStore.list = list;
 	takeStore.loaded = true;
+	for (const take of takeStore.list) told(take, false);
 }
 
 export function takeById(id) {
@@ -23,7 +35,9 @@ export function upsertTake(take) {
 	const i = takeStore.list.findIndex((t) => t.id === take.id);
 	if (i < 0) takeStore.list.push(take);
 	else Object.assign(takeStore.list[i], take);
-	return takeById(take.id);
+	const stored = takeById(take.id);
+	told(stored, true);
+	return stored;
 }
 
 export function patchTake(id, fields) {

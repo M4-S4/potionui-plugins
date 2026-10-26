@@ -103,7 +103,41 @@ async def end_frame(owner: User, project: Mapping[str, Any], shot_id: str) -> Di
     asset = asset_of(doc, clip.get("assetId"))
     if asset is None or asset.get("kind") != "video":
         raise _no_media()
-    shot_takes = takes.list_takes(project["id"])
+    return await cut_frame(owner, project["id"], clip, asset)
+
+
+def take_asset(take: Mapping[str, Any]) -> Dict[str, Any]:
+    """The asset the page makes of a finished take, as far as finding its file needs."""
+    return {"id": f"gen-{take['id']}", "kind": "video", "resultId": take["id"], "generated": True}
+
+
+async def take_end_frame(owner: User, project: Mapping[str, Any], shot_id: str, take: Mapping[str, Any]) -> Dict[str, Any]:
+    """Store the frame a finished take of a shot ends on once placed on it: the shot's cut starts at 0 on a take just placed, so the end is its duration, or the take's when the shot is gone; as end_frame does."""
+    clip = next((item for item in project["doc"].get("clips") or [] if item.get("id") == shot_id), None)
+    length = float(clip.get("dur") or 0) if clip is not None else float(take.get("duration_s") or 0)
+    return await cut_frame(owner, project["id"], {"id": shot_id, "srcIn": 0, "dur": length}, take_asset(take))
+
+
+def media_of(owner_id: str, frame: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """The library media of a stored frame, as the page reads it, or None when its library item cannot be found."""
+    item = core_bridge.upload_item(owner_id, frame["value"]) or {}
+    if not item.get("item_id"):
+        return None
+    return {
+        "kind": "library",
+        "item_id": item["item_id"],
+        "media_type": "image",
+        "url": f"/api/media/uploads/{media.basename(frame['value'])}",
+        "filename": frame["filename"],
+        "width": item.get("width"),
+        "height": item.get("height"),
+        "origin": {"kind": "library", "itemId": item["item_id"]},
+    }
+
+
+async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset: Mapping[str, Any]) -> Dict[str, Any]:
+    """Store the last frame the video of asset shows at the end of the cut of clip, as end_frame does."""
+    shot_takes = takes.list_takes(project_id)
     resolver = media.Resolver(owner)
     found = media.locate(asset, shot_takes, resolver)
     if found is None or not found.kind:

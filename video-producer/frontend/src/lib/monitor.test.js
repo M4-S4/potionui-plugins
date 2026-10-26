@@ -93,7 +93,10 @@ test('monitor: every color change of a shot brings that shot to the monitor', ()
 	const matching = source('../components/inspector/MatchSection.svelte');
 	assert.match(matching, /function setStrength\(v\) \{\n\t\tclip\.match\.strength = v;\n\t\tshowShot\(clip\);\n\t\}/);
 	assert.match(matching, /format=\{strength\} onchange=\{setStrength\}/);
-	assert.match(source('./continuity.svelte.js'), /clip\.preset = 'Raccord';\n\t\}\);\n\tshowShot\(clip\);/);
+	const continuity = source('./continuity.svelte.js');
+	assert.match(continuity, /clip\.preset = 'Raccord';\n\}/);
+	assert.match(continuity, /act\(\(\) => correct\(clip, ca, cb\)\);\n\tshowShot\(clip\);/);
+	assert.match(continuity, /for \(const step of plan\) correct\(step\.clip, step\.from, step\.to\);\n\t\}\);\n\tshowShot\(plan\[0\]\.clip\);/);
 	const lib = source('./match.svelte.js');
 	assert.match(lib, /act\(\(\) => \(live\.match = \{[^\n]+\}\)\);\n\t\tshowShot\(live\);/);
 	assert.match(lib, /act\(\(\) => delete clip\.match\);\n\tshowShot\(clip\);/);

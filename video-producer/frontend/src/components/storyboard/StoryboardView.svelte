@@ -4,13 +4,15 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf } from '../../lib/state.svelte.js';
+	import { ui, doc, select, act, secs, clamp, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf } from '../../lib/state.svelte.js';
 	import { takesOf, promoteToFinal, shotActivity, shotEngineText, soundOf } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { clipThumb } from '../../lib/media.js';
 	import { stages } from '../../lib/catalog.js';
-	import { seam } from '../../lib/continuity.svelte.js';
+	import { colorIssues, matchAll, seam } from '../../lib/continuity.svelte.js';
+	import { shotWaitText } from '../../lib/chain.svelte.js';
+	import { overlayLayer } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { shotStale } from '../../lib/shots.js';
 	import { activityStep } from '../../lib/generation.js';
@@ -18,6 +20,8 @@
 	import DraftsField from '../shots/DraftsField.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import BandView from './BandView.svelte';
+	import ChainChip from './ChainChip.svelte';
+	import SeamPanel from './SeamPanel.svelte';
 	import ViewSwitch from './ViewSwitch.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
 
@@ -36,6 +40,10 @@
 	]);
 
 	const counts = $derived(Object.keys(stages).map((k) => [k, doc.clips.filter((c) => c.stage === k).length]));
+	const colorFixes = $derived(doc.clips.length > 1 ? colorIssues() : 0);
+	const SEAM_MENU = 'dropdown:seam:';
+	const seamClip = $derived(typeof ui.menuOpen === 'string' && ui.menuOpen.startsWith(SEAM_MENU) ? (doc.clips.find((c) => ui.menuOpen === SEAM_MENU + c.id) ?? null) : null);
+	let seamAnchor = null;
 	const isSel = (c) => ui.selection?.kind === 'clip' && ui.selection.id === c.id;
 	const primaryIcon = { draft: 'arrow-up', final: 'layers' };
 
@@ -84,6 +92,22 @@
 		select('clip', c.id);
 		deleteSelection();
 	}
+	function openSeamMenu(e, c) {
+		e.stopPropagation();
+		if (ui.menuOpen === SEAM_MENU + c.id) return (ui.menuOpen = null);
+		seamAnchor = e.currentTarget.getBoundingClientRect();
+		ui.menuOpen = SEAM_MENU + c.id;
+	}
+	function placeSeamMenu(node) {
+		const r = node.getBoundingClientRect();
+		const a = seamAnchor ?? { left: 8, right: 8 + r.width, top: 8, bottom: 8 };
+		const below = a.bottom + 6 + r.height <= window.innerHeight - 8;
+		node.style.left = `${clamp(a.right - r.width, 8, window.innerWidth - r.width - 8)}px`;
+		node.style.top = `${below ? a.bottom + 6 : Math.max(8, a.top - r.height - 6)}px`;
+	}
+	function closeSeamMenu() {
+		if (seamClip) ui.menuOpen = null;
+	}
 
 	function onDragStart(e, c) {
 		dragId = c.id;
@@ -122,6 +146,11 @@
 			{/each}
 		</div>
 		<div class="flex shrink-0 items-center gap-3">
+			{#if colorFixes}
+				<HostUi name="Tooltip" props={{ text: t('storyboard.matchAllTip'), wrapperClass: 'inline-flex' }}>
+					<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: hostIconName('palette'), onclick: matchAll }}>{t('storyboard.matchAll', { count: colorFixes })}</HostUi>
+				</HostUi>
+			{/if}
 			<ViewSwitch />
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => addShot() }}>{t('storyboard.addShot')}</HostUi>
 			<div class="vp-seg" role="group" aria-label={t('storyboard.size.group')}>
@@ -132,7 +161,7 @@
 		</div>
 	</ZoneHeader>
 
-	<div class="min-h-0 flex-1 overflow-auto p-5" role="list" ondragend={reset}>
+	<div class="min-h-0 flex-1 overflow-auto p-5" role="list" ondragend={reset} onscroll={closeSeamMenu}>
 		<div class="grid {cols[size]} gap-x-5 gap-y-6">
 			{#each doc.clips as c, i (c.id)}
 				{@const thumb = clipThumb(c)}
@@ -141,6 +170,7 @@
 				{@const sm = i > 0 ? seam(i) : null}
 				{@const activity = shotActivity(c.id)}
 				{@const busy = activity.state === 'running'}
+				{@const waiting = busy && !activity.running ? shotWaitText(c.id) : ''}
 				{@const stale = shotStale(c, takes)}
 				{@const ownEngine = shotEngineText(c)}
 				{@const sound = soundOf(c)}
@@ -176,16 +206,24 @@
 								<span class="text-xs text-fg-muted">{t('storyboard.placeholder')}</span>
 							</div>
 						{/if}
-						<span class="vp-tc absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">{String(i + 1).padStart(2, '0')}</span>
+						<div class="absolute left-2 top-2 z-10 flex items-center gap-1">
+							<span class="vp-tc rounded-md bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">{String(i + 1).padStart(2, '0')}</span>
+							{#if i > 0}<ChainChip clip={c} />{/if}
+						</div>
 						{#if sm?.issues.length}
-							<span
-								class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-warning-solid text-black"
-								role="img"
+							<button
+								type="button"
+								class="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-warning-solid text-black {seamClip?.id === c.id ? 'ring-2 ring-signal' : ''}"
 								title={sm.issues.map((x) => x.text).join('\n')}
 								aria-label={t('storyboard.seamIssue')}
+								aria-expanded={seamClip?.id === c.id}
+								aria-haspopup="dialog"
+								data-vp-menu
+								data-seam-alert={c.id}
+								onclick={(e) => openSeamMenu(e, c)}
 							>
 								<Icon name="alert" class="h-3.5 w-3.5" />
-							</span>
+							</button>
 						{/if}
 						{#if stale}
 							<span class="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-warning-solid px-1.5 py-0.5 text-xs font-medium text-black" style:max-width="calc(100% - 4.75rem)" title={t('storyboard.staleTip')}><Icon name="pencil" class="h-3 w-3 shrink-0" /><span class="truncate">{t('storyboard.stale')}</span></span>
@@ -193,7 +231,7 @@
 						<span class="vp-tc absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-white backdrop-blur-sm">{secs(c.dur)}</span>
 						{#if busy}
 							<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 backdrop-blur-[2px]" transition:fade={{ duration: ms(150) }}>
-								<span class="max-w-[90%] truncate text-xs text-white">{activityStep(activity) || (activity.running ? t('generation.state.running') : t('lib.status.queued'))}</span>
+								<span class="max-w-[90%] truncate text-xs text-white" data-chain-wait={waiting ? c.id : null}>{activityStep(activity) || (activity.running ? t('generation.state.running') : waiting || t('lib.status.queued'))}</span>
 								<div class="h-1 w-2/3 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-label={t('generation.shotProgress', { shot: clipLabel(c) })} aria-valuemin="0" aria-valuemax="100" aria-valuenow={activity.running ? Math.round(activity.progress) : undefined}>
 									<div class="h-full bg-white transition-[width] duration-150" style:width="{activity.progress}%"></div>
 								</div>
@@ -260,5 +298,12 @@
 			</button>
 		</div>
 	</div>
+	{#if seamClip}
+		{#key seamClip.id}
+			<div class="vp-menu w-80 p-3" style:position="fixed" role="dialog" aria-label={t('storyboard.seamIssue')} data-vp-menu use:overlayLayer use:placeSeamMenu>
+				<SeamPanel clip={seamClip} />
+			</div>
+		{/key}
+	{/if}
 </section>
 {/if}

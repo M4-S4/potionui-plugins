@@ -74,8 +74,8 @@ test('keys: Alt combinations read the physical key, focus rules recognise fields
 	assert.ok(!isActivationTarget(null));
 });
 
-test('icons: 77 source editor icons, 29 missing names plus 10 vp- variants for the host, 6 aliases', () => {
-	assert.equal(Object.keys(paths).length, 77);
+test('icons: 78 source editor icons, 29 missing names plus 10 vp- variants for the host, 6 aliases', () => {
+	assert.equal(Object.keys(paths).length, 78);
 	assert.equal(HOST_MISSING.length, 29);
 	assert.equal(HOST_VARIANTS.length, 10);
 	assert.equal(Object.keys(HOST_ALIASES).length, 6);

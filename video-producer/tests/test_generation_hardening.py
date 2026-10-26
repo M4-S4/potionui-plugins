@@ -9,7 +9,7 @@ from src.plugin_api import HookContext, get_current_active_user
 
 BASE = "/api/plugins/video-producer"
 GPU = "video-producer.gpu_minutes"
-SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 6}]
+SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 6, "firstFromPrevious": False}]
 ORDER = {"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.WAN}
 FRAME_ASSET = {"id": "b", "kind": "image", "name": "b", "origin": {"kind": "history", "generationId": "g-b", "fileId": "2"}}
 

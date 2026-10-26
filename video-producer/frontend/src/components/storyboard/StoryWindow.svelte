@@ -4,7 +4,6 @@
 	import { ui, doc, secs, clipLabel, proposeShots, acceptProposal } from '../../lib/state.svelte.js';
 	import { shotActivity, startGeneration, retryTake } from '../../lib/production.svelte.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
-	import { matchToPrevious } from '../../lib/continuity.svelte.js';
 	import { castCards, CHARACTERS, PLACES, cardsOf, names } from '../../lib/bible.js';
 	import { draftsOf } from '../../lib/shots.js';
 	import { stages } from '../../lib/catalog.js';
@@ -13,7 +12,7 @@
 	import { AVG_MAX, AVG_MIN, BAND_STEP, METHODS, mergeItem, moveItem, musicParts, removeItem, sentencesOf, splitItem } from '../../lib/band.js';
 	import { bandChecks, compareSeam, pickShot, selectedShot } from '../../lib/band.svelte.js';
 	import { ulid } from '../../lib/ulid.js';
-	import SeamAction from '../takes/SeamAction.svelte';
+	import SeamFix from './SeamFix.svelte';
 	import Icon from '../Icon.svelte';
 
 	const proposal = $derived(ui.storyProposal);
@@ -232,8 +231,7 @@
 					<Icon name={check.kind === 'seam' ? 'link' : check.kind === 'failed' ? 'alert' : 'pencil'} class="h-3.5 w-3.5 shrink-0 text-warning" />
 					<span class="vp-tc text-fg-subtle">{String(doc.clips.indexOf(check.clip) + 1).padStart(2, '0')}</span>
 					<span class="min-w-0 flex-1 text-fg-muted">{check.text}</span>
-					{#if check.kind === 'seam' && check.issue.fix}<button type="button" class="vp-link-hit shrink-0 text-fg underline decoration-signal underline-offset-2" onclick={() => matchToPrevious(check.clip)}>{t('panels.story.matchColor')}</button>{/if}
-					{#if check.kind === 'seam' && check.issue.kind.startsWith('chain_')}<span class="shrink-0"><SeamAction clip={check.clip} /></span>{/if}
+					{#if check.kind === 'seam'}<SeamFix clip={check.clip} issue={check.issue} />{/if}
 					{#if check.kind === 'failed'}<button type="button" class="vp-link-hit shrink-0 text-fg underline decoration-signal underline-offset-2" onclick={() => retryTake(check.take)}>{t('storyboard.check.retry')}</button>{/if}
 					{#if check.kind === 'stale'}<button type="button" class="vp-link-hit shrink-0 text-fg underline decoration-signal underline-offset-2" onclick={() => startGeneration({ clips: [check.clip], quality: 'draft' })}>{t('storyboard.check.regenerate')}</button>{/if}
 					{#if check.kind === 'prompt'}<button type="button" class="vp-link-hit shrink-0 text-fg underline decoration-signal underline-offset-2" onclick={() => writePrompt(check.clip)}>{t('storyboard.check.write')}</button>{/if}

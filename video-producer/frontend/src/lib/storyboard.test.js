@@ -339,5 +339,8 @@ test('progress: the timeline block and the storyboard card show the same shot ac
 	assert.match(timeline, /import \{ takesOf, shotActivity, shotEngineText(, \w+)* \} from '\.\.\/\.\.\/lib\/production\.svelte\.js';/);
 	assert.match(timeline, /\{@const activity = shotActivity\(c\.id\)\}/);
 	assert.match(timeline, /\{#if activity\.state === 'running'\}/);
-	for (const page of [timeline, storyboard]) assert.match(page, /activityStep\(activity\) \|\| \(activity\.running \? t\('generation\.state\.running'\) : t\('lib\.status\.queued'\)\)/);
+	for (const page of [timeline, storyboard]) {
+		assert.match(page, /\{@const waiting = (busy|activity\.state === 'running') && !activity\.running \? shotWaitText\(c\.id\) : ''\}/);
+		assert.match(page, /activityStep\(activity\) \|\| \(activity\.running \? t\('generation\.state\.running'\) : waiting \|\| t\('lib\.status\.queued'\)\)/);
+	}
 });

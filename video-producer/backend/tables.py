@@ -106,6 +106,8 @@ _ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (
     ("video_producer_takes", "label", "TEXT"),
     ("video_producer_takes", "shot_revision", "INTEGER"),
     ("video_producer_takes", "priority", "INTEGER NOT NULL DEFAULT 0"),
+    ("video_producer_takes", "chain", "TEXT"),
+    ("video_producer_takes", "chain_wait", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 _INDEXES = (

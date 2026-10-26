@@ -47,6 +47,8 @@ TRACK = "track"
 
 TRACK_PREFIX = "track:"
 
+CHAIN_PREFIX = "chain:"
+
 CONDITION = "condition"
 MUX = "mux"
 IGNORED = "ignored"
@@ -187,6 +189,7 @@ class ShotPlan:
     audio: Optional[ShotAudio] = None
     work_scale: float = 1.0
     reference: Optional[bible.ReferencePart] = None
+    chain: Optional[str] = None
 
     @property
     def needs_audio(self) -> bool:
@@ -206,6 +209,7 @@ class ShotPlan:
             "profile": self.profile,
             "quality": self.quality,
             "audio": self.audio.summary() if self.audio is not None else None,
+            "chain": self.chain,
         }
 
     def request_for(self, take_id: Optional[str] = None, seed: Optional[int] = None) -> Dict[str, Any]:
@@ -220,6 +224,17 @@ class ShotPlan:
             if isinstance(document, dict):
                 document["settings"]["seed"] = seed
         return request
+
+
+@dataclass(frozen=True)
+class Chain:
+    previous: str
+    asset_id: Optional[str] = None
+
+
+def chain_value(previous: str) -> str:
+    """The stand-in a request carries for the last image of the previous shot until it is taken."""
+    return f"{CHAIN_PREFIX}{previous}"
 
 
 @dataclass(frozen=True)
@@ -905,10 +920,11 @@ def bind_frames(
     last_allowed: bool = True,
     segment_id: Optional[str] = None,
     capabilities: Optional[Mapping[str, Any]] = None,
+    first_media: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], str]:
-    """The request with the shot's first and last frames bound, on segment_id of a director document when given, and the composition mode that results."""
+    """The request with the shot's first and last frames bound, on segment_id of a director document when given, and the composition mode that results; first_media, when given, is bound in place of the shot's first frame."""
     first, last = shot_frames(doc, shot_id)
-    first_media = _frame_media(user, doc, first)
+    first_media = first_media or _frame_media(user, doc, first)
     if first_media is None:
         return request, "t2v"
     placed = {"segment_id": segment_id, "capabilities": capabilities} if segment_id is not None else {"promote": True}
@@ -1002,11 +1018,25 @@ class _Context:
     silent: Mapping[str, Collection[str]] = field(default_factory=dict)
     fields: Dict[str, models.Fields] = field(default_factory=dict)
     cuts: List[TrackCut] = field(default_factory=list)
+    chained: Mapping[str, Chain] = field(default_factory=dict)
 
     def mode_fields(self, mode: str) -> models.Fields:
         if mode not in self.fields:
             self.fields[mode] = models.form_fields(self.preset.id, mode)
         return self.fields[mode]
+
+
+def _chain_media(context: _Context, shot_id: str) -> Optional[Dict[str, Any]]:
+    chained = context.chained.get(shot_id)
+    if chained is None:
+        return None
+    if chained.asset_id is not None:
+        return _frame_media(context.user, context.doc, {"assetId": chained.asset_id})
+    return {"value": chain_value(chained.previous), "media_type": "image"}
+
+
+def _chain_of(context: _Context, shot_id: str, media: Optional[Dict[str, Any]], director_mode: str) -> Optional[str]:
+    return context.chained[shot_id].previous if media is not None and director_mode != "t2v" else None
 
 
 def _text_only(preset: Preset) -> bool:
@@ -1096,6 +1126,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     if mixed:
         document = audio_document(document, seconds, fps, capabilities)
     request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
+    chained: Optional[Dict[str, Any]] = None
     if context.profile == REF2VA:
         request["form_data"]["references"] = [entry.value for entry in sent]
         director_mode = REFS_MODE
@@ -1104,6 +1135,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         warnings.append(note("text_only_preset", "The preset generates from text only: the frames of the shot are not used.", shot_id=shot_id))
     else:
         modes = catalog.director_modes(preset.variables)
+        chained = None if _text_only(preset) else _chain_media(context, shot_id)
         request, director_mode = bind_frames(
             context.user,
             doc,
@@ -1112,6 +1144,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
             last_allowed=not modes or "flf" in modes,
             segment_id=SEGMENT_ID if mixed else None,
             capabilities=capabilities if mixed else None,
+            first_media=chained,
         )
         if director_mode == "t2v" and context.profile == FL2VA:
             warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
@@ -1134,6 +1167,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         audio=audio,
         work_scale=engine_options.work_scale(fields, request["form_data"]),
         reference=reference,
+        chain=_chain_of(context, shot_id, chained, director_mode),
     )
 
 
@@ -1218,7 +1252,8 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     tasks = model.get("tasks") or []
     first, last = shot_frames(doc, shot_id)
     image_task = IMG2VIDEO in tasks and IMG2VIDEO in preset.modes and _has_input(model, FIRST_FRAME, IMG2VIDEO)
-    first_media = _frame_media(context.user, doc, first) if image_task else None
+    chained = _chain_media(context, shot_id) if image_task else None
+    first_media = (chained or _frame_media(context.user, doc, first)) if image_task else None
     task = IMG2VIDEO if first_media is not None else TXT2VIDEO
     if task == TXT2VIDEO and (TXT2VIDEO not in tasks or TXT2VIDEO not in preset.modes):
         raise DirectorError("no_model", "The model needs a first frame for this shot.", shot_id=shot_id)
@@ -1255,7 +1290,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     director_mode = "t2v"
     if first_media is not None:
         request, director_mode = bind_frames(
-            context.user, doc, shot_id, request, last_allowed=_has_input(model, LAST_FRAME, IMG2VIDEO)
+            context.user, doc, shot_id, request, last_allowed=_has_input(model, LAST_FRAME, IMG2VIDEO), first_media=first_media
         )
     if director_mode == "t2v" and context.profile == FL2VA:
         warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
@@ -1277,6 +1312,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
         seed=chosen.seed,
         audio=audio,
         reference=reference,
+        chain=_chain_of(context, shot_id, chained, director_mode),
     )
 
 
@@ -1324,19 +1360,21 @@ def build_plans(
     profile: Optional[str] = None,
     overrides: bool = False,
     silent: Optional[Mapping[str, Collection[str]]] = None,
+    chained: Optional[Mapping[str, Chain]] = None,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds."""
+    """The generation request of each shot, with what blocks the run and what the user should know. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds. Chained maps a shot to the previous shot whose last image it starts from: when its engine starts from an image, a stand-in for that image (or the previous shot's still) is bound as its first frame and its plan names that shot in chain."""
     silent = silent or {}
+    chained = chained or {}
     if not overrides:
-        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent)
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent, chained)
     project = (preset_id, quality, model_id, profile)
     groups: Dict[Tuple[str, str, Optional[str], Optional[str]], List[str]] = {}
     for shot_id in dict.fromkeys(shot_ids):
         if clip_of(doc, shot_id) is not None:
             groups.setdefault(_engine_of(doc, shot_id, *project), []).append(shot_id)
     if not groups:
-        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent)
-    parts = [(key, ids, _build(user, doc, ids, *key, silent)) for key, ids in groups.items()]
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent, chained)
+    parts = [(key, ids, _build(user, doc, ids, *key, silent, chained)) for key, ids in groups.items()]
     main = next((part for key, _, part in parts if key == project), parts[0][2])
     plans = Plans(preset=main.preset, model=main.model, quality=quality, profile=main.profile)
     for key, ids, part in parts:
@@ -1357,6 +1395,7 @@ def _build(
     model_id: Optional[str],
     profile: Optional[str],
     silent: Mapping[str, Collection[str]],
+    chained: Optional[Mapping[str, Chain]] = None,
 ) -> Plans:
     profile = profile if profile in PROFILES else profile_of(doc)
     preset = find_preset(user, preset_id)
@@ -1387,6 +1426,7 @@ def _build(
         model=plans.model,
         draft_setting=str(settings.get_setting("draft_resolution")),
         silent=silent,
+        chained=chained or {},
     )
     plans.track_cuts = context.cuts
     missing: List[str] = []

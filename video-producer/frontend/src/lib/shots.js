@@ -132,6 +132,7 @@ function migrateClip(clip) {
 	const next = migrateShotEngine({ ...clip });
 	if ('drafts' in next && !(Number.isInteger(next.drafts) && next.drafts >= MIN_DRAFTS && next.drafts <= MAX_STORED_DRAFTS)) delete next.drafts;
 	if ('revision' in next && !(Number.isInteger(next.revision) && next.revision >= 0)) delete next.revision;
+	if ('firstFromPrevious' in next && typeof next.firstFromPrevious !== 'boolean') delete next.firstFromPrevious;
 	if ('referenceOverrides' in next) {
 		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next) }).filter(([, list]) => list.length);
 		if (kept.length) next.referenceOverrides = Object.fromEntries(kept);

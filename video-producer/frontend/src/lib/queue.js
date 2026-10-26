@@ -1,7 +1,7 @@
 import { isInFlight } from './generation.js';
 
 export const handedOver = (take) => take?.status === 'running' || Boolean(take?.generationId);
-export const isWaiting = (take) => take?.status === 'queued' && !take?.generationId;
+export const isWaiting = (take) => take?.status === 'queued' && !take?.generationId && take?.chain?.state !== 'waiting';
 
 function byQueue(a, b) {
 	const handed = Number(handedOver(b)) - Number(handedOver(a));

@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import core_bridge, limits, soundtrack, takes
+from . import chaining, core_bridge, limits, soundtrack, takes
 from .core_bridge import AccountType, User
 from .director import Plans, ShotPlan, note
 
@@ -45,6 +45,7 @@ class Evaluation:
     minutes: Dict[str, float]
     payload: Dict[str, Any]
     counts: Dict[str, int] = field(default_factory=dict)
+    waits: Dict[str, chaining.Wait] = field(default_factory=dict)
 
     @property
     def blocked(self) -> bool:
@@ -264,9 +265,10 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
 
 
 async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order, project_id: str = "") -> Evaluation:
-    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape, the time and the minutes following the steps the options of each shot ask for; the reference tracks a guided shot would send silent are left out."""
+    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape, the time and the minutes following the steps the options of each shot ask for; the reference tracks a guided shot would send silent are left out, and a shot that waits for the last image of the previous shot is planned from that image."""
+    found = chaining.waits(project_id, doc, order.shots)
     plans = await soundtrack.heard_plans(
-        owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, overrides=True
+        owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, overrides=True, chained=chaining.chain_map(found)
     )
     vram, vram_warnings = await _vram(owner, plans)
     counts = {plan.shot_id: order.count(plan.shot_id) for plan in plans.shots}
@@ -294,4 +296,5 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
         "blocks": blocks,
         "warnings": warnings,
     }
-    return Evaluation(plans=plans, variants=order.variants, minutes=minutes, payload=payload, counts=counts)
+    waits = {plan.shot_id: found[plan.shot_id] for plan in plans.shots if plan.chain}
+    return Evaluation(plans=plans, variants=order.variants, minutes=minutes, payload=payload, counts=counts, waits=waits)

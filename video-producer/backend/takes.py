@@ -63,6 +63,8 @@ COLUMNS = (
     "created_at",
     "started_at",
     "finished_at",
+    "chain",
+    "chain_wait",
 )
 
 PUBLIC = (
@@ -105,11 +107,14 @@ PUBLIC = (
     "created_at",
     "started_at",
     "finished_at",
+    "chain",
 )
 
 _ACTIVE_SQL = "status IN ('queued', 'running')"
 
-_WAITING_SQL = "status = 'queued' AND generation_id IS NULL"
+_WAITING_SQL = "status = 'queued' AND generation_id IS NULL AND chain_wait = 0"
+
+_CHAIN_WAIT_SQL = "status = 'queued' AND generation_id IS NULL AND chain_wait = 1"
 
 _VIDEO_SQL = f"COALESCE(kind, '') != '{KEYFRAME}'"
 
@@ -151,6 +156,8 @@ def _take(row: Any) -> Dict[str, Any]:
     take["priority"] = int(take["priority"] or 0)
     take["units_reserved"] = float(take["units_reserved"] or 0)
     take["request"] = json.loads(take["request"]) if take["request"] else None
+    take["chain"] = json.loads(take["chain"]) if take["chain"] else None
+    take["chain_wait"] = bool(take["chain_wait"])
     return take
 
 
@@ -191,13 +198,19 @@ def create_take(fields: Dict[str, Any]) -> Dict[str, Any]:
 
     take = {column: None for column in COLUMNS}
     take.update(
-        {"id": generate_ulid(), "status": "queued", "chosen": False, "priority": 0, "units_reserved": 0.0, "created_at": _now()}
+        {"id": generate_ulid(), "status": "queued", "chosen": False, "priority": 0, "units_reserved": 0.0, "created_at": _now(), "chain_wait": False}
     )
     take.update({key: value for key, value in fields.items() if key in COLUMNS})
     if take["label"] not in LABELS:
         take["label"] = legacy_label(take["chosen"], take["flag"]) if take["chosen"] or take["flag"] else initial_label(take["quality"])
     take.update(_marks(take["label"]))
-    values = {**take, "chosen": int(bool(take["chosen"])), "request": json.dumps(take["request"]) if take["request"] else None}
+    values = {
+        **take,
+        "chosen": int(bool(take["chosen"])),
+        "request": json.dumps(take["request"]) if take["request"] else None,
+        "chain": json.dumps(take["chain"]) if take["chain"] else None,
+        "chain_wait": int(bool(take["chain_wait"])),
+    }
     with db.get_cursor() as cursor:
         cursor.execute(
             f"INSERT INTO {TAKES} ({', '.join(COLUMNS)}) VALUES ({', '.join('?' for _ in COLUMNS)})",
@@ -258,7 +271,7 @@ def waiting_user_ids() -> List[str]:
     with db.get_cursor() as cursor:
         cursor.execute(
             f"SELECT user_id, MIN(created_at) AS first FROM {TAKES} "
-            "WHERE status = 'queued' AND generation_id IS NULL AND user_id IS NOT NULL GROUP BY user_id ORDER BY first"
+            f"WHERE {_WAITING_SQL} AND user_id IS NOT NULL GROUP BY user_id ORDER BY first"
         )
         return [row["user_id"] for row in cursor.fetchall()]
 
@@ -445,3 +458,20 @@ def calibration(
             (preset_id, backend_id, resolution, limit),
         )
         return [(float(row["seconds"]), int(row["duration_ms"])) for row in cursor.fetchall()]
+
+
+def chain_waiting() -> List[Dict[str, Any]]:
+    """The queued takes that wait for the last image of the previous shot before the queue may hand them over, oldest first."""
+    return _fetch_all(f"{_SELECT} WHERE {_CHAIN_WAIT_SQL} ORDER BY created_at, id")
+
+
+def take_frame(take_id: str, chain: Dict[str, Any], request: Dict[str, Any]) -> bool:
+    """Record the first image a waiting take got and the request that carries it, the take joining the queue; False when it no longer waits."""
+    from src.plugin_api import db
+
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            f"UPDATE {TAKES} SET chain = ?, request = ?, chain_wait = 0 WHERE id = ? AND {_CHAIN_WAIT_SQL}",
+            (json.dumps(chain), json.dumps(request), take_id),
+        )
+        return cursor.rowcount == 1

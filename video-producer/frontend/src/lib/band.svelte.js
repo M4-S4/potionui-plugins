@@ -2,7 +2,7 @@ import { t } from '../i18n/index.svelte.js';
 import { ui, doc, act, relayout, select, moveClip, promptOf, toast, clipLabel, secs } from './state.svelte.js';
 import { takesOf, findTake, shotDurationLimit, settleRelease, labelTake } from './production.svelte.js';
 import { applyShotDraft, shotDraft, shotStale } from './shots.js';
-import { seam } from './continuity.svelte.js';
+import { identityTakes, seam } from './continuity.svelte.js';
 import { seek } from './playback.svelte.js';
 import { ulid } from './ulid.js';
 import { BAND_STEP, ghostLayout, insertIndex, lastFailure, previewable } from './band.js';
@@ -96,6 +96,26 @@ export function compareSeam(clip = selectedShot()) {
 	ui.preview = null;
 	ui.compare = null;
 	ui.seamCompare = ui.seamCompare === clip.id ? null : clip.id;
+}
+
+export function compareSeamTakes(clip) {
+	const pair = identityTakes(clip);
+	if (!pair) return;
+	ui.workspace = 'storyboard';
+	ui.storyView = 'band';
+	select('clip', clip.id);
+	ui.seamCompare = null;
+	ui.preview = null;
+	ui.compare = pair;
+}
+
+export function openSeam(clip) {
+	ui.workspace = 'storyboard';
+	ui.storyView = 'band';
+	pickShot(clip);
+	ui.compare = null;
+	ui.preview = null;
+	ui.seamCompare = clip.id;
 }
 
 export function proposalLayout() {

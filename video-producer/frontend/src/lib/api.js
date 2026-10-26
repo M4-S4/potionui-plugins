@@ -2,7 +2,7 @@ import { progressText } from './generation.js';
 import { LABELS, legacyLabel } from './labels.js';
 import { filenameFrom, lastSegment, normalizeJob, jobPath } from './exports.js';
 import { normalizeSeamMedia, requestBody } from './seam.js';
-import { normalizeFrameSource } from './chain.js';
+import { normalizeChain, normalizeFrameSource } from './chain.js';
 import { normalizeKeyframeEstimate, normalizeKeyframePreset } from './keyframes.js';
 
 const CODE_BY_STATUS = {
@@ -354,7 +354,8 @@ export function normalizeTake(value) {
 		unitsReserved: number(value.units_reserved, 0),
 		createdAt: text(value.created_at) || null,
 		startedAt: text(value.started_at) || null,
-		finishedAt: text(value.finished_at) || null
+		finishedAt: text(value.finished_at) || null,
+		chain: normalizeChain(value.chain)
 	};
 }
 

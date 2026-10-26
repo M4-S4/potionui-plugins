@@ -7,6 +7,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { commandById } from '../../lib/commands.js';
 	import { lastFailure } from '../../lib/band.js';
+	import { colorIssues, matchAll } from '../../lib/continuity.svelte.js';
 	import { bandChecks, selectedShot } from '../../lib/band.svelte.js';
 	import { emptyActions } from '../../lib/empty.js';
 	import BandLanes from './BandLanes.svelte';
@@ -23,6 +24,7 @@
 	const running = $derived(doc.clips.filter((c) => shotActivity(c.id).state === 'running').length);
 	const failed = $derived(doc.clips.filter((c) => lastFailure(takesOf(c))).length);
 	const checks = $derived(doc.clips.length ? bandChecks().length : 0);
+	const colorFixes = $derived(doc.clips.length > 1 ? colorIssues() : 0);
 	const key = (id) => commandById(id)?.key || undefined;
 	const total = $derived(doc.clips.reduce((sum, c) => sum + c.dur, 0));
 	const openCut = () => ((ui.storyOpen = true), (ui.storyTab = 'cut'));
@@ -58,6 +60,11 @@
 				{#if checks}<span class="vp-tc min-w-4 rounded-full bg-warning-solid px-1 text-center text-2xs font-semibold leading-4 text-black" title={t('storyboard.story.checksTip', { count: checks })}>{checks}</span>{/if}
 			</button>
 		</HostUi>
+		{#if colorFixes}
+			<HostUi name="Tooltip" props={{ text: t('storyboard.matchAllTip'), wrapperClass: 'inline-flex shrink-0' }}>
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: hostIconName('palette'), onclick: matchAll }}>{t('storyboard.matchAll', { count: colorFixes })}</HostUi>
+			</HostUi>
+		{/if}
 		<ViewSwitch />
 		<div class="flex shrink-0 items-center gap-1" role="group" aria-label={t('timeline.zoom')}>
 			<HostUi name="IconButton" props={{ icon: hostIconName('magnet'), label: t('timeline.snapping'), size: 'sm', class: 'vp-h7 vp-toggle', ariaPressed: ui.snapping, kbd: key('snap'), onclick: () => (ui.snapping = !ui.snapping) }} />

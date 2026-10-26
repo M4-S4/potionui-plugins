@@ -2,6 +2,30 @@ import { framesOf } from './seam.js';
 
 const FRAME_NAME = /^(.+)-frame-(?:last|-?\d[\d.e+-]*s)\.png$/i;
 
+export const LUM_GAP = 0.12;
+export const WARM_GAP = 0.1;
+
+export const colorsApart = (from, to) => Math.abs(to.lum - from.lum) > LUM_GAP || Math.abs(to.warm - from.warm) > WARM_GAP;
+
+export function colorPlanOf(pairs) {
+	const plan = [];
+	let carry = null;
+	pairs.forEach((pair, index) => {
+		if (!pair?.from || !pair?.to) {
+			carry = null;
+			return;
+		}
+		const from = carry ? { lum: pair.from.lum + carry.lum, warm: pair.from.warm + carry.warm } : pair.from;
+		if (!colorsApart(from, pair.to)) {
+			carry = null;
+			return;
+		}
+		plan.push({ index, from, to: pair.to });
+		carry = { lum: from.lum - pair.to.lum, warm: from.warm - pair.to.warm };
+	});
+	return plan;
+}
+
 function decoded(value) {
 	try {
 		return decodeURIComponent(value);

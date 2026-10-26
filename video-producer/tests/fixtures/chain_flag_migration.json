@@ -1,0 +1,10 @@
+[
+  {"value": true, "expected": true},
+  {"value": false, "expected": false},
+  {"value": "yes", "expected": null},
+  {"value": 1, "expected": null},
+  {"value": 0, "expected": null},
+  {"value": null, "expected": null},
+  {"value": {"on": true}, "expected": null},
+  {"value": [true], "expected": null}
+]
