@@ -221,6 +221,11 @@ function baseNoteText(note) {
 	if (code === 'prompt_too_long') return t('generation.warn.promptTooLong', { shot: shotName(data.shot_id), tokens: data.tokens ?? '—', limit: data.limit ?? '—' });
 	if (code === 'reference_prompt_changed') return t('generation.warn.referenceChanged', { shot: shotName(data.shot_id) });
 	if (code === 'reference_prompt_ignored') return t('generation.warn.referenceIgnored', { shot: shotName(data.shot_id) });
+	if (code === 'dialogue_ignored') return t('generation.warn.dialogueIgnored', { shot: shotName(data.shot_id) });
+	if (code === 'dialogue_speaker_unknown') return t('generation.warn.dialogueSpeakerUnknown', { shot: shotName(data.shot_id) });
+	if (code === 'dialogue_speaker_not_cast') return t('generation.warn.dialogueSpeakerNotCast', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });
+	if (code === 'dialogue_too_long') return t('generation.warn.dialogueTooLong', { shot: shotName(data.shot_id), words: data.words ?? '—', limit: data.limit ?? '—' });
+	if (code === 'dialogue_voice_not_sent') return t('generation.warn.dialogueVoiceNotSent', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });
 	if (code === 'engine_option_invalid') return t('generation.warn.optionInvalid', { engine: presetLabel(presetById(data.preset_id)) || engineOptionLabel(data.preset_id, null), fields: optionNames(data.preset_id, Array.isArray(data.fields) ? data.fields : []) });
 	return note?.message || code || '';
 }

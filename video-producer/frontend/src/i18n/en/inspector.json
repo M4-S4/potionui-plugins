@@ -201,5 +201,9 @@
 	"lane.shotsNone": "No shot edge falls inside the clips of this track.",
 	"lane.shotsTooMany": "The shots would cut its clips into more than {max} slices each.",
 	"section.cast": "Cast",
+	"section.dialogue": "Dialogue",
+	"dialogue.offscreen": " (off-screen)",
+	"dialogue.none": "No line.",
+	"dialogue.edit": "Edit the dialogue…",
 	"takes.drafts": "Drafts of this shot"
 }

@@ -175,5 +175,10 @@
 	"warn.bibleLabelMissing": "« {shot} » : l’instruction ne nomme pas {labels}, distribué dans le plan.",
 	"warn.promptTooLong": "« {shot} » : le prompt prend environ {tokens} jetons, plus que les {limit} que lit le moteur ; sa fin risque d’être ignorée.",
 	"warn.referenceChanged": "« {shot} » : ses références ou sa distribution ont changé depuis le remplacement de la partie du prompt qui en est tirée ; le texte remplacé part toujours.",
-	"warn.referenceIgnored": "« {shot} » : la partie du prompt tirée de ses références a été remplacée pour un autre moteur ; c’est la partie composée qui part."
+	"warn.referenceIgnored": "« {shot} » : la partie du prompt tirée de ses références a été remplacée pour un autre moteur ; c’est la partie composée qui part.",
+	"warn.dialogueIgnored": "« {shot} » : ce moteur ne génère pas de parole ; les répliques du plan ne sont pas envoyées.",
+	"warn.dialogueSpeakerUnknown": "« {shot} » : une réplique cite un personnage que la bible n’a plus ; une voix sans nom la dit.",
+	"warn.dialogueSpeakerNotCast": "« {shot} » : {labels} parle à l’écran sans être distribué dans le plan.",
+	"warn.dialogueTooLong": "« {shot} » : {words} mots de dialogue, plus que les {limit} que le plan porte à un débit naturel.",
+	"warn.dialogueVoiceNotSent": "« {shot} » : la voix de {labels} n’est pas parmi les références envoyées ; le moteur l’invente."
 }

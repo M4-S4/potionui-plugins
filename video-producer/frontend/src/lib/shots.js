@@ -2,6 +2,7 @@ import { labelOf } from './labels.js';
 import { SEAM_STRENGTH, frameTime, framesOf } from './seam.js';
 import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
 import { castOf, migrateCast, sameCast, setCast } from './bible.js';
+import { linesOf, migrateDialogue, sameDialogue, setDialogue } from './dialogue.js';
 import { migrateReferencePrompt, referencePromptOf, sameReferencePrompt, setReferencePrompt } from './refprompt.js';
 
 export const MIN_DRAFTS = 1;
@@ -119,6 +120,7 @@ export function inputsChanged(before, after) {
 		!sameList([...(before.excludeLanes ?? [])].sort(), [...(after.excludeLanes ?? [])].sort()) ||
 		!sameList(before.own.map((r) => `${r.id}:${r.assetId}:${r.type}`), after.own.map((r) => `${r.id}:${r.assetId}:${r.type}`)) ||
 		!sameCast(before.cast, after.cast) ||
+		!sameDialogue(before.dialogue, after.dialogue) ||
 		!sameReferencePrompt(before.referencePrompt, after.referencePrompt)
 	);
 }
@@ -144,6 +146,11 @@ function migrateClip(clip) {
 		const cast = migrateCast(next.cast);
 		if (cast) next.cast = cast;
 		else delete next.cast;
+	}
+	if ('dialogue' in next) {
+		const lines = migrateDialogue(next.dialogue);
+		if (lines) next.dialogue = lines;
+		else delete next.dialogue;
 	}
 	return next;
 }
@@ -197,6 +204,7 @@ export function shotDraft(doc, clip, engine) {
 		drafts: draftsOf(clip, engine),
 		engine: shotEngineOf(clip),
 		cast: castOf(clip),
+		dialogue: linesOf(clip),
 		referencePrompt: referencePromptOf(clip)
 	};
 }
@@ -249,6 +257,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	if (draft.drafts !== before.drafts || Number.isInteger(clip.drafts)) clip.drafts = count(draft.drafts) ?? projectDrafts(engine);
 	if ('engine' in draft) setShotEngine(clip, draft.engine);
 	if ('cast' in draft) setCast(clip, draft.cast);
+	if ('dialogue' in draft) setDialogue(clip, draft.dialogue);
 	if ('referencePrompt' in draft) setReferencePrompt(clip, draft.referencePrompt);
 	const released = resized ? releaseOverrun(doc, clip, was) : null;
 	if (changed) touch(clip);

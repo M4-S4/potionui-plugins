@@ -128,7 +128,10 @@ IDS = {**_array(ID), "uniqueItems": True}
 
 CAST = _object({}, optional={"characters": IDS, "place": REF})
 
-CHARACTER = _object({"id": ID, "label": TEXT, "text": TEXT, "props": TEXT, "references": IDS})
+CHARACTER = _object(
+    {"id": ID, "label": TEXT, "text": TEXT, "props": TEXT, "references": IDS},
+    optional={"voice": TEXT, "language": TEXT, "voiceRef": REF},
+)
 
 PLACE = _object({"id": ID, "label": TEXT, "text": TEXT, "references": IDS})
 
@@ -137,6 +140,8 @@ BIBLE = _object({"characters": _array(CHARACTER), "places": _array(PLACE)})
 PROMPT_PARTS = _object({}, optional={name: TEXT for name in PARTS})
 
 REFERENCE_PROMPT = _object({"layout": _enum(*LAYOUTS), "parts": PROMPT_PARTS, "base": PROMPT_PARTS})
+
+LINE = _object({"id": ID, "speaker": REF, "text": TEXT}, optional={"offscreen": FLAG})
 
 OPTION_LORA = _object({"model": ID, "strength": NUMBER})
 
@@ -177,6 +182,7 @@ CLIP = _object(
         "engine": SHOT_ENGINE,
         "cast": CAST,
         "referencePrompt": REFERENCE_PROMPT,
+        "dialogue": _array(LINE),
     },
 )
 
@@ -351,6 +357,7 @@ DOC_SCHEMA: Dict[str, Any] = {
             "hybrid": HYBRID,
             "firstFromPrevious": FLAG,
             "bible": BIBLE,
+            "dialogueLanguage": TEXT,
             REMOVED_TAKES: IDS,
         },
     ),
@@ -485,12 +492,25 @@ def _cast(clip: Any, characters: Set[Any], places: Set[Any]) -> Any:
     return {**clip, "cast": kept} if kept else {key: value for key, value in clip.items() if key != "cast"}
 
 
+def _spoken(clip: Any, characters: Set[Any]) -> Any:
+    lines = clip.get("dialogue") if isinstance(clip, dict) else None
+    if not isinstance(lines, list):
+        return clip
+    kept = [
+        {**line, "speaker": None} if isinstance(line, dict) and line.get("speaker") is not None and line["speaker"] not in characters else line
+        for line in lines
+    ]
+    if all(new is old for new, old in zip(kept, lines)):
+        return clip
+    return {**clip, "dialogue": kept}
+
+
 def _removed_takes(value: Any) -> List[str]:
     return list(dict.fromkeys(item for item in value if isinstance(item, str) and item)) if isinstance(value, list) else []
 
 
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, and the takes whose video the user removed kept as distinct ids, the key dropped when none is left; the same object when nothing changes."""
+    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, and the takes whose video the user removed kept as distinct ids, the key dropped when none is left; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -513,7 +533,8 @@ def migrate(doc: Any) -> Any:
         changes["references"] = [*kept, *motions]
     clips = doc.get("clips")
     if isinstance(clips, list):
-        cast = [_cast(clip, _card_ids(doc, "characters"), _card_ids(doc, "places")) for clip in clips]
+        characters = _card_ids(doc, "characters")
+        cast = [_spoken(_cast(clip, characters, _card_ids(doc, "places")), characters) for clip in clips]
         if any(new is not old for new, old in zip(cast, clips)):
             changes["clips"] = cast
     if not changes and not any(key in doc for key in dropped):

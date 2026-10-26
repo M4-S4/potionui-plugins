@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, engine_options, models, presets, settings
+from . import bible, catalog, core_bridge, dialogue, engine_options, models, presets, settings
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -70,6 +70,8 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "keep_setting": "<Subject {subject}> (appears in [Shot 1]): partially_preserved - keeps the place, the subjects, the light and the colours; the framing follows the camera move.",
         "keep_motion": "{label} (motion of [Shot 1]): attribute_transfer - its motion is carried over to the subjects of the shot.",
         "keep_audio": "{label} (sound of [Shot 1]): reference - its voice or sound serves as a reference.",
+        "define_voice": "{label} is the voice of {who}.",
+        "keep_voice": "{label} (sound of [Shot 1]): reference - the voice of {who}, kept for its lines.",
         "cite_setting": "The shot takes place in <Subject {subject}>.",
         "cite_character": "<Subject {subject}> appears in the shot.",
         "soundscape": "The natural ambient sound of the place and the physical sounds of the action described above.",
@@ -84,6 +86,8 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "keep_setting": "<Subject {subject}> (appears in [Shot 1]): partially_preserved - garde le lieu, les sujets, la lumière et les couleurs ; le cadrage suit le mouvement de caméra.",
         "keep_motion": "{label} (mouvement de [Shot 1]): attribute_transfer - son mouvement est repris par les sujets du plan.",
         "keep_audio": "{label} (son de [Shot 1]): reference - sa voix ou son son sert de référence.",
+        "define_voice": "{label} est la voix de {who}.",
+        "keep_voice": "{label} (son de [Shot 1]): reference - la voix de {who}, gardée pour ses répliques.",
         "cite_setting": "Le plan se déroule dans <Subject {subject}>.",
         "cite_character": "<Subject {subject}> apparaît dans le plan.",
         "soundscape": "Le son ambiant naturel du lieu et les sons physiques de l'action décrite plus haut.",
@@ -403,6 +407,12 @@ def audio_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any
     return [*scoped, *shared]
 
 
+def mixed_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
+    """The audio references of the shot that can be mixed onto a take: the voice of a character is a sample for the engine, never a sound of the shot."""
+    voices = dialogue.voice_references(doc)
+    return [reference for reference in audio_references(doc, shot_id) if reference.get("id") not in voices]
+
+
 def audio_behavior(preset: Preset, profile: Optional[str]) -> str:
     """How an engine takes the sound of a shot: as a guide in MiniMax-H3's reference mode, mixed onto the take when its director mode declares audio, else not at all."""
     if profile == REF2VA:
@@ -462,16 +472,16 @@ def _audio_note(behavior: str, shot_id: str) -> Dict[str, Any]:
 
 def _ignored_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
     shot_id = clip["id"]
-    if not audio_references(doc, shot_id) and not reference_lanes(doc, shot_id, *mux_window(clip, seconds)):
+    if not mixed_references(doc, shot_id) and not reference_lanes(doc, shot_id, *mux_window(clip, seconds)):
         return None
     warnings.append(_audio_note(IGNORED, shot_id))
     return ShotAudio(behavior=IGNORED, start=0.0, end=0.0)
 
 
 def mux_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
-    """What a shot mixes onto its take: the part of its reference tracks under it and its audio references, or None when it has neither."""
+    """What a shot mixes onto its take: the part of its reference tracks under it and its audio references other than the voices of the bible, or None when it has neither."""
     shot_id = clip["id"]
-    references = [str(reference["assetId"]) for reference in audio_references(doc, shot_id)]
+    references = [str(reference["assetId"]) for reference in mixed_references(doc, shot_id)]
     start, end = mux_window(clip, seconds)
     if not references and not reference_lanes(doc, shot_id, start, end):
         return None
@@ -534,25 +544,29 @@ def direction_lines(doc: Mapping[str, Any]) -> List[str]:
 
 
 def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> Tuple[str, bible.ReferencePart]:
-    """The shot's prompt and the part of it made from its cast: the instruction, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, re-announced after the action in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines. A part the shot replaces for itself goes as it is in the same place."""
+    """The shot's prompt and the part of it made from its cast: the instruction, its lines when the engine speaks, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, re-announced after the action and the lines in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines. A part the shot replaces for itself goes as it is in the same place."""
     instruction = shot_instruction(doc, clip)
     direction = direction_lines(doc)
-    plain = [line for line in [instruction, *direction] if line]
     characters, place = bible.cast_of(doc, clip)
     language = _language(doc)
+    lines = dialogue.lines_of(doc, clip)
     if engine == bible.H3:
         cast = [*characters, *([place] if place is not None else [])]
         subjects = " ".join(bible.definition(card, index, language) for index, card in enumerate(cast, 1))
+        spoken = dialogue.h3_lines(doc, lines, {card.id: index for index, card in enumerate(cast, 1)}) if lines else ""
+        plain = [line for line in [instruction, spoken, *direction] if line]
         reference = bible.reference_part(clip, bible.SUBJECTS_LAYOUT, {bible.SUBJECT_DEFINITIONS: subjects})
         part = reference.sent[bible.SUBJECT_DEFINITIONS]
         return "\n\n".join(text for text in (f"subject_definitions: {part}" if part else "", "\n".join(plain)) if text), reference
+    spoken = dialogue.ltx_lines(doc, lines, language) if engine == bible.LTX and lines else ""
+    plain = [line for line in [instruction, spoken, *direction] if line]
     described = bible.prose(characters, place, language)
     reference = bible.reference_part(clip, bible.CAST_LAYOUT, {bible.CAST_PART: (" " if engine == bible.LTX else "\n").join(described)})
     part = reference.sent[bible.CAST_PART]
     if not part:
         return "\n".join(plain), reference
     if engine == bible.LTX:
-        return " ".join([*([_sentence(instruction)] if instruction else []), part, *(_sentence(line) for line in direction)]), reference
+        return " ".join([*([_sentence(instruction)] if instruction else []), *([spoken] if spoken else []), part, *(_sentence(line) for line in direction)]), reference
     return "\n".join([part, *plain]), reference
 
 
@@ -610,6 +624,64 @@ def _bible_warnings(
         )
 
 
+def _dialogue_warnings(
+    doc: Mapping[str, Any],
+    clip: Mapping[str, Any],
+    engine: str,
+    seconds: float,
+    warnings: List[Dict[str, Any]],
+    sent: Optional[Sequence[SentReference]] = None,
+) -> None:
+    lines = dialogue.lines_of(doc, clip)
+    if not lines:
+        return
+    shot_id = clip["id"]
+    if engine not in (bible.H3, bible.LTX):
+        warnings.append(note("dialogue_ignored", "This engine does not generate speech: the lines of the shot are not sent.", shot_id=shot_id))
+        return
+    if any(line.named and line.speaker is None for line in lines):
+        warnings.append(
+            note("dialogue_speaker_unknown", "A line names a character the bible no longer has, or one without a label: it is said by an unnamed voice.", shot_id=shot_id)
+        )
+    characters, _ = bible.cast_of(doc, clip)
+    cast = {card.id for card in characters}
+    absent = list(dict.fromkeys(line.speaker.label for line in lines if line.speaker is not None and not line.offscreen and line.speaker.id not in cast))
+    if absent:
+        warnings.append(
+            note(
+                "dialogue_speaker_not_cast",
+                f"{', '.join(absent)} speak{'s' if len(absent) == 1 else ''} on screen without being cast in the shot: the engine does not see their description.",
+                shot_id=shot_id,
+                labels=absent,
+            )
+        )
+    spoken, limit = dialogue.words(lines), dialogue.word_limit(seconds)
+    if spoken > limit:
+        warnings.append(
+            note(
+                "dialogue_too_long",
+                f"The lines of the shot take {spoken} words, more than the {limit} a {seconds:g}-second shot carries at a natural pace.",
+                shot_id=shot_id,
+                words=spoken,
+                limit=limit,
+            )
+        )
+    if sent is None:
+        return
+    given = {(entry.item or {}).get("id") for entry in sent if entry.origin == REFERENCE}
+    speakers = list(dict.fromkeys(line.speaker for line in lines if line.speaker is not None))
+    unsent = [card.label for card in speakers if card.voice_ref and card.voice_ref not in given]
+    if unsent:
+        warnings.append(
+            note(
+                "dialogue_voice_not_sent",
+                f"The voice of {', '.join(unsent)} is not among the references the shot sends: the engine invents it.",
+                shot_id=shot_id,
+                labels=unsent,
+            )
+        )
+
+
 def _language(doc: Mapping[str, Any]) -> str:
     language = doc.get("promptLanguage")
     return language if language in REFS_TEXT else "en"
@@ -629,10 +701,28 @@ def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[
     return compose_refs(doc, clip, sent, seconds)[0]
 
 
+def _subjects(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference]) -> Dict[str, int]:
+    numbers: Dict[str, int] = {}
+    subject = 0
+    for entry in sent:
+        if entry.role in ("character", "setting"):
+            subject += 1
+            card = bible.card_for_reference(doc, (entry.item or {}).get("id")) if entry.origin == REFERENCE else None
+            if card is not None:
+                numbers.setdefault(card.id, subject)
+    characters, place = bible.cast_of(doc, clip)
+    for card in [*characters, *([place] if place is not None else [])]:
+        if card.id not in numbers:
+            subject += 1
+            numbers[card.id] = subject
+    return numbers
+
+
 def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> Tuple[str, bible.ReferencePart]:
-    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself, its sound and its score. A reference linked to a card of the bible is defined with the card's words; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places."""
+    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself with its lines, its sound and its score. A reference linked to a card of the bible is defined with the card's words, and a sound that is the voice of a character as that character's voice; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places."""
     language = _language(doc)
     text = REFS_TEXT[language]
+    numbers = _subjects(doc, clip, sent)
     definitions: List[str] = []
     retention: List[str] = []
     citations: List[str] = []
@@ -651,6 +741,12 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
                 definitions.append(text[f"define_{role}"].format(subject=subject, label=entry.label))
             retention.append(text[f"keep_{kept}"].format(subject=subject))
             citations.append(text[f"cite_{kept}"].format(subject=subject))
+            continue
+        owner = dialogue.voice_owner(doc, (entry.item or {}).get("id")) if role == "audio" and entry.origin == REFERENCE else None
+        if owner is not None:
+            who = f"<Subject {numbers[owner.id]}>" if owner.id in numbers else owner.label
+            definitions.append(text["define_voice"].format(label=entry.label, who=who))
+            retention.append(text["keep_voice"].format(label=entry.label, who=who))
         else:
             definitions.append(text[f"define_{role}"].format(label=entry.label))
             retention.append(text[f"keep_{role}"].format(label=entry.label))
@@ -668,7 +764,9 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
     )
     parts = reference.sent
     instruction = shot_instruction(doc, clip)
-    shot = [*([_sentence(instruction)] if instruction else []), parts[bible.CITATIONS]]
+    lines = dialogue.lines_of(doc, clip)
+    spoken = dialogue.h3_lines(doc, lines, numbers, refs=True) if lines else ""
+    shot = [*([_sentence(instruction)] if instruction else []), parts[bible.CITATIONS], spoken]
     style = " ".join(_sentence(line) for line in direction_lines(doc))
     body = " ".join(line for line in shot if line)
     description = " ".join(part for part in (style, f"[Shot 1] {body}".rstrip()) if part)
@@ -991,6 +1089,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         prompt, reference = compose_shot(doc, clip, engine)
         audio = _shot_mux(context, clip, seconds, warnings)
     _bible_warnings(doc, clip, prompt, engine, warnings, reference)
+    _dialogue_warnings(doc, clip, engine, seconds, warnings, sent if context.profile == REF2VA else None)
     capabilities = catalog.director_of(preset.variables)
     document = _document(prompt, fps, seconds, resolution)
     mixed = audio is not None and audio.behavior == MUX
@@ -1140,6 +1239,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     fps = preset.fps
     prompt, reference = compose_shot(doc, clip, bible.CLOUD)
     _bible_warnings(doc, clip, prompt, bible.CLOUD, warnings, reference)
+    _dialogue_warnings(doc, clip, bible.CLOUD, seconds, warnings)
     form: Dict[str, Any] = {
         "seed": -1,
         "model": f"{models.MODEL_REF}{model['id']}",

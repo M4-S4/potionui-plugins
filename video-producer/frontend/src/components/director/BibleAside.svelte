@@ -2,7 +2,8 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, asset, toast, undo } from '../../lib/state.svelte.js';
-	import { CHARACTERS, PLACES, SPACES, LABEL_MAX, cardsOf, linkable, removeCard, shotsCasting, usable } from '../../lib/bible.js';
+	import { CHARACTERS, PLACES, SPACES, LABEL_MAX, cardsOf, linkable, removeCard, setVoice, shotsCasting, usable, voiceChoices } from '../../lib/bible.js';
+	import { LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
 	import { addCardImage, refTypeLabel } from '../../lib/references.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
@@ -15,6 +16,8 @@
 	const card = $derived(found?.[1] ?? null);
 	const references = $derived(kind ? linkable(doc, kind) : []);
 	const cast = $derived(card ? shotsCasting(doc, kind, card.id).length : 0);
+	const voices = $derived(voiceChoices(doc));
+	const languageName = (name) => t(`lib.language.${name}`);
 
 	const labelHint = (k) => (k === CHARACTERS ? t('panels.dock.bible.labelHint.characters') : t('panels.dock.bible.labelHint.places'));
 	const textLabel = (k) => (k === CHARACTERS ? t('panels.dock.bible.text.characters') : t('panels.dock.bible.text.places'));
@@ -57,6 +60,28 @@
 						<span class="vp-label">{t('panels.dock.bible.props')}</span>
 						<input class="input vp-dense w-full" bind:value={card.props} placeholder={t('panels.dock.bible.propsHint')} oninput={() => (ui.dirty = true)} />
 					</label>
+					<section class="space-y-2">
+						<div class="vp-section-title">{t('panels.dock.bible.voiceTitle')}</div>
+						<label class="block space-y-1">
+							<span class="vp-label">{t('panels.dock.bible.voice')}</span>
+							<input class="input vp-dense w-full" value={card.voice ?? ''} placeholder={t('panels.dock.bible.voiceHint')} oninput={(e) => { setVoice(card, 'voice', e.currentTarget.value); ui.dirty = true; }} />
+						</label>
+						<label class="block space-y-1">
+							<span class="vp-label">{t('panels.dock.bible.language')}</span>
+							<select class="vp-popup w-full" value={card.language ?? ''} onchange={(e) => act(() => setVoice(card, 'language', e.currentTarget.value))}>
+								<option value="">{t('panels.dock.bible.languageProject', { language: languageName(spokenLanguage(doc, null)) })}</option>
+								{#each LANGUAGES as name (name)}<option value={name}>{languageName(name)}</option>{/each}
+							</select>
+						</label>
+						<label class="block space-y-1">
+							<span class="vp-label">{t('panels.dock.bible.voiceRef')}</span>
+							<select class="vp-popup w-full" value={card.voiceRef ?? ''} onchange={(e) => act(() => setVoice(card, 'voiceRef', e.currentTarget.value))}>
+								<option value="">{t('panels.dock.bible.voiceRefNone')}</option>
+								{#each voices as r (r.id)}<option value={r.id}>{r.name || refTypeLabel(r.type)}</option>{/each}
+							</select>
+						</label>
+						<p class="text-xs text-fg-subtle">{voices.length ? t('panels.dock.bible.voiceRefHint') : t('panels.dock.bible.voiceRefEmpty')}</p>
+					</section>
 				{/if}
 				<section class="space-y-2">
 					<div class="vp-section-title">{t('panels.director.aside.images')}</div>

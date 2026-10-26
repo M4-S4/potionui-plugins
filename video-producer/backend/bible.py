@@ -68,6 +68,9 @@ class Card:
     text: str
     props: str = ""
     references: Tuple[str, ...] = ()
+    voice: str = ""
+    language: str = ""
+    voice_ref: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -143,6 +146,9 @@ def cards(doc: Mapping[str, Any], kind: str) -> List[Card]:
                 text=_clean(item.get("text")),
                 props=_clean(item.get("props")) if kind == CHARACTERS else "",
                 references=tuple(ref for ref in references if isinstance(ref, str)) if isinstance(references, list) else (),
+                voice=_clean(item.get("voice")) if kind == CHARACTERS else "",
+                language=_clean(item.get("language")) if kind == CHARACTERS else "",
+                voice_ref=item["voiceRef"] if kind == CHARACTERS and isinstance(item.get("voiceRef"), str) and item["voiceRef"] else None,
             )
         )
     return found
