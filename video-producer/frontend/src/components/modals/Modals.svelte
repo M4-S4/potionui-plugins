@@ -142,7 +142,7 @@
 				{#each shortcutList as c (c.id)}
 					<div class="flex break-inside-avoid items-center justify-between gap-3 py-1 text-sm">
 						<dt class="text-fg-muted">{c.label}</dt>
-						<dd><kbd class="vp-kbd text-xs">{c.key}</kbd></dd>
+						<dd class="flex shrink-0 gap-1"><kbd class="vp-kbd text-xs">{c.key}</kbd>{#if c.alias}<kbd class="vp-kbd text-xs">{c.aliasKey}</kbd>{/if}</dd>
 					</div>
 				{/each}
 			</dl>

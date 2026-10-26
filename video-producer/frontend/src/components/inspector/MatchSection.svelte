@@ -5,6 +5,7 @@
 	import { lutOf, matchStale } from '../../lib/match.js';
 	import { anchorKey, anchorThumb, anchorsOf, autoMatch, clearMatch, defaultAnchor, matchGaps, matchState, setDeflicker, storedAnchor } from '../../lib/match.svelte.js';
 	import { shotFrame } from '../../lib/media.js';
+	import { showShot } from '../../lib/monitor.svelte.js';
 	import SliderField from './SliderField.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -33,6 +34,11 @@
 		if (Math.abs(gap.warm) >= 2) parts.push(gap.warm > 0 ? t('inspector.match.warmer') : t('inspector.match.cooler'));
 		if (Math.abs(gap.tint) >= 2) parts.push(gap.tint > 0 ? t('inspector.match.magenta') : t('inspector.match.green'));
 		return parts.join(' · ');
+	}
+
+	function setStrength(v) {
+		clip.match.strength = v;
+		showShot(clip);
 	}
 
 	function pick(key) {
@@ -117,7 +123,7 @@
 		{/if}
 
 		{#if clip.match && !stale}
-			<SliderField label={t('inspector.match.strength')} value={clip.match.strength} min={0} max={100} format={strength} onchange={(v) => (clip.match.strength = v)} />
+			<SliderField label={t('inspector.match.strength')} value={clip.match.strength} min={0} max={100} format={strength} onchange={setStrength} />
 		{/if}
 
 		<HostUi name="Button" props={{ variant: clip.match && !stale ? 'secondary' : 'primary', size: 'xs', class: 'w-full justify-center', icon: 'sparkles', disabled: measuring || !chosen, onclick: () => autoMatch(clip, chosen) }}>

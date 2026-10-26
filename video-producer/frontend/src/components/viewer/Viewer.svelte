@@ -12,6 +12,7 @@
 	import { mediaFailure, mediaFormat } from '../../lib/playable.js';
 	import { frameDuration } from '../../lib/timebase.js';
 	import { lutOf } from '../../lib/match.js';
+	import { placedOn } from '../../lib/monitor.js';
 	import MatchCanvas from './MatchCanvas.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -44,6 +45,11 @@
 	let video = $state();
 	let picture = $state();
 	const lut = $derived(mode === 'sequence' && clip ? lutOf(clip) : null);
+	const resultShot = $derived(previewResult ? placedOn(doc.clips, previewResult) : null);
+	const resultLut = $derived(resultShot ? lutOf(resultShot) : null);
+	let resultVideo = $state();
+	let sides = $state({});
+	const graded = (shot) => Boolean(shot) && (clipFilter(shot) !== 'none' || Boolean(lutOf(shot)));
 	let failed = $state({});
 	const mark = (src, el, withSize = false) => {
 		const reason = mediaFailure(el, { video: withSize });
@@ -96,11 +102,14 @@
 				{#if compareRes.length === 2}
 					<div class="grid h-full grid-cols-2 gap-px bg-line">
 						{#each compareRes as res (res.id)}
+							{@const shot = placedOn(doc.clips, res)}
+							{@const look = shot ? lutOf(shot) : null}
 							<div class="relative overflow-hidden bg-black">
 								{#if playable(res) && failed[res.url]}
 									{@render cannotPlay(failed[res.url], takeLabel(res), res.url)}
 								{:else if playable(res)}
 									<video
+										bind:this={sides[res.id]}
 										src={res.url}
 										class="h-full w-full object-contain"
 										autoplay
@@ -109,13 +118,15 @@
 										playsinline
 										preload="auto"
 										aria-label={takeLabel(res)}
+										style:filter={shot ? clipFilter(shot) : null}
 										onerror={(e) => mark(res.url, e.currentTarget)}
 										onloadedmetadata={(e) => mark(res.url, e.currentTarget, true)}
 									></video>
+									{#if look && sides[res.id]}<MatchCanvas source={sides[res.id]} lut={look} filter={clipFilter(shot)} />{/if}
 								{:else if takeThumb(res)}
 									<img src={takeThumb(res)} alt="" class="h-full w-full object-cover" />
 								{/if}
-								<span class="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur-sm">{takeLabel(res)}</span>
+								<span class="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur-sm">{takeLabel(res)}{#if graded(shot)} <span class="text-white/60">{t('viewer.graded')}</span>{/if}</span>
 							</div>
 						{/each}
 					</div>
@@ -123,22 +134,29 @@
 					{#if playable(previewResult) && failed[previewResult.url]}
 						{@render cannotPlay(failed[previewResult.url], takeLabel(previewResult), previewResult.url)}
 					{:else if playable(previewResult)}
-						<video
-							src={previewResult.url}
-							class="h-full w-full object-contain"
-							controls
-							muted
-							playsinline
-							preload="metadata"
-							aria-label={takeLabel(previewResult)}
-							onerror={(e) => mark(previewResult.url, e.currentTarget)}
-							onloadedmetadata={(e) => mark(previewResult.url, e.currentTarget, true)}
-						></video>
+						{#key Boolean(resultLut)}
+							<video
+								bind:this={resultVideo}
+								src={previewResult.url}
+								class="h-full w-full object-contain"
+								controls={!resultLut}
+								autoplay={Boolean(resultLut)}
+								loop={Boolean(resultLut)}
+								muted
+								playsinline
+								preload={resultLut ? 'auto' : 'metadata'}
+								aria-label={takeLabel(previewResult)}
+								style:filter={resultShot ? clipFilter(resultShot) : null}
+								onerror={(e) => mark(previewResult.url, e.currentTarget)}
+								onloadedmetadata={(e) => mark(previewResult.url, e.currentTarget, true)}
+							></video>
+							{#if resultLut && resultVideo}<MatchCanvas source={resultVideo} lut={resultLut} filter={clipFilter(resultShot)} />{/if}
+						{/key}
 					{:else if takeThumb(previewResult)}
 						<img src={takeThumb(previewResult)} alt="" class="h-full w-full object-cover" />
 					{/if}
 					<div class="absolute inset-x-0 flex items-center gap-2 px-3 text-sm text-white {playable(previewResult) ? 'top-0 bg-gradient-to-b from-black/80 to-transparent pb-8 pt-12' : 'bottom-0 bg-gradient-to-t from-black/80 to-transparent pb-2.5 pt-8'}">
-						<span class="flex-1">{takeLabel(previewResult)} <span class="text-white/60">{t('viewer.outOfCut')}</span></span>
+						<span class="flex-1">{takeLabel(previewResult)} <span class="text-white/60">{t('viewer.outOfCut')}{#if graded(resultShot)} {t('viewer.graded')}{/if}</span></span>
 						{#if playable(previewResult)}
 							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => insertResult(previewResult.id) }}>{t('viewer.useTake')}</HostUi>
 						{/if}

@@ -11,10 +11,10 @@ const source = readFileSync(join(here, 'commands.js'), 'utf-8');
 const calls = [...source.matchAll(/(?<![\w$.])command\(\s*'([a-z0-9-]+)'/g)];
 const commands = calls.map((call, i) => {
 	const chunk = source.slice(call.index, calls[i + 1]?.index ?? source.length);
-	return { id: call[1], spec: /\bkeys:\s*'([^']+)'/.exec(chunk)?.[1] ?? null };
+	return { id: call[1], spec: /\bkeys:\s*'([^']+)'/.exec(chunk)?.[1] ?? null, alias: /\balias:\s*'([^']+)'/.exec(chunk)?.[1] ?? null };
 });
 const bound = commands.filter((c) => c.spec);
-const specs = bound.map((c) => c.spec);
+const specs = bound.flatMap((c) => [c.spec, c.alias].filter(Boolean));
 const SYMBOL = /^[^a-z0-9\s]$/;
 const FIXED = ['delete', 'home', 'end', 'arrowleft', 'arrowright', 'shift+arrowleft', 'shift+arrowright', 'arrowup', 'arrowdown', 'shift+mod+arrowleft', 'shift+mod+arrowright', '<', '>', 'shift+r', 'enter'];
 
@@ -111,6 +111,10 @@ test('shortcuts: 42 commands carry a shortcut, each one different, and the other
 			'assistant'
 		]
 	);
+	assert.deepEqual(
+		commands.filter((c) => c.alias).map((c) => [c.id, c.spec, c.alias]),
+		[['redo', 'shift+mod+z', 'mod+y']]
+	);
 	assert.equal(new Set(specs).size, specs.length);
 	for (const spec of FIXED) assert.ok(!specs.includes(spec), `${spec} is a fixed key`);
 	const labels = specs.map((spec) => formatShortcut(spec, { mac: false }));
@@ -150,6 +154,9 @@ test('shortcuts: every shortcut that is shown fires with exactly its keys and wi
 test('shortcuts: the key handler looks every key up in the table of the commands, with the guards the guides describe', () => {
 	const handler = source.slice(source.indexOf('export function handleKeydown'));
 	assert.match(handler, /findShortcut\(e, keymap, IS_MAC\)/);
+	assert.match(source, /\.\.\.allCommands\.flatMap\(\(c\) =>\n\t\t\[c\.keys, c\.alias\]\.filter\(Boolean\)\.map\(\(spec\) => \(\{ spec, run: c\.press, global: c\.global, repeat: c\.repeat, single: isSingleKey\(spec\) \}\)\)\n\t\),/);
+	assert.match(source, /get aliasKey\(\) \{\n\t\t\treturn alias \? shortcutLabel\(alias\) : '';\n\t\t\}/);
+	assert.match(readFileSync(join(here, '../components/modals/Modals.svelte'), 'utf-8'), /<kbd class="vp-kbd text-xs">\{c\.key\}<\/kbd>\{#if c\.alias\}<kbd class="vp-kbd text-xs">\{c\.aliasKey\}<\/kbd>\{\/if\}/);
 	assert.match(handler, /if \(hit\.when && !hit\.when\(\)\) return;/);
 	assert.match(handler, /!hit\.global && \(isTypingTarget\(target\) \|\| ui\.modal \|\| ui\.paletteOpen\)/);
 	assert.match(handler, /hit\.single && !ui\.singleKeyShortcuts/);

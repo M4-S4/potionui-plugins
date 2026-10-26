@@ -229,7 +229,7 @@ If you delete the project from another tab or device while it is open here, the 
 
 ### Undo and redo
 
-**Edit › Undo** and **Redo** (Ctrl+Z, Ctrl+Shift+Z) work on the changes you made in the page, up to 100 steps. The history is kept in the page, not in the project: loading the page again, opening another project, creating a project, restoring a version and a reload after a conflict all empty it. An undo is a change like any other, and it is saved too.
+**Edit › Undo** and **Redo** (Ctrl+Z; Ctrl+Shift+Z or Ctrl+Y) work on the changes you made in the page, up to 100 steps. The history is kept in the page, not in the project: loading the page again, opening another project, creating a project, restoring a version and a reload after a conflict all empty it. An undo is a change like any other, and it is saved too.
 
 ## 6. Media
 
@@ -554,6 +554,8 @@ Continuity is about the seams, the cut from one shot to the next. Video Producer
 
 An alert appears only when two neighbor shots do not match: "“Shot” is brighter, darker, warmer or cooler than the previous shot". It shows in Director AI (under **To check** in the left panel, and on the seam lines of the **Review** in **All shots**), in the Storyboard (under **Continuity**, and as a warning icon on the card of the shot) and in the Inspector. **Match** (**Match color** in the Storyboard) fixes it in one click by adjusting exposure and temperature to the previous shot. The **Color** tab also has the luminance scope, six presets (Original, Golden light, Cold morning, 35 mm film, Blue night, Soft) and fine settings (**Exposure**, **Contrast**, **Saturation**, **Temperature**), with **Reset** and **To all shots**. Before a shot has an image, the tab says that color can be adjusted once the shot is generated.
 
+**What the viewer shows.** Adjusting the color of a shot (a preset, a fine setting, **Reset**, **To all shots**, **Match**, **Auto match**, its **Strength** or **Remove**) brings that shot to the viewer, in every workspace: it becomes the selected shot, the playhead moves to its start when it was elsewhere, and a preview, a comparison or a seam that does not show it closes. The viewer shows the grade of a shot on the images of that shot: the cut under the playhead, the preview of the take placed on the shot (the one it plays), each placed take of a comparison, and both sides of a seam in the band, each with the grade of its own shot. A take that is not placed and a source media stay raw; a graded take says so next to its name ("shot grade"). With an **Auto match**, the preview of a placed take plays in a loop, without the browser's controls. The Storyboard grid and the Direction, Bible and References views of Director AI have no viewer: the playhead is already on the shot when you go to the band or to **Play**.
+
 The measure is made on real images, for each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A similarity percentage between two generated shots can also appear in the alerts ("Check the identity between … and … (similarity 78 %)"): it is simulated (chapter 17). Color is real.
 
 ### Auto match
@@ -761,7 +763,7 @@ What it never changes: nothing you typed is translated, and changing the setting
 
 ## 16. Keyboard shortcuts
 
-The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl, ⌥ for Alt and ⇧ for Shift; the menus and the tooltips show the notation of your system, and the side panel is ⌃⌘1 (Control and Command). **Search commands…** (Ctrl+K) finds any command, and **Keyboard shortcuts** (Ctrl+/) lists those that have a shortcut. The menus, the command search and that window show only the shortcuts that work.
+The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl, ⌥ for Alt and ⇧ for Shift; the menus and the tooltips show the notation of your system, and the side panel is ⌃⌘1 (Control and Command). **Search commands…** (Ctrl+K) finds any command, and **Keyboard shortcuts** (Ctrl+/) lists those that have a shortcut. The menus, the command search and that window show only the shortcuts that work. **Redo** has two: Ctrl+Shift+Z, which the menus, the tooltips and the command search show, and Ctrl+Y, which the **Keyboard shortcuts** window shows next to it.
 
 | Shortcut | Action |
 |---|---|
@@ -770,6 +772,7 @@ The table gives the shortcuts for Windows and Linux. On a Mac, read ⌘ for Ctrl
 | Ctrl+, | Preferences… |
 | Esc | Close, in this order: the command search, the open window, the open menu, a take preview or comparison; otherwise clear the selection |
 | Ctrl+Z, Ctrl+Shift+Z | Undo, Redo |
+| Ctrl+Y | Redo (second shortcut) |
 | Ctrl+S | Save |
 | Ctrl+O | Open… |
 | Ctrl+I | Import from the library… |

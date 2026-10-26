@@ -45,11 +45,12 @@ export function shortcutLabel(spec) {
 	return formatShortcut(spec, { mac: IS_MAC, names: { space: t('commands.kbd.space'), backspace: t('commands.kbd.backspace') } });
 }
 
-function command(id, run, { keys = null, check = null, global = false, press = null, repeat = false, vars = null } = {}) {
+function command(id, run, { keys = null, alias = null, check = null, global = false, press = null, repeat = false, vars = null } = {}) {
 	return {
 		id,
 		run,
 		keys,
+		alias,
 		check,
 		global,
 		press: press ?? run,
@@ -60,6 +61,9 @@ function command(id, run, { keys = null, check = null, global = false, press = n
 		},
 		get key() {
 			return keys ? shortcutLabel(keys) : '';
+		},
+		get aliasKey() {
+			return alias ? shortcutLabel(alias) : '';
 		},
 		get menu() {
 			return this.menuId ? t(`shell.menu.${this.menuId}`) : '';
@@ -191,7 +195,7 @@ export const menus = [
 		]
 	]),
 	menu('edit', [
-		[command('undo', undo, { keys: 'mod+z', repeat: true }), command('redo', redo, { keys: 'shift+mod+z', repeat: true })],
+		[command('undo', undo, { keys: 'mod+z', repeat: true }), command('redo', redo, { keys: 'shift+mod+z', alias: 'mod+y', repeat: true })],
 		[
 			command('copy', () => toast(t('lib.toast.copied'))),
 			command('paste', duplicateSelection),
@@ -406,9 +410,9 @@ const fixedBindings = [
 ];
 
 const keymap = [
-	...allCommands
-		.filter((c) => c.keys)
-		.map((c) => ({ spec: c.keys, run: c.press, global: c.global, repeat: c.repeat, single: isSingleKey(c.keys) })),
+	...allCommands.flatMap((c) =>
+		[c.keys, c.alias].filter(Boolean).map((spec) => ({ spec, run: c.press, global: c.global, repeat: c.repeat, single: isSingleKey(spec) }))
+	),
 	...fixedBindings
 ];
 

@@ -6,6 +6,7 @@ import { videoFrame } from './sources.svelte.js';
 import { frameStem, seamPick, takeStems } from './continuity.js';
 import { roleKind } from './seam.js';
 import { DEFAULT_STRENGTH, gapOf, labStats, movedStats, transferOf } from './match.js';
+import { showShot } from './monitor.svelte.js';
 
 const SAMPLE = 128;
 const TIMEOUT = 20000;
@@ -197,6 +198,7 @@ export async function autoMatch(clip, anchor) {
 		if (!target || !source) return toast(t('inspector.match.failed'), 'error');
 		const strength = live.match?.strength ?? DEFAULT_STRENGTH;
 		act(() => (live.match = { anchor: chosen.kind, anchorId: chosen.id, assetId, strength, source, target }));
+		showShot(live);
 		const gaps = matchGaps(live.match);
 		toast(t('inspector.match.done', { shot: clipLabel(live), before: deltaText(gaps.before.delta), after: deltaText(gaps.after.delta) }), 'success', { label: t('shell.toast.undo'), run: undo });
 	} finally {
@@ -207,6 +209,7 @@ export async function autoMatch(clip, anchor) {
 export function clearMatch(clip) {
 	if (!clip?.match) return;
 	act(() => delete clip.match);
+	showShot(clip);
 }
 
 export function setDeflicker(clip, on) {
