@@ -86,6 +86,6 @@
 			</div>
 		{/key}
 	{:else}
-		<p class="p-3 text-xs text-fg-subtle">{t('panels.director.aside.noCard')}</p>
+		<div class="p-3"><HostUi name="EmptyState" props={{ compact: true, icon: hostIconName('book'), title: t('panels.director.aside.noCardTitle'), description: t('panels.director.aside.noCard') }} /></div>
 	{/if}
 </aside>

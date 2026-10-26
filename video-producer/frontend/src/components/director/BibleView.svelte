@@ -4,12 +4,13 @@
 	import { ui, doc, act, asset, select, toast, clipLabel } from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { CHARACTERS, PLACES, addCard, cardsOf, labelOf, newCard, shotsCasting, usable } from '../../lib/bible.js';
-	import { cardImages, castWhereCited, citedWithout, isCast, recast, unnamedIn } from '../../lib/director.js';
+	import { VIEW_ICONS, cardImages, castWhereCited, citedWithout, isCast, recast, unnamedIn } from '../../lib/director.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { ulid } from '../../lib/ulid.js';
 	import DirectorViews from './DirectorViews.svelte';
+	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import Icon from '../Icon.svelte';
 
 	const groups = $derived([
@@ -58,14 +59,13 @@
 </script>
 
 <section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label={commandById('view-bible')?.label}>
-	<div class="flex h-10 shrink-0 items-center gap-3 border-b border-line px-4">
-		<DirectorViews />
-		<span class="shrink-0 text-sm font-semibold">{commandById('view-bible')?.label}</span>
+	<ZoneHeader icon={ui.sidebarOpen ? VIEW_ICONS.bible : null} title={commandById('view-bible')?.label}>
+		{#snippet lead()}<DirectorViews />{/snippet}
 		<span class="min-w-0 flex-1 truncate text-xs text-fg-subtle">{t('panels.director.sum.bible', { characters, places })}</span>
 		{#each groups as g (g.kind)}
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'shrink-0', onclick: () => add(g.kind) }}>{g.add}</HostUi>
 		{/each}
-	</div>
+	</ZoneHeader>
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		{#if !cards.length}

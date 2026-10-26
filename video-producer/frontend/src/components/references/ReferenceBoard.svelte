@@ -8,7 +8,10 @@
 	import { assetThumb } from '../../lib/media.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
 	import { engineLabel, supportedProfiles } from '../../lib/production.svelte.js';
+	import { VIEW_ICONS } from '../../lib/director.js';
 	import DirectorViews from '../director/DirectorViews.svelte';
+	import FilterPills from '../shell/FilterPills.svelte';
+	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import Icon from '../Icon.svelte';
 
 	let q = $state('');
@@ -26,6 +29,7 @@
 	const isSel = (r) => ui.selection?.kind === 'reference' && ui.selection.id === r.id;
 	const family = $derived(ui.refSpace === 'all' ? null : (fam(ui.refSpace) ?? null));
 	const inFamily = $derived(doc.references.filter((r) => !family || r.space === family.id).length);
+	const pills = $derived([{ id: 'all', label: t('references.all'), count: doc.references.length }, ...families.map((f) => ({ id: f.id, label: f.short, tip: f.hint, count: doc.references.filter((r) => r.space === f.id).length }))]);
 	const emptyProps = $derived({
 		icon: family?.icon ?? 'bookmark',
 		title: family ? t('references.empty.family', { family: family.label }) : t('references.empty.all'),
@@ -46,30 +50,21 @@
 </script>
 
 <section class="isolate flex min-w-0 flex-col bg-canvas" aria-label={t('references.title')}>
-	<div class="flex h-10 shrink-0 items-center gap-3 border-b border-line px-4">
-		<DirectorViews />
-		<span class="shrink-0 whitespace-nowrap text-sm font-semibold">{t('references.title')}</span>
-		<span class="shrink-0 whitespace-nowrap text-xs text-fg-subtle">{t('references.total', { count: doc.references.length })}</span>
+	<ZoneHeader icon={ui.sidebarOpen ? VIEW_ICONS.references : null} title={t('references.title')} subtitle={t('references.total', { count: doc.references.length })}>
+		{#snippet lead()}<DirectorViews />{/snippet}
 		{#if !sent && doc.references.length}
 			<HostUi name="Tooltip" props={{ text: t('generation.refs.why', { engine: engineLabel() }), wrapperClass: 'inline-flex shrink-0' }}>
 				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.refs.notSent')}</HostUi>
 			</HostUi>
 		{/if}
-		<div class="no-scrollbar ml-1 flex min-w-0 items-center gap-1 overflow-x-auto p-1" role="tablist" aria-label={t('references.families')}>
-			<button type="button" role="tab" class="vp-pill shrink-0" aria-selected={ui.refSpace === 'all'} onclick={() => (ui.refSpace = 'all')}>{t('references.all')}</button>
-			{#each families as f (f.id)}
-				<HostUi name="Tooltip" props={{ text: f.hint }}>
-					<button type="button" role="tab" class="vp-pill shrink-0" aria-selected={ui.refSpace === f.id} onclick={() => (ui.refSpace = f.id)}>{f.short}</button>
-				</HostUi>
-			{/each}
-		</div>
+		<FilterPills class="ml-1" label={t('references.families')} items={pills} value={ui.refSpace} onselect={(id) => (ui.refSpace = id)} />
 		<div class="flex-1"></div>
 		<div class="relative w-52 min-w-28">
 			<Icon name="search" class="pointer-events-none absolute left-2 top-1.5 h-4 w-4 text-fg-subtle" />
 			<input class="input vp-dense !pl-7" placeholder={t('references.search')} bind:value={q} aria-label={t('references.searchLabel')} />
 		</div>
 		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'shrink-0', onclick: () => addReference() }}>{t('references.add')}</HostUi>
-	</div>
+	</ZoneHeader>
 
 	<div class="flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-5">
 		{#if !inFamily}

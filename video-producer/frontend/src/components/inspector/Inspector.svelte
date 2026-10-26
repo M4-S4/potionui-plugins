@@ -183,27 +183,28 @@
 
 <aside class="flex min-h-0 flex-col overflow-hidden border-l border-line bg-surface-1" aria-label={t('inspector.title')} class:invisible={!ui.inspectorOpen}>
 	<div class="vp-panel-head border-b border-line">
-		<Icon name={item ? icons[s.kind] : 'info'} class="h-4 w-4 text-fg-muted" />
-		<span class="truncate text-sm font-semibold">{item ? kindTitle(s.kind) : t('inspector.title')}</span>
+		{#if item && s.kind === 'clip'}
+			<Tabs
+				label={t('inspector.tabs')}
+				class="vp-tabs-head"
+				value={ui.inspectorTab}
+				onselect={(id) => (ui.inspectorTab = id)}
+				items={[
+					{ id: 'video', label: t('inspector.tab.video') },
+					{ id: 'takes', label: t('inspector.tab.takes'), badge: takesOf(item).length || null },
+					{ id: 'color', label: t('inspector.tab.color') }
+				]}
+			/>
+		{:else}
+			<Icon name={item ? icons[s.kind] : 'info'} class="h-4 w-4 text-fg-muted" />
+			<span class="truncate text-sm font-semibold">{item ? kindTitle(s.kind) : t('inspector.title')}</span>
+		{/if}
 		<div class="flex-1"></div>
 		<HostUi
 			name="IconButton"
 			props={{ icon: hostIconName('x'), label: t('inspector.close'), tooltip: t('inspector.closeTip'), kbd: commandById('inspector')?.key, size: 'sm', class: 'vp-h7', onclick: () => (ui.inspectorOpen = false) }}
 		/>
 	</div>
-
-	{#if item && s.kind === 'clip'}
-		<Tabs
-			label={t('inspector.tabs')}
-			value={ui.inspectorTab}
-			onselect={(id) => (ui.inspectorTab = id)}
-			items={[
-				{ id: 'video', label: t('inspector.tab.video') },
-				{ id: 'takes', label: t('inspector.tab.takes'), badge: takesOf(item).length || null },
-				{ id: 'color', label: t('inspector.tab.color') }
-			]}
-		/>
-	{/if}
 	<div class="min-h-0 flex-1 space-y-4 overflow-auto p-3">
 		{#if !item}
 			<div class="space-y-3">

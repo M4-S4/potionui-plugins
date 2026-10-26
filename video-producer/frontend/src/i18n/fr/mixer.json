@@ -3,8 +3,6 @@
 	"filter.label": "Filtrer par rôle",
 	"filter.all": "Tous",
 	"addLane": "Piste audio",
-	"import": "Bibliothèque",
-	"importLocal": "Depuis l’ordinateur",
 	"play": "Lecture",
 	"pause": "Pause",
 	"transport": "Transport commun",

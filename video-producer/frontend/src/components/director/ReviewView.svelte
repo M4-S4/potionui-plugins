@@ -10,7 +10,7 @@
 	import { labelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
 	import { shotStale } from '../../lib/shots.js';
 	import { sections } from '../../lib/band.js';
-	import { REVIEW_FILTERS, reviewCounts, reviewShots, reviewState } from '../../lib/director.js';
+	import { REVIEW_FILTERS, VIEW_ICONS, reviewCounts, reviewShots, reviewState } from '../../lib/director.js';
 	import { commandById } from '../../lib/commands.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -18,6 +18,8 @@
 	import TakeCard from '../takes/TakeCard.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import DirectorViews from './DirectorViews.svelte';
+	import FilterPills from '../shell/FilterPills.svelte';
+	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import Icon from '../Icon.svelte';
 
 	const counts = $derived(reviewCounts(doc.clips, takeStore.list));
@@ -32,6 +34,7 @@
 	const isSel = (c) => ui.selection?.kind === 'clip' && ui.selection.id === c.id;
 	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const partOf = (c) => parts.find((p) => c.start >= p.start && c.start < p.end)?.label ?? '';
+	const pills = $derived(REVIEW_FILTERS.map((f) => ({ id: f, label: filterLabel(f), count: counts[f] })));
 
 	function filterLabel(f) {
 		if (f === 'review') return t('panels.director.review.filter.review');
@@ -68,20 +71,15 @@
 </script>
 
 <section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label={commandById('view-review')?.label}>
-	<div class="flex h-10 shrink-0 items-center gap-3 border-b border-line px-4">
-		<DirectorViews />
-		<span class="shrink-0 text-sm font-semibold">{commandById('view-review')?.label}</span>
-		<span class="shrink-0 whitespace-nowrap text-xs text-fg-subtle">{t('panels.director.review.count', { count: takeStore.list.length })}</span>
-		<div class="no-scrollbar ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1" role="tablist" aria-label={t('panels.director.review.filters')}>
-			{#each REVIEW_FILTERS as f (f)}
-				<button type="button" role="tab" class="vp-pill shrink-0" aria-selected={filter === f} onclick={() => (ui.reviewFilter = f)}>{filterLabel(f)}<span class="vp-tc text-2xs text-fg-subtle">{counts[f]}</span></button>
-			{/each}
+	<ZoneHeader icon={ui.sidebarOpen ? VIEW_ICONS.review : null} title={commandById('view-review')?.label} subtitle={t('panels.director.review.count', { count: takeStore.list.length })}>
+		{#snippet lead()}<DirectorViews />{/snippet}
+		<FilterPills class="ml-1 flex-1" label={t('panels.director.review.filters')} items={pills} value={filter} onselect={(f) => (ui.reviewFilter = f)}>
 			{#if rejected}
 				<span class="vp-divider"></span>
 				<button type="button" class="vp-pill shrink-0" aria-pressed={ui.hideRejected} onclick={() => (ui.hideRejected = !ui.hideRejected)}>{t('generation.labels.hideRejected', { count: rejected })}</button>
 			{/if}
-		</div>
-	</div>
+		</FilterPills>
+	</ZoneHeader>
 
 	{#if watching}
 		<div class="grid min-h-0 shrink-0 border-b border-line" style:height="46%">
