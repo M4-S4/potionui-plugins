@@ -676,6 +676,7 @@ def test_the_cloud_video_models_of_a_backend_are_the_enabled_entries_with_a_cata
             "tasks": ["img2video", "txt2video"],
             "typical_seconds": 60,
             "max_seconds": 300,
+            "inputs": [],
         }
     ]
 

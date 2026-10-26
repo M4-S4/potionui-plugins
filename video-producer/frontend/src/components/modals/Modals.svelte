@@ -8,7 +8,7 @@
 	import { seek } from '../../lib/playback.svelte.js';
 	import { allCommands, pointerShortcuts } from '../../lib/commands.js';
 	import { frameRoleLabel } from '../../lib/catalog.js';
-	import { openReferences, refRoleLabel } from '../../lib/references.js';
+	import { openReferences, referenceTagText } from '../../lib/references.js';
 	import Modal from './Modal.svelte';
 	import OpenProject from './OpenProject.svelte';
 	import VersionHistory from './VersionHistory.svelte';
@@ -119,7 +119,7 @@
 						<span class="font-medium">{t('shell.recap.refs')}</span>
 					</div>
 					<ul class="text-xs text-fg-muted">
-						{#each recap.it.references as r}<li>{r.name} · {refRoleLabel(r.role)} · {r.scope.type === 'global' ? t('shell.recap.scopeGlobal') : t('shell.recap.scopeLocal')}</li>{/each}
+						{#each recap.it.references as r}<li>{r.name} · {referenceTagText(r)}</li>{/each}
 						{#each recap.it.frames as f}<li>{t('shell.recap.frame', { role: frameRoleLabel(f.role), time: secs(f.time), strength: f.strength })}</li>{/each}
 					</ul>
 				</section>

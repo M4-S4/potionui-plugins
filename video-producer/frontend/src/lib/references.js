@@ -1,13 +1,15 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, select, toast, productionRange, secs, clipAt, overlaps, openDirector } from './state.svelte.js';
+import { ui, doc, act, select, toast, productionRange, secs, clipAt, clipLabel, overlaps, openDirector } from './state.svelte.js';
 import { ulid } from './ulid.js';
-import { SOUND_ROLE, SOUND_SPACE } from './sound.js';
+import { SOUND_SPACE } from './sound.js';
 import { refMediaKind, typesOf } from './refmedia.js';
+import { CHARACTERS } from './bible.js';
+import { DEFAULT_ROLES, FAMILY_ICONS, ROLE_KEYS, TYPE_KEYS, referenceTags } from './reftags.js';
 
 export const families = [
 	{
 		id: 'identite',
-		icon: 'user',
+		icon: FAMILY_ICONS.identite,
 		get label() {
 			return t('lib.family.identite.label');
 		},
@@ -20,7 +22,7 @@ export const families = [
 	},
 	{
 		id: 'decors3d',
-		icon: 'cube',
+		icon: FAMILY_ICONS.decors3d,
 		get label() {
 			return t('lib.family.decors3d.label');
 		},
@@ -33,7 +35,7 @@ export const families = [
 	},
 	{
 		id: 'mouvement',
-		icon: 'route',
+		icon: FAMILY_ICONS.mouvement,
 		get label() {
 			return t('lib.family.mouvement.label');
 		},
@@ -46,7 +48,7 @@ export const families = [
 	},
 	{
 		id: SOUND_SPACE,
-		icon: 'wave',
+		icon: FAMILY_ICONS[SOUND_SPACE],
 		get label() {
 			return t('lib.family.son.label');
 		},
@@ -58,34 +60,32 @@ export const families = [
 		}
 	}
 ];
-const roles = { identite: 'Identité', decors3d: 'Décor', mouvement: 'Mouvement', [SOUND_SPACE]: SOUND_ROLE };
+const roles = DEFAULT_ROLES;
 
 export { refMediaKind, typesOf };
 
-export function refTypeLabel(type) {
-	if (type === 'Personnage') return t('lib.refType.character');
-	if (type === 'Décor') return t('lib.refType.set');
-	if (type === 'Objet') return t('lib.refType.object');
-	if (type === 'Style') return t('lib.refType.style');
-	if (type === 'Capture 3D') return t('lib.refType.capture3d');
-	if (type === 'Control video') return t('lib.refType.control');
-	if (type === 'Trajectoire') return t('lib.refType.trajectory');
-	if (type === 'Voix') return t('lib.refType.voice');
-	if (type === 'Musique') return t('lib.refType.music');
-	if (type === 'Ambiance') return t('lib.refType.ambience');
-	return type;
+export const refTypeLabel = (type) => (TYPE_KEYS[type] ? t(`lib.refType.${TYPE_KEYS[type]}`) : type);
+
+export const refRoleLabel = (role) => (ROLE_KEYS[role] ? t(`lib.refRole.${ROLE_KEYS[role]}`) : role);
+
+const cardName = (card) => card.label?.trim() || t('panels.dock.bible.unnamed');
+
+export function refTagLabel(tag) {
+	if (tag.kind === 'type') return refTypeLabel(tag.type);
+	if (tag.kind === 'role') return t('lib.refTag.role', { role: refRoleLabel(tag.role) });
+	if (tag.kind === 'scope') return tag.global ? t('lib.refTag.project') : tag.number ? t('lib.refTag.shot', { number: String(tag.number).padStart(2, '0') }) : t('lib.refTag.shotGone');
+	return cardName(tag.card);
 }
 
-export function refRoleLabel(role) {
-	if (role === 'Identité') return t('lib.refRole.identity');
-	if (role === 'Style') return t('lib.refRole.style');
-	if (role === 'Décor') return t('lib.refRole.set');
-	if (role === 'Objet') return t('lib.refRole.object');
-	if (role === 'Mouvement') return t('lib.refRole.motion');
-	if (role === 'Caméra') return t('lib.refRole.camera');
-	if (role === SOUND_ROLE) return t('lib.refRole.sound');
-	return role;
+export function refTagTip(tag) {
+	if (tag.kind === 'type') return t('lib.refTag.typeTip', { family: families.find((f) => f.id === tag.space)?.label ?? tag.space, type: refTypeLabel(tag.type) });
+	if (tag.kind === 'role') return t('lib.refTag.roleTip', { role: refRoleLabel(tag.role) });
+	if (tag.kind === 'scope') return tag.shot ? t('lib.refTag.shotTip', { shot: clipLabel(tag.shot), start: secs(tag.shot.start), end: secs(tag.shot.start + tag.shot.dur) }) : t('lib.refTag.projectTip');
+	if (tag.voice) return t('lib.refTag.voice', { name: cardName(tag.card) });
+	return tag.cardKind === CHARACTERS ? t('lib.refTag.character', { name: cardName(tag.card) }) : t('lib.refTag.place', { name: cardName(tag.card) });
 }
+
+export const referenceTagText = (reference) => referenceTags(doc, reference).map(refTagLabel).join(' · ');
 
 export function openReferences(space = 'all') {
 	openDirector('references');

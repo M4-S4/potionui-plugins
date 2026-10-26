@@ -231,5 +231,16 @@
 	"refType.ambience": "Ambiance",
 	"refRole.sound": "Son",
 	"toast.shotsDeleted.one": "{count} plan supprimé",
-	"toast.shotsDeleted.other": "{count} plans supprimés"
+	"toast.shotsDeleted.other": "{count} plans supprimés",
+	"refTag.project": "Projet",
+	"refTag.shot": "Plan {number}",
+	"refTag.shotGone": "Plan disparu",
+	"refTag.projectTip": "Envoyée avec chaque plan du projet, sauf s’il l’exclut",
+	"refTag.shotTip": "Seulement pour « {shot} » ({start}–{end})",
+	"refTag.role": "comme {role}",
+	"refTag.roleTip": "Rôle : {role}",
+	"refTag.typeTip": "{family} · {type}",
+	"refTag.character": "Fiche personnage « {name} »",
+	"refTag.place": "Fiche lieu « {name} »",
+	"refTag.voice": "Voix de la fiche « {name} »"
 }

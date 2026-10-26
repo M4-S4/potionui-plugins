@@ -34,6 +34,8 @@
 	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
 	import { takesOf, promoteToFinal, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { refMediaKind, refRoleLabel, refTypeLabel, typesOf } from '../../lib/references.js';
+	import { typeIcon } from '../../lib/reftags.js';
+	import RefTags from '../references/RefTags.svelte';
 	import { followLane, hasOwnReference, isReferenceItem, isReferenceLane, joinPlan, setReferenceItem, setReferenceLane } from '../../lib/sound.js';
 	import AudioPicker from '../shots/AudioPicker.svelte';
 	import MediaPicker from '../shots/MediaPicker.svelte';
@@ -209,7 +211,7 @@
 				]}
 			/>
 		{:else}
-			<Icon name={item ? icons[s.kind] : 'info'} class="h-4 w-4 text-fg-muted" />
+			<Icon name={item ? (s.kind === 'reference' ? typeIcon(item) : icons[s.kind]) : 'info'} class="h-4 w-4 text-fg-muted" />
 			<span class="truncate text-sm font-semibold">{item ? kindTitle(s.kind) : t('inspector.title')}</span>
 		{/if}
 		<div class="flex-1"></div>
@@ -518,6 +520,7 @@
 						<span class="text-xs text-fg-muted">{t('inspector.field.name')}</span>
 						<input class="input vp-dense w-full" value={item.name} onchange={(e) => act(() => (item.name = e.currentTarget.value))} />
 					</label>
+					<RefTags reference={item} />
 					<label class="flex items-center gap-2">
 						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.type')}</span>
 						<select class="input vp-dense min-w-0 flex-1" value={item.type} onchange={(e) => act(() => (item.type = e.currentTarget.value))}>

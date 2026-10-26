@@ -154,32 +154,130 @@ def _build(core, doc, **body):
     return keyframes.build(core.users["user-1"], doc, "s1", _order(**body))
 
 
-def test_the_edit_presets_are_those_that_edit_from_several_pictures(client, core, qwen, cloud):
+def add_image_preset(core, preset_id, name, modes, category="image"):
+    described = {
+        mode: ModeDescription(
+            default_form="custom",
+            forms={"custom": {key: FieldDescription(type=spec["type"], required=spec["required"], multi=bool(spec.get("multi"))) for key, spec in fields.items()}},
+        )
+        for mode, fields in modes.items()
+    }
+    core.descriptions[preset_id] = PresetDescription(id=preset_id, name=name, vars={}, modes=described, engine="native", category=category, requires=None)
+    for mode, fields in modes.items():
+        core.fields[(preset_id, mode)] = fields
+    return core.descriptions[preset_id]
+
+
+def img2img_fields(model="flux2_klein"):
+    return {
+        "seed": _plain("seed", -1),
+        "quantity": _plain("stepper", 1),
+        "denoise": _plain("slider", 0.55),
+        "diffusion_model": _model(model),
+        "vae": _model("flux2_vae"),
+        "source_image": _plain("image", required=True),
+    }
+
+
+def test_every_image_preset_is_listed_with_the_mode_its_start_images_use_or_why_it_cannot_make_one(client, core, qwen, cloud):
     add_edit_preset(core, FLUX3, "FLUX 3 Klein (experimental)", flux3_fields())
     add_edit_preset(core, "01SINGLE", "One picture", {**qwen_fields(), "source_image": {**_plain("image", required=True)}})
     add_edit_preset(core, "01ONE", "Multi of one", qwen_fields(max_items=1))
+    add_image_preset(core, "01FLUX2", "Flux2", {"txt2img": {"seed": _plain("seed", -1)}, "img2img": img2img_fields()})
+    add_image_preset(core, "01ZIMAGE", "Z-Image", {"txt2img": {"seed": _plain("seed", -1)}})
+    add_image_preset(core, "01TOOLS", "Image Tools", {"remove_background": {"image": _plain("image", required=True)}}, category="utility")
     core.use_wan()
 
     listed = client.get(f"{BASE}/me").json()["data"]["keyframe_presets"]
 
-    assert [(preset["id"], preset["max_images"]) for preset in listed] == [(FLUX3, 10), (QWEN, 10), (GEMINI, 10)]
-    assert listed[1] == {
+    assert [(preset["name"], preset["mode"], preset["max_images"], preset["reason"]) for preset in listed] == [
+        ("FLUX 3 Klein (experimental)", "edit", 10, None),
+        ("Flux2", "img2img", 1, None),
+        ("Multi of one", "edit", 1, None),
+        ("One picture", "edit", 1, None),
+        ("Qwen-Image-2.1", "edit", 10, None),
+        ("Gemini Images", "edit", 10, None),
+        ("Z-Image", None, 0, "no_image_mode"),
+    ]
+    assert listed[4] == {
         "id": QWEN,
         "name": "Qwen-Image-2.1",
         "engine": "native",
         "driver": None,
         "backend_id": None,
         "requires": {"recommended_vram_gb": 24},
+        "mode": "edit",
         "max_images": 10,
+        "usable": True,
+        "reason": None,
+        "missing": [],
         "models": [],
     }
-    assert listed[2]["backend_id"] == "b-google" and listed[2]["models"] == [{"id": "cm-nano", "name": "Nano Banana 2.1", "max_images": 10}]
+    assert listed[5]["backend_id"] == "b-google" and listed[5]["models"] == [{"id": "cm-nano", "name": "Nano Banana 2.1", "max_images": 10}]
+    assert listed[6]["usable"] is False and [preset.id for preset in keyframes.edit_presets(core.users["user-1"])] == [preset["id"] for preset in listed[:6]]
 
 
-def test_a_cloud_edit_preset_without_an_edit_model_turned_on_is_not_offered(core, qwen, cloud):
-    cloud.models["b-google"] = []
+def test_a_preset_whose_edit_models_are_missing_makes_its_start_images_from_one_picture_or_says_what_is_missing(core):
+    edit = {**qwen_fields(max_items=3), "diffusion_model": _model("qwen_edit_2511")}
+    add_image_preset(core, QWEN_EDIT, "Qwen-Image", {"txt2img": {}, "edit": edit, "img2img": img2img_fields("qwen_2512")})
+    user = core.users["user-1"]
+    core.missing.add("qwen_edit_2511-sha")
 
-    assert [preset.id for preset in keyframes.edit_presets(core.users["user-1"])] == [QWEN]
+    (fallback,) = keyframes.image_presets(user)
+    core.missing.add("qwen_2512-sha")
+    (missing,) = keyframes.image_presets(user)
+
+    assert (fallback.mode, fallback.max_images, fallback.usable) == ("img2img", 1, True)
+    assert (missing.mode, missing.reason, missing.missing) == ("edit", "missing_models", ("diffusion_model",))
+
+
+@pytest.mark.parametrize(
+    "backends, models, reason",
+    [
+        ([], {}, "no_backend"),
+        ([{"id": "b-google", "engine": CLOUD_ENGINE, "driver": "cloud.google", "configured": False}], {"b-google": [nano_banana()]}, "no_key"),
+        ([{"id": "b-google", "engine": CLOUD_ENGINE, "driver": "cloud.google"}], {"b-google": []}, "no_edit_model"),
+    ],
+)
+def test_a_cloud_image_preset_that_cannot_run_says_why(core, qwen, cloud, backends, models, reason):
+    cloud.backends[:] = backends
+    cloud.models.clear()
+    cloud.models.update(models)
+
+    presets = keyframes.image_presets(core.users["user-1"])
+
+    assert [(preset.id, preset.reason) for preset in presets] == [(QWEN, None), (GEMINI, reason)]
+    assert presets[1].models == ()
+
+
+def test_an_image_preset_that_cannot_run_blocks_its_candidates_with_its_reason(core, qwen, cloud, scene):
+    cloud.backends[:] = []
+    core.missing.add("qwen21_vae-sha")
+
+    no_backend = keyframes.build(core.users["user-1"], scene, "s1", keyframes.parse_order({"preset_id": GEMINI, "model_id": "cm-nano"}))
+    missing = _build(core, scene)
+
+    assert no_backend.blocks == [
+        {"code": "preset_unusable", "message": "The provider of this preset is turned off or not set up in PotionUI.", "data": {"preset_id": GEMINI, "reason": "no_backend"}}
+    ]
+    assert [block["code"] for block in missing.blocks] == ["missing_models"] and missing.blocks[0]["data"]["fields"] == ["vae"]
+    assert no_backend.plan is None and missing.plan.missing_models == ["vae"]
+
+
+def test_an_image_to_image_preset_reworks_the_first_picture_with_the_prompt(core, scene):
+    add_image_preset(core, "01FLUX2", "Flux2", {"txt2img": {}, "img2img": img2img_fields()})
+
+    built = keyframes.build(core.users["user-1"], scene, "s1", keyframes.parse_order({"preset_id": "01FLUX2"}))
+
+    request = built.plan.request
+    assert request["mode"] == "img2img" and built.plan.preset_mode == "img2img"
+    assert request["form_data"]["source_image"] == ["uploads/cafe.png"]
+    assert "Image 1 shows the setting (Café)" in built.plan.prompt_text and "image 2" not in built.plan.prompt_text
+    assert built.warnings[0] == {
+        "code": "references_trimmed",
+        "message": "The model takes at most 1 picture: the last ones are left out.",
+        "data": {"sent": 1, "found": 3},
+    }
 
 
 def test_the_edit_request_sends_the_shot_pictures_settings_first_with_its_prompt(core, qwen, scene):
@@ -332,8 +430,9 @@ def test_the_estimate_reports_memory_time_quota_and_the_pictures_sent(client, co
 
     data = client.post(f"{BASE}/projects/{project['id']}/shots/s1/keyframes/estimate", json={"preset_id": QWEN, "count": 3}).json()["data"]
 
-    assert set(data) == {"shot_id", "role", "count", "preset", "model_id", "resolution", "prompt", "references", "vram", "time", "quota", "cost", "blocks", "warnings"}
-    assert data["preset"] == {"id": QWEN, "name": "Qwen-Image-2.1", "cloud": False}
+    assert set(data) == {"shot_id", "role", "count", "preset", "model_id", "resolution", "prompt", "references", "parts", "vram", "time", "quota", "cost", "blocks", "warnings"}
+    assert data["preset"] == {"id": QWEN, "name": "Qwen-Image-2.1", "cloud": False, "mode": "edit"}
+    assert data["parts"] == [{"role": "first", "resolution": data["resolution"], "prompt": data["prompt"], "references": data["references"]}]
     assert [(item["rank"], item["asset_id"], item["role"]) for item in data["references"]] == [(1, "cafe", "setting"), (2, "lea", "character"), (3, "hat", "object")]
     assert data["vram"]["estimate_gb"] == 18.5 and data["vram"]["backend_id"] == "b-local"
     assert data["time"] == {"seconds": None, "per_candidate": None, "samples": 0}
@@ -502,7 +601,7 @@ def test_the_candidate_letters_follow_the_ones_already_used(client, core, qwen, 
     [
         ({"preset_id": QWEN, "count": 5}, "count must be an integer from 2 to 4."),
         ({"preset_id": QWEN, "count": 1}, "count must be an integer from 2 to 4."),
-        ({"preset_id": QWEN, "role": "middle"}, "role must be one of: first, last."),
+        ({"preset_id": QWEN, "role": "middle"}, "role must be one of: first, last, both."),
         ({"preset_id": ""}, "preset_id must be a preset id."),
         ({"preset_id": QWEN, "references": [{"role": "setting"}]}, "Each reference needs an asset_id."),
         ({"preset_id": QWEN, "references": [{"asset_id": "a", "role": "hero"}]}, "A reference role must be one of: frame, setting, character, object, style."),
@@ -572,3 +671,51 @@ def test_the_bridge_gives_a_multiple_field_its_most_items(monkeypatch, tmp_path)
 
     assert (fields["source_image"]["multi"], fields["source_image"]["max_items"]) == (True, 10)
     assert "multi" not in fields["seed"] and "max_items" not in fields["seed"]
+
+
+def test_both_images_estimate_two_sets_of_candidates_the_end_one_framed_by_the_start_image(client, core, qwen, scene):
+    scene["frames"] = [{"id": "f1", "shotId": "s1", "time": 0, "assetId": "street", "role": "first", "strength": 100}]
+    project = projects.create_project("user-1", scene)
+    pictures = [{"asset_id": "street", "role": "frame"}, {"asset_id": "lea", "role": "character", "name": "Léa"}]
+
+    data = client.post(f"{BASE}/projects/{project['id']}/shots/s1/keyframes/estimate", json={"preset_id": QWEN, "role": "both", "count": 3, "references": pictures}).json()["data"]
+
+    assert data["role"] == "both" and [part["role"] for part in data["parts"]] == ["first", "last"]
+    first, last = data["parts"]
+    assert [item["asset_id"] for item in first["references"]] == ["lea"] and first["prompt"].startswith("The opening frame")
+    assert [(item["asset_id"], item["role"]) for item in last["references"]] == [("street", "frame"), ("lea", "character")]
+    assert last["prompt"].startswith("The closing frame") and "Image 1 is the opening frame of the same shot" in last["prompt"]
+    assert data["references"] == first["references"] and data["quota"]["needed_minutes"] == 6.0
+    assert [warning["code"] for warning in data["warnings"]].count("time_unknown") == 1
+
+
+def test_both_images_start_the_start_candidates_then_the_end_ones_each_with_its_image(client, core, qwen, scene):
+    scene["clips"][0]["engine"] = {"seed": 10}
+    project = projects.create_project("user-1", scene)
+
+    created = _generate(client, project, role="both")
+
+    assert [(take["variant"], take["frame_role"], take["seed"]) for take in created] == [("A", "first", 10), ("B", "first", 11), ("C", "last", 12), ("D", "last", 13)]
+    prompts = [take["prompt_text"].split("\n")[0] for take in created]
+    assert prompts == ["The opening frame of a film shot, in a 16:9 frame."] * 2 + ["The closing frame of a film shot, in a 16:9 frame."] * 2
+    assert [take["frame_role"] for take in client.get(f"{BASE}/projects/{project['id']}/shots/s1/keyframes").json()["data"]["takes"]] == ["first", "first", "last", "last"]
+
+
+def test_an_end_image_candidate_is_retried_and_announced_as_an_end_image(client, core, qwen, scene):
+    project = projects.create_project("user-1", scene)
+    created = _generate(client, project, role="last")
+    _complete_image(core, created[0]["generation_id"])
+    core.fail(created[1]["generation_id"])
+    asyncio.run(tracker.Tracker().tick())
+
+    retried = client.post(f"{BASE}/takes/{created[1]['id']}/retry").json()["data"]["take"]
+
+    assert [take["frame_role"] for take in created] == ["last", "last"] and retried["frame_role"] == "last"
+    assert any(item["message"] == "[lib.default.project]: the end image candidate A is ready." for item in core.notified)
+
+
+def test_a_candidate_stored_before_the_image_it_is_made_for_has_none(client, core, qwen, scene):
+    project = projects.create_project("user-1", scene)
+    take = takes.create_take({"project_id": project["id"], "shot_id": "s1", "user_id": "user-1", "quality": "draft", "kind": "keyframe", "variant": "A"})
+
+    assert takes.public(takes.get_take(take["id"]))["frame_role"] is None

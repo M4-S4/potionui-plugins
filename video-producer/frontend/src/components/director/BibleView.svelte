@@ -7,6 +7,8 @@
 	import { DEFAULT_LANGUAGE, LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
 	import { VIEW_ICONS, cardImages, castWhereCited, citedWithout, isCast, recast, unnamedIn } from '../../lib/director.js';
 	import { assetThumb } from '../../lib/media.js';
+	import { referenceTagText } from '../../lib/references.js';
+	import { CARD_ICONS } from '../../lib/reftags.js';
 	import { commandById } from '../../lib/commands.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { ulid } from '../../lib/ulid.js';
@@ -15,8 +17,8 @@
 	import Icon from '../Icon.svelte';
 
 	const groups = $derived([
-		{ kind: CHARACTERS, icon: 'user', kindLabel: t('panels.director.bible.character'), add: t('panels.dock.bible.addCharacter') },
-		{ kind: PLACES, icon: 'mountain', kindLabel: t('panels.director.bible.place'), add: t('panels.dock.bible.addPlace') }
+		{ kind: CHARACTERS, icon: CARD_ICONS[CHARACTERS], kindLabel: t('panels.director.bible.character'), add: t('panels.dock.bible.addCharacter') },
+		{ kind: PLACES, icon: CARD_ICONS[PLACES], kindLabel: t('panels.director.bible.place'), add: t('panels.dock.bible.addPlace') }
 	]);
 	const cards = $derived(groups.flatMap((g) => cardsOf(doc, g.kind).map((card) => ({ ...g, card }))));
 	const characters = $derived(cardsOf(doc, CHARACTERS).length);
@@ -96,7 +98,7 @@
 							<span class="flex w-full gap-1">
 								{#each images.slice(0, 3) as r (r.id)}
 									{@const thumb = assetThumb(asset(r.assetId))}
-									<span class="relative block aspect-video min-w-0 flex-1 overflow-hidden rounded-lg bg-surface-3" title={r.name}>
+									<span class="relative block aspect-video min-w-0 flex-1 overflow-hidden rounded-lg bg-surface-3" title={`${r.name} · ${referenceTagText(r)}`} data-ref-thumb>
 										{#if thumb}<img src={thumb} alt="" class="h-full w-full object-cover" />{:else}<span class="flex h-full items-center justify-center text-fg-subtle"><Icon name="image" class="h-5 w-5" /></span>{/if}
 									</span>
 								{:else}

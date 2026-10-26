@@ -231,5 +231,16 @@
 	"refType.ambience": "Ambience",
 	"refRole.sound": "Sound",
 	"toast.shotsDeleted.one": "{count} shot deleted",
-	"toast.shotsDeleted.other": "{count} shots deleted"
+	"toast.shotsDeleted.other": "{count} shots deleted",
+	"refTag.project": "Project",
+	"refTag.shot": "Shot {number}",
+	"refTag.shotGone": "Missing shot",
+	"refTag.projectTip": "Sent with every shot of the project, unless a shot leaves it out",
+	"refTag.shotTip": "Only for “{shot}” ({start}–{end})",
+	"refTag.role": "as {role}",
+	"refTag.roleTip": "Role: {role}",
+	"refTag.typeTip": "{family} · {type}",
+	"refTag.character": "Character card “{name}”",
+	"refTag.place": "Place card “{name}”",
+	"refTag.voice": "Voice of the card “{name}”"
 }

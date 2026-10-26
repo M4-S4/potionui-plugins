@@ -175,6 +175,11 @@ function strings(values) {
 	return Array.isArray(values) ? values.filter((value) => typeof value === 'string' && value) : [];
 }
 
+function lastFrameOf(inputs) {
+	if (!Array.isArray(inputs)) return null;
+	return inputs.some((item) => isObject(item) && item.role === 'last_frame' && (!strings(item.tasks).length || strings(item.tasks).includes('img2video')));
+}
+
 function normalizeModel(value) {
 	if (!isObject(value) || !text(value.id)) return null;
 	return {
@@ -183,7 +188,8 @@ function normalizeModel(value) {
 		providerModelId: text(value.provider_model_id) || null,
 		tasks: strings(value.tasks),
 		typicalSeconds: number(value.typical_seconds),
-		maxSeconds: number(value.max_seconds)
+		maxSeconds: number(value.max_seconds),
+		lastFrame: lastFrameOf(value.inputs)
 	};
 }
 
@@ -355,13 +361,20 @@ export function normalizeTake(value) {
 		createdAt: text(value.created_at) || null,
 		startedAt: text(value.started_at) || null,
 		finishedAt: text(value.finished_at) || null,
-		chain: normalizeChain(value.chain)
+		chain: normalizeChain(value.chain),
+		frameRole: value.frame_role === 'first' || value.frame_role === 'last' ? value.frame_role : null
 	};
 }
 
 function normalizeNote(value) {
 	if (!isObject(value) || !text(value.code)) return null;
 	return { code: value.code, message: text(value.message), data: isObject(value.data) ? value.data : null };
+}
+
+function shotFrame(data) {
+	const media = normalizeSeamMedia(data.media);
+	const source = normalizeFrameSource(data.source);
+	return media && source ? { media, source } : null;
 }
 
 const ENGINE_FAMILIES = ['h3', 'ltx', 'wan', 'cloud', 'other'];
@@ -718,11 +731,10 @@ export function createClient(api, save) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/seam-frame`, requestBody(source)), (data) => normalizeSeamMedia(data.media));
 		},
 		async endFrame(projectId, shotId) {
-			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/end-frame`, {}), (data) => {
-				const media = normalizeSeamMedia(data.media);
-				const source = normalizeFrameSource(data.source);
-				return media && source ? { media, source } : null;
-			});
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/end-frame`, {}), shotFrame);
+		},
+		async startFrame(projectId, shotId) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/start-frame`, {}), shotFrame);
 		},
 		download(path, filename) {
 			return downloadFrom(api, path, filename, save);

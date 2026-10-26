@@ -5,7 +5,8 @@
 	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf, shotDurationLimit, settleRelease } from '../../lib/production.svelte.js';
 	import { PROFILES, optionKey, presetProfiles } from '../../lib/generation.js';
 	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
-	import { families, refTypeLabel } from '../../lib/references.js';
+	import { refTypeLabel } from '../../lib/references.js';
+	import { typeIcon } from '../../lib/reftags.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { SHOT_CAP, applyShotDraft, inputsChanged, overrunsTake, shotDraft, shotReferences } from '../../lib/shots.js';
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
@@ -22,6 +23,7 @@
 	import ComposedPrompt from '../shots/ComposedPrompt.svelte';
 	import ReferencePrompt from '../shots/ReferencePrompt.svelte';
 	import KeyframeCandidates from '../shots/KeyframeCandidates.svelte';
+	import RefTags from '../references/RefTags.svelte';
 
 	let { id, draft: kept = null, baseline: keptBaseline = null } = $props();
 
@@ -45,7 +47,6 @@
 	let composed = $state(null);
 
 	const takes = $derived(clip ? takesOf(clip) : []);
-	const family = (space) => families.find((f) => f.id === space) ?? null;
 	const inherited = $derived(clip ? shotReferences(doc, clip, draft.exclude).inherited : []);
 	const sentCount = $derived(draft.own.length + inherited.filter((x) => !x.excluded).length);
 	const limit = $derived(clip ? shotDurationLimit({ ...clip, engine: draft.engine }) : { max: SHOT_CAP, by: null, take: null });
@@ -181,13 +182,13 @@
 						{#if inherited.length}
 							<ul class="divide-y divide-line rounded-lg border border-line-strong">
 								{#each inherited as { reference: r, excluded } (r.id)}
-									{@const f = family(r.space)}
 									{@const thumb = r.assetId ? assetThumb(asset(r.assetId)) : null}
 									<li class="flex items-center gap-2 px-2 py-1.5 text-xs {excluded ? 'opacity-60' : ''}">
-										{#if thumb}<img src={thumb} alt="" class="h-7 w-12 shrink-0 rounded object-cover" />{:else}<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name={f?.icon ?? 'bookmark'} class="h-3.5 w-3.5 text-fg-muted" /></span>{/if}
-										<span class="min-w-0 flex-1">
+										{#if thumb}<img src={thumb} alt="" class="h-7 w-12 shrink-0 rounded object-cover" />{:else}<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name={typeIcon(r)} class="h-3.5 w-3.5 text-fg-muted" /></span>{/if}
+										<span class="min-w-0 flex-1 space-y-0.5">
 											<span class="block truncate text-fg {excluded ? 'line-through' : ''}">{r.name}</span>
-											<span class="block truncate text-fg-subtle">{f?.label ?? r.space} · {refTypeLabel(r.type)}{r.assetId ? '' : ` · ${t('modals.shot.noMedia')}`}{isSound(r) && asset(r.assetId)?.srcDur ? ` · ${secs(asset(r.assetId).srcDur)}` : ''}</span>
+											<RefTags reference={r} />
+											{#if !r.assetId || (isSound(r) && asset(r.assetId)?.srcDur)}<span class="block truncate text-fg-subtle">{r.assetId ? secs(asset(r.assetId).srcDur) : t('modals.shot.noMedia')}</span>{/if}
 											{#if isSound(r) && asset(r.assetId)?.src && !excluded}
 												<!-- svelte-ignore a11y_media_has_caption -->
 												<audio class="mt-1 h-7 w-full" controls preload="metadata" src={asset(r.assetId).src} aria-label={t('modals.shot.listen', { name: r.name })}></audio>
@@ -220,21 +221,19 @@
 						{#if draft.own.length}
 							<ul class="divide-y divide-line rounded-lg border border-line-strong">
 								{#each draft.own as r (r.id)}
-									{@const f = family(r.space)}
 									{@const thumb = r.assetId ? assetThumb(asset(r.assetId)) : null}
 									<li class="space-y-1 px-2 py-1.5 text-xs">
 										<div class="flex items-center gap-2">
-											{#if thumb}<img src={thumb} alt="" class="h-7 w-12 shrink-0 rounded object-cover" />{:else}<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name={f?.icon ?? 'bookmark'} class="h-3.5 w-3.5 text-fg-muted" /></span>{/if}
+											{#if thumb}<img src={thumb} alt="" class="h-7 w-12 shrink-0 rounded object-cover" />{:else}<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name={typeIcon(r)} class="h-3.5 w-3.5 text-fg-muted" /></span>{/if}
 											<input class="input vp-dense min-w-0 flex-1" bind:value={r.name} aria-label={t('modals.shot.referenceName')} />
 											{#if r.space === 'identite' || r.space === SOUND_SPACE}
 												<select class="vp-popup shrink-0" bind:value={r.type} aria-label={t('modals.shot.referenceType', { name: r.name })}>
 													{#each r.space === SOUND_SPACE ? SOUND_TYPES : IDENTITY_TYPES as type (type)}<option value={type}>{refTypeLabel(type)}</option>{/each}
 												</select>
-											{:else}
-												<span class="shrink-0 text-fg-subtle">{f?.label ?? r.space} · {refTypeLabel(r.type)}</span>
 											{/if}
 											<HostUi name="IconButton" props={{ icon: 'trash', label: t('modals.shot.removeReference', { name: r.name }), tooltip: t('modals.shot.removeReferenceTip'), size: 'xs', onclick: () => removeOwn(r.id) }} />
 										</div>
+										<RefTags reference={{ ...r, scope: { type: 'shot', shotId: clip.id } }} class="pl-14" />
 										{#if isSound(r) && asset(r.assetId)?.src}
 											<div class="flex items-center gap-2 pl-14">
 												<!-- svelte-ignore a11y_media_has_caption -->

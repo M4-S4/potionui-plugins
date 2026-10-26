@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizePreset } from './api.js';
+import { FAMILY_ICONS, TYPE_KEYS } from './reftags.js';
 import { applyShotDraft, inputsChanged, migrateShots, setExcluded, shotDraft } from './shots.js';
 import {
 	CONDITION,
@@ -60,9 +61,11 @@ test('sound space: a new reference family with its voice, music and ambience typ
 	assert.equal(SOUND_SPACE, 'son');
 	assert.deepEqual(SOUND_TYPES, ['Voix', 'Musique', 'Ambiance']);
 	const references = source('./references.js');
-	assert.match(references, /id: SOUND_SPACE,\n\t\ticon: 'wave'/);
+	assert.match(references, /id: SOUND_SPACE,\n\t\ticon: FAMILY_ICONS\[SOUND_SPACE\]/);
+	assert.equal(FAMILY_ICONS[SOUND_SPACE], 'wave');
 	assert.deepEqual(typesOf(SOUND_SPACE), SOUND_TYPES);
-	assert.match(references, /if \(type === 'Voix'\) return t\('lib\.refType\.voice'\)/);
+	assert.deepEqual(SOUND_TYPES.map((type) => TYPE_KEYS[type]), ['voice', 'music', 'ambience']);
+	assert.match(references, /t\(`lib\.refType\.\$\{TYPE_KEYS\[type\]\}`\)/);
 });
 
 test('margin: read from the engine of the project, 0 by default, held between 0 and 10 seconds, removed at 0', () => {
