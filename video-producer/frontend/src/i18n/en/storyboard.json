@@ -135,5 +135,7 @@
 	"check.retry": "Retry",
 	"check.regenerate": "Generate new drafts",
 	"check.write": "Write the prompt",
-	"check.none": "Nothing to check: consistent seams, prompts written, no failed take."
+	"check.none": "Nothing to check: consistent seams, prompts written, no failed take.",
+	"band.emptyKey": "{key} opens Synopsis and breakdown",
+	"quick.noneTitle": "No shot chosen"
 }

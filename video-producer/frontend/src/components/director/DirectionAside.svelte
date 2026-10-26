@@ -31,7 +31,7 @@
 			<p class="text-xs text-fg-subtle">{t('panels.director.aside.hint')}</p>
 			<ComposedPrompt source={doc} shotId={witness.id} />
 		{:else}
-			<p class="text-xs text-fg-subtle">{t('panels.director.aside.none')}</p>
+			<HostUi name="EmptyState" props={{ compact: true, icon: 'film', title: t('panels.director.aside.noneTitle'), description: t('panels.director.aside.none') }} />
 		{/if}
 	</div>
 </aside>

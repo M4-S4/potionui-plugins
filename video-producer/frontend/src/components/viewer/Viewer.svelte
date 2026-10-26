@@ -19,6 +19,7 @@
 
 	let w = $state(0);
 	let h = $state(0);
+	let sideW = $state(0);
 	const ratios = { '16:9': 16 / 9, '2.39:1': 2.39, '9:16': 9 / 16, '1:1': 1, '4:5': 0.8 };
 	const r = $derived(ratios[doc.aspect]);
 	const box = $derived(w / h > r ? { w: h * r, h } : { w, h: w / r });
@@ -237,13 +238,13 @@
 		</div>
 	</div>
 
-	<div class="grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-t border-line px-3">
-		<div class="flex min-w-0 items-center gap-2">
+	<div class="grid h-11 shrink-0 items-center gap-3 border-t border-line px-3" style:grid-template-columns="minmax(0, 1fr) auto minmax(max-content, 1fr)">
+		<div class="flex min-w-0 items-center gap-2 overflow-hidden" bind:clientWidth={sideW}>
 			<HostUi
 				name="IconButton"
-				props={{ icon: hostIconName(ui.muted ? 'volume-x' : 'volume'), label: ui.muted ? t('viewer.unmute') : t('viewer.mute'), size: 'sm', class: 'vp-h7', tooltip: t('viewer.monitor'), onclick: () => (ui.muted = !ui.muted) }}
+				props={{ icon: hostIconName(ui.muted ? 'volume-x' : 'volume'), label: ui.muted ? t('viewer.unmute') : t('viewer.mute'), size: 'sm', class: 'vp-h7 shrink-0', tooltip: t('viewer.monitor'), onclick: () => (ui.muted = !ui.muted) }}
 			/>
-			<input class="vp-slider w-24" type="range" min="0" max="1" step="0.01" bind:value={ui.monitorVol} aria-label={t('viewer.monitor')} />
+			{#if sideW >= 136}<input class="vp-slider w-24 shrink-0" type="range" min="0" max="1" step="0.01" bind:value={ui.monitorVol} aria-label={t('viewer.monitor')} />{/if}
 			{#if player && clip}
 				<span class="ml-1 min-w-0 truncate text-sm text-fg-muted">{t('viewer.shot', { index: doc.clips.indexOf(clip) + 1, count: doc.clips.length, name: clipLabel(clip) })}</span>
 			{/if}

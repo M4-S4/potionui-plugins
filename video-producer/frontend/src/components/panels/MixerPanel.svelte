@@ -3,8 +3,11 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, secs } from '../../lib/state.svelte.js';
 	import { addToTimeline, openImport, openLocalImport } from '../../lib/importer.js';
+	import { emptyActions } from '../../lib/empty.js';
+	import { hostIconName } from '../../lib/icons.js';
 	import { roleColor, audioRoleLabel } from '../../lib/catalog.js';
 	import PanelHeader from './PanelHeader.svelte';
+	import ImportButtons from './ImportButtons.svelte';
 	import Icon from '../Icon.svelte';
 
 	const roles = ['Dialogue', 'Musique', 'Ambiance', 'SFX'];
@@ -14,11 +17,23 @@
 		const params = { role: s.role ? audioRoleLabel(s.role) : t('project.origin.imported'), duration: s.srcDur === null ? '—' : secs(s.srcDur) };
 		return s.generated ? t('panels.mixer.soundMetaPrepared', params) : t('panels.mixer.soundMeta', params);
 	}
+
+	const noneProps = $derived({
+		compact: true,
+		icon: hostIconName('music'),
+		title: t('panels.mixer.noSounds'),
+		description: t('panels.mixer.noSoundsHint'),
+		actions: emptyActions(
+			[
+				{ variant: 'secondary', icon: 'folder', onclick: () => openImport('audio'), children: t('panels.media.import') },
+				{ variant: 'ghost', icon: 'upload', onclick: () => openLocalImport('audio'), children: t('panels.media.importLocal') }
+			]
+		)
+	});
 </script>
 
-<PanelHeader icon="sliders" title={t('panels.mixer.title')}>
-	<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'folder', onclick: () => openImport('audio') }}>{t('panels.mixer.addSound')}</HostUi>
-	<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'upload', onclick: () => openLocalImport('audio') }}>{t('panels.mixer.addSoundLocal')}</HostUi>
+<PanelHeader icon="music" title={t('panels.mixer.sounds')} subtitle={sounds.length ? t('panels.mixer.count', { count: sounds.length }) : ''}>
+	<ImportButtons kind="audio" />
 </PanelHeader>
 
 <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
@@ -31,9 +46,9 @@
 		<Icon name="chevron-right" class="h-4 w-4 text-fg-muted" />
 	</button>
 
-	<div>
-		<div class="vp-section-title mb-1.5">{t('panels.mixer.sounds')}</div>
-		{#if !sounds.length}<p class="px-2 text-xs text-fg-subtle">{t('panels.mixer.noSounds')}</p>{/if}
+	{#if !sounds.length}
+		<HostUi name="EmptyState" props={noneProps} />
+	{:else}
 		<ul class="space-y-1">
 			{#each sounds as s (s.id)}
 				<li class="group flex items-center gap-2 rounded px-2 py-1.5 hover:bg-surface-2" draggable="true" ondragstart={(e) => e.dataTransfer.setData('text/x-asset', s.id)}>
@@ -56,7 +71,7 @@
 				</li>
 			{/each}
 		</ul>
-	</div>
+	{/if}
 
 	<div>
 		<div class="vp-section-title mb-1.5">{t('panels.mixer.roles')}</div>

@@ -3,8 +3,6 @@
 	"filter.label": "Filter by role",
 	"filter.all": "All",
 	"addLane": "Audio track",
-	"import": "Library",
-	"importLocal": "From computer",
 	"play": "Play",
 	"pause": "Pause",
 	"transport": "Shared transport",

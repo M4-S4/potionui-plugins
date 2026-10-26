@@ -7,12 +7,15 @@
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { mountHostSlot } from '../../lib/host.js';
+	import { emptyActions } from '../../lib/empty.js';
 	import { addToTimeline, importFiles, openImport, openLocalImport } from '../../lib/importer.js';
 	import { deleteAsset } from '../../lib/assets.svelte.js';
 	import { fileDrop } from '../../lib/filedrop.js';
 	import { LOCAL_KINDS } from '../../lib/upload.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
 	import PanelHeader from './PanelHeader.svelte';
+	import ImportButtons from './ImportButtons.svelte';
+	import FilterPills from '../shell/FilterPills.svelte';
 	import Icon from '../Icon.svelte';
 
 	const collections = ['all', 'image', 'video', 'audio', 'generated'];
@@ -24,6 +27,7 @@
 	const inCollection = (a, c) => c === 'all' || categoryOf(a) === c;
 	const list = $derived(media.filter((a) => inCollection(a, ui.mediaCollection) && (!ui.mediaQuery || norm(a.name).includes(norm(ui.mediaQuery)))));
 	const cur = $derived(doc.assets.find((a) => a.id === picked) ?? null);
+	const pills = $derived(collections.map((c) => ({ id: c, label: collectionLabel(c), count: media.filter((a) => inCollection(a, c)).length })));
 	const originLabel = (a) => (a.origin?.kind === 'library' ? t('project.origin.library') : t('project.origin.history'));
 
 	function collectionLabel(c) {
@@ -56,45 +60,27 @@
 		icon: 'image',
 		title: t('panels.media.none'),
 		description: t('panels.media.noneHint'),
-		actions: { slot: importButtons }
+		actions: emptyActions(
+			[
+				{ variant: 'secondary', icon: 'folder', onclick: () => openImport(), children: t('panels.media.import') },
+				{ variant: 'ghost', icon: 'upload', onclick: () => openLocalImport(), children: t('panels.media.importLocal') }
+			],
+			[commandById('import')?.key, commandById('import-local')?.key].filter(Boolean).join(' · ')
+		)
 	});
-
-	function importButtons(el) {
-		const row = el.appendChild(document.createElement('div'));
-		row.className = 'flex flex-wrap justify-center gap-1.5';
-		const mounted = [
-			mountHostSlot(row.appendChild(document.createElement('div')), 'Button', { variant: 'secondary', size: 'xs', icon: 'folder', onclick: () => openImport(), children: t('panels.media.import') }),
-			mountHostSlot(row.appendChild(document.createElement('div')), 'Button', { variant: 'secondary', size: 'xs', icon: 'upload', onclick: () => openLocalImport(), children: t('panels.media.importLocal') })
-		];
-		return () => {
-			for (const unmount of mounted) unmount();
-			row.remove();
-		};
-	}
 </script>
 
 <div class="relative flex min-h-0 flex-1 flex-col" use:fileDrop={{ kinds: LOCAL_KINDS.media, hover: (v) => (dropping = v), drop: (files) => importFiles(files, LOCAL_KINDS.media) }}>
 	<PanelHeader icon="image" title={t('panels.media.title')} subtitle={t('panels.media.count', { count: media.length })}>
-		<HostUi
-			name="IconButton"
-			props={{ icon: 'folder', label: t('panels.media.import'), size: 'sm', class: 'vp-h7', tooltip: t('panels.media.importTip'), kbd: commandById('import')?.key, onclick: () => openImport() }}
-		/>
-		<HostUi
-			name="IconButton"
-			props={{ icon: 'upload', label: t('panels.media.importLocal'), size: 'sm', class: 'vp-h7', tooltip: t('panels.media.importLocalTip'), kbd: commandById('import-local')?.key, onclick: () => openLocalImport() }}
-		/>
+		<ImportButtons />
 	</PanelHeader>
 
-	<div class="flex flex-col gap-2 px-3 pb-2 pt-3">
+	<div class="flex flex-col gap-1 px-3 pb-1 pt-3">
 		<div class="relative">
 			<Icon name="search" class="pointer-events-none absolute left-2 top-1.5 h-4 w-4 text-fg-subtle" />
 			<input class="input vp-dense !pl-7" placeholder={t('panels.media.search')} bind:value={ui.mediaQuery} aria-label={t('panels.media.search')} />
 		</div>
-		<div class="flex flex-wrap gap-1" role="tablist" aria-label={t('panels.media.collections')}>
-			{#each collections as c (c)}
-				<button type="button" role="tab" aria-selected={ui.mediaCollection === c} class="vp-pill" onclick={() => (ui.mediaCollection = c)}>{collectionLabel(c)}</button>
-			{/each}
-		</div>
+		<FilterPills class="-mx-1" label={t('panels.media.collections')} items={pills} value={ui.mediaCollection} onselect={(c) => (ui.mediaCollection = c)} />
 	</div>
 
 	<div class="min-h-0 flex-1 overflow-auto px-3">

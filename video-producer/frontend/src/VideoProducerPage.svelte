@@ -726,15 +726,23 @@
 
 		.vp-root .vp-tabs {
 			display: flex;
+			height: 2.5rem;
 			flex-shrink: 0;
+			align-items: center;
 			gap: 1rem;
 			border-bottom: 1px solid rgb(var(--line));
 			padding: 0 0.75rem;
 		}
+		.vp-root .vp-tabs.vp-tabs-head {
+			height: 100%;
+			min-width: 0;
+			border-bottom: 0;
+			padding: 0;
+		}
 		.vp-root .vp-tabs > [role='tab'] {
 			position: relative;
 			display: flex;
-			height: 2.25rem;
+			align-self: stretch;
 			min-width: 1.5rem;
 			align-items: center;
 			justify-content: center;
@@ -919,6 +927,15 @@
 			align-items: center;
 			gap: 0.5rem;
 			padding: 0 0.75rem;
+		}
+		.vp-root .vp-zone-head {
+			display: flex;
+			height: 2.5rem;
+			flex-shrink: 0;
+			align-items: center;
+			gap: 0.75rem;
+			border-bottom: 1px solid rgb(var(--line));
+			padding: 0 1rem;
 		}
 
 		.vp-root .vp-projectbar {

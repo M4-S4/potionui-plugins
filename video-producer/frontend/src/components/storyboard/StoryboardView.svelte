@@ -19,6 +19,7 @@
 	import SoundNote from '../shots/SoundNote.svelte';
 	import BandView from './BandView.svelte';
 	import ViewSwitch from './ViewSwitch.svelte';
+	import ZoneHeader from '../shell/ZoneHeader.svelte';
 
 	let size = $state('m');
 	let dragId = $state(null);
@@ -112,9 +113,7 @@
 	<BandView />
 {:else}
 <section class="isolate flex min-w-0 flex-col bg-canvas" aria-label={t('storyboard.title')}>
-	<div class="flex h-10 shrink-0 items-center gap-3 border-b border-line px-4">
-		<span class="min-w-0 truncate text-sm font-semibold">{t('storyboard.title')}</span>
-		<span class="shrink-0 whitespace-nowrap text-xs text-fg-subtle">{t('storyboard.summary', { count: doc.clips.length, duration: secs(seqDuration()) })}</span>
+	<ZoneHeader icon="grid" title={t('storyboard.title')} subtitle={t('storyboard.summary', { count: doc.clips.length, duration: secs(seqDuration()) })}>
 		<div bind:this={countsEl} class="ml-2 flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
 			{#each counts as [k, n] (k)}
 				<span class="flex shrink-0 items-center gap-1.5 text-xs {n ? 'text-fg-muted' : 'text-fg-subtle'}" title={t('storyboard.stageCount', { stage: stages[k].label, n })}>
@@ -131,7 +130,7 @@
 				{/each}
 			</div>
 		</div>
-	</div>
+	</ZoneHeader>
 
 	<div class="min-h-0 flex-1 overflow-auto p-5" role="list" ondragend={reset}>
 		<div class="grid {cols[size]} gap-x-5 gap-y-6">

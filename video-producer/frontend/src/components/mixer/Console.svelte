@@ -5,15 +5,18 @@
 	import { meters, togglePlay } from '../../lib/playback.svelte.js';
 	import { roleColor, audioRoleLabel } from '../../lib/catalog.js';
 	import { commandById } from '../../lib/commands.js';
-	import { openImport, openLocalImport } from '../../lib/importer.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { laneCode, videoTrack } from '../../lib/tracks.js';
 	import { isReferenceLane, setReferenceLane } from '../../lib/sound.js';
+	import ImportButtons from '../panels/ImportButtons.svelte';
+	import FilterPills from '../shell/FilterPills.svelte';
+	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import Icon from '../Icon.svelte';
 
 	const roles = ['Dialogue', 'Musique', 'Ambiance', 'SFX'];
 	const filters = ['Tous', ...roles];
 	const lanes = $derived(doc.lanes.filter((l) => ui.mixerFilter === 'Tous' || l.role === ui.mixerFilter));
+	const pills = $derived(filters.map((f) => ({ id: f, label: filterLabel(f), count: doc.lanes.filter((l) => f === 'Tous' || l.role === f).length })));
 	const dbFmt = (v) => (v <= -59 ? '−∞' : formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'exceptZero' }));
 	const autoNext = { off: 'read', read: 'write', write: 'off' };
 	const video = $derived(videoTrack(doc));
@@ -59,17 +62,11 @@
 </script>
 
 <div class="flex h-full flex-col bg-surface-1">
-	<div class="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2">
-		<span class="px-1 text-sm font-semibold">{t('mixer.title')}</span>
-		<div class="ml-1 flex items-center gap-1" role="tablist" aria-label={t('mixer.filter.label')}>
-			{#each filters as f (f)}
-				<button type="button" role="tab" class="vp-pill" aria-selected={ui.mixerFilter === f} onclick={() => (ui.mixerFilter = f)}>{filterLabel(f)}</button>
-			{/each}
-		</div>
+	<ZoneHeader icon="sliders" title={t('mixer.title')}>
+		<FilterPills label={t('mixer.filter.label')} items={pills} value={ui.mixerFilter} onselect={(f) => (ui.mixerFilter = f)} />
 		<div class="vp-divider"></div>
-		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: addAudioLane }}>{t('mixer.addLane')}</HostUi>
-		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'folder', onclick: () => openImport('audio') }}>{t('mixer.import')}</HostUi>
-		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'upload', onclick: () => openLocalImport('audio') }}>{t('mixer.importLocal')}</HostUi>
+		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'shrink-0', onclick: addAudioLane }}>{t('mixer.addLane')}</HostUi>
+		<div class="flex shrink-0 items-center gap-1"><ImportButtons kind="audio" /></div>
 		<div class="flex-1"></div>
 		<HostUi
 			name="IconButton"
@@ -78,7 +75,7 @@
 		<span class="vp-tc text-sm">{tc(ui.playhead, doc.fps)}</span>
 		<div class="vp-divider"></div>
 		<HostUi name="IconButton" props={{ icon: 'film', label: t('mixer.backToTimeline'), tooltip: t('mixer.backToTimeline'), size: 'sm', class: 'vp-h7', onclick: () => (ui.bottomView = 'timeline') }} />
-	</div>
+	</ZoneHeader>
 
 	<div class="flex min-h-0 flex-1 gap-px overflow-auto bg-line p-px">
 		{@render videoStrip()}

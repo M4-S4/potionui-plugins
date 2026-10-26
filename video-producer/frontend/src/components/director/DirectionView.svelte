@@ -8,7 +8,9 @@
 	import { ulid } from '../../lib/ulid.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { VIEW_ICONS } from '../../lib/director.js';
 	import DirectorViews from './DirectorViews.svelte';
+	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import Icon from '../Icon.svelte';
 
 	const MAX = 4000;
@@ -37,11 +39,10 @@
 </script>
 
 <section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label={commandById('view-direction')?.label}>
-	<div class="flex h-10 shrink-0 items-center gap-3 border-b border-line px-4">
-		<DirectorViews />
-		<span class="shrink-0 text-sm font-semibold">{commandById('view-direction')?.label}</span>
-		<span class="min-w-0 truncate text-xs {chars > MAX ? 'text-danger' : 'text-fg-subtle'}">{t('panels.director.direction.subtitle', { chars, max: MAX })}</span>
-	</div>
+	<ZoneHeader icon={ui.sidebarOpen ? VIEW_ICONS.direction : null} title={commandById('view-direction')?.label}>
+		{#snippet lead()}<DirectorViews />{/snippet}
+		<span class="vp-tc min-w-0 truncate text-xs {chars > MAX ? 'text-danger' : 'text-fg-subtle'}">{t('panels.director.direction.subtitle', { chars, max: MAX })}</span>
+	</ZoneHeader>
 
 	<div class="min-h-0 flex-1 overflow-auto">
 		<div class="space-y-3 p-5" style:max-width="800px">

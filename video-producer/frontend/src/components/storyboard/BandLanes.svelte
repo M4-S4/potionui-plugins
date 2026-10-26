@@ -388,7 +388,7 @@
 		<button
 			type="button"
 			tabindex="-1"
-			class="absolute h-3 overflow-hidden whitespace-nowrap vp-tc rounded-sm border px-1 text-left text-[9px] font-semibold leading-[10px] {take.status === 'done' ? (label === 'final' ? 'border-transparent bg-success/55 text-fg' : label === 'candidate' ? 'border-transparent bg-signal/50 text-fg' : label === 'rejected' ? 'border-transparent bg-[repeating-linear-gradient(135deg,rgb(var(--danger)/0.35)_0_2px,transparent_2px_5px)] text-danger' : 'border-transparent bg-fg-subtle/35 text-fg') : take.status === 'failed' ? 'border-transparent bg-danger-solid/50 text-white' : 'border-dashed border-fg-subtle bg-surface-3 text-fg-muted'} {shown ? 'ring-1 ring-fg' : ''} {isSel ? '' : 'opacity-60'}"
+			class="absolute h-3 overflow-hidden whitespace-nowrap vp-tc rounded-sm border px-1 text-left text-2xs font-semibold leading-[10px] {take.status === 'done' ? (label === 'final' ? 'border-transparent bg-success/55 text-fg' : label === 'candidate' ? 'border-transparent bg-signal/50 text-fg' : label === 'rejected' ? 'border-transparent bg-[repeating-linear-gradient(135deg,rgb(var(--danger)/0.35)_0_2px,transparent_2px_5px)] text-danger' : 'border-transparent bg-fg-subtle/35 text-fg') : take.status === 'failed' ? 'border-transparent bg-danger-solid/50 text-white' : 'border-dashed border-fg-subtle bg-surface-3 text-fg-muted'} {shown ? 'ring-1 ring-fg' : ''} {isSel ? '' : 'opacity-60'}"
 			style:left="{x(starts[i])}px"
 			style:top="{3 + r * 14}px"
 			style:width="{w}px"

@@ -135,5 +135,7 @@
 	"check.retry": "Réessayer",
 	"check.regenerate": "Générer de nouveaux brouillons",
 	"check.write": "Écrire l’instruction",
-	"check.none": "Rien à vérifier : raccords cohérents, instructions écrites, aucune prise en échec."
+	"check.none": "Rien à vérifier : raccords cohérents, instructions écrites, aucune prise en échec.",
+	"band.emptyKey": "{key} ouvre Synopsis et découpage",
+	"quick.noneTitle": "Aucun plan choisi"
 }
