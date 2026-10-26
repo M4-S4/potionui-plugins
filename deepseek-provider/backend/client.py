@@ -5,6 +5,8 @@ from src.plugin_api.llm import LLMConfig, OpenAIClient, OpenAIRequest
 
 PLUGIN_ID = "deepseek-provider"
 PLUGIN_VERSION = "0.1.0"
+DEFAULT_THINKING = "auto"
+DEFAULT_REASONING_EFFORT = "high"
 
 
 def uses_tools(request: OpenAIRequest) -> bool:
@@ -21,15 +23,17 @@ class DeepSeekClient(OpenAIClient):
 
     def _thinking(self, request: OpenAIRequest) -> Dict[str, Any]:
         settings = self._settings()
-        if settings["thinking"] == "off" or uses_tools(request):
+        if settings.get("thinking", DEFAULT_THINKING) == "off" or uses_tools(request):
             return {"thinking": {"type": "disabled"}}
-        return {"thinking": {"type": "enabled"}, "reasoning_effort": settings["reasoning_effort"]}
+        return {
+            "thinking": {"type": "enabled"},
+            "reasoning_effort": settings.get("reasoning_effort", DEFAULT_REASONING_EFFORT),
+        }
 
     def adapt_request(self, request: OpenAIRequest, config: LLMConfig) -> OpenAIRequest:
-        thinking = self._thinking(request)
-        for params in (request.payload, request.sampling_params):
-            if "max_completion_tokens" in params:
-                params["max_tokens"] = params.pop("max_completion_tokens")
-            params.pop("reasoning_effort", None)
-            params.update(thinking)
+        payload = request.payload
+        if "max_completion_tokens" in payload:
+            payload["max_tokens"] = payload.pop("max_completion_tokens")
+        payload.pop("reasoning_effort", None)
+        payload.update(self._thinking(request))
         return request

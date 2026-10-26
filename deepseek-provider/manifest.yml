@@ -20,7 +20,7 @@ settings:
   - name: "thinking"
     type: "select"
     label: "Thinking"
-    description: "Auto lets DeepSeek reason before it answers when a request offers no tools (prompt enhancement, plain generation) and turns reasoning off as soon as tools are involved, because DeepSeek refuses tool conversations whose earlier reasoning is not sent back. Off never reasons."
+    description: "Auto: reasons when no tools are offered. Off: never."
     default: "auto"
     options:
       - value: "auto"

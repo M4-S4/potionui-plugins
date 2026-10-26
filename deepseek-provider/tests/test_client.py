@@ -69,13 +69,18 @@ def test_a_reasoning_effort_already_in_the_request_gives_way_to_the_setting():
     assert "reasoning_effort" not in adapt(AUTO, request_with(PLAIN_HISTORY, [TOOL], reasoning_effort="low")).payload
 
 
-def test_max_tokens_go_out_under_the_name_deepseek_reads_and_the_trace_says_the_same():
+def test_max_tokens_go_out_under_the_name_deepseek_reads():
     request = adapt(AUTO, request_with(PLAIN_HISTORY))
 
-    for params in (request.payload, request.sampling_params):
-        assert params["max_tokens"] == 4096
-        assert "max_completion_tokens" not in params
-    assert request.sampling_params["thinking"] == request.payload["thinking"]
+    assert request.payload["max_tokens"] == 4096
+    assert "max_completion_tokens" not in request.payload
+
+
+def test_settings_the_registry_cannot_resolve_fall_back_to_auto_and_high():
+    request = adapt({}, request_with(PLAIN_HISTORY))
+
+    assert request.payload["thinking"] == {"type": "enabled"}
+    assert request.payload["reasoning_effort"] == "high"
 
 
 def test_the_rest_of_the_request_is_left_as_built():
