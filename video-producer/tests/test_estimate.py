@@ -5,7 +5,7 @@ import pytest
 from backend import estimate, presets, takes
 from backend.estimate import Order, OrderError
 
-SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 6}]
+SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 6, "firstFromPrevious": False}]
 
 
 def _order(**fields):
@@ -20,7 +20,7 @@ def _codes(notes):
     return [item["code"] for item in notes]
 
 
-WAN_DRAFT = {"preset_id": presets.WAN, "model_id": None, "profile": "FL2VA", "quality": "draft", "audio": None}
+WAN_DRAFT = {"preset_id": presets.WAN, "model_id": None, "profile": "FL2VA", "quality": "draft", "audio": None, "chain": None}
 
 
 def test_a_native_estimate_has_the_contract_shape(core, make_doc):

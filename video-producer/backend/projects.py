@@ -177,6 +177,7 @@ CLIP = _object(
         "engine": SHOT_ENGINE,
         "cast": CAST,
         "referencePrompt": REFERENCE_PROMPT,
+        "firstFromPrevious": FLAG,
     },
 )
 
@@ -485,12 +486,18 @@ def _cast(clip: Any, characters: Set[Any], places: Set[Any]) -> Any:
     return {**clip, "cast": kept} if kept else {key: value for key, value in clip.items() if key != "cast"}
 
 
+def _chain_flag(clip: Any) -> Any:
+    if not isinstance(clip, dict) or "firstFromPrevious" not in clip or isinstance(clip["firstFromPrevious"], bool):
+        return clip
+    return {key: value for key, value in clip.items() if key != "firstFromPrevious"}
+
+
 def _removed_takes(value: Any) -> List[str]:
     return list(dict.fromkeys(item for item in value if isinstance(item, str) and item)) if isinstance(value, list) else []
 
 
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, and the takes whose video the user removed kept as distinct ids, the key dropped when none is left; the same object when nothing changes."""
+    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, a shot's own firstFromPrevious dropped when it is not a boolean, and the takes whose video the user removed kept as distinct ids, the key dropped when none is left; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -513,7 +520,7 @@ def migrate(doc: Any) -> Any:
         changes["references"] = [*kept, *motions]
     clips = doc.get("clips")
     if isinstance(clips, list):
-        cast = [_cast(clip, _card_ids(doc, "characters"), _card_ids(doc, "places")) for clip in clips]
+        cast = [_chain_flag(_cast(clip, _card_ids(doc, "characters"), _card_ids(doc, "places"))) for clip in clips]
         if any(new is not old for new, old in zip(cast, clips)):
             changes["clips"] = cast
     if not changes and not any(key in doc for key in dropped):

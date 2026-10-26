@@ -30,6 +30,7 @@
 		sourceLength
 	} from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
+	import { shotWaitText } from '../../lib/chain.svelte.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
@@ -629,6 +630,7 @@
 	{@const sel = isSel('clip', c.id)}
 	{@const takes = takesOf(c).length}
 	{@const activity = shotActivity(c.id)}
+	{@const waiting = activity.state === 'running' && !activity.running ? shotWaitText(c.id) : ''}
 	{@const ownEngine = shotEngineText(c)}
 	<div
 		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/40'} {reorder?.id === c.id ? 'opacity-60' : ''}"
@@ -661,7 +663,7 @@
 			<div class="pointer-events-none absolute inset-x-0 bottom-0 top-5 flex flex-col justify-center gap-1 bg-black/60 px-1.5 text-white">
 				{#if w > 56}
 					<div class="flex items-center justify-between gap-1 text-2xs leading-3">
-						{#if w > 110}<span class="min-w-0 truncate">{activityStep(activity) || (activity.running ? t('generation.state.running') : t('lib.status.queued'))}</span>{/if}
+						{#if w > 110}<span class="min-w-0 truncate">{activityStep(activity) || (activity.running ? t('generation.state.running') : waiting || t('lib.status.queued'))}</span>{/if}
 						{#if activity.running}<span class="vp-tc ml-auto shrink-0">{t('exports.percent', { value: percent })}</span>{/if}
 					</div>
 				{/if}

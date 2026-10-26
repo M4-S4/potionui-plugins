@@ -43,6 +43,7 @@
 	import { framesOf, roleKind } from '../../lib/seam.js';
 	import Tabs from '../shell/Tabs.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
+	import ChainSwitch from '../shots/ChainSwitch.svelte';
 	import Icon from '../Icon.svelte';
 	import TakesSection from './TakesSection.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
@@ -330,6 +331,7 @@
 							{/each}
 						</div>
 						<SeamAction clip={item} variant="button" />
+						<ChainSwitch clip={item} />
 						<p class="text-xs text-fg-subtle">{t('inspector.frames.hint')}</p>
 					</section>
 					{@render fadeFields(true)}

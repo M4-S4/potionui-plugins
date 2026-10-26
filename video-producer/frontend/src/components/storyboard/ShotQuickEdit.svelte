@@ -13,6 +13,7 @@
 	import { applyQuick } from '../../lib/band.svelte.js';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
+	import ChainSwitch from '../shots/ChainSwitch.svelte';
 	import Icon from '../Icon.svelte';
 
 	let { clip } = $props();
@@ -136,6 +137,8 @@
 			</div>
 		</div>
 	</div>
+
+	<ChainSwitch {clip} />
 
 	<div class="flex items-center gap-2">
 		<div class="flex-1"></div>

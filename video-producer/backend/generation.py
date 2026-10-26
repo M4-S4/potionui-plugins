@@ -3,7 +3,7 @@ import logging
 import secrets
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple
 
-from . import core_bridge, director, engine_options, estimate, limits, models, notifications, projects, settings, soundtrack, takes
+from . import chaining, core_bridge, director, engine_options, estimate, limits, models, notifications, projects, settings, soundtrack, takes
 from .core_bridge import AccountType, GenerationNotFoundException, IdempotencyKeyConflict, User
 from .director import DirectorError, ShotPlan, note
 from .estimate import Evaluation
@@ -130,8 +130,9 @@ def create(
     minutes: float,
     parent_take_id: Optional[str] = None,
     revision: Optional[int] = None,
+    chain: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Store one take of a plan, with the GPU minutes it reserves."""
+    """Store one take of a plan, with the GPU minutes it reserves and, for a shot that starts from the last image of the previous shot, what it waits for."""
     size = models.parse_size(plan.resolution)
     take_id = core_bridge.generate_ulid()
     takes.create_take(
@@ -158,6 +159,8 @@ def create(
             "duration_s": plan.seconds,
             "fps": plan.fps,
             "request": plan.request_for(take_id, seed),
+            "chain": chain,
+            "chain_wait": bool(chain) and chain["state"] == chaining.WAITING,
         }
     )
     if minutes > 0 and core_bridge.record_limit_event(owner.id, limits.GPU_MINUTES, minutes, limit_ref(take_id)):
@@ -166,28 +169,32 @@ def create(
 
 
 async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation) -> List[Dict[str, Any]]:
-    """Create the takes each shot asks for on its own engine, one per variant: a fresh seed each, or the shot's fixed seed for the first and the seeds after it for the others, and hand what fits to the core."""
+    """Create the takes each shot asks for on its own engine, one per variant, in the order of the shots in the edit: a fresh seed each, or the shot's fixed seed for the first and the seeds after it for the others; a take that starts from the last image of the previous shot records what it waits for. Hand what fits to the core."""
     if evaluation.blocked:
         raise Blocked(evaluation.payload["blocks"])
     quota = evaluation.payload["quota"]
     reserve = bool(quota["applies"]) and reserves(quota)
     await with_sound(owner, project, evaluation.plans.shots)
-    created = [
-        create(
-            owner,
-            project["id"],
-            plan,
-            preset_id=plan.preset_id,
-            quality=plan.quality,
-            kind=RENDER,
-            seed=new_seed() if plan.seed is None else (plan.seed + index) % SEED_RANGE,
-            variant=letter,
-            minutes=evaluation.minutes.get(plan.shot_id, 0.0) if reserve and not plan.cloud else 0.0,
-            revision=director.shot_revision(project["doc"], plan.shot_id),
-        )
-        for plan in evaluation.plans.shots
-        for index, letter in enumerate(next_variants(project["id"], plan.shot_id, plan.quality, evaluation.count(plan.shot_id)))
-    ]
+    batch = core_bridge.generate_ulid()
+    places = {clip.get("id"): index for index, clip in enumerate(project["doc"].get("clips") or [])}
+    created: List[Dict[str, Any]] = []
+    for plan in sorted(evaluation.plans.shots, key=lambda plan: places.get(plan.shot_id, len(places))):
+        for index, letter in enumerate(next_variants(project["id"], plan.shot_id, plan.quality, evaluation.count(plan.shot_id))):
+            created.append(
+                create(
+                    owner,
+                    project["id"],
+                    plan,
+                    preset_id=plan.preset_id,
+                    quality=plan.quality,
+                    kind=RENDER,
+                    seed=new_seed() if plan.seed is None else (plan.seed + index) % SEED_RANGE,
+                    variant=letter,
+                    minutes=evaluation.minutes.get(plan.shot_id, 0.0) if reserve and not plan.cloud else 0.0,
+                    revision=director.shot_revision(project["doc"], plan.shot_id),
+                    chain=chaining.record(evaluation.waits.get(plan.shot_id), letter, created, batch),
+                )
+            )
     await pump(owner)
     return [takes.get_take(take["id"]) for take in created]
 
@@ -519,10 +526,18 @@ def _checked(plan: ShotPlan, preset_id: str, native: bool, owner: User, backend_
 
 
 async def _render_plan(
-    owner: User, project: Mapping[str, Any], source: Mapping[str, Any], quality: str
+    owner: User, project: Mapping[str, Any], source: Mapping[str, Any], quality: str, found: Optional[Mapping[str, chaining.Wait]] = None
 ) -> Tuple[ShotPlan, str, bool]:
     plans = await soundtrack.heard_plans(
-        owner, project["id"], project["doc"], [source["shot_id"]], source["preset_id"], quality, source.get("model_id"), source.get("profile")
+        owner,
+        project["id"],
+        project["doc"],
+        [source["shot_id"]],
+        source["preset_id"],
+        quality,
+        source.get("model_id"),
+        source.get("profile"),
+        chained=chaining.chain_map(found or {}),
     )
     if plans.blocks:
         raise Blocked(plans.blocks)
@@ -566,9 +581,10 @@ async def final(owner: User, project: Mapping[str, Any], source: Mapping[str, An
 
 
 async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, Any]) -> Dict[str, Any]:
-    """A new take like a failed or cancelled one: same shot, seed, quality and preset."""
+    """A new take like a failed or cancelled one: same shot, seed, quality and preset; a rendered take of a shot that starts from the last image of the previous shot waits for it again."""
     if source["status"] not in RETRYABLE:
         raise TakeError(409, "take_not_retryable", "Only a failed or cancelled take can be retried.")
+    found: Dict[str, chaining.Wait] = {}
     if source["kind"] == UPSCALE:
         parent = takes.get_take(source.get("parent_take_id") or "")
         if parent is None or parent["status"] != "done":
@@ -576,7 +592,8 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         plan, preset_id, native = _upscale_plan(owner, parent, director.upscale_target(source))
         revision = parent.get("shot_revision")
     else:
-        plan, preset_id, native = await _render_plan(owner, project, source, source["quality"])
+        found = chaining.waits(project["id"], project["doc"], [source["shot_id"]])
+        plan, preset_id, native = await _render_plan(owner, project, source, source["quality"], found)
         revision = director.shot_revision(project["doc"], source["shot_id"])
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     await with_sound(owner, project, [plan])
@@ -592,6 +609,7 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         minutes=minutes,
         parent_take_id=source.get("parent_take_id"),
         revision=revision,
+        chain=chaining.record(found.get(plan.shot_id) if plan.chain else None, source.get("variant") or variant_letter(0), [], core_bridge.generate_ulid()),
     )
     await pump(owner)
     return takes.get_take(take["id"])

@@ -6,6 +6,7 @@
 	import { cancelTake, prioritizeTake, presetById, queueState } from '../../lib/production.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { canPrioritize, handedOver, queueOrder } from '../../lib/queue.js';
+	import { waitText } from '../../lib/chain.svelte.js';
 	import { presetLabel } from '../../lib/generation.js';
 	import { labelOf } from '../../lib/labels.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -28,6 +29,8 @@
 	function stateText(take) {
 		if (take.status === 'running') return take.step || t('generation.state.running');
 		if (handedOver(take)) return t('panels.queue.handed');
+		const wait = waitText(take);
+		if (wait) return wait;
 		const place = queueState.positions[take.id];
 		return place ? t('panels.queue.place', { place }) : t('lib.status.queued');
 	}

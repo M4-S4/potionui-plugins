@@ -4,7 +4,7 @@
 	import { ui, doc, clipLabel } from '../../lib/state.svelte.js';
 	import { takesOf } from '../../lib/production.svelte.js';
 	import { labelOf } from '../../lib/labels.js';
-	import { seam, matchToPrevious } from '../../lib/continuity.svelte.js';
+	import { seam } from '../../lib/continuity.svelte.js';
 	import { seamPick } from '../../lib/continuity.js';
 	import { seamImage } from '../../lib/seam.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
@@ -15,7 +15,7 @@
 	import { lutOf } from '../../lib/match.js';
 	import Viewer from '../viewer/Viewer.svelte';
 	import MatchCanvas from '../viewer/MatchCanvas.svelte';
-	import SeamAction from '../takes/SeamAction.svelte';
+	import SeamPanel from './SeamPanel.svelte';
 	import Icon from '../Icon.svelte';
 
 	const RATIOS = { '16:9': 16 / 9, '2.39:1': 2.39, '9:16': 9 / 16, '1:1': 1, '4:5': 0.8 };
@@ -61,18 +61,7 @@
 					</div>
 				{/each}
 			</div>
-			<ul class="flex w-full max-w-[604px] flex-col gap-1.5 text-xs">
-				{#each comparing.issues as issue, n (n)}
-					<li class="flex items-start gap-2">
-						<Icon name="alert" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
-						<span class="min-w-0 flex-1 text-fg-muted">{issue.text}</span>
-						{#if issue.fix}<button type="button" class="vp-link-hit shrink-0 text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => matchToPrevious(clip)}>{t('panels.story.matchColor')}</button>{/if}
-						{#if issue.kind.startsWith('chain_')}<span class="shrink-0"><SeamAction {clip} /></span>{/if}
-					</li>
-				{:else}
-					<li class="flex items-center gap-2 text-fg-muted"><Icon name="check" class="h-3.5 w-3.5 text-success" />{comparing.measured ? t('panels.story.continuityOk') : t('panels.story.continuityNone')}</li>
-				{/each}
-			</ul>
+			<div class="flex w-full max-w-[604px]"><SeamPanel {clip} title={false} compare={false} /></div>
 		</div>
 	{:else}
 		<Viewer />

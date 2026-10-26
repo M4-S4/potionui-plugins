@@ -1,8 +1,13 @@
 import { t } from '../i18n/index.svelte.js';
 import { doc, act, toast, undo, clipLabel, onShotsAdded } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone } from './project.svelte.js';
+import { onTake, takeStore } from './takes.svelte.js';
+import { isRemoved } from './removedtakes.js';
+import { engineChoices } from './production.svelte.js';
+import { optionFor } from './generation.js';
+import { effectiveEngine } from './engine.js';
 import { placeSeamFrame, previousShot, seamImage } from './seam.js';
-import { chainPlan, chainSource, chainState, frameAsset, stillAsset } from './chain.js';
+import { chainOn, chainPlan, chainSource, chainState, chainWaiting, frameAsset, ignoresFirstFrame, placesTakeFrame, resetShotChain, seamChain, setShotChain, shotChained, stillAsset, takeFrameAsset } from './chain.js';
 
 export const chainJobs = $state({ shots: [] });
 
@@ -83,3 +88,73 @@ function chainShots(clips) {
 }
 
 onShotsAdded(chainShots);
+
+export function setShotChaining(clip, on) {
+	const target = doc.clips.find((c) => c.id === clip?.id);
+	const previous = target ? previousShot(doc, target.id) : null;
+	if (!previous || shotChained(doc, target) === on) return;
+	act(() => setShotChain(doc, target, on));
+	const names = { shot: clipLabel(target), previous: clipLabel(previous) };
+	toast(on ? t('lib.chain.shotOn', names) : t('lib.chain.shotOff', names), 'info', { label: t('shell.toast.undo'), run: undo });
+	if (on && !seamImage(doc, target.id, 'first') && chainSource(doc, previous)) chainFrame(target.id, true);
+}
+
+export const toggleShotChaining = (clip) => setShotChaining(clip, !shotChained(doc, clip));
+
+export function seamChainOf(clip) {
+	const i = clip ? doc.clips.findIndex((c) => c.id === clip.id) : -1;
+	if (i <= 0) return null;
+	const option = optionFor(engineChoices(), effectiveEngine(doc.clips[i], doc));
+	return seamChain(doc, i, takeStore.list, ignoresFirstFrame(option));
+}
+
+export function waitText(take) {
+	if (!chainWaiting(take)) return '';
+	const previous = doc.clips.find((c) => c.id === take.chain.previous);
+	const shot = previous ? clipLabel(previous) : '—';
+	const after = take.chain.after ? takeStore.list.find((x) => x.id === take.chain.after) : null;
+	return after ? t('lib.chain.waitTake', { variant: after.variant, shot }) : t('lib.chain.waitFrame', { shot });
+}
+
+export function chainStatusText(state) {
+	const previous = clipLabel(state.from);
+	if (state.state === 'off') return t('storyboard.chain.off');
+	if (state.state === 'textOnly') return t('storyboard.chain.textOnly');
+	if (state.state === 'waiting') return waitText(state.take);
+	if (state.state === 'own') return t('storyboard.chain.own');
+	if (state.state === 'stale') return t('storyboard.chain.stale', { previous });
+	if (state.state === 'fresh') return t('storyboard.chain.fresh', { previous });
+	if (state.state === 'ready') return t('storyboard.chain.ready', { previous });
+	return t('storyboard.chain.later', { previous });
+}
+
+export function shotWaitText(shotId) {
+	const take = takeStore.list.find((x) => x.shotId === shotId && chainWaiting(x));
+	return take ? waitText(take) : '';
+}
+
+export function followProjectChain(clip) {
+	const target = doc.clips.find((c) => c.id === clip?.id);
+	if (!target || typeof target.firstFromPrevious !== 'boolean') return;
+	const before = shotChained(doc, target);
+	act(() => resetShotChain(doc, target));
+	const previous = previousShot(doc, target.id);
+	if (!before && chainOn(doc) && previous && !seamImage(doc, target.id, 'first') && chainSource(doc, previous)) chainFrame(target.id, true);
+}
+
+const placed = new Set();
+
+function placeTakeFrame(take, live) {
+	if (placed.has(take?.id) || !placesTakeFrame(doc, take, takeStore.list, (id) => isRemoved(doc, id))) return;
+	const target = doc.clips.find((c) => c.id === take.shotId);
+	const previous = previousShot(doc, take.shotId);
+	const asset = takeFrameAsset(doc, take, assetName(previous));
+	if (!asset) return;
+	placed.add(take.id);
+	const apply = () => placeSeamFrame(doc, target, 'first', asset);
+	if (!live) return apply();
+	act(apply);
+	toast(t('lib.chain.batchTaken', { shot: clipLabel(target), previous: clipLabel(previous), variant: take.variant }), 'success', { label: t('shell.toast.undo'), run: undo });
+}
+
+onTake(placeTakeFrame);

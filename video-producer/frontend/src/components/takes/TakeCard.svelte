@@ -6,6 +6,7 @@
 	import { FAILURE_CODES, isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { extractable, extractAtPlayhead, seamState } from '../../lib/seam.svelte.js';
+	import { waitText } from '../../lib/chain.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { canLabel, labelOf, toggledLabel } from '../../lib/labels.js';
 	import { isStale } from '../../lib/shots.js';
@@ -43,7 +44,7 @@
 	}
 
 	function stateText(status) {
-		if (status === 'queued') return t('lib.status.queued');
+		if (status === 'queued') return waitText(take) || t('lib.status.queued');
 		if (status === 'running') return t('generation.state.running');
 		if (status === 'failed') return t('lib.status.failed');
 		if (status === 'cancelled') return t('lib.status.cancelled');

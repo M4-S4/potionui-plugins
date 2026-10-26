@@ -8,7 +8,7 @@ from backend.estimate import Order
 from backend.projects import DocError, validate_doc
 
 BASE = "/api/plugins/video-producer"
-SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4}, {"id": "s3", "start": 8, "dur": 4}]
+SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4, "firstFromPrevious": False}, {"id": "s3", "start": 8, "dur": 4, "firstFromPrevious": False}]
 ORDER = {"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.WAN}
 
 

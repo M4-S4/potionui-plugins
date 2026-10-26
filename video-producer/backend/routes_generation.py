@@ -49,10 +49,10 @@ async def generate_takes(
 
 @router.get("/projects/{project_id}/queue")
 def project_queue(project_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The project's queued and running takes in queue order, each waiting one with its place among all its owner's waiting takes, its start image candidates apart; how many of the owner's generation slots are taken; and how many of the owner's active takes belong to other projects."""
+    """The project's queued and running takes in queue order, each waiting one with its place among all its owner's waiting takes (none for a take that waits for the last image of the previous shot), its start image candidates apart; how many of the owner's generation slots are taken; and how many of the owner's active takes belong to other projects."""
     project = access.project_for(user, project_id)
     active = takes.list_user_active(project["user_id"])
-    waiting = [take["id"] for take in active if take["status"] == "queued" and not take.get("generation_id")]
+    waiting = [take["id"] for take in takes.waiting(project["user_id"])]
     places = {take_id: index + 1 for index, take_id in enumerate(waiting)}
     mine = takes.list_active(project_id)
     others = [take for take in active if take["project_id"] != project_id]
@@ -63,8 +63,8 @@ def project_queue(project_id: str, user: User = Depends(get_current_active_user)
             "keyframes": [take for take in placed if take["kind"] == takes.KEYFRAME],
             "slots": {"in_flight": takes.in_flight(project["user_id"]), "max": settings.get_setting("max_parallel_jobs")},
             "elsewhere": {
-                "waiting": sum(1 for take in others if take["id"] in places),
-                "in_flight": sum(1 for take in others if take["id"] not in places),
+                "waiting": sum(1 for take in others if not take.get("generation_id")),
+                "in_flight": sum(1 for take in others if take.get("generation_id")),
             },
         }
     )

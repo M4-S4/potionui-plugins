@@ -9,7 +9,7 @@ from backend.generation import Blocked, TakeError
 from hooks import generation_hooks
 from src.plugin_api import HookContext
 
-SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 6}]
+SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 6, "firstFromPrevious": False}]
 GPU = "video-producer.gpu_minutes"
 
 

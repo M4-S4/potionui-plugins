@@ -8,6 +8,7 @@
 	import { castLabels } from '../../lib/bible.js';
 	import { seamImage } from '../../lib/seam.js';
 	import { seam } from '../../lib/continuity.svelte.js';
+	import { shotWaitText } from '../../lib/chain.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
 	import { wheelZoomFactor } from '../../lib/timebase.js';
@@ -22,6 +23,7 @@
 	import { compareSeam, pickShot, previewTake, proposalLayout, selectedShot } from '../../lib/band.svelte.js';
 	import Icon from '../Icon.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
+	import ChainChip from './ChainChip.svelte';
 
 	const HEAD = 120;
 	const SONG = 48;
@@ -298,6 +300,7 @@
 	{@const silent = !c.assetId && !promptOf(c)?.text?.trim()}
 	{@const sm = i > 0 ? seam(i) : null}
 	{@const status = seamStatus(sm)}
+	{@const waiting = activity.state === 'running' && !activity.running ? shotWaitText(c.id) : ''}
 	<div
 		class="group absolute bottom-0 top-0 overflow-hidden rounded-md border bg-surface-1 vp-touch-none {isSel ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-strong hover:border-line-hover'} {reorder?.id === c.id ? 'z-20 opacity-80 shadow-floating' : ''}"
 		style:left="{x(starts[i])}px"
@@ -324,11 +327,14 @@
 				{#if last?.src && w > 200}<div class="relative h-full w-[42%] max-w-[120px] bg-cover bg-center" style:background-image="url({last.src})"><span class="absolute bottom-0 left-0 rounded-tr bg-black/60 px-1 text-2xs text-white">{t('storyboard.band.last')}</span></div>{/if}
 			{/if}
 		</div>
-		<span class="vp-tc absolute left-1.5 top-1.5 rounded bg-black/60 px-1 text-2xs font-medium leading-4 text-white">{String(i + 1).padStart(2, '0')}</span>
+		<div class="absolute left-1.5 top-1.5 flex items-center gap-1">
+			<span class="vp-tc rounded bg-black/60 px-1 text-2xs font-medium leading-4 text-white">{String(i + 1).padStart(2, '0')}</span>
+			{#if i > 0 && w > 46}<ChainChip clip={c} small />{/if}
+		</div>
 		<div class="absolute right-1.5 top-1.5 flex gap-1">
 			{#if activity.state === 'running'}
-				<span class="flex h-[18px] items-center gap-1 rounded bg-black/60 px-1.5 text-2xs text-white" title={activityStep(activity) || (activity.running ? t('generation.state.running') : t('lib.status.queued'))}>
-					<Icon name={activity.running ? 'sparkles' : 'history'} class="h-3 w-3" />{#if !narrow}{activity.running ? `${Math.round(activity.progress)} %` : t('lib.status.queued')}{/if}
+				<span class="flex h-[18px] items-center gap-1 rounded bg-black/60 px-1.5 text-2xs text-white" title={activityStep(activity) || (activity.running ? t('generation.state.running') : waiting || t('lib.status.queued'))} data-chain-wait={waiting ? c.id : null}>
+					<Icon name={activity.running ? 'sparkles' : waiting ? 'link' : 'history'} class="h-3 w-3" />{#if !narrow}{activity.running ? `${Math.round(activity.progress)} %` : waiting ? t('storyboard.band.waiting') : t('lib.status.queued')}{/if}
 				</span>
 			{:else if failed}
 				<span class="flex h-[18px] items-center gap-1 rounded bg-danger-solid px-1.5 text-2xs text-white" title={t('storyboard.band.failedTip', { variant: failed.variant ?? '' })}><Icon name="alert" class="h-3 w-3" />{#if !narrow}{t('storyboard.band.failed')}{/if}</span>

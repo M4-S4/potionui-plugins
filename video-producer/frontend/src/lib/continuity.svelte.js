@@ -1,11 +1,11 @@
 import { t } from '../i18n/index.svelte.js';
-import { doc, asset, act, toast, clamp, round, clipLabel } from './state.svelte.js';
+import { doc, asset, act, toast, undo, clamp, round, clipLabel } from './state.svelte.js';
 import { drawGraded, filterOf, lookSteps } from './grade.js';
 import { lutOf } from './match.js';
 import { realThumb } from './media.js';
 import { findTake } from './production.svelte.js';
 import { takeStore } from './takes.svelte.js';
-import { seamPick, seamSourceOf } from './continuity.js';
+import { LUM_GAP, WARM_GAP, colorPlanOf, seamPick, seamSourceOf } from './continuity.js';
 import { chainState } from './chain.js';
 import { chainBusy } from './chain.svelte.js';
 import { showShot } from './monitor.svelte.js';
@@ -87,8 +87,8 @@ export function seam(i) {
 	if (ca && cb) {
 		const dl = cb.lum - ca.lum;
 		const dw = cb.warm - ca.warm;
-		if (Math.abs(dl) > 0.12) out.issues.push({ kind: 'lum', text: dl > 0 ? t('lib.continuity.brighter', { shot: clipLabel(b) }) : t('lib.continuity.darker', { shot: clipLabel(b) }), fix: true });
-		if (Math.abs(dw) > 0.1) out.issues.push({ kind: 'warm', text: dw > 0 ? t('lib.continuity.warmer', { shot: clipLabel(b) }) : t('lib.continuity.cooler', { shot: clipLabel(b) }), fix: true });
+		if (Math.abs(dl) > LUM_GAP) out.issues.push({ kind: 'lum', text: dl > 0 ? t('lib.continuity.brighter', { shot: clipLabel(b) }) : t('lib.continuity.darker', { shot: clipLabel(b) }), fix: true });
+		if (Math.abs(dw) > WARM_GAP) out.issues.push({ kind: 'warm', text: dw > 0 ? t('lib.continuity.warmer', { shot: clipLabel(b) }) : t('lib.continuity.cooler', { shot: clipLabel(b) }), fix: true });
 	}
 	const id = identityScore(a, b);
 	out.measured = !out.pending || id != null;
@@ -119,6 +119,12 @@ export function seamTip(shotId) {
 	return t('assistant.review.measuredThumbsTip');
 }
 
+function correct(clip, from, to) {
+	clip.exposure = round(clamp(clip.exposure + (from.lum - to.lum) * 5, -2, 2), 0.05);
+	clip.temperature = Math.round(clamp(clip.temperature + (from.warm - to.warm) * 320, -100, 100));
+	clip.preset = 'Raccord';
+}
+
 export function matchToPrevious(clip) {
 	const i = doc.clips.indexOf(clip);
 	const prev = doc.clips[i - 1];
@@ -126,11 +132,31 @@ export function matchToPrevious(clip) {
 	const ca = sides?.from;
 	const cb = sides?.to;
 	if (!ca || !cb) return toast(t('lib.continuity.pending'), 'warning');
-	act(() => {
-		clip.exposure = round(clamp(clip.exposure + (ca.lum - cb.lum) * 5, -2, 2), 0.05);
-		clip.temperature = Math.round(clamp(clip.temperature + (ca.warm - cb.warm) * 320, -100, 100));
-		clip.preset = 'Raccord';
-	});
+	act(() => correct(clip, ca, cb));
 	showShot(clip);
 	toast(t('lib.continuity.matched', { shot: clipLabel(clip), previous: clipLabel(prev) }), 'success');
+}
+
+export function colorPlan() {
+	const pairs = doc.clips.slice(1).map((_, k) => seamSides(k + 1));
+	return colorPlanOf(pairs).map((step) => ({ ...step, clip: doc.clips[step.index + 1] }));
+}
+
+export const colorIssues = () => seams().filter((s) => s.issues.some((x) => x.fix)).length;
+
+export function matchAll() {
+	const plan = colorPlan();
+	if (!plan.length) return toast(t('lib.continuity.pending'), 'warning');
+	act(() => {
+		for (const step of plan) correct(step.clip, step.from, step.to);
+	});
+	showShot(plan[0].clip);
+	toast(t('lib.continuity.matchedAll', { count: plan.length }), 'success', { label: t('shell.toast.undo'), run: undo });
+}
+
+export function identityTakes(clip) {
+	const i = doc.clips.indexOf(clip);
+	const a = i > 0 ? takeOf(doc.clips[i - 1]) : null;
+	const b = takeOf(clip);
+	return a && b ? [a.id, b.id] : null;
 }

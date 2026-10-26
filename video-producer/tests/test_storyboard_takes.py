@@ -7,7 +7,7 @@ from backend.projects import DocError, validate_doc
 from backend.tables import create_tables
 
 BASE = "/api/plugins/video-producer"
-SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4}]
+SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4, "firstFromPrevious": False}]
 ORDER = {"shots": ["s1"], "quality": "draft", "variants": 2, "preset_id": presets.WAN}
 
 
