@@ -7,6 +7,7 @@
 	import { lutOf } from '../../lib/match.js';
 	import { shotFrame } from '../../lib/media.js';
 	import { matchToPrevious, seam } from '../../lib/continuity.svelte.js';
+	import { showShot } from '../../lib/monitor.svelte.js';
 	import SliderField from './SliderField.svelte';
 	import MatchSection from './MatchSection.svelte';
 	import Icon from '../Icon.svelte';
@@ -18,14 +19,18 @@
 	const idx = $derived(doc.clips.indexOf(clip));
 	const sm = $derived(idx > 0 ? seam(idx) : null);
 	const colorIssue = $derived(sm?.issues.some((x) => x.fix));
-	const set = (k, v) => (clip[k] = v);
-
+	function set(k, v) {
+		clip[k] = v;
+		showShot(clip);
+	}
 	function apply(name) {
 		act(() => Object.assign(clip, colorPresets[name], { preset: name }));
+		showShot(clip);
 	}
 	function applyAll() {
 		const p = { exposure: clip.exposure, contrast: clip.contrast, saturation: clip.saturation, temperature: clip.temperature, preset: clip.preset };
 		act(() => doc.clips.forEach((c) => Object.assign(c, p)));
+		showShot(clip);
 		toast(t('inspector.color.appliedAll'));
 	}
 

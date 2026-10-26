@@ -7,6 +7,7 @@
 	"takeFinal": "{shot} · Final {variant}",
 	"takeDraft": "{shot} · Draft {variant}",
 	"outOfCut": "· preview outside the cut",
+	"graded": "· shot grade",
 	"useTake": "Use this take",
 	"sourceMedia": "· source media",
 	"addToCut": "Add to cut",

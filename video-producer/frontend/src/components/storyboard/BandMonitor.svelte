@@ -11,13 +11,17 @@
 	import { clipThumb } from '../../lib/media.js';
 	import { previewable, seamStatus } from '../../lib/band.js';
 	import { compareSeam, labelPreviewed, pickShot, previewed, selectedShot } from '../../lib/band.svelte.js';
+	import { clipFilter } from '../../lib/look.js';
+	import { lutOf } from '../../lib/match.js';
 	import Viewer from '../viewer/Viewer.svelte';
+	import MatchCanvas from '../viewer/MatchCanvas.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import Icon from '../Icon.svelte';
 
 	const RATIOS = { '16:9': 16 / 9, '2.39:1': 2.39, '9:16': 9 / 16, '1:1': 1, '4:5': 0.8 };
 	let w = $state(0);
 	let h = $state(0);
+	let stills = $state([]);
 
 	const clip = $derived(selectedShot());
 	const index = $derived(clip ? doc.clips.indexOf(clip) : -1);
@@ -48,9 +52,11 @@
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => (ui.seamCompare = null) }}>{t('storyboard.band.close')}</HostUi>
 			</div>
 			<div class="flex gap-1">
-				{#each [[lastSrc, t('storyboard.band.endOf', { n: num(index - 1) })], [firstSrc, t('storyboard.band.startOf', { n: num(index) })]] as [src, caption] (caption)}
+				{#each [[lastSrc, t('storyboard.band.endOf', { n: num(index - 1) }), prev], [firstSrc, t('storyboard.band.startOf', { n: num(index) }), clip]] as [src, caption, shot], k (caption)}
+					{@const look = lutOf(shot)}
 					<div class="relative h-[168px] w-[300px] overflow-hidden rounded {src ? 'bg-black' : 'bg-surface-3 bg-[repeating-linear-gradient(135deg,rgb(var(--line-strong))_0_1px,transparent_1px_10px)]'}">
-						{#if src}<img {src} alt="" class="h-full w-full object-cover" />{/if}
+						{#if src}<img bind:this={stills[k]} {src} alt="" class="h-full w-full object-cover" style:filter={clipFilter(shot)} />{/if}
+						{#if src && look && stills[k]}<MatchCanvas source={stills[k]} lut={look} filter={clipFilter(shot)} cover />{/if}
 						<span class="absolute bottom-1.5 left-1.5 rounded bg-black/65 px-1.5 text-2xs text-white">{caption}</span>
 					</div>
 				{/each}
@@ -98,7 +104,7 @@
 		<div class="flex items-center gap-2.5 {before ? '' : 'flex-row-reverse'}">
 			<button type="button" class="pointer-events-auto flex w-[140px] flex-col gap-1 text-left text-2xs text-fg-subtle" onclick={() => pickShot(shot)} title={clipLabel(shot)}>
 				<span class="truncate">{before ? t('storyboard.band.endOf', { n: num(doc.clips.indexOf(shot)) }) : t('storyboard.band.startOf', { n: num(doc.clips.indexOf(shot)) })} · {clipLabel(shot)}</span>
-				<span class="block h-[79px] w-full overflow-hidden rounded border border-line-strong opacity-85 {src ? 'bg-black' : 'bg-surface-3'}">{#if src}<img {src} alt="" class="h-full w-full object-cover" />{/if}</span>
+				<span class="block h-[79px] w-full overflow-hidden rounded border border-line-strong opacity-85 {src ? 'bg-black' : 'bg-surface-3'}">{#if src}<img {src} alt="" class="h-full w-full object-cover" style:filter={clipFilter(shot)} />{/if}</span>
 			</button>
 			{#if status}
 				<HostUi name="Tooltip" props={{ text: status === 'issue' ? t('storyboard.band.seamCompare') : t('storyboard.band.seamOkTip'), wrapperClass: 'pointer-events-auto inline-flex' }}>

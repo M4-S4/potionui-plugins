@@ -229,7 +229,7 @@ Si vous supprimez le projet depuis un autre onglet ou un autre appareil pendant 
 
 ### Annuler et rétablir
 
-**Édition › Annuler** et **Rétablir** (Ctrl+Z, Ctrl+Shift+Z) portent sur les modifications faites dans la page, jusqu’à 100 étapes. L’historique est gardé dans la page, pas dans le projet : recharger la page, ouvrir un autre projet, créer un projet, restaurer une version et un rechargement après un conflit le vident tous. Une annulation est une modification comme une autre, et elle est enregistrée aussi.
+**Édition › Annuler** et **Rétablir** (Ctrl+Z ; Ctrl+Shift+Z ou Ctrl+Y) portent sur les modifications faites dans la page, jusqu’à 100 étapes. L’historique est gardé dans la page, pas dans le projet : recharger la page, ouvrir un autre projet, créer un projet, restaurer une version et un rechargement après un conflit le vident tous. Une annulation est une modification comme une autre, et elle est enregistrée aussi.
 
 ## 6. Médias
 
@@ -555,6 +555,8 @@ La continuité concerne les raccords, la coupe d’un plan au suivant. Video Pro
 
 Une alerte n’apparaît que lorsque deux plans voisins ne se raccordent pas : « “Plan” est plus clair, plus sombre, plus chaud ou plus froid que le plan précédent ». Elle s’affiche dans Director AI (sous **À vérifier** dans le panneau de gauche, et sur les lignes de raccord de la **Revue** dans **Tous les plans**), dans le Storyboard (sous **Continuité**, et par une icône d’alerte sur la carte du plan) et dans l’inspecteur. **Raccorder** (**Raccorder la couleur** dans le Storyboard) corrige en un clic, en ajustant l’exposition et la température sur celles du plan précédent. L’onglet **Couleur** contient aussi le scope de luminance, six préréglages (Original, Lumière dorée, Matin froid, Film 35 mm, Nuit bleue, Doux) et des réglages fins (**Exposition**, **Contraste**, **Saturation**, **Température**), avec **Réinitialiser** et **À tous les plans**. Tant qu’un plan n’a pas d’image, l’onglet indique que la couleur se règle une fois le plan généré.
 
+**Ce que montre le visualiseur.** Régler la couleur d’un plan (un préréglage, un réglage fin, **Réinitialiser**, **À tous les plans**, **Raccorder**, **Raccord auto**, son **Intensité** ou **Retirer**) amène ce plan au visualiseur, dans tous les espaces : il devient le plan sélectionné, la tête de lecture vient à son début si elle était ailleurs, et un aperçu, une comparaison ou un raccord qui ne le montre pas se ferme. Le visualiseur montre l’étalonnage d’un plan sur les images de ce plan : le montage sous la tête de lecture, l’aperçu de la prise posée sur le plan (celle qu’il joue), chaque prise posée d’une comparaison, et les deux côtés d’un raccord dans la bande, chacun avec l’étalonnage de son plan. Une prise qui n’est pas posée et un média source restent bruts ; une prise étalonnée l’indique à côté de son nom (« étalonnage du plan »). Avec un **Raccord auto**, l’aperçu d’une prise posée joue en boucle, sans les commandes du navigateur. La grille du Storyboard et les vues Direction, Bible et Références de Director AI n’ont pas de visualiseur : la tête de lecture est déjà sur le plan quand vous passez à la bande ou à **Lecture**.
+
 La mesure est faite sur de vraies images, pour chaque plan qui en a une. Le projet de départ n’en a pas encore, et le Storyboard indique alors « Aucun raccord à calculer : les plans n’ont pas encore d’image. » Un pourcentage de ressemblance entre deux plans générés peut aussi apparaître dans les alertes (« Identité à vérifier entre … et … (similarité 78 %) ») : il est simulé (chapitre 17). La couleur, elle, est réelle.
 
 ### Raccord auto
@@ -762,7 +764,7 @@ Ce qu’elle ne change jamais : rien de ce que vous avez saisi n’est traduit, 
 
 ## 16. Raccourcis clavier
 
-Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pour Ctrl, ⌥ pour Alt et ⇧ pour Shift ; les menus et les infobulles affichent la notation de votre système, et le panneau latéral se fait avec ⌃⌘1 (Contrôle et Commande). **Rechercher une commande…** (Ctrl+K) trouve toutes les commandes, et **Raccourcis clavier** (Ctrl+/) liste celles qui ont un raccourci. Les menus, la recherche de commande et cette fenêtre n’affichent que les raccourcis qui fonctionnent.
+Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pour Ctrl, ⌥ pour Alt et ⇧ pour Shift ; les menus et les infobulles affichent la notation de votre système, et le panneau latéral se fait avec ⌃⌘1 (Contrôle et Commande). **Rechercher une commande…** (Ctrl+K) trouve toutes les commandes, et **Raccourcis clavier** (Ctrl+/) liste celles qui ont un raccourci. Les menus, la recherche de commande et cette fenêtre n’affichent que les raccourcis qui fonctionnent. **Rétablir** en a deux : Ctrl+Shift+Z, que montrent les menus, les infobulles et la recherche de commande, et Ctrl+Y, que la fenêtre **Raccourcis clavier** montre à côté.
 
 | Raccourci | Action |
 |---|---|
@@ -771,6 +773,7 @@ Le tableau donne les raccourcis pour Windows et Linux. Sur un Mac, lisez ⌘ pou
 | Ctrl+, | Préférences… |
 | Échap | Fermer, dans cet ordre : la recherche de commande, la fenêtre ouverte, le menu ouvert, un aperçu ou une comparaison de prises ; sinon désélectionner |
 | Ctrl+Z, Ctrl+Shift+Z | Annuler, Rétablir |
+| Ctrl+Y | Rétablir (second raccourci) |
 | Ctrl+S | Enregistrer |
 | Ctrl+O | Ouvrir… |
 | Ctrl+I | Importer depuis la bibliothèque… |

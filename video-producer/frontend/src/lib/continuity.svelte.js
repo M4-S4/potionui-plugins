@@ -8,6 +8,7 @@ import { takeStore } from './takes.svelte.js';
 import { seamPick, seamSourceOf } from './continuity.js';
 import { chainState } from './chain.js';
 import { chainBusy } from './chain.svelte.js';
+import { showShot } from './monitor.svelte.js';
 
 const stats = $state({});
 const pending = new Set();
@@ -130,5 +131,6 @@ export function matchToPrevious(clip) {
 		clip.temperature = Math.round(clamp(clip.temperature + (ca.warm - cb.warm) * 320, -100, 100));
 		clip.preset = 'Raccord';
 	});
+	showShot(clip);
 	toast(t('lib.continuity.matched', { shot: clipLabel(clip), previous: clipLabel(prev) }), 'success');
 }

@@ -3,7 +3,7 @@
 
 	const MAX_WIDTH = 1920;
 
-	let { source, lut, filter = 'none', fade = 1 } = $props();
+	let { source, lut, filter = 'none', fade = 1, cover = false } = $props();
 	let canvas = $state();
 	let live = $state(false);
 	let renderer = null;
@@ -63,4 +63,4 @@
 	});
 </script>
 
-<canvas bind:this={canvas} class="pointer-events-none absolute inset-0 h-full w-full object-contain" style:filter={look} style:visibility={live ? 'visible' : 'hidden'} aria-hidden="true"></canvas>
+<canvas bind:this={canvas} class="pointer-events-none absolute inset-0 h-full w-full {cover ? 'object-cover' : 'object-contain'}" style:filter={look} style:visibility={live ? 'visible' : 'hidden'} aria-hidden="true"></canvas>
