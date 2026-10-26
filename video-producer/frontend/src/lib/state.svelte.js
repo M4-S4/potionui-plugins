@@ -2,13 +2,14 @@ import { formatNumber, t } from '../i18n/index.svelte.js';
 import { emptyDoc, migrate, newAsset, newClip, promptLanguageOf } from './starter.js';
 import { confirm, toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
-import { resetTakes } from './takes.svelte.js';
+import { resetTakes, takeStore } from './takes.svelte.js';
 import { compileRules, conflictIds } from './rules.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
 import { joinPlan } from './sound.js';
 import { touch } from './shots.js';
 import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
+import { viewOf } from './director.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -17,7 +18,10 @@ export const doc = $state(emptyDoc(t));
 
 export const ui = $state({
 	workspace: 'storyboard',
-	dockTab: 'direction',
+	directorView: null,
+	reviewFilter: null,
+	bibleCard: null,
+	witness: null,
 	refSpace: 'all',
 	sidebarOpen: true,
 	inspectorOpen: typeof window === 'undefined' || window.innerWidth >= 1360,
@@ -98,6 +102,15 @@ export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const round = (v, s = 0.1) => +(Math.round(v / s) * s).toFixed(3);
 
 export const bandView = () => ui.workspace === 'storyboard' && ui.storyView === 'band';
+
+export const directorView = () => viewOf(ui.directorView, takeStore.list);
+
+export function openDirector(view = null) {
+	ui.workspace = 'director';
+	if (view) ui.directorView = view;
+}
+
+export const generates = () => ui.workspace === 'director' || ui.workspace === 'storyboard';
 
 export const bottomKey = () => (ui.bottomView === 'console' ? 'consoleH' : ui.workspace === 'storyboard' ? 'storyH' : 'timelineH');
 

@@ -2,7 +2,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, bandView } from '../../lib/state.svelte.js';
 	import MediaBrowser from './MediaBrowser.svelte';
-	import DirectorDock from './DirectorDock.svelte';
+	import DirectorSummary from '../director/DirectorSummary.svelte';
 	import StoryPanel from './StoryPanel.svelte';
 	import MixerPanel from './MixerPanel.svelte';
 </script>
@@ -11,7 +11,7 @@
 	{#if ui.workspace === 'media'}
 		<MediaBrowser />
 	{:else if ui.workspace === 'director'}
-		<DirectorDock />
+		<DirectorSummary />
 	{:else if ui.workspace === 'storyboard'}
 		<StoryPanel />
 	{:else}

@@ -3,7 +3,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, asset, clipAt, tc, seqDuration, clipLabel, promptOf } from '../../lib/state.svelte.js';
 	import { addToTimeline } from '../../lib/importer.js';
-	import { insertResult, startGeneration, findTake, shotActivity, engineLabel } from '../../lib/production.svelte.js';
+	import { insertResult, findTake } from '../../lib/production.svelte.js';
 	import { togglePlay, seek } from '../../lib/playback.svelte.js';
 	import { clipFilter, fadeOpacity } from '../../lib/look.js';
 	import { assetThumb, takeThumb } from '../../lib/media.js';
@@ -36,7 +36,6 @@
 	const mode = $derived(compareRes.length === 2 ? 'compare' : previewResult ? 'result' : previewAsset ? 'asset' : 'sequence');
 	const bare = $derived(mode === 'sequence' && !(clip && a));
 	const previewThumb = $derived(previewAsset ? assetThumb(previewAsset) : null);
-	const busy = $derived(clip ? shotActivity(clip.id).state === 'running' : false);
 	const playable = (res) => res.status === 'done' && Boolean(res.url);
 	const key = (id) => commandById(id)?.key || undefined;
 	const liveVideo = $derived(mode === 'sequence' && clip && a?.src && a.kind === 'video' ? a.src : null);
@@ -178,13 +177,6 @@
 							<Icon name="sparkles" class="h-7 w-7 text-fg-subtle" />
 							<div class="text-md font-medium text-fg">{clipLabel(clip)}</div>
 							<p class="max-w-md text-sm text-fg-muted">{localPrompt?.text || t('viewer.placeholderHint')}</p>
-						{/if}
-						{#if !player}
-							<div class="mt-1">
-								<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'sparkles', disabled: busy, onclick: () => startGeneration({ clips: [clip], quality: 'draft' }) }}>
-									{t('viewer.generateDrafts')} <span class="opacity-60">{engineLabel()}</span>
-								</HostUi>
-							</div>
 						{/if}
 					</div>
 				{:else if liveVideo && failed[liveVideo]}

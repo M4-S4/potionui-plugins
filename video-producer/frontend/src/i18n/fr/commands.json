@@ -57,7 +57,7 @@
 	"cmd.cancel-generation": "Annuler la génération",
 	"cmd.results": "Résultats et prises",
 	"cmd.assemble": "Assembler les prises choisies",
-	"cmd.engine": "Modifier le moteur…",
+	"cmd.engine": "Edit Engine…",
 	"cmd.audio-add": "Ajouter une piste audio",
 	"cmd.audio-import": "Importer un son de la bibliothèque…",
 	"cmd.audio-import-local": "Importer un son depuis l’ordinateur…",
@@ -80,7 +80,7 @@
 	"cmd.snap": "Magnétisme",
 	"cmd.ws-media": "Médias",
 	"cmd.ws-play": "Lecture",
-	"cmd.ws-director": "Director IA",
+	"cmd.ws-director": "Director AI",
 	"cmd.ws-story": "Storyboard",
 	"cmd.ws-mixer": "Mixage",
 	"cmd.ref-all": "Références",
@@ -102,5 +102,9 @@
 	"kbd.escape": "Échap",
 	"cmd.story-window": "Synopsis et découpage",
 	"cmd.story-view": "Storyboard en bande",
-	"cmd.shot-editor": "Éditeur de plan…"
+	"cmd.shot-editor": "Éditeur de plan…",
+	"cmd.view-review": "Revue",
+	"cmd.view-direction": "Direction",
+	"cmd.view-bible": "Bible",
+	"cmd.view-references": "Références"
 }

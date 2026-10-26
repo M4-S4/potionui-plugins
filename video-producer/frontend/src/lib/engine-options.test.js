@@ -367,7 +367,7 @@ test('client: the models a field can take come from the PotionUI preset model li
 	assert.equal(refused.ok, false);
 });
 
-test('pages: the engine settings live in the Production bar and the Edit Engine window, the dock only points there', () => {
+test('pages: the engine settings live in the Production bar and the Edit Engine window, the Director AI summary only points there', () => {
 	const bar = source('../components/production/ProductionBar.svelte');
 	assert.match(bar, /const profileItems = \$derived\(supportedProfiles\(\)\.map\(\(m\) => \(\{ id: m, label: m \}\)\)\);/);
 	assert.doesNotMatch(bar, /disabled: !supported/);
@@ -382,10 +382,10 @@ test('pages: the engine settings live in the Production bar and the Edit Engine 
 	assert.match(bar, /observer \?\?= new ResizeObserver\(measure\);/);
 	assert.doesNotMatch(bar, /min-\[1400px\]/);
 
-	const dock = source('../components/panels/DirectorDock.svelte');
-	for (const gone of ['selectEngine', 'setProjectQuality', 'DraftsField', 'setReferenceMargin', 'SegmentedControl', 'dockFocus']) assert.doesNotMatch(dock, new RegExp(gone), gone);
-	assert.match(dock, /t\('panels\.dock\.engine\.moved'\)/);
-	assert.match(dock, /onclick: \(\) => openEngineSettings\(\)/);
+	const summary = source('../components/director/DirectorSummary.svelte');
+	for (const gone of ['selectEngine', 'setProjectQuality', 'DraftsField', 'setReferenceMargin', 'SegmentedControl', 'dockFocus']) assert.doesNotMatch(summary, new RegExp(gone), gone);
+	assert.match(summary, /t\('panels\.director\.sum\.engine', \{ engine: engineLabel\(\), profile: doc\.direction\.mode \}\)/);
+	assert.match(summary, /onclick: \(\) => openEngineSettings\(\)/);
 
 	const production = source('./production.svelte.js');
 	assert.match(production, /ui\.modal = \{ type: 'engine', preset: typeof preset === 'string' && preset \? preset : null \};/);

@@ -1,5 +1,5 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs, onRestore } from './state.svelte.js';
+import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs, onRestore, openDirector, generates } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
@@ -135,9 +135,11 @@ function optionNames(presetId, names) {
 }
 
 export function openQueue() {
-	ui.workspace = 'director';
-	ui.dockTab = 'queue';
+	if (!generates()) ui.workspace = 'director';
+	ui.menuOpen = QUEUE_MENU;
 }
+
+export const QUEUE_MENU = 'queue';
 
 function syncEngine() {
 	if (!doc.engine) return;
@@ -602,8 +604,7 @@ export function toggleCompare(id) {
 }
 
 export function openResults() {
-	ui.workspace = 'director';
-	ui.dockTab = 'results';
+	openDirector('review');
 	if (ui.production.state === 'done') ui.production.state = 'ready';
 }
 

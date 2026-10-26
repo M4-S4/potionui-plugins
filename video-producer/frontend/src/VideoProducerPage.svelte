@@ -7,7 +7,7 @@
 	import { disposeExports, resumeExports } from './lib/exports.svelte.js';
 	import { detectLocale, getLocale, has, setLocale, t } from './i18n/index.svelte.js';
 	import { ms } from './lib/motion.js';
-	import { ui, doc, applyMe, bottomKey, bandView, dispose as disposeState, toast } from './lib/state.svelte.js';
+	import { ui, doc, applyMe, bottomKey, bandView, generates, dispose as disposeState, toast } from './lib/state.svelte.js';
 	import { project, bindClient, currentJson, disposeProject, flushSave, noteChange, openLatestOrStarter } from './lib/project.svelte.js';
 	import { startProduction } from './lib/production.svelte.js';
 	import { setPluginRoot } from './lib/focus.js';
@@ -29,8 +29,8 @@
 	import LeftPanel from './components/panels/LeftPanel.svelte';
 	import Viewer from './components/viewer/Viewer.svelte';
 	import StoryboardView from './components/storyboard/StoryboardView.svelte';
-	import ReferenceBoard from './components/references/ReferenceBoard.svelte';
-	import Inspector from './components/inspector/Inspector.svelte';
+	import DirectorCenter from './components/director/DirectorCenter.svelte';
+	import RightPanel from './components/panels/RightPanel.svelte';
 	import ProductionBar from './components/production/ProductionBar.svelte';
 	import Timeline from './components/timeline/Timeline.svelte';
 	import Console from './components/mixer/Console.svelte';
@@ -55,10 +55,10 @@
 		if (code && has(`shell.error.${code}`)) return t(`shell.error.${code}`);
 		return loadError?.status >= 500 ? t('shell.error.server_error') : t('shell.error.unknown');
 	});
-	const refBoard = $derived(ui.workspace === 'director' && ui.dockTab === 'references' && !ui.preview && !ui.compare);
-	const center = $derived(ui.workspace === 'storyboard' ? 'story' : refBoard ? 'refs' : 'viewer');
+	const center = $derived(ui.workspace === 'storyboard' ? 'story' : ui.workspace === 'director' ? 'director' : 'viewer');
 	const player = $derived(isPlayer(ui.workspace));
 	const band = $derived(bandView());
+	const bare = $derived(band || ui.workspace === 'director');
 	const columns = $derived(player ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '300px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '304px' : '0px'}`);
 	let inspectorBefore = null;
 
@@ -211,22 +211,22 @@
 					<div class="grid min-h-0 min-w-0" in:fade={{ duration: ms(160) }}>
 						{#if center === 'story'}
 							<StoryboardView />
-						{:else if center === 'refs'}
-							<ReferenceBoard />
+						{:else if center === 'director'}
+							<DirectorCenter />
 						{:else}
 							<Viewer {player} />
 						{/if}
 					</div>
 				{/key}
-				{#if !player}<Inspector />{/if}
+				{#if !player}<RightPanel />{/if}
 			</main>
 
 			<div>
-				<Splitter />
-				{#if !player}<ProductionBar />{/if}
+				{#if !bare}<Splitter />{/if}
+				{#if generates()}<ProductionBar />{/if}
 			</div>
 
-			<section class="min-h-0 overflow-hidden" style:height={`${ui[bottomKey()]}px`} hidden={band} aria-label={ui.bottomView === 'console' ? t('shell.layout.console') : t('shell.layout.timeline')}>
+			<section class="min-h-0 overflow-hidden" style:height={`${ui[bottomKey()]}px`} hidden={bare} aria-label={ui.bottomView === 'console' ? t('shell.layout.console') : t('shell.layout.timeline')}>
 				{#if ui.bottomView === 'console'}
 					<Console />
 				{:else}

@@ -7,10 +7,13 @@
 	import { mountHostSlot } from '../../lib/host.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
+	import { engineLabel, supportedProfiles } from '../../lib/production.svelte.js';
+	import DirectorViews from '../director/DirectorViews.svelte';
 	import Icon from '../Icon.svelte';
 
 	let q = $state('');
 	const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+	const sent = $derived(supportedProfiles().includes('Ref2VA'));
 	const shotOf = (r) => (r.scope.type === 'shot' ? doc.clips.find((c) => c.id === r.scope.shotId) ?? null : null);
 	const list = $derived(
 		doc.references.filter((r) => (ui.refSpace === 'all' || r.space === ui.refSpace) && (!q || norm(`${r.name} ${refTypeLabel(r.type)} ${refRoleLabel(r.role)}`).includes(norm(q))))
@@ -44,8 +47,14 @@
 
 <section class="isolate flex min-w-0 flex-col bg-canvas" aria-label={t('references.title')}>
 	<div class="flex h-10 shrink-0 items-center gap-3 border-b border-line px-4">
+		<DirectorViews />
 		<span class="shrink-0 whitespace-nowrap text-sm font-semibold">{t('references.title')}</span>
 		<span class="shrink-0 whitespace-nowrap text-xs text-fg-subtle">{t('references.total', { count: doc.references.length })}</span>
+		{#if !sent && doc.references.length}
+			<HostUi name="Tooltip" props={{ text: t('generation.refs.why', { engine: engineLabel() }), wrapperClass: 'inline-flex shrink-0' }}>
+				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.refs.notSent')}</HostUi>
+			</HostUi>
+		{/if}
 		<div class="no-scrollbar ml-1 flex min-w-0 items-center gap-1 overflow-x-auto p-1" role="tablist" aria-label={t('references.families')}>
 			<button type="button" role="tab" class="vp-pill shrink-0" aria-selected={ui.refSpace === 'all'} onclick={() => (ui.refSpace = 'all')}>{t('references.all')}</button>
 			{#each families as f (f.id)}

@@ -244,7 +244,7 @@
 	"shot.castCharacters": "Characters",
 	"shot.castPlace": "Place",
 	"shot.castNoPlace": "No place",
-	"shot.castEmpty": "The bible has no card yet: add characters and places in Director IA › Direction.",
+	"shot.castEmpty": "The bible has no card yet: add characters and places in Director AI › Bible.",
 	"shot.castOpen": "Open the bible",
 	"shot.castMissing": "The instruction does not name {labels}: write the visual tag of each character cast in the shot.",
 	"shot.composed": "Prompt sent to the engine",

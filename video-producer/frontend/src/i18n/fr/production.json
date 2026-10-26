@@ -43,7 +43,7 @@
 	"own.one": "{count} moteur propre",
 	"own.other": "{count} moteurs propres",
 	"own.tip": "Plans qui fixent leur propre moteur, profil, qualité ou graine dans leur éditeur de plan : ces réglages passent avant ceux du projet.",
-	"editEngine": "Modifier le moteur",
+	"editEngine": "Edit Engine",
 	"editEngineTip": "Toutes les options de {engine}, gardées avec le projet",
 	"more": "Autres réglages du moteur"
 }

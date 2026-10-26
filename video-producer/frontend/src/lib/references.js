@@ -1,5 +1,5 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, select, toast, productionRange, secs, clipAt, overlaps } from './state.svelte.js';
+import { ui, doc, act, select, toast, productionRange, secs, clipAt, overlaps, openDirector } from './state.svelte.js';
 import { ulid } from './ulid.js';
 import { SOUND_ROLE, SOUND_SPACE } from './sound.js';
 import { refMediaKind, typesOf } from './refmedia.js';
@@ -88,8 +88,7 @@ export function refRoleLabel(role) {
 }
 
 export function openReferences(space = 'all') {
-	ui.workspace = 'director';
-	ui.dockTab = 'references';
+	openDirector('references');
 	ui.refSpace = space;
 }
 
@@ -99,6 +98,17 @@ export function addReference(space = ui.refSpace === 'all' ? 'identite' : ui.ref
 	act(() => doc.references.push(r));
 	select('reference', r.id);
 	toast(t('lib.refs.added'));
+}
+
+export function addCardImage(card, space, assetId) {
+	if (!card || !assetId) return null;
+	const type = typesOf(space)[0];
+	const r = { id: ulid(), name: card.label || t('lib.default.reference', { type: refTypeLabel(type) }), space, type, assetId, role: roles[space], scope: { type: 'global' } };
+	act(() => {
+		doc.references.push(r);
+		card.references = [...(card.references ?? []), r.id];
+	});
+	return r;
 }
 
 export function attachToRange() {

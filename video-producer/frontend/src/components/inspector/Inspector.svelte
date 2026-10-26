@@ -24,13 +24,14 @@
 		clipLabel,
 		shotIdAt,
 		sourceLength,
-		promptEdited
+		promptEdited,
+		openDirector
 	} from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
-	import { takesOf, promoteToFinal, startGeneration, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
+	import { takesOf, promoteToFinal, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { refMediaKind, refRoleLabel, refTypeLabel, typesOf } from '../../lib/references.js';
 	import { followLane, hasOwnReference, isReferenceItem, isReferenceLane, joinPlan, setReferenceItem, setReferenceLane } from '../../lib/sound.js';
 	import AudioPicker from '../shots/AudioPicker.svelte';
@@ -171,9 +172,7 @@
 	}
 
 	function openBible() {
-		ui.workspace = 'director';
-		ui.dockTab = 'direction';
-		ui.sidebarOpen = true;
+		openDirector('bible');
 	}
 
 	function setScope(id) {
@@ -268,17 +267,16 @@
 						<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('pencil'), class: 'min-w-0 flex-1', onclick: () => (ui.modal = { type: 'shot', id: item.id }) }}>{t('inspector.editShot')}</HostUi>
 						<DraftsField clips={[item]} label={false} disabled={busy} />
 					</div>
-					{#if item.stage !== 'final' && item.stage !== 'source'}
-						{@const promote = item.stage === 'draft' && Boolean(take)}
+					{#if item.stage === 'draft' && take}
 						<button
 							type="button"
 							class="flex w-full items-center gap-3 rounded-lg border border-line-strong bg-surface-2/60 p-2.5 text-left transition-colors hover:border-line-hover disabled:opacity-50"
-							onclick={() => (take && promote ? promoteToFinal(take.id) : startGeneration({ clips: [item], quality: 'draft' }))}
+							onclick={() => promoteToFinal(take.id)}
 							disabled={busy}
 						>
-							<span class="flex h-8 w-8 items-center justify-center rounded-full bg-surface-3 text-fg"><Icon name={promote ? 'arrow-up' : 'sparkles'} class="h-4 w-4" /></span>
+							<span class="flex h-8 w-8 items-center justify-center rounded-full bg-surface-3 text-fg"><Icon name="arrow-up" class="h-4 w-4" /></span>
 							<span class="min-w-0 flex-1">
-								<span class="block text-sm font-medium">{promote ? t('inspector.promoteTake', { variant: take?.variant ?? '' }) : t('inspector.generateDrafts')}</span>
+								<span class="block text-sm font-medium">{t('inspector.promoteTake', { variant: take.variant ?? '' })}</span>
 								<span class="block truncate text-xs text-fg-muted">{t('inspector.engineOn', { engine: engineLabel() })}</span>
 							</span>
 						</button>

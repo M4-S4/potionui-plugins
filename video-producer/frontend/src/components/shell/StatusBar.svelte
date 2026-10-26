@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, selected, seqDuration, secs, allIssues } from '../../lib/state.svelte.js';
+	import { ui, doc, selected, seqDuration, secs, allIssues, openDirector } from '../../lib/state.svelte.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import { openQueue } from '../../lib/production.svelte.js';
 	import Icon from '../Icon.svelte';
@@ -30,8 +30,7 @@
 	}
 
 	function directionIssues() {
-		ui.workspace = 'director';
-		ui.dockTab = 'direction';
+		openDirector('direction');
 	}
 </script>
 
@@ -54,7 +53,7 @@
 		</button>
 	{/if}
 	{#if queued}
-		<button type="button" class="flex h-6 items-center gap-1 hover:text-fg hover:underline" onclick={openQueue}>
+		<button type="button" class="flex h-6 items-center gap-1 hover:text-fg hover:underline" data-vp-menu onclick={openQueue}>
 			<Icon name="list" class="h-3 w-3" />{t('shell.status.queue', { count: queued })}
 		</button>
 	{/if}

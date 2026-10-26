@@ -5,7 +5,7 @@
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
 	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf } from '../../lib/state.svelte.js';
-	import { takesOf, startGeneration, promoteToFinal, shotActivity, shotEngineText, soundOf } from '../../lib/production.svelte.js';
+	import { takesOf, promoteToFinal, shotActivity, shotEngineText, soundOf } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { clipThumb } from '../../lib/media.js';
@@ -36,7 +36,7 @@
 
 	const counts = $derived(Object.keys(stages).map((k) => [k, doc.clips.filter((c) => c.stage === k).length]));
 	const isSel = (c) => ui.selection?.kind === 'clip' && ui.selection.id === c.id;
-	const primaryIcon = { todo: 'sparkles', draft: 'arrow-up', final: 'layers', source: 'refresh' };
+	const primaryIcon = { draft: 'arrow-up', final: 'layers' };
 
 	$effect(() => {
 		if (!countsEl) return;
@@ -57,10 +57,8 @@
 	});
 
 	function primaryLabel(stage) {
-		if (stage === 'todo') return t('storyboard.primary.todo');
 		if (stage === 'draft') return t('storyboard.primary.draft');
-		if (stage === 'final') return t('storyboard.primary.final');
-		return t('storyboard.primary.source');
+		return t('storyboard.primary.final');
 	}
 
 	function pick(c) {
@@ -75,11 +73,10 @@
 	function primary(c) {
 		select('clip', c.id);
 		if (c.stage === 'draft' && c.take) return promoteToFinal(c.take);
-		if (c.stage === 'final') return (ui.inspectorOpen = true);
-		startGeneration({ clips: [c], quality: 'draft' });
+		ui.inspectorOpen = true;
 	}
 	function inViewer(c) {
-		ui.workspace = 'director';
+		ui.workspace = 'play';
 		pick(c);
 	}
 	function remove(c) {
@@ -244,7 +241,7 @@
 							</button>
 						{/if}
 						<div class="mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100 {isSel(c) || busy ? 'opacity-100' : ''}">
-							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName(primaryIcon[c.stage]), disabled: busy, onclick: (e) => (e.stopPropagation(), primary(c)) }}>{primaryLabel(c.stage)}</HostUi>
+							{#if primaryIcon[c.stage]}<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName(primaryIcon[c.stage]), disabled: busy, onclick: (e) => (e.stopPropagation(), primary(c)) }}>{primaryLabel(c.stage)}</HostUi>{/if}
 							{#if generatesFrom(c.stage)}<DraftsField clips={[c]} label={false} disabled={busy} />{/if}
 							<div class="flex-1"></div>
 							<HostUi name="IconButton" props={{ icon: hostIconName('eye'), label: t('storyboard.inViewer'), size: 'xs', tooltip: t('storyboard.inViewer'), onclick: (e) => (e.stopPropagation(), inViewer(c)) }} />

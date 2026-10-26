@@ -80,7 +80,7 @@
 	"cmd.snap": "Snapping",
 	"cmd.ws-media": "Media",
 	"cmd.ws-play": "Play",
-	"cmd.ws-director": "Director IA",
+	"cmd.ws-director": "Director AI",
 	"cmd.ws-story": "Storyboard",
 	"cmd.ws-mixer": "Mix",
 	"cmd.ref-all": "References",
@@ -102,5 +102,9 @@
 	"kbd.escape": "Esc",
 	"cmd.story-window": "Synopsis and breakdown",
 	"cmd.story-view": "Storyboard as a band",
-	"cmd.shot-editor": "Shot editor…"
+	"cmd.shot-editor": "Shot editor…",
+	"cmd.view-review": "Review",
+	"cmd.view-direction": "Direction",
+	"cmd.view-bible": "Bible",
+	"cmd.view-references": "References"
 }
