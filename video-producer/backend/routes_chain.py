@@ -10,13 +10,11 @@ from .responses import fail, ok
 router = APIRouter()
 
 
-@router.post("/projects/{project_id}/shots/{shot_id}/end-frame")
-async def end_frame(project_id: str, shot_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """Store the last frame a shot shows, at the end of its cut (srcIn + dur) of its placed take or video, as an image of the project owner, with where it was taken."""
+async def _frame(user: User, project_id: str, shot_id: str, first: bool) -> Dict[str, Any]:
     project = access.project_for(user, project_id)
     owner = access.owner_of(user, project)
     try:
-        frame = await chain.end_frame(owner, project, shot_id)
+        frame = await (chain.start_frame if first else chain.end_frame)(owner, project, shot_id)
     except ChainError as exc:
         fail(exc.status, exc.code, exc.message)
     except MediaRefError as exc:
@@ -27,3 +25,15 @@ async def end_frame(project_id: str, shot_id: str, user: User = Depends(get_curr
     if stored is None:
         fail(502, "extract_failed", "The frame was stored but its library item cannot be found.", code="store_failed")
     return ok({"media": stored, "source": frame["source"]})
+
+
+@router.post("/projects/{project_id}/shots/{shot_id}/end-frame")
+async def end_frame(project_id: str, shot_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
+    """Store the last frame a shot shows, at the end of its cut (srcIn + dur) of its placed take or video, as an image of the project owner, with where it was taken."""
+    return await _frame(user, project_id, shot_id, False)
+
+
+@router.post("/projects/{project_id}/shots/{shot_id}/start-frame")
+async def start_frame(project_id: str, shot_id: str, user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
+    """Store the first frame a shot shows, at the start of its cut (srcIn) of its placed take or video, as an image of the project owner, with where it was taken."""
+    return await _frame(user, project_id, shot_id, True)

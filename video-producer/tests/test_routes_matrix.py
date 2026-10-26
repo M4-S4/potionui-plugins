@@ -412,6 +412,14 @@ ROUTES = {
         denied=lambda w: Call(f"/projects/{w.reference['id']}/shots/{END_SHOT}/end-frame", status=404, code="project_not_found", who="user-2"),
         invalid=lambda w: Call(f"/projects/{w.reference['id']}/shots/nope/end-frame", status=404, code="shot_not_found"),
     ),
+    "POST /projects/{id}/shots/{shot}/start-frame": Route(
+        success=lambda w: Call(
+            f"/projects/{w.reference['id']}/shots/{END_SHOT}/start-frame",
+            check=lambda r: (_data(r)["source"]["at"], _data(r)["media"]["filename"]) == (0.4, "1-frame-0.4s.png"),
+        ),
+        denied=lambda w: Call(f"/projects/{w.reference['id']}/shots/{END_SHOT}/start-frame", status=404, code="project_not_found", who="user-2"),
+        invalid=lambda w: Call(f"/projects/{w.reference['id']}/shots/nope/start-frame", status=404, code="shot_not_found"),
+    ),
     "GET /me": Route(
         success=lambda w: Call("/me", check=lambda r: _data(r)["plugin"]["id"] == "video-producer"),
         denied=_get_me_of_another_user,

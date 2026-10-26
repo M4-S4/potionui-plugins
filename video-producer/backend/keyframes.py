@@ -1,9 +1,9 @@
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import catalog, core_bridge, director, estimate, generation, limits, models, takes
+from . import core_bridge, director, estimate, generation, limits, models, takes
 from .core_bridge import CLOUD_ENGINE, EDIT_TASK, MediaRefError, User
 from .director import ShotPlan, note
 from .generation import Blocked
@@ -13,13 +13,30 @@ logger = logging.getLogger("plugins.video-producer")
 KEYFRAME = takes.KEYFRAME
 
 EDIT_MODE = "edit"
+IMG2IMG_MODE = "img2img"
+IMAGE_MODES = (EDIT_MODE, IMG2IMG_MODE)
 MODEL_FIELD = "model"
 OUTPUT_SIZE = "output_size"
 IMAGE = "image"
 
 FIRST = "first"
 LAST = "last"
+BOTH = "both"
 ROLES = (FIRST, LAST)
+ORDER_ROLES = (FIRST, LAST, BOTH)
+
+NO_IMAGE_MODE = "no_image_mode"
+MISSING_MODELS = "missing_models"
+NO_BACKEND = "no_backend"
+NO_KEY = "no_key"
+NO_EDIT_MODEL = "no_edit_model"
+
+UNUSABLE = {
+    NO_IMAGE_MODE: "This preset has no edit or image to image mode: it cannot keep the pictures of the shot.",
+    NO_BACKEND: "The provider of this preset is turned off or not set up in PotionUI.",
+    NO_KEY: "The provider of this preset has no API key in PotionUI.",
+    NO_EDIT_MODEL: "No edit model of this provider is turned on in its catalog.",
+}
 
 MIN_CANDIDATES = 2
 MAX_CANDIDATES = 4
@@ -103,10 +120,17 @@ class EditPreset:
     requires: Optional[Dict[str, Any]] = None
     output_sizes: Tuple[str, ...] = ()
     models: Tuple[Dict[str, Any], ...] = ()
+    mode: Optional[str] = EDIT_MODE
+    reason: Optional[str] = None
+    missing: Tuple[str, ...] = ()
 
     @property
     def cloud(self) -> bool:
         return self.engine == CLOUD_ENGINE
+
+    @property
+    def usable(self) -> bool:
+        return self.reason is None
 
     def model(self, model_id: Optional[str]) -> Optional[Dict[str, Any]]:
         """The enabled edit model of a cloud preset with this id, or None."""
@@ -126,7 +150,11 @@ class EditPreset:
             "driver": self.driver,
             "backend_id": self.backend_id,
             "requires": self.requires,
+            "mode": self.mode,
             "max_images": self.max_images,
+            "usable": self.usable,
+            "reason": self.reason,
+            "missing": list(self.missing),
             "models": [
                 {"id": model["id"], "name": model["name"], "max_images": self.limit(model["id"])} for model in self.models
             ],
@@ -152,6 +180,7 @@ class Picture:
 class KeyframePlan:
     preset: Optional[EditPreset]
     shot_id: str
+    role: str = FIRST
     pictures: List[Picture] = field(default_factory=list)
     plan: Optional[ShotPlan] = None
     blocks: List[Dict[str, Any]] = field(default_factory=list)
@@ -160,9 +189,13 @@ class KeyframePlan:
 
 @dataclass
 class Evaluation:
-    built: KeyframePlan
+    parts: List[KeyframePlan]
     minutes: float
     payload: Dict[str, Any]
+
+    @property
+    def built(self) -> KeyframePlan:
+        return self.parts[0]
 
     @property
     def blocked(self) -> bool:
@@ -201,8 +234,8 @@ def parse_order(body: Any) -> Order:
     if model_id is not None and (not isinstance(model_id, str) or not model_id):
         raise OrderError("model_id must be a model id or null.")
     role = body.get("role", FIRST)
-    if role not in ROLES:
-        raise OrderError(f"role must be one of: {', '.join(ROLES)}.")
+    if role not in ORDER_ROLES:
+        raise OrderError(f"role must be one of: {', '.join(ORDER_ROLES)}.")
     count = body.get("count", DEFAULT_CANDIDATES)
     if not _count(count):
         raise OrderError(f"count must be an integer from {MIN_CANDIDATES} to {MAX_CANDIDATES}.")
@@ -228,17 +261,20 @@ def _param(model: Mapping[str, Any], name: str) -> Optional[Dict[str, Any]]:
     )
 
 
-def _request(preset_id: str, prompt: str, form: Dict[str, Any]) -> Dict[str, Any]:
-    return {"preset_id": preset_id, "mode": EDIT_MODE, "prompts": [{"positive": prompt, "negative": ""}], "form_data": form}
+def _request(preset_id: str, mode: str, prompt: str, form: Dict[str, Any]) -> Dict[str, Any]:
+    return {"preset_id": preset_id, "mode": mode, "prompts": [{"positive": prompt, "negative": ""}], "form_data": form}
 
 
 def _image_field(mode: Any) -> Optional[str]:
     forms = mode.forms or {}
     fields = forms.get(mode.default_form) or next(iter(forms.values()), {})
-    return next((name for name, spec in fields.items() if spec.type == IMAGE and spec.multi), None)
+    images = [name for name, spec in fields.items() if spec.type == IMAGE]
+    return next((name for name in images if fields[name].multi), images[0] if images else None)
 
 
 def _limit(spec: Mapping[str, Any]) -> int:
+    if not spec.get("multi"):
+        return 1
     value = spec.get("max_items")
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else MAX_PICTURES
 
@@ -261,52 +297,89 @@ def _cloud_backends() -> List[Dict[str, Any]]:
         return []
 
 
-def _edit_preset(description: Any, cloud_backends: List[Dict[str, Any]]) -> Optional[EditPreset]:
-    mode = (description.modes or {}).get(EDIT_MODE)
-    name = _image_field(mode) if mode is not None else None
-    if name is None:
-        return None
-    fields = models.form_fields(description.id, EDIT_MODE)
-    driver = core_bridge.preset_driver(description.id) if description.engine == CLOUD_ENGINE else None
-    backend_id = catalog.preset_backend_id(description, driver, cloud_backends)
+def _image_modes(description: Any) -> List[str]:
+    modes = description.modes or {}
+    return [name for name in IMAGE_MODES if name in modes and _image_field(modes[name]) is not None]
+
+
+def _mode_preset(description: Any, mode: str, **extra: Any) -> EditPreset:
+    name = _image_field(description.modes[mode]) or ""
+    fields = models.form_fields(description.id, mode)
     sizes = (fields.get(OUTPUT_SIZE) or {}).get("options") or []
-    preset = EditPreset(
+    return EditPreset(
         id=description.id,
         name=description.name,
         engine=description.engine,
         field=name,
         max_images=_limit(fields.get(name) or {}),
-        driver=driver,
-        backend_id=backend_id,
         requires=description.requires,
         output_sizes=tuple(option["value"] for option in sizes if models.parse_size(option["value"])),
-        models=_edit_models(backend_id) if description.engine == CLOUD_ENGINE else (),
+        mode=mode,
+        **extra,
     )
-    if preset.cloud:
-        usable = MODEL_FIELD in fields and any(preset.limit(model["id"]) >= 2 for model in preset.models)
-        return preset if usable else None
-    return preset if preset.max_images >= 2 else None
 
 
-def edit_presets(user: User) -> List[EditPreset]:
-    """The presets the user may run whose edit mode takes several reference pictures, local ones first; a cloud one only with an edit model turned on."""
+def _native_preset(description: Any, mode: str) -> EditPreset:
+    missing = tuple(models.resolve_models(description.id, mode, None, models.form_fields(description.id, mode)).missing)
+    return _mode_preset(description, mode, reason=MISSING_MODELS if missing else None, missing=missing)
+
+
+def _provider(driver: Optional[str], cloud_backends: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    own = [backend for backend in cloud_backends if driver and backend.get("driver") == driver]
+    return next((backend for backend in own if backend.get("configured") is not False), own[0] if own else None)
+
+
+def _cloud_preset(description: Any, mode: str, cloud_backends: List[Dict[str, Any]]) -> EditPreset:
+    driver = core_bridge.preset_driver(description.id)
+    backend = _provider(driver, cloud_backends)
+    ready = backend is not None and backend.get("configured") is not False
+    found = _edit_models(backend.get("id")) if ready else ()
+    reason = None
+    if backend is None:
+        reason = NO_BACKEND
+    elif not ready:
+        reason = NO_KEY
+    elif MODEL_FIELD not in models.form_fields(description.id, mode) or not found:
+        reason = NO_EDIT_MODEL
+    return _mode_preset(description, mode, driver=driver, backend_id=backend.get("id") if backend else None, models=found, reason=reason)
+
+
+def _image_preset(description: Any, cloud_backends: List[Dict[str, Any]]) -> Optional[EditPreset]:
+    modes = _image_modes(description)
+    if not modes:
+        if description.category != IMAGE:
+            return None
+        return EditPreset(id=description.id, name=description.name, engine=description.engine, field="", max_images=0, requires=description.requires, mode=None, reason=NO_IMAGE_MODE)
+    if description.engine == CLOUD_ENGINE:
+        return _cloud_preset(description, modes[0], cloud_backends)
+    found = [_native_preset(description, mode) for mode in modes]
+    return next((preset for preset in found if preset.usable), found[0])
+
+
+def image_presets(user: User) -> List[EditPreset]:
+    """Every image preset the user may run, each with the mode its start images use (edit, else image to image, the first whose models are installed) or why it cannot make one; usable ones first, local before cloud."""
     try:
         descriptions = core_bridge.list_presets(user)
     except Exception:
-        logger.warning("[VIDEO-PRODUCER] Could not list the presets of user %s; reporting no edit preset", user.id, exc_info=True)
+        logger.warning("[VIDEO-PRODUCER] Could not list the presets of user %s; reporting no image preset", user.id, exc_info=True)
         return []
-    wanted = [description for description in descriptions if EDIT_MODE in (description.modes or {})]
+    wanted = [description for description in descriptions if _image_modes(description) or description.category == IMAGE]
     cloud_backends = _cloud_backends() if any(description.engine == CLOUD_ENGINE for description in wanted) else []
     found = []
     for description in wanted:
         try:
-            preset = _edit_preset(description, cloud_backends)
+            preset = _image_preset(description, cloud_backends)
         except Exception:
-            logger.warning("[VIDEO-PRODUCER] Could not read the edit mode of preset %s", description.id, exc_info=True)
+            logger.warning("[VIDEO-PRODUCER] Could not read the image modes of preset %s", description.id, exc_info=True)
             continue
         if preset is not None:
             found.append(preset)
-    return sorted(found, key=lambda preset: (preset.cloud, preset.name.lower()))
+    return sorted(found, key=lambda preset: (not preset.usable, preset.cloud, preset.name.lower()))
+
+
+def edit_presets(user: User) -> List[EditPreset]:
+    """The image presets the user may run that can make a start image now."""
+    return [preset for preset in image_presets(user) if preset.usable]
 
 
 def _visible(user: User, preset_id: str) -> bool:
@@ -318,7 +391,7 @@ def _visible(user: User, preset_id: str) -> bool:
 
 
 def preset_state(user: User, preset_id: str) -> str:
-    """Why an edit preset is missing for the user: not_loaded, not_installed, not_assigned (to them), not_edit when they may run it but it edits no several pictures or has no edit model turned on, or unknown."""
+    """Why an image preset is missing for the user: not_loaded, not_installed, not_assigned (to them), not_edit when they may run it but it makes no image, or unknown."""
     try:
         state = core_bridge.preset_state(preset_id)
     except Exception:
@@ -334,10 +407,14 @@ def preset_state(user: User, preset_id: str) -> str:
 def _missing_preset(user: User, preset_id: str) -> Dict[str, Any]:
     return note(
         "preset_missing",
-        "This edit preset is not available to you: it is not installed, not assigned to you, or edits no several pictures.",
+        "This image preset is not available to you: it is not installed, not assigned to you, or makes no image.",
         preset_id=preset_id,
         state=preset_state(user, preset_id),
     )
+
+
+def _unusable(preset: EditPreset) -> Dict[str, Any]:
+    return note("preset_unusable", UNUSABLE.get(preset.reason or "", "This image preset cannot make a start image."), preset_id=preset.id, reason=preset.reason)
 
 
 def _role_of(reference: Mapping[str, Any]) -> str:
@@ -537,13 +614,16 @@ def _cloud_form(model: Mapping[str, Any], doc: Mapping[str, Any], fields: models
 def build(user: User, doc: Mapping[str, Any], shot_id: str, order: Order) -> KeyframePlan:
     """The edit request of a shot's start or end image candidates, with the pictures it sends and what blocks or warns about it."""
     clip = director.clip_of(doc, shot_id)
-    preset = next((preset for preset in edit_presets(user) if preset.id == order.preset_id), None)
-    built = KeyframePlan(preset=preset, shot_id=shot_id)
+    preset = next((preset for preset in image_presets(user) if preset.id == order.preset_id), None)
+    built = KeyframePlan(preset=preset, shot_id=shot_id, role=order.role)
     if clip is None:
         built.blocks.append(note("shot_not_found", "The shot does not exist.", shot_id=shot_id))
         return built
     if preset is None:
         built.blocks.append(_missing_preset(user, order.preset_id))
+        return built
+    if not preset.usable and preset.reason != MISSING_MODELS:
+        built.blocks.append(_unusable(preset))
         return built
     model = preset.model(order.model_id) if preset.cloud else None
     if preset.cloud and model is None:
@@ -556,14 +636,15 @@ def build(user: User, doc: Mapping[str, Any], shot_id: str, order: Order) -> Key
     limit = preset.limit(order.model_id)
     if len(pictures) > limit:
         built.warnings.append(
-            note("references_trimmed", f"The model takes {limit} pictures at most: the last ones are left out.", sent=limit, found=len(pictures))
+            note("references_trimmed", f"The model takes at most {limit} {'picture' if limit == 1 else 'pictures'}: the last ones are left out.", sent=limit, found=len(pictures))
         )
         pictures = pictures[:limit]
     built.pictures = pictures
     if not pictures:
         built.blocks.append(note("no_references", "Add an identity or 3D set picture to the shot first.", shot_id=shot_id))
         return built
-    fields = models.form_fields(preset.id, EDIT_MODE)
+    mode = preset.mode or EDIT_MODE
+    fields = models.form_fields(preset.id, mode)
     aspect = director.aspect_of(doc)
     prompt = keyframe_prompt(doc, clip, pictures, order.role, order.prompt)
     params: Dict[str, Any] = {}
@@ -586,7 +667,7 @@ def build(user: User, doc: Mapping[str, Any], shot_id: str, order: Order) -> Key
             built.warnings.append(
                 note("aspect_mismatch", "The image takes the aspect ratio of the first picture, not the project's.", aspect=doc.get("aspect"), size=size)
             )
-        resolved = models.resolve_models(preset.id, EDIT_MODE, None, fields)
+        resolved = models.resolve_models(preset.id, mode, None, fields)
         form.update(resolved.values)
         missing = list(resolved.missing)
         if missing:
@@ -596,12 +677,12 @@ def build(user: User, doc: Mapping[str, Any], shot_id: str, order: Order) -> Key
         shot_id=shot_id,
         profile=None,
         director_mode=None,
-        preset_mode=EDIT_MODE,
+        preset_mode=mode,
         seconds=0.0,
         resolution=size,
         fps=None,
         prompt_text=prompt,
-        request=_request(preset.id, prompt, form),
+        request=_request(preset.id, mode, prompt, form),
         model_id=model["id"] if model else None,
         cloud_task=EDIT_TASK if preset.cloud else None,
         cloud_params=params,
@@ -635,12 +716,42 @@ def _quota(owner: User, needed: float, applies: bool) -> Dict[str, Any]:
     }
 
 
+def _part(order: Order, role: str) -> Order:
+    if order.role != BOTH:
+        return order
+    pictures = order.pictures
+    if role == FIRST and pictures is not None:
+        pictures = [picture for picture in pictures if picture["role"] != FRAME]
+    return replace(order, role=role, pictures=pictures)
+
+
+def _distinct(notes: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    kept: List[Dict[str, Any]] = []
+    for item in notes:
+        if item not in kept:
+            kept.append(item)
+    return kept
+
+
+def _summary(part: KeyframePlan) -> Dict[str, Any]:
+    plan = part.plan
+    return {
+        "role": part.role,
+        "resolution": plan.resolution if plan else None,
+        "prompt": plan.prompt_text if plan else None,
+        "references": [picture.summary(rank) for rank, picture in enumerate(part.pictures, start=1)],
+    }
+
+
 async def evaluate(caller: User, owner: User, project: Mapping[str, Any], shot_id: str, order: Order) -> Evaluation:
-    """What the start or end image candidates of a shot would need in memory, time, GPU minutes and money, the pictures they send, and what blocks them."""
-    built = build(owner, project["doc"], shot_id, order)
+    """What the start or end image candidates of a shot, or both, would need in memory, time, GPU minutes and money, the pictures each image sends, and what blocks them; with both, the end image takes the frame pictures and the start image does not."""
+    roles = ROLES if order.role == BOTH else (order.role,)
+    parts = [build(owner, project["doc"], shot_id, _part(order, role)) for role in roles]
+    built = parts[0]
     plan = built.plan
+    runs = order.count * len(parts)
     vram = estimate.unknown_vram()
-    warnings = list(built.warnings)
+    warnings = [item for part in parts for item in part.warnings]
     minutes, ratio, samples = 0.0, None, 0
     cost = None
     if plan is not None and not plan.cloud:
@@ -651,33 +762,34 @@ async def evaluate(caller: User, owner: User, project: Mapping[str, Any], shot_i
         if ratio is None:
             warnings.append(note("time_unknown", "No candidate of this preset was measured at this size yet."))
     elif plan is not None and plan.model_id:
-        runs = [{"task": EDIT_TASK, "params": dict(plan.cloud_params)} for _ in range(order.count)]
-        cost = estimate.model_cost(caller, plan.model_id, runs)
+        cloud_runs = [{"task": EDIT_TASK, "params": dict(part.plan.cloud_params)} for part in parts if part.plan for _ in range(order.count)]
+        cost = estimate.model_cost(caller, plan.model_id, cloud_runs)
     native = plan is not None and not plan.cloud
-    quota = _quota(owner, minutes * order.count, native)
-    blocks = list(built.blocks) + ([estimate.quota_block(quota)] if quota["blocks"] else [])
+    quota = _quota(owner, minutes * runs, native)
+    blocks = _distinct([item for part in parts for item in part.blocks]) + ([estimate.quota_block(quota)] if quota["blocks"] else [])
     preset = built.preset
     payload = {
         "shot_id": shot_id,
         "role": order.role,
         "count": order.count,
-        "preset": {"id": preset.id, "name": preset.name, "cloud": preset.cloud} if preset else None,
+        "preset": {"id": preset.id, "name": preset.name, "cloud": preset.cloud, "mode": preset.mode} if preset else None,
         "model_id": plan.model_id if plan else None,
         "resolution": plan.resolution if plan else None,
         "prompt": plan.prompt_text if plan else None,
         "references": [picture.summary(rank) for rank, picture in enumerate(built.pictures, start=1)],
+        "parts": [_summary(part) for part in parts],
         "vram": vram,
         "time": {
-            "seconds": round(ratio * order.count, 1) if ratio is not None else None,
+            "seconds": round(ratio * runs, 1) if ratio is not None else None,
             "per_candidate": round(ratio, 1) if ratio is not None else None,
             "samples": samples,
         },
         "quota": quota,
         "cost": cost,
         "blocks": blocks,
-        "warnings": warnings,
+        "warnings": _distinct(warnings),
     }
-    return Evaluation(built=built, minutes=minutes if native and generation.reserves(quota) else 0.0, payload=payload)
+    return Evaluation(parts=parts, minutes=minutes if native and generation.reserves(quota) else 0.0, payload=payload)
 
 
 def next_variants(project_id: str, shot_id: str, count: int) -> List[str]:
@@ -694,26 +806,30 @@ def next_variants(project_id: str, shot_id: str, count: int) -> List[str]:
 
 
 async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation) -> List[Dict[str, Any]]:
-    """Create one candidate take per asked image, a seed each from the shot's fixed seed or a fresh one, and hand what fits to the core."""
+    """Create one candidate take per asked image, the start ones first with both, each with the image it is made for, its letter and a seed from the shot's fixed seed or a fresh one, and hand what fits to the core."""
     if evaluation.blocked:
         raise Blocked(evaluation.payload["blocks"])
-    plan = evaluation.built.plan
-    base = plan.seed if plan.seed is not None else generation.new_seed()
-    revision = director.shot_revision(project["doc"], plan.shot_id)
+    first = evaluation.built.plan
+    base = first.seed if first.seed is not None else generation.new_seed()
+    revision = director.shot_revision(project["doc"], first.shot_id)
+    count = evaluation.payload["count"]
+    letters = next_variants(project["id"], first.shot_id, count * len(evaluation.parts))
+    runs = [part for part in evaluation.parts for _ in range(count)]
     created = [
         generation.create(
             owner,
             project["id"],
-            plan,
-            preset_id=plan.preset_id,
+            part.plan,
+            preset_id=part.plan.preset_id,
             quality="draft",
             kind=KEYFRAME,
-            seed=(base + index) % generation.SEED_RANGE,
-            variant=letter,
+            seed=(base + rank) % generation.SEED_RANGE,
+            variant=letters[rank],
             minutes=evaluation.minutes,
             revision=revision,
+            frame_role=part.role,
         )
-        for index, letter in enumerate(next_variants(project["id"], plan.shot_id, evaluation.payload["count"]))
+        for rank, part in enumerate(runs)
     ]
     await generation.pump(owner)
     return [takes.get_take(take["id"]) for take in created]
@@ -739,7 +855,7 @@ def stored_plan(source: Mapping[str, Any]) -> ShotPlan:
 
 
 async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, Any]) -> Dict[str, Any]:
-    """A new candidate like a failed or cancelled one: same shot, request, seed and letter."""
+    """A new candidate like a failed or cancelled one: same shot, request, seed, letter and image."""
     if source["status"] not in generation.RETRYABLE:
         raise generation.TakeError(409, "take_not_retryable", "Only a failed or cancelled take can be retried.")
     plan = stored_plan(source)
@@ -762,6 +878,7 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         variant=source.get("variant") or generation.variant_letter(0),
         minutes=minutes,
         revision=source.get("shot_revision"),
+        frame_role=source.get("frame_role"),
     )
     await generation.pump(owner)
     return takes.get_take(take["id"])

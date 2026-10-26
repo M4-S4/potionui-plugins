@@ -80,7 +80,7 @@ test('normalizeMe: engines, presets, features, upscale targets and settings come
 			['openrouter', 'cloud', null, 2]
 		]
 	);
-	assert.deepEqual(me.engines[2].models[0], { id: 'm-veo', name: 'Veo 3', providerModelId: 'google/veo-3', tasks: ['text_to_video', 'image_to_video'], typicalSeconds: 8, maxSeconds: 8 });
+	assert.deepEqual(me.engines[2].models[0], { id: 'm-veo', name: 'Veo 3', providerModelId: 'google/veo-3', tasks: ['text_to_video', 'image_to_video'], typicalSeconds: 8, maxSeconds: 8, lastFrame: null });
 	const wan = me.presets.find((p) => p.id === WAN);
 	assert.deepEqual(wan.resolutions, [
 		{ value: '832x480', label: 'SD' },

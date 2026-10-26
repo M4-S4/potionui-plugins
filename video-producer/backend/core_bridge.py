@@ -485,6 +485,7 @@ def _cloud_summary(model_id: str, entry: Any) -> Dict[str, Any]:
         "tasks": sorted(entry.tasks or []),
         "typical_seconds": spec.typical_seconds,
         "max_seconds": spec.max_seconds,
+        "inputs": [{"role": media.role, "tasks": sorted(media.tasks)} for media in spec.inputs or ()],
     }
 
 
@@ -524,7 +525,6 @@ def cloud_model(model_id: str) -> Optional[Dict[str, Any]]:
         **_cloud_summary(model_id, resolved.entry),
         "backend_id": resolved.backend_id,
         "params": _params(spec),
-        "inputs": [{"role": media.role, "tasks": sorted(media.tasks)} for media in spec.inputs],
     }
 
 

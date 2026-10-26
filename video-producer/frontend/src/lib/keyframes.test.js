@@ -168,3 +168,61 @@ test('a candidate take keeps its kind, the gallery runs in letter order, and an 
 		{ id: 'gen-t1', kind: 'image', src: '/api/media/generations/g1/0.png', origin: { kind: 'history', generationId: 'g1', fileId: 'f1' }, res: '1360×768', generated: true, resultId: 't1' }
 	);
 });
+
+test('every image preset of GET /me is an option, the unusable ones disabled with their reason, never a default', () => {
+	const listed = [
+		{ id: QWEN, name: 'Qwen-Image-2.1', engine: 'native', mode: 'edit', max_images: 10, usable: true, reason: null, missing: [] },
+		{ id: 'flux2', name: 'Flux2', engine: 'native', mode: 'img2img', max_images: 1, usable: true },
+		{ id: 'flux3', name: 'FLUX 3 Klein', engine: 'native', mode: 'edit', max_images: 10, usable: false, reason: 'missing_models', missing: ['diffusion_model', 7] },
+		{ id: 'zimage', name: 'Z-Image', engine: 'native', mode: null, max_images: 0, usable: false, reason: 'no_image_mode' },
+		{ id: GEMINI, name: 'Gemini Images', engine: 'cloud', mode: 'edit', max_images: 10, usable: false, reason: 'no_key', models: [] },
+		{ id: 'odd', name: 'Odd', engine: 'native', usable: false, reason: 'made_up' }
+	].map(normalizeKeyframePreset);
+	const options = keyframeOptions(listed);
+
+	assert.deepEqual(
+		options.map((o) => [o.preset, o.mode, o.disabled, o.reason, o.maxImages]),
+		[
+			[QWEN, 'edit', false, null, 10],
+			['flux2', 'img2img', false, null, 1],
+			['flux3', 'edit', true, 'missing_models', null],
+			['zimage', null, true, 'no_image_mode', null],
+			[GEMINI, 'edit', true, 'no_key', null],
+			['odd', null, true, 'no_image_mode', null]
+		]
+	);
+	assert.deepEqual(options[2].missing, ['diffusion_model']);
+	assert.equal(listed[0].usable && !listed[2].usable, true);
+	assert.equal(chosenOption([...options].reverse(), { preset: null }).preset, 'flux2');
+	assert.equal(chosenOption(options, { preset: 'zimage', model: null }).reason, 'no_image_mode');
+	assert.equal(chosenOption(options, { preset: GEMINI, model: 'cm-nano' }).reason, 'no_key');
+	assert.equal(presetAbsent(options, { preset: GEMINI, model: 'cm-nano' }), false);
+	assert.equal(chosenOption(options.filter((o) => o.disabled), { preset: null }), null);
+});
+
+test('both images send the start image as framing for the end image, and their estimate gives each image its part', () => {
+	const doc = scene();
+	const draft = draftOf(doc, { first: 'capture' });
+	const option = keyframeOptions(presets)[0];
+
+	assert.deepEqual(draftPictures(doc, doc.clips[0], draft, 'both')[0], { assetId: 'capture', role: 'frame', name: '', origin: 'frame' });
+	assert.equal(requestBody({ option, role: 'both', count: 2, prompt: '', pictures: [] }).role, 'both');
+	const estimate = normalizeKeyframeEstimate({
+		role: 'both',
+		count: 2,
+		parts: [
+			{ role: 'first', resolution: '1360x768', prompt: 'The opening frame', references: [{ rank: 1, asset_id: 'cafe', role: 'setting' }] },
+			{ role: 'last', resolution: '1360x768', prompt: 'The closing frame', references: [{ rank: 1, asset_id: 'capture', role: 'frame' }] },
+			{ role: 'both' }
+		]
+	});
+	assert.equal(estimate.role, 'both');
+	assert.deepEqual(estimate.parts.map((p) => [p.role, p.prompt, p.references[0].assetId, p.references[0].role]), [['first', 'The opening frame', 'cafe', 'setting'], ['last', 'The closing frame', 'capture', 'frame']]);
+	assert.deepEqual(normalizeKeyframeEstimate({}).parts, []);
+});
+
+test('a candidate says the image it was made for, and an older one none', () => {
+	assert.equal(normalizeTake({ id: 't1', kind: 'keyframe', frame_role: 'last' }).frameRole, 'last');
+	assert.equal(normalizeTake({ id: 't2', kind: 'keyframe', frame_role: 'both' }).frameRole, null);
+	assert.equal(normalizeTake({ id: 't3', kind: 'keyframe' }).frameRole, null);
+});

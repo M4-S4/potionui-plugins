@@ -126,8 +126,6 @@
 	"recap.quote": "« {text} »",
 	"recap.none": "Aucune.",
 	"recap.refs": "Références et frames",
-	"recap.scopeGlobal": "globale",
-	"recap.scopeLocal": "locale",
 	"recap.frame": "Frame {role} à {time} · {strength} %",
 	"properties.title": "Propriétés du projet",
 	"properties.name": "Nom",

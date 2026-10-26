@@ -206,7 +206,8 @@ export function shotDraft(doc, clip, engine) {
 		engine: shotEngineOf(clip),
 		cast: castOf(clip),
 		dialogue: linesOf(clip),
-		referencePrompt: referencePromptOf(clip)
+		referencePrompt: referencePromptOf(clip),
+		firstFromPrevious: typeof clip.firstFromPrevious === 'boolean' ? clip.firstFromPrevious : null
 	};
 }
 
@@ -260,6 +261,10 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	if ('cast' in draft) setCast(clip, draft.cast);
 	if ('dialogue' in draft) setDialogue(clip, draft.dialogue);
 	if ('referencePrompt' in draft) setReferencePrompt(clip, draft.referencePrompt);
+	if ('firstFromPrevious' in draft && draft.firstFromPrevious !== before.firstFromPrevious) {
+		if (typeof draft.firstFromPrevious === 'boolean') clip.firstFromPrevious = draft.firstFromPrevious;
+		else delete clip.firstFromPrevious;
+	}
 	const released = resized ? releaseOverrun(doc, clip, was) : null;
 	if (changed) touch(clip);
 	return { changed, resized, released };

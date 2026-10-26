@@ -3,7 +3,8 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, asset, select, secs } from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { families, addReference, refMediaKind, refTypeLabel, refRoleLabel } from '../../lib/references.js';
+	import { families, addReference, refMediaKind, referenceTagText } from '../../lib/references.js';
+	import { typeIcon } from '../../lib/reftags.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
@@ -13,13 +14,14 @@
 	import FilterPills from '../shell/FilterPills.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import Icon from '../Icon.svelte';
+	import RefTags from './RefTags.svelte';
 
 	let q = $state('');
 	const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 	const sent = $derived(supportedProfiles().includes('Ref2VA'));
 	const shotOf = (r) => (r.scope.type === 'shot' ? doc.clips.find((c) => c.id === r.scope.shotId) ?? null : null);
 	const list = $derived(
-		doc.references.filter((r) => (ui.refSpace === 'all' || r.space === ui.refSpace) && (!q || norm(`${r.name} ${refTypeLabel(r.type)} ${refRoleLabel(r.role)}`).includes(norm(q))))
+		doc.references.filter((r) => (ui.refSpace === 'all' || r.space === ui.refSpace) && (!q || norm(`${r.name} ${referenceTagText(r)}`).includes(norm(q))))
 	);
 	const groups = $derived([
 		{ id: 'global', title: t('references.group.global'), hint: t('references.group.globalHint'), refs: list.filter((r) => r.scope.type === 'global') },
@@ -85,7 +87,6 @@
 							{@const thumb = assetThumb(a)}
 							{@const kind = refMediaKind(r.space, r.type)}
 							{@const f = fam(r.space)}
-							{@const shot = shotOf(r)}
 							{@const playable = a?.kind === 'audio' && a.src}
 							<li class="rounded-xl border bg-surface-1 p-2 transition-[border-color,box-shadow] duration-150 {isSel(r) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'}">
 								<div
@@ -104,17 +105,14 @@
 											<img src={thumb} alt="" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100" draggable="false" />
 										{:else}
 											<div class="flex h-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgb(var(--viz-8)/0.25),transparent_60%)]">
-												<Icon name={f?.icon ?? 'bookmark'} class="h-7 w-7 text-fg-muted" />
+												<Icon name={typeIcon(r)} class="h-7 w-7 text-fg-muted" />
 											</div>
 										{/if}
-										<span class="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-white backdrop-blur-sm"><Icon name={f?.icon ?? 'bookmark'} class="h-3 w-3" />{refTypeLabel(r.type)}</span>
-										<span class="absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs text-white backdrop-blur-sm">
-											{#if r.scope.type === 'global'}{t('references.globalBadge')}{:else if shot}<span class="vp-tc">{t('references.range', { start: secs(shot.start), end: secs(shot.start + shot.dur) })}</span>{/if}
-										</span>
 									</div>
-									<div class="px-1 pb-0.5 pt-2">
+									<div class="space-y-1 px-1 pb-0.5 pt-2">
 										<div class="truncate text-sm font-medium">{r.name}</div>
-										<div class="truncate text-xs text-fg-subtle">{r.file ? t('references.roleFile', { role: refRoleLabel(r.role), file: r.file }) : refRoleLabel(r.role)}{a?.kind === 'audio' ? ` · ${a.srcDur ? secs(a.srcDur) : a.name}` : ''}</div>
+										<RefTags reference={r} />
+										{#if r.file || a?.kind === 'audio'}<div class="truncate text-xs text-fg-subtle">{[r.file ? t('references.file', { file: r.file }) : '', a?.kind === 'audio' ? (a.srcDur ? secs(a.srcDur) : a.name) : ''].filter(Boolean).join(' · ')}</div>{/if}
 										{#if kind === 'audio' && !playable}
 											<div class="mt-1 text-xs text-warning">{t('references.noSound')}</div>
 										{:else if !a}

@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from . import core_bridge, takes
 from .core_bridge import User
@@ -39,6 +39,11 @@ def end_of(clip: Mapping[str, Any]) -> float:
     return round(max(float(clip.get("srcIn") or 0), 0.0) + max(float(clip.get("dur") or 0), 0.0), 3)
 
 
+def start_of(clip: Mapping[str, Any]) -> float:
+    """The time of its source the cut of a shot starts at, srcIn, to the millisecond."""
+    return round(max(float(clip.get("srcIn") or 0), 0.0), 3)
+
+
 def frame_command(ffmpeg: str, source: str, end: float, output: Path, length: Optional[float] = None) -> List[str]:
     """The ffmpeg command that writes the last frame a video of length seconds shows before end seconds into output: it decodes from PREROLL seconds before end, or before the end of the video when end is past it, drops every frame from end on and overwrites output with each frame it keeps."""
     seek = max(round(min(end, length or end) - PREROLL, 3), 0.0)
@@ -68,6 +73,30 @@ def frame_command(ffmpeg: str, source: str, end: float, output: Path, length: Op
     ]
 
 
+def first_frame_command(ffmpeg: str, source: str, start: float, output: Path) -> List[str]:
+    """The ffmpeg command that writes the first frame a video shows from start seconds into output: a seek on the input, which ffmpeg makes exact by decoding from the keyframe before, then one frame."""
+    head = ["-ss", num(start)] if start > 0 else []
+    return [
+        ffmpeg,
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        *head,
+        "-i",
+        source,
+        "-map",
+        "0:v:0",
+        "-an",
+        "-sn",
+        "-dn",
+        "-frames:v",
+        "1",
+        "-y",
+        str(output),
+    ]
+
+
 async def run(command: List[str]) -> None:
     """Run one ffmpeg command; raises ChainError when it fails, writes nothing or runs longer than FRAME_SECONDS."""
     try:
@@ -90,20 +119,32 @@ async def run(command: List[str]) -> None:
         raise ChainError("extract_failed", message or "The frame could not be taken from the video.", 502)
 
 
-def _no_media() -> ChainError:
-    return ChainError("no_media", "The shot has no video to take its last frame from.")
+def _no_media(first: bool = False) -> ChainError:
+    which = "first" if first else "last"
+    return ChainError("no_media", f"The shot has no video to take its {which} frame from.")
 
 
-async def end_frame(owner: User, project: Mapping[str, Any], shot_id: str) -> Dict[str, Any]:
-    """Store, as the owner's upload, the last frame a shot shows at the end of its cut of its placed take or video, named <file>-frame-<end>s.png; the stored key, the file name and where it was taken: shot, take, asset and end. Raises ChainError, MediaRefError or LimitExceeded."""
+def _placed(project: Mapping[str, Any], shot_id: str, first: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     doc = project["doc"]
     clip = next((item for item in doc.get("clips") or [] if item.get("id") == shot_id), None)
     if clip is None:
         raise ChainError("shot_not_found", "The shot does not exist.", 404)
     asset = asset_of(doc, clip.get("assetId"))
     if asset is None or asset.get("kind") != "video":
-        raise _no_media()
+        raise _no_media(first)
+    return clip, asset
+
+
+async def end_frame(owner: User, project: Mapping[str, Any], shot_id: str) -> Dict[str, Any]:
+    """Store, as the owner's upload, the last frame a shot shows at the end of its cut of its placed take or video, named <file>-frame-<end>s.png; the stored key, the file name and where it was taken: shot, take, asset and end. Raises ChainError, MediaRefError or LimitExceeded."""
+    clip, asset = _placed(project, shot_id, False)
     return await cut_frame(owner, project["id"], clip, asset)
+
+
+async def start_frame(owner: User, project: Mapping[str, Any], shot_id: str) -> Dict[str, Any]:
+    """Store, as end_frame does, the first frame a shot shows at the start of its cut (srcIn) of its placed take or video; where it was taken gives that start."""
+    clip, asset = _placed(project, shot_id, True)
+    return await cut_frame(owner, project["id"], clip, asset, first=True)
 
 
 def take_asset(take: Mapping[str, Any]) -> Dict[str, Any]:
@@ -135,18 +176,19 @@ def media_of(owner_id: str, frame: Mapping[str, Any]) -> Optional[Dict[str, Any]
     }
 
 
-async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset: Mapping[str, Any]) -> Dict[str, Any]:
-    """Store the last frame the video of asset shows at the end of the cut of clip, as end_frame does."""
+async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset: Mapping[str, Any], first: bool = False) -> Dict[str, Any]:
+    """Store the last frame the video of asset shows at the end of the cut of clip, as end_frame does, or its first frame at the start of the cut."""
     shot_takes = takes.list_takes(project_id)
     resolver = media.Resolver(owner)
     found = media.locate(asset, shot_takes, resolver)
     if found is None or not found.kind:
-        raise _no_media()
+        raise _no_media(first)
     ffmpeg = core_bridge.find_ffmpeg()
     if not ffmpeg:
         raise ChainError("ffmpeg_missing", "ffmpeg is not available on this server: the last frame cannot be taken.", 503)
     ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     end = end_of(clip)
+    at = start_of(clip) if first else end
     take = media.take_of(asset, shot_takes)
     base = work_base() / owner.id
     base.mkdir(parents=True, exist_ok=True)
@@ -154,15 +196,18 @@ async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset
     try:
         source = await asyncio.to_thread(resolver.local, found.kind, found.value, folder)
         if source is None:
-            raise _no_media()
-        probe = await asyncio.to_thread(core_bridge.probe_video, source)
-        output = folder / f"{Path(found.name).stem or 'shot'}-frame-{num(end)}s.png"
-        await run(frame_command(ffmpeg, str(source), end, output, probe.duration if probe else None))
+            raise _no_media(first)
+        output = folder / f"{Path(found.name).stem or 'shot'}-frame-{num(at)}s.png"
+        if first:
+            await run(first_frame_command(ffmpeg, str(source), at, output))
+        else:
+            probe = await asyncio.to_thread(core_bridge.probe_video, source)
+            await run(frame_command(ffmpeg, str(source), end, output, probe.duration if probe else None))
         stored = await core_bridge.save_user_media(owner, output)
     finally:
         await asyncio.to_thread(shutil.rmtree, folder, True)
     return {
         "value": str(stored["value"]),
         "filename": output.name,
-        "source": {"shotId": clip["id"], "takeId": take["id"] if take else None, "assetId": asset["id"], "at": end},
+        "source": {"shotId": clip["id"], "takeId": take["id"] if take else None, "assetId": asset["id"], "at": at},
     }

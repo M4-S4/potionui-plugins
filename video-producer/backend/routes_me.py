@@ -39,7 +39,7 @@ def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
             "plugin": {"id": PLUGIN_ID, "version": PLUGIN_VERSION},
             "engines": catalog.video_engines(),
             "presets": video_presets,
-            "keyframe_presets": [preset.summary() for preset in keyframes.edit_presets(user)],
+            "keyframe_presets": [preset.summary() for preset in keyframes.image_presets(user)],
             "features": {"upscaler": any(preset["upscaler"] for preset in video_presets), "guided": director.guided_ready(user)},
             "upscale_targets": list(catalog.UPSCALE_TARGETS),
             "ffmpeg": _ffmpeg(),

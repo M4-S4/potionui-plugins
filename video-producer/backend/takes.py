@@ -65,6 +65,7 @@ COLUMNS = (
     "finished_at",
     "chain",
     "chain_wait",
+    "frame_role",
 )
 
 PUBLIC = (
@@ -108,6 +109,7 @@ PUBLIC = (
     "started_at",
     "finished_at",
     "chain",
+    "frame_role",
 )
 
 _ACTIVE_SQL = "status IN ('queued', 'running')"

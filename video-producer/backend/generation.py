@@ -132,8 +132,9 @@ def create(
     parent_take_id: Optional[str] = None,
     revision: Optional[int] = None,
     chain: Optional[Dict[str, Any]] = None,
+    frame_role: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Store one take of a plan, with the GPU minutes it reserves and, for a shot that starts from the last image of the previous shot, what it waits for."""
+    """Store one take of a plan, with the GPU minutes it reserves, for a shot that starts from the last image of the previous shot what it waits for, and for a start or end image candidate the image it is made for."""
     size = models.parse_size(plan.resolution)
     take_id = core_bridge.generate_ulid()
     takes.create_take(
@@ -162,6 +163,7 @@ def create(
             "request": plan.request_for(take_id, seed),
             "chain": chain,
             "chain_wait": bool(chain) and chain["state"] == chaining.WAITING,
+            "frame_role": frame_role,
         }
     )
     if minutes > 0 and core_bridge.record_limit_event(owner.id, limits.GPU_MINUTES, minutes, limit_ref(take_id)):
@@ -282,7 +284,8 @@ def _notify(take: Mapping[str, Any], done: bool, message: str = "") -> None:
     name = _project_name(take["project_id"])
     quality = "final" if take.get("quality") == "final" else "draft"
     variant = f" {take['variant']}" if take.get("variant") else ""
-    subject = f"start image candidate{variant}" if take.get("kind") == takes.KEYFRAME else f"{quality} take{variant}"
+    image = "end" if take.get("frame_role") == "last" else "start"
+    subject = f"{image} image candidate{variant}" if take.get("kind") == takes.KEYFRAME else f"{quality} take{variant}"
     text = f"{name}: the {subject} is ready." if done else f"{name}: the {subject} failed."
     core_bridge.notify(
         user_id=take.get("user_id"),

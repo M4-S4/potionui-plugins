@@ -189,7 +189,8 @@ test('shot editor: the draft reads the prompt, the frames, the references and th
 		engine: {},
 		cast: { characters: [], place: null },
 		dialogue: [],
-		referencePrompt: null
+		referencePrompt: null,
+		firstFromPrevious: null
 	});
 });
 

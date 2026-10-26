@@ -5,10 +5,12 @@
 	import { CHARACTERS, PLACES, SPACES, LABEL_MAX, cardsOf, linkable, removeCard, setVoice, shotsCasting, usable, voiceChoices } from '../../lib/bible.js';
 	import { LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
 	import { addCardImage, refTypeLabel } from '../../lib/references.js';
+	import { CARD_ICONS } from '../../lib/reftags.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import MediaPicker from '../shots/MediaPicker.svelte';
+	import RefTags from '../references/RefTags.svelte';
 	import Icon from '../Icon.svelte';
 
 	const found = $derived([CHARACTERS, PLACES].map((kind) => [kind, cardsOf(doc, kind).find((c) => c.id === ui.bibleCard)]).find(([, card]) => card) ?? null);
@@ -38,7 +40,7 @@
 
 <aside class="flex min-h-0 flex-col overflow-hidden border-l border-line bg-surface-1" aria-label={t('panels.director.aside.card')} class:invisible={!ui.inspectorOpen}>
 	<div class="vp-panel-head border-b border-line">
-		<Icon name={kind === PLACES ? 'mountain' : 'user'} class="h-4 w-4 text-fg-muted" />
+		<Icon name={CARD_ICONS[kind ?? CHARACTERS]} class="h-4 w-4 text-fg-muted" />
 		<span class="truncate text-sm font-semibold">{card ? (kind === PLACES ? t('panels.director.bible.place') : t('panels.director.bible.character')) : t('panels.director.aside.card')}</span>
 		<div class="flex-1"></div>
 		<HostUi name="IconButton" props={{ icon: hostIconName('x'), label: t('inspector.close'), tooltip: t('inspector.closeTip'), kbd: commandById('inspector')?.key, size: 'sm', class: 'vp-h7', onclick: () => (ui.inspectorOpen = false) }} />
@@ -93,7 +95,10 @@
 									<label class="flex min-h-7 items-center gap-2 text-xs text-fg-muted">
 										<input type="checkbox" checked={card.references.includes(r.id)} onchange={(e) => link(r.id, e.currentTarget.checked)} />
 										<span class="block h-7 w-12 shrink-0 overflow-hidden rounded bg-surface-3">{#if thumb}<img src={thumb} alt="" class="h-full w-full object-cover" />{/if}</span>
-										<span class="min-w-0 flex-1 truncate">{r.name || refTypeLabel(r.type)}</span>
+										<span class="min-w-0 flex-1 space-y-0.5">
+											<span class="block truncate">{r.name || refTypeLabel(r.type)}</span>
+											<RefTags reference={r} />
+										</span>
 									</label>
 								</li>
 							{/each}
