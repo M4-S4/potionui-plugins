@@ -1,5 +1,5 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, globalPrompt, clipAt, secs, onRestore, openDirector, generates } from './state.svelte.js';
+import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, itemsOf, pickedClips, globalPrompt, clipAt, secs, onRestore, openDirector, generates } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
@@ -19,7 +19,8 @@ const INFO_WARNINGS = ['time_unknown', 'vram_unknown', 'audio_condition'];
 
 export const estimateState = $state({ key: null, data: null, loading: false, error: null });
 export const queueState = $state({ slots: null, elsewhere: null, positions: {} });
-const run = $state({ starting: false });
+const run = $state({ starting: 0 });
+const UNDO_TOAST = 8000;
 
 let alive = false;
 let estimateTimer = null;
@@ -31,6 +32,7 @@ let polling = false;
 let refreshing = null;
 let refreshTimer = null;
 let closeDetails = null;
+let launching = Promise.resolve();
 const subscriptions = new Map();
 const session = new Set();
 
@@ -166,7 +168,7 @@ export function shotActivity(shotId) {
 	return aggregate(realTakesOf(shotId));
 }
 
-export const busy = () => run.starting || flyingTakes().length > 0;
+export const busy = () => run.starting > 0 || flyingTakes().length > 0;
 export const upscaleAvailable = (take) => canUpscale(take, ui.me);
 
 function shotName(shotId) {
@@ -235,6 +237,8 @@ function clipsRange(clips) {
 }
 
 export function jobClips(range = productionRange()) {
+	const picked = pickedClips();
+	if (picked.length) return picked;
 	const sel = ui.selection?.kind === 'clip' ? doc.clips.find((c) => c.id === ui.selection.id) : null;
 	if (ui.production.target === 'clip') return [sel ?? clipAt(ui.playhead) ?? doc.clips[0]].filter(Boolean);
 	const inRange = shotsIn(range);
@@ -312,8 +316,9 @@ export function scheduleEstimate(request) {
 }
 
 export function readiness(opts = {}) {
-	const range = opts.clips?.length ? clipsRange(opts.clips) : productionRange();
-	const items = itemsIn(range);
+	const picked = opts.clips?.length ? [] : pickedClips();
+	const range = opts.clips?.length ? clipsRange(opts.clips) : picked.length ? clipsRange(picked) : productionRange();
+	const items = picked.length ? itemsOf(picked) : itemsIn(range);
 	const missing = [];
 	const warnings = [];
 	const notes = [];
@@ -351,9 +356,7 @@ function failed(error, fallback) {
 	else toast(fallback, 'error');
 }
 
-export async function startGeneration(opts = {}) {
-	if (run.starting) return;
-	if (!opts.clips && busy()) return toast(t('lib.toast.jobRunning'), 'warning');
+export function startGeneration(opts = {}) {
 	const { missing, warnings, range } = readiness(opts);
 	if (missing.length) return toast(missing[0], 'warning');
 	const option = currentEngine();
@@ -361,21 +364,48 @@ export async function startGeneration(opts = {}) {
 	if (!option || !clips.length) return;
 	const quality = opts.quality ?? ui.production.quality;
 	const counts = generationCounts(clips, doc.engine, opts.variants);
-	run.starting = true;
+	const again = clips.filter((c) => shotActivity(c.id).state === 'running').length;
+	run.starting += 1;
 	updateProduction();
-	try {
-		const saved = await flushSave();
-		if (!saved || !project.id) return toast(t('generation.toast.saveFirst'), 'error');
-		const projectId = project.id;
-		const result = await getClient().generate(projectId, requestBody(clips, quality, counts, option));
-		if (projectId !== project.id) return;
-		if (!result.ok) return failed(result.error, t('generation.toast.startFailed'));
-		for (const take of result.data) upsertTake(take);
-		if (warnings.length) toast(warnings[0], 'warning');
-	} finally {
-		run.starting = false;
+	const job = launching.then(() => launch(requestBody(clips, quality, counts, option), warnings, again));
+	launching = job.catch(() => {});
+	return job.finally(() => {
+		run.starting -= 1;
 		track();
+	});
+}
+
+async function launch(body, warnings, again) {
+	const saved = await flushSave();
+	if (!saved || !project.id) return toast(t('generation.toast.saveFirst'), 'error');
+	const projectId = project.id;
+	const result = await getClient().generate(projectId, body);
+	if (projectId !== project.id) return;
+	if (!result.ok) return failed(result.error, t('generation.toast.startFailed'));
+	for (const take of result.data) upsertTake(take);
+	if (result.data.length) queued(result.data, again);
+	if (warnings.length) toast(warnings[0], 'warning');
+}
+
+function queued(created, again) {
+	const ids = created.map((take) => take.id);
+	const shots = new Set(created.map((take) => take.shotId)).size;
+	const text = again ? t('generation.toast.queuedAgain', { count: shots, again }) : t('generation.toast.queued', { count: shots });
+	toast(text, 'info', { label: t('shell.toast.undo'), run: () => cancelQueued(ids) }, UNDO_TOAST);
+}
+
+export async function cancelQueued(ids) {
+	const flying = ids.map(takeById).filter((take) => take && isInFlight(take));
+	if (!flying.length) return;
+	const results = await Promise.all(flying.map((take) => getClient().cancelTake(take.id)));
+	let failures = 0;
+	for (const result of results) {
+		if (result.ok) upsertTake(result.data);
+		else failures += 1;
 	}
+	if (failures) await refreshTakes();
+	track();
+	toast(failures ? t('generation.toast.actionFailed') : t('generation.toast.queueUndone', { count: flying.length - failures }), failures ? 'error' : 'info');
 }
 
 export function promoteToFinal(takeId) {
@@ -627,7 +657,7 @@ function doneMessage(done) {
 function updateProduction() {
 	const p = ui.production;
 	const agg = aggregate(takeStore.list);
-	if (agg.state === 'running' || run.starting) {
+	if (agg.state === 'running' || run.starting > 0) {
 		p.state = 'running';
 		p.progress = agg.progress;
 		p.running = agg.running;

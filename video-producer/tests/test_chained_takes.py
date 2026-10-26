@@ -274,6 +274,30 @@ def test_a_shot_after_a_shot_still_being_generated_waits_for_its_take_of_the_sam
     assert takes.get_take(s2["id"])["chain"]["source"]["takeId"] == s1a["id"]
 
 
+def test_orders_added_while_takes_run_queue_behind_them_with_the_next_letter_and_chain_on_the_takes_still_queued(core, make_project, frames, store):
+    store[("max_parallel_jobs", None)] = "1"
+    core.use_wan()
+    project = make_project(clips=SHOTS)
+    (s1a,) = _start(core, project, ["s1"])
+
+    (s1b,) = _start(core, project, ["s1"])
+    (s2,) = _start(core, project, ["s2"])
+    (s3,) = _start(core, project, ["s3"])
+
+    assert (s1a["variant"], s1b["variant"], s2["variant"], s3["variant"]) == ("A", "B", "A", "A")
+    assert s1a["generation_id"] is not None and (s1b["generation_id"], s2["generation_id"], s3["generation_id"]) == (None, None, None)
+    assert [take["id"] for take in takes.waiting("user-1")] == [s1b["id"]]
+    assert (s2["chain"]["after"], s3["chain"]["after"]) == (s1a["id"], s2["id"])
+    assert s2["chain"]["batch"] != s3["chain"]["batch"]
+    core.complete(s1a["generation_id"])
+    _tick()
+
+    assert takes.get_take(s1b["id"])["generation_id"] is not None
+    assert takes.get_take(s2["id"])["chain"]["state"] == "taken" and takes.get_take(s2["id"])["generation_id"] is None
+    assert takes.get_take(s3["id"])["chain_wait"] is True
+    assert len(core.submitted) == 2
+
+
 def test_a_shot_keeps_an_image_of_its_own_and_a_last_image_already_taken_from_a_previous_shot_left_out_of_the_order(make_doc):
     own = {"id": "own", "kind": "image", "src": "/x.png", "origin": {"kind": "library", "itemId": "it-2"}}
     taken = {**own, "id": "taken", "frameOf": {"shotId": "s1", "takeId": "t0", "assetId": "gen-t0", "at": 4.0}}

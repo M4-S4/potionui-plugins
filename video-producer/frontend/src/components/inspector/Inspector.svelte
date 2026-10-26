@@ -25,7 +25,8 @@
 		shotIdAt,
 		sourceLength,
 		promptEdited,
-		openDirector
+		openDirector,
+		pickedClips
 	} from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -54,9 +55,11 @@
 	import ColorSection from './ColorSection.svelte';
 	import NumField from './NumField.svelte';
 	import SliderField from './SliderField.svelte';
+	import PickedSummary from './PickedSummary.svelte';
 
 	const s = $derived(ui.selection);
 	const item = $derived(selected());
+	const multi = $derived(pickedClips().length > 1);
 
 	const icons = { clip: 'film', audio: 'wave', title: 'type', prompt: 'sparkles', frame: 'image', marker: 'bookmark', reference: 'bookmark', lane: 'sliders' };
 
@@ -190,7 +193,10 @@
 
 <aside class="flex min-h-0 flex-col overflow-hidden border-l border-line bg-surface-1" aria-label={t('inspector.title')} class:invisible={!ui.inspectorOpen}>
 	<div class="vp-panel-head border-b border-line">
-		{#if item && s.kind === 'clip'}
+		{#if multi}
+			<Icon name="layers" class="h-4 w-4 text-fg-muted" />
+			<span class="truncate text-sm font-semibold">{t('inspector.kind.picked')}</span>
+		{:else if item && s.kind === 'clip'}
 			<Tabs
 				label={t('inspector.tabs')}
 				class="vp-tabs-head"
@@ -213,7 +219,9 @@
 		/>
 	</div>
 	<div class="min-h-0 flex-1 space-y-4 overflow-auto p-3">
-		{#if !item}
+		{#if multi}
+			<PickedSummary />
+		{:else if !item}
 			<div class="space-y-3">
 				<div class="text-sm font-medium">{doc.name}</div>
 				<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">

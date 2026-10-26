@@ -4,7 +4,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, select, act, secs, clamp, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf } from '../../lib/state.svelte.js';
+	import { ui, doc, select, act, secs, clamp, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf, isPicked, pickClip, pickedClips } from '../../lib/state.svelte.js';
 	import { takesOf, promoteToFinal, shotActivity, shotEngineText, soundOf } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -15,6 +15,7 @@
 	import { overlayLayer } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { shotStale } from '../../lib/shots.js';
+	import { pickMode } from '../../lib/keyboard.js';
 	import { activityStep } from '../../lib/generation.js';
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
@@ -25,12 +26,14 @@
 	import ViewSwitch from './ViewSwitch.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import FinalPassButton from '../production/FinalPassButton.svelte';
+	import PickedChip from './PickedChip.svelte';
 
 	let size = $state('m');
 	let dragId = $state(null);
 	let editingId = $state(null);
 	let overIdx = $state(null);
 	let countsEl = $state();
+	let listEl = $state();
 	let compact = $state(false);
 	let fullWidth = 0;
 	const cols = { s: 'grid-cols-[repeat(auto-fill,minmax(164px,1fr))]', m: 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))]', l: 'grid-cols-[repeat(auto-fill,minmax(320px,1fr))]' };
@@ -41,6 +44,7 @@
 	]);
 
 	const counts = $derived(Object.keys(stages).map((k) => [k, doc.clips.filter((c) => c.stage === k).length]));
+	const multi = $derived(pickedClips().length > 1);
 	const colorFixes = $derived(doc.clips.length > 1 ? colorIssues() : 0);
 	const SEAM_MENU = 'dropdown:seam:';
 	const seamClip = $derived(typeof ui.menuOpen === 'string' && ui.menuOpen.startsWith(SEAM_MENU) ? (doc.clips.find((c) => ui.menuOpen === SEAM_MENU + c.id) ?? null) : null);
@@ -71,9 +75,28 @@
 		return t('storyboard.primary.final');
 	}
 
-	function pick(c) {
+	$effect(() => {
+		const id = ui.selection?.kind === 'clip' ? ui.selection.id : null;
+		if (id && listEl) queueMicrotask(() => reveal(id));
+	});
+
+	function reveal(id) {
+		const card = listEl?.querySelector(`[data-story-shot="${id}"]`);
+		if (!card) return;
+		const box = listEl.getBoundingClientRect();
+		const r = card.getBoundingClientRect();
+		if (r.top < box.top + 12) listEl.scrollTop += r.top - box.top - 12;
+		else if (r.bottom > box.bottom - 12) listEl.scrollTop += Math.min(r.bottom - box.bottom + 12, r.top - box.top - 12);
+	}
+
+	function pick(c, e = null) {
+		const mode = e ? pickMode(e) : null;
+		if (mode) return pickClip(c.id, mode);
 		select('clip', c.id);
 		seek(c.start + 0.01);
+	}
+	function holdText(e) {
+		if (e.shiftKey && e.target.tagName !== 'INPUT') e.preventDefault();
 	}
 	function editShot(c) {
 		select('clip', c.id);
@@ -137,14 +160,18 @@
 {#if ui.storyView === 'band'}
 	<BandView />
 {:else}
-<section class="isolate flex min-w-0 flex-col bg-canvas" aria-label={t('storyboard.title')}>
+<section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label={t('storyboard.title')}>
 	<ZoneHeader icon="grid" title={t('storyboard.title')} subtitle={t('storyboard.summary', { count: doc.clips.length, duration: secs(seqDuration()) })}>
 		<div bind:this={countsEl} class="ml-2 flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
-			{#each counts as [k, n] (k)}
-				<span class="flex shrink-0 items-center gap-1.5 text-xs {n ? 'text-fg-muted' : 'text-fg-subtle'}" title={t('storyboard.stageCount', { stage: stages[k].label, n })}>
-					<span class="h-1.5 w-1.5 rounded-full {stages[k].dot} {n ? '' : 'opacity-40'}"></span><span class={compact ? 'sr-only' : ''}>{stages[k].label}</span><span class="vp-tc text-fg">{n}</span>
-				</span>
-			{/each}
+			{#if multi}
+				<PickedChip />
+			{:else}
+				{#each counts as [k, n] (k)}
+					<span class="flex shrink-0 items-center gap-1.5 text-xs {n ? 'text-fg-muted' : 'text-fg-subtle'}" title={t('storyboard.stageCount', { stage: stages[k].label, n })}>
+						<span class="h-1.5 w-1.5 rounded-full {stages[k].dot} {n ? '' : 'opacity-40'}"></span><span class={compact ? 'sr-only' : ''}>{stages[k].label}</span><span class="vp-tc text-fg">{n}</span>
+					</span>
+				{/each}
+			{/if}
 		</div>
 		<div class="flex shrink-0 items-center gap-3">
 			{#if colorFixes}
@@ -163,8 +190,8 @@
 		</div>
 	</ZoneHeader>
 
-	<div class="min-h-0 flex-1 overflow-auto p-5" role="list" ondragend={reset} onscroll={closeSeamMenu}>
-		<div class="grid {cols[size]} gap-x-5 gap-y-6">
+	<div bind:this={listEl} class="min-h-0 flex-1 overflow-auto p-5" role="list" ondragend={reset} onscroll={closeSeamMenu}>
+		<div class="grid {cols[size]} gap-x-5 gap-y-6" data-story-grid>
 			{#each doc.clips as c, i (c.id)}
 				{@const thumb = clipThumb(c)}
 				{@const takes = takesOf(c)}
@@ -176,16 +203,21 @@
 				{@const stale = shotStale(c, takes)}
 				{@const ownEngine = shotEngineText(c)}
 				{@const sound = soundOf(c)}
+				{@const picked = isPicked(c.id)}
 				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<article
 					animate:flip={{ duration: ms(220) }}
 					role="listitem"
-					class="group relative rounded-xl border bg-surface-1 p-2 transition-[box-shadow,border-color,opacity] duration-150 {isSel(c) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'} {dragId === c.id ? 'opacity-40' : ''}"
+					class="group relative rounded-xl border bg-surface-1 p-2 transition-[box-shadow,border-color,opacity] duration-150 {isSel(c) || picked ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'} {dragId === c.id ? 'opacity-40' : ''}"
+					style:box-shadow={picked ? '0 0 0 2px rgb(var(--signal))' : null}
+					data-story-shot={c.id}
+					data-picked={picked ? '' : null}
 					draggable={editingId !== c.id}
 					ondragstart={(e) => onDragStart(e, c)}
 					ondragover={(e) => onDragOver(e, i)}
 					ondrop={onDrop}
-					onclick={() => pick(c)}
+					onmousedown={holdText}
+					onclick={(e) => pick(c, e)}
 					ondblclick={() => inViewer(c)}
 					onkeydown={(e) => e.key === 'Enter' && pick(c)}
 				>
@@ -209,7 +241,7 @@
 							</div>
 						{/if}
 						<div class="absolute left-2 top-2 z-10 flex items-center gap-1">
-							<span class="vp-tc rounded-md bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">{String(i + 1).padStart(2, '0')}</span>
+							<span class="vp-tc flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium backdrop-blur-sm {picked ? 'bg-signal text-accent-contrast' : 'bg-black/60 text-white'}">{#if picked}<Icon name="check" class="h-3 w-3" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}{String(i + 1).padStart(2, '0')}</span>
 							{#if i > 0}<ChainChip clip={c} />{/if}
 						</div>
 						{#if sm?.issues.length}

@@ -45,5 +45,9 @@
 	"own.tip": "Shots that set their own engine, profile, quality or seed in their shot editor: those settings come before the project's.",
 	"editEngine": "Edit Engine",
 	"editEngineTip": "Every option of {engine}, kept with the project",
-	"more": "More engine settings"
+	"more": "More engine settings",
+	"enqueue": "Add to queue",
+	"enqueueTip": "Takes are running: add the generation of the selection to the queue",
+	"target.picked.one": "{count} shot",
+	"target.picked.other": "{count} shots"
 }

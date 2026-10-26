@@ -154,5 +154,17 @@
 	"check.write": "Write the prompt",
 	"check.none": "Nothing to check: consistent seams, prompts written, no failed take.",
 	"band.emptyKey": "{key} opens Synopsis and breakdown",
-	"quick.noneTitle": "No shot chosen"
+	"quick.noneTitle": "No shot chosen",
+	"pick.picked": "Picked",
+	"pick.count.one": "{count} shot picked",
+	"pick.count.other": "{count} shots picked",
+	"pick.chip.one": "{count} picked",
+	"pick.chip.other": "{count} picked",
+	"pick.clear": "Clear the selection",
+	"pick.clearTip": "Clear the selection of shots ({key})",
+	"pick.only": "Pick “{shot}” alone",
+	"pick.generateHint": "{key} or Generate selection, in the Production bar, queues these shots in the order of the edit, even while other takes are running.",
+	"pick.running.one": "{count} of them already has a take on its way: it gets one more variant.",
+	"pick.running.other": "{count} of them already have a take on their way: each gets one more variant.",
+	"pick.hint": "{toggle} adds or removes a shot, {range} picks every shot up to that one, {esc} clears the selection."
 }

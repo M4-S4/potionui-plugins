@@ -1,6 +1,6 @@
 <script>
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, asset, clamp, round, relayout, secs, clipLabel, promptOf, sourceLength } from '../../lib/state.svelte.js';
+	import { ui, doc, asset, clamp, round, relayout, secs, clipLabel, promptOf, sourceLength, isPicked, pickClip } from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot, soundOf } from '../../lib/production.svelte.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { labelOf } from '../../lib/labels.js';
@@ -12,6 +12,7 @@
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
 	import { wheelZoomFactor } from '../../lib/timebase.js';
+	import { pickMode } from '../../lib/keyboard.js';
 	import { audioPeaks } from '../../lib/sources.svelte.js';
 	import { clipThumb } from '../../lib/media.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -74,6 +75,12 @@
 	}
 
 	function shotDown(e, c) {
+		const mode = e.button === 0 ? pickMode(e) : null;
+		if (mode) {
+			e.preventDefault();
+			e.stopPropagation();
+			return pickClip(c.id, mode);
+		}
 		drag(e, {
 			onMove: (dx, dy, ev) => {
 				const at = timeAt(ev.clientX);
@@ -181,7 +188,7 @@
 			{@const failed = lastFailure(takesOf(c))}
 			{@const running = shotActivity(c.id).state === 'running'}
 			<div
-				class="absolute bottom-[5px] top-[5px] rounded-sm {failed ? 'bg-danger/75' : running ? 'bg-signal/60' : stages[c.stage].dot} {sel?.id === c.id ? 'ring-[1.5px] ring-fg' : ''}"
+				class="absolute bottom-[5px] top-[5px] rounded-sm {failed ? 'bg-danger/75' : running ? 'bg-signal/60' : stages[c.stage].dot} {sel?.id === c.id || isPicked(c.id) ? 'ring-[1.5px] ring-fg' : ''}"
 				style:left="{(starts[i] / overview) * 100}%"
 				style:width="calc({(c.dur / overview) * 100}% - 2px)"
 				style:opacity={failed || running ? null : 0.6}
@@ -293,6 +300,7 @@
 	{@const last = thumb ? null : seamImage(doc, c.id, 'last')}
 	{@const narrow = w < 92}
 	{@const isSel = sel?.id === c.id}
+	{@const picked = isPicked(c.id)}
 	{@const engine = shotEngineText(c)}
 	{@const sound = soundOf(c)}
 	{@const cast = castLabels(doc, c)}
@@ -302,10 +310,11 @@
 	{@const status = seamStatus(sm)}
 	{@const waiting = activity.state === 'running' && !activity.running ? shotWaitText(c.id) : ''}
 	<div
-		class="group absolute bottom-0 top-0 overflow-hidden rounded-md border bg-surface-1 vp-touch-none {isSel ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-strong hover:border-line-hover'} {reorder?.id === c.id ? 'z-20 opacity-80 shadow-floating' : ''}"
+		class="group absolute bottom-0 top-0 overflow-hidden rounded-md border bg-surface-1 vp-touch-none {isSel || picked ? 'z-10 border-signal ring-1 ring-signal' : 'border-line-strong hover:border-line-hover'} {reorder?.id === c.id ? 'z-20 opacity-80 shadow-floating' : ''}"
 		style:left="{x(starts[i])}px"
 		style:width="{w}px"
 		style:transform={reorder?.id === c.id ? `translateX(${reorder.dx}px)` : null}
+		data-picked={picked ? '' : null}
 		role="button"
 		tabindex={isSel ? 0 : -1}
 		aria-label={t('storyboard.band.shotLabel', { n: i + 1, name: clipLabel(c), dur: secs(c.dur), stage: stages[c.stage].label })}
@@ -328,7 +337,7 @@
 			{/if}
 		</div>
 		<div class="absolute left-1.5 top-1.5 flex items-center gap-1">
-			<span class="vp-tc rounded bg-black/60 px-1 text-2xs font-medium leading-4 text-white">{String(i + 1).padStart(2, '0')}</span>
+			<span class="vp-tc flex items-center gap-0.5 rounded px-1 text-2xs font-medium leading-4 {picked ? 'bg-signal text-accent-contrast' : 'bg-black/60 text-white'}">{#if picked}<Icon name="check" class="h-2.5 w-2.5" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}{String(i + 1).padStart(2, '0')}</span>
 			{#if i > 0 && w > 46}<ChainChip clip={c} small />{/if}
 		</div>
 		<div class="absolute right-1.5 top-1.5 flex gap-1">
@@ -358,6 +367,7 @@
 			</div>
 		</div>
 		<div class="absolute inset-x-0 bottom-0 h-[3px] {stages[c.stage].dot}"></div>
+		{#if picked}<div class="pointer-events-none absolute inset-0 z-10 rounded-md" style:box-shadow="inset 0 0 0 2px rgb(var(--signal))"></div>{/if}
 		<button type="button" tabindex="-1" class="vp-hit absolute inset-y-0 right-0 z-20 w-2 cursor-ew-resize hover:bg-warning {isSel ? 'bg-warning/60' : ''}" aria-label={t('timeline.trim.end')} title={t('storyboard.band.trimTip')} onpointerdown={(e) => trimDown(e, c)}></button>
 	</div>
 	{#if status}

@@ -205,5 +205,6 @@
 	"dialogue.offscreen": " (off-screen)",
 	"dialogue.none": "No line.",
 	"dialogue.edit": "Edit the dialogue…",
-	"takes.drafts": "Drafts of this shot"
+	"takes.drafts": "Drafts of this shot",
+	"kind.picked": "Selection"
 }

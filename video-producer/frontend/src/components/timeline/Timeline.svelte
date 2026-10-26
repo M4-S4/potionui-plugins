@@ -27,13 +27,16 @@
 		toast,
 		secs,
 		clipLabel,
-		sourceLength
+		sourceLength,
+		isPicked,
+		pickClip
 	} from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { shotWaitText } from '../../lib/chain.svelte.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
+	import { pickMode } from '../../lib/keyboard.js';
 	import { overrunsTake } from '../../lib/shots.js';
 	import { audioPeaks } from '../../lib/sources.svelte.js';
 	import { roleColor, stages, frameRoleLabel } from '../../lib/catalog.js';
@@ -232,6 +235,12 @@
 	}
 
 	function clipDown(e, c) {
+		const mode = e.button === 0 && ui.tool !== 'blade' ? pickMode(e) : null;
+		if (mode) {
+			e.preventDefault();
+			e.stopPropagation();
+			return pickClip(c.id, mode);
+		}
 		if (ui.tool === 'blade') {
 			select('clip', c.id);
 			return bladeAt(timeAt(e.clientX));
@@ -628,16 +637,18 @@
 	{@const media = asset(c.assetId)}
 	{@const w = x(c.dur)}
 	{@const sel = isSel('clip', c.id)}
+	{@const picked = isPicked(c.id)}
 	{@const takes = takesOf(c).length}
 	{@const activity = shotActivity(c.id)}
 	{@const waiting = activity.state === 'running' && !activity.running ? shotWaitText(c.id) : ''}
 	{@const ownEngine = shotEngineText(c)}
 	<div
-		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/40'} {reorder?.id === c.id ? 'opacity-60' : ''}"
+		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel || picked ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/40'} {reorder?.id === c.id ? 'opacity-60' : ''}"
 		style:left="{x(c.start)}px"
 		style:width="{w}px"
 		style:transform={reorder?.id === c.id ? `translateX(${reorder.dx}px)` : null}
 		style:background="rgb(var(--viz-1) / 0.35)"
+		data-picked={picked ? '' : null}
 		onpointerdown={(e) => clipDown(e, c)}
 		ondblclick={() => (ui.inspectorOpen = true)}
 		role="button"
@@ -651,7 +662,8 @@
 			<div class="absolute inset-x-0 bottom-0 top-5 bg-surface-2 bg-[repeating-linear-gradient(135deg,rgb(var(--viz-1)/0.35)_0_1px,transparent_1px_8px)]"></div>
 			{#if !media?.src}<span class="absolute bottom-1.5 left-1.5 text-2xs text-fg-muted">{media ? t('lib.media.offline') : stages.todo.label}</span>{/if}
 		{/if}
-		<div class="vp-clip-head absolute inset-x-0 top-0 flex h-5 items-center gap-1 bg-viz-1 px-1.5 text-xs font-semibold">
+		<div class="vp-clip-head absolute inset-x-0 top-0 flex h-5 items-center gap-1 bg-viz-1 px-1.5 text-xs font-semibold" style:background-color={picked ? 'rgb(var(--signal))' : null} style:color={picked ? 'rgb(var(--accent-contrast))' : null}>
+			{#if picked}<Icon name="check" class="h-3 w-3 shrink-0" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}
 			<span class="h-1.5 w-1.5 shrink-0 rounded-full {stages[c.stage].dot}" title={stages[c.stage].label}></span>
 			{#if c.flag}<Icon name={flagIcon[c.flag]} class="h-3 w-3" />{/if}
 			{#if ownEngine}<span class="flex shrink-0" role="img" aria-label={ownEngine} title={ownEngine} data-own-engine><Icon name="sliders" class="h-3 w-3" /></span>{/if}

@@ -66,7 +66,6 @@
 	"toast.useTakeFinal": "“{shot}” uses final take {variant}",
 	"toast.useTakeDraft": "“{shot}” uses draft take {variant}",
 	"toast.takeReleased": "“{shot}” is longer than its take: it goes back to be generated",
-	"toast.jobRunning": "A generation is already running.",
 	"toast.cancelled": "Generation cancelled",
 	"toast.finalReady": "Final version ready and applied to the shot",
 	"toast.takesFinal.one": "{count} final take ready",
@@ -230,5 +229,7 @@
 	"refType.voice": "Voice",
 	"refType.music": "Music",
 	"refType.ambience": "Ambience",
-	"refRole.sound": "Sound"
+	"refRole.sound": "Sound",
+	"toast.shotsDeleted.one": "{count} shot deleted",
+	"toast.shotsDeleted.other": "{count} shots deleted"
 }

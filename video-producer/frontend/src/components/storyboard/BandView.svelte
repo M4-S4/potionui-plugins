@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, secs, addShot } from '../../lib/state.svelte.js';
+	import { ui, doc, secs, addShot, pickedClips } from '../../lib/state.svelte.js';
 	import { shotActivity, takesOf } from '../../lib/production.svelte.js';
 	import { stages } from '../../lib/catalog.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -17,11 +17,14 @@
 	import ViewSwitch from './ViewSwitch.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import FinalPassButton from '../production/FinalPassButton.svelte';
+	import PickedSummary from '../inspector/PickedSummary.svelte';
+	import PickedChip from './PickedChip.svelte';
 	import Icon from '../Icon.svelte';
 
 	let lanes = $state();
 	let countsEl = $state();
 	const sel = $derived(selectedShot());
+	const multi = $derived(pickedClips().length > 1);
 	const counts = $derived(Object.keys(stages).map((k) => [k, doc.clips.filter((c) => c.stage === k).length]));
 	const running = $derived(doc.clips.filter((c) => shotActivity(c.id).state === 'running').length);
 	const failed = $derived(doc.clips.filter((c) => lastFailure(takesOf(c))).length);
@@ -48,11 +51,15 @@
 <section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label={t('storyboard.title')}>
 	<ZoneHeader icon="grid" title={t('storyboard.title')} subtitle={t('storyboard.summary', { count: doc.clips.length, duration: secs(total) })}>
 		<div bind:this={countsEl} class="flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
-			{#each counts as [k, n] (k)}
-				<span class="flex shrink-0 items-center gap-1.5 text-xs {n ? 'text-fg-muted' : 'text-fg-subtle'}" title={t('storyboard.stageCount', { stage: stages[k].label, n })}>
-					<span class="h-1.5 w-1.5 rounded-full {stages[k].dot} {n ? '' : 'opacity-40'}"></span>{stages[k].label}<span class="vp-tc text-fg">{n}</span>
-				</span>
-			{/each}
+			{#if multi}
+				<PickedChip />
+			{:else}
+				{#each counts as [k, n] (k)}
+					<span class="flex shrink-0 items-center gap-1.5 text-xs {n ? 'text-fg-muted' : 'text-fg-subtle'}" title={t('storyboard.stageCount', { stage: stages[k].label, n })}>
+						<span class="h-1.5 w-1.5 rounded-full {stages[k].dot} {n ? '' : 'opacity-40'}"></span>{stages[k].label}<span class="vp-tc text-fg">{n}</span>
+					</span>
+				{/each}
+			{/if}
 			{#if running}<span class="flex shrink-0 items-center gap-1 text-xs text-signal"><Icon name="sparkles" class="h-3 w-3" />{t('storyboard.band.running', { count: running })}</span>{/if}
 			{#if failed}<span class="flex shrink-0 items-center gap-1 text-xs text-danger"><Icon name="alert" class="h-3 w-3" />{t('storyboard.band.failedCount', { count: failed })}</span>{/if}
 		</div>
@@ -93,7 +100,9 @@
 		{:else}
 			<BandMonitor />
 			<aside class="min-h-0 overflow-auto border-l border-line bg-surface-1 p-3" aria-label={t('storyboard.quick.title')}>
-				{#if sel}
+				{#if multi}
+					<PickedSummary />
+				{:else if sel}
 					{#key sel.id}<ShotQuickEdit clip={sel} />{/key}
 				{:else}
 					<HostUi name="EmptyState" props={noPick} />

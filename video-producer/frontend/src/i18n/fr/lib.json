@@ -66,7 +66,6 @@
 	"toast.useTakeFinal": "« {shot} » utilise la prise finale {variant}",
 	"toast.useTakeDraft": "« {shot} » utilise la prise brouillon {variant}",
 	"toast.takeReleased": "« {shot} » dépasse sa prise : il repasse à générer",
-	"toast.jobRunning": "Une génération est déjà en cours.",
 	"toast.cancelled": "Génération annulée",
 	"toast.finalReady": "Version finale prête et appliquée au plan",
 	"toast.takesFinal.one": "{count} prise finale prête",
@@ -230,5 +229,7 @@
 	"refType.voice": "Voix",
 	"refType.music": "Musique",
 	"refType.ambience": "Ambiance",
-	"refRole.sound": "Son"
+	"refRole.sound": "Son",
+	"toast.shotsDeleted.one": "{count} plan supprimé",
+	"toast.shotsDeleted.other": "{count} plans supprimés"
 }

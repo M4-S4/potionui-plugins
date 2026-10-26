@@ -17,7 +17,7 @@ test('base: the underlined tabs are 40 px high like every area header, and the I
 	assert.match(rule('.vp-panel-head'), /height: 2\.5rem;/);
 	assert.match(rule('.vp-zone-head'), /height: 2\.5rem;[\s\S]*gap: 0\.75rem;[\s\S]*border-bottom: 1px solid rgb\(var\(--line\)\);[\s\S]*padding: 0 1rem;/);
 	const inspector = read('../components/inspector/Inspector.svelte');
-	assert.match(inspector, /<div class="vp-panel-head border-b border-line">\n\t\t\{#if item && s\.kind === 'clip'\}\n\t\t\t<Tabs\n\t\t\t\tlabel=\{t\('inspector\.tabs'\)\}\n\t\t\t\tclass="vp-tabs-head"/);
+	assert.match(inspector, /<div class="vp-panel-head border-b border-line">\n\t\t\{#if multi\}\n\t\t\t<Icon name="layers" class="h-4 w-4 text-fg-muted" \/>\n\t\t\t<span class="truncate text-sm font-semibold">\{t\('inspector\.kind\.picked'\)\}<\/span>\n\t\t\{:else if item && s\.kind === 'clip'\}\n\t\t\t<Tabs\n\t\t\t\tlabel=\{t\('inspector\.tabs'\)\}\n\t\t\t\tclass="vp-tabs-head"/);
 });
 
 test('base: the centre areas share one header template, icon, title and counter on the left', () => {
