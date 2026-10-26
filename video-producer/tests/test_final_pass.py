@@ -8,7 +8,7 @@ from backend.estimate import Order
 from backend.final_pass import PassError
 from backend.generation import Blocked
 
-SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4}]
+SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4, "firstFromPrevious": False}]
 BASE = "/api/plugins/video-producer"
 
 
