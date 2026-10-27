@@ -4,7 +4,6 @@
 	"toast.prompt": "Prompt of “{shot}” updated by the assistant",
 	"toast.fixed.one": "{count} prompt rewritten by the assistant",
 	"toast.fixed.other": "{count} prompts rewritten by the assistant",
-	"toast.reloaded": "Project reloaded with the assistant’s changes",
 	"toast.reloadFailed": "The project could not be reloaded. Reopen it to see the assistant’s changes.",
 	"toast.proposal.one": "{count} shot proposed in Storyboard",
 	"toast.proposal.other": "{count} shots proposed in Storyboard",
@@ -48,5 +47,13 @@
 	"suggest.sound": "Help me write a sound brief: {type}, from {start} to {end}.",
 	"seam.cast_unnamed": "“{shot}” does not name {labels}, cast in the shot.",
 	"fix.cast_unnamed": "Name each character cast in the shot by its visual tag.",
-	"suggest.split": "Break my synopsis down into shots, timed on the parts of the song."
+	"suggest.split": "Break my synopsis down into shots, timed on the parts of the song.",
+	"toast.changed": "Project updated by the assistant",
+	"toast.changedKept.one": "Project updated by the assistant; {count} of your edits was kept over its change",
+	"toast.changedKept.other": "Project updated by the assistant; {count} of your edits were kept over its change",
+	"toast.changedDropped.one": "Project updated by the assistant; it deleted {count} shot you had edited, Ctrl+Z brings it back",
+	"toast.changedDropped.other": "Project updated by the assistant; it deleted {count} shots you had edited, Ctrl+Z brings them back",
+	"toast.takes.one": "{count} take started by the assistant",
+	"toast.takes.other": "{count} takes started by the assistant",
+	"toast.export": "Export started by the assistant"
 }

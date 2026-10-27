@@ -1,13 +1,15 @@
-import { t } from '../i18n/index.svelte.js';
-import { doc, ui, act, toast, round, secs, clipLabel, allIssues, ruleText, openDirector } from './state.svelte.js';
-import { project, openProject, savedSnapshot, markSaved } from './project.svelte.js';
+import { getLocale, t } from '../i18n/index.svelte.js';
+import { doc, ui, act, toast, round, secs, clipLabel, allIssues, ruleText, openDirector, undo } from './state.svelte.js';
+import { project, savedSnapshot, markSaved, flushSave, getClient, pullProject, mergedToast } from './project.svelte.js';
 import { promptLanguageOf } from './starter.js';
 import { bibleContext } from './bible.js';
 import { seams } from './continuity.svelte.js';
 import { chat } from './host.js';
 import { ulid } from './ulid.js';
-import { flyingTakes } from './takes.svelte.js';
-import { applyPrompts, issuesContext, productionContext, promptChanges, promptPlan, proposalFrom, reviewCount, reviewFrom, seamsContext, shotsContext } from './assistant.js';
+import { flyingTakes, realTakesOf } from './takes.svelte.js';
+import { engineLabel, followTakes } from './production.svelte.js';
+import { listJobs } from './exports.svelte.js';
+import { LIVE_TOOLS, PAGE_TOOLS, applyPrompts, changePlan, issuesContext, productionContext, promptChanges, promptPlan, proposalFrom, reviewCount, reviewFrom, seamsContext, shotsContext, startedTakes } from './assistant.js';
 
 export const review = $state({ current: null });
 
@@ -61,9 +63,12 @@ export function reviewFix(seam, issue) {
 }
 
 export function contextSnapshot() {
+	if (ui.dirty && project.id) flushSave();
 	return {
+		contextId: ulid(),
 		projectId: project.id,
 		projectVersion: project.version,
+		locale: getLocale(),
 		name: doc.name,
 		promptLanguage: promptLanguageOf(doc.promptLanguage),
 		workspace: ui.workspace,
@@ -73,8 +78,8 @@ export function contextSnapshot() {
 		synopsis: doc.synopsis,
 		direction: $state.snapshot(doc.direction),
 		bible: bibleContext(doc),
-		production: productionContext(ui.production, flyingTakes().length),
-		shots: shotsContext(doc, clipLabel),
+		production: productionContext(ui.production, flyingTakes().length, engineLabel()),
+		shots: shotsContext(doc, clipLabel, realTakesOf),
 		issues: issuesContext(allIssues()),
 		seams: seamsContext(seams())
 	};
@@ -90,13 +95,6 @@ export function showReview() {
 	ui.sidebarOpen = true;
 }
 
-function reload() {
-	openProject(project.id).then(
-		(result) => (result.ok ? toast(t('assistant.toast.reloaded'), 'warning') : toast(t('assistant.toast.reloadFailed'), 'error')),
-		() => toast(t('assistant.toast.reloadFailed'), 'error')
-	);
-}
-
 function appliedToast(tool, changes) {
 	if (tool === 'vp_fix_conflicts') return toast(t('assistant.toast.fixed', { count: changes.length }), 'success');
 	toast(t('assistant.toast.prompt', { shot: clipLabel(doc.clips.find((c) => c.id === changes[0].shotId)) }), 'success');
@@ -110,7 +108,7 @@ export function applyPromptResult(tool, result) {
 	if (plan === 'stale') return { status: 'stale', message: t('assistant.stale.write') };
 	if (plan === 'noop') return { status: 'noop' };
 	if (plan === 'reload') {
-		reload();
+		pull(result.version);
 		return { status: 'applied' };
 	}
 	act(() => applyPrompts(doc, changes));
@@ -147,16 +145,68 @@ export function applyReview(result) {
 	return { status: 'applied' };
 }
 
+const CHANGED = {
+	merged: () => t('assistant.toast.changed'),
+	kept: (count) => t('assistant.toast.changedKept', { count }),
+	dropped: (count) => t('assistant.toast.changedDropped', { count })
+};
+
+function changedToast(outcome) {
+	if (outcome?.changed) mergedToast(outcome, { ...CHANGED, action: { label: t('shell.toast.undo'), run: undo } });
+}
+
+let following = null;
+
+function pull(version = 0) {
+	const pulled = pullProject(version);
+	if (pulled !== following) {
+		following = pulled;
+		pulled.then(changedToast, () => toast(t('assistant.toast.reloadFailed'), 'error'));
+	}
+	return pulled;
+}
+
+async function reloadTakes(projectId) {
+	const result = await getClient()?.listTakes(projectId);
+	if (result?.ok && projectId === project.id) followTakes(result.data);
+}
+
+function exportStarted() {
+	listJobs();
+	toast(t('assistant.toast.export'), 'success', { label: t('assistant.toast.show'), run: () => (ui.modal = { type: 'export' }) });
+}
+
+export function applyChangeResult(tool, result) {
+	const plan = changePlan({ tool, result, projectId: project.id, version: project.version });
+	if (plan.status === 'stale') return { status: 'stale', message: t('assistant.stale.write') };
+	if (plan.status === 'noop') return { status: 'noop' };
+	if (plan.pull) pull(plan.pull);
+	if (plan.takes) reloadTakes(project.id);
+	const started = startedTakes(tool, result);
+	if (started) toast(t('assistant.toast.takes', { count: started }), 'success', { label: t('assistant.toast.show'), run: () => openDirector('review') });
+	if (plan.exported) exportStarted();
+	return { status: 'applied' };
+}
+
+function onToolEnd(event) {
+	const detail = event?.detail;
+	if (detail?.success === false || detail?.pending || !LIVE_TOOLS.includes(detail?.tool_name) || !project.id) return;
+	pull();
+}
+
 export function startAssistant() {
 	const offs = [
 		chat.provideContext('video_producer', contextSnapshot),
 		chat.onToolApplied('vp_write_shot_prompt', (result) => applyPromptResult('vp_write_shot_prompt', result)),
 		chat.onToolApplied('vp_fix_conflicts', (result) => applyPromptResult('vp_fix_conflicts', result)),
 		chat.onToolApplied('vp_split_synopsis', applyProposal),
-		chat.onToolApplied('vp_check_continuity', applyReview)
+		chat.onToolApplied('vp_check_continuity', applyReview),
+		...PAGE_TOOLS.map((tool) => chat.onToolApplied(tool, (result) => applyChangeResult(tool, result)))
 	];
+	if (typeof window !== 'undefined') window.addEventListener('potionui:tool-end', onToolEnd);
 	return () => {
 		for (const off of offs) off();
+		if (typeof window !== 'undefined') window.removeEventListener('potionui:tool-end', onToolEnd);
 		review.current = null;
 	};
 }

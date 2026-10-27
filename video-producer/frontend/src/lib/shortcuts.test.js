@@ -154,10 +154,12 @@ test('shortcuts: every shortcut that is shown fires with exactly its keys and wi
 test('shortcuts: the key handler looks every key up in the table of the commands, with the guards the guides describe', () => {
 	const handler = source.slice(source.indexOf('export function handleKeydown'));
 	assert.match(handler, /findShortcut\(e, keymap, IS_MAC\)/);
-	assert.match(source, /\.\.\.allCommands\.flatMap\(\(c\) =>\n\t\t\[c\.keys, c\.alias\]\.filter\(Boolean\)\.map\(\(spec\) => \(\{ spec, run: c\.press, global: c\.global, claim: c\.claim, typing: c\.typing, repeat: c\.repeat, single: isSingleKey\(spec\) \}\)\)\n\t\),/);
+	assert.match(source, /\.\.\.allCommands\.flatMap\(\(c\) =>\n\t\t\[c\.keys, c\.alias\]\.filter\(Boolean\)\.map\(\(spec\) => \(\{ spec, id: c\.id, run: c\.press, global: c\.global, claim: c\.claim, typing: c\.typing, repeat: c\.repeat, single: isSingleKey\(spec\) \}\)\)\n\t\),/);
 	assert.match(source, /get aliasKey\(\) \{\n\t\t\treturn alias \? shortcutLabel\(alias\) : '';\n\t\t\}/);
 	assert.match(readFileSync(join(here, '../components/modals/Modals.svelte'), 'utf-8'), /<kbd class="vp-kbd text-xs">\{c\.key\}<\/kbd>\{#if c\.alias\}<kbd class="vp-kbd text-xs">\{c\.aliasKey\}<\/kbd>\{\/if\}/);
 	assert.match(handler, /if \(hit\.when && !hit\.when\(\)\) return;/);
+	assert.match(handler, /if \(\(target && target !== document\.body && root && !root\.contains\(target\)\) \|\| ui\.hostModal \|\| \(hostOverlayOpen\(\) && !overChat\(e\)\)\) \{/);
+	assert.match(source, /const OVER_CHAT = \['undo', 'redo'\];/);
 	assert.match(handler, /!hit\.global && \(isTypingTarget\(target, e\) \|\| ui\.modal \|\| ui\.paletteOpen\)/);
 	assert.match(handler, /hit\.single && !ui\.singleKeyShortcuts/);
 	assert.match(handler, /e\.repeat && !hit\.repeat/);

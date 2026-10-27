@@ -11,6 +11,7 @@ import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
 import { promptShot, viewOf, viewShot, witnessOf } from './director.js';
 import { picking, pruned } from './picking.js';
+import { same } from './merge.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -196,6 +197,16 @@ export function discardLast() {
 export function act(fn) {
 	checkpoint();
 	fn();
+}
+export function adopt(next) {
+	const known = new Set(doc.clips.map((c) => c.id));
+	act(() => {
+		for (const k of Object.keys(doc)) if (!(k in next)) delete doc[k];
+		for (const k of Object.keys(next)) if (!same($state.snapshot(doc[k]), next[k])) doc[k] = next[k];
+		shotsAdded(doc.clips.filter((c) => !known.has(c.id)));
+	});
+	if (ui.selection && !selected()) ui.selection = null;
+	for (const listener of restoreListeners) listener();
 }
 
 const HOST_LEVELS = { info: 'info', success: 'success', warning: 'warning', error: 'error', sim: 'info' };

@@ -144,6 +144,8 @@
 	"shot.subtitle": "{start} → {end}",
 	"shot.takesNote.one": "Ce plan a {count} prise. Enregistrer une modification la garde et la marque « Prompt modifié ».",
 	"shot.takesNote.other": "Ce plan a {count} prises. Enregistrer une modification les garde et les marque « Prompt modifié ».",
+	"shot.kept.one": "{count} réglage de ce plan a changé pendant votre modification ; votre version a été gardée",
+	"shot.kept.other": "{count} réglages de ce plan ont changé pendant votre modification ; votre version a été gardée",
 	"shot.references": "Références",
 	"shot.referencesSent.one": "{count} référence pour ce plan",
 	"shot.referencesSent.other": "{count} références pour ce plan",

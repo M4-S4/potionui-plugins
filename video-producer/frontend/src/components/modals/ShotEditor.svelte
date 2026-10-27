@@ -1,14 +1,14 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, asset, clipLabel, promptIssues, relayout, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, act, asset, clipLabel, promptIssues, relayout, secs, toast } from '../../lib/state.svelte.js';
 	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf, shotDurationLimit, settleRelease } from '../../lib/production.svelte.js';
 	import { PROFILES, optionKey, presetProfiles } from '../../lib/generation.js';
 	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
 	import { refTypeLabel } from '../../lib/references.js';
 	import { typeIcon } from '../../lib/reftags.js';
 	import { assetThumb } from '../../lib/media.js';
-	import { SHOT_CAP, applyShotDraft, inputsChanged, overrunsTake, shotDraft, shotReferences } from '../../lib/shots.js';
+	import { SHOT_CAP, applyShotDraft, inputsChanged, overrunsTake, rebaseDraft, shotDraft, shotReferences } from '../../lib/shots.js';
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
 	import { laneTitle } from '../../lib/tracks.js';
 	import { ulid } from '../../lib/ulid.js';
@@ -119,12 +119,17 @@
 	function saveIt() {
 		if (!clip) return (ui.modal = null);
 		let released = null;
+		let conflicts = 0;
 		act(() => {
-			const result = applyShotDraft(doc, clip, baseline, $state.snapshot(draft), { makeId: ulid, maxDur: limit.max, engine: doc.engine });
+			const current = $state.snapshot(shotDraft(doc, clip, doc.engine));
+			const rebased = rebaseDraft($state.snapshot(baseline), $state.snapshot(draft), current);
+			const result = applyShotDraft(doc, clip, current, rebased.draft, { makeId: ulid, maxDur: limit.max, engine: doc.engine });
+			conflicts = rebased.conflicts;
 			released = result.released;
 			if (result.resized) relayout();
 		});
 		settleRelease(clip, released);
+		if (conflicts) toast(t('modals.shot.kept', { count: conflicts }), 'warning');
 		ui.modal = null;
 	}
 

@@ -86,5 +86,10 @@
 	"upload.soundOnly.one": "“{name}” cannot be used here: only audio files are accepted.",
 	"upload.soundOnly.other": "{count} files cannot be used here: only audio files are accepted.",
 	"upload.videoOnly.one": "“{name}” cannot be used here: only videos are accepted.",
-	"upload.videoOnly.other": "{count} files cannot be used here: only videos are accepted."
+	"upload.videoOnly.other": "{count} files cannot be used here: only videos are accepted.",
+	"toast.merged": "Changes saved elsewhere were merged into the project",
+	"toast.mergedKept.one": "Changes saved elsewhere were merged; {count} of your edits was kept over them",
+	"toast.mergedKept.other": "Changes saved elsewhere were merged; {count} of your edits were kept over them",
+	"toast.mergedDropped.one": "Changes saved elsewhere were merged; {count} shot you had edited was deleted there, Ctrl+Z brings it back",
+	"toast.mergedDropped.other": "Changes saved elsewhere were merged; {count} shots you had edited were deleted there, Ctrl+Z brings them back"
 }

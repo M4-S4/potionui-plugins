@@ -133,10 +133,20 @@ def _cast(shot: Mapping[str, Any]) -> str:
     return f"; cast: {', '.join(cast)}" if cast else ""
 
 
+def _takes(shot: Mapping[str, Any]) -> str:
+    count = shot.get("takes")
+    if not isinstance(count, int) or isinstance(count, bool):
+        return f", take {_cap(shot['take'], 40)}" if shot.get("take") else ""
+    if count <= 0:
+        return ", no take"
+    final = _cap(shot.get("final"), 4)
+    return f", {count} take{'s' if count != 1 else ''}" + (f" (final {final})" if final else "")
+
+
 def _shot_line(index: int, shot: Mapping[str, Any], labels: Dict[Any, str]) -> str:
     start = _number(shot.get("start"))
     end = start + _number(shot.get("dur"))
-    take = f", take {_cap(shot['take'], 40)}" if shot.get("take") else ""
+    take = _takes(shot)
     prompt = _cap(shot.get("prompt"), MAX_PROMPT_CHARS)
     instruction = f'prompt: "{prompt}"' if prompt else "no prompt"
     return (
@@ -199,10 +209,13 @@ def _production(page: Mapping[str, Any]) -> List[str]:
     if not isinstance(production, dict):
         return []
     field = lambda key, limit, default: _cap(production.get(key), limit) or default
+    engine = _cap(production.get("engine"), MAX_LABEL_CHARS)
     return [
         f"Production: {field('state', 20, 'ready')}, {field('progress', 10, '0')}% "
         f"({field('quality', 20, '?')} quality, "
-        f"target {field('target', 20, '?')}, {field('queue', 10, '0')} queued)."
+        f"target {field('target', 20, '?')}, {field('queue', 10, '0')} queued"
+        + (f', engine "{engine}"' if engine else "")
+        + ")."
     ]
 
 

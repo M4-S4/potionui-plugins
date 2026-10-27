@@ -201,3 +201,15 @@ def test_malformed_values_from_the_page_never_break_the_block():
     assert '  1. [shot-1] "Shot 1" 0–0 s, todo, frames none; prompt: "Instruction 1"' in block
     assert "Playhead" not in block and "Range" not in block
     assert "Direction (generation profile FL2VA):\n  (empty)" in block
+
+
+def test_each_shot_says_how_many_takes_it_has_and_which_one_is_final_and_production_names_the_engine():
+    shots = [_shot(1, takes=3, final="B"), _shot(2, takes=1), _shot(3, takes=0)]
+    production = {"target": "clip", "quality": "draft", "state": "ready", "progress": 0, "queue": 0, "engine": "Wan 2.1 / 2.2"}
+
+    lines = build_context(_metadata(shots=shots, production=production), None, "user-1").splitlines()
+
+    assert '  1. [shot-1] "Shot 1" 0–4 s, todo, 3 takes (final B), frames none; prompt: "Instruction 1"' in lines
+    assert '  2. [shot-2] "Shot 2" 4–8 s, todo, 1 take, frames none; prompt: "Instruction 2"' in lines
+    assert '  3. [shot-3] "Shot 3" 8–12 s, todo, no take, frames none; prompt: "Instruction 3"' in lines
+    assert lines[-1] == 'Production: ready, 0% (draft quality, target clip, 0 queued, engine "Wan 2.1 / 2.2").'

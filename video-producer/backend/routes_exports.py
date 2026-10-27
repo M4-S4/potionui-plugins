@@ -89,7 +89,11 @@ def start_video_export(
 ) -> Dict[str, Any]:
     """Queue the assembly of the sequence into an MP4 for the web (project aspect) or social networks (9:16)."""
     body = _object(body)
-    fmt, requested = body.get("format"), body.get("resolution")
+    return ok({"job": jobs.public(queue_video(user, project_id, body.get("format"), body.get("resolution")))})
+
+
+def queue_video(user: User, project_id: str, fmt: Any, requested: Any) -> Dict[str, Any]:
+    """Queue the MP4 export of a project the user may reach, after every check of the export route; an HTTP error otherwise."""
     if not isinstance(fmt, str) or fmt not in video.FORMATS:
         _invalid(f"format must be one of: {', '.join(video.FORMATS)}.")
     if requested is not None and (not isinstance(requested, str) or requested not in video.RESOLUTIONS):
@@ -110,7 +114,7 @@ def start_video_export(
     if job is None:
         fail(409, "export_running", "An export of this project is already queued or running.")
     jobs.ensure_running()
-    return ok({"job": jobs.public(job)})
+    return job
 
 
 @router.get("/exports/{job_id}")

@@ -141,7 +141,7 @@ Ctrl+click (⌘+click on a Mac) on a card of the grid, a shot of the band or a b
 - **Drafts**: how many drafts a generation of the shot makes at once (chapter 8).
 - **Engine**: what the shot generates with. Each field starts on the value of the project: **As the project (Wan 2.1 / 2.2)** for the engine, **As the project (FL2VA)** for the profile, **As the Production bar** for the quality, **Random** for the seed. Pick another value to give it to this shot only: **Preset or model** (the engines of the Production bar pop-up), **Profile** (the ones the chosen engine cannot generate are greyed), **Quality** (**Draft** or **Final**, whatever the bar says) and **Seed** (the arrows button picks one). With a seed, the first take of each generation takes it and the next ones the seeds after it, so generating again gives the same takes. **Back to the project** clears them all. A retry or a **Make final** keeps the engine and the seed of its take.
 
-**Save** applies everything at once, and **Edit › Undo** brings it all back. When the shot has takes, the window says so ("This shot has 4 takes. Saving a change keeps them and marks them “Prompt modified”.") and, once you change the prompt, the duration, a frame or a reference, the footer warns "The takes of the shot will be marked “Prompt modified”". Saving deletes no take: they stay, with **Prompt modified** on their card and on the Storyboard card, until you generate new drafts. Changing only the number of drafts or the engine marks nothing. Editing the prompt of a shot elsewhere (the Inspector of the shot prompt, the prompt editor of the timeline, the library, or the assistant when you approve its rewrite) marks the takes the same way.
+**Save** applies everything at once, and **Edit › Undo** brings it all back. When the shot has takes, the window says so ("This shot has 4 takes. Saving a change keeps them and marks them “Prompt modified”.") and, once you change the prompt, the duration, a frame or a reference, the footer warns "The takes of the shot will be marked “Prompt modified”". Saving deletes no take: they stay, with **Prompt modified** on their card and on the Storyboard card, until you generate new drafts. Changing only the number of drafts or the engine marks nothing. Editing the prompt of a shot elsewhere (the Inspector of the shot prompt, the prompt editor of the timeline, the library, or the assistant when you approve its rewrite) marks the takes the same way. If the assistant changes the shot while the window is open (a character, a reference, its prompt), **Save** keeps its change wherever you did not touch it; when you both changed the same setting, your version is kept and the page warns you.
 
 A capture of the window, in the dark and light themes of the English interface, is in `docs/screenshots/shot-editor.png`, and one of its **Engine** section with settings of the shot's own in `docs/screenshots/shot-engine.png`.
 
@@ -233,7 +233,7 @@ Your admin limits how many versions are kept per project (50 by default) and the
 
 ### When the project changed elsewhere
 
-If you open the same project in two tabs, windows or devices, the page that saves second started from an out-of-date version, and the server refuses its save. That page then loads the saved version of the project and shows "Project reloaded: it changed elsewhere". The changes you had not saved in this page are lost, and nothing is merged. Work on a project in one place at a time. **File › Version history…** brings back an earlier state if you need it.
+If you open the same project in two tabs, windows or devices, or the assistant changes it while you edit (chapter 10), the page that saves second started from an out-of-date version, and the server refuses its save. That page then reads the saved version and merges it with its own: what changed on one side only is kept, and when both sides changed the same thing (the same name, the same length), the page keeps yours. The shots stay end to end, each prompt and frame in its shot, and the lists of a shot (its characters, the references it leaves out) keep what each side added and drop what either removed. A shot deleted on the other side goes, even if you had edited it, with its prompt and its frames: the page says so, and Ctrl+Z brings it back with your edit. It says "Changes saved elsewhere were merged into the project", or how many of your edits it kept over the other ones, and Ctrl+Z undoes the merge. **File › Version history…** brings back an earlier state if you need it. In the rare case where the page has nothing to compare with, it loads the saved version and shows "Project reloaded: it changed elsewhere": the changes you had not saved in this page are then lost.
 
 ### When the project was deleted elsewhere
 
@@ -465,12 +465,17 @@ Each row also shows the take it starts from ("Take A · 832×480"), **Prompt mod
 
 ## 10. Assistant
 
-The assistant is the PotionUI chat, working in its own mode for this page, **Video Producer assistant**. It reads your project and has four tools, the actions it can run: write the prompt of a shot, fix the contradictions between the global direction and the shot prompts, cut your synopsis into shots, and check the continuity between shots. It proposes and you decide: for the three tools that write or propose something, the chat shows an approval card with a preview, and nothing happens in your project until you click **Approve**.
+The assistant is the PotionUI chat, working in its own mode for this page, **Video Producer assistant**. It reads your project and can drive the whole page with its thirteen tools, the actions it can run: read the project in detail; add, change, reorder and delete shots; write their prompts and fix the contradictions with the global direction; cut your synopsis into shots; cast the shots from the bible and give them frames and references; check the continuity; generate takes, follow them, label them, assemble the edit and export the video.
+
+Two kinds of change:
+
+- **What costs or cannot be taken back waits for you.** Writing over a shot prompt, deleting shots, generating takes and proposing a cut of the synopsis show an approval card with a preview, and nothing happens in your project until you click **Approve**.
+- **The rest is done at once.** Adding and changing shots, labelling a take, assembling and exporting are saved as soon as the assistant runs them, the page shows them as they happen, and Ctrl+Z (or **Undo** on the message "Project updated by the assistant") takes each one back.
 
 ### Before you start
 
 - Your admin has to configure a language model in PotionUI (Admin › LLM / Assistant) and assign it to you. It must be able to call tools, and a local model server set up for the assistant (llama.cpp `llama-server` or Ollama, with the settings of the administration guide) or an online provider such as OpenAI is the safer choice: the model built into PotionUI ran out of memory, or was too small to call the tools, on a 12 GB graphics card in our tests. Without a model the chat says that it is unavailable (see "If it does not work" below).
-- The assistant reads your project as the page shows it, but it writes into the project as saved on the server. Wait for "Saved at" in the project bar before you approve a change.
+- The assistant works on your project as saved on the server. The page saves your edits when you send a message, so the assistant sees what you see, and its changes come back to the page and are merged with what you type meanwhile (see What it changes, and what it does not).
 - Keep the Video Producer page open while you chat: the assistant only knows your project while the page is open on it.
 
 ### Open the assistant
@@ -485,15 +490,15 @@ With each message, the page sends the assistant a summary of your project:
 - where you are: the workspace, the playhead (and the shot under it), your selection and the range;
 - the synopsis and the global direction: the five fields and the H3 profile;
 - the bible: the visual tag and the words of each card;
-- the shots in timeline order: name, start and end, stage, whether a take is on it, whether it has a first and a last frame, the beginning of its shot prompt and the visual tags it casts;
+- the shots in timeline order: number, name, start and end, stage, how many takes it has and which one is final, whether it has a first and a last frame, the beginning of its shot prompt and the visual tags it casts;
 - the conflicts that the page flags between a shot prompt and the direction, and the color and identity matches it measured between neighbor shots;
-- the state of the production: target, quality, progress and queue.
+- the state of the production: target, quality, progress, queue and the engine of the Production bar.
 
-The summary is text and it is kept short: 40 shots at most, 800 characters of the synopsis, 240 of each field of the direction and 160 of each shot prompt, so a longer text is cut in what the assistant reads. It holds none of your images, videos, takes, references or audio, and the assistant sees no picture. If you leave the Video Producer page, the summary stops: the assistant says the page is not open and asks you to open a project.
+The summary is text and it is kept short: 40 shots at most, 800 characters of the synopsis, 240 of each field of the direction and 160 of each shot prompt, so a longer text is cut in what the assistant reads. It holds none of your images, videos, references or audio, and the assistant sees no picture. When it needs more, the assistant reads the project itself (the tool **Read project**): the full prompts, the takes of each shot with their letter and label, the references, and the names of your media, which it can use as frames and references. If you leave the Video Producer page, the summary stops: the assistant says the page is not open and asks you to open a project.
 
-### Four requests to try
+### Requests to try
 
-You write to the assistant in your own language. The examples below are only examples; select a shot first and the assistant knows which one you mean.
+You write to the assistant in your own language. The examples below are only examples; select a shot first and the assistant knows which one you mean. You can name a shot by its name or by its number in the timeline ("shot 3").
 
 #### Request 1: write the prompt of a shot
 
@@ -527,6 +532,35 @@ For example: "Check the continuity between my shots and tell me what to fix." Th
 3. What it looks for: a shot without a prompt; a shot prompt that contradicts the global direction; a shot shorter than 2 s or longer than 15 s; a shot with the FL2VA profile and no first frame; a shot prompt that does not name a character the shot casts from the bible; a camera move that changes between two shots; a jump of brightness or color temperature (the page measures these on the images, the seam frames of the shots when they have some and their thumbnails otherwise, and the line carries the badge **Measured**; chapter 12); and a similarity point between two takes. That last one comes from the similarity score, which stays simulated (chapter 17), so its line carries the gray badge **Simulated** instead. Shots that come from a source are skipped.
 4. **Dismiss the check** (the cross of the section) removes the list. Ask again to refresh it.
 
+#### Request 5: add, change and order shots
+
+For example: "Add two shots after “The gulls”: a close-up on Mara’s hands, 3 s, and a wide shot of the dock, 5 s, with Mara in the dock." Or: "Make shot 2 last 6 seconds, move “Exit” to the start and cast Mara in it."
+
+1. The chat shows the tool it runs (**Add shots**, **Update shots**). No card: the change is saved at once and the shots appear on the page while the assistant is still answering. The page says "Project updated by the assistant", with **Undo**.
+2. A new shot comes "To generate", with its prompt. Changing the length of a shot moves its prompt, its frames and the shots after it, like the shot editor; a take that becomes too short leaves the shot, which goes back to "To generate".
+3. The assistant can also give a shot a first or last frame and attach references, from the media of your project ("Use the image “Gate” as the first frame of shot 3"), set the number of takes per run, and turn on or off the start from the previous shot's last image.
+4. Ctrl+Z takes the change back, and the page saves the shot as it was. To change the prompt of an existing shot, the assistant uses request 1, with its card.
+
+#### Request 6: delete shots
+
+For example: "Delete the shots “Exit” and “Credits”." The card **Delete shots** lists them with their time range and the beginning of their prompt. **Approve** deletes them with their prompts, frames and own references, and the later shots move up; their takes stay in the project. Ctrl+Z brings them back. **Approve** deletes the shots the card shows, even if they moved meanwhile. If these shots change between the card and **Approve** (moved, renamed, another length), the card says it is out of date and its button reads **Approve anyway**; if a shot of the card was deleted meanwhile, nothing is deleted and the assistant shows a new card. A card you rejected never runs: if you ask again, **Approve** runs the new card, the one on screen.
+
+#### Request 7: generate and follow the takes
+
+For example: "Generate a draft of shots 1 to 3." The assistant uses the engine of the Production bar and the number of takes of each shot, unless you give one ("two takes each").
+
+1. The card **Generate takes** shows the shots, the number of takes, the quality, the engine, the GPU minutes they need and what is left of your monthly minutes, and the estimated time. Nothing starts before you click **Approve**, and **Approve** starts what the card shows: the same shots, quality and number of takes, even if you changed them meanwhile. If a shot of the card was deleted, or the estimate made again costs more than the card said, nothing starts and the assistant shows a new card.
+2. When a take cannot start (a model to install, minutes used up, a profile the engine cannot make), the assistant says why and shows no card.
+3. After **Approve**, the page says "3 takes started by the assistant", with **Show**, and the Production bar shows the progress, as for a generation you start. Ask "Where are my takes?" and the assistant reads the queue: the takes running or waiting, their place, the minutes left and the latest exports.
+
+#### Request 8: choose the final takes
+
+For example: "Make take B of “The gulls” the final one." (The letter is the one on the take card.) A final take is put on its shot in the edit, like **Use this take**, and the previous final of the shot becomes a candidate. The assistant can also label a take **Rejected** or **Candidate**. Ctrl+Z takes the final take off the shot. A final take stays final until you or the assistant make another take of the shot final.
+
+#### Request 9: assemble and export
+
+For example: "Put the final takes in the edit and export the video for the web." The assistant puts every final take on its shot, as **Assemble chosen takes** does, tells you which shots have no final take yet, then starts the export (web, or social in 9:16; the resolution of the project unless you ask for another). The page says "Export started by the assistant", with **Show**, which opens the export window: download the video there when it is ready. The export runs on the processor of the server, not on the graphics card.
+
 ### Suggestions that fill the request for you
 
 Three places of the page start the chat with a request already typed. You can read it, edit it, then press Enter: nothing is sent for you.
@@ -539,10 +573,11 @@ If you had already typed something in the box of the chat, your text stays and t
 
 ### What it changes, and what it does not
 
-- It writes shot prompts (requests 1 and 2) and proposes shots (request 3). It never starts a generation, chooses a take, makes a shot final, adds, moves or deletes a shot by itself, nor edits the synopsis, the global direction, the references, the titles or the audio. For a field of the direction or for a sound brief it answers in text only: copy what you like yourself.
+- It writes shot prompts (requests 1 and 2), proposes shots (request 3), adds, changes, orders and deletes shots (requests 5 and 6), generates takes (request 7), labels them (request 8), assembles and exports (request 9). It does not edit the synopsis, the global direction, the bible cards, the titles, the color, the sound or the mix, nor choose the engine, nor make the final pass of the film, nor import media: ask it and it answers in text, and you do it on the page.
 - **Propose a breakdown** and **Production › Split synopsis into shots…** are not the assistant: they only cut the synopsis into sentences, one shot per sentence. **Production › Continuity check** opens Director AI on the **Review** view with its left panel, where **To check** lists what the page found, and does not call the assistant.
-- Each approved change is a new version of your project: **File › Version history…** shows it with the word "Assistant". When the page applied the change itself, **Edit › Undo** works on it like on your own changes.
-- If you had typed in the same shot prompt and not yet saved it when you approved, the page reloads the project to show the assistant's version ("Project reloaded with the assistant’s changes"): that typing and your undo history are lost. Wait for "Saved at" before you approve.
+- Each change of the assistant is a new version of your project: **File › Version history…** shows it with the word "Assistant". On the page, **Edit › Undo** (Ctrl+Z) takes it back like your own changes, one tool call at a time.
+- If you edit the project while the assistant works, both changes are kept. When you and the assistant changed the same thing (the same name, the same length), your version wins, and the message says so: "Project updated by the assistant; 1 of your edits was kept over its change".
+- A generation, a label in the takes and an export are not in the project: Ctrl+Z does not cancel them. Cancel a take in the queue, and delete an export in the export window.
 - The assistant writes shot prompts in the prompt language of the project (chapter 15) and answers you in your language. It never translates what you wrote. The contradiction checks only read texts in the prompt language.
 - The list **To check** and the proposal appear once, when the answer arrives. They disappear when you leave the page or open another project, and reopening an old conversation does not bring them back: ask again.
 
@@ -551,10 +586,13 @@ If you had already typed something in the box of the chat, your text stays and t
 The chat itself is a PotionUI window: its buttons (**Tools**, **New chat**, **Approve**, **Reject**, **Retry**) keep PotionUI's labels.
 
 - **"Chat is currently unavailable".** No language model is assigned to you. Ask your admin to add one in Admin › LLM / Assistant and assign it to you. (An admin reads "No enabled LLM configurations" instead.)
-- **The assistant answers but never shows a card, or says it cannot act.** The **Tools** button of the chat box is off: hover it, it reads "Tools OFF"; click it to turn the tools on, and check that the four tools of the group Video Producer are ticked in its list. Your admin may also have turned them off for the model, or the model may not be able to call tools: try another one.
+- **The assistant answers but never shows a card, or says it cannot act.** The **Tools** button of the chat box is off: hover it, it reads "Tools OFF"; click it to turn the tools on, and check that the tools of the group Video Producer are ticked in its list. Your admin may also have turned them off for the model, or the model may not be able to call tools: try another one.
 - **The assistant does not seem to know your project, or the header says "Started in …".** The conversation was started in another mode. Click **start a new chat** from the Video Producer page.
 - **The assistant says the page is not open on a project.** Open a project in Video Producer, keep the page open and ask again.
 - **A card is Failed and quotes `version_conflict`, `project_not_found` or `shot_not_found`.** The project was saved from somewhere else at the very moment of the save, was deleted, or no longer has that shot. Let the page reload the project (**File › Open…**), then click **Retry** on the card or ask again. The assistant says so itself in the chat.
+- **The assistant says `blocked` or that the takes cannot start.** The reason follows: models to install, monthly GPU minutes used up, a profile the engine cannot make, no engine in the Production bar. It is the same block as in the Production bar (chapter 8).
+- **The assistant says several takes share a letter (`ambiguous_take`).** A shot has a draft and a final take with the same letter. Say which one ("the draft B"), or ask it to read the takes of the shot first.
+- **With a small context window, the assistant first loads the production tools.** Under 24,576 tokens of context, PotionUI sends the tools that generate, follow, label, assemble and export only when the assistant asks for them: the chat shows a first call **use_tools**, then the real one. That is expected.
 - **You approved and the chat says "The assistant changed another project, not the one open here."** The answer was for another project than the one you have open now. Open that one, or ask again here.
 - **"The project could not be reloaded. Reopen it to see the assistant’s changes."** The assistant's change is saved, but the page could not reload it: open the project again (**File › Open…**).
 - **The suggestion did not appear in the box.** You had already typed a draft, or your PotionUI cannot fill the box (it then opens it empty). Type or paste the request.
@@ -864,7 +902,7 @@ The single-letter shortcuts (A, R, B, I, O, M, N, F, U, D, T and E) can be turne
 
 When the shortcuts work:
 
-- Only while the focus is on the page and not in a text field. With a text field focused, a window open (a PotionUI picker or confirmation included) or the command search open, the other shortcuts are off; Esc, Ctrl+K and Ctrl+/ always act. While the PotionUI chat is open, the shortcuts of the page are off.
+- Only while the focus is on the page and not in a text field. With a text field focused, a window open (a PotionUI picker or confirmation included) or the command search open, the other shortcuts are off; Esc, Ctrl+K and Ctrl+/ always act. While the PotionUI chat is open, the shortcuts of the page are off, except Undo and Redo (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y) outside a text field, so that you can take back a change of the assistant without closing the chat.
 - Ctrl+G is the exception: from a text field of the page, it first commits the field (the prompt of the quick edit, for instance), then queues. In an open window, such as the shot editor, it does nothing. Ctrl+G and Ctrl+Shift+G never go to the find bar of the browser (its find next or previous), wherever the focus is.
 - A combination acts only with exactly its keys. Ctrl+Shift+I and Ctrl+Shift+J (on a Mac Option+Command+I, J or K) stay with the developer tools of the browser, and the Alt+Left arrow of the browser keeps going back. The page never takes the combinations that manage the tabs and windows of the browser (Ctrl+N, Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+1 to Ctrl+9), its address bar (Ctrl+L), its page search (Ctrl+F) or the clipboard (Ctrl+C, Ctrl+V): for the workspaces, a new project or a new title, use the menu, the buttons or the workspace selector. On Linux, Chrome and Firefox keep Alt+1 to Alt+8 for their tabs: open the Director AI views from the **Window** menu or the summary instead.
 - A key held down does not repeat a command that switches something (Space, M, N, F, U, Ctrl+S, Ctrl+G, Ctrl+D and the like). Undo, Redo, Delete and the arrows do repeat.
@@ -880,7 +918,7 @@ Some parts keep their interface but do not do the real thing. They carry a gray 
 
 The badge **Simulated** appears in the header of the window **Sound design workshop** (titled **Voice and dialogue** for a voice); next to the formats **Master file · ProRes 422** and **Archive · H.265** when one of them is picked, next to the audio stems and, when a simulated format is picked, in the footer of the **Video** tab of the export window ("Simulated render: master and archive"); on the automation button of the console strips; and on the identity line of the assistant's check (chapter 10).
 
-Everything else works for real: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard (the **Propose a breakdown** button is a simple cut into sentences, not a simulation), the PotionUI assistant with its four tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the mixing console playing your audio files, the seam frames, the web and social videos (MP4 files that ffmpeg assembles on the server) and the FCPXML, OpenTimelineIO, EDL and SRT files, which are real files.
+Everything else works for real: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard (the **Propose a breakdown** button is a simple cut into sentences, not a simulation), the PotionUI assistant with its thirteen tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the mixing console playing your audio files, the seam frames, the web and social videos (MP4 files that ffmpeg assembles on the server) and the FCPXML, OpenTimelineIO, EDL and SRT files, which are real files.
 
 The window **Simulated features** lists five items. For each one, the table gives what the window says and what is real next to it.
 
@@ -894,7 +932,7 @@ The window **Simulated features** lists five items. For each one, the table give
 
 The **Advanced workshop** of earlier versions is gone, with its settings that the engine did not use. What acted is now in the Production bar and the **Edit Engine** window (engine, profile, quality, drafts per shot), summed up on the **Engine** line of Director AI, and in the shot editor (engine, profile, quality and seed of one shot). The removed settings were: consistency between windows, lock character identity, motion guide first, the generation windows with their length and overlap, the final resolution, the seed, the steps, the guidance (CFG), the LoRAs, the track that drives the performance, lip sync, follow the rhythm of the cut, audio / picture offset, result naming, post-processing, insert variant A automatically, and the Hybrid builder weights with their saved profiles. A project made before keeps their values, which nothing reads; a preset only exposes the controls it declares, and MiniMax H3, for example, has no guidance and no negative prompt. The seed of a take is drawn by the server and shown on its card, unless the shot sets its own, and the resolutions follow the draft and final rules of chapter 8.
 
-The assistant, for its part, is not simulated: it is the PotionUI chat in the Video Producer assistant mode, which writes shot prompts, fixes conflicts with the global direction, splits a synopsis into shots and checks continuity, and you approve each change before it touches the project (chapter 10). The one simulated point in what it shows is the identity similarity between two takes.
+The assistant, for its part, is not simulated: it is the PotionUI chat in the Video Producer assistant mode, which drives the page from the shots to the export; you approve what writes over a prompt, deletes shots or spends GPU minutes, and Ctrl+Z takes back the rest (chapter 10). The one simulated point in what it shows is the identity similarity between two takes.
 
 ## 18. Troubleshooting
 

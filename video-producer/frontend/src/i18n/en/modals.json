@@ -144,6 +144,8 @@
 	"shot.subtitle": "{start} → {end}",
 	"shot.takesNote.one": "This shot has {count} take. Saving a change keeps it and marks it “Prompt modified”.",
 	"shot.takesNote.other": "This shot has {count} takes. Saving a change keeps them and marks them “Prompt modified”.",
+	"shot.kept.one": "{count} setting of this shot changed while you edited it; your version was kept",
+	"shot.kept.other": "{count} settings of this shot changed while you edited it; your version was kept",
 	"shot.references": "References",
 	"shot.referencesSent.one": "{count} reference for this shot",
 	"shot.referencesSent.other": "{count} references for this shot",

@@ -4,6 +4,7 @@ import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
 import { castOf, migrateCast, sameCast, setCast } from './bible.js';
 import { linesOf, migrateDialogue, sameDialogue, setDialogue } from './dialogue.js';
 import { migrateReferencePrompt, referencePromptOf, sameReferencePrompt, setReferencePrompt } from './refprompt.js';
+import { merge3 } from './merge.js';
 
 export const MIN_DRAFTS = 1;
 export const MAX_DRAFTS = 8;
@@ -209,6 +210,12 @@ export function shotDraft(doc, clip, engine) {
 		referencePrompt: referencePromptOf(clip),
 		firstFromPrevious: typeof clip.firstFromPrevious === 'boolean' ? clip.firstFromPrevious : null
 	};
+}
+
+export function rebaseDraft(before, draft, current) {
+	const { value, conflicts } = merge3(before, draft, current);
+	const lists = { exclude: value.exclude ?? [], excludeLanes: value.excludeLanes ?? [], own: value.own ?? [] };
+	return { draft: { ...value, ...lists, cast: castOf({ cast: value.cast }) }, conflicts };
 }
 
 function placeFrame(doc, clip, kind, assetId, makeId) {
