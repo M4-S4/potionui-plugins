@@ -8,7 +8,6 @@ export const MAX_PROPOSAL = 24;
 const FIRST_ROLES = ['first', 'début', 'debut'];
 const LAST_ROLES = ['last', 'fin'];
 const MEASURED_KINDS = ['lum', 'warm', 'identity'];
-const SIMULATED_KINDS = [];
 export const PAGE_TOOLS = ['vp_add_shots', 'vp_update_shots', 'vp_delete_shots', 'vp_generate', 'vp_label_take', 'vp_assemble', 'vp_export_video'];
 export const LIVE_TOOLS = ['vp_add_shots', 'vp_update_shots', 'vp_label_take', 'vp_assemble'];
 const TAKE_TOOLS = ['vp_generate', 'vp_label_take', 'vp_update_shots'];
@@ -145,8 +144,7 @@ export function reviewFrom(result, now = Date.now()) {
 					shotId: isText(i.shot_id) ? i.shot_id : null,
 					rule: isText(i.rule) ? i.rule : null,
 					labels: Array.isArray(i.labels) ? i.labels.filter((x) => isText(x) && x.trim()) : [],
-					measured: !SIMULATED_KINDS.includes(i.kind) && (i.measured === true || MEASURED_KINDS.includes(i.kind)),
-					simulated: SIMULATED_KINDS.includes(i.kind)
+					measured: i.measured === true || MEASURED_KINDS.includes(i.kind)
 				}))
 		}))
 		.filter((s) => s.issues.length);

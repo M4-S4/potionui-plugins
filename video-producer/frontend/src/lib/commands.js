@@ -320,8 +320,7 @@ export const menus = [
 		]
 	]),
 	menu('help', [
-		[command('tour', modal('tour')), command('help-keys', modal('shortcuts')), command('help-find', () => (ui.paletteOpen = true))],
-		[command('help-sim', modal('simulations'))]
+		[command('tour', modal('tour')), command('help-keys', modal('shortcuts')), command('help-find', () => (ui.paletteOpen = true))]
 	])
 ];
 

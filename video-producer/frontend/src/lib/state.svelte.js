@@ -212,11 +212,11 @@ export function adopt(next) {
 	for (const listener of restoreListeners) listener();
 }
 
-const HOST_LEVELS = { info: 'info', success: 'success', warning: 'warning', error: 'error', sim: 'info' };
+const HOST_LEVELS = { info: 'info', success: 'success', warning: 'warning', error: 'error' };
 const toastTimers = new Set();
 
 export function toast(message, level = 'info', action, hold = null) {
-	const duration = hold ?? (level === 'sim' ? 4200 : 2800);
+	const duration = hold ?? 2800;
 	if (!action && hostToast(HOST_LEVELS[level] ?? 'info', message, duration)) return;
 	const id = ulid();
 	ui.toasts.push({ id, message, level, action });

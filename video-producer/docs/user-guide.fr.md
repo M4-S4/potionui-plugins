@@ -2,7 +2,7 @@
 
 English: [Video Producer: user guide](/docs?doc=plugin/video-producer/user-guide) (file `docs/user-guide.md`).
 
-Ce guide explique comment réaliser un court film avec Video Producer. Les libellés de l’interface sont écrits en **gras**. L’interface est complète, en anglais et en français. Vos projets sont enregistrés au fil de votre travail, vos médias sont importés depuis PotionUI, et les prises et les finals sont de vraies vidéos (chapitres 8 et 9). L’assistant PotionUI a son propre mode (chapitre 10), les plans sont raccordés entre eux (chapitre 12) et la livraison est réelle : des vidéos pour le web et pour les réseaux sociaux, des fichiers pour un autre logiciel et des sous-titres (chapitre 14). Une fonction est simulée et signalée comme telle (chapitre 17). Le guide d’administration est une page distincte que seuls les admins voient.
+Ce guide explique comment réaliser un court film avec Video Producer. Les libellés de l’interface sont écrits en **gras**. L’interface est complète, en anglais et en français. Vos projets sont enregistrés au fil de votre travail, vos médias sont importés depuis PotionUI, et les prises et les finals sont de vraies vidéos (chapitres 8 et 9). L’assistant PotionUI a son propre mode (chapitre 10), les plans sont raccordés entre eux (chapitre 12) et la livraison est réelle : des vidéos pour le web et pour les réseaux sociaux, des fichiers pour un autre logiciel et des sous-titres (chapitre 14). Le guide d’administration est une page distincte que seuls les admins voient.
 
 ## 1. Ce qu’est Video Producer
 
@@ -10,11 +10,11 @@ Video Producer est un plugin PotionUI de montage audiovisuel, de génération de
 
 Avant de commencer :
 
-- Un admin doit avoir préparé au moins un moteur (ce poste, un serveur d’atelier ou un modèle cloud) et au moins un preset vidéo qui vous est attribué. Si la barre Production n’affiche aucun moteur, voyez le chapitre 18.
+- Un admin doit avoir préparé au moins un moteur (ce poste, un serveur d’atelier ou un modèle cloud) et au moins un preset vidéo qui vous est attribué. Si la barre Production n’affiche aucun moteur, voyez le chapitre 17.
 - Votre admin règle aussi la résolution des brouillons, le nombre de générations que vous pouvez avoir en cours en même temps, et peut limiter les minutes GPU que vous pouvez utiliser par mois.
 - La génération est réelle : les prises sont des vidéos produites par les machines ou le compte cloud de votre admin, et elles prennent du temps. L’estimation de la barre Production vous dit à quoi vous attendre avant de commencer (chapitre 8). À titre de mesure, sur une carte graphique de 12 Go, un brouillon de 5 secondes a pris environ 6 à 7,5 minutes avec les presets nommés (12 GB) et environ 26 minutes avec Wan, et un final par agrandissement en 1080p a pris plus de deux heures.
 - La machine de votre admin décide de ce que vous pouvez utiliser. Un preset dont le nom se termine par une taille de carte est réglé pour une carte graphique de cette taille, et le menu des moteurs ajoute la mémoire ordinaire (RAM) dont le serveur a besoin (chapitre 8). Sur une carte de 8 Go, choisissez **Wan 2.1 T2V 1.3B (8 GB) · 32 GB RAM** ou **Wan 2.2 TI2V 5B (8 GB) · 32 GB RAM** : ils font des clips 480p de 5 secondes au plus à partir du seul texte. Sur une carte de 12 Go, choisissez **MiniMax H3 (12 GB) · 64 GB RAM** ou **MiniMax H3 Fast (12 GB) · 64 GB RAM** : les autres presets MiniMax H3 sont faits pour des cartes plus grosses (celui en Fast a manqué de mémoire sur une carte de 12 Go lors de nos essais). Demandez à votre admin de quelle carte il dispose.
-- Livrer un fichier vidéo demande ffmpeg sur votre serveur PotionUI. Si la fenêtre d’export dit que ffmpeg est absent, demandez à votre admin (chapitres 14 et 18). Les fichiers pour un autre logiciel et les sous-titres n’en ont pas besoin.
+- Livrer un fichier vidéo demande ffmpeg sur votre serveur PotionUI. Si la fenêtre d’export dit que ffmpeg est absent, demandez à votre admin (chapitres 14 et 17). Les fichiers pour un autre logiciel et les sous-titres n’en ont pas besoin.
 - L’assistant a besoin d’un modèle de langage que votre admin a configuré dans PotionUI et qui vous est attribué (chapitre 10). Demandez à votre admin de connecter un serveur de modèle local réglé pour l’assistant (le `llama-server` de llama.cpp ou Ollama) ou un fournisseur en ligne : le modèle intégré à PotionUI a manqué de mémoire ou n’a pas su appeler les outils sur une carte graphique de 12 Go lors de nos essais. Tout le reste fonctionne sans lui.
 - Le modèle MiniMax H3 (les entrées **MiniMax H3** du menu des moteurs) est sous une licence qui exclut son usage, et tout ce qu’il génère, dans l’Union européenne, au Royaume-Uni, aux États-Unis et en Corée du Sud sans autorisation individuelle de MiniMax, et qui demande qu’un produit commercial affiche « MiniMax H3 » de façon visible. Demandez à votre admin avant de l’utiliser. Video Producer ne vérifie rien de tout cela à votre place.
 
@@ -62,7 +62,7 @@ Les dix menus regroupent toutes les commandes de la page. La recherche de comman
 | **Audio** | Ajouter une piste audio, Importer un son de la bibliothèque, Importer un son depuis l’ordinateur, Console de mixage. |
 | **Présentation** | Lecture, boucle, plein écran, guides de cadrage, Comparer les prises, Scope de luminance, Indicateurs audio, zoom de la timeline, Magnétisme. |
 | **Fenêtre** | Les cinq espaces, Storyboard en bande, les quatre vues de Director AI, les espaces de références, Panneau latéral, Inspecteur, Assistant PotionUI, Bibliothèque de prompts, Index de la timeline, Tâches en arrière-plan. |
-| **Aide** | Prise en main, Raccourcis clavier, Rechercher une fonctionnalité, Fonctions simulées. |
+| **Aide** | Prise en main, Raccourcis clavier, Rechercher une fonctionnalité. |
 
 ### Les zones de la page
 
@@ -364,7 +364,7 @@ Les boutons qui lancent des prises hors de la barre (**Réessayer** et **Passer 
 
 Ce qui avertit seulement, sans bloquer :
 
-- une estimation de mémoire supérieure à celle du GPU : « Passera par la RAM de l’hôte, plus lent. » Les poids passent par la mémoire du serveur. La génération continue, plus lentement, et échoue si le serveur manque de mémoire pour cela (chapitre 18) ;
+- une estimation de mémoire supérieure à celle du GPU : « Passera par la RAM de l’hôte, plus lent. » Les poids passent par la mémoire du serveur. La génération continue, plus lentement, et échoue si le serveur manque de mémoire pour cela (chapitre 17) ;
 - le profil FL2VA sans frame liée à un plan : « “Plan 2” n’a pas de frame liée : il sera généré à partir du texte seul. » La génération continue à partir du texte, et la carte de la prise indique « texte seul ». Quand le plan a un plan précédent avec une prise terminée, une icône à côté de l’avertissement dans la barre Production, **Utiliser la dernière image du plan précédent**, lui donne une première image (chapitre 12) ;
 - un moteur qui génère à partir du texte seul, comme les presets Wan (8 GB), pour un plan qui a des frames liées : « Ce moteur génère à partir du texte seul : les frames liées à « Plan 2 » ne seront pas utilisées. » La génération continue à partir du texte ;
 - un plan plus long que ce que le moteur permet : « “Plan 2” dépasse la durée permise par ce moteur : il sera coupé à 15 s. » ;
@@ -411,6 +411,12 @@ Le **Profil** de la barre Production, rappelé aussi sur la ligne **Moteur** de 
 - **Ref2VA** envoie à MiniMax H3 les références du plan, puis les références globales : au plus 9 images, 3 vidéos et 3 fichiers audio. Une vidéo de la famille **Guides de mouvement** est la source du mouvement du plan : MiniMax H3 reprend son mouvement dans les sujets du plan.
 - **Hybrid AV** fonctionne comme FL2VA sur MiniMax H3, dont le modèle produit l’image et le son ensemble.
 - Un plan peut prendre un autre profil que le projet dans son éditeur de plan (chapitre 4).
+
+Ce que le moteur choisi ne sait pas faire n’est pas une erreur : il porte un badge gris uni, comme ces profils, **Agrandisseur indisponible** (chapitre 9) et **Non transmis à ce moteur** sur les références d’un moteur sans Ref2VA.
+
+### Les réglages des versions précédentes
+
+L’**Atelier avancé** des versions précédentes a disparu, avec ses réglages que le moteur n’utilisait pas. Ce qui agissait est maintenant dans la barre Production et la fenêtre **Edit Engine** (moteur, profil, qualité, brouillons par plan), résumés sur la ligne **Moteur** de Director AI, et dans l’éditeur de plan (moteur, profil, qualité et graine d’un plan). Les réglages retirés étaient : cohérence entre fenêtres, verrouillage de l’identité des personnages, priorité au guide de mouvement, les fenêtres de génération avec leur longueur et leur chevauchement, la résolution finale, la graine, les étapes, le guidage (CFG), les LoRAs, la piste qui guide la performance, la synchronisation labiale, le rythme du montage, le décalage audio / image, le nommage des résultats, les post-traitements, l’insertion automatique de la variante A, et les poids du Hybrid builder avec ses profils enregistrés. Un projet fait avant garde leurs valeurs, que rien ne lit ; un preset n’expose que les contrôles qu’il déclare ; MiniMax H3, par exemple, n’a ni guidage ni prompt négatif. La graine d’une prise est tirée par le serveur et affichée sur sa carte, sauf si le plan fixe la sienne, et les résolutions suivent les règles du brouillon et du final du chapitre 8.
 
 ## 9. Prises et final
 
@@ -541,7 +547,7 @@ Par exemple : « Vérifie les raccords entre mes plans et dis-moi quoi corriger.
 
 1. Quand l’assistant a répondu, la page dit « 2 raccords à vérifier » (ou « Raccords vérifiés : rien à corriger »), avec un bouton **Afficher** quand le panneau de gauche de Director AI n’est pas à l’écran.
 2. Dans le panneau de gauche de **Director AI**, sous la liste de la page, une section **À vérifier**, avec « Assistant · 14:32 » à côté de son titre (l’heure de la vérification), liste les paires de plans voisins à regarder, sous la forme « Plan 1 → Plan 2 ». Cliquez sur une paire pour ouvrir le plan dans la **Revue**. Sous chaque paire, une ligne dit ce qui ne va pas et une seconde comment corriger.
-3. Ce qu’elle cherche : un plan sans prompt ; une instruction locale qui contredit la direction globale ; un plan de moins de 2 s ou de plus de 15 s ; un plan en profil FL2VA sans première image ; une instruction locale qui ne nomme pas un personnage que le plan distribue depuis la bible ; un mouvement de caméra qui change entre deux plans ; un saut de luminosité ou de température de couleur (la page les mesure sur les images, les images de raccord des plans quand ils en ont et leurs vignettes sinon, et la ligne porte le badge **Mesuré** ; chapitre 12) ; et un point de ressemblance entre deux prises. Ce dernier vient du score de ressemblance, qui reste simulé (chapitre 17), sa ligne porte donc le badge gris **Simulé** à la place. Les plans qui viennent d’une source sont ignorés.
+3. Ce qu’elle cherche : un plan sans prompt ; une instruction locale qui contredit la direction globale ; un plan de moins de 2 s ou de plus de 15 s ; un plan en profil FL2VA sans première image ; une instruction locale qui ne nomme pas un personnage que le plan distribue depuis la bible ; un mouvement de caméra qui change entre deux plans ; un saut de luminosité ou de température de couleur (la page les mesure sur les images, les images de raccord des plans quand ils en ont et leurs vignettes sinon, et la ligne porte le badge **Mesuré** ; chapitre 12) ; et un point sur l’allure de deux prises à un raccord, que le serveur mesure sur leurs images avec SigLIP (chapitre 12), sa ligne porte donc elle aussi le badge **Mesuré**. Les plans qui viennent d’une source sont ignorés.
 4. **Fermer la vérification** (la croix de la section) retire la liste. Redemandez pour la rafraîchir.
 
 #### Demande 5 : ajouter, modifier et ordonner des plans
@@ -667,7 +673,7 @@ Pour chaque paire de plans voisins, la page compare la fin du premier avec le d�
 - pour le plan précédent, l’image qui est sa **Dernière image** s’il en a une, sinon sa vignette ;
 - pour le plan, l’image qui est sa **Première image** s’il en a une, sinon sa vignette.
 
-Toute image que vous avez placée comme première ou dernière image compte, pas seulement celles faites dans ce chapitre. La vérification de continuité de l’assistant (chapitre 10) marque d’un badge **Mesuré** les points que la page a mesurés ; survolez-le pour voir ce qui a été mesuré : « Mesuré par cette page sur les images de raccord : dernière image du plan précédent, première image de celui-ci », ou « Mesuré par cette page sur les vignettes des plans ». Le point de ressemblance garde le badge gris **Simulé**.
+Toute image que vous avez placée comme première ou dernière image compte, pas seulement celles faites dans ce chapitre. La vérification de continuité de l’assistant (chapitre 10) marque d’un badge **Mesuré** les points que la page a mesurés ; survolez-le pour voir ce qui a été mesuré : « Mesuré par cette page sur les images de raccord : dernière image du plan précédent, première image de celui-ci », ou « Mesuré par cette page sur les vignettes des plans ». L’allure de deux prises à un raccord porte elle aussi **Mesuré**, avec « Mesuré par SigLIP sur les images au raccord : l’allure générale, pas une reconnaissance faciale ».
 
 ### Faire démarrer un plan sur le précédent
 
@@ -818,7 +824,7 @@ L’export se fait sur le serveur, en arrière-plan. La fenêtre montre une cart
 - Vous pouvez fermer la fenêtre ou quitter la page : l’export continue. Fenêtre fermée, la page continue de le suivre et affiche un toast avec **Télécharger** quand il est prêt. PotionUI envoie la notification « Video Producer: export ready » (ou « Video Producer: export failed » ; leur libellé reste en anglais), et quand vous rouvrez **Exporter et partager** la carte est de retour.
 - Un projet n’a qu’un export à la fois (« Un export de ce projet est déjà en cours. »).
 - Quand il est prêt, la carte dit « Aube_sur_le_port_1080p.mp4 est prêt » avec sa taille, et propose **Télécharger** et, quand votre PotionUI peut l’afficher, **Afficher dans la bibliothèque**, qui ouvre votre bibliothèque sur les vidéos. Un MP4 web ou réseaux sociaux est aussi dans votre bibliothèque comme n’importe quelle vidéo : vous pouvez l’importer dans un projet (chapitre 6) ; **Afficher dans la bibliothèque** n’est pas proposé pour un maître ou une archive, que vous téléchargez.
-- Un export en échec dit ce qui a échoué (« ffmpeg n’a pas pu assembler la vidéo. », « La vidéo n’a pas pu être convertie. » ou « L’export n’a pas pu être enregistré. ») et, en dessous, le message technique du serveur (chapitre 18).
+- Un export en échec dit ce qui a échoué (« ffmpeg n’a pas pu assembler la vidéo. », « La vidéo n’a pas pu être convertie. » ou « L’export n’a pas pu être enregistré. ») et, en dessous, le message technique du serveur (chapitre 17).
 
 ### Exports précédents
 
@@ -931,17 +937,7 @@ Quand les raccourcis fonctionnent :
 
 Chaque bouton a un nom accessible, et un bouton d’icône affiche son infobulle quand il reçoit le focus du clavier, pas seulement au survol de la souris. La touche Tab atteint chaque commande avec un anneau de focus visible, y compris le premier choix d’une fenêtre ouverte à la souris. Les poignées d’ajustement et de fondu de la timeline sont des poignées pour la souris que Tab ignore : utilisez le menu **Montage** et l’inspecteur à la place (chapitres 3 et 7). Un lecteur d’écran entend la progression d’une génération ou d’un export à chaque palier de 10 %, ou quand l’étape change, et jamais plus d’une fois toutes les 3 secondes.
 
-## 17. Ce qui est simulé
-
-Plus aucune partie de la page n’est simulée : **Aide › Fonctions simulées** ne liste rien. Ce que le moteur choisi ne sait pas faire n’est pas une simulation, et porte à la place un badge gris uni : un profil grisé (« Ref2VA : MiniMax H3 seulement »), **Agrandisseur indisponible** et **Non transmis à ce moteur** (chapitres 8 et 9).
-
-Tout le reste fonctionne pour de vrai : la génération elle-même (les moteurs activés par votre admin, l’estimation, les prises avec leur progression, l’annulation et la reprise, les finals par agrandissement ou nouveau rendu, le quota et les notifications), les projets enregistrés, **Fichier › Ouvrir…**, **Fichier › Historique des versions…** et **Fichier › Nouveau projet…**, l’import de vos images, vidéos et fichiers audio avec leurs vignettes et leur lecture, le montage sur la timeline (ajustement des plans, fondus, coupe, magnétisme, plage, marqueurs, annuler et rétablir), la sélection et l’inspecteur, le Storyboard (le bouton **Proposer un découpage** est une simple coupe par phrases, pas une simulation), l’assistant PotionUI avec ses treize outils (chapitre 10), la bibliothèque de prompts et le compositeur, le contrôle des contradictions de direction, le raccord de couleur, la console de mixage qui joue vos fichiers audio, les images de raccord, les vidéos (MP4 web et réseaux sociaux, maître ProRes, archive H.265, que ffmpeg assemble sur le serveur à travers la console) avec leurs stems audio, et les fichiers FCPXML, OpenTimelineIO, EDL et SRT, qui sont de vrais fichiers.
-
-L’**Atelier avancé** des versions précédentes a disparu, avec ses réglages que le moteur n’utilisait pas. Ce qui agissait est maintenant dans la barre Production et la fenêtre **Edit Engine** (moteur, profil, qualité, brouillons par plan), résumés sur la ligne **Moteur** de Director AI, et dans l’éditeur de plan (moteur, profil, qualité et graine d’un plan). Les réglages retirés étaient : cohérence entre fenêtres, verrouillage de l’identité des personnages, priorité au guide de mouvement, les fenêtres de génération avec leur longueur et leur chevauchement, la résolution finale, la graine, les étapes, le guidage (CFG), les LoRAs, la piste qui guide la performance, la synchronisation labiale, le rythme du montage, le décalage audio / image, le nommage des résultats, les post-traitements, l’insertion automatique de la variante A, et les poids du Hybrid builder avec ses profils enregistrés. Un projet fait avant garde leurs valeurs, que rien ne lit ; un preset n’expose que les contrôles qu’il déclare ; MiniMax H3, par exemple, n’a ni guidage ni prompt négatif. La graine d’une prise est tirée par le serveur et affichée sur sa carte, sauf si le plan fixe la sienne, et les résolutions suivent les règles du brouillon et du final du chapitre 8.
-
-L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video Producer assistant, qui pilote la page des plans jusqu’à l’export ; vous approuvez ce qui réécrit une instruction, supprime des plans ou consomme des minutes GPU, et Ctrl+Z annule le reste (chapitre 10).
-
-## 18. Dépannage
+## 17. Dépannage
 
 - **La barre Production n’affiche aucun moteur.** Le menu indique « Aucun moteur ». Votre admin n’a pas terminé la mise en place : un moteur, un preset vidéo qui vous est attribué, ou un modèle vidéo activé chez le fournisseur cloud. Demandez-lui d’ouvrir Admin → Plugins → Video Producer.
 - **L’estimation affiche « — » pour le temps.** Rien n’a encore été mesuré pour ce preset, ce moteur et cette résolution (la calibration est vide). Elle se remplit après quelques générations.
@@ -975,7 +971,7 @@ L’assistant, lui, n’est pas simulé : c’est le chat PotionUI en mode Video
 - **L’assistant ne répond pas, n’affiche aucune carte ou agit sur le mauvais projet.** Voyez le chapitre 10, « Si cela ne fonctionne pas ».
 
 
-## 19. Glossaire
+## 18. Glossaire
 
 | Français | English | Sens |
 |---|---|---|

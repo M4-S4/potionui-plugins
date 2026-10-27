@@ -207,7 +207,7 @@ test('exports.error.<code> matches the export error codes the export window tran
 });
 
 test('every command and menu of lib/commands.js has a label, and every label has a command', () => {
-	assert.equal(commandIds.length, 102, 'the source editor has 97 commands, minus the theme switch, plus the version history, the two imports from the computer, the slicing, joining and slicing on the shots of an audio clip, the Play workspace, the Synopsis and breakdown window, the Storyboard band and the shot editor, minus the advanced workshop, the Hybrid builder and the camera keyframes, minus the 3D scene workspace and its new scene command, plus the four views of Director AI, the final pass of the film, and picking every shot and clearing the shots picked, minus the voice and the five sounds of the retired Sound design workshop');
+	assert.equal(commandIds.length, 101, 'the source editor has 97 commands, minus the theme switch, plus the version history, the two imports from the computer, the slicing, joining and slicing on the shots of an audio clip, the Play workspace, the Synopsis and breakdown window, the Storyboard band and the shot editor, minus the advanced workshop, the Hybrid builder and the camera keyframes, minus the 3D scene workspace and its new scene command, plus the four views of Director AI, the final pass of the film, and picking every shot and clearing the shots picked, minus the voice and the five sounds of the retired Sound design workshop, minus the Simulated features window of the Help menu');
 	assert.equal(new Set(commandIds).size, commandIds.length, 'duplicate command id');
 	assert.equal(menuIds.length, 10);
 	assert.ok(!commandIds.includes('theme'), 'the theme command belongs to the host');
@@ -219,15 +219,12 @@ test('every command and menu of lib/commands.js has a label, and every label has
 	assert.ok(errors.includes('shell.error.unknown') && errors.includes('shell.error.server_error'));
 });
 
-test('Help › Simulated features lists no simulated item', () => {
-	const items = [];
-	const declared = Object.keys(dictionaries.en).filter((key) => /^shell\.simulations\.[^.]+\.title$/.test(key)).map((key) => key.split('.')[2]);
-	assert.deepEqual(declared, items);
+test('nothing is simulated any more: no Simulated features window, command or text is left', () => {
+	for (const locale of LOCALES) assert.deepEqual(Object.keys(dictionaries[locale]).filter((key) => /simulat/i.test(key)), [], locale);
+	for (const locale of LOCALES) assert.deepEqual(Object.entries(dictionaries[locale]).filter(([, text]) => /simulat/i.test(text)).map(([key]) => key), [], locale);
 	const modals = readFileSync(join(srcRoot, 'components', 'modals', 'Modals.svelte'), 'utf-8');
-	for (const item of items) {
-		for (const locale of LOCALES) assert.ok(dictionaries[locale][`shell.simulations.${item}.text`], `${locale} shell.simulations.${item}.text`);
-		assert.ok(modals.includes(`t('shell.simulations.${item}.title'), t('shell.simulations.${item}.text')`), `Modals.svelte does not list ${item}`);
-	}
+	assert.doesNotMatch(modals, /simulations|vp-sim/);
+	assert.doesNotMatch(readFileSync(join(srcRoot, 'lib', 'commands.js'), 'utf-8'), /help-sim|simulations/);
 });
 
 test('translate interpolates, pluralises and falls back to en then to the key', () => {

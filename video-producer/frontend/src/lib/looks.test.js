@@ -61,8 +61,10 @@ test('wiring: the measured look feeds the seams, the review, To check and the St
 	assert.doesNotMatch(continuity, /look === rb\.look|0\.94 : 0\.78/);
 	assert.match(continuity, /const found = seamLook\(looks, a, b\);/);
 	assert.match(continuity, /if \(look\?\.low\) out\.issues\.push\(\{ kind: 'identity'/);
-	assert.match(source('./assistant.js'), /const MEASURED_KINDS = \['lum', 'warm', 'identity'\];\nconst SIMULATED_KINDS = \[\];/);
-	assert.doesNotMatch(source('../components/modals/Modals.svelte'), /simulations\.identity/);
+	assert.match(source('./assistant.js'), /const MEASURED_KINDS = \['lum', 'warm', 'identity'\];/);
+	assert.doesNotMatch(source('./assistant.js'), /SIMULATED_KINDS|simulated/);
+	assert.doesNotMatch(source('../components/modals/Modals.svelte'), /simulations/);
+	assert.doesNotMatch(source('../components/director/DirectorSummary.svelte'), /vp-sim|simulatedTip/);
 	assert.match(source('../components/storyboard/SeamPanel.svelte'), /\{#if issue\.kind === 'identity'\}<span class="mt-0\.5 block text-2xs text-fg-subtle" data-look-hint>\{t\('lib\.continuity\.lookHint'\)\}/);
 	const take = source('../components/director/ReviewTake.svelte');
 	assert.match(take, /\{#if look\?\.cards\.length\}\n\t<section class="space-y-2" data-take-looks>/);

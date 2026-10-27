@@ -195,10 +195,6 @@
 												<HostUi name="Tooltip" props={{ text: i.kind === 'identity' ? t('assistant.review.measuredLookTip') : seamTip(s.toShotId), wrapperClass: 'inline-flex shrink-0' }}>
 													<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('assistant.review.measured')}</HostUi>
 												</HostUi>
-											{:else if i.simulated}
-												<HostUi name="Tooltip" props={{ text: t('assistant.review.simulatedTip'), wrapperClass: 'inline-flex shrink-0' }}>
-													<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>
-												</HostUi>
 											{/if}
 										</li>
 									{/each}
