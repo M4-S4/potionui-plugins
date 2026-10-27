@@ -53,8 +53,9 @@
 	import { laneAudible, laneCode, videoTrack } from '../../lib/tracks.js';
 	import { isReferenceItem, isReferenceLane } from '../../lib/sound.js';
 	import { VREF_ROLES, trackItemsOf, videoTracksOf } from '../../lib/vrefs.js';
-	import { VREF_COLOR, receivingCount, trackFrames, trackMarks, trackRowId, vrefLabel } from '../../lib/vreftracks.js';
-	import { addTrackItem, openTrackSettings, roleLabel, setTrackRole, sideText, toggleTrack, trackName } from '../../lib/vreftracks.svelte.js';
+	import { VREF_COLOR, receivingCount, trackBusy, trackFrames, trackMarks, trackRowId, vrefLabel } from '../../lib/vreftracks.js';
+	import { addTrackItem, dropTakeOnTrack, isPlaced, openTrackSettings, roleLabel, setTrackRole, sideText, takeSpan, toggleTrack, trackName } from '../../lib/vreftracks.svelte.js';
+	import { takeById } from '../../lib/takes.svelte.js';
 	import { engineTitle, shotReceptionFor } from '../../lib/references.js';
 	import { LIMITS, VIDEO_TRACKS, leastSeconds } from '../../lib/reception.js';
 	import { TAG_CLASS } from '../../lib/reftags.js';
@@ -67,6 +68,7 @@
 	let viewW = $state(800);
 	let reorder = $state(null);
 	let fileHover = $state(null);
+	let takeHover = $state(null);
 	let laneMenu = $state(null);
 	let trackMenu = $state(null);
 
@@ -374,8 +376,30 @@
 
 	function onDrop(e, row) {
 		e.preventDefault();
+		takeHover = null;
+		const take = e.dataTransfer.getData('text/x-take');
+		if (take) {
+			if (row.vtrack) dropTakeOnTrack(take, row.vtrack);
+			else toast(t('timeline.vref.takeOnly'), 'warning');
+			return;
+		}
 		const id = e.dataTransfer.getData('text/x-asset');
 		if (asset(id)) placeAsset(id, row, timeAt(e.clientX));
+	}
+
+	function onDragOver(e, row) {
+		e.preventDefault();
+		const take = ui.dragTake ? takeById(ui.dragTake) : null;
+		if (!take || !e.dataTransfer?.types?.includes('text/x-take')) return;
+		if (!row.vtrack) {
+			takeHover = null;
+			e.dataTransfer.dropEffect = 'none';
+			return;
+		}
+		const span = takeSpan(take);
+		const busy = trackBusy(doc, row.vtrack, span[0], span[1]);
+		takeHover = { row: row.id, span, busy, move: isPlaced(take), label: row.label };
+		e.dataTransfer.dropEffect = busy ? 'none' : takeHover.move ? 'move' : 'copy';
 	}
 
 	function filesOn(row) {
@@ -559,10 +583,15 @@
 						data-vtrack={row.vtrack ?? null}
 						onpointerdown={laneDown}
 						ondblclick={(e) => laneDbl(e, row)}
-						ondragover={(e) => e.preventDefault()}
+						ondragover={(e) => onDragOver(e, row)}
 						ondrop={(e) => onDrop(e, row)}
 						use:fileDrop={filesOn(row)}
 					>
+						{#if ui.dragTake && takeHover?.row === row.id}
+							<div class="pointer-events-none absolute inset-y-0 z-20 border {takeHover.busy ? 'border-danger bg-danger/10' : 'border-signal bg-signal/10'}" style:left="{x(takeHover.span[0])}px" style:width="{Math.max(2, x(takeHover.span[1] - takeHover.span[0]))}px" data-take-hover={takeHover.busy ? 'busy' : 'free'}>
+								<span class="absolute left-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded border border-line-strong bg-surface-3 px-1.5 py-0.5 text-2xs {takeHover.busy ? 'text-danger' : 'text-fg'}">{takeHover.busy ? t('timeline.vref.takeBusy', { label: takeHover.label }) : takeHover.move ? t('timeline.vref.takeMove', { label: takeHover.label, time: secs(takeHover.span[0]) }) : t('timeline.vref.takeCopy', { label: takeHover.label, time: secs(takeHover.span[0]) })}</span>
+							</div>
+						{/if}
 						{#if fileHover?.row === row.id}
 							<div class="pointer-events-none absolute inset-0 z-20 border {fileHover.verdict === 'reject' ? 'border-danger bg-danger/10' : 'border-signal bg-signal/10'}">
 								{#if fileHover.verdict !== 'reject'}<div class="absolute inset-y-0 w-0.5 bg-signal" style:left="{x(fileHover.at)}px"></div>{/if}

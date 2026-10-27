@@ -273,5 +273,10 @@
 	"vref.deleteConfirm": "Delete the track",
 	"toast.vrefDeleted": "Track {label} deleted",
 	"media.use.vrefs.one": "{count} part of a reference video track, removed",
-	"media.use.vrefs.other": "{count} parts of reference video tracks, removed"
+	"media.use.vrefs.other": "{count} parts of reference video tracks, removed",
+	"vref.take.busy": "{label} is taken under {shot}.",
+	"vref.take.busyHere": "{label} is taken at that point.",
+	"vref.take.moved": "Take {variant} moved to {label}: shot {shot} is to be generated again.",
+	"vref.take.copied": "Take {variant} copied to {label}.",
+	"vref.take.withSound": "Its sound is on {lane}."
 }

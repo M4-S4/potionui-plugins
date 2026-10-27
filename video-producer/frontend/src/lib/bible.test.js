@@ -162,7 +162,15 @@ test('bible: the shot editor carries the cast, a changed cast counts as a change
 test('bible: the prompts route answer is normalized', () => {
 	const data = normalizePrompts({
 		prompts: [
-			{ shot_id: 's1', preset_id: 'p', profile: 'FL2VA', engine: 'ltx', prompt: 'Hello.', warnings: [{ code: 'prompt_too_long', message: 'm', data: { tokens: 600 } }, 'junk'] },
+			{
+				shot_id: 's1',
+				preset_id: 'p',
+				profile: 'FL2VA',
+				engine: 'ltx',
+				prompt: 'Hello.',
+				video_tracks: [{ slot: 2, track_id: 't2', label: '<Video 1>' }, { slot: '1', label: '<Video 2>' }, { slot: 3 }],
+				warnings: [{ code: 'prompt_too_long', message: 'm', data: { tokens: 600 } }, 'junk']
+			},
 			{ shot_id: 's2', engine: 'mystery' },
 			{ prompt: 'no shot' }
 		],
@@ -170,8 +178,17 @@ test('bible: the prompts route answer is normalized', () => {
 	});
 	assert.deepEqual(data, {
 		prompts: [
-			{ shotId: 's1', presetId: 'p', profile: 'FL2VA', engine: 'ltx', prompt: 'Hello.', reference: null, warnings: [{ code: 'prompt_too_long', message: 'm', data: { tokens: 600 } }] },
-			{ shotId: 's2', presetId: null, profile: null, engine: 'other', prompt: '', reference: null, warnings: [] }
+			{
+				shotId: 's1',
+				presetId: 'p',
+				profile: 'FL2VA',
+				engine: 'ltx',
+				prompt: 'Hello.',
+				reference: null,
+				videoTracks: [{ slot: 2, trackId: 't2', label: '<Video 1>' }],
+				warnings: [{ code: 'prompt_too_long', message: 'm', data: { tokens: 600 } }]
+			},
+			{ shotId: 's2', presetId: null, profile: null, engine: 'other', prompt: '', reference: null, videoTracks: [], warnings: [] }
 		],
 		blocks: [{ code: 'no_preset', message: 'm', data: null }]
 	});

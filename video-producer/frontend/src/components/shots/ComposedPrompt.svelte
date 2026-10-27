@@ -4,6 +4,9 @@
 	import { project, getClient } from '../../lib/project.svelte.js';
 	import { currentEngine, engineOptionLabel, noteText } from '../../lib/production.svelte.js';
 	import { marked } from '../../lib/director.js';
+	import { TAG_CLASS } from '../../lib/reftags.js';
+	import { labelParts, trackOf, vrefLabel } from '../../lib/vreftracks.js';
+	import { roleLabel, trackName } from '../../lib/vreftracks.svelte.js';
 
 	let { source, shotId, marks = [], current = $bindable(null) } = $props();
 
@@ -21,6 +24,13 @@
 	const warnings = $derived((item?.warnings ?? []).filter((w) => !ELSEWHERE.includes(w.code)));
 	const blocks = $derived(item ? [] : (composed.data?.blocks ?? []));
 	const parts = $derived(item ? marked(item.prompt, marks) : []);
+	const tracks = $derived(item?.videoTracks ?? []);
+
+	function labelTip(slot) {
+		const entry = tracks.find((x) => x.slot === slot);
+		const track = entry?.trackId ? trackOf(source, entry.trackId) : null;
+		return t('modals.shot.vref.labelTip', { label: entry?.label ?? '', track: track ? trackName(track) : vrefLabel(slot), role: track ? roleLabel(track.role) : '' });
+	}
 
 	$effect(() => {
 		current = item;
@@ -46,6 +56,8 @@
 	});
 </script>
 
+{#snippet labelled(text)}{#each labelParts(text, tracks) as piece, j (j)}{piece.text}{#if piece.slot}<span class="{TAG_CLASS} vp-tc ml-0.5 align-baseline" title={labelTip(piece.slot)} data-composed-vref={piece.slot}>{vrefLabel(piece.slot)}</span>{/if}{/each}{/snippet}
+
 <details class="rounded-lg border border-line-strong p-2.5 text-xs" open>
 	<summary class="-mb-1 -mt-1 min-h-6 cursor-pointer py-1 font-medium text-fg-muted">
 		{t('modals.shot.composed')}{#if item}<span class="font-normal text-fg-subtle"> · {engineOptionLabel(item.presetId)} · {item.profile}</span>{/if}
@@ -56,7 +68,7 @@
 		{:else if !project.id}
 			<p class="text-fg-subtle">{t('modals.shot.composedUnsaved')}</p>
 		{:else if item}
-			<p class="max-h-48 overflow-auto whitespace-pre-wrap leading-5 text-fg-muted {composed.loading ? 'opacity-60' : ''}" aria-live="polite">{#each parts as part, i (i)}{#if part.mark}<mark class="rounded-sm text-fg" style:background-color="rgb(var(--warning) / 0.25)" data-composed-mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</p>
+			<p class="max-h-48 overflow-auto whitespace-pre-wrap leading-5 text-fg-muted {composed.loading ? 'opacity-60' : ''}" aria-live="polite">{#each parts as part, i (i)}{#if part.mark}<mark class="rounded-sm text-fg" style:background-color="rgb(var(--warning) / 0.25)" data-composed-mark>{@render labelled(part.text)}</mark>{:else}{@render labelled(part.text)}{/if}{/each}</p>
 			{#each warnings as w, i (i)}
 				<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{noteText(w)}</HostUi>
 			{/each}

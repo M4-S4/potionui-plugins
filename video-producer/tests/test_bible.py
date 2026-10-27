@@ -360,6 +360,7 @@ def test_the_prompts_route_composes_the_unsaved_document_it_is_given(core, clien
                 "engine": "wan",
                 "prompt": WALK,
                 "reference": {"layout": "cast", "composed": {"cast": ""}, "sent": {"cast": ""}, "overridden": False, "changed": False, "ignored": False},
+                "video_tracks": [],
                 "warnings": [NO_FRAME],
             }
         ],

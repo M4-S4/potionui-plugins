@@ -215,5 +215,10 @@
 	"shot.vref.switch": "Passer ce plan en {engine}",
 	"shot.vref.leave.one": "Laisser {labels} de côté",
 	"shot.vref.leave.other": "Laisser {labels} de côté",
-	"shot.vref.counts": "Vidéos {videos}/{maxVideos} · Images {images}/{maxImages} · Sons {sounds}/{maxSounds}"
+	"shot.vref.counts": "Vidéos {videos}/{maxVideos} · Images {images}/{maxImages} · Sons {sounds}/{maxSounds}",
+	"shot.vref.labelTip": "{label} : {track} · {role}",
+	"shot.vref.cite": "Citer",
+	"shot.vref.citeTip": "Ajouter {tag} à l’instruction, au curseur. En Ref2VA, la mention part comme la vidéo de la piste ; avec un autre moteur, elle est retirée.",
+	"shot.vref.cited": "{tag} cité",
+	"shot.vref.citedAs": "{tag} → {label}"
 }

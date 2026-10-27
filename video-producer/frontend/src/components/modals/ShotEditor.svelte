@@ -1,4 +1,5 @@
 <script>
+	import { tick } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, asset, clipLabel, promptIssues, relayout, secs, toast } from '../../lib/state.svelte.js';
@@ -8,7 +9,7 @@
 	import { engineTitle, refTypeLabel, shotReceptionIn } from '../../lib/references.js';
 	import { TAG_CLASS, typeIcon } from '../../lib/reftags.js';
 	import { LIMITS } from '../../lib/reception.js';
-	import { vrefLabel } from '../../lib/vreftracks.js';
+	import { citeTrack, citedSlots, vrefLabel, vrefTag } from '../../lib/vreftracks.js';
 	import { roleLabel, trackVerdict } from '../../lib/vreftracks.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { SHOT_CAP, applyShotDraft, inputsChanged, overrunsTake, rebaseDraft, shotDraft, shotReferences } from '../../lib/shots.js';
@@ -88,6 +89,21 @@
 		const other = engineChoices().find((o) => presetProfiles(o.info).includes(REFERENCE_PROFILE));
 		return other ? { option: other, label: withProfile(other.label, REFERENCE_PROFILE) } : null;
 	});
+
+	let textEl = $state(null);
+	let caret = null;
+	const cited = $derived(citedSlots(draft?.text));
+
+	function cite(slot) {
+		const result = citeTrack(draft.text, slot, caret);
+		if (!result.added) return;
+		draft.text = result.text;
+		caret = result.caret;
+		tick().then(() => {
+			textEl?.focus();
+			textEl?.setSelectionRange(result.caret, result.caret);
+		});
+	}
 
 	function toggleVref(trackId, on) {
 		const list = draft.excludeVrefs ?? [];
@@ -180,7 +196,7 @@
 						<button type="button" class="flex min-h-6 items-center gap-1 text-xs text-fg-muted hover:text-fg" onclick={openLibrary}><Icon name="wand" class="h-3.5 w-3.5" />{t('modals.prompt.library')}</button>
 					</div>
 					<!-- svelte-ignore a11y_autofocus -->
-					<textarea id={textId} class="input w-full text-md" rows="5" bind:value={draft.text} autofocus={focus !== 'keyframes'} placeholder={t('modals.prompt.placeholder')}></textarea>
+					<textarea id={textId} class="input w-full text-md" rows="5" bind:this={textEl} bind:value={draft.text} onblur={(e) => (caret = e.currentTarget.selectionStart)} autofocus={focus !== 'keyframes'} placeholder={t('modals.prompt.placeholder')}></textarea>
 					{#each issues as issue, i (i)}
 						{#if issue.level === 'conflict'}
 							<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{issue.text}</HostUi>
@@ -310,12 +326,20 @@
 								{#each vrefRows as entry (entry.track.id)}
 									{@const verdict = trackVerdict(entry)}
 									{@const excluded = (draft.excludeVrefs ?? []).includes(entry.track.id)}
+									{@const sentAs = (composed?.videoTracks ?? []).find((x) => x.slot === entry.slot)?.label ?? null}
 									<li class="flex items-center gap-2 px-2 py-1.5 text-xs {excluded || entry.status === 'off' ? 'opacity-60' : ''}" data-vref-row={entry.slot}>
 										<span class="flex h-7 w-12 shrink-0 items-center justify-center"><span class="{TAG_CLASS} vp-tc {verdict.ok ? 'border-success text-success' : 'line-through'}">{vrefLabel(entry.slot)}</span></span>
 										<span class="min-w-0 flex-1">
 											<span class="block truncate text-fg">{entry.track.name ? `${entry.track.name} · ${roleLabel(entry.track.role)}` : roleLabel(entry.track.role)}</span>
 											<span class="block truncate {verdict.tone}">{verdict.text}</span>
 										</span>
+										{#if cited.includes(entry.slot)}
+											<span class="vp-tc shrink-0 text-fg-subtle" data-vref-cited={entry.slot}>{sentAs ? t('modals.shot.vref.citedAs', { tag: vrefTag(entry.slot), label: sentAs }) : t('modals.shot.vref.cited', { tag: vrefTag(entry.slot) })}</span>
+										{:else}
+											<HostUi name="Tooltip" props={{ text: t('modals.shot.vref.citeTip', { tag: vrefTag(entry.slot) }) }}>
+												<button type="button" class="h-6 shrink-0 rounded px-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg" data-vref-cite={entry.slot} onclick={() => cite(entry.slot)}>{t('modals.shot.vref.cite')}</button>
+											</HostUi>
+										{/if}
 										<label class="flex shrink-0 items-center gap-1.5 text-fg-muted">
 											<input type="checkbox" checked={excluded} disabled={entry.status === 'off'} onchange={(e) => toggleVref(entry.track.id, e.currentTarget.checked)} aria-label={t('modals.shot.excludeLabel', { name: vrefLabel(entry.slot) })} />
 											{t('modals.shot.exclude')}

@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, secs } from '../../lib/state.svelte.js';
 	import { labelTake, promoteToFinal, retryTake, cancelTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable } from '../../lib/production.svelte.js';
 	import { FAILURE_CODES, isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
@@ -11,7 +11,11 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { canLabel, labelOf, toggledLabel } from '../../lib/labels.js';
 	import { isStale } from '../../lib/shots.js';
+	import { TAG_CLASS } from '../../lib/reftags.js';
+	import { takeTracks, vrefLabel } from '../../lib/vreftracks.js';
+	import { roleLabel, trackName } from '../../lib/vreftracks.svelte.js';
 	import Icon from '../Icon.svelte';
+	import TakeToRefs from './TakeToRefs.svelte';
 
 	let { take, clip, onchoose = null, chosen = false } = $props();
 
@@ -30,6 +34,7 @@
 	const flying = $derived(isInFlight(take));
 	const done = $derived(take.status === 'done' && Boolean(take.url));
 	const thumb = $derived(done ? takeThumb(take) : null);
+	const vrefs = $derived(done ? takeTracks(doc, take.id) : []);
 	const parent = $derived(take.parentTakeId ? findTake(take.parentTakeId) : null);
 	const progress = $derived(take.status === 'running' ? Math.round(Math.min(100, Math.max(0, take.progress ?? 0))) : 0);
 	const engineText = $derived.by(() => {
@@ -70,6 +75,17 @@
 		else previewTake(take);
 	}
 
+	function drag(e) {
+		if (!done) return e.preventDefault();
+		e.dataTransfer.effectAllowed = 'copyMove';
+		e.dataTransfer.setData('text/x-take', take.id);
+		ui.dragTake = take.id;
+	}
+
+	function dragEnd() {
+		if (ui.dragTake === take.id) ui.dragTake = null;
+	}
+
 	function choose(e) {
 		if (!onchoose || e.target.closest?.('button, a, input, select, textarea, label')) return;
 		e.stopPropagation();
@@ -80,9 +96,9 @@
 <li class="overflow-hidden rounded-lg border transition-colors {active ? 'border-signal ring-1 ring-signal' : previewed || inCompare || chosen ? 'border-signal/60' : 'border-line-strong hover:border-line-hover'} {chosen ? 'bg-surface-2' : ''}" aria-current={chosen ? 'true' : undefined} data-take-card={take.id}>
 	<div role="presentation" class={onchoose ? 'cursor-pointer' : ''} onclick={choose}>
 		<div class="flex gap-2.5 p-1.5">
-			<button type="button" class="relative aspect-video w-28 shrink-0 overflow-hidden rounded bg-surface-3 disabled:cursor-default" disabled={!done} aria-label={t('generation.card.preview', { variant: take.variant })} onclick={open}>
+			<button type="button" class="relative aspect-video w-28 shrink-0 overflow-hidden rounded bg-surface-3 disabled:cursor-default" disabled={!done} draggable={done} aria-label={t('generation.card.preview', { variant: take.variant })} title={done ? t('generation.card.dragTip') : undefined} ondragstart={drag} ondragend={dragEnd} onclick={open}>
 				{#if thumb}
-					<img src={thumb} alt="" class="h-full w-full object-cover" />
+					<img src={thumb} alt="" class="h-full w-full object-cover" draggable="false" />
 				{:else}
 					<span class="absolute inset-0 flex items-center justify-center {tone}">
 						{#if take.status === 'running'}
@@ -106,6 +122,7 @@
 				</div>
 				<div class="flex min-w-0 items-center gap-1.5">
 					<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[label]}">{t(`generation.label.${label}`)}</span>
+					{#each vrefs as track (track.id)}<span class="{TAG_CLASS} vp-tc shrink-0" title={t('generation.card.refs.chipTip', { track: trackName(track), role: roleLabel(track.role) })} data-take-vref={track.slot}>{vrefLabel(track.slot)}</span>{/each}
 					{#if stale}<span class="flex min-w-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></span>{/if}
 				</div>
 				<div class="truncate text-fg-muted">{modeText()}</div>
@@ -138,6 +155,7 @@
 					props={{ icon: hostIconName('compare'), label: t('generation.card.compare', { variant: take.variant }), tooltip: t('generation.card.compareTip'), size: 'xs', class: 'vp-toggle', ariaPressed: inCompare, onclick: () => toggleCompare(take.id) }}
 				/>
 			{/if}
+			{#if done}<TakeToRefs {take} {clip} />{/if}
 			{#if clip && extractable(take)}
 				<HostUi
 					name="IconButton"

@@ -18,6 +18,7 @@ const { effectiveEngine } = await import('./engine.js');
 const { assetUses, removeAsset, USE_KINDS } = await import('./usage.js');
 const { rowKinds } = await import('./upload.js');
 const v = await import('./vreftracks.js');
+const { freeReferenceLane, takeSound } = await import('./sound.js');
 
 const read = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
 const { engines, cases } = read('../../../tests/fixtures/reception_cases.json');
@@ -197,4 +198,70 @@ test('removing a video from the Media takes its parts off the tracks and says so
 	removeAsset(doc, 'b');
 	assert.equal('vrefItems' in doc, false);
 	assert.equal(doc.vrefTracks.length, 1);
+});
+
+test('a piece copied from a take remembers it, and a track is busy where one of its pieces lies', () => {
+	const doc = { clips: [] };
+	v.addVrefTrack(doc, 'a', '');
+	v.addVrefTrack(doc, 'b', 'Walk');
+	const item = v.addVrefItem(doc, { id: 'i1', track: 'a', assetId: 'gen-t1', start: 4, srcDur: 3, fromTake: 't1' });
+	assert.deepEqual(item, { id: 'i1', track: 'a', assetId: 'gen-t1', start: 4, dur: 3, srcIn: 0, fromTake: 't1' });
+	assert.equal('fromTake' in v.addVrefItem(doc, { id: 'i2', track: 'b', assetId: 'walk', start: 0, srcDur: 2 }), false);
+	assert.equal(v.trackBusy(doc, 'a', 0, 4), false);
+	assert.equal(v.trackBusy(doc, 'a', 6.9, 9), true);
+	assert.equal(v.trackBusy(doc, 'a', 7, 9), false);
+	assert.equal(v.trackBusy(doc, 'b', 1, 3), true);
+	assert.deepEqual(v.takeTracks(doc, 't1').map((track) => track.id), ['a']);
+	v.addVrefItem(doc, { id: 'i3', track: 'b', assetId: 'gen-t1', start: 10, srcDur: 3, fromTake: 't1' });
+	assert.deepEqual(v.takeTracks(doc, 't1').map((track) => v.vrefLabel(track.slot)), ['vref1', 'vref2']);
+	assert.deepEqual(v.takeTracks(doc, 't9'), []);
+	assert.deepEqual(v.takeTracks(doc, null), []);
+});
+
+test('@vrefN is read as the server reads it, and citing a track writes the mention once, at the cursor', () => {
+	assert.deepEqual(v.citedSlots('The walk of @vref2, then @VREF1 and @vref2 again; x@vref3, @vref12, @vref0'), [2, 1]);
+	assert.deepEqual(v.citedSlots(null), []);
+	assert.deepEqual(v.citeTrack('', 1), { text: '@vref1', caret: 6, added: true });
+	assert.deepEqual(v.citeTrack('She walks.', 2), { text: 'She walks. @vref2', caret: 17, added: true });
+	assert.deepEqual(v.citeTrack('She walks as in .', 1, 16), { text: 'She walks as in @vref1.', caret: 22, added: true });
+	assert.deepEqual(v.citeTrack('Walkslowly', 3, 4), { text: 'Walk @vref3 slowly', caret: 11, added: true });
+	assert.deepEqual(v.citeTrack('As in (', 1), { text: 'As in (@vref1', caret: 13, added: true });
+	assert.deepEqual(v.citeTrack('Walk @vref1 slowly', 1, 0), { text: 'Walk @vref1 slowly', caret: 0, added: false });
+	assert.equal(v.citeTrack('abc', 1, 99).text, 'abc @vref1');
+});
+
+test('the labels the server gives the tracks of a shot split its composed prompt', () => {
+	const tracks = [
+		{ slot: 1, trackId: 't1', label: '<Video 2>' },
+		{ slot: 3, trackId: 't3', label: '<Video 1>' }
+	];
+	assert.deepEqual(v.labelParts('<Video 1> is the footage; <Video 2> moves. <Video 3> is a plain video.', tracks), [
+		{ text: '<Video 1>', slot: 3 },
+		{ text: ' is the footage; ', slot: null },
+		{ text: '<Video 2>', slot: 1 },
+		{ text: ' moves. <Video 3> is a plain video.', slot: null }
+	]);
+	assert.deepEqual(v.labelParts('No track.', []), [{ text: 'No track.', slot: null }]);
+	assert.deepEqual(v.labelParts('', tracks), []);
+});
+
+test('the sound of a take goes on the first reference sound track free under it, at its own level and without fades', () => {
+	const doc = { lanes: [{ id: 'A1' }, { id: 'A2', reference: true }, { id: 'A3', reference: true }], audio: [{ id: 'x', lane: 'A2', start: 2, dur: 3 }] };
+	assert.equal(freeReferenceLane(doc, [0, 4])?.id, 'A3');
+	assert.equal(freeReferenceLane(doc, [5, 8])?.id, 'A2');
+	doc.audio.push({ id: 'y', lane: 'A3', start: 0, dur: 10 });
+	assert.equal(freeReferenceLane(doc, [0, 4]), null);
+	assert.equal(freeReferenceLane({ lanes: [{ id: 'A1' }], audio: [] }, [0, 4]), null);
+	assert.deepEqual(takeSound({ id: 's', assetId: 'gen-t1', lane: 'A2', start: 5, dur: 3, fromTake: 't1' }), {
+		id: 's',
+		assetId: 'gen-t1',
+		lane: 'A2',
+		start: 5,
+		dur: 3,
+		srcIn: 0,
+		fadeIn: 0,
+		fadeOut: 0,
+		gain: 0,
+		fromTake: 't1'
+	});
 });

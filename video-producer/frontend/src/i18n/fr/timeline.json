@@ -114,5 +114,9 @@
 	"vref.mark.unknown": "{label} · plan {shot} — le moteur du plan n’est pas disponible : rien ne part.",
 	"vref.mark.trimmed": "{label} · plan {shot} — le plan envoie déjà {max} vidéos : {label} ne part pas.",
 	"vref.mark.short": "{label} · plan {shot} — moins de {seconds} {side} : rien ne part.",
-	"vref.mark.missing": "{label} · plan {shot} — le média n’est plus lisible : rien ne part."
+	"vref.mark.missing": "{label} · plan {shot} — le média n’est plus lisible : rien ne part.",
+	"vref.takeOnly": "Une prise se dépose sur une piste de référence vidéo (vref).",
+	"vref.takeBusy": "{label} est occupée sous ce plan",
+	"vref.takeMove": "Déplacer dans {label} à {time}",
+	"vref.takeCopy": "Copier dans {label} à {time}"
 }

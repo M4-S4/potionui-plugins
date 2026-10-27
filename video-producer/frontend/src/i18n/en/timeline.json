@@ -114,5 +114,9 @@
 	"vref.mark.unknown": "{label} · shot {shot} — the engine of the shot is not available: nothing is sent.",
 	"vref.mark.trimmed": "{label} · shot {shot} — the shot already sends {max} videos: {label} is not sent.",
 	"vref.mark.short": "{label} · shot {shot} — less than {seconds} {side}: nothing is sent.",
-	"vref.mark.missing": "{label} · shot {shot} — the media can no longer be read: nothing is sent."
+	"vref.mark.missing": "{label} · shot {shot} — the media can no longer be read: nothing is sent.",
+	"vref.takeOnly": "A take is dropped on a reference video track (vref).",
+	"vref.takeBusy": "{label} is taken under this shot",
+	"vref.takeMove": "Move to {label} at {time}",
+	"vref.takeCopy": "Copy to {label} at {time}"
 }
