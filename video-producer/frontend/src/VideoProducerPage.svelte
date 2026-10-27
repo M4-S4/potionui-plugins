@@ -586,7 +586,7 @@
 			-webkit-backdrop-filter: blur(24px);
 			backdrop-filter: blur(24px);
 		}
-		.vp-root .vp-menu [role='menuitem'] {
+		.vp-root .vp-menu :is([role='menuitem'], [role='menuitemradio']) {
 			display: flex;
 			height: 1.75rem;
 			width: 100%;
@@ -599,7 +599,7 @@
 			line-height: 16px;
 			color: rgb(var(--fg));
 		}
-		.vp-root .vp-menu [role='menuitem']:is(:hover, :focus-visible) {
+		.vp-root .vp-menu :is([role='menuitem'], [role='menuitemradio']):is(:hover, :focus-visible) {
 			background-color: rgb(var(--signal) / 0.2);
 		}
 		.vp-root .vp-menu-sep {

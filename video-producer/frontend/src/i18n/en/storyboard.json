@@ -53,8 +53,6 @@
 	"band.takes": "Takes",
 	"band.takesTip": "The takes of each shot, the final on top: click a take or use ↑ ↓ to see it in the monitor",
 	"band.music": "Music",
-	"band.sound": "Reference sounds",
-	"band.soundTip": "What each shot sends to the engine as a reference sound",
 	"band.partTip": "{label} · {start} → {end}",
 	"band.partsHint": "Add markers (M) on the song to name its parts",
 	"band.noShots": "No shot",
@@ -167,5 +165,7 @@
 	"pick.generateHint": "{key} or Generate selection, in the Production bar, queues these shots in the order of the edit, even while other takes are running.",
 	"pick.running.one": "{count} of them already has a take on its way: it gets one more variant.",
 	"pick.running.other": "{count} of them already have a take on their way: each gets one more variant.",
-	"pick.hint": "{toggle} adds or removes a shot, {range} picks every shot up to that one, {esc} clears the selection."
+	"pick.hint": "{toggle} adds or removes a shot, {range} picks every shot up to that one, {esc} clears the selection.",
+	"band.refs": "Refs",
+	"band.refsTip": "What each shot sends to the engine: the vref tracks (green when sent, struck through when the engine ignores them) and the reference sound"
 }

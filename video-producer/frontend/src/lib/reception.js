@@ -106,7 +106,8 @@ export function shotVideoTracks(doc, clip, seconds) {
 		const region = videoRegion(track.role, start, seconds, track.seconds);
 		const items = trackItemsOf(doc, track.id).filter((item) => playsIn(item, region));
 		if (!items.length) continue;
-		const entry = { track, slot: track.slot };
+		const span = [Math.max(region[0], Math.min(...items.map((item) => item.start))), Math.min(region[1], Math.max(...items.map((item) => item.start + item.dur)))];
+		const entry = { track, slot: track.slot, region, span };
 		if (track.off === true) found.push({ ...entry, status: 'off' });
 		else if (excluded.has(track.id)) found.push({ ...entry, status: 'excluded' });
 		else {
@@ -141,8 +142,7 @@ export function mediaKey(asset) {
 
 const assetOf = (doc, id) => (id ? ((doc?.assets ?? []).find((a) => a.id === id) ?? null) : null);
 
-function mediaStatuses(doc, own, shared, tracks, videos, tracked) {
-	const counts = Object.fromEntries(Object.keys(LIMITS).map((kind) => [kind, 0]));
+function mediaStatuses(doc, own, shared, tracks, videos, tracked, counts) {
 	const seen = new Set();
 	const statuses = new Map();
 	const add = (reference) => {
@@ -181,19 +181,22 @@ export function shotReception(doc, clip, engine, tracks = 0) {
 	const tracked = new Map(found.filter((x) => x.status !== 'ready').map((x) => [x.track.id, x.status]));
 	const going = found.filter((x) => x.status !== 'off' && x.status !== 'excluded');
 	let statuses;
+	let counts = null;
 	if (state !== 'ready') {
 		statuses = new Map([...own, ...shared].map((r) => [r.id, state]));
 		for (const x of going) tracked.set(x.track.id, state);
-	} else if (takesReferences(profile)) statuses = mediaStatuses(doc, own, shared, tracks, going.filter((x) => x.status === 'ready'), tracked);
-	else {
+	} else if (takesReferences(profile)) {
+		counts = Object.fromEntries(Object.keys(LIMITS).map((kind) => [kind, 0]));
+		statuses = mediaStatuses(doc, own, shared, tracks, going.filter((x) => x.status === 'ready'), tracked, counts);
+	} else {
 		const mixes = audioBehavior(info, profile) === MUX;
 		const voices = voiceReferences(doc);
 		statuses = new Map([...own, ...shared].map((r) => [r.id, mixes && assetOf(doc, r.assetId)?.kind === 'audio' && !voices.has(r.id) ? 'mixed' : 'ignored']));
 		for (const x of going) tracked.set(x.track.id, 'ignored');
 	}
 	for (const x of inherited) if (x.excluded) statuses.set(x.reference.id, 'excluded');
-	const videoTracks = found.map((x) => ({ track: x.track, slot: x.slot, status: tracked.get(x.track.id), frames: x.frames ?? 0, window: tracked.get(x.track.id) === 'sent' ? x.window : null }));
-	return { clip, engine, state, layout, overridden: Boolean(override) && override.layout === layout, ignoredLayout: Boolean(override) && override.layout !== layout, statuses, videoTracks };
+	const videoTracks = found.map((x) => ({ track: x.track, slot: x.slot, status: tracked.get(x.track.id), frames: x.frames ?? 0, window: tracked.get(x.track.id) === 'sent' ? x.window : null, region: x.region, span: x.span }));
+	return { clip, engine, state, layout, overridden: Boolean(override) && override.layout === layout, ignoredLayout: Boolean(override) && override.layout !== layout, statuses, videoTracks, counts };
 }
 
 export function linkedCard(doc, reference) {

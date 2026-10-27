@@ -29,7 +29,8 @@
 		clipLabel,
 		sourceLength,
 		isPicked,
-		pickClip
+		pickClip,
+		deleteVrefTrack
 	} from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { shotWaitText } from '../../lib/chain.svelte.js';
@@ -51,6 +52,12 @@
 	import { rowKinds } from '../../lib/upload.js';
 	import { laneAudible, laneCode, videoTrack } from '../../lib/tracks.js';
 	import { isReferenceItem, isReferenceLane } from '../../lib/sound.js';
+	import { VREF_ROLES, trackItemsOf, videoTracksOf } from '../../lib/vrefs.js';
+	import { VREF_COLOR, receivingCount, trackFrames, trackMarks, trackRowId, vrefLabel } from '../../lib/vreftracks.js';
+	import { addTrackItem, openTrackSettings, roleLabel, setTrackRole, sideText, toggleTrack, trackName } from '../../lib/vreftracks.svelte.js';
+	import { engineTitle, shotReceptionFor } from '../../lib/references.js';
+	import { LIMITS, VIDEO_TRACKS, leastSeconds } from '../../lib/reception.js';
+	import { TAG_CLASS } from '../../lib/reftags.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from '../shell/Dropdown.svelte';
 
@@ -61,9 +68,12 @@
 	let reorder = $state(null);
 	let fileHover = $state(null);
 	let laneMenu = $state(null);
+	let trackMenu = $state(null);
 
 	const pps = $derived(ui.pxPerSec);
-	const total = $derived(seqDuration());
+	const tracks = $derived(videoTracksOf(doc));
+	const shots = $derived(tracks.length ? doc.clips.map((c) => shotReceptionFor(c)) : []);
+	const total = $derived(Math.max(seqDuration(), ...(doc.vrefItems ?? []).map((item) => item.start + item.dur)));
 	const contentW = $derived(Math.max(viewW - HEAD, (total + 8) * pps));
 	const x = (time) => time * pps;
 	const FADE_EDGE = 37;
@@ -77,6 +87,7 @@
 		{ id: 'prompts', label: t('timeline.row.prompts'), icon: 'sparkles', h: BLOCK_ROW, color: roleColor.Prompts },
 		{ id: 'frames', label: t('timeline.row.frames'), icon: 'image', h: 32, color: roleColor.Frames },
 		{ id: 'v1', label: t('timeline.row.video'), icon: 'film', h: 60, color: roleColor.Vidéo },
+		...tracks.map((track) => ({ id: trackRowId(track), vtrack: track.id, track, label: vrefLabel(track.slot), icon: 'film', h: 46, color: VREF_COLOR })),
 		...doc.lanes.map((l) => ({ id: l.id, lane: l, label: t('timeline.row.lane', { id: laneCode(doc.lanes, l.id), name: l.name }), icon: l.role === 'Dialogue' ? 'mic' : l.role === 'Musique' ? 'music' : 'wave', h: 38, color: roleColor[l.role] }))
 	]);
 
@@ -91,12 +102,16 @@
 		{ label: t('timeline.add.frame'), icon: 'image', run: () => addFrame() },
 		{ label: t('timeline.add.title'), icon: 'type', key: key('title'), run: () => addTitle() },
 		{ label: t('timeline.add.marker'), icon: 'bookmark', key: key('marker'), run: () => addMarker() },
-		{ label: t('timeline.add.lane'), icon: 'wave', key: key('audio-add'), run: addAudioLane }
+		{ label: t('timeline.add.lane'), icon: 'wave', key: key('audio-add'), run: addAudioLane },
+		addTrackItem()
 	]);
 
 	const isSel = (kind, id) => ui.selection?.kind === kind && ui.selection?.id === id;
 	const video = $derived(videoTrack(doc));
 	const menuLane = $derived(laneMenu && ui.menuOpen === `lane:${laneMenu.id}` ? doc.lanes.find((l) => l.id === laneMenu.id) : null);
+	const menuTrack = $derived(trackMenu && ui.menuOpen === `vtrack:${trackMenu.id}` ? (tracks.find((track) => track.id === trackMenu.id) ?? null) : null);
+	const vsecs = (v) => `${formatNumber(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s`;
+	const shotNumber = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 
 	function toggleVideo(key) {
 		doc.video = { ...videoTrack(doc), [key]: !videoTrack(doc)[key] };
@@ -117,11 +132,39 @@
 		ui.menuOpen = null;
 		run(lane);
 	}
-	function placeMenu(node) {
+	function openTrackMenu(e, track) {
+		e.preventDefault();
+		select('vtrack', track.id);
+		trackMenu = { id: track.id, x: e.clientX, y: e.clientY };
+		ui.menuOpen = `vtrack:${track.id}`;
+	}
+	function trackMenuKey(e, track) {
+		if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return;
+		const r = e.currentTarget.getBoundingClientRect();
+		openTrackMenu({ preventDefault: () => e.preventDefault(), clientX: r.left, clientY: r.bottom }, track);
+	}
+	function trackAction(run) {
+		const track = menuTrack;
+		ui.menuOpen = null;
+		run(track);
+	}
+	function placeMenu(node, at) {
 		const r = node.getBoundingClientRect();
-		node.style.left = `${clamp(laneMenu.x, 8, window.innerWidth - r.width - 8)}px`;
-		node.style.top = `${clamp(laneMenu.y, 8, window.innerHeight - r.height - 8)}px`;
-		node.querySelector('[role="menuitem"]')?.focus();
+		node.style.left = `${clamp(at.x, 8, window.innerWidth - r.width - 8)}px`;
+		node.style.top = `${clamp(at.y, 8, window.innerHeight - r.height - 8)}px`;
+		node.querySelector('[role="menuitem"], [role="menuitemradio"]')?.focus();
+	}
+	function markText(mark, track) {
+		const shot = shotNumber(mark.clip);
+		const label = vrefLabel(track.slot);
+		const engine = engineTitle(mark.engine);
+		if (mark.status === 'sent') return t('timeline.vref.mark.sent', { shot, engine, label, seconds: vsecs(mark.frames / VIDEO_TRACKS.fps), side: sideText(track.role) });
+		if (mark.status === 'ignored') return t('timeline.vref.mark.ignored', { shot, engine, label });
+		if (mark.status === 'blocked') return t('timeline.vref.mark.blocked', { shot, engine, label });
+		if (mark.status === 'unknown') return t('timeline.vref.mark.unknown', { shot, label });
+		if (mark.status === 'trimmed') return t('timeline.vref.mark.trimmed', { shot, label, max: LIMITS.video });
+		if (mark.status === 'short') return t('timeline.vref.mark.short', { shot, label, seconds: vsecs(leastSeconds()), side: sideText(track.role) });
+		return t('timeline.vref.mark.missing', { shot, label });
 	}
 	const timeAt = (clientX) => {
 		const r = scroller.getBoundingClientRect();
@@ -178,6 +221,7 @@
 		select(kind, item.id);
 		const s0 = item.start;
 		const lane0 = item.lane;
+		const track0 = item.track;
 		drag(e, {
 			onMove: (dx, dy, ev) => {
 				const r = snapMove(Math.max(0, s0 + dx / pps), item.dur, item.id);
@@ -186,8 +230,15 @@
 					const laneEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-lane]');
 					if (laneEl) item.lane = laneEl.dataset.lane;
 				}
+				if (kind === 'vref') {
+					const trackEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-vtrack]');
+					if (trackEl) item.track = trackEl.dataset.vtrack;
+				}
 				if (ui.drag) ui.drag.at = r.at;
-				setDragText(kind === 'audio' && item.lane !== lane0 ? t('timeline.drag.moveLane', { start: secs(item.start), lane: laneCode(doc.lanes, item.lane) }) : t('timeline.drag.move', { start: secs(item.start), dur: secs(item.dur) }));
+				const onto = kind === 'vref' && item.track !== track0 ? tracks.find((track) => track.id === item.track) : null;
+				if (kind === 'audio' && item.lane !== lane0) setDragText(t('timeline.drag.moveLane', { start: secs(item.start), lane: laneCode(doc.lanes, item.lane) }));
+				else if (onto) setDragText(t('timeline.drag.moveLane', { start: secs(item.start), lane: vrefLabel(onto.slot) }));
+				else setDragText(t('timeline.drag.move', { start: secs(item.start), dur: secs(item.dur) }));
 			},
 			onEnd: () => relinkAfter(kind, item),
 			onClick: () => {}
@@ -198,14 +249,15 @@
 		const s0 = item.start;
 		const d0 = item.dur;
 		const in0 = item.srcIn ?? 0;
-		const src = kind === 'audio' ? (asset(item.assetId)?.srcDur ?? Infinity) : Infinity;
+		const sourced = kind === 'audio' || kind === 'vref';
+		const src = sourced ? (asset(item.assetId)?.srcDur ?? Infinity) : Infinity;
 		drag(e, {
 			onMove: (dx) => {
 				let limit = false;
 				if (edge === 'start') {
 					let ns = snap(s0 + dx / pps, item.id).t;
 					ns = clamp(ns, Math.max(0, s0 - in0), s0 + d0 - 0.3);
-					if (kind === 'audio' && ns <= s0 - in0 + 0.001) limit = true;
+					if (sourced && ns <= s0 - in0 + 0.001) limit = true;
 					item.dur = s0 + d0 - ns;
 					if ('srcIn' in item) item.srcIn = in0 + (ns - s0);
 					item.start = ns;
@@ -336,7 +388,7 @@
 			},
 			drop: (files, e) => {
 				if (!kinds.length) return toast(t('timeline.toast.dropHint'), 'warning');
-				importFiles(files, kinds, { row: { id: row.id, lane: Boolean(row.lane) }, at: timeAt(e.clientX) });
+				importFiles(files, kinds, { row: { id: row.id, lane: Boolean(row.lane), vtrack: row.vtrack ?? null }, at: timeAt(e.clientX) });
 			}
 		};
 	}
@@ -441,12 +493,14 @@
 				<div class="flex border-b border-line/70" style:height="{row.h}px">
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
-						class="sticky left-0 z-30 flex w-[156px] shrink-0 items-center gap-2 border-r border-line pl-0 pr-1.5 {row.lane && isSel('lane', row.id) ? 'bg-surface-2' : 'bg-surface-1'}"
-						oncontextmenu={row.lane ? (e) => openLaneMenu(e, row.lane) : null}
+						class="sticky left-0 z-30 flex w-[156px] shrink-0 items-center gap-2 border-r border-line pl-0 pr-1.5 {(row.lane && isSel('lane', row.id)) || (row.track && isSel('vtrack', row.track.id)) ? 'bg-surface-2' : 'bg-surface-1'}"
+						oncontextmenu={row.lane ? (e) => openLaneMenu(e, row.lane) : row.track ? (e) => openTrackMenu(e, row.track) : null}
 					>
 						<span class="h-full w-[3px] {row.color ? '' : 'bg-line-hover'}" style:background={row.color ? `rgb(var(--${row.color}))` : null}></span>
-						<Icon name={row.icon} class="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-						{#if row.lane}
+						{#if !row.track}<Icon name={row.icon} class="h-3.5 w-3.5 shrink-0 text-fg-subtle" />{/if}
+						{#if row.track}
+							{@render trackHead(row)}
+						{:else if row.lane}
 							<button
 								type="button"
 								class="min-w-0 flex-1 truncate text-left text-xs {isSel('lane', row.id) ? 'text-fg' : 'text-fg-muted hover:text-fg'}"
@@ -502,6 +556,7 @@
 						class="relative flex-1 {row.id === 'v1' ? 'bg-canvas/60' : ''}"
 						class:vp-touch-none={ui.tool === 'range'}
 						data-lane={row.lane ? row.id : null}
+						data-vtrack={row.vtrack ?? null}
 						onpointerdown={laneDown}
 						ondblclick={(e) => laneDbl(e, row)}
 						ondragover={(e) => e.preventDefault()}
@@ -552,6 +607,17 @@
 							{#if reorder}
 								<div class="absolute inset-y-0 z-20 w-0.5 bg-signal" style:left="{x(reorder.at)}px"></div>
 							{/if}
+						{:else if row.track}
+							{@const items = trackItemsOf(doc, row.track.id)}
+							{#each items as item (item.id)}
+								{@render vrefClip(item, row)}
+							{/each}
+							{#each trackMarks(shots, row.track.id) as mark (mark.clip.id)}
+								{@render vrefMark(mark, row.track)}
+							{/each}
+							{#if !items.length}
+								<span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">{t('timeline.vref.empty')}</span>
+							{/if}
 						{:else if row.lane}
 							{#each doc.audio.filter((a) => a.lane === row.id) as a (a.id)}
 								{@render audioClip(a, row)}
@@ -576,7 +642,7 @@
 
 {#if menuLane}
 	{#key laneMenu}
-		<div class="vp-menu" style:position="fixed" style:left="{laneMenu.x}px" style:top="{laneMenu.y}px" role="menu" aria-label={t('timeline.lane.menu', { lane: laneCode(doc.lanes, menuLane.id) })} data-vp-menu use:overlayLayer use:placeMenu>
+		<div class="vp-menu" style:position="fixed" style:left="{laneMenu.x}px" style:top="{laneMenu.y}px" role="menu" aria-label={t('timeline.lane.menu', { lane: laneCode(doc.lanes, menuLane.id) })} data-vp-menu use:overlayLayer use:placeMenu={laneMenu}>
 			<button type="button" role="menuitem" onclick={() => laneAction((lane) => ((ui.inspectorOpen = true), select('lane', lane.id)))}>
 				<Icon name="sliders" class="h-3.5 w-3.5 text-fg-muted" /><span class="flex-1">{t('timeline.lane.settings')}</span>
 			</button>
@@ -585,6 +651,32 @@
 			</button>
 			<button type="button" role="menuitem" onclick={() => laneAction((lane) => deleteLane(lane.id))}>
 				<Icon name="trash" class="h-3.5 w-3.5 text-danger" /><span class="flex-1 text-danger">{t('timeline.lane.delete')}</span><span class="vp-menu-key">{key('delete') ?? ''}</span>
+			</button>
+		</div>
+	{/key}
+{/if}
+
+{#if menuTrack}
+	{#key trackMenu}
+		<div class="vp-menu" style:position="fixed" style:left="{trackMenu.x}px" style:top="{trackMenu.y}px" role="menu" aria-label={t('timeline.vref.menu', { track: trackName(menuTrack) })} data-vp-menu use:overlayLayer use:placeMenu={trackMenu}>
+			{#each VREF_ROLES as role (role)}
+				<button type="button" role="menuitemradio" aria-checked={menuTrack.role === role} onclick={() => trackAction((track) => setTrackRole(track, role))}>
+					<Icon name="check" class="h-3.5 w-3.5 {menuTrack.role === role ? 'text-fg' : 'opacity-0'}" /><span class="flex-1">{roleLabel(role)}</span><span class="vp-menu-key">{sideText(role)}</span>
+				</button>
+			{/each}
+			<div class="vp-menu-sep" role="separator"></div>
+			<button type="button" role="menuitem" onclick={() => trackAction((track) => openTrackSettings(track, 'length'))}>
+				<Icon name="range" class="h-3.5 w-3.5 text-fg-muted" /><span class="flex-1">{t('timeline.vref.length')}</span><span class="vp-menu-key">{vsecs(trackFrames(menuTrack) / VIDEO_TRACKS.fps)}</span>
+			</button>
+			<button type="button" role="menuitem" onclick={() => trackAction((track) => openTrackSettings(track, 'name'))}>
+				<Icon name="pencil" class="h-3.5 w-3.5 text-fg-muted" /><span class="flex-1">{t('timeline.vref.rename')}</span>
+			</button>
+			<button type="button" role="menuitem" onclick={() => trackAction(toggleTrack)}>
+				<Icon name="eye" class="h-3.5 w-3.5 text-fg-muted" /><span class="flex-1">{menuTrack.off ? t('timeline.vref.enable') : t('timeline.vref.disable')}</span>
+			</button>
+			<div class="vp-menu-sep" role="separator"></div>
+			<button type="button" role="menuitem" onclick={() => trackAction((track) => deleteVrefTrack(track.id))}>
+				<Icon name="trash" class="h-3.5 w-3.5 text-danger" /><span class="flex-1 text-danger">{t('timeline.vref.delete')}</span><span class="vp-menu-key">{key('delete') ?? ''}</span>
 			</button>
 		</div>
 	{/key}
@@ -794,4 +886,102 @@
 			onpointerdown={(e) => trimBlock(e, kind, item, 'end')}
 		></button>
 	</div>
+{/snippet}
+
+{#snippet trackHead(row)}
+	{@const track = row.track}
+	{@const count = receivingCount(shots, track.id)}
+	<button
+		type="button"
+		class="flex min-w-0 flex-1 flex-col items-start gap-0.5 pl-1 text-left {isSel('vtrack', track.id) ? 'text-fg' : 'text-fg-muted hover:text-fg'}"
+		title={t('timeline.vref.headTip', { track: trackName(track) })}
+		aria-haspopup="menu"
+		onclick={() => select('vtrack', track.id)}
+		onkeydown={(e) => trackMenuKey(e, track)}
+		data-vref-head={track.slot}
+	>
+		<span class="flex w-full min-w-0 items-center gap-1">
+			<span class="{TAG_CLASS} vp-tc shrink-0 text-fg {track.off ? 'line-through' : ''}">{row.label}</span>
+			{#if track.name}<span class="min-w-0 truncate text-xs">{track.name}</span>{/if}
+		</span>
+		{#if track.off}
+			<span class="max-w-full truncate text-2xs text-fg-subtle">{t('timeline.vref.offLine', { role: roleLabel(track.role) })}</span>
+		{:else if count}
+			<span class="max-w-full truncate text-2xs text-fg-subtle">{t('timeline.vref.receiving', { role: roleLabel(track.role), count })}</span>
+		{:else}
+			<span class="max-w-full truncate rounded-sm bg-surface-3 px-1 text-2xs text-fg-subtle" data-vref-nobody>{t('timeline.vref.nobody')}</span>
+		{/if}
+	</button>
+{/snippet}
+
+{#snippet vrefClip(item, row)}
+	{@const src = asset(item.assetId)}
+	{@const w = x(item.dur)}
+	{@const sel = isSel('vref', item.id)}
+	{@const thumb = assetThumb(src)}
+	<div
+		class="vp-touch-none group absolute overflow-hidden rounded border {sel ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/30'} {row.track.off ? 'opacity-40' : ''}"
+		style:left="{x(item.start)}px"
+		style:width="{w}px"
+		style:top="3px"
+		style:bottom="15px"
+		style:background="rgb(var(--{row.color}) / 0.3)"
+		onpointerdown={(e) => moveBlock(e, 'vref', item)}
+		role="button"
+		tabindex="0"
+		aria-label={t('timeline.vref.itemLabel', { name: src?.name ?? '', label: row.label, dur: secs(item.dur) })}
+		onkeydown={(e) => e.key === 'Enter' && select('vref', item.id)}
+		data-vref-item={item.id}
+	>
+		{#if thumb}<div class="pointer-events-none absolute inset-0 bg-repeat-x opacity-50" style:background-image="url({thumb})" style:background-size="auto 100%"></div>{/if}
+		<div class="pointer-events-none absolute left-1.5 top-0.5 flex max-w-full items-center gap-1 pr-3 text-xs font-medium text-fg">
+			<Icon name="film" class="h-3 w-3 shrink-0" /><span class="truncate">{src?.name ?? t('lib.media.offline')}</span>
+		</div>
+		<button
+			type="button"
+			tabindex="-1"
+			class="vp-hit vp-edge-start absolute inset-y-0 left-0 z-20 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
+			aria-label={t('timeline.trim.start')}
+			title={t('timeline.trim.start')}
+			onpointerdown={(e) => trimBlock(e, 'vref', item, 'start')}
+		></button>
+		<button
+			type="button"
+			tabindex="-1"
+			class="vp-hit vp-edge-end absolute inset-y-0 right-0 z-20 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
+			aria-label={t('timeline.trim.end')}
+			title={t('timeline.trim.end')}
+			onpointerdown={(e) => trimBlock(e, 'vref', item, 'end')}
+		></button>
+	</div>
+{/snippet}
+
+{#snippet vrefMark(mark, track)}
+	{@const text = markText(mark, track)}
+	{@const left = x(mark.span[0])}
+	{@const w = Math.max(4, x(mark.span[1] - mark.span[0]))}
+	{#if mark.tone === 'ignored'}
+		<div
+			class="pointer-events-none absolute rounded-sm border border-line-hover"
+			style:left="{left}px"
+			style:width="{w}px"
+			style:top="3px"
+			style:bottom="15px"
+			style:background="repeating-linear-gradient(135deg, rgb(var(--fg-subtle) / 0.35) 0 1px, transparent 1px 6px)"
+			data-vref-hatch={mark.clip.id}
+		></div>
+	{/if}
+	<div
+		class="absolute h-1 rounded-full {mark.tone === 'sent' ? 'bg-success' : mark.tone === 'warn' ? 'bg-warning' : 'bg-line-hover'}"
+		style:left="{left}px"
+		style:width="{w}px"
+		style:bottom="5px"
+		role="img"
+		aria-label={text}
+		title={text}
+		data-vref-mark={mark.status}
+	></div>
+	{#if mark.tone === 'sent' && w > 24}
+		<span class="vp-tc pointer-events-none absolute whitespace-nowrap text-2xs text-success" style:left="{left + w + 4}px" style:bottom="1px" style:line-height="12px">{vsecs(mark.frames / VIDEO_TRACKS.fps)}</span>
+	{/if}
 {/snippet}

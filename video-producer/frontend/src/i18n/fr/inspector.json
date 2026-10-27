@@ -215,5 +215,22 @@
 	"dialogue.none": "Aucune réplique.",
 	"dialogue.edit": "Modifier le dialogue…",
 	"takes.drafts": "Brouillons de ce plan",
-	"kind.picked": "Sélection"
+	"kind.picked": "Sélection",
+	"kind.vtrack": "Piste de référence vidéo",
+	"kind.vref": "Référence vidéo",
+	"vref.nameHint": "Le nom ne change pas l’étiquette : la piste reste {label}, et un prompt la cite par @{label}.",
+	"vref.motionHint": "Mouvement : chaque plan reçoit ce qui est sous lui, depuis son début.",
+	"vref.continuationHint": "Suite : chaque plan reçoit ce qui le précède juste ; la coupe finit sur le raccord et le plan la prolonge.",
+	"vref.length": "Longueur",
+	"vref.lengthChoice": "{seconds} · {frames} images",
+	"vref.lengthHint": "La plus longue part envoyée à un plan, jamais moins de {least}, et jamais plus longue que le plan.",
+	"vref.on": "Active",
+	"vref.engineHint": "Seul MiniMax-H3 en Ref2VA reçoit une vidéo de référence. Les autres moteurs génèrent sans elle, et rien n’est bloqué.",
+	"vref.delete": "Supprimer {label}",
+	"vref.deleteHint.one": "Retire aussi son morceau.",
+	"vref.deleteHint.other": "Retire aussi ses {count} morceaux.",
+	"vref.deleteEmpty": "La piste est vide.",
+	"vref.track": "Piste",
+	"vref.itemHint": "Chaque plan reçoit la part de cette vidéo qui tombe dans sa fenêtre.",
+	"vref.remove": "Retirer de la piste"
 }

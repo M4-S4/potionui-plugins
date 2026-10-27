@@ -26,8 +26,13 @@
 		sourceLength,
 		promptEdited,
 		openDirector,
-		pickedClips
+		pickedClips,
+		deleteVrefTrack
 	} from '../../lib/state.svelte.js';
+	import { VREF_ROLES, videoTracksOf } from '../../lib/vrefs.js';
+	import { lengthChoices, trackFrames, vrefLabel } from '../../lib/vreftracks.js';
+	import { renameTrack, roleLabel, setTrackLength, setTrackRole, toggleTrack, trackName } from '../../lib/vreftracks.svelte.js';
+	import { VIDEO_TRACKS } from '../../lib/reception.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
@@ -63,7 +68,9 @@
 	const item = $derived(s ? selected() : null);
 	const multi = $derived(pickedClips().length > 1);
 
-	const icons = { clip: 'film', audio: 'wave', title: 'type', prompt: 'sparkles', frame: 'image', marker: 'bookmark', reference: 'bookmark', lane: 'sliders' };
+	const icons = { clip: 'film', audio: 'wave', title: 'type', prompt: 'sparkles', frame: 'image', marker: 'bookmark', reference: 'bookmark', lane: 'sliders', vtrack: 'film', vref: 'film' };
+	let trackNameInput = $state();
+	let trackLengthSelect = $state();
 
 	function kindTitle(kind) {
 		if (kind === 'clip') return t('inspector.kind.clip');
@@ -73,6 +80,8 @@
 		if (kind === 'frame') return t('inspector.kind.frame');
 		if (kind === 'marker') return t('inspector.kind.marker');
 		if (kind === 'reference') return t('inspector.kind.reference');
+		if (kind === 'vtrack') return t('inspector.kind.vtrack');
+		if (kind === 'vref') return t('inspector.kind.vref');
 		return t('inspector.kind.lane');
 	}
 
@@ -84,8 +93,9 @@
 
 	const name = $derived.by(() => {
 		if (!item) return '';
-		if (s.kind === 'clip' || s.kind === 'audio' || s.kind === 'frame') return asset(item.assetId)?.name;
+		if (s.kind === 'clip' || s.kind === 'audio' || s.kind === 'frame' || s.kind === 'vref') return asset(item.assetId)?.name;
 		if (s.kind === 'lane') return laneTitle(doc.lanes, item);
+		if (s.kind === 'vtrack') return trackName(item);
 		return item.name ?? item.text ?? item.label ?? '';
 	});
 
@@ -115,6 +125,17 @@
 	const onShots = $derived(audio ? shotCuts(audio, doc.clips) : []);
 	const laneShots = $derived(s?.kind === 'lane' && item ? doc.audio.filter((x) => x.lane === item.id).map((x) => shotCuts(x, doc.clips)) : []);
 	const laneSliced = $derived(laneShots.filter((x) => x?.length));
+	const vsecs = (v) => `${formatNumber(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s`;
+
+	$effect(() => {
+		const want = ui.vrefField;
+		if (!want || s?.kind !== 'vtrack' || want.id !== s.id) return;
+		const node = want.field === 'name' ? trackNameInput : trackLengthSelect;
+		if (!node) return;
+		node.focus();
+		if (want.field === 'name') node.select();
+		ui.vrefField = null;
+	});
 
 	function referenceHint(item, lane) {
 		if (hasOwnReference(item)) return item.reference ? t('inspector.audio.referenceOn') : t('inspector.audio.referenceOff');
@@ -559,6 +580,51 @@
 					{/if}
 					<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'trash', class: 'w-full', onclick: deleteSelection }}>{t('inspector.reference.remove')}</HostUi>
 				</section>
+			{:else if s.kind === 'vtrack'}
+				{@const count = (doc.vrefItems ?? []).filter((x) => x.track === item.id).length}
+				<section class="space-y-2">
+					<label class="block space-y-1">
+						<span class="text-xs text-fg-muted">{t('inspector.field.name')}</span>
+						<input class="input vp-dense w-full" bind:this={trackNameInput} value={item.name} placeholder={vrefLabel(item.slot)} onchange={(e) => renameTrack(item, e.currentTarget.value.trim())} />
+					</label>
+					<p class="text-xs text-fg-subtle">{t('inspector.vref.nameHint', { label: vrefLabel(item.slot) })}</p>
+					<label class="flex items-center gap-2">
+						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
+						<select class="input vp-dense min-w-0 flex-1" value={item.role} onchange={(e) => setTrackRole(item, e.currentTarget.value)}>
+							{#each VREF_ROLES as role (role)}<option value={role}>{roleLabel(role)}</option>{/each}
+						</select>
+					</label>
+					<p class="text-xs text-fg-subtle">{item.role === 'continuation' ? t('inspector.vref.continuationHint') : t('inspector.vref.motionHint')}</p>
+					<label class="flex items-center gap-2">
+						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.vref.length')}</span>
+						<select class="input vp-dense min-w-0 flex-1" bind:this={trackLengthSelect} value={trackFrames(item)} onchange={(e) => setTrackLength(item, Number(e.currentTarget.value))}>
+							{#each lengthChoices() as choice (choice.frames)}<option value={choice.frames}>{t('inspector.vref.lengthChoice', { seconds: vsecs(choice.seconds), frames: choice.frames })}</option>{/each}
+						</select>
+					</label>
+					<p class="text-xs text-fg-subtle">{t('inspector.vref.lengthHint', { least: vsecs(VIDEO_TRACKS.minFrames / VIDEO_TRACKS.fps) })}</p>
+					<div class="flex min-h-6 items-center justify-between gap-2 text-xs text-fg-muted">
+						<label for="vp-vref-on">{t('inspector.vref.on')}</label>
+						<HostUi name="Switch" props={{ id: 'vp-vref-on', checked: item.off !== true, size: 'lg', label: t('inspector.vref.on'), onchange: () => toggleTrack(item) }} />
+					</div>
+					<p class="text-xs text-fg-subtle">{t('inspector.vref.engineHint')}</p>
+				</section>
+				<section class="space-y-2 border-t border-line pt-3">
+					<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'trash', class: 'w-full', onclick: () => deleteVrefTrack(item.id) }}>{t('inspector.vref.delete', { label: vrefLabel(item.slot) })}</HostUi>
+					<p class="text-xs text-fg-subtle">{count ? t('inspector.vref.deleteHint', { count }) : t('inspector.vref.deleteEmpty')}</p>
+				</section>
+			{:else if s.kind === 'vref'}
+				<section class="space-y-2">
+					<label class="flex items-center gap-2">
+						<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.vref.track')}</span>
+						<select class="input vp-dense min-w-0 flex-1" value={item.track} onchange={(e) => act(() => (item.track = e.currentTarget.value))}>
+							{#each videoTracksOf(doc) as track (track.id)}<option value={track.id}>{trackName(track)}</option>{/each}
+						</select>
+					</label>
+					<NumField label={t('inspector.field.start')} value={item.start} min={0} step={0.04} unit="s" onchange={(v) => set('start', v)} />
+					<NumField label={t('inspector.field.duration')} value={item.dur} min={0.3} max={(asset(item.assetId)?.srcDur ?? Infinity) - item.srcIn} step={0.04} unit="s" onchange={(v) => set('dur', v)} />
+					<p class="text-xs text-fg-subtle">{t('inspector.vref.itemHint')}</p>
+				</section>
+				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'trash', class: 'w-full', onclick: deleteSelection }}>{t('inspector.vref.remove')}</HostUi>
 			{:else if s.kind === 'lane'}
 				<section class="space-y-2">
 					<label class="block space-y-1">

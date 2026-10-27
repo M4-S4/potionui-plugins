@@ -208,5 +208,12 @@
 	"shot.reference.ignored": "This replacement was written for another engine: the composed text is sent.",
 	"shot.reference.again": "Replace again",
 	"shot.reference.waiting": "The composed part shows with the prompt sent to the engine.",
-	"shot.reference.replacedWaiting": "Replaced for this shot: the text shows with the prompt sent to the engine."
+	"shot.reference.replacedWaiting": "Replaced for this shot: the text shows with the prompt sent to the engine.",
+	"shot.vref.title": "Reference video tracks",
+	"shot.vref.ignored.one": "{engine} does not take a reference video: {labels} is not sent to this shot. Nothing is blocked.",
+	"shot.vref.ignored.other": "{engine} does not take a reference video: {labels} are not sent to this shot. Nothing is blocked.",
+	"shot.vref.switch": "Switch this shot to {engine}",
+	"shot.vref.leave.one": "Leave {labels} out",
+	"shot.vref.leave.other": "Leave {labels} out",
+	"shot.vref.counts": "Videos {videos}/{maxVideos} · Images {images}/{maxImages} · Sounds {sounds}/{maxSounds}"
 }
