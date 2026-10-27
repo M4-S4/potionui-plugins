@@ -142,6 +142,7 @@ export function receptionVerdict(status, kind, profile = '') {
 	if (status === 'trimmed') return { text: t('panels.director.refs.trimmed', { limit: LIMITS[media] }), tone: 'text-warning', ok: false };
 	if (status === 'missing') return { text: t('panels.director.refs.missing'), tone: 'text-warning', ok: false };
 	if (status === 'excluded') return { text: t('panels.director.refs.left'), tone: 'text-fg-subtle', ok: false };
+	if (status === 'not_cast') return { text: t('panels.director.refs.notCast'), tone: 'text-fg-subtle', ok: false };
 	if (status === 'blocked') return { text: t('panels.director.refs.blocked', { profile }), tone: 'text-warning', ok: false };
 	return { text: t('panels.director.refs.unknown'), tone: 'text-fg-subtle', ok: false };
 }

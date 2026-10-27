@@ -1,5 +1,5 @@
 import { optionKey } from './generation.js';
-import { isGlobal } from './shots.js';
+import { isShared, shotReferences } from './shots.js';
 
 export const KEYFRAME = 'keyframe';
 export const ROLES = ['first', 'last'];
@@ -100,9 +100,10 @@ export function draftPictures(doc, clip, draft, role = 'first') {
 	};
 	const first = imageAsset(doc, draft.first);
 	if (first && (role === 'last' || role === 'both')) add(first, 'frame', '', 'frame');
-	const skip = new Set(draft.exclude ?? []);
-	const shared = (doc.references ?? []).filter((r) => isGlobal(r) && !skip.has(r.id));
-	for (const reference of [...(draft.own ?? []), ...shared]) {
+	const { inherited, cast } = shotReferences(doc, clip, draft.exclude ?? [], draft.cast);
+	const fromCast = cast.filter((x) => !x.excluded).map((x) => x.reference);
+	const shared = inherited.filter(isShared).map((x) => x.reference);
+	for (const reference of [...(draft.own ?? []), ...fromCast, ...shared]) {
 		if (SPACES.includes(reference.space)) add(imageAsset(doc, reference.assetId), pictureRole(reference), reference.name, 'reference');
 	}
 	const rank = (p) => PICTURE_ROLES.indexOf(p.role);

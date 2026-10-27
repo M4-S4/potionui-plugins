@@ -14,6 +14,7 @@
 	"highlight.one": "Highlighted: the reference that goes with {shot}, chosen in {space}.",
 	"highlight.other": "Highlighted: the {count} references that go with {shot}, chosen in {space}.",
 	"excludedFrom": "left out of {shot}",
+	"notCastIn": "card not cast in {shot}",
 	"dragHint": "Drag onto the Frames track to anchor it to a moment",
 	"empty.global": "No reference for the whole project.",
 	"empty.globalIn": "No reference for the whole project in “{family}”.",

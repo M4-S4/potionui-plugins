@@ -197,10 +197,24 @@ def _take_entry(take: Mapping[str, Any]) -> Dict[str, Any]:
 
 def _reference_entries(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[Dict[str, Any]]:
     skipped = set(edits.excluded(clip))
-    entries = [{"id": ref["id"], "name": ref.get("name"), "space": SPACE_NAMES.get(ref.get("space"), ref.get("space")), "own": True} for ref in edits.own_references(doc, clip)]
+    groups = director.shot_reference_groups(doc, str(clip.get("id")))
+    aside = {ref.get("id") for ref in groups.not_cast}
+    owned = edits.own_references(doc, clip)
+    shared = edits.global_references(doc)
+    reached = {ref.get("id") for ref in (*groups.cast, *groups.excluded)}
+
+    def entry(ref: Mapping[str, Any], **flags: Any) -> Dict[str, Any]:
+        return {"id": ref["id"], "name": ref.get("name"), "space": SPACE_NAMES.get(ref.get("space"), ref.get("space")), **flags}
+
+    entries = [entry(ref, own=True) for ref in owned]
     entries += [
-        {"id": ref["id"], "name": ref.get("name"), "space": SPACE_NAMES.get(ref.get("space"), ref.get("space")), "own": False, **({"excluded": True} if ref["id"] in skipped else {})}
-        for ref in edits.global_references(doc)
+        entry(ref, own=False, **({"excluded": True} if ref["id"] in skipped else {}), **({"not_cast": True} if ref["id"] in aside else {}))
+        for ref in shared
+    ]
+    entries += [
+        entry(ref, own=False, cast=True, **({"excluded": True} if ref["id"] in skipped else {}))
+        for ref in edits.dicts(doc.get("references"))
+        if ref.get("id") in reached and ref not in owned and ref not in shared
     ]
     return entries
 

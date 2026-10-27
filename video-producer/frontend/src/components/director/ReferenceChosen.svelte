@@ -40,7 +40,7 @@
 		found.groups.map((g) => ({
 			key: g.key,
 			status: g.status,
-			title: g.status === 'excluded' ? t('panels.director.refs.excludedBy') : engineTitle(g.engine),
+			title: g.status === 'excluded' ? t('panels.director.refs.excludedBy') : g.status === 'not_cast' ? t('panels.director.refs.notCastBy') : engineTitle(g.engine),
 			shots: g.shots.map((shot) => shot.clip),
 			...receptionVerdict(g.status, kind, g.engine?.profile)
 		}))

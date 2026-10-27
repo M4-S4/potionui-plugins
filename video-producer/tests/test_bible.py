@@ -142,13 +142,15 @@ def test_ref2va_defines_a_linked_reference_with_its_card_and_the_rest_of_the_cas
     )
 
 
-def test_ref2va_names_a_linked_reference_with_its_card_even_when_the_card_is_not_cast(core, make_doc):
+def test_ref2va_sends_the_picture_of_a_card_only_to_the_shots_that_cast_the_card(core, make_doc):
     core.use_h3()
     references = [{"id": "r1", "assetId": "hero", "space": "decors3d", "scope": {"type": "global"}}]
-    doc = _doc(make_doc, cast=None, places=({**HARBOUR, "references": ["r1"]},), assets=[_hero(core)], references=references, direction={"mode": "Ref2VA"})
+    parts = {"places": ({**HARBOUR, "references": ["r1"]},), "assets": [_hero(core)], "references": references, "direction": {"mode": "Ref2VA"}}
 
-    plan, warnings = _plan(core, doc, presets.MINIMAX_H3)
+    alone = director.build_plans(core.users["user-1"], _doc(make_doc, cast=None, **parts), ["s1"], presets.MINIMAX_H3, "draft")
+    plan, warnings = _plan(core, _doc(make_doc, cast={"place": "p-harbour"}, **parts), presets.MINIMAX_H3)
 
+    assert _codes(alone.blocks) == ["no_references"]
     assert _sections(plan.prompt_text)["subject_definitions"] == (
         "<Subject 1> is the setting shown in <Picture 1>, the harbour at dawn: Wet cobblestones, moored boats, low mist."
     )

@@ -9,7 +9,7 @@
 	import { activateOnKey } from '../../lib/keyboard.js';
 	import { presetProfiles } from '../../lib/generation.js';
 	import { takesReferences } from '../../lib/reception.js';
-	import { excludedOf, isGlobal, sentReferences } from '../../lib/shots.js';
+	import { excludedOf, isGlobal, sentReferences, shotReferences } from '../../lib/shots.js';
 	import { spaceLabel } from '../../lib/commands.js';
 	import { VIEW_ICONS, panelSelection } from '../../lib/director.js';
 	import DirectorViews from '../director/DirectorViews.svelte';
@@ -26,6 +26,7 @@
 	const shot = $derived(chosen?.kind === 'clip' ? (doc.clips.find((c) => c.id === chosen.id) ?? null) : null);
 	const going = $derived(shot ? new Set(sentReferences(doc, shot).map((r) => r.id)) : null);
 	const left = $derived(shot ? new Set(excludedOf(shot)) : null);
+	const aside = $derived(shot ? new Set(shotReferences(doc, shot).inherited.filter((x) => x.notCast && !x.excluded).map((x) => x.reference.id)) : null);
 	const shotNum = $derived(shot ? String(doc.clips.indexOf(shot) + 1).padStart(2, '0') : '');
 	const list = $derived(
 		doc.references.filter((r) => (ui.refSpace === 'all' || r.space === ui.refSpace) && (!q || norm(`${r.name} ${referenceTagText(r)}`).includes(norm(q))))
@@ -96,7 +97,7 @@
 							{@const kind = refMediaKind(r.space, r.type)}
 							{@const f = fam(r.space)}
 							{@const playable = a?.kind === 'audio' && a.src}
-							<li class="rounded-xl border bg-surface-1 p-2 transition-[border-color,box-shadow,opacity] duration-150 {isSel(r) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : going?.has(r.id) ? 'border-signal' : 'border-line-strong hover:border-line-hover'} {left?.has(r.id) ? 'opacity-50' : ''}" data-reference-card={r.id} data-going={going ? going.has(r.id) : null}>
+							<li class="rounded-xl border bg-surface-1 p-2 transition-[border-color,box-shadow,opacity] duration-150 {isSel(r) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : going?.has(r.id) ? 'border-signal' : 'border-line-strong hover:border-line-hover'} {left?.has(r.id) || aside?.has(r.id) ? 'opacity-50' : ''}" data-reference-card={r.id} data-going={going ? going.has(r.id) : null}>
 								<div
 									role="button"
 									tabindex="0"
@@ -120,6 +121,7 @@
 										<div class="truncate text-sm font-medium">{r.name}</div>
 										<RefTags reference={r} />
 										{#if left?.has(r.id)}<div class="text-xs text-warning">{t('references.excludedFrom', { shot: shotNum })}</div>{/if}
+										{#if aside?.has(r.id)}<div class="text-xs text-fg-subtle" data-not-cast>{t('references.notCastIn', { shot: shotNum })}</div>{/if}
 										{#if r.file || a?.kind === 'audio'}<div class="truncate text-xs text-fg-subtle">{[r.file ? t('references.file', { file: r.file }) : '', a?.kind === 'audio' ? (a.srcDur ? secs(a.srcDur) : a.name) : ''].filter(Boolean).join(' · ')}</div>{/if}
 										{#if kind === 'audio' && !playable}
 											<div class="mt-1 text-xs text-warning">{t('references.noSound')}</div>

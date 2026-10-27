@@ -179,6 +179,27 @@ async def test_reading_lists_the_shots_with_their_prompt_cast_frames_references_
     assert third["references"] == [{"id": "r-look", "name": "Look", "space": "identity", "own": False, "excluded": True}]
 
 
+async def test_reading_says_which_references_a_shot_takes_from_its_cast_and_which_it_leaves_for_a_card_it_does_not_cast(project):
+    stored = _stored(project["id"])
+    doc = stored["doc"]
+    doc["references"].append({"id": "r-back", "name": "Back", "space": "identite", "type": "Personnage", "role": "Identité", "assetId": "img-gate", "scope": {"type": "shot", "shotId": "s3"}})
+    doc["bible"]["characters"][0]["references"] = ["r-look", "r-back"]
+    doc["clips"][0]["cast"] = {"characters": ["c-mara"]}
+    projects.save_project(project["id"], doc, stored["version"])
+
+    first, second, third = _data(await ReadProjectTool().execute(_context(project["id"])))["shots"]
+
+    assert first["references"] == [
+        {"id": "r-look", "name": "Look", "space": "identity", "own": False},
+        {"id": "r-back", "name": "Back", "space": "identity", "own": False, "cast": True},
+    ]
+    assert second["references"] == [{"id": "r-look", "name": "Look", "space": "identity", "own": False, "not_cast": True}]
+    assert third["references"] == [
+        {"id": "r-back", "name": "Back", "space": "identity", "own": True},
+        {"id": "r-look", "name": "Look", "space": "identity", "own": False, "not_cast": True},
+    ]
+
+
 async def test_reading_names_shots_by_number_or_label_and_refuses_an_unknown_one(project):
     picked = _data(await ReadProjectTool().execute(_context(project["id"]), shots=["2", "exit"]))
     unknown = await ReadProjectTool().execute(_context(project["id"]), shots=["Finale"])

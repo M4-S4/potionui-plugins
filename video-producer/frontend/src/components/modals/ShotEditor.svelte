@@ -11,7 +11,7 @@
 	import { vrefLabel } from '../../lib/vreftracks.js';
 	import { roleLabel, trackVerdict } from '../../lib/vreftracks.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
-	import { SHOT_CAP, applyShotDraft, inputsChanged, overrunsTake, rebaseDraft, shotDraft, shotReferences } from '../../lib/shots.js';
+	import { SHOT_CAP, applyShotDraft, inputsChanged, isGlobal, isShared, overrunsTake, rebaseDraft, shotDraft, shotReferences } from '../../lib/shots.js';
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
 	import { laneTitle } from '../../lib/tracks.js';
 	import { ulid } from '../../lib/ulid.js';
@@ -50,8 +50,10 @@
 	let composed = $state(null);
 
 	const takes = $derived(clip ? takesOf(clip) : []);
-	const inherited = $derived(clip ? shotReferences(doc, clip, draft.exclude).inherited : []);
-	const sentCount = $derived(draft.own.length + inherited.filter((x) => !x.excluded).length);
+	const lists = $derived(clip ? shotReferences(doc, clip, draft.exclude, draft.cast) : { inherited: [], cast: [] });
+	const inherited = $derived(lists.inherited);
+	const borrowed = $derived(lists.cast.filter((x) => !isGlobal(x.reference)));
+	const sentCount = $derived(draft.own.length + lists.cast.filter((x) => !x.excluded).length + inherited.filter(isShared).length);
 	const limit = $derived(clip ? shotDurationLimit({ ...clip, engine: draft.engine }) : { max: SHOT_CAP, by: null, take: null });
 	const beyondTake = $derived(clip ? overrunsTake(limit.take, clip.dur, +draft.dur) : false);
 	const issues = $derived(clip ? promptIssues({ text: draft.text, start: clip.start, dur: +draft.dur, shotId: clip.id }) : []);
@@ -68,7 +70,7 @@
 	const lanes = $derived(clip ? referenceLanes(doc, clip, draft.excludeLanes) : []);
 	const behavior = $derived(clip ? soundBehaviorOf({ ...clip, engine: draft.engine }) : null);
 	const soundWindow = $derived(clip ? (behavior === CONDITION ? conditionWindow(doc, { ...clip, dur: +draft.dur }) : muxWindow({ ...clip, dur: +draft.dur })) : [0, 0]);
-	const sounding = $derived(lanes.some((x) => !x.excluded) || draft.own.some(isSound) || inherited.some((x) => !x.excluded && isSound(x.reference)));
+	const sounding = $derived(lanes.some((x) => !x.excluded) || draft.own.some(isSound) || [...inherited.filter((x) => !x.notCast), ...borrowed].some((x) => !x.excluded && isSound(x.reference)));
 	const source = $derived.by(() => {
 		const copy = $state.snapshot(doc);
 		const shot = copy.clips.find((c) => c.id === id);
@@ -211,15 +213,17 @@
 					</div>
 					<div class="space-y-1">
 						<div class="text-xs font-medium text-fg-muted">{t('modals.shot.inherited')}</div>
-						{#if inherited.length}
+						{#if inherited.length || borrowed.length}
 							<ul class="divide-y divide-line rounded-lg border border-line-strong">
-								{#each inherited as { reference: r, excluded } (r.id)}
+								{#each [...inherited, ...borrowed] as { reference: r, excluded, notCast } (r.id)}
 									{@const thumb = r.assetId ? assetThumb(asset(r.assetId)) : null}
-									<li class="flex items-center gap-2 px-2 py-1.5 text-xs {excluded ? 'opacity-60' : ''}">
+									<li class="flex items-center gap-2 px-2 py-1.5 text-xs {excluded || notCast ? 'opacity-60' : ''}">
 										{#if thumb}<img src={thumb} alt="" class="h-7 w-12 shrink-0 rounded object-cover" />{:else}<span class="flex h-7 w-12 shrink-0 items-center justify-center rounded bg-surface-3"><Icon name={typeIcon(r)} class="h-3.5 w-3.5 text-fg-muted" /></span>{/if}
 										<span class="min-w-0 flex-1 space-y-0.5">
-											<span class="block truncate text-fg {excluded ? 'line-through' : ''}">{r.name}</span>
+											<span class="block truncate text-fg {excluded || notCast ? 'line-through' : ''}">{r.name}</span>
 											<RefTags reference={r} />
+											{#if notCast && !excluded}<span class="block truncate text-fg-subtle" data-not-cast>{t('modals.shot.notCast')}</span>{/if}
+											{#if !isGlobal(r)}<span class="block truncate text-fg-subtle" data-from-cast>{t('modals.shot.fromCast')}</span>{/if}
 											{#if !r.assetId || (isSound(r) && asset(r.assetId)?.srcDur)}<span class="block truncate text-fg-subtle">{r.assetId ? secs(asset(r.assetId).srcDur) : t('modals.shot.noMedia')}</span>{/if}
 											{#if isSound(r) && asset(r.assetId)?.src && !excluded}
 												<!-- svelte-ignore a11y_media_has_caption -->

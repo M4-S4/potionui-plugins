@@ -97,6 +97,17 @@ test('the pictures sent are the Identité and Décors 3D images of the editor, s
 	);
 });
 
+test('the pictures sent follow the cast of the editor: the pictures of a cast card, and not a global one of a card left out', () => {
+	const doc = scene();
+	doc.bible = { characters: [{ id: 'c-lea', label: 'Léa', references: ['r-lea'] }], places: [{ id: 'p-street', label: 'Street', references: ['r-street'] }] };
+
+	const alone = draftPictures(doc, doc.clips[0], draftOf(doc, { cast: { characters: [], place: null } }));
+	const cast = draftPictures(doc, doc.clips[0], draftOf(doc, { cast: { characters: ['c-lea'], place: 'p-street' } }));
+
+	assert.deepEqual(alone.map((p) => p.assetId), ['cafe', 'hat']);
+	assert.deepEqual(cast.map((p) => p.assetId), ['cafe', 'lea', 'hat']);
+});
+
 test('the start image is the framing of the end image only, a former 3D capture included', () => {
 	const doc = scene();
 	doc.frames = [{ id: 'f1', shotId: 's1', time: 0, assetId: 'capture', role: 'first', strength: 100, sceneId: 'sc1' }];
