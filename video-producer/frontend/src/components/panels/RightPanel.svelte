@@ -4,6 +4,7 @@
 	import ReviewAside from '../director/ReviewAside.svelte';
 	import DirectionAside from '../director/DirectionAside.svelte';
 	import BibleAside from '../director/BibleAside.svelte';
+	import ReferenceAside from '../director/ReferenceAside.svelte';
 
 	const view = $derived(ui.workspace === 'director' ? directorView() : null);
 </script>
@@ -14,6 +15,8 @@
 	<DirectionAside />
 {:else if view === 'bible'}
 	<BibleAside />
+{:else if view === 'references'}
+	<ReferenceAside />
 {:else}
 	<Inspector />
 {/if}

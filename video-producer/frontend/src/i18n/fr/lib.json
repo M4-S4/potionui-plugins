@@ -151,7 +151,7 @@
 	"chain.waitFrame": "Attend la dernière image de « {shot} »",
 	"chain.error.noMedia": "Le plan précédent n’a ni prise ni vidéo dont reprendre une image.",
 	"chain.error.ffmpeg": "ffmpeg manque sur le serveur : la dernière image ne peut pas être reprise.",
-	"refs.added": "Référence ajoutée : réglez son rôle et sa portée dans l’inspecteur",
+	"refs.added": "Référence ajoutée : choisissez son image et sa portée dans le panneau de droite",
 	"refs.selectOne": "Sélectionnez une référence.",
 	"refs.attached": "« {name} » associée à {start}–{end}",
 	"family.identite.label": "Images et identité",

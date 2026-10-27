@@ -19,6 +19,7 @@ const { doc, ui, replaceDoc, select, openDirector, directorShot, productionRange
 const { jobClips, readiness } = await import('./production.svelte.js');
 const { showInReview, chooseTake, chooseSeam } = await import('./band.svelte.js');
 const { setTakes, takeStore } = await import('./takes.svelte.js');
+const { reception, setReferenceShot, setSent, addShotReference, linkReferenceCard, startImage } = await import('./references.js');
 const { emptyDoc, newAsset, newClip } = await import('./starter.js');
 const { t } = await import('../i18n/index.svelte.js');
 
@@ -172,4 +173,75 @@ test('director flow: a sound chosen in Media leaves the panel of the Review empt
 	followIssue(allIssues().find((i) => i.level === 'conflict'));
 	assert.equal(ui.reveal, 's2');
 	assert.deepEqual({ ...ui.selection }, { kind: 'clip', id: 's2' });
+});
+
+const reference = (id, extra = {}) => ({ id, name: id, space: 'identite', type: 'Personnage', assetId: null, role: 'Identité', scope: { type: 'global' }, ...extra });
+
+test('director flow: in References a reference goes to the shot chosen in the panel, never to the one under the hidden playhead', () => {
+	project({ playhead: 9 });
+	doc.references = [reference('g1')];
+	openDirector('references');
+	select('reference', 'g1');
+	setReferenceShot(doc.references[0], 's1');
+	assert.deepEqual({ ...doc.references[0].scope }, { type: 'shot', shotId: 's1' });
+	setReferenceShot(doc.references[0], null);
+	assert.deepEqual({ ...doc.references[0].scope }, { type: 'global' });
+	assert.deepEqual({ ...ui.selection }, { kind: 'reference', id: 'g1' });
+});
+
+test('director flow: a shot chosen in References sends or leaves out a project reference, which marks its takes, and a reference added there is its own', () => {
+	project();
+	doc.references = [reference('g1'), reference('g2')];
+	openDirector('references');
+	select('clip', 's2');
+	setSent(shotOf('s2'), 'g1', false);
+	assert.deepEqual([...shotOf('s2').referenceOverrides.exclude], ['g1']);
+	assert.equal(shotOf('s2').revision, 1);
+	setSent(shotOf('s2'), 'g1', false);
+	assert.equal(shotOf('s2').revision, 1);
+	setSent(shotOf('s2'), 'g1', true);
+	assert.equal(shotOf('s2').referenceOverrides, undefined);
+	assert.equal(shotOf('s2').revision, 2);
+	const added = addShotReference(shotOf('s2'));
+	assert.deepEqual({ ...added.scope }, { type: 'shot', shotId: 's2' });
+	assert.deepEqual({ ...ui.selection }, { kind: 'reference', id: added.id });
+	startImage(shotOf('s2'));
+	assert.deepEqual({ ...ui.modal }, { type: 'shot', id: 's2', focus: 'keyframes' });
+	ui.modal = null;
+});
+
+test('director flow: what a reference becomes follows the engine and the profile of each shot from the presets the page reads, and its card is linked from the panel', () => {
+	project();
+	const me = ui.me;
+	const wan = '01KX47WANVIDEO0000000000TV';
+	const h3 = '01KX47H3MINIMAX000000000VA';
+	ui.me = {
+		engines: [{ id: 'native', kind: 'local', name: 'Local' }],
+		presets: [
+			{ id: wan, name: 'Wan 2.1 / 2.2', video: true, cloud: false, audioMux: false, profiles: ['FL2VA'] },
+			{ id: h3, name: 'MiniMax-H3', video: true, cloud: false, audioMux: true, profiles: ['FL2VA', 'Ref2VA', 'Hybrid AV'] }
+		]
+	};
+	doc.engine.preset = wan;
+	doc.engine.model = null;
+	shotOf('s3').engine = { preset: h3, model: null, profile: 'Ref2VA' };
+	shotOf('s2').referenceOverrides = { exclude: ['g1'] };
+	doc.assets.push(newAsset({ id: 'img', kind: 'image', name: 'lina.jpg', src: '/media/lina.jpg', origin: { kind: 'library', itemId: 'lib-lina' } }));
+	doc.references = [reference('g1', { assetId: 'img' })];
+	const found = reception(doc.references[0]);
+	assert.deepEqual(
+		found.groups.map((g) => [g.engine?.preset ?? null, g.engine?.profile ?? null, g.status, g.shots.map((s) => s.clip.id)]),
+		[
+			[wan, 'FL2VA', 'ignored', ['s1']],
+			[h3, 'Ref2VA', 'sent', ['s3']],
+			[null, null, 'excluded', ['s2']]
+		]
+	);
+	doc.bible = { characters: [{ id: 'lina', label: 'Lina', text: '', props: '', references: [] }, { id: 'malo', label: 'Malo', text: '', props: '', references: ['g1'] }], places: [] };
+	linkReferenceCard(doc.references[0], 'characters', 'lina');
+	assert.deepEqual(doc.bible.characters.map((c) => [...c.references]), [['g1'], []]);
+	assert.equal(reception(doc.references[0]).linked.card.id, 'lina');
+	linkReferenceCard(doc.references[0], 'characters', null);
+	assert.deepEqual(doc.bible.characters.map((c) => [...c.references]), [[], []]);
+	ui.me = me;
 });

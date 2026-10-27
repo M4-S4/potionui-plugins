@@ -1,0 +1,13 @@
+{
+  "limits": {
+    "image": 9,
+    "video": 3,
+    "audio": 3
+  },
+  "references": ["Ref2VA"],
+  "layouts": [
+    { "profiles": ["Ref2VA"], "layout": "refs" },
+    { "families": ["h3"], "layout": "subjects" },
+    { "layout": "cast" }
+  ]
+}

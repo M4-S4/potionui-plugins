@@ -35,6 +35,7 @@ import { openGallery, openImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
 import { matchToPrevious } from './continuity.svelte.js';
 import { openFinalPass } from './finalpass.svelte.js';
+import { WORKSPACES } from './workspaces.js';
 import { openReferences } from './references.js';
 import { togglePlay, seek } from './playback.svelte.js';
 import { chat, confirm } from './host.js';
@@ -336,6 +337,11 @@ export const allCommands = menus.flatMap((m) => m.groups.flat());
 
 export function commandById(id) {
 	return allCommands.find((x) => x.id === id) ?? null;
+}
+
+export function spaceLabel(from) {
+	if (from?.startsWith('director:')) return commandById(`view-${from.slice('director:'.length)}`)?.label;
+	return commandById(WORKSPACES.find((w) => w.id === from)?.command)?.label;
 }
 
 export function runCommand(id) {

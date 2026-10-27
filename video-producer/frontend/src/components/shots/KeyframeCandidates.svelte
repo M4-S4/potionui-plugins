@@ -1,5 +1,5 @@
 <script>
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t, formatDuration, formatNumber } from '../../i18n/index.svelte.js';
 	import { doc, ui, asset, clipLabel } from '../../lib/state.svelte.js';
@@ -15,13 +15,15 @@
 	import { PICTURE_ICONS, TAG_CLASS } from '../../lib/reftags.js';
 	import Icon from '../Icon.svelte';
 
-	let { clip, draft, onaccept } = $props();
+	let { clip, draft, onaccept, focus = false } = $props();
 
 	const id = $props.id();
 	let open = $state(false);
 	let choice = $state('first');
 	let count = $state(DEFAULT_CANDIDATES);
 	let shown = false;
+	let focused = false;
+	let root = $state(null);
 
 	const making = $derived(!retrieves(choice));
 	const options = $derived(keyframeChoices());
@@ -71,6 +73,13 @@
 
 	$effect(() => {
 		if (open && body) scheduleKeyframeEstimate(body);
+	});
+
+	$effect(() => {
+		if (!focus || !root || focused) return;
+		focused = true;
+		open = true;
+		tick().then(() => root?.scrollIntoView({ block: 'start' }));
 	});
 
 	const roleText = (value) => (value === 'last' ? t('keyframes.role.last') : t('keyframes.role.first'));
@@ -159,9 +168,10 @@
 	const turnsChainOn = $derived(Boolean(picked?.enabled) && (choice === 'previous' || choice === 'neighbors') && !draftChained(doc, draft));
 </script>
 
-<section class="space-y-2" aria-labelledby="{id}-title" data-shot-images>
+<section class="space-y-2" aria-labelledby="{id}-title" data-shot-images bind:this={root}>
 	<div class="flex items-center justify-between gap-2">
-		<button type="button" class="flex min-h-6 items-center gap-1.5 text-left" aria-expanded={open} aria-controls="{id}-body" onclick={() => (open = !open)}>
+		<!-- svelte-ignore a11y_autofocus -->
+		<button type="button" class="flex min-h-6 items-center gap-1.5 text-left" aria-expanded={open} aria-controls="{id}-body" autofocus={focus} onclick={() => (open = !open)}>
 			<Icon name={open ? 'chevron-down' : 'chevron-right'} class="h-3.5 w-3.5 text-fg-muted" />
 			<span id="{id}-title" class="vp-section-title">{t('keyframes.title')}</span>
 		</button>

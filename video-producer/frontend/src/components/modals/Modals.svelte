@@ -82,7 +82,7 @@
 	{#if m?.type === 'prompt'}
 		<PromptEditor id={m.id} isNew={m.isNew} />
 	{:else if m?.type === 'shot'}
-		<ShotEditor id={m.id} draft={m.draft ?? null} baseline={m.baseline ?? null} />
+		<ShotEditor id={m.id} draft={m.draft ?? null} baseline={m.baseline ?? null} focus={m.focus ?? null} />
 	{:else if m?.type === 'engine'}
 		<EngineEditor preset={m.preset ?? null} />
 	{:else if m?.type === 'library'}

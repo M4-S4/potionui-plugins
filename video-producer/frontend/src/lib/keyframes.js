@@ -87,6 +87,8 @@ const imageAsset = (doc, id) => {
 	return found?.kind === 'image' ? found : null;
 };
 
+export const isPictureReference = (reference) => SPACES.includes(reference?.space);
+
 export const pictureRole = (reference) => (reference.space === 'decors3d' ? 'setting' : (TYPE_ROLES[reference.type] ?? 'character'));
 
 export function draftPictures(doc, clip, draft, role = 'first') {

@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, dialogue, engine_options, models, presets, settings
+from . import bible, catalog, core_bridge, dialogue, engine_options, models, presets, reception, settings
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -29,7 +29,7 @@ DEFAULT_DURATION = 5.0
 DEFAULT_ASPECT = 16 / 9
 ASPECT_TOLERANCE = 0.03
 
-REFERENCE_LIMITS = {"image": 9, "video": 3, "audio": 3}
+REFERENCE_LIMITS = reception.LIMITS
 
 SEEDVR2_MODE = "video_upscale"
 H3_UPSCALE_MODE = "upscale"
@@ -439,7 +439,7 @@ def mixed_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any
 
 def audio_behavior(preset: Preset, profile: Optional[str]) -> str:
     """How an engine takes the sound of a shot: as a guide in MiniMax-H3's reference mode, mixed onto the take when its director mode declares audio, else not at all."""
-    if profile == REF2VA:
+    if reception.takes_references(profile):
         return CONDITION
     if preset.cloud:
         return IGNORED
@@ -574,18 +574,19 @@ def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = 
     characters, place = bible.cast_of(doc, clip)
     language = _language(doc)
     lines = dialogue.lines_of(doc, clip)
-    if engine == bible.H3:
+    layout = reception.layout(engine)
+    if layout == bible.SUBJECTS_LAYOUT:
         cast = [*characters, *([place] if place is not None else [])]
         subjects = " ".join(bible.definition(card, index, language) for index, card in enumerate(cast, 1))
         spoken = dialogue.h3_lines(doc, lines, {card.id: index for index, card in enumerate(cast, 1)}) if lines else ""
         plain = [line for line in [instruction, spoken, *direction] if line]
-        reference = bible.reference_part(clip, bible.SUBJECTS_LAYOUT, {bible.SUBJECT_DEFINITIONS: subjects})
+        reference = bible.reference_part(clip, layout, {bible.SUBJECT_DEFINITIONS: subjects})
         part = reference.sent[bible.SUBJECT_DEFINITIONS]
         return "\n\n".join(text for text in (f"subject_definitions: {part}" if part else "", "\n".join(plain)) if text), reference
     spoken = dialogue.ltx_lines(doc, lines, language) if engine == bible.LTX and lines else ""
     plain = [line for line in [instruction, spoken, *direction] if line]
     described = bible.prose(characters, place, language)
-    reference = bible.reference_part(clip, bible.CAST_LAYOUT, {bible.CAST_PART: (" " if engine == bible.LTX else "\n").join(described)})
+    reference = bible.reference_part(clip, layout, {bible.CAST_PART: (" " if engine == bible.LTX else "\n").join(described)})
     part = reference.sent[bible.CAST_PART]
     if not part:
         return "\n".join(plain), reference
@@ -783,7 +784,7 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
     summary = text["summary"].format(seconds=_seconds_text(seconds, language))
     reference = bible.reference_part(
         clip,
-        bible.REFS_LAYOUT,
+        reception.layout(bible.H3, REF2VA),
         {bible.SUBJECT_DEFINITIONS: " ".join(definitions), bible.RETENTION: "\n".join(retention), bible.CITATIONS: " ".join(citations)},
     )
     parts = reference.sent
@@ -1091,7 +1092,8 @@ def project_options(context: _Context, fields: models.Fields, warnings: List[Dic
 
 def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
     preset, doc, shot_id = context.preset, context.doc, clip["id"]
-    mode = REFS_MODE if context.profile == REF2VA else preset.main_mode
+    refs = reception.takes_references(context.profile)
+    mode = REFS_MODE if refs else preset.main_mode
     if mode is None or mode not in preset.modes:
         raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
     fields = context.mode_fields(mode)
@@ -1101,7 +1103,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     sent: List[SentReference] = []
     audio: Optional[ShotAudio] = None
     engine = bible.family(preset.id, preset.cloud)
-    if context.profile == REF2VA:
+    if refs:
         window = condition_window(doc, clip, seconds)
         tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
         context.cuts.extend(TrackCut(shot_id, lane_id, *window) for lane_id in tracks)
@@ -1128,7 +1130,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         prompt, reference = compose_shot(doc, clip, engine)
         audio = _shot_mux(context, clip, seconds, warnings)
     _bible_warnings(doc, clip, prompt, engine, warnings, reference)
-    _dialogue_warnings(doc, clip, engine, seconds, warnings, sent if context.profile == REF2VA else None)
+    _dialogue_warnings(doc, clip, engine, seconds, warnings, sent if refs else None)
     capabilities = catalog.director_of(preset.variables)
     document = _document(prompt, fps, seconds, resolution)
     mixed = audio is not None and audio.behavior == MUX
@@ -1136,7 +1138,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         document = audio_document(document, seconds, fps, capabilities)
     request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
     chained: Optional[Dict[str, Any]] = None
-    if context.profile == REF2VA:
+    if refs:
         request["form_data"]["references"] = [entry.value for entry in sent]
         director_mode = REFS_MODE
     elif _text_only(preset) and shot_frames(doc, shot_id)[0] is not None:
