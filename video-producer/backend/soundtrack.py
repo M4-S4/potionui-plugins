@@ -11,9 +11,9 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import core_bridge, director, takes
+from . import core_bridge, director, takes, vreftrack
 from .core_bridge import User
-from .director import MUX, TRACK_PREFIX, Plans, ShotPlan, TrackCut
+from .director import MUX, TRACK_PREFIX, VTRACK_PREFIX, Plans, ShotPlan, TrackCut, VideoCut
 from .exports import media
 from .exports.common import asset_of
 from .exports.video import SAMPLE_RATE, ExportError, assemble, kill_tree, last_line, num, sound_chain
@@ -369,17 +369,27 @@ async def heard_plans(owner: User, project_id: str, doc: Mapping[str, Any], *arg
 
 
 async def _store(owner: User, path: Path) -> str:
+    video = path.suffix == vreftrack.SUFFIX
     try:
         stored = await core_bridge.save_user_media(owner, path)
     except Exception as exc:
-        logger.warning("[VIDEO-PRODUCER] Could not store the sound %s", path.name, exc_info=True)
+        logger.warning("[VIDEO-PRODUCER] Could not store the cut %s", path.name, exc_info=True)
+        if video:
+            raise SoundError("video_store_failed", last_line(str(exc)) or "The reference video of the shot could not be stored.") from None
         raise SoundError("audio_store_failed", last_line(str(exc)) or "The sound of the shot could not be stored.") from None
     return str(stored["value"])
 
 
-def _file_name(doc: Mapping[str, Any], plan: ShotPlan, suffix: str) -> str:
+def _file_name(doc: Mapping[str, Any], plan: ShotPlan, suffix: str, kind: str = "sound") -> str:
     index = next((i for i, clip in enumerate(doc.get("clips") or []) if clip.get("id") == plan.shot_id), 0)
-    return f"vp-sound-shot-{index + 1:02d}-{suffix}"
+    return f"vp-{kind}-shot-{index + 1:02d}-{suffix}"
+
+
+async def _video(ffmpeg: str, sources: _Sources, cut: VideoCut, name: str) -> Path:
+    try:
+        return await vreftrack.cut(ffmpeg, sources, cut, name)
+    except ExportError as exc:
+        raise SoundError(exc.code, exc.message) from None
 
 
 def _lane_code(doc: Mapping[str, Any], lane_id: str) -> str:
@@ -388,8 +398,16 @@ def _lane_code(doc: Mapping[str, Any], lane_id: str) -> str:
 
 
 def _jobs(ffmpeg: str, doc: Mapping[str, Any], plan: ShotPlan) -> List[Tuple[str, Callable[..., Awaitable[Path]]]]:
+    videos = [
+        (f"{VTRACK_PREFIX}{cut.track_id}", partial(_video, ffmpeg=ffmpeg, cut=cut, name=_file_name(doc, plan, f"vref{cut.slot}", "vref")))
+        for cut in plan.video
+    ]
+    return _sound_jobs(ffmpeg, doc, plan) + videos
+
+
+def _sound_jobs(ffmpeg: str, doc: Mapping[str, Any], plan: ShotPlan) -> List[Tuple[str, Callable[..., Awaitable[Path]]]]:
     audio = plan.audio
-    if audio is None:
+    if audio is None or not plan.needs_audio:
         return []
     if audio.behavior == MUX:
         mix = partial(cut, ffmpeg=ffmpeg, lanes=audio.lanes, start=audio.start, end=audio.end, name=_file_name(doc, plan, "mix"), references=audio.references)
@@ -435,12 +453,16 @@ async def attach(owner: User, project: Mapping[str, Any], plan: ShotPlan) -> Non
 
 
 async def attach_all(owner: User, project: Mapping[str, Any], plans: Sequence[ShotPlan]) -> None:
-    """Cut the sound each plan sends, store each cut once as the owner's upload and put it in the plan's request: for a guided shot, each reference track in place of its placeholder and each sound reference in place of its file, both at the 32 kHz MiniMax-H3 encodes without resampling; for a mixed shot, one mix of the tracks and the audio references as the mux entry of its director document. The cuts of all the plans run at most MEASURES at a time, each in a work folder of its own, while their files are stored and put in the requests in the order of the plans and of what each sends, so that the uploads and the requests are those of one cut after the other. Raises the SoundError of the first cut or store that fails in that order, with its shot, after stopping the cuts still running and removing every work folder: nothing from the failing step on is stored."""
-    sounding = [plan for plan in plans if plan.needs_audio]
+    """Cut the sound each plan sends, store each cut once as the owner's upload and put it in the plan's request: for a guided shot, each reference track in place of its placeholder and each sound reference in place of its file, both at the 32 kHz MiniMax-H3 encodes without resampling; for a mixed shot, one mix of the tracks and the audio references as the mux entry of its director document; for each reference video track a guided shot sends, its cut (vreftrack.cut) in place of its vtrack: placeholder. The cuts of all the plans run at most MEASURES at a time, each in a work folder of its own, while their files are stored and put in the requests in the order of the plans and of what each sends, so that the uploads and the requests are those of one cut after the other. Raises the SoundError of the first cut or store that fails in that order, with its shot, after stopping the cuts still running and removing every work folder: nothing from the failing step on is stored."""
+    sounding = [plan for plan in plans if plan.needs_cut]
     if not sounding:
         return
     ffmpeg = core_bridge.find_ffmpeg()
     if not ffmpeg:
+        if not sounding[0].needs_audio:
+            raise SoundError(
+                "video_ffmpeg_missing", "ffmpeg is not available on this server: the reference video tracks of the shot cannot be cut.", sounding[0].shot_id
+            )
         raise SoundError("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shot cannot be cut.", sounding[0].shot_id)
     ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     doc = project["doc"]

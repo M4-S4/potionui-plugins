@@ -122,6 +122,7 @@ _ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (
     ("video_producer_takes", "chain", "TEXT"),
     ("video_producer_takes", "chain_wait", "INTEGER NOT NULL DEFAULT 0"),
     ("video_producer_takes", "frame_role", "TEXT"),
+    ("video_producer_takes", "video_refs", "TEXT"),
     ("video_producer_export_jobs", "stems", "INTEGER NOT NULL DEFAULT 0"),
 )
 

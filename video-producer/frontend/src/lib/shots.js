@@ -77,6 +77,12 @@ export function setExcludedLanes(clip, ids) {
 	setOverride(clip, 'excludeLanes', ids);
 }
 
+export const excludedVrefsOf = (clip) => idList(clip?.referenceOverrides?.excludeVrefs);
+
+export function setExcludedVrefs(clip, ids) {
+	setOverride(clip, 'excludeVrefs', ids);
+}
+
 export function shotReferences(doc, clip, excluded = excludedOf(clip)) {
 	const references = Array.isArray(doc?.references) ? doc.references : [];
 	const skip = new Set(excluded);
@@ -135,7 +141,7 @@ function migrateClip(clip) {
 	if ('revision' in next && !(Number.isInteger(next.revision) && next.revision >= 0)) delete next.revision;
 	if ('firstFromPrevious' in next && typeof next.firstFromPrevious !== 'boolean') delete next.firstFromPrevious;
 	if ('referenceOverrides' in next) {
-		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next) }).filter(([, list]) => list.length);
+		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next), excludeVrefs: excludedVrefsOf(next) }).filter(([, list]) => list.length);
 		if (kept.length) next.referenceOverrides = Object.fromEntries(kept);
 		else delete next.referenceOverrides;
 	}

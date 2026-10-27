@@ -12,6 +12,7 @@ import { fieldTitle, presetFields } from './options.js';
 import { prioritized } from './queue.js';
 import { laneTitle } from './tracks.js';
 import { clearRemoved, isRemoved, pruneRemoved } from './removedtakes.js';
+import { LIMITS, leastSeconds } from './reception.js';
 
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
@@ -215,6 +216,15 @@ function baseNoteText(note) {
 	if (code === 'audio_track_muted') return t('generation.warn.audioTrackMuted', { shot: shotName(data.shot_id), lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
 	if (code === 'audio_track_empty') return t('generation.warn.audioTrackEmpty', { shot: shotName(data.shot_id), lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
 	if (code === 'audio_track_silent') return t('generation.warn.audioTrackSilent', { shot: shotName(data.shot_id), lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
+	if (code === 'audio_track_trimmed') return t('generation.warn.audioTrackTrimmed', { shot: shotName(data.shot_id), limit: LIMITS.audio, lane: laneTitle(doc.lanes, doc.lanes.find((l) => l.id === data.lane_id)) || '—' });
+	if (code === 'video_track_ignored') return t('generation.warn.videoTrackIgnored', { shot: shotName(data.shot_id), track: `vref${data.slot ?? ''}` });
+	if (code === 'video_track_trimmed') return t('generation.warn.videoTrackTrimmed', { shot: shotName(data.shot_id), limit: LIMITS.video, track: `vref${data.slot ?? ''}` });
+	if (code === 'video_track_short') return t('generation.warn.videoTrackShort', { shot: shotName(data.shot_id), track: `vref${data.slot ?? ''}`, seconds: secs(leastSeconds()) });
+	if (code === 'video_track_missing') return t('generation.warn.videoTrackMissing', { shot: shotName(data.shot_id), track: `vref${data.slot ?? ''}` });
+	if (code === 'video_tag_ignored') return t('generation.warn.videoTagIgnored', { shot: shotName(data.shot_id), track: `vref${data.slot ?? ''}` });
+	if (code === 'video_ffmpeg_missing') return t('generation.block.videoFfmpeg');
+	if (code === 'video_source_missing') return t('generation.block.videoSource', { shot: shotName(data.shot_id) });
+	if (code === 'video_cut_failed' || code === 'video_store_failed') return t('generation.block.videoCut', { shot: shotName(data.shot_id) });
 	if (code === 'audio_only_references') return t('generation.block.audioOnly', { shot: shotName(data.shot_id) });
 	if (code === 'audio_ffmpeg_missing') return t('generation.block.audioFfmpeg');
 	if (code === 'audio_source_missing') return t('generation.block.audioSource', { shot: shotName(data.shot_id) });

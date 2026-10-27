@@ -1,6 +1,7 @@
 import copy
 import logging
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -53,8 +54,18 @@ SEED_RANGE = 2**31
 
 REFERENCE = "reference"
 TRACK = "track"
+VTRACK = "vtrack"
 
 TRACK_PREFIX = "track:"
+VTRACK_PREFIX = "vtrack:"
+
+OFF = "off"
+EXCLUDED = "excluded"
+MISSING = "missing"
+SHORT = "short"
+READY = "ready"
+
+TAG = re.compile(r"(?P<space>[ \t]*)(?<![0-9A-Za-z_])@vref(?P<slot>[1-9])(?![0-9A-Za-z_])", re.IGNORECASE)
 
 CHAIN_PREFIX = "chain:"
 
@@ -86,6 +97,11 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "cite_setting": "The shot takes place in <Subject {subject}>.",
         "cite_character": "<Subject {subject}> appears in the shot.",
         "soundscape": "The natural ambient sound of the place and the physical sounds of the action described above.",
+        "define_continuation": "{label} is the footage that [Shot 1] continues.",
+        "keep_continuation": "{label} (continued by [Shot 1]): fully_preserved - the shot picks up where it ends, with the same subjects, place, light and colours.",
+        "cite_motion": "The subjects move as in {label}.",
+        "cite_continuation": "The shot continues from the last frame of {label}.",
+        "summary_continuation": "[video continuation] + [reference generation] A {seconds}-second shot that continues {label}, made from the description below and its references.",
     },
     "fr": {
         "define_character": "<Subject {subject}> est le personnage montré par {label}.",
@@ -102,6 +118,11 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
         "cite_setting": "Le plan se déroule dans <Subject {subject}>.",
         "cite_character": "<Subject {subject}> apparaît dans le plan.",
         "soundscape": "Le son ambiant naturel du lieu et les sons physiques de l'action décrite plus haut.",
+        "define_continuation": "{label} est la séquence que [Shot 1] prolonge.",
+        "keep_continuation": "{label} (prolongée par [Shot 1]): fully_preserved - le plan reprend là où elle s'arrête, avec les mêmes sujets, le même lieu, la même lumière et les mêmes couleurs.",
+        "cite_motion": "Les sujets bougent comme dans {label}.",
+        "cite_continuation": "Le plan prolonge la dernière image de {label}.",
+        "summary_continuation": "[video continuation] + [reference generation] Un plan de {seconds} secondes qui prolonge {label}, fait d'après la description ci-dessous et ses références.",
     },
 }
 
@@ -199,11 +220,17 @@ class ShotPlan:
     work_scale: float = 1.0
     reference: Optional[bible.ReferencePart] = None
     chain: Optional[str] = None
+    video: List["VideoCut"] = field(default_factory=list)
 
     @property
     def needs_audio(self) -> bool:
         """True when a file of the shot's sound must be cut before its takes are created."""
         return self.audio is not None and self.audio.behavior in (CONDITION, MUX) and bool(self.audio.lanes or self.audio.references)
+
+    @property
+    def needs_cut(self) -> bool:
+        """True when a file of the shot's sound or of one of its reference video tracks must be cut before its takes are created."""
+        return self.needs_audio or bool(self.video)
 
     def summary(self) -> Dict[str, Any]:
         """The shot as the estimate reports it."""
@@ -218,6 +245,7 @@ class ShotPlan:
             "profile": self.profile,
             "quality": self.quality,
             "audio": self.audio.summary() if self.audio is not None else None,
+            "video": {"tracks": [cut.slot for cut in self.video]} if self.video else None,
             "chain": self.chain,
         }
 
@@ -255,6 +283,62 @@ class TrackCut:
 
 
 @dataclass(frozen=True)
+class VideoPiece:
+    item_id: str
+    asset_id: str
+    start: float
+    end: float
+    source: float
+
+
+@dataclass
+class VideoCut:
+    track_id: str
+    slot: int
+    role: str
+    frames: int
+    pieces: List[VideoPiece]
+    size: Tuple[int, int] = (0, 0)
+
+    @property
+    def start(self) -> float:
+        return self.pieces[0].start
+
+    @property
+    def end(self) -> float:
+        return self.pieces[-1].end
+
+    @property
+    def seconds(self) -> float:
+        return round(self.frames / reception.VIDEO_TRACKS["fps"], 6)
+
+    def trace(self) -> Dict[str, Any]:
+        """What a take receives of the track: its slot and role, the part of the timeline it is cut from, its frames and the size it is written at."""
+        return {
+            "slot": self.slot,
+            "track_id": self.track_id,
+            "role": self.role,
+            "start": self.start,
+            "end": self.end,
+            "frames": self.frames,
+            "seconds": self.seconds,
+            "size": list(self.size),
+            "items": [piece.item_id for piece in self.pieces],
+        }
+
+
+@dataclass
+class ShotTrack:
+    track: Dict[str, Any]
+    status: str
+    cut: Optional[VideoCut] = None
+
+    @property
+    def slot(self) -> int:
+        return int(self.track["slot"])
+
+
+@dataclass(frozen=True)
 class SentReference:
     value: str
     kind: str
@@ -270,6 +354,8 @@ class SentReference:
     def role(self) -> str:
         if self.kind == "audio":
             return "audio"
+        if self.origin == VTRACK:
+            return reception.CONTINUATION if (self.item or {}).get("role") == reception.CONTINUATION else reception.MOTION
         return ROLES_BY_SPACE.get(str((self.item or {}).get("space")), "setting")
 
 
@@ -355,6 +441,123 @@ def excluded_lanes(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
     overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
     lanes = overrides.get("excludeLanes") if isinstance(overrides, Mapping) else None
     return {str(item) for item in lanes if isinstance(item, str)} if isinstance(lanes, list) else set()
+
+
+def excluded_vrefs(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
+    """The ids of the reference video tracks the shot leaves out."""
+    overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
+    tracks = overrides.get("excludeVrefs") if isinstance(overrides, Mapping) else None
+    return {str(item) for item in tracks if isinstance(item, str)} if isinstance(tracks, list) else set()
+
+
+def video_tracks(doc: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """The reference video tracks of the document, in the order of their slots."""
+    tracks = [
+        track
+        for track in doc.get("vrefTracks") or []
+        if isinstance(track, Mapping) and track.get("id") and isinstance(track.get("slot"), int) and not isinstance(track.get("slot"), bool)
+    ]
+    return sorted(tracks, key=lambda track: track["slot"])
+
+
+def track_items(doc: Mapping[str, Any], track_id: Any) -> List[Dict[str, Any]]:
+    """The items of a reference video track, in time order."""
+    items = [item for item in doc.get("vrefItems") or [] if isinstance(item, Mapping) and item.get("track") == track_id]
+    return sorted(items, key=lambda item: float(item.get("start") or 0))
+
+
+def readable_video(doc: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
+    """Whether an item of a reference video track plays a video the server can read."""
+    asset = _asset(doc, item.get("assetId"))
+    return asset is not None and asset.get("kind") == "video" and media_ref(asset.get("origin")) is not None
+
+
+def _plays_in(item: Mapping[str, Any], begin: float, end: float) -> bool:
+    start, dur = item.get("start"), item.get("dur")
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in (start, dur)) or dur <= EPSILON:
+        return False
+    return min(end, start + dur) - max(begin, start) > EPSILON
+
+
+def shot_video_tracks(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float) -> List[ShotTrack]:
+    """The reference video tracks that have an item in the region of a shot, in slot order, each with what keeps it from being sent whatever the engine (off, excluded, missing when none of its items there can be read, short when what can be read there is shorter than the table's minimum) or ready with its cut."""
+    start = float(clip.get("start") or 0)
+    excluded = excluded_vrefs(doc, clip["id"])
+    found: List[ShotTrack] = []
+    for track in video_tracks(doc):
+        role, cap = track.get("role"), track.get("seconds")
+        begin, end = reception.video_region(role, start, seconds, cap)
+        items = [item for item in track_items(doc, track["id"]) if _plays_in(item, begin, end)]
+        if not items:
+            continue
+        if track.get("off") is True:
+            found.append(ShotTrack(track, OFF))
+            continue
+        if track["id"] in excluded:
+            found.append(ShotTrack(track, EXCLUDED))
+            continue
+        readable = [item for item in items if readable_video(doc, item)]
+        if not readable:
+            found.append(ShotTrack(track, MISSING))
+            continue
+        frames, parts = reception.video_pieces(readable, role, start, seconds, cap)
+        if frames < reception.VIDEO_TRACKS["minFrames"]:
+            found.append(ShotTrack(track, SHORT))
+            continue
+        by_id = {item["id"]: item for item in readable}
+        pieces = [
+            VideoPiece(
+                item_id=str(part["id"]),
+                asset_id=str(by_id[part["id"]]["assetId"]),
+                start=part["from"],
+                end=part["to"],
+                source=round(float(by_id[part["id"]].get("srcIn") or 0) + part["from"] - float(by_id[part["id"]]["start"]), 6),
+            )
+            for part in parts
+        ]
+        cut = VideoCut(str(track["id"]), int(track["slot"]), reception.CONTINUATION if role == reception.CONTINUATION else reception.MOTION, frames, pieces)
+        found.append(ShotTrack(track, READY, cut))
+    return found
+
+
+def cited_slots(text: str) -> List[int]:
+    """The slots of the reference video tracks a text cites as @vref1, @vref2…, in order, once each."""
+    return list(dict.fromkeys(int(match.group("slot")) for match in TAG.finditer(text or "")))
+
+
+def cite_tracks(text: str, labels: Mapping[int, str]) -> str:
+    """The text with each @vrefN it cites replaced by the label its track goes as, or left out with the space before it when the track does not go."""
+    def replace(match: "re.Match[str]") -> str:
+        label = labels.get(int(match.group("slot")))
+        return f"{match.group('space')}{label}" if label else ""
+
+    return TAG.sub(replace, text or "").strip()
+
+
+def _track_note(code: str, message: str, shot_id: str, track: ShotTrack) -> Dict[str, Any]:
+    return note(code, message, shot_id=shot_id, track_id=str(track.track["id"]), slot=track.slot)
+
+
+def _ignored_tracks(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> None:
+    for track in shot_video_tracks(doc, clip, seconds):
+        if track.status not in (OFF, EXCLUDED):
+            warnings.append(
+                _track_note("video_track_ignored", f"This engine does not take a reference video: track vref{track.slot} is not sent.", clip["id"], track)
+            )
+    _tag_warnings(doc, clip, set(), warnings)
+
+
+def _tag_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Collection[int], warnings: List[Dict[str, Any]]) -> None:
+    for slot in cited_slots(shot_instruction(doc, clip)):
+        if slot not in sent:
+            warnings.append(
+                note(
+                    "video_tag_ignored",
+                    f"The shot cites @vref{slot}, which this engine does not receive: the mention is left out.",
+                    shot_id=clip["id"],
+                    slot=slot,
+                )
+            )
 
 
 def reference_margin(doc: Mapping[str, Any]) -> float:
@@ -568,8 +771,8 @@ def direction_lines(doc: Mapping[str, Any]) -> List[str]:
 
 
 def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> Tuple[str, bible.ReferencePart]:
-    """The shot's prompt and the part of it made from its cast: the instruction, its lines when the engine speaks, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, re-announced after the action and the lines in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines. A part the shot replaces for itself goes as it is in the same place."""
-    instruction = shot_instruction(doc, clip)
+    """The shot's prompt and the part of it made from its cast: the instruction without the reference video tracks it cites, its lines when the engine speaks, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, re-announced after the action and the lines in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines. A part the shot replaces for itself goes as it is in the same place."""
+    instruction = cite_tracks(shot_instruction(doc, clip), {})
     direction = direction_lines(doc)
     characters, place = bible.cast_of(doc, clip)
     language = _language(doc)
@@ -744,7 +947,7 @@ def _subjects(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[Se
 
 
 def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> Tuple[str, bible.ReferencePart]:
-    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself with its lines, its sound and its score. A reference linked to a card of the bible is defined with the card's words, and a sound that is the voice of a character as that character's voice; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places."""
+    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself with its lines, its sound and its score. A reference linked to a card of the bible is defined with the card's words, and a sound that is the voice of a character as that character's voice; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places. A reference video track is defined, kept and cited by its role, as the source of the motion of the shot or as the footage it continues, a continuation adding its task to the summary, and each @vrefN of the instruction becomes the label its track goes as."""
     language = _language(doc)
     text = REFS_TEXT[language]
     numbers = _subjects(doc, clip, sent)
@@ -775,20 +978,27 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
         else:
             definitions.append(text[f"define_{role}"].format(label=entry.label))
             retention.append(text[f"keep_{role}"].format(label=entry.label))
+        if entry.origin == VTRACK:
+            citations.append(text[f"cite_{role}"].format(label=entry.label))
     characters, place = bible.cast_of(doc, clip)
     for card in [*characters, *([place] if place is not None else [])]:
         if card.id not in defined:
             subject += 1
             definitions.append(bible.definition(card, subject, language))
             citations.append(text["cite_character" if card.kind == bible.CHARACTERS else "cite_setting"].format(subject=subject))
-    summary = text["summary"].format(seconds=_seconds_text(seconds, language))
+    continued = next((entry for entry in sent if entry.origin == VTRACK and entry.role == reception.CONTINUATION), None)
+    if continued is not None:
+        summary = text["summary_continuation"].format(seconds=_seconds_text(seconds, language), label=continued.label)
+    else:
+        summary = text["summary"].format(seconds=_seconds_text(seconds, language))
     reference = bible.reference_part(
         clip,
         reception.layout(bible.H3, REF2VA),
         {bible.SUBJECT_DEFINITIONS: " ".join(definitions), bible.RETENTION: "\n".join(retention), bible.CITATIONS: " ".join(citations)},
     )
     parts = reference.sent
-    instruction = shot_instruction(doc, clip)
+    labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
+    instruction = cite_tracks(shot_instruction(doc, clip), labels)
     lines = dialogue.lines_of(doc, clip)
     spoken = dialogue.h3_lines(doc, lines, numbers, refs=True) if lines else ""
     shot = [*([_sentence(instruction)] if instruction else []), parts[bible.CITATIONS], spoken]
@@ -958,8 +1168,9 @@ def reference_media(
     doc: Mapping[str, Any],
     shot_id: str,
     tracks: Sequence[str] = (),
+    videos: Sequence[VideoCut] = (),
 ) -> List[SentReference]:
-    """What a shot sends as references, within the per-kind limits: its own references, the cut of each of its reference tracks (a track: placeholder until the cut is stored), then the global ones it does not exclude; each with its rank among the references of its kind."""
+    """What a shot sends as references, within the per-kind limits and in the order of the table: its own references, the cut of each of its reference tracks (a track: placeholder until the cut is stored) and of each of its reference video tracks (a vtrack: placeholder), then the global ones it does not exclude; each with its rank among the references of its kind."""
     scoped, shared = [], []
     excluded = excluded_references(doc, shot_id)
     for reference in doc.get("references") or []:
@@ -988,12 +1199,19 @@ def reference_media(
         counts[kind] += 1
         sent.append(SentReference(resolved["value"], kind, counts[kind], origin, dict(item) if item is not None else None))
 
-    for reference in scoped:
-        add(REFERENCE, reference.get("assetId"), reference)
-    for lane_id in tracks:
-        add(TRACK, None, {"laneId": lane_id}, "audio", {"value": f"{TRACK_PREFIX}{lane_id}", "media_type": "audio"})
-    for reference in shared:
-        add(REFERENCE, reference.get("assetId"), reference)
+    for step in reception.ORDER:
+        if step == "own":
+            for reference in scoped:
+                add(REFERENCE, reference.get("assetId"), reference)
+        elif step == "tracks":
+            for lane_id in tracks:
+                add(TRACK, None, {"laneId": lane_id}, "audio", {"value": f"{TRACK_PREFIX}{lane_id}", "media_type": "audio"})
+            for cut in videos:
+                item = {"trackId": cut.track_id, "slot": cut.slot, "role": cut.role}
+                add(VTRACK, None, item, "video", {"value": f"{VTRACK_PREFIX}{cut.track_id}", "media_type": "video"})
+        else:
+            for reference in shared:
+                add(REFERENCE, reference.get("assetId"), reference)
     return sent
 
 
@@ -1103,11 +1321,17 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     sent: List[SentReference] = []
     audio: Optional[ShotAudio] = None
     engine = bible.family(preset.id, preset.cloud)
+    video: List[VideoCut] = []
     if refs:
         window = condition_window(doc, clip, seconds)
         tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
         context.cuts.extend(TrackCut(shot_id, lane_id, *window) for lane_id in tracks)
-        sent = reference_media(context.user, doc, shot_id, tracks)
+        ready = _ready_tracks(doc, clip, seconds, warnings)
+        sent = reference_media(context.user, doc, shot_id, tracks, [track.cut for track in ready])
+        video = _sent_tracks(doc, shot_id, tracks, ready, sent, warnings)
+        for cut in video:
+            cut.size = reception.cut_size(aspect_of(doc), models.parse_size(resolution))
+        _tag_warnings(doc, clip, {cut.slot for cut in video}, warnings)
         if not sent:
             raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
         if all(entry.kind == "audio" for entry in sent):
@@ -1129,6 +1353,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     else:
         prompt, reference = compose_shot(doc, clip, engine)
         audio = _shot_mux(context, clip, seconds, warnings)
+        _ignored_tracks(doc, clip, seconds, warnings)
     _bible_warnings(doc, clip, prompt, engine, warnings, reference)
     _dialogue_warnings(doc, clip, engine, seconds, warnings, sent if refs else None)
     capabilities = catalog.director_of(preset.variables)
@@ -1179,7 +1404,60 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         work_scale=engine_options.work_scale(fields, request["form_data"]),
         reference=reference,
         chain=_chain_of(context, shot_id, chained, director_mode),
+        video=video,
     )
+
+
+def _ready_tracks(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> List[ShotTrack]:
+    ready: List[ShotTrack] = []
+    for track in shot_video_tracks(doc, clip, seconds):
+        if track.status == READY:
+            ready.append(track)
+        elif track.status == MISSING:
+            warnings.append(
+                _track_note("video_track_missing", f"The video of track vref{track.slot} can no longer be read: nothing of it is sent.", clip["id"], track)
+            )
+        elif track.status == SHORT:
+            least = reception.least_seconds()
+            warnings.append(
+                _track_note(
+                    "video_track_short", f"Track vref{track.slot} has less than {least:.2f} s of video for this shot: nothing of it is sent.", clip["id"], track
+                )
+            )
+    return ready
+
+
+def _sent_tracks(
+    doc: Mapping[str, Any],
+    shot_id: str,
+    lanes: Sequence[str],
+    ready: Sequence[ShotTrack],
+    sent: Sequence[SentReference],
+    warnings: List[Dict[str, Any]],
+) -> List[VideoCut]:
+    going = {str((entry.item or {}).get("laneId")) for entry in sent if entry.origin == TRACK}
+    for lane_id in lanes:
+        if lane_id not in going:
+            warnings.append(
+                note(
+                    "audio_track_trimmed",
+                    f"The shot already sends {REFERENCE_LIMITS['audio']} sounds: the reference track is not sent.",
+                    shot_id=shot_id,
+                    lane_id=lane_id,
+                )
+            )
+    slots = {int((entry.item or {})["slot"]) for entry in sent if entry.origin == VTRACK}
+    video: List[VideoCut] = []
+    for track in ready:
+        if track.slot in slots and track.cut is not None:
+            video.append(track.cut)
+        else:
+            warnings.append(
+                _track_note(
+                    "video_track_trimmed", f"The shot already sends {REFERENCE_LIMITS['video']} videos: track vref{track.slot} is not sent.", shot_id, track
+                )
+            )
+    return video
 
 
 def _shot_mux(context: _Context, clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
@@ -1286,6 +1564,7 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     prompt, reference = compose_shot(doc, clip, bible.CLOUD)
     _bible_warnings(doc, clip, prompt, bible.CLOUD, warnings, reference)
     _dialogue_warnings(doc, clip, bible.CLOUD, seconds, warnings)
+    _ignored_tracks(doc, clip, seconds, warnings)
     form: Dict[str, Any] = {
         "seed": -1,
         "model": f"{models.MODEL_REF}{model['id']}",
@@ -1457,10 +1736,20 @@ def _build(
             note("missing_models", f"Install a recommended file for: {', '.join(missing)}.", fields=missing)
         )
     cutting = [plan.shot_id for plan in plans.shots if plan.needs_audio]
-    if cutting and not core_bridge.find_ffmpeg():
-        plans.blocks.append(
-            note("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shots cannot be cut.", shot_ids=cutting)
-        )
+    filming = [plan.shot_id for plan in plans.shots if plan.video]
+    if (cutting or filming) and not core_bridge.find_ffmpeg():
+        if cutting:
+            plans.blocks.append(
+                note("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shots cannot be cut.", shot_ids=cutting)
+            )
+        if filming:
+            plans.blocks.append(
+                note(
+                    "video_ffmpeg_missing",
+                    "ffmpeg is not available on this server: the reference video tracks of the shots cannot be cut.",
+                    shot_ids=filming,
+                )
+            )
     return plans
 
 

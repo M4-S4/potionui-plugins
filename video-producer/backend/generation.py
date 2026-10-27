@@ -164,6 +164,7 @@ def create(
             "chain": chain,
             "chain_wait": bool(chain) and chain["state"] == chaining.WAITING,
             "frame_role": frame_role,
+            "video_refs": [cut.trace() for cut in plan.video] or None,
         }
     )
     if minutes > 0 and core_bridge.record_limit_event(owner.id, limits.GPU_MINUTES, minutes, limit_ref(take_id)):

@@ -20,7 +20,7 @@ def _codes(notes):
     return [item["code"] for item in notes]
 
 
-WAN_DRAFT = {"preset_id": presets.WAN, "model_id": None, "profile": "FL2VA", "quality": "draft", "audio": None, "chain": None}
+WAN_DRAFT = {"preset_id": presets.WAN, "model_id": None, "profile": "FL2VA", "quality": "draft", "audio": None, "video": None, "chain": None}
 
 
 def test_a_native_estimate_has_the_contract_shape(core, make_doc):

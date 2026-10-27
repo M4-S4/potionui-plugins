@@ -67,6 +67,7 @@ COLUMNS = (
     "chain",
     "chain_wait",
     "frame_role",
+    "video_refs",
 )
 
 PUBLIC = (
@@ -111,6 +112,7 @@ PUBLIC = (
     "finished_at",
     "chain",
     "frame_role",
+    "video_refs",
 )
 
 _ACTIVE_SQL = "status IN ('queued', 'running')"
@@ -161,6 +163,7 @@ def _take(row: Any) -> Dict[str, Any]:
     take["request"] = json.loads(take["request"]) if take["request"] else None
     take["chain"] = json.loads(take["chain"]) if take["chain"] else None
     take["chain_wait"] = bool(take["chain_wait"])
+    take["video_refs"] = json.loads(take["video_refs"]) if take["video_refs"] else None
     return take
 
 
@@ -213,6 +216,7 @@ def create_take(fields: Dict[str, Any]) -> Dict[str, Any]:
         "request": json.dumps(take["request"]) if take["request"] else None,
         "chain": json.dumps(take["chain"]) if take["chain"] else None,
         "chain_wait": int(bool(take["chain_wait"])),
+        "video_refs": json.dumps(take["video_refs"]) if take["video_refs"] else None,
     }
     with db.get_cursor() as cursor:
         cursor.execute(

@@ -11,7 +11,8 @@ export async function load(url, context, next) {
 }`;
 register(`data:text/javascript,${encodeURIComponent(hooks)}`, import.meta.url);
 
-const { FAMILIES, LIMITS, cardReception, familyOf, layoutOf, mediaKey, projectReception, receptionOf, shotReception, takesReferences } = await import('./reception.js');
+const { FAMILIES, LIMITS, ORDER, VIDEO_TRACKS, cardReception, cutSize, familyOf, layoutOf, mediaKey, projectReception, receptionOf, shotReception, takesReferences, videoCap, videoFrames, videoPieces, videoRegion } = await import('./reception.js');
+const { MAX_VREF_TRACKS, VREF_ROLES } = await import('./vrefs.js');
 const { PROFILES } = await import('./generation.js');
 const { CONDITION, audioBehavior } = await import('./sound.js');
 const { effectiveEngine } = await import('./engine.js');
@@ -20,6 +21,9 @@ const read = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), '
 const pageCopy = read('./reception.json');
 const shared = read('../../../backend/reception.json');
 const { engines, cases } = read('../../../tests/fixtures/reception_cases.json');
+const lengths = read('../../../tests/fixtures/vref_lengths.json');
+const round = (value, digits) => Math.round(value * 10 ** digits) / 10 ** digits;
+const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} != ${expected}`);
 
 const infoOf = (engine) => {
 	const found = Object.values(engines).find((e) => e.preset === engine.preset && (e.model ?? null) === (engine.model ?? null));
@@ -67,10 +71,60 @@ for (const c of cases) {
 			}
 			const ids = (status) => doc.references.filter((r) => shot.statuses.get(r.id) === status).map((r) => r.id);
 			found[clip.id] = { layout: shot.layout, ignoredLayout: shot.ignoredLayout, sent: ids('sent'), trimmed: ids('trimmed'), mixed: ids('mixed'), excluded: ids('excluded') };
+			if (doc.vrefTracks) {
+				const slots = (status) => shot.videoTracks.filter((x) => x.status === status).map((x) => x.slot);
+				found[clip.id].tracks = Object.fromEntries(['sent', 'trimmed', 'short', 'missing', 'ignored', 'excluded', 'off'].map((status) => [status, slots(status)]));
+				found[clip.id].windows = Object.fromEntries(shot.videoTracks.filter((x) => x.window).map((x) => [String(x.slot), x.window.map((v) => round(v, 3))]));
+			}
 		}
 		assert.deepEqual(found, c.expected);
 	});
 }
+
+test('the table orders the references, bounds the reference video tracks and names the roles and sizes the page knows', () => {
+	assert.deepEqual(ORDER, ['own', 'tracks', 'shared']);
+	assert.equal(VIDEO_TRACKS.max, MAX_VREF_TRACKS);
+	assert.deepEqual(Object.keys(VIDEO_TRACKS.roles), VREF_ROLES);
+	assert.deepEqual(Object.values(VIDEO_TRACKS.roles), ['under', 'before']);
+	assert.ok(VIDEO_TRACKS.sizes.includes(VIDEO_TRACKS.size));
+	assert.equal((VIDEO_TRACKS.minFrames - VIDEO_TRACKS.head) % VIDEO_TRACKS.chunk, 0);
+	assert.equal(VIDEO_TRACKS.minFrames, 56);
+});
+
+test('shared lengths: the frames a track sends for a length, its cap and its region', () => {
+	for (const [seconds, frames] of lengths.frames) assert.equal(videoFrames(seconds), frames, `${seconds} s`);
+	for (const [cap, seconds] of lengths.caps) close(videoCap(cap), seconds);
+	for (const r of lengths.regions) {
+		const [a, b] = videoRegion(r.role, r.start, r.seconds, r.cap);
+		close(a, r.region[0]);
+		close(b, r.region[1]);
+	}
+});
+
+test('shared lengths: the parts of the items a track sends', () => {
+	for (const c of lengths.pieces) {
+		const { frames, pieces } = videoPieces(c.items, c.role, c.start, c.seconds, c.cap);
+		assert.equal(frames, c.frames, c.name);
+		assert.deepEqual(pieces.map((p) => [p.id, round(p.from, 6), round(p.to, 6)]), c.pieces.map((p) => [p.id, p.from, p.to]), c.name);
+	}
+});
+
+test('shared sizes: a cut is written at the canvas of MiniMax-H3 for the aspect, or at the size of the take', () => {
+	for (const c of lengths.sizes) assert.deepEqual(cutSize(c.aspect, c.resolution, c.setting), c.size, JSON.stringify(c));
+});
+
+test('shotReception: a track sends nothing to a shot whose engine is not known, and its slots come in slot order', () => {
+	const doc = caseDoc('the videos of the shot go first');
+	const clip = doc.clips[0];
+	assert.deepEqual(shotReception(doc, clip, { preset: 'gone', profile: 'Ref2VA', info: null }).videoTracks.map((x) => [x.slot, x.status, x.window]), [
+		[1, 'unknown', null],
+		[2, 'unknown', null]
+	]);
+	assert.deepEqual(shotReception(doc, clip, engineFor(doc)(clip)).videoTracks.map((x) => [x.slot, x.frames]), [
+		[1, 56],
+		[2, 56]
+	]);
+});
 
 test('mediaKey: only an asset the server can read has a media', () => {
 	assert.equal(mediaKey({ origin: { kind: 'library', itemId: 'x' } }), 'library:x');
