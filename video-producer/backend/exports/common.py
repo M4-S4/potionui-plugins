@@ -7,8 +7,6 @@ LOCALES = ("en", "fr")
 
 DEFAULT_CLIP = {"en": "Shot", "fr": "Plan"}
 
-CUE = {"en": "{character}: {text}", "fr": "{character} : {text}"}
-
 UNDEFINED = object()
 
 MS_PER_SECOND = 1000.0

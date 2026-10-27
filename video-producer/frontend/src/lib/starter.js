@@ -32,10 +32,6 @@ export function newAsset(extra = {}) {
 		quality: null,
 		resultId: null,
 		role: null,
-		synth: null,
-		transcript: null,
-		character: null,
-		lipSync: null,
 		...extra
 	};
 }
@@ -49,7 +45,6 @@ function lane(name, role, vol, pan) {
 		pan,
 		mute: false,
 		solo: false,
-		automation: 'off',
 		sends: { R1: role === 'Dialogue' ? -18 : -12, D1: -60 },
 		inserts: [
 			{ type: 'eq', on: true, low: 0, mid: 0, high: role === 'Dialogue' ? 2 : 0 },
@@ -145,6 +140,19 @@ function currentReference(r) {
 	return r.role === OLD_SET_ROLE ? { ...next, role: SET_ROLE } : next;
 }
 const RETIRED_KEYS = ['controls', 'plans3d', 'scenes'];
+export const RETIRED_ASSET_KEYS = ['synth', 'transcript', 'character', 'lipSync'];
+export const RETIRED_LANE_KEYS = ['automation'];
+const without = (item, keys) => (isObject(item) && keys.some((key) => key in item) ? Object.fromEntries(Object.entries(item).filter(([key]) => !keys.includes(key))) : item);
+export const workshopSound = (a) => isObject(a) && Boolean(a.synth) && !a.src && !a.origin;
+
+function migrateSounds(next) {
+	const dropped = new Set((Array.isArray(next.assets) ? next.assets : []).filter(workshopSound).map((a) => a.id).filter(Boolean));
+	if (Array.isArray(next.assets)) next.assets = next.assets.filter((a) => !workshopSound(a)).map((a) => without(a, RETIRED_ASSET_KEYS));
+	if (Array.isArray(next.lanes)) next.lanes = next.lanes.map((lane) => without(lane, RETIRED_LANE_KEYS));
+	if (!dropped.size) return;
+	if (Array.isArray(next.audio)) next.audio = next.audio.filter((item) => !(isObject(item) && dropped.has(item.assetId)));
+	if (Array.isArray(next.references)) next.references = next.references.map((r) => (isObject(r) && dropped.has(r.assetId) ? { ...r, assetId: null } : r));
+}
 const isNumber = (v) => typeof v === 'number';
 const span = (item) => {
 	const start = isNumber(item.start) ? item.start : 0;
@@ -188,6 +196,7 @@ export function migrate(doc) {
 		next.references = [...kept, ...motionReferences(doc, kept)];
 	}
 	for (const key of RETIRED_KEYS) delete next[key];
+	migrateSounds(next);
 	if ('bible' in doc) next.bible = migrateBible(doc.bible);
 	if (isObject(doc.engine)) next.engine = migrateOptions(doc.engine);
 	if ('removedTakes' in doc) {

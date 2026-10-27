@@ -44,7 +44,6 @@
 	"suggest.promptAt": "Help me write the prompt at {time}.",
 	"suggest.direction": "Help me write the “{field}” field of the global direction.",
 	"suggest.library": "Help me write a prompt for this project.",
-	"suggest.sound": "Help me write a sound brief: {type}, from {start} to {end}.",
 	"seam.cast_unnamed": "“{shot}” does not name {labels}, cast in the shot.",
 	"fix.cast_unnamed": "Name each character cast in the shot by its visual tag.",
 	"suggest.split": "Break my synopsis down into shots, timed on the parts of the song.",

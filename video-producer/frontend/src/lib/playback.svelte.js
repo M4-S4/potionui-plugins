@@ -3,6 +3,8 @@ import { ui, doc, asset, seqDuration, clamp, toast } from './state.svelte.js';
 import { mediaFailure } from './playable.js';
 import { clipSoundAudible, laneAudible } from './tracks.js';
 import { advance } from './player.js';
+import mixRule from './mix.json';
+import { gainOf, reverbImpulse, stripOf } from './mix.js';
 
 export const meters = $state({ lanes: {}, video: 0, master: [0, 0] });
 
@@ -79,14 +81,12 @@ function ensureAudio() {
 }
 
 function makeReverb() {
-	const len = ctx.sampleRate * 2.4;
-	const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-	for (let ch = 0; ch < 2; ch++) {
-		const d = buf.getChannelData(ch);
-		for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-	}
+	const channels = reverbImpulse(mixRule, ctx.sampleRate);
+	const buf = ctx.createBuffer(2, channels[0].length, ctx.sampleRate);
+	channels.forEach((data, ch) => buf.copyToChannel(data, ch));
 	const input = ctx.createGain();
 	const conv = ctx.createConvolver();
+	conv.normalize = false;
 	conv.buffer = buf;
 	const out = ctx.createGain();
 	input.connect(conv).connect(out).connect(master);
@@ -95,34 +95,40 @@ function makeReverb() {
 function makeDelay() {
 	const input = ctx.createGain();
 	const d = ctx.createDelay(1);
-	d.delayTime.value = 0.32;
+	d.delayTime.value = mixRule.delay.seconds;
 	const fb = ctx.createGain();
-	fb.gain.value = 0.35;
+	fb.gain.value = mixRule.delay.feedback;
 	const out = ctx.createGain();
 	input.connect(d).connect(out).connect(master);
 	d.connect(fb).connect(d);
 	return { input, out };
 }
 
-const db = (v) => (v <= -59 ? 0 : Math.pow(10, v / 20));
+const db = (v) => gainOf(mixRule, v);
 
 function strip(lane) {
 	let s = strips.get(lane.id);
 	if (s) return s;
 	const input = ctx.createGain();
-	const lo = ctx.createBiquadFilter();
-	lo.type = 'lowshelf';
-	lo.frequency.value = 200;
-	const mid = ctx.createBiquadFilter();
-	mid.type = 'peaking';
-	mid.frequency.value = 1200;
-	const hi = ctx.createBiquadFilter();
-	hi.type = 'highshelf';
-	hi.frequency.value = 5000;
+	input.channelCount = 2;
+	input.channelCountMode = 'explicit';
+	input.channelInterpretation = 'speakers';
+	const band = ({ type, frequency, q }) => {
+		const node = ctx.createBiquadFilter();
+		node.type = type;
+		node.frequency.value = frequency;
+		if (q) node.Q.value = q;
+		return node;
+	};
+	const lo = band(mixRule.eq.low);
+	const mid = band(mixRule.eq.mid);
+	const hi = band(mixRule.eq.high);
 	const filt = ctx.createBiquadFilter();
-	filt.type = 'lowpass';
-	filt.frequency.value = 20000;
+	filt.type = mixRule.filter.type;
+	filt.Q.value = mixRule.filter.qDb;
+	filt.frequency.value = ctx.sampleRate / 2;
 	const comp = ctx.createDynamicsCompressor();
+	comp.knee.value = mixRule.comp.knee;
 	const pan = ctx.createStereoPanner();
 	const fader = ctx.createGain();
 	const an = ctx.createAnalyser();
@@ -187,104 +193,16 @@ function mediaVoice(clip, src, warn = true) {
 	return v;
 }
 
-const SYNTH_BY_ROLE = { Dialogue: 'voice', Musique: 'pad', Ambiance: 'wind', SFX: 'steps' };
-
 function voice(clip) {
-	let v = voices.get(clip.id);
-	const a = asset(clip.assetId);
-	const src = a?.src ?? null;
-	if (v && (v.src ?? null) === src) return v;
+	const v = voices.get(clip.id);
+	const src = asset(clip.assetId)?.src ?? null;
+	if (v && v.src === src) return v;
 	if (v) {
 		v.stop();
 		v.out.disconnect();
 		voices.delete(clip.id);
 	}
-	if (src) return mediaVoice(clip, src);
-	const out = ctx.createGain();
-	out.gain.value = 0;
-	const stops = [];
-	const synth = a?.synth ?? SYNTH_BY_ROLE[a?.role] ?? 'pad';
-	if (synth === 'pad') {
-		const f = ctx.createBiquadFilter();
-		f.type = 'lowpass';
-		f.frequency.value = 900;
-		f.connect(out);
-		for (const [hz, type] of [[110, 'sawtooth'], [164.8, 'triangle'], [220.5, 'sine'], [277.2, 'triangle'], [329.6, 'sine']]) {
-			const o = ctx.createOscillator();
-			o.type = type;
-			o.frequency.value = hz;
-			o.detune.value = (Math.random() - 0.5) * 12;
-			const g = ctx.createGain();
-			g.gain.value = type === 'sawtooth' ? 0.03 : 0.06;
-			o.connect(g).connect(f);
-			o.start();
-			stops.push(o);
-		}
-		const lfo = ctx.createOscillator();
-		lfo.frequency.value = 0.08;
-		const lg = ctx.createGain();
-		lg.gain.value = 400;
-		lfo.connect(lg).connect(f.frequency);
-		lfo.start();
-		stops.push(lfo);
-	} else {
-		const len = ctx.sampleRate * 2;
-		const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-		const d = buf.getChannelData(0);
-		let b = 0;
-		for (let i = 0; i < len; i++) {
-			b = 0.97 * b + 0.03 * (Math.random() * 2 - 1);
-			d[i] = synth === 'wind' ? b * 6 : Math.random() * 2 - 1;
-		}
-		const src = ctx.createBufferSource();
-		src.buffer = buf;
-		src.loop = true;
-		const f = ctx.createBiquadFilter();
-		const g = ctx.createGain();
-		if (synth === 'wind') {
-			f.type = 'bandpass';
-			f.frequency.value = 500;
-			f.Q.value = 0.7;
-			const lfo = ctx.createOscillator();
-			lfo.frequency.value = 0.15;
-			const lg = ctx.createGain();
-			lg.gain.value = 300;
-			lfo.connect(lg).connect(f.frequency);
-			lfo.start();
-			stops.push(lfo);
-			g.gain.value = 0.5;
-		} else if (synth === 'steps') {
-			f.type = 'bandpass';
-			f.frequency.value = 2200;
-			g.gain.value = 0;
-			const lfo = ctx.createOscillator();
-			lfo.type = 'square';
-			lfo.frequency.value = 1.8;
-			const lg = ctx.createGain();
-			lg.gain.value = 0.25;
-			lfo.connect(lg).connect(g.gain);
-			lfo.start();
-			stops.push(lfo);
-		} else {
-			f.type = 'bandpass';
-			f.frequency.value = 700;
-			f.Q.value = 4;
-			g.gain.value = 0;
-			const lfo = ctx.createOscillator();
-			lfo.frequency.value = 4.2;
-			const lg = ctx.createGain();
-			lg.gain.value = 0.35;
-			lfo.connect(lg).connect(g.gain);
-			lfo.start();
-			stops.push(lfo);
-		}
-		src.connect(f).connect(g).connect(out);
-		src.start();
-		stops.push(src);
-	}
-	v = { out, stop: () => stops.forEach((s) => s.stop()), lane: null, el: null, src: null };
-	voices.set(clip.id, v);
-	return v;
+	return src ? mediaVoice(clip, src) : null;
 }
 
 function dropVoice(id) {
@@ -339,20 +257,21 @@ function updateAudio() {
 		}
 	for (const lane of doc.lanes) {
 		const s = strip(lane);
-		s.fader.gain.setTargetAtTime(laneAudible(doc, lane) ? db(lane.vol) : 0, now, 0.03);
-		s.pan.pan.setTargetAtTime(lane.pan, now, 0.03);
-		const eq = lane.inserts.find((i) => i.type === 'eq');
-		s.lo.gain.value = eq?.on ? eq.low : 0;
-		s.mid.gain.value = eq?.on ? eq.mid : 0;
-		s.hi.gain.value = eq?.on ? eq.high : 0;
-		const fl = lane.inserts.find((i) => i.type === 'filter');
-		s.filt.frequency.value = fl?.on ? fl.cutoff : 20000;
-		const cp = lane.inserts.find((i) => i.type === 'comp');
-		s.comp.threshold.value = cp?.on ? cp.threshold : 0;
-		s.comp.ratio.value = cp?.on ? cp.ratio : 1;
-		const aux = (id) => doc.aux.find((a) => a.id === id);
-		s.sendR.gain.value = aux('R1')?.mute ? 0 : db(lane.sends.R1) * db(aux('R1')?.vol ?? 0);
-		s.sendD.gain.value = aux('D1')?.mute ? 0 : db(lane.sends.D1) * db(aux('D1')?.vol ?? 0);
+		const st = stripOf(mixRule, lane, doc.aux, laneAudible(doc, lane));
+		s.fader.gain.setTargetAtTime(st.fader, now, 0.03);
+		s.pan.pan.setTargetAtTime(st.pan, now, 0.03);
+		s.lo.gain.value = st.eq.low;
+		s.mid.gain.value = st.eq.mid;
+		s.hi.gain.value = st.eq.high;
+		s.filt.frequency.value = st.cutoff ?? ctx.sampleRate / 2;
+		s.comp.threshold.value = st.comp ? st.comp.threshold : 0;
+		s.comp.ratio.value = st.comp ? st.comp.ratio : 1;
+		if (st.comp) {
+			s.comp.attack.value = st.comp.attack / 1000;
+			s.comp.release.value = st.comp.release / 1000;
+		}
+		s.sendR.gain.value = st.sends[mixRule.reverb.id];
+		s.sendD.gain.value = st.sends[mixRule.delay.id];
 	}
 	const live = new Set();
 	for (const c of doc.audio) {
@@ -360,13 +279,14 @@ function updateAudio() {
 		const lane = doc.lanes.find((l) => l.id === c.lane);
 		if (!lane) continue;
 		const v = voice(c);
+		if (!v) continue;
 		if (v.lane !== lane.id) {
 			v.out.disconnect();
 			v.out.connect(strip(lane).input);
 			v.lane = lane.id;
 		}
-		if (v.el) follow(v, c, t);
-		v.out.gain.setTargetAtTime(envelope(c, t) * (v.el ? 1 : 0.5), now, 0.02);
+		follow(v, c, t);
+		v.out.gain.setTargetAtTime(envelope(c, t), now, 0.02);
 	}
 	for (const c of doc.clips) {
 		if (t < c.start - CLIP_LEAD || t >= c.start + c.dur) continue;
@@ -442,23 +362,6 @@ function silence() {
 	}
 	clearTimeout(silenceTimer);
 	silenceTimer = setTimeout(resetMeters, 120);
-}
-
-export function audition(type, seconds = 2.5) {
-	ensureAudio();
-	if (!ctx) return;
-	monitor.gain.value = ui.muted ? 0 : ui.monitorVol;
-	const o = ctx.createOscillator();
-	const g = ctx.createGain();
-	o.type = type === 'Impact' ? 'sine' : 'triangle';
-	o.frequency.value = type === 'Impact' ? 60 : type === 'Musique' ? 220 : 400;
-	if (type === 'Impact') o.frequency.exponentialRampToValueAtTime(35, ctx.currentTime + seconds);
-	g.gain.setValueAtTime(0.0001, ctx.currentTime);
-	g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
-	g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + seconds);
-	o.connect(g).connect(master);
-	o.start();
-	o.stop(ctx.currentTime + seconds);
 }
 
 export function dispose() {

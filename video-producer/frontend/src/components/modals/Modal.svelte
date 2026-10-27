@@ -12,7 +12,7 @@
 	import { ui } from '../../lib/state.svelte.js';
 	import Icon from '../Icon.svelte';
 
-	let { title, subtitle = '', icon = null, width = 560, sim = false, children, footer, onclose = null } = $props();
+	let { title, subtitle = '', icon = null, width = 560, children, footer, onclose = null } = $props();
 
 	let dialog = $state();
 	let layer = null;
@@ -78,7 +78,6 @@
 				<h2 class="text-md font-semibold">{title}</h2>
 				{#if subtitle}<p class="text-xs text-fg-muted">{subtitle}</p>{/if}
 			</div>
-			{#if sim}<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>{/if}
 			<span class="-mr-1.5 -mt-1 inline-flex" data-close>
 				<HostUi name="IconButton" props={{ icon: hostIconName('x'), label: t('shell.window.close'), tooltip: t('shell.window.close'), kbd: t('commands.kbd.escape'), size: 'sm', class: 'vp-h7', onclick: close }} />
 			</span>

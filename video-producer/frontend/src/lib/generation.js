@@ -241,11 +241,7 @@ export function takeAsset(take, name) {
 		generated: true,
 		quality: take.quality,
 		resultId: take.id,
-		role: null,
-		synth: null,
-		transcript: null,
-		character: null,
-		lipSync: null
+		role: null
 	};
 }
 

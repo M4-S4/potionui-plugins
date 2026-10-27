@@ -60,12 +60,9 @@
 	"story.matchColor": "Match color",
 	"story.continuityOk": "Color and identity matches are consistent.",
 	"story.continuityNone": "No match to check yet: the shots have no image.",
-	"mixer.soundDesign": "Sound design workshop",
-	"mixer.soundDesignHint": "Ambiences, foley, textures, impacts",
 	"mixer.sounds": "Sounds",
 	"mixer.noSounds": "No sounds in this project.",
 	"mixer.soundMeta": "{role} · {duration}",
-	"mixer.soundMetaPrepared": "{role} · {duration} · prepared (simulated)",
 	"mixer.addAtPlayhead": "Add {name} at the playhead",
 	"mixer.addAtPlayheadTip": "Add at the playhead",
 	"mixer.roles": "Roles",
@@ -339,7 +336,7 @@
 	"director.bible.noReferences": "No linked picture or voice: only its text is sent.",
 	"mixer.count.one": "{count} sound",
 	"mixer.count.other": "{count} sounds",
-	"mixer.noSoundsHint": "Import music, voices or ambiences; the Sound design workshop prepares some too.",
+	"mixer.noSoundsHint": "Import music, voices or ambiences.",
 	"director.aside.noneTitle": "No shot",
 	"director.aside.noCardTitle": "No card chosen"
 }

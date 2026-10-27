@@ -26,7 +26,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 
 function lane(id, extra = {}) {
-	return { id, name: id, role: 'Ambiance', vol: 0, pan: 0, mute: false, solo: false, automation: 'off', sends: { R1: -60, D1: -60 }, inserts: [], ...extra };
+	return { id, name: id, role: 'Ambiance', vol: 0, pan: 0, mute: false, solo: false, sends: { R1: -60, D1: -60 }, inserts: [], ...extra };
 }
 
 function makeDoc({ lanes = ['A1', 'A2', 'A3'], video, audio = [], clips = [] } = {}) {
@@ -170,7 +170,7 @@ test('migrate: the document migration runs the track migration', () => {
 test('preview: the playback engine applies the shared rule to lanes and shot sound', () => {
 	const source = readFileSync(join(here, 'playback.svelte.js'), 'utf-8');
 	assert.match(source, /import \{ clipSoundAudible, laneAudible \} from '\.\/tracks\.js';/);
-	assert.match(source, /laneAudible\(doc, lane\) \? db\(lane\.vol\) : 0/);
+	assert.match(source, /stripOf\(mixRule, lane, doc\.aux, laneAudible\(doc, lane\)\)/);
 	assert.match(source, /clipSoundAudible\(doc, c\) \? envelope\(c, t\) : 0/);
 	assert.doesNotMatch(source, /lanes\.some\(\(l\) => l\.solo\)/, 'no second copy of the solo rule');
 });

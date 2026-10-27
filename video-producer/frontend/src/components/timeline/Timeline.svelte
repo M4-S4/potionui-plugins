@@ -734,7 +734,7 @@
 		onkeydown={(e) => e.key === 'Enter' && select('audio', a.id)}
 	>
 		<svg class="absolute inset-x-0 bottom-0" width={w} height="22" aria-hidden="true">
-			<polygon points={src?.src ? (peaks ? peakWaveform(peaks, w, 22, a.srcIn, pps) : '') : waveform(a.assetId, w, 22, a.srcIn, pps, src?.synth)} fill="rgb(var(--{row.color}))" opacity="0.85" />
+			<polygon points={src?.src ? (peaks ? peakWaveform(peaks, w, 22, a.srcIn, pps) : '') : waveform(a.assetId, w, 22, a.srcIn, pps)} fill="rgb(var(--{row.color}))" opacity="0.85" />
 		</svg>
 		<div class="absolute left-1.5 top-0.5 flex items-center gap-1 text-xs font-medium text-fg">
 			{#if reference}<span class="flex shrink-0 text-signal" role="img" title={t('timeline.audio.reference')} aria-label={t('timeline.audio.reference')} data-reference-item><Icon name="sparkles" class="h-3 w-3" /></span>{/if}

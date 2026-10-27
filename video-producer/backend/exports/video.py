@@ -1,11 +1,13 @@
 import asyncio
 import logging
+import math
 import os
 import re
 import subprocess
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Collection, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import psutil
 
@@ -13,10 +15,23 @@ from .. import core_bridge, director, takes
 from ..core_bridge import User
 from . import levels, match, media, slug
 from .common import asset_of, fps_of, seq_duration, timing_error
+from .mix import RULE as MIX_RULE, delay_taps, gain_of, pan_of, strip_of, write_impulse
 
 logger = logging.getLogger("plugins.video-producer")
 
-FORMATS = ("web", "social")
+FORMATS = ("web", "social", "master", "archive")
+
+LIBRARY_FORMATS = ("web", "social")
+
+EXTENSIONS = {"master": "mov", "web": "mp4", "social": "mp4", "archive": "mp4"}
+
+SUFFIXES = {"archive": "_archive"}
+
+ROLE_STEMS = (("Dialogue", "dialogue"), ("Musique", "music"), ("Ambiance", "ambience"), ("SFX", "sfx"))
+
+SHOTS_STEM = "shots"
+
+STEM_NAMES = (*(name for _, name in ROLE_STEMS), SHOTS_STEM)
 
 RESOLUTIONS = {"720p": 720, "1080p": 1080, "4K": 2160}
 
@@ -44,7 +59,11 @@ MESSAGE_LIMIT = 300
 
 EPSILON = 1e-6
 
-MEZZANINE = "mezzanine.mp4"
+MEZZANINE = "mezzanine.mkv"
+
+IMPULSE = "reverb.wav"
+
+MIX_STEM = "mix-{}.wav"
 
 GRAPH = "graph.txt"
 
@@ -66,6 +85,10 @@ LEGACY_GRAPH_OPTION = "-filter_complex_script"
 
 GRAPH_OPTION_SINCE = 7
 
+IMPULSE_OPTION = "irnorm=-1"
+
+LEGACY_IMPULSE_OPTION = "gtype=none"
+
 VERSION_TIMEOUT = 15
 
 RELEASE = re.compile(r"\bversion\s+n?(\d+)")
@@ -84,11 +107,15 @@ VIDEO_ENCODER = ("-c:v", "libx264", "-preset", "veryfast", "-crf", "14", "-pix_f
 
 AUDIO_LAYOUT = ("-ar", str(SAMPLE_RATE), "-ac", "2")
 
-ENCODER = (*VIDEO_ENCODER, "-c:a", "aac", "-b:a", "192k", *AUDIO_LAYOUT, "-movflags", "+faststart")
+ENCODER = (*VIDEO_ENCODER, "-c:a", "pcm_f32le", *AUDIO_LAYOUT)
 
-PART_ENCODER = (*VIDEO_ENCODER, "-c:a", "pcm_f32le", *AUDIO_LAYOUT)
+PART_ENCODER = ENCODER
 
 LANES_ENCODER = ("-c:a", "pcm_f32le", *AUDIO_LAYOUT)
+
+STEM_ENCODER = ("-c:a", "pcm_f32le", *AUDIO_LAYOUT, "-rf64", "auto")
+
+STEM_DELIVERY = ("-c:a", "pcm_s24le", *AUDIO_LAYOUT, "-rf64", "auto")
 
 OPTION_SPECIAL = "\\':"
 
@@ -100,10 +127,25 @@ MIN_CROSSFADE = 0.02
 
 CROSSFADE_CURVE = "qsin"
 
+MONO_UP = "pan=stereo|c0=c0|c1=c0"
+
 DELIVERY = (
     "-c:v", "libx264", "-crf", "26", "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
     "-c:a", "aac", "-b:a", "96k", "-f", "mp4",
 )
+
+MASTER_DELIVERY = (
+    "-c:v", "prores_ks", "-profile:v", "3", "-pix_fmt", "yuv422p10le",
+    "-c:a", "pcm_s24le", "-f", "mov",
+)
+
+ARCHIVE_DELIVERY = (
+    "-c:v", "libx265", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p10le", "-tag:v", "hvc1",
+    "-x265-params", "log-level=error", "-movflags", "+faststart",
+    "-c:a", "aac", "-b:a", "256k", "-f", "mp4",
+)
+
+DELIVERIES = {"master": MASTER_DELIVERY, "web": DELIVERY, "social": DELIVERY, "archive": ARCHIVE_DELIVERY}
 
 Segment = Tuple[float, Optional[Mapping[str, Any]]]
 
@@ -149,9 +191,20 @@ def job_folder(job: Mapping[str, Any]) -> Path:
     return exports_root(job["user_id"]) / job["id"]
 
 
-def file_name(project_name: str, resolution: str) -> str:
-    """The name of an exported video: <slug>_<resolution>.mp4, the slug cut to 80 characters."""
-    return f"{slug(project_name)[:SLUG_LIMIT].rstrip('._')}_{resolution}.mp4"
+def file_name(project_name: str, resolution: str, fmt: str = "web", stems: bool = False) -> str:
+    """The name of an export: <slug>_<resolution>.mp4, .mov for the master, _archive.mp4 for the archive, the slug cut to 80 characters; with the stems, <slug>_<resolution>_<format>_stems.zip."""
+    base = f"{slug(project_name)[:SLUG_LIMIT].rstrip('._')}_{resolution}"
+    return f"{base}_{fmt}_stems.zip" if stems else f"{base}{SUFFIXES.get(fmt, '')}.{EXTENSIONS.get(fmt, 'mp4')}"
+
+
+def download_name(project_name: str, resolution: str, fmt: str = "web", stems: bool = False) -> str:
+    """The name an export downloads under, without its extension: the project's name as it is, then what file_name adds to its slug."""
+    return f"{project_name}_{resolution}_{fmt}_stems" if stems else f"{project_name}_{resolution}{SUFFIXES.get(fmt, '')}"
+
+
+def stem_file(video: str, name: str) -> str:
+    """The name of a stem next to the video it goes with: the video's name without its extension, then the stem."""
+    return f"{Path(video).stem}_{name}.wav"
 
 
 def resolution_of(doc: Mapping[str, Any], requested: Optional[str] = None) -> str:
@@ -268,13 +321,15 @@ def clip_heard(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> bool:
 
 
 def audible(doc: Mapping[str, Any]) -> List[Tuple[Mapping[str, Any], Mapping[str, Any]]]:
-    """The audio items heard in the mix with their lane: items of a missing or muted lane left out, soloed lanes alone when any track is, the video track included."""
+    """The audio items heard in the mix with their lane: items of a missing or muted lane, of a lane whose fader is down to silence, or at a gain down to silence, left out, soloed lanes alone when any track is, the video track included."""
     lanes = {lane["id"]: lane for lane in doc.get("lanes") or []}
     soloed = any_solo(doc)
     playing = []
     for item in doc.get("audio") or []:
         lane = lanes.get(item.get("lane"))
         if lane is None or lane.get("mute") or (soloed and not lane.get("solo")) or float(item.get("dur") or 0) <= EPSILON:
+            continue
+        if gain_of(lane.get("vol")) == 0 or gain_of(item.get("gain")) == 0:
             continue
         playing.append((item, lane))
     return playing
@@ -386,8 +441,8 @@ class _Inputs:
         return index
 
 
-def sound_chain(item: Mapping[str, Any], lane: Mapping[str, Any], origin: float = 0.0, seek: float = 0.0) -> List[str]:
-    """The filters that play an audio item at its place in a mix starting at origin seconds on the timeline: its part of the source, its gain with its track's volume and its fades, the part before origin cut off. Seek is the time of the source its input was sought to: the filters then take the source from there, timed as the whole item."""
+def sound_chain(item: Mapping[str, Any], lane: Mapping[str, Any], origin: float = 0.0, seek: float = 0.0, mono: bool = False) -> List[str]:
+    """The filters that play an audio item at its place in a mix starting at origin seconds on the timeline: its part of the source, its gain with the volume of the lane given and its fades, the part before origin cut off; a mono source on both channels at its full level when mono is set, as the page's console plays it. Seek is the time of the source its input was sought to: the filters then take the source from there, timed as the whole item."""
     dur = float(item["dur"])
     start = float(item.get("start") or 0)
     gain = float(item.get("gain") or 0) + float(lane.get("vol") or 0)
@@ -399,6 +454,7 @@ def sound_chain(item: Mapping[str, Any], lane: Mapping[str, Any], origin: float 
         f"atrim=start={num(trim)}:duration={num(dur - head)}",
         f"asetpts=PTS-STARTPTS+{num(head)}/TB" if head > EPSILON else "asetpts=PTS-STARTPTS",
         f"aresample={SAMPLE_RATE}",
+        *([MONO_UP] if mono else []),
         "aformat=sample_fmts=fltp:channel_layouts=stereo",
         f"volume={num(gain)}dB",
         *_fades(item, dur, "afade"),
@@ -479,8 +535,8 @@ def runs(doc: Mapping[str, Any], sounds: Mapping[str, str]) -> List[List[Heard]]
     return result
 
 
-def _crossfaded(run: Sequence[Heard], sources: Sequence[int], label: str) -> List[str]:
-    """The chains of a run of neighbours: each item played with its extra source and without its own fade where it crossfades, every pair joined by acrossfade, the whole set at the start of its first item."""
+def _crossfaded(run: Sequence[Heard], sources: Sequence[int], label: str, lifts: Sequence[bool] = ()) -> List[str]:
+    """The chains of a run of neighbours: each item played with its extra source and without its own fade where it crossfades, at its own gain, a source whose lift is set on both channels, every pair joined by acrossfade, the whole set at the start of its first item."""
     chains: List[str] = []
     name = label.strip("[]")
     last = len(run) - 1
@@ -495,7 +551,8 @@ def _crossfaded(run: Sequence[Heard], sources: Sequence[int], label: str) -> Lis
             "fadeIn": item.get("fadeIn") if k == 0 else 0,
             "fadeOut": item.get("fadeOut") if k == last else 0,
         }
-        steps = [step for step in sound_chain(stretched, heard.lane) if not step.startswith("adelay=")]
+        lifted = bool(lifts[k]) if k < len(lifts) else False
+        steps = [step for step in sound_chain(stretched, {}, mono=lifted) if not step.startswith("adelay=")]
         chains.append(f"[{source}:a]{','.join([*steps, f'apad=whole_dur={num(dur)}'])}[{name}x{k}]")
     joined = f"[{name}x0]"
     for k in range(1, len(run)):
@@ -507,19 +564,153 @@ def _crossfaded(run: Sequence[Heard], sources: Sequence[int], label: str) -> Lis
     return chains
 
 
-def _lanes(doc: Mapping[str, Any], sounds: Mapping[str, str], inputs: _Inputs) -> Tuple[List[str], List[str]]:
-    """The chains of the audio items heard in the mix, each from its own input, neighbours crossfaded when the master asks for it, and their labels."""
+def _lanes(doc: Mapping[str, Any], sounds: Mapping[str, str], inputs: _Inputs, mono: Collection[str] = ()) -> Tuple[List[str], List[str]]:
+    """The chains of the audio items heard in the mix, each from its own input at its own gain, its track's volume left to the strip, neighbours crossfaded when the master asks for it, a file among mono on both channels, and their labels, one per run in the order of runs()."""
     chains: List[str] = []
     labels: List[str] = []
     for run in runs(doc, sounds):
-        sources = [inputs.sound(sounds[heard.item["id"]]) for heard in run]
+        files = [sounds[heard.item["id"]] for heard in run]
+        sources = [inputs.sound(path) for path in files]
+        lifts = [str(path) in mono for path in files]
         label = f"[m{len(labels)}]"
         if len(run) == 1:
-            chains.append(f"[{sources[0]}:a]{','.join(sound_chain(run[0].item, run[0].lane))}{label}")
+            chains.append(f"[{sources[0]}:a]{','.join(sound_chain(run[0].item, {}, mono=lifts[0]))}{label}")
         else:
-            chains.extend(_crossfaded(run, sources, label))
+            chains.extend(_crossfaded(run, sources, label, lifts))
         labels.append(label)
     return chains, labels
+
+
+def _pan_terms(left: float, right: float) -> str:
+    terms = [f"{num(gain)}*c{channel}" for channel, gain in ((0, left), (1, right)) if num(gain) != "0"]
+    return "+".join(terms) or "0*c0"
+
+
+def strip_filters(strip: Mapping[str, Any], vol: float) -> List[str]:
+    """The ffmpeg filters of a track's strip as strip_of describes it, wired as the page's console: the three bands of the equalizer, the low-pass filter, the compressor, the pan and the fader at vol dB; nothing for what leaves the sound as it is."""
+    filters: List[str] = []
+    for band in ("low", "mid", "high"):
+        gain = strip["eq"][band]
+        if not gain:
+            continue
+        spec = MIX_RULE["eq"][band]
+        if spec["type"] == "peaking":
+            filters.append(f"equalizer=f={num(spec['frequency'])}:t=q:w={num(spec['q'])}:g={num(gain)}")
+        else:
+            filters.append(f"{spec['type']}=f={num(spec['frequency'])}:t=s:w={num(MIX_RULE['eq']['slope'])}:g={num(gain)}")
+    if strip["cutoff"] is not None:
+        filters.append(f"lowpass=f={num(strip['cutoff'])}:p=2:t=q:w={num(math.pow(10, MIX_RULE['filter']['qDb'] / 20))}")
+    comp = strip["comp"]
+    if comp is not None:
+        filters.append(
+            f"acompressor=threshold={num(math.pow(10, comp['threshold'] / 20))}:ratio={num(comp['ratio'])}"
+            f":attack={num(comp['attack'])}:release={num(comp['release'])}:makeup={num(comp['makeup'])}"
+            f":knee={num(max(math.pow(10, comp['knee'] / 20), 1.0))}"
+            f":detection={MIX_RULE['comp']['detection']}:link={MIX_RULE['comp']['link']}"
+        )
+    if strip["pan"]:
+        gains = pan_of(strip["pan"])
+        filters.append(f"pan=stereo|c0={_pan_terms(gains['ll'], gains['rl'])}|c1={_pan_terms(gains['lr'], gains['rr'])}")
+    if vol:
+        filters.append(f"volume={num(vol)}dB")
+    return filters
+
+
+def _summed(labels: Sequence[str], then: Sequence[str] = ()) -> str:
+    """The labels and the filters that sum them, then the filters given: amix when there are several."""
+    steps = [f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0"] if len(labels) > 1 else []
+    steps.extend(then)
+    return f"{''.join(labels)}{','.join(steps or ['anull'])}"
+
+
+def _with_impulse_option(options: Mapping[str, Any], paths: Mapping[str, Any]) -> Mapping[str, Any]:
+    if options.get("impulse_option"):
+        return options
+    return {**options, "impulse_option": impulse_option_of(paths.get("graph_option") or LEGACY_GRAPH_OPTION)}
+
+
+def impulse_option_of(graph_option: str) -> str:
+    """How afir is told to take the impulse response as it is: gtype=none for an ffmpeg older than 7, which reads its graph with -filter_complex_script, irnorm=-1 since, where gtype became a gain of its own."""
+    return LEGACY_IMPULSE_OPTION if graph_option == LEGACY_GRAPH_OPTION else IMPULSE_OPTION
+
+
+def master_level(doc: Mapping[str, Any]) -> Optional[str]:
+    """The filter of the master's fader, None at 0 dB: volume=0 when it is down to silence."""
+    master = doc.get("master")
+    vol = master.get("vol") if isinstance(master, Mapping) else 0
+    if gain_of(vol) == 0:
+        return "volume=0"
+    return f"volume={num(vol)}dB" if vol else None
+
+
+def _console(doc: Mapping[str, Any], sounds: Mapping[str, str], inputs: _Inputs, options: Mapping[str, Any]) -> List[str]:
+    """The chains that play the audio items through the console as the page does and mix them with the shots' sound at [bed] into [aout]: the items of each track summed over the whole sequence and run through its strip, the tracks of each role summed with what they send to the reverb (afir on the impulse response at options["impulse"]) and to the delay (its echoes unrolled), the roles and the shots' sound summed under the master's fader. With options["stems"], the shots' sound and each role also at [stem_<name>], under the master's fader and as long as the sequence, a role nothing plays in silent."""
+    length = num(timeline(doc)[1])
+    chains, labels = _lanes(doc, sounds, inputs, set(options.get("mono") or ()))
+    tracks: Dict[str, List[str]] = {}
+    lanes: Dict[str, Mapping[str, Any]] = {}
+    for label, run in zip(labels, runs(doc, sounds)):
+        tracks.setdefault(run[0].lane["id"], []).append(label)
+        lanes[run[0].lane["id"]] = run[0].lane
+    reverb, delay = MIX_RULE["reverb"]["id"], MIX_RULE["delay"]["id"]
+    known = {role for role, _ in ROLE_STEMS}
+    parts: Dict[str, List[str]] = {}
+    sent: Dict[Tuple[str, str], List[str]] = {}
+    for n, (lane_id, items) in enumerate(tracks.items()):
+        lane = lanes[lane_id]
+        strip = strip_of(lane, doc.get("aux"))
+        role = lane.get("role") if lane.get("role") in known else ROLE_STEMS[-1][0]
+        buses = [bus for bus in (reverb, delay) if strip["sends"][bus] > 0]
+        outs = [f"[t{n}]", *(f"[t{n}{bus}]" for bus in buses)]
+        steps = [f"apad=whole_dur={length}", f"atrim=duration={length}", *strip_filters(strip, float(lane.get("vol") or 0))]
+        chains.append(f"{_summed(items, [*steps, *([f'asplit={len(outs)}'] if buses else [])])}{''.join(outs)}")
+        parts.setdefault(role, []).append(f"[t{n}]")
+        for bus in buses:
+            chains.append(f"[t{n}{bus}]volume={num(20 * math.log10(strip['sends'][bus]))}dB[t{n}{bus}s]")
+            sent.setdefault((role, bus), []).append(f"[t{n}{bus}s]")
+    wet = [role for role, _ in ROLE_STEMS if (role, reverb) in sent]
+    if wet:
+        impulse = inputs.sound(options["impulse"])
+        responses = [f"[{impulse}:a]"] if len(wet) == 1 else [f"[ir{k}]" for k in range(len(wet))]
+        if len(wet) > 1:
+            chains.append(f"[{impulse}:a]asplit={len(wet)}{''.join(responses)}")
+        option = options.get("impulse_option") or LEGACY_IMPULSE_OPTION
+        for role, response in zip(wet, responses):
+            name, senders = dict(ROLE_STEMS)[role], sent[(role, reverb)]
+            source = senders[0] if len(senders) == 1 else f"[{name}{reverb}in]"
+            if len(senders) > 1:
+                chains.append(f"{_summed(senders)}{source}")
+            chains.append(f"{source}{response}afir={option}[{name}{reverb}]")
+            parts[role].append(f"[{name}{reverb}]")
+    taps = delay_taps()
+    echoes = f"aecho=in_gain=0:out_gain=1:delays={'|'.join(num(tap['seconds'] * 1000) for tap in taps)}:decays={'|'.join(num(tap['gain']) for tap in taps)}"
+    for role, name in ROLE_STEMS:
+        if (role, delay) in sent:
+            chains.append(f"{_summed(sent[(role, delay)], [echoes, f'atrim=duration={length}'])}[{name}{delay}]")
+            parts[role].append(f"[{name}{delay}]")
+    heard = [(name, parts[role]) for role, name in ROLE_STEMS if parts.get(role)]
+    for name, labels in heard:
+        chains.append(f"{_summed(labels)}[{name}]")
+    level = master_level(doc)
+    mains = ["[bed]", *(f"[{name}]" for name, _ in heard)]
+    if options.get("stems"):
+        playing = {SHOTS_STEM: "[bed]", **{name: f"[{name}]" for name, _ in heard}}
+        mains = []
+        for name in STEM_NAMES:
+            stem = f"[stem_{name}]"
+            if name not in playing:
+                chains.append(f"anullsrc=r={SAMPLE_RATE}:cl=stereo,atrim=duration={length}{stem}")
+                continue
+            chains.append(f"{playing[name]}asplit=2[{name}m][{name}s]")
+            chains.append(f"[{name}s]{','.join([*([level] if level else []), f'apad=whole_dur={length}', f'atrim=duration={length}'])}{stem}")
+            mains.append(f"[{name}m]")
+        mains.sort(key=lambda label: label != f"[{SHOTS_STEM}m]")
+    tail = [level] if level else []
+    if len(mains) == 1:
+        chains.append(f"{mains[0]}{','.join(tail or ['anull'])}[aout]")
+    else:
+        chains.append(f"{''.join(mains)}{','.join([f'amix=inputs={len(mains)}:duration=first:dropout_transition=0:normalize=0', *tail])}[aout]")
+    return chains
 
 
 def _assembly(
@@ -539,6 +730,7 @@ def _assembly(
     graph: List[str] = []
     pairs: List[str] = []
     shots = _shots(doc, files, options, timeline(doc)[0] if segments is None else segments)
+    mono = set(options.get("mono") or ())
     for index, shot in enumerate(shots):
         length = num(shot.dur)
         black = f"color=c=black:s={width}x{height}:r={fps}:d={length},setsar=1,format=yuv420p[v{index}]"
@@ -569,9 +761,10 @@ def _assembly(
                 ]
                 graph.append(f"[{source}:v]{','.join(video)}[v{index}]")
             if shot.sound:
+                lift = f"{MONO_UP}," if str(shot.entry["path"]) in mono else ""
                 graph.append(
                     f"[{source}:a]atrim=start={num(shot.start)}:duration={length},asetpts=PTS-STARTPTS,"
-                    f"aresample={SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                    f"aresample={SAMPLE_RATE},{lift}aformat=sample_fmts=fltp:channel_layouts=stereo,"
                     f"apad=whole_dur={length},atrim=duration={length}{''.join(',' + fade for fade in _fades(shot.clip, shot.dur, 'afade'))}[a{index}]"
                 )
             else:
@@ -580,12 +773,7 @@ def _assembly(
     graph.append(f"{''.join(pairs)}concat=n={len(shots)}:v=1:a=1[vout][{'bed' if mix else 'aout'}]")
     if not mix:
         return inputs.args, graph
-    chains, labels = _lanes(doc, sounds, inputs)
-    graph.extend(chains)
-    if labels:
-        graph.append(f"[bed]{''.join(labels)}amix=inputs={len(labels) + 1}:duration=first:dropout_transition=0:normalize=0[aout]")
-    else:
-        graph.append("[bed]anull[aout]")
+    graph.extend(_console(doc, sounds, inputs, options))
     return inputs.args, graph
 
 
@@ -629,7 +817,7 @@ def filter_graph(
     paths: Mapping[str, Any],
 ) -> str:
     """The filter graph that assembles, grades, fades and mixes the sequence in one run: the text of the file build_command's run reads."""
-    return ";".join(_assembly(doc, files, options, paths.get("audio") or {})[1])
+    return ";".join(_assembly(doc, files, _with_impulse_option(options, paths), paths.get("audio") or {})[1])
 
 
 def graph_option_of(banner: str) -> str:
@@ -686,23 +874,33 @@ def build_command(
     paths: Mapping[str, Any],
 ) -> List[str]:
     """The one ffmpeg run that writes the mezzanine file, its filter graph read from the file at paths["graph"] by the option paths["graph_option"] (-filter_complex_script when absent); with paths["cwd"], run from that folder, the input files are named relative to it."""
-    inputs, _ = _assembly(doc, files, options, paths.get("audio") or {}, paths.get("cwd"))
+    inputs, _ = _assembly(doc, files, _with_impulse_option(options, paths), paths.get("audio") or {}, paths.get("cwd"))
     _, total = timeline(doc)
     return _command(paths, inputs, ENCODER, total, fps_of(doc))
 
 
 def convert_command(
-    ffmpeg: str, mezzanine: Path, final: Path, size: Tuple[int, int], fps: Any, audio_filter: Optional[str] = None
+    ffmpeg: str, mezzanine: Path, final: Path, size: Tuple[int, int], fps: Any, audio_filter: Optional[str] = None, fmt: str = "web"
 ) -> List[str]:
-    """The ffmpeg run that writes the delivery file from the mezzanine with the host converter's settings: H.264 at crf 26 with the slow preset, AAC at 96 kb/s, an MP4 that plays while it downloads; the sound through audio_filter when given."""
+    """The ffmpeg run that writes the delivery file from the mezzanine: for the web and social formats the host converter's settings (H.264 at crf 26 with the slow preset, AAC at 96 kb/s, an MP4 that plays while it downloads), for the master ProRes 422 HQ in 10 bits with 24-bit PCM in a MOV, for the archive H.265 in 10 bits at crf 18 with AAC at 256 kb/s in an MP4; the sound through audio_filter when given."""
     rate = num(fps)
     return [
         ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
         "-i", str(mezzanine), "-map", "0:v:0", "-map", "0:a:0?",
         "-vf", f"scale='min({size[0]},iw)':-2:flags=lanczos,fps={rate}", "-r", rate, "-map_metadata", "-1",
         *(["-af", audio_filter] if audio_filter else []),
-        *DELIVERY, str(final),
+        *DELIVERIES.get(fmt, DELIVERY), str(final),
     ]
+
+
+def stems_command(ffmpeg: str, stems: Mapping[str, Path], finals: Mapping[str, Path], gain: float = 0.0) -> List[str]:
+    """The ffmpeg run that writes each stem of the mezzanine as a 24-bit WAV, at the gain in dB the loudness target gave the mix, so that the stems still add up to its sound."""
+    command = [ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats"]
+    for path in stems.values():
+        command.extend(["-i", str(path)])
+    for index, name in enumerate(stems):
+        command.extend(["-map", f"{index}:a:0", *(["-af", f"volume={num(gain)}dB"] if gain else []), *STEM_DELIVERY, str(finals[name])])
+    return command
 
 
 def _progress_seconds(line: str) -> Optional[float]:
@@ -806,32 +1004,36 @@ async def _premix(
     folder: Path,
     total: float,
     on_process: Optional[Callable[[Any], Any]],
+    mono: Collection[str] = (),
 ) -> Tuple[Mapping[str, Any], Mapping[str, str]]:
-    """The document and sounds the last run mixes: as they are with at most MIX_INPUTS audio items, else each batch of at most that many items mixed first into a file of its own, heard as one item, a run of crossfading neighbours kept in one batch unless it alone is longer."""
+    """The document and sounds the last run mixes: as they are with at most MIX_INPUTS audio items, else the items of each track mixed first, in batches of at most that many, into files of their own, each heard as one item of its track, so that the strip of the track still plays them; a run of crossfading neighbours kept in one batch unless it alone is longer."""
     playing = [item for item, _ in audible(doc) if item["id"] in sounds]
     if len(playing) <= MIX_INPUTS:
         return doc, sounds
     cwd = common_folder([sounds[item["id"]] for item in playing])
-    batches: List[List[Mapping[str, Any]]] = [[]]
+    tracks: Dict[str, List[List[Mapping[str, Any]]]] = {}
     for run in runs(doc, sounds):
+        batches = tracks.setdefault(run[0].lane["id"], [[]])
         for piece in [run] if len(run) <= MIX_INPUTS else [[heard] for heard in run]:
             if len(batches[-1]) + len(piece) > MIX_INPUTS:
                 batches.append([])
             batches[-1].extend(heard.item for heard in piece)
     mixes: Dict[str, str] = {}
-    for number, batch in enumerate(batches):
+    items: List[Dict[str, Any]] = []
+    for lane_id, batch in [(lane_id, batch) for lane_id, batches in tracks.items() for batch in batches]:
+        number = len(mixes)
         group = {**doc, "audio": batch}
         inputs = _Inputs(cwd=cwd)
-        chains, labels = _lanes(group, sounds, inputs)
-        mix = "anull" if len(labels) == 1 else f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0"
+        chains, labels = _lanes(group, sounds, inputs, set(mono))
+        summed = "anull" if len(labels) == 1 else f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0"
         graph = folder / LANES_GRAPH.format(number)
-        graph.write_text(";".join([*chains, f"{''.join(labels)}{mix}[aout]"]), encoding="utf-8")
+        graph.write_text(";".join([*chains, f"{''.join(labels)}{summed}[aout]"]), encoding="utf-8")
         output = folder / LANES_NAME.format(number)
         run = {**paths, "graph": str(graph), "output": str(output)}
         await assemble(_command(run, inputs.args, LANES_ENCODER, total, maps=("[aout]",)), total, None, on_process, cwd)
         mixes[f"lanes-{number}"] = str(output)
-    items = [{"id": key, "lane": "lanes", "start": 0, "dur": total, "srcIn": 0, "gain": 0} for key in mixes]
-    return {**doc, "lanes": [{"id": "lanes", "vol": 0, "solo": any_solo(doc)}], "audio": items}, mixes
+        items.append({"id": f"lanes-{number}", "lane": lane_id, "start": 0, "dur": total, "srcIn": 0, "gain": 0})
+    return {**doc, "audio": items}, mixes
 
 
 async def _part_length(path: Path, nominal: float) -> float:
@@ -847,11 +1049,12 @@ async def assemble_sequence(
     folder: Path,
     report: Callable[[float, str], bool],
     on_process: Optional[Callable[[Any], Any]] = None,
-) -> None:
-    """Write the mezzanine at paths["output"]: in one ffmpeg run when the sequence opens at most PART_INPUTS inputs, else in parts of consecutive shots that each open at most that many, joined by a last run that mixes the audio items in, so that neither the memory ffmpeg holds per open input nor the length of its command line grows with the sequence."""
+) -> Dict[str, Path]:
+    """Write the mezzanine at paths["output"]: in one ffmpeg run when the sequence opens at most PART_INPUTS inputs, else in parts of consecutive shots that each open at most that many, joined by a last run that mixes the audio items in, so that neither the memory ffmpeg holds per open input nor the length of its command line grows with the sequence. With options["stems"], the last run also writes each stem in the folder; returns their files by name."""
     segments, total = timeline(doc)
     fps = fps_of(doc)
     sounds: Mapping[str, str] = paths.get("audio") or {}
+    options = _with_impulse_option(options, paths)
     files, picks, cwd = shots, options, paths.get("cwd")
     groups = plan_parts(doc, files, picks, segments)
     rounds = _rounds(len(groups))
@@ -882,12 +1085,16 @@ async def assemble_sequence(
     start = MIX_FROM if level else 0.0
     if level:
         _step(report, start)
-    mix_doc, sounds = await _premix(doc, sounds, paths, folder, total, on_process)
+    mix_doc, sounds = await _premix(doc, sounds, paths, folder, total, on_process, options.get("mono") or ())
     cwd = common_folder([entry["path"] for entry in files.values() if entry is not None] + list(sounds.values()))
     inputs, chains = _assembly(mix_doc, files, picks, sounds, cwd, segments)
     Path(paths["graph"]).write_text(";".join(chains), encoding="utf-8")
+    stems = {name: folder / MIX_STEM.format(name) for name in STEM_NAMES} if options.get("stems") else {}
     command = _command(paths, inputs, ENCODER, total, fps)
+    for name, path in stems.items():
+        command.extend(["-map", f"[stem_{name}]", "-t", num(total), *STEM_ENCODER, str(path)])
     await assemble(command, total, _progress(report, start, ASSEMBLE_SHARE - start), on_process, cwd)
+    return stems
 
 
 async def discard(path: Path) -> bool:
@@ -904,18 +1111,25 @@ async def discard(path: Path) -> bool:
 
 
 async def discard_work(folder: Path) -> None:
-    """Delete what only the assembly needs: the filter graphs, the parts, the audio premixes, the color match LUTs and the local copies of the sources."""
-    for pattern in ("graph*.txt", "part-*.mkv", "lanes-*.wav", "match-*.cube", f"{core_bridge.SOURCE_PREFIX}*"):
+    """Delete what only the assembly needs: the filter graphs, the parts, the audio premixes, the reverb's impulse response, the color match LUTs and the local copies of the sources."""
+    for pattern in ("graph*.txt", "part-*.mkv", "lanes-*.wav", IMPULSE, "match-*.cube", f"{core_bridge.SOURCE_PREFIX}*"):
         for path in folder.glob(pattern):
             await discard(path)
+
+
+async def loudness_of(
+    ffmpeg: str, mezzanine: Path, target: float, total: float, on_process: Optional[Callable[[Any], Any]] = None
+) -> Optional[Dict[str, float]]:
+    """What a first ffmpeg run measures of the mezzanine's sound for the loudness target; None for a silent mix; raises ExportError(transcode_failed)."""
+    stderr = await assemble(levels.measure_command(ffmpeg, mezzanine, target), total, None, on_process, None, "transcode_failed")
+    return levels.parse(stderr)
 
 
 async def loudness_filter(
     ffmpeg: str, mezzanine: Path, target: float, total: float, on_process: Optional[Callable[[Any], Any]] = None
 ) -> Optional[str]:
     """The second loudnorm pass for the mezzanine's sound, from a first ffmpeg run that measures it; None for a silent mix; raises ExportError(transcode_failed)."""
-    stderr = await assemble(levels.measure_command(ffmpeg, mezzanine, target), total, None, on_process, None, "transcode_failed")
-    measured = levels.parse(stderr)
+    measured = await loudness_of(ffmpeg, mezzanine, target, total, on_process)
     return None if measured is None else levels.normalize_filter(target, measured, SAMPLE_RATE)
 
 
@@ -929,17 +1143,38 @@ async def convert(
     report: Callable[[float, str], bool],
     on_process: Optional[Callable[[Any], Any]] = None,
     loudness: Optional[float] = None,
-) -> None:
-    """Write the delivery file from the mezzanine, its sound brought to the loudness target in LUFS when given, reporting the transcode step from ASSEMBLE_SHARE to TRANSCODE_END; raises ExportError(transcode_failed)."""
+    fmt: str = "web",
+) -> float:
+    """Write the delivery file of the format from the mezzanine, its sound brought to the loudness target in LUFS when given, reporting the transcode step from ASSEMBLE_SHARE to TRANSCODE_END; returns the gain in dB the target gave the mix, 0 without one; raises ExportError(transcode_failed)."""
 
     def converted(share: float) -> None:
         report(ASSEMBLE_SHARE + share * (TRANSCODE_END - ASSEMBLE_SHARE), "transcode")
 
-    audio_filter = None if loudness is None else await loudness_filter(ffmpeg, mezzanine, loudness, total, on_process)
-    command = convert_command(ffmpeg, mezzanine, final, size, fps, audio_filter)
+    measured = None if loudness is None else await loudness_of(ffmpeg, mezzanine, loudness, total, on_process)
+    audio_filter = None if measured is None else levels.normalize_filter(loudness, measured, SAMPLE_RATE)
+    command = convert_command(ffmpeg, mezzanine, final, size, fps, audio_filter, fmt)
     await assemble(command, total, converted, on_process, None, "transcode_failed")
     if not final.exists() or final.stat().st_size == 0:
         raise ExportError("transcode_failed", "ffmpeg wrote an empty video.")
+    return 0.0 if measured is None else levels.normalize_gain(loudness, measured)
+
+
+async def write_stems(
+    ffmpeg: str, stems: Mapping[str, Path], finals: Mapping[str, Path], gain: float, total: float, on_process: Optional[Callable[[Any], Any]] = None
+) -> None:
+    """Write the delivered stems from those of the mezzanine; raises ExportError(transcode_failed)."""
+    await assemble(stems_command(ffmpeg, stems, finals, gain), total, None, on_process, None, "transcode_failed")
+    empty = [name for name, path in finals.items() if not path.exists() or path.stat().st_size == 0]
+    if empty:
+        raise ExportError("transcode_failed", f"ffmpeg wrote an empty stem: {', '.join(empty)}.")
+
+
+def pack(target: Path, files: Sequence[Path]) -> Path:
+    """A ZIP of the files, stored without compression, each under its own name."""
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+        for path in files:
+            archive.write(path, arcname=path.name)
+    return target
 
 
 def folder_size(path: Path) -> int:
@@ -952,6 +1187,27 @@ def folder_size(path: Path) -> int:
             except OSError:
                 pass
     return total
+
+
+def channels_of(ffprobe: str, path: Any) -> Optional[int]:
+    """The channels of a file's first audio stream as ffprobe reads them, None when it cannot tell."""
+    try:
+        run = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=channels", "-of", "csv=p=0", str(path)],
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=VERSION_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    text = run.stdout.decode("utf-8", "replace").strip().splitlines() if run.returncode == 0 else []
+    return int(text[0]) if text and text[0].strip().isdigit() else None
+
+
+def mono_files(paths: Iterable[Any]) -> List[str]:
+    """The files among these whose sound has one channel, each file read once; none without ffprobe."""
+    ffprobe = core_bridge.find_ffprobe()
+    if not ffprobe:
+        return []
+    return [path for path in dict.fromkeys(str(path) for path in paths) if channels_of(ffprobe, path) == 1]
 
 
 def inspect(shots: Mapping[str, Optional[Mapping[str, Any]]]) -> Dict[str, Any]:
@@ -986,7 +1242,7 @@ async def render(
     report: Callable[[float, str], bool],
     on_process: Optional[Callable[[Any], Any]] = None,
 ) -> Dict[str, Any]:
-    """Assemble, transcode and store one export; returns its file and library item, raises ExportError."""
+    """Assemble, transcode and store one export: the video of its format, packed in a ZIP with its stems when the job asks for them, the web and social videos also stored in the requester's library; returns its file and library item, raises ExportError."""
     doc = project["doc"]
     untimed = timing_error(doc)
     if untimed is not None:
@@ -998,20 +1254,14 @@ async def render(
         raise ExportError("ffmpeg_failed", "ffmpeg is not available on this server.")
     ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     resolver = media.Resolver(owner)
-    size = frame_size(doc, job["format"], job["resolution"])
-    mezzanine, final = folder / MEZZANINE, folder / file_name(project["name"], job["resolution"])
+    fmt, resolution = job["format"], job["resolution"]
+    size = frame_size(doc, fmt, resolution)
+    mezzanine, final = folder / MEZZANINE, folder / file_name(project["name"], resolution, fmt)
     _, total = timeline(doc)
     try:
         shots, sounds = await asyncio.to_thread(media.local_inputs, doc, takes.list_takes(project["id"]), resolver, folder)
         if not any(shots.values()):
             raise ExportError("ffmpeg_failed", "No shot of the sequence has a file to assemble.")
-        options = {
-            "format": job["format"],
-            "resolution": job["resolution"],
-            "stills": [clip_id for clip_id, entry in shots.items() if entry is not None and entry["still"]],
-            "cubes": await asyncio.to_thread(match.write_cubes, doc, folder),
-            **await asyncio.to_thread(inspect, shots),
-        }
         paths = {
             "ffmpeg": ffmpeg,
             "graph_option": await asyncio.to_thread(graph_option, ffmpeg),
@@ -1021,28 +1271,50 @@ async def render(
         }
         sources = [entry["path"] for entry in shots.values() if entry is not None] + list(sounds.values())
         paths["cwd"] = common_folder(sources)
+        options = {
+            "format": fmt,
+            "resolution": resolution,
+            "stills": [clip_id for clip_id, entry in shots.items() if entry is not None and entry["still"]],
+            "cubes": await asyncio.to_thread(match.write_cubes, doc, folder),
+            **await asyncio.to_thread(inspect, shots),
+            "mono": await asyncio.to_thread(mono_files, sources),
+            "impulse": str(await asyncio.to_thread(write_impulse, folder / IMPULSE, SAMPLE_RATE)),
+            "stems": bool(job.get("stems")),
+        }
         if not report(0, "assemble"):
             raise cancelled()
-        await assemble_sequence(doc, shots, options, paths, folder, report, on_process)
+        mixed = await assemble_sequence(doc, shots, options, paths, folder, report, on_process)
     finally:
         await discard_work(folder)
     if not report(ASSEMBLE_SHARE, "transcode"):
         raise cancelled()
+    stems = {name: folder / stem_file(final.name, name) for name in mixed}
     try:
-        await convert(ffmpeg, mezzanine, final, size, fps_of(doc), total, report, on_process, levels.target_of(doc))
+        gain = await convert(ffmpeg, mezzanine, final, size, fps_of(doc), total, report, on_process, levels.target_of(doc), fmt)
+        if mixed:
+            await write_stems(ffmpeg, mixed, stems, gain, total, on_process)
     finally:
         await discard(mezzanine)
+        for path in mixed.values():
+            await discard(path)
     if not report(TRANSCODE_END, "store"):
         raise cancelled()
-    try:
-        stored = await core_bridge.save_user_media(requester, final)
-        item = core_bridge.upload_item(requester.id, stored["value"]) or {}
-    except Exception as exc:
-        logger.warning("[VIDEO-PRODUCER] Could not store export %s in the library", job["id"], exc_info=True)
-        raise ExportError("store_failed", last_line(str(exc)) or "The video could not be stored in the library.") from exc
-    return {
-        "file_name": final.name,
-        "file_size": final.stat().st_size,
-        "media_item_id": item.get("item_id"),
-        "media_url": f"/api/media/uploads/{media.basename(stored['value'])}",
-    }
+    result: Dict[str, Any] = {"file_name": final.name, "file_size": final.stat().st_size, "media_item_id": None, "media_url": None}
+    if fmt in LIBRARY_FORMATS:
+        try:
+            stored = await core_bridge.save_user_media(requester, final)
+            item = core_bridge.upload_item(requester.id, stored["value"]) or {}
+        except Exception as exc:
+            logger.warning("[VIDEO-PRODUCER] Could not store export %s in the library", job["id"], exc_info=True)
+            raise ExportError("store_failed", last_line(str(exc)) or "The video could not be stored in the library.") from exc
+        result.update(media_item_id=item.get("item_id"), media_url=f"/api/media/uploads/{media.basename(stored['value'])}")
+    if stems:
+        files = [final, *stems.values()]
+        try:
+            packed = await asyncio.to_thread(pack, folder / file_name(project["name"], resolution, fmt, stems=True), files)
+        except OSError as exc:
+            raise ExportError("store_failed", last_line(str(exc)) or "The stems could not be packed.") from exc
+        for path in files:
+            await discard(path)
+        result.update(file_name=packed.name, file_size=packed.stat().st_size)
+    return result

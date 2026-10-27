@@ -15,6 +15,8 @@ router = APIRouter()
 
 MB = 1024 * 1024
 
+MEDIA_TYPES = {"mp4": "video/mp4", "mov": "video/quicktime", "zip": "application/zip"}
+
 
 def _invalid(message: str) -> NoReturn:
     fail(422, "invalid_request", message)
@@ -87,13 +89,16 @@ def exchange_export(
 def start_video_export(
     project_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
-    """Queue the assembly of the sequence into an MP4 for the web (project aspect) or social networks (9:16)."""
+    """Queue the assembly of the sequence into a video: an MP4 for the web (project aspect) or social networks (9:16), a ProRes master or an H.265 archive (project aspect), with its stems in a ZIP when stems is true."""
     body = _object(body)
-    return ok({"job": jobs.public(queue_video(user, project_id, body.get("format"), body.get("resolution")))})
+    stems = body.get("stems", False)
+    if not isinstance(stems, bool):
+        _invalid("stems must be true or false.")
+    return ok({"job": jobs.public(queue_video(user, project_id, body.get("format"), body.get("resolution"), stems))})
 
 
-def queue_video(user: User, project_id: str, fmt: Any, requested: Any) -> Dict[str, Any]:
-    """Queue the MP4 export of a project the user may reach, after every check of the export route; an HTTP error otherwise."""
+def queue_video(user: User, project_id: str, fmt: Any, requested: Any, stems: bool = False) -> Dict[str, Any]:
+    """Queue the video export of a project the user may reach, after every check of the export route; an HTTP error otherwise."""
     if not isinstance(fmt, str) or fmt not in video.FORMATS:
         _invalid(f"format must be one of: {', '.join(video.FORMATS)}.")
     if requested is not None and (not isinstance(requested, str) or requested not in video.RESOLUTIONS):
@@ -110,7 +115,7 @@ def queue_video(user: User, project_id: str, fmt: Any, requested: Any) -> Dict[s
     quota = int(settings.get_setting("export_dir_quota_mb"))
     if not jobs.make_room(user.id, quota * MB):
         fail(429, "export_quota", f"Your export cache is over its {quota} MB budget.", quota_mb=quota)
-    job = jobs.create_job(project_id, user.id, fmt, video.resolution_of(project["doc"], requested))
+    job = jobs.create_job(project_id, user.id, fmt, video.resolution_of(project["doc"], requested), stems)
     if job is None:
         fail(409, "export_running", "An export of this project is already queued or running.")
     jobs.ensure_running()
@@ -125,17 +130,17 @@ def get_export(job_id: str, user: User = Depends(get_current_active_user)) -> Di
 
 @router.get("/exports/{job_id}/file")
 def export_file(job_id: str, user: User = Depends(get_current_active_user)) -> FileResponse:
-    """The exported MP4, as an attachment."""
+    """The exported file (the video, or the ZIP of the video and its stems), as an attachment."""
     job = _job_for(user, job_id)
     if job["status"] != "done":
         fail(409, "not_ready", "The export is not finished.")
     path = jobs.file_path(job)
     if path is None:
         fail(404, "job_not_found", "The exported file is no longer available.")
-    stem = job["file_name"].rsplit(".", 1)[0]
+    stem, _, extension = job["file_name"].rpartition(".")
     project = projects.get_project(job["project_id"])
-    name = f"{project['name']}_{job['resolution']}" if project else stem
-    return FileResponse(path, media_type="video/mp4", headers={"Content-Disposition": content_disposition(name, "mp4")})
+    name = video.download_name(project["name"], job["resolution"], job["format"], bool(job.get("stems"))) if project else stem
+    return FileResponse(path, media_type=MEDIA_TYPES.get(extension, "application/octet-stream"), headers={"Content-Disposition": content_disposition(name, extension)})
 
 
 @router.delete("/exports/{job_id}")

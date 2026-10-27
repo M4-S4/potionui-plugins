@@ -98,12 +98,13 @@ def test_an_administrator_exports_another_users_project_with_the_owners_media(ap
     assert response.status_code == 200 and set(asked) == {"user-1"}
 
 
-def test_the_srt_cue_of_a_character_follows_the_users_locale(client, project, store):
+def test_the_srt_holds_the_titles_alone_whatever_the_users_locale(client, project, store):
     store[("locale", "user-1")] = "fr"
 
     response = client.get(f"{BASE}/projects/{project['id']}/exports/srt")
 
-    assert "Marin : On part avant la marée." in response.text
+    assert response.status_code == 200
+    assert "Fin" in response.text and "Marin" not in response.text
 
 
 def _start(client, project_id, **body):
@@ -138,12 +139,21 @@ def test_a_social_export_takes_the_resolution_asked_for(client, project):
 
 @pytest.mark.parametrize(
     "body",
-    [{"format": "master"}, {"format": "archive"}, {"format": "web", "resolution": "8K"}, {"resolution": "720p"}, ["web"]],
+    [{"format": "prores"}, {"format": "mkv"}, {"format": "web", "resolution": "8K"}, {"resolution": "720p"}, ["web"], {"format": "web", "stems": "yes"}, {"format": "web", "stems": 1}],
 )
-def test_a_format_other_than_web_or_social_is_an_invalid_request(client, project, body):
+def test_a_format_resolution_or_stems_choice_the_export_does_not_know_is_an_invalid_request(client, project, body):
     response = client.post(f"{BASE}/projects/{project['id']}/exports/video", json=body)
 
     assert response.status_code == 422 and response.json()["detail"]["error"] == "invalid_request"
+
+
+@pytest.mark.parametrize("fmt, stems", [("master", True), ("archive", False), ("social", True)])
+def test_the_master_the_archive_and_the_stems_are_real_exports_queued_like_the_web_video(client, project, host, fmt, stems):
+    response = _start(client, project["id"], format=fmt, stems=stems)
+
+    assert response.status_code == 202
+    job = response.json()["data"]["job"]
+    assert (job["format"], job["stems"], job["status"]) == (fmt, stems, "queued")
 
 
 @pytest.mark.parametrize("fmt", ["fcpxml", "otio", "edl", "video"])
@@ -263,6 +273,30 @@ def test_the_file_of_a_job_is_not_ready_until_it_is_done_then_downloads_as_an_at
     done = client.get(f"{BASE}/exports/{job['id']}").json()["data"]["job"]
     assert done["file"] == {"name": "Aube_maree_1080p.mp4", "size": 11, "url": f"{BASE}/exports/{job['id']}/file"}
     assert done["media"] == {"kind": "library", "item_id": "item-1", "url": "/api/media/uploads/u.mp4"}
+
+
+@pytest.mark.parametrize(
+    "fmt, stems, stored, media_type, download",
+    [
+        ("master", False, "Aube_maree_1080p.mov", "video/quicktime", "Aube_%26_mar%C3%A9e_1080p.mov"),
+        ("archive", False, "Aube_maree_1080p_archive.mp4", "video/mp4", "Aube_%26_mar%C3%A9e_1080p_archive.mp4"),
+        ("master", True, "Aube_maree_1080p_master_stems.zip", "application/zip", "Aube_%26_mar%C3%A9e_1080p_master_stems.zip"),
+    ],
+)
+def test_a_master_an_archive_and_the_stems_download_under_their_own_type_and_name(client, project, fmt, stems, stored, media_type, download):
+    job = _start(client, project["id"], format=fmt, stems=stems).json()["data"]["job"]
+    folder = video.job_folder(jobs.get_job(job["id"]))
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / stored).write_bytes(b"x" * 7)
+    jobs.claim_next()
+    jobs.settle(job["id"], "done", progress=100.0, step=None, file_name=stored, file_size=7)
+
+    response = client.get(f"{BASE}/exports/{job['id']}/file")
+
+    assert response.status_code == 200 and response.headers["content-type"] == media_type
+    assert response.headers["content-disposition"] == f"attachment; filename=\"{stored}\"; filename*=UTF-8''{download}"
+    done = client.get(f"{BASE}/exports/{job['id']}").json()["data"]["job"]
+    assert done["media"] is None and done["stems"] is stems
 
 
 def test_deleting_a_queued_job_cancels_it_and_deleting_it_again_removes_it(client, project):

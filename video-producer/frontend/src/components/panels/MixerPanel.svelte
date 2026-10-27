@@ -1,21 +1,19 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, secs } from '../../lib/state.svelte.js';
+	import { doc, secs } from '../../lib/state.svelte.js';
 	import { addToTimeline, openImport, openLocalImport } from '../../lib/importer.js';
 	import { emptyActions } from '../../lib/empty.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { roleColor, audioRoleLabel } from '../../lib/catalog.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import ImportButtons from './ImportButtons.svelte';
-	import Icon from '../Icon.svelte';
 
 	const roles = ['Dialogue', 'Musique', 'Ambiance', 'SFX'];
 	const sounds = $derived(doc.assets.filter((a) => a.kind === 'audio'));
 
 	function soundMeta(s) {
-		const params = { role: s.role ? audioRoleLabel(s.role) : t('project.origin.imported'), duration: s.srcDur === null ? '—' : secs(s.srcDur) };
-		return s.generated ? t('panels.mixer.soundMetaPrepared', params) : t('panels.mixer.soundMeta', params);
+		return t('panels.mixer.soundMeta', { role: s.role ? audioRoleLabel(s.role) : t('project.origin.imported'), duration: s.srcDur === null ? '—' : secs(s.srcDur) });
 	}
 
 	const noneProps = $derived({
@@ -37,15 +35,6 @@
 </PanelHeader>
 
 <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
-	<button type="button" class="flex w-full items-center gap-3 rounded-lg border border-line-strong bg-surface-2 p-3 text-left hover:border-line-hover" onclick={() => (ui.modal = { type: 'sound' })}>
-		<Icon name="wave" class="h-5 w-5 text-fg-muted" />
-		<span class="flex-1">
-			<span class="block text-sm font-medium">{t('panels.mixer.soundDesign')}</span>
-			<span class="block text-xs text-fg-muted">{t('panels.mixer.soundDesignHint')}</span>
-		</span>
-		<Icon name="chevron-right" class="h-4 w-4 text-fg-muted" />
-	</button>
-
 	{#if !sounds.length}
 		<HostUi name="EmptyState" props={noneProps} />
 	{:else}

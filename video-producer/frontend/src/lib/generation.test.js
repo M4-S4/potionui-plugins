@@ -412,11 +412,7 @@ test('takes: a done take becomes a gen-<takeId> asset, H3 upscales by itself', (
 		generated: true,
 		quality: 'final',
 		resultId: 't1',
-		role: null,
-		synth: null,
-		transcript: null,
-		character: null,
-		lipSync: null
+		role: null
 	});
 	assert.equal(takeAsset({ ...take, fileId: null }, 'x').origin, null);
 	assert.equal(canUpscale(null, me), false);

@@ -192,11 +192,7 @@ export function keyframeAsset(take, name) {
 		generated: true,
 		quality: 'draft',
 		resultId: take.id,
-		role: null,
-		synth: null,
-		transcript: null,
-		character: null,
-		lipSync: null
+		role: null
 	};
 }
 

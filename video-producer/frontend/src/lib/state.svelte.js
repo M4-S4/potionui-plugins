@@ -558,7 +558,6 @@ function newLane(role = 'Ambiance') {
 		pan: 0,
 		mute: false,
 		solo: false,
-		automation: 'off',
 		sends: { R1: -60, D1: -60 },
 		inserts: [{ type: 'eq', on: false, low: 0, mid: 0, high: 0 }]
 	};

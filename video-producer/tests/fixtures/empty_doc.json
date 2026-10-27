@@ -29,7 +29,6 @@
       "pan": 0,
       "mute": false,
       "solo": false,
-      "automation": "off",
       "sends": {
         "R1": -18,
         "D1": -60
@@ -60,7 +59,6 @@
       "pan": 0,
       "mute": false,
       "solo": false,
-      "automation": "off",
       "sends": {
         "R1": -12,
         "D1": -60
@@ -91,7 +89,6 @@
       "pan": -0.2,
       "mute": false,
       "solo": false,
-      "automation": "off",
       "sends": {
         "R1": -12,
         "D1": -60
@@ -122,7 +119,6 @@
       "pan": 0.3,
       "mute": false,
       "solo": false,
-      "automation": "off",
       "sends": {
         "R1": -12,
         "D1": -60

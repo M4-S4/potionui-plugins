@@ -24,6 +24,7 @@ COLUMNS = (
     "user_id",
     "format",
     "resolution",
+    "stems",
     "status",
     "progress",
     "step",
@@ -57,6 +58,7 @@ def now() -> str:
 def _job(row: Any) -> Dict[str, Any]:
     job = {column: row[column] for column in COLUMNS}
     job["progress"] = float(job["progress"] or 0)
+    job["stems"] = bool(job["stems"])
     return job
 
 
@@ -69,6 +71,7 @@ def public(job: Dict[str, Any]) -> Dict[str, Any]:
         "project_id": job["project_id"],
         "format": job["format"],
         "resolution": job["resolution"],
+        "stems": bool(job.get("stems")),
         "status": job["status"],
         "progress": round(job["progress"], 1),
         "step": job["step"],
@@ -114,17 +117,17 @@ def list_active() -> List[Dict[str, Any]]:
     return _fetch(f"{_SELECT} WHERE {_ACTIVE_SQL} ORDER BY created_at, id")
 
 
-def create_job(project_id: str, user_id: str, fmt: str, resolution: str) -> Optional[Dict[str, Any]]:
-    """Queue an export of a project; None when one of the project is already queued or running."""
+def create_job(project_id: str, user_id: str, fmt: str, resolution: str, stems: bool = False) -> Optional[Dict[str, Any]]:
+    """Queue an export of a project, with its stems when asked; None when one of the project is already queued or running."""
     from src.plugin_api import db
 
     job_id = generate_ulid()
     with db.get_cursor() as cursor:
         cursor.execute(
-            f"INSERT INTO {JOBS} (id, project_id, user_id, format, resolution, status, progress, created_at) "
-            f"SELECT ?, ?, ?, ?, ?, 'queued', 0, ? WHERE NOT EXISTS "
+            f"INSERT INTO {JOBS} (id, project_id, user_id, format, resolution, stems, status, progress, created_at) "
+            f"SELECT ?, ?, ?, ?, ?, ?, 'queued', 0, ? WHERE NOT EXISTS "
             f"(SELECT 1 FROM {JOBS} WHERE project_id = ? AND {_ACTIVE_SQL})",
-            (job_id, project_id, user_id, fmt, resolution, now(), project_id),
+            (job_id, project_id, user_id, fmt, resolution, 1 if stems else 0, now(), project_id),
         )
         if cursor.rowcount != 1:
             return None
@@ -272,7 +275,7 @@ def forget_project(project_id: str) -> None:
 def _notify(job: Dict[str, Any], done: bool, message: str = "") -> None:
     project = projects.get_project(job["project_id"])
     name = project["name"] if project else "Video Producer"
-    what = f"the {job['format']} video ({job['resolution']})"
+    what = f"the {job['format']} video ({job['resolution']}){' with its stems' if job.get('stems') else ''}"
     text = f"{name}: {what} is ready." if done else f"{name}: {what} could not be exported."
     core_bridge.notify(
         user_id=job["user_id"],

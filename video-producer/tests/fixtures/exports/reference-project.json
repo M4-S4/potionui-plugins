@@ -152,7 +152,6 @@
         "pan": 0,
         "mute": false,
         "solo": false,
-        "automation": "off",
         "sends": {
           "R1": -18,
           "D1": -60
@@ -183,7 +182,6 @@
         "pan": 0,
         "mute": false,
         "solo": false,
-        "automation": "off",
         "sends": {
           "R1": -12,
           "D1": -60
@@ -214,7 +212,6 @@
         "pan": -0.2,
         "mute": false,
         "solo": false,
-        "automation": "off",
         "sends": {
           "R1": -12,
           "D1": -60
@@ -245,7 +242,6 @@
         "pan": 0.3,
         "mute": false,
         "solo": false,
-        "automation": "off",
         "sends": {
           "R1": -12,
           "D1": -60
@@ -339,10 +335,6 @@
         "quality": "final",
         "resultId": "01M5R2W7F6Z126TXG7H111YRDN",
         "role": null,
-        "synth": null,
-        "transcript": null,
-        "character": null,
-        "lipSync": null,
         "id": "gen-01M5R2W7F6Z126TXG7H111YRDN"
       },
       {
@@ -363,10 +355,6 @@
         "quality": "draft",
         "resultId": "01M5R3P2RJX9DV882508WPJC3X",
         "role": null,
-        "synth": null,
-        "transcript": null,
-        "character": null,
-        "lipSync": null,
         "id": "gen-01M5R3P2RJX9DV882508WPJC3X"
       },
       {
@@ -386,10 +374,6 @@
         "quality": null,
         "resultId": null,
         "role": null,
-        "synth": null,
-        "transcript": null,
-        "character": null,
-        "lipSync": null,
         "id": "01M5R0SRCHARBOURWIDE00000V"
       },
       {
@@ -409,10 +393,6 @@
         "quality": null,
         "resultId": null,
         "role": "Dialogue",
-        "synth": null,
-        "transcript": "On part avant la marée.",
-        "character": "Marin",
-        "lipSync": null,
         "id": "01M5R0SRCFISHERMANLINE000A"
       },
       {
@@ -432,10 +412,6 @@
         "quality": null,
         "resultId": null,
         "role": "Musique",
-        "synth": null,
-        "transcript": null,
-        "character": null,
-        "lipSync": null,
         "id": "01M5R0SRCDAWNTHEME0000000A"
       },
       {
@@ -455,10 +431,6 @@
         "quality": null,
         "resultId": null,
         "role": "SFX",
-        "synth": null,
-        "transcript": null,
-        "character": null,
-        "lipSync": null,
         "id": "01M5R0SRCGULLCRIES0000000A"
       }
     ]

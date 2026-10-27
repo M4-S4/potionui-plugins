@@ -739,10 +739,6 @@ _SHAPES = {
         "quality": None,
         "resultId": None,
         "role": None,
-        "synth": None,
-        "transcript": None,
-        "character": None,
-        "lipSync": None,
     },
 }
 

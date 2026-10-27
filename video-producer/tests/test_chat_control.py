@@ -737,7 +737,13 @@ async def test_exporting_queues_the_video_with_the_routes_checks(project, core, 
     assert {key: data[key] for key in ("status", "format", "resolution")} == {"status": "queued", "format": "social", "resolution": "720p"}
     assert jobs.get_job(data["job_id"])["user_id"] == "user-1"
     assert _code(again) == "export_running"
-    assert _code(await ExportVideoTool().execute(_context(project["id"]), format="archive")) == "invalid_request"
+    assert data["stems"] is False
+    assert _code(await ExportVideoTool().execute(_context(project["id"]), format="prores")) == "invalid_request"
+    jobs.cancel(jobs.get_job(data["job_id"]))
+    master = _data(await ExportVideoTool().execute(_context(project["id"]), format="master", stems=True))
+    assert (master["format"], master["stems"]) == ("master", True) and jobs.get_job(master["job_id"])["stems"] is True
+    assert set(ExportVideoTool().parameters["properties"]) == {"format", "resolution", "stems"}
+    assert ExportVideoTool().parameters["properties"]["format"]["enum"] == ["web", "social", "master", "archive"]
 
 
 async def test_a_change_retries_once_on_a_version_conflict_and_then_gives_up(project, monkeypatch):

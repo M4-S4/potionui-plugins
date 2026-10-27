@@ -16,7 +16,7 @@ FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "color_match.json").r
 
 BLOCK, COLUMNS, INNER = 8, 24, 2
 
-PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mp4", "graph": "/tmp/out/graph.txt"}
+PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mkv", "graph": "/tmp/out/graph.txt"}
 
 
 def _match(**fields):

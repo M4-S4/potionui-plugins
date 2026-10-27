@@ -259,7 +259,7 @@
 						{@const peaks = audioPeaks(src)}
 						<div class="absolute bottom-1 top-1 overflow-hidden rounded-sm bg-success/10" style:left="{x(a.start)}px" style:width="{w}px" title={src?.name ?? ''}>
 							<svg class="absolute inset-0" width={w} height={MUSIC - 8} aria-hidden="true">
-								<polygon points={src?.src ? (peaks ? peakWaveform(peaks, w, MUSIC - 8, a.srcIn, pps) : '') : waveform(a.assetId, w, MUSIC - 8, a.srcIn, pps, src?.synth)} fill="rgb(var(--success))" opacity="0.6" />
+								<polygon points={src?.src ? (peaks ? peakWaveform(peaks, w, MUSIC - 8, a.srcIn, pps) : '') : waveform(a.assetId, w, MUSIC - 8, a.srcIn, pps)} fill="rgb(var(--success))" opacity="0.6" />
 							</svg>
 						</div>
 					{/each}

@@ -269,15 +269,7 @@ export const menus = [
 		[command('engine', openEngineSettings)]
 	]),
 	menu('audio', [
-		[command('audio-add', addAudioLane), command('audio-import', () => openImport('audio')), command('audio-import-local', () => openLocalImport('audio')), command('audio-mixer', mixer)],
-		[
-			command('voice', modal('sound', { kind: 'Voix' })),
-			command('sd-ambience', modal('sound', { kind: 'Ambiance' })),
-			command('sd-foley', modal('sound', { kind: 'Bruitage' })),
-			command('sd-texture', modal('sound', { kind: 'Texture' })),
-			command('sd-impact', modal('sound', { kind: 'Impact' })),
-			command('sd-music', modal('sound', { kind: 'Musique' }))
-		]
+		[command('audio-add', addAudioLane), command('audio-import', () => openImport('audio')), command('audio-import-local', () => openLocalImport('audio')), command('audio-mixer', mixer)]
 	]),
 	menu('view', [
 		[

@@ -12,11 +12,12 @@ import pytest
 
 from backend import core_bridge, takes
 from backend.exports import content_disposition, jobs, slug, video
+from backend.exports.mix import write_impulse
 from backend.exports.video import ExportError, build_command, filter_graph, frame_size, timeline
 
 HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 
-PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mp4", "graph": "/tmp/out/graph.txt"}
+PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mkv", "graph": "/tmp/out/graph.txt"}
 
 FILE_NAMES = [
     ("Cœur", "Coeur"),
@@ -40,7 +41,7 @@ FILE_NAMES = [
 
 
 def _options(fmt="web", resolution="720p", audio=None, stills=(), **probed):
-    return {"format": fmt, "resolution": resolution, "audio": audio or {}, "stills": list(stills), **probed}
+    return {"format": fmt, "resolution": resolution, "audio": audio or {}, "stills": list(stills), "impulse": "/tmp/out/reverb.wav", **probed}
 
 
 def _graph(doc, files, sounds=None, **options):
@@ -210,7 +211,7 @@ def test_a_still_image_is_looped_for_the_length_of_its_shot(make_doc):
     assert command[position - 7 : position] == ["-loop", "1", "-framerate", "25", "-t", "3.5", "-i"]
 
 
-def test_the_audio_items_are_trimmed_delayed_set_to_gain_plus_lane_and_faded_then_mixed_without_normalising(make_doc):
+def test_the_audio_items_are_trimmed_delayed_set_to_their_gain_and_faded_then_summed_by_track_and_role_without_normalising(make_doc):
     doc = _doc(
         make_doc,
         [{"id": "c1", "start": 0, "dur": 4}],
@@ -225,13 +226,15 @@ def test_the_audio_items_are_trimmed_delayed_set_to_gain_plus_lane_and_faded_the
 
     command, graph = _command(doc, {"c1": None}, sounds=sounds), _graph(doc, {"c1": None}, sounds=sounds)
 
-    assert _inputs(command) == ["/media/voice.wav", "/media/music.mp3"]
+    assert _inputs(command) == ["/media/voice.wav", "/media/music.mp3", "/tmp/out/reverb.wav"]
     assert graph[3] == (
         "[0:a]atrim=start=0.5:duration=2,asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
         "volume=-3dB,afade=t=in:st=0:d=0.1,afade=t=out:st=1.7:d=0.3,adelay=delays=1250:all=1[m0]"
     )
-    assert graph[4].endswith("volume=-8dB,adelay=delays=0:all=1[m1]")
-    assert graph[5] == "[bed][m0][m1]amix=inputs=3:duration=first:dropout_transition=0:normalize=0[aout]"
+    assert graph[4].endswith("volume=-6dB,adelay=delays=0:all=1[m1]")
+    assert graph[5].startswith("[m0]apad=whole_dur=4,atrim=duration=4,") and graph[5].endswith("asplit=2[t0][t0R1]")
+    assert graph[7] == "[m1]apad=whole_dur=4,atrim=duration=4,volume=-2dB,asplit=2[t1][t1R1]"
+    assert graph[-1] == "[bed][dialogue][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0[aout]"
 
 
 def test_a_muted_lane_is_left_out_and_a_soloed_lane_plays_alone(make_doc):
@@ -245,8 +248,8 @@ def test_a_muted_lane_is_left_out_and_a_soloed_lane_plays_alone(make_doc):
         sounds=sounds,
     )
 
-    assert _inputs(muted) == ["/v.wav", "/a.wav"]
-    assert _inputs(soloed) == ["/v.wav"]
+    assert _inputs(muted) == ["/v.wav", "/a.wav", "/tmp/out/reverb.wav"]
+    assert _inputs(soloed) == ["/v.wav", "/tmp/out/reverb.wav"]
 
 
 def test_subtitles_are_never_burnt_in_and_an_item_without_file_is_skipped(make_doc):
@@ -259,7 +262,7 @@ def test_subtitles_are_never_burnt_in_and_an_item_without_file_is_skipped(make_d
     assert _inputs(_command(doc, {"c1": None})) == []
 
 
-def test_the_mezzanine_is_h264_crf_14_with_aac_192k_at_the_project_rate_and_length(make_doc):
+def test_the_mezzanine_is_h264_crf_14_with_float_pcm_in_matroska_at_the_project_rate_and_length(make_doc):
     doc = _doc(make_doc, [{"id": "c1", "start": 0, "dur": 2.5}], fps=30)
 
     command = _command(doc, {"c1": None})
@@ -270,8 +273,7 @@ def test_the_mezzanine_is_h264_crf_14_with_aac_192k_at_the_project_rate_and_leng
     assert tail[:4] == ["-map", "[vout]", "-map", "[aout]"]
     assert tail[4:8] == ["-t", "2.5", "-r", "30"]
     assert " ".join(tail[8:]) == (
-        "-c:v libx264 -preset veryfast -crf 14 -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 "
-        "-movflags +faststart /tmp/out/mezzanine.mp4"
+        "-c:v libx264 -preset veryfast -crf 14 -pix_fmt yuv420p -c:a pcm_f32le -ar 48000 -ac 2 /tmp/out/mezzanine.mkv"
     )
 
 
@@ -410,18 +412,23 @@ def test_a_command_run_from_a_working_folder_names_its_input_files_relative_to_i
     }
     paths = {
         **PATHS,
-        "output": str(work / "mezzanine.mp4"),
+        "output": str(work / "mezzanine.mkv"),
         "graph": str(work / "graph.txt"),
         "audio": {"voice": str(storage / "uploads" / "voice.wav")},
         "cwd": str(storage),
     }
 
-    command = build_command(doc, files, _options(), paths)
+    command = build_command(doc, files, _options(impulse=str(work / "reverb.wav")), paths)
 
     assert command[0] == PATHS["ffmpeg"]
-    assert _inputs(command) == [_relative("generations", "1.mp4"), _relative("uploads", "-2.mp4"), _relative("uploads", "voice.wav")]
+    assert _inputs(command) == [
+        _relative("generations", "1.mp4"),
+        _relative("uploads", "-2.mp4"),
+        _relative("uploads", "voice.wav"),
+        _relative("video_producer", "job", "reverb.wav"),
+    ]
     assert command[command.index("-filter_complex_script") + 1] == str(work / "graph.txt")
-    assert command[-1] == str(work / "mezzanine.mp4")
+    assert command[-1] == str(work / "mezzanine.mkv")
 
 
 def test_a_command_without_a_working_folder_names_every_file_by_its_path(make_doc):
@@ -671,9 +678,9 @@ def _real_doc(make_doc):
 async def test_two_one_second_clips_assemble_into_a_two_second_720p_mezzanine_with_sound(make_doc, clips, tmp_path):
     first, second, voice = clips
     doc = _real_doc(make_doc)
-    output = tmp_path / "mezzanine.mp4"
+    output = tmp_path / "mezzanine.mkv"
     files = {"c1": {"name": first.name, "path": str(first)}, "c2": {"name": second.name, "path": str(second)}}
-    options = {"format": "web", "resolution": "720p", **video.inspect(files)}
+    options = {"format": "web", "resolution": "720p", **video.inspect(files), "impulse": str(write_impulse(tmp_path / "reverb.wav", 48000))}
     paths = {
         "ffmpeg": shutil.which("ffmpeg"),
         "graph_option": video.graph_option(shutil.which("ffmpeg")),
@@ -1094,8 +1101,9 @@ def test_a_new_job_is_queued_with_the_contract_shape(stored_jobs):
     job = _job()
 
     public = jobs.public(job)
-    assert set(public) == {"id", "project_id", "format", "resolution", "status", "progress", "step", "file", "media", "error", "created_at", "finished_at"}
+    assert set(public) == {"id", "project_id", "format", "resolution", "stems", "status", "progress", "step", "file", "media", "error", "created_at", "finished_at"}
     assert (public["status"], public["progress"], public["step"], public["file"], public["media"], public["error"]) == ("queued", 0, None, None, None, None)
+    assert public["stems"] is False and jobs.public(jobs.create_job("p-2", "user-1", "master", "1080p", stems=True))["stems"] is True
 
 
 def test_one_project_has_one_export_in_flight(stored_jobs):

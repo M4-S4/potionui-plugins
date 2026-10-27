@@ -18,7 +18,6 @@
 	const lanes = $derived(doc.lanes.filter((l) => ui.mixerFilter === 'Tous' || l.role === ui.mixerFilter));
 	const pills = $derived(filters.map((f) => ({ id: f, label: filterLabel(f), count: doc.lanes.filter((l) => f === 'Tous' || l.role === f).length })));
 	const dbFmt = (v) => (v <= -59 ? '−∞' : formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'exceptZero' }));
-	const autoNext = { off: 'read', read: 'write', write: 'off' };
 	const video = $derived(videoTrack(doc));
 
 	function toggleVideo(key) {
@@ -34,12 +33,6 @@
 		if (type === 'comp') return t('mixer.fx.comp');
 		if (type === 'filter') return t('mixer.fx.filter');
 		return t('mixer.fx.reverb');
-	}
-
-	function autoLabel(mode) {
-		if (mode === 'read') return t('mixer.auto.read');
-		if (mode === 'write') return t('mixer.auto.write');
-		return t('mixer.auto.off');
 	}
 
 	function addInsert(l) {
@@ -181,12 +174,6 @@
 				aria-label={t('mixer.reference', { name: l.name })}
 				onclick={() => act(() => setReferenceLane(l, !isReferenceLane(l)))}
 			><Icon name="sparkles" class="h-3 w-3" />{t('mixer.referenceShort')}</button>
-		</HostUi>
-		<HostUi name="Tooltip" props={{ text: t('mixer.auto.tip'), wrapperClass: 'flex w-full' }}>
-			<button type="button" class="vp-sim w-full justify-center" aria-label={t('mixer.auto.label', { mode: autoLabel(l.automation) })} onclick={() => (l.automation = autoNext[l.automation] ?? 'off')}>
-				<span class="h-1.5 w-1.5 rounded-full {l.automation === 'write' ? 'bg-danger' : l.automation === 'read' ? 'bg-success' : 'bg-fg-disabled'}"></span>
-				<Icon name="automation" class="h-3 w-3" />{autoLabel(l.automation)}
-			</button>
 		</HostUi>
 	</div>
 {/snippet}
