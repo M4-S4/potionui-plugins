@@ -82,8 +82,9 @@ def project(core, make_project, make_doc, clock):
     return make_project(doc=_doc(make_doc))
 
 
-def _context(project_id, user_id="user-1", is_admin=False):
-    return ToolContext(user_id=user_id, mode_id="video-producer", is_admin=is_admin, session_metadata={"video_producer": {"projectId": project_id}})
+def _context(project_id, user_id="user-1", is_admin=False, turn="turn-1"):
+    page = {"contextId": turn, "projectId": project_id}
+    return ToolContext(user_id=user_id, mode_id="video-producer", is_admin=is_admin, session_metadata={"video_producer": page})
 
 
 def _stored(project_id):
@@ -410,7 +411,7 @@ async def test_a_shot_holding_a_take_is_not_lengthened_past_what_its_engine_make
 
     def setup(doc):
         edits.place_take(doc, doc["clips"][0], takes.public(take), "en")
-        doc["clips"][0]["engine"] = {"preset": presets.OPENROUTER_VIDEO, "model": None}
+        doc["clips"][0]["engine"] = {"preset": presets.OPENROUTER_VIDEO, "model": "vendor/video-1"}
 
     _edit_stored(project["id"], setup)
     data = _data(await UpdateShotsTool().execute(_context(project["id"]), updates=[{"shot": "s1", "duration_s": 14}]))
@@ -442,7 +443,7 @@ async def test_an_approved_deletion_removes_the_shot_the_card_showed_even_after_
     context = _context(project["id"])
     card = await DeleteShotsTool().execute(context, shots=["2"])
     _edit_stored(project["id"], lambda doc: doc["clips"].insert(0, doc["clips"].pop(2)))
-    again = await DeleteShotsTool().execute(context, shots=["2"])
+    again = await DeleteShotsTool().execute(_context(project["id"], turn="approval"), shots=["2"])
 
     confirmed = _data(await DeleteShotsTool().execute_confirmed(context, shots=["2"]))
 
@@ -473,7 +474,7 @@ async def test_an_approval_the_server_has_no_card_for_runs_nothing(project, core
 
 async def test_a_card_belongs_to_the_turn_that_showed_it(project):
     turn = _context(project["id"])
-    later = ToolContext(user_id="user-1", mode_id="video-producer", session_metadata={"video_producer": {"projectId": project["id"], "projectVersion": 7}})
+    later = _context(project["id"], turn="turn-2")
     await DeleteShotsTool().execute(turn, shots=["Exit"])
 
     assert _code(await DeleteShotsTool().execute_confirmed(later, shots=["Exit"])) == "card_expired"
@@ -526,7 +527,7 @@ async def test_an_approved_generation_starts_the_quality_and_takes_the_card_show
         doc["clips"][0]["drafts"] = 3
 
     _edit_stored(project["id"], change)
-    again = await GenerateTool().execute(context, shots=["Arrival"])
+    again = await GenerateTool().execute(_context(project["id"], turn="approval"), shots=["Arrival"])
     data = _data(await GenerateTool().execute_confirmed(context, shots=["Arrival"]))
 
     assert _before(card.preview) != _before(again.preview)
@@ -546,6 +547,85 @@ async def test_an_approved_generation_whose_estimate_rose_or_whose_shot_is_gone_
     assert _code(longer) == "card_out_of_date" and "The estimate rose to 1 take and" in longer.error
     assert _code(gone) == "card_out_of_date" and "Exit no longer exists" in gone.error
     assert takes.list_takes(project["id"]) == [] and core.submitted == []
+
+
+async def test_a_generation_refused_then_asked_again_after_a_change_starts_what_the_new_card_shows(project, core):
+    _edit_stored(project["id"], lambda doc: doc["clips"][2].update(drafts=4, firstFromPrevious=False))
+    first = await GenerateTool().execute(_context(project["id"], turn="turn-1"), shots=["3"])
+    _data(await UpdateShotsTool().execute(_context(project["id"], turn="turn-2"), updates=[{"shot": "3", "takes_per_run": 1}]))
+    second = await GenerateTool().execute(_context(project["id"], turn="turn-2"), shots=["3"])
+    stale_check = await GenerateTool().execute(_context(project["id"], turn="approval"), shots=["3"])
+
+    data = _data(await GenerateTool().execute_confirmed(_context(project["id"], turn="turn-2"), shots=["3"]))
+
+    assert [_data(result)["takes"] for result in (first, second, stale_check)] == [4, 1, 1]
+    assert _before(second.preview) == _before(stale_check.preview)
+    assert [take["variant"] for take in data["takes"]] == ["A"] and len(takes.list_takes(project["id"])) == 1
+
+
+async def test_a_deletion_refused_then_asked_again_after_a_reorder_deletes_the_shot_the_new_card_shows(project):
+    first = await DeleteShotsTool().execute(_context(project["id"], turn="turn-1"), shots=["2"])
+    _data(await UpdateShotsTool().execute(_context(project["id"], turn="turn-2"), updates=[{"shot": "Exit", "position": 2}]))
+    second = await DeleteShotsTool().execute(_context(project["id"], turn="turn-2"), shots=["2"])
+    await DeleteShotsTool().execute(_context(project["id"], turn="approval"), shots=["2"])
+
+    data = _data(await DeleteShotsTool().execute_confirmed(_context(project["id"], turn="turn-2"), shots=["2"]))
+
+    assert [_before(result.preview)[0]["id"] for result in (first, second)] == ["s2", "s3"]
+    assert data["deleted"] == ["s3"]
+    assert [clip["id"] for clip in _stored(project["id"])["doc"]["clips"]] == ["s1", "s2"]
+
+
+async def test_a_new_preview_of_the_same_call_in_the_same_turn_replaces_its_card(project):
+    turn = _context(project["id"])
+    await DeleteShotsTool().execute(turn, shots=["2"])
+    _edit_stored(project["id"], lambda doc: doc["clips"].insert(0, doc["clips"].pop(2)))
+    await DeleteShotsTool().execute(turn, shots=["2"])
+
+    assert _data(await DeleteShotsTool().execute_confirmed(turn, shots=["2"]))["deleted"] == ["s1"]
+
+
+async def test_a_refused_approval_is_not_run_again_by_a_retry_and_the_next_turn_gets_a_new_card(project, core):
+    turn = _context(project["id"])
+    await GenerateTool().execute(turn, shots=["s1"])
+    _edit_stored(project["id"], lambda doc: doc["clips"][0].update(dur=12))
+    refused = await GenerateTool().execute_confirmed(turn, shots=["s1"])
+    _edit_stored(project["id"], lambda doc: doc["clips"][0].update(dur=4))
+    retried = await GenerateTool().execute_confirmed(turn, shots=["s1"])
+    assert takes.list_takes(project["id"]) == []
+
+    fresh = _data(await _approved(GenerateTool(), _context(project["id"], turn="turn-2"), shots=["s1"]))
+
+    assert _code(refused) == "card_out_of_date" and retried.error == refused.error
+    assert len(fresh["takes"]) == 1 and len(takes.list_takes(project["id"])) == 1
+
+
+async def test_cards_are_kept_per_user_and_an_evicted_card_says_why(project, monkeypatch):
+    monkeypatch.setattr(cards, "MAX_CARDS_PER_USER", 2)
+    pending = _context(project["id"], turn="pending")
+    await DeleteShotsTool().execute(pending, shots=["Exit"])
+    for index in range(3):
+        await DeleteShotsTool().execute(_context(project["id"], user_id="admin-1", is_admin=True, turn=f"admin-{index}"), shots=["Exit"])
+    kept = _data(await DeleteShotsTool().execute_confirmed(pending, shots=["Exit"]))
+    await DeleteShotsTool().execute(pending, shots=["Bridge"])
+    for index in range(2):
+        await DeleteShotsTool().execute(_context(project["id"], turn=f"newer-{index}"), shots=["Arrival"])
+
+    evicted = await DeleteShotsTool().execute_confirmed(pending, shots=["Bridge"])
+
+    assert kept["deleted"] == ["s3"]
+    assert _code(evicted) == "card_expired" and "more than 2 newer cards of yours" in evicted.error
+    assert [clip["id"] for clip in _stored(project["id"])["doc"]["clips"]] == ["s1", "s2"]
+
+
+async def test_a_page_that_sends_no_context_id_gets_no_approval_card(project, core):
+    bare = ToolContext(user_id="user-1", mode_id="video-producer", session_metadata={"video_producer": {"projectId": project["id"]}})
+
+    deletion = await DeleteShotsTool().execute(bare, shots=["Exit"])
+    generation = await GenerateTool().execute(bare, shots=["Exit"])
+
+    assert _code(deletion) == "page_outdated" and _code(generation) == "page_outdated"
+    assert "reload the page" in deletion.error
 
 
 async def test_generating_without_an_engine_or_past_the_quota_is_refused_with_its_reason(project, core):

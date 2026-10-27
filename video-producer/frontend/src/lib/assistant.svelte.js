@@ -65,6 +65,7 @@ export function reviewFix(seam, issue) {
 export function contextSnapshot() {
 	if (ui.dirty && project.id) flushSave();
 	return {
+		contextId: ulid(),
 		projectId: project.id,
 		projectVersion: project.version,
 		locale: getLocale(),

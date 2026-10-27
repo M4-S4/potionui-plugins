@@ -175,30 +175,31 @@ async function pullOnce(id) {
 
 async function pullRounds() {
 	const outcome = { changed: false, conflicts: 0, dropped: 0 };
-	let late = 0;
-	while (project.id && client) {
-		const asked = answered !== asks;
-		if (!asked && (wanted <= project.version || late >= 2)) break;
-		if (!asked) late += 1;
-		answered = asks;
-		const step = await pullOnce(project.id);
-		if (!step) break;
-		outcome.changed ||= step.changed;
-		outcome.conflicts += step.conflicts;
-		outcome.dropped += step.dropped;
+	try {
+		await null;
+		let late = 0;
+		while (project.id && client) {
+			const asked = answered !== asks;
+			if (!asked && (wanted <= project.version || late >= 2)) break;
+			if (!asked) late += 1;
+			answered = asks;
+			const step = await pullOnce(project.id);
+			if (!step) break;
+			outcome.changed ||= step.changed;
+			outcome.conflicts += step.conflicts;
+			outcome.dropped += step.dropped;
+		}
+		return outcome;
+	} finally {
+		pulling = null;
+		wanted = 0;
 	}
-	return outcome;
 }
 
 export function pullProject(version = 0) {
 	wanted = Math.max(wanted, version);
 	asks += 1;
-	if (pulling) return pulling;
-	pulling = pullRounds().finally(() => {
-		pulling = null;
-		wanted = 0;
-		if (answered !== asks && project.id && client) pullProject();
-	});
+	pulling ??= pullRounds();
 	return pulling;
 }
 

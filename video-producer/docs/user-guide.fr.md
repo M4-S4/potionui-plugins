@@ -533,7 +533,7 @@ Par exemple : « Ajoute deux plans après “Les goélands” : un gros plan sur
 
 #### Demande 6 : supprimer des plans
 
-Par exemple : « Supprime les plans “Sortie” et “Générique”. » La carte **Delete shots** les liste avec leur plage de temps et le début de leur instruction. **Approve** les supprime avec leurs instructions, leurs images et leurs références propres, et les plans suivants remontent ; leurs prises restent dans le projet. Ctrl+Z les fait revenir. **Approve** supprime les plans que la carte montre, même s’ils ont été déplacés entre-temps. Si ces plans changent entre la carte et **Approve** (déplacés, renommés, une autre durée), la carte se dit périmée et son bouton devient **Approve anyway** ; si un plan de la carte a été supprimé entre-temps, rien n’est supprimé et l’assistant affiche une nouvelle carte.
+Par exemple : « Supprime les plans “Sortie” et “Générique”. » La carte **Delete shots** les liste avec leur plage de temps et le début de leur instruction. **Approve** les supprime avec leurs instructions, leurs images et leurs références propres, et les plans suivants remontent ; leurs prises restent dans le projet. Ctrl+Z les fait revenir. **Approve** supprime les plans que la carte montre, même s’ils ont été déplacés entre-temps. Si ces plans changent entre la carte et **Approve** (déplacés, renommés, une autre durée), la carte se dit périmée et son bouton devient **Approve anyway** ; si un plan de la carte a été supprimé entre-temps, rien n’est supprimé et l’assistant affiche une nouvelle carte. Une carte refusée ne part jamais : si vous redemandez, **Approve** lance la nouvelle carte, celle qui est affichée.
 
 #### Demande 7 : générer et suivre les prises
 

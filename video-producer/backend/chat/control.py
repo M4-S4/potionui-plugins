@@ -584,8 +584,25 @@ def _generation_preview(doc: Mapping[str, Any], order: estimate.Order, evaluatio
 def _unknown_card() -> ToolFailure:
     return ToolFailure(
         CARD_EXPIRED,
-        "The server no longer knows the card that was approved (it restarted, or the card is more than a week old), so nothing ran. Ask again to show a new card.",
+        f"The server no longer has the card that was approved: it restarted, the card is more than a week old, or more than {cards.MAX_CARDS_PER_USER} newer cards of yours were shown since. Nothing ran; ask again to show a new card.",
     )
+
+
+def approved_card(context: ToolContext, tool: str, arguments: Mapping[str, Any]) -> Dict[str, Any]:
+    """The card an approval runs: the one its turn showed, the refusal it already met, or card_expired when the server no longer has it."""
+    card = cards.shown(context, tool, arguments)
+    if card is None:
+        raise _unknown_card()
+    refused = card.get(cards.REFUSED)
+    if refused:
+        raise ToolFailure(refused["code"], refused["message"])
+    return card
+
+
+def _refused(context: ToolContext, tool: str, arguments: Mapping[str, Any], failure: ToolFailure) -> ToolResult:
+    if failure.code == CARD_OUT_OF_DATE:
+        cards.refuse(context, tool, arguments, failure)
+    return failure.result()
 
 
 def _out_of_date(what: str) -> ToolFailure:
@@ -985,6 +1002,7 @@ class DeleteShotsTool(_VideoProducerTool):
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
         try:
+            cards.turn_of(context)
             project = load_project(context)
             targets = self._targets(project["doc"], kwargs)
         except ToolFailure as failure:
@@ -1016,9 +1034,10 @@ class DeleteShotsTool(_VideoProducerTool):
         return _ok({"status": "pending_approval", "project_id": project["id"], "shots": [clip["id"] for clip in targets]}, preview)
 
     async def execute_confirmed(self, context: ToolContext, **kwargs: Any) -> ToolResult:
-        card = cards.shown(context, self.name, kwargs)
-        if card is None:
-            return _unknown_card().result()
+        try:
+            card = approved_card(context, self.name, kwargs)
+        except ToolFailure as failure:
+            return failure.result()
 
         def delete(doc: Dict[str, Any]) -> List[str]:
             present = {clip["id"] for clip in edits.clips_of(doc)}
@@ -1032,7 +1051,7 @@ class DeleteShotsTool(_VideoProducerTool):
         try:
             project, deleted, version = _changed(context, delete)
         except ToolFailure as failure:
-            return failure.result()
+            return _refused(context, self.name, kwargs, failure)
         cards.forget(context, self.name, kwargs)
         return _ok({"project_id": project["id"], "version": version, "deleted": deleted})
 
@@ -1085,6 +1104,7 @@ class GenerateTool(_ProductionTool):
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
         try:
+            cards.turn_of(context)
             project, _, order, evaluation = await evaluate_order(context, kwargs)
         except ToolFailure as failure:
             return failure.result()
@@ -1093,13 +1113,14 @@ class GenerateTool(_ProductionTool):
         return _ok({"status": "pending_approval", "project_id": project["id"], **data}, preview)
 
     async def execute_confirmed(self, context: ToolContext, **kwargs: Any) -> ToolResult:
-        card = cards.shown(context, self.name, kwargs)
-        if card is None:
-            return _unknown_card().result()
+        try:
+            card = approved_card(context, self.name, kwargs)
+        except ToolFailure as failure:
+            return failure.result()
         try:
             project, created = await generate_shown(context, card)
         except ToolFailure as failure:
-            return failure.result()
+            return _refused(context, self.name, kwargs, failure)
         cards.forget(context, self.name, kwargs)
         tracker.ensure_running()
         return _ok({"project_id": project["id"], "takes": [{**_take_entry(take), "shot_id": take["shot_id"]} for take in created]})

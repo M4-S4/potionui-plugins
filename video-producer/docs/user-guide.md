@@ -531,7 +531,7 @@ For example: "Add two shots after “The gulls”: a close-up on Mara’s hands,
 
 #### Request 6: delete shots
 
-For example: "Delete the shots “Exit” and “Credits”." The card **Delete shots** lists them with their time range and the beginning of their prompt. **Approve** deletes them with their prompts, frames and own references, and the later shots move up; their takes stay in the project. Ctrl+Z brings them back. **Approve** deletes the shots the card shows, even if they moved meanwhile. If these shots change between the card and **Approve** (moved, renamed, another length), the card says it is out of date and its button reads **Approve anyway**; if a shot of the card was deleted meanwhile, nothing is deleted and the assistant shows a new card.
+For example: "Delete the shots “Exit” and “Credits”." The card **Delete shots** lists them with their time range and the beginning of their prompt. **Approve** deletes them with their prompts, frames and own references, and the later shots move up; their takes stay in the project. Ctrl+Z brings them back. **Approve** deletes the shots the card shows, even if they moved meanwhile. If these shots change between the card and **Approve** (moved, renamed, another length), the card says it is out of date and its button reads **Approve anyway**; if a shot of the card was deleted meanwhile, nothing is deleted and the assistant shows a new card. A card you rejected never runs: if you ask again, **Approve** runs the new card, the one on screen.
 
 #### Request 7: generate and follow the takes
 

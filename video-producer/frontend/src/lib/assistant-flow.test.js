@@ -159,6 +159,15 @@ test('sending a message saves the pending edits first, so the tools read what th
 	assert.equal(stored.doc.clips[0].label, 'Renamed');
 });
 
+test('each context the page sends carries an id of its own, so that an approval card belongs to the turn that showed it', async () => {
+	await opened('p-turns');
+
+	const ids = [contextSnapshot(), contextSnapshot(), contextSnapshot()].map((snapshot) => snapshot.contextId);
+
+	assert.ok(ids.every((id) => typeof id === 'string' && id.length === 26));
+	assert.equal(new Set(ids).size, 3);
+});
+
 test('an approved prompt that comes two versions ahead is merged, not reloaded, so the page keeps its edits and its undo', async () => {
 	const stored = await opened('p-prompt');
 	act(() => (doc.clips[1].label = 'Bridge at dawn'));
