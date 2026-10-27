@@ -183,6 +183,7 @@ pipeline:
             strength: "{{ item.strength }}"
       steps: "{{ form.steps | default(generation.profile.steps) }}"
       resolution: "{{ form.resolution }}"
+      reference_image_pixel_budget: "{{ form.reference_image_budget }}"
       frames: "{{ ((form.video_director.settings.duration * preset.vars.fps) | round(0, 'floor') | int) if (form.video_director is defined and form.video_director.settings is defined and form.video_director.settings.duration is not none) else (((form.duration) * preset.vars.fps) | round(0, 'floor') | int if form.duration is defined else preset.vars.default_frames) }}"
       quantity: "{{ form.quantity }}"
       preview: "{{ form.preview }}"
