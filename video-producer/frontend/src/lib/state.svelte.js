@@ -577,7 +577,8 @@ export function laneForRole(role) {
 }
 
 export function newReferenceLane() {
-	const lane = newLane('Ambiance');
+	newLane('Ambiance');
+	const lane = doc.lanes.at(-1);
 	setReferenceLane(lane, true);
 	return lane;
 }
