@@ -9,6 +9,7 @@ GRID = 0.04
 PROMPT_STRENGTH = 75
 FRAME_STRENGTH = 100
 MIN_SHOT_S = 0.4
+SHOT_CAP_S = 60.0
 TAKE_SLACK = 0.05
 FIRST, LAST = "first", "last"
 LINKED = ("prompts", "frames")
@@ -244,12 +245,30 @@ def place_frame(doc: Dict[str, Any], clip: Mapping[str, Any], kind: str, asset_i
         frames.append({"id": generate_ulid(), **fields})
 
 
+def _media_of(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    return next((item for item in dicts(doc.get("assets")) if item.get("id") == clip.get("assetId")), None)
+
+
+def _source_length(media: Optional[Mapping[str, Any]]) -> Optional[float]:
+    length = media.get("srcDur") if media else None
+    return float(length) if isinstance(length, (int, float)) and not isinstance(length, bool) else None
+
+
 def take_length(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[float]:
     """How long the generated take placed on a shot lasts from its in point, or None."""
-    media = next((item for item in dicts(doc.get("assets")) if item.get("id") == clip.get("assetId")), None)
-    if not media or not media.get("generated") or not isinstance(media.get("srcDur"), (int, float)):
+    media = _media_of(doc, clip)
+    if not media or not media.get("generated") or _source_length(media) is None:
         return None
     return number(media["srcDur"]) - number(clip.get("srcIn"))
+
+
+def duration_limit(doc: Mapping[str, Any], clip: Mapping[str, Any], engine_max: Optional[float] = None) -> Tuple[float, Optional[str]]:
+    """The longest a shot may last and what sets it, as the page's durationLimit: its engine over a generated take, else what its source media has left from its in point."""
+    media = _media_of(doc, clip)
+    if media and media.get("generated"):
+        return (engine_max, "engine") if engine_max and engine_max > 0 else (SHOT_CAP_S, None)
+    length = _source_length(media)
+    return (length if length is not None else SHOT_CAP_S) - number(clip.get("srcIn")), "source" if length else None
 
 
 def release(clip: Dict[str, Any]) -> Optional[str]:
@@ -259,9 +278,9 @@ def release(clip: Dict[str, Any]) -> Optional[str]:
     return held
 
 
-def resize(doc: Dict[str, Any], clip: Dict[str, Any], duration: float) -> Tuple[bool, Optional[str]]:
-    """Change a shot's length as the shot editor does: its covering prompt and its frames follow, and a take too short for it is released; returns whether it changed and the take released."""
-    duration = snap(max(MIN_SHOT_S, duration))
+def resize(doc: Dict[str, Any], clip: Dict[str, Any], duration: float, maximum: float = SHOT_CAP_S) -> Tuple[bool, Optional[str]]:
+    """Change a shot's length as the shot editor does, within its maximum: its covering prompt and its frames follow, and a take too short for it is released; returns whether it changed and the take released."""
+    duration = snap(min(max(MIN_SHOT_S, duration), max(MIN_SHOT_S, maximum)))
     was = number(clip.get("dur"))
     if abs(duration - was) <= 1e-6:
         return False, None
@@ -294,6 +313,25 @@ def set_cast(clip: Dict[str, Any], characters: Optional[List[str]], place: Any) 
         clip["cast"] = cast
     else:
         clip.pop("cast", None)
+
+
+def chain_frames(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """The first frames of a shot taken from the last image of the previous shot, as the page's chainFrames."""
+    if index_of(doc, clip) == 0:
+        return []
+    stills = {item.get("id") for item in dicts(doc.get("assets")) if isinstance(item.get("frameOf"), dict)}
+    return [frame for frame in frames_of(doc, clip, FIRST) if frame.get("assetId") in stills]
+
+
+def set_chain(doc: Dict[str, Any], clip: Dict[str, Any], on: bool) -> bool:
+    """Make a shot start from the last image of the previous shot or not, as the page's setShotChain; False for the first shot or when its own choice is already that."""
+    if index_of(doc, clip) == 0 or clip.get("firstFromPrevious") is on:
+        return False
+    dropped = [] if on else chain_frames(doc, clip)
+    clip["firstFromPrevious"] = on
+    if dropped:
+        doc["frames"] = [frame for frame in dicts(doc.get("frames")) if not any(frame is item for item in dropped)]
+    return True
 
 
 def reference_type(space: str, kind: Any) -> Optional[str]:

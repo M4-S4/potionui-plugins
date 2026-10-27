@@ -1,6 +1,6 @@
 import { getLocale, t } from '../i18n/index.svelte.js';
 import { doc, ui, act, toast, round, secs, clipLabel, allIssues, ruleText, openDirector, undo } from './state.svelte.js';
-import { project, savedSnapshot, markSaved, flushSave, getClient, pullProject } from './project.svelte.js';
+import { project, savedSnapshot, markSaved, flushSave, getClient, pullProject, mergedToast } from './project.svelte.js';
 import { promptLanguageOf } from './starter.js';
 import { bibleContext } from './bible.js';
 import { seams } from './continuity.svelte.js';
@@ -144,14 +144,25 @@ export function applyReview(result) {
 	return { status: 'applied' };
 }
 
+const CHANGED = {
+	merged: () => t('assistant.toast.changed'),
+	kept: (count) => t('assistant.toast.changedKept', { count }),
+	dropped: (count) => t('assistant.toast.changedDropped', { count })
+};
+
 function changedToast(outcome) {
-	if (!outcome?.changed) return;
-	const message = outcome.conflicts ? t('assistant.toast.changedKept', { count: outcome.conflicts }) : t('assistant.toast.changed');
-	toast(message, outcome.conflicts ? 'warning' : 'success', { label: t('shell.toast.undo'), run: undo });
+	if (outcome?.changed) mergedToast(outcome, { ...CHANGED, action: { label: t('shell.toast.undo'), run: undo } });
 }
 
+let following = null;
+
 function pull(version = 0) {
-	return pullProject(version).then(changedToast, () => toast(t('assistant.toast.reloadFailed'), 'error'));
+	const pulled = pullProject(version);
+	if (pulled !== following) {
+		following = pulled;
+		pulled.then(changedToast, () => toast(t('assistant.toast.reloadFailed'), 'error'));
+	}
+	return pulled;
 }
 
 async function reloadTakes(projectId) {

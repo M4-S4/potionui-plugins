@@ -5,11 +5,11 @@ from fastapi import HTTPException
 
 from src.plugin_api.chat import ToolApprovalPreview, ToolContext, ToolResult
 
-from .. import bible, core_bridge, estimate, generation, limits, projects, settings, takes, tracker
+from .. import bible, core_bridge, director, estimate, generation, limits, projects, settings, takes, tracker
 from ..exports import jobs, video
 from ..generation import Blocked
 from ..routes_exports import queue_video
-from . import edits
+from . import cards, edits
 from .edits import EditError
 from .tools import (
     MAX_DURATION_S,
@@ -28,6 +28,8 @@ from .tools import (
 )
 
 PRODUCTION = "vp_production"
+CARD_EXPIRED = "card_expired"
+CARD_OUT_OF_DATE = "card_out_of_date"
 MAX_TAKES_PER_SHOT = 8
 MAX_READ_CHARS = 9000
 MAX_READ_PROMPT_CHARS = 1200
@@ -224,8 +226,8 @@ def _shot_details(doc: Mapping[str, Any], clip: Mapping[str, Any], shot_takes: S
     }
     if isinstance(clip.get("drafts"), int):
         entry["takes_per_run"] = clip["drafts"]
-    if clip.get("firstFromPrevious") is False:
-        entry["chain"] = False
+    if isinstance(clip.get("firstFromPrevious"), bool):
+        entry["chain"] = clip["firstFromPrevious"]
     return entry
 
 
@@ -381,17 +383,47 @@ def _references(doc: Dict[str, Any], clip: Dict[str, Any], fields: Mapping[str, 
     return inputs
 
 
-def update_shot(doc: Dict[str, Any], fields: Mapping[str, Any]) -> Dict[str, Any]:
-    """Apply one shot's update as the page does, counting an edit of its inputs when its length, frames, references or cast change."""
+EngineMax = Callable[[Mapping[str, Any], Mapping[str, Any]], Optional[float]]
+
+
+def _no_engine_max(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[float]:
+    return None
+
+
+def engine_max(context: ToolContext) -> EngineMax:
+    """The longest take the engine of a shot makes, read once per preset from the presets the caller may run."""
+    user = core_bridge.get_user(context.user_id)
+    found: Dict[str, Optional[float]] = {}
+
+    def maximum(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[float]:
+        engine = doc.get("engine") if isinstance(doc.get("engine"), dict) else {}
+        preset_id = director.shot_engine(doc, clip["id"]).get("preset") or engine.get("preset")
+        if user is None or not isinstance(preset_id, str) or not preset_id:
+            return None
+        if preset_id not in found:
+            preset = director.find_preset(user, preset_id)
+            value = preset.limits.get("max_duration") if preset else None
+            found[preset_id] = float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else None
+        return found[preset_id]
+
+    return maximum
+
+
+def update_shot(doc: Dict[str, Any], fields: Mapping[str, Any], longest: EngineMax = _no_engine_max) -> Dict[str, Any]:
+    """Apply one shot's update as the page does, counting an edit of its inputs when its length, frames, references or cast change, and keeping its length within what its media and its engine allow."""
     clip = edits.find_shot(doc, fields["shot"])
     changed: List[str] = []
     inputs = False
     released = None
+    limited = None
     if "label" in fields and fields["label"] != clip.get("label"):
         clip["label"] = fields["label"]
         changed.append("label")
     if "duration_s" in fields:
-        resized, released = edits.resize(doc, clip, fields["duration_s"])
+        maximum, by = edits.duration_limit(doc, clip, longest(doc, clip))
+        if fields["duration_s"] > max(edits.MIN_SHOT_S, maximum) + 1e-6:
+            limited = {"max_s": round(max(edits.MIN_SHOT_S, maximum), 2), "by": by}
+        resized, released = edits.resize(doc, clip, fields["duration_s"], maximum)
         if resized:
             edits.relayout(doc)
             changed.append("duration_s")
@@ -415,17 +447,13 @@ def update_shot(doc: Dict[str, Any], fields: Mapping[str, Any]) -> Dict[str, Any
     if "takes_per_run" in fields and clip.get("drafts") != fields["takes_per_run"]:
         clip["drafts"] = fields["takes_per_run"]
         changed.append("takes_per_run")
-    if "chain" in fields and (clip.get("firstFromPrevious") is not False) != fields["chain"]:
-        if fields["chain"]:
-            clip.pop("firstFromPrevious", None)
-        else:
-            clip["firstFromPrevious"] = False
-        changed.append("chain")
     if "position" in fields and edits.move_shot(doc, clip, fields["position"] - 1):
         changed.append("position")
+    if "chain" in fields and edits.set_chain(doc, clip, fields["chain"]):
+        changed.append("chain")
     if inputs:
         edits.touch(clip, doc)
-    return {"shot_id": clip["id"], "changed": changed, **({"released_take": released} if released else {})}
+    return {"shot_id": clip["id"], "changed": changed, **({"released_take": released} if released else {}), **({"duration_limit": limited} if limited else {})}
 
 
 def _release_labels(released: Sequence[str]) -> None:
@@ -481,10 +509,47 @@ async def evaluate_order(context: ToolContext, arguments: Mapping[str, Any]) -> 
     return project, owner, order, evaluation
 
 
-def _generation_preview(doc: Mapping[str, Any], order: estimate.Order, evaluation: estimate.Evaluation) -> Tuple[ToolApprovalPreview, Dict[str, Any]]:
+def _cost_usd(evaluation: estimate.Evaluation) -> Optional[float]:
+    total = (evaluation.payload.get("cost") or {}).get("total_usd")
+    return float(total) if isinstance(total, (int, float)) and not isinstance(total, bool) else None
+
+
+def _take_count(evaluation: estimate.Evaluation) -> int:
+    return sum(evaluation.count(plan.shot_id) for plan in evaluation.plans.shots)
+
+
+def _generation_card(doc: Mapping[str, Any], order: estimate.Order, evaluation: estimate.Evaluation) -> Dict[str, Any]:
+    return {
+        "shots": list(order.shots),
+        "names": [edits.shot_name(doc, edits.find_shot(doc, shot_id), "en") for shot_id in order.shots],
+        "quality": order.quality,
+        "variants": order.variants,
+        "shot_variants": dict(order.shot_variants),
+        "preset_id": order.preset_id,
+        "model_id": order.model_id,
+        "presets": {plan.shot_id: plan.preset_id for plan in evaluation.plans.shots},
+        "takes": _take_count(evaluation),
+        "gpu_minutes": evaluation.payload["quota"]["needed_minutes"],
+        "cost_usd": _cost_usd(evaluation),
+    }
+
+
+def _generation_shown(doc: Mapping[str, Any], card: Mapping[str, Any], evaluation: estimate.Evaluation) -> Dict[str, Any]:
+    durations = {clip["id"]: _seconds(clip.get("dur")) for clip in edits.clips_of(doc)}
+    return {
+        "shots": [{"id": shot_id, "duration_s": durations.get(shot_id), "takes": evaluation.count(shot_id)} for shot_id in card["shots"]],
+        "quality": card["quality"],
+        "engine": card["preset_id"],
+        "model": card["model_id"],
+        "presets": card["presets"],
+    }
+
+
+def _generation_preview(doc: Mapping[str, Any], order: estimate.Order, evaluation: estimate.Evaluation) -> Tuple[ToolApprovalPreview, Dict[str, Any], Dict[str, Any]]:
     payload = evaluation.payload
-    names = [edits.shot_name(doc, edits.find_shot(doc, shot_id), "en") for shot_id in order.shots]
-    count = sum(evaluation.count(plan.shot_id) for plan in evaluation.plans.shots)
+    card = _generation_card(doc, order, evaluation)
+    names = card["names"]
+    count = card["takes"]
     quota = payload["quota"]
     minutes = f"{quota['needed_minutes']:g}"
     if quota.get("limit") is not None and not quota.get("exempt") and quota.get("remaining") is not None:
@@ -510,9 +575,65 @@ def _generation_preview(doc: Mapping[str, Any], order: estimate.Order, evaluatio
         summary=summary,
         fields=fields,
         note=" ".join(warnings) or None,
+        changes=[{"op": "generate", "summary": summary, "before": _generation_shown(doc, card, evaluation), "after": None}],
     )
     data = {"shots": order.shots, "takes": count, "quality": order.quality, "gpu_minutes": quota["needed_minutes"], "warnings": warnings}
-    return preview, data
+    return preview, data, card
+
+
+def _unknown_card() -> ToolFailure:
+    return ToolFailure(
+        CARD_EXPIRED,
+        "The server no longer knows the card that was approved (it restarted, or the card is more than a week old), so nothing ran. Ask again to show a new card.",
+    )
+
+
+def _out_of_date(what: str) -> ToolFailure:
+    return ToolFailure(CARD_OUT_OF_DATE, f"{what} since the card was shown, so nothing ran. Read the project and ask again to show a new card.")
+
+
+def _missing(names: Sequence[str]) -> str:
+    return f"{', '.join(names)} no longer exist{'s' if len(names) == 1 else ''}"
+
+
+def _within_card(card: Mapping[str, Any], evaluation: estimate.Evaluation) -> None:
+    if {plan.shot_id: plan.preset_id for plan in evaluation.plans.shots} != card["presets"]:
+        raise _out_of_date("The engine of a shot changed")
+    count = _take_count(evaluation)
+    minutes = evaluation.payload["quota"]["needed_minutes"]
+    cost = _cost_usd(evaluation)
+    dearer = cost is not None and (card["cost_usd"] is None or cost > card["cost_usd"] + 1e-9)
+    if count > card["takes"] or minutes > card["gpu_minutes"] + 1e-9 or dearer:
+        shown = f"{_plural(card['takes'], 'take')} and {card['gpu_minutes']:g} GPU minutes"
+        raise _out_of_date(f"The estimate rose to {_plural(count, 'take')} and {minutes:g} GPU minutes from the {shown} on the card")
+
+
+async def generate_shown(context: ToolContext, card: Mapping[str, Any]) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Start the takes an approved card showed: the same shots by id, quality, numbers of takes and engine, refused when a shot is gone or the estimate rose."""
+    project = load_project(context)
+    caller, owner = _owner(context, project)
+    doc = project["doc"]
+    present = {clip["id"] for clip in edits.clips_of(doc)}
+    gone = [name for shot_id, name in zip(card["shots"], card["names"]) if shot_id not in present]
+    if gone:
+        raise _out_of_date(_missing(gone))
+    order = estimate.Order(
+        shots=list(card["shots"]),
+        quality=card["quality"],
+        variants=card["variants"],
+        preset_id=card["preset_id"],
+        model_id=card["model_id"],
+        shot_variants=dict(card["shot_variants"]),
+    )
+    evaluation = await estimate.evaluate(caller, owner, doc, order, project["id"])
+    if evaluation.blocked:
+        raise ToolFailure("blocked", " ".join(block["message"] for block in evaluation.payload["blocks"]))
+    _within_card(card, evaluation)
+    try:
+        created = await generation.start(owner, project, evaluation)
+    except Blocked as exc:
+        raise ToolFailure("blocked", str(exc) or "The takes cannot start.") from None
+    return project, created
 
 
 def _find_take(project: Mapping[str, Any], arguments: Mapping[str, Any]) -> Dict[str, Any]:
@@ -809,7 +930,8 @@ class UpdateShotsTool(_VideoProducerTool):
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
         try:
             updates = _update_arguments(kwargs)
-            project, changes, version = _changed(context, lambda doc: [update_shot(doc, fields) for fields in updates])
+            longest = engine_max(context)
+            project, changes, version = _changed(context, lambda doc: [update_shot(doc, fields, longest) for fields in updates])
         except ToolFailure as failure:
             return failure.result()
         _release_labels([change["released_take"] for change in changes if change.get("released_take")])
@@ -884,12 +1006,26 @@ class DeleteShotsTool(_VideoProducerTool):
             summary=f"Delete {count}",
             rows=rows,
             note="Their prompts, frames and own references go with them; their takes stay in the project. Ctrl+Z on the page brings them back.",
+            changes=[
+                {"op": "remove", "summary": edits.shot_name(doc, clip, "en"), "before": {**_shot_entry(doc, clip), "prompt": _head(instruction_of(doc, clip))}, "after": None}
+                for clip in targets
+            ],
         )
+        shown = [{"id": clip["id"], "name": edits.shot_name(doc, clip, "en")} for clip in targets]
+        cards.keep(context, self.name, kwargs, {"project_id": project["id"], "shots": shown})
         return _ok({"status": "pending_approval", "project_id": project["id"], "shots": [clip["id"] for clip in targets]}, preview)
 
     async def execute_confirmed(self, context: ToolContext, **kwargs: Any) -> ToolResult:
+        card = cards.shown(context, self.name, kwargs)
+        if card is None:
+            return _unknown_card().result()
+
         def delete(doc: Dict[str, Any]) -> List[str]:
-            ids = [clip["id"] for clip in self._targets(doc, kwargs)]
+            present = {clip["id"] for clip in edits.clips_of(doc)}
+            gone = [shot["name"] for shot in card["shots"] if shot["id"] not in present]
+            if gone:
+                raise _out_of_date(_missing(gone))
+            ids = [shot["id"] for shot in card["shots"]]
             edits.delete_shots(doc, ids)
             return ids
 
@@ -897,6 +1033,7 @@ class DeleteShotsTool(_VideoProducerTool):
             project, deleted, version = _changed(context, delete)
         except ToolFailure as failure:
             return failure.result()
+        cards.forget(context, self.name, kwargs)
         return _ok({"project_id": project["id"], "version": version, "deleted": deleted})
 
 
@@ -951,17 +1088,19 @@ class GenerateTool(_ProductionTool):
             project, _, order, evaluation = await evaluate_order(context, kwargs)
         except ToolFailure as failure:
             return failure.result()
-        preview, data = _generation_preview(project["doc"], order, evaluation)
+        preview, data, card = _generation_preview(project["doc"], order, evaluation)
+        cards.keep(context, self.name, kwargs, card)
         return _ok({"status": "pending_approval", "project_id": project["id"], **data}, preview)
 
     async def execute_confirmed(self, context: ToolContext, **kwargs: Any) -> ToolResult:
+        card = cards.shown(context, self.name, kwargs)
+        if card is None:
+            return _unknown_card().result()
         try:
-            project, owner, _, evaluation = await evaluate_order(context, kwargs)
-            created = await generation.start(owner, project, evaluation)
+            project, created = await generate_shown(context, card)
         except ToolFailure as failure:
             return failure.result()
-        except Blocked as exc:
-            return ToolFailure("blocked", str(exc) or "The takes cannot start.").result()
+        cards.forget(context, self.name, kwargs)
         tracker.ensure_running()
         return _ok({"project_id": project["id"], "takes": [{**_take_entry(take), "shot_id": take["shot_id"]} for take in created]})
 

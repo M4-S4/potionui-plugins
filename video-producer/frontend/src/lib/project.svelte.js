@@ -1,7 +1,7 @@
 import { t, tFor } from '../i18n/index.svelte.js';
 import { doc, ui, replaceDoc, toast, adopt } from './state.svelte.js';
 import { DEFAULT_PROMPT_LANGUAGE, emptyDoc, migrate, starterDoc } from './starter.js';
-import { merge3, same } from './merge.js';
+import { mergeDocs, same } from './merge.js';
 import { pause } from './playback.svelte.js';
 import { confirm } from './host.js';
 
@@ -15,6 +15,8 @@ let timer = null;
 let inFlight = null;
 let pulling = null;
 let wanted = 0;
+let asks = 0;
+let answered = 0;
 const loadListeners = new Set();
 
 export function onLoaded(listener) {
@@ -114,15 +116,21 @@ export function mergeServer(p) {
 	if (!base || !p?.doc) return null;
 	const theirs = serverDoc(p);
 	const mine = $state.snapshot(doc);
-	const { value, conflicts } = merge3(base, mine, theirs);
+	const { value, conflicts, dropped } = mergeDocs(base, mine, theirs);
 	const changed = !same(value, mine);
-	const saved = same(value, theirs) ? null : JSON.stringify(theirs);
 	if (changed) adopt(JSON.parse(JSON.stringify(value)));
 	Object.assign(project, { version: p.version, savedAt: p.updatedAt ?? new Date().toISOString(), status: 'saved', error: null });
-	lastSavedJson = saved ?? currentJson();
+	const now = $state.snapshot(doc);
+	lastSavedJson = JSON.stringify(same(now, theirs) ? now : theirs);
 	ui.dirty = currentJson() !== lastSavedJson;
 	if (ui.dirty) scheduleSave();
-	return { changed, conflicts };
+	return { changed, conflicts, dropped };
+}
+
+export function mergedToast(outcome, texts) {
+	if (outcome.dropped) return toast(texts.dropped(outcome.dropped), 'warning', texts.action);
+	if (outcome.conflicts) return toast(texts.kept(outcome.conflicts), 'warning', texts.action);
+	toast(texts.merged(), texts.level ?? 'success', texts.action);
 }
 
 async function reloadAfterConflict(id) {
@@ -138,11 +146,17 @@ async function reloadAfterConflict(id) {
 	if (!merged) {
 		loaded(result.data);
 		toast(t('project.toast.reloaded'), 'warning');
-	} else toast(merged.conflicts ? t('project.toast.mergedKept', { count: merged.conflicts }) : t('project.toast.merged'), 'warning');
+	} else
+		mergedToast(merged, {
+			merged: () => t('project.toast.merged'),
+			kept: (count) => t('project.toast.mergedKept', { count }),
+			dropped: (count) => t('project.toast.mergedDropped', { count }),
+			level: 'warning'
+		});
 	return false;
 }
 
-const UNCHANGED = { changed: false, conflicts: 0 };
+const UNCHANGED = { changed: false, conflicts: 0, dropped: 0 };
 
 async function pullOnce(id) {
 	if (inFlight) await inFlight;
@@ -160,24 +174,30 @@ async function pullOnce(id) {
 }
 
 async function pullRounds() {
-	const outcome = { changed: false, conflicts: 0 };
-	for (let round = 0; round < 3; round += 1) {
-		const id = project.id;
-		if (!id || !client || ((round > 0 || wanted) && wanted <= project.version)) break;
-		const step = await pullOnce(id);
+	const outcome = { changed: false, conflicts: 0, dropped: 0 };
+	let late = 0;
+	while (project.id && client) {
+		const asked = answered !== asks;
+		if (!asked && (wanted <= project.version || late >= 2)) break;
+		if (!asked) late += 1;
+		answered = asks;
+		const step = await pullOnce(project.id);
 		if (!step) break;
 		outcome.changed ||= step.changed;
 		outcome.conflicts += step.conflicts;
+		outcome.dropped += step.dropped;
 	}
 	return outcome;
 }
 
 export function pullProject(version = 0) {
 	wanted = Math.max(wanted, version);
+	asks += 1;
 	if (pulling) return pulling;
 	pulling = pullRounds().finally(() => {
 		pulling = null;
 		wanted = 0;
+		if (answered !== asks && project.id && client) pullProject();
 	});
 	return pulling;
 }

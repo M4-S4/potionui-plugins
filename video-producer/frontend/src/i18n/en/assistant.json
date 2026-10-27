@@ -51,6 +51,8 @@
 	"toast.changed": "Project updated by the assistant",
 	"toast.changedKept.one": "Project updated by the assistant; {count} of your edits was kept over its change",
 	"toast.changedKept.other": "Project updated by the assistant; {count} of your edits were kept over its change",
+	"toast.changedDropped.one": "Project updated by the assistant; it deleted {count} shot you had edited, Ctrl+Z brings it back",
+	"toast.changedDropped.other": "Project updated by the assistant; it deleted {count} shots you had edited, Ctrl+Z brings them back",
 	"toast.takes.one": "{count} take started by the assistant",
 	"toast.takes.other": "{count} takes started by the assistant",
 	"toast.export": "Export started by the assistant"

@@ -89,5 +89,7 @@
 	"upload.videoOnly.other": "{count} fichiers ne peuvent pas servir ici : seules les vidéos sont acceptées.",
 	"toast.merged": "Les modifications enregistrées ailleurs ont été fusionnées dans le projet",
 	"toast.mergedKept.one": "Modifications enregistrées ailleurs fusionnées ; {count} de vos changements a été gardé à leur place",
-	"toast.mergedKept.other": "Modifications enregistrées ailleurs fusionnées ; {count} de vos changements ont été gardés à leur place"
+	"toast.mergedKept.other": "Modifications enregistrées ailleurs fusionnées ; {count} de vos changements ont été gardés à leur place",
+	"toast.mergedDropped.one": "Modifications enregistrées ailleurs fusionnées ; {count} plan que vous aviez modifié y a été supprimé, Ctrl+Z le rétablit",
+	"toast.mergedDropped.other": "Modifications enregistrées ailleurs fusionnées ; {count} plans que vous aviez modifiés y ont été supprimés, Ctrl+Z les rétablit"
 }

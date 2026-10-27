@@ -3,7 +3,7 @@ import json
 import pytest
 
 from backend import core_bridge, presets, projects, routes_exports, takes
-from backend.chat import control, edits, tools
+from backend.chat import cards, control, edits, tools
 from backend.chat.control import (
     AddShotsTool,
     AssembleTool,
@@ -67,6 +67,13 @@ def _doc(make_doc, **parts):
     doc["engine"] = dict(ENGINE)
     doc["bible"] = json.loads(json.dumps(BIBLE))
     return doc
+
+
+@pytest.fixture(autouse=True)
+def no_cards():
+    cards.clear()
+    yield
+    cards.clear()
 
 
 @pytest.fixture
@@ -349,6 +356,69 @@ async def test_lengthening_a_shot_past_its_placed_take_releases_the_take_back_to
     assert takes.get_take(take["id"])["label"] == "draft"
 
 
+def _edit_stored(project_id, change):
+    stored = _stored(project_id)
+    change(stored["doc"])
+    projects.save_project(project_id, stored["doc"], stored["version"])
+
+
+def _before(preview):
+    return [change["before"] for change in preview.changes]
+
+
+async def _approved(tool, context, **arguments):
+    _data(await tool.execute(context, **arguments))
+    return await tool.execute_confirmed(context, **arguments)
+
+
+async def test_chain_sets_the_shots_own_choice_either_way_and_off_drops_the_image_taken_from_the_previous_shot(project, make_doc):
+    frame_of = {"shotId": "s1", "takeId": "t0", "assetId": "gen-t0", "at": 3.96}
+    still = make_doc(assets=[{"id": "still-1", "name": "1-frame-4s.png", "origin": {"kind": "library", "itemId": "it-9"}, "frameOf": frame_of}])["assets"][0]
+
+    def setup(doc):
+        doc["firstFromPrevious"] = False
+        doc["assets"].append(still)
+        doc["frames"].append({"id": "f2", "shotId": "s2", "time": 4, "assetId": "still-1", "role": "first", "strength": 100})
+
+    _edit_stored(project["id"], setup)
+    on = _data(await UpdateShotsTool().execute(_context(project["id"]), updates=[{"shot": "s2", "chain": True}, {"shot": "s1", "chain": True}]))
+    clips = {clip["id"]: clip for clip in _stored(project["id"])["doc"]["clips"]}
+    off = _data(await UpdateShotsTool().execute(_context(project["id"]), updates=[{"shot": "s2", "chain": False}, {"shot": "s3", "chain": True}]))
+    doc = _stored(project["id"])["doc"]
+    read = _data(await ReadProjectTool().execute(_context(project["id"])))
+
+    assert on["updated"] == [{"shot_id": "s2", "changed": ["chain"]}, {"shot_id": "s1", "changed": []}]
+    assert clips["s2"]["firstFromPrevious"] is True and "firstFromPrevious" not in clips["s1"]
+    assert off["updated"] == [{"shot_id": "s2", "changed": ["chain"]}, {"shot_id": "s3", "changed": ["chain"]}]
+    assert [clip.get("firstFromPrevious") for clip in doc["clips"]] == [None, False, True]
+    assert [frame["id"] for frame in doc["frames"]] == ["f3", "f3l"]
+    assert [shot.get("chain") for shot in read["shots"]] == [None, False, True]
+
+
+async def test_a_shot_is_not_lengthened_past_what_its_source_media_has_left(project):
+    _edit_stored(project["id"], lambda doc: (doc["assets"][2].update(srcDur=8), doc["clips"][1].update(assetId="vid-run", srcIn=1, stage="source")))
+
+    data = _data(await UpdateShotsTool().execute(_context(project["id"]), updates=[{"shot": "s2", "duration_s": 9}]))
+
+    assert data["updated"] == [{"shot_id": "s2", "changed": ["duration_s"], "duration_limit": {"max_s": 7, "by": "source"}}]
+    assert _clips(project["id"]) == [("s1", 0, 4), ("s2", 4, 7), ("s3", 11, 3)]
+
+
+async def test_a_shot_holding_a_take_is_not_lengthened_past_what_its_engine_makes(project, core):
+    core.use_openrouter()
+    take = _done_take(project["id"], "s1", "A", label="final")
+
+    def setup(doc):
+        edits.place_take(doc, doc["clips"][0], takes.public(take), "en")
+        doc["clips"][0]["engine"] = {"preset": presets.OPENROUTER_VIDEO, "model": None}
+
+    _edit_stored(project["id"], setup)
+    data = _data(await UpdateShotsTool().execute(_context(project["id"]), updates=[{"shot": "s1", "duration_s": 14}]))
+
+    assert data["updated"] == [{"shot_id": "s1", "changed": ["duration_s"], "released_take": take["id"], "duration_limit": {"max_s": 10, "by": "engine"}}]
+    assert _clips(project["id"])[0] == ("s1", 0, 10)
+
+
 async def test_deleting_shots_previews_them_and_deletes_only_once_approved(project):
     _done_take(project["id"], "s3", "A")
     preview = await DeleteShotsTool().execute(_context(project["id"]), shots=["Exit", "s3"])
@@ -356,15 +426,59 @@ async def test_deleting_shots_previews_them_and_deletes_only_once_approved(proje
     assert _data(preview) == {"status": "pending_approval", "project_id": project["id"], "shots": ["s3"]}
     assert preview.preview.kind == "timeline" and preview.preview.target == "1 shot"
     assert preview.preview.rows == [{"range": "9–12 s", "text": "Exit: The rider leaves", "op": "remove"}]
+    assert _before(preview.preview) == [{"id": "s3", "n": 3, "label": "Exit", "start_s": 9, "duration_s": 3, "prompt": "The rider leaves"}]
     assert _stored(project["id"])["version"] == 1
 
-    confirmed = _data(await DeleteShotsTool().execute_confirmed(_context(project["id"]), shots=["s2"]))
+    confirmed = _data(await DeleteShotsTool().execute_confirmed(_context(project["id"]), shots=["Exit", "s3"]))
 
     doc = _stored(project["id"])["doc"]
-    assert confirmed == {"project_id": project["id"], "version": 2, "deleted": ["s2"]}
-    assert [(clip["id"], clip["start"]) for clip in doc["clips"]] == [("s1", 0), ("s3", 4)]
-    assert [frame["time"] for frame in doc["frames"]] == [4, 6.96]
+    assert confirmed == {"project_id": project["id"], "version": 2, "deleted": ["s3"]}
+    assert [(clip["id"], clip["start"]) for clip in doc["clips"]] == [("s1", 0), ("s2", 4)]
+    assert doc["frames"] == [] and [prompt["id"] for prompt in doc["prompts"]] == ["p1"]
     assert len(takes.list_takes(project["id"])) == 1
+
+
+async def test_an_approved_deletion_removes_the_shot_the_card_showed_even_after_it_moved(project):
+    context = _context(project["id"])
+    card = await DeleteShotsTool().execute(context, shots=["2"])
+    _edit_stored(project["id"], lambda doc: doc["clips"].insert(0, doc["clips"].pop(2)))
+    again = await DeleteShotsTool().execute(context, shots=["2"])
+
+    confirmed = _data(await DeleteShotsTool().execute_confirmed(context, shots=["2"]))
+
+    assert _before(card.preview)[0]["id"] == "s2" and _before(again.preview)[0]["id"] == "s1"
+    assert confirmed["deleted"] == ["s2"]
+    assert [clip["id"] for clip in _stored(project["id"])["doc"]["clips"]] == ["s3", "s1"]
+
+
+async def test_an_approved_deletion_of_a_shot_deleted_since_the_card_deletes_nothing(project):
+    context = _context(project["id"])
+    await DeleteShotsTool().execute(context, shots=["Bridge", "Exit"])
+    _edit_stored(project["id"], lambda doc: doc["clips"].pop(1))
+
+    result = await DeleteShotsTool().execute_confirmed(context, shots=["Bridge", "Exit"])
+
+    assert _code(result) == "card_out_of_date" and "Bridge no longer exists" in result.error
+    assert [clip["id"] for clip in _stored(project["id"])["doc"]["clips"]] == ["s1", "s3"]
+    assert _stored(project["id"])["version"] == 2
+
+
+async def test_an_approval_the_server_has_no_card_for_runs_nothing(project, core):
+    deletion = await DeleteShotsTool().execute_confirmed(_context(project["id"]), shots=["s2"])
+    generation = await GenerateTool().execute_confirmed(_context(project["id"]), shots=["s1"])
+
+    assert _code(deletion) == "card_expired" and _code(generation) == "card_expired"
+    assert len(_stored(project["id"])["doc"]["clips"]) == 3 and core.submitted == []
+
+
+async def test_a_card_belongs_to_the_turn_that_showed_it(project):
+    turn = _context(project["id"])
+    later = ToolContext(user_id="user-1", mode_id="video-producer", session_metadata={"video_producer": {"projectId": project["id"], "projectVersion": 7}})
+    await DeleteShotsTool().execute(turn, shots=["Exit"])
+
+    assert _code(await DeleteShotsTool().execute_confirmed(later, shots=["Exit"])) == "card_expired"
+    assert _data(await DeleteShotsTool().execute_confirmed(turn, shots=["Exit"]))["deleted"] == ["s3"]
+    assert _code(await DeleteShotsTool().execute_confirmed(turn, shots=["Exit"])) == "card_expired"
 
 
 async def test_generating_previews_the_estimate_and_starts_nothing_before_approval(project, core):
@@ -376,25 +490,62 @@ async def test_generating_previews_the_estimate_and_starts_nothing_before_approv
     assert result.preview.kind == "generation" and result.preview.summary == "Generate 4 takes for 2 shots"
     assert fields["Shots"] == "Arrival, Bridge" and fields["Takes"] == "4" and fields["Quality"] == "draft"
     assert fields["GPU minutes"].endswith("of 600 left this month")
+    assert _before(result.preview) == [
+        {
+            "shots": [{"id": "s1", "duration_s": 4, "takes": 2}, {"id": "s2", "duration_s": 5, "takes": 2}],
+            "quality": "draft",
+            "engine": presets.WAN,
+            "model": None,
+            "presets": {"s1": presets.WAN, "s2": presets.WAN},
+        }
+    ]
     assert takes.list_takes(project["id"]) == [] and core.submitted == []
 
 
 async def test_generating_once_approved_starts_each_shots_own_number_of_takes(project, core):
-    stored = _stored(project["id"])
-    stored["doc"]["clips"][1]["drafts"] = 2
-    stored["doc"]["clips"][1]["firstFromPrevious"] = False
-    projects.save_project(project["id"], stored["doc"], stored["version"])
+    _edit_stored(project["id"], lambda doc: doc["clips"][1].update(drafts=2, firstFromPrevious=False))
 
-    data = _data(await GenerateTool().execute_confirmed(_context(project["id"]), shots=["s1", "s2"]))
+    data = _data(await _approved(GenerateTool(), _context(project["id"]), shots=["s1", "s2"]))
 
     assert [(take["shot_id"], take["variant"], take["quality"]) for take in data["takes"]] == [("s1", "A", "draft"), ("s2", "A", "draft"), ("s2", "B", "draft")]
     assert len(takes.list_takes(project["id"])) == 3 and len(core.submitted) == 2
 
 
 async def test_an_administrator_generates_on_a_users_project_as_its_owner(project, core):
-    await GenerateTool().execute_confirmed(_context(project["id"], user_id="admin-1", is_admin=True), shots=["s1"])
+    await _approved(GenerateTool(), _context(project["id"], user_id="admin-1", is_admin=True), shots=["s1"])
 
     assert [user_id for user_id, _ in core.submitted] == ["user-1"]
+
+
+async def test_an_approved_generation_starts_the_quality_and_takes_the_card_showed(project, core):
+    context = _context(project["id"])
+    card = await GenerateTool().execute(context, shots=["Arrival"])
+
+    def change(doc):
+        doc["engine"]["quality"] = "final"
+        doc["clips"][0]["drafts"] = 3
+
+    _edit_stored(project["id"], change)
+    again = await GenerateTool().execute(context, shots=["Arrival"])
+    data = _data(await GenerateTool().execute_confirmed(context, shots=["Arrival"]))
+
+    assert _before(card.preview) != _before(again.preview)
+    assert [(take["shot_id"], take["variant"], take["quality"]) for take in data["takes"]] == [("s1", "A", "draft")]
+
+
+async def test_an_approved_generation_whose_estimate_rose_or_whose_shot_is_gone_starts_nothing(project, core):
+    context = _context(project["id"])
+    await GenerateTool().execute(context, shots=["s1"])
+    await GenerateTool().execute(context, shots=["s2", "s3"])
+    _edit_stored(project["id"], lambda doc: doc["clips"][0].update(dur=12))
+    _edit_stored(project["id"], lambda doc: doc["clips"].pop(2))
+
+    longer = await GenerateTool().execute_confirmed(context, shots=["s1"])
+    gone = await GenerateTool().execute_confirmed(context, shots=["s2", "s3"])
+
+    assert _code(longer) == "card_out_of_date" and "The estimate rose to 1 take and" in longer.error
+    assert _code(gone) == "card_out_of_date" and "Exit no longer exists" in gone.error
+    assert takes.list_takes(project["id"]) == [] and core.submitted == []
 
 
 async def test_generating_without_an_engine_or_past_the_quota_is_refused_with_its_reason(project, core):
@@ -416,7 +567,7 @@ async def test_the_status_lists_the_takes_in_flight_and_the_latest_exports(proje
     stored = _stored(project["id"])
     stored["doc"]["clips"][1]["firstFromPrevious"] = False
     projects.save_project(project["id"], stored["doc"], stored["version"])
-    await GenerateTool().execute_confirmed(_context(project["id"]), shots=["s1", "s2"])
+    await _approved(GenerateTool(), _context(project["id"]), shots=["s1", "s2"])
     jobs.create_job(project["id"], "user-1", "web", "1080p")
 
     data = _data(await StatusTool().execute(_context(project["id"])))

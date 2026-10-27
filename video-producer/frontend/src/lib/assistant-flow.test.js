@@ -14,7 +14,7 @@ register(`data:text/javascript,${encodeURIComponent(hooks)}`, import.meta.url);
 
 globalThis.window = Object.assign(new EventTarget(), { __potionui: { confirm: async () => true, notifications: { toast() {} } } });
 
-const { doc, ui, act, undo, history, dispose } = await import('./state.svelte.js');
+const { doc, ui, act, undo, history, dispose, addShot, onShotsAdded } = await import('./state.svelte.js');
 const { project, bindClient, openProject, flushSave } = await import('./project.svelte.js');
 const { startAssistant, applyChangeResult, applyPromptResult, contextSnapshot } = await import('./assistant.svelte.js');
 const { emptyDoc, newClip } = await import('./starter.js');
@@ -24,12 +24,14 @@ const settle = async () => {
 	for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-const server = { projects: new Map(), saves: [], gets: 0 };
+const server = { projects: new Map(), saves: [], gets: 0, gate: null };
 bindClient({
 	async getProject(id) {
 		server.gets += 1;
 		const p = server.projects.get(id);
-		return { ok: true, data: { id, name: p.doc.name, version: p.version, doc: copy(p.doc), createdAt: null, updatedAt: null } };
+		const read = { ok: true, data: { id, name: p.doc.name, version: p.version, doc: copy(p.doc), createdAt: null, updatedAt: null } };
+		if (server.gate) await server.gate;
+		return read;
 	},
 	async saveProject(id, next, version) {
 		const p = server.projects.get(id);
@@ -175,5 +177,104 @@ test('an approved prompt that comes two versions ahead is merged, not reloaded, 
 	assert.deepEqual(
 		stored.doc.clips.map((c) => c.label),
 		['Arrival', 'Bridge at dawn', 'Insert']
+	);
+});
+
+const spans = (clips) => clips.map((c) => [c.label, c.start, c.dur]);
+
+function assistantOpens(stored) {
+	const opening = newClip({ id: 'a-open', label: 'Opening', start: 0, dur: 3 });
+	stored.doc.clips = [opening, ...stored.doc.clips.map((c) => ({ ...c, start: c.start + 3 }))];
+	stored.version += 1;
+	return { project_id: project.id, version: stored.version, added: [{ id: 'a-open' }] };
+}
+
+test('a shot the assistant adds at the start and one added at the end on the page are laid out end to end, on the page and on the server', async () => {
+	const stored = await opened('p-layout');
+	addShot('Exit', '', 2);
+	assert.deepEqual(spans(doc.clips), [
+		['Arrival', 0, 4],
+		['Bridge', 4, 4],
+		['Exit', 8, 2]
+	]);
+
+	applyChangeResult('vp_add_shots', assistantOpens(stored));
+	await settle();
+	await flushSave();
+
+	const laid = [
+		['Opening', 0, 3],
+		['Arrival', 3, 4],
+		['Bridge', 7, 4],
+		['Exit', 11, 2]
+	];
+	assert.deepEqual(spans(doc.clips), laid);
+	assert.deepEqual(spans(stored.doc.clips), laid);
+	assert.equal(ui.dirty, false);
+});
+
+test('an image a merged shot gets as it lands is saved, not taken for saved', async () => {
+	const stored = await opened('p-chain');
+	const off = onShotsAdded((clips) => {
+		for (const clip of clips) doc.frames.push({ id: `chain-${clip.id}`, shotId: clip.id, time: clip.start, assetId: 'still', role: 'first', strength: 100 });
+	});
+
+	applyChangeResult('vp_add_shots', assistantAdds(stored, 'Close-up'));
+	await settle();
+	off();
+
+	assert.equal(ui.dirty, true);
+	await flushSave();
+	assert.deepEqual(
+		stored.doc.frames.map((f) => f.id),
+		['chain-a-Close-up']
+	);
+	assert.equal(ui.dirty, false);
+});
+
+test('the end of a tool that comes while the page is still reading the project is read after it', async () => {
+	const stored = await opened('p-queue');
+	let open;
+	server.gate = new Promise((resolve) => (open = resolve));
+	assistantAdds(stored, 'Insert');
+	window.dispatchEvent(new CustomEvent('potionui:tool-end', { detail: { tool_name: 'vp_add_shots', success: true } }));
+	await settle();
+	server.gate = null;
+	stored.doc.clips[0].label = 'Arrival at night';
+	stored.version += 1;
+	window.dispatchEvent(new CustomEvent('potionui:tool-end', { detail: { tool_name: 'vp_update_shots', success: true } }));
+	open();
+	await settle();
+
+	assert.deepEqual(labels(), ['Arrival at night', 'Bridge', 'Insert']);
+	assert.equal(project.version, stored.version);
+});
+
+test('a shot the assistant deleted while the page edited it goes whole with a warning, and Ctrl+Z brings it back with the edit', async () => {
+	const stored = await opened('p-delete');
+	stored.doc.prompts = [{ id: 'pb', shotId: 's2', start: 4, dur: 4, strength: 75, text: 'The bridge at dawn' }];
+	stored.version += 1;
+	await openProject('p-delete');
+	act(() => (doc.clips[1].label = 'Bridge at dawn'));
+	stored.doc.clips = stored.doc.clips.slice(0, 1);
+	stored.doc.prompts = [];
+	stored.version += 1;
+	ui.toasts.length = 0;
+
+	applyChangeResult('vp_delete_shots', { project_id: project.id, version: stored.version, deleted: ['s2'] });
+	await settle();
+
+	assert.deepEqual(labels(), ['Arrival']);
+	assert.deepEqual(doc.prompts, []);
+	assert.match(ui.toasts.at(-1).message, /deleted 1 shot you had edited/);
+
+	undo();
+	await flushSave();
+
+	assert.deepEqual(labels(), ['Arrival', 'Bridge at dawn']);
+	assert.equal(doc.prompts[0].text, 'The bridge at dawn');
+	assert.deepEqual(
+		stored.doc.clips.map((c) => c.label),
+		['Arrival', 'Bridge at dawn']
 	);
 });

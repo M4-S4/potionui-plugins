@@ -51,6 +51,8 @@
 	"toast.changed": "Projet modifié par l’assistant",
 	"toast.changedKept.one": "Projet modifié par l’assistant ; {count} de vos changements a été gardé à la place du sien",
 	"toast.changedKept.other": "Projet modifié par l’assistant ; {count} de vos changements ont été gardés à la place des siens",
+	"toast.changedDropped.one": "Projet modifié par l’assistant ; il a supprimé {count} plan que vous aviez modifié, Ctrl+Z le rétablit",
+	"toast.changedDropped.other": "Projet modifié par l’assistant ; il a supprimé {count} plans que vous aviez modifiés, Ctrl+Z les rétablit",
 	"toast.takes.one": "{count} prise lancée par l’assistant",
 	"toast.takes.other": "{count} prises lancées par l’assistant",
 	"toast.export": "Export lancé par l’assistant"
