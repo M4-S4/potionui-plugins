@@ -3,7 +3,7 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import core_bridge, director, estimate, generation, limits, models, takes
+from . import core_bridge, director, estimate, formats, generation, limits, models, takes
 from .core_bridge import CLOUD_ENGINE, EDIT_TASK, MediaRefError, User
 from .director import ShotPlan, note
 from .generation import Blocked
@@ -77,6 +77,7 @@ TEXT: Dict[str, Dict[str, str]] = {
         "character_name": "the character",
         "object_name": "the object",
         "still": "One photographic still: no text, no caption, no border, no split panels.",
+        "crop": "The film keeps only its central {aspect} part: keep the action there.",
     },
     "fr": {
         FIRST: "La première image d'un plan de film, au format {aspect}.",
@@ -90,6 +91,7 @@ TEXT: Dict[str, Dict[str, str]] = {
         "character_name": "le personnage",
         "object_name": "l'objet",
         "still": "Une seule image photographique : sans texte, sans légende, sans bordure, sans vignettes.",
+        "crop": "Le film n'en garde que la partie centrale au format {aspect} : y garder l'action.",
     },
 }
 
@@ -514,9 +516,17 @@ def _language(doc: Mapping[str, Any]) -> str:
     return language if language in TEXT else "en"
 
 
-def _aspect_text(doc: Mapping[str, Any]) -> str:
+def _aspect_text(doc: Mapping[str, Any], working: Optional[float] = None) -> str:
+    if working is not None and formats.fit(working, director.aspect_of(doc)) != formats.EXACT:
+        return formats.ratio_text(working)
     aspect = str(doc.get("aspect") or "").strip()
     return aspect or f"{director.aspect_of(doc):.2f}:1"
+
+
+def _crop_line(doc: Mapping[str, Any], working: Optional[float], language: str) -> str:
+    if working is None or formats.fit(working, director.aspect_of(doc), formats.framing_of(doc)) != formats.CROP:
+        return ""
+    return TEXT[language]["crop"].format(aspect=_aspect_text(doc))
 
 
 def picture_lines(pictures: Sequence[Picture], role: str, language: str) -> List[str]:
@@ -536,14 +546,20 @@ def picture_lines(pictures: Sequence[Picture], role: str, language: str) -> List
 
 
 def keyframe_prompt(
-    doc: Mapping[str, Any], clip: Mapping[str, Any], pictures: Sequence[Picture], role: str, instruction: Optional[str] = None
+    doc: Mapping[str, Any],
+    clip: Mapping[str, Any],
+    pictures: Sequence[Picture],
+    role: str,
+    instruction: Optional[str] = None,
+    working: Optional[float] = None,
 ) -> str:
-    """The edit prompt of a start or end image: the frame it is, the instruction given (else the shot's) without the reference video tracks it cites, the project's direction, what to keep of each picture, and a still with no text."""
+    """The edit prompt of a start or end image: the frame it is, in the ratio the shot's video engine makes its takes in (working) with the part the film keeps when it crops them, the instruction given (else the shot's) without the reference video tracks it cites, the project's direction, what to keep of each picture, and a still with no text."""
     language = _language(doc)
     text = TEXT[language]
     own = director.cite_tracks((instruction or "").strip() or director.shot_instruction(doc, clip), {})
     lines = [
-        text[role].format(aspect=_aspect_text(doc)),
+        text[role].format(aspect=_aspect_text(doc, working)),
+        _crop_line(doc, working, language),
         own,
         *director.direction_lines(doc),
         *picture_lines(pictures, role, language),
@@ -593,7 +609,9 @@ def closest_aspect(values: Sequence[Any], aspect: float) -> Optional[str]:
     return min(ratios)[1] if ratios else None
 
 
-def _cloud_form(model: Mapping[str, Any], doc: Mapping[str, Any], fields: models.Fields) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def _cloud_form(
+    model: Mapping[str, Any], doc: Mapping[str, Any], fields: models.Fields, working: Optional[float] = None
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     form: Dict[str, Any] = {"seed": -1, MODEL_FIELD: f"{models.MODEL_REF}{model['id']}"}
     if "count" in fields:
         form["count"] = 1
@@ -601,7 +619,9 @@ def _cloud_form(model: Mapping[str, Any], doc: Mapping[str, Any], fields: models
     aspect_param = _param(model, "aspect_ratio")
     if aspect_param is not None and "aspect_ratio" in fields:
         values = [str(value) for value in aspect_param.get("values") or []]
-        wanted = doc.get("aspect") if doc.get("aspect") in values else closest_aspect(values, director.aspect_of(doc))
+        target = director.aspect_of(doc) if working is None else working
+        exact = doc.get("aspect") in values and formats.fit(director.aspect_of(doc), target) == formats.EXACT
+        wanted = doc.get("aspect") if exact else closest_aspect(values, target)
         chosen = wanted or aspect_param.get("default")
         if chosen is not None:
             form["aspect_ratio"] = params["aspect_ratio"] = str(chosen)
@@ -645,16 +665,17 @@ def build(user: User, doc: Mapping[str, Any], shot_id: str, order: Order) -> Key
         return built
     mode = preset.mode or EDIT_MODE
     fields = models.form_fields(preset.id, mode)
-    aspect = director.aspect_of(doc)
-    prompt = keyframe_prompt(doc, clip, pictures, order.role, order.prompt)
+    aspect = director.working_ratio(user, doc, shot_id)
+    prompt = keyframe_prompt(doc, clip, pictures, order.role, order.prompt, aspect)
     params: Dict[str, Any] = {}
     missing: List[str] = []
     if preset.cloud:
-        form, params = _cloud_form(model or {}, doc, fields)
+        form, params = _cloud_form(model or {}, doc, fields, aspect)
         size = None
-        if form.get("aspect_ratio") and form["aspect_ratio"] != doc.get("aspect"):
+        made = formats.ratio_of(form.get("aspect_ratio"))
+        if made is not None and formats.fit(made, aspect) != formats.EXACT:
             built.warnings.append(
-                note("aspect_mismatch", "The model offers no frame in the project's aspect ratio.", aspect=doc.get("aspect"), size=form["aspect_ratio"])
+                note("aspect_mismatch", "The model offers no frame in the ratio of the shot's takes.", aspect=_aspect_text(doc, aspect), size=form["aspect_ratio"])
             )
     else:
         form = {"seed": -1}
@@ -665,7 +686,7 @@ def build(user: User, doc: Mapping[str, Any], shot_id: str, order: Order) -> Key
             form[OUTPUT_SIZE] = size
         if _mismatch(size, aspect):
             built.warnings.append(
-                note("aspect_mismatch", "The image takes the aspect ratio of the first picture, not the project's.", aspect=doc.get("aspect"), size=size)
+                note("aspect_mismatch", "The image takes the aspect ratio of the first picture, not the one of the shot's takes.", aspect=_aspect_text(doc, aspect), size=size)
             )
         resolved = models.resolve_models(preset.id, mode, None, fields)
         form.update(resolved.values)

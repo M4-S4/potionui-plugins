@@ -253,6 +253,17 @@ def test_the_size_of_the_cut_is_a_setting_of_the_shared_rule(core, make_doc, mon
     assert vertical.video[0].size == tuple(int(side) for side in vertical.resolution.split("x"))
 
 
+def test_the_cut_follows_the_ratio_of_the_takes_not_the_format_of_the_film(core, make_doc):
+    core.use_h3()
+    _media(core)
+    doc = {**_doc(make_doc, tracks=[_walk()], items=[_item("i1", "t1", "walk", 0, 12)]), "aspect": "2.39:1"}
+
+    plan = _plans(core, doc).shots[0]
+
+    assert plan.resolution == "832x480"
+    assert plan.video[0].size == (1344, 768)
+
+
 def test_without_ffmpeg_a_shot_that_sends_a_track_is_blocked(core, make_doc, monkeypatch):
     core.use_h3()
     _media(core)

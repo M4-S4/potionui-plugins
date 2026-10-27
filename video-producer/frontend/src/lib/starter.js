@@ -6,6 +6,7 @@ import { migrateOptions } from './options.js';
 import { removedIds } from './removedtakes.js';
 import { migratePass } from './finalpass.js';
 import { migrateVrefs } from './vrefs.js';
+import { migrateFormats } from './formats.js';
 
 const SHOT_DURATION = 5;
 export const PROMPT_LANGUAGES = ['en', 'fr'];
@@ -210,5 +211,5 @@ export function migrate(doc) {
 		if (pass) next.finalPass = pass;
 		else delete next.finalPass;
 	}
-	return migrateVrefs(next);
+	return migrateFormats(migrateVrefs(next));
 }

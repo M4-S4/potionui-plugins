@@ -5,6 +5,7 @@
 	import { ui, doc, toast, clipLabel } from '../../lib/state.svelte.js';
 	import { makeFinal, upscaleAvailable, findTake, presetById } from '../../lib/production.svelte.js';
 	import { UPSCALE_TARGETS, aspectOf, finalResolution, upscaleTargetFor, upscalesItself } from '../../lib/generation.js';
+	import { chosenSize } from '../../lib/formats.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { guidedReady, guidedResolution } from '../../lib/finalpass.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -17,7 +18,7 @@
 	const targets = $derived(ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS);
 	const canUpscale = $derived(upscaleAvailable(take));
 	const h3 = $derived(upscalesItself(take?.presetId));
-	const renderRes = $derived((finalResolution(presetById(take?.presetId), aspectOf(doc.aspect, doc.resolution)) ?? take?.resolution ?? '—').replace('x', '×'));
+	const renderRes = $derived((finalResolution(presetById(take?.presetId), aspectOf(doc.aspect, doc.resolution), chosenSize(doc, take?.presetId, 'final')) ?? take?.resolution ?? '—').replace('x', '×'));
 	let target = $state(untrack(() => upscaleTargetFor(doc.resolution, ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS)));
 	const guided = $derived(guidedReady());
 	const guidedRes = $derived(guidedResolution());

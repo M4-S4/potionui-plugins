@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import best_match
 
-from . import reception, settings
+from . import formats, reception, settings
 from .bible import LAYOUTS, PARTS
 from .catalog import PROFILES, UPSCALE_TARGETS
 from .core_bridge import generate_ulid
@@ -42,6 +42,10 @@ RETIRED_SET_TYPES = ("Scène d’essai", "Scène d'essai", "Gaussian Splat")
 REMOVED_TAKES = "removedTakes"
 
 FINAL_PASS = "finalPass"
+
+FRAMING = "framing"
+
+SIZES = "sizes"
 
 VREF_TRACKS = "vrefTracks"
 
@@ -188,6 +192,10 @@ PRESET_OPTIONS = {
 
 ENGINE_OPTIONS = {"type": "object", "propertyNames": {"minLength": 1}, "additionalProperties": PRESET_OPTIONS}
 
+SIZE = {"type": "string", "pattern": "^[0-9]+x[0-9]+$"}
+
+ENGINE_SIZES = {"type": "object", "propertyNames": {"minLength": 1}, "additionalProperties": _object({}, optional={quality: SIZE for quality in formats.QUALITIES})}
+
 CLIP = _object(
     {
         "id": ID,
@@ -314,6 +322,7 @@ ENGINE = _object(
         "referenceMargin": {"type": "number", "minimum": 0, "maximum": MAX_REFERENCE_MARGIN},
         "options": ENGINE_OPTIONS,
         "keyframes": _object({}, optional={"preset": ID, "model": REF}),
+        SIZES: ENGINE_SIZES,
     },
 )
 
@@ -391,6 +400,7 @@ DOC_SCHEMA: Dict[str, Any] = {
             "dialogueLanguage": TEXT,
             REMOVED_TAKES: IDS,
             FINAL_PASS: FINAL_PASS_SCHEMA,
+            FRAMING: _enum(*formats.FRAMINGS),
             VREF_TRACKS: {**_array(VREF_TRACK), "maxItems": MAX_VREF_TRACKS},
             VREF_ITEMS: _array(VREF_ITEM),
         },
@@ -669,8 +679,27 @@ def _vrefs(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Set[str]]:
     return changes, dropped
 
 
+def _formats(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Set[str]]:
+    """The film's format and delivery resolution as the formats table keeps them (formats.format_value, formats.resolution_value), its framing dropped when it is not one the table knows, and the sizes the project chose per preset kept to valid ones (formats.sizes_value), the key dropped when none is left."""
+    changes: Dict[str, Any] = {}
+    dropped: Set[str] = set()
+    for key, keep in (("aspect", formats.format_value), ("resolution", formats.resolution_value)):
+        if key in doc and keep(doc[key]) != doc[key]:
+            changes[key] = keep(doc[key])
+    if FRAMING in doc and doc[FRAMING] not in formats.FRAMINGS:
+        dropped.add(FRAMING)
+    engine = doc.get("engine")
+    if isinstance(engine, dict) and SIZES in engine:
+        sizes = formats.sizes_value(engine[SIZES])
+        if not sizes:
+            changes["engine"] = {key: value for key, value in engine.items() if key != SIZES}
+        elif sizes != engine[SIZES]:
+            changes["engine"] = {**engine, SIZES: sizes}
+    return changes, dropped
+
+
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, a shot's own firstFromPrevious dropped when it is not a boolean, the takes whose video the user removed kept as distinct ids, the key dropped when none is left, the choice of the film's final pass kept to the values it knows, dropped when none is left, the retired Sound design workshop forgotten: its sounds, which have no file, dropped with their audio items and the references to them left without media, its fields and the automation mode of each lane dropped, and the reference video tracks and their items kept to what the schema takes (_vrefs); the same object when nothing changes."""
+    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, a shot's own firstFromPrevious dropped when it is not a boolean, the takes whose video the user removed kept as distinct ids, the key dropped when none is left, the choice of the film's final pass kept to the values it knows, dropped when none is left, the retired Sound design workshop forgotten: its sounds, which have no file, dropped with their audio items and the references to them left without media, its fields and the automation mode of each lane dropped, and the reference video tracks and their items kept to what the schema takes (_vrefs), and the film's format, delivery resolution, framing and chosen sizes kept to what the formats table takes (_formats); the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -706,6 +735,9 @@ def migrate(doc: Any) -> Any:
             changes["clips"] = cast
     vrefs, gone = _vrefs({**doc, **changes})
     changes.update(vrefs)
+    dropped |= gone
+    kept, gone = _formats({**doc, **changes})
+    changes.update(kept)
     dropped |= gone
     if not changes and not any(key in doc for key in dropped):
         return doc

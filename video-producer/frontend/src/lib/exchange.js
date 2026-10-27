@@ -1,4 +1,5 @@
 import { laneCode } from './tracks.js';
+import { BOX, deliverySize, ratioOf } from './formats.js';
 
 export const EXCHANGE = {
 	fcpxml: { ext: 'fcpxml', mime: 'application/xml' },
@@ -6,8 +7,6 @@ export const EXCHANGE = {
 	edl: { ext: 'edl', mime: 'text/plain' },
 	srt: { ext: 'srt', mime: 'application/x-subrip' }
 };
-
-const RESOLUTIONS = { '720p': [1280, 720], '1080p': [1920, 1080], '4K': [3840, 2160] };
 
 const XML_FORBIDDEN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g;
 const esc = (s) => String(s).replace(XML_FORBIDDEN, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -58,11 +57,22 @@ function timing(doc) {
 	return { frames, rt, tcode };
 }
 
+export function sequenceFrame(doc) {
+	const ratio = ratioOf(doc.aspect);
+	return deliverySize(ratio === null || ratio < 1 / 4 || ratio > 4 ? BOX : ratio, doc.resolution);
+}
+
+function formatName(doc) {
+	const [width, height] = sequenceFrame(doc);
+	const [boxWidth, boxHeight] = deliverySize(BOX, doc.resolution);
+	return width === boxWidth && height === boxHeight ? ` name="FFVideoFormat${doc.resolution}${doc.fps}"` : '';
+}
+
 export function fcpxml(doc, { label }) {
 	const { rt } = timing(doc);
 	const file = (c) => fileOf(doc, c, label);
 	const media = doc.clips.filter(file);
-	const res = RESOLUTIONS[doc.resolution] ?? RESOLUTIONS['1080p'];
+	const res = sequenceFrame(doc);
 	const assets = media.map(
 		(c, i) =>
 			`\t\t<asset id="r${i + 2}" name="${esc(label(c))}" start="0s" duration="${rt(assetOf(doc, c.assetId).srcDur ?? c.srcIn + c.dur)}" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/${esc(encodeURI(file(c)))}"/></asset>`
@@ -76,7 +86,7 @@ export function fcpxml(doc, { label }) {
 <!DOCTYPE fcpxml>
 <fcpxml version="1.10">
 	<resources>
-		<format id="r1" name="FFVideoFormat${doc.resolution}${doc.fps}" frameDuration="1/${doc.fps}s" width="${res[0]}" height="${res[1]}"/>
+		<format id="r1"${formatName(doc)} frameDuration="1/${doc.fps}s" width="${res[0]}" height="${res[1]}"/>
 ${assets.join('\n')}
 	</resources>
 	<library>

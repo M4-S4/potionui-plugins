@@ -1,3 +1,5 @@
+import { pickSize, ratioOf } from './formats.js';
+
 export const PROFILES = ['FL2VA', 'Ref2VA', 'Hybrid AV'];
 export const MINIMAX_H3_IDS = ['01KX47H3MINIMAX000000000VA', '01KX47H3FASTH30000000000VA', '01KX47H3VDNMINIMAX000000VA', '01M54HN72B0KY7H63BKQ16T253', '01M54HN72PABVRE54YNQA2Q7ZT'];
 export const UPSCALE_TARGETS = ['hd720', 'fhd1080', 'qhd1440', 'uhd2160'];
@@ -131,54 +133,25 @@ export function parseResolution(value) {
 	return match ? { width: Number(match[1]), height: Number(match[2]) } : null;
 }
 
-const area = (value) => {
-	const size = parseResolution(value);
-	return size ? size.width * size.height : null;
-};
-
-const ASPECT_TOLERANCE = 0.03;
-
 export function aspectOf(aspect, resolution) {
-	const text = String(aspect ?? '');
-	for (const separator of [':', '/', 'x']) {
-		const parts = text.split(separator);
-		if (parts.length !== 2) continue;
-		const width = Number(parts[0]);
-		const height = Number(parts[1]);
-		if (!Number.isFinite(width) || !Number.isFinite(height) || parts[0].trim() === '' || parts[1].trim() === '') break;
-		if (width > 0 && height > 0) return width / height;
-	}
+	const ratio = ratioOf(aspect);
+	if (ratio !== null) return ratio;
 	const size = parseResolution(resolution);
 	return size ? size.width / size.height : 16 / 9;
 }
 
-function matching(preset, aspect) {
-	const sizes = (preset?.resolutions ?? []).map((r) => ({ value: r.value, size: parseResolution(r.value) })).filter((x) => x.size);
-	if (!sizes.length) return [];
-	const distance = (x) => Math.abs(Math.log(x.size.width / x.size.height) - Math.log(aspect));
-	const closest = Math.min(...sizes.map(distance));
-	return sizes.filter((x) => distance(x) <= closest + ASPECT_TOLERANCE);
+const optionValues = (preset) => (preset?.resolutions ?? []).map((r) => r.value);
+
+const offered = (preset) => optionValues(preset).some((value) => parseResolution(value));
+
+export function draftResolution(preset, setting, aspect = 16 / 9, chosen = null) {
+	if (!offered(preset)) return null;
+	return pickSize(optionValues(preset), aspect, 'draft', setting, chosen, preset?.id ?? null).size;
 }
 
-export function draftResolution(preset, setting, aspect = 16 / 9) {
-	const size = parseResolution(setting);
-	const candidates = matching(preset, aspect);
-	if (!size || !candidates.length) return null;
-	const [width, height] = size.width >= size.height === aspect >= 1 ? [size.width, size.height] : [size.height, size.width];
-	const wanted = `${width}x${height}`;
-	if (candidates.some((x) => x.value === wanted)) return wanted;
-	const target = width * height;
-	const areaOf = (x) => x.size.width * x.size.height;
-	return candidates.reduce((a, b) => {
-		const da = Math.abs(areaOf(a) - target);
-		const db = Math.abs(areaOf(b) - target);
-		return db < da || (db === da && areaOf(b) < areaOf(a)) ? b : a;
-	}).value;
-}
-
-export function finalResolution(preset, aspect = 16 / 9) {
-	const candidates = matching(preset, aspect);
-	return candidates.length ? candidates.reduce((a, b) => (b.size.width * b.size.height > a.size.width * a.size.height ? b : a)).value : null;
+export function finalResolution(preset, aspect = 16 / 9, chosen = null) {
+	if (!offered(preset)) return null;
+	return pickSize(optionValues(preset), aspect, 'final', null, chosen, preset?.id ?? null).size;
 }
 
 const MARKERS = ['PIPE', 'PROGRESS', 'MODEL', 'GPU', 'RESOLUTION', 'NUMBER', 'EFFECT', 'TIME'];

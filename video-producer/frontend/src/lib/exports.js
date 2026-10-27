@@ -1,10 +1,12 @@
 import { EXCHANGE } from './exchange.js';
+import { RESOLUTION_NAMES, SOCIAL_DEFAULT, SOCIAL_FORMATS } from './formats.js';
 
 export const VIDEO_FORMATS = ['master', 'web', 'social', 'archive'];
 export const LIBRARY_FORMATS = ['web', 'social'];
 const EXTENSIONS = { master: 'mov', web: 'mp4', social: 'mp4', archive: 'mp4' };
 const SUFFIXES = { archive: '_archive' };
-export const RESOLUTIONS = ['720p', '1080p', '4K'];
+export const RESOLUTIONS = RESOLUTION_NAMES;
+export const SOCIAL_RATIOS = SOCIAL_FORMATS;
 export const JOB_STATES = ['queued', 'running', 'done', 'failed', 'cancelled'];
 export const JOB_STEPS = ['assemble', 'mix', 'transcode', 'store'];
 export const EXPORT_ERROR_CODES = ['ffmpeg_unavailable', 'nothing_to_export', 'export_running', 'export_quota', 'not_ready', 'invalid_request', 'invalid_doc', 'ffmpeg_failed', 'transcode_failed', 'store_failed', 'cancelled'];
@@ -36,8 +38,10 @@ export function slugify(name) {
 }
 
 export const exchangeFile = (name, format) => `${slugify(name)}.${EXCHANGE[format].ext}`;
-export function videoFile(name, resolution, format = 'web', stems = false) {
-	const base = `${slugify(name).slice(0, 80).replace(/[._]+$/, '') || FALLBACK_NAME}_${resolution}`;
+const ratioPart = (format, ratio) => (format === 'social' && SOCIAL_FORMATS.includes(ratio) && ratio !== SOCIAL_DEFAULT ? `_${ratio.replace(':', 'x')}` : '');
+
+export function videoFile(name, resolution, format = 'web', stems = false, ratio = null) {
+	const base = `${slugify(name).slice(0, 80).replace(/[._]+$/, '') || FALLBACK_NAME}_${resolution}${ratioPart(format, ratio)}`;
 	return stems ? `${base}_${format}_stems.zip` : `${base}${SUFFIXES[format] ?? ''}.${EXTENSIONS[format] ?? 'mp4'}`;
 }
 

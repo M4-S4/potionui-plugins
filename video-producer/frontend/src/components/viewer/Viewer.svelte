@@ -13,6 +13,7 @@
 	import { frameDuration } from '../../lib/timebase.js';
 	import { lutOf } from '../../lib/match.js';
 	import { placedOn } from '../../lib/monitor.js';
+	import { aspectOf } from '../../lib/generation.js';
 	import MatchCanvas from './MatchCanvas.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -22,7 +23,7 @@
 	let h = $state(0);
 	let sideW = $state(0);
 	const ratios = { '16:9': 16 / 9, '2.39:1': 2.39, '9:16': 9 / 16, '1:1': 1, '4:5': 0.8 };
-	const r = $derived(ratios[doc.aspect]);
+	const r = $derived(aspectOf(doc.aspect, doc.resolution));
 	const box = $derived(w / h > r ? { w: h * r, h } : { w, h: w / r });
 
 	const time = $derived(ui.playhead);

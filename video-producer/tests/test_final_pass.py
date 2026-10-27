@@ -222,12 +222,12 @@ def test_a_guided_pass_follows_the_draft_with_the_layout_to_render_ic_lora_from_
 
     assert evaluation.payload["blocks"] == []
     assert (take["kind"], take["quality"], take["preset_id"], take["parent_take_id"]) == ("guided", "final", presets.LTX_2_5, drafts[0]["id"])
-    assert (take["resolution"], take["shot_revision"], take["seed"]) == ("1280x720", drafts[0]["shot_revision"], drafts[0]["seed"])
+    assert (take["resolution"], take["shot_revision"], take["seed"]) == ("1280x704", drafts[0]["shot_revision"], drafts[0]["seed"])
     request = core.submitted[submitted][1]
     form = request["form_data"]
     document = form["video_director"]
     assert (request["preset_id"], request["mode"], document["mode"]) == (presets.LTX_2_5, "video", "director")
-    assert (form["fps"], form["resolution"], document["settings"]["duration"]) == (16.0, "1280x720", round(65 / 16, 6))
+    assert (form["fps"], form["resolution"], document["settings"]["duration"]) == (16.0, "1280x704", round(65 / 16, 6))
     assert (form["speed_profile"], form["steps"], form["cfg"], form["sampler"]) == ("distilled", 8, 1.0, "euler_ancestral")
     (entry,) = document["ic_lora"]
     assert entry["lora"] == {"model": f"model:id-{director.GUIDE_LORA}", "strength": 1.0} and entry["strength"] == 1.0

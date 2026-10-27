@@ -742,7 +742,8 @@ async def test_exporting_queues_the_video_with_the_routes_checks(project, core, 
     jobs.cancel(jobs.get_job(data["job_id"]))
     master = _data(await ExportVideoTool().execute(_context(project["id"]), format="master", stems=True))
     assert (master["format"], master["stems"]) == ("master", True) and jobs.get_job(master["job_id"])["stems"] is True
-    assert set(ExportVideoTool().parameters["properties"]) == {"format", "resolution", "stems"}
+    assert set(ExportVideoTool().parameters["properties"]) == {"format", "resolution", "ratio", "stems"}
+    assert ExportVideoTool().parameters["properties"]["ratio"]["enum"] == ["9:16", "4:5", "1:1"]
     assert ExportVideoTool().parameters["properties"]["format"]["enum"] == ["web", "social", "master", "archive"]
 
 

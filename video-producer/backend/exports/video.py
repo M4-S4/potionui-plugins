@@ -11,7 +11,7 @@ from typing import Any, Callable, Collection, Dict, Iterable, List, Mapping, Opt
 
 import psutil
 
-from .. import core_bridge, director, takes
+from .. import core_bridge, director, formats, takes
 from ..core_bridge import User
 from . import levels, match, media, slug
 from .common import asset_of, fps_of, seq_duration, timing_error
@@ -33,11 +33,13 @@ SHOTS_STEM = "shots"
 
 STEM_NAMES = (*(name for _, name in ROLE_STEMS), SHOTS_STEM)
 
-RESOLUTIONS = {"720p": 720, "1080p": 1080, "4K": 2160}
+RESOLUTIONS = formats.RESOLUTIONS
 
-DEFAULT_RESOLUTION = "1080p"
+DEFAULT_RESOLUTION = formats.DEFAULT_RESOLUTION
 
-SOCIAL_ASPECT = 9 / 16
+SOCIAL_RATIOS = formats.SOCIAL_FORMATS
+
+SOCIAL_RATIO = formats.SOCIAL_DEFAULT
 
 FALLBACK_ASPECT = 16 / 9
 
@@ -191,15 +193,26 @@ def job_folder(job: Mapping[str, Any]) -> Path:
     return exports_root(job["user_id"]) / job["id"]
 
 
-def file_name(project_name: str, resolution: str, fmt: str = "web", stems: bool = False) -> str:
-    """The name of an export: <slug>_<resolution>.mp4, .mov for the master, _archive.mp4 for the archive, the slug cut to 80 characters; with the stems, <slug>_<resolution>_<format>_stems.zip."""
-    base = f"{slug(project_name)[:SLUG_LIMIT].rstrip('._')}_{resolution}"
+def social_ratio(value: Any) -> str:
+    """The ratio of a social video: one of the social formats, 9:16 unless another is asked."""
+    return value if isinstance(value, str) and value in SOCIAL_RATIOS else SOCIAL_RATIO
+
+
+def _ratio_part(fmt: str, ratio: Optional[str]) -> str:
+    chosen = social_ratio(ratio)
+    return f"_{chosen.replace(':', 'x')}" if fmt == "social" and chosen != SOCIAL_RATIO else ""
+
+
+def file_name(project_name: str, resolution: str, fmt: str = "web", stems: bool = False, ratio: Optional[str] = None) -> str:
+    """The name of an export: <slug>_<resolution>.mp4, .mov for the master, _archive.mp4 for the archive, a social video of another ratio than 9:16 with it (_4x5), the slug cut to 80 characters; with the stems, <slug>_<resolution>_<format>_stems.zip."""
+    base = f"{slug(project_name)[:SLUG_LIMIT].rstrip('._')}_{resolution}{_ratio_part(fmt, ratio)}"
     return f"{base}_{fmt}_stems.zip" if stems else f"{base}{SUFFIXES.get(fmt, '')}.{EXTENSIONS.get(fmt, 'mp4')}"
 
 
-def download_name(project_name: str, resolution: str, fmt: str = "web", stems: bool = False) -> str:
+def download_name(project_name: str, resolution: str, fmt: str = "web", stems: bool = False, ratio: Optional[str] = None) -> str:
     """The name an export downloads under, without its extension: the project's name as it is, then what file_name adds to its slug."""
-    return f"{project_name}_{resolution}_{fmt}_stems" if stems else f"{project_name}_{resolution}{SUFFIXES.get(fmt, '')}"
+    base = f"{project_name}_{resolution}{_ratio_part(fmt, ratio)}"
+    return f"{base}_{fmt}_stems" if stems else f"{base}{SUFFIXES.get(fmt, '')}"
 
 
 def stem_file(video: str, name: str) -> str:
@@ -214,20 +227,12 @@ def resolution_of(doc: Mapping[str, Any], requested: Optional[str] = None) -> st
     return doc.get("resolution") if doc.get("resolution") in RESOLUTIONS else DEFAULT_RESOLUTION
 
 
-def _even(value: float) -> int:
-    whole = int(round(value))
-    return max(2, whole - whole % 2)
-
-
-def frame_size(doc: Mapping[str, Any], fmt: str, resolution: str) -> Tuple[int, int]:
-    """The frame of the export: the short side from the resolution, the long side from the aspect (9:16 for social, 16:9 past 1:4 or 4:1)."""
-    base = RESOLUTIONS.get(resolution, RESOLUTIONS[DEFAULT_RESOLUTION])
-    aspect = SOCIAL_ASPECT if fmt == "social" else director.aspect_of(doc)
-    if not MIN_ASPECT <= aspect <= MAX_ASPECT:
+def frame_size(doc: Mapping[str, Any], fmt: str, resolution: str, ratio: Optional[str] = None) -> Tuple[int, int]:
+    """The frame of the export: the project's format, or the ratio of a social video (9:16 unless another is asked), inside the 16:9 box of the resolution (formats.delivery_size), 16:9 past 1:4 or 4:1."""
+    aspect = formats.ratio_of(social_ratio(ratio)) if fmt == "social" else director.aspect_of(doc)
+    if aspect is None or not MIN_ASPECT <= aspect <= MAX_ASPECT:
         aspect = FALLBACK_ASPECT
-    if aspect >= 1:
-        return _even(base * aspect), base
-    return base, _even(base / aspect)
+    return formats.delivery_size(aspect, resolution)
 
 
 def timeline(doc: Mapping[str, Any]) -> Tuple[List[Segment], float]:
@@ -293,13 +298,24 @@ def _fades(item: Mapping[str, Any], dur: float, name: str) -> List[str]:
     return filters
 
 
-def _fit(fmt: str, width: int, height: int) -> str:
-    if fmt == "social":
+def fit_filter(width: int, height: int, keep: float) -> str:
+    """The filters that bring a picture to the frame: scaled to cover it and cropped at its centre when the narrower of its ratio and the frame's keeps at least keep of the wider, else scaled inside it with black bars; keep 0 always crops (formats.keep_share)."""
+    if keep <= 0:
         return f"scale={width}:{height}:force_original_aspect_ratio=increase:force_divisible_by=2,crop={width}:{height}"
+    ratio = num(width / height)
+    covers = f"gte(min(a,{ratio})/max(a,{ratio}),{num(keep)})"
+    scaled_width = f"if({covers},ceil(max({width},{height}*a)/2)*2,trunc(min({width},{height}*a)/2)*2)"
+    scaled_height = f"if({covers},ceil(max({height},{width}/a)/2)*2,trunc(min({height},{width}/a)/2)*2)"
     return (
-        f"scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+        f"scale=w='{scaled_width}':h='{scaled_height}',"
+        f"crop=w='min(iw,{width})':h='min(ih,{height})',"
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
     )
+
+
+def fit_share(doc: Mapping[str, Any], fmt: str) -> float:
+    """What fit_filter keeps before it puts bars: a social video always crops, the other formats follow the project's framing."""
+    return 0.0 if fmt == "social" else formats.keep_share(formats.framing_of(doc))
 
 
 def video_track(doc: Mapping[str, Any]) -> Dict[str, bool]:
@@ -723,7 +739,8 @@ def _assembly(
     mix: bool = True,
 ) -> Tuple[List[str], List[str]]:
     fmt, resolution = options["format"], options["resolution"]
-    width, height = frame_size(doc, fmt, resolution)
+    width, height = frame_size(doc, fmt, resolution, options.get("ratio"))
+    keep = fit_share(doc, fmt)
     rate = fps_of(doc)
     fps = num(rate)
     inputs = _Inputs(fps, cwd)
@@ -751,7 +768,7 @@ def _assembly(
                     f"fps={fps}",
                     *(["deflicker"] if not shot.still and shot.clip.get("deflicker") is True else []),
                     *_match(shot.clip, options, cwd),
-                    _fit(fmt, width, height),
+                    fit_filter(width, height, keep),
                     "setsar=1",
                     "format=yuv420p",
                     f"tpad=stop_mode=clone:stop_duration={num(pad)}",
@@ -1254,9 +1271,9 @@ async def render(
         raise ExportError("ffmpeg_failed", "ffmpeg is not available on this server.")
     ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     resolver = media.Resolver(owner)
-    fmt, resolution = job["format"], job["resolution"]
-    size = frame_size(doc, fmt, resolution)
-    mezzanine, final = folder / MEZZANINE, folder / file_name(project["name"], resolution, fmt)
+    fmt, resolution, ratio = job["format"], job["resolution"], job.get("ratio")
+    size = frame_size(doc, fmt, resolution, ratio)
+    mezzanine, final = folder / MEZZANINE, folder / file_name(project["name"], resolution, fmt, ratio=ratio)
     _, total = timeline(doc)
     try:
         shots, sounds = await asyncio.to_thread(media.local_inputs, doc, takes.list_takes(project["id"]), resolver, folder)
@@ -1274,6 +1291,7 @@ async def render(
         options = {
             "format": fmt,
             "resolution": resolution,
+            "ratio": ratio,
             "stills": [clip_id for clip_id, entry in shots.items() if entry is not None and entry["still"]],
             "cubes": await asyncio.to_thread(match.write_cubes, doc, folder),
             **await asyncio.to_thread(inspect, shots),
@@ -1311,7 +1329,7 @@ async def render(
     if stems:
         files = [final, *stems.values()]
         try:
-            packed = await asyncio.to_thread(pack, folder / file_name(project["name"], resolution, fmt, stems=True), files)
+            packed = await asyncio.to_thread(pack, folder / file_name(project["name"], resolution, fmt, stems=True, ratio=ratio), files)
         except OSError as exc:
             raise ExportError("store_failed", last_line(str(exc)) or "The stems could not be packed.") from exc
         for path in files:

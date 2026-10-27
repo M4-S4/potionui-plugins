@@ -468,6 +468,20 @@ def calibration(
         return [(float(row["seconds"]), int(row["duration_ms"])) for row in cursor.fetchall()]
 
 
+def calibrated_sizes(preset_id: str, backend_id: Optional[str]) -> List[str]:
+    """The resolutions a preset was measured at on a backend; none without a backend."""
+    from src.plugin_api import db
+
+    if not backend_id:
+        return []
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            f"SELECT DISTINCT resolution FROM {CALIBRATION} WHERE preset_id = ? AND backend_id = ? ORDER BY resolution",
+            (preset_id, backend_id),
+        )
+        return [str(row["resolution"]) for row in cursor.fetchall()]
+
+
 def chain_waiting() -> List[Dict[str, Any]]:
     """The queued takes that wait for the last image of the previous shot before the queue may hand them over, oldest first."""
     return _fetch_all(f"{_SELECT} WHERE {_CHAIN_WAIT_SQL} ORDER BY created_at, id")

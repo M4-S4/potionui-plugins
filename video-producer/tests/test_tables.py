@@ -19,7 +19,7 @@ _EXPECTED_COLUMNS = {
     "video_producer_calibration": ["preset_id", "backend_id", "resolution", "seconds", "duration_ms", "created_at"],
     "video_producer_looks": ["key", "user_id", "kind", "source", "model", "status", "frames", "error", "created_at", "updated_at"],
     "video_producer_export_jobs": [
-        "id", "project_id", "user_id", "format", "resolution", "stems", "status", "progress", "step", "file_name", "file_size",
+        "id", "project_id", "user_id", "format", "resolution", "stems", "ratio", "status", "progress", "step", "file_name", "file_size",
         "media_item_id", "media_url", "error_code", "error_message", "created_at", "started_at", "finished_at",
     ],
 }

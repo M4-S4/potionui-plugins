@@ -76,7 +76,8 @@ def _command(doc, files, sounds=None, **options):
         ("16:9", "web", "4K", (3840, 2160)),
         ("9:16", "web", "1080p", (1080, 1920)),
         ("1:1", "web", "720p", (720, 720)),
-        ("2.39:1", "web", "1080p", (2580, 1080)),
+        ("2.39:1", "web", "1080p", (1920, 804)),
+        ("4:3", "web", "1440p", (1920, 1440)),
         ("16:9", "social", "720p", (720, 1280)),
         ("16:9", "social", "1080p", (1080, 1920)),
         ("16:9", "social", "4K", (2160, 3840)),
@@ -86,7 +87,7 @@ def test_the_frame_follows_the_resolution_and_the_aspect(make_doc, aspect, fmt, 
     assert frame_size(make_doc(aspect=aspect), fmt, resolution) == size
 
 
-@pytest.mark.parametrize("aspect, size", [("4:1", (4320, 1080)), ("1:4", (1080, 4320)), ("4.01:1", (1920, 1080)), ("1:4.01", (1920, 1080)), ("1e400:1", (1920, 1080))])
+@pytest.mark.parametrize("aspect, size", [("4:1", (1920, 480)), ("1:4", (480, 1920)), ("4.01:1", (1920, 1080)), ("1:4.01", (1920, 1080)), ("1e400:1", (1920, 1080))])
 def test_an_aspect_past_one_to_four_falls_back_to_16_9(make_doc, aspect, size):
     assert frame_size(make_doc(aspect=aspect), "web", "1080p") == size
 
@@ -123,7 +124,8 @@ def test_the_resolution_defaults_to_the_projects_then_to_1080p(make_doc):
 
     assert (video.resolution_of(doc, "4K"), video.resolution_of(doc)) == ("4K", "1080p")
     assert video.resolution_of({**doc, "resolution": "720p"}) == "720p"
-    assert video.resolution_of({**doc, "resolution": "1440p"}) == "1080p"
+    assert video.resolution_of({**doc, "resolution": "1440p"}) == "1440p"
+    assert video.resolution_of({**doc, "resolution": "8K"}) == "1080p"
 
 
 def test_the_timeline_fills_the_holes_between_shots_and_up_to_the_end_with_black(make_doc):
@@ -149,7 +151,9 @@ def test_a_shot_with_a_file_is_trimmed_fitted_graded_and_faded(make_doc):
     assert _inputs(command) == ["/media/1.mp4"]
     assert graph[0] == (
         "[0:v]trim=start=0.5:duration=2.5,setpts=PTS-STARTPTS,fps=24,"
-        "scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,"
+        "scale=w='if(gte(min(a,1.777778)/max(a,1.777778),0.7),ceil(max(1280,720*a)/2)*2,trunc(min(1280,720*a)/2)*2)'"
+        ":h='if(gte(min(a,1.777778)/max(a,1.777778),0.7),ceil(max(720,1280/a)/2)*2,trunc(min(720,1280/a)/2)*2)',"
+        "crop=w='min(iw,1280)':h='min(ih,720)',pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,"
         "setsar=1,format=yuv420p,tpad=stop_mode=clone:stop_duration=2.5,trim=duration=2.5,"
         "eq=contrast=1.2:saturation=0.8:brightness=0.05,colortemperature=temperature=6000:pl=1,"
         "fade=t=in:st=0:d=0.4,fade=t=out:st=1.9:d=0.6[v0]"
@@ -1101,7 +1105,7 @@ def test_a_new_job_is_queued_with_the_contract_shape(stored_jobs):
     job = _job()
 
     public = jobs.public(job)
-    assert set(public) == {"id", "project_id", "format", "resolution", "stems", "status", "progress", "step", "file", "media", "error", "created_at", "finished_at"}
+    assert set(public) == {"id", "project_id", "format", "resolution", "stems", "ratio", "status", "progress", "step", "file", "media", "error", "created_at", "finished_at"}
     assert (public["status"], public["progress"], public["step"], public["file"], public["media"], public["error"]) == ("queued", 0, None, None, None, None)
     assert public["stems"] is False and jobs.public(jobs.create_job("p-2", "user-1", "master", "1080p", stems=True))["stems"] is True
 

@@ -4,6 +4,7 @@
 	import { ui, doc } from '../../lib/state.svelte.js';
 	import { takesOf, currentEngine } from '../../lib/production.svelte.js';
 	import { aspectOf, draftResolution, finalResolution } from '../../lib/generation.js';
+	import { chosenSize } from '../../lib/formats.js';
 	import { labelGroups, rejectedCount } from '../../lib/labels.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import TakeCard from '../takes/TakeCard.svelte';
@@ -15,8 +16,8 @@
 	const rejected = $derived(rejectedCount(takes));
 	const engine = $derived(currentEngine());
 	const aspect = $derived(aspectOf(doc.aspect, doc.resolution));
-	const draftRes = $derived(draftResolution(engine?.info, ui.me?.settings?.draftResolution, aspect));
-	const finalRes = $derived(finalResolution(engine?.info, aspect));
+	const draftRes = $derived(draftResolution(engine?.info, ui.me?.settings?.draftResolution, aspect, chosenSize(doc, engine?.preset, 'draft')));
+	const finalRes = $derived(finalResolution(engine?.info, aspect, chosenSize(doc, engine?.preset, 'final')));
 </script>
 
 {#if !takes.length && takeStore.loaded}

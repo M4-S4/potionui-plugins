@@ -89,20 +89,22 @@ def exchange_export(
 def start_video_export(
     project_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
-    """Queue the assembly of the sequence into a video: an MP4 for the web (project aspect) or social networks (9:16), a ProRes master or an H.265 archive (project aspect), with its stems in a ZIP when stems is true."""
+    """Queue the assembly of the sequence into a video: an MP4 for the web (project format) or social networks (9:16, or the ratio asked: 4:5 or 1:1), a ProRes master or an H.265 archive (project format), with its stems in a ZIP when stems is true."""
     body = _object(body)
     stems = body.get("stems", False)
     if not isinstance(stems, bool):
         _invalid("stems must be true or false.")
-    return ok({"job": jobs.public(queue_video(user, project_id, body.get("format"), body.get("resolution"), stems))})
+    return ok({"job": jobs.public(queue_video(user, project_id, body.get("format"), body.get("resolution"), stems, body.get("ratio")))})
 
 
-def queue_video(user: User, project_id: str, fmt: Any, requested: Any, stems: bool = False) -> Dict[str, Any]:
+def queue_video(user: User, project_id: str, fmt: Any, requested: Any, stems: bool = False, ratio: Any = None) -> Dict[str, Any]:
     """Queue the video export of a project the user may reach, after every check of the export route; an HTTP error otherwise."""
     if not isinstance(fmt, str) or fmt not in video.FORMATS:
         _invalid(f"format must be one of: {', '.join(video.FORMATS)}.")
     if requested is not None and (not isinstance(requested, str) or requested not in video.RESOLUTIONS):
         _invalid(f"resolution must be one of: {', '.join(video.RESOLUTIONS)}.")
+    if ratio is not None and (fmt != "social" or not isinstance(ratio, str) or ratio not in video.SOCIAL_RATIOS):
+        _invalid(f"ratio is only for the social format and must be one of: {', '.join(video.SOCIAL_RATIOS)}.")
     project = access.project_for(user, project_id)
     _timed(project["doc"])
     owner = access.owner_of(user, project)
@@ -115,7 +117,7 @@ def queue_video(user: User, project_id: str, fmt: Any, requested: Any, stems: bo
     quota = int(settings.get_setting("export_dir_quota_mb"))
     if not jobs.make_room(user.id, quota * MB):
         fail(429, "export_quota", f"Your export cache is over its {quota} MB budget.", quota_mb=quota)
-    job = jobs.create_job(project_id, user.id, fmt, video.resolution_of(project["doc"], requested), stems)
+    job = jobs.create_job(project_id, user.id, fmt, video.resolution_of(project["doc"], requested), stems, ratio)
     if job is None:
         fail(409, "export_running", "An export of this project is already queued or running.")
     jobs.ensure_running()
@@ -139,7 +141,7 @@ def export_file(job_id: str, user: User = Depends(get_current_active_user)) -> F
         fail(404, "job_not_found", "The exported file is no longer available.")
     stem, _, extension = job["file_name"].rpartition(".")
     project = projects.get_project(job["project_id"])
-    name = video.download_name(project["name"], job["resolution"], job["format"], bool(job.get("stems"))) if project else stem
+    name = video.download_name(project["name"], job["resolution"], job["format"], bool(job.get("stems")), job.get("ratio")) if project else stem
     return FileResponse(path, media_type=MEDIA_TYPES.get(extension, "application/octet-stream"), headers={"Content-Disposition": content_disposition(name, extension)})
 
 
