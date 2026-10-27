@@ -11,6 +11,10 @@ export function conflictIds(rules, language, globalText, promptText) {
 	return rules.conflicts[language].filter((rule) => rule.global.test(globalText) && rule.local.test(promptText)).map((rule) => rule.id);
 }
 
+export function conflictRule(rules, language, id) {
+	return rules.conflicts[language]?.find((rule) => rule.id === id) ?? null;
+}
+
 export function namesCamera(rules, language, text) {
 	return rules.cameraWords[language].test(text);
 }

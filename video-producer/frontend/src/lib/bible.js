@@ -145,10 +145,10 @@ export function missingLabels(instruction, characters) {
 	return characters.filter((card) => !names(instruction, card.label)).map(labelOf);
 }
 
-export function instructionOf(doc, clip) {
+export function instructionPromptOf(doc, clip) {
 	const prompts = Array.isArray(doc?.prompts) ? doc.prompts : [];
 	const own = prompts.find((p) => p.shotId === clip?.id);
-	if (own) return words(own.text).trim();
+	if (own) return own;
 	const start = Number(clip?.start) || 0;
 	const end = start + (Number(clip?.dur) || 0);
 	let best = null;
@@ -160,7 +160,11 @@ export function instructionOf(doc, clip) {
 			most = overlap;
 		}
 	}
-	return words(best?.text).trim();
+	return best;
+}
+
+export function instructionOf(doc, clip) {
+	return words(instructionPromptOf(doc, clip)?.text).trim();
 }
 
 export function suggestedLabel(value) {

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { CHARACTERS, PLACES, castOf } from './bible.js';
-import { REVIEW_FILTERS, VIEWS, cardImages, castWhereCited, citedWithout, defaultView, isCast, reviewCounts, reviewShots, reviewState, toggledCast, unnamedIn, viewOf } from './director.js';
+import { PANEL_KINDS, REVIEW_FILTERS, VIEWS, cardImages, castWhereCited, citedWithout, defaultView, isCast, marked, markedPhrases, panelSelection, promptShot, reviewCounts, reviewFilterOf, reviewShots, reviewState, shotNumbers, toggledCast, unnamedIn, viewOf, viewShot, witnessOf } from './director.js';
 
 const take = (id, shotId, fields = {}) => ({ id, shotId, status: 'done', url: `/t/${id}.mp4`, label: 'draft', createdAt: `2026-10-26T10:0${id.slice(-1)}:00Z`, ...fields });
 
@@ -123,6 +123,106 @@ test('director: casting a card where it is cited touches only those shots, and t
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf-8');
 
+test('director: each view of the right panel keeps the kinds it can show, and anything else stays selected elsewhere', () => {
+	assert.deepEqual(PANEL_KINDS, { review: ['clip'], direction: ['clip'], bible: [], references: ['reference', 'clip'] });
+	const shot = { kind: 'clip', id: 's2' };
+	const sound = { kind: 'audio', id: 'a1' };
+	const reference = { kind: 'reference', id: 'r1' };
+	assert.deepEqual(panelSelection('review', shot), { shown: shot, elsewhere: null });
+	assert.deepEqual(panelSelection('review', sound), { shown: null, elsewhere: sound });
+	assert.deepEqual(panelSelection('review', reference), { shown: null, elsewhere: reference });
+	assert.deepEqual(panelSelection('references', reference), { shown: reference, elsewhere: null });
+	assert.deepEqual(panelSelection('references', shot), { shown: shot, elsewhere: null });
+	for (const kind of ['audio', 'title', 'prompt', 'frame', 'marker', 'lane']) assert.equal(panelSelection('references', { kind, id: 'x' }).shown, null, kind);
+	assert.deepEqual(panelSelection('bible', shot), { shown: null, elsewhere: shot });
+	assert.deepEqual(panelSelection('review', null), { shown: null, elsewhere: null });
+});
+
+test('director: the sample shot is the pinned one, else the chosen shot, else the first shot with an instruction, and the view shot follows the panel', () => {
+	const doc = { clips: [{ id: 's1', start: 0, dur: 4 }, { id: 's2', start: 4, dur: 4 }, { id: 's3', start: 8, dur: 4 }], prompts: [{ id: 'p2', shotId: 's2', start: 4, dur: 4, text: 'Lina runs.' }] };
+	const [s1, s2, s3] = doc.clips;
+	assert.deepEqual(witnessOf(doc, { kind: 'clip', id: 's3' }, 's1'), { clip: s1, source: 'pinned' });
+	assert.deepEqual(witnessOf(doc, { kind: 'clip', id: 's3' }, 'gone'), { clip: s3, source: 'selection' });
+	assert.deepEqual(witnessOf(doc, { kind: 'audio', id: 'a1' }, null), { clip: s2, source: 'first' });
+	assert.deepEqual(witnessOf({ clips: [s1], prompts: [] }, null, null), { clip: s1, source: 'first' });
+	assert.deepEqual(witnessOf({ clips: [], prompts: [] }, null, null), { clip: null, source: null });
+	assert.equal(viewShot('direction', doc, { kind: 'clip', id: 's3' }, null), s3);
+	assert.equal(viewShot('direction', doc, null, 's1'), s1);
+	assert.equal(viewShot('review', doc, { kind: 'clip', id: 's3' }, 's1'), s3);
+	assert.equal(viewShot('review', doc, { kind: 'audio', id: 'a1' }, null), null);
+	assert.equal(viewShot('references', doc, { kind: 'reference', id: 'r1' }, null), null);
+	assert.equal(viewShot('references', doc, { kind: 'clip', id: 's1' }, null), s1);
+	assert.equal(viewShot('bible', doc, { kind: 'clip', id: 's1' }, 's2'), null);
+});
+
+test('director: a contradiction belongs to the shot of its prompt, and its two sentences are found and marked', () => {
+	const doc = { clips: [{ id: 's1', start: 0, dur: 4 }, { id: 's2', start: 4, dur: 4 }] };
+	assert.equal(promptShot(doc, { shotId: 's2', start: 0, dur: 1 }), doc.clips[1]);
+	assert.equal(promptShot(doc, { shotId: null, start: 3, dur: 4 }), doc.clips[1]);
+	assert.equal(promptShot(doc, { shotId: null, start: 20, dur: 2 }), null);
+	assert.equal(promptShot(doc, null), null);
+	const text = 'A stable camera. Lina runs with a handheld camera; rain falls.\nNo neon.';
+	const parts = marked(text, [/stable camera/i, /handheld/i]);
+	assert.equal(parts.map((x) => x.text).join(''), text);
+	assert.deepEqual(parts.filter((x) => x.mark).map((x) => x.text), ['A stable camera.', 'Lina runs with a handheld camera;']);
+	assert.deepEqual(marked(text, []).filter((x) => x.mark), []);
+	assert.deepEqual(markedPhrases(text, [/neon/i]), ['No neon.']);
+	assert.deepEqual(marked('', [/x/]), []);
+});
+
+test('director: shots are named by their numbers, three at most, and the Review filter falls back on its counts', () => {
+	const doc = { clips: [{ id: 's1' }, { id: 's2' }, { id: 's3' }, { id: 's4' }, { id: 's5' }] };
+	assert.deepEqual(shotNumbers(doc, [doc.clips[1]]), { list: '02', more: 0 });
+	assert.deepEqual(shotNumbers(doc, doc.clips), { list: '01 · 02 · 03', more: 2 });
+	assert.deepEqual(shotNumbers(doc, []), { list: '', more: 0 });
+	assert.equal(reviewFilterOf('final', { review: 2 }), 'final');
+	assert.equal(reviewFilterOf(null, { review: 2 }), 'review');
+	assert.equal(reviewFilterOf('gone', { review: 0 }), 'all');
+});
+
+test('director: the right panel of Review and References filters the selection, keeps it, says where it stays and leaves the flag and the times out of Director AI', () => {
+	const inspector = read('../components/inspector/Inspector.svelte');
+	assert.match(inspector, /const filtered = \$derived\(view \? panelSelection\(view, ui\.selection\) : \{ shown: ui\.selection, elsewhere: null \}\);/);
+	assert.match(inspector, /\{#if away && !multi\}/);
+	assert.match(inspector, /\{#if view && s\.kind === 'clip'\}<span class="vp-tc">\{t\('inspector\.shotNumber', \{ number: num\(item\) \}\)\}<\/span>/);
+	assert.match(inspector, /\{#if !view\}\n\t+<section class="space-y-2">\n\t+<div class="vp-section-title">\{t\('inspector\.section\.flag'\)\}<\/div>/);
+	assert.match(inspector, /disabled=\{!f \|\| Boolean\(view\)\}/);
+	assert.doesNotMatch(inspector, /ui\.selection = null/);
+	assert.match(read('./state.svelte.js'), /ui\.selectedIn = kind \? \(ui\.workspace === 'director' \? `director:\$\{directorView\(\)\}` : ui\.workspace\) : null;/);
+	const board = read('../components/references/ReferenceBoard.svelte');
+	assert.doesNotMatch(board, /ondblclick|seek\(/);
+	for (const locale of ['en', 'fr']) {
+		const keys = JSON.parse(read(`../i18n/${locale}/inspector.json`));
+		for (const kind of ['audio', 'title', 'prompt', 'frame', 'marker', 'reference', 'lane']) assert.match(keys[`elsewhere.${kind}`], /\{name\}.*\{space\}/, `${locale} ${kind}`);
+		assert.doesNotMatch(JSON.parse(read(`../i18n/${locale}/lib.json`))['refTag.shotTip'], /\{start\}|\{end\}/, locale);
+	}
+});
+
+test('director: a contradiction link makes its shot the sample, names it, and the panel marks the two sentences and edits the instruction', () => {
+	const view = read('../components/director/DirectionView.svelte');
+	assert.match(view, /onclick=\{\(\) => followIssue\(i\)\}>\{isShown\(i\) \? t\('panels\.director\.direction\.issueShown', \{ shot: num\(clip\) \}\) : t\('panels\.director\.direction\.issueLink', \{ shot: num\(clip\) \}\)\}<\/button>/);
+	assert.doesNotMatch(view, /select\('prompt'|seek\(|issuePrompt/);
+	const summary = read('../components/director/DirectorSummary.svelte');
+	assert.match(summary, /onclick=\{\(\) => followIssue\(i\)\}>/);
+	assert.doesNotMatch(summary, /seek\(/);
+	const aside = read('../components/director/DirectionAside.svelte');
+	assert.match(aside, /const marks = \$derived\(rule \? \[rule\.global, rule\.local\] : \[\]\);/);
+	assert.match(aside, /t\('panels\.director\.aside\.edit', \{ shot: num\(shot\) \}\)/);
+	assert.match(aside, /onclick=\{\(\) => \(ui\.witness = null\)\}>\{t\('panels\.director\.aside\.unpin'\)\}/);
+	assert.match(read('../components/shots/ComposedPrompt.svelte'), /\{#if part\.mark\}<mark /);
+	for (const locale of ['en', 'fr']) assert.match(JSON.parse(read(`../i18n/${locale}/panels.json`))['director.direction.issueLink'], /^\{shot\} · /, locale);
+});
+
+test('director: a shot chip of the Bible opens the Review on that shot and brings its row on screen', () => {
+	const bible = read('../components/director/BibleView.svelte');
+	assert.match(bible, /function goTo\(e, clip\) \{\n\t\te\.stopPropagation\(\);\n\t\tshowInReview\(clip\);\n\t\}/);
+	assert.match(bible, /title=\{t\('panels\.director\.bible\.chipTip', \{ shot: num\(clip\), name: clipLabel\(clip\) \}\)\}/);
+	assert.doesNotMatch(bible, /seek\(/);
+	const review = read('../components/director/ReviewView.svelte');
+	assert.match(review, /rows\?\.querySelector\(`\[data-review-shot="\$\{id\}"\]`\)\?\.scrollIntoView\(\{ block: 'start' \}\);\n\t\t\tui\.reveal = null;/);
+	assert.match(read('./band.svelte.js'), /export function showInReview\(clip\) \{[\s\S]*?openDirector\('review'\);\n\tpickShot\(clip\);\n\tui\.reveal = clip\.id;\n\}/);
+});
+
 test('director: the summary leads to the four views and the engine, the center shows one view, the right panel follows it', () => {
 	assert.match(read('../components/panels/LeftPanel.svelte'), /\{:else if ui\.workspace === 'director'\}\n\t\t<DirectorSummary \/>/);
 	const summary = read('../components/director/DirectorSummary.svelte');
@@ -135,7 +235,7 @@ test('director: the summary leads to the four views and the engine, the center s
 	const right = read('../components/panels/RightPanel.svelte');
 	assert.match(right, /\{#if view === 'direction'\}\n\t<DirectionAside \/>\n\{:else if view === 'bible'\}\n\t<BibleAside \/>\n\{:else\}\n\t<Inspector \/>/);
 	assert.match(read('../components/director/DirectorViews.svelte'), /\{#if !ui\.sidebarOpen\}/);
-	assert.match(read('../components/director/DirectionAside.svelte'), /<ComposedPrompt source=\{doc\} shotId=\{witness\.id\} \/>/);
+	assert.match(read('../components/director/DirectionAside.svelte'), /<ComposedPrompt source=\{doc\} shotId=\{shot\.id\} \{marks\} bind:current=\{composed\} \/>/);
 	assert.match(read('../components/director/BibleAside.svelte'), /onpick=\{\(id\) => addCardImage\(card, SPACES\[kind\], id\)\}/);
 });
 

@@ -3,13 +3,13 @@ import { emptyDoc, migrate, newAsset, newClip, promptLanguageOf } from './starte
 import { confirm, toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
 import { resetTakes, takeStore } from './takes.svelte.js';
-import { compileRules, conflictIds } from './rules.js';
+import { compileRules, conflictIds, conflictRule } from './rules.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
 import { joinPlan } from './sound.js';
 import { touch } from './shots.js';
 import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
-import { viewOf } from './director.js';
+import { promptShot, viewOf, viewShot, witnessOf } from './director.js';
 import { picking, pruned } from './picking.js';
 import sharedRules from './rules.json';
 
@@ -23,6 +23,9 @@ export const ui = $state({
 	reviewFilter: null,
 	bibleCard: null,
 	witness: null,
+	issue: null,
+	reveal: null,
+	selectedIn: null,
 	refSpace: 'all',
 	sidebarOpen: true,
 	inspectorOpen: typeof window === 'undefined' || window.innerWidth >= 1360,
@@ -112,6 +115,10 @@ export function openDirector(view = null) {
 	ui.workspace = 'director';
 	if (view) ui.directorView = view;
 }
+
+export const witness = () => witnessOf(doc, ui.selection, ui.witness);
+
+export const directorShot = () => (ui.workspace === 'director' ? viewShot(directorView(), doc, ui.selection, ui.witness) : undefined);
 
 export const generates = () => ui.workspace === 'director' || ui.workspace === 'storyboard';
 
@@ -211,6 +218,7 @@ const collections = { clip: 'clips', audio: 'audio', title: 'titles', prompt: 'p
 const LINKED = ['prompts', 'frames'];
 
 export function select(kind, id) {
+	ui.selectedIn = kind ? (ui.workspace === 'director' ? `director:${directorView()}` : ui.workspace) : null;
 	ui.selection = kind ? { kind, id } : null;
 	if (ui.picked.length) ui.picked = [];
 	if (kind && ui.workspace !== 'mixer' && !bandView()) ui.inspectorOpen = true;
@@ -583,6 +591,8 @@ export function productionRange() {
 	const p = ui.production;
 	if (p.target === 'range' && ui.range) return [ui.range.in, ui.range.out];
 	if (p.target === 'sequence') return [0, seqDuration()];
+	const shot = directorShot();
+	if (shot !== undefined) return shot ? [shot.start, shot.start + shot.dur] : [0, 0];
 	const sel = selected();
 	if (sel && 'start' in sel && 'dur' in sel && ui.selection.kind !== 'audio') return [sel.start, sel.start + sel.dur];
 	const c = clipAt(ui.playhead) ?? doc.clips[0];
@@ -633,12 +643,33 @@ export function promptIssues(p) {
 	const g = globalPrompt();
 	const language = promptLanguageOf(doc.promptLanguage);
 	const out = [];
-	for (const id of conflictIds(rules, language, g, p.text)) out.push({ level: 'conflict', text: ruleText(id) ?? id });
+	for (const id of conflictIds(rules, language, g, p.text)) out.push({ level: 'conflict', id, text: ruleText(id) ?? id });
 	if (!p.text.trim()) out.push({ level: 'missing', text: t('lib.issue.emptyPrompt') });
 	return out;
 }
 export function allIssues() {
 	return doc.prompts.flatMap((p) => promptIssues(p).map((i) => ({ ...i, prompt: p })));
+}
+
+export function issueRule(id) {
+	const rule = conflictRule(rules, promptLanguageOf(doc.promptLanguage), id);
+	return rule ? { global: rule.global, local: rule.local } : null;
+}
+
+export function followedIssue(clip) {
+	const followed = ui.issue;
+	if (!followed || !clip) return null;
+	const issue = allIssues().find((i) => i.id === followed.rule && i.prompt.id === followed.prompt);
+	return issue && promptShot(doc, issue.prompt)?.id === clip.id ? issue : null;
+}
+
+export function followIssue(issue) {
+	openDirector('direction');
+	const clip = promptShot(doc, issue?.prompt);
+	if (!clip) return;
+	ui.issue = { prompt: issue.prompt.id, rule: issue.id };
+	ui.witness = null;
+	select('clip', clip.id);
 }
 
 export const sourceLength = (c) => asset(c?.assetId)?.srcDur ?? 60;
@@ -705,7 +736,7 @@ export function replaceDoc(next) {
 	Object.assign(doc, incoming);
 	past.length = 0;
 	future.length = 0;
-	Object.assign(ui, { selection: null, picked: [], preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, dirty: false });
+	Object.assign(ui, { selection: null, picked: [], preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, selectedIn: null, issue: null, reveal: null, dirty: false });
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0 });
 	resetTakes();
 	if (ui.playhead > seqDuration()) ui.playhead = 0;

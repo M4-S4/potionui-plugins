@@ -40,6 +40,7 @@
 	import DraftsField from '../shots/DraftsField.svelte';
 	import QueuePanel from '../panels/QueuePanel.svelte';
 	import { takeCount } from '../../lib/shots.js';
+	import { shotNumbers } from '../../lib/director.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 
 	const p = $derived(ui.production);
@@ -60,6 +61,14 @@
 	const notes = $derived(blocked ? [...ready.missing, ...ready.warnings] : ready.warnings);
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
 	const picked = $derived(pickedClips().length);
+	const byShots = $derived(ui.workspace === 'director' && (picked > 0 || p.target === 'clip'));
+	const span = $derived.by(() => {
+		if (!byShots) return `${secs(ready.range[0])} → ${secs(ready.range[1])}`;
+		const numbers = shotNumbers(doc, clips);
+		if (!clips.length) return t('production.scope.none');
+		if (clips.length === 1) return t('production.scope.shot', { number: numbers.list });
+		return numbers.more ? t('production.scope.shotsMore', numbers) : t('production.scope.shots', numbers);
+	});
 	const primary = $derived(busy ? t('production.enqueue') : t('production.generate'));
 	const primaryTip = $derived(busy ? t('production.enqueueTip') : t('production.generate'));
 	const targets = $derived([
@@ -224,7 +233,7 @@
 		{#if fit.inline.has('scope')}
 			<HostUi name="Tooltip" props={{ text: scope, wrapperClass: 'flex shrink-0' }}>
 				<div class="flex flex-col pl-1 leading-tight">
-					<span class="vp-tc whitespace-nowrap text-sm text-fg">{secs(ready.range[0])} → {secs(ready.range[1])}</span>
+					<span class="{byShots ? '' : 'vp-tc '}whitespace-nowrap text-sm text-fg">{span}</span>
 					<span class="flex items-center gap-1 whitespace-nowrap text-xs text-fg-subtle">
 						{t('production.count.shots', { count: clips.length })} · {t('production.count.prompts', { count: it.prompts.length })}
 						{#if conflicts.length}

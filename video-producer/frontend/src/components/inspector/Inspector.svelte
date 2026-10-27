@@ -26,7 +26,8 @@
 		sourceLength,
 		promptEdited,
 		openDirector,
-		pickedClips
+		pickedClips,
+		directorView
 	} from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -41,6 +42,8 @@
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import { commandById } from '../../lib/commands.js';
+	import { panelSelection, promptShot } from '../../lib/director.js';
+	import { WORKSPACES } from '../../lib/workspaces.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, shotCuts, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
@@ -59,9 +62,13 @@
 	import SliderField from './SliderField.svelte';
 	import PickedSummary from './PickedSummary.svelte';
 
-	const s = $derived(ui.selection);
-	const item = $derived(selected());
+	const view = $derived(ui.workspace === 'director' ? directorView() : null);
+	const filtered = $derived(view ? panelSelection(view, ui.selection) : { shown: ui.selection, elsewhere: null });
+	const s = $derived(filtered.shown);
+	const item = $derived(s ? selected() : null);
+	const away = $derived(filtered.elsewhere ? selected() : null);
 	const multi = $derived(pickedClips().length > 1);
+	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 
 	const icons = { clip: 'film', audio: 'wave', title: 'type', prompt: 'sparkles', frame: 'image', marker: 'bookmark', reference: 'bookmark', lane: 'sliders' };
 
@@ -74,6 +81,33 @@
 		if (kind === 'marker') return t('inspector.kind.marker');
 		if (kind === 'reference') return t('inspector.kind.reference');
 		return t('inspector.kind.lane');
+	}
+
+	function spaceName(from) {
+		if (from?.startsWith('director:')) return commandById(`view-${from.slice('director:'.length)}`)?.label;
+		return commandById(WORKSPACES.find((w) => w.id === from)?.command)?.label;
+	}
+
+	function awayName(kind, it) {
+		if (kind === 'audio' || kind === 'frame') return asset(it.assetId)?.name ?? '';
+		if (kind === 'lane') return laneTitle(doc.lanes, it);
+		if (kind === 'prompt') {
+			const text = String(it.text ?? '').trim();
+			const shot = promptShot(doc, it);
+			return text.length > 40 ? `${text.slice(0, 39).trim()}…` : text || (shot ? num(shot) : '');
+		}
+		return it.name ?? it.text ?? it.label ?? '';
+	}
+
+	function awayText(kind, it) {
+		const params = { name: awayName(kind, it), space: spaceName(ui.selectedIn) ?? t('inspector.elsewhere.space') };
+		if (kind === 'audio') return t('inspector.elsewhere.audio', params);
+		if (kind === 'title') return t('inspector.elsewhere.title', params);
+		if (kind === 'prompt') return t('inspector.elsewhere.prompt', params);
+		if (kind === 'frame') return t('inspector.elsewhere.frame', params);
+		if (kind === 'marker') return t('inspector.elsewhere.marker', params);
+		if (kind === 'reference') return t('inspector.elsewhere.reference', params);
+		return t('inspector.elsewhere.lane', params);
 	}
 
 	function fxName(type) {
@@ -267,7 +301,8 @@
 					{/if}
 					<div class="flex items-center gap-2 text-xs text-fg-subtle">
 						{#if s.kind === 'clip'}<span class="flex items-center gap-1 {stages[item.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[item.stage].dot}"></span>{stages[item.stage].label}</span>{/if}
-						{#if 'start' in item}<span class="vp-tc">{secs(item.start)} → {secs(item.start + item.dur)}</span>{/if}
+						{#if view && s.kind === 'clip'}<span class="vp-tc">{t('inspector.shotNumber', { number: num(item) })}</span>
+						{:else if 'start' in item}<span class="vp-tc">{secs(item.start)} → {secs(item.start + item.dur)}</span>{/if}
 						{#if 'time' in item}<span class="vp-tc">{t('inspector.at', { time: secs(item.time) })}</span>{/if}
 					</div>
 				</div>
@@ -342,8 +377,8 @@
 								{@const thumb = f ? assetThumb(asset(f.assetId)) : null}
 								<button
 									type="button"
-									class="overflow-hidden rounded-md border border-line-strong text-left transition-colors {f ? 'hover:border-line-hover' : ''} disabled:cursor-default"
-									disabled={!f}
+									class="overflow-hidden rounded-md border border-line-strong text-left transition-colors {f && !view ? 'hover:border-line-hover' : ''} disabled:cursor-default"
+									disabled={!f || Boolean(view)}
 									onclick={() => f && select('frame', f.id)}
 								>
 									{#if thumb}
@@ -381,13 +416,15 @@
 							</p>
 						</section>
 					{/if}
-					<section class="space-y-2">
-						<div class="vp-section-title">{t('inspector.section.flag')}</div>
-						<HostUi
-							name="SegmentedControl"
-							props={{ items: flags, selected: item.flag ?? 'none', variant: 'toggle', fullWidth: true, ariaLabel: t('inspector.section.flag'), onSelect: (id) => act(() => (item.flag = id === 'none' ? null : id)) }}
-						/>
-					</section>
+					{#if !view}
+						<section class="space-y-2">
+							<div class="vp-section-title">{t('inspector.section.flag')}</div>
+							<HostUi
+								name="SegmentedControl"
+								props={{ items: flags, selected: item.flag ?? 'none', variant: 'toggle', fullWidth: true, ariaLabel: t('inspector.section.flag'), onSelect: (id) => act(() => (item.flag = id === 'none' ? null : id)) }}
+							/>
+						</section>
+					{/if}
 					<div class="flex items-center gap-0.5 border-t border-line pt-2">
 						<HostUi
 							name="IconButton"
@@ -553,7 +590,7 @@
 						<label class="flex items-center gap-2">
 							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.shot')}</span>
 							<select class="input vp-dense min-w-0 flex-1" value={item.scope.shotId} onchange={(e) => act(() => (item.scope = { type: 'shot', shotId: e.currentTarget.value }))}>
-								{#each doc.clips as c (c.id)}<option value={c.id}>{clipLabel(c)} · {secs(c.start)}–{secs(c.start + c.dur)}</option>{/each}
+								{#each doc.clips as c (c.id)}<option value={c.id}>{view ? `${num(c)} · ${clipLabel(c)}` : `${clipLabel(c)} · ${secs(c.start)}–${secs(c.start + c.dur)}`}</option>{/each}
 							</select>
 						</label>
 					{/if}
@@ -621,6 +658,12 @@
 			{/if}
 		{/if}
 	</div>
+	{#if away && !multi}
+		<p class="flex shrink-0 items-start gap-1.5 border-t border-dashed border-line-strong px-3 py-2 text-xs text-fg-subtle" data-elsewhere={filtered.elsewhere.kind}>
+			<Icon name="info" class="mt-px h-3.5 w-3.5 shrink-0" />
+			<span class="min-w-0">{awayText(filtered.elsewhere.kind, away)}</span>
+		</p>
+	{/if}
 </aside>
 
 {#snippet fadeFields(video)}

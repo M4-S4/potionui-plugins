@@ -2,7 +2,6 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, asset, select, secs } from '../../lib/state.svelte.js';
-	import { seek } from '../../lib/playback.svelte.js';
 	import { families, addReference, refMediaKind, referenceTagText } from '../../lib/references.js';
 	import { typeIcon } from '../../lib/reftags.js';
 	import { mountHostSlot } from '../../lib/host.js';
@@ -19,7 +18,6 @@
 	let q = $state('');
 	const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 	const sent = $derived(supportedProfiles().includes('Ref2VA'));
-	const shotOf = (r) => (r.scope.type === 'shot' ? doc.clips.find((c) => c.id === r.scope.shotId) ?? null : null);
 	const list = $derived(
 		doc.references.filter((r) => (ui.refSpace === 'all' || r.space === ui.refSpace) && (!q || norm(`${r.name} ${referenceTagText(r)}`).includes(norm(q))))
 	);
@@ -43,11 +41,6 @@
 		const family = ui.refSpace !== 'all' ? fam(ui.refSpace)?.label : null;
 		if (group === 'global') return family ? t('references.empty.globalIn', { family }) : t('references.empty.global');
 		return family ? t('references.empty.shotIn', { family }) : t('references.empty.shot');
-	}
-
-	function openAt(r) {
-		const shot = shotOf(r);
-		if (shot) seek(shot.start);
 	}
 </script>
 
@@ -97,7 +90,6 @@
 									ondragstart={(e) => a?.src && e.dataTransfer.setData('text/x-asset', a.id)}
 									onclick={() => select('reference', r.id)}
 									onkeydown={(e) => activateOnKey(e, () => select('reference', r.id))}
-									ondblclick={() => openAt(r)}
 									title={a?.src ? t('references.dragHint') : f?.hint}
 								>
 									<div class="relative aspect-video overflow-hidden rounded-lg bg-surface-3">

@@ -3,8 +3,9 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { project, getClient } from '../../lib/project.svelte.js';
 	import { currentEngine, engineOptionLabel, noteText } from '../../lib/production.svelte.js';
+	import { marked } from '../../lib/director.js';
 
-	let { source, shotId, current = $bindable(null) } = $props();
+	let { source, shotId, marks = [], current = $bindable(null) } = $props();
 
 	const DELAY = 400;
 	const ELSEWHERE = ['bible_label_missing', 'reference_prompt_changed', 'reference_prompt_ignored'];
@@ -19,6 +20,7 @@
 	const item = $derived(composed.data?.prompts.find((p) => p.shotId === shotId) ?? null);
 	const warnings = $derived((item?.warnings ?? []).filter((w) => !ELSEWHERE.includes(w.code)));
 	const blocks = $derived(item ? [] : (composed.data?.blocks ?? []));
+	const parts = $derived(item ? marked(item.prompt, marks) : []);
 
 	$effect(() => {
 		current = item;
@@ -54,7 +56,7 @@
 		{:else if !project.id}
 			<p class="text-fg-subtle">{t('modals.shot.composedUnsaved')}</p>
 		{:else if item}
-			<p class="max-h-48 overflow-auto whitespace-pre-wrap leading-5 text-fg-muted {composed.loading ? 'opacity-60' : ''}" aria-live="polite">{item.prompt}</p>
+			<p class="max-h-48 overflow-auto whitespace-pre-wrap leading-5 text-fg-muted {composed.loading ? 'opacity-60' : ''}" aria-live="polite">{#each parts as part, i (i)}{#if part.mark}<mark class="rounded-sm text-fg" style:background-color="rgb(var(--warning) / 0.25)" data-composed-mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</p>
 			{#each warnings as w, i (i)}
 				<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{noteText(w)}</HostUi>
 			{/each}

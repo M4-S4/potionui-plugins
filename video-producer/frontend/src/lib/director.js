@@ -40,6 +40,8 @@ export function reviewCounts(clips, takes) {
 	return Object.fromEntries(REVIEW_FILTERS.map((filter) => [filter, reviewShots(clips, takes, filter).length]));
 }
 
+export const reviewFilterOf = (chosen, counts) => (REVIEW_FILTERS.includes(chosen) ? chosen : counts.review ? 'review' : 'all');
+
 export function citedWithout(doc, kind, card) {
 	if (!usable(card)) return [];
 	const cast = new Set(shotsCasting(doc, kind, card.id));
@@ -77,4 +79,65 @@ export function castWhereCited(doc, kind, card) {
 export function cardImages(doc, card) {
 	const ids = new Set(card?.references ?? []);
 	return (doc?.references ?? []).filter((r) => ids.has(r.id));
+}
+
+export const PANEL_KINDS = { review: ['clip'], direction: ['clip'], bible: [], references: ['reference', 'clip'] };
+
+export function panelSelection(view, selection) {
+	if (!selection) return { shown: null, elsewhere: null };
+	return (PANEL_KINDS[view] ?? []).includes(selection.kind) ? { shown: selection, elsewhere: null } : { shown: null, elsewhere: selection };
+}
+
+export function witnessOf(doc, selection, pinned) {
+	const clips = doc?.clips ?? [];
+	const fixed = pinned ? clips.find((c) => c.id === pinned) : null;
+	if (fixed) return { clip: fixed, source: 'pinned' };
+	const picked = selection?.kind === 'clip' ? clips.find((c) => c.id === selection.id) : null;
+	if (picked) return { clip: picked, source: 'selection' };
+	const first = clips.find((c) => instructionOf(doc, c)) ?? clips[0] ?? null;
+	return { clip: first, source: first ? 'first' : null };
+}
+
+export function viewShot(view, doc, selection, pinned) {
+	if (view === 'direction') return witnessOf(doc, selection, pinned).clip;
+	const shown = panelSelection(view, selection).shown;
+	return shown?.kind === 'clip' ? ((doc?.clips ?? []).find((c) => c.id === shown.id) ?? null) : null;
+}
+
+export function promptShot(doc, prompt) {
+	const clips = doc?.clips ?? [];
+	if (!prompt) return null;
+	const own = clips.find((c) => c.id === prompt.shotId);
+	if (own) return own;
+	const start = Number(prompt.start) || 0;
+	const end = start + (Number(prompt.dur) || 0);
+	let best = null;
+	let most = 0;
+	for (const c of clips) {
+		const overlap = Math.min(end, c.start + c.dur) - Math.max(start, c.start);
+		if (overlap > most) {
+			best = c;
+			most = overlap;
+		}
+	}
+	return best;
+}
+
+export function marked(text, patterns) {
+	const list = (patterns ?? []).filter(Boolean);
+	return String(text ?? '')
+		.split(/(?<=[.!?;\n])/)
+		.filter(Boolean)
+		.flatMap((part) => {
+			const [, lead, body] = part.match(/^(\s*)([\s\S]*)$/);
+			const mark = Boolean(body) && list.some((re) => re.test(body));
+			return [...(lead ? [{ text: lead, mark: false }] : []), ...(body ? [{ text: body, mark }] : [])];
+		});
+}
+
+export const markedPhrases = (text, patterns) => marked(text, patterns).filter((part) => part.mark).map((part) => part.text.trim());
+
+export function shotNumbers(doc, clips, max = 3) {
+	const list = (clips ?? []).map((c) => String((doc?.clips ?? []).indexOf(c) + 1).padStart(2, '0'));
+	return { list: list.slice(0, max).join(' · '), more: Math.max(0, list.length - max) };
 }

@@ -1,14 +1,13 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, undo, toast, select, secs, globalPrompt, allIssues } from '../../lib/state.svelte.js';
-	import { seek } from '../../lib/playback.svelte.js';
+	import { ui, doc, act, undo, toast, globalPrompt, allIssues, followIssue, followedIssue, witness } from '../../lib/state.svelte.js';
 	import { directionFields } from '../../lib/catalog.js';
 	import { convertDirection } from '../../lib/bible.js';
 	import { ulid } from '../../lib/ulid.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
-	import { VIEW_ICONS } from '../../lib/director.js';
+	import { VIEW_ICONS, promptShot } from '../../lib/director.js';
 	import DirectorViews from './DirectorViews.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import Icon from '../Icon.svelte';
@@ -18,12 +17,9 @@
 	const chars = $derived(globalPrompt().length);
 	const conflicts = $derived(allIssues().filter((i) => i.level !== 'missing'));
 	const free = $derived(String(doc.direction.personnages ?? '').trim());
-
-	function openPrompt(p) {
-		select('prompt', p.id);
-		seek(p.start);
-		ui.modal = { type: 'prompt', id: p.id };
-	}
+	const followed = $derived(followedIssue(witness().clip));
+	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
+	const isShown = (i) => followed?.id === i.id && followed.prompt === i.prompt;
 
 	function library(key) {
 		ui.modal = { type: 'library', target: { kind: 'direction', key } };
@@ -50,9 +46,12 @@
 				<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: hostIconName('alert'), title: t('panels.director.direction.conflicts', { count: conflicts.length }), live: 'off' }}>
 					<ul class="mt-1.5 space-y-1.5">
 						{#each conflicts as i, n (n)}
+							{@const clip = promptShot(doc, i.prompt)}
 							<li class="text-xs text-fg-muted">
 								{i.text}
-								<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => openPrompt(i.prompt)}>{t('panels.dock.issuePrompt', { time: secs(i.prompt.start) })}</button>
+								{#if clip}
+									<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" aria-pressed={isShown(i)} onclick={() => followIssue(i)}>{isShown(i) ? t('panels.director.direction.issueShown', { shot: num(clip) }) : t('panels.director.direction.issueLink', { shot: num(clip) })}</button>
+								{/if}
 							</li>
 						{/each}
 					</ul>
