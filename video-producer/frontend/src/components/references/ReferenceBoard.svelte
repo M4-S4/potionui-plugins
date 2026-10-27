@@ -1,14 +1,17 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, asset, select, secs } from '../../lib/state.svelte.js';
-	import { families, addReference, refMediaKind, referenceTagText } from '../../lib/references.js';
+	import { ui, doc, asset, select, secs, clipLabel } from '../../lib/state.svelte.js';
+	import { families, addReference, refMediaKind, referenceTagText, engineOf, engineTitle } from '../../lib/references.js';
 	import { typeIcon } from '../../lib/reftags.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
-	import { engineLabel, supportedProfiles } from '../../lib/production.svelte.js';
-	import { VIEW_ICONS } from '../../lib/director.js';
+	import { presetProfiles } from '../../lib/generation.js';
+	import { takesReferences } from '../../lib/reception.js';
+	import { excludedOf, sentReferences } from '../../lib/shots.js';
+	import { spaceLabel } from '../../lib/commands.js';
+	import { VIEW_ICONS, panelSelection } from '../../lib/director.js';
 	import DirectorViews from '../director/DirectorViews.svelte';
 	import FilterPills from '../shell/FilterPills.svelte';
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
@@ -17,7 +20,13 @@
 
 	let q = $state('');
 	const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-	const sent = $derived(supportedProfiles().includes('Ref2VA'));
+	const project = $derived(engineOf({}));
+	const sent = $derived(!project.info || (presetProfiles(project.info).includes(project.profile) && takesReferences(project.profile)));
+	const chosen = $derived(panelSelection('references', ui.selection).shown);
+	const shot = $derived(chosen?.kind === 'clip' ? (doc.clips.find((c) => c.id === chosen.id) ?? null) : null);
+	const going = $derived(shot ? new Set(sentReferences(doc, shot).map((r) => r.id)) : null);
+	const left = $derived(shot ? new Set(excludedOf(shot)) : null);
+	const shotNum = $derived(shot ? String(doc.clips.indexOf(shot) + 1).padStart(2, '0') : '');
 	const list = $derived(
 		doc.references.filter((r) => (ui.refSpace === 'all' || r.space === ui.refSpace) && (!q || norm(`${r.name} ${referenceTagText(r)}`).includes(norm(q))))
 	);
@@ -48,7 +57,7 @@
 	<ZoneHeader icon={ui.sidebarOpen ? VIEW_ICONS.references : null} title={t('references.title')} subtitle={t('references.total', { count: doc.references.length })}>
 		{#snippet lead()}<DirectorViews />{/snippet}
 		{#if !sent && doc.references.length}
-			<HostUi name="Tooltip" props={{ text: t('generation.refs.why', { engine: engineLabel() }), wrapperClass: 'inline-flex shrink-0' }}>
+			<HostUi name="Tooltip" props={{ text: t('generation.refs.why', { engine: engineTitle(project) }), wrapperClass: 'inline-flex shrink-0' }}>
 				<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.refs.notSent')}</HostUi>
 			</HostUi>
 		{/if}
@@ -61,6 +70,12 @@
 		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'shrink-0', onclick: () => addReference() }}>{t('references.add')}</HostUi>
 	</ZoneHeader>
 
+	{#if shot}
+		<p class="flex shrink-0 items-center gap-1.5 border-b border-line px-5 py-2 text-xs text-fg-muted" data-reference-highlight={shot.id}>
+			<Icon name="info" class="h-3.5 w-3.5 shrink-0" />
+			<span class="min-w-0">{t('references.highlight', { count: going.size, shot: `${shotNum} · ${clipLabel(shot)}`, space: spaceLabel(ui.selectedIn) ?? t('inspector.elsewhere.space') })}</span>
+		</p>
+	{/if}
 	<div class="flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-5">
 		{#if !inFamily}
 			<div class="m-auto w-full max-w-lg">
@@ -81,7 +96,7 @@
 							{@const kind = refMediaKind(r.space, r.type)}
 							{@const f = fam(r.space)}
 							{@const playable = a?.kind === 'audio' && a.src}
-							<li class="rounded-xl border bg-surface-1 p-2 transition-[border-color,box-shadow] duration-150 {isSel(r) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'}">
+							<li class="rounded-xl border bg-surface-1 p-2 transition-[border-color,box-shadow,opacity] duration-150 {isSel(r) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : going?.has(r.id) ? 'border-signal' : 'border-line-strong hover:border-line-hover'} {left?.has(r.id) ? 'opacity-50' : ''}" data-reference-card={r.id} data-going={going ? going.has(r.id) : null}>
 								<div
 									role="button"
 									tabindex="0"
@@ -104,6 +119,7 @@
 									<div class="space-y-1 px-1 pb-0.5 pt-2">
 										<div class="truncate text-sm font-medium">{r.name}</div>
 										<RefTags reference={r} />
+										{#if left?.has(r.id)}<div class="text-xs text-warning">{t('references.excludedFrom', { shot: shotNum })}</div>{/if}
 										{#if r.file || a?.kind === 'audio'}<div class="truncate text-xs text-fg-subtle">{[r.file ? t('references.file', { file: r.file }) : '', a?.kind === 'audio' ? (a.srcDur ? secs(a.srcDur) : a.name) : ''].filter(Boolean).join(' · ')}</div>{/if}
 										{#if kind === 'audio' && !playable}
 											<div class="mt-1 text-xs text-warning">{t('references.noSound')}</div>

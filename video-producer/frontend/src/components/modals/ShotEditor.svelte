@@ -25,7 +25,7 @@
 	import KeyframeCandidates from '../shots/KeyframeCandidates.svelte';
 	import RefTags from '../references/RefTags.svelte';
 
-	let { id, draft: kept = null, baseline: keptBaseline = null } = $props();
+	let { id, draft: kept = null, baseline: keptBaseline = null, focus = null } = $props();
 
 	const IDENTITY_TYPES = ['Personnage', 'Décor', 'Objet', 'Style'];
 	const clip = $derived(doc.clips.find((c) => c.id === id));
@@ -153,7 +153,7 @@
 						<button type="button" class="flex min-h-6 items-center gap-1 text-xs text-fg-muted hover:text-fg" onclick={openLibrary}><Icon name="wand" class="h-3.5 w-3.5" />{t('modals.prompt.library')}</button>
 					</div>
 					<!-- svelte-ignore a11y_autofocus -->
-					<textarea id={textId} class="input w-full text-md" rows="5" bind:value={draft.text} autofocus placeholder={t('modals.prompt.placeholder')}></textarea>
+					<textarea id={textId} class="input w-full text-md" rows="5" bind:value={draft.text} autofocus={focus !== 'keyframes'} placeholder={t('modals.prompt.placeholder')}></textarea>
 					{#each issues as issue, i (i)}
 						{#if issue.level === 'conflict'}
 							<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{issue.text}</HostUi>
@@ -278,7 +278,7 @@
 					</div>
 					{#if sounding && behavior}<SoundNote {behavior} />{/if}
 				</section>
-				<KeyframeCandidates {clip} {draft} onaccept={(role, assetId) => (draft[role] = assetId)} />
+				<KeyframeCandidates {clip} {draft} focus={focus === 'keyframes'} onaccept={(role, assetId) => (draft[role] = assetId)} />
 			</div>
 
 			<div class="space-y-4">

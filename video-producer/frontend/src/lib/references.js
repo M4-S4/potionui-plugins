@@ -1,10 +1,15 @@
 import { t } from '../i18n/index.svelte.js';
 import { ui, doc, act, select, toast, productionRange, secs, clipAt, clipLabel, overlaps, openDirector } from './state.svelte.js';
 import { ulid } from './ulid.js';
-import { SOUND_SPACE } from './sound.js';
+import { SOUND_SPACE, shotSound } from './sound.js';
 import { refMediaKind, typesOf } from './refmedia.js';
-import { CHARACTERS } from './bible.js';
+import { CHARACTERS, cardsOf } from './bible.js';
 import { DEFAULT_ROLES, FAMILY_ICONS, ROLE_KEYS, TYPE_KEYS, referenceTags } from './reftags.js';
+import { effectiveEngine } from './engine.js';
+import { optionFor, withProfile } from './generation.js';
+import { engineChoices, engineOptionLabel } from './production.svelte.js';
+import { excludedOf, setExcluded, touch } from './shots.js';
+import { LIMITS, cardReception, projectReception, receptionOf, shotReception, takesReferences } from './reception.js';
 
 export const families = [
 	{
@@ -92,12 +97,83 @@ export function openReferences(space = 'all') {
 	ui.refSpace = space;
 }
 
-export function addReference(space = ui.refSpace === 'all' ? 'identite' : ui.refSpace) {
+export function addReference(space = ui.refSpace === 'all' ? 'identite' : ui.refSpace, scope = { type: 'global' }) {
 	const type = typesOf(space)[0];
-	const r = { id: ulid(), name: t('lib.default.reference', { type: refTypeLabel(type) }), space, type, assetId: null, role: roles[space], scope: { type: 'global' } };
+	const r = { id: ulid(), name: t('lib.default.reference', { type: refTypeLabel(type) }), space, type, assetId: null, role: roles[space], scope };
 	act(() => doc.references.push(r));
 	select('reference', r.id);
 	toast(t('lib.refs.added'));
+	return r;
+}
+
+export function addShotReference(clip) {
+	return clip ? addReference(undefined, { type: 'shot', shotId: clip.id }) : null;
+}
+
+export function engineOf(clip, source = doc) {
+	const engine = effectiveEngine(clip, source);
+	const option = optionFor(engineChoices(), engine);
+	return { ...engine, info: option ? { ...option.info, cloud: option.kind === 'cloud' || option.info.cloud } : null, label: option?.label ?? null };
+}
+
+function tracksFor(source) {
+	return (clip) => {
+		const engine = engineOf(clip, source);
+		return engine.info && takesReferences(engine.profile) ? (shotSound(source, clip, engine.info, engine.profile)?.lanes.length ?? 0) : 0;
+	};
+}
+
+export const reception = (reference, source = doc) => receptionOf(reference, source, (clip) => engineOf(clip, source), tracksFor(source));
+export const shotReceptionFor = (clip) => shotReception(doc, clip, engineOf(clip), tracksFor(doc)(clip));
+export const projectReceptionFor = () => projectReception(doc, (clip) => engineOf(clip), tracksFor(doc));
+export const cardReceptionFor = (kind, card) => cardReception(doc, kind, card, (clip) => engineOf(clip), tracksFor(doc));
+
+export const engineTitle = (engine) => withProfile(engine?.label ?? engineOptionLabel(engine?.preset ?? null, engine?.model ?? null), engine?.profile ?? '');
+
+const GOT = { image: () => t('panels.director.refs.got.image'), video: () => t('panels.director.refs.got.video'), audio: () => t('panels.director.refs.got.audio') };
+const NOT = { image: () => t('panels.director.refs.not.image'), video: () => t('panels.director.refs.not.video'), audio: () => t('panels.director.refs.not.audio') };
+
+export function receptionVerdict(status, kind, profile = '') {
+	const media = Object.hasOwn(GOT, kind) ? kind : 'image';
+	if (status === 'sent') return { text: GOT[media](), tone: 'text-success', ok: true };
+	if (status === 'mixed') return { text: t('panels.director.refs.mixed'), tone: 'text-success', ok: true };
+	if (status === 'ignored') return { text: NOT[media](), tone: 'text-fg-subtle', ok: false };
+	if (status === 'trimmed') return { text: t('panels.director.refs.trimmed', { limit: LIMITS[media] }), tone: 'text-warning', ok: false };
+	if (status === 'missing') return { text: t('panels.director.refs.missing'), tone: 'text-warning', ok: false };
+	if (status === 'excluded') return { text: t('panels.director.refs.left'), tone: 'text-fg-subtle', ok: false };
+	if (status === 'blocked') return { text: t('panels.director.refs.blocked', { profile }), tone: 'text-warning', ok: false };
+	return { text: t('panels.director.refs.unknown'), tone: 'text-fg-subtle', ok: false };
+}
+
+export function setReferenceShot(reference, shotId) {
+	if (!reference) return;
+	const scope = shotId ? { type: 'shot', shotId } : { type: 'global' };
+	if (reference.scope?.type === scope.type && reference.scope?.shotId === scope.shotId) return;
+	act(() => (reference.scope = scope));
+}
+
+export function linkReferenceCard(reference, kind, cardId) {
+	if (!reference) return;
+	act(() => {
+		for (const card of cardsOf(doc, kind)) {
+			const linked = (card.references ?? []).includes(reference.id);
+			if (card.id === cardId && !linked) card.references = [...(card.references ?? []), reference.id];
+			else if (card.id !== cardId && linked) card.references = card.references.filter((id) => id !== reference.id);
+		}
+	});
+}
+
+export function setSent(clip, referenceId, sent) {
+	const excluded = excludedOf(clip);
+	if (!clip || sent !== excluded.includes(referenceId)) return;
+	act(() => {
+		setExcluded(clip, sent ? excluded.filter((id) => id !== referenceId) : [...excluded, referenceId]);
+		touch(clip);
+	});
+}
+
+export function startImage(clip) {
+	if (clip) ui.modal = { type: 'shot', id: clip.id, focus: 'keyframes' };
 }
 
 export function addCardImage(card, space, assetId) {

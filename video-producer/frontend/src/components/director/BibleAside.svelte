@@ -4,13 +4,14 @@
 	import { ui, doc, act, asset, toast, undo } from '../../lib/state.svelte.js';
 	import { CHARACTERS, PLACES, SPACES, LABEL_MAX, cardsOf, linkable, removeCard, setVoice, shotsCasting, usable, voiceChoices } from '../../lib/bible.js';
 	import { LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
-	import { addCardImage, refTypeLabel } from '../../lib/references.js';
+	import { addCardImage, refTypeLabel, cardReceptionFor, engineTitle } from '../../lib/references.js';
 	import { CARD_ICONS } from '../../lib/reftags.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import RefTags from '../references/RefTags.svelte';
+	import ReceptionList from './ReceptionList.svelte';
 	import Icon from '../Icon.svelte';
 
 	const found = $derived([CHARACTERS, PLACES].map((kind) => [kind, cardsOf(doc, kind).find((c) => c.id === ui.bibleCard)]).find(([, card]) => card) ?? null);
@@ -18,6 +19,18 @@
 	const card = $derived(found?.[1] ?? null);
 	const references = $derived(kind ? linkable(doc, kind) : []);
 	const cast = $derived(card ? shotsCasting(doc, kind, card.id).length : 0);
+	const received = $derived(card ? cardReceptionFor(kind, card) : null);
+	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
+	const ownWords = $derived((received?.shots ?? []).filter((shot) => shot.overridden).map((shot) => shot.clip));
+	const lostWords = $derived((received?.shots ?? []).filter((shot) => shot.ignoredLayout).map((shot) => shot.clip));
+
+	function verdict(group) {
+		if (group.state === 'unknown') return { text: t('panels.director.refs.unknown'), tone: 'text-fg-subtle', ok: false };
+		if (group.state === 'blocked') return { text: t('panels.director.refs.blocked', { profile: group.engine.profile }), tone: 'text-warning', ok: false };
+		return group.received ? { text: t('panels.director.bible.gets'), tone: 'text-success', ok: true } : { text: t('panels.director.bible.getsNot'), tone: 'text-fg-subtle', ok: false };
+	}
+
+	const rows = $derived((received?.groups ?? []).map((g) => ({ key: g.key, status: g.state, title: engineTitle(g.engine), shots: g.shots.map((shot) => shot.clip), ...verdict(g) })));
 	const voices = $derived(voiceChoices(doc));
 	const languageName = (name) => t(`lib.language.${name}`);
 
@@ -109,7 +122,17 @@
 					<MediaPicker title={t('panels.director.aside.addImage')} onpick={(id) => addCardImage(card, SPACES[kind], id)} removable={false} compact />
 					<p class="text-xs text-fg-subtle">{referencesHint(kind)}</p>
 				</section>
-				<p class="text-xs text-fg-subtle">{t('panels.director.bible.cast', { count: cast })}</p>
+				<section class="space-y-2" data-card-reception>
+					<div class="vp-section-title">{t('panels.director.bible.received')}</div>
+					<p class="text-xs text-fg-muted">{cast ? t('panels.director.refs.cardText', { name: card.label || t('panels.dock.bible.unnamed'), count: cast }) : t('panels.director.refs.cardNone', { name: card.label || t('panels.dock.bible.unnamed') })}</p>
+					{#if rows.length && received.references.length}
+						<ReceptionList {rows} label={t('panels.director.bible.received')} />
+					{:else if cast}
+						<p class="text-xs text-fg-subtle">{t('panels.director.bible.noReferences')}</p>
+					{/if}
+					{#if ownWords.length}<p class="text-xs text-fg-subtle">{t('panels.director.refs.ownWords', { count: ownWords.length, shots: ownWords.map(num).join(', ') })}</p>{/if}
+					{#if lostWords.length}<p class="text-xs text-warning">{t('panels.director.refs.lostWords', { count: lostWords.length, shots: lostWords.map(num).join(', ') })}</p>{/if}
+				</section>
 			</div>
 			<div class="flex shrink-0 items-center border-t border-line px-3 py-2">
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'trash', onclick: remove }}>{t('panels.dock.bible.remove')}</HostUi>

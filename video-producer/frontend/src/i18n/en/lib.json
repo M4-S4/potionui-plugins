@@ -151,7 +151,7 @@
 	"chain.waitFrame": "Waiting for the last frame of “{shot}”",
 	"chain.error.noMedia": "The previous shot has no take or video to take a frame from.",
 	"chain.error.ffmpeg": "ffmpeg is missing on the server: the last frame cannot be taken.",
-	"refs.added": "Reference added: set its role and scope in the inspector",
+	"refs.added": "Reference added: choose its picture and scope in the right panel",
 	"refs.selectOne": "Select a reference.",
 	"refs.attached": "“{name}” attached to {start}–{end}",
 	"family.identite.label": "Images and identity",

@@ -182,13 +182,18 @@ test('director: shots are named by their numbers, three at most, and the Review 
 
 test('director: the right panel of Review and References filters the selection, keeps it, says where it stays and leaves the flag and the times out of Director AI', () => {
 	const inspector = read('../components/inspector/Inspector.svelte');
-	assert.match(inspector, /const filtered = \$derived\(view \? panelSelection\(view, ui\.selection\) : \{ shown: ui\.selection, elsewhere: null \}\);/);
-	assert.match(inspector, /\{#if filtered\.elsewhere && !multi\}<ElsewhereNote kind=\{filtered\.elsewhere\.kind\} \/>\{\/if\}/);
-	assert.match(read('../components/inspector/ElsewhereNote.svelte'), /data-elsewhere=\{kind\}/);
-	assert.match(inspector, /\{#if view && s\.kind === 'clip'\}<span class="vp-tc">\{t\('inspector\.shotNumber', \{ number: num\(item\) \}\)\}<\/span>/);
-	assert.match(inspector, /\{#if !view\}\n\t+<section class="space-y-2">\n\t+<div class="vp-section-title">\{t\('inspector\.section\.flag'\)\}<\/div>/);
-	assert.match(inspector, /disabled=\{!f \|\| Boolean\(view\)\}/);
+	assert.match(inspector, /const s = \$derived\(ui\.selection\);/);
+	assert.doesNotMatch(inspector, /directorView|panelSelection|ElsewhereNote|shotNumber/);
 	assert.doesNotMatch(inspector, /ui\.selection = null/);
+	const note = read('../components/inspector/ElsewhereNote.svelte');
+	assert.match(note, /data-elsewhere=\{kind\}/);
+	assert.match(note, /space: spaceLabel\(ui\.selectedIn\) \?\? t\('inspector\.elsewhere\.space'\)/);
+	const aside = read('../components/director/ReferenceAside.svelte');
+	assert.match(aside, /const filtered = \$derived\(panelSelection\('references', ui\.selection\)\);/);
+	assert.match(aside, /\{#if filtered\.elsewhere\}<ElsewhereNote kind=\{filtered\.elsewhere\.kind\} \/>\{\/if\}/);
+	for (const file of ['ReferenceAside', 'ReferenceChosen', 'ReferenceShot', 'ReferenceProject', 'ReceptionList']) {
+		assert.doesNotMatch(read(`../components/director/${file}.svelte`), /secs\(|inspector\.section\.flag|ui\.playhead|shotIdAt/, file);
+	}
 	assert.match(read('./state.svelte.js'), /ui\.selectedIn = kind \? \(ui\.workspace === 'director' \? `director:\$\{directorView\(\)\}` : ui\.workspace\) : null;/);
 	const board = read('../components/references/ReferenceBoard.svelte');
 	assert.doesNotMatch(board, /ondblclick|seek\(/);
@@ -234,7 +239,7 @@ test('director: the summary leads to the four views and the engine, the center s
 	const center = read('../components/director/DirectorCenter.svelte');
 	for (const view of ['DirectionView', 'BibleView', 'ReferenceBoard', 'ReviewView']) assert.match(center, new RegExp(`<${view} />`));
 	const right = read('../components/panels/RightPanel.svelte');
-	assert.match(right, /\{#if view === 'review'\}\n\t<ReviewAside \/>\n\{:else if view === 'direction'\}\n\t<DirectionAside \/>\n\{:else if view === 'bible'\}\n\t<BibleAside \/>\n\{:else\}\n\t<Inspector \/>/);
+	assert.match(right, /\{#if view === 'review'\}\n\t<ReviewAside \/>\n\{:else if view === 'direction'\}\n\t<DirectionAside \/>\n\{:else if view === 'bible'\}\n\t<BibleAside \/>\n\{:else if view === 'references'\}\n\t<ReferenceAside \/>\n\{:else\}\n\t<Inspector \/>/);
 	assert.match(read('../components/director/DirectorViews.svelte'), /\{#if !ui\.sidebarOpen\}/);
 	assert.match(read('../components/director/DirectionAside.svelte'), /<ComposedPrompt source=\{doc\} shotId=\{shot\.id\} \{marks\} bind:current=\{composed\} \/>/);
 	assert.match(read('../components/director/BibleAside.svelte'), /onpick=\{\(id\) => addCardImage\(card, SPACES\[kind\], id\)\}/);
@@ -350,4 +355,37 @@ test('director: Alt+1 to Alt+4 open the views, the old dock and its tabs are gon
 		assert.equal(JSON.parse(read(`../i18n/${locale}/production.json`)).editEngine, 'Edit Engine');
 		assert.equal(JSON.parse(read(`../i18n/${locale}/commands.json`))['cmd.engine'], 'Edit Engine…');
 	}
+});
+
+test('director: References has its own panel, which reads what each engine gets from the rule the server applies', () => {
+	const aside = read('../components/director/ReferenceAside.svelte');
+	assert.match(aside, /\{#if reference\}\n\t+<ReferenceChosen \{reference\} \/>\n\t+\{:else if clip\}\n\t+<ReferenceShot \{clip\} \/>\n\t+\{:else\}\n\t+<ReferenceProject \/>/);
+	assert.match(aside, /onclick: deleteSelection \}\}>\{t\('inspector\.reference\.remove'\)\}/);
+	assert.match(read('./references.js'), /export const reception = \(reference, source = doc\) => receptionOf\(reference, source, \(clip\) => engineOf\(clip, source\), tracksFor\(source\)\);/);
+	assert.match(read('./reception.js'), /^import table from '\.\/reception\.json';/);
+	const chosen = read('../components/director/ReferenceChosen.svelte');
+	assert.match(chosen, /const found = \$derived\(reception\(reference\)\);/);
+	assert.match(chosen, /\{ id: 'global', label: t\('inspector\.scope\.global'\) \},\n\t\t\{ id: 'shot', label: t\('inspector\.scope\.shot'\) \}/);
+	assert.match(chosen, /\} else if \(isGlobal\(reference\)\) pending = true;/);
+	assert.match(chosen, /<option value="" disabled>\{t\('panels\.director\.refs\.pickShot'\)\}<\/option>/);
+	assert.match(chosen, /<ReceptionList \{rows\} label=\{t\('panels\.director\.refs\.received'\)\} \/>/);
+	assert.match(chosen, /onclick=\{\(\) => showInReview\(c\)\}/);
+	assert.match(chosen, /onclick: \(\) => startImage\(target\)/);
+	const shot = read('../components/director/ReferenceShot.svelte');
+	assert.match(shot, /onclick=\{\(\) => setSent\(clip, r\.id, false\)\}/);
+	assert.match(shot, /onclick: \(\) => addShotReference\(clip\)/);
+	assert.match(read('../components/director/ReferenceProject.svelte'), /const groups = \$derived\(projectReceptionFor\(\)\);/);
+	const board = read('../components/references/ReferenceBoard.svelte');
+	assert.match(board, /const going = \$derived\(shot \? new Set\(sentReferences\(doc, shot\)\.map\(\(r\) => r\.id\)\) : null\);/);
+	assert.match(board, /data-reference-highlight=\{shot\.id\}/);
+	assert.match(board, /takesReferences\(project\.profile\)/);
+	assert.doesNotMatch(board, /supportedProfiles/);
+	const bible = read('../components/director/BibleAside.svelte');
+	assert.match(bible, /const received = \$derived\(card \? cardReceptionFor\(kind, card\) : null\);/);
+	assert.match(bible, /<ReceptionList \{rows\} label=\{t\('panels\.director\.bible\.received'\)\} \/>/);
+	assert.match(read('../components/modals/Modals.svelte'), /focus=\{m\.focus \?\? null\}/);
+	const keyframes = read('../components/shots/KeyframeCandidates.svelte');
+	assert.match(keyframes, /tick\(\)\.then\(\(\) => root\?\.scrollIntoView\(\{ block: 'start' \}\)\);/);
+	assert.match(keyframes, /aria-controls="\{id\}-body" autofocus=\{focus\}/);
+	assert.match(read('../components/modals/ShotEditor.svelte'), /autofocus=\{focus !== 'keyframes'\}/);
 });

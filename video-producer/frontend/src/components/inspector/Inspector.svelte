@@ -26,8 +26,7 @@
 		sourceLength,
 		promptEdited,
 		openDirector,
-		pickedClips,
-		directorView
+		pickedClips
 	} from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -42,7 +41,6 @@
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import { commandById } from '../../lib/commands.js';
-	import { panelSelection } from '../../lib/director.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, shotCuts, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
@@ -60,14 +58,10 @@
 	import NumField from './NumField.svelte';
 	import SliderField from './SliderField.svelte';
 	import PickedSummary from './PickedSummary.svelte';
-	import ElsewhereNote from './ElsewhereNote.svelte';
 
-	const view = $derived(ui.workspace === 'director' ? directorView() : null);
-	const filtered = $derived(view ? panelSelection(view, ui.selection) : { shown: ui.selection, elsewhere: null });
-	const s = $derived(filtered.shown);
+	const s = $derived(ui.selection);
 	const item = $derived(s ? selected() : null);
 	const multi = $derived(pickedClips().length > 1);
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 
 	const icons = { clip: 'film', audio: 'wave', title: 'type', prompt: 'sparkles', frame: 'image', marker: 'bookmark', reference: 'bookmark', lane: 'sliders' };
 
@@ -273,8 +267,7 @@
 					{/if}
 					<div class="flex items-center gap-2 text-xs text-fg-subtle">
 						{#if s.kind === 'clip'}<span class="flex items-center gap-1 {stages[item.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[item.stage].dot}"></span>{stages[item.stage].label}</span>{/if}
-						{#if view && s.kind === 'clip'}<span class="vp-tc">{t('inspector.shotNumber', { number: num(item) })}</span>
-						{:else if 'start' in item}<span class="vp-tc">{secs(item.start)} → {secs(item.start + item.dur)}</span>{/if}
+						{#if 'start' in item}<span class="vp-tc">{secs(item.start)} → {secs(item.start + item.dur)}</span>{/if}
 						{#if 'time' in item}<span class="vp-tc">{t('inspector.at', { time: secs(item.time) })}</span>{/if}
 					</div>
 				</div>
@@ -349,8 +342,8 @@
 								{@const thumb = f ? assetThumb(asset(f.assetId)) : null}
 								<button
 									type="button"
-									class="overflow-hidden rounded-md border border-line-strong text-left transition-colors {f && !view ? 'hover:border-line-hover' : ''} disabled:cursor-default"
-									disabled={!f || Boolean(view)}
+									class="overflow-hidden rounded-md border border-line-strong text-left transition-colors {f ? 'hover:border-line-hover' : ''} disabled:cursor-default"
+									disabled={!f}
 									onclick={() => f && select('frame', f.id)}
 								>
 									{#if thumb}
@@ -388,15 +381,13 @@
 							</p>
 						</section>
 					{/if}
-					{#if !view}
-						<section class="space-y-2">
-							<div class="vp-section-title">{t('inspector.section.flag')}</div>
-							<HostUi
-								name="SegmentedControl"
-								props={{ items: flags, selected: item.flag ?? 'none', variant: 'toggle', fullWidth: true, ariaLabel: t('inspector.section.flag'), onSelect: (id) => act(() => (item.flag = id === 'none' ? null : id)) }}
-							/>
-						</section>
-					{/if}
+					<section class="space-y-2">
+						<div class="vp-section-title">{t('inspector.section.flag')}</div>
+						<HostUi
+							name="SegmentedControl"
+							props={{ items: flags, selected: item.flag ?? 'none', variant: 'toggle', fullWidth: true, ariaLabel: t('inspector.section.flag'), onSelect: (id) => act(() => (item.flag = id === 'none' ? null : id)) }}
+						/>
+					</section>
 					<div class="flex items-center gap-0.5 border-t border-line pt-2">
 						<HostUi
 							name="IconButton"
@@ -562,7 +553,7 @@
 						<label class="flex items-center gap-2">
 							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.shot')}</span>
 							<select class="input vp-dense min-w-0 flex-1" value={item.scope.shotId} onchange={(e) => act(() => (item.scope = { type: 'shot', shotId: e.currentTarget.value }))}>
-								{#each doc.clips as c (c.id)}<option value={c.id}>{view ? `${num(c)} · ${clipLabel(c)}` : `${clipLabel(c)} · ${secs(c.start)}–${secs(c.start + c.dur)}`}</option>{/each}
+								{#each doc.clips as c (c.id)}<option value={c.id}>{clipLabel(c)} · {secs(c.start)}–{secs(c.start + c.dur)}</option>{/each}
 							</select>
 						</label>
 					{/if}
@@ -630,7 +621,6 @@
 			{/if}
 		{/if}
 	</div>
-	{#if filtered.elsewhere && !multi}<ElsewhereNote kind={filtered.elsewhere.kind} />{/if}
 </aside>
 
 {#snippet fadeFields(video)}

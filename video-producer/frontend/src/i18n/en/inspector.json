@@ -35,7 +35,6 @@
 	"projectProps": "Project properties…",
 	"shotName": "Shot name",
 	"at": "at {time}",
-	"shotNumber": "Shot {number}",
 	"elsewhere.audio": "The audio clip “{name}”, selected in {space}, stays selected there.",
 	"elsewhere.title": "The title “{name}”, selected in {space}, stays selected there.",
 	"elsewhere.prompt": "The local instruction “{name}”, selected in {space}, stays selected there.",

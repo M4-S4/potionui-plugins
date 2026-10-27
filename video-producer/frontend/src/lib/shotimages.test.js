@@ -117,5 +117,5 @@ test('the panel offers the six choices in two rows, greys the retrieve ones with
 	assert.match(panel, /<option value=\{o\.key\} disabled=\{o\.disabled\}>\{optionLabel\(o\)\}<\/option>/);
 	assert.match(panel, /data-frame-role=\{take\.frameRole\}/);
 	const editor = source('../components/modals/ShotEditor.svelte');
-	assert.match(editor, /<KeyframeCandidates \{clip\} \{draft\} onaccept=\{\(role, assetId\) => \(draft\[role\] = assetId\)\} \/>/);
+	assert.match(editor, /<KeyframeCandidates \{clip\} \{draft\} focus=\{focus === 'keyframes'\} onaccept=\{\(role, assetId\) => \(draft\[role\] = assetId\)\} \/>/);
 });

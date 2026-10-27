@@ -1,9 +1,8 @@
 <script>
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, asset, selected } from '../../lib/state.svelte.js';
-	import { commandById } from '../../lib/commands.js';
+	import { spaceLabel } from '../../lib/commands.js';
 	import { promptShot } from '../../lib/director.js';
-	import { WORKSPACES } from '../../lib/workspaces.js';
 	import { laneTitle } from '../../lib/tracks.js';
 	import Icon from '../Icon.svelte';
 
@@ -11,11 +10,6 @@
 
 	const item = $derived(selected());
 	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
-
-	function spaceName(from) {
-		if (from?.startsWith('director:')) return commandById(`view-${from.slice('director:'.length)}`)?.label;
-		return commandById(WORKSPACES.find((w) => w.id === from)?.command)?.label;
-	}
 
 	function nameOf(it) {
 		if (kind === 'audio' || kind === 'frame') return asset(it.assetId)?.name ?? '';
@@ -29,7 +23,7 @@
 	}
 
 	function textOf(it) {
-		const params = { name: nameOf(it), space: spaceName(ui.selectedIn) ?? t('inspector.elsewhere.space') };
+		const params = { name: nameOf(it), space: spaceLabel(ui.selectedIn) ?? t('inspector.elsewhere.space') };
 		if (kind === 'audio') return t('inspector.elsewhere.audio', params);
 		if (kind === 'title') return t('inspector.elsewhere.title', params);
 		if (kind === 'prompt') return t('inspector.elsewhere.prompt', params);
