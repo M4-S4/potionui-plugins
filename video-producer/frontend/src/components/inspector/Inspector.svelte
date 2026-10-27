@@ -53,7 +53,7 @@
 	import CastField from '../shots/CastField.svelte';
 	import { CHARACTERS, cardsOf, instructionOf, labelOf, setCast } from '../../lib/bible.js';
 	import { linesOf } from '../../lib/dialogue.js';
-	import { touch } from '../../lib/shots.js';
+	import { isGlobal, touch } from '../../lib/shots.js';
 	import ColorSection from './ColorSection.svelte';
 	import NumField from './NumField.svelte';
 	import SliderField from './SliderField.svelte';
@@ -188,7 +188,7 @@
 	}
 
 	function setScope(id) {
-		if (id === item.scope.type) return;
+		if (id === (isGlobal(item) ? 'global' : 'shot')) return;
 		act(() => (item.scope = id === 'global' ? { type: 'global' } : { type: 'shot', shotId: shotIdAt(ui.playhead) ?? doc.clips[0]?.id ?? null }));
 	}
 </script>
@@ -548,8 +548,8 @@
 					{/if}
 					{#if item.file}<div class="text-xs text-fg-subtle">{t('inspector.reference.file', { file: item.file })}</div>{/if}
 					<div class="vp-label pt-1">{t('inspector.field.scope')}</div>
-					<HostUi name="SegmentedControl" props={{ items: scopes, selected: item.scope.type === 'global' ? 'global' : 'shot', variant: 'toggle', fullWidth: true, ariaLabel: t('inspector.field.scope'), onSelect: setScope }} />
-					{#if item.scope.type === 'shot'}
+					<HostUi name="SegmentedControl" props={{ items: scopes, selected: isGlobal(item) ? 'global' : 'shot', variant: 'toggle', fullWidth: true, ariaLabel: t('inspector.field.scope'), onSelect: setScope }} />
+					{#if !isGlobal(item)}
 						<label class="flex items-center gap-2">
 							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.shot')}</span>
 							<select class="input vp-dense min-w-0 flex-1" value={item.scope.shotId} onchange={(e) => act(() => (item.scope = { type: 'shot', shotId: e.currentTarget.value }))}>

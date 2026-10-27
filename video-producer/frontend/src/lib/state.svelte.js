@@ -6,7 +6,7 @@ import { resetTakes, takeStore } from './takes.svelte.js';
 import { compileRules, conflictIds, conflictRule } from './rules.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
 import { joinPlan } from './sound.js';
-import { touch } from './shots.js';
+import { isGlobal, touch } from './shots.js';
 import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
 import { promptShot, reviewPickOf, viewOf, viewShot, witnessOf } from './director.js';
@@ -622,7 +622,7 @@ export function itemsOf(clips) {
 	return {
 		prompts: doc.prompts.filter((p) => (p.shotId ? shots.has(p.shotId) : near(p.start, p.start + p.dur))),
 		frames: doc.frames.filter((f) => (f.shotId ? shots.has(f.shotId) : clips.some((c) => f.time >= c.start && f.time <= c.start + c.dur))),
-		references: doc.references.filter((r) => r.scope.type === 'global' || (r.scope.type === 'shot' && shots.has(r.scope.shotId)))
+		references: doc.references.filter((r) => isGlobal(r) || shots.has(r.scope.shotId))
 	};
 }
 export function itemsIn(range) {
@@ -631,7 +631,7 @@ export function itemsIn(range) {
 	return {
 		prompts: doc.prompts.filter((p) => inRange(p, overlaps(p.start, p.dur, range))),
 		frames: doc.frames.filter((f) => inRange(f, f.time >= range[0] && f.time <= range[1])),
-		references: doc.references.filter((r) => r.scope.type === 'global' || (r.scope.type === 'shot' && shots.has(r.scope.shotId)))
+		references: doc.references.filter((r) => isGlobal(r) || shots.has(r.scope.shotId))
 	};
 }
 
