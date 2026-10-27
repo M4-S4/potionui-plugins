@@ -49,7 +49,7 @@
 <span class="inline-flex" data-vp-menu>
 	<HostUi
 		name="IconButton"
-		props={{ icon: 'film', label: t('generation.card.refs.open', { variant: take.variant }), tooltip: t('generation.card.refs.tip'), size: 'xs', ariaExpanded: open, ariaHaspopup: 'menu', onclick: toggle }}
+		props={{ icon: 'film', label: t('generation.card.refs.open', { variant: take.variant }), tooltip: t('generation.card.refs.tip'), size: 'xs', ariaExpanded: open, 'aria-haspopup': 'menu', onclick: toggle }}
 	/>
 </span>
 
