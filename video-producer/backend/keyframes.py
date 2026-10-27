@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from . import core_bridge, director, estimate, formats, generation, limits, models, takes
-from .core_bridge import CLOUD_ENGINE, EDIT_TASK, MediaRefError, User
+from .core_bridge import CLOUD_ENGINE, EDIT_TASK, User
 from .director import ShotPlan, note
 from .generation import Blocked
 
@@ -433,17 +433,8 @@ def _picture(user: User, doc: Mapping[str, Any], asset_id: Any, role: str, name:
     asset = _asset(doc, asset_id)
     if asset is None or asset.get("kind") != IMAGE:
         return None
-    ref = director.media_ref(asset.get("origin"))
-    if ref is None:
-        return None
-    try:
-        resolved = core_bridge.resolve_media(user, ref)
-    except MediaRefError:
-        return None
-    except Exception:
-        logger.warning("[VIDEO-PRODUCER] Could not resolve media %s", ref, exc_info=True)
-        return None
-    if str(resolved.get("media_type") or IMAGE).split("/", 1)[0] != IMAGE:
+    resolved = director._resolve(user, asset)
+    if resolved is None or resolved["media_type"] != IMAGE:
         return None
     return Picture(
         value=resolved["value"],

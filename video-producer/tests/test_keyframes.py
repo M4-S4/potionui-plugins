@@ -316,6 +316,22 @@ def test_the_start_image_is_only_the_starting_point_of_the_end_image_a_former_3d
     assert "Image 1 is the opening frame of the same shot" in last.plan.prompt_text
 
 
+def test_pictures_from_the_history_are_sent_though_the_core_stores_their_type_in_capitals(core, qwen, scene):
+    for name in ("start", "lea2"):
+        core.add_media({"kind": "history", "generation_id": f"g-{name}", "file_id": "0"}, f"generations/2026-10-27/g-{name}/0.png", "IMAGE")
+        scene["assets"].append({"id": name, "kind": "image", "name": name, "origin": {"kind": "history", "generationId": f"g-{name}", "fileId": "0"}, "width": 1344, "height": 768})
+    scene["references"].append({"id": "r-lea2", "name": "Léa", "space": "identite", "type": "Personnage", "assetId": "lea2"})
+    scene["frames"] = [{"id": "f1", "shotId": "s1", "time": 0, "assetId": "start", "role": "first", "strength": 100}]
+
+    last = _build(core, scene, role="last")
+    chosen = _build(core, scene, references=[{"asset_id": "lea2", "role": "character", "name": "Léa"}])
+
+    assert [(picture.asset_id, picture.role) for picture in last.pictures] == [("start", "frame"), ("cafe", "setting"), ("lea", "character"), ("lea2", "character"), ("hat", "object")]
+    assert last.plan.request["form_data"]["source_image"][0] == "generations/2026-10-27/g-start/0.png"
+    assert chosen.plan.request["form_data"]["source_image"] == ["generations/2026-10-27/g-lea2/0.png"]
+    assert "reference_unavailable" not in [item["code"] for item in chosen.warnings]
+
+
 def test_the_pictures_and_prompt_of_the_shot_editor_are_sent_in_their_order(core, qwen, scene):
     body = {
         "prompt": "Léa looks up, surprised.",
