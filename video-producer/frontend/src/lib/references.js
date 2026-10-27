@@ -80,7 +80,7 @@ export function refTagLabel(tag) {
 export function refTagTip(tag) {
 	if (tag.kind === 'type') return t('lib.refTag.typeTip', { family: families.find((f) => f.id === tag.space)?.label ?? tag.space, type: refTypeLabel(tag.type) });
 	if (tag.kind === 'role') return t('lib.refTag.roleTip', { role: refRoleLabel(tag.role) });
-	if (tag.kind === 'scope') return tag.shot ? t('lib.refTag.shotTip', { shot: clipLabel(tag.shot), start: secs(tag.shot.start), end: secs(tag.shot.start + tag.shot.dur) }) : t('lib.refTag.projectTip');
+	if (tag.kind === 'scope') return tag.shot ? t('lib.refTag.shotTip', { shot: clipLabel(tag.shot), number: String(tag.number).padStart(2, '0') }) : t('lib.refTag.projectTip');
 	if (tag.voice) return t('lib.refTag.voice', { name: cardName(tag.card) });
 	return tag.cardKind === CHARACTERS ? t('lib.refTag.character', { name: cardName(tag.card) }) : t('lib.refTag.place', { name: cardName(tag.card) });
 }

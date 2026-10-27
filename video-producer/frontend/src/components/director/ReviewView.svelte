@@ -1,4 +1,5 @@
 <script>
+	import { tick } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, secs, clipAt, clipLabel } from '../../lib/state.svelte.js';
@@ -10,7 +11,7 @@
 	import { shotStale } from '../../lib/shots.js';
 	import { sections } from '../../lib/band.js';
 	import { openSeam, pickShot } from '../../lib/band.svelte.js';
-	import { REVIEW_FILTERS, VIEW_ICONS, reviewCounts, reviewShots, reviewState } from '../../lib/director.js';
+	import { REVIEW_FILTERS, VIEW_ICONS, reviewCounts, reviewFilterOf, reviewShots, reviewState } from '../../lib/director.js';
 	import { commandById } from '../../lib/commands.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -24,7 +25,7 @@
 	import Icon from '../Icon.svelte';
 
 	const counts = $derived(reviewCounts(doc.clips, takeStore.list));
-	const filter = $derived(ui.reviewFilter ?? (counts.review ? 'review' : 'all'));
+	const filter = $derived(reviewFilterOf(ui.reviewFilter, counts));
 	const shown = $derived(reviewShots(doc.clips, takeStore.list, filter));
 	const rejected = $derived(rejectedCount(takeStore.list));
 	const chosen = $derived(takeStore.list.filter((r) => labelOf(r) === 'final' && r.status === 'done').length);
@@ -49,6 +50,16 @@
 		if (taking) ui.reviewMonitor = true;
 	});
 	$effect(() => () => (ui.reviewMonitor = false));
+
+	let rows = $state(null);
+	$effect(() => {
+		const id = ui.reveal;
+		if (!id || !rows || !shown.some((c) => c.id === id)) return;
+		tick().then(() => {
+			rows?.querySelector(`[data-review-shot="${id}"]`)?.scrollIntoView({ block: 'start' });
+			ui.reveal = null;
+		});
+	});
 
 	const pick = (c) => pickShot(c, clipAt(ui.playhead)?.id !== c.id);
 
@@ -98,7 +109,7 @@
 		</div>
 	{/if}
 
-	<div class="min-h-0 flex-1 overflow-auto">
+	<div class="min-h-0 flex-1 overflow-auto" bind:this={rows}>
 		{#if !doc.clips.length}
 			<div class="m-auto w-full max-w-lg p-6"><HostUi name="EmptyState" props={noShots} /></div>
 		{:else if !shown.length}
@@ -120,7 +131,7 @@
 						<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => openSeam(c)}>{t('panels.director.review.seamCompare')}</button>
 					</div>
 				{/if}
-				<section class="relative border-b border-line {isSel(c) ? 'bg-surface-1' : ''}" aria-label={clipLabel(c)} aria-current={isSel(c) ? 'true' : undefined}>
+				<section class="relative border-b border-line {isSel(c) ? 'bg-surface-1' : ''}" data-review-shot={c.id} aria-label={clipLabel(c)} aria-current={isSel(c) ? 'true' : undefined}>
 					{#if isSel(c)}<span class="absolute inset-y-0 left-0 w-0.5 bg-signal" aria-hidden="true"></span>{/if}
 					<div role="presentation" class="px-4 py-3" onclick={(e) => choose(e, c)}>
 						<button type="button" class="mb-2 flex min-h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-left transition-colors hover:bg-surface-2" style:margin-inline="-0.375rem" style:width="calc(100% + 0.75rem)" onclick={() => pick(c)}>

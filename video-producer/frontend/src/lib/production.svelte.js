@@ -1,5 +1,5 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, itemsOf, pickedClips, globalPrompt, clipAt, secs, onRestore, openDirector, generates } from './state.svelte.js';
+import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, itemsOf, pickedClips, globalPrompt, clipAt, secs, onRestore, openDirector, generates, directorShot } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
@@ -240,6 +240,8 @@ export function jobClips(range = productionRange()) {
 	const picked = pickedClips();
 	if (picked.length) return picked;
 	const sel = ui.selection?.kind === 'clip' ? doc.clips.find((c) => c.id === ui.selection.id) : null;
+	const shot = directorShot();
+	if (ui.production.target === 'clip' && shot !== undefined) return shot ? [shot] : [];
 	if (ui.production.target === 'clip') return [sel ?? clipAt(ui.playhead) ?? doc.clips[0]].filter(Boolean);
 	const inRange = shotsIn(range);
 	const toMake = inRange.filter((c) => c.stage !== 'source');
@@ -323,7 +325,7 @@ export function readiness(opts = {}) {
 	const warnings = [];
 	const notes = [];
 	const gaps = [];
-	if (range[1] - range[0] <= 0.05) missing.push(t('lib.block.noRange'));
+	if (range[1] - range[0] <= 0.05) missing.push(!opts.clips?.length && !picked.length && ui.production.target === 'clip' && directorShot() === null ? t('lib.block.noShot') : t('lib.block.noRange'));
 	if (!globalPrompt() && !items.prompts.length) missing.push(t('lib.block.noDirection'));
 	const empty = items.prompts.filter((p) => !p.text.trim());
 	if (empty.length) missing.push(t('lib.block.emptyPrompts', { count: empty.length }));

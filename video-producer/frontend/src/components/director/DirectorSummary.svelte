@@ -1,15 +1,15 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatTime, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, select, globalPrompt, allIssues, directorView } from '../../lib/state.svelte.js';
-	import { seek } from '../../lib/playback.svelte.js';
+	import { ui, doc, globalPrompt, allIssues, directorView, followIssue } from '../../lib/state.svelte.js';
+	import { showInReview } from '../../lib/band.svelte.js';
 	import { engineLabel, openEngineSettings, takesOf } from '../../lib/production.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { seams, matchToPrevious, seamTip } from '../../lib/continuity.svelte.js';
 	import { review, reviewFix, reviewText, seamNames, suggest } from '../../lib/assistant.svelte.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { CHARACTERS, PLACES, cardsOf, labelOf } from '../../lib/bible.js';
-	import { VIEWS, VIEW_ICONS, citedWithout, reviewCounts, reviewState, unnamedIn } from '../../lib/director.js';
+	import { VIEWS, VIEW_ICONS, citedWithout, promptShot, reviewCounts, reviewState, unnamedIn } from '../../lib/director.js';
 	import { hasOwnEngine } from '../../lib/engine.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -48,16 +48,9 @@
 	const num = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 	const clipById = (id) => doc.clips.find((c) => c.id === id) ?? null;
 
-	function goTo(view, clip = null) {
-		ui.directorView = view;
-		if (!clip) return;
-		select('clip', clip.id);
-		seek(clip.start);
-	}
-
 	function openCard(item) {
 		ui.bibleCard = item.card.id;
-		goTo('bible');
+		ui.directorView = 'bible';
 	}
 
 	function seamLabel(s) {
@@ -67,7 +60,7 @@
 
 	function goToSeam(s) {
 		const c = clipById(s.toShotId) ?? clipById(s.fromShotId);
-		if (c) goTo('review', c);
+		if (c) showInReview(c);
 	}
 </script>
 
@@ -116,9 +109,10 @@
 		{/if}
 		<ul class="space-y-1.5 text-xs">
 			{#each conflicts as i, n (n)}
+				{@const shot = promptShot(doc, i.prompt)}
 				<li>
-					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" onclick={() => goTo('direction')}>
-						<Icon name="sparkles" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" /><span class="min-w-0 flex-1">{i.text}</span>
+					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" onclick={() => followIssue(i)}>
+						<Icon name="sparkles" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" /><span class="min-w-0 flex-1">{shot ? `${num(shot)} · ${i.text}` : i.text}</span>
 					</button>
 				</li>
 			{/each}
@@ -132,7 +126,7 @@
 			{/each}
 			{#each failed as clip (clip.id)}
 				<li>
-					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" onclick={() => goTo('review', clip)}>
+					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" onclick={() => showInReview(clip)}>
 						<Icon name="alert" class="mt-px h-3.5 w-3.5 shrink-0 text-danger" /><span class="min-w-0 flex-1">{t('panels.director.check.failed', { shot: num(clip) })}</span>
 					</button>
 				</li>
@@ -146,7 +140,7 @@
 							{#if i.fix}
 								<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => matchToPrevious(i.clip)}>{t('panels.dock.match')}</button>
 							{:else}
-								<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => goTo('review', i.clip)}>{t('panels.dock.seeTakes')}</button>
+								<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => showInReview(i.clip)}>{t('panels.dock.seeTakes')}</button>
 							{/if}
 							<SeamAction clip={i.clip} />
 						</div>

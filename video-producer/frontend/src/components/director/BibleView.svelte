@@ -1,8 +1,8 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, asset, select, toast, clipLabel } from '../../lib/state.svelte.js';
-	import { seek } from '../../lib/playback.svelte.js';
+	import { ui, doc, act, asset, toast, clipLabel } from '../../lib/state.svelte.js';
+	import { showInReview } from '../../lib/band.svelte.js';
 	import { CHARACTERS, PLACES, addCard, cardsOf, labelOf, newCard, shotsCasting, usable } from '../../lib/bible.js';
 	import { DEFAULT_LANGUAGE, LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
 	import { VIEW_ICONS, cardImages, castWhereCited, citedWithout, isCast, recast, unnamedIn } from '../../lib/director.js';
@@ -49,8 +49,7 @@
 
 	function goTo(e, clip) {
 		e.stopPropagation();
-		select('clip', clip.id);
-		seek(clip.start);
+		showInReview(clip);
 	}
 
 	function cellTip(clip, kind, card) {
@@ -117,7 +116,7 @@
 						<div class="flex flex-wrap items-center gap-1">
 							<span class="mr-1 text-xs text-fg-subtle">{t('panels.director.bible.cast', { count: cast.length })}</span>
 							{#each cast as clip (clip.id)}
-								<button type="button" class="vp-tc min-h-6 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted hover:text-fg" title={clipLabel(clip)} onclick={(e) => goTo(e, clip)}>{num(clip)}</button>
+								<button type="button" class="vp-tc min-h-6 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted hover:text-fg" title={t('panels.director.bible.chipTip', { shot: num(clip), name: clipLabel(clip) })} onclick={(e) => goTo(e, clip)}>{num(clip)}</button>
 							{/each}
 						</div>
 						{#if cited.length}

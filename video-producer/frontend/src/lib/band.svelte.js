@@ -1,10 +1,12 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, relayout, select, moveClip, promptOf, toast, clipLabel, secs } from './state.svelte.js';
+import { ui, doc, act, relayout, select, moveClip, promptOf, toast, clipLabel, secs, openDirector } from './state.svelte.js';
 import { takesOf, findTake, shotDurationLimit, settleRelease, labelTake } from './production.svelte.js';
 import { applyShotDraft, shotDraft, shotStale } from './shots.js';
 import { identityTakes, seam } from './continuity.svelte.js';
 import { seek } from './playback.svelte.js';
 import { previewTake } from './monitor.svelte.js';
+import { takeStore } from './takes.svelte.js';
+import { reviewCounts, reviewFilterOf, reviewShots } from './director.js';
 import { ulid } from './ulid.js';
 import { BAND_STEP, ghostLayout, insertIndex, lastFailure, previewable } from './band.js';
 
@@ -99,6 +101,15 @@ export function compareSeamTakes(clip) {
 	ui.seamCompare = null;
 	ui.preview = null;
 	ui.compare = pair;
+}
+
+export function showInReview(clip) {
+	if (!clip) return;
+	const filter = reviewFilterOf(ui.reviewFilter, reviewCounts(doc.clips, takeStore.list));
+	if (!reviewShots(doc.clips, takeStore.list, filter).includes(clip)) ui.reviewFilter = 'all';
+	openDirector('review');
+	pickShot(clip);
+	ui.reveal = clip.id;
 }
 
 export function openSeam(clip) {
