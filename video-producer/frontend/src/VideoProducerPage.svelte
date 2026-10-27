@@ -363,23 +363,6 @@
 			line-height: 14px;
 			color: rgb(var(--fg-muted));
 		}
-		.vp-root .vp-sim {
-			display: inline-flex;
-			height: 1.25rem;
-			align-items: center;
-			gap: 0.25rem;
-			white-space: nowrap;
-			border-radius: 2px;
-			border: 1px dashed rgb(var(--line-hover));
-			background-color: rgb(var(--surface-1));
-			padding: 0 0.375rem;
-			font-size: 11px;
-			line-height: 16px;
-			color: rgb(var(--fg-muted));
-		}
-		.vp-root button.vp-sim {
-			height: 1.5rem;
-		}
 		.vp-root .vp-pill {
 			display: inline-flex;
 			height: 1.75rem;
@@ -856,11 +839,6 @@
 			background-color: rgb(var(--surface-2));
 			color: rgb(var(--fg));
 		}
-		.vp-root .vp-toast-sim {
-			border-style: dashed;
-			border-color: rgb(var(--line-hover));
-		}
-
 		.vp-root .vp-modal-backdrop {
 			position: fixed;
 			inset: 0;

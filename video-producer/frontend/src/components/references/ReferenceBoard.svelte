@@ -9,7 +9,7 @@
 	import { activateOnKey } from '../../lib/keyboard.js';
 	import { presetProfiles } from '../../lib/generation.js';
 	import { takesReferences } from '../../lib/reception.js';
-	import { excludedOf, sentReferences } from '../../lib/shots.js';
+	import { excludedOf, isGlobal, sentReferences } from '../../lib/shots.js';
 	import { spaceLabel } from '../../lib/commands.js';
 	import { VIEW_ICONS, panelSelection } from '../../lib/director.js';
 	import DirectorViews from '../director/DirectorViews.svelte';
@@ -31,8 +31,8 @@
 		doc.references.filter((r) => (ui.refSpace === 'all' || r.space === ui.refSpace) && (!q || norm(`${r.name} ${referenceTagText(r)}`).includes(norm(q))))
 	);
 	const groups = $derived([
-		{ id: 'global', title: t('references.group.global'), hint: t('references.group.globalHint'), refs: list.filter((r) => r.scope.type === 'global') },
-		{ id: 'shot', title: t('references.group.shot'), hint: t('references.group.shotHint'), refs: list.filter((r) => r.scope.type === 'shot') }
+		{ id: 'global', title: t('references.group.global'), hint: t('references.group.globalHint'), refs: list.filter(isGlobal) },
+		{ id: 'shot', title: t('references.group.shot'), hint: t('references.group.shotHint'), refs: list.filter((r) => !isGlobal(r)) }
 	]);
 	const fam = (id) => families.find((f) => f.id === id);
 	const isSel = (r) => ui.selection?.kind === 'reference' && ui.selection.id === r.id;

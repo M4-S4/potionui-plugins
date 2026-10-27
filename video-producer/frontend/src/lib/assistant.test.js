@@ -250,13 +250,14 @@ test('reviewFrom keeps the seams with issues and marks the measured ones', () =>
 	assert.equal(review.checkedAt, '2026-10-17T12:00:00.000Z');
 	assert.equal(review.seams.length, 2);
 	assert.deepEqual(review.seams[0].issues, [
-		{ kind: 'lum', text: 'Path is brighter', fix: 'Match the exposure', shotId: null, rule: null, labels: [], measured: true, simulated: false },
-		{ kind: 'camera_change', text: 'Orbit then dolly', fix: '', shotId: null, rule: null, labels: [], measured: false, simulated: false },
-		{ kind: 'conflict', text: '“Path”: no neon.', fix: 'Rewrite.', shotId: 'c2', rule: 'noNeon', labels: [], measured: false, simulated: false }
+		{ kind: 'lum', text: 'Path is brighter', fix: 'Match the exposure', shotId: null, rule: null, labels: [], measured: true },
+		{ kind: 'camera_change', text: 'Orbit then dolly', fix: '', shotId: null, rule: null, labels: [], measured: false },
+		{ kind: 'conflict', text: '“Path”: no neon.', fix: 'Rewrite.', shotId: 'c2', rule: 'noNeon', labels: [], measured: false }
 	]);
 	assert.deepEqual([review.seams[1].fromLabel, review.seams[1].toLabel, review.seams[1].issues[0].measured], ['', '', true]);
 	const identity = reviewFrom({ project_id: 'P', seams: [{ from_shot_id: 'c1', to_shot_id: 'c2', issues: [{ kind: 'identity', text: 'Check' }] }] }, 0);
-	assert.deepEqual([identity.seams[0].issues[0].measured, identity.seams[0].issues[0].simulated], [true, false]);
+	assert.equal(identity.seams[0].issues[0].measured, true);
+	assert.ok(!('simulated' in identity.seams[0].issues[0]));
 	assert.equal(reviewFrom({ project_id: 'P' }), null);
 	assert.equal(reviewCount(reviewFrom({ project_id: 'P' })), 0);
 	assert.equal(reviewCount(review), 4);

@@ -2,7 +2,7 @@
 
 Français : [Video Producer : guide utilisateur](/docs?doc=plugin/video-producer/user-guide.fr) (fichier `docs/user-guide.fr.md`).
 
-This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. The interface is complete, in English and in French. Your projects are saved as you work, your media are imported from PotionUI, and takes and finals are real videos (chapters 8 and 9). The PotionUI assistant has its own mode (chapter 10), shots are joined at their seams (chapter 12), and delivery is real: videos for the web and for social networks, files for other software and subtitles (chapter 14). One function is simulated and marked as such (chapter 17). The administrator guide is a separate page that only admins see.
+This guide explains how to make a short film with Video Producer. Interface labels are written in **bold**. The interface is complete, in English and in French. Your projects are saved as you work, your media are imported from PotionUI, and takes and finals are real videos (chapters 8 and 9). The PotionUI assistant has its own mode (chapter 10), shots are joined at their seams (chapter 12), and delivery is real: videos for the web and for social networks, files for other software and subtitles (chapter 14). The administrator guide is a separate page that only admins see.
 
 ## 1. What Video Producer is
 
@@ -10,11 +10,11 @@ Video Producer is a PotionUI plugin for audiovisual editing, AI sequence generat
 
 Before you start:
 
-- An admin has to prepare at least one engine (this machine, a studio server or a cloud model) and at least one video preset assigned to you. If the Production bar shows no engine, see chapter 18.
+- An admin has to prepare at least one engine (this machine, a studio server or a cloud model) and at least one video preset assigned to you. If the Production bar shows no engine, see chapter 17.
 - Your admin also sets the draft resolution, how many generations you can have in progress at once, and may limit the GPU minutes you can use per month.
 - Generation is real: the takes are videos made by your admin's machines or cloud account, and they take time. The estimate in the Production bar tells you what to expect before you start (chapter 8). As a measure, on a 12 GB graphics card a 5-second draft took about 6 to 7.5 minutes with the presets named (12 GB) and about 26 minutes with Wan, and a final by upscale to 1080p took more than two hours.
 - The machine your admin runs decides what you can use. A preset whose name ends with a card size is set up for a graphics card of that size, and the engine pop-up adds the ordinary memory (RAM) the server needs (chapter 8). On an 8 GB card, pick **Wan 2.1 T2V 1.3B (8 GB) · 32 GB RAM** or **Wan 2.2 TI2V 5B (8 GB) · 32 GB RAM**: they make 480p clips of up to 5 seconds from the text alone. On a 12 GB card, pick **MiniMax H3 (12 GB) · 64 GB RAM** or **MiniMax H3 Fast (12 GB) · 64 GB RAM**: the other MiniMax H3 presets are made for bigger cards (the Fast one ran out of memory on a 12 GB card in our tests). Ask your admin which card they have.
-- Delivering a video file needs ffmpeg on your PotionUI server. If the export window says that ffmpeg is missing, ask your admin (chapters 14 and 18). The files for other software and the subtitles do not need it.
+- Delivering a video file needs ffmpeg on your PotionUI server. If the export window says that ffmpeg is missing, ask your admin (chapters 14 and 17). The files for other software and the subtitles do not need it.
 - The assistant needs a language model that your admin has configured in PotionUI and assigned to you (chapter 10). Ask your admin to connect a local model server set up for the assistant (llama.cpp `llama-server` or Ollama) or an online provider: the model built into PotionUI ran out of memory or could not call the tools on a 12 GB graphics card in our tests. Everything else works without it.
 - The model MiniMax H3 (the **MiniMax H3** entries of the engine pop-up) comes with a license that excludes use, and anything generated with it, in the European Union, the United Kingdom, the United States and South Korea without an individual authorization from MiniMax, and that asks a commercial product to display "MiniMax H3" prominently. Ask your admin before you use it. Video Producer does not check any of this for you.
 
@@ -62,7 +62,7 @@ The ten menus group all the commands of the page. The command search (**Search c
 | **Audio** | Add audio track, Import audio from the library, Import audio from this computer, Mixing console. |
 | **View** | Play, loop, full screen, framing guides, Compare takes, Luminance scope, Audio meters, timeline zoom, Snapping. |
 | **Window** | The five workspaces, Storyboard as a band, the four views of Director AI, the reference spaces, Side panel, Inspector, PotionUI assistant, Prompt library, Timeline index, Background tasks. |
-| **Help** | Getting started, Keyboard shortcuts, Search features, Simulated features. |
+| **Help** | Getting started, Keyboard shortcuts, Search features. |
 
 ### The areas of the page
 
@@ -364,7 +364,7 @@ The buttons that start takes outside the bar (**Retry** and **Make final** on a 
 
 What only warns, without blocking:
 
-- a memory estimate above what the GPU has: "Will stream through host RAM, slower." The weights pass through the server's memory. The generation goes on, more slowly, and fails if the server lacks the memory for it (chapter 18);
+- a memory estimate above what the GPU has: "Will stream through host RAM, slower." The weights pass through the server's memory. The generation goes on, more slowly, and fails if the server lacks the memory for it (chapter 17);
 - the FL2VA profile with no frame linked to a shot: "“Shot 2” has no linked frame: it will be generated from text only." The generation goes on from the text, and the card of the take says "text only". When the shot has a previous shot with a finished take, an icon next to the warning in the Production bar, **Use the previous shot’s last frame**, gives it a first frame (chapter 12);
 - an engine that generates from text only, such as the (8 GB) Wan presets, for a shot with linked frames: "This engine generates from text only: the frames linked to “Shot 2” will not be used." The generation goes on from the text;
 - a shot longer than the engine allows: "“Shot 2” is longer than this engine allows: it will be cut to 15 s.";
@@ -411,6 +411,12 @@ The **Profile** of the Production bar, also shown on the **Engine** line of Dire
 - **Ref2VA** sends the references of the shot, then the global ones, to MiniMax H3: up to 9 images, 3 videos and 3 audio files. A video of the **Motion guides** family is the source of the motion of the shot: MiniMax H3 carries its motion over to the subjects of the shot.
 - **Hybrid AV** works like FL2VA on MiniMax H3, whose model makes the picture and the sound together.
 - A shot can use another profile than the project in its shot editor (chapter 4).
+
+What the engine you picked cannot do is not an error: it has a plain gray badge, as these profiles, **Upscaler not available** (chapter 9) and **Not sent with this engine** on the references of an engine without Ref2VA.
+
+### The settings of earlier versions
+
+The **Advanced workshop** of earlier versions is gone, with its settings that the engine did not use. What acted is now in the Production bar and the **Edit Engine** window (engine, profile, quality, drafts per shot), summed up on the **Engine** line of Director AI, and in the shot editor (engine, profile, quality and seed of one shot). The removed settings were: consistency between windows, lock character identity, motion guide first, the generation windows with their length and overlap, the final resolution, the seed, the steps, the guidance (CFG), the LoRAs, the track that drives the performance, lip sync, follow the rhythm of the cut, audio / picture offset, result naming, post-processing, insert variant A automatically, and the Hybrid builder weights with their saved profiles. A project made before keeps their values, which nothing reads; a preset only exposes the controls it declares, and MiniMax H3, for example, has no guidance and no negative prompt. The seed of a take is drawn by the server and shown on its card, unless the shot sets its own, and the resolutions follow the draft and final rules of chapter 8.
 
 ## 9. Takes and final
 
@@ -539,7 +545,7 @@ For example: "Check the continuity between my shots and tell me what to fix." Th
 
 1. When the assistant has answered, the page says "2 continuity points to check" (or "Continuity checked: nothing to fix"), with a **Show** button when the left panel of Director AI is not on screen.
 2. In the left panel of **Director AI**, under the page's own list, a **To check** section, with "Assistant · 14:32" beside its title (the time of the check), lists the pairs of neighbor shots to look at, as "Shot 1 → Shot 2". Click a pair to open the shot in the **Review**. Under each pair, a line says what is wrong and a second line how to fix it.
-3. What it looks for: a shot without a prompt; a shot prompt that contradicts the global direction; a shot shorter than 2 s or longer than 15 s; a shot with the FL2VA profile and no first frame; a shot prompt that does not name a character the shot casts from the bible; a camera move that changes between two shots; a jump of brightness or color temperature (the page measures these on the images, the seam frames of the shots when they have some and their thumbnails otherwise, and the line carries the badge **Measured**; chapter 12); and a similarity point between two takes. That last one comes from the similarity score, which stays simulated (chapter 17), so its line carries the gray badge **Simulated** instead. Shots that come from a source are skipped.
+3. What it looks for: a shot without a prompt; a shot prompt that contradicts the global direction; a shot shorter than 2 s or longer than 15 s; a shot with the FL2VA profile and no first frame; a shot prompt that does not name a character the shot casts from the bible; a camera move that changes between two shots; a jump of brightness or color temperature (the page measures these on the images, the seam frames of the shots when they have some and their thumbnails otherwise, and the line carries the badge **Measured**; chapter 12); and a point on the look of two takes at a seam, which the server measures on their images with SigLIP (chapter 12), so its line carries the badge **Measured** too. Shots that come from a source are skipped.
 4. **Dismiss the check** (the cross of the section) removes the list. Ask again to refresh it.
 
 #### Request 5: add, change and order shots
@@ -666,7 +672,7 @@ For each pair of neighbor shots the page compares the end of the first with the 
 - for the previous shot, its **Last frame** image if it has one, otherwise its thumbnail;
 - for the shot, its **First frame** image if it has one, otherwise its thumbnail.
 
-Any image that you placed as a first or last frame counts, not only the images made in this chapter. The assistant's continuity check (chapter 10) marks the points that the page measured with the badge **Measured**; hover it to see what was measured: "Measured by this page on the seam frames: last image of the previous shot, first image of this one", or "Measured by this page on the shots’ thumbnails". The similarity point keeps the gray badge **Simulated**.
+Any image that you placed as a first or last frame counts, not only the images made in this chapter. The assistant's continuity check (chapter 10) marks the points that the page measured with the badge **Measured**; hover it to see what was measured: "Measured by this page on the seam frames: last image of the previous shot, first image of this one", or "Measured by this page on the shots’ thumbnails". The look of two takes at a seam carries **Measured** too, with "Measured by SigLIP on the images at the seam: the overall look, not a face recognition".
 
 ### Start a shot from the previous shot
 
@@ -817,7 +823,7 @@ The export runs on the server, in the background. The window shows a card with t
 - You can close the window or leave the page: the export goes on. With the window closed the page keeps following it and shows a toast with **Download** when it is ready. PotionUI sends the notification "Video Producer: export ready" (or "Video Producer: export failed"), and when you open **Export and share** again the card is back.
 - A project has one export at a time ("An export of this project is already running.").
 - When it is ready the card says "Dawn_at_the_harbour_1080p.mp4 is ready" with its size, and offers **Download** and, when your PotionUI can show it, **Show in the library**, which opens your library on the videos. A web or social MP4 is also in your library like any video, so you can import it into a project (chapter 6); **Show in the library** is not offered for a master or an archive, which you download.
-- A failed export says what failed ("ffmpeg could not assemble the video.", "The video could not be converted." or "The export could not be saved.") and, under it, the technical message of the server (chapter 18).
+- A failed export says what failed ("ffmpeg could not assemble the video.", "The video could not be converted." or "The export could not be saved.") and, under it, the technical message of the server (chapter 17).
 
 ### Previous exports
 
@@ -930,17 +936,7 @@ When the shortcuts work:
 
 Every button has an accessible name, and an icon button shows its tooltip when it receives the keyboard focus, not only when the mouse hovers it. The Tab key reaches every control with a visible focus ring, including the first choice of a window that you opened with the mouse. The trim and fade handles of the timeline are mouse handles that Tab skips: use the **Cut** menu and the Inspector instead (chapters 3 and 7). A screen reader hears the progress of a generation or of an export at each 10 %, or when the step changes, and never more than once every 3 seconds.
 
-## 17. What is simulated
-
-No part of the page is simulated any more: **Help › Simulated features** lists nothing. What the engine you picked cannot do is not a simulation, and it has a plain gray badge instead: a greyed profile ("Ref2VA: MiniMax H3 only"), **Upscaler not available** and **Not sent with this engine** (chapters 8 and 9).
-
-Everything else works for real: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard (the **Propose a breakdown** button is a simple cut into sentences, not a simulation), the PotionUI assistant with its thirteen tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the mixing console playing your audio files, the seam frames, the videos (web and social MP4, ProRes master, H.265 archive, which ffmpeg assembles on the server through the console) with their audio stems, and the FCPXML, OpenTimelineIO, EDL and SRT files, which are real files.
-
-The **Advanced workshop** of earlier versions is gone, with its settings that the engine did not use. What acted is now in the Production bar and the **Edit Engine** window (engine, profile, quality, drafts per shot), summed up on the **Engine** line of Director AI, and in the shot editor (engine, profile, quality and seed of one shot). The removed settings were: consistency between windows, lock character identity, motion guide first, the generation windows with their length and overlap, the final resolution, the seed, the steps, the guidance (CFG), the LoRAs, the track that drives the performance, lip sync, follow the rhythm of the cut, audio / picture offset, result naming, post-processing, insert variant A automatically, and the Hybrid builder weights with their saved profiles. A project made before keeps their values, which nothing reads; a preset only exposes the controls it declares, and MiniMax H3, for example, has no guidance and no negative prompt. The seed of a take is drawn by the server and shown on its card, unless the shot sets its own, and the resolutions follow the draft and final rules of chapter 8.
-
-The assistant, for its part, is not simulated: it is the PotionUI chat in the Video Producer assistant mode, which drives the page from the shots to the export; you approve what writes over a prompt, deletes shots or spends GPU minutes, and Ctrl+Z takes back the rest (chapter 10).
-
-## 18. Troubleshooting
+## 17. Troubleshooting
 
 - **The Production bar shows no engine.** The pop-up reads "No engine". Your admin has not finished the setup: an engine, a video preset assigned to you, or a video model turned on for the cloud provider. Ask them to open Admin → Plugins → Video Producer.
 - **The estimate shows "—" for the time.** Nothing has been measured yet for this preset, engine and resolution (the calibration is empty). It fills in after a few generations.
@@ -974,7 +970,7 @@ The assistant, for its part, is not simulated: it is the PotionUI chat in the Vi
 - **The assistant does not answer, shows no card or acts on the wrong project.** See chapter 10, "If it does not work".
 
 
-## 19. Glossary
+## 18. Glossary
 
 | English | Français | Meaning |
 |---|---|---|

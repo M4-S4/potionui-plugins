@@ -9,63 +9,31 @@ PLUGIN = Path(__file__).resolve().parents[1]
 I18N = PLUGIN / "frontend" / "src" / "i18n"
 SHOTS = PLUGIN / "docs" / "screenshots"
 DIST = PLUGIN / "frontend" / "dist" / "VideoProducerPage.js"
-SIMULATION_ORDER = ()
 ALLOWED_COMMENTS = {("backend/exports/video.py", "# one frame of slack: a file can end a frame before its probed length")}
+GUIDES = (PLUGIN / "docs" / "user-guide.md", PLUGIN / "docs" / "user-guide.fr.md")
 
 
-def _norm(text):
-    text = text.replace("**", "").replace("`", "").replace("’", "'").replace("“", '"').replace("”", '"')
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _simulations(lang):
-    shell = json.loads((I18N / lang / "shell.json").read_text(encoding="utf-8"))
-    return [(shell[f"simulations.{key}.title"], shell[f"simulations.{key}.text"]) for key in SIMULATION_ORDER]
-
-
-def _table_rows(section):
-    rows = []
-    for line in section.splitlines():
-        if line.startswith("|") and not re.match(r"^\|[-| ]+\|$", line):
-            rows.append([cell.strip() for cell in line.strip().strip("|").split("|")])
-    return rows[1:]
-
-
-def _guide_section(path):
-    text = path.read_text(encoding="utf-8")
-    return re.search(r"^## 17\..*?(?=^## 18\.)", text, re.S | re.M).group(0)
-
-
-def _readme_section():
-    text = (PLUGIN / "README.md").read_text(encoding="utf-8")
-    start = text.index("## What stays simulated")
-    end = text.find("\n## ", start + 5)
-    return text[start:end] if end > 0 else text[start:]
-
-
-def test_the_page_dictionary_lists_no_simulation_in_both_languages():
+def test_nothing_is_simulated_any_more_in_the_dictionaries_the_readme_or_the_guides():
     for lang in ("en", "fr"):
-        shell = json.loads((I18N / lang / "shell.json").read_text(encoding="utf-8"))
-        assert len([key for key in shell if re.fullmatch(r"simulations\.\w+\.title", key)]) == 0
-        assert _simulations(lang) == []
+        for path in sorted((I18N / lang).glob("*.json")):
+            words = json.loads(path.read_text(encoding="utf-8"))
+            assert [key for key, text in words.items() if re.search(r"simulat", f"{key} {text}", re.I)] == [], path.name
+    readme = (PLUGIN / "README.md").read_text(encoding="utf-8")
+    assert "## What stays simulated" not in readme and "Simulated features" not in readme
+    for path in GUIDES:
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(r"Simulated features|Fonctions simulées|What is simulated|Ce qui est simulé|\*\*Simul", text), path.name
 
 
-@pytest.mark.parametrize(
-    "lang, section",
-    [
-        ("en", lambda: _guide_section(PLUGIN / "docs" / "user-guide.md")),
-        ("fr", lambda: _guide_section(PLUGIN / "docs" / "user-guide.fr.md")),
-        ("en", _readme_section),
-    ],
-    ids=["guide-en", "guide-fr", "readme"],
-)
-def test_the_simulation_table_repeats_the_window_titles_and_texts_in_order(lang, section):
-    rows = _table_rows(section())
-    expected = _simulations(lang)
+@pytest.mark.parametrize("path", GUIDES, ids=["guide-en", "guide-fr"])
+def test_the_chapters_of_a_guide_follow_each_other_and_every_chapter_it_names_exists(path):
+    text = path.read_text(encoding="utf-8")
+    numbers = [int(number) for number in re.findall(r"^## (\d+)\. ", text, re.M)]
+    named = {int(number) for number in re.findall(r"(?:chapters?|chapitres?) (\d+)", text)}
+    named |= {int(number) for pair in re.findall(r"(?:chapters|chapitres) (\d+) (?:and|et) (\d+)", text) for number in pair}
 
-    assert len(rows) == 0
-    assert [_norm(row[0]) for row in rows] == [_norm(title) for title, _ in expected]
-    assert [_norm(row[1]) for row in rows] == [_norm(text) for _, text in expected]
+    assert numbers == list(range(1, len(numbers) + 1))
+    assert sorted(named - set(numbers)) == []
 
 
 def test_every_screenshot_the_readme_cites_exists_and_every_image_is_cited():
@@ -89,12 +57,12 @@ def test_the_python_sources_hold_no_comment_but_the_one_kept_in_the_video_export
     assert found == ALLOWED_COMMENTS
 
 
-def test_the_served_dist_keeps_no_trace_of_the_retired_simulated_take():
+def test_the_served_dist_keeps_no_trace_of_a_simulation():
     dist = DIST.read_text(encoding="utf-8")
 
-    for leftover in ("generation.card.legacy", "viewer.simDraft", "shell.menubar.simulated"):
+    for leftover in ("generation.card.legacy", "viewer.simDraft", "shell.menubar.simulated", "shell.simulations", "help-sim", "simulatedTip", "vp-toast-sim"):
         assert leftover not in dist, leftover
-    assert dist.count("vp-sim") == 4
+    assert dist.count("vp-sim") == 0
 
 
 def test_the_page_draws_a_focus_ring_around_the_host_switches():

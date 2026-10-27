@@ -13,6 +13,7 @@
 	import { CHARACTERS, PLACES, cardsOf, labelOf } from '../../lib/bible.js';
 	import { VIEWS, VIEW_ICONS, citedWithout, promptShot, reviewCounts, reviewState, unnamedIn } from '../../lib/director.js';
 	import { hasOwnEngine } from '../../lib/engine.js';
+	import { isGlobal } from '../../lib/shots.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import PanelHeader from '../panels/PanelHeader.svelte';
@@ -37,7 +38,7 @@
 	const unmeasured = $derived(looks?.embedder.available ? looks.missing : 0);
 	const failed = $derived(doc.clips.filter((c) => reviewState(takesOf(c)).failed));
 	const checked = $derived(review.current?.projectId === project.id ? review.current : null);
-	const globals = $derived(doc.references.filter((r) => r.scope.type === 'global').length);
+	const globals = $derived(doc.references.filter(isGlobal).length);
 	const own = $derived(doc.clips.filter(hasOwnEngine).length);
 	const total = $derived(conflicts.length + bibleIssues.length + seamIssues.length + failed.length + lookIssues.length);
 	const lines = $derived({
@@ -194,10 +195,6 @@
 											{#if i.measured}
 												<HostUi name="Tooltip" props={{ text: i.kind === 'identity' ? t('assistant.review.measuredLookTip') : seamTip(s.toShotId), wrapperClass: 'inline-flex shrink-0' }}>
 													<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('assistant.review.measured')}</HostUi>
-												</HostUi>
-											{:else if i.simulated}
-												<HostUi name="Tooltip" props={{ text: t('assistant.review.simulatedTip'), wrapperClass: 'inline-flex shrink-0' }}>
-													<span class="vp-sim"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>
 												</HostUi>
 											{/if}
 										</li>

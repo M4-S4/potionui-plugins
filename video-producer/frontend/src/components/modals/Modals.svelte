@@ -36,7 +36,6 @@
 	});
 
 	const shortcutList = $derived(allCommands.filter((c) => c.keys));
-	const introParts = $derived(t('shell.simulations.intro').split('{badge}'));
 
 	const tour = $derived([
 		[t('shell.tour.project.title'), t('shell.tour.project.text'), () => (ui.modal = { type: 'project' })],
@@ -48,8 +47,6 @@
 		[t('shell.tour.mix.title'), t('shell.tour.mix.text'), () => ((ui.workspace = 'mixer'), close())],
 		[t('shell.tour.delivery.title'), t('shell.tour.delivery.text'), () => (ui.modal = { type: 'export' })]
 	]);
-
-	const simList = $derived([]);
 
 	const timelineIndex = $derived(
 		[
@@ -114,20 +111,6 @@
 						{#each recap.it.frames as f}<li>{t('shell.recap.frame', { role: frameRoleLabel(f.role), time: secs(f.time), strength: f.strength })}</li>{/each}
 					</ul>
 				</section>
-			</div>
-		</Modal>
-	{:else if m?.type === 'simulations'}
-		<Modal title={t('shell.simulations.title')} subtitle={t('shell.simulations.subtitle')} icon="flask" width={620}>
-			<div class="space-y-3 p-4">
-				<p class="text-sm text-fg-muted">{introParts[0]}<span class="vp-sim align-middle"><Icon name="flask" class="h-3 w-3" />{t('shell.window.simulated')}</span>{introParts[1] ?? ''}</p>
-				<ul class="space-y-2">
-					{#each simList as [title, text]}
-						<li class="rounded-lg border border-line-strong p-2.5">
-							<div class="text-sm font-medium">{title}</div>
-							<div class="text-xs text-fg-muted">{text}</div>
-						</li>
-					{/each}
-				</ul>
 			</div>
 		</Modal>
 	{:else if m?.type === 'shortcuts'}
