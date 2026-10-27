@@ -47,6 +47,10 @@ def _plans(core, doc, preset_id=presets.MINIMAX_H3, shots=("s1",)):
     return director.build_plans(core.users["user-1"], doc, list(shots), preset_id, "draft")
 
 
+def _size(plan):
+    return tuple(int(side) for side in plan.resolution.split("x"))
+
+
 def _codes(plans, prefix=("video_", "audio_track")):
     return [(item["code"], (item.get("data") or {}).get("slot")) for item in plans.warnings if item["code"].startswith(prefix)]
 
@@ -117,7 +121,7 @@ def test_a_motion_track_goes_after_the_videos_of_the_shot_and_before_those_of_th
     assert plan.request["form_data"]["references"] == ["uploads/own.mp4", "vtrack:t1", "uploads/dock.mp4"]
     assert plan.summary()["video"] == {"tracks": [1]} and plan.needs_cut and not plan.needs_audio
     [cut] = plan.video
-    assert (cut.slot, cut.role, cut.frames, cut.start, cut.end, cut.size) == (1, "motion", 56, 4.0, 6.333333, (1344, 768))
+    assert (cut.slot, cut.role, cut.frames, cut.start, cut.end, cut.size) == (1, "motion", 56, 4.0, 6.333333, _size(plan))
     assert [(piece.item_id, piece.asset_id, piece.source) for piece in cut.pieces] == [("i1", "walk", 5.5)]
     assert "<Video 2> is the source of the motion of [Shot 1]." in plan.prompt_text
     assert "<Video 2> (motion of [Shot 1]): attribute_transfer" in plan.prompt_text
@@ -238,19 +242,22 @@ def test_three_videos_of_the_shot_trim_the_track_and_an_unreadable_or_short_one_
     assert _codes(plans) == [("video_track_missing", 2), ("video_track_short", 3), ("video_track_trimmed", 1)]
 
 
-def test_the_size_of_the_cut_is_a_setting_of_the_shared_rule(core, make_doc, monkeypatch):
+def test_the_cut_is_written_at_the_size_of_the_take_by_default_and_at_the_canvas_when_the_rule_says_so(core, make_doc, monkeypatch):
     core.use_h3()
     _media(core)
     doc = _doc(make_doc, tracks=[_walk()], items=[_item("i1", "t1", "walk", 0, 12)])
 
-    canvas = _plans(core, doc).shots[0]
-    monkeypatch.setitem(reception.VIDEO_TRACKS, "size", reception.DRAFT)
+    assert reception.VIDEO_TRACKS["size"] == reception.DRAFT
     draft = _plans(core, doc).shots[0]
     vertical = _plans(core, {**doc, "aspect": "9:16"}).shots[0]
+    monkeypatch.setitem(reception.VIDEO_TRACKS, "size", reception.CANVAS)
+    canvas = _plans(core, doc).shots[0]
+    tall = _plans(core, {**doc, "aspect": "9:16"}).shots[0]
 
+    assert draft.video[0].size == _size(draft)
+    assert vertical.video[0].size == _size(vertical)
     assert canvas.video[0].size == (1344, 768)
-    assert draft.video[0].size == tuple(int(side) for side in draft.resolution.split("x"))
-    assert vertical.video[0].size == tuple(int(side) for side in vertical.resolution.split("x"))
+    assert tall.video[0].size == (768, 1344)
 
 
 def test_without_ffmpeg_a_shot_that_sends_a_track_is_blocked(core, make_doc, monkeypatch):
@@ -391,7 +398,7 @@ def test_a_take_keeps_what_it_received_of_the_tracks(core, make_doc, make_projec
         core.users["user-1"], project["id"], plan, preset_id=presets.MINIMAX_H3, quality="draft", kind="shot", seed=7, variant="A", minutes=0
     )
 
-    trace = {"slot": 1, "track_id": "t1", "role": "motion", "start": 4.0, "end": 6.333333, "frames": 56, "seconds": 2.333333, "size": [1344, 768], "items": ["i1"]}
+    trace = {"slot": 1, "track_id": "t1", "role": "motion", "start": 4.0, "end": 6.333333, "frames": 56, "seconds": 2.333333, "size": list(_size(plan)), "items": ["i1"]}
     assert take["video_refs"] == [trace]
     assert takes.public(take)["video_refs"] == [trace]
     assert takes.get_take(take["id"])["video_refs"] == [trace]

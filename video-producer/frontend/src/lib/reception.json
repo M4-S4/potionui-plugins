@@ -13,7 +13,7 @@
     "head": 5,
     "minFrames": 56,
     "roles": { "motion": "under", "continuation": "before" },
-    "size": "canvas",
+    "size": "draft",
     "sizes": ["canvas", "draft"],
     "canvas": { "shortEdge": 768, "maxPixels": 1032192, "multiple": 32 }
   },

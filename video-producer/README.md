@@ -370,10 +370,10 @@ The estimate cuts nothing. When `generate`, a re-render or a retry creates the t
 
 The size of the cut is a setting of the table, `videoTracks.size`:
 
-- `canvas`, the default: the canvas MiniMax-H3 resizes a reference video to (768 px on the short side, at most 768×1344 in area, both sides a multiple of 32, so 1344×768 in 16:9), which it then reads as it is;
-- `draft`: the size of the shot's own take (832×480 for a draft in 16:9), which MiniMax-H3 reads at that size, since the core no longer enlarges a smaller reference (unless `native_h3_reference_upscale` is on).
+- `canvas`: the canvas MiniMax-H3 resizes a reference video to (768 px on the short side, at most 768×1344 in area, both sides a multiple of 32, so 1344×768 in 16:9), which it then reads as it is;
+- `draft`, the default: the size of the shot's own take (832×480 for a draft in 16:9, the largest size of the preset for a final take), which MiniMax-H3 reads at that size, since the core no longer enlarges a smaller reference (unless `native_h3_reference_upscale` is on).
 
-A reference video costs MiniMax-H3 far more than an image: 56 frames at 1344×768 make about 17,000 tokens, twice a 3-second draft shot at 832×480. The estimate does not count it yet.
+A reference video costs MiniMax-H3 far more than an image. Measured on a 12 GB card for a 3-second draft shot at 832×480 (lot E), a 56-frame cut adds 6,630 rows at 832×480 and the step takes 16.4 s instead of about 10.6 s, while at 1344×768 it adds 17,136 rows and the step takes 31.3 s; both sizes carry the motion of the reference alike, which is why `draft` is the default. The estimate does not count it yet.
 
 A track whose video can no longer be read, a cut that fails or a file refused refuses the request with 409 `blocked` (`video_source_missing`, `video_cut_failed`, `video_store_failed`, with `shot_id`); without ffmpeg the estimate blocks the shots that send a track (`video_ffmpeg_missing`). A take records what it received of the tracks in `video_refs` (slot, track, role, region, frames, seconds, size and items), returned with the take. An audio item may also come from a take (`fromTake`) and play the take's own file: on a reference track its sound is cut like any other sound, provided the file has a sound stream.
 
