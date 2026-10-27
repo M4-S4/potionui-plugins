@@ -20,6 +20,10 @@
 	import MakeFinal from './MakeFinal.svelte';
 	import FinalPass from './FinalPass.svelte';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
+	import { CROP_LOSS, RESOLUTION_NAMES, deliverySize, framingOf } from '../../lib/formats.js';
+	import { filmRatio, percent } from '../../lib/framing.js';
+	import { setFraming, setResolution } from '../../lib/framing.svelte.js';
+	import FormatPicker from '../shell/FormatPicker.svelte';
 	import Icon from '../Icon.svelte';
 
 	let { version = null, setLanguage = () => {} } = $props();
@@ -62,6 +66,18 @@
 	]);
 
 	const promptLanguage = $derived(promptLanguageOf(doc.promptLanguage));
+	const framings = $derived([
+		{ id: 'auto', label: t('project.framing.auto') },
+		{ id: 'crop', label: t('project.framing.crop') },
+		{ id: 'bars', label: t('project.framing.bars') }
+	]);
+	const framingHelp = $derived.by(() => {
+		const mode = framingOf(doc);
+		if (mode === 'crop') return t('project.framing.cropHelp');
+		if (mode === 'bars') return t('project.framing.barsHelp');
+		return t('project.framing.autoHelp', { loss: percent(CROP_LOSS) });
+	});
+	const deliveryText = (resolution) => deliverySize(filmRatio(doc), resolution).join('×');
 
 	function setPromptLanguage(id) {
 		if (id !== promptLanguage) act(() => (doc.promptLanguage = id));
@@ -174,18 +190,28 @@
 		<Modal title={t('shell.properties.title')} icon="film" width={480}>
 			<div class="space-y-3 p-4">
 				<label class="block space-y-1"><span class="vp-label">{t('shell.properties.name')}</span><input class="input vp-dense" bind:value={doc.name} /></label>
-				<div class="grid grid-cols-3 gap-3">
+				<div class="space-y-1">
+					<label class="vp-label block" for="vp-project-format">{t('shell.properties.aspect')}</label>
+					<FormatPicker triggerId="vp-project-format" />
+				</div>
+				<div class="grid grid-cols-2 gap-3">
 					<label class="space-y-1"
-						><span class="vp-label">{t('shell.properties.aspect')}</span><select class="input vp-dense" bind:value={doc.aspect}>{#each ['16:9', '2.39:1', '9:16', '1:1', '4:5'] as a}<option>{a}</option>{/each}</select></label
-					>
-					<label class="space-y-1"
-						><span class="vp-label">{t('shell.properties.resolution')}</span><select class="input vp-dense" bind:value={doc.resolution}><option>720p</option><option>1080p</option><option>4K</option></select></label
+						><span class="vp-label">{t('shell.properties.resolution')}</span><select class="input vp-dense" value={doc.resolution} onchange={(e) => setResolution(e.currentTarget.value)}
+							>{#each RESOLUTION_NAMES as r (r)}<option value={r}>{t('shell.properties.resolutionValue', { resolution: r, size: deliveryText(r) })}</option>{/each}</select
+						></label
 					>
 					<label class="space-y-1"
 						><span class="vp-label">{t('shell.properties.fps')}</span><select class="input vp-dense" bind:value={doc.fps}
 							>{#each [24, 25, 30] as fps}<option value={fps}>{t('shell.properties.fpsValue', { fps })}</option>{/each}</select
 						></label
 					>
+				</div>
+				<div class="space-y-1">
+					<div class="flex items-center justify-between gap-3">
+						<span class="vp-label">{t('project.framing.label')}</span>
+						<HostUi name="SegmentedControl" props={{ items: framings, selected: framingOf(doc), onSelect: setFraming, ariaLabel: t('project.framing.label'), variant: 'toggle' }} />
+					</div>
+					<p class="text-xs text-fg-subtle">{framingHelp}</p>
 				</div>
 				<div class="space-y-1">
 					<div class="flex items-center justify-between gap-3">

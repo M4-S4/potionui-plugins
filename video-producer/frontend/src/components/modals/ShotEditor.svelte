@@ -3,7 +3,9 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, asset, clipLabel, promptIssues, relayout, secs, toast } from '../../lib/state.svelte.js';
 	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf, shotDurationLimit, settleRelease } from '../../lib/production.svelte.js';
-	import { PROFILES, optionKey, presetProfiles, withProfile } from '../../lib/generation.js';
+	import { PROFILES, aspectOf, draftResolution, finalResolution, optionKey, presetProfiles, withProfile } from '../../lib/generation.js';
+	import { chosenSize, formatValue, parseSize } from '../../lib/formats.js';
+	import { framed } from '../../lib/framing.js';
 	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
 	import { engineTitle, refTypeLabel, shotReceptionIn } from '../../lib/references.js';
 	import { TAG_CLASS, typeIcon } from '../../lib/reftags.js';
@@ -64,6 +66,19 @@
 		return option ? presetProfiles(option.info) : [...PROFILES];
 	});
 	const ownEngine = $derived(Object.keys(draft.engine).length > 0);
+	const sizeLine = $derived.by(() => {
+		const option = draftKey ? draftOption : currentEngine();
+		if (!option || option.kind === 'cloud') return '';
+		const ratio = aspectOf(doc.aspect, doc.resolution);
+		const small = draftResolution(option.info, ui.me?.settings?.draftResolution, ratio, chosenSize(doc, option.preset, 'draft'));
+		const large = finalResolution(option.info, ratio, chosenSize(doc, option.preset, 'final'));
+		if (!small || !large) return '';
+		const line = t('modals.shot.sizeLine', { draft: small.replace('x', '×'), final: large.replace('x', '×') });
+		const mode = framed(parseSize(large), doc)?.mode;
+		if (mode === 'crop') return `${line} · ${t('modals.shot.sizeCropped', { aspect: formatValue(doc.aspect) })}`;
+		if (mode === 'bars') return `${line} · ${t('modals.shot.sizeBars', { aspect: formatValue(doc.aspect) })}`;
+		return line;
+	});
 	const isSound = (r) => asset(r.assetId)?.kind === 'audio';
 	const lanes = $derived(clip ? referenceLanes(doc, clip, draft.excludeLanes) : []);
 	const behavior = $derived(clip ? soundBehaviorOf({ ...clip, engine: draft.engine }) : null);
@@ -386,6 +401,7 @@
 							{/each}
 						</select>
 					</label>
+					{#if sizeLine}<p class="text-xs text-fg-subtle">{sizeLine}</p>{/if}
 					<label class="block space-y-1">
 						<span class="vp-label">{t('modals.shot.profile')}</span>
 						<select class="vp-popup w-full" value={draft.engine.profile ?? ''} onchange={(e) => setOwn('profile', e.currentTarget.value)}>

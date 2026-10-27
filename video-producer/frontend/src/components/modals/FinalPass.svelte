@@ -4,7 +4,10 @@
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, clipLabel, fmtDuration } from '../../lib/state.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
-	import { upscalesItself } from '../../lib/generation.js';
+	import { aspectOf, finalResolution, upscalesItself } from '../../lib/generation.js';
+	import { chosenSize, formatValue } from '../../lib/formats.js';
+	import { changedRatio } from '../../lib/framing.js';
+	import { presetById } from '../../lib/production.svelte.js';
 	import { passFlying, passPlan } from '../../lib/finalpass.js';
 	import { cancelFinalPass, guidedReady, guidedResolution, passNoteText, passState, passTargets, savedChoice, schedulePassEstimate, startFinalPass, stopPassEstimate } from '../../lib/finalpass.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -31,6 +34,8 @@
 	const notes = $derived(est && !passState.loading ? est.warnings : []);
 	const sounds = $derived((est?.shots ?? []).filter((shot) => shot.sound).length);
 	const count = $derived(sources.length);
+	const renderSize = (take) => finalResolution(presetById(take?.presetId), aspectOf(doc.aspect, doc.resolution), chosenSize(doc, take?.presetId, 'final'));
+	const oldRatio = $derived(plan.included.filter((row) => changedRatio(row.source, renderSize(row.source))).length);
 	const num = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 	const one = (v) => formatNumber(v ?? 0, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 	const minutes = (v) => formatNumber(v ?? 0, { maximumFractionDigits: 1 });
@@ -113,6 +118,7 @@
 			<span class="vp-label block">{t('generation.finalPass.method.label')}</span>
 			<HostUi name="SegmentedControl" props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.finalPass.method.label'), items: methods, selected: method, onSelect: (id) => (method = id) }} />
 			<p class="text-xs text-fg-subtle">{hint}</p>
+			{#if method === 'render'}<p class="flex items-start gap-1.5 text-xs text-fg-muted"><Icon name="info" class="mt-0.5 h-3 w-3 shrink-0" />{guided ? t('generation.finalPass.placement') : t('generation.finalPass.placementNoGuided')}</p>{/if}
 			{#if method === 'upscale'}
 				<HostUi name="SegmentedControl" props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.final.target'), items: targets.map((id) => ({ id, label: targetLabel(id), disabled: !upscaleReady })), selected: target, onSelect: (id) => (target = id) }} />
 				{#if ownUpscale}
@@ -123,6 +129,7 @@
 				{/if}
 			{/if}
 			<p class="flex items-start gap-1.5 text-xs text-fg-subtle"><Icon name="wave" class="mt-0.5 h-3 w-3 shrink-0" />{soundText}</p>
+			{#if oldRatio}<p class="text-xs text-fg-subtle">{t('generation.finalPass.oldRatio', { count: oldRatio, aspect: formatValue(doc.aspect) })}</p>{/if}
 		</section>
 
 		<section class="space-y-2" aria-label={t('generation.finalPass.shots')}>

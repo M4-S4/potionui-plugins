@@ -1,12 +1,14 @@
-from typing import Any, Dict, NoReturn, Optional
+import logging
+from typing import Any, Dict, Iterable, List, NoReturn, Optional
 
 from fastapi import APIRouter, Body, Depends
 
-from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, director, keyframes, limits, projects, settings
+from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, director, keyframes, limits, projects, settings, takes
 from .core_bridge import AccountType, User, get_current_active_user
 from .responses import fail, ok
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 ME_KEYS = ("locale", "last_project_id")
 
@@ -18,6 +20,14 @@ def _last_project_id(user_id: str) -> Optional[str]:
     return project_id
 
 
+def _measured(video_presets: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, List[str]]]:
+    try:
+        return takes.measured_sizes(preset["id"] for preset in video_presets)
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not read the measured sizes; reporting none", exc_info=True)
+        return {}
+
+
 def _ffmpeg() -> bool:
     try:
         return bool(core_bridge.find_ffmpeg() and core_bridge.find_ffprobe())
@@ -27,7 +37,7 @@ def _ffmpeg() -> bool:
 
 @router.get("/me")
 def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The signed-in user's locale, last project, role, quota, engines, video presets (with the options the project may set in each mode the Video Director runs them in) and features, the presets that edit a start image from several pictures, ffmpeg, and the plugin settings."""
+    """The signed-in user's locale, last project, role, quota, engines, video presets (with the options the project may set in each mode the Video Director runs them in, and the sizes each was measured at by backend) and features, the presets that edit a start image from several pictures, ffmpeg, and the plugin settings."""
     video_presets = catalog.video_presets(user)
     return ok(
         {
@@ -39,6 +49,7 @@ def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
             "plugin": {"id": PLUGIN_ID, "version": PLUGIN_VERSION},
             "engines": catalog.video_engines(),
             "presets": video_presets,
+            "measured": _measured(video_presets),
             "keyframe_presets": [preset.summary() for preset in keyframes.image_presets(user)],
             "features": {"upscaler": any(preset["upscaler"] for preset in video_presets), "guided": director.guided_ready(user)},
             "upscale_targets": list(catalog.UPSCALE_TARGETS),

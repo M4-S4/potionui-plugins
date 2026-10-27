@@ -6,7 +6,9 @@
 	import { ui, doc, act, seqDuration, secs, allIssues, clipLabel } from '../../lib/state.svelte.js';
 	import { activeTransfer, matchStale } from '../../lib/match.js';
 	import { EXCHANGE } from '../../lib/exchange.js';
-	import { README_HREF, RESOLUTIONS, VIDEO_FORMATS, exchangeFile, historyOf, isJobActive, keptInLibrary, videoFile } from '../../lib/exports.js';
+	import { README_HREF, RESOLUTIONS, SOCIAL_RATIOS, VIDEO_FORMATS, exchangeFile, historyOf, isJobActive, keptInLibrary, videoFile } from '../../lib/exports.js';
+	import { BARS, CROP, SOCIAL_DEFAULT, formatValue } from '../../lib/formats.js';
+	import { exportFrame, framed, largestTake, upscaled } from '../../lib/framing.js';
 	import {
 		exportState,
 		exchangeText,
@@ -33,6 +35,7 @@
 	let format = $state('web');
 	let res = $state(RESOLUTIONS.includes(doc.resolution) ? doc.resolution : '1080p');
 	let stems = $state(false);
+	let ratio = $state(SOCIAL_DEFAULT);
 	let exchange = $state('fcpxml');
 	let spoken = $state('');
 	const voice = announcer();
@@ -55,7 +58,11 @@
 	const pending = $derived(doc.clips.filter((c) => c.take && labelOf(findTake(c.take)) === 'rejected').length);
 	const issues = $derived(allIssues().filter((i) => i.level === 'conflict').length);
 	const dur = $derived(seqDuration());
-	const fileName = $derived(videoFile(doc.name, res, format, stems));
+	const social = $derived(format === 'social');
+	const fileName = $derived(videoFile(doc.name, res, format, stems, social ? ratio : null));
+	const frame = $derived(exportFrame(doc, format, res, ratio));
+	const largest = $derived(largestTake(doc.clips, findTake));
+	const enlarged = $derived(upscaled(largest, frame, social ? CROP : (framed(largest, doc)?.mode ?? BARS)));
 	const cues = $derived(subtitleCues());
 	const targets = {
 		fcpxml: { label: 'FCPXML', ext: EXCHANGE.fcpxml.ext },
@@ -106,7 +113,7 @@
 
 	const tone = (status) => (status === 'done' ? 'text-success' : status === 'failed' ? 'text-danger' : status === 'cancelled' ? 'text-fg-subtle' : 'text-signal');
 	const dot = (status) => (status === 'done' ? 'bg-success' : status === 'failed' ? 'bg-danger' : status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
-	const nameOf = (j) => j.file?.name ?? videoFile(doc.name, j.resolution ?? res, j.format ?? 'web', j.stems);
+	const nameOf = (j) => j.file?.name ?? videoFile(doc.name, j.resolution ?? res, j.format ?? 'web', j.stems, j.ratio);
 
 	$effect(() => {
 		if (!running || !job) {
@@ -161,6 +168,13 @@
 						{#each RESOLUTIONS as r (r)}<option value={r}>{r}</option>{/each}
 					</select>
 				</label>
+				{#if social}
+					<div class="col-span-2 flex items-center gap-2" role="group" aria-label={t('modals.export.socialRatio')}>
+						<span class="vp-label">{t('modals.export.socialRatio')}</span>
+						{#each SOCIAL_RATIOS as r (r)}<button type="button" class="vp-pill" aria-pressed={ratio === r} disabled={running} onclick={() => (ratio = r)}>{r}</button>{/each}
+						<span class="text-xs text-fg-subtle">{t('modals.export.socialHint')}</span>
+					</div>
+				{/if}
 				{#if !keptInLibrary(format)}<p class="col-span-2 text-xs text-fg-subtle">{t('exports.notInLibrary')}</p>{/if}
 				{#if ui.range}<p class="col-span-2 text-xs text-fg-subtle">{t('exports.rangeWhole')}</p>{/if}
 			</div>
@@ -192,7 +206,8 @@
 			</section>
 			<div class="rounded-lg border border-line-strong p-3 text-xs text-fg-muted">
 				<div class="mb-1 text-sm text-fg">{fileName}</div>
-				{t('modals.export.fileInfo', { fps: doc.fps, aspect: format === 'social' ? '9:16' : doc.aspect })}{stems ? ` · ${t('modals.export.fileStems')}` : ''} · {t('exports.real')}
+				{t('modals.export.fileInfo', { size: `${frame[0]}×${frame[1]}`, fps: doc.fps, aspect: social ? ratio : formatValue(doc.aspect) })}{stems ? ` · ${t('modals.export.fileStems')}` : ''} · {t('exports.real')}
+				{#if enlarged}<p class="mt-1 text-fg-subtle">{t('modals.export.upscaled', { size: `${largest[0]}×${largest[1]}`, frame: `${frame[0]}×${frame[1]}` })}</p>{/if}
 			</div>
 
 			{#if job}
@@ -240,7 +255,7 @@
 					<ul class="max-h-40 space-y-0.5 overflow-auto">
 						{#each history as j (j.id)}
 							<li class="flex min-h-7 items-center gap-2 rounded-md px-2 text-xs odd:bg-surface-2/50">
-								<span class="min-w-0 flex-1 truncate text-fg">{formatLabel(j.format)}{j.stems ? ` · ${t('exports.history.stems')}` : ''} · <span class="vp-tc">{j.resolution ?? '—'}</span></span>
+								<span class="min-w-0 flex-1 truncate text-fg">{formatLabel(j.format)}{j.stems ? ` · ${t('exports.history.stems')}` : ''} · <span class="vp-tc">{j.resolution ?? '—'}{j.format === 'social' && j.ratio ? ` · ${j.ratio}` : ''}</span></span>
 								<span class="shrink-0 {tone(j.status)}">{statusText(j.status)}</span>
 								{#if isJobActive(j)}
 									<span class="vp-tc shrink-0 text-fg-subtle">{t('exports.percent', { value: Math.round(j.progress) })}</span>
@@ -298,7 +313,7 @@
 	{#snippet footer()}
 		<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', onclick: () => (ui.modal = null) }}>{t('modals.export.close')}</HostUi>
 		{#if tab === 'video'}
-			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('export'), disabled: ffmpegMissing || running || exportState.starting, onclick: () => startVideoExport({ format, resolution: res, stems }) }}>{t('modals.export.export')}</HostUi>
+			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('export'), disabled: ffmpegMissing || running || exportState.starting, onclick: () => startVideoExport({ format, resolution: res, stems, ratio: social ? ratio : null }) }}>{t('modals.export.export')}</HostUi>
 		{:else if tab === 'exchange'}
 			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('export'), disabled: Boolean(exportState.busy), onclick: () => exportExchange(exchange) }}>{t('modals.export.download', { file: exchangeFile(doc.name, exchange) })}</HostUi>
 		{:else}

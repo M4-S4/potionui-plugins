@@ -29,6 +29,11 @@ test('normalizeMe: ffmpeg is true, false, or null when the server does not say',
 	assert.equal(normalizeMe({}).ffmpeg, null);
 });
 
+test('normalizeMe: the measured sizes keep each preset and backend with at least one size', () => {
+	assert.deepEqual(normalizeMe({ measured: { p1: { gpu: ['832x480', 7, ''], cpu: [] }, p2: 'x', p3: { gpu: 'x' } } }).measured, { p1: { gpu: ['832x480'] } });
+	assert.deepEqual(normalizeMe({}).measured, {});
+});
+
 test('project payloads: summaries, full projects and versions are camelCased and checked', () => {
 	assert.deepEqual(normalizeProjectSummary({ id: 'p1', name: 'Dawn', version: 3, created_at: '2026-10-16T10:00:00Z', updated_at: '2026-10-16T11:00:00Z', shots: 5, duration_s: 25 }), {
 		id: 'p1',

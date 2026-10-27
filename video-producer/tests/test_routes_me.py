@@ -198,6 +198,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "plugin": {"id": "video-producer", "version": "0.1.0"},
             "engines": [],
             "presets": [],
+            "measured": {},
             "keyframe_presets": [],
             "features": {"upscaler": False, "guided": False},
             "upscale_targets": ["hd720", "fhd1080", "qhd1440", "uhd2160"],
@@ -537,6 +538,40 @@ def test_me_describes_a_video_director_preset_with_its_modes_fields_and_director
             "backend_id": None,
         }
     ]
+
+
+def test_me_gives_the_sizes_each_listed_preset_was_measured_at_by_backend(client, store, no_container, catalog, project_db):
+    from backend import takes
+
+    catalog.presets = [_wan()]
+    for preset_id, backend_id, resolution in (
+        (presets.WAN, "b-gpu", "832x480"),
+        (presets.WAN, "b-gpu", "832x480"),
+        (presets.WAN, "b-gpu", "1280x720"),
+        (presets.WAN, "b-other", "960x544"),
+        (presets.SEEDVR2, "b-gpu", "1920x1080"),
+    ):
+        takes.add_calibration(preset_id, backend_id, resolution, 5.0, 50000)
+
+    assert client.get(ME_URL).json()["data"]["measured"] == {presets.WAN: {"b-gpu": ["1280x720", "832x480"], "b-other": ["960x544"]}}
+
+
+def test_me_reports_no_measured_size_and_logs_when_they_cannot_be_read(client, store, no_container, catalog, monkeypatch, caplog):
+    from backend import takes
+
+    catalog.presets = [_wan()]
+
+    def broken(preset_ids):
+        raise RuntimeError("no table")
+
+    monkeypatch.setattr(takes, "measured_sizes", broken)
+
+    with caplog.at_level(logging.WARNING):
+        data = client.get(ME_URL).json()["data"]
+
+    assert data["measured"] == {}
+    assert [preset["id"] for preset in data["presets"]] == [presets.WAN]
+    assert "Could not read the measured sizes" in caplog.text
 
 
 def test_me_lists_the_cloud_video_presets_too(client, store, no_container, catalog):

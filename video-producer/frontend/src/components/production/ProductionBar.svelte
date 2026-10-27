@@ -39,6 +39,8 @@
 	import InfoTip from '../shell/InfoTip.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
+	import SizePicker from './SizePicker.svelte';
+	import { setEngineSize } from '../../lib/framing.svelte.js';
 	import QueuePanel from '../panels/QueuePanel.svelte';
 	import { takeCount } from '../../lib/shots.js';
 	import { shotNumbers } from '../../lib/director.js';
@@ -255,6 +257,9 @@
 	<HostUi name="Tooltip" props={{ text: p.quality === 'draft' ? t('production.quality.draftTip', { resolution: draftRes }) : t('production.quality.finalTip', { resolution: finalRes }) }}>
 		<HostUi name="SegmentedControl" props={{ items: qualities, selected: p.quality, variant: 'toggle', ariaLabel: t('production.quality.label'), onSelect: setProjectQuality }} />
 	</HostUi>
+	{#if engine && !cloud && engine.info?.resolutions?.length}
+		<SizePicker preset={engine.info} quality={p.quality} backend={engine.backend} value={chosenSize(doc, engine.preset, p.quality)} onselect={(v) => setEngineSize(engine.preset, p.quality, v)} variant="popup" />
+	{/if}
 	<DraftsField {clips} label={false} disabled={!clips.length} />
 
 	<div class="vp-divider"></div>

@@ -290,6 +290,17 @@ export function normalizePreset(value) {
 	};
 }
 
+function measuredOf(value) {
+	if (!isObject(value)) return {};
+	const kept = {};
+	for (const [preset, backends] of Object.entries(value)) {
+		if (!isObject(backends)) continue;
+		const sizes = Object.fromEntries(Object.entries(backends).map(([backend, list]) => [backend, strings(list)]).filter(([, list]) => list.length));
+		if (Object.keys(sizes).length) kept[preset] = sizes;
+	}
+	return kept;
+}
+
 export function normalizeMe(data) {
 	const me = isObject(data) ? data : {};
 	const user = isObject(me.user) ? me.user : {};
@@ -305,6 +316,7 @@ export function normalizeMe(data) {
 		lastProjectId: text(me.last_project_id) || null,
 		engines: list(me.engines, normalizeEngine) ?? [],
 		presets: list(me.presets, normalizePreset) ?? [],
+		measured: measuredOf(me.measured),
 		keyframePresets: list(me.keyframe_presets, normalizeKeyframePreset) ?? [],
 		features: { upscaler: features.upscaler === true, guided: features.guided === true },
 		upscaleTargets: strings(me.upscale_targets),

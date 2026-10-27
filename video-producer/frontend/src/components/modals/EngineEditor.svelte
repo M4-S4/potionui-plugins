@@ -2,7 +2,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act } from '../../lib/state.svelte.js';
-	import { presetById } from '../../lib/production.svelte.js';
+	import { engineChoices, presetById } from '../../lib/production.svelte.js';
 	import { getClient } from '../../lib/project.svelte.js';
 	import { presetLabel } from '../../lib/generation.js';
 	import { hasOwnEngine, shotEngineOf } from '../../lib/engine.js';
@@ -12,6 +12,9 @@
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import OptionField from '../engine/OptionField.svelte';
+	import SizePicker from '../production/SizePicker.svelte';
+	import { formatValue, sizesValue } from '../../lib/formats.js';
+	import { engineSize, sameSizes } from '../../lib/framing.js';
 
 	let { preset: asked = null } = $props();
 
@@ -26,6 +29,7 @@
 	let drafts = $state({});
 	let variants = $state(projectDrafts(doc.engine));
 	let models = $state({});
+	let sizes = $state({ sizes: sizesValue($state.snapshot(doc.engine?.sizes)) });
 
 	const preset = $derived(chosen ? presetById(chosen) : null);
 	const name = $derived(preset ? presetLabel(preset) : t('generation.engine.unavailable'));
@@ -35,6 +39,8 @@
 	const groups = $derived(groupsOf(resolveFields(fields, values).filter((row) => row.visible)));
 	const steps = $derived(stepCounts(fields, values));
 	const setCount = $derived(Object.keys(values).length);
+	const backend = $derived(engineChoices().find((o) => o.preset === chosen && o.kind !== 'cloud')?.backend ?? null);
+	const sizeOf = (quality) => sizes.sizes?.[chosen]?.[quality] ?? null;
 	const choices = $derived.by(() => {
 		const used = doc.clips.map((c) => shotEngineOf(c).preset).filter(Boolean);
 		const ids = [...new Set([projectPreset, ...used, ...videoPresets.map((p) => p.id), chosen].filter(Boolean))];
@@ -67,10 +73,16 @@
 			.map(([id, kept]) => [id, presetById(id) ? cleanOptions(presetFields(presetById(id)), kept) : kept])
 			.filter(([id, kept]) => !sameOptions(kept, optionsOf(doc.engine, id)));
 		const moved = variants !== projectDrafts(doc.engine);
-		if (updates.length || moved) {
+		const kept = sizesValue($state.snapshot(sizes.sizes));
+		const sized = !sameSizes(kept, sizesValue(doc.engine.sizes));
+		if (updates.length || moved || sized) {
 			act(() => {
 				for (const [id, kept] of updates) setPresetOptions(doc.engine, id, kept);
 				if (moved) doc.engine.variants = variants;
+				if (sized) {
+					if (Object.keys(kept).length) doc.engine.sizes = kept;
+					else delete doc.engine.sizes;
+				}
 			});
 		}
 		ui.modal = null;
@@ -90,6 +102,25 @@
 				<p class="rounded-lg border border-dashed border-line-hover p-2 text-xs text-fg-muted">{t('generation.engine.empty')}</p>
 			{/if}
 		</div>
+
+		{#if preset && (preset.cloud || preset.resolutions?.length)}
+			<section class="space-y-2" aria-labelledby="vp-engine-size">
+				<span id="vp-engine-size" class="vp-section-title">{t('modals.engine.size')}</span>
+				{#if preset.cloud}
+					<p class="text-xs text-fg-subtle">{t('modals.engine.sizeCloud')}</p>
+				{:else}
+					<div class="grid grid-cols-2 gap-3">
+						{#each ['draft', 'final'] as quality (quality)}
+							<div class="min-w-0 space-y-1">
+								<label class="vp-label block" for="vp-engine-size-{quality}">{quality === 'draft' ? t('lib.stage.draft') : t('lib.stage.final')}</label>
+								<SizePicker {preset} {quality} {backend} value={sizeOf(quality)} onselect={(v) => engineSize(sizes, chosen, quality, v)} triggerId="vp-engine-size-{quality}" />
+							</div>
+						{/each}
+					</div>
+					<p class="text-xs text-fg-subtle">{t('modals.engine.sizeHint', { format: formatValue(doc.aspect) })}</p>
+				{/if}
+			</section>
+		{/if}
 
 		{#if own}
 			<p class="flex items-start gap-1.5 text-xs text-fg-muted"><Icon name="info" class="mt-px h-3.5 w-3.5 shrink-0" />{t('modals.engine.priority', { count: own })}</p>

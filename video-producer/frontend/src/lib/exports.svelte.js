@@ -99,13 +99,13 @@ export async function listJobs() {
 	schedule();
 }
 
-export async function startVideoExport({ format, resolution, stems = false }) {
+export async function startVideoExport({ format, resolution, stems = false, ratio = null }) {
 	if (exportState.starting || isJobActive(exportState.job)) return;
 	exportState.starting = true;
 	try {
 		if (!(await saved())) return;
 		const projectId = project.id;
-		const result = await getClient().exportVideo(projectId, { format, resolution, stems });
+		const result = await getClient().exportVideo(projectId, { format, resolution, stems, ...(ratio ? { ratio } : {}) });
 		if (projectId !== project.id) return;
 		if (!result.ok) {
 			if (result.error.code === 'export_running') await listJobs();
