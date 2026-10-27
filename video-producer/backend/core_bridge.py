@@ -237,6 +237,21 @@ def find_ffprobe() -> Optional[str]:
     return shutil.which("ffprobe")
 
 
+def image_embedder() -> Dict[str, Any]:
+    """The application's image embedder: model, slug, device, whether its weights are here and whether it is loaded."""
+    return dict(api_media.image_embedder())
+
+
+def embed_images(paths: Sequence[str]) -> List[List[float]]:
+    """The L2-normalized vectors of image files from the application's image embedder; FileNotFoundError without its weights."""
+    return [list(vector) for vector in api_media.embed_images(list(paths))]
+
+
+def generation_active() -> bool:
+    """True while the application's generation queue holds a generation, pending or running."""
+    return bool(api_generation.generation_active())
+
+
 def probe_video(path: Path) -> Optional[VideoProbe]:
     """What ffprobe reads of a video file, or None."""
     return api_media.probe_video(Path(path))

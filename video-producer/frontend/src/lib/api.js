@@ -3,6 +3,7 @@ import { LABELS, legacyLabel } from './labels.js';
 import { filenameFrom, lastSegment, normalizeJob, jobPath } from './exports.js';
 import { normalizeSeamMedia, requestBody } from './seam.js';
 import { normalizeChain, normalizeFrameSource } from './chain.js';
+import { normalizeLooks } from './looks.js';
 import { normalizeKeyframeEstimate, normalizeKeyframePreset } from './keyframes.js';
 
 const CODE_BY_STATUS = {
@@ -704,6 +705,12 @@ export function createClient(api, save) {
 		},
 		async queue(projectId) {
 			return mapped(await call(api, 'get', `${projectPath(projectId)}/queue`), normalizeQueue);
+		},
+		async looks(projectId) {
+			return mapped(await call(api, 'get', `${projectPath(projectId)}/looks`), normalizeLooks);
+		},
+		async measureLooks(projectId) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/looks`, {}), normalizeLooks);
 		},
 		async keyframes(projectId, shotId) {
 			return mapped(await call(api, 'get', keyframePath(projectId, shotId)), (data) => list(data.takes, normalizeTake));

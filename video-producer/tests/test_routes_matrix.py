@@ -282,6 +282,14 @@ ROUTES = {
         denied=lambda w: Call(f"/projects/{w.pid}/generate", ORDER, 404, "project_not_found", "user-2"),
         invalid=lambda w: Call(f"/projects/{w.pid}/generate", {**ORDER, "quality": "best"}, 422, "invalid_request"),
     ),
+    "GET /projects/{id}/looks": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/looks", check=lambda r: _data(r)["thresholds"] == {"seam": 0.7, "cast": 0.6}),
+        denied=lambda w: Call(f"/projects/{w.pid}/looks", status=404, code="project_not_found", who="user-2"),
+    ),
+    "POST /projects/{id}/looks": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/looks", check=lambda r: "queued" in _data(r)),
+        denied=lambda w: Call(f"/projects/{w.pid}/looks", status=404, code="project_not_found", who="user-2"),
+    ),
     "GET /projects/{id}/queue": Route(
         success=lambda w: Call(f"/projects/{w.pid}/queue", check=lambda r: _data(r)["slots"]["max"] == 2),
         denied=lambda w: Call(f"/projects/{w.pid}/queue", status=404, code="project_not_found", who="user-2"),

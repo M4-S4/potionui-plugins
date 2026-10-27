@@ -7,6 +7,7 @@ from .core_bridge import generate_ulid
 TAKES = "video_producer_takes"
 JOBS = "video_producer_jobs"
 CALIBRATION = "video_producer_calibration"
+LOOKS = "video_producer_looks"
 
 ACTIVE = ("queued", "running")
 
@@ -389,11 +390,12 @@ def migrate_labels() -> int:
 
 
 def delete_take(take_id: str) -> bool:
-    """Delete a take and its jobs; False when there was no such take."""
+    """Delete a take, its jobs and its look; False when there was no such take."""
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:
         cursor.execute(f"DELETE FROM {JOBS} WHERE take_id = ?", (take_id,))
+        cursor.execute(f"DELETE FROM {LOOKS} WHERE key = ?", (f"take:{take_id}",))
         cursor.execute(f"DELETE FROM {TAKES} WHERE id = ?", (take_id,))
         return cursor.rowcount > 0
 

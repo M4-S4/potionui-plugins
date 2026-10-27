@@ -447,6 +447,9 @@ BRIDGED = (
     "cloud_video_models",
     "notify",
     "run_on_app_loop",
+    "image_embedder",
+    "embed_images",
+    "generation_active",
 )
 
 
@@ -486,6 +489,9 @@ class FakeCore:
         self.notified = []
         self.scheduled = []
         self.counter = 0
+        self.busy = False
+        self.embedder = {"model": "google/siglip-base-patch16-224", "slug": "local-google-siglip-base-patch16-224", "device": "cpu", "available": True, "loaded": False}
+        self.embedded = []
         for user_id in ("user-1", "user-2"):
             self.add_user(user_id)
         self.add_user("admin-1", admin=True)
@@ -689,6 +695,27 @@ class FakeCore:
 
     def notify(self, **kwargs):
         self.notified.append(kwargs)
+
+    def image_embedder(self):
+        return dict(self.embedder)
+
+    def embed_images(self, paths):
+        from PIL import Image
+
+        self.embedded.append([str(path) for path in paths])
+        if not self.embedder["available"]:
+            raise FileNotFoundError("The weights of the image embedder are not on this server")
+        vectors = []
+        for path in paths:
+            with Image.open(path) as image:
+                r, g, b = image.convert("RGB").resize((1, 1)).getpixel((0, 0))
+            values = [r + 1.0, g + 1.0, b + 1.0, 8.0]
+            norm = sum(v * v for v in values) ** 0.5
+            vectors.append([v / norm for v in values])
+        return vectors
+
+    def generation_active(self):
+        return self.busy
 
     def run_on_app_loop(self, coroutine):
         import concurrent.futures

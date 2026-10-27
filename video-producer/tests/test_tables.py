@@ -17,6 +17,7 @@ _EXPECTED_COLUMNS = {
         "id", "take_id", "generation_id", "limit_ref_id", "units_reserved", "started_at", "finished_at",
     ],
     "video_producer_calibration": ["preset_id", "backend_id", "resolution", "seconds", "duration_ms", "created_at"],
+    "video_producer_looks": ["key", "user_id", "kind", "source", "model", "status", "frames", "error", "created_at", "updated_at"],
     "video_producer_export_jobs": [
         "id", "project_id", "user_id", "format", "resolution", "status", "progress", "step", "file_name", "file_size",
         "media_item_id", "media_url", "error_code", "error_message", "created_at", "started_at", "finished_at",
@@ -31,6 +32,7 @@ _EXPECTED_INDEXES = {
     "idx_video_producer_jobs_take": ("video_producer_jobs", ["take_id"]),
     "idx_video_producer_jobs_generation": ("video_producer_jobs", ["generation_id"]),
     "idx_video_producer_calibration_key": ("video_producer_calibration", ["preset_id", "backend_id", "resolution"]),
+    "idx_video_producer_looks_status": ("video_producer_looks", ["status", "updated_at"]),
     "idx_video_producer_export_jobs_project": ("video_producer_export_jobs", ["project_id", "created_at"]),
     "idx_video_producer_export_jobs_status": ("video_producer_export_jobs", ["status", "created_at"]),
 }
@@ -66,8 +68,8 @@ def _indexes(db):
     return found
 
 
-def test_table_names_are_the_six_plugin_tables():
-    assert len(TABLE_NAMES) == 6
+def test_table_names_are_the_seven_plugin_tables():
+    assert len(TABLE_NAMES) == 7
     assert set(TABLE_NAMES) == set(_EXPECTED_COLUMNS)
     assert all(name.startswith("video_producer_") for name in TABLE_NAMES)
 
@@ -84,7 +86,7 @@ def test_tables_have_the_planned_columns(plugin_db):
     assert {table: _columns(plugin_db, table) for table in TABLE_NAMES} == _EXPECTED_COLUMNS
 
 
-def test_create_tables_creates_the_nine_indexes(plugin_db):
+def test_create_tables_creates_the_ten_indexes(plugin_db):
     create_tables()
 
     assert _indexes(plugin_db) == _EXPECTED_INDEXES
@@ -93,7 +95,7 @@ def test_create_tables_creates_the_nine_indexes(plugin_db):
 def test_every_index_name_carries_the_plugin_prefix(plugin_db):
     create_tables()
 
-    assert len(_indexes(plugin_db)) == 9
+    assert len(_indexes(plugin_db)) == 10
     assert all(name.startswith("idx_video_producer_") for name in _indexes(plugin_db))
 
 

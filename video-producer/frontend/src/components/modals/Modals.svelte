@@ -51,7 +51,6 @@
 	]);
 
 	const simList = $derived([
-		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')],
 		[t('shell.simulations.lipSync.title'), t('shell.simulations.lipSync.text')],
 		[t('shell.simulations.voice.title'), t('shell.simulations.voice.text')],
 		[t('shell.simulations.console.title'), t('shell.simulations.console.text')],

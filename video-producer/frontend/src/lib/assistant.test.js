@@ -255,8 +255,8 @@ test('reviewFrom keeps the seams with issues and marks the measured ones', () =>
 		{ kind: 'conflict', text: '“Path”: no neon.', fix: 'Rewrite.', shotId: 'c2', rule: 'noNeon', labels: [], measured: false, simulated: false }
 	]);
 	assert.deepEqual([review.seams[1].fromLabel, review.seams[1].toLabel, review.seams[1].issues[0].measured], ['', '', true]);
-	const identity = reviewFrom({ project_id: 'P', seams: [{ from_shot_id: 'c1', to_shot_id: 'c2', issues: [{ kind: 'identity', text: 'Check', measured: true }] }] }, 0);
-	assert.deepEqual([identity.seams[0].issues[0].measured, identity.seams[0].issues[0].simulated], [false, true]);
+	const identity = reviewFrom({ project_id: 'P', seams: [{ from_shot_id: 'c1', to_shot_id: 'c2', issues: [{ kind: 'identity', text: 'Check' }] }] }, 0);
+	assert.deepEqual([identity.seams[0].issues[0].measured, identity.seams[0].issues[0].simulated], [true, false]);
 	assert.equal(reviewFrom({ project_id: 'P' }), null);
 	assert.equal(reviewCount(reviewFrom({ project_id: 'P' })), 0);
 	assert.equal(reviewCount(review), 4);

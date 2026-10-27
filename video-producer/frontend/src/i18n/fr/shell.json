@@ -107,8 +107,6 @@
 	"simulations.title": "Fonctions simulées",
 	"simulations.subtitle": "Ce qui fonctionne réellement et ce qui est simulé",
 	"simulations.intro": "Le montage, la sélection, l’inspecteur, les fondus, la bibliothèque de prompts, l’assistant, les contradictions, la génération IA et les prises, les exports et la console fonctionnent réellement. Les éléments suivants sont simulés et portent le badge {badge} :",
-	"simulations.identity.title": "Score d’identité",
-	"simulations.identity.text": "La similarité d’identité entre deux plans, dans le contrôle des raccords et dans la revue de l’assistant, est simulée. Le raccord couleur, lui, analyse réellement les images.",
 	"simulations.lipSync.title": "Synchronisation labiale",
 	"simulations.lipSync.text": "Aucune synchronisation labiale n’est calculée : les options de synchronisation de l’atelier Sound design restent dans le projet et ne changent ni les prises ni l’export.",
 	"simulations.voice.title": "Voix et dialogues générés",

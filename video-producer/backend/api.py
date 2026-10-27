@@ -10,6 +10,7 @@ from .routes_exports import router as exports_router
 from .routes_final_pass import router as final_pass_router
 from .routes_generation import router as generation_router
 from .routes_keyframes import router as keyframes_router
+from .routes_looks import router as looks_router
 from .routes_me import router as me_router
 from .routes_media import router as media_router
 from .routes_projects import router as projects_router
@@ -35,3 +36,4 @@ router.include_router(exports_router)
 router.include_router(chain_router)
 router.include_router(keyframes_router)
 router.include_router(final_pass_router)
+router.include_router(looks_router)

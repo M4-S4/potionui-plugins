@@ -3,7 +3,7 @@ import logging
 import threading
 from typing import Any, Dict, Optional
 
-from . import chaining, core_bridge, generation, takes
+from . import chaining, core_bridge, generation, looks, takes
 from .core_bridge import GenerationNotFoundException
 
 logger = logging.getLogger("plugins.video-producer")
@@ -59,7 +59,7 @@ class Tracker:
             await asyncio.sleep(BUSY_INTERVAL if busy else IDLE_INTERVAL)
 
     async def tick(self) -> bool:
-        """One round: follow each generation in flight, give the takes that wait for the last image of the previous shot that image once there is one, then hand queued takes to the core; True while takes remain active."""
+        """One round: follow each generation in flight, give the takes that wait for the last image of the previous shot that image once there is one, hand queued takes to the core, then, while no generation runs, compute one queued look; True while takes remain active or looks wait."""
         users: Dict[Optional[str], Any] = {}
 
         def owner(user_id: Optional[str]) -> Any:
@@ -91,7 +91,8 @@ class Tracker:
             user = owner(user_id)
             if user is not None and user is not _UNREADABLE:
                 await generation.pump(user)
-        return bool(takes.list_active())
+        await looks.run_once()
+        return bool(takes.list_active()) or looks.queued_count() > 0
 
 
 TRACKER = Tracker()
