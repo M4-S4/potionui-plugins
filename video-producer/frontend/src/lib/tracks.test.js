@@ -170,7 +170,7 @@ test('migrate: the document migration runs the track migration', () => {
 test('preview: the playback engine applies the shared rule to lanes and shot sound', () => {
 	const source = readFileSync(join(here, 'playback.svelte.js'), 'utf-8');
 	assert.match(source, /import \{ clipSoundAudible, laneAudible \} from '\.\/tracks\.js';/);
-	assert.match(source, /laneAudible\(doc, lane\) \? db\(lane\.vol\) : 0/);
+	assert.match(source, /stripOf\(mixRule, lane, doc\.aux, laneAudible\(doc, lane\)\)/);
 	assert.match(source, /clipSoundAudible\(doc, c\) \? envelope\(c, t\) : 0/);
 	assert.doesNotMatch(source, /lanes\.some\(\(l\) => l\.solo\)/, 'no second copy of the solo rule');
 });

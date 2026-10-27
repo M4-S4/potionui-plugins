@@ -19,6 +19,7 @@ from backend.core_bridge import LimitExceeded, MediaRefError
 from backend.exports import EXCHANGE, content_disposition, jobs, render, slug, unicode_name, video
 from backend.exports.fcpxml import media_url
 from backend.exports.media import files_of
+from backend.exports.mix import write_impulse
 from backend.exports.video import ExportError, build_command, filter_graph, frame_size
 from src.plugin_api import AccountType, get_current_active_user
 
@@ -28,7 +29,7 @@ BACKSLASH = chr(92)
 HAS_FFMPEG = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 WINDOWS_COMMAND_LIMIT = 32767
 FORMATS = tuple(EXCHANGE)
-PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mp4", "graph": "/tmp/out/graph.txt"}
+PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mkv", "graph": "/tmp/out/graph.txt"}
 MAX_ARGUMENT = 131072
 
 
@@ -75,7 +76,7 @@ def _inputs(command):
 
 
 def _options(fmt="web", resolution="720p", audio=None, stills=()):
-    return {"format": fmt, "resolution": resolution, "audio": audio or {}, "stills": list(stills)}
+    return {"format": fmt, "resolution": resolution, "audio": audio or {}, "stills": list(stills), "impulse": "/tmp/out/reverb.wav"}
 
 
 def _command(doc, files, sounds=None, **options):
@@ -94,10 +95,11 @@ def _prepare(doc, files, folder, label, audio=None, sounds=None, fmt="web", reso
     paths = {
         "ffmpeg": ffmpeg,
         "graph_option": video.graph_option(ffmpeg),
-        "output": str(folder / f"{label}.mp4"),
+        "output": str(folder / f"{label}.mkv"),
         "graph": str(folder / f"{label}.graph"),
         "audio": sounds or {},
     }
+    options["impulse"] = str(write_impulse(folder / "reverb.wav", 48000))
     sources = [entry["path"] for entry in files.values() if entry is not None] + list((sounds or {}).values())
     paths["cwd"] = video.common_folder(sources)
     Path(paths["graph"]).write_text(filter_graph(doc, files, options, paths), encoding="utf-8")
@@ -549,7 +551,7 @@ async def test_a_long_sequence_assembles_when_ffmpeg_is_started_from_the_command
 
     await video.assemble(command, 16.0, None, None, cwd)
 
-    assert abs(core_bridge.probe_video(tmp_path / "long.mp4").duration - 16.0) < 0.2
+    assert abs(core_bridge.probe_video(tmp_path / "long.mkv").duration - 16.0) < 0.2
 
 
 def _long_folder(tmp_path):
@@ -599,7 +601,7 @@ async def test_four_hundred_shots_of_four_hundred_files_in_a_long_folder_assembl
     await video.assemble(command, 16.0, None, None, cwd)
 
     assert sum(len(argument) + 1 for argument in command) < WINDOWS_COMMAND_LIMIT
-    assert abs(core_bridge.probe_video(tmp_path / "distinct.mp4").duration - 16.0) < 0.2
+    assert abs(core_bridge.probe_video(tmp_path / "distinct.mkv").duration - 16.0) < 0.2
 
 
 def _recorded(monkeypatch):
@@ -619,7 +621,7 @@ def _sequence_paths(folder, label, sounds):
     return {
         "ffmpeg": ffmpeg,
         "graph_option": video.graph_option(ffmpeg),
-        "output": str(folder / f"{label}.mp4"),
+        "output": str(folder / f"{label}.mkv"),
         "graph": str(folder / f"{label}.graph"),
         "audio": sounds,
     }
@@ -670,7 +672,7 @@ async def test_a_sequence_assembled_in_parts_matches_its_single_run_in_picture_t
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", f"sine=frequency={500 + 50 * index}:duration=1", str(tone)], check=True, timeout=60)
         sounds[f"u{index}"] = str(tone)
     doc = _with_audio(_doc(make_doc, clips), [{"start": index * 0.8, "dur": 0.6, "gain": -6} for index in range(5)])
-    options = {"format": "web", "resolution": "720p", "stills": [], **video.inspect(files)}
+    options = {"format": "web", "resolution": "720p", "stills": [], **video.inspect(files), "impulse": str(write_impulse(tmp_path / "reverb.wav", 48000))}
     whole, parted = _sequence_paths(tmp_path, "whole", sounds), _sequence_paths(tmp_path, "parted", sounds)
     await video.assemble_sequence(doc, files, options, whole, tmp_path, lambda progress, step: True)
     monkeypatch.setattr(video, "PART_INPUTS", limit)
@@ -684,13 +686,13 @@ async def test_a_sequence_assembled_in_parts_matches_its_single_run_in_picture_t
     assert {_output_of(command).split("-")[1] for command in parts} == {str(level) for level in range(rounds)}
     assert parts and all(len(_inputs(command)) <= limit for command in parts)
     assert len(premixes) == 3 and all(len(_inputs(command)) <= 2 for command in premixes)
-    assert _output_of(commands[-1]) == "parted.mp4" and len(commands) == len(parts) + len(premixes) + 1
-    first, second = core_bridge.probe_video(tmp_path / "whole.mp4"), core_bridge.probe_video(tmp_path / "parted.mp4")
+    assert _output_of(commands[-1]) == "parted.mkv" and len(commands) == len(parts) + len(premixes) + 1
+    first, second = core_bridge.probe_video(tmp_path / "whole.mkv"), core_bridge.probe_video(tmp_path / "parted.mkv")
     assert abs(first.duration - second.duration) < 0.05 and abs(second.duration - 4.5) < 0.1
     for index in range(9):
-        expected = _rgb_at(tmp_path / "whole.mp4", index * 0.5 + 0.3)
-        assert max(expected) > 200 and max(abs(a - b) for a, b in zip(expected, _rgb_at(tmp_path / "parted.mp4", index * 0.5 + 0.3))) < 12
-    assert abs(_mean_volume(tmp_path / "whole.mp4") - _mean_volume(tmp_path / "parted.mp4")) < 0.5
+        expected = _rgb_at(tmp_path / "whole.mkv", index * 0.5 + 0.3)
+        assert max(expected) > 200 and max(abs(a - b) for a, b in zip(expected, _rgb_at(tmp_path / "parted.mkv", index * 0.5 + 0.3))) < 12
+    assert abs(_mean_volume(tmp_path / "whole.mkv") - _mean_volume(tmp_path / "parted.mkv")) < 0.5
     assert [progress for progress, _ in steps] == sorted(progress for progress, _ in steps)
     assert all(step == ("mix" if progress >= video.MIX_FROM else "assemble") for progress, step in steps)
     assert steps[-1][0] == pytest.approx(video.ASSEMBLE_SHARE, abs=2)
@@ -708,7 +710,7 @@ async def test_seven_hundred_shots_of_seven_hundred_files_assemble_in_runs_of_fo
 
     assert len(commands) == 19 and max(len(_inputs(command)) for command in commands) <= video.PART_INPUTS
     assert max(len(subprocess.list2cmdline(command)) for command in commands) < WINDOWS_COMMAND_LIMIT // 4
-    assert abs(core_bridge.probe_video(tmp_path / "long.mp4").duration - 28.0) < 0.2
+    assert abs(core_bridge.probe_video(tmp_path / "long.mkv").duration - 28.0) < 0.2
 
 
 HOSTILE = [
@@ -784,7 +786,7 @@ def test_fades_longer_than_the_shot_are_cut_to_the_shot(make_doc, fade_in, fade_
         assert 0 <= float(start) and 0 < float(duration) <= 2 and float(start) + float(duration) <= 2 + 1e-9
 
 
-@pytest.mark.parametrize("gain", [-1000, -30, 0, 12, 60, 1e30])
+@pytest.mark.parametrize("gain", [-58, -30, 0, 12, 60, 1e30])
 def test_an_extreme_gain_is_written_as_a_plain_number_of_decibels(make_doc, gain):
     doc = _doc(make_doc, [_shot(0, dur=2)])
     _with_audio(doc, [{"id": "u0", "assetId": "a1", "dur": 1, "gain": gain}], lanes={"A1": {"vol": 0}})
@@ -834,13 +836,24 @@ def test_a_lane_both_muted_and_soloed_stays_muted(make_doc):
     assert _heard(doc) == ["u2"]
 
 
-def test_the_lane_volume_adds_to_the_gain_of_each_item(make_doc):
+@pytest.mark.parametrize("gain", [-1000, -59, -60])
+def test_an_item_at_a_gain_down_to_silence_is_not_mixed_as_the_page_plays_it(make_doc, gain):
+    doc = _three_lanes(make_doc)
+    doc["audio"][0]["gain"] = gain
+
+    assert _heard(doc) == ["u2", "u3"]
+
+
+def test_the_lane_volume_is_the_fader_of_its_strip_after_its_items_are_summed(make_doc):
     doc = _three_lanes(make_doc, A1={"vol": -6.5})
     doc["audio"][0]["gain"] = 2.25
 
-    graph = _script(doc, {"c0": {"name": "x", "path": "/srv/x.mp4"}}, sounds={"u1": "/a", "u2": "/b", "u3": "/c"})
+    graph = _script(doc, {"c0": {"name": "x", "path": "/srv/x.mp4"}}, sounds={"u1": "/a", "u2": "/b", "u3": "/c"}).split(";")
 
-    assert "volume=-4.25dB" in graph
+    item = next(chain for chain in graph if chain.endswith("[m0]"))
+    strip = next(chain for chain in graph if chain.startswith("[m0]apad="))
+    assert "volume=2.25dB" in item and "-6.5" not in item
+    assert "volume=-6.5dB" in strip
 
 
 def test_an_item_shorter_than_a_microsecond_is_not_mixed(make_doc):
@@ -920,7 +933,7 @@ async def _assemble(doc, files, tmp_path, label, audio=None, sounds=None, fmt="w
     command, cwd = _prepare(doc, files, tmp_path, label, audio=audio, sounds=sounds, fmt=fmt, resolution=resolution, stills=stills)
     _, total = video.timeline(doc)
     await asyncio.wait_for(video.assemble(command, total, None, None, cwd), timeout=120)
-    return tmp_path / f"{label}.mp4", total
+    return tmp_path / f"{label}.mkv", total
 
 
 def _file(path):
@@ -974,11 +987,12 @@ class TestRealAssemblies:
         source = _clip(tmp_path, "a.mp4")
         doc = _doc(make_doc, [_shot(0, dur=2)])
         _with_audio(doc, [{"id": "u0", "assetId": "a1", "dur": 1, "gain": 1000}])
+        mezzanine, total = await _assemble(doc, {"c0": _file(source)}, tmp_path, "gain", audio={"c0": True}, sounds={"u0": str(_sound(tmp_path))})
 
         with pytest.raises(ExportError) as caught:
-            await _assemble(doc, {"c0": _file(source)}, tmp_path, "gain", audio={"c0": True}, sounds={"u0": str(_sound(tmp_path))})
+            await video.convert(shutil.which("ffmpeg"), mezzanine, tmp_path / "gain.mp4", (1280, 720), 25, total, lambda progress, step: True)
 
-        assert caught.value.code == "ffmpeg_failed" and caught.value.message
+        assert caught.value.code == "transcode_failed" and caught.value.message
 
     @pytest.mark.parametrize(
         "look",
@@ -1116,7 +1130,7 @@ def test_a_shot_that_starts_after_the_end_of_its_source_does_not_swallow_the_mem
 
     run = subprocess.run(command, capture_output=True, timeout=120, preexec_fn=_limited(2), env=environment, cwd=cwd)
 
-    assert run.returncode == 0 and abs(core_bridge.probe_video(tmp_path / "late.mp4").duration - 2.0) < 0.2
+    assert run.returncode == 0 and abs(core_bridge.probe_video(tmp_path / "late.mkv").duration - 2.0) < 0.2
 
 
 @pytest.fixture
@@ -1414,8 +1428,9 @@ BODIES = [
     pytest.param({"format": "web", "resolution": ["720p"]}, id="resolution-list"),
     pytest.param({"format": "web", "resolution": "720P"}, id="resolution-case"),
     pytest.param({"format": "web", "resolution": ""}, id="resolution-empty"),
-    pytest.param({"format": "master"}, id="master"),
-    pytest.param({"format": "archive"}, id="archive"),
+    pytest.param({"format": "prores"}, id="format-unknown"),
+    pytest.param({"format": "web", "stems": "true"}, id="stems-text"),
+    pytest.param({"format": "web", "stems": None}, id="stems-null"),
 ]
 
 

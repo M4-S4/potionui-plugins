@@ -1,7 +1,9 @@
 import { EXCHANGE } from './exchange.js';
 
 export const VIDEO_FORMATS = ['master', 'web', 'social', 'archive'];
-export const REAL_FORMATS = ['web', 'social'];
+export const LIBRARY_FORMATS = ['web', 'social'];
+const EXTENSIONS = { master: 'mov', web: 'mp4', social: 'mp4', archive: 'mp4' };
+const SUFFIXES = { archive: '_archive' };
 export const RESOLUTIONS = ['720p', '1080p', '4K'];
 export const JOB_STATES = ['queued', 'running', 'done', 'failed', 'cancelled'];
 export const JOB_STEPS = ['assemble', 'mix', 'transcode', 'store'];
@@ -18,7 +20,7 @@ const text = (value) => (typeof value === 'string' ? value : '');
 const number = (value) => (value === null || value === undefined || value === '' || !Number.isFinite(Number(value)) ? null : Number(value));
 const idText = (value) => (typeof value === 'number' && Number.isFinite(value) ? String(value) : text(value) || null);
 
-export const isRealFormat = (format) => REAL_FORMATS.includes(format);
+export const keptInLibrary = (format) => LIBRARY_FORMATS.includes(format);
 export const isJobActive = (job) => job?.status === 'queued' || job?.status === 'running';
 
 export function slugify(name) {
@@ -34,7 +36,10 @@ export function slugify(name) {
 }
 
 export const exchangeFile = (name, format) => `${slugify(name)}.${EXCHANGE[format].ext}`;
-export const videoFile = (name, resolution) => `${slugify(name).slice(0, 80).replace(/[._]+$/, '') || FALLBACK_NAME}_${resolution}.mp4`;
+export function videoFile(name, resolution, format = 'web', stems = false) {
+	const base = `${slugify(name).slice(0, 80).replace(/[._]+$/, '') || FALLBACK_NAME}_${resolution}`;
+	return stems ? `${base}_${format}_stems.zip` : `${base}${SUFFIXES[format] ?? ''}.${EXTENSIONS[format] ?? 'mp4'}`;
+}
 
 export function exchangePath(projectId, format, media = 'path') {
 	return `/projects/${encodeURIComponent(projectId)}/exports/${format}${media === 'name' ? '?media=name' : ''}`;
@@ -66,6 +71,7 @@ export function normalizeJob(value) {
 		projectId: idText(value.project_id),
 		format: text(value.format) || null,
 		resolution: text(value.resolution) || null,
+		stems: value.stems === true,
 		status: JOB_STATES.includes(value.status) ? value.status : 'queued',
 		progress: progress === null ? 0 : Math.min(100, Math.max(0, progress)),
 		step: JOB_STEPS.includes(value.step) ? value.step : null,

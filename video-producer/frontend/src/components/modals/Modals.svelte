@@ -50,9 +50,7 @@
 	]);
 
 	const simList = $derived([
-		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')],
-		[t('shell.simulations.console.title'), t('shell.simulations.console.text')],
-		[t('shell.simulations.formats.title'), t('shell.simulations.formats.text')]
+		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')]
 	]);
 
 	const timelineIndex = $derived(

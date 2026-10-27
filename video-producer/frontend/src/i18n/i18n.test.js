@@ -219,8 +219,8 @@ test('every command and menu of lib/commands.js has a label, and every label has
 	assert.ok(errors.includes('shell.error.unknown') && errors.includes('shell.error.server_error'));
 });
 
-test('Help › Simulated features lists the three simulated items, each with a title and a text', () => {
-	const items = ['identity', 'console', 'formats'];
+test('Help › Simulated features lists the one simulated item left, with a title and a text', () => {
+	const items = ['identity'];
 	const declared = Object.keys(dictionaries.en).filter((key) => /^shell\.simulations\.[^.]+\.title$/.test(key)).map((key) => key.split('.')[2]);
 	assert.deepEqual(declared, items);
 	const modals = readFileSync(join(srcRoot, 'components', 'modals', 'Modals.svelte'), 'utf-8');

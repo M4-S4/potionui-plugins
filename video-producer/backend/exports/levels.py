@@ -64,10 +64,20 @@ def parse(stderr: str) -> Optional[Dict[str, float]]:
     return values
 
 
+def _goal(target: float, measured: Mapping[str, float]) -> float:
+    reach = TRUE_PEAK - PEAK_MARGIN - measured["input_tp"] + measured["input_i"]
+    return max(min(target, reach), SILENCE)
+
+
+def normalize_gain(target: float, measured: Mapping[str, float]) -> float:
+    """The gain in dB the second pass gives the whole mix in the linear mode: the loudness it aims at less the loudness measured, both as its options write them."""
+    _, low, high = MEASURED["input_i"]
+    return float(_num(_goal(target, measured))) - float(_num(min(max(measured["input_i"], low), high)))
+
+
 def normalize_filter(target: float, measured: Mapping[str, float], rate: int) -> str:
     """The filter of the second pass: one gain for the whole mix that brings it to the target, lowered so that its true peak stays under the ceiling, with a loudness range target no narrower than the measured one so that loudnorm keeps the linear mode."""
-    reach = TRUE_PEAK - PEAK_MARGIN - measured["input_tp"] + measured["input_i"]
-    goal = max(min(target, reach), SILENCE)
+    goal = _goal(target, measured)
     spread = min(max(LOUDNESS_RANGE, math.ceil(measured["input_lra"] * 10) / 10), MAX_RANGE)
     known = ":".join(
         f"{option}={_num(min(max(measured[key], low), high))}" for key, (option, low, high) in MEASURED.items()

@@ -7,7 +7,9 @@ from backend.exports import render, video
 from backend.exports.video import audible, build_command, clip_heard, filter_graph
 from backend.projects import DocError, migrate, validate_doc
 
-PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mp4", "graph": "/tmp/out/graph.txt"}
+PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mkv", "graph": "/tmp/out/graph.txt"}
+
+IMPULSE = "/tmp/out/reverb.wav"
 
 SHOT = {"name": "1.mp4", "path": "/media/1.mp4"}
 
@@ -15,7 +17,7 @@ ULIDS = ["01JB0000000000000000000001", "01JB0000000000000000000002", "01JB000000
 
 
 def _options(audio=None, **probed):
-    return {"format": "web", "resolution": "720p", "audio": audio or {}, "stills": [], **probed}
+    return {"format": "web", "resolution": "720p", "audio": audio or {}, "stills": [], "impulse": IMPULSE, **probed}
 
 
 def _graph(doc, files, sounds=None, **options):
@@ -24,7 +26,7 @@ def _graph(doc, files, sounds=None, **options):
 
 def _inputs(doc, files, sounds=None, **options):
     command = build_command(doc, files, _options(**options), {**PATHS, "audio": sounds or {}})
-    return [command[index + 1] for index, item in enumerate(command) if item == "-i"]
+    return [command[index + 1] for index, item in enumerate(command) if item == "-i" and command[index + 1] != IMPULSE]
 
 
 def _doc(make_doc, clips, audio=(), lanes=None, video_track=None):
@@ -171,7 +173,7 @@ def test_the_premix_of_many_items_keeps_the_solo_so_the_soloed_shots_and_lanes_s
     assert clip_heard(mixed, doc["clips"][0])
 
 
-def test_without_any_solo_the_premix_does_not_turn_one_on(make_doc, monkeypatch, tmp_path):
+def test_the_premix_keeps_each_item_on_its_track_so_that_its_strip_still_plays_it_and_turns_no_solo_on(make_doc, monkeypatch, tmp_path):
     async def ran(*args, **kwargs):
         return None
 
@@ -182,7 +184,8 @@ def test_without_any_solo_the_premix_does_not_turn_one_on(make_doc, monkeypatch,
 
     mixed, _ = asyncio.run(video._premix(doc, sounds, {**PATHS, "graph_option": "-/filter_complex"}, tmp_path, 2.0, None))
 
-    assert mixed["lanes"] == [{"id": "lanes", "vol": 0, "solo": False}]
+    assert mixed["lanes"] == doc["lanes"]
+    assert [(item["id"], item["lane"], item["gain"]) for item in mixed["audio"]] == [("lanes-0", "A1", 0), ("lanes-1", "A2", 0)]
     assert clip_heard(mixed, doc["clips"][0])
 
 

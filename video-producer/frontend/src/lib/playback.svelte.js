@@ -3,6 +3,8 @@ import { ui, doc, asset, seqDuration, clamp, toast } from './state.svelte.js';
 import { mediaFailure } from './playable.js';
 import { clipSoundAudible, laneAudible } from './tracks.js';
 import { advance } from './player.js';
+import mixRule from './mix.json';
+import { gainOf, reverbImpulse, stripOf } from './mix.js';
 
 export const meters = $state({ lanes: {}, video: 0, master: [0, 0] });
 
@@ -79,14 +81,12 @@ function ensureAudio() {
 }
 
 function makeReverb() {
-	const len = ctx.sampleRate * 2.4;
-	const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-	for (let ch = 0; ch < 2; ch++) {
-		const d = buf.getChannelData(ch);
-		for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-	}
+	const channels = reverbImpulse(mixRule, ctx.sampleRate);
+	const buf = ctx.createBuffer(2, channels[0].length, ctx.sampleRate);
+	channels.forEach((data, ch) => buf.copyToChannel(data, ch));
 	const input = ctx.createGain();
 	const conv = ctx.createConvolver();
+	conv.normalize = false;
 	conv.buffer = buf;
 	const out = ctx.createGain();
 	input.connect(conv).connect(out).connect(master);
@@ -95,34 +95,40 @@ function makeReverb() {
 function makeDelay() {
 	const input = ctx.createGain();
 	const d = ctx.createDelay(1);
-	d.delayTime.value = 0.32;
+	d.delayTime.value = mixRule.delay.seconds;
 	const fb = ctx.createGain();
-	fb.gain.value = 0.35;
+	fb.gain.value = mixRule.delay.feedback;
 	const out = ctx.createGain();
 	input.connect(d).connect(out).connect(master);
 	d.connect(fb).connect(d);
 	return { input, out };
 }
 
-const db = (v) => (v <= -59 ? 0 : Math.pow(10, v / 20));
+const db = (v) => gainOf(mixRule, v);
 
 function strip(lane) {
 	let s = strips.get(lane.id);
 	if (s) return s;
 	const input = ctx.createGain();
-	const lo = ctx.createBiquadFilter();
-	lo.type = 'lowshelf';
-	lo.frequency.value = 200;
-	const mid = ctx.createBiquadFilter();
-	mid.type = 'peaking';
-	mid.frequency.value = 1200;
-	const hi = ctx.createBiquadFilter();
-	hi.type = 'highshelf';
-	hi.frequency.value = 5000;
+	input.channelCount = 2;
+	input.channelCountMode = 'explicit';
+	input.channelInterpretation = 'speakers';
+	const band = ({ type, frequency, q }) => {
+		const node = ctx.createBiquadFilter();
+		node.type = type;
+		node.frequency.value = frequency;
+		if (q) node.Q.value = q;
+		return node;
+	};
+	const lo = band(mixRule.eq.low);
+	const mid = band(mixRule.eq.mid);
+	const hi = band(mixRule.eq.high);
 	const filt = ctx.createBiquadFilter();
-	filt.type = 'lowpass';
-	filt.frequency.value = 20000;
+	filt.type = mixRule.filter.type;
+	filt.Q.value = mixRule.filter.qDb;
+	filt.frequency.value = ctx.sampleRate / 2;
 	const comp = ctx.createDynamicsCompressor();
+	comp.knee.value = mixRule.comp.knee;
 	const pan = ctx.createStereoPanner();
 	const fader = ctx.createGain();
 	const an = ctx.createAnalyser();
@@ -251,20 +257,21 @@ function updateAudio() {
 		}
 	for (const lane of doc.lanes) {
 		const s = strip(lane);
-		s.fader.gain.setTargetAtTime(laneAudible(doc, lane) ? db(lane.vol) : 0, now, 0.03);
-		s.pan.pan.setTargetAtTime(lane.pan, now, 0.03);
-		const eq = lane.inserts.find((i) => i.type === 'eq');
-		s.lo.gain.value = eq?.on ? eq.low : 0;
-		s.mid.gain.value = eq?.on ? eq.mid : 0;
-		s.hi.gain.value = eq?.on ? eq.high : 0;
-		const fl = lane.inserts.find((i) => i.type === 'filter');
-		s.filt.frequency.value = fl?.on ? fl.cutoff : 20000;
-		const cp = lane.inserts.find((i) => i.type === 'comp');
-		s.comp.threshold.value = cp?.on ? cp.threshold : 0;
-		s.comp.ratio.value = cp?.on ? cp.ratio : 1;
-		const aux = (id) => doc.aux.find((a) => a.id === id);
-		s.sendR.gain.value = aux('R1')?.mute ? 0 : db(lane.sends.R1) * db(aux('R1')?.vol ?? 0);
-		s.sendD.gain.value = aux('D1')?.mute ? 0 : db(lane.sends.D1) * db(aux('D1')?.vol ?? 0);
+		const st = stripOf(mixRule, lane, doc.aux, laneAudible(doc, lane));
+		s.fader.gain.setTargetAtTime(st.fader, now, 0.03);
+		s.pan.pan.setTargetAtTime(st.pan, now, 0.03);
+		s.lo.gain.value = st.eq.low;
+		s.mid.gain.value = st.eq.mid;
+		s.hi.gain.value = st.eq.high;
+		s.filt.frequency.value = st.cutoff ?? ctx.sampleRate / 2;
+		s.comp.threshold.value = st.comp ? st.comp.threshold : 0;
+		s.comp.ratio.value = st.comp ? st.comp.ratio : 1;
+		if (st.comp) {
+			s.comp.attack.value = st.comp.attack / 1000;
+			s.comp.release.value = st.comp.release / 1000;
+		}
+		s.sendR.gain.value = st.sends[mixRule.reverb.id];
+		s.sendD.gain.value = st.sends[mixRule.delay.id];
 	}
 	const live = new Set();
 	for (const c of doc.audio) {

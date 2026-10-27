@@ -11,8 +11,8 @@ import {
 	finishedNow,
 	historyOf,
 	isJobActive,
-	isRealFormat,
 	jobFilePath,
+	keptInLibrary,
 	jobPath,
 	lastSegment,
 	mergeJob,
@@ -81,8 +81,18 @@ test('file names and routes follow the contract', () => {
 	assert.equal(jobPath('j 1'), '/exports/j%201');
 	assert.equal(jobFilePath('j1'), '/exports/j1/file');
 	assert.equal(README_HREF, '/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME');
-	assert.ok(isRealFormat('web') && isRealFormat('social'));
-	assert.ok(!isRealFormat('master') && !isRealFormat('archive'));
+	assert.ok(keptInLibrary('web') && keptInLibrary('social'));
+	assert.ok(!keptInLibrary('master') && !keptInLibrary('archive'));
+});
+
+test('videoFile: the name the server gives each format, the stems in a ZIP named after the video', () => {
+	assert.equal(videoFile('Aube sur le port', '4K', 'social'), 'Aube_sur_le_port_4K.mp4');
+	assert.equal(videoFile('Aube sur le port', '1080p', 'master'), 'Aube_sur_le_port_1080p.mov');
+	assert.equal(videoFile('Aube sur le port', '720p', 'archive'), 'Aube_sur_le_port_720p_archive.mp4');
+	assert.equal(videoFile('Aube sur le port', '1080p', 'master', true), 'Aube_sur_le_port_1080p_master_stems.zip');
+	assert.equal(videoFile('Aube sur le port', '1080p', 'archive', true), 'Aube_sur_le_port_1080p_archive_stems.zip');
+	assert.equal(videoFile('Aube sur le port', '1080p', 'web', true), 'Aube_sur_le_port_1080p_web_stems.zip');
+	assert.equal(videoFile('x'.repeat(120), '1080p', 'archive'), `${'x'.repeat(80)}_1080p_archive.mp4`);
 });
 
 test('normalizeJob: camelCase, bounded progress, known states and steps only', () => {
@@ -91,6 +101,7 @@ test('normalizeJob: camelCase, bounded progress, known states and steps only', (
 		project_id: 'p1',
 		format: 'web',
 		resolution: '1080p',
+		stems: true,
 		status: 'done',
 		progress: 140,
 		step: 'store',
@@ -105,6 +116,7 @@ test('normalizeJob: camelCase, bounded progress, known states and steps only', (
 		projectId: 'p1',
 		format: 'web',
 		resolution: '1080p',
+		stems: true,
 		status: 'done',
 		progress: 100,
 		step: 'store',

@@ -69,12 +69,14 @@ export async function exportExchange(format) {
 	}
 }
 
+const fileOf = (job) => job.file?.name || videoFile(doc.name, job.resolution, job.format ?? 'web', job.stems);
+
 function settle(job) {
 	const before = exportState.job;
 	if (before && before.id === job.id) exportState.job = job;
 	exportState.jobs = mergeJob(exportState.jobs, job);
 	if (finishedNow(before, job) && (!shown() || !canShowLibrary())) {
-		toast(t('exports.toast.done', { file: job.file?.name ?? videoFile(doc.name, job.resolution) }), 'success', { label: t('exports.download'), run: () => downloadJob(job) });
+		toast(t('exports.toast.done', { file: fileOf(job) }), 'success', { label: t('exports.download'), run: () => downloadJob(job) });
 	}
 	schedule();
 }
@@ -97,13 +99,13 @@ export async function listJobs() {
 	schedule();
 }
 
-export async function startVideoExport({ format, resolution }) {
+export async function startVideoExport({ format, resolution, stems = false }) {
 	if (exportState.starting || isJobActive(exportState.job)) return;
 	exportState.starting = true;
 	try {
 		if (!(await saved())) return;
 		const projectId = project.id;
-		const result = await getClient().exportVideo(projectId, { format, resolution });
+		const result = await getClient().exportVideo(projectId, { format, resolution, stems });
 		if (projectId !== project.id) return;
 		if (!result.ok) {
 			if (result.error.code === 'export_running') await listJobs();
@@ -176,7 +178,7 @@ export async function cancelJob(job) {
 export async function deleteJob(job) {
 	const ok = await confirm({
 		title: t('exports.delete.title'),
-		message: t('exports.delete.message', { file: job.file?.name ?? videoFile(doc.name, job.resolution) }),
+		message: t('exports.delete.message', { file: fileOf(job) }),
 		variant: 'danger',
 		confirmLabel: t('exports.delete.confirm'),
 		cancelLabel: t('exports.delete.cancel')
@@ -190,7 +192,7 @@ export async function deleteJob(job) {
 }
 
 export async function downloadJob(job) {
-	const result = await getClient().download(jobFilePath(job.id), job.file?.name || videoFile(doc.name, job.resolution));
+	const result = await getClient().download(jobFilePath(job.id), fileOf(job));
 	if (!result.ok) return failed(result.error);
 	toast(t('modals.export.downloaded', { file: result.data.filename }), 'success');
 }
