@@ -62,6 +62,18 @@ _COLUMNS = {
         duration_ms INTEGER NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     """,
+    "video_producer_looks": """
+        key TEXT PRIMARY KEY,
+        user_id TEXT,
+        kind TEXT NOT NULL,
+        source TEXT,
+        model TEXT,
+        status TEXT NOT NULL,
+        frames TEXT,
+        error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    """,
     "video_producer_export_jobs": """
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -121,6 +133,7 @@ _INDEXES = (
     ("idx_video_producer_jobs_take", "video_producer_jobs", "take_id"),
     ("idx_video_producer_jobs_generation", "video_producer_jobs", "generation_id"),
     ("idx_video_producer_calibration_key", "video_producer_calibration", "preset_id, backend_id, resolution"),
+    ("idx_video_producer_looks_status", "video_producer_looks", "status, updated_at"),
     ("idx_video_producer_export_jobs_project", "video_producer_export_jobs", "project_id, created_at"),
     ("idx_video_producer_export_jobs_status", "video_producer_export_jobs", "status, created_at"),
 )

@@ -8,6 +8,8 @@
 	import { labelOf } from '../../lib/labels.js';
 	import { isStale } from '../../lib/shots.js';
 	import { seamChainOf } from '../../lib/chain.svelte.js';
+	import { currentLooks, lookState, measureLooks } from '../../lib/looks.svelte.js';
+	import { percent, takeLook } from '../../lib/looks.js';
 	import { seam } from '../../lib/continuity.svelte.js';
 	import { seamImage } from '../../lib/seam.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
@@ -33,6 +35,10 @@
 	const nextChain = $derived(next ? seamChainOf(next) : null);
 	const chained = $derived(Boolean(nextChain) && !['off', 'textOnly', 'own'].includes(nextChain.state));
 	const thumb = $derived(takeThumb(take));
+	const looks = $derived(currentLooks());
+	const look = $derived(takeLook(looks, take.id));
+	const unmeasured = $derived(Boolean(look) && ['missing', 'failed', 'unavailable'].includes(look.status) && Boolean(looks?.embedder.available));
+	const lowCard = (card) => card.status === 'done' && card.score < looks.thresholds.cast;
 	const endOf = (c) => seamImage(doc, c.id, 'last')?.src ?? clipThumb(c);
 	const startOf = (c) => seamImage(doc, c.id, 'first')?.src ?? clipThumb(c);
 	const verdict = (i) => {
@@ -108,6 +114,24 @@
 			</div>
 		{/each}
 		{#if !placed}<p class="text-xs text-fg-subtle">{t('panels.director.pick.seamsHint')}</p>{/if}
+	</section>
+{/if}
+
+{#if look?.cards.length}
+	<section class="space-y-2" data-take-looks>
+		<div class="flex items-center gap-2">
+			<span class="vp-section-title min-w-0 flex-1">{t('panels.director.pick.looks')}</span>
+			{#if unmeasured}<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', disabled: lookState.asking, onclick: measureLooks }}>{t('panels.director.pick.measure')}</HostUi>{/if}
+		</div>
+		<ul class="space-y-1 text-xs">
+			{#each look.cards as card (card.cardId)}
+				<li class="flex items-center gap-2" data-take-look={card.status}>
+					<span class="min-w-0 flex-1 truncate text-fg-muted">{card.label}</span>
+					<span class="shrink-0 {lowCard(card) ? 'text-warning' : 'text-fg-subtle'}">{#if card.status === 'done'}<span class="vp-tc">{percent(card.score)} %</span>{#if lowCard(card)}{` · ${t('panels.director.pick.lookLow')}`}{/if}{:else}{t(`panels.director.pick.lookState.${card.status}`)}{/if}</span>
+				</li>
+			{/each}
+		</ul>
+		<p class="text-xs text-fg-subtle">{t('panels.director.pick.lookHint')}</p>
 	</section>
 {/if}
 

@@ -20,6 +20,7 @@
 	"review.measuredLastTip": "Mesuré par cette page sur la dernière image du plan précédent et sur la vignette de celui-ci",
 	"review.measuredFirstTip": "Mesuré par cette page sur la vignette du plan précédent et sur la première image de celui-ci",
 	"review.simulatedTip": "La similarité d’identité est simulée",
+	"review.measuredLookTip": "Mesuré par SigLIP sur les images au raccord : l’allure générale, pas une reconnaissance faciale",
 	"review.clear": "L’assistant n’a rien trouvé à corriger.",
 	"review.dismiss": "Fermer la vérification",
 	"seam.no_instruction": "« {shot} » n’a pas de prompt.",

@@ -9,7 +9,7 @@ import { EXPORT_ERROR_CODES } from '../lib/exports.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, '..');
-const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.', 'generation.failed.', 'exports.error.', 'generation.label.', 'generation.labels.group.', 'keyframes.note.', 'keyframes.state.', 'keyframes.pictureRole.', 'keyframes.reason.', 'keyframes.unusable.', 'keyframes.frameNote.', 'keyframes.retrieve.previousState.', 'keyframes.retrieve.nextState.', 'lib.refType.', 'lib.refRole.', 'lib.language.'];
+const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.', 'generation.failed.', 'exports.error.', 'generation.label.', 'generation.labels.group.', 'keyframes.note.', 'keyframes.state.', 'keyframes.pictureRole.', 'keyframes.reason.', 'keyframes.unusable.', 'keyframes.frameNote.', 'keyframes.retrieve.previousState.', 'keyframes.retrieve.nextState.', 'lib.refType.', 'lib.refRole.', 'lib.language.', 'panels.director.pick.lookState.'];
 const PLURAL_SUFFIX = /\.(zero|one|two|few|many|other)$/;
 const SKIPPED_DIRS = new Set(['dist', 'node_modules']);
 
@@ -219,8 +219,8 @@ test('every command and menu of lib/commands.js has a label, and every label has
 	assert.ok(errors.includes('shell.error.unknown') && errors.includes('shell.error.server_error'));
 });
 
-test('Help › Simulated features lists the one simulated item left, with a title and a text', () => {
-	const items = ['identity'];
+test('Help › Simulated features lists no simulated item', () => {
+	const items = [];
 	const declared = Object.keys(dictionaries.en).filter((key) => /^shell\.simulations\.[^.]+\.title$/.test(key)).map((key) => key.split('.')[2]);
 	assert.deepEqual(declared, items);
 	const modals = readFileSync(join(srcRoot, 'components', 'modals', 'Modals.svelte'), 'utf-8');

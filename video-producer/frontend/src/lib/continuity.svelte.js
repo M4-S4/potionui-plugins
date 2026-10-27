@@ -9,6 +9,8 @@ import { LUM_GAP, WARM_GAP, colorPlanOf, seamPick, seamSourceOf } from './contin
 import { chainState } from './chain.js';
 import { chainBusy } from './chain.svelte.js';
 import { showShot } from './monitor.svelte.js';
+import { currentLooks } from './looks.svelte.js';
+import { lowSeam, percent, seamLook } from './looks.js';
 
 const stats = $state({});
 const pending = new Set();
@@ -69,12 +71,11 @@ const takeOf = (clip) => {
 	return a?.generated ? findTake(a.resultId) : null;
 };
 
-const identityScore = (a, b) => {
-	const ra = takeOf(a);
-	const rb = takeOf(b);
-	if (!ra?.look || !rb?.look) return null;
-	return ra.look === rb.look ? 0.94 : 0.78;
-};
+function lookOf(a, b) {
+	const looks = currentLooks();
+	const found = seamLook(looks, a, b);
+	return found ? { seam: found, low: lowSeam(looks, found) } : null;
+}
 
 export function seam(i) {
 	const a = doc.clips[i - 1];
@@ -90,9 +91,9 @@ export function seam(i) {
 		if (Math.abs(dl) > LUM_GAP) out.issues.push({ kind: 'lum', text: dl > 0 ? t('lib.continuity.brighter', { shot: clipLabel(b) }) : t('lib.continuity.darker', { shot: clipLabel(b) }), fix: true });
 		if (Math.abs(dw) > WARM_GAP) out.issues.push({ kind: 'warm', text: dw > 0 ? t('lib.continuity.warmer', { shot: clipLabel(b) }) : t('lib.continuity.cooler', { shot: clipLabel(b) }), fix: true });
 	}
-	const id = identityScore(a, b);
-	out.measured = !out.pending || id != null;
-	if (id != null && id < 0.85) out.issues.push({ kind: 'identity', text: t('lib.continuity.identity', { from: clipLabel(a), to: clipLabel(b), score: Math.round(id * 100) }), fix: false });
+	const look = lookOf(a, b);
+	out.measured = !out.pending || look?.seam.status === 'done';
+	if (look?.low) out.issues.push({ kind: 'identity', text: t('lib.continuity.identity', { from: clipLabel(a), to: clipLabel(b), score: percent(look.seam.score) }), fix: false, score: look.seam.score });
 	const chain = chainState(doc, i);
 	if (chain?.state === 'stale') out.issues.push({ kind: 'chain_stale', text: t('lib.chain.stale', { shot: clipLabel(b), previous: clipLabel(a) }), fix: false });
 	if (chain?.state === 'offer' && !chainBusy(b.id)) out.issues.push({ kind: 'chain_offer', text: t('lib.chain.offer', { shot: clipLabel(b), previous: clipLabel(a) }), fix: false });

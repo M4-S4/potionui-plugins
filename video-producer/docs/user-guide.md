@@ -501,7 +501,7 @@ With each message, the page sends the assistant a summary of your project:
 - the synopsis and the global direction: the five fields and the H3 profile;
 - the bible: the visual tag and the words of each card;
 - the shots in timeline order: number, name, start and end, stage, how many takes it has and which one is final, whether it has a first and a last frame, the beginning of its shot prompt and the visual tags it casts;
-- the conflicts that the page flags between a shot prompt and the direction, and the color and identity matches it measured between neighbor shots;
+- the conflicts that the page flags between a shot prompt and the direction, and the color and look matches it measured between neighbor shots;
 - the state of the production: target, quality, progress, queue and the engine of the Production bar.
 
 The summary is text and it is kept short: 40 shots at most, 800 characters of the synopsis, 240 of each field of the direction and 160 of each shot prompt, so a longer text is cut in what the assistant reads. It holds none of your images, videos, references or audio, and the assistant sees no picture. When it needs more, the assistant reads the project itself (the tool **Read project**): the full prompts, the takes of each shot with their letter and label, the references, and the names of your media, which it can use as frames and references. If you leave the Video Producer page, the summary stops: the assistant says the page is not open and asks you to open a project.
@@ -638,7 +638,16 @@ An alert appears only when two neighbor shots do not match: "“Shot” is brigh
 
 **What the viewer shows.** Adjusting the color of a shot (a preset, a fine setting, **Reset**, **To all shots**, **Match**, **Auto match**, its **Strength** or **Remove**) brings that shot to the viewer, in every workspace: it becomes the selected shot, the playhead moves to its start when it was elsewhere, and a preview, a comparison or a seam that does not show it closes. The seam of the band shows both its shots: adjusting either keeps it open, without changing the chosen shot or the playhead. In the **Review**, the viewer opens if it was closed. Opening the preview of a take (Review, **Takes** tab, stack of the band) chooses its shot: that is the shot the Inspector shows and the one you adjust. The viewer shows the grade of a shot on the images of that shot: the cut under the playhead, the preview of the take placed on the shot (the one it plays), each placed take of a comparison, and both sides of a seam in the band, each with the grade of its own shot. A take that is not placed and a source media stay raw; a graded take says so next to its name ("shot grade"). With an **Auto match**, the preview of a placed take plays in a loop, without the browser's controls. The Storyboard grid and the Direction, Bible and References views of Director AI have no viewer: the playhead is already on the shot when you go to the band or to **Play**.
 
-The measure is made on real images, for each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A similarity percentage between two generated shots can also appear in the alerts ("Check the identity between … and … (similarity 78 %)"): it is simulated (chapter 17). Color is real.
+The measure is made on real images, for each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A resemblance percentage between two generated shots can also appear in the alerts ("Look to check between … and … (resemblance 56 %)"): it is measured by SigLIP on the images at the seam (see The look of the takes below).
+
+### The look of the takes
+
+The look of a take is measured by the server with SigLIP, the image model of the gallery search, and compared at each seam and with the bible. SigLIP compares the overall look of two images (costume, light, setting, the face as part of it): **it is not a face recognition**, so two people dressed and lit alike can pass, and the same character under another light can be flagged.
+
+- **At a seam.** When two neighbor shots both play a take, the image the first ends on (at the end of its cut) is compared with the image the second starts on. Under 70 % the seam says "Look to check between “Shot 2” and “Shot 3” (resemblance 56 %)", in the seam panel of the Storyboard, the band monitor, the Review and To check, with **Compare the takes**, which opens the two takes side by side in the monitor of the band.
+- **With the bible.** A take is compared with the pictures of each character card cast in its shot. The review panel of the take has a section **Resemblance to the bible** with each card and its score; under 60 % it says "drifts from the card", and To check lists "03: drifts from the card “Marin” (resemblance 54 %)" for a placed take. A card without a picture says so.
+- **When it is measured.** Each take that finishes is measured in the background, a few seconds later, and never while a generation is running or waiting. Takes made before this version, and pictures added to a card later, are measured on demand: **Measure** in To check (with the number of looks not measured yet) or in the review panel of the take.
+- **Without SigLIP on the server**, the looks say "SigLIP not installed" and nothing is measured; nothing is downloaded.
 
 ### Auto match
 
@@ -923,21 +932,13 @@ Every button has an accessible name, and an icon button shows its tooltip when i
 
 ## 17. What is simulated
 
-One part keeps its interface but does not do the real thing. It carries a gray dashed badge, **Simulated**, never a yellow one: yellow is kept for real points to check. **Help › Simulated features** opens the list of the item below. What the engine you picked cannot do is not a simulation, and it has a plain gray badge instead: a greyed profile ("Ref2VA: MiniMax H3 only"), **Upscaler not available** and **Not sent with this engine** (chapters 8 and 9).
-
-The badge **Simulated** appears on the identity line of the assistant's check (chapter 10).
+No part of the page is simulated any more: **Help › Simulated features** lists nothing. What the engine you picked cannot do is not a simulation, and it has a plain gray badge instead: a greyed profile ("Ref2VA: MiniMax H3 only"), **Upscaler not available** and **Not sent with this engine** (chapters 8 and 9).
 
 Everything else works for real: the generation itself (the engines your admin enabled, the estimate, the takes with their progress, cancel and retry, the finals by upscale or re-render, the quota and the notifications), saved projects, **File › Open…**, **File › Version history…** and **File › New project…**, the import of your images, videos and audio files with their thumbnails and their playback, editing on the timeline (trim, fades, split, snapping, range, markers, undo and redo), the selection and the Inspector, the Storyboard (the **Propose a breakdown** button is a simple cut into sentences, not a simulation), the PotionUI assistant with its thirteen tools (chapter 10), the prompt library and the composer, the direction conflict checks, the color match, the mixing console playing your audio files, the seam frames, the videos (web and social MP4, ProRes master, H.265 archive, which ffmpeg assembles on the server through the console) with their audio stems, and the FCPXML, OpenTimelineIO, EDL and SRT files, which are real files.
 
-The window **Simulated features** lists one item. The table gives what the window says and what is real next to it.
-
-| Item in the window | What the window says | What is real next to it |
-|---|---|---|
-| **Identity score** | The identity similarity between two shots, in the continuity check and in the assistant’s review, is simulated. The color match really analyzes the images. | The color check analyzes the images for real: the seam frames of the shots and their thumbnails (chapter 12). No identity measure is available to plugins, so the percentage stays simulated. |
-
 The **Advanced workshop** of earlier versions is gone, with its settings that the engine did not use. What acted is now in the Production bar and the **Edit Engine** window (engine, profile, quality, drafts per shot), summed up on the **Engine** line of Director AI, and in the shot editor (engine, profile, quality and seed of one shot). The removed settings were: consistency between windows, lock character identity, motion guide first, the generation windows with their length and overlap, the final resolution, the seed, the steps, the guidance (CFG), the LoRAs, the track that drives the performance, lip sync, follow the rhythm of the cut, audio / picture offset, result naming, post-processing, insert variant A automatically, and the Hybrid builder weights with their saved profiles. A project made before keeps their values, which nothing reads; a preset only exposes the controls it declares, and MiniMax H3, for example, has no guidance and no negative prompt. The seed of a take is drawn by the server and shown on its card, unless the shot sets its own, and the resolutions follow the draft and final rules of chapter 8.
 
-The assistant, for its part, is not simulated: it is the PotionUI chat in the Video Producer assistant mode, which drives the page from the shots to the export; you approve what writes over a prompt, deletes shots or spends GPU minutes, and Ctrl+Z takes back the rest (chapter 10). The one simulated point in what it shows is the identity similarity between two takes.
+The assistant, for its part, is not simulated: it is the PotionUI chat in the Video Producer assistant mode, which drives the page from the shots to the export; you approve what writes over a prompt, deletes shots or spends GPU minutes, and Ctrl+Z takes back the rest (chapter 10).
 
 ## 18. Troubleshooting
 

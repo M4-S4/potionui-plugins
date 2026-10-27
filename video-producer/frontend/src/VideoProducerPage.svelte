@@ -10,6 +10,7 @@
 	import { ui, doc, applyMe, bottomKey, bandView, generates, dispose as disposeState, toast } from './lib/state.svelte.js';
 	import { project, bindClient, currentJson, disposeProject, flushSave, noteChange, openLatestOrStarter } from './lib/project.svelte.js';
 	import { startProduction } from './lib/production.svelte.js';
+	import { startLooks } from './lib/looks.svelte.js';
 	import { setPluginRoot } from './lib/focus.js';
 	import { needsProbe, probeAsset } from './lib/importer.js';
 	import { dispose as disposePlayback } from './lib/playback.svelte.js';
@@ -120,6 +121,7 @@
 		const onvisibility = () => document.visibilityState === 'hidden' && flushSave();
 		document.addEventListener('visibilitychange', onvisibility);
 		const stopProduction = startProduction();
+		const stopLooks = startLooks();
 		load();
 		return () => {
 			alive = false;
@@ -127,6 +129,7 @@
 			saveSeq += 1;
 			document.removeEventListener('visibilitychange', onvisibility);
 			stopProduction();
+			stopLooks();
 			disposeExports();
 			flushSave();
 			disposeProject();

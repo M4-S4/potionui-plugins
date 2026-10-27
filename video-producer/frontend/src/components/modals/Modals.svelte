@@ -49,9 +49,7 @@
 		[t('shell.tour.delivery.title'), t('shell.tour.delivery.text'), () => (ui.modal = { type: 'export' })]
 	]);
 
-	const simList = $derived([
-		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')]
-	]);
+	const simList = $derived([]);
 
 	const timelineIndex = $derived(
 		[

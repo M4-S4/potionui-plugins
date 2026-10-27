@@ -107,8 +107,6 @@
 	"simulations.title": "Simulated features",
 	"simulations.subtitle": "What really works and what is simulated",
 	"simulations.intro": "Editing, selection, the inspector, fades, the prompt library, the assistant, conflict checks, AI generation and takes, exports and the console work for real. The following are simulated and carry the {badge} badge:",
-	"simulations.identity.title": "Identity score",
-	"simulations.identity.text": "The identity similarity between two shots, in the continuity check and in the assistant’s review, is simulated. The color match really analyzes the images.",
 	"open.title": "Open a project",
 	"open.current": "Current",
 	"recap.title": "Generation summary",

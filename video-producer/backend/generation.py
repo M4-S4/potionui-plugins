@@ -3,7 +3,7 @@ import logging
 import secrets
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple
 
-from . import chaining, core_bridge, director, engine_options, estimate, limits, models, notifications, presets, projects, settings, soundtrack, takes
+from . import chaining, core_bridge, director, engine_options, estimate, limits, looks, models, notifications, presets, projects, settings, soundtrack, takes
 from .core_bridge import AccountType, GenerationNotFoundException, IdempotencyKeyConflict, User
 from .director import DirectorError, ShotPlan, note
 from .estimate import Evaluation
@@ -384,6 +384,7 @@ def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
     _adjust(take, duration_ms)
     takes.close_jobs(take["id"])
     _notify(take, done=True)
+    looks.queue_take(take)
     return True
 
 

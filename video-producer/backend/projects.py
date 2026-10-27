@@ -48,6 +48,7 @@ PROJECTS = "video_producer_projects"
 VERSIONS = "video_producer_versions"
 TAKES = "video_producer_takes"
 JOBS = "video_producer_jobs"
+LOOKS = "video_producer_looks"
 
 ID = {"type": "string", "minLength": 1}
 REF = {"type": ["string", "null"], "minLength": 1}
@@ -799,6 +800,7 @@ def delete_project(project_id: str) -> bool:
 
     with db.get_cursor() as cursor:
         cursor.execute(f"DELETE FROM {JOBS} WHERE take_id IN (SELECT id FROM {TAKES} WHERE project_id = ?)", (project_id,))
+        cursor.execute(f"DELETE FROM {LOOKS} WHERE key IN (SELECT 'take:' || id FROM {TAKES} WHERE project_id = ?)", (project_id,))
         cursor.execute(f"DELETE FROM {TAKES} WHERE project_id = ?", (project_id,))
         cursor.execute(f"DELETE FROM {VERSIONS} WHERE project_id = ?", (project_id,))
         cursor.execute(f"DELETE FROM {PROJECTS} WHERE id = ?", (project_id,))
