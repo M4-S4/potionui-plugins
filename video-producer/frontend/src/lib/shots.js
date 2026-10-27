@@ -125,6 +125,7 @@ export function inputsChanged(before, after) {
 		before.last !== after.last ||
 		!sameList([...before.exclude].sort(), [...after.exclude].sort()) ||
 		!sameList([...(before.excludeLanes ?? [])].sort(), [...(after.excludeLanes ?? [])].sort()) ||
+		!sameList([...(before.excludeVrefs ?? [])].sort(), [...(after.excludeVrefs ?? [])].sort()) ||
 		!sameList(before.own.map((r) => `${r.id}:${r.assetId}:${r.type}`), after.own.map((r) => `${r.id}:${r.assetId}:${r.type}`)) ||
 		!sameCast(before.cast, after.cast) ||
 		!sameDialogue(before.dialogue, after.dialogue) ||
@@ -208,6 +209,7 @@ export function shotDraft(doc, clip, engine) {
 		last: frameAsset(doc, clip, 'last'),
 		exclude: excludedOf(clip),
 		excludeLanes: excludedLanesOf(clip),
+		excludeVrefs: excludedVrefsOf(clip),
 		own: shotReferences(doc, clip).own.map(ownCopy),
 		drafts: draftsOf(clip, engine),
 		engine: shotEngineOf(clip),
@@ -220,7 +222,7 @@ export function shotDraft(doc, clip, engine) {
 
 export function rebaseDraft(before, draft, current) {
 	const { value, conflicts } = merge3(before, draft, current);
-	const lists = { exclude: value.exclude ?? [], excludeLanes: value.excludeLanes ?? [], own: value.own ?? [] };
+	const lists = { exclude: value.exclude ?? [], excludeLanes: value.excludeLanes ?? [], excludeVrefs: value.excludeVrefs ?? [], own: value.own ?? [] };
 	return { draft: { ...value, ...lists, cast: castOf({ cast: value.cast }) }, conflicts };
 }
 
@@ -268,6 +270,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	if (resized || before.last !== draft.last) placeFrame(doc, clip, 'last', draft.last, makeId);
 	setExcluded(clip, draft.exclude);
 	if ('excludeLanes' in draft) setExcludedLanes(clip, draft.excludeLanes);
+	if ('excludeVrefs' in draft) setExcludedVrefs(clip, draft.excludeVrefs);
 	writeReferences(doc, clip, draft.own);
 	if (draft.drafts !== before.drafts || Number.isInteger(clip.drafts)) clip.drafts = count(draft.drafts) ?? projectDrafts(engine);
 	if ('engine' in draft) setShotEngine(clip, draft.engine);

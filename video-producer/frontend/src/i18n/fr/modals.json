@@ -208,5 +208,12 @@
 	"shot.reference.ignored": "Ce remplacement a été écrit pour un autre moteur : c’est le texte composé qui part.",
 	"shot.reference.again": "Remplacer à nouveau",
 	"shot.reference.waiting": "La partie composée s’affiche avec le prompt envoyé au moteur.",
-	"shot.reference.replacedWaiting": "Remplacée pour ce plan : le texte s’affiche avec le prompt envoyé au moteur."
+	"shot.reference.replacedWaiting": "Remplacée pour ce plan : le texte s’affiche avec le prompt envoyé au moteur.",
+	"shot.vref.title": "Pistes de référence vidéo",
+	"shot.vref.ignored.one": "{engine} ne reçoit pas de vidéo de référence : {labels} ne part pas dans ce plan. Rien n’est bloqué.",
+	"shot.vref.ignored.other": "{engine} ne reçoit pas de vidéo de référence : {labels} ne partent pas dans ce plan. Rien n’est bloqué.",
+	"shot.vref.switch": "Passer ce plan en {engine}",
+	"shot.vref.leave.one": "Laisser {labels} de côté",
+	"shot.vref.leave.other": "Laisser {labels} de côté",
+	"shot.vref.counts": "Vidéos {videos}/{maxVideos} · Images {images}/{maxImages} · Sons {sounds}/{maxSounds}"
 }

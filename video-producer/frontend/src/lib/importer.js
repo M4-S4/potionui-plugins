@@ -7,6 +7,8 @@ import { probeMedia } from './sources.svelte.js';
 import { LOCAL_KINDS, acceptFor, fileKind, importQueue, sortFiles, uploadForm } from './upload.js';
 import { trackUploads, updateUpload } from './uploads.svelte.js';
 import { fitSounds, laneCode, newSound } from './tracks.js';
+import { fitVrefItems } from './vreftracks.js';
+import { placeOnTrack } from './vreftracks.svelte.js';
 
 const KINDS = { media: ['image', 'video'], audio: ['audio'] };
 const probing = new Map();
@@ -238,6 +240,7 @@ export async function placeAsset(id, row, at) {
 	const a = asset(id);
 	if (!a) return null;
 	const start = round(at, 0.04);
+	if (row.vtrack) return placeOnTrack(row.vtrack, id, start);
 	if (row.id === 'frames' && a.kind !== 'audio') {
 		addFrame(id, start);
 		return start;
@@ -282,6 +285,7 @@ async function probe(id, a) {
 	if (info.srcDur !== null) {
 		target.srcDur = info.srcDur;
 		if (target.kind === 'audio') fitSounds(doc, id, info.srcDur);
+		if (target.kind === 'video') fitVrefItems(doc, id, info.srcDur);
 	}
 	if (info.width && info.height) {
 		target.width = info.width;

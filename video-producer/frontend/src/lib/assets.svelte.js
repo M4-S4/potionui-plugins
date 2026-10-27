@@ -7,6 +7,7 @@ import { USE_KINDS, assetUses, removeAsset } from './usage.js';
 function useText(kind, count) {
 	if (kind === 'shots') return t('lib.media.use.shots', { count });
 	if (kind === 'sounds') return t('lib.media.use.sounds', { count });
+	if (kind === 'vrefs') return t('lib.media.use.vrefs', { count });
 	if (kind === 'references') return t('lib.media.use.references', { count });
 	if (kind === 'edges') return t('lib.media.use.edges', { count });
 	return t('lib.media.use.frames', { count });

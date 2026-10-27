@@ -65,7 +65,7 @@ export function drag(e, { onMove, onEnd, onClick, onCancel, undoable = true }) {
 export function snapTargets(excludeId) {
 	const t = [0, ui.playhead];
 	for (const c of doc.clips) if (c.id !== excludeId) t.push(c.start, c.start + c.dur);
-	for (const list of [doc.audio, doc.prompts, doc.titles])
+	for (const list of [doc.audio, doc.prompts, doc.titles, doc.vrefItems ?? []])
 		for (const x of list) if (x.id !== excludeId) t.push(x.start, x.start + x.dur);
 	for (const f of doc.frames) if (f.id !== excludeId) t.push(f.time);
 	for (const m of doc.markers) t.push(m.time);

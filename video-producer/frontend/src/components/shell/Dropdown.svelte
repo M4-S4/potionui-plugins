@@ -15,6 +15,7 @@
 	const button = $derived({ variant, size, icon: hostIconName(icon), class: className, ariaExpanded: open, ariaHaspopup: 'menu', onclick: () => (ui.menuOpen = open ? null : id) });
 
 	function run(item) {
+		if (item.disabled) return;
 		ui.menuOpen = null;
 		item.run();
 	}
@@ -31,11 +32,13 @@
 	{#if open}
 		<div class="vp-menu top-8 {align === 'right' ? 'right-0' : 'left-0'}" role="menu" use:overlayLayer in:fly={{ y: -4, duration: ms(120) }}>
 			{#each items as item}
-				<button type="button" role="menuitem" onclick={() => run(item)}>
+				<button type="button" role="menuitem" class={item.disabled ? 'opacity-50' : ''} aria-disabled={item.disabled ? 'true' : null} onclick={() => run(item)}>
 					{#if item.icon}<Icon name={item.icon} class="h-3.5 w-3.5 text-fg-muted" />{/if}
 					<span class="flex-1">{item.label}</span>
+					{#if item.badge}<span class="vp-menu-key rounded-sm border border-line-strong px-1">{item.badge}</span>{/if}
 					{#if item.key}<span class="vp-menu-key">{item.key}</span>{/if}
 				</button>
+				{#if item.hint}<p class="px-2 pb-1.5 pl-8 text-2xs text-fg-subtle" style:max-width="16rem">{item.hint}</p>{/if}
 			{/each}
 		</div>
 	{/if}

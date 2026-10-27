@@ -72,6 +72,7 @@ export function dragVerdict(dataTransfer, kinds) {
 }
 
 export function rowKinds(row) {
+	if (row?.vtrack) return ['video'];
 	if (row?.lane) return ['audio'];
 	if (row?.id === 'v1' || row?.id === 'frames') return ['image', 'video'];
 	return [];

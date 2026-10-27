@@ -215,5 +215,22 @@
 	"dialogue.none": "No line.",
 	"dialogue.edit": "Edit the dialogue…",
 	"takes.drafts": "Drafts of this shot",
-	"kind.picked": "Selection"
+	"kind.picked": "Selection",
+	"kind.vtrack": "Reference video track",
+	"kind.vref": "Reference video",
+	"vref.nameHint": "The name never changes the label: the track stays {label}, and a prompt cites it as @{label}.",
+	"vref.motionHint": "Motion: each shot receives what lies under it, from its start.",
+	"vref.continuationHint": "Continuation: each shot receives what comes just before it; the cut ends on the seam and the shot carries it on.",
+	"vref.length": "Length",
+	"vref.lengthChoice": "{seconds} · {frames} frames",
+	"vref.lengthHint": "The longest part sent to a shot, never less than {least}, and never longer than the shot.",
+	"vref.on": "Enabled",
+	"vref.engineHint": "Only MiniMax-H3 in Ref2VA receives a reference video. Other engines generate without it, and nothing is blocked.",
+	"vref.delete": "Delete {label}",
+	"vref.deleteHint.one": "Also removes its part.",
+	"vref.deleteHint.other": "Also removes its {count} parts.",
+	"vref.deleteEmpty": "The track is empty.",
+	"vref.track": "Track",
+	"vref.itemHint": "Each shot receives the part of this video that falls in its window.",
+	"vref.remove": "Remove from the track"
 }

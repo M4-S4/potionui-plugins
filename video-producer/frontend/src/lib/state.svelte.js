@@ -12,6 +12,7 @@ import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
 import { promptShot, reviewPickOf, viewOf, viewShot, witnessOf } from './director.js';
 import { picking, pruned } from './picking.js';
 import { same } from './merge.js';
+import { citingShots, removeVrefTrack, trackOf, vrefLabel } from './vreftracks.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -26,6 +27,7 @@ export const ui = $state({
 	witness: null,
 	issue: null,
 	reveal: null,
+	vrefField: null,
 	reviewPick: null,
 	selectedIn: null,
 	refSpace: 'all',
@@ -228,7 +230,7 @@ export function toast(message, level = 'info', action, hold = null) {
 	toastTimers.add(timer);
 }
 
-const collections = { clip: 'clips', audio: 'audio', title: 'titles', prompt: 'prompts', frame: 'frames', marker: 'markers', reference: 'references' };
+const collections = { clip: 'clips', audio: 'audio', title: 'titles', prompt: 'prompts', frame: 'frames', marker: 'markers', reference: 'references', vref: 'vrefItems' };
 const LINKED = ['prompts', 'frames'];
 
 export function select(kind, id) {
@@ -266,6 +268,7 @@ export function selected() {
 	const s = ui.selection;
 	if (!s) return null;
 	if (s.kind === 'lane') return doc.lanes.find((l) => l.id === s.id) ?? null;
+	if (s.kind === 'vtrack') return trackOf(doc, s.id);
 	const list = doc[collections[s.kind]];
 	return list?.find((x) => x.id === s.id) ?? null;
 }
@@ -318,14 +321,16 @@ export function relayout() {
 export function deleteSelection() {
 	const s = ui.selection;
 	if (s?.kind === 'lane') return deleteLane(s.id);
+	if (s?.kind === 'vtrack') return deleteVrefTrack(s.id);
 	const picked = pickedClips();
 	if (picked.length) return deleteShots(picked);
 	if (!s) return;
-	const list = listOf(s.kind);
+	const list = listOf(s.kind) ?? [];
 	const i = list.findIndex((x) => x.id === s.id);
 	if (i < 0) return;
 	act(() => {
 		const [removed] = list.splice(i, 1);
+		if (s.kind === 'vref' && !list.length) delete doc.vrefItems;
 		if (s.kind === 'clip') {
 			dropLinked(removed.id);
 			relayout();
@@ -350,7 +355,7 @@ function deleteShots(clips) {
 
 export function duplicateSelection() {
 	const s = ui.selection;
-	if (!s || s.kind === 'lane' || s.kind === 'reference') return;
+	if (!s || s.kind === 'lane' || s.kind === 'vtrack' || s.kind === 'reference') return;
 	const list = listOf(s.kind);
 	const i = list.findIndex((x) => x.id === s.id);
 	if (i < 0) return;
@@ -601,6 +606,32 @@ export async function deleteLane(id) {
 	return true;
 }
 
+let confirmingTrack = false;
+
+export async function deleteVrefTrack(id) {
+	const track = trackOf(doc, id);
+	if (!track || confirmingTrack) return false;
+	const label = vrefLabel(track.slot);
+	const count = (doc.vrefItems ?? []).filter((item) => item.track === id).length;
+	const cited = citingShots(doc, track.slot);
+	const named = track.name ? `${label} · ${track.name}` : label;
+	const parts = [count ? t('lib.vref.deleteItems', { count, track: named }) : t('lib.vref.deleteEmpty', { track: named })];
+	if (cited.length) parts.push(t('lib.vref.deleteCited', { count: cited.length, label, shots: cited.map((c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0')).join(', ') }));
+	parts.push(t('lib.vref.deleteSlot', { label }));
+	confirmingTrack = true;
+	let ok = false;
+	try {
+		ok = await confirm({ title: t('lib.vref.deleteTitle', { label }), message: parts.join(' '), variant: 'danger', confirmLabel: t('lib.vref.deleteConfirm') });
+	} finally {
+		confirmingTrack = false;
+	}
+	if (!ok || !trackOf(doc, id)) return false;
+	act(() => removeVrefTrack(doc, id));
+	if (ui.selection && !selected()) ui.selection = null;
+	toast(t('lib.toast.vrefDeleted', { label }), 'info', { label: t('shell.toast.undo'), run: undo });
+	return true;
+}
+
 export function productionRange() {
 	const p = ui.production;
 	if (p.target === 'range' && ui.range) return [ui.range.in, ui.range.out];
@@ -608,7 +639,7 @@ export function productionRange() {
 	const shot = directorShot();
 	if (shot !== undefined) return shot ? [shot.start, shot.start + shot.dur] : [0, 0];
 	const sel = selected();
-	if (sel && 'start' in sel && 'dur' in sel && ui.selection.kind !== 'audio') return [sel.start, sel.start + sel.dur];
+	if (sel && 'start' in sel && 'dur' in sel && ui.selection.kind !== 'audio' && ui.selection.kind !== 'vref') return [sel.start, sel.start + sel.dur];
 	const c = clipAt(ui.playhead) ?? doc.clips[0];
 	return c ? [c.start, c.start + c.dur] : [0, 0];
 }

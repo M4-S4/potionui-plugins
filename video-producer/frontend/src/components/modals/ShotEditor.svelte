@@ -3,10 +3,13 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, asset, clipLabel, promptIssues, relayout, secs, toast } from '../../lib/state.svelte.js';
 	import { takesOf, engineLabel, engineChoices, engineGroups, currentEngine, soundBehaviorOf, shotDurationLimit, settleRelease } from '../../lib/production.svelte.js';
-	import { PROFILES, optionKey, presetProfiles } from '../../lib/generation.js';
+	import { PROFILES, optionKey, presetProfiles, withProfile } from '../../lib/generation.js';
 	import { SEED_MAX, randomSeed, validSeed } from '../../lib/engine.js';
-	import { refTypeLabel } from '../../lib/references.js';
-	import { typeIcon } from '../../lib/reftags.js';
+	import { engineTitle, refTypeLabel, shotReceptionIn } from '../../lib/references.js';
+	import { TAG_CLASS, typeIcon } from '../../lib/reftags.js';
+	import { LIMITS } from '../../lib/reception.js';
+	import { vrefLabel } from '../../lib/vreftracks.js';
+	import { roleLabel, trackVerdict } from '../../lib/vreftracks.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { SHOT_CAP, applyShotDraft, inputsChanged, overrunsTake, rebaseDraft, shotDraft, shotReferences } from '../../lib/shots.js';
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
@@ -72,6 +75,30 @@
 		if (shot && baseline) applyShotDraft(copy, shot, baseline, $state.snapshot(draft), { makeId: ulid, maxDur: limit.max, engine: copy.engine });
 		return copy;
 	});
+
+	const REFERENCE_PROFILE = 'Ref2VA';
+	const draftShot = $derived(source.clips.find((c) => c.id === id) ?? null);
+	const reception = $derived(draftShot ? shotReceptionIn(source, draftShot) : null);
+	const vrefRows = $derived(reception?.videoTracks ?? []);
+	const ignoredRows = $derived(vrefRows.filter((entry) => entry.status === 'ignored'));
+	const ignoredLabels = $derived(ignoredRows.map((entry) => vrefLabel(entry.slot)).join(', '));
+	const switchTarget = $derived.by(() => {
+		const current = draftKey ? draftOption : currentEngine();
+		if (current && presetProfiles(current.info).includes(REFERENCE_PROFILE)) return { option: null, label: withProfile(current.label, REFERENCE_PROFILE) };
+		const other = engineChoices().find((o) => presetProfiles(o.info).includes(REFERENCE_PROFILE));
+		return other ? { option: other, label: withProfile(other.label, REFERENCE_PROFILE) } : null;
+	});
+
+	function toggleVref(trackId, on) {
+		const list = draft.excludeVrefs ?? [];
+		draft.excludeVrefs = on ? [...list.filter((x) => x !== trackId), trackId] : list.filter((x) => x !== trackId);
+	}
+
+	function switchToReferences() {
+		if (!switchTarget) return;
+		if (switchTarget.option) pickEngine(switchTarget.option.key);
+		setOwn('profile', REFERENCE_PROFILE);
+	}
 
 	function pickEngine(key) {
 		const { preset, model, backend, ...rest } = draft.engine;
@@ -276,6 +303,43 @@
 							<p class="text-xs text-fg-subtle">{t('modals.shot.noTracks')}</p>
 						{/if}
 					</div>
+					{#if vrefRows.length}
+						<div class="space-y-1" data-vref-section>
+							<div class="text-xs font-medium text-fg-muted">{t('modals.shot.vref.title')}</div>
+							<ul class="divide-y divide-line rounded-lg border border-line-strong">
+								{#each vrefRows as entry (entry.track.id)}
+									{@const verdict = trackVerdict(entry)}
+									{@const excluded = (draft.excludeVrefs ?? []).includes(entry.track.id)}
+									<li class="flex items-center gap-2 px-2 py-1.5 text-xs {excluded || entry.status === 'off' ? 'opacity-60' : ''}" data-vref-row={entry.slot}>
+										<span class="flex h-7 w-12 shrink-0 items-center justify-center"><span class="{TAG_CLASS} vp-tc {verdict.ok ? 'border-success text-success' : 'line-through'}">{vrefLabel(entry.slot)}</span></span>
+										<span class="min-w-0 flex-1">
+											<span class="block truncate text-fg">{entry.track.name ? `${entry.track.name} · ${roleLabel(entry.track.role)}` : roleLabel(entry.track.role)}</span>
+											<span class="block truncate {verdict.tone}">{verdict.text}</span>
+										</span>
+										<label class="flex shrink-0 items-center gap-1.5 text-fg-muted">
+											<input type="checkbox" checked={excluded} disabled={entry.status === 'off'} onchange={(e) => toggleVref(entry.track.id, e.currentTarget.checked)} aria-label={t('modals.shot.excludeLabel', { name: vrefLabel(entry.slot) })} />
+											{t('modals.shot.exclude')}
+										</label>
+									</li>
+								{/each}
+							</ul>
+							{#if ignoredRows.length}
+								<div class="flex gap-2 rounded-lg border border-line-hover p-2 text-xs text-fg-muted" data-vref-ignored>
+									<Icon name="info" class="mt-px h-3.5 w-3.5 shrink-0" />
+									<span class="min-w-0 space-y-1">
+										<span class="block">{t('modals.shot.vref.ignored', { engine: engineTitle(reception.engine), labels: ignoredLabels, count: ignoredRows.length })}</span>
+										<span class="flex flex-wrap gap-x-3">
+											{#if switchTarget}<button type="button" class="vp-link-hit text-left underline decoration-line-hover underline-offset-2 hover:text-fg" onclick={switchToReferences}>{t('modals.shot.vref.switch', { engine: switchTarget.label })}</button>{/if}
+											<button type="button" class="vp-link-hit text-left underline decoration-line-hover underline-offset-2 hover:text-fg" onclick={() => ignoredRows.forEach((entry) => toggleVref(entry.track.id, true))}>{t('modals.shot.vref.leave', { labels: ignoredLabels, count: ignoredRows.length })}</button>
+										</span>
+									</span>
+								</div>
+							{/if}
+						</div>
+					{/if}
+					{#if reception?.counts}
+						<p class="text-xs text-fg-subtle" data-media-counts>{t('modals.shot.vref.counts', { videos: reception.counts.video, images: reception.counts.image, sounds: reception.counts.audio, maxVideos: LIMITS.video, maxImages: LIMITS.image, maxSounds: LIMITS.audio })}</p>
+					{/if}
 					{#if sounding && behavior}<SoundNote {behavior} />{/if}
 				</section>
 				<KeyframeCandidates {clip} {draft} focus={focus === 'keyframes'} onaccept={(role, assetId) => (draft[role] = assetId)} />

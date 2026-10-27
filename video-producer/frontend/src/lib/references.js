@@ -125,6 +125,7 @@ function tracksFor(source) {
 
 export const reception = (reference, source = doc) => receptionOf(reference, source, (clip) => engineOf(clip, source), tracksFor(source));
 export const shotReceptionFor = (clip) => shotReception(doc, clip, engineOf(clip), tracksFor(doc)(clip));
+export const shotReceptionIn = (source, clip) => shotReception(source, clip, engineOf(clip, source), tracksFor(source)(clip));
 export const projectReceptionFor = () => projectReception(doc, (clip) => engineOf(clip), tracksFor(doc));
 export const cardReceptionFor = (kind, card) => cardReception(doc, kind, card, (clip) => engineOf(clip), tracksFor(doc));
 

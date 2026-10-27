@@ -19,6 +19,10 @@
 	import { stages } from '../../lib/catalog.js';
 	import { laneCode } from '../../lib/tracks.js';
 	import { CONDITION, MUX } from '../../lib/sound.js';
+	import { shotReceptionFor } from '../../lib/references.js';
+	import { videoTracksOf } from '../../lib/vrefs.js';
+	import { OVERLAY, vrefLabel } from '../../lib/vreftracks.js';
+	import { trackVerdict } from '../../lib/vreftracks.svelte.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { MUSIC_ROLE, displayStart, lastFailure, musicEnd, sections, seamStatus, stackOrder } from '../../lib/band.js';
 	import { compareSeam, pickShot, proposalLayout, selectedShot } from '../../lib/band.svelte.js';
@@ -58,6 +62,9 @@
 	const overview = $derived(Math.max(total, 1));
 	const tickLabel = (v) => (step < 1 ? formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}`);
 	const tone = { [CONDITION]: 'border-success/60 bg-success/15 text-success', [MUX]: 'border-line-hover bg-fg-subtle/15 text-fg-muted' };
+	const hasTracks = $derived(videoTracksOf(doc).length > 0);
+	const vrefsOf = (c) => (hasTracks ? shotReceptionFor(c).videoTracks.filter((v) => v.status !== 'off' && v.status !== 'excluded') : []);
+	const chipTone = (status) => (status === 'sent' ? 'border-success/60 bg-success/15 text-success' : OVERLAY[status] === 'warn' ? 'border-warning/50 bg-warning/10 text-warning' : 'border-line-hover text-fg-subtle line-through');
 
 	const timeAt = (clientX) => {
 		const r = scroller.getBoundingClientRect();
@@ -209,7 +216,7 @@
 			<div class="flex items-center gap-2 border-b border-line border-l-[3px] border-l-viz-1 px-2 text-xs text-fg-muted" style:height="{SHOTS}px"><Icon name="film" class="h-3.5 w-3.5 shrink-0 text-fg-subtle" /><span class="truncate">{t('storyboard.band.shots')}</span></div>
 			<div class="flex items-center gap-2 border-b border-line border-l-[3px] border-l-viz-1 px-2 text-xs text-fg-muted" style:height="{TAKES}px" title={t('storyboard.band.takesTip')}><Icon name="layers" class="h-3.5 w-3.5 shrink-0 text-fg-subtle" /><span class="truncate">{t('storyboard.band.takes')}</span></div>
 			<div class="flex items-center gap-2 border-b border-line border-l-[3px] border-l-success px-2 text-xs text-fg-muted" style:height="{MUSIC}px" title={musicLanes.map((l) => `${laneCode(doc.lanes, l.id)} · ${l.name}`).join(', ')}><Icon name="music" class="h-3.5 w-3.5 shrink-0 text-fg-subtle" /><span class="truncate">{musicLanes.length ? musicLanes.map((l) => laneCode(doc.lanes, l.id)).join(', ') + ' · ' + t('storyboard.band.music') : t('storyboard.band.music')}</span></div>
-			<div class="flex items-center gap-2 border-l-[3px] border-l-viz-2 px-2 text-xs text-fg-muted" style:height="{REFS}px" title={t('storyboard.band.soundTip')}><Icon name="wave" class="h-3.5 w-3.5 shrink-0 text-fg-subtle" /><span class="truncate">{t('storyboard.band.sound')}</span></div>
+			<div class="flex items-center gap-2 border-l-[3px] border-l-viz-2 px-2 text-xs text-fg-muted" style:height="{REFS}px" title={t('storyboard.band.refsTip')}><Icon name="wave" class="h-3.5 w-3.5 shrink-0 text-fg-subtle" /><span class="truncate">{t('storyboard.band.refs')}</span></div>
 		</div>
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -269,10 +276,19 @@
 				<div class="absolute inset-x-0" style:top="{SONG + SHOTS + TAKES + MUSIC}px" style:height="{REFS}px">
 					{#each doc.clips as c, i (c.id)}
 						{@const sound = soundOf(c)}
-						{#if sound?.sends}
-							{@const names = [...sound.lanes.map((id) => laneCode(doc.lanes, id)), ...sound.references.map((r) => r.name)]}
-							<div class="absolute top-1 flex h-[21px] items-center gap-1 overflow-hidden whitespace-nowrap rounded-sm border px-1.5 text-2xs {tone[sound.behavior] ?? 'border-warning/50 bg-warning/10 text-warning'}" style:left="{x(starts[i])}px" style:width="{Math.max(6, x(c.dur) - 3)}px" title={names.join(', ')}>
-								<Icon name="wave" class="h-3 w-3 shrink-0" /><span class="truncate">{names.join(' · ')}</span>
+						{@const vrefs = vrefsOf(c)}
+						{#if sound?.sends || vrefs.length}
+							{@const names = sound?.sends ? [...sound.lanes.map((id) => laneCode(doc.lanes, id)), ...sound.references.map((r) => r.name)] : []}
+							<div
+								class="absolute top-1 flex h-[21px] items-center gap-1 overflow-hidden whitespace-nowrap rounded-sm border px-1.5 text-2xs {sound?.sends ? (tone[sound.behavior] ?? 'border-warning/50 bg-warning/10 text-warning') : 'border-line-hover bg-surface-2 text-fg-muted'}"
+								style:left="{x(starts[i])}px"
+								style:width="{Math.max(6, x(c.dur) - 3)}px"
+								title={[...vrefs.map((v) => `${vrefLabel(v.slot)} · ${trackVerdict(v).text}`), ...(names.length ? [names.join(', ')] : [])].join('\n')}
+							>
+								{#each vrefs as v (v.track.id)}
+									<span class="vp-tc shrink-0 rounded-sm border px-1 {chipTone(v.status)}" data-vref-chip={v.status}>{vrefLabel(v.slot)}</span>
+								{/each}
+								{#if names.length}<Icon name="wave" class="h-3 w-3 shrink-0" /><span class="truncate">{names.join(' · ')}</span>{/if}
 							</div>
 						{/if}
 					{/each}
