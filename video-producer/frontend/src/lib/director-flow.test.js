@@ -15,9 +15,10 @@ register(`data:text/javascript,${encodeURIComponent(hooks)}`, import.meta.url);
 globalThis.window = { __potionui: { confirm: async () => true, notifications: { toast() {} } } };
 globalThis.document = { body: {}, querySelector: () => null };
 
-const { doc, ui, replaceDoc, select, openDirector, directorShot, productionRange, allIssues, followIssue, followedIssue, issueRule, witness, dispose } = await import('./state.svelte.js');
+const { doc, ui, replaceDoc, select, openDirector, directorShot, productionRange, allIssues, followIssue, followedIssue, issueRule, witness, reviewPick, dispose } = await import('./state.svelte.js');
 const { jobClips, readiness } = await import('./production.svelte.js');
-const { showInReview } = await import('./band.svelte.js');
+const { showInReview, chooseTake, chooseSeam } = await import('./band.svelte.js');
+const { setTakes, takeStore } = await import('./takes.svelte.js');
 const { emptyDoc, newAsset, newClip } = await import('./starter.js');
 const { t } = await import('../i18n/index.svelte.js');
 
@@ -115,4 +116,60 @@ test('director flow: a shot chip opens the Review on that shot, shows every shot
 	assert.deepEqual({ ...ui.selection }, { kind: 'clip', id: 's3' });
 	assert.equal(ui.reveal, 's3');
 	assert.ok(ui.playhead >= 8 && ui.playhead < 12);
+});
+
+const done = (id, shotId, fields = {}) => ({ id, projectId: null, shotId, kind: 'render', quality: 'draft', status: 'done', variant: id.slice(-1).toUpperCase(), label: 'draft', url: `/media/${id}.mp4`, thumbUrl: null, durationS: 4, createdAt: `2026-10-27T10:0${id.length}:00Z`, ...fields });
+
+function review(extra = {}) {
+	project({ workspace: 'director', directorView: 'review', reviewFilter: 'all', preview: null, compare: null, reviewMonitor: false, ...extra });
+	setTakes(null, [done('t2a', 's2'), done('t2b', 's2', { label: 'final' }), done('t3a', 's3', { status: 'failed', url: null, errorCode: 'cuda_oom' }), done('t3b', 's3', { status: 'running', url: null })]);
+}
+
+test('director flow: in the Review a card chooses its take, opens it in the monitor and the panel follows it; a running take leaves the shot chosen', () => {
+	review({ playhead: 1 });
+	chooseTake(takeStore.list[0]);
+	assert.deepEqual({ ...ui.selection }, { kind: 'clip', id: 's2' });
+	assert.deepEqual({ ...ui.reviewPick }, { kind: 'take', id: 't2a' });
+	assert.deepEqual({ ...ui.preview }, { kind: 'result', id: 't2a' });
+	assert.ok(ui.playhead >= 4 && ui.playhead < 8);
+	assert.deepEqual({ kind: reviewPick().kind, take: reviewPick().take.id }, { kind: 'take', take: 't2a' });
+	assert.equal(directorShot(), shotOf('s2'));
+	chooseTake(takeStore.list[2]);
+	assert.deepEqual({ kind: reviewPick().kind, take: reviewPick().take.id }, { kind: 'failed', take: 't3a' });
+	assert.equal(ui.preview, null);
+	chooseTake(takeStore.list[3]);
+	assert.deepEqual({ ...ui.reviewPick }, { kind: 'shot', id: 's3' });
+	assert.deepEqual({ kind: reviewPick().kind, clip: reviewPick().clip.id }, { kind: 'shot', clip: 's3' });
+});
+
+test('director flow: a seam line chooses the seam and its arriving shot, and a plain selection or Escape drops the choice of the Review', () => {
+	review();
+	chooseSeam(shotOf('s1'));
+	assert.equal(ui.reviewPick, null);
+	chooseSeam(shotOf('s3'));
+	assert.deepEqual({ ...ui.reviewPick }, { kind: 'seam', id: 's3' });
+	assert.deepEqual({ kind: reviewPick().kind, clip: reviewPick().clip.id, previous: reviewPick().previous.id }, { kind: 'seam', clip: 's3', previous: 's2' });
+	assert.equal(directorShot(), shotOf('s3'));
+	select('clip', 's1');
+	assert.equal(ui.reviewPick, null);
+	assert.equal(reviewPick().kind, 'shot');
+	chooseTake(takeStore.list[0]);
+	select(null);
+	assert.equal(ui.reviewPick, null);
+	assert.equal(reviewPick(), null);
+	chooseTake(takeStore.list[0]);
+	replaceDoc({ ...emptyDoc((key) => key) });
+	assert.equal(ui.reviewPick, null);
+});
+
+test('director flow: a sound chosen in Media leaves the panel of the Review empty, and following a contradiction asks its row to come on screen', () => {
+	review();
+	ui.workspace = 'media';
+	select('audio', 'a1');
+	openDirector('review');
+	assert.equal(reviewPick(), null);
+	assert.deepEqual({ ...ui.selection }, { kind: 'audio', id: 'a1' });
+	followIssue(allIssues().find((i) => i.level === 'conflict'));
+	assert.equal(ui.reveal, 's2');
+	assert.deepEqual({ ...ui.selection }, { kind: 'clip', id: 's2' });
 });

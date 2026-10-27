@@ -141,3 +141,58 @@ export function shotNumbers(doc, clips, max = 3) {
 	const list = (clips ?? []).map((c) => String((doc?.clips ?? []).indexOf(c) + 1).padStart(2, '0'));
 	return { list: list.slice(0, max).join(' · '), more: Math.max(0, list.length - max) };
 }
+
+const reviewable = (take) => finished(take) || take?.status === 'failed';
+
+export const reviewChoice = (take, clip) => (reviewable(take) ? { kind: 'take', id: take.id } : { kind: 'shot', id: clip.id });
+
+export function reviewPickOf(doc, takes, pick, selection) {
+	const clips = doc?.clips ?? [];
+	const chosen = selection?.kind === 'clip' ? (clips.find((c) => c.id === selection.id) ?? null) : null;
+	if (!chosen) return null;
+	if (pick?.kind === 'take') {
+		const take = (takes ?? []).find((x) => x.id === pick.id);
+		if (take?.shotId === chosen.id && reviewable(take)) return { kind: take.status === 'failed' ? 'failed' : 'take', clip: chosen, take };
+	}
+	const index = clips.indexOf(chosen);
+	if (pick?.kind === 'seam' && pick.id === chosen.id && index > 0) return { kind: 'seam', clip: chosen, previous: clips[index - 1] };
+	return { kind: 'shot', clip: chosen };
+}
+
+export function nextToReview(clips, takes) {
+	for (const clip of reviewShots(clips, takes, 'review')) {
+		const open = (takes ?? []).filter((x) => x.shotId === clip.id && finished(x) && labelOf(x) !== 'rejected');
+		const take = open.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0];
+		if (take) return { clip, take };
+	}
+	return null;
+}
+
+const WORD = /^[\p{L}\p{N}]/u;
+
+export function missingWords(text, sent) {
+	const known = new Set(String(sent ?? '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+	const parts = String(text ?? '')
+		.split(/([\p{L}\p{N}]+)/u)
+		.filter(Boolean)
+		.map((part) => ({ text: part, mark: WORD.test(part) && !known.has(part.toLowerCase()) }));
+	return parts
+		.map((part, i) => ({ ...part, mark: part.mark || (/^\s+$/.test(part.text) && Boolean(parts[i - 1]?.mark) && Boolean(parts[i + 1]?.mark)) }))
+		.reduce((out, part) => {
+			const last = out.at(-1);
+			if (last && last.mark === part.mark) last.text += part.text;
+			else out.push({ ...part });
+			return out;
+		}, []);
+}
+
+const AFTER_PREVIOUS = ['previous_take_failed', 'previous_take_cancelled', 'previous_take_gone', 'chain_frame_failed'];
+const REFUSED = ['banned_prompt', 'content_blocked'];
+
+export function failureFixes(take) {
+	const code = take?.errorCode;
+	if (AFTER_PREVIOUS.includes(code)) return ['previous', 'retry'];
+	if (REFUSED.includes(code)) return ['instruction', 'retry'];
+	if (code === 'cuda_oom') return ['retry', 'engine', 'shorter'];
+	return ['retry'];
+}

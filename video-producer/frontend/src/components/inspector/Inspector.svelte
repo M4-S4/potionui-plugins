@@ -42,8 +42,7 @@
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import { commandById } from '../../lib/commands.js';
-	import { panelSelection, promptShot } from '../../lib/director.js';
-	import { WORKSPACES } from '../../lib/workspaces.js';
+	import { panelSelection } from '../../lib/director.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { MAX_SLICES, SLICE_MAX, SLICE_MIN, clipSoundAudible, laneCode, laneItemCount, laneTitle, shotCuts, sliceCuts, sliceLength, videoTrack } from '../../lib/tracks.js';
 	import { framesOf, roleKind } from '../../lib/seam.js';
@@ -61,12 +60,12 @@
 	import NumField from './NumField.svelte';
 	import SliderField from './SliderField.svelte';
 	import PickedSummary from './PickedSummary.svelte';
+	import ElsewhereNote from './ElsewhereNote.svelte';
 
 	const view = $derived(ui.workspace === 'director' ? directorView() : null);
 	const filtered = $derived(view ? panelSelection(view, ui.selection) : { shown: ui.selection, elsewhere: null });
 	const s = $derived(filtered.shown);
 	const item = $derived(s ? selected() : null);
-	const away = $derived(filtered.elsewhere ? selected() : null);
 	const multi = $derived(pickedClips().length > 1);
 	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 
@@ -81,33 +80,6 @@
 		if (kind === 'marker') return t('inspector.kind.marker');
 		if (kind === 'reference') return t('inspector.kind.reference');
 		return t('inspector.kind.lane');
-	}
-
-	function spaceName(from) {
-		if (from?.startsWith('director:')) return commandById(`view-${from.slice('director:'.length)}`)?.label;
-		return commandById(WORKSPACES.find((w) => w.id === from)?.command)?.label;
-	}
-
-	function awayName(kind, it) {
-		if (kind === 'audio' || kind === 'frame') return asset(it.assetId)?.name ?? '';
-		if (kind === 'lane') return laneTitle(doc.lanes, it);
-		if (kind === 'prompt') {
-			const text = String(it.text ?? '').trim();
-			const shot = promptShot(doc, it);
-			return text.length > 40 ? `${text.slice(0, 39).trim()}…` : text || (shot ? num(shot) : '');
-		}
-		return it.name ?? it.text ?? it.label ?? '';
-	}
-
-	function awayText(kind, it) {
-		const params = { name: awayName(kind, it), space: spaceName(ui.selectedIn) ?? t('inspector.elsewhere.space') };
-		if (kind === 'audio') return t('inspector.elsewhere.audio', params);
-		if (kind === 'title') return t('inspector.elsewhere.title', params);
-		if (kind === 'prompt') return t('inspector.elsewhere.prompt', params);
-		if (kind === 'frame') return t('inspector.elsewhere.frame', params);
-		if (kind === 'marker') return t('inspector.elsewhere.marker', params);
-		if (kind === 'reference') return t('inspector.elsewhere.reference', params);
-		return t('inspector.elsewhere.lane', params);
 	}
 
 	function fxName(type) {
@@ -658,12 +630,7 @@
 			{/if}
 		{/if}
 	</div>
-	{#if away && !multi}
-		<p class="flex shrink-0 items-start gap-1.5 border-t border-dashed border-line-strong px-3 py-2 text-xs text-fg-subtle" data-elsewhere={filtered.elsewhere.kind}>
-			<Icon name="info" class="mt-px h-3.5 w-3.5 shrink-0" />
-			<span class="min-w-0">{awayText(filtered.elsewhere.kind, away)}</span>
-		</p>
-	{/if}
+	{#if filtered.elsewhere && !multi}<ElsewhereNote kind={filtered.elsewhere.kind} />{/if}
 </aside>
 
 {#snippet fadeFields(video)}

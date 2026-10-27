@@ -9,7 +9,7 @@ import { joinPlan } from './sound.js';
 import { touch } from './shots.js';
 import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
-import { promptShot, viewOf, viewShot, witnessOf } from './director.js';
+import { promptShot, reviewPickOf, viewOf, viewShot, witnessOf } from './director.js';
 import { picking, pruned } from './picking.js';
 import { same } from './merge.js';
 import sharedRules from './rules.json';
@@ -26,6 +26,7 @@ export const ui = $state({
 	witness: null,
 	issue: null,
 	reveal: null,
+	reviewPick: null,
 	selectedIn: null,
 	refSpace: 'all',
 	sidebarOpen: true,
@@ -120,6 +121,8 @@ export function openDirector(view = null) {
 export const witness = () => witnessOf(doc, ui.selection, ui.witness);
 
 export const directorShot = () => (ui.workspace === 'director' ? viewShot(directorView(), doc, ui.selection, ui.witness) : undefined);
+
+export const reviewPick = () => reviewPickOf(doc, takeStore.list, ui.reviewPick, ui.selection);
 
 export const generates = () => ui.workspace === 'director' || ui.workspace === 'storyboard';
 
@@ -230,6 +233,7 @@ const LINKED = ['prompts', 'frames'];
 
 export function select(kind, id) {
 	ui.selectedIn = kind ? (ui.workspace === 'director' ? `director:${directorView()}` : ui.workspace) : null;
+	ui.reviewPick = null;
 	ui.selection = kind ? { kind, id } : null;
 	if (ui.picked.length) ui.picked = [];
 	if (kind && ui.workspace !== 'mixer' && !bandView()) ui.inspectorOpen = true;
@@ -681,6 +685,7 @@ export function followIssue(issue) {
 	ui.issue = { prompt: issue.prompt.id, rule: issue.id };
 	ui.witness = null;
 	select('clip', clip.id);
+	ui.reveal = clip.id;
 }
 
 export const sourceLength = (c) => asset(c?.assetId)?.srcDur ?? 60;
@@ -747,7 +752,7 @@ export function replaceDoc(next) {
 	Object.assign(doc, incoming);
 	past.length = 0;
 	future.length = 0;
-	Object.assign(ui, { selection: null, picked: [], preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, selectedIn: null, issue: null, reveal: null, dirty: false });
+	Object.assign(ui, { selection: null, picked: [], preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, selectedIn: null, issue: null, reveal: null, reviewPick: null, dirty: false });
 	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0 });
 	resetTakes();
 	if (ui.playhead > seqDuration()) ui.playhead = 0;
