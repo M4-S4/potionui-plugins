@@ -229,15 +229,9 @@ def _card_images(owner: Any, doc: Mapping[str, Any], card: bible.Card) -> List[T
         asset = asset_of(doc, (references.get(reference_id) or {}).get("assetId"))
         if asset is None or asset.get("kind") != "image":
             continue
-        ref = director.media_ref(asset.get("origin"))
-        if ref is None:
-            continue
-        try:
-            resolved = core_bridge.resolve_media(owner, ref)
-        except MediaRefError:
-            continue
-        if str(resolved.get("media_type") or "").split("/", 1)[0] == "image":
-            found.append((card.id, ref, str(resolved["value"])))
+        resolved = director._resolve(owner, asset)
+        if resolved is not None and resolved["media_type"] == "image":
+            found.append((card.id, director.media_ref(asset.get("origin")), str(resolved["value"])))
     return found
 
 
