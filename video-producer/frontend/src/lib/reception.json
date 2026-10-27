@@ -5,6 +5,18 @@
     "audio": 3
   },
   "references": ["Ref2VA"],
+  "order": ["own", "tracks", "shared"],
+  "videoTracks": {
+    "max": 3,
+    "fps": 24,
+    "chunk": 17,
+    "head": 5,
+    "minFrames": 56,
+    "roles": { "motion": "under", "continuation": "before" },
+    "size": "canvas",
+    "sizes": ["canvas", "draft"],
+    "canvas": { "shortEdge": 768, "maxPixels": 1032192, "multiple": 32 }
+  },
   "layouts": [
     { "profiles": ["Ref2VA"], "layout": "refs" },
     { "families": ["h3"], "layout": "subjects" },

@@ -538,10 +538,10 @@ def picture_lines(pictures: Sequence[Picture], role: str, language: str) -> List
 def keyframe_prompt(
     doc: Mapping[str, Any], clip: Mapping[str, Any], pictures: Sequence[Picture], role: str, instruction: Optional[str] = None
 ) -> str:
-    """The edit prompt of a start or end image: the frame it is, the instruction given (else the shot's) and the project's direction, what to keep of each picture, and a still with no text."""
+    """The edit prompt of a start or end image: the frame it is, the instruction given (else the shot's) without the reference video tracks it cites, the project's direction, what to keep of each picture, and a still with no text."""
     language = _language(doc)
     text = TEXT[language]
-    own = (instruction or "").strip() or director.shot_instruction(doc, clip)
+    own = director.cite_tracks((instruction or "").strip() or director.shot_instruction(doc, clip), {})
     lines = [
         text[role].format(aspect=_aspect_text(doc)),
         own,

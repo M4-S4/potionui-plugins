@@ -1,11 +1,12 @@
 import json
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import best_match
 
-from . import settings
+from . import reception, settings
 from .bible import LAYOUTS, PARTS
 from .catalog import PROFILES, UPSCALE_TARGETS
 from .core_bridge import generate_ulid
@@ -41,6 +42,14 @@ RETIRED_SET_TYPES = ("Scène d’essai", "Scène d'essai", "Gaussian Splat")
 REMOVED_TAKES = "removedTakes"
 
 FINAL_PASS = "finalPass"
+
+VREF_TRACKS = "vrefTracks"
+
+VREF_ITEMS = "vrefItems"
+
+VREF_ROLES = tuple(reception.VIDEO_TRACKS["roles"])
+
+MAX_VREF_TRACKS = int(reception.VIDEO_TRACKS["max"])
 
 FINAL_PASS_CHOICES = {"method": ("upscale", "guided", "render"), "target": UPSCALE_TARGETS, "upscaler": ("auto", "seedvr2")}
 
@@ -103,7 +112,22 @@ def _tagged(tag: str, variants: Dict[str, Dict[str, Any]], nullable: bool = Fals
 
 
 REFERENCE_OVERRIDES = _object(
-    {}, optional={"exclude": {**_array(ID), "uniqueItems": True}, "excludeLanes": {**_array(ID), "uniqueItems": True}}
+    {},
+    optional={
+        "exclude": {**_array(ID), "uniqueItems": True},
+        "excludeLanes": {**_array(ID), "uniqueItems": True},
+        "excludeVrefs": {**_array(ID), "uniqueItems": True},
+    },
+)
+
+VREF_TRACK = _object(
+    {"id": ID, "slot": {"type": "integer", "minimum": 1, "maximum": MAX_VREF_TRACKS}, "name": TEXT, "role": _enum(*VREF_ROLES)},
+    optional={"seconds": {"type": "number", "exclusiveMinimum": 0}, "off": FLAG},
+)
+
+VREF_ITEM = _object(
+    {"id": ID, "track": ID, "assetId": REF, "start": NUMBER, "dur": NUMBER, "srcIn": NUMBER},
+    optional={"fromTake": NULLABLE_TEXT},
 )
 
 STATS = {"type": "array", "items": NUMBER, "minItems": MATCH_STATS, "maxItems": MATCH_STATS}
@@ -210,7 +234,7 @@ AUDIO = _object(
         "fadeOut": NUMBER,
         "gain": NUMBER,
     },
-    optional={"reference": FLAG},
+    optional={"reference": FLAG, "fromTake": NULLABLE_TEXT},
 )
 
 TITLE = _object({"id": ID, "text": TEXT, "sub": TEXT, "start": NUMBER, "dur": NUMBER})
@@ -367,6 +391,8 @@ DOC_SCHEMA: Dict[str, Any] = {
             "dialogueLanguage": TEXT,
             REMOVED_TAKES: IDS,
             FINAL_PASS: FINAL_PASS_SCHEMA,
+            VREF_TRACKS: {**_array(VREF_TRACK), "maxItems": MAX_VREF_TRACKS},
+            VREF_ITEMS: _array(VREF_ITEM),
         },
     ),
 }
@@ -562,8 +588,89 @@ def _final_pass(value: Any) -> Dict[str, str]:
     return {key: value[key] for key, choices in FINAL_PASS_CHOICES.items() if value.get(key) in choices}
 
 
+def _finite(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _vref_tracks(value: Any) -> List[Dict[str, Any]]:
+    tracks: List[Dict[str, Any]] = []
+    ids: Set[str] = set()
+    slots: Set[int] = set()
+    for track in value if isinstance(value, list) else []:
+        if len(tracks) == MAX_VREF_TRACKS:
+            break
+        if not isinstance(track, dict):
+            continue
+        track_id, slot = track.get("id"), track.get("slot")
+        if not isinstance(track_id, str) or not track_id or track_id in ids:
+            continue
+        if not isinstance(slot, int) or isinstance(slot, bool) or not 1 <= slot <= MAX_VREF_TRACKS or slot in slots:
+            continue
+        kept: Dict[str, Any] = {
+            "id": track_id,
+            "slot": slot,
+            "name": track["name"] if isinstance(track.get("name"), str) else "",
+            "role": track["role"] if track.get("role") in VREF_ROLES else VREF_ROLES[0],
+        }
+        if _finite(track.get("seconds")) and track["seconds"] > 0:
+            kept["seconds"] = track["seconds"]
+        if isinstance(track.get("off"), bool):
+            kept["off"] = track["off"]
+        tracks.append(kept)
+        ids.add(track_id)
+        slots.add(slot)
+    return tracks
+
+
+def _vref_items(value: Any, tracks: List[Dict[str, Any]], assets: Any) -> List[Dict[str, Any]]:
+    known = {track["id"] for track in tracks}
+    kinds = {asset.get("id"): asset.get("kind") for asset in assets if isinstance(asset, dict)} if isinstance(assets, list) else {}
+    items: List[Dict[str, Any]] = []
+    ids: Set[str] = set()
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        item_id, asset_id = item.get("id"), item.get("assetId")
+        if not isinstance(item_id, str) or not item_id or item_id in ids or item.get("track") not in known:
+            continue
+        if not (_finite(item.get("start")) and _finite(item.get("dur")) and item["dur"] > 0):
+            continue
+        if not (asset_id is None or (isinstance(asset_id, str) and asset_id)) or kinds.get(asset_id, "video") != "video":
+            continue
+        kept: Dict[str, Any] = {
+            "id": item_id,
+            "track": item["track"],
+            "assetId": asset_id,
+            "start": item["start"],
+            "dur": item["dur"],
+            "srcIn": item["srcIn"] if _finite(item.get("srcIn")) and item["srcIn"] >= 0 else 0,
+        }
+        if "fromTake" in item and (item["fromTake"] is None or isinstance(item["fromTake"], str)):
+            kept["fromTake"] = item["fromTake"]
+        items.append(kept)
+        ids.add(item_id)
+    return items
+
+
+def _vrefs(doc: Dict[str, Any]) -> Tuple[Dict[str, Any], Set[str]]:
+    """The reference video tracks and their items as the schema takes them: at most three tracks, of distinct ids and slots from 1 to 3, an unknown role read as motion; the items of a known track, of distinct ids, a positive duration and a video or no media; each key dropped when nothing is left."""
+    if VREF_TRACKS not in doc and VREF_ITEMS not in doc:
+        return {}, set()
+    tracks = _vref_tracks(doc.get(VREF_TRACKS))
+    items = _vref_items(doc.get(VREF_ITEMS), tracks, doc.get("assets"))
+    changes: Dict[str, Any] = {}
+    dropped: Set[str] = set()
+    for key, value in ((VREF_TRACKS, tracks), (VREF_ITEMS, items)):
+        if not value:
+            if key in doc:
+                dropped.add(key)
+        elif value != doc.get(key):
+            changes[key] = value
+    return changes, dropped
+
+
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, a shot's own firstFromPrevious dropped when it is not a boolean, the takes whose video the user removed kept as distinct ids, the key dropped when none is left, the choice of the film's final pass kept to the values it knows, dropped when none is left, and the retired Sound design workshop forgotten: its sounds, which have no file, dropped with their audio items and the references to them left without media, its fields and the automation mode of each lane dropped; the same object when nothing changes."""
+    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, a shot's own firstFromPrevious dropped when it is not a boolean, the takes whose video the user removed kept as distinct ids, the key dropped when none is left, the choice of the film's final pass kept to the values it knows, dropped when none is left, the retired Sound design workshop forgotten: its sounds, which have no file, dropped with their audio items and the references to them left without media, its fields and the automation mode of each lane dropped, and the reference video tracks and their items kept to what the schema takes (_vrefs); the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -597,6 +704,9 @@ def migrate(doc: Any) -> Any:
         cast = [_chain_flag(_spoken(_cast(clip, characters, _card_ids(doc, "places")), characters)) for clip in clips]
         if any(new is not old for new, old in zip(cast, clips)):
             changes["clips"] = cast
+    vrefs, gone = _vrefs({**doc, **changes})
+    changes.update(vrefs)
+    dropped |= gone
     if not changes and not any(key in doc for key in dropped):
         return doc
     return {**{key: value for key, value in doc.items() if key not in dropped}, **changes}

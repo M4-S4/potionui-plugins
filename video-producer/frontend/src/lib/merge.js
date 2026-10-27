@@ -1,5 +1,7 @@
+import { migrateVrefs } from './vrefs.js';
+
 const ABSENT = Symbol('absent');
-const SETS = new Set(['removedTakes', 'characters', 'exclude', 'excludeLanes']);
+const SETS = new Set(['removedTakes', 'characters', 'exclude', 'excludeLanes', 'excludeVrefs']);
 const CONTAINERS = new Set(['cast', 'referenceOverrides']);
 const LINKED = ['prompts', 'frames'];
 
@@ -180,5 +182,7 @@ export function mergeDocs(base, mine, theirs) {
 		if (inTheirs.has(id) && !same(before, shotParts(t, id))) out.conflicts += 1;
 	}
 	const value = mergeValue(...[b, m, t].map((doc) => withoutShots(doc, gone)), out);
-	return { value: absolute(value, mine, theirs), conflicts: out.conflicts, dropped: out.dropped };
+	const settled = migrateVrefs(value);
+	if (!same(settled, value)) out.conflicts += 1;
+	return { value: absolute(settled, mine, theirs), conflicts: out.conflicts, dropped: out.dropped };
 }

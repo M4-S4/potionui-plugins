@@ -1,0 +1,76 @@
+{
+	"frames": [
+		[0, 0],
+		[0.1, 0],
+		[0.5, 5],
+		[0.92, 22],
+		[1.0, 22],
+		[1.625, 39],
+		[2.0, 39],
+		[2.333, 39],
+		[2.334, 56],
+		[3.0, 56],
+		[3.042, 73],
+		[4.0, 90],
+		[5.0, 107],
+		[5.17, 124],
+		[14.375, 345],
+		[15.0, 345]
+	],
+	"caps": [
+		[null, 2.333333],
+		[0, 2.333333],
+		[1, 2.333333],
+		[4, 4],
+		[12.5, 12.5]
+	],
+	"regions": [
+		{ "role": "motion", "start": 8, "seconds": 4, "cap": null, "region": [8, 10.333333] },
+		{ "role": "continuation", "start": 8, "seconds": 4, "cap": null, "region": [5.666667, 8] },
+		{ "role": "continuation", "start": 1, "seconds": 4, "cap": null, "region": [0, 1] },
+		{ "role": "motion", "start": 8, "seconds": 1.5, "cap": null, "region": [8, 9.5] },
+		{ "role": "motion", "start": 8, "seconds": 6, "cap": 4, "region": [8, 12] },
+		{ "role": "continuation", "start": 8, "seconds": 6, "cap": 10, "region": [2, 8] },
+		{ "role": "motion", "start": 8, "seconds": 6, "cap": 1, "region": [8, 10.333333] },
+		{ "role": "unknown", "start": 3, "seconds": 5, "cap": null, "region": [3, 5.333333] }
+	],
+	"pieces": [
+		{
+			"name": "a motion track keeps the start of what lies under the shot",
+			"items": [{ "id": "a", "start": 0, "dur": 10 }],
+			"role": "motion", "start": 4, "seconds": 5, "cap": 3,
+			"frames": 56, "pieces": [{ "id": "a", "from": 4, "to": 6.333333 }]
+		},
+		{
+			"name": "a continuation keeps the end of what lies before the shot, up to the cut",
+			"items": [{ "id": "a", "start": 0, "dur": 3 }, { "id": "b", "start": 3.5, "dur": 0.5 }],
+			"role": "continuation", "start": 4, "seconds": 5, "cap": 4,
+			"frames": 73, "pieces": [{ "id": "a", "from": 0.458333, "to": 3 }, { "id": "b", "from": 3.5, "to": 4 }]
+		},
+		{
+			"name": "the gaps are left out and an item of no duration plays nothing",
+			"items": [{ "id": "a", "start": 0, "dur": 1.5 }, { "id": "z", "start": 1.6, "dur": 0 }, { "id": "b", "start": 2, "dur": 2 }],
+			"role": "motion", "start": 0, "seconds": 6, "cap": 4,
+			"frames": 73, "pieces": [{ "id": "a", "from": 0, "to": 1.5 }, { "id": "b", "from": 2, "to": 3.541667 }]
+		},
+		{
+			"name": "less than one chunk sends no frame",
+			"items": [{ "id": "a", "start": 0, "dur": 0.1 }],
+			"role": "motion", "start": 0, "seconds": 4, "cap": null,
+			"frames": 0, "pieces": []
+		}
+	],
+	"sizes": [
+		{ "aspect": 1.7777777777777777, "resolution": [832, 480], "setting": "canvas", "size": [1344, 768] },
+		{ "aspect": 1.7777777777777777, "resolution": [832, 480], "setting": "draft", "size": [832, 480] },
+		{ "aspect": 1.7777777777777777, "resolution": null, "setting": "draft", "size": [1344, 768] },
+		{ "aspect": 1.7777777777777777, "resolution": [832, 480], "setting": null, "size": [1344, 768] },
+		{ "aspect": 0.5625, "resolution": [480, 832], "setting": "canvas", "size": [768, 1344] },
+		{ "aspect": 1, "resolution": null, "setting": "canvas", "size": [768, 768] },
+		{ "aspect": 1.3333333333333333, "resolution": null, "setting": "canvas", "size": [1024, 768] },
+		{ "aspect": 2.39, "resolution": null, "setting": "canvas", "size": [1568, 672] },
+		{ "aspect": 2.3333333333333335, "resolution": null, "setting": "canvas", "size": [1536, 672] },
+		{ "aspect": 1.85, "resolution": null, "setting": "canvas", "size": [1376, 736] },
+		{ "aspect": 0.8, "resolution": null, "setting": "canvas", "size": [768, 960] }
+	]
+}
