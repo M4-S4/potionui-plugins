@@ -364,7 +364,7 @@ def test_a_square_first_picture_warns_that_the_image_will_be_square(core, qwen, 
     assert built.warnings == [
         {
             "code": "aspect_mismatch",
-            "message": "The image takes the aspect ratio of the first picture, not the project's.",
+            "message": "The image takes the aspect ratio of the first picture, not the one of the shot's takes.",
             "data": {"aspect": "16:9", "size": "1024x1024"},
         }
     ]

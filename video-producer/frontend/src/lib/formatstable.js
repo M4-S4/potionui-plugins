@@ -1,0 +1,32 @@
+export default {
+	"formats": [
+		{ "id": "2.39:1", "group": "cinema" },
+		{ "id": "2:1", "group": "cinema" },
+		{ "id": "1.85:1", "group": "cinema" },
+		{ "id": "16:9", "group": "screen" },
+		{ "id": "4:3", "group": "screen" },
+		{ "id": "1:1", "group": "social" },
+		{ "id": "4:5", "group": "social" },
+		{ "id": "9:16", "group": "social" }
+	],
+	"defaultFormat": "16:9",
+	"custom": { "minRatio": 0.25, "maxRatio": 4, "decimals": 2 },
+	"resolutions": { "720p": 720, "1080p": 1080, "1440p": 1440, "4K": 2160 },
+	"defaultResolution": "1080p",
+	"box": [16, 9],
+	"social": { "formats": ["9:16", "4:5", "1:1"], "default": "9:16" },
+	"framing": { "modes": ["auto", "crop", "bars"], "default": "auto", "exact": 0.03, "crop": 0.3 },
+	"sizes": { "tolerance": 0.05, "draftMax": 600000, "finalShare": 0.5, "min": 64, "max": 8192, "grid": 8, "timeExponent": 1.2 },
+	"engines": {
+		"wan": { "grid": 16, "presets": ["01KX47WANVIDEO0000000000TV", "01M57QPEMDPKHHW83YSEYBN0WZ", "01M57QPEMDPKHHW83YSEYBN0X1"] },
+		"wan5b": { "grid": 32, "presets": ["01M57QPEMDPKHHW83YSEYBN0X0"] },
+		"ltx": { "grid": 32, "presets": ["01KX47LTXVIDEO0000000000TV", "01KX47LTX25VIDEO00000000TV"] },
+		"h3": {
+			"grid": 32,
+			"minRatio": 0.25,
+			"maxRatio": 4,
+			"maxPixels": 1032192,
+			"presets": ["01KX47H3MINIMAX000000000VA", "01KX47H3FASTH30000000000VA", "01KX47H3VDNMINIMAX000000VA", "01M54HN72B0KY7H63BKQ16T253", "01M54HN72PABVRE54YNQA2Q7ZT"]
+		}
+	}
+};

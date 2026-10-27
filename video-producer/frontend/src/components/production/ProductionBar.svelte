@@ -26,6 +26,7 @@
 		estimateState
 	} from '../../lib/production.svelte.js';
 	import { aspectOf, draftResolution, finalResolution } from '../../lib/generation.js';
+	import { chosenSize } from '../../lib/formats.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hasOwnEngine } from '../../lib/engine.js';
 	import { fitInline } from '../../lib/barfit.js';
@@ -52,8 +53,8 @@
 	const groups = $derived(engineGroups());
 	const cloud = $derived(engine?.kind === 'cloud');
 	const aspect = $derived(aspectOf(doc.aspect, doc.resolution));
-	const draftRes = $derived(draftResolution(engine?.info, ui.me?.settings?.draftResolution, aspect)?.replace('x', '×') ?? '—');
-	const finalRes = $derived(finalResolution(engine?.info, aspect)?.replace('x', '×') ?? '—');
+	const draftRes = $derived(draftResolution(engine?.info, ui.me?.settings?.draftResolution, aspect, chosenSize(doc, engine?.preset, 'draft'))?.replace('x', '×') ?? '—');
+	const finalRes = $derived(finalResolution(engine?.info, aspect, chosenSize(doc, engine?.preset, 'final'))?.replace('x', '×') ?? '—');
 	const conflicts = $derived(allIssues().filter((i) => i.level !== 'missing' && it.prompts.includes(i.prompt)));
 	const status = $derived(p.state === 'running' ? 'running' : p.state === 'done' ? 'done' : ready.missing.length ? 'missing' : 'ready');
 	const busy = $derived(status === 'running');

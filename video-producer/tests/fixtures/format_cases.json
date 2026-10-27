@@ -1,0 +1,2984 @@
+{
+	"options": {
+		"wan": [
+			"832x480",
+			"480x832",
+			"960x544",
+			"544x960",
+			"640x480",
+			"480x640",
+			"1280x720",
+			"720x1280",
+			"512x512",
+			"1024x1024",
+			"720x720",
+			"960x960",
+			"576x720",
+			"832x1040",
+			"720x576",
+			"1040x832",
+			"480x720",
+			"768x1152",
+			"720x480",
+			"1152x768"
+		],
+		"h3": [
+			"1344x768",
+			"768x1344",
+			"1536x672",
+			"1152x768",
+			"768x1152",
+			"1024x768",
+			"768x1024",
+			"960x768",
+			"768x960",
+			"768x768",
+			"960x544",
+			"544x960",
+			"832x480",
+			"480x832",
+			"640x480",
+			"480x640",
+			"640x640",
+			"736x416",
+			"416x736",
+			"608x352",
+			"352x608",
+			"512x384",
+			"384x512"
+		],
+		"wan13": [
+			"832x480",
+			"480x832",
+			"640x480",
+			"480x640"
+		],
+		"wan5b": [
+			"832x480",
+			"480x832"
+		]
+	},
+	"presets": {
+		"wan": "01M57QPEMDPKHHW83YSEYBN0X1",
+		"ltx": "01KX47LTX25VIDEO00000000TV",
+		"h3": "01M54HN72B0KY7H63BKQ16T253",
+		"wan13": "01M57QPEMDPKHHW83YSEYBN0WZ",
+		"wan5b": "01M57QPEMDPKHHW83YSEYBN0X0",
+		"other": null
+	},
+	"ratios": [
+		[
+			"16:9",
+			1.7777777777777777
+		],
+		[
+			"2.39:1",
+			2.39
+		],
+		[
+			"16/9",
+			1.7777777777777777
+		],
+		[
+			"1280x720",
+			1.7777777777777777
+		],
+		[
+			" 4:3 ",
+			1.3333333333333333
+		],
+		[
+			"nope",
+			null
+		],
+		[
+			"0:9",
+			null
+		],
+		[
+			"inf:1",
+			null
+		],
+		[
+			"1e1:5",
+			2.0
+		],
+		[
+			"1_0:1",
+			null
+		],
+		[
+			"16:9:1",
+			null
+		],
+		[
+			"",
+			null
+		]
+	],
+	"values": [
+		[
+			"2.39:1",
+			"2.39:1"
+		],
+		[
+			" 16:9 ",
+			"16:9"
+		],
+		[
+			"2.35:1",
+			"2.35:1"
+		],
+		[
+			"21:9",
+			"21:9"
+		],
+		[
+			"1.5:1",
+			"1.5:1"
+		],
+		[
+			"1.234:1",
+			"16:9"
+		],
+		[
+			"5:1",
+			"16:9"
+		],
+		[
+			"1:5",
+			"16:9"
+		],
+		[
+			"16/9",
+			"16:9"
+		],
+		[
+			"",
+			"16:9"
+		],
+		[
+			null,
+			"16:9"
+		],
+		[
+			7,
+			"16:9"
+		]
+	],
+	"resolutions": [
+		[
+			"720p",
+			"720p"
+		],
+		[
+			"1440p",
+			"1440p"
+		],
+		[
+			"4K",
+			"4K"
+		],
+		[
+			"4k",
+			"1080p"
+		],
+		[
+			"2160p",
+			"1080p"
+		],
+		[
+			null,
+			"1080p"
+		]
+	],
+	"delivery": [
+		[
+			"2.39:1",
+			"720p",
+			[
+				1280,
+				536
+			]
+		],
+		[
+			"2.39:1",
+			"1080p",
+			[
+				1920,
+				804
+			]
+		],
+		[
+			"2.39:1",
+			"1440p",
+			[
+				2560,
+				1072
+			]
+		],
+		[
+			"2.39:1",
+			"4K",
+			[
+				3840,
+				1606
+			]
+		],
+		[
+			"2.39:1",
+			"8K",
+			[
+				1920,
+				804
+			]
+		],
+		[
+			"2:1",
+			"720p",
+			[
+				1280,
+				640
+			]
+		],
+		[
+			"2:1",
+			"1080p",
+			[
+				1920,
+				960
+			]
+		],
+		[
+			"2:1",
+			"1440p",
+			[
+				2560,
+				1280
+			]
+		],
+		[
+			"2:1",
+			"4K",
+			[
+				3840,
+				1920
+			]
+		],
+		[
+			"2:1",
+			"8K",
+			[
+				1920,
+				960
+			]
+		],
+		[
+			"1.85:1",
+			"720p",
+			[
+				1280,
+				692
+			]
+		],
+		[
+			"1.85:1",
+			"1080p",
+			[
+				1920,
+				1038
+			]
+		],
+		[
+			"1.85:1",
+			"1440p",
+			[
+				2560,
+				1384
+			]
+		],
+		[
+			"1.85:1",
+			"4K",
+			[
+				3840,
+				2076
+			]
+		],
+		[
+			"1.85:1",
+			"8K",
+			[
+				1920,
+				1038
+			]
+		],
+		[
+			"16:9",
+			"720p",
+			[
+				1280,
+				720
+			]
+		],
+		[
+			"16:9",
+			"1080p",
+			[
+				1920,
+				1080
+			]
+		],
+		[
+			"16:9",
+			"1440p",
+			[
+				2560,
+				1440
+			]
+		],
+		[
+			"16:9",
+			"4K",
+			[
+				3840,
+				2160
+			]
+		],
+		[
+			"16:9",
+			"8K",
+			[
+				1920,
+				1080
+			]
+		],
+		[
+			"4:3",
+			"720p",
+			[
+				960,
+				720
+			]
+		],
+		[
+			"4:3",
+			"1080p",
+			[
+				1440,
+				1080
+			]
+		],
+		[
+			"4:3",
+			"1440p",
+			[
+				1920,
+				1440
+			]
+		],
+		[
+			"4:3",
+			"4K",
+			[
+				2880,
+				2160
+			]
+		],
+		[
+			"4:3",
+			"8K",
+			[
+				1440,
+				1080
+			]
+		],
+		[
+			"1:1",
+			"720p",
+			[
+				720,
+				720
+			]
+		],
+		[
+			"1:1",
+			"1080p",
+			[
+				1080,
+				1080
+			]
+		],
+		[
+			"1:1",
+			"1440p",
+			[
+				1440,
+				1440
+			]
+		],
+		[
+			"1:1",
+			"4K",
+			[
+				2160,
+				2160
+			]
+		],
+		[
+			"1:1",
+			"8K",
+			[
+				1080,
+				1080
+			]
+		],
+		[
+			"4:5",
+			"720p",
+			[
+				720,
+				900
+			]
+		],
+		[
+			"4:5",
+			"1080p",
+			[
+				1080,
+				1350
+			]
+		],
+		[
+			"4:5",
+			"1440p",
+			[
+				1440,
+				1800
+			]
+		],
+		[
+			"4:5",
+			"4K",
+			[
+				2160,
+				2700
+			]
+		],
+		[
+			"4:5",
+			"8K",
+			[
+				1080,
+				1350
+			]
+		],
+		[
+			"9:16",
+			"720p",
+			[
+				720,
+				1280
+			]
+		],
+		[
+			"9:16",
+			"1080p",
+			[
+				1080,
+				1920
+			]
+		],
+		[
+			"9:16",
+			"1440p",
+			[
+				1440,
+				2560
+			]
+		],
+		[
+			"9:16",
+			"4K",
+			[
+				2160,
+				3840
+			]
+		],
+		[
+			"9:16",
+			"8K",
+			[
+				1080,
+				1920
+			]
+		],
+		[
+			"2.35:1",
+			"720p",
+			[
+				1280,
+				544
+			]
+		],
+		[
+			"2.35:1",
+			"1080p",
+			[
+				1920,
+				818
+			]
+		],
+		[
+			"2.35:1",
+			"1440p",
+			[
+				2560,
+				1090
+			]
+		],
+		[
+			"2.35:1",
+			"4K",
+			[
+				3840,
+				1634
+			]
+		],
+		[
+			"2.35:1",
+			"8K",
+			[
+				1920,
+				818
+			]
+		],
+		[
+			"3:2",
+			"720p",
+			[
+				1080,
+				720
+			]
+		],
+		[
+			"3:2",
+			"1080p",
+			[
+				1620,
+				1080
+			]
+		],
+		[
+			"3:2",
+			"1440p",
+			[
+				2160,
+				1440
+			]
+		],
+		[
+			"3:2",
+			"4K",
+			[
+				3240,
+				2160
+			]
+		],
+		[
+			"3:2",
+			"8K",
+			[
+				1620,
+				1080
+			]
+		]
+	],
+	"plans": [
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.39:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.39:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.39:1",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.39:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2:1",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "1.85:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "1.85:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "1.85:1",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "1.85:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "16:9",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "16:9",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "16:9",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "16:9",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "4:3",
+			"setting": "832x480",
+			"draft": "720x576",
+			"final": "1040x832"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "4:3",
+			"setting": "960x544",
+			"draft": "720x576",
+			"final": "1040x832"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "4:3",
+			"setting": "1280x720",
+			"draft": "1040x832",
+			"final": "1040x832"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "4:3",
+			"setting": null,
+			"draft": null,
+			"final": "1040x832"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "1:1",
+			"setting": "832x480",
+			"draft": "720x720",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "1:1",
+			"setting": "960x544",
+			"draft": "720x720",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "1:1",
+			"setting": "1280x720",
+			"draft": "960x960",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "1:1",
+			"setting": null,
+			"draft": null,
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "4:5",
+			"setting": "832x480",
+			"draft": "576x720",
+			"final": "832x1040"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "4:5",
+			"setting": "960x544",
+			"draft": "576x720",
+			"final": "832x1040"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "4:5",
+			"setting": "1280x720",
+			"draft": "832x1040",
+			"final": "832x1040"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "4:5",
+			"setting": null,
+			"draft": null,
+			"final": "832x1040"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "9:16",
+			"setting": "832x480",
+			"draft": "480x832",
+			"final": "720x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "9:16",
+			"setting": "960x544",
+			"draft": "544x960",
+			"final": "720x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "9:16",
+			"setting": "1280x720",
+			"draft": "720x1280",
+			"final": "720x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "9:16",
+			"setting": null,
+			"draft": null,
+			"final": "720x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.35:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.35:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.35:1",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.35:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "3:2",
+			"setting": "832x480",
+			"draft": "720x480",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "3:2",
+			"setting": "960x544",
+			"draft": "720x480",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "3:2",
+			"setting": "1280x720",
+			"draft": "1152x768",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "3:2",
+			"setting": null,
+			"draft": null,
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.39:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.39:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.39:1",
+			"setting": "1280x720",
+			"draft": "1280x704",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.39:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2:1",
+			"setting": "1280x720",
+			"draft": "1280x704",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "1.85:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "1.85:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "1.85:1",
+			"setting": "1280x720",
+			"draft": "1280x704",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "1.85:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "16:9",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "16:9",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "16:9",
+			"setting": "1280x720",
+			"draft": "1280x704",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "16:9",
+			"setting": null,
+			"draft": null,
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "4:3",
+			"setting": "832x480",
+			"draft": "704x576",
+			"final": "1024x832"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "4:3",
+			"setting": "960x544",
+			"draft": "704x576",
+			"final": "1024x832"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "4:3",
+			"setting": "1280x720",
+			"draft": "1024x832",
+			"final": "1024x832"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "4:3",
+			"setting": null,
+			"draft": null,
+			"final": "1024x832"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "1:1",
+			"setting": "832x480",
+			"draft": "704x704",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "1:1",
+			"setting": "960x544",
+			"draft": "704x704",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "1:1",
+			"setting": "1280x720",
+			"draft": "960x960",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "1:1",
+			"setting": null,
+			"draft": null,
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "4:5",
+			"setting": "832x480",
+			"draft": "576x704",
+			"final": "832x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "4:5",
+			"setting": "960x544",
+			"draft": "576x704",
+			"final": "832x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "4:5",
+			"setting": "1280x720",
+			"draft": "832x1024",
+			"final": "832x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "4:5",
+			"setting": null,
+			"draft": null,
+			"final": "832x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "9:16",
+			"setting": "832x480",
+			"draft": "480x832",
+			"final": "704x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "9:16",
+			"setting": "960x544",
+			"draft": "544x960",
+			"final": "704x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "9:16",
+			"setting": "1280x720",
+			"draft": "704x1280",
+			"final": "704x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "9:16",
+			"setting": null,
+			"draft": null,
+			"final": "704x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.35:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.35:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.35:1",
+			"setting": "1280x720",
+			"draft": "1280x704",
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.35:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x704"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "3:2",
+			"setting": "832x480",
+			"draft": "704x480",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "3:2",
+			"setting": "960x544",
+			"draft": "704x480",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "3:2",
+			"setting": "1280x720",
+			"draft": "1152x768",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "3:2",
+			"setting": null,
+			"draft": null,
+			"final": "1152x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.39:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.39:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.39:1",
+			"setting": "1280x720",
+			"draft": "1344x768",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.39:1",
+			"setting": null,
+			"draft": null,
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2:1",
+			"setting": "1280x720",
+			"draft": "1344x768",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2:1",
+			"setting": null,
+			"draft": null,
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "1.85:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "1.85:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "1.85:1",
+			"setting": "1280x720",
+			"draft": "1344x768",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "1.85:1",
+			"setting": null,
+			"draft": null,
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "16:9",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "16:9",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "16:9",
+			"setting": "1280x720",
+			"draft": "1344x768",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "16:9",
+			"setting": null,
+			"draft": null,
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "4:3",
+			"setting": "832x480",
+			"draft": "640x480",
+			"final": "1024x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "4:3",
+			"setting": "960x544",
+			"draft": "640x480",
+			"final": "1024x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "4:3",
+			"setting": "1280x720",
+			"draft": "1024x768",
+			"final": "1024x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "4:3",
+			"setting": null,
+			"draft": null,
+			"final": "1024x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "1:1",
+			"setting": "832x480",
+			"draft": "640x640",
+			"final": "768x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "1:1",
+			"setting": "960x544",
+			"draft": "768x768",
+			"final": "768x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "1:1",
+			"setting": "1280x720",
+			"draft": "768x768",
+			"final": "768x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "1:1",
+			"setting": null,
+			"draft": null,
+			"final": "768x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "4:5",
+			"setting": "832x480",
+			"draft": "480x640",
+			"final": "768x1024"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "4:5",
+			"setting": "960x544",
+			"draft": "480x640",
+			"final": "768x1024"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "4:5",
+			"setting": "1280x720",
+			"draft": "768x1024",
+			"final": "768x1024"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "4:5",
+			"setting": null,
+			"draft": null,
+			"final": "768x1024"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "9:16",
+			"setting": "832x480",
+			"draft": "480x832",
+			"final": "768x1344"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "9:16",
+			"setting": "960x544",
+			"draft": "544x960",
+			"final": "768x1344"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "9:16",
+			"setting": "1280x720",
+			"draft": "768x1344",
+			"final": "768x1344"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "9:16",
+			"setting": null,
+			"draft": null,
+			"final": "768x1344"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.35:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.35:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.35:1",
+			"setting": "1280x720",
+			"draft": "1344x768",
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.35:1",
+			"setting": null,
+			"draft": null,
+			"final": "1344x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "3:2",
+			"setting": "832x480",
+			"draft": "640x480",
+			"final": "1024x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "3:2",
+			"setting": "960x544",
+			"draft": "640x480",
+			"final": "1024x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "3:2",
+			"setting": "1280x720",
+			"draft": "1024x768",
+			"final": "1024x768"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "3:2",
+			"setting": null,
+			"draft": null,
+			"final": "1024x768"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2.39:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2.39:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2.39:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2.39:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "1.85:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "1.85:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "1.85:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "1.85:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "16:9",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "16:9",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "16:9",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "16:9",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "4:3",
+			"setting": "832x480",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "4:3",
+			"setting": "960x544",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "4:3",
+			"setting": "1280x720",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "4:3",
+			"setting": null,
+			"draft": null,
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "1:1",
+			"setting": "832x480",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "1:1",
+			"setting": "960x544",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "1:1",
+			"setting": "1280x720",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "1:1",
+			"setting": null,
+			"draft": null,
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "4:5",
+			"setting": "832x480",
+			"draft": "480x640",
+			"final": "480x640"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "4:5",
+			"setting": "960x544",
+			"draft": "480x640",
+			"final": "480x640"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "4:5",
+			"setting": "1280x720",
+			"draft": "480x640",
+			"final": "480x640"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "4:5",
+			"setting": null,
+			"draft": null,
+			"final": "480x640"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "9:16",
+			"setting": "832x480",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "9:16",
+			"setting": "960x544",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "9:16",
+			"setting": "1280x720",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "9:16",
+			"setting": null,
+			"draft": null,
+			"final": "480x832"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2.35:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2.35:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2.35:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "2.35:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "3:2",
+			"setting": "832x480",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "3:2",
+			"setting": "960x544",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "3:2",
+			"setting": "1280x720",
+			"draft": "640x480",
+			"final": "640x480"
+		},
+		{
+			"options": "wan13",
+			"preset": "wan13",
+			"format": "3:2",
+			"setting": null,
+			"draft": null,
+			"final": "640x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2.39:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2.39:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2.39:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2.39:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "1.85:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "1.85:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "1.85:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "1.85:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "16:9",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "16:9",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "16:9",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "16:9",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "4:3",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "4:3",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "4:3",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "4:3",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "1:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "1:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "1:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "1:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "4:5",
+			"setting": "832x480",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "4:5",
+			"setting": "960x544",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "4:5",
+			"setting": "1280x720",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "4:5",
+			"setting": null,
+			"draft": null,
+			"final": "480x832"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "9:16",
+			"setting": "832x480",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "9:16",
+			"setting": "960x544",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "9:16",
+			"setting": "1280x720",
+			"draft": "480x832",
+			"final": "480x832"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "9:16",
+			"setting": null,
+			"draft": null,
+			"final": "480x832"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2.35:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2.35:1",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2.35:1",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "2.35:1",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "3:2",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "3:2",
+			"setting": "960x544",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "3:2",
+			"setting": "1280x720",
+			"draft": "832x480",
+			"final": "832x480"
+		},
+		{
+			"options": "wan5b",
+			"preset": "wan5b",
+			"format": "3:2",
+			"setting": null,
+			"draft": null,
+			"final": "832x480"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.39:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.39:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.39:1",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.39:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2:1",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "1.85:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "1.85:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "1.85:1",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "1.85:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "16:9",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "16:9",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "16:9",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "16:9",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "4:3",
+			"setting": "832x480",
+			"draft": "720x576",
+			"final": "1040x832"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "4:3",
+			"setting": "960x544",
+			"draft": "720x576",
+			"final": "1040x832"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "4:3",
+			"setting": "1280x720",
+			"draft": "1040x832",
+			"final": "1040x832"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "4:3",
+			"setting": null,
+			"draft": null,
+			"final": "1040x832"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "1:1",
+			"setting": "832x480",
+			"draft": "720x720",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "1:1",
+			"setting": "960x544",
+			"draft": "720x720",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "1:1",
+			"setting": "1280x720",
+			"draft": "960x960",
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "1:1",
+			"setting": null,
+			"draft": null,
+			"final": "1024x1024"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "4:5",
+			"setting": "832x480",
+			"draft": "576x720",
+			"final": "832x1040"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "4:5",
+			"setting": "960x544",
+			"draft": "576x720",
+			"final": "832x1040"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "4:5",
+			"setting": "1280x720",
+			"draft": "832x1040",
+			"final": "832x1040"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "4:5",
+			"setting": null,
+			"draft": null,
+			"final": "832x1040"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "9:16",
+			"setting": "832x480",
+			"draft": "480x832",
+			"final": "720x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "9:16",
+			"setting": "960x544",
+			"draft": "544x960",
+			"final": "720x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "9:16",
+			"setting": "1280x720",
+			"draft": "720x1280",
+			"final": "720x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "9:16",
+			"setting": null,
+			"draft": null,
+			"final": "720x1280"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.35:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.35:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.35:1",
+			"setting": "1280x720",
+			"draft": "1280x720",
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.35:1",
+			"setting": null,
+			"draft": null,
+			"final": "1280x720"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "3:2",
+			"setting": "832x480",
+			"draft": "720x480",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "3:2",
+			"setting": "960x544",
+			"draft": "720x480",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "3:2",
+			"setting": "1280x720",
+			"draft": "1152x768",
+			"final": "1152x768"
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "3:2",
+			"setting": null,
+			"draft": null,
+			"final": "1152x768"
+		}
+	],
+	"picks": [
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.39:1",
+			"quality": "final",
+			"setting": "832x480",
+			"chosen": "1920x1080",
+			"size": "1344x768",
+			"refused": "1920x1080",
+			"problem": "area"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.39:1",
+			"quality": "draft",
+			"setting": "832x480",
+			"chosen": "1600x200",
+			"size": "832x480",
+			"refused": "1600x200",
+			"problem": "ratio"
+		},
+		{
+			"options": "h3",
+			"preset": "h3",
+			"format": "2.39:1",
+			"quality": "draft",
+			"setting": "832x480",
+			"chosen": "960x544",
+			"size": "960x544",
+			"refused": null,
+			"problem": null
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.39:1",
+			"quality": "final",
+			"setting": "832x480",
+			"chosen": "1920x1080",
+			"size": "1920x1088",
+			"refused": null,
+			"problem": null
+		},
+		{
+			"options": "wan",
+			"preset": "ltx",
+			"format": "2.39:1",
+			"quality": "draft",
+			"setting": "832x480",
+			"chosen": "40x40",
+			"size": "832x480",
+			"refused": "40x40",
+			"problem": "bounds"
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.39:1",
+			"quality": "final",
+			"setting": "832x480",
+			"chosen": "1488x624",
+			"size": "1488x624",
+			"refused": null,
+			"problem": null
+		},
+		{
+			"options": "wan",
+			"preset": "wan",
+			"format": "2.39:1",
+			"quality": "final",
+			"setting": "832x480",
+			"chosen": "nonsense",
+			"size": "1280x720",
+			"refused": null,
+			"problem": null
+		},
+		{
+			"options": "wan",
+			"preset": "other",
+			"format": "2.39:1",
+			"quality": "draft",
+			"setting": "832x480",
+			"chosen": "1001x563",
+			"size": "1000x560",
+			"refused": null,
+			"problem": null
+		}
+	],
+	"fits": [
+		[
+			"1280x720",
+			"16:9",
+			"auto",
+			"exact"
+		],
+		[
+			"1280x720",
+			"16:9",
+			"crop",
+			"exact"
+		],
+		[
+			"1280x720",
+			"16:9",
+			"bars",
+			"exact"
+		],
+		[
+			"832x480",
+			"16:9",
+			"auto",
+			"exact"
+		],
+		[
+			"832x480",
+			"16:9",
+			"crop",
+			"exact"
+		],
+		[
+			"832x480",
+			"16:9",
+			"bars",
+			"exact"
+		],
+		[
+			"1280x704",
+			"16:9",
+			"auto",
+			"exact"
+		],
+		[
+			"1280x704",
+			"16:9",
+			"crop",
+			"exact"
+		],
+		[
+			"1280x704",
+			"16:9",
+			"bars",
+			"exact"
+		],
+		[
+			"1280x720",
+			"2.39:1",
+			"auto",
+			"crop"
+		],
+		[
+			"1280x720",
+			"2.39:1",
+			"crop",
+			"crop"
+		],
+		[
+			"1280x720",
+			"2.39:1",
+			"bars",
+			"bars"
+		],
+		[
+			"832x480",
+			"2.39:1",
+			"auto",
+			"crop"
+		],
+		[
+			"832x480",
+			"2.39:1",
+			"crop",
+			"crop"
+		],
+		[
+			"832x480",
+			"2.39:1",
+			"bars",
+			"bars"
+		],
+		[
+			"1280x720",
+			"1:1",
+			"auto",
+			"bars"
+		],
+		[
+			"1280x720",
+			"1:1",
+			"crop",
+			"crop"
+		],
+		[
+			"1280x720",
+			"1:1",
+			"bars",
+			"bars"
+		],
+		[
+			"640x480",
+			"1:1",
+			"auto",
+			"crop"
+		],
+		[
+			"640x480",
+			"1:1",
+			"crop",
+			"crop"
+		],
+		[
+			"640x480",
+			"1:1",
+			"bars",
+			"bars"
+		],
+		[
+			"480x832",
+			"4:5",
+			"auto",
+			"crop"
+		],
+		[
+			"480x832",
+			"4:5",
+			"crop",
+			"crop"
+		],
+		[
+			"480x832",
+			"4:5",
+			"bars",
+			"bars"
+		],
+		[
+			"1536x672",
+			"2.39:1",
+			"auto",
+			"crop"
+		],
+		[
+			"1536x672",
+			"2.39:1",
+			"crop",
+			"crop"
+		],
+		[
+			"1536x672",
+			"2.39:1",
+			"bars",
+			"bars"
+		],
+		[
+			"1024x768",
+			"4:3",
+			"auto",
+			"exact"
+		],
+		[
+			"1024x768",
+			"4:3",
+			"crop",
+			"exact"
+		],
+		[
+			"1024x768",
+			"4:3",
+			"bars",
+			"exact"
+		]
+	],
+	"closest": [
+		[
+			[
+				"16:9",
+				"9:16"
+			],
+			"1:1",
+			"16:9"
+		],
+		[
+			[
+				"16:9",
+				"9:16"
+			],
+			"4:5",
+			"9:16"
+		],
+		[
+			[
+				"16:9",
+				"9:16"
+			],
+			"2.39:1",
+			"16:9"
+		],
+		[
+			[
+				"1:1",
+				"4:3",
+				"16:9",
+				"21:9"
+			],
+			"2.39:1",
+			"21:9"
+		],
+		[
+			[],
+			"16:9",
+			null
+		],
+		[
+			[
+				"auto",
+				"16:9"
+			],
+			"1:1",
+			"16:9"
+		]
+	],
+	"texts": [
+		[
+			"1280x720",
+			"16:9"
+		],
+		[
+			"832x480",
+			"16:9"
+		],
+		[
+			"1536x672",
+			"2.29:1"
+		],
+		[
+			"1024x768",
+			"4:3"
+		],
+		[
+			"768x960",
+			"4:5"
+		],
+		[
+			"480x832",
+			"9:16"
+		],
+		[
+			"1280x704",
+			"1.85:1"
+		],
+		[
+			"1000x100",
+			"10.00:1"
+		]
+	],
+	"scales": [
+		[
+			"832x480",
+			"1280x720",
+			2.727806016
+		],
+		[
+			"832x480",
+			"832x480",
+			1.0
+		],
+		[
+			"1344x768",
+			"960x544",
+			0.441500879
+		],
+		[
+			"832x480",
+			"640x640",
+			1.030847593
+		]
+	],
+	"nearest": [
+		[
+			[
+				"832x480",
+				"1344x768"
+			],
+			"960x544",
+			"832x480"
+		],
+		[
+			[
+				"832x480",
+				"1344x768"
+			],
+			"1280x720",
+			"1344x768"
+		],
+		[
+			[
+				"640x480",
+				"1024x768"
+			],
+			"800x600",
+			"640x480"
+		],
+		[
+			[],
+			"832x480",
+			null
+		],
+		[
+			[
+				"bad"
+			],
+			"832x480",
+			null
+		]
+	],
+	"sizes": [
+		[
+			{
+				"p": {
+					"draft": "1280 x 720",
+					"final": "10x10"
+				},
+				"q": {
+					"final": "nope"
+				}
+			},
+			{
+				"p": {
+					"draft": "1280x720"
+				}
+			}
+		],
+		[
+			{
+				"p": {
+					"draft": "832x480",
+					"final": "1280x720",
+					"other": "1x1"
+				}
+			},
+			{
+				"p": {
+					"draft": "832x480",
+					"final": "1280x720"
+				}
+			}
+		],
+		[
+			{
+				"": {
+					"draft": "832x480"
+				},
+				"p": "832x480"
+			},
+			{}
+		],
+		[
+			null,
+			{}
+		],
+		[
+			[],
+			{}
+		]
+	]
+}

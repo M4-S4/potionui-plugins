@@ -25,6 +25,7 @@ COLUMNS = (
     "format",
     "resolution",
     "stems",
+    "ratio",
     "status",
     "progress",
     "step",
@@ -72,6 +73,7 @@ def public(job: Dict[str, Any]) -> Dict[str, Any]:
         "format": job["format"],
         "resolution": job["resolution"],
         "stems": bool(job.get("stems")),
+        "ratio": job.get("ratio"),
         "status": job["status"],
         "progress": round(job["progress"], 1),
         "step": job["step"],
@@ -117,17 +119,19 @@ def list_active() -> List[Dict[str, Any]]:
     return _fetch(f"{_SELECT} WHERE {_ACTIVE_SQL} ORDER BY created_at, id")
 
 
-def create_job(project_id: str, user_id: str, fmt: str, resolution: str, stems: bool = False) -> Optional[Dict[str, Any]]:
-    """Queue an export of a project, with its stems when asked; None when one of the project is already queued or running."""
+def create_job(
+    project_id: str, user_id: str, fmt: str, resolution: str, stems: bool = False, ratio: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Queue an export of a project, with its stems when asked and the ratio of a social video; None when one of the project is already queued or running."""
     from src.plugin_api import db
 
     job_id = generate_ulid()
     with db.get_cursor() as cursor:
         cursor.execute(
-            f"INSERT INTO {JOBS} (id, project_id, user_id, format, resolution, stems, status, progress, created_at) "
-            f"SELECT ?, ?, ?, ?, ?, ?, 'queued', 0, ? WHERE NOT EXISTS "
+            f"INSERT INTO {JOBS} (id, project_id, user_id, format, resolution, stems, ratio, status, progress, created_at) "
+            f"SELECT ?, ?, ?, ?, ?, ?, ?, 'queued', 0, ? WHERE NOT EXISTS "
             f"(SELECT 1 FROM {JOBS} WHERE project_id = ? AND {_ACTIVE_SQL})",
-            (job_id, project_id, user_id, fmt, resolution, 1 if stems else 0, now(), project_id),
+            (job_id, project_id, user_id, fmt, resolution, 1 if stems else 0, ratio, now(), project_id),
         )
         if cursor.rowcount != 1:
             return None

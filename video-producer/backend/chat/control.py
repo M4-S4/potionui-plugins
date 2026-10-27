@@ -1280,9 +1280,9 @@ class ExportVideoTool(_ProductionTool):
     @property
     def description(self) -> str:
         return (
-            "Queue the assembly of the edit open on the page into a video: web (H.264 MP4) keeps the project's aspect, "
-            "social (H.264 MP4) is 9:16, master is ProRes 422 HQ in a MOV and archive H.265 in an MP4, both in the "
-            "project's aspect. stems also writes one WAV per role and one for the shots' sound, packed with the video "
+            "Queue the assembly of the edit open on the page into a video: web (H.264 MP4) keeps the project's format, "
+            "social (H.264 MP4) is 9:16 or the ratio given (4:5 or 1:1), cropped from the centre of the film, master is "
+            "ProRes 422 HQ in a MOV and archive H.265 in an MP4, both in the project's format. stems also writes one WAV per role and one for the shots' sound, packed with the video "
             "in a ZIP. The resolution defaults to the project's. It runs on the server's CPU, not the GPU; follow it "
             "with vp_status and download it from the page's Export window."
         )
@@ -1294,6 +1294,7 @@ class ExportVideoTool(_ProductionTool):
             "properties": {
                 "format": {"type": "string", "enum": list(video.FORMATS)},
                 "resolution": {"type": "string", "enum": list(video.RESOLUTIONS)},
+                "ratio": {"type": "string", "enum": list(video.SOCIAL_RATIOS)},
                 "stems": {"type": "boolean"},
             },
             "required": [],
@@ -1303,7 +1304,12 @@ class ExportVideoTool(_ProductionTool):
         try:
             project = load_project(context)
             job = queue_video(
-                _user(context.user_id), project["id"], kwargs.get("format") or video.FORMATS[0], kwargs.get("resolution") or None, kwargs.get("stems") is True
+                _user(context.user_id),
+                project["id"],
+                kwargs.get("format") or video.FORMATS[0],
+                kwargs.get("resolution") or None,
+                kwargs.get("stems") is True,
+                kwargs.get("ratio") or None,
             )
         except ToolFailure as failure:
             return failure.result()
@@ -1311,5 +1317,5 @@ class ExportVideoTool(_ProductionTool):
             return _http(error).result()
         shown = jobs.public(job)
         return _ok(
-            {"project_id": project["id"], "job_id": shown["id"], "status": shown["status"], "format": shown["format"], "resolution": shown["resolution"], "stems": shown["stems"]}
+            {"project_id": project["id"], "job_id": shown["id"], "status": shown["status"], "format": shown["format"], "resolution": shown["resolution"], "ratio": shown["ratio"], "stems": shown["stems"]}
         )

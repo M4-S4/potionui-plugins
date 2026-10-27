@@ -359,15 +359,15 @@ test('aggregate: the Production bar follows the takes in flight, mean progress, 
 	assert.ok(isInFlight({ status: 'queued' }) && isInFlight({ status: 'running' }) && !isInFlight({ status: 'cancelled' }));
 });
 
-test('resolutions: only the sizes in the project aspect count; drafts use the admin setting or the nearest, finals the largest', () => {
+test('resolutions: only the sizes in the project aspect count, on the grid of the engine; drafts use the admin setting or the nearest, finals the largest', () => {
 	const wan = me.presets.find((p) => p.id === WAN);
 	const h3 = me.presets.find((p) => p.id === H3);
 	const wide = aspectOf('16:9', '1080p');
 	assert.equal(draftResolution(wan, '832x480', wide), '832x480');
-	assert.equal(draftResolution(h3, '832x480', wide), '1280x720');
+	assert.equal(draftResolution(h3, '832x480', wide), '1280x704');
 	assert.equal(draftResolution(h3, null, wide), null);
 	assert.equal(finalResolution(wan, wide), '1280x720');
-	assert.equal(finalResolution(h3, wide), '1920x1080');
+	assert.equal(finalResolution(h3, wide), '1920x1088');
 	const square = { resolutions: ['832x480', '480x832', '960x544', '1280x720', '720x1280', '512x512', '1024x1024'].map((value) => ({ value, label: value })) };
 	assert.equal(finalResolution(square, wide), '1280x720');
 	assert.equal(finalResolution(square, aspectOf('1:1')), '1024x1024');

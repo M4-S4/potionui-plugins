@@ -13,13 +13,13 @@
 	import { compareSeam, labelPreviewed, pickShot, previewed, selectedShot } from '../../lib/band.svelte.js';
 	import { clipFilter, colorPresetLabel } from '../../lib/look.js';
 	import { lutOf } from '../../lib/match.js';
+	import { aspectOf } from '../../lib/generation.js';
 	import Viewer from '../viewer/Viewer.svelte';
 	import MatchCanvas from '../viewer/MatchCanvas.svelte';
 	import SeamPanel from './SeamPanel.svelte';
 	import ColorControls from '../inspector/ColorControls.svelte';
 	import Icon from '../Icon.svelte';
 
-	const RATIOS = { '16:9': 16 / 9, '2.39:1': 2.39, '9:16': 9 / 16, '1:1': 1, '4:5': 0.8 };
 	let w = $state(0);
 	let h = $state(0);
 	let stills = $state([]);
@@ -33,7 +33,7 @@
 	const take = $derived(previewed());
 	const takes = $derived(clip ? previewable(takesOf(clip), ui.hideRejected) : []);
 	const comparing = $derived(clip && index > 0 && ui.seamCompare === clip.id ? seam(index) : null);
-	const ratio = $derived(RATIOS[doc.aspect] ?? 16 / 9);
+	const ratio = $derived(aspectOf(doc.aspect, doc.resolution));
 	const margin = $derived((w - Math.min(w, Math.max(0, h - 60) * ratio)) / 2);
 	const sides = $derived(Boolean(clip) && margin >= 170);
 	const pick = $derived(comparing ? seamPick(doc, index, takeStore.list) : null);

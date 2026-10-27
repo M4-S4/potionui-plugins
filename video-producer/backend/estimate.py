@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import chaining, core_bridge, limits, soundtrack, takes
+from . import chaining, core_bridge, formats, limits, soundtrack, takes
 from .core_bridge import AccountType, User
 from .director import Plans, ShotPlan, note
 
@@ -98,14 +98,43 @@ def parse_order(body: Any) -> Order:
     )
 
 
-def calibrated_ratio(preset_id: str, backend_id: Optional[str], resolution: Optional[str]) -> Tuple[Optional[float], int]:
-    """Seconds of work per second of video measured for a preset at a resolution at the steps of its defaults, and how many measures back it."""
-    if not resolution:
-        return None, 0
+@dataclass(frozen=True)
+class Calibration:
+    """Seconds of work per second of video, how many measures back them, and the size they were measured at when it is not the one asked."""
+
+    ratio: Optional[float]
+    samples: int
+    measured: Optional[str] = None
+
+
+def _measured(preset_id: str, backend_id: Optional[str], resolution: str) -> Tuple[Optional[float], int]:
     rows = [(seconds, duration_ms) for seconds, duration_ms in takes.calibration(preset_id, backend_id, resolution) if seconds > 0]
     if not rows:
         return None, 0
     return statistics.median(duration_ms / 1000 / seconds for seconds, duration_ms in rows), len(rows)
+
+
+def calibration(preset_id: str, backend_id: Optional[str], resolution: Optional[str]) -> Calibration:
+    """The measures of a preset at a resolution on a backend; with none there, those of its size closest in area, scaled by the areas (formats.time_scale)."""
+    if not resolution:
+        return Calibration(None, 0)
+    ratio, samples = _measured(preset_id, backend_id, resolution)
+    if ratio is not None or formats.parse_size(resolution) is None:
+        return Calibration(ratio, samples)
+    nearest = formats.nearest_measured(takes.calibrated_sizes(preset_id, backend_id), resolution)
+    if nearest is None:
+        return Calibration(None, 0)
+    ratio, samples = _measured(preset_id, backend_id, nearest)
+    scale = formats.time_scale(nearest, resolution)
+    if ratio is None or scale is None:
+        return Calibration(None, 0)
+    return Calibration(ratio * scale, samples, nearest)
+
+
+def calibrated_ratio(preset_id: str, backend_id: Optional[str], resolution: Optional[str]) -> Tuple[Optional[float], int]:
+    """Seconds of work per second of video measured for a preset at a resolution at the steps of its defaults, else extrapolated from its closest measured size, and how many measures back it."""
+    found = calibration(preset_id, backend_id, resolution)
+    return found.ratio, found.samples
 
 
 def take_minutes(seconds: float, ratio: Optional[float]) -> float:
@@ -275,16 +304,28 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
     minutes: Dict[str, float] = {}
     work: Optional[float] = 0.0
     samples = 0
+    extrapolated: List[Dict[str, Any]] = []
     for index, plan in enumerate(plans.shots):
-        ratio, count = calibrated_ratio(plan.preset_id, plan.backend_id or vram.get("backend_id"), plan.resolution)
+        measure = calibration(plan.preset_id, plan.backend_id or vram.get("backend_id"), plan.resolution)
+        ratio = measure.ratio
         if index == 0:
-            samples = count
+            samples = measure.samples
+        if measure.measured is not None:
+            warning = note(
+                "size_unmeasured",
+                f"No take was measured at {plan.resolution} on this engine yet: its time is reckoned from {measure.measured}.",
+                preset_id=plan.preset_id,
+                size=plan.resolution,
+                measured=measure.measured,
+            )
+            if warning not in extrapolated:
+                extrapolated.append(warning)
         minutes[plan.shot_id] = take_minutes(plan.seconds * plan.work_scale, ratio)
         work = None if ratio is None or work is None else work + ratio * plan.seconds * plan.work_scale * counts[plan.shot_id]
     seconds = round(work, 1) if work is not None and plans.shots else None
     quota = _quota(owner, plans, minutes, counts)
     blocks = list(plans.blocks) + ([quota_block(quota)] if quota["blocks"] else [])
-    warnings = list(plans.warnings) + vram_warnings
+    warnings = list(plans.warnings) + vram_warnings + extrapolated
     if plans.shots and seconds is None:
         warnings.append(note("time_unknown", "No take of this preset was measured at this resolution yet."))
     payload = {

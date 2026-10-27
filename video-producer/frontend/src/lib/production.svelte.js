@@ -85,6 +85,8 @@ export function backendName(id) {
 	return (ui.me?.engines ?? []).find((e) => e.id === id)?.name ?? id ?? '—';
 }
 
+const engineName = (presetId) => presetLabel(presetById(presetId)) || engineOptionLabel(presetId ?? null, null);
+
 export function engineOptionLabel(preset, model = null) {
 	const option = optionFor(engineChoices(), { preset, model });
 	if (option) return option.label;
@@ -238,6 +240,11 @@ function baseNoteText(note) {
 	if (code === 'dialogue_speaker_not_cast') return t('generation.warn.dialogueSpeakerNotCast', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });
 	if (code === 'dialogue_too_long') return t('generation.warn.dialogueTooLong', { shot: shotName(data.shot_id), words: data.words ?? '—', limit: data.limit ?? '—' });
 	if (code === 'dialogue_voice_not_sent') return t('generation.warn.dialogueVoiceNotSent', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });
+	if (code === 'aspect_cropped') return t('generation.warn.aspectCropped', { engine: engineName(data.preset_id), made: data.made ?? '—', loss: data.loss ?? '—' });
+	if (code === 'aspect_bars') return t('generation.warn.aspectBars', { engine: engineName(data.preset_id), made: data.made ?? '—' });
+	if (code === 'aspect_unsupported') return t('generation.warn.aspectUnsupported', { engine: engineOptionLabel(data.preset_id ?? null, data.model_id ?? null), aspect: data.aspect ?? doc.aspect, made: data.made ?? '—' });
+	if (code === 'size_unmeasured') return t('generation.warn.sizeUnmeasured', { size: String(data.size ?? '—').replace('x', '×'), measured: String(data.measured ?? '—').replace('x', '×') });
+	if (code === 'engine_size_invalid') return t('generation.warn.sizeInvalid', { engine: engineName(data.preset_id), size: String(data.size ?? '—').replace('x', '×') });
 	if (code === 'engine_option_invalid') return t('generation.warn.optionInvalid', { engine: presetLabel(presetById(data.preset_id)) || engineOptionLabel(data.preset_id, null), fields: optionNames(data.preset_id, Array.isArray(data.fields) ? data.fields : []) });
 	return note?.message || code || '';
 }

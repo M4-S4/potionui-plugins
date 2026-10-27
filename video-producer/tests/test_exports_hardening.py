@@ -87,8 +87,8 @@ def _script(doc, files, sounds=None, **options):
     return filter_graph(doc, files, _options(**options), {**PATHS, "audio": sounds or {}})
 
 
-def _prepare(doc, files, folder, label, audio=None, sounds=None, fmt="web", resolution="720p", stills=(), lengths=None):
-    options = {"format": fmt, "resolution": resolution, "stills": list(stills), **(video.inspect(files) if lengths is None else {"lengths": lengths})}
+def _prepare(doc, files, folder, label, audio=None, sounds=None, fmt="web", resolution="720p", stills=(), lengths=None, ratio=None):
+    options = {"format": fmt, "resolution": resolution, "ratio": ratio, "stills": list(stills), **(video.inspect(files) if lengths is None else {"lengths": lengths})}
     if audio is not None:
         options["audio"] = audio
     ffmpeg = shutil.which("ffmpeg")
@@ -867,15 +867,18 @@ ASPECTS = ["16:9", "9:16", "1:1", "4:5", "5:4", "21:9", "2.39:1", "1.85:1", "4:3
 
 
 @pytest.mark.parametrize("fmt", ["web", "social"])
-@pytest.mark.parametrize("resolution", ["720p", "1080p", "4K"])
+@pytest.mark.parametrize("resolution", ["720p", "1080p", "1440p", "4K"])
 @pytest.mark.parametrize("aspect", ASPECTS)
-def test_every_aspect_gives_an_even_frame_of_a_sane_size(make_doc, aspect, resolution, fmt):
+def test_every_aspect_gives_an_even_frame_inside_the_16_9_box_of_its_resolution(make_doc, aspect, resolution, fmt):
     doc = _doc(make_doc, [_shot(0)], aspect=aspect)
+    base = {"720p": 720, "1080p": 1080, "1440p": 1440, "4K": 2160}[resolution]
 
     width, height = frame_size(doc, fmt, resolution)
+    short, long = sorted((width, height))
 
     assert width % 2 == 0 and height % 2 == 0 and 2 <= width <= 7680 and 2 <= height <= 7680
-    assert min(width, height) == {"720p": 720, "1080p": 1080, "4K": 2160}[resolution]
+    assert short <= base and long <= base * 16 // 9
+    assert short == base or long == base * 16 // 9
 
 
 def test_a_social_export_is_always_nine_by_sixteen_whatever_the_project_aspect(make_doc):
@@ -929,8 +932,8 @@ def _sound(folder):
     return path
 
 
-async def _assemble(doc, files, tmp_path, label, audio=None, sounds=None, fmt="web", resolution="720p", stills=()):
-    command, cwd = _prepare(doc, files, tmp_path, label, audio=audio, sounds=sounds, fmt=fmt, resolution=resolution, stills=stills)
+async def _assemble(doc, files, tmp_path, label, audio=None, sounds=None, fmt="web", resolution="720p", stills=(), ratio=None):
+    command, cwd = _prepare(doc, files, tmp_path, label, audio=audio, sounds=sounds, fmt=fmt, resolution=resolution, stills=stills, ratio=ratio)
     _, total = video.timeline(doc)
     await asyncio.wait_for(video.assemble(command, total, None, None, cwd), timeout=120)
     return tmp_path / f"{label}.mkv", total
@@ -943,6 +946,28 @@ def _file(path):
 @pytest.mark.requires_ffmpeg
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg and ffprobe are not on the PATH")
 class TestRealAssemblies:
+    @pytest.mark.parametrize(
+        "aspect, fmt, resolution, ratio, framing, size",
+        [
+            ("2.39:1", "web", "720p", None, None, (1280, 536)),
+            ("1.85:1", "master", "1440p", None, "bars", (2560, 1384)),
+            ("4:3", "archive", "720p", None, "crop", (960, 720)),
+            ("16:9", "social", "720p", "4:5", None, (720, 900)),
+            ("2.39:1", "social", "1080p", "1:1", None, (1080, 1080)),
+        ],
+    )
+    async def test_the_formats_and_sizes_assemble_to_their_frame(self, make_doc, tmp_path, aspect, fmt, resolution, ratio, framing, size):
+        wide = _clip(tmp_path, "w.mp4", "320x180", 1.0, True, 25)
+        square = _clip(tmp_path, "s.mp4", "240x240", 1.0, False, 25)
+        doc = _doc(make_doc, [_shot(0), _shot(1)], aspect=aspect, **({"framing": framing} if framing else {}))
+
+        output, total = await _assemble(
+            doc, {"c0": _file(wide), "c1": _file(square)}, tmp_path, "formats", audio={"c0": True, "c1": False}, fmt=fmt, resolution=resolution, ratio=ratio
+        )
+
+        probe = core_bridge.probe_video(output)
+        assert (probe.width, probe.height) == size and abs(probe.duration - total) < 0.1
+
     async def test_sources_of_every_shape_assemble_to_the_length_of_the_sequence(self, make_doc, tmp_path):
         stereo = _clip(tmp_path, "a.mp4", "320x240", 1.0, True, 25)
         odd = _clip(tmp_path, "b.mp4", "333x187", 1.0, True, 10)
@@ -1031,8 +1056,8 @@ class TestRealAssemblies:
             )
             return {key: float(re.search(rf"signalstats\.{key}=([\d.]+)", run.stdout).group(1)) for key in ("YAVG", "UAVG", "VAVG")}
 
-        neutral, _ = await _assemble(_doc(make_doc, [_shot(0)]), {"c0": _file(grey)}, tmp_path, "neutral")
-        graded, _ = await _assemble(_doc(make_doc, [_shot(0, **look)]), {"c0": _file(grey)}, tmp_path, "graded")
+        neutral, _ = await _assemble(_doc(make_doc, [_shot(0)], framing="bars"), {"c0": _file(grey)}, tmp_path, "neutral")
+        graded, _ = await _assemble(_doc(make_doc, [_shot(0, **look)], framing="bars"), {"c0": _file(grey)}, tmp_path, "graded")
 
         before, after = stats(neutral), stats(graded)
         sign = lambda value, tolerance: (value > tolerance) - (value < -tolerance)

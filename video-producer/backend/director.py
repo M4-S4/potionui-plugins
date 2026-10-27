@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, dialogue, engine_options, models, presets, reception, settings
+from . import bible, catalog, core_bridge, dialogue, engine_options, formats, models, presets, reception, settings
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -1018,49 +1018,49 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
 
 def aspect_of(doc: Mapping[str, Any]) -> float:
     """The project's aspect ratio, width over height."""
-    aspect = str(doc.get("aspect") or "")
-    for separator in (":", "/", "x"):
-        if aspect.count(separator) == 1:
-            left, right = aspect.split(separator)
-            try:
-                width, height = float(left), float(right)
-            except ValueError:
-                break
-            if width > 0 and height > 0:
-                return width / height
+    ratio = formats.ratio_of(doc.get("aspect"))
+    if ratio is not None:
+        return ratio
     size = models.parse_size(doc.get("resolution"))
     return size[0] / size[1] if size else DEFAULT_ASPECT
 
 
-def _matching(options: Sequence[Mapping[str, str]], aspect: float) -> List[Tuple[str, int, int]]:
-    sizes = [(option["value"], *models.parse_size(option["value"])) for option in options]
-    if not sizes:
-        return []
-    distance = {value: abs(math.log(width / height) - math.log(aspect)) for value, width, height in sizes}
-    closest = min(distance.values())
-    return [size for size in sizes if distance[size[0]] <= closest + ASPECT_TOLERANCE]
+def draft_resolution(options: Sequence[Any], setting: str, aspect: float, preset_id: Optional[str] = None) -> Optional[str]:
+    """The draft size of the family of sizes the preset makes a film of this ratio in (formats.draft_size)."""
+    return formats.draft_size(options, setting, aspect, preset_id)
 
 
-def draft_resolution(options: Sequence[Mapping[str, str]], setting: str, aspect: float) -> Optional[str]:
-    """The admin's draft resolution, turned to the project's orientation, when offered; else the closest offered size in area."""
-    size = models.parse_size(setting)
-    if size is None:
+def final_resolution(options: Sequence[Any], aspect: float, preset_id: Optional[str] = None) -> Optional[str]:
+    """The largest size of the family of sizes the preset makes a film of this ratio in (formats.final_size)."""
+    return formats.final_size(options, aspect, preset_id)
+
+
+def size_ratio(size: Any) -> Optional[float]:
+    """The width over height of a WxH size, or None."""
+    parsed = formats.parse_size(size)
+    return parsed[0] / parsed[1] if parsed else None
+
+
+def framing_note(doc: Mapping[str, Any], preset: "Preset", size: Optional[str], made: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """The warning that the film crops the takes of a preset, or shows them between bars, because they come in another ratio than the project's; None when the ratios agree."""
+    take = formats.ratio_of(made) if made is not None else size_ratio(size)
+    if take is None:
         return None
-    width, height = size if (size[0] >= size[1]) == (aspect >= 1) else (size[1], size[0])
-    wanted = f"{width}x{height}"
-    candidates = _matching(options, aspect)
-    if not candidates:
-        return wanted
-    if any(value == wanted for value, _, _ in candidates):
-        return wanted
-    area = width * height
-    return min(candidates, key=lambda option: (abs(option[1] * option[2] - area), option[1] * option[2]))[0]
+    frame = aspect_of(doc)
+    shown = formats.fit(take, frame, formats.framing_of(doc))
+    if shown == formats.EXACT:
+        return None
+    lost = round(formats.loss(take, frame) * 100)
+    made = made or formats.ratio_text(take)
+    data = {"preset_id": preset.id, "size": size, "made": made, "aspect": doc.get("aspect"), "loss": lost}
+    if shown == formats.CROP:
+        return note("aspect_cropped", f"{preset.name} makes the takes of this film in {made}: the film crops them ({lost} % of the picture).", **data)
+    return note("aspect_bars", f"{preset.name} makes the takes of this film in {made}: the film shows them between bars.", **data)
 
 
-def final_resolution(options: Sequence[Mapping[str, str]], aspect: float) -> Optional[str]:
-    """The largest offered size in the project's aspect ratio."""
-    candidates = _matching(options, aspect)
-    return max(candidates, key=lambda option: option[1] * option[2])[0] if candidates else None
+def _add(warnings: List[Dict[str, Any]], warning: Optional[Dict[str, Any]]) -> None:
+    if warning is not None and warning not in warnings:
+        warnings.append(warning)
 
 
 def _clamped(wanted: float, maximum: Any, clip_id: str, warnings: List[Dict[str, Any]]) -> float:
@@ -1272,14 +1272,56 @@ def _text_only(preset: Preset) -> bool:
     return bool(modes) and "i2v" not in modes
 
 
-def _native_size(context: _Context, fields: models.Fields) -> Optional[str]:
-    options = models.resolution_options(fields)
-    aspect = aspect_of(context.doc)
-    return (
-        final_resolution(options, aspect)
-        if context.quality == "final"
-        else draft_resolution(options, context.draft_setting, aspect)
-    ) or (fields.get("resolution") or {}).get("default") or context.draft_setting
+def _native_size(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> Optional[str]:
+    preset = context.preset
+    choice = formats.pick_size(
+        models.resolution_options(fields),
+        aspect_of(context.doc),
+        context.quality,
+        context.draft_setting,
+        formats.chosen_size(context.doc, preset.id, context.quality),
+        preset.id,
+    )
+    if choice.refused is not None:
+        _add(
+            warnings,
+            note(
+                "engine_size_invalid",
+                f"{preset.name} cannot make takes of {choice.refused}: the size the project chose for it is left out.",
+                preset_id=preset.id,
+                quality=context.quality,
+                size=choice.refused,
+                reason=choice.problem,
+            ),
+        )
+    size = choice.size or (fields.get("resolution") or {}).get("default") or context.draft_setting
+    if "resolution" in fields:
+        _add(warnings, framing_note(context.doc, preset, size))
+    return size
+
+
+def working_ratio(user: User, doc: Mapping[str, Any], shot_id: str) -> float:
+    """The ratio a shot's video engine makes its takes in for the project's format: the ratio of the family of sizes of its preset, the closest one its cloud model offers, else the project's."""
+    frame = aspect_of(doc)
+    chosen = shot_engine(doc, shot_id)
+    engine = doc.get("engine") if isinstance(doc.get("engine"), Mapping) else {}
+    preset_id = chosen["preset"] if "preset" in chosen else engine.get("preset")
+    model_id = chosen.get("model") if "preset" in chosen else engine.get("model")
+    preset = find_preset(user, preset_id) if isinstance(preset_id, str) and preset_id else None
+    if preset is None:
+        return frame
+    if preset.cloud:
+        model = _cloud_model(model_id) or {}
+        for task in (IMG2VIDEO, TXT2VIDEO):
+            values = [str(value) for value in (_param(model, "aspect_ratio", task) or {}).get("values") or []]
+            ratio = formats.ratio_of(formats.closest_format(values, frame))
+            if ratio is not None:
+                return ratio
+        return frame
+    mode = preset.main_mode
+    if mode is None or mode not in preset.modes:
+        return frame
+    return size_ratio(final_resolution(models.resolution_options(models.form_fields(preset.id, mode)), frame, preset.id)) or frame
 
 
 def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Optional[str], fps: float) -> Dict[str, Any]:
@@ -1315,7 +1357,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     if mode is None or mode not in preset.modes:
         raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
     fields = context.mode_fields(mode)
-    resolution = _native_size(context, fields)
+    resolution = _native_size(context, fields, warnings)
     seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
     fps = preset.fps
     sent: List[SentReference] = []
@@ -1330,7 +1372,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         sent = reference_media(context.user, doc, shot_id, tracks, [track.cut for track in ready])
         video = _sent_tracks(doc, shot_id, tracks, ready, sent, warnings)
         for cut in video:
-            cut.size = reception.cut_size(aspect_of(doc), models.parse_size(resolution))
+            cut.size = reception.cut_size(size_ratio(resolution) or aspect_of(doc), models.parse_size(resolution))
         _tag_warnings(doc, clip, {cut.slot for cut in video}, warnings)
         if not sent:
             raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
@@ -1550,7 +1592,20 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     resolution = cloud_resolution(_param(model, "resolution", task), context.quality)
     aspect_param = _param(model, "aspect_ratio", task)
     aspect_values = [str(value) for value in (aspect_param or {}).get("values") or []]
-    aspect = doc.get("aspect") if doc.get("aspect") in aspect_values else (aspect_param or {}).get("default")
+    aspect = doc.get("aspect") if doc.get("aspect") in aspect_values else formats.closest_format(aspect_values, aspect_of(doc)) or (aspect_param or {}).get("default")
+    if aspect is not None and aspect != doc.get("aspect"):
+        _add(
+            warnings,
+            note(
+                "aspect_unsupported",
+                f"{model.get('name') or model.get('id')} offers no {doc.get('aspect')} frame: its takes come in {aspect}.",
+                preset_id=preset.id,
+                model_id=model.get("id"),
+                made=str(aspect),
+                aspect=doc.get("aspect"),
+            ),
+        )
+        _add(warnings, framing_note(doc, preset, None, str(aspect)))
     duration_param = _param(model, "duration_s", task)
     wanted = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
     seconds, longest = cloud_duration(duration_param, wanted)
@@ -1994,7 +2049,7 @@ def build_guided(user: User, doc: Mapping[str, Any], source: Mapping[str, Any], 
     fps = _guided_fps(preset, fields, source)
     length = float(source.get("duration_s") or 0) or _wanted_seconds(clip, preset)
     seconds = round(guided_frames(length, fps) / fps, 6)
-    resolution = final_resolution(models.resolution_options(fields), _guided_aspect(doc, source)) or (fields.get("resolution") or {}).get("default")
+    resolution = final_resolution(models.resolution_options(fields), _guided_aspect(doc, source), preset.id) or (fields.get("resolution") or {}).get("default")
     prompt, reference = compose_shot(doc, clip, bible.family(preset.id, False))
     document = guided_document(prompt, fps, seconds, resolution, lora, source_video(user, source)["value"])
     asset = take_asset(doc, source.get("id")) if sound else None

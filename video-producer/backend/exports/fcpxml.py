@@ -2,9 +2,8 @@ import re
 from typing import Any, Dict, Mapping, Optional, Tuple
 from urllib.parse import quote
 
+from .. import formats
 from .common import Timebase, asset_of, clip_label, js_number, seq_duration
-
-SIZES = {"720p": (1280, 720), "1080p": (1920, 1080), "4K": (3840, 2160)}
 
 _URI_SAFE = ";,/?:@&=+$!*'()#"
 
@@ -36,11 +35,26 @@ def media_url(entry: Mapping[str, str]) -> str:
     return esc(f"file://{encode_uri(f'/Video Producer/{location}')}")
 
 
+def frame(doc: Mapping[str, Any]) -> Tuple[int, int]:
+    """The frame of the sequence: the project's format inside the 16:9 box of its resolution, 16:9 past 1:4 or 4:1, as the video export frames it."""
+    ratio = formats.ratio_of(doc.get("aspect"))
+    if ratio is None or not 1 / 4 <= ratio <= 4:
+        ratio = formats.BOX
+    return formats.delivery_size(ratio, doc.get("resolution"))
+
+
+def format_name(doc: Mapping[str, Any], fps: str) -> str:
+    """The name attribute of the sequence's format, kept for a 16:9 frame and left out for the other formats, which no named format describes."""
+    if frame(doc) != formats.delivery_size(formats.BOX, doc.get("resolution")):
+        return ""
+    return f' name="FFVideoFormat{doc["resolution"]}{fps}"'
+
+
 def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict[str, str]]], locale: str = "en") -> str:
     """The sequence as FCPXML 1.10."""
     time = Timebase(doc)
     media = [(index, clip) for index, clip in enumerate(doc["clips"]) if files.get(("clips", index))]
-    width, height = SIZES.get(doc["resolution"], (1920, 1080))
+    width, height = frame(doc)
     refs = {index: number + 2 for number, (index, _) in enumerate(media)}
     assets = []
     for index, clip in media:
@@ -70,7 +84,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
         "<!DOCTYPE fcpxml>\n"
         '<fcpxml version="1.10">\n'
         "\t<resources>\n"
-        f'\t\t<format id="r1" name="FFVideoFormat{doc["resolution"]}{fps}" frameDuration="1/{fps}s" '
+        f'\t\t<format id="r1"{format_name(doc, fps)} frameDuration="1/{fps}s" '
         f'width="{width}" height="{height}"/>\n'
         f"{chr(10).join(assets)}\n"
         "\t</resources>\n"
