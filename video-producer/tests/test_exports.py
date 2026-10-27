@@ -73,7 +73,7 @@ def test_the_fixture_is_a_document_the_plugin_stores(fixture):
     assert len(doc["clips"]) == 4 and sum(1 for clip in doc["clips"] if clip["assetId"] is None) == 1
     assert [clip["stage"] for clip in doc["clips"]].count("source") == 1
     assert len({item["lane"] for item in doc["audio"]}) == 2 and len(doc["titles"]) == 2
-    assert any(asset["transcript"] and asset["character"] for asset in doc["assets"])
+    assert not any(key in asset for asset in doc["assets"] for key in ("synth", "transcript", "character", "lipSync"))
 
 
 def test_the_fcpxml_is_well_formed_and_every_clip_points_at_a_declared_asset(fixture, resolver):
@@ -124,13 +124,16 @@ def test_the_srt_numbers_its_cues_in_time_order(fixture, resolver):
     text = render("srt", fixture["doc"], {})
 
     blocks = text.strip("\n").split("\n\n")
-    assert [block.split("\n")[0] for block in blocks] == ["1", "2", "3"]
+    assert [block.split("\n")[0] for block in blocks] == ["1", "2"]
     assert all(re.fullmatch(r"\d\d:\d\d:\d\d,\d{3} --> \d\d:\d\d:\d\d,\d{3}", block.split("\n")[1]) for block in blocks)
-    assert blocks[1].split("\n")[2] == "Marin: On part avant la marée."
+    assert blocks[1].split("\n")[2] == "Fin"
 
 
-def test_the_srt_writes_the_character_the_french_way_in_french(fixture):
-    assert "Marin : On part avant la marée." in render("srt", fixture["doc"], {}, locale="fr")
+def test_the_srt_holds_the_titles_alone_whatever_the_locale(fixture):
+    text = render("srt", fixture["doc"], {})
+
+    assert render("srt", fixture["doc"], {}, locale="fr") == text
+    assert "Marin" not in text
 
 
 def test_a_take_names_its_real_file_and_gives_its_path_on_the_server(fixture, resolver):

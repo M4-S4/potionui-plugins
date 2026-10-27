@@ -16,7 +16,6 @@
 	import ShotEditor from './ShotEditor.svelte';
 	import EngineEditor from './EngineEditor.svelte';
 	import PromptLibrary from './PromptLibrary.svelte';
-	import SoundDesign from './SoundDesign.svelte';
 	import ExportDialog from './ExportDialog.svelte';
 	import MakeFinal from './MakeFinal.svelte';
 	import FinalPass from './FinalPass.svelte';
@@ -52,8 +51,6 @@
 
 	const simList = $derived([
 		[t('shell.simulations.identity.title'), t('shell.simulations.identity.text')],
-		[t('shell.simulations.lipSync.title'), t('shell.simulations.lipSync.text')],
-		[t('shell.simulations.voice.title'), t('shell.simulations.voice.text')],
 		[t('shell.simulations.console.title'), t('shell.simulations.console.text')],
 		[t('shell.simulations.formats.title'), t('shell.simulations.formats.text')]
 	]);
@@ -87,8 +84,6 @@
 		<EngineEditor preset={m.preset ?? null} />
 	{:else if m?.type === 'library'}
 		<PromptLibrary target={m.target} tab={m.tab} />
-	{:else if m?.type === 'sound'}
-		<SoundDesign type={m.kind ?? 'Ambiance'} />
 	{:else if m?.type === 'export'}
 		<ExportDialog tab={m.tab ?? 'video'} />
 	{:else if m?.type === 'final'}

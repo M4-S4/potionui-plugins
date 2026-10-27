@@ -11,7 +11,7 @@ const fixtures = join(here, '..', '..', '..', 'tests', 'fixtures', 'exports');
 const readDomain = (domain) => JSON.parse(readFileSync(join(here, '..', 'i18n', 'en', `${domain}.json`), 'utf-8'));
 const dictionaries = { en: mergeDomains(Object.fromEntries(DOMAINS.map((domain) => [domain, readDomain(domain)]))) };
 const en = (key, params) => translate(dictionaries, 'en', key, params);
-const optionsFor = (doc) => ({ label: labelOf(doc, en('lib.default.clip')), cue: (character, text) => en('modals.export.cue', { character, text }) });
+const optionsFor = (doc) => ({ label: labelOf(doc, en('lib.default.clip')) });
 
 function sampleDoc() {
 	return {
@@ -29,7 +29,7 @@ function sampleDoc() {
 		assets: [
 			{ id: 'a1', kind: 'video', name: 'Ridge take', src: '/api/media/generations/g1/ridge%20take.mp4?x=1', srcDur: 6, generated: true, quality: 'final', resultId: 't1' },
 			{ id: 'a2', kind: 'video', name: 'Hut · wide', src: null, srcDur: null, generated: true, quality: 'draft', resultId: 'r7' },
-			{ id: 'v1', kind: 'audio', name: 'Line 1', src: null, transcript: 'Hello', character: 'Mara' }
+			{ id: 'v1', kind: 'audio', name: 'Line 1', src: null }
 		]
 	};
 }
@@ -75,8 +75,8 @@ test('formats: gaps for shots without a file, escaped names, CRLF edit list, cue
 	assert.ok(list.startsWith('TITLE: DAWN & <PORT>\r\nFCM: NON-DROP FRAME\r\n\r\n'));
 	assert.match(list, /002 {2}BL {7}V {5}C {8}00:00:00:00 00:00:01:13 00:00:02:00 00:00:03:13\r\n\* FROM CLIP NAME: Shot\r\n\r\n/);
 	assert.match(list, /\* SOURCE FILE: ridge take\.mp4\r\n/);
-	assert.deepEqual(srtCues(doc, options).map((c) => c.text), ['Dawn\nPort', 'Mara: Hello']);
-	assert.equal(srt(doc, options), '1\n00:00:00,000 --> 00:00:01,000\nDawn\nPort\n\n2\n00:00:00,500 --> 00:00:01,700\nMara: Hello\n');
+	assert.deepEqual(srtCues(doc).map((c) => c.text), ['Dawn\nPort']);
+	assert.equal(srt(doc), '1\n00:00:00,000 --> 00:00:01,000\nDawn\nPort\n');
 	assert.deepEqual(Object.keys(MAKERS), Object.keys(EXCHANGE));
 });
 
@@ -91,7 +91,7 @@ test('text the formats cannot hold: control characters out of the XML, line brea
 	const lines = edl(doc, options).split('\r\n');
 	assert.equal(lines.filter((line) => /^\d{3} /.test(line)).length, 3);
 	assert.ok(lines.includes(`* FROM CLIP NAME: Ridge${forged}`));
-	assert.equal(srt(doc, options).split('\n\n')[0], '1\n00:00:00,000 --> 00:00:01,000\none\ntwo\nthree');
+	assert.equal(srt(doc), '1\n00:00:00,000 --> 00:00:01,000\none\ntwo\nthree\n');
 });
 
 test('the four formats regenerate the backend golden files byte for byte (media=name)', () => {

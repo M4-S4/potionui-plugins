@@ -207,7 +207,7 @@ test('exports.error.<code> matches the export error codes the export window tran
 });
 
 test('every command and menu of lib/commands.js has a label, and every label has a command', () => {
-	assert.equal(commandIds.length, 108, 'the source editor has 97 commands, minus the theme switch, plus the version history, the two imports from the computer, the slicing, joining and slicing on the shots of an audio clip, the Play workspace, the Synopsis and breakdown window, the Storyboard band and the shot editor, minus the advanced workshop, the Hybrid builder and the camera keyframes, minus the 3D scene workspace and its new scene command, plus the four views of Director AI, the final pass of the film, and picking every shot and clearing the shots picked');
+	assert.equal(commandIds.length, 102, 'the source editor has 97 commands, minus the theme switch, plus the version history, the two imports from the computer, the slicing, joining and slicing on the shots of an audio clip, the Play workspace, the Synopsis and breakdown window, the Storyboard band and the shot editor, minus the advanced workshop, the Hybrid builder and the camera keyframes, minus the 3D scene workspace and its new scene command, plus the four views of Director AI, the final pass of the film, and picking every shot and clearing the shots picked, minus the voice and the five sounds of the retired Sound design workshop');
 	assert.equal(new Set(commandIds).size, commandIds.length, 'duplicate command id');
 	assert.equal(menuIds.length, 10);
 	assert.ok(!commandIds.includes('theme'), 'the theme command belongs to the host');
@@ -219,8 +219,8 @@ test('every command and menu of lib/commands.js has a label, and every label has
 	assert.ok(errors.includes('shell.error.unknown') && errors.includes('shell.error.server_error'));
 });
 
-test('Help › Simulated features lists the five simulated items, each with a title and a text', () => {
-	const items = ['identity', 'lipSync', 'voice', 'console', 'formats'];
+test('Help › Simulated features lists the three simulated items, each with a title and a text', () => {
+	const items = ['identity', 'console', 'formats'];
 	const declared = Object.keys(dictionaries.en).filter((key) => /^shell\.simulations\.[^.]+\.title$/.test(key)).map((key) => key.split('.')[2]);
 	assert.deepEqual(declared, items);
 	const modals = readFileSync(join(srcRoot, 'components', 'modals', 'Modals.svelte'), 'utf-8');

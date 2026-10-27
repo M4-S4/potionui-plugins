@@ -35,10 +35,6 @@ def _audio_asset(**fields):
         "quality": None,
         "resultId": None,
         "role": "Ambiance",
-        "synth": "wind",
-        "transcript": None,
-        "character": None,
-        "lipSync": None,
         **fields,
     }
 
@@ -59,10 +55,6 @@ def _video_asset(**fields):
         "quality": None,
         "resultId": None,
         "role": None,
-        "synth": None,
-        "transcript": None,
-        "character": None,
-        "lipSync": None,
         **fields,
     }
 
@@ -151,7 +143,6 @@ def _rich(doc):
         },
     ]
     doc["lanes"][0]["inserts"].append({"type": "filter", "on": True, "cutoff": 8000})
-    doc["lanes"][1]["automation"] = "write"
     doc["profiles"].append({"id": "01M535B4GTPROFILE000000000", "name": "Profile 1", "weights": dict(doc["hybrid"])})
     doc["engine"]["loras"].append({"name": "Film grain", "weight": 0.55})
     doc["assets"] += [_audio_asset(), _video_asset()]
@@ -188,15 +179,9 @@ def test_the_reference_project_is_valid_and_current():
     assert not {"scenes", "controls", "plans3d"} & set(doc)
 
 
-def test_an_audio_asset_from_sound_design_and_a_video_asset_without_audio_fields_are_valid(starter):
+def test_an_audio_asset_and_a_video_asset_without_audio_fields_are_valid(starter):
     starter["assets"] = [
-        _audio_asset(
-            synth="voice",
-            role="Dialogue",
-            transcript="We camp here tonight.",
-            character="Lena",
-            lipSync=True,
-        ),
+        _audio_asset(role="Dialogue", src="/api/media/uploads/line.wav", generated=False),
         _video_asset(
             id="gen-01M535B4GTRESULT00000000",
             src=None,
@@ -351,16 +336,16 @@ def test_an_invalid_document_names_the_json_path_at_fault(starter, mutate, path,
     "asset, path",
     [
         (_audio_asset(kind="text"), "$.assets[0].kind"),
-        (_audio_asset(synth="rain"), "$.assets[0].synth"),
         (_audio_asset(role="Voix"), "$.assets[0].role"),
-        (_audio_asset(lipSync="yes"), "$.assets[0].lipSync"),
+        ({**_audio_asset(), "synth": "wind"}, "$.assets[0]"),
+        ({**_audio_asset(), "lipSync": None}, "$.assets[0]"),
         (_audio_asset(quality="preview"), "$.assets[0].quality"),
         (_video_asset(width=19.5), "$.assets[0].width"),
         (_video_asset(id=""), "$.assets[0].id"),
         (_video_asset(origin={"kind": "history", "generationId": "g"}), "$.assets[0].origin"),
         (_video_asset(origin={"kind": "library", "item_id": "i"}), "$.assets[0].origin"),
         (_video_asset(origin={"kind": "url", "href": "x"}), "$.assets[0].origin.kind"),
-        ({key: value for key, value in _video_asset().items() if key != "transcript"}, "$.assets[0]"),
+        ({key: value for key, value in _video_asset().items() if key != "role"}, "$.assets[0]"),
         ({**_video_asset(), "tags": []}, "$.assets[0]"),
     ],
 )
@@ -537,8 +522,8 @@ def _control(control_id, asset_id, shot_id=None, start=0, dur=5, source="scene3d
 def test_migrating_adds_the_video_of_each_3d_guide_once_as_a_mouvement_reference_of_the_shot_it_covers(starter):
     video = "01M535B4GTVIDEO00000000000"
     starter["assets"] = [
-        {**_audio_asset(), "id": video, "kind": "video", "role": None, "synth": None},
-        {**_audio_asset(), "id": "still", "kind": "image", "role": None, "synth": None},
+        {**_audio_asset(), "id": video, "kind": "video", "role": None},
+        {**_audio_asset(), "id": "still", "kind": "image", "role": None},
     ]
     second = starter["clips"][1]["id"]
     starter["controls"] = [

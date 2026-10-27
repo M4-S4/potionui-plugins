@@ -14,11 +14,11 @@ let polling = false;
 let watching = false;
 let live = false;
 
-const options = () => ({ label: clipLabel, cue: (character, text) => t('modals.export.cue', { character, text }) });
+const options = () => ({ label: clipLabel });
 const gone = (error) => error?.code === 'project_not_found';
 
 export const exchangeText = (format) => MAKERS[format](doc, options());
-export const subtitleCues = () => srtCues(doc, options());
+export const subtitleCues = () => srtCues(doc);
 export const canShowLibrary = () => libraryAvailable();
 
 const knownError = (code) => EXPORT_ERROR_CODES.includes(code);

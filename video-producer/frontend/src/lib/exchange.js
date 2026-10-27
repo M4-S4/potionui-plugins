@@ -152,23 +152,17 @@ export function edl(doc, { label }) {
 	return lines.join('\r\n');
 }
 
-export function srtCues(doc, { cue }) {
-	const cues = [];
-	for (const a of doc.audio) {
-		const src = assetOf(doc, a.assetId);
-		if (src?.transcript) cues.push({ start: a.start, end: a.start + a.dur, text: src.character ? cue(src.character, src.transcript) : src.transcript });
-	}
-	for (const title of doc.titles) cues.push({ start: title.start, end: title.start + title.dur, text: [title.text, title.sub].filter(Boolean).join('\n') });
-	return cues.sort((a, b) => a.start - b.start);
+export function srtCues(doc) {
+	return doc.titles.map((title) => ({ start: title.start, end: title.start + title.dur, text: [title.text, title.sub].filter(Boolean).join('\n') })).sort((a, b) => a.start - b.start);
 }
 
-export function srt(doc, options) {
+export function srt(doc) {
 	const ts = (sec) => {
 		const ms = Math.round(sec * 1000);
 		const p = (n, w = 2) => String(n).padStart(w, '0');
 		return `${p(Math.floor(ms / 3600000))}:${p(Math.floor((ms % 3600000) / 60000))}:${p(Math.floor((ms % 60000) / 1000))},${p(ms % 1000, 3)}`;
 	};
-	return srtCues(doc, options)
+	return srtCues(doc)
 		.map((c, i) => `${i + 1}\n${ts(c.start)} --> ${ts(c.end)}\n${fold(c.text)}\n`)
 		.join('\n');
 }

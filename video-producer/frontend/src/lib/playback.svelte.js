@@ -187,104 +187,16 @@ function mediaVoice(clip, src, warn = true) {
 	return v;
 }
 
-const SYNTH_BY_ROLE = { Dialogue: 'voice', Musique: 'pad', Ambiance: 'wind', SFX: 'steps' };
-
 function voice(clip) {
-	let v = voices.get(clip.id);
-	const a = asset(clip.assetId);
-	const src = a?.src ?? null;
-	if (v && (v.src ?? null) === src) return v;
+	const v = voices.get(clip.id);
+	const src = asset(clip.assetId)?.src ?? null;
+	if (v && v.src === src) return v;
 	if (v) {
 		v.stop();
 		v.out.disconnect();
 		voices.delete(clip.id);
 	}
-	if (src) return mediaVoice(clip, src);
-	const out = ctx.createGain();
-	out.gain.value = 0;
-	const stops = [];
-	const synth = a?.synth ?? SYNTH_BY_ROLE[a?.role] ?? 'pad';
-	if (synth === 'pad') {
-		const f = ctx.createBiquadFilter();
-		f.type = 'lowpass';
-		f.frequency.value = 900;
-		f.connect(out);
-		for (const [hz, type] of [[110, 'sawtooth'], [164.8, 'triangle'], [220.5, 'sine'], [277.2, 'triangle'], [329.6, 'sine']]) {
-			const o = ctx.createOscillator();
-			o.type = type;
-			o.frequency.value = hz;
-			o.detune.value = (Math.random() - 0.5) * 12;
-			const g = ctx.createGain();
-			g.gain.value = type === 'sawtooth' ? 0.03 : 0.06;
-			o.connect(g).connect(f);
-			o.start();
-			stops.push(o);
-		}
-		const lfo = ctx.createOscillator();
-		lfo.frequency.value = 0.08;
-		const lg = ctx.createGain();
-		lg.gain.value = 400;
-		lfo.connect(lg).connect(f.frequency);
-		lfo.start();
-		stops.push(lfo);
-	} else {
-		const len = ctx.sampleRate * 2;
-		const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-		const d = buf.getChannelData(0);
-		let b = 0;
-		for (let i = 0; i < len; i++) {
-			b = 0.97 * b + 0.03 * (Math.random() * 2 - 1);
-			d[i] = synth === 'wind' ? b * 6 : Math.random() * 2 - 1;
-		}
-		const src = ctx.createBufferSource();
-		src.buffer = buf;
-		src.loop = true;
-		const f = ctx.createBiquadFilter();
-		const g = ctx.createGain();
-		if (synth === 'wind') {
-			f.type = 'bandpass';
-			f.frequency.value = 500;
-			f.Q.value = 0.7;
-			const lfo = ctx.createOscillator();
-			lfo.frequency.value = 0.15;
-			const lg = ctx.createGain();
-			lg.gain.value = 300;
-			lfo.connect(lg).connect(f.frequency);
-			lfo.start();
-			stops.push(lfo);
-			g.gain.value = 0.5;
-		} else if (synth === 'steps') {
-			f.type = 'bandpass';
-			f.frequency.value = 2200;
-			g.gain.value = 0;
-			const lfo = ctx.createOscillator();
-			lfo.type = 'square';
-			lfo.frequency.value = 1.8;
-			const lg = ctx.createGain();
-			lg.gain.value = 0.25;
-			lfo.connect(lg).connect(g.gain);
-			lfo.start();
-			stops.push(lfo);
-		} else {
-			f.type = 'bandpass';
-			f.frequency.value = 700;
-			f.Q.value = 4;
-			g.gain.value = 0;
-			const lfo = ctx.createOscillator();
-			lfo.frequency.value = 4.2;
-			const lg = ctx.createGain();
-			lg.gain.value = 0.35;
-			lfo.connect(lg).connect(g.gain);
-			lfo.start();
-			stops.push(lfo);
-		}
-		src.connect(f).connect(g).connect(out);
-		src.start();
-		stops.push(src);
-	}
-	v = { out, stop: () => stops.forEach((s) => s.stop()), lane: null, el: null, src: null };
-	voices.set(clip.id, v);
-	return v;
+	return src ? mediaVoice(clip, src) : null;
 }
 
 function dropVoice(id) {
@@ -360,13 +272,14 @@ function updateAudio() {
 		const lane = doc.lanes.find((l) => l.id === c.lane);
 		if (!lane) continue;
 		const v = voice(c);
+		if (!v) continue;
 		if (v.lane !== lane.id) {
 			v.out.disconnect();
 			v.out.connect(strip(lane).input);
 			v.lane = lane.id;
 		}
-		if (v.el) follow(v, c, t);
-		v.out.gain.setTargetAtTime(envelope(c, t) * (v.el ? 1 : 0.5), now, 0.02);
+		follow(v, c, t);
+		v.out.gain.setTargetAtTime(envelope(c, t), now, 0.02);
 	}
 	for (const c of doc.clips) {
 		if (t < c.start - CLIP_LEAD || t >= c.start + c.dur) continue;
@@ -442,23 +355,6 @@ function silence() {
 	}
 	clearTimeout(silenceTimer);
 	silenceTimer = setTimeout(resetMeters, 120);
-}
-
-export function audition(type, seconds = 2.5) {
-	ensureAudio();
-	if (!ctx) return;
-	monitor.gain.value = ui.muted ? 0 : ui.monitorVol;
-	const o = ctx.createOscillator();
-	const g = ctx.createGain();
-	o.type = type === 'Impact' ? 'sine' : 'triangle';
-	o.frequency.value = type === 'Impact' ? 60 : type === 'Musique' ? 220 : 400;
-	if (type === 'Impact') o.frequency.exponentialRampToValueAtTime(35, ctx.currentTime + seconds);
-	g.gain.setValueAtTime(0.0001, ctx.currentTime);
-	g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
-	g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + seconds);
-	o.connect(g).connect(master);
-	o.start();
-	o.stop(ctx.currentTime + seconds);
 }
 
 export function dispose() {

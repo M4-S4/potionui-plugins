@@ -98,12 +98,13 @@ def test_an_administrator_exports_another_users_project_with_the_owners_media(ap
     assert response.status_code == 200 and set(asked) == {"user-1"}
 
 
-def test_the_srt_cue_of_a_character_follows_the_users_locale(client, project, store):
+def test_the_srt_holds_the_titles_alone_whatever_the_users_locale(client, project, store):
     store[("locale", "user-1")] = "fr"
 
     response = client.get(f"{BASE}/projects/{project['id']}/exports/srt")
 
-    assert "Marin : On part avant la marée." in response.text
+    assert response.status_code == 200
+    assert "Fin" in response.text and "Marin" not in response.text
 
 
 def _start(client, project_id, **body):

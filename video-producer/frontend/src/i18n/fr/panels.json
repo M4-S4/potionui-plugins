@@ -60,12 +60,9 @@
 	"story.matchColor": "Raccorder la couleur",
 	"story.continuityOk": "Raccords de couleur et d’identité cohérents.",
 	"story.continuityNone": "Aucun raccord à calculer : les plans n’ont pas encore d’image.",
-	"mixer.soundDesign": "Atelier Sound design",
-	"mixer.soundDesignHint": "Ambiances, bruitages, textures, impacts",
 	"mixer.sounds": "Sons",
 	"mixer.noSounds": "Aucun son dans ce projet.",
 	"mixer.soundMeta": "{role} · {duration}",
-	"mixer.soundMetaPrepared": "{role} · {duration} · préparé (simulé)",
 	"mixer.addAtPlayhead": "Ajouter {name} à la tête de lecture",
 	"mixer.addAtPlayheadTip": "Ajouter à la tête de lecture",
 	"mixer.roles": "Rôles",
@@ -262,7 +259,7 @@
 	"director.pick.keyViews": "Changer de vue",
 	"mixer.count.one": "{count} son",
 	"mixer.count.other": "{count} sons",
-	"mixer.noSoundsHint": "Importez une musique, des voix ou des ambiances ; l’atelier Sound design en prépare aussi.",
+	"mixer.noSoundsHint": "Importez une musique, des voix ou des ambiances.",
 	"director.aside.noneTitle": "Aucun plan",
 	"director.aside.noCardTitle": "Aucune fiche choisie"
 }

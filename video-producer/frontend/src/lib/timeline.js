@@ -97,7 +97,7 @@ export function rulerStep(pps) {
 	return 120;
 }
 
-export function waveform(seed, width, height, srcIn, pps, kind) {
+export function waveform(seed, width, height, srcIn, pps) {
 	const pts = [];
 	const step = 3;
 	const mid = height / 2;
@@ -106,12 +106,7 @@ export function waveform(seed, width, height, srcIn, pps, kind) {
 	for (let x = 0; x <= width; x += step) {
 		const t = srcIn + x / pps;
 		const n = Math.sin(t * 7.1 + s) * 0.5 + Math.sin(t * 2.3 + s * 0.7) * 0.3 + Math.sin(t * 19.7 + s * 1.3) * 0.2;
-		let amp;
-		if (kind === 'steps') amp = Math.max(0.05, Math.pow(Math.max(0, Math.sin(t * Math.PI * 1.8)), 6));
-		else if (kind === 'voice') amp = Math.max(0.05, Math.abs(Math.sin(t * 4.2 + s)) * (0.4 + 0.6 * Math.abs(n)));
-		else if (kind === 'wind') amp = 0.35 + 0.3 * Math.abs(n);
-		else amp = 0.45 + 0.25 * n;
-		pts.push([x, Math.max(0.5, amp * (mid - 2))]);
+		pts.push([x, Math.max(0.5, (0.45 + 0.25 * n) * (mid - 2))]);
 	}
 	return polygon(pts, mid);
 }

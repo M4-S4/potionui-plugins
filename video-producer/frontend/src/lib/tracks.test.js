@@ -26,7 +26,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 
 function lane(id, extra = {}) {
-	return { id, name: id, role: 'Ambiance', vol: 0, pan: 0, mute: false, solo: false, automation: 'off', sends: { R1: -60, D1: -60 }, inserts: [], ...extra };
+	return { id, name: id, role: 'Ambiance', vol: 0, pan: 0, mute: false, solo: false, sends: { R1: -60, D1: -60 }, inserts: [], ...extra };
 }
 
 function makeDoc({ lanes = ['A1', 'A2', 'A3'], video, audio = [], clips = [] } = {}) {

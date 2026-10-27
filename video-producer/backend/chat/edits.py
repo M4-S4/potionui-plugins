@@ -412,10 +412,6 @@ def take_asset(take: Mapping[str, Any], name: str) -> Dict[str, Any]:
         "quality": take.get("quality"),
         "resultId": take["id"],
         "role": None,
-        "synth": None,
-        "transcript": None,
-        "character": None,
-        "lipSync": None,
     }
 
 

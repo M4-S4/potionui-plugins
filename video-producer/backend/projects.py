@@ -16,6 +16,10 @@ _REASON_LIMIT = 300
 
 RETIRED_KEYS = ("results", "controls", "plans3d", "scenes")
 
+RETIRED_ASSET_KEYS = ("synth", "transcript", "character", "lipSync")
+
+RETIRED_LANE_KEYS = ("automation",)
+
 CAPTURE_ROLE = "Capture 3D"
 
 GUIDE_SOURCE = "scene3d"
@@ -248,7 +252,6 @@ LANE = _object(
         "pan": NUMBER,
         "mute": FLAG,
         "solo": FLAG,
-        "automation": _enum("off", "read", "write"),
         "sends": _object({"R1": NUMBER, "D1": NUMBER}),
         "inserts": _array(INSERT),
     },
@@ -311,10 +314,6 @@ ASSET = _object(
         "quality": _enum("draft", "final", None),
         "resultId": NULLABLE_TEXT,
         "role": _enum(*AUDIO_ROLES, None),
-        "synth": _enum("wind", "steps", "pad", "voice", None),
-        "transcript": NULLABLE_TEXT,
-        "character": NULLABLE_TEXT,
-        "lipSync": NULLABLE_FLAG,
     },
     optional={"frameOf": FRAME_OF},
 )
@@ -523,6 +522,39 @@ def _removed_takes(value: Any) -> List[str]:
     return list(dict.fromkeys(item for item in value if isinstance(item, str) and item)) if isinstance(value, list) else []
 
 
+def workshop_sound(asset: Any) -> bool:
+    """True for a sound of the retired Sound design workshop: it names a synthesis and has no file."""
+    return isinstance(asset, dict) and bool(asset.get("synth")) and not asset.get("src") and not asset.get("origin")
+
+
+def _without(item: Any, keys: Tuple[str, ...]) -> Any:
+    if not isinstance(item, dict) or not any(key in item for key in keys):
+        return item
+    return {key: value for key, value in item.items() if key not in keys}
+
+
+def _retired_sounds(doc: Dict[str, Any], references: Any) -> Dict[str, Any]:
+    found: Dict[str, Any] = {}
+    assets = doc.get("assets") if isinstance(doc.get("assets"), list) else []
+    dropped = {asset["id"] for asset in assets if workshop_sound(asset) and asset.get("id")}
+    if any(workshop_sound(asset) or _without(asset, RETIRED_ASSET_KEYS) is not asset for asset in assets):
+        found["assets"] = [_without(asset, RETIRED_ASSET_KEYS) for asset in assets if not workshop_sound(asset)]
+    lanes = doc.get("lanes")
+    if isinstance(lanes, list) and any(_without(lane, RETIRED_LANE_KEYS) is not lane for lane in lanes):
+        found["lanes"] = [_without(lane, RETIRED_LANE_KEYS) for lane in lanes]
+    if not dropped:
+        return found
+    audio = doc.get("audio")
+    if isinstance(audio, list):
+        found["audio"] = [item for item in audio if not (isinstance(item, dict) and item.get("assetId") in dropped)]
+    if isinstance(references, list) and any(isinstance(reference, dict) and reference.get("assetId") in dropped for reference in references):
+        found["references"] = [
+            {**reference, "assetId": None} if isinstance(reference, dict) and reference.get("assetId") in dropped else reference
+            for reference in references
+        ]
+    return found
+
+
 def _final_pass(value: Any) -> Dict[str, str]:
     if not isinstance(value, dict):
         return {}
@@ -530,7 +562,7 @@ def _final_pass(value: Any) -> Dict[str, str]:
 
 
 def migrate(doc: Any) -> Any:
-    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, a shot's own firstFromPrevious dropped when it is not a boolean, the takes whose video the user removed kept as distinct ids, the key dropped when none is left, and the choice of the film's final pass kept to the values it knows, dropped when none is left; the same object when nothing changes."""
+    """A document in the current schema: the video of each 3D guide added once as a Mouvement reference of the shot it covers, then the keys earlier versions of the page wrote dropped (the simulated takes, the 3D shots, the Control videos and the 3D scenes), the empty 3D captures dropped and the scene of the other frames forgotten, the retired 3D set references turned into 3D captures when they have an image and dropped otherwise, the 3D set role of a reference turned into the set role, the cast of each shot cleared of the bible cards that no longer exist, the lines of a character that no longer exists kept without a speaker, a shot's own firstFromPrevious dropped when it is not a boolean, the takes whose video the user removed kept as distinct ids, the key dropped when none is left, the choice of the film's final pass kept to the values it knows, dropped when none is left, and the retired Sound design workshop forgotten: its sounds, which have no file, dropped with their audio items and the references to them left without media, its fields and the automation mode of each lane dropped; the same object when nothing changes."""
     if not isinstance(doc, dict):
         return doc
     changes: Dict[str, Any] = {}
@@ -557,6 +589,7 @@ def migrate(doc: Any) -> Any:
     motions = _motion_references(doc, kept) if isinstance(kept, list) else []
     if motions:
         changes["references"] = [*kept, *motions]
+    changes.update(_retired_sounds(doc, changes.get("references", references)))
     clips = doc.get("clips")
     if isinstance(clips, list):
         characters = _card_ids(doc, "characters")
