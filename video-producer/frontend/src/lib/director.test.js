@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { CHARACTERS, PLACES, castOf } from './bible.js';
-import { PANEL_KINDS, REVIEW_FILTERS, VIEWS, cardImages, castWhereCited, citedWithout, defaultView, isCast, marked, markedPhrases, panelSelection, promptShot, reviewCounts, reviewFilterOf, reviewShots, reviewState, shotNumbers, toggledCast, unnamedIn, viewOf, viewShot, witnessOf } from './director.js';
+import { PANEL_KINDS, REVIEW_FILTERS, VIEWS, cardImages, castWhereCited, citedWithout, defaultView, failureFixes, isCast, marked, markedPhrases, missingWords, nextToReview, panelSelection, promptShot, reviewChoice, reviewCounts, reviewFilterOf, reviewPickOf, reviewShots, reviewState, shotNumbers, toggledCast, unnamedIn, viewOf, viewShot, witnessOf } from './director.js';
 
 const take = (id, shotId, fields = {}) => ({ id, shotId, status: 'done', url: `/t/${id}.mp4`, label: 'draft', createdAt: `2026-10-26T10:0${id.slice(-1)}:00Z`, ...fields });
 
@@ -183,7 +183,8 @@ test('director: shots are named by their numbers, three at most, and the Review 
 test('director: the right panel of Review and References filters the selection, keeps it, says where it stays and leaves the flag and the times out of Director AI', () => {
 	const inspector = read('../components/inspector/Inspector.svelte');
 	assert.match(inspector, /const filtered = \$derived\(view \? panelSelection\(view, ui\.selection\) : \{ shown: ui\.selection, elsewhere: null \}\);/);
-	assert.match(inspector, /\{#if away && !multi\}/);
+	assert.match(inspector, /\{#if filtered\.elsewhere && !multi\}<ElsewhereNote kind=\{filtered\.elsewhere\.kind\} \/>\{\/if\}/);
+	assert.match(read('../components/inspector/ElsewhereNote.svelte'), /data-elsewhere=\{kind\}/);
 	assert.match(inspector, /\{#if view && s\.kind === 'clip'\}<span class="vp-tc">\{t\('inspector\.shotNumber', \{ number: num\(item\) \}\)\}<\/span>/);
 	assert.match(inspector, /\{#if !view\}\n\t+<section class="space-y-2">\n\t+<div class="vp-section-title">\{t\('inspector\.section\.flag'\)\}<\/div>/);
 	assert.match(inspector, /disabled=\{!f \|\| Boolean\(view\)\}/);
@@ -233,7 +234,7 @@ test('director: the summary leads to the four views and the engine, the center s
 	const center = read('../components/director/DirectorCenter.svelte');
 	for (const view of ['DirectionView', 'BibleView', 'ReferenceBoard', 'ReviewView']) assert.match(center, new RegExp(`<${view} />`));
 	const right = read('../components/panels/RightPanel.svelte');
-	assert.match(right, /\{#if view === 'direction'\}\n\t<DirectionAside \/>\n\{:else if view === 'bible'\}\n\t<BibleAside \/>\n\{:else\}\n\t<Inspector \/>/);
+	assert.match(right, /\{#if view === 'review'\}\n\t<ReviewAside \/>\n\{:else if view === 'direction'\}\n\t<DirectionAside \/>\n\{:else if view === 'bible'\}\n\t<BibleAside \/>\n\{:else\}\n\t<Inspector \/>/);
 	assert.match(read('../components/director/DirectorViews.svelte'), /\{#if !ui\.sidebarOpen\}/);
 	assert.match(read('../components/director/DirectionAside.svelte'), /<ComposedPrompt source=\{doc\} shotId=\{shot\.id\} \{marks\} bind:current=\{composed\} \/>/);
 	assert.match(read('../components/director/BibleAside.svelte'), /onpick=\{\(id\) => addCardImage\(card, SPACES\[kind\], id\)\}/);
@@ -243,18 +244,21 @@ test('director: the Review lists the takes with their cards and compares them in
 	const review = read('../components/director/ReviewView.svelte');
 	assert.match(review, /const taking = \$derived\(ui\.compare\?\.length === 2 \|\| ui\.preview\?\.kind === 'result'\);\n\tconst watching = \$derived\(ui\.reviewMonitor \|\| taking\);/);
 	assert.match(review, /\{#if watching\}\n\t\t<div class="relative grid min-h-0 shrink-0 border-b border-line" style:height="46%">\n\t\t\t<Viewer \/>/);
-	assert.match(review, /<TakeCard \{take\} clip=\{c\} \/>/);
+	assert.match(review, /<TakeCard \{take\} clip=\{c\} onchoose=\{chooseTake\} chosen=\{picked\?\.take\?\.id === take\.id\} \/>/);
 	assert.match(review, /onclick: assembleChosen/);
 	assert.doesNotMatch(review, /startGeneration/);
-	for (const file of ['../components/inspector/Inspector.svelte', '../components/inspector/TakesSection.svelte', '../components/storyboard/ShotQuickEdit.svelte', '../components/storyboard/StoryboardView.svelte', '../components/viewer/Viewer.svelte']) assert.doesNotMatch(read(file), /startGeneration/, file);
+	for (const file of ['../components/inspector/Inspector.svelte', '../components/inspector/TakesSection.svelte', '../components/storyboard/ShotQuickEdit.svelte', '../components/storyboard/StoryboardView.svelte', '../components/viewer/Viewer.svelte', '../components/director/ReviewAside.svelte', '../components/director/ReviewTake.svelte', '../components/director/ReviewFailure.svelte', '../components/director/ReviewShot.svelte']) assert.doesNotMatch(read(file), /startGeneration/, file);
 });
 
-test('director: in the Review, a click in the block of a shot or on one of its takes chooses the shot, which shows plainly, and the monitor stays open on the cut once open', () => {
+test('director: in the Review, a click in the block of a shot chooses the shot, a click on a card chooses its take, the seam line chooses the seam, and the monitor stays open on the cut once open', () => {
 	const review = read('../components/director/ReviewView.svelte');
-	assert.match(review, /const pick = \(c\) => pickShot\(c, clipAt\(ui\.playhead\)\?\.id !== c\.id\);/);
-	assert.match(review, /function choose\(e, c\) \{\n\t\tif \(e\.target\.closest\?\.\('button, a, input, select, textarea, label'\)\) return;\n\t\tpick\(c\);\n\t\}/);
+	assert.match(read('./band.svelte.js'), /export function chooseShot\(clip\) \{\n\tif \(!clip\) return;\n\tpickShot\(clip, clipAt\(ui\.playhead\)\?\.id !== clip\.id\);\n\tui\.reviewPick = \{ kind: 'shot', id: clip\.id \};\n\}/);
+	assert.match(review, /function choose\(e, c\) \{\n\t\tif \(e\.target\.closest\?\.\('button, a, input, select, textarea, label'\)\) return;\n\t\tchooseShot\(c\);\n\t\}/);
 	assert.match(review, /<div role="presentation" class="px-4 py-3" onclick=\{\(e\) => choose\(e, c\)\}>/);
-	assert.match(review, /<button type="button" class="mb-2 flex min-h-7 cursor-pointer items-center gap-2 rounded px-1\.5 text-left transition-colors hover:bg-surface-2"[^>]*onclick=\{\(\) => pick\(c\)\}>/);
+	assert.match(review, /<button type="button" class="mb-2 flex min-h-7 cursor-pointer items-center gap-2 rounded px-1\.5 text-left transition-colors hover:bg-surface-2"[^>]*onclick=\{\(\) => chooseShot\(c\)\}>/);
+	assert.match(review, /data-review-seam=\{c\.id\}\n\t+aria-current=\{seamOn\(c\) \? 'true' : undefined\}\n\t+onclick=\{\(e\) => chooseAt\(e, c\)\}/);
+	assert.match(review, /title=\{t\('panels\.director\.review\.seamTip'\)\} onclick=\{\(\) => chooseSeam\(c\)\}>/);
+	assert.match(review, /if \(ui\.selection\?\.kind !== 'clip' \|\| ui\.selection\.id !== id\) return void \(ui\.reveal = null\);\n\t\tif \(!shown\.some\(\(c\) => c\.id === id\)\) return void \(ui\.reviewFilter = 'all'\);/);
 	assert.match(review, /aria-current=\{isSel\(c\) \? 'true' : undefined\}>\n\t+\{#if isSel\(c\)\}<span class="absolute inset-y-0 left-0 w-0\.5 bg-signal" aria-hidden="true"><\/span>\{\/if\}/);
 	assert.match(review, /\$effect\(\(\) => \{\n\t\tif \(taking\) ui\.reviewMonitor = true;\n\t\}\);\n\t\$effect\(\(\) => \(\) => \(ui\.reviewMonitor = false\)\);/);
 	assert.match(review, /function closeMonitor\(\) \{\n\t\tui\.preview = null;\n\t\tui\.compare = null;\n\t\tui\.reviewMonitor = false;\n\t\}/);
@@ -262,11 +266,78 @@ test('director: in the Review, a click in the block of a shot or on one of its t
 	assert.match(review, /onclick=\{\(\) => openSeam\(c\)\}/);
 	assert.doesNotMatch(review, /function openSeam|select\('clip'/);
 	const card = read('../components/takes/TakeCard.svelte');
-	assert.match(card, /onclick=\{\(\) => previewTake\(take\)\}/);
+	assert.match(card, /function open\(\) \{\n\t\tif \(onchoose\) onchoose\(take\);\n\t\telse previewTake\(take\);\n\t\}/);
+	assert.match(card, /function choose\(e\) \{\n\t\tif \(!onchoose \|\| e\.target\.closest\?\.\('button, a, input, select, textarea, label'\)\) return;\n\t\te\.stopPropagation\(\);\n\t\tonchoose\(take\);\n\t\}/);
+	assert.match(card, /<div role="presentation" class=\{onchoose \? 'cursor-pointer' : ''\} onclick=\{choose\}>/);
+	assert.match(card, /onclick=\{open\}>/);
 	assert.doesNotMatch(card, /ui\.preview = /);
 	assert.match(read('../components/storyboard/BandLanes.svelte'), /import \{ previewTake \} from '\.\.\/\.\.\/lib\/monitor\.svelte\.js';/);
 	assert.match(read('./commands.js'), /\} else if \(ui\.reviewMonitor\) ui\.reviewMonitor = false;\n\telse if \(ui\.seamCompare\) ui\.seamCompare = null;/);
 	for (const locale of ['en', 'fr']) assert.ok(JSON.parse(read(`../i18n/${locale}/panels.json`))['director.review.closeMonitor'], locale);
+});
+
+test('director: the Review panel shows the chosen take when it is finished or failed, the seam of the chosen shot, else the shot, else nothing', () => {
+	const doc = { clips };
+	const [s1, s2, s3, s4] = clips;
+	const shot = (id) => ({ kind: 'clip', id });
+	assert.equal(reviewPickOf(doc, takes, { kind: 'take', id: 't3' }, null), null);
+	assert.equal(reviewPickOf(doc, takes, null, { kind: 'audio', id: 'a1' }), null);
+	assert.deepEqual(reviewPickOf(doc, takes, { kind: 'take', id: 't3' }, shot('s2')), { kind: 'take', clip: s2, take: takes[2] });
+	assert.deepEqual(reviewPickOf(doc, takes, { kind: 'take', id: 't7' }, shot('s4')), { kind: 'failed', clip: s4, take: takes[6] });
+	assert.deepEqual(reviewPickOf(doc, takes, { kind: 'take', id: 't5' }, shot('s3')), { kind: 'shot', clip: s3 });
+	assert.deepEqual(reviewPickOf(doc, takes, { kind: 'take', id: 't3' }, shot('s1')), { kind: 'shot', clip: s1 });
+	assert.deepEqual(reviewPickOf(doc, takes, { kind: 'take', id: 'gone' }, shot('s1')), { kind: 'shot', clip: s1 });
+	assert.deepEqual(reviewPickOf(doc, takes, { kind: 'seam', id: 's2' }, shot('s2')), { kind: 'seam', clip: s2, previous: s1 });
+	assert.deepEqual(reviewPickOf(doc, takes, { kind: 'seam', id: 's1' }, shot('s1')), { kind: 'shot', clip: s1 });
+	assert.deepEqual(reviewPickOf(doc, takes, { kind: 'seam', id: 's2' }, shot('s3')), { kind: 'shot', clip: s3 });
+	assert.deepEqual(reviewChoice(takes[4], s3), { kind: 'shot', id: 's3' });
+	assert.deepEqual(reviewChoice(takes[6], s4), { kind: 'take', id: 't7' });
+	assert.deepEqual(reviewChoice(takes[0], s1), { kind: 'take', id: 't1' });
+});
+
+test('director: the next take to review is the latest finished one, not rejected, of the first shot left to review', () => {
+	assert.deepEqual(nextToReview(clips, takes), { clip: clips[1], take: takes[2] });
+	assert.deepEqual(nextToReview(clips, takes.filter((x) => x.id !== 't3')), { clip: clips[3], take: takes[5] });
+	assert.equal(nextToReview(clips, []), null);
+});
+
+test('director: what a take lacks is every word of the instruction of today that the sent prompt did not carry', () => {
+	const text = 'Lina and Malo exchange a glance, handheld, close framing.';
+	const parts = missingWords(text, 'Bible: Lina. Lina and Malo exchange a glance under flickering lights, close framing.');
+	assert.equal(parts.map((x) => x.text).join(''), text);
+	assert.deepEqual(parts.filter((x) => x.mark).map((x) => x.text), ['handheld']);
+	assert.deepEqual(missingWords('A slow tracking shot at dusk.', 'A shot.').filter((x) => x.mark).map((x) => x.text), ['slow tracking', 'at dusk']);
+	assert.deepEqual(missingWords('Same words.', 'same WORDS'), [{ text: 'Same words.', mark: false }]);
+	assert.deepEqual(missingWords('', 'x'), []);
+});
+
+test('director: a failed take offers to retry, and the way out that fits its cause', () => {
+	assert.deepEqual(failureFixes({ errorCode: 'cuda_oom' }), ['retry', 'engine', 'shorter']);
+	assert.deepEqual(failureFixes({ errorCode: 'content_blocked' }), ['instruction', 'retry']);
+	assert.deepEqual(failureFixes({ errorCode: 'banned_prompt' }), ['instruction', 'retry']);
+	assert.deepEqual(failureFixes({ errorCode: 'previous_take_failed' }), ['previous', 'retry']);
+	assert.deepEqual(failureFixes({ errorCode: 'backend_unreachable' }), ['retry']);
+	assert.deepEqual(failureFixes(null), ['retry']);
+});
+
+test('director: the Review has its own panel, about the take, its failure, the shot or the seam, with nothing that sets a shot', () => {
+	const aside = read('../components/director/ReviewAside.svelte');
+	assert.match(aside, /const pick = \$derived\(reviewPick\(\)\);/);
+	assert.match(aside, /const elsewhere = \$derived\(panelSelection\('review', ui\.selection\)\.elsewhere\);/);
+	assert.match(aside, /\{#if elsewhere\}<ElsewhereNote kind=\{elsewhere\.kind\} \/>\{\/if\}/);
+	assert.match(aside, /\{#if pick\?\.kind === 'take'\}\n\t+<ReviewTake clip=\{pick\.clip\} \{take\} \/>\n\t+\{:else if pick\?\.kind === 'failed'\}\n\t+<ReviewFailure clip=\{pick\.clip\} \{take\} \/>\n\t+\{:else if pick\?\.kind === 'seam'\}\n\t+<ReviewSeam clip=\{pick\.clip\} previous=\{pick\.previous\} \/>\n\t+\{:else if pick\}\n\t+<ReviewShot clip=\{pick\.clip\} \/>\n\t+\{:else\}\n\t+<ReviewEmpty \/>/);
+	const panel = ['ReviewAside', 'ReviewTake', 'ReviewFailure', 'ReviewShot', 'ReviewSeam', 'ReviewEmpty', 'ShotSummary'].map((name) => read(`../components/director/${name}.svelte`)).join('\n');
+	for (const gone of [/labelTake|toggledLabel|rejectShort|candidateShort|finalShort/, /inspector\.field\.|inspector\.section\.(sound|fades|flag|duration|frames)/, /bladeAt|duplicateSelection|deleteSelection|deleteTake/, /TakesSection|TakeCard|inspector\.tab\.video|inspector\.flag/, /secs\(\w+\.start\)/]) assert.doesNotMatch(panel, gone, String(gone));
+	const take = read('../components/director/ReviewTake.svelte');
+	assert.match(take, /const parts = \$derived\(take\.promptText \? missingWords\(today, take\.promptText\) : \[\{ text: today, mark: false \}\]\);/);
+	assert.match(take, /\{#if stale\}\n\t<section class="space-y-2" data-take-since>/);
+	assert.match(take, /<p class="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-line-strong p-2\.5 text-xs leading-5 text-fg-muted">\{take\.promptText\}<\/p>/);
+	assert.match(take, /<ShotSummary \{clip\} \/>/);
+	assert.match(read('../components/director/ShotSummary.svelte'), /onclick: \(\) => showInStoryboard\(clip\)/);
+	assert.match(read('../components/director/ReviewFailure.svelte'), /failureFixes\(take\)/);
+	assert.match(read('../components/director/ReviewSeam.svelte'), /<SeamPanel \{clip\} title=\{false\} compare=\{false\} \/>/);
+	assert.match(read('../components/director/ReviewShot.svelte'), /<ComposedPrompt source=\{doc\} shotId=\{clip\.id\} \/>/);
+	assert.match(read('./state.svelte.js'), /\tui\.witness = null;\n\tselect\('clip', clip\.id\);\n\tui\.reveal = clip\.id;\n\}/);
 });
 
 test('director: Alt+1 to Alt+4 open the views, the old dock and its tabs are gone, Draft is grey and Edit Engine keeps its English name', () => {

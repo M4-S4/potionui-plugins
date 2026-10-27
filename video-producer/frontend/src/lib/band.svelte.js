@@ -1,12 +1,12 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, relayout, select, moveClip, promptOf, toast, clipLabel, secs, openDirector } from './state.svelte.js';
+import { ui, doc, act, relayout, select, moveClip, promptOf, toast, clipLabel, secs, openDirector, clipAt } from './state.svelte.js';
 import { takesOf, findTake, shotDurationLimit, settleRelease, labelTake } from './production.svelte.js';
 import { applyShotDraft, shotDraft, shotStale } from './shots.js';
 import { identityTakes, seam } from './continuity.svelte.js';
 import { seek } from './playback.svelte.js';
 import { previewTake } from './monitor.svelte.js';
 import { takeStore } from './takes.svelte.js';
-import { reviewCounts, reviewFilterOf, reviewShots } from './director.js';
+import { reviewChoice, reviewCounts, reviewFilterOf, reviewShots } from './director.js';
 import { ulid } from './ulid.js';
 import { BAND_STEP, ghostLayout, insertIndex, lastFailure, previewable } from './band.js';
 
@@ -110,6 +110,41 @@ export function showInReview(clip) {
 	openDirector('review');
 	pickShot(clip);
 	ui.reveal = clip.id;
+}
+
+export function chooseShot(clip) {
+	if (!clip) return;
+	pickShot(clip, clipAt(ui.playhead)?.id !== clip.id);
+	ui.reviewPick = { kind: 'shot', id: clip.id };
+}
+
+export function chooseTake(take) {
+	const clip = take ? doc.clips.find((c) => c.id === take.shotId) : null;
+	if (!clip) return;
+	chooseShot(clip);
+	ui.reviewPick = reviewChoice(take, clip);
+	if (take.status === 'done' && take.url) previewTake(take);
+	else if (ui.preview?.kind === 'result') ui.preview = null;
+}
+
+export function chooseSeam(clip) {
+	if (doc.clips.indexOf(clip) <= 0) return;
+	chooseShot(clip);
+	ui.reviewPick = { kind: 'seam', id: clip.id };
+}
+
+export function compareSeamHere(clip) {
+	const pair = identityTakes(clip);
+	if (!pair) return;
+	ui.preview = null;
+	ui.compare = pair;
+	ui.reviewMonitor = true;
+}
+
+export function showInStoryboard(clip) {
+	if (!clip) return;
+	ui.workspace = 'storyboard';
+	pickShot(clip);
 }
 
 export function openSeam(clip) {

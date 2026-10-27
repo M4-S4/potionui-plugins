@@ -13,7 +13,7 @@
 	import { isStale } from '../../lib/shots.js';
 	import Icon from '../Icon.svelte';
 
-	let { take, clip } = $props();
+	let { take, clip, onchoose = null, chosen = false } = $props();
 
 	const active = $derived(clip?.take === take.id);
 	const label = $derived(labelOf(take));
@@ -64,109 +64,122 @@
 	const dot = $derived(take.status === 'failed' ? 'bg-danger' : take.status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
 	const errorText = $derived(FAILURE_CODES.includes(take.errorCode) ? t(`generation.failed.${take.errorCode}`, { id: take.generationId ?? '—' }) : take.errorMessage || t('generation.card.error', { code: take.errorCode ?? '—' }));
 	const finalTip = $derived(upscaleAvailable(take) ? t('generation.card.finalTip') : t('generation.block.upscaleUnsupported'));
+
+	function open() {
+		if (onchoose) onchoose(take);
+		else previewTake(take);
+	}
+
+	function choose(e) {
+		if (!onchoose || e.target.closest?.('button, a, input, select, textarea, label')) return;
+		e.stopPropagation();
+		onchoose(take);
+	}
 </script>
 
-<li class="overflow-hidden rounded-lg border transition-colors {active ? 'border-signal ring-1 ring-signal' : previewed || inCompare ? 'border-signal/60' : 'border-line-strong hover:border-line-hover'}">
-	<div class="flex gap-2.5 p-1.5">
-		<button type="button" class="relative aspect-video w-28 shrink-0 overflow-hidden rounded bg-surface-3 disabled:cursor-default" disabled={!done} aria-label={t('generation.card.preview', { variant: take.variant })} onclick={() => previewTake(take)}>
-			{#if thumb}
-				<img src={thumb} alt="" class="h-full w-full object-cover" />
-			{:else}
-				<span class="absolute inset-0 flex items-center justify-center {tone}">
-					{#if take.status === 'running'}
-						<HostUi name="Spinner" props={{ size: 'sm' }} />
-					{:else}
-						<Icon name={take.status === 'failed' ? 'alert' : take.status === 'cancelled' ? 'x' : 'history'} class="h-4 w-4" />
+<li class="overflow-hidden rounded-lg border transition-colors {active ? 'border-signal ring-1 ring-signal' : previewed || inCompare || chosen ? 'border-signal/60' : 'border-line-strong hover:border-line-hover'} {chosen ? 'bg-surface-2' : ''}" aria-current={chosen ? 'true' : undefined} data-take-card={take.id}>
+	<div role="presentation" class={onchoose ? 'cursor-pointer' : ''} onclick={choose}>
+		<div class="flex gap-2.5 p-1.5">
+			<button type="button" class="relative aspect-video w-28 shrink-0 overflow-hidden rounded bg-surface-3 disabled:cursor-default" disabled={!done} aria-label={t('generation.card.preview', { variant: take.variant })} onclick={open}>
+				{#if thumb}
+					<img src={thumb} alt="" class="h-full w-full object-cover" />
+				{:else}
+					<span class="absolute inset-0 flex items-center justify-center {tone}">
+						{#if take.status === 'running'}
+							<HostUi name="Spinner" props={{ size: 'sm' }} />
+						{:else}
+							<Icon name={take.status === 'failed' ? 'alert' : take.status === 'cancelled' ? 'x' : 'history'} class="h-4 w-4" />
+						{/if}
+					</span>
+				{/if}
+				<span class="absolute left-1 top-1 rounded bg-black/60 px-1 text-xs font-semibold text-white">{take.variant}</span>
+				{#if active}<span class="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full border border-signal bg-surface-1 text-signal"><Icon name="check" class="h-3 w-3" strokeWidth={2.5} /></span>{/if}
+			</button>
+			<div class="min-w-0 flex-1 space-y-0.5 text-xs leading-4">
+				<div class="flex items-center gap-1.5">
+					<span class="truncate font-medium text-fg">{qualityText()}</span>
+					{#if take.status !== 'done'}
+						<span class="ml-auto flex shrink-0 items-center gap-1 {tone}"><span class="h-1.5 w-1.5 rounded-full {dot}"></span>{stateText(take.status)}</span>
+					{:else if take.durationS}
+						<span class="vp-tc ml-auto shrink-0 text-fg-subtle">{secs(take.durationS)}</span>
 					{/if}
-				</span>
-			{/if}
-			<span class="absolute left-1 top-1 rounded bg-black/60 px-1 text-xs font-semibold text-white">{take.variant}</span>
-			{#if active}<span class="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full border border-signal bg-surface-1 text-signal"><Icon name="check" class="h-3 w-3" strokeWidth={2.5} /></span>{/if}
-		</button>
-		<div class="min-w-0 flex-1 space-y-0.5 text-xs leading-4">
-			<div class="flex items-center gap-1.5">
-				<span class="truncate font-medium text-fg">{qualityText()}</span>
-				{#if take.status !== 'done'}
-					<span class="ml-auto flex shrink-0 items-center gap-1 {tone}"><span class="h-1.5 w-1.5 rounded-full {dot}"></span>{stateText(take.status)}</span>
-				{:else if take.durationS}
-					<span class="vp-tc ml-auto shrink-0 text-fg-subtle">{secs(take.durationS)}</span>
-				{/if}
-			</div>
-			<div class="flex min-w-0 items-center gap-1.5">
-				<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[label]}">{t(`generation.label.${label}`)}</span>
-				{#if stale}<span class="flex min-w-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></span>{/if}
-			</div>
-			<div class="truncate text-fg-muted">{modeText()}</div>
-			<div class="truncate text-fg-subtle"><span class="vp-tc">{resolution}</span>{#if parent}{' · ' + t('generation.card.from', { variant: parent.variant })}{/if}</div>
-			<div class="vp-tc truncate text-fg-subtle">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>
-			<div class="truncate text-fg-subtle" title={engineText}>{engineText}</div>
-		</div>
-	</div>
-	{#if flying}
-		<div class="px-2 pb-2">
-			<div class="mb-1 flex justify-between gap-2 text-xs">
-				<span class="truncate text-fg-muted">{take.step || stateText(take.status)}</span>
-				{#if take.status === 'running'}<span class="vp-tc text-fg-subtle">{t('exports.percent', { value: progress })}</span>{/if}
-			</div>
-			{#if take.status === 'running'}
-				<div class="h-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-label={t('generation.card.progress', { variant: take.variant })} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}>
-					<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{progress}%"></div>
 				</div>
-			{:else}
-				<div class="h-1 rounded-full bg-surface-3" aria-hidden="true"></div>
-			{/if}
+				<div class="flex min-w-0 items-center gap-1.5">
+					<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[label]}">{t(`generation.label.${label}`)}</span>
+					{#if stale}<span class="flex min-w-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></span>{/if}
+				</div>
+				<div class="truncate text-fg-muted">{modeText()}</div>
+				<div class="truncate text-fg-subtle"><span class="vp-tc">{resolution}</span>{#if parent}{' · ' + t('generation.card.from', { variant: parent.variant })}{/if}</div>
+				<div class="vp-tc truncate text-fg-subtle">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>
+				<div class="truncate text-fg-subtle" title={engineText}>{engineText}</div>
+			</div>
 		</div>
-	{:else if take.status === 'failed'}
-		<p class="px-2 pb-2 text-xs text-danger">{errorText}</p>
-	{/if}
-	<div class="flex flex-wrap items-center gap-0.5 border-t border-line p-0.5">
-		{#if done}
-			<HostUi
-				name="IconButton"
-				props={{ icon: hostIconName('compare'), label: t('generation.card.compare', { variant: take.variant }), tooltip: t('generation.card.compareTip'), size: 'xs', class: 'vp-toggle', ariaPressed: inCompare, onclick: () => toggleCompare(take.id) }}
-			/>
-		{/if}
-		{#if clip && extractable(take)}
-			<HostUi
-				name="IconButton"
-				props={{ icon: hostIconName('image'), label: t('lib.seam.extract'), tooltip: t('lib.seam.extractTip'), size: 'xs', disabled: Boolean(seamState.busy), onclick: () => extractAtPlayhead(take, clip) }}
-			/>
-		{/if}
-		{#if take.generationId}
-			<HostUi name="IconButton" props={{ icon: 'info', label: t('generation.card.details', { variant: take.variant }), tooltip: t('generation.card.detailsTip'), size: 'xs', onclick: () => showDetails(take) }} />
-		{/if}
-		<HostUi name="IconButton" props={{ icon: 'trash', label: t('generation.card.delete', { variant: take.variant }), tooltip: t('generation.card.deleteTip'), size: 'xs', onclick: () => deleteTake(take) }} />
-		<span class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-0.5">
-			{#if flying}
-				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => cancelTake(take) }}>{t('generation.card.cancel')}</HostUi>
-			{:else if take.status === 'failed'}
-				<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: () => retryTake(take) }}>{t('generation.card.retry')}</HostUi>
-			{:else if done}
-				{#if take.quality === 'draft'}
-					<HostUi name="Tooltip" props={{ text: finalTip }}>
-						<button type="button" class="h-6 whitespace-nowrap rounded px-1.5 text-xs font-medium text-signal hover:bg-surface-2" onclick={() => promoteToFinal(take.id)}>{t('generation.card.makeFinal')}</button>
-					</HostUi>
+		{#if flying}
+			<div class="px-2 pb-2">
+				<div class="mb-1 flex justify-between gap-2 text-xs">
+					<span class="truncate text-fg-muted">{take.step || stateText(take.status)}</span>
+					{#if take.status === 'running'}<span class="vp-tc text-fg-subtle">{t('exports.percent', { value: progress })}</span>{/if}
+				</div>
+				{#if take.status === 'running'}
+					<div class="h-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-label={t('generation.card.progress', { variant: take.variant })} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}>
+						<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{progress}%"></div>
+					</div>
+				{:else}
+					<div class="h-1 rounded-full bg-surface-3" aria-hidden="true"></div>
 				{/if}
+			</div>
+		{:else if take.status === 'failed'}
+			<p class="px-2 pb-2 text-xs text-danger">{errorText}</p>
+		{/if}
+		<div class="flex flex-wrap items-center gap-0.5 border-t border-line p-0.5">
+			{#if done}
+				<HostUi
+					name="IconButton"
+					props={{ icon: hostIconName('compare'), label: t('generation.card.compare', { variant: take.variant }), tooltip: t('generation.card.compareTip'), size: 'xs', class: 'vp-toggle', ariaPressed: inCompare, onclick: () => toggleCompare(take.id) }}
+				/>
 			{/if}
-		</span>
-	</div>
-	{#if !flying}
-		<div class="flex items-center gap-1 border-t border-line px-1.5 py-1" role="group" aria-label={t('generation.card.labels', { variant: take.variant })}>
-			{#each choices as c (c.id)}
-				{@const allowed = c.id === 'final' ? canLabel(take, 'final') && Boolean(clip) : canLabel(take, c.id)}
-				<HostUi name="Tooltip" props={{ text: !allowed && label === 'final' && c.id !== 'final' ? lockedTip : c.tip }}>
-					<button
-						type="button"
-						class="vp-toggle h-6 rounded px-2 text-xs font-medium disabled:cursor-default disabled:opacity-50 {label === c.id ? '' : 'text-fg-muted hover:bg-surface-2 hover:text-fg'}"
-						aria-pressed={label === c.id}
-						aria-label={c.aria}
-						disabled={!allowed}
-						onclick={() => labelTake(clip, take, toggledLabel(take, c.id))}
-					>
-						{#if c.id === 'final' && label === 'final'}<Icon name="check" class="-ml-0.5 mr-0.5 inline h-3 w-3" />{/if}{c.text}
-					</button>
-				</HostUi>
-			{/each}
+			{#if clip && extractable(take)}
+				<HostUi
+					name="IconButton"
+					props={{ icon: hostIconName('image'), label: t('lib.seam.extract'), tooltip: t('lib.seam.extractTip'), size: 'xs', disabled: Boolean(seamState.busy), onclick: () => extractAtPlayhead(take, clip) }}
+				/>
+			{/if}
+			{#if take.generationId}
+				<HostUi name="IconButton" props={{ icon: 'info', label: t('generation.card.details', { variant: take.variant }), tooltip: t('generation.card.detailsTip'), size: 'xs', onclick: () => showDetails(take) }} />
+			{/if}
+			<HostUi name="IconButton" props={{ icon: 'trash', label: t('generation.card.delete', { variant: take.variant }), tooltip: t('generation.card.deleteTip'), size: 'xs', onclick: () => deleteTake(take) }} />
+			<span class="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-0.5">
+				{#if flying}
+					<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => cancelTake(take) }}>{t('generation.card.cancel')}</HostUi>
+				{:else if take.status === 'failed'}
+					<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: 'refresh', onclick: () => retryTake(take) }}>{t('generation.card.retry')}</HostUi>
+				{:else if done}
+					{#if take.quality === 'draft'}
+						<HostUi name="Tooltip" props={{ text: finalTip }}>
+							<button type="button" class="h-6 whitespace-nowrap rounded px-1.5 text-xs font-medium text-signal hover:bg-surface-2" onclick={() => promoteToFinal(take.id)}>{t('generation.card.makeFinal')}</button>
+						</HostUi>
+					{/if}
+				{/if}
+			</span>
 		</div>
-	{/if}
+		{#if !flying}
+			<div class="flex items-center gap-1 border-t border-line px-1.5 py-1" role="group" aria-label={t('generation.card.labels', { variant: take.variant })}>
+				{#each choices as c (c.id)}
+					{@const allowed = c.id === 'final' ? canLabel(take, 'final') && Boolean(clip) : canLabel(take, c.id)}
+					<HostUi name="Tooltip" props={{ text: !allowed && label === 'final' && c.id !== 'final' ? lockedTip : c.tip }}>
+						<button
+							type="button"
+							class="vp-toggle h-6 rounded px-2 text-xs font-medium disabled:cursor-default disabled:opacity-50 {label === c.id ? '' : 'text-fg-muted hover:bg-surface-2 hover:text-fg'}"
+							aria-pressed={label === c.id}
+							aria-label={c.aria}
+							disabled={!allowed}
+							onclick={() => labelTake(clip, take, toggledLabel(take, c.id))}
+						>
+							{#if c.id === 'final' && label === 'final'}<Icon name="check" class="-ml-0.5 mr-0.5 inline h-3 w-3" />{/if}{c.text}
+						</button>
+					</HostUi>
+				{/each}
+			</div>
+		{/if}
+	</div>
 </li>
