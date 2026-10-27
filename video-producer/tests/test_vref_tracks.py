@@ -271,7 +271,7 @@ def test_the_cut_is_written_at_the_size_of_the_take_by_default_and_at_the_canvas
     _media(core)
     doc = _doc(make_doc, tracks=[_walk()], items=[_item("i1", "t1", "walk", 0, 12)])
 
-    assert reception.VIDEO_TRACKS["size"] == reception.DRAFT
+    assert reception.VIDEO_TRACKS["size"] == reception.TAKE
     draft = _plans(core, doc).shots[0]
     vertical = _plans(core, {**doc, "aspect": "9:16"}).shots[0]
     monkeypatch.setitem(reception.VIDEO_TRACKS, "size", reception.CANVAS)
@@ -370,7 +370,7 @@ def uploads(monkeypatch, tmp_path):
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
-@pytest.mark.parametrize("size", [reception.CANVAS, reception.DRAFT])
+@pytest.mark.parametrize("size", [reception.CANVAS, reception.TAKE])
 def test_ffmpeg_writes_the_cut_of_a_track_with_exactly_its_frames_at_its_size_and_without_sound(core, make_doc, films, uploads, export_storage, monkeypatch, size):
     core.use_h3()
     _media(core)

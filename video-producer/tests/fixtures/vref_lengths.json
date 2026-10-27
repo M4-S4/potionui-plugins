@@ -62,8 +62,8 @@
 	],
 	"sizes": [
 		{ "aspect": 1.7777777777777777, "resolution": [832, 480], "setting": "canvas", "size": [1344, 768] },
-		{ "aspect": 1.7777777777777777, "resolution": [832, 480], "setting": "draft", "size": [832, 480] },
-		{ "aspect": 1.7777777777777777, "resolution": null, "setting": "draft", "size": [1344, 768] },
+		{ "aspect": 1.7777777777777777, "resolution": [832, 480], "setting": "take", "size": [832, 480] },
+		{ "aspect": 1.7777777777777777, "resolution": null, "setting": "take", "size": [1344, 768] },
 		{ "aspect": 1.7777777777777777, "resolution": [832, 480], "setting": null, "size": [832, 480] },
 		{ "aspect": 0.5625, "resolution": [480, 832], "setting": null, "size": [480, 832] },
 		{ "aspect": 1.7777777777777777, "resolution": null, "setting": null, "size": [1344, 768] },

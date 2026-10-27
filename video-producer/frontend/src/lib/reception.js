@@ -18,7 +18,7 @@ export const CONTINUATION = 'continuation';
 export const UNDER = 'under';
 export const BEFORE = 'before';
 export const CANVAS = 'canvas';
-export const DRAFT = 'draft';
+export const TAKE = 'take';
 
 const EPSILON = 1e-6;
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
@@ -73,7 +73,7 @@ export function videoPieces(items, role, start, seconds, cap) {
 
 export function cutSize(aspect, resolution = null, setting = null) {
 	const chosen = VIDEO_TRACKS.sizes.includes(setting) ? setting : VIDEO_TRACKS.size;
-	if (chosen === DRAFT && resolution) return [resolution[0], resolution[1]];
+	if (chosen === TAKE && resolution) return [resolution[0], resolution[1]];
 	const { shortEdge, maxPixels, multiple } = VIDEO_TRACKS.canvas;
 	const ratio = aspect > 0 ? aspect : 16 / 9;
 	let [width, height] = ratio >= 1 ? [shortEdge * ratio, shortEdge] : [shortEdge, shortEdge / ratio];
