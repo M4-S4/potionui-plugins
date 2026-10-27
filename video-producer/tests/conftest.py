@@ -343,6 +343,7 @@ def h3_refs_fields():
     fields["model"] = _model("model", sha256="ref2va-sha")
     fields["duration"] = _plain("slider", 5)
     fields["references"] = _plain("media")
+    fields["reference_image_budget"] = _plain("select", "0", ("0", "1", "2"))
     return fields
 
 

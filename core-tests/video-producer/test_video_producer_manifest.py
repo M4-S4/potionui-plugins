@@ -1656,6 +1656,20 @@ def test_the_plugin_runs_ref2va_on_the_12_gb_preset_with_its_refs_models(shipped
     assert fields["references"]["type"] == "media"
 
 
+def test_the_reference_image_budgets_the_plugin_sends_are_choices_of_the_12_gb_refs_form(shipped_presets):
+    bridge = _load("backend.core_bridge")
+    director = _load("backend.director")
+    engine_options = _load("backend.engine_options")
+    preset = shipped_presets[H3_12GB]
+    [form] = preset.modes["refs"].forms
+    fields = {}
+    bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
+
+    field = fields[engine_options.REFERENCE_IMAGE_BUDGET]
+    assert set(director.REFERENCE_IMAGE_BUDGETS.values()) <= {option["value"] for option in field["options"]}
+    assert not engine_options.editable(engine_options.REFERENCE_IMAGE_BUDGET, field)
+
+
 def test_the_shipped_recommendations_the_core_forms_already_make_are_copied_unchanged(shipped_presets, core_presets):
     for preset_id, shipped in SHIPPED_PRESETS.items():
         named, _ = _video_form(shipped_presets[preset_id])

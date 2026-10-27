@@ -49,6 +49,7 @@ DISTILLED = "distilled"
 DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
 
 QUALITIES = ("draft", "final")
+REFERENCE_IMAGE_BUDGETS = {"draft": "1", "final": "0"}
 
 SEED_RANGE = 2**31
 
@@ -1324,7 +1325,7 @@ def working_ratio(user: User, doc: Mapping[str, Any], shot_id: str) -> float:
     return size_ratio(final_resolution(models.resolution_options(models.form_fields(preset.id, mode)), frame, preset.id)) or frame
 
 
-def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Optional[str], fps: float) -> Dict[str, Any]:
+def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Optional[str], fps: float, quality: str) -> Dict[str, Any]:
     form: Dict[str, Any] = {"seed": -1, "video_director": document}
     if "resolution" in fields:
         form["resolution"] = resolution
@@ -1332,6 +1333,8 @@ def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Op
         form["fps"] = fps
     if "quantity" in fields:
         form["quantity"] = 1
+    if engine_options.REFERENCE_IMAGE_BUDGET in fields:
+        form[engine_options.REFERENCE_IMAGE_BUDGET] = REFERENCE_IMAGE_BUDGETS[quality]
     return form
 
 
@@ -1403,7 +1406,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     mixed = audio is not None and audio.behavior == MUX
     if mixed:
         document = audio_document(document, seconds, fps, capabilities)
-    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
+    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, context.quality))
     chained: Optional[Dict[str, Any]] = None
     if refs:
         request["form_data"]["references"] = [entry.value for entry in sent]
@@ -2063,7 +2066,7 @@ def build_guided(user: User, doc: Mapping[str, Any], source: Mapping[str, Any], 
         resolution=resolution,
         fps=fps,
         prompt_text=prompt,
-        request=_request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps)),
+        request=_request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, "final")),
         audio=audio,
         reference=reference,
     )
