@@ -52,6 +52,7 @@
 	"card.progress": "Progression de la prise {variant}",
 	"card.error": "La génération a échoué ({code}).",
 	"failed.cuda_oom": "La mémoire du GPU du serveur est saturée : essayez une résolution plus basse ou moins de frames.",
+	"failed.gpu_restart_required": "Le GPU du serveur doit être redémarré avant de pouvoir générer de nouveau : un administrateur doit redémarrer le backend (Administration › Backends).",
 	"failed.host_ram_oom": "La mémoire du serveur est saturée : réessayez dans un instant.",
 	"failed.missing_model_file": "Un modèle nécessaire à ce preset manque sur le serveur.",
 	"failed.disk_full": "Le serveur n’a plus d’espace de stockage.",

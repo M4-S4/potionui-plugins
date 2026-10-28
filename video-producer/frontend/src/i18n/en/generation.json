@@ -52,6 +52,7 @@
 	"card.progress": "Progress of take {variant}",
 	"card.error": "The generation failed ({code}).",
 	"failed.cuda_oom": "The server’s GPU ran out of memory: try a lower resolution or fewer frames.",
+	"failed.gpu_restart_required": "The server’s GPU needs a restart before it can generate again: an administrator must restart the backend (Administration › Backends).",
 	"failed.host_ram_oom": "The server ran out of memory: try again in a moment.",
 	"failed.missing_model_file": "A model this preset needs is missing on the server.",
 	"failed.disk_full": "The server has run out of storage space.",
