@@ -23,6 +23,7 @@ FISHER = {"id": "c-fisher", "label": "the old fisherman", "text": "A man in his 
 HARBOUR = {"id": "p-harbour", "label": "the harbour at dawn", "text": "Wet cobblestones, moored boats, low mist.", "references": []}
 CAST = {"characters": ["c-woman"], "place": "p-harbour"}
 WALK = "The red-haired woman walks along the quay."
+WALK_TAGGED = "The red-haired woman (<Subject 1>) walks along the quay."
 NO_FRAME = {"code": "fl2va_no_frame", "message": "The shot has no first frame: it is generated from its text alone.", "data": {"shot_id": "s1"}}
 
 WOMAN_LINE = "The red-haired woman: A woman in her thirties, short copper hair, navy wool raincoat. Props: a brass lantern."
@@ -96,7 +97,7 @@ def test_h3_in_fl2va_opens_on_subject_definitions_and_keeps_the_plain_prompt_aft
         f"subject_definitions: {WOMAN_SUBJECT} "
         "<Subject 2> is the old fisherman: A man in his seventies, white beard, yellow oilskin. "
         "<Subject 3> is the setting, the harbour at dawn: Wet cobblestones, moored boats, low mist."
-        f"\n\n{WALK}\nA fishing village."
+        f"\n\n{WALK_TAGGED}\nA fishing village."
     )
 
 
@@ -105,7 +106,7 @@ def test_h3_hybrid_av_takes_the_same_subject_definitions(core, make_doc):
 
     plan, _ = _plan(core, _doc(make_doc, cast={"characters": ["c-woman"]}), presets.MINIMAX_H3, profile="Hybrid AV")
 
-    assert plan.prompt_text == f"subject_definitions: {WOMAN_SUBJECT}\n\n{WALK}"
+    assert plan.prompt_text == f"subject_definitions: {WOMAN_SUBJECT}\n\n{WALK_TAGGED}"
 
 
 def _hero(core):
@@ -138,8 +139,103 @@ def test_ref2va_defines_a_linked_reference_with_its_card_and_the_rest_of_the_cas
     )
     assert sections["retention_analysis"] == "<Subject 1> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance."
     assert sections["detailed_description"] == (
-        f"[Shot 1] {WALK} <Subject 1> appears in the shot. <Subject 2> appears in the shot. The shot takes place in <Subject 3>."
+        f"[Shot 1] {WALK_TAGGED} <Subject 1> appears in the shot. <Subject 2> appears in the shot. The shot takes place in <Subject 3>."
     )
+
+
+def _pictures(core, *names):
+    assets = []
+    for name in names:
+        core.add_media({"kind": "library", "item_id": f"lib-{name}"}, f"uploads/{name}.png", "image")
+        assets.append({"id": name, "kind": "image", "name": name, "origin": {"kind": "library", "itemId": f"lib-{name}"}})
+    return assets
+
+
+def test_ref2va_makes_one_subject_of_the_pictures_of_one_card_defined_kept_and_cited_once(core, make_doc):
+    core.use_h3()
+    woman = {**WOMAN, "references": ["r-face", "r-body"]}
+    references = [
+        {"id": "r-face", "assetId": "face", "space": "identite", "type": "Personnage", "scope": {"type": "global"}},
+        {"id": "r-body", "assetId": "body", "space": "identite", "type": "Personnage", "scope": {"type": "global"}},
+        {"id": "r-loose", "assetId": "loose", "space": "identite", "type": "Personnage", "name": "Stranger", "scope": {"type": "global"}},
+    ]
+    doc = _doc(
+        make_doc,
+        cast={"characters": ["c-woman", "c-fisher"]},
+        characters=(woman, FISHER),
+        assets=_pictures(core, "face", "body", "loose"),
+        references=references,
+        direction={"mode": "Ref2VA"},
+    )
+
+    plan, warnings = _plan(core, doc, presets.MINIMAX_H3)
+    sections = _sections(plan.prompt_text)
+
+    assert plan.request["form_data"]["references"] == ["uploads/face.png", "uploads/body.png", "uploads/loose.png"]
+    assert sections["subject_definitions"] == (
+        "<Subject 1> is the character shown in <Picture 1> and <Picture 2>, the red-haired woman: A woman in her thirties, short copper hair, navy wool raincoat. Props: a brass lantern. "
+        "<Subject 2> is the character shown in <Picture 3>. "
+        "<Subject 3> is the old fisherman: A man in his seventies, white beard, yellow oilskin."
+    )
+    assert sections["retention_analysis"] == (
+        "<Subject 1> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.\n"
+        "<Subject 2> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance."
+    )
+    assert sections["detailed_description"] == (
+        f"[Shot 1] {WALK_TAGGED} <Subject 1> appears in the shot. <Subject 2> appears in the shot. <Subject 3> appears in the shot."
+    )
+    assert [item["data"] for item in warnings if item["code"] == "reference_unlinked"] == [{"shot_id": "s1", "references": ["r-loose"], "names": ["Stranger"]}]
+
+
+def test_ref2va_lists_three_pictures_of_a_card_in_the_prompt_language(core, make_doc):
+    core.use_h3()
+    woman = {**WOMAN, "label": "la femme rousse", "references": ["r1", "r2", "r3"]}
+    references = [{"id": f"r{n}", "assetId": f"p{n}", "space": "identite", "type": "Personnage", "scope": {"type": "global"}} for n in (1, 2, 3)]
+    doc = _doc(
+        make_doc,
+        cast={"characters": ["c-woman"]},
+        characters=(woman,),
+        assets=_pictures(core, "p1", "p2", "p3"),
+        references=references,
+        prompt="La femme rousse longe le quai, puis la femme rousse s'arrête.",
+        direction={"mode": "Ref2VA"},
+        language="fr",
+    )
+
+    plan, _ = _plan(core, doc, presets.MINIMAX_H3)
+    sections = _sections(plan.prompt_text)
+
+    assert sections["subject_definitions"].startswith("<Subject 1> est le personnage montré par <Picture 1>, <Picture 2> et <Picture 3>, la femme rousse : ")
+    assert sections["detailed_description"].startswith("[Shot 1] La femme rousse (<Subject 1>) longe le quai, puis la femme rousse s'arrête.")
+
+
+def test_ref2va_does_not_tag_the_instruction_when_the_shot_replaces_its_own_words(core, make_doc):
+    core.use_h3()
+    woman = {**WOMAN, "references": ["r1"]}
+    references = [{"id": "r1", "assetId": "hero", "space": "identite", "type": "Personnage", "scope": {"type": "global"}}]
+    doc = _doc(make_doc, cast={"characters": ["c-woman"]}, characters=(woman,), assets=[_hero(core)], references=references, direction={"mode": "Ref2VA"})
+    composed, _ = _plan(core, copy.deepcopy(doc), presets.MINIMAX_H3)
+    parts = {"subject_definitions": "<Subject 1> is the woman in <Picture 1>.", "retention_analysis": "", "citations": ""}
+
+    plan, _ = _plan(core, _replace(doc, "refs", parts, composed.reference.composed), presets.MINIMAX_H3)
+
+    assert _sections(composed.prompt_text)["detailed_description"].startswith(f"[Shot 1] {WALK_TAGGED}")
+    assert _sections(plan.prompt_text)["detailed_description"] == f"[Shot 1] {WALK}"
+
+
+def test_a_picture_of_another_type_or_linked_to_a_card_is_not_flagged_as_unlinked(core, make_doc):
+    core.use_h3()
+    woman = {**WOMAN, "references": ["r-face"]}
+    references = [
+        {"id": "r-face", "assetId": "face", "space": "identite", "type": "Personnage", "scope": {"type": "global"}},
+        {"id": "r-style", "assetId": "style", "space": "identite", "type": "Style", "scope": {"type": "global"}},
+        {"id": "r-set", "assetId": "set", "space": "decors3d", "type": "Décor", "scope": {"type": "global"}},
+    ]
+    doc = _doc(make_doc, cast={"characters": ["c-woman"]}, characters=(woman,), assets=_pictures(core, "face", "style", "set"), references=references, direction={"mode": "Ref2VA"})
+
+    _, warnings = _plan(core, doc, presets.MINIMAX_H3)
+
+    assert "reference_unlinked" not in _codes(warnings)
 
 
 def test_ref2va_sends_the_picture_of_a_card_only_to_the_shots_that_cast_the_card(core, make_doc):
@@ -251,6 +347,28 @@ def test_a_cast_character_the_instruction_does_not_name_is_flagged(core, make_do
 @pytest.mark.parametrize("case", LABEL_CASES, ids=lambda case: f"{case['label']}|{case['text']}")
 def test_a_label_is_found_as_whole_words_ignoring_case_accents_and_spacing(case):
     assert bible.names(case["text"], case["label"]) is case["found"]
+
+
+@pytest.mark.parametrize("case", LABEL_CASES, ids=lambda case: f"{case['label']}|{case['text']}")
+def test_a_mention_is_found_where_a_label_is_named_and_spans_the_label_in_the_text(case):
+    span = bible.mention(case["text"], case["label"])
+
+    assert (span is not None) is case["found"]
+    if span is not None:
+        assert bible.names(case["text"][span[0] : span[1]], case["label"])
+
+
+def test_the_first_mention_of_each_cast_tag_takes_its_subject_and_an_existing_subject_is_left_alone():
+    woman = bible.Card("w", bible.CHARACTERS, "Élodie", "")
+    girl = bible.Card("g", bible.CHARACTERS, "Lina", "")
+    child = bible.Card("c", bible.CHARACTERS, "the child", "")
+
+    tagged = bible.tag_subjects("ELODIE   waves at Lina (<Subject 2>), and elodie laughs.", [woman, girl, child], {"w": 1, "g": 2, "c": 3})
+
+    assert tagged == "ELODIE (<Subject 1>)   waves at Lina (<Subject 2>), and elodie laughs."
+    assert bible.tag_subjects("Lina runs.", [girl], {}) == "Lina runs."
+    assert bible.listed(["<Picture 1>"], "en") == "<Picture 1>"
+    assert bible.listed(["<Picture 1>", "<Picture 2>"], "fr") == "<Picture 1> et <Picture 2>"
 
 
 def test_a_wan_prompt_past_its_512_tokens_is_flagged_and_an_ltx_one_is_not(core, make_doc):

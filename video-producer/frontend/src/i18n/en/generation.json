@@ -286,6 +286,8 @@
 	"warn.sizeInvalid": "{engine} cannot make takes of {size}: the size the project chose for it is left out.",
 	"warn.bibleLabelMissing": "“{shot}”: the instruction does not name {labels}, cast in the shot.",
 	"warn.promptTooLong": "“{shot}”: the prompt takes about {tokens} tokens, more than the {limit} the engine reads; its end may be ignored.",
+	"warn.referenceUnlinked.one": "“{shot}”: {names} shows a character but is linked to no card of the bible, so no words tie it to the instruction. Link it to a card to describe it.",
+	"warn.referenceUnlinked.other": "“{shot}”: {names} show characters but are linked to no card of the bible, so no words tie them to the instruction. Link them to cards to describe them.",
 	"warn.referenceChanged": "“{shot}”: its references or its cast changed since the prompt part made from them was replaced; the replaced text is still sent.",
 	"warn.referenceIgnored": "“{shot}”: the prompt part made from its references was replaced for another engine; the composed part is sent.",
 	"warn.dialogueIgnored": "“{shot}”: this engine does not generate speech; the lines of the shot are not sent.",

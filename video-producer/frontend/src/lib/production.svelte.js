@@ -237,6 +237,7 @@ function baseNoteText(note) {
 	if (code === 'prompt_too_long') return t('generation.warn.promptTooLong', { shot: shotName(data.shot_id), tokens: data.tokens ?? '—', limit: data.limit ?? '—' });
 	if (code === 'reference_prompt_changed') return t('generation.warn.referenceChanged', { shot: shotName(data.shot_id) });
 	if (code === 'reference_prompt_ignored') return t('generation.warn.referenceIgnored', { shot: shotName(data.shot_id) });
+	if (code === 'reference_unlinked') return t('generation.warn.referenceUnlinked', { shot: shotName(data.shot_id), names: (Array.isArray(data.names) ? data.names : []).join(', '), count: Array.isArray(data.names) ? data.names.length : 1 });
 	if (code === 'dialogue_ignored') return t('generation.warn.dialogueIgnored', { shot: shotName(data.shot_id) });
 	if (code === 'dialogue_speaker_unknown') return t('generation.warn.dialogueSpeakerUnknown', { shot: shotName(data.shot_id) });
 	if (code === 'dialogue_speaker_not_cast') return t('generation.warn.dialogueSpeakerNotCast', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });

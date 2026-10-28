@@ -18,6 +18,7 @@ WOMAN = {
 FISHER = {"id": "c-fisher", "label": "the old fisherman", "text": "A man in his seventies, white beard.", "props": "", "references": []}
 HARBOUR = {"id": "p-harbour", "label": "the harbour at dawn", "text": "Wet cobblestones, low mist.", "references": []}
 WALK = "The red-haired woman walks along the quay."
+WALK_TAGGED = "The red-haired woman (<Subject 1>) walks along the quay."
 
 WOMAN_SUBJECT = "<Subject 1> is the red-haired woman: A woman in her thirties, short copper hair, navy wool raincoat."
 HARBOUR_SUBJECT = "<Subject 2> is the setting, the harbour at dawn: Wet cobblestones, low mist."
@@ -80,7 +81,7 @@ def test_h3_speaks_each_line_by_its_subject_with_its_voice_once_and_the_exact_wo
 
     assert plan.prompt_text == (
         f"subject_definitions: {WOMAN_SUBJECT} {HARBOUR_SUBJECT}\n\n"
-        f"{WALK}\n"
+        f"{WALK_TAGGED}\n"
         "<Subject 1> (S1), a low, husky voice, says: <d>[French] Je descends au prochain arrêt.</d> "
         "<Subject 1> (S1) says: <d>[French] Adieu.</d>"
     )
@@ -149,7 +150,7 @@ def test_ref2va_defines_the_voice_of_a_character_and_says_its_lines_in_the_shot(
     assert plan.request["form_data"]["references"] == ["uploads/hero.png", "uploads/voice.wav"]
     assert sections["subject_definitions"].endswith("<Audio 1> is the voice of <Subject 1>.")
     assert sections["retention_analysis"].splitlines()[-1] == "<Audio 1> (sound of [Shot 1]): reference - the voice of <Subject 1>, kept for its lines."
-    assert sections["detailed_description"] == f"[Shot 1] {WALK} <Subject 1> appears in the shot. <Subject 1> (S1), a low, husky voice, says, <d>[French] Bonjour.</d>"
+    assert sections["detailed_description"] == f"[Shot 1] {WALK_TAGGED} <Subject 1> appears in the shot. <Subject 1> (S1), a low, husky voice, says, <d>[French] Bonjour.</d>"
     assert _codes(warnings) == []
 
 
