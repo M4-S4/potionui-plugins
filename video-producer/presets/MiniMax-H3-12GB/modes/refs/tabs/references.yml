@@ -31,10 +31,21 @@ fields:
     type: "select"
     label: "Reference detail budget"
     default: "1"
-    ai_hint: "Caps how much of each reference the text encoder's vision tower reads — the VAE-encoded reference rows are unaffected: there an image is encoded at a 2048px short edge capped at twice the 1344x768 release canvas area (about 2,000 tokens), and a video at the canvas its own aspect ratio resolves to, neither ever enlarged (an 832x480 frame costs about 390 tokens). Uncapped reads up to 16MP per image and is paid for by area, which with nine references is the slowest part of the request. '0' (uncapped) is the right answer when the user cares about likeness. Suggest 2x once there are more than three or four references, or 1x when encoding is slow and the references are large photos. Values are multiples of the output canvas AREA, not edge length."
+    ai_hint: "Caps how much of each reference the text encoder's vision tower reads — the VAE-encoded reference rows are unaffected: there an image is encoded at a 2048px short edge capped at twice the 1344x768 release canvas area (about 2,000 tokens, or less under 'Reference image budget' below), and a video at the canvas its own aspect ratio resolves to, neither ever enlarged (an 832x480 frame costs about 390 tokens). Uncapped reads up to 16MP per image and is paid for by area, which with nine references is the slowest part of the request. '0' (uncapped) is the right answer when the user cares about likeness. Suggest 2x once there are more than three or four references, or 1x when encoding is slow and the references are large photos. Values are multiples of the output canvas AREA, not edge length."
     configuration:
       options:
         - { label: "Uncapped (model default)", value: "0" }
         - { label: "1x output area (fastest)", value: "1" }
         - { label: "2x output area", value: "2" }
         - { label: "4x output area", value: "4" }
+
+  - name: "reference_image_budget"
+    type: "select"
+    label: "Reference image budget"
+    default: "0"
+    ai_hint: "Caps the size each reference IMAGE is VAE-encoded at, which sets the condition rows the video model reads; the text encoder's own read is 'Reference detail budget' above. '0' keeps the fixed cap: a 2048px short edge within twice the 1344x768 release canvas area, about 2,000 tokens per image. '1x' encodes a large photo at about the output size, about 390 tokens on an 832x480 draft, which keeps its look and makes each step faster: suggest it for drafts made from large photos, and '0' for a final take, where the photo's detail shows. No value ever enlarges an image, and reference videos are unaffected. Values are multiples of the output canvas AREA, not edge length."
+    configuration:
+      options:
+        - { label: "Fixed cap (2x release canvas)", value: "0" }
+        - { label: "1x output area (fastest)", value: "1" }
+        - { label: "2x output area", value: "2" }
