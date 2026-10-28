@@ -375,7 +375,25 @@ export function normalizeTake(value) {
 		startedAt: text(value.started_at) || null,
 		finishedAt: text(value.finished_at) || null,
 		chain: normalizeChain(value.chain),
-		frameRole: value.frame_role === 'first' || value.frame_role === 'last' ? value.frame_role : null
+		frameRole: value.frame_role === 'first' || value.frame_role === 'last' ? value.frame_role : null,
+		videoRefs: list(value.video_refs, normalizeVideoRef) ?? []
+	};
+}
+
+function normalizeVideoRef(value) {
+	if (!isObject(value) || !Number.isInteger(value.slot) || value.slot < 1) return null;
+	const size = Array.isArray(value.size) && value.size.length === 2 && value.size.every((side) => Number.isInteger(side) && side > 0) ? [value.size[0], value.size[1]] : null;
+	return {
+		slot: value.slot,
+		trackId: text(value.track_id) || null,
+		role: value.role === 'continuation' ? 'continuation' : 'motion',
+		start: number(value.start),
+		end: number(value.end),
+		frames: number(value.frames, 0),
+		seconds: number(value.seconds),
+		size,
+		items: Array.isArray(value.items) ? value.items.filter((id) => text(id)) : [],
+		label: text(value.label) || null
 	};
 }
 
@@ -440,8 +458,14 @@ function normalizeShotEstimate(value) {
 		directorMode: DIRECTOR_MODES.includes(value.director_mode) ? value.director_mode : null,
 		seconds: number(value.seconds),
 		resolution: text(value.resolution) || null,
-		fps: number(value.fps)
+		fps: number(value.fps),
+		video: normalizeShotVideo(value.video)
 	};
+}
+
+function normalizeShotVideo(value) {
+	if (!isObject(value) || !Array.isArray(value.tracks)) return null;
+	return { tracks: value.tracks.filter((slot) => Number.isInteger(slot) && slot > 0), rows: number(value.rows), baseRows: number(value.base_rows), scale: number(value.scale, 1) };
 }
 
 function usd(value) {

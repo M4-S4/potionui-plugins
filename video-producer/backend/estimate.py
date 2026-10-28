@@ -144,9 +144,9 @@ def take_minutes(seconds: float, ratio: Optional[float]) -> float:
 
 
 def plan_minutes(plan: ShotPlan, preset_id: str, backend_id: Optional[str] = None) -> float:
-    """The GPU minutes one take of a plan reserves, longer or shorter with the steps its options ask for."""
+    """The GPU minutes one take of a plan reserves, longer or shorter with the steps its options ask for and the reference video tracks it sends."""
     ratio, _ = calibrated_ratio(preset_id, backend_id, plan.resolution)
-    return take_minutes(plan.seconds * plan.work_scale, ratio)
+    return take_minutes(plan.seconds * plan.time_scale, ratio)
 
 
 def unknown_vram(backend_id: Optional[str] = None) -> Dict[str, Any]:
@@ -294,7 +294,7 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
 
 
 async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order, project_id: str = "") -> Evaluation:
-    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape, the time and the minutes following the steps the options of each shot ask for; the reference tracks a guided shot would send silent are left out, and a shot that waits for the last image of the previous shot is planned from that image."""
+    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape, the time and the minutes following the steps the options of each shot ask for and the reference video tracks it sends; the reference tracks a guided shot would send silent are left out, and a shot that waits for the last image of the previous shot is planned from that image."""
     found = chaining.waits(project_id, doc, order.shots)
     plans = await soundtrack.heard_plans(
         owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, overrides=True, chained=chaining.chain_map(found)
@@ -320,8 +320,8 @@ async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Ord
             )
             if warning not in extrapolated:
                 extrapolated.append(warning)
-        minutes[plan.shot_id] = take_minutes(plan.seconds * plan.work_scale, ratio)
-        work = None if ratio is None or work is None else work + ratio * plan.seconds * plan.work_scale * counts[plan.shot_id]
+        minutes[plan.shot_id] = take_minutes(plan.seconds * plan.time_scale, ratio)
+        work = None if ratio is None or work is None else work + ratio * plan.seconds * plan.time_scale * counts[plan.shot_id]
     seconds = round(work, 1) if work is not None and plans.shots else None
     quota = _quota(owner, plans, minutes, counts)
     blocks = list(plans.blocks) + ([quota_block(quota)] if quota["blocks"] else [])

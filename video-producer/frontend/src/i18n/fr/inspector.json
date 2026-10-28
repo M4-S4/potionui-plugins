@@ -232,5 +232,6 @@
 	"vref.deleteEmpty": "La piste est vide.",
 	"vref.track": "Piste",
 	"vref.itemHint": "Chaque plan reçoit la part de cette vidéo qui tombe dans sa fenêtre.",
-	"vref.remove": "Retirer de la piste"
+	"vref.remove": "Retirer de la piste",
+	"match.anchorVref": "Fin de {label}"
 }

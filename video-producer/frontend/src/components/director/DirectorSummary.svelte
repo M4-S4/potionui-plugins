@@ -16,6 +16,11 @@
 	import { isGlobal } from '../../lib/shots.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { engineTitle, shotReceptionFor } from '../../lib/references.js';
+	import { videoTracksOf } from '../../lib/vrefs.js';
+	import { trackIssues, vrefLabel } from '../../lib/vreftracks.js';
+	import { leaveAside, leastText, shotList, showTrack, sideText } from '../../lib/vreftracks.svelte.js';
+	import { LIMITS } from '../../lib/reception.js';
 	import PanelHeader from '../panels/PanelHeader.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
 	import Icon from '../Icon.svelte';
@@ -40,7 +45,9 @@
 	const checked = $derived(review.current?.projectId === project.id ? review.current : null);
 	const globals = $derived(doc.references.filter(isGlobal).length);
 	const own = $derived(doc.clips.filter(hasOwnEngine).length);
-	const total = $derived(conflicts.length + bibleIssues.length + seamIssues.length + failed.length + lookIssues.length);
+	const vrefTracks = $derived(videoTracksOf(doc));
+	const trackChecks = $derived(vrefTracks.length ? trackIssues(doc.clips.map(shotReceptionFor), vrefTracks) : []);
+	const total = $derived(conflicts.length + bibleIssues.length + seamIssues.length + failed.length + lookIssues.length + trackChecks.length);
 	const lines = $derived({
 		review: t('panels.director.sum.review', counts),
 		direction: conflicts.length ? t('panels.director.sum.conflicts', { chars, count: conflicts.length }) : t('panels.director.sum.direction', { chars }),
@@ -53,6 +60,14 @@
 
 	const num = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 	const clipById = (id) => doc.clips.find((c) => c.id === id) ?? null;
+
+	function trackText(issue) {
+		const params = { label: vrefLabel(issue.track.slot), shots: shotList(issue.clips) };
+		if (issue.status === 'ignored') return t('panels.director.check.vrefIgnored', { ...params, engine: engineTitle(issue.engine) });
+		if (issue.status === 'trimmed') return t('panels.director.check.vrefTrimmed', { ...params, max: LIMITS.video });
+		if (issue.status === 'short') return t('panels.director.check.vrefShort', { ...params, seconds: leastText(), side: sideText(issue.track.role) });
+		return t('panels.director.check.vrefMissing', params);
+	}
 
 	function openCard(item) {
 		ui.bibleCard = item.card.id;
@@ -134,6 +149,18 @@
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
 						<span class="min-w-0 flex-1">{item.cited ? t('panels.director.check.cited', { shot: num(item.clip), name: labelOf(item.card) }) : t('panels.director.check.unnamed', { shot: num(item.clip), name: labelOf(item.card) })}</span>
 					</button>
+				</li>
+			{/each}
+			{#each trackChecks as issue (issue.key)}
+				<li class="flex gap-1.5 text-fg-muted" data-track-check={issue.status}>
+					<Icon name="film" class="mt-px h-3.5 w-3.5 shrink-0 {issue.status === 'ignored' ? 'text-fg-subtle' : 'text-warning'}" />
+					<div class="min-w-0 flex-1">
+						<button type="button" class="block text-left hover:text-fg" onclick={() => showTrack(issue.track.id)}>{trackText(issue)}</button>
+						<div class="mt-0.5 flex flex-wrap items-center gap-x-3">
+							<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => (ui.modal = { type: 'shot', id: issue.clips[0].id })}>{t('panels.director.check.open', { shot: num(issue.clips[0]) })}</button>
+							<button type="button" class="vp-link-hit text-fg underline decoration-line-hover underline-offset-2 hover:decoration-2" onclick={() => leaveAside(issue.track.id, issue.clips)}>{t('panels.director.check.leave')}</button>
+						</div>
+					</div>
 				</li>
 			{/each}
 			{#each failed as clip (clip.id)}

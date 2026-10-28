@@ -45,6 +45,7 @@
 	import { takeCount } from '../../lib/shots.js';
 	import { shotNumbers } from '../../lib/director.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
+	import { withSendings } from '../../lib/vreftracks.svelte.js';
 
 	const p = $derived(ui.production);
 	const ready = $derived(readiness());
@@ -193,7 +194,7 @@
 	}
 
 	function setProfile(m) {
-		if (m !== doc.direction.mode) act(() => (doc.direction.mode = m));
+		if (m !== doc.direction.mode) withSendings(() => act(() => (doc.direction.mode = m)));
 	}
 
 	function setMargin(value) {

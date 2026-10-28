@@ -27,5 +27,9 @@
 	"noSound": "Aucun son attaché : choisissez-en un dans l’Inspecteur.",
 	"noImage": "Aucune image attachée : choisissez-en une dans l’Inspecteur.",
 	"noVideo": "Aucune vidéo attachée : choisissez-en une dans l’Inspecteur.",
-	"file": "Fichier : {file}"
+	"file": "Fichier : {file}",
+	"group.tracks": "Pistes de référence vidéo",
+	"group.tracksHint": "seul MiniMax-H3 en Ref2VA les reçoit",
+	"trackReceived.one": "Reçue par {count} plan",
+	"trackReceived.other": "Reçue par {count} plans"
 }

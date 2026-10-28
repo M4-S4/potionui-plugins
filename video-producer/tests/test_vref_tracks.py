@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import core_bridge, director, generation, presets, projects, reception, soundtrack, takes, vreftrack
+from backend import core_bridge, director, estimate, generation, presets, projects, reception, sequence, soundtrack, takes, vreftrack
 from backend.projects import DocError, validate_doc
 
 HAS_FFMPEG = bool(shutil.which("ffmpeg")) and bool(shutil.which("ffprobe"))
@@ -106,6 +106,15 @@ def test_the_schema_takes_three_tracks_at_most_of_known_slots_and_roles_and_item
             validate_doc({**doc, **broken})
 
 
+def test_a_shot_can_match_its_colour_to_the_end_of_a_continuation_track(make_doc):
+    doc = _doc(make_doc, tracks=[_walk(1, "continuation")], items=[_item("i1", "t1", "walk", 0, 4)])
+    match = {"anchor": "vref", "anchorId": "t1", "assetId": "walk", "strength": 80, "source": [50, 0, 0, 20, 5, 5], "target": [55, 1, 2, 20, 5, 5]}
+    validate_doc({**doc, "clips": [{**doc["clips"][0], "assetId": "walk", "match": match}]})
+
+    with pytest.raises(DocError):
+        validate_doc({**doc, "clips": [{**doc["clips"][0], "assetId": "walk", "match": {**match, "anchor": "track"}}]})
+
+
 def test_a_motion_track_goes_after_the_videos_of_the_shot_and_before_those_of_the_project(core, make_doc):
     core.use_h3()
     _media(core)
@@ -119,7 +128,7 @@ def test_a_motion_track_goes_after_the_videos_of_the_shot_and_before_those_of_th
     plan = plans.shots[0]
 
     assert plan.request["form_data"]["references"] == ["uploads/own.mp4", "vtrack:t1", "uploads/dock.mp4"]
-    assert plan.summary()["video"] == {"tracks": [1]} and plan.needs_cut and not plan.needs_audio
+    assert plan.summary()["video"]["tracks"] == [1] and plan.needs_cut and not plan.needs_audio
     [cut] = plan.video
     assert (cut.slot, cut.role, cut.frames, cut.start, cut.end, cut.size) == (1, "motion", 56, 4.0, 6.333333, _size(plan))
     assert [(piece.item_id, piece.asset_id, piece.source) for piece in cut.pieces] == [("i1", "walk", 5.5)]
@@ -436,7 +445,100 @@ def test_a_take_keeps_what_it_received_of_the_tracks(core, make_doc, make_projec
         core.users["user-1"], project["id"], plan, preset_id=presets.MINIMAX_H3, quality="draft", kind="shot", seed=7, variant="A", minutes=0
     )
 
-    trace = {"slot": 1, "track_id": "t1", "role": "motion", "start": 4.0, "end": 6.333333, "frames": 56, "seconds": 2.333333, "size": list(_size(plan)), "items": ["i1"]}
+    trace = {"slot": 1, "track_id": "t1", "role": "motion", "start": 4.0, "end": 6.333333, "frames": 56, "seconds": 2.333333, "size": list(_size(plan)), "items": ["i1"], "label": "<Video 1>"}
     assert take["video_refs"] == [trace]
     assert takes.public(take)["video_refs"] == [trace]
     assert takes.get_take(take["id"])["video_refs"] == [trace]
+    assert take["track_scale"] == pytest.approx(plan.track_scale) and plan.track_scale > 1
+    assert "track_scale" not in takes.public(take)
+
+
+def test_the_latent_frames_follow_the_chunks_of_the_video_vae():
+    assert [sequence.latent_frames(frames) for frames in (1, 5, 56, 72, 73, 96, 120)] == [2, 2, 17, 22, 22, 32, 37]
+    assert sequence.frame_rows((832, 480)) == 390 and sequence.frame_rows((1344, 768)) == 1008 and sequence.frame_rows(None) == 0
+
+
+@pytest.mark.parametrize(
+    "seconds, size, images, fitted, cuts, measured",
+    [
+        (3, (832, 480), 0, True, [(56, (832, 480))], 16618),
+        (3, (832, 480), 0, True, [(56, (1344, 768))], 27046),
+        (3, (832, 480), 1, True, [], 9588),
+        (3, (832, 480), 1, False, [], 11212),
+    ],
+    ids=["E2-take-cut", "E1-canvas-cut", "E4a-fitted-photo", "E4c-photo-at-the-cap"],
+)
+def test_the_rows_of_a_shot_are_those_the_takes_of_the_27_october_logged(seconds, size, images, fitted, cuts, measured):
+    rows = sequence.shot_rows(seconds, 24, size, images, fitted, cuts)
+
+    assert rows.total == pytest.approx(measured, rel=0.01)
+
+
+def test_the_step_grows_with_the_rows_as_measured_and_a_shot_without_tracks_keeps_its_time():
+    step = lambda rows: 10.6 * (rows / 11200) ** sequence.EXPONENT
+    with_track = sequence.shot_rows(3, 24, (832, 480), 1, False, [(56, (832, 480))])
+    without = sequence.shot_rows(3, 24, (832, 480), 1, False, [])
+
+    assert step(with_track.base) * with_track.scale == pytest.approx(step(with_track.total))
+    assert step(with_track.total) == pytest.approx(19.6, abs=0.6)
+    assert (without.scale, without.high) == (1.0, False)
+    assert sequence.Rows(base=0, tracks=500).scale == 1.0
+
+
+def test_a_track_lengthens_the_estimate_of_its_shot_and_says_by_how_much(core, make_doc):
+    core.use_h3()
+    _media(core)
+    plain = _doc(make_doc)
+    doc = _doc(make_doc, tracks=[_walk()], items=[_item("i1", "t1", "walk", 0, 12)], references=[{"id": "r", "space": "identite", "type": "Character", "assetId": "face", "role": "Identité", "scope": {"type": "shot", "shotId": "s1"}}])
+    plain["references"] = doc["references"]
+    resolution = _plans(core, doc).shots[0].resolution
+    takes.add_calibration(presets.MINIMAX_H3, "b-local", resolution, 4.0, 400000)
+    order = estimate.Order(shots=["s1"], quality="draft", variants=1, preset_id=presets.MINIMAX_H3)
+
+    alone = asyncio.run(estimate.evaluate(core.users["user-1"], core.users["user-1"], plain, order))
+    tracked = asyncio.run(estimate.evaluate(core.users["user-1"], core.users["user-1"], doc, order))
+    plan = tracked.plans.shots[0]
+
+    assert alone.plans.shots[0].track_scale == 1.0 and alone.payload["time"]["seconds"] == 400.0
+    assert plan.rows.total == sequence.shot_rows(4, 24, _size(plan), 1, True, [(56, _size(plan))]).total
+    assert tracked.payload["time"]["seconds"] == pytest.approx(400.0 * plan.track_scale, abs=0.1)
+    assert tracked.minutes["s1"] == pytest.approx(400.0 * plan.track_scale / 60, abs=0.001)
+    assert tracked.payload["shots"][0]["video"] == {"tracks": [1], "rows": plan.rows.total, "base_rows": plan.rows.base, "scale": round(plan.track_scale, 2)}
+    [time] = [item for item in tracked.payload["warnings"] if item["code"] == "vref_step_time"]
+    assert time["data"] == {"shot_id": "s1", "rows": plan.rows.total, "base_rows": plan.rows.base, "scale": round(plan.track_scale, 2), "limit": sequence.CEILING}
+    assert "vref_rows_high" not in [item["code"] for item in tracked.payload["warnings"]]
+
+
+def test_past_the_rows_a_12_gb_card_holds_the_estimate_warns_instead_of_only_lengthening(core, make_doc, monkeypatch):
+    core.use_h3()
+    _media(core)
+    monkeypatch.setitem(reception.VIDEO_TRACKS, "size", reception.CANVAS)
+    doc = _doc(make_doc, tracks=[_walk(1), _walk(2)], items=[_item("i1", "t1", "walk", 0, 12), _item("i2", "t2", "dock", 0, 12)])
+
+    plans = _plans(core, doc)
+    plan = plans.shots[0]
+    codes = [item["code"] for item in plans.warnings]
+
+    assert plan.rows.total > sequence.CEILING and plan.rows.high
+    assert "vref_rows_high" in codes and "vref_step_time" not in codes
+    [high] = [item for item in plans.warnings if item["code"] == "vref_rows_high"]
+    assert (high["data"]["shot_id"], high["data"]["rows"], high["data"]["limit"]) == ("s1", plan.rows.total, 28000)
+
+
+def test_a_measure_of_a_take_with_a_track_counts_as_one_made_without_it(core, make_doc, make_project):
+    core.use_h3()
+    _media(core)
+    doc = _doc(make_doc, tracks=[_walk()], items=[_item("i1", "t1", "walk", 0, 12)])
+    project = make_project(doc=doc)
+    plan = _plans(core, doc).shots[0]
+    plan.preset_id = presets.MINIMAX_H3
+    take = generation.create(
+        core.users["user-1"], project["id"], plan, preset_id=presets.MINIMAX_H3, quality="draft", kind="shot", seed=7, variant="A", minutes=0
+    )
+    core.complete("g-track", duration_ms=600000, seconds=plan.seconds, fps=24.0)
+
+    assert generation.finish_done({**take, "generation_id": "g-track"}, core.users["user-1"], core.states["g-track"])
+    ((seconds, duration_ms),) = takes.calibration(presets.MINIMAX_H3, "b-local", take["resolution"])
+
+    assert (seconds, duration_ms) == (pytest.approx(plan.seconds * plan.track_scale), 600000)
+    assert takes.track_scale({"track_scale": None}) == 1.0 and takes.track_scale({}) == 1.0

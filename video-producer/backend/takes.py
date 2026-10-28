@@ -68,6 +68,7 @@ COLUMNS = (
     "chain_wait",
     "frame_role",
     "video_refs",
+    "track_scale",
 )
 
 PUBLIC = (
@@ -164,7 +165,14 @@ def _take(row: Any) -> Dict[str, Any]:
     take["chain"] = json.loads(take["chain"]) if take["chain"] else None
     take["chain_wait"] = bool(take["chain_wait"])
     take["video_refs"] = json.loads(take["video_refs"]) if take["video_refs"] else None
+    take["track_scale"] = track_scale(take)
     return take
+
+
+def track_scale(take: Dict[str, Any]) -> float:
+    """How much longer each step of a take ran with the reference video tracks it was sent, so that its measure counts as one made without them; 1 for a take that had none."""
+    value = take.get("track_scale")
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 1.0
 
 
 def _basename(path: str) -> str:

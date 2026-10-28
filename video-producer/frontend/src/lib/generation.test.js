@@ -258,11 +258,29 @@ test('normalizeTake: the take row of the contract becomes camelCase with safe de
 	assert.deepEqual([labelled.label, labelled.shotRevision], ['rejected', 4]);
 	assert.deepEqual([normalizeTake({ id: 't4', label: 'best', flag: 'reject', shot_revision: -2 }).label, normalizeTake({ id: 't4', shot_revision: 1.5 }).shotRevision], ['rejected', 0]);
 	assert.equal(normalizeTake({ status: 'done' }), null);
+	assert.deepEqual(take.videoRefs, []);
+	const traced = normalizeTake({
+		id: 't5',
+		video_refs: [
+			{ slot: 2, track_id: 'vt2', role: 'continuation', start: 1.7, end: 4, frames: 56, seconds: 2.333333, size: [832, 480], items: ['i1', ''], label: '<Video 2>' },
+			{ slot: 1, role: 'odd', size: [0, 480] },
+			{ slot: 0 },
+			'bad'
+		]
+	});
+	assert.deepEqual(traced.videoRefs, [
+		{ slot: 2, trackId: 'vt2', role: 'continuation', start: 1.7, end: 4, frames: 56, seconds: 2.333333, size: [832, 480], items: ['i1'], label: '<Video 2>' },
+		{ slot: 1, trackId: null, role: 'motion', start: null, end: null, frames: 0, seconds: null, size: null, items: [], label: null }
+	]);
 });
 
 test('normalizeEstimate and normalizeQueue: every block of the contract, null where the server says so', () => {
 	const est = normalizeEstimate({
-		shots: [{ shot_id: 's1', director_mode: 'flf', seconds: 5, resolution: '832x480', fps: 16 }, { bad: true }],
+		shots: [
+			{ shot_id: 's1', director_mode: 'flf', seconds: 5, resolution: '832x480', fps: 16 },
+			{ shot_id: 's2', director_mode: 'flf', seconds: 3, resolution: '832x480', fps: 24, video: { tracks: [1, 'x', 0], rows: 16590, base_rows: 9180, scale: 2.06 } },
+			{ bad: true }
+		],
 		vram: { estimate_gb: 21.4, free_gb: 18, total_gb: 24, streams: true, unknown: false, backend_id: 'native' },
 		time: { seconds: null, samples: 0 },
 		quota: { limit: 600, used: 590, remaining: 10, exempt: false, needed_minutes: 12.5, applies: true, blocks: true },
@@ -270,7 +288,10 @@ test('normalizeEstimate and normalizeQueue: every block of the contract, null wh
 		blocks: [{ code: 'quota_exceeded', message: 'Quota exceeded' }, { message: 'no code' }],
 		warnings: [{ code: 'vram_stream', message: 'will stream through host RAM, slower' }, { code: 'fl2va_no_frame', message: 'x', data: { shot_id: 's1' } }]
 	});
-	assert.deepEqual(est.shots, [{ shotId: 's1', directorMode: 'flf', seconds: 5, resolution: '832x480', fps: 16 }]);
+	assert.deepEqual(est.shots, [
+		{ shotId: 's1', directorMode: 'flf', seconds: 5, resolution: '832x480', fps: 16, video: null },
+		{ shotId: 's2', directorMode: 'flf', seconds: 3, resolution: '832x480', fps: 24, video: { tracks: [1], rows: 16590, baseRows: 9180, scale: 2.06 } }
+	]);
 	assert.deepEqual(est.vram, { estimateGb: 21.4, freeGb: 18, totalGb: 24, streams: true, unknown: false, backendId: 'native' });
 	assert.deepEqual(est.time, { seconds: null, samples: 0 });
 	assert.deepEqual(est.quota, { limit: 600, used: 590, remaining: 10, exempt: false, neededMinutes: 12.5, applies: true, blocks: true });

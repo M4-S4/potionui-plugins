@@ -9,20 +9,24 @@
 	import ReferenceChosen from './ReferenceChosen.svelte';
 	import ReferenceShot from './ReferenceShot.svelte';
 	import ReferenceProject from './ReferenceProject.svelte';
+	import ReferenceTrack from './ReferenceTrack.svelte';
+	import { trackOf, vrefLabel } from '../../lib/vreftracks.js';
 	import ElsewhereNote from '../inspector/ElsewhereNote.svelte';
 	import Icon from '../Icon.svelte';
 
 	const filtered = $derived(panelSelection('references', ui.selection));
 	const reference = $derived(filtered.shown?.kind === 'reference' ? (doc.references.find((r) => r.id === filtered.shown.id) ?? null) : null);
 	const clip = $derived(filtered.shown?.kind === 'clip' ? (doc.clips.find((c) => c.id === filtered.shown.id) ?? null) : null);
+	const track = $derived(filtered.shown?.kind === 'vtrack' ? trackOf(doc, filtered.shown.id) : null);
 	const head = $derived.by(() => {
 		if (reference) return { icon: typeIcon(reference), title: t('panels.director.refs.reference'), sub: '' };
+		if (track) return { icon: 'film', title: t('inspector.kind.vtrack'), sub: vrefLabel(track.slot) };
 		if (clip) return { icon: 'bookmark', title: t('panels.director.refs.ofShot'), sub: String(doc.clips.indexOf(clip) + 1).padStart(2, '0') };
 		return { icon: 'bookmark', title: commandById('view-references')?.label ?? '', sub: '' };
 	});
 </script>
 
-<aside class="flex min-h-0 flex-col overflow-hidden border-l border-line bg-surface-1" aria-label={head.title} class:invisible={!ui.inspectorOpen} data-reference-aside={reference ? 'reference' : clip ? 'shot' : 'none'}>
+<aside class="flex min-h-0 flex-col overflow-hidden border-l border-line bg-surface-1" aria-label={head.title} class:invisible={!ui.inspectorOpen} data-reference-aside={reference ? 'reference' : clip ? 'shot' : track ? 'track' : 'none'}>
 	<div class="vp-panel-head border-b border-line">
 		<Icon name={head.icon} class="h-4 w-4 text-fg-muted" />
 		<span class="truncate text-sm font-semibold">{head.title}</span>
@@ -31,9 +35,11 @@
 		<HostUi name="IconButton" props={{ icon: hostIconName('x'), label: t('inspector.close'), tooltip: t('inspector.closeTip'), kbd: commandById('inspector')?.key, size: 'sm', class: 'vp-h7', onclick: () => (ui.inspectorOpen = false) }} />
 	</div>
 	<div class="min-h-0 flex-1 overflow-auto">
-		{#key reference?.id ?? clip?.id ?? 'none'}
+		{#key reference?.id ?? clip?.id ?? track?.id ?? 'none'}
 			{#if reference}
 				<ReferenceChosen {reference} />
+			{:else if track}
+				<ReferenceTrack {track} />
 			{:else if clip}
 				<ReferenceShot {clip} />
 			{:else}

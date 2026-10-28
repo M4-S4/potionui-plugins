@@ -320,5 +320,7 @@
 	"card.refs.copyNew": "Copier dans une nouvelle piste",
 	"card.refs.newTrack": "Nouvelle piste",
 	"card.refs.full": "{max} pistes au plus : supprimez-en une pour en ajouter une autre.",
-	"card.refs.chipTip": "{track} · {role} : un morceau vient de cette prise"
+	"card.refs.chipTip": "{track} · {role} : un morceau vient de cette prise",
+	"warn.vrefStepTime": "{shot} : ses pistes de référence vidéo allongent chaque pas d’environ ×{scale} ({rows} lignes au lieu de {base}).",
+	"warn.vrefRowsHigh": "{shot} : avec ses pistes de référence vidéo, il envoie environ {rows} lignes au modèle. Au-delà d’environ {limit}, une carte de 12 Go manque de mémoire et chaque pas ralentit beaucoup."
 }

@@ -171,8 +171,8 @@ async def evaluate(owner: User, project: Mapping[str, Any], order: Order, source
         ratio, count = estimate.calibrated_ratio(item.preset_id, backend_id, plan.resolution) if item.native else (None, 0)
         if index == 0:
             samples = count
-        item.minutes = estimate.take_minutes(plan.seconds * plan.work_scale, ratio) if item.native else 0.0
-        work = None if ratio is None or work is None else work + ratio * plan.seconds * plan.work_scale
+        item.minutes = estimate.take_minutes(plan.seconds * plan.time_scale, ratio) if item.native else 0.0
+        work = None if ratio is None or work is None else work + ratio * plan.seconds * plan.time_scale
     seconds = round(work, 1) if work is not None and planned else None
     native = [item for item in planned if item.native]
     status = limits.gpu_minutes_status(owner.id)

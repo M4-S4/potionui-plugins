@@ -320,5 +320,7 @@
 	"card.refs.copyNew": "Copy to a new track",
 	"card.refs.newTrack": "New track",
 	"card.refs.full": "{max} tracks at most: delete one to add another.",
-	"card.refs.chipTip": "{track} · {role}: a piece of it comes from this take"
+	"card.refs.chipTip": "{track} · {role}: a piece of it comes from this take",
+	"warn.vrefStepTime": "{shot}: its reference video tracks make each step about ×{scale} longer ({rows} rows instead of {base}).",
+	"warn.vrefRowsHigh": "{shot}: with its reference video tracks it sends about {rows} rows to the model. Past about {limit}, a 12 GB card runs short of memory and each step slows down a lot."
 }

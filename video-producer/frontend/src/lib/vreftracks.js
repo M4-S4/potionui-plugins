@@ -1,5 +1,5 @@
 import { MAX_VREF_TRACKS, VREF_ITEMS, VREF_ROLES, VREF_TRACKS, trackItemsOf, videoTracksOf } from './vrefs.js';
-import { VIDEO_TRACKS, videoCap, videoFrames } from './reception.js';
+import { VIDEO_TRACKS, engineKey, videoCap, videoFrames } from './reception.js';
 import { excludedVrefsOf, setExcludedVrefs } from './shots.js';
 
 export const VREF_COLOR = 'viz-8';
@@ -160,3 +160,54 @@ export function trackMarks(shots, trackId) {
 }
 
 export const receivingCount = (shots, trackId) => shots.filter((shot) => shot.videoTracks.some((x) => x.track.id === trackId && x.status === 'sent')).length;
+
+export const SHOULD_GO = ['ignored', 'trimmed', 'short', 'missing'];
+export const LEFT_ASIDE = ['excluded', 'off'];
+
+export function trackShots(shots, trackId) {
+	return shots.flatMap((shot) => {
+		const entry = shot.videoTracks.find((x) => x.track.id === trackId);
+		return entry ? [{ clip: shot.clip, engine: shot.engine, entry }] : [];
+	});
+}
+
+export function trackGroups(shots, trackId) {
+	const groups = [];
+	for (const { clip, engine, entry } of trackShots(shots, trackId)) {
+		const aside = LEFT_ASIDE.includes(entry.status);
+		const key = aside ? entry.status : `${engineKey(engine)}|${entry.status}|${entry.status === 'sent' ? entry.frames : ''}`;
+		let group = groups.find((g) => g.key === key);
+		if (!group) groups.push((group = { key, status: entry.status, engine: aside ? null : engine, entry, clips: [] }));
+		group.clips.push(clip);
+	}
+	return [...groups.filter((g) => !LEFT_ASIDE.includes(g.status)), ...LEFT_ASIDE.flatMap((status) => groups.filter((g) => g.status === status))];
+}
+
+export function trackIssues(shots, tracks) {
+	return (tracks ?? []).flatMap((track) =>
+		trackGroups(shots, track.id)
+			.filter((g) => SHOULD_GO.includes(g.status))
+			.map((g) => ({ ...g, key: `${track.id}|${g.key}`, track }))
+	);
+}
+
+export function sendings(shots) {
+	const sent = new Map();
+	for (const shot of shots) for (const x of shot.videoTracks) if (x.status === 'sent') sent.set(x.track.id, [...(sent.get(x.track.id) ?? []), shot.clip.id]);
+	return sent;
+}
+
+export function sendingChanges(before, shots) {
+	const after = sendings(shots);
+	const changes = [];
+	for (const id of new Set([...before.keys(), ...after.keys()])) {
+		const was = new Set(before.get(id) ?? []);
+		const now = new Set(after.get(id) ?? []);
+		const entries = shots.map((shot) => ({ shot, entry: shot.videoTracks.find((x) => x.track.id === id) ?? null }));
+		const track = entries.find((x) => x.entry)?.entry.track ?? null;
+		const started = entries.filter((x) => now.has(x.shot.clip.id) && !was.has(x.shot.clip.id)).map((x) => x.shot.clip);
+		const stopped = entries.filter((x) => was.has(x.shot.clip.id) && !now.has(x.shot.clip.id)).map((x) => ({ clip: x.shot.clip, engine: x.shot.engine, status: x.entry?.status ?? null }));
+		if (track && (started.length || stopped.length)) changes.push({ track, started, stopped });
+	}
+	return changes.sort((a, b) => a.track.slot - b.track.slot);
+}

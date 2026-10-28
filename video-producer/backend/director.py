@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, dialogue, engine_options, formats, models, presets, reception, settings, upscalers
+from . import bible, catalog, core_bridge, dialogue, engine_options, formats, models, presets, reception, sequence, settings, upscalers
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -225,6 +225,21 @@ class ShotPlan:
     chain: Optional[str] = None
     video: List["VideoCut"] = field(default_factory=list)
     video_labels: Dict[int, str] = field(default_factory=dict)
+    rows: Optional[sequence.Rows] = None
+
+    @property
+    def track_scale(self) -> float:
+        """How much longer each step of a take runs with the reference video tracks it sends; 1 without any."""
+        return self.rows.scale if self.rows is not None else 1.0
+
+    @property
+    def time_scale(self) -> float:
+        """How much longer than at the mode's defaults and without reference video tracks a take of the plan runs."""
+        return self.work_scale * self.track_scale
+
+    def video_trace(self) -> Optional[List[Dict[str, Any]]]:
+        """What a take receives of the reference video tracks, each cut with the label it goes as in the prompt."""
+        return [{**cut.trace(), "label": self.video_labels.get(cut.slot)} for cut in self.video] or None
 
     @property
     def needs_audio(self) -> bool:
@@ -249,7 +264,11 @@ class ShotPlan:
             "profile": self.profile,
             "quality": self.quality,
             "audio": self.audio.summary() if self.audio is not None else None,
-            "video": {"tracks": [cut.slot for cut in self.video]} if self.video else None,
+            "video": (
+                {"tracks": [cut.slot for cut in self.video], "rows": self.rows.total, "base_rows": self.rows.base, "scale": round(self.track_scale, 2)}
+                if self.video and self.rows is not None
+                else None
+            ),
             "chain": self.chain,
         }
 
@@ -1452,6 +1471,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     engine = bible.family(preset.id, preset.cloud)
     video: List[VideoCut] = []
     labels: Dict[int, str] = {}
+    rows: Optional[sequence.Rows] = None
     if refs:
         window = condition_window(doc, clip, seconds)
         tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
@@ -1482,6 +1502,11 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         prompt, reference = compose_refs(doc, clip, sent, seconds)
         _unlinked_warnings(doc, clip, sent, warnings)
         labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
+        if video:
+            fitted = REFERENCE_IMAGE_BUDGETS[context.quality] == "1" and engine_options.REFERENCE_IMAGE_BUDGET in fields
+            images = sum(1 for entry in sent if entry.kind == "image")
+            rows = sequence.shot_rows(seconds, fps or reception.VIDEO_TRACKS["fps"], models.parse_size(resolution), images, fitted, [(cut.frames, cut.size) for cut in video])
+            _row_warnings(shot_id, rows, warnings)
     else:
         prompt, reference = compose_shot(doc, clip, engine)
         audio = _shot_mux(context, clip, seconds, warnings)
@@ -1538,7 +1563,23 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         chain=_chain_of(context, shot_id, chained, director_mode),
         video=video,
         video_labels=labels,
+        rows=rows,
     )
+
+
+def _row_warnings(shot_id: str, rows: sequence.Rows, warnings: List[Dict[str, Any]]) -> None:
+    """What the reference video tracks of a shot cost: a sequence past what a 12 GB card holds, else the longer step when it shows."""
+    data = {"shot_id": shot_id, "rows": rows.total, "base_rows": rows.base, "scale": round(rows.scale, 2), "limit": sequence.CEILING}
+    if rows.high:
+        warnings.append(
+            note(
+                "vref_rows_high",
+                f"With its reference video tracks the shot sends about {rows.total} rows to the model: past about {sequence.CEILING}, a 12 GB card runs short of memory and each step slows down a lot.",
+                **data,
+            )
+        )
+    elif rows.scale >= sequence.NOTICEABLE:
+        warnings.append(note("vref_step_time", f"Its reference video tracks make each step of the shot about {rows.scale:.1f} times longer.", **data))
 
 
 def _ready_tracks(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> List[ShotTrack]:

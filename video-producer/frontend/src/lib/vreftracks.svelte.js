@@ -1,12 +1,13 @@
-import { formatNumber, t } from '../i18n/index.svelte.js';
-import { LIMITS, VIDEO_TRACKS, leastSeconds } from './reception.js';
-import { ui, doc, act, asset, round, select, toast, newReferenceLane, undo } from './state.svelte.js';
+import { formatNumber, getLocale, t } from '../i18n/index.svelte.js';
+import { LIMITS, VIDEO_TRACKS, engineKey, leastSeconds } from './reception.js';
+import { ui, doc, act, asset, round, select, toast, newReferenceLane, undo, openDirector } from './state.svelte.js';
 import { ulid } from './ulid.js';
 import { MAX_VREF_TRACKS, videoTracksOf } from './vrefs.js';
-import { addVrefItem, addVrefTrack, freeSlot, itemSpan, setTrackFrames, setTrackOff, trackBusy, trackOf, vrefLabel } from './vreftracks.js';
+import { addVrefItem, addVrefTrack, freeSlot, itemSpan, sendingChanges, sendings, setTrackFrames, setTrackOff, trackBusy, trackOf, vrefLabel } from './vreftracks.js';
+import { engineTitle, shotReceptionFor } from './references.js';
 import { ensureTakeAsset, releaseTake } from './production.svelte.js';
 import { takeById } from './takes.svelte.js';
-import { releaseShot } from './shots.js';
+import { excludedVrefsOf, releaseShot, setExcludedVrefs } from './shots.js';
 import { freeReferenceLane, takeSound } from './sound.js';
 import { laneCode } from './tracks.js';
 
@@ -24,17 +25,84 @@ const vsecs = (v) => `${formatNumber(v, { minimumFractionDigits: 2, maximumFract
 
 export const sentSeconds = (frames) => vsecs(frames / VIDEO_TRACKS.fps);
 
+export const leastText = () => vsecs(leastSeconds());
+
 export function trackVerdict(entry) {
 	const side = sideText(entry.track.role);
 	if (entry.status === 'sent') return { text: t('lib.vref.verdict.sent', { seconds: sentSeconds(entry.frames), side }), tone: 'text-success', ok: true };
 	if (entry.status === 'trimmed') return { text: t('lib.vref.verdict.trimmed', { max: LIMITS.video }), tone: 'text-warning', ok: false };
-	if (entry.status === 'short') return { text: t('lib.vref.verdict.short', { seconds: vsecs(leastSeconds()), side }), tone: 'text-warning', ok: false };
+	if (entry.status === 'short') return { text: t('lib.vref.verdict.short', { seconds: leastText(), side }), tone: 'text-warning', ok: false };
 	if (entry.status === 'missing') return { text: t('lib.vref.verdict.missing'), tone: 'text-warning', ok: false };
 	if (entry.status === 'excluded') return { text: t('lib.vref.verdict.excluded'), tone: 'text-fg-subtle', ok: false };
 	if (entry.status === 'off') return { text: t('lib.vref.verdict.off'), tone: 'text-fg-subtle', ok: false };
 	if (entry.status === 'blocked') return { text: t('lib.vref.verdict.blocked'), tone: 'text-fg-subtle', ok: false };
 	if (entry.status === 'unknown') return { text: t('lib.vref.verdict.unknown'), tone: 'text-fg-subtle', ok: false };
 	return { text: t('lib.vref.verdict.ignored'), tone: 'text-fg-subtle', ok: false };
+}
+
+const shotNum = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
+
+export function shotList(clips) {
+	if (clips.length > 3) return t('lib.vref.change.shots', { count: clips.length });
+	return new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(clips.map(shotNum));
+}
+
+export function showTrack(trackId) {
+	if (!trackOf(doc, trackId)) return;
+	openDirector('references');
+	select('vtrack', trackId);
+}
+
+export const trackSendings = () => (videoTracksOf(doc).length ? sendings(doc.clips.map(shotReceptionFor)) : new Map());
+
+function stoppedLine(label, group) {
+	const shots = shotList(group.clips);
+	if (group.status === 'ignored') return t('lib.vref.change.ignored', { label, shots, engine: engineTitle(group.engine) });
+	if (group.status === 'trimmed') return t('lib.vref.change.trimmed', { label, shots, max: LIMITS.video });
+	if (group.status === 'blocked') return t('lib.vref.change.blocked', { label, shots, engine: engineTitle(group.engine) });
+	if (group.status === 'unknown') return t('lib.vref.change.unknown', { label, shots });
+	if (group.status === 'short') return t('lib.vref.change.short', { label, shots, seconds: leastText() });
+	return t('lib.vref.change.stopped', { label, shots });
+}
+
+export function announceSendings(before) {
+	if (!before.size && !videoTracksOf(doc).length) return [];
+	const changes = sendingChanges(before, doc.clips.map(shotReceptionFor));
+	if (!changes.length) return [];
+	const lines = [];
+	for (const change of changes) {
+		const label = vrefLabel(change.track.slot);
+		const groups = [];
+		for (const x of change.stopped) {
+			const key = `${x.status}|${x.status === 'ignored' || x.status === 'blocked' ? engineKey(x.engine) : ''}`;
+			let group = groups.find((g) => g.key === key);
+			if (!group) groups.push((group = { key, status: x.status, engine: x.engine, clips: [] }));
+			group.clips.push(x.clip);
+		}
+		lines.push(...groups.map((group) => stoppedLine(label, group)));
+		if (change.started.length) lines.push(t('lib.vref.change.started', { label, shots: shotList(change.started) }));
+	}
+	const first = changes[0].track.id;
+	toast(lines.join(' '), 'info', { label: t('lib.vref.change.see'), run: () => showTrack(first) }, 6000);
+	return changes;
+}
+
+export function leaveAside(trackId, clips) {
+	const track = trackOf(doc, trackId);
+	const left = clips.filter((clip) => !excludedVrefsOf(clip).includes(trackId));
+	if (!track || !left.length) return 0;
+	act(() => {
+		for (const clip of left) setExcludedVrefs(clip, [...excludedVrefsOf(clip), trackId]);
+	});
+	toast(t('lib.vref.leftAside', { label: vrefLabel(track.slot), shots: shotList(left) }), 'info', { label: t('shell.toast.undo'), run: undo });
+	return left.length;
+}
+
+export function withSendings(change) {
+	const before = trackSendings();
+	const result = change();
+	announceSendings(before);
+	return result;
 }
 
 export function addTrackItem() {

@@ -279,5 +279,16 @@
 	"vref.take.busyHere": "{label} est occupée à cet endroit.",
 	"vref.take.moved": "Prise {variant} déplacée dans {label} : le plan {shot} est à générer.",
 	"vref.take.copied": "Prise {variant} copiée dans {label}.",
-	"vref.take.withSound": "Son son est sur {lane}."
+	"vref.take.withSound": "Son son est sur {lane}.",
+	"vref.change.shots.one": "{count} plan",
+	"vref.change.shots.other": "{count} plans",
+	"vref.change.started": "{label} part maintenant dans {shots}.",
+	"vref.change.ignored": "{label} ne part plus dans {shots} : {engine} ne reçoit pas de vidéo de référence.",
+	"vref.change.trimmed": "{label} ne part plus dans {shots} : au-delà de la limite de {max} vidéos.",
+	"vref.change.blocked": "{label} ne part plus dans {shots} : {engine} ne peut pas jouer ce profil.",
+	"vref.change.unknown": "{label} ne part plus dans {shots} : le moteur n’est pas disponible.",
+	"vref.change.short": "{label} ne part plus dans {shots} : il en reste moins de {seconds}.",
+	"vref.change.stopped": "{label} ne part plus dans {shots}.",
+	"vref.change.see": "Voir",
+	"vref.leftAside": "{label} laissée de côté dans {shots}."
 }

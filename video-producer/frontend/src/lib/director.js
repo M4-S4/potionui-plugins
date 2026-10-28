@@ -81,7 +81,7 @@ export function cardImages(doc, card) {
 	return (doc?.references ?? []).filter((r) => ids.has(r.id));
 }
 
-export const PANEL_KINDS = { review: ['clip'], direction: ['clip'], bible: [], references: ['reference', 'clip'] };
+export const PANEL_KINDS = { review: ['clip'], direction: ['clip'], bible: [], references: ['reference', 'clip', 'vtrack'] };
 
 export function panelSelection(view, selection) {
 	if (!selection) return { shown: null, elsewhere: null };

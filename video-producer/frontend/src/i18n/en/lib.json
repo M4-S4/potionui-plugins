@@ -279,5 +279,16 @@
 	"vref.take.busyHere": "{label} is taken at that point.",
 	"vref.take.moved": "Take {variant} moved to {label}: shot {shot} is to be generated again.",
 	"vref.take.copied": "Take {variant} copied to {label}.",
-	"vref.take.withSound": "Its sound is on {lane}."
+	"vref.take.withSound": "Its sound is on {lane}.",
+	"vref.change.shots.one": "{count} shot",
+	"vref.change.shots.other": "{count} shots",
+	"vref.change.started": "{label} now goes into {shots}.",
+	"vref.change.ignored": "{label} no longer goes into {shots}: {engine} does not take a reference video.",
+	"vref.change.trimmed": "{label} no longer goes into {shots}: past the limit of {max} videos.",
+	"vref.change.blocked": "{label} no longer goes into {shots}: {engine} cannot play this profile.",
+	"vref.change.unknown": "{label} no longer goes into {shots}: the engine is not available.",
+	"vref.change.short": "{label} no longer goes into {shots}: less than {seconds} of it is left there.",
+	"vref.change.stopped": "{label} no longer goes into {shots}.",
+	"vref.change.see": "See",
+	"vref.leftAside": "{label} left out of {shots}."
 }

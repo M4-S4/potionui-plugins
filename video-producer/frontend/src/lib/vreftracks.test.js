@@ -265,3 +265,57 @@ test('the sound of a take goes on the first reference sound track free under it,
 		fromTake: 't1'
 	});
 });
+
+test('the reception of a track groups its shots by engine and verdict, the shots that leave it out last, and only those it should reach but does not are to check', () => {
+	const doc = caseDoc('a reference video track is ignored by every engine');
+	const shots = receptions(doc);
+	const track = videoTracksOf(doc)[0];
+	const groups = v.trackGroups(shots, track.id);
+	assert.deepEqual(
+		groups.map((g) => [g.status, g.clips.map((c) => c.id)]),
+		[['ignored', ['s1']], ['ignored', ['s2']], ['ignored', ['s3']], ['ignored', ['s4']]]
+	);
+	assert.deepEqual(v.trackIssues(shots, [track]).map((issue) => [issue.status, issue.track.id, issue.clips.map((c) => c.id)]), groups.map((g) => ['ignored', track.id, g.clips.map((c) => c.id)]));
+
+	const motion = caseDoc('a motion track sends a Ref2VA shot');
+	const [sent] = v.trackGroups(receptions(motion), videoTracksOf(motion)[0].id);
+	assert.deepEqual([sent.status, sent.entry.frames, sent.clips.map((c) => c.id)], ['sent', 56, ['s1']]);
+	assert.deepEqual(v.trackIssues(receptions(motion), videoTracksOf(motion)), []);
+
+	const full = caseDoc('three videos of the shot fill the budget');
+	assert.deepEqual(v.trackIssues(receptions(full), videoTracksOf(full)).map((issue) => issue.status), ['trimmed']);
+
+	const quiet = caseDoc('a shot that leaves a track out');
+	const quietGroups = v.trackGroups(receptions(quiet), videoTracksOf(quiet)[0].id);
+	assert.equal(quietGroups.at(-1).status, 'excluded');
+	assert.equal(quietGroups.at(-1).engine, null);
+	assert.ok(v.trackIssues(receptions(quiet), videoTracksOf(quiet)).every((issue) => issue.status !== 'excluded'));
+
+	const off = caseDoc('a disabled track is sent nowhere');
+	assert.deepEqual(v.trackIssues(receptions(off), videoTracksOf(off)), []);
+	assert.ok(v.trackGroups(receptions(off), videoTracksOf(off)[0].id).every((g) => g.status === 'off'));
+
+	const short = caseDoc('a continuation track sends what lies just before the shot');
+	assert.ok(v.trackIssues(receptions(short), videoTracksOf(short)).some((issue) => issue.status === 'short'));
+	assert.ok(!v.trackIssues(receptions(short), videoTracksOf(short)).some((issue) => issue.clips.some((c) => c.id === 's1') && issue.status === 'sent'));
+});
+
+test('the shots a track goes into before and after a change: which start, which stop and why', () => {
+	const doc = caseDoc('a motion track sends a Ref2VA shot');
+	const before = v.sendings(receptions(doc));
+	assert.deepEqual([...before.entries()], [['t1', ['s1']]]);
+	assert.deepEqual(v.sendingChanges(before, receptions(doc)), []);
+
+	doc.direction.mode = 'FL2VA';
+	const [stopped] = v.sendingChanges(before, receptions(doc));
+	assert.deepEqual([stopped.track.id, stopped.started, stopped.stopped.map((x) => [x.clip.id, x.status])], ['t1', [], [['s1', 'ignored']]]);
+
+	const after = v.sendings(receptions(doc));
+	doc.direction.mode = 'Ref2VA';
+	const [started] = v.sendingChanges(after, receptions(doc));
+	assert.deepEqual([started.started.map((c) => c.id), started.stopped], [['s1'], []]);
+
+	delete doc.vrefTracks;
+	delete doc.vrefItems;
+	assert.deepEqual(v.sendingChanges(before, receptions(doc)), []);
+});

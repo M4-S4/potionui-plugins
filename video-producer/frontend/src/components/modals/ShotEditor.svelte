@@ -12,7 +12,7 @@
 	import { TAG_CLASS, typeIcon } from '../../lib/reftags.js';
 	import { LIMITS } from '../../lib/reception.js';
 	import { citeTrack, citedSlots, vrefLabel, vrefTag } from '../../lib/vreftracks.js';
-	import { roleLabel, trackVerdict } from '../../lib/vreftracks.svelte.js';
+	import { roleLabel, trackVerdict, withSendings } from '../../lib/vreftracks.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { SHOT_CAP, applyShotDraft, inputsChanged, isGlobal, isShared, overrunsTake, rebaseDraft, shotDraft, shotReferences } from '../../lib/shots.js';
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
@@ -180,14 +180,16 @@
 		if (!clip) return (ui.modal = null);
 		let released = null;
 		let conflicts = 0;
-		act(() => {
-			const current = $state.snapshot(shotDraft(doc, clip, doc.engine));
-			const rebased = rebaseDraft($state.snapshot(baseline), $state.snapshot(draft), current);
-			const result = applyShotDraft(doc, clip, current, rebased.draft, { makeId: ulid, maxDur: limit.max, engine: doc.engine });
-			conflicts = rebased.conflicts;
-			released = result.released;
-			if (result.resized) relayout();
-		});
+		withSendings(() =>
+			act(() => {
+				const current = $state.snapshot(shotDraft(doc, clip, doc.engine));
+				const rebased = rebaseDraft($state.snapshot(baseline), $state.snapshot(draft), current);
+				const result = applyShotDraft(doc, clip, current, rebased.draft, { makeId: ulid, maxDur: limit.max, engine: doc.engine });
+				conflicts = rebased.conflicts;
+				released = result.released;
+				if (result.resized) relayout();
+			})
+		);
 		settleRelease(clip, released);
 		if (conflicts) toast(t('modals.shot.kept', { count: conflicts }), 'warning');
 		ui.modal = null;
