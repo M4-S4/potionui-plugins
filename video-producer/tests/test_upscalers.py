@@ -82,7 +82,7 @@ def test_rtx_is_ready_only_with_its_video_mode_its_target_field_and_nvidia_vfx(c
     assert upscalers.ready(user)["rtx"] is False
 
 
-def test_rtx_upscales_a_take_to_the_short_side_of_its_target_without_a_seed(core):
+def test_rtx_upscales_a_take_to_the_short_side_of_its_target_without_a_seed_tuned_for_a_compressed_source(core):
     core.use_rtx()
     _video(core)
 
@@ -91,13 +91,26 @@ def test_rtx_upscales_a_take_to_the_short_side_of_its_target_without_a_seed(core
     assert (plan.request["preset_id"], plan.request["mode"]) == (presets.RTX_UPSCALE, "video_upscale")
     assert plan.request["form_data"] == {
         "input_video": "generations/x/9.mp4",
-        "intent": "upscale",
+        "intent": "upscale_highbitrate",
         "quality": "ultra",
         "target_short_side": 1080,
         "keep_audio": True,
     }
     assert (plan.resolution, plan.missing_models) == ("1872x1080", [])
     assert director.upscale_target({"request": plan.request}) == "fhd1080"
+    assert director.upscale_rtx_source({"request": plan.request}) == "compressed"
+
+
+def test_rtx_is_tuned_for_a_clean_source_only_when_told_so(core):
+    core.use_rtx()
+    _video(core)
+
+    plan = director.build_upscale(core.users["user-1"], _source(), "fhd1080", "rtx", "clean")
+
+    assert plan.request["form_data"]["intent"] == "upscale"
+    assert director.upscale_rtx_source({"request": plan.request}) == "clean"
+    assert upscalers.RTX_SOURCES == ("compressed", "clean")
+    assert upscalers.rtx_source_of("denoise") == upscalers.rtx_source_of(None) == "compressed"
 
 
 def test_rtx_is_refused_when_it_cannot_aim_at_a_size_or_nvidia_vfx_is_missing(core):

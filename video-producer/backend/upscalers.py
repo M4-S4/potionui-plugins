@@ -20,6 +20,12 @@ MODE = "video_upscale"
 RTX_MODULE = "nvvfx"
 RTX_TARGET_FIELD = "target_short_side"
 
+RTX_INTENTS = {"compressed": "upscale_highbitrate", "clean": "upscale"}
+
+RTX_SOURCES = tuple(RTX_INTENTS)
+
+DEFAULT_RTX_SOURCE = "compressed"
+
 UPSCALE_SHORT_SIDES = {"hd720": 720, "fhd1080": 1080, "qhd1440": 1440, "uhd2160": 2160}
 
 NAMED_TARGETS = tuple(UPSCALE_SHORT_SIDES)
@@ -46,6 +52,11 @@ def _runnable(user: User, preset_id: str) -> Optional[Any]:
         logger.warning("[VIDEO-PRODUCER] Could not list the presets of user %s", getattr(user, "id", None), exc_info=True)
         return None
     return next((item for item in descriptions if item.id == preset_id and MODE in (item.modes or {})), None)
+
+
+def rtx_source_of(intent: Any) -> str:
+    """The kind of source an RTX upscale was tuned for, read back from its intent; compressed when it says nothing known."""
+    return next((source for source, known in RTX_INTENTS.items() if known == intent), DEFAULT_RTX_SOURCE)
 
 
 def rtx_target_field(preset_id: str = presets.RTX_UPSCALE) -> bool:

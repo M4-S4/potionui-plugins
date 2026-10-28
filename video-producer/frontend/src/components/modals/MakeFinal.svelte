@@ -4,10 +4,10 @@
 	import { ui, doc, toast, clipLabel } from '../../lib/state.svelte.js';
 	import { makeFinal, findTake, presetById } from '../../lib/production.svelte.js';
 	import { UPSCALE_TARGETS, aspectOf, canUpscale as autoUpscale, finalResolution, upscalesItself } from '../../lib/generation.js';
-	import { AUTO_TARGET, upscalerReady } from '../../lib/finalpass.js';
+	import { AUTO_TARGET, rtxSourceShown, upscalerReady } from '../../lib/finalpass.js';
 	import { chosenSize } from '../../lib/formats.js';
 	import { takeThumb } from '../../lib/media.js';
-	import { guidedReady, guidedResolution } from '../../lib/finalpass.svelte.js';
+	import { guidedReady, guidedResolution, rememberRtxSource, savedChoice } from '../../lib/finalpass.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
 
@@ -18,6 +18,12 @@
 	const targets = $derived([AUTO_TARGET, ...(ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS)]);
 	const h3 = $derived(upscalesItself(take?.presetId));
 	let upscaler = $state('auto');
+	let rtxSource = $state(savedChoice().rtxSource);
+	const rtxSources = $derived([
+		{ id: 'compressed', label: t('generation.finalPass.rtxSource.compressed') },
+		{ id: 'clean', label: t('generation.finalPass.rtxSource.clean') }
+	]);
+	const rtxShown = $derived(rtxSourceShown(upscaler, ui.me) && !(upscaler === 'auto' && h3));
 	const canUpscale = $derived(upscaler === 'auto' ? autoUpscale(take, ui.me) : upscalerReady(upscaler, ui.me, take ? [take.presetId] : []));
 	const upscalers = $derived([
 		{ id: 'auto', label: t('generation.finalPass.upscaler.auto') },
@@ -53,7 +59,8 @@
 		if (!take || sending) return;
 		const message = method === 'upscale' ? (target === AUTO_TARGET ? t('generation.final.startedUpscaleAuto') : t('generation.final.startedUpscale', { target: targetLabel(target) })) : method === 'guided' ? t('generation.final.startedGuided', { res: guidedRes }) : t('generation.final.startedRender', { res: renderRes });
 		sending = true;
-		const ok = await makeFinal(take.id, method, target, upscaler);
+		if (method === 'upscale') rememberRtxSource(rtxSource);
+		const ok = await makeFinal(take.id, method, target, upscaler, rtxSource);
 		sending = false;
 		if (!ok) return;
 		close();
@@ -80,6 +87,13 @@
 					<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.upscaler.label')}</span>
 					<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.upscaler.label'), items: upscalers, selected: upscaler, onSelect: (id) => (upscaler = id) }} />
 				</div>
+				{#if rtxShown}
+					<div class="flex items-center gap-3">
+						<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.rtxSource.label')}</span>
+						<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.rtxSource.label'), items: rtxSources, selected: rtxSource, onSelect: (id) => (rtxSource = id) }} />
+					</div>
+					<p class="text-xs text-fg-subtle">{rtxSource === 'clean' ? t('generation.finalPass.rtxSource.cleanHint') : t('generation.finalPass.rtxSource.compressedHint')}</p>
+				{/if}
 				<HostUi
 					name="SegmentedControl"
 					props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.final.target'), items: targets.map((id) => ({ id, label: targetLabel(id), disabled: !canUpscale })), selected: target, onSelect: (id) => (target = id) }}

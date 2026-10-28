@@ -4,7 +4,7 @@ import { project, getClient, flushSave, projectGone } from './project.svelte.js'
 import { takeStore } from './takes.svelte.js';
 import { cancelTake, followTakes, noteText, presetById } from './production.svelte.js';
 import { UPSCALE_TARGETS, aspectOf, finalResolution } from './generation.js';
-import { AUTO_TARGET, GUIDED_PRESET, passBody, passChoice, passFlying } from './finalpass.js';
+import { AUTO_TARGET, DEFAULT_RTX_SOURCE, GUIDED_PRESET, passBody, passChoice, passFlying } from './finalpass.js';
 
 const ESTIMATE_DELAY = 400;
 
@@ -36,10 +36,15 @@ export function savedChoice() {
 }
 
 function remember(choice) {
-	const next = { method: choice.method, target: choice.target, upscaler: choice.upscaler };
+	const next = { method: choice.method, target: choice.target, upscaler: choice.upscaler, rtxSource: choice.rtxSource ?? DEFAULT_RTX_SOURCE };
 	const before = doc.finalPass ?? {};
-	if (before.method === next.method && before.target === next.target && before.upscaler === next.upscaler) return;
+	if (before.method === next.method && before.target === next.target && before.upscaler === next.upscaler && before.rtxSource === next.rtxSource) return;
 	act(() => (doc.finalPass = next));
+}
+
+export function rememberRtxSource(rtxSource) {
+	if ((doc.finalPass ?? {}).rtxSource === rtxSource) return;
+	act(() => (doc.finalPass = { ...(doc.finalPass ?? {}), rtxSource }));
 }
 
 function shotsText(note) {

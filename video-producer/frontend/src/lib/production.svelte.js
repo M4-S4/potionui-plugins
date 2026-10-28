@@ -435,11 +435,11 @@ export function promoteToFinal(takeId) {
 	ui.modal = { type: 'final', take: take.id };
 }
 
-export async function makeFinal(takeId, method, target, upscaler = 'auto') {
+export async function makeFinal(takeId, method, target, upscaler = 'auto', rtxSource = 'compressed') {
 	const take = takeById(takeId);
 	if (!take) return false;
 	const projectId = project.id;
-	const result = await getClient().finalTake(projectId, take.id, method, target, upscaler);
+	const result = await getClient().finalTake(projectId, take.id, method, target, upscaler, rtxSource);
 	if (projectId !== project.id) return false;
 	if (!result.ok) {
 		failed(result.error, t('generation.toast.finalFailed'));

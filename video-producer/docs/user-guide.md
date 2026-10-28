@@ -455,7 +455,7 @@ Projects made before the labels keep their marks: a chosen take is **Final**, a 
 
 - **Upscale** is the default. The upscaler enlarges the take as it is: the motion does not change. Pick the **Upscaler**:
   - **Automatic**: Wan, LTX, MiniMax H3 Fast and VDN, MiniMax H3 (12 GB) and MiniMax H3 Fast (12 GB), and cloud takes go through SeedVR2 ("SeedVR2 enlarges this take and restores detail: the motion does not change."), or RTX when SeedVR2 is missing; a take of the base MiniMax H3 preset uses the upscale mode of its own preset ("MiniMax H3 enlarges this take with its own upscale mode: the motion does not change.");
-  - **Fast (RTX)**: "sharp and faithful, a few seconds per take; it adds no detail";
+  - **Fast (RTX)**: "sharp and faithful, a few seconds per take; it adds no detail". A **Source** choice says what RTX is tuned for: **Compressed**, the default, which suits the takes of the engines (sharper and more faithful on them), or **Clean**, for a source without compression artefacts. It also shows under **Automatic** when Automatic goes through RTX, and the project keeps it for the next time;
   - **SeedVR2**: "restores and adds detail; slow; it can retouch a texture or a face";
   - **Engine**, for a take of the base MiniMax H3 preset: the take goes through its own engine again.
 
@@ -474,7 +474,7 @@ Once each shot of the Storyboard has its **Final** take, make the whole film fin
 The window "Make the film final" works like **Make final**, for every shot at once. Each shot starts from its Final take, which serves as the reference: its motion and framing are kept. Choose once:
 
 - the **Method**: **Upscale** (the default), **Guided render** or **Render again**, each with its explanation and what becomes of the sound ("Sound: the sound of each take is kept."). Under **Render again**, a line recalls that it keeps the subject and the look of each take, but not its layout, which the guided render keeps. After a change of format, another line counts the shots whose take is in an old ratio: **Upscale** keeps that ratio, **Render again** takes the new one;
-- for an upscale, the **Upscaler** (**Automatic**, **Fast (RTX)**, **SeedVR2**, and **Engine** when the film has takes of the base MiniMax H3 preset), with one line that says what it does, and the **Target resolution**, **Auto** by default: each take gets the size the film's export needs.
+- for an upscale, the **Upscaler** (**Automatic**, **Fast (RTX)**, **SeedVR2**, and **Engine** when the film has takes of the base MiniMax H3 preset), with one line that says what it does, the **Source** for RTX (**Compressed** by default, see Make final), and the **Target resolution**, **Auto** by default: each take gets the size the film's export needs.
 
 The project keeps your choice for the next time. Then the window lists the shots with their state:
 

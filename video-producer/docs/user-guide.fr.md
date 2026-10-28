@@ -455,7 +455,7 @@ Les projets faits avant les étiquettes gardent leurs marques : une prise choisi
 
 - **Agrandissement** est la voie par défaut. L’agrandisseur agrandit la prise telle quelle : le mouvement ne change pas. Choisissez l’**Agrandisseur** :
   - **Automatique** : les prises de Wan, LTX, MiniMax H3 Fast et VDN, MiniMax H3 (12 GB) et MiniMax H3 Fast (12 GB), et des modèles cloud passent par SeedVR2 (« SeedVR2 agrandit cette prise et restaure le détail : le mouvement ne change pas. »), ou par RTX quand SeedVR2 manque ; une prise du preset MiniMax H3 de base utilise le mode d’agrandissement de son propre preset (« MiniMax H3 agrandit cette prise avec son propre mode d’agrandissement : le mouvement ne change pas. ») ;
-  - **Rapide (RTX)** : « net et fidèle, en quelques secondes par prise ; il n’ajoute pas de détail » ;
+  - **Rapide (RTX)** : « net et fidèle, en quelques secondes par prise ; il n’ajoute pas de détail ». Un choix **Source** dit pour quoi RTX est réglé : **Compressée**, par défaut, qui convient aux prises des moteurs (plus net et plus fidèle sur elles), ou **Propre**, pour une source sans artefacts de compression. Il s’affiche aussi sous **Automatique** quand Automatique passe par RTX, et le projet le garde pour la fois suivante ;
   - **SeedVR2** : « restaure et ajoute du détail ; long ; peut retoucher une texture ou un visage » ;
   - **Moteur**, pour une prise du preset MiniMax H3 de base : la prise repasse dans son propre moteur.
 
@@ -474,7 +474,7 @@ Quand chaque plan du Storyboard a sa prise **Finale**, passez tout le film en fi
 La fenêtre « Passer le film en final » fait comme **Passer en final**, pour tous les plans à la fois. Chaque plan part de sa prise Finale, qui sert de référence : son mouvement et son cadrage sont gardés. Choisissez une fois :
 
 - la **Méthode** : **Agrandir** (par défaut), **Rendu guidé** ou **Nouveau rendu**, chacune avec son explication et ce que devient le son (« Son : le son de chaque prise est gardé. »). Sous **Nouveau rendu**, une ligne rappelle qu’il garde le sujet et l’allure de chaque prise, mais pas sa mise en place, que le rendu guidé garde. Après un changement de format, une autre ligne compte les plans dont la prise est dans un ancien ratio : **Agrandir** garde ce ratio, **Nouveau rendu** prend le nouveau ;
-- pour un agrandissement, l’**Agrandisseur** (**Automatique**, **Rapide (RTX)**, **SeedVR2**, et **Moteur** quand le film a des prises du preset MiniMax H3 de base), avec une ligne qui dit ce qu’il fait, et la **Résolution cible**, **Auto** par défaut : chaque prise reçoit la taille que demande l’export du film.
+- pour un agrandissement, l’**Agrandisseur** (**Automatique**, **Rapide (RTX)**, **SeedVR2**, et **Moteur** quand le film a des prises du preset MiniMax H3 de base), avec une ligne qui dit ce qu’il fait, la **Source** pour RTX (**Compressée** par défaut, voir Passer en final), et la **Résolution cible**, **Auto** par défaut : chaque prise reçoit la taille que demande l’export du film.
 
 Le projet garde votre choix pour la fois suivante. La fenêtre liste ensuite les plans avec leur état :
 

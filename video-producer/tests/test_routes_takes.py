@@ -149,7 +149,8 @@ def test_a_final_by_upscale_answers_202_with_the_new_take(client, core, project)
 
 
 @pytest.mark.parametrize(
-    "body", [{"method": "remix", "target": "fhd1080"}, {"method": "upscale", "target": "8k"}, {"method": "render"}, None]
+    "body",
+    [{"method": "remix", "target": "fhd1080"}, {"method": "upscale", "target": "8k"}, {"method": "render"}, {"method": "upscale", "target": "fhd1080", "rtx_source": "raw"}, None],
 )
 def test_a_final_needs_a_known_method_and_target(client, core, project, body):
     take = _generate(client, project["id"])[0]

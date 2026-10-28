@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { emptyDoc, migrate } from './starter.js';
 import { normalizePassEstimate, normalizeTake } from './api.js';
-import { GUIDED_PRESET, PASS_METHODS, PASS_TARGETS, UPSCALERS, migratePass, passBody, passChoice, passFlying, passPlan, passProgress, passShot, upscalerReady } from './finalpass.js';
+import { DEFAULT_RTX_SOURCE, GUIDED_PRESET, PASS_METHODS, PASS_TARGETS, RTX_SOURCES, UPSCALERS, migratePass, passBody, passChoice, passFlying, passPlan, passProgress, passShot, rtxSourceShown, upscalerReady } from './finalpass.js';
 
 const t = (key) => key;
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -81,9 +81,11 @@ test('passFlying lists the final takes made from another take that are queued or
 });
 
 test('the choice of the pass keeps what it knows, falls back to upscale and to the first target, Auto', () => {
-	assert.deepEqual(passChoice(null), { method: 'upscale', target: 'auto', upscaler: 'auto' });
-	assert.deepEqual(passChoice({ method: 'render', target: 'uhd2160', upscaler: 'seedvr2' }), { method: 'render', target: 'uhd2160', upscaler: 'seedvr2' });
-	assert.deepEqual(passChoice({ method: 'guided', target: 'auto', upscaler: 'rtx' }), { method: 'upscale', target: 'auto', upscaler: 'rtx' });
+	assert.deepEqual(passChoice(null), { method: 'upscale', target: 'auto', upscaler: 'auto', rtxSource: 'compressed' });
+	assert.deepEqual(passChoice({ method: 'render', target: 'uhd2160', upscaler: 'seedvr2' }), { method: 'render', target: 'uhd2160', upscaler: 'seedvr2', rtxSource: 'compressed' });
+	assert.deepEqual(passChoice({ method: 'guided', target: 'auto', upscaler: 'rtx', rtxSource: 'clean' }), { method: 'upscale', target: 'auto', upscaler: 'rtx', rtxSource: 'clean' });
+	assert.equal(passChoice({ rtxSource: 'raw' }).rtxSource, DEFAULT_RTX_SOURCE);
+	assert.deepEqual(RTX_SOURCES, ['compressed', 'clean']);
 	assert.deepEqual(passChoice({ method: 'guided' }, undefined, true).method, 'guided');
 	assert.equal(passChoice({ target: 'uhd2160' }, ['hd720', 'fhd1080']).target, 'hd720');
 	assert.deepEqual(PASS_METHODS, ['upscale', 'guided', 'render']);
@@ -109,6 +111,22 @@ test('the body of the pass sends the upscaler only when it is not automatic', ()
 	assert.deepEqual(passBody(['d1', 'd2'], { method: 'upscale', target: 'fhd1080', upscaler: 'auto' }), { takes: ['d1', 'd2'], method: 'upscale', target: 'fhd1080' });
 	assert.deepEqual(passBody(['d1'], { method: 'upscale', target: 'hd720', upscaler: 'seedvr2' }), { takes: ['d1'], method: 'upscale', target: 'hd720', upscaler: 'seedvr2' });
 	assert.deepEqual(passBody(['d1'], { method: 'guided', target: 'hd720', upscaler: 'seedvr2' }), { takes: ['d1'], method: 'guided', target: 'hd720' });
+});
+
+test('the body of the pass asks RTX for a clean source only when chosen, compressed being the default of the server', () => {
+	assert.deepEqual(passBody(['d1'], { method: 'upscale', target: 'fhd1080', upscaler: 'rtx', rtxSource: 'compressed' }), { takes: ['d1'], method: 'upscale', target: 'fhd1080', upscaler: 'rtx' });
+	assert.deepEqual(passBody(['d1'], { method: 'upscale', target: 'fhd1080', upscaler: 'rtx', rtxSource: 'clean' }), { takes: ['d1'], method: 'upscale', target: 'fhd1080', upscaler: 'rtx', rtx_source: 'clean' });
+	assert.deepEqual(passBody(['d1'], { method: 'render', target: 'fhd1080', upscaler: 'rtx', rtxSource: 'clean' }), { takes: ['d1'], method: 'render', target: 'fhd1080' });
+});
+
+test('the kind of source shows for RTX, and for Automatic only when Automatic falls back to RTX', () => {
+	const both = { features: { upscalers: { seedvr2: true, rtx: true } } };
+	const rtx = { features: { upscalers: { seedvr2: false, rtx: true } } };
+	assert.equal(rtxSourceShown('rtx', both), true);
+	assert.equal(rtxSourceShown('auto', both), false);
+	assert.equal(rtxSourceShown('auto', rtx), true);
+	assert.equal(rtxSourceShown('seedvr2', rtx), false);
+	assert.equal(rtxSourceShown('auto', null), false);
 });
 
 test('migrating keeps the known values of the final pass and drops the key when none is left, as the server does', () => {

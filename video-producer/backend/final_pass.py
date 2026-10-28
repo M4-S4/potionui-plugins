@@ -21,6 +21,7 @@ class Order:
     method: str
     target: str
     upscaler: str = AUTO
+    rtx_source: str = upscalers.DEFAULT_RTX_SOURCE
 
 
 @dataclass
@@ -45,7 +46,7 @@ class Evaluation:
 
 
 def parse_order(body: Any) -> Order:
-    """The takes, method, target and upscaler a body asks for; PassError for a malformed one."""
+    """The takes, method, target, upscaler and kind of source for RTX a body asks for; PassError for a malformed one."""
     if not isinstance(body, dict):
         raise PassError("The request body must be a JSON object.")
     ids = body.get("takes")
@@ -62,7 +63,10 @@ def parse_order(body: Any) -> Order:
     upscaler = body.get("upscaler", AUTO)
     if upscaler not in upscalers.CHOICES:
         raise PassError(f"upscaler must be one of: {', '.join(upscalers.CHOICES)}.")
-    return Order(takes=list(dict.fromkeys(ids)), method=method, target=target, upscaler=upscaler)
+    rtx_source = body.get("rtx_source", upscalers.DEFAULT_RTX_SOURCE)
+    if rtx_source not in upscalers.RTX_SOURCES:
+        raise PassError(f"rtx_source must be one of: {', '.join(upscalers.RTX_SOURCES)}.")
+    return Order(takes=list(dict.fromkeys(ids)), method=method, target=target, upscaler=upscaler, rtx_source=rtx_source)
 
 
 def _add(blocks: List[Dict[str, Any]], block: Mapping[str, Any], shot_id: str) -> None:
@@ -96,7 +100,7 @@ async def _plan_all(owner: User, project: Mapping[str, Any], order: Order, sourc
             _add(blocks, note("final_running", "A final take of this take is already queued or running."), shot_id)
             continue
         try:
-            plan, preset_id, native = await generation.final_plan(owner, project, source, order.method, order.target, order.upscaler)
+            plan, preset_id, native = await generation.final_plan(owner, project, source, order.method, order.target, order.upscaler, order.rtx_source)
         except TakeError as exc:
             _add(blocks, note(exc.code, exc.message), shot_id)
             continue

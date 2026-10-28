@@ -1890,6 +1890,11 @@ def h3_target_size(fields: models.Fields, target: str) -> str:
     return str(default) if default in values else values[0]
 
 
+def upscale_rtx_source(take: Mapping[str, Any]) -> str:
+    """The kind of source an RTX upscale take was tuned for: compressed or clean."""
+    return upscalers.rtx_source_of(((take.get("request") or {}).get("form_data") or {}).get("intent"))
+
+
 def upscale_target(take: Mapping[str, Any]) -> str:
     """The upscale target an upscale take was asked for: SeedVR2's named target, RTX's short side, or MiniMax-H3's size."""
     form = (take.get("request") or {}).get("form_data") or {}
@@ -1949,8 +1954,10 @@ def _upscaler_preset(user: User, source: Mapping[str, Any], upscaler: str) -> Tu
     return preset, SEEDVR2_MODE
 
 
-def build_upscale(user: User, source: Mapping[str, Any], target: str, upscaler: str = upscalers.AUTO) -> ShotPlan:
-    """The final take of a finished take upscaled to a named target: Auto uses a MiniMax-H3 preset's own Upscale mode for its takes and SeedVR2 otherwise, RTX when SeedVR2 is missing and RTX is ready; Engine only the own mode; SeedVR2 and RTX their preset's video mode."""
+def build_upscale(
+    user: User, source: Mapping[str, Any], target: str, upscaler: str = upscalers.AUTO, rtx_source: str = upscalers.DEFAULT_RTX_SOURCE
+) -> ShotPlan:
+    """The final take of a finished take upscaled to a named target: Auto uses a MiniMax-H3 preset's own Upscale mode for its takes and SeedVR2 otherwise, RTX when SeedVR2 is missing and RTX is ready; Engine only the own mode; SeedVR2 and RTX their preset's video mode, RTX tuned for a compressed source unless told the source is clean."""
     preset, mode = _upscaler_preset(user, source, upscaler)
     preset_id = preset.id
     h3 = mode == H3_UPSCALE_MODE
@@ -1966,7 +1973,7 @@ def build_upscale(user: User, source: Mapping[str, Any], target: str, upscaler: 
             form["quantity"] = 1
     elif rtx:
         form.pop("seed")
-        form.update({"intent": "upscale", "quality": "ultra", upscalers.RTX_TARGET_FIELD: UPSCALE_SHORT_SIDES[target], "keep_audio": True})
+        form.update({"intent": upscalers.RTX_INTENTS.get(rtx_source, upscalers.RTX_INTENTS[upscalers.DEFAULT_RTX_SOURCE]), "quality": "ultra", upscalers.RTX_TARGET_FIELD: UPSCALE_SHORT_SIDES[target], "keep_audio": True})
     else:
         form["restoration_intent"] = "faithful"
         form["resolution_target"] = target

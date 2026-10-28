@@ -65,6 +65,7 @@ def guided(core, monkeypatch):
         ({"takes": ["t1"], "method": "remaster", "target": "fhd1080"}, "method must be one of: upscale, render, guided."),
         ({"takes": ["t1"], "method": "upscale", "target": "8k"}, "target must be one of"),
         ({"takes": ["t1"], "method": "upscale", "target": "fhd1080", "upscaler": "turbo"}, "upscaler must be one of: auto, seedvr2, rtx, engine."),
+        ({"takes": ["t1"], "method": "upscale", "target": "fhd1080", "rtx_source": "raw"}, "rtx_source must be one of: compressed, clean."),
     ],
 )
 def test_a_malformed_final_pass_is_refused(body, message):
@@ -77,7 +78,8 @@ def test_a_malformed_final_pass_is_refused(body, message):
 def test_an_order_keeps_each_take_once_in_its_order_with_the_automatic_upscaler():
     order = final_pass.parse_order({"takes": ["b", "a", "b"], "method": "render", "target": "hd720"})
 
-    assert order == final_pass.Order(takes=["b", "a"], method="render", target="hd720", upscaler="auto")
+    assert order == final_pass.Order(takes=["b", "a"], method="render", target="hd720", upscaler="auto", rtx_source="compressed")
+    assert final_pass.parse_order({"takes": ["a"], "method": "upscale", "target": "hd720", "rtx_source": "clean"}).rtx_source == "clean"
 
 
 def test_the_final_pass_upscales_every_take_with_one_target_and_reserves_their_minutes(core, make_project):
@@ -199,6 +201,19 @@ def test_a_retried_upscale_keeps_the_upscaler_its_take_was_made_with(core, make_
     retried = asyncio.run(generation.retry(core.users["user-1"], project, takes.get_take(final["id"])))
 
     assert (retried["preset_id"], retried["mode"], retried["parent_take_id"]) == (presets.SEEDVR2, "video_upscale", drafts[0]["id"])
+
+
+def test_an_rtx_pass_follows_the_kind_of_source_asked_for_and_a_retry_keeps_it(core, make_project):
+    core.use_rtx()
+    project, drafts = _drafts(core, make_project, clips=SHOTS[:1])
+    (final,) = _start(core, _pass(core, project, drafts, upscaler="rtx", rtx_source="clean"), project)
+    assert takes.get_take(final["id"])["request"]["form_data"]["intent"] == "upscale"
+    core.fail(final["generation_id"])
+    _tick()
+
+    retried = asyncio.run(generation.retry(core.users["user-1"], project, takes.get_take(final["id"])))
+
+    assert (retried["preset_id"], retried["request"]["form_data"]["intent"]) == (presets.RTX_UPSCALE, "upscale")
 
 
 def test_a_render_pass_renders_each_shot_again_at_the_largest_size_with_its_seed(core, make_project):

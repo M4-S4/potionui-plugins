@@ -57,7 +57,7 @@ VREF_ROLES = tuple(reception.VIDEO_TRACKS["roles"])
 
 MAX_VREF_TRACKS = int(reception.VIDEO_TRACKS["max"])
 
-FINAL_PASS_CHOICES = {"method": ("upscale", "guided", "render"), "target": upscalers.TARGETS, "upscaler": upscalers.CHOICES}
+FINAL_PASS_CHOICES = {"method": ("upscale", "guided", "render"), "target": upscalers.TARGETS, "upscaler": upscalers.CHOICES, "rtxSource": upscalers.RTX_SOURCES}
 
 PROJECTS = "video_producer_projects"
 VERSIONS = "video_producer_versions"

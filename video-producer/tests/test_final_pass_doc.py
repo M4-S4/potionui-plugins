@@ -17,6 +17,7 @@ def starter():
 
 def test_a_document_may_keep_the_choice_of_its_final_pass(starter):
     validate_doc({**starter, "finalPass": {"method": "guided", "target": "hd720", "upscaler": "seedvr2"}})
+    validate_doc({**starter, "finalPass": {"upscaler": "rtx", "rtxSource": "clean"}})
     validate_doc({**starter, "finalPass": {}})
 
 
@@ -26,6 +27,7 @@ def test_a_document_may_keep_the_choice_of_its_final_pass(starter):
         ({"method": "remaster"}, "$.finalPass.method", "'remaster' is not one of"),
         ({"target": "8k"}, "$.finalPass.target", "'8k' is not one of"),
         ({"upscaler": "turbo"}, "$.finalPass.upscaler", "'turbo' is not one of"),
+        ({"rtxSource": "raw"}, "$.finalPass.rtxSource", "'raw' is not one of"),
         ({"redo": True}, "$.finalPass", "Additional properties are not allowed"),
         ("upscale", "$.finalPass", "'upscale' is not of type 'object'"),
     ],

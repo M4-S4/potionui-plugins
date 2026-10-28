@@ -694,8 +694,9 @@ export function createClient(api, save) {
 		async deleteTake(projectId, takeId) {
 			return mapped(await call(api, 'delete', takePath(projectId, takeId)), (data) => (text(data.deleted) ? { deleted: data.deleted } : null));
 		},
-		async finalTake(projectId, takeId, method, target, upscaler = 'auto') {
+		async finalTake(projectId, takeId, method, target, upscaler = 'auto', rtxSource = 'compressed') {
 			const body = method === 'upscale' && upscaler !== 'auto' ? { method, target, upscaler } : { method, target };
+			if (method === 'upscale' && rtxSource === 'clean') body.rtx_source = rtxSource;
 			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/final`, body), pickTake);
 		},
 		async finalPassEstimate(projectId, body, signal) {

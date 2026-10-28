@@ -5,6 +5,8 @@ import { isStale } from './shots.js';
 export const PASS_METHODS = ['upscale', 'guided', 'render'];
 export const GUIDED_PRESET = '01KX47LTX25VIDEO00000000TV';
 export const UPSCALERS = ['auto', 'rtx', 'seedvr2', 'engine'];
+export const RTX_SOURCES = ['compressed', 'clean'];
+export const DEFAULT_RTX_SOURCE = 'compressed';
 export const AUTO_TARGET = 'auto';
 export const PASS_TARGETS = [AUTO_TARGET, ...UPSCALE_TARGETS];
 export const PASS_STATES = ['ready', 'running', 'done', 'missing', 'source'];
@@ -62,6 +64,7 @@ export function migratePass(value) {
 	if (PASS_METHODS.includes(value.method)) kept.method = value.method;
 	if (PASS_TARGETS.includes(value.target)) kept.target = value.target;
 	if (UPSCALERS.includes(value.upscaler)) kept.upscaler = value.upscaler;
+	if (RTX_SOURCES.includes(value.rtxSource)) kept.rtxSource = value.rtxSource;
 	return Object.keys(kept).length ? kept : null;
 }
 
@@ -69,7 +72,7 @@ export function passChoice(saved, targets = PASS_TARGETS, guided = false) {
 	const kept = migratePass(saved) ?? {};
 	const method = kept.method === 'guided' && !guided ? 'upscale' : (kept.method ?? 'upscale');
 	const target = targets.includes(kept.target) ? kept.target : (targets[0] ?? AUTO_TARGET);
-	return { method, target, upscaler: kept.upscaler ?? 'auto' };
+	return { method, target, upscaler: kept.upscaler ?? 'auto', rtxSource: kept.rtxSource ?? DEFAULT_RTX_SOURCE };
 }
 
 export function upscalerReady(upscaler, me, presetIds = []) {
@@ -81,8 +84,14 @@ export function upscalerReady(upscaler, me, presetIds = []) {
 	return me?.features?.upscaler === true || own;
 }
 
+export function rtxSourceShown(upscaler, me) {
+	const ready = me?.features?.upscalers ?? {};
+	return upscaler === 'rtx' || (upscaler === 'auto' && ready.rtx === true && ready.seedvr2 !== true);
+}
+
 export function passBody(sources, choice) {
 	const body = { takes: [...sources], method: choice.method, target: choice.target };
 	if (choice.method === 'upscale' && choice.upscaler !== 'auto') body.upscaler = choice.upscaler;
+	if (choice.method === 'upscale' && RTX_SOURCES.includes(choice.rtxSource) && choice.rtxSource !== DEFAULT_RTX_SOURCE) body.rtx_source = choice.rtxSource;
 	return body;
 }
