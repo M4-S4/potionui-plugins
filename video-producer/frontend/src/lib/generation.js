@@ -5,6 +5,7 @@ export const MINIMAX_H3_IDS = ['01KX47H3MINIMAX000000000VA', '01KX47H3FASTH30000
 export const UPSCALE_TARGETS = ['hd720', 'fhd1080', 'qhd1440', 'uhd2160'];
 export const FAILURE_CODES = [
 	'cuda_oom',
+	'gpu_restart_required',
 	'host_ram_oom',
 	'missing_model_file',
 	'disk_full',
