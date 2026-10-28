@@ -115,9 +115,8 @@ def _queue(key: str, user_id: Optional[str], kind: str, source: Mapping[str, Any
 
 
 def queue_take(take: Mapping[str, Any]) -> None:
-    """Ask for the look of a finished take."""
-    if take.get("kind") != takes.KEYFRAME:
-        _queue(take_key(take["id"]), take.get("user_id"), TAKE, {"take_id": take["id"]})
+    """Ask for the look of a finished take, a start or end image candidate included."""
+    _queue(take_key(take["id"]), take.get("user_id"), TAKE, {"take_id": take["id"]})
 
 
 def queue_image(user_id: str, ref: Mapping[str, Any], value: str) -> None:
@@ -189,6 +188,8 @@ async def _take_frames(owner: Any, take: Mapping[str, Any], folder: Path) -> Lis
     source = await asyncio.to_thread(media.Resolver(owner).local, found.kind, found.value, folder)
     if source is None:
         raise chain.ChainError("no_media", "The video of the take is no longer available.")
+    if take.get("kind") == takes.KEYFRAME:
+        return [(0.0, source)]
     probe = await asyncio.to_thread(core_bridge.probe_video, source)
     length = probe.duration if probe and probe.duration else float(take.get("duration_s") or 0)
     ffmpeg = _ffmpeg()
@@ -368,17 +369,18 @@ def _cards(take_row: Optional[Mapping[str, Any]], images: Sequence[Tuple[str, Di
 
 
 def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dict[str, Any]:
-    """The looks of a project's finished takes, from the stored ones: the score of each seam between two placed takes, at the end of the cut of the first and the start of the cut of the second, and for each take the score of each bible card of its shot's cast, the best match of its images with the card's pictures. With enqueue, every look missing for the project is asked for first."""
+    """The looks of a project's finished takes, from the stored ones: the score of each seam between two placed takes, at the end of the cut of the first and the start of the cut of the second, and for each take and each start or end image candidate the score of each bible card of its shot's cast, the best match of its images with the card's pictures. With enqueue, every look missing for the project is asked for first."""
     doc = project["doc"]
     info = embedder()
     model = info["slug"]
     project_takes = [take for take in takes.list_takes(project["id"]) if take["status"] == "done" and take.get("file_path")]
-    shots = {take["shot_id"] for take in project_takes}
+    candidates = [take for take in takes.list_keyframes(project["id"]) if take["status"] == "done" and take.get("file_path")]
+    shots = {take["shot_id"] for take in (*project_takes, *candidates)}
     images = {shot_id: _cast_images(owner, project, shot_id) for shot_id in shots}
-    keys = [take_key(take["id"]) for take in project_takes] + [image_key(value) for found in images.values() for _, _, value in found]
+    keys = [take_key(take["id"]) for take in (*project_takes, *candidates)] + [image_key(value) for found in images.values() for _, _, value in found]
     found = rows(keys)
     if enqueue:
-        for take in project_takes:
+        for take in (*project_takes, *candidates):
             if not _current(found.get(take_key(take["id"])), model) and _state(found.get(take_key(take["id"])), model) != QUEUED:
                 queue_take(take)
         unique: Dict[str, Tuple[str, Dict[str, Any], str]] = {}
@@ -389,18 +391,20 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
             if not _current(found.get(image_key(value)), model) and _state(found.get(image_key(value)), model) != QUEUED:
                 queue_image(owner.id, ref, value)
         found = rows(keys)
-    takes_out = []
-    for take in project_takes:
+    def measured(take: Mapping[str, Any]) -> Dict[str, Any]:
         clip = director.clip_of(doc, take["shot_id"])
         characters = bible.cast_of(doc, clip)[0] if clip is not None else []
         row = found.get(take_key(take["id"]))
-        takes_out.append({"take_id": take["id"], "shot_id": take["shot_id"], "status": _state(row, model), "cards": _cards(row, images.get(take["shot_id"], []), characters, found, model)})
+        return {"take_id": take["id"], "shot_id": take["shot_id"], "status": _state(row, model), "cards": _cards(row, images.get(take["shot_id"], []), characters, found, model)}
+
+    takes_out = [measured(take) for take in project_takes]
     states = [_state(found.get(key), model) for key in keys]
     return {
         "embedder": {"model": info["model"], "available": info["available"]},
         "thresholds": {"seam": SEAM_LOW, "cast": CAST_LOW},
         "seams": _seams(doc, project_takes, found, model),
         "takes": takes_out,
+        "candidates": [measured(take) for take in candidates],
         "missing": sum(1 for state in states if state in (MISSING, FAILED, UNAVAILABLE)),
         "queued": sum(1 for state in states if state == QUEUED),
     }

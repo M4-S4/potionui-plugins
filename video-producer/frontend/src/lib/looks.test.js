@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CAST_LOW, SEAM_LOW, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
+import { CAST_LOW, SEAM_LOW, bestCandidate, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -29,7 +29,33 @@ test('normalizeLooks keeps the seams and takes the server measured, with its thr
 	assert.equal(looks.takes.length, 2);
 	assert.deepEqual(looks.takes[1], { takeId: 'bad', shotId: null, status: 'missing', cards: [] });
 	assert.deepEqual([looks.missing, looks.queued], [3, 0]);
-	assert.deepEqual(normalizeLooks(null), { embedder: { model: null, available: false }, thresholds: { seam: SEAM_LOW, cast: CAST_LOW }, seams: [], takes: [], missing: 0, queued: 0 });
+	assert.deepEqual(normalizeLooks(null), { embedder: { model: null, available: false }, thresholds: { seam: SEAM_LOW, cast: CAST_LOW }, seams: [], takes: [], candidates: [], missing: 0, queued: 0 });
+});
+
+test('a start image candidate is scored by the mean of its cast cards, and the closest stands out only among two scored ones or more', () => {
+	const looks = normalizeLooks({
+		...payload,
+		candidates: [
+			{ take_id: 'k1', shot_id: 's2', status: 'done', cards: [{ card_id: 'c1', label: 'Marin', score: 0.8, status: 'done' }, { card_id: 'c3', label: 'Malo', score: 0.6, status: 'done' }] },
+			{ take_id: 'k2', shot_id: 's2', status: 'done', cards: [{ card_id: 'c1', label: 'Marin', score: 0.75, status: 'done' }, { card_id: 'c2', label: 'Lina', score: null, status: 'no_images' }] },
+			{ take_id: 'k3', shot_id: 's2', status: 'queued', cards: [{ card_id: 'c1', label: 'Marin', score: null, status: 'queued' }] }
+		]
+	});
+	assert.equal(candidateLook(looks, 't2'), null);
+	assert.equal(Math.round(candidateScore(candidateLook(looks, 'k1')) * 100), 70);
+	assert.equal(candidateScore(candidateLook(looks, 'k2')), 0.75);
+	assert.equal(candidateScore(candidateLook(looks, 'k3')), null);
+	assert.equal(bestCandidate(looks, ['k1', 'k2', 'k3']), 'k2');
+	assert.equal(bestCandidate(looks, ['k1', 'k3']), null);
+	assert.equal(bestCandidate(null, ['k1', 'k2']), null);
+});
+
+test('the candidate window shows the likeness of each candidate and the closest one, and lets the user choose', () => {
+	const window = source('../components/shots/KeyframeCandidates.svelte');
+	assert.match(window, /data-candidate-look=\{take\.id\}/);
+	assert.match(window, /\{#if best === take\.id\}/);
+	assert.match(window, /if \(finished\) untrack\(\(\) => refreshLooks\(\)\)/);
+	assert.doesNotMatch(window, /acceptCandidate\(best/);
 });
 
 test('a seam look counts only for the takes placed on its two shots now, and warns under the seam threshold', () => {

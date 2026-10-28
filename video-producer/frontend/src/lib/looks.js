@@ -32,6 +32,7 @@ export function normalizeLooks(value) {
 		thresholds: { seam: score(thresholds.seam) ?? SEAM_LOW, cast: score(thresholds.cast) ?? CAST_LOW },
 		seams: (Array.isArray(data.seams) ? data.seams : []).map(normalizeSeamLook).filter(Boolean),
 		takes: (Array.isArray(data.takes) ? data.takes : []).map(normalizeTakeLook).filter(Boolean),
+		candidates: (Array.isArray(data.candidates) ? data.candidates : []).map(normalizeTakeLook).filter(Boolean),
 		missing: count(data.missing),
 		queued: count(data.queued)
 	};
@@ -45,6 +46,19 @@ export function seamLook(looks, from, to) {
 export const lowSeam = (looks, seam) => seam?.status === 'done' && seam.score !== null && seam.score < looks.thresholds.seam;
 
 export const takeLook = (looks, takeId) => (looks && takeId ? (looks.takes.find((x) => x.takeId === takeId) ?? null) : null);
+
+export const candidateLook = (looks, takeId) => (looks && takeId ? (looks.candidates.find((x) => x.takeId === takeId) ?? null) : null);
+
+export function candidateScore(look) {
+	const done = (look?.cards ?? []).filter((c) => c.status === 'done' && c.score !== null);
+	return done.length ? done.reduce((sum, c) => sum + c.score, 0) / done.length : null;
+}
+
+export function bestCandidate(looks, takeIds) {
+	const scored = takeIds.map((id) => [id, candidateScore(candidateLook(looks, id))]).filter(([, value]) => value !== null);
+	if (scored.length < 2) return null;
+	return scored.reduce((best, item) => (item[1] > best[1] ? item : best))[0];
+}
 
 export const lowCards = (looks, look) => (look?.cards ?? []).filter((c) => c.status === 'done' && c.score !== null && c.score < looks.thresholds.cast);
 

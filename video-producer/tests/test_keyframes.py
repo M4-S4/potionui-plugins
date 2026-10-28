@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend import core_bridge, generation, keyframes, projects, takes, tracker
+from backend import bible, core_bridge, generation, keyframes, projects, takes, tracker
 from src.plugin_api import FieldDescription, ModeDescription, PresetDescription, get_current_active_user
 from src.plugin_api.cloud import CLOUD_ENGINE
 
@@ -275,7 +275,7 @@ def test_an_image_to_image_preset_reworks_the_first_picture_with_the_prompt(core
     assert "Image 1 shows the setting (Café)" in built.plan.prompt_text and "image 2" not in built.plan.prompt_text
     assert built.warnings[0] == {
         "code": "references_trimmed",
-        "message": "The model takes at most 1 picture: the last ones are left out.",
+        "message": "The model takes at most 1 picture: the framing and the pictures of the cast are kept first, the last of the others are left out.",
         "data": {"sent": 1, "found": 3},
     }
 
@@ -313,6 +313,50 @@ def test_the_start_image_takes_the_pictures_of_the_cards_the_shot_casts_and_not_
 
     assert [(picture.asset_id, picture.role) for picture in alone.pictures] == [("cafe", "setting"), ("hat", "object")]
     assert [(picture.asset_id, picture.role) for picture in cast.pictures] == [("cafe", "setting"), ("lea", "character"), ("capture", "character"), ("hat", "object")]
+
+
+def test_the_edit_prompt_names_a_picture_of_a_card_by_its_tag_and_words_and_adds_the_cast_no_picture_shows(core, qwen, scene):
+    scene["bible"] = {
+        "characters": [
+            {"id": "c-lea", "label": "Léa", "text": "a woman in her thirties, short copper hair", "props": "a red scarf", "references": ["r-lea"]},
+            {"id": "c-max", "label": "Max", "text": "a boy of ten in a yellow raincoat", "props": "", "references": []},
+        ],
+        "places": [{"id": "p-cafe", "label": "the corner café", "text": "warm wooden tables and a long zinc bar", "references": ["r-cafe"]}],
+    }
+    scene["clips"][0]["cast"] = {"characters": ["c-lea", "c-max"], "place": "p-cafe"}
+
+    built = _build(core, scene)
+
+    assert [(picture.asset_id, picture.card.id if picture.card else None) for picture in built.pictures] == [("cafe", "p-cafe"), ("lea", "c-lea"), ("hat", None)]
+    assert built.plan.request["prompts"][0]["positive"].split("\n")[3:] == [
+        "Image 1 shows the setting (the corner café): keep its place, light and colours. Warm wooden tables and a long zinc bar.",
+        "Keep the face, hair, body and costume of Léa from image 2: a woman in her thirties, short copper hair. Props: a red scarf.",
+        "Keep the look of Red hat from image 3.",
+        "Max: a boy of ten in a yellow raincoat.",
+        "One photographic still: no text, no caption, no border, no split panels.",
+    ]
+    assert [picture.summary(rank)["card_id"] for rank, picture in enumerate(built.pictures, 1)] == ["p-cafe", "c-lea", None]
+
+
+def test_past_the_limit_the_framing_and_the_pictures_of_the_cast_are_kept_first_in_their_place(core, scene):
+    add_image_preset(core, "01FLUX2", "Flux2", {"txt2img": {}, "img2img": img2img_fields()})
+    scene["bible"] = {"characters": [{"id": "c-lea", "label": "Léa", "text": "", "props": "", "references": ["r-lea"]}], "places": []}
+    scene["clips"][0]["cast"] = {"characters": ["c-lea"]}
+
+    built = keyframes.build(core.users["user-1"], scene, "s1", keyframes.parse_order({"preset_id": "01FLUX2"}))
+    chosen = keyframes.build(
+        core.users["user-1"],
+        scene,
+        "s1",
+        keyframes.parse_order({"preset_id": "01FLUX2", "references": [{"asset_id": "cafe", "role": "setting", "name": "Café"}, {"asset_id": "lea", "role": "character", "name": "Léa"}]}),
+    )
+
+    assert [picture.asset_id for picture in built.pictures] == ["lea"]
+    assert [picture.asset_id for picture in chosen.pictures] == ["lea"]
+    assert chosen.pictures[0].card.id == "c-lea"
+    assert "Keep the face, hair, body and costume of Léa from image 1." in chosen.plan.prompt_text
+    pictures = [keyframes.Picture("v1", "setting", "a", "reference"), keyframes.Picture("v2", "character", "b", "reference", card=bible.Card("c", bible.CHARACTERS, "C", "")), keyframes.Picture("v0", "frame", "", "frame")]
+    assert [picture.value for picture in keyframes.kept_pictures(pictures, 2, [bible.Card("c", bible.CHARACTERS, "C", "")])] == ["v2", "v0"]
 
 
 def test_the_start_image_is_only_the_starting_point_of_the_end_image_a_former_3d_capture_included(core, qwen, scene):
