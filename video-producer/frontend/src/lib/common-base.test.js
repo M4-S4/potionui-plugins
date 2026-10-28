@@ -88,6 +88,12 @@ test('base: the transport keeps its time controls centred and drops the volume s
 	assert.doesNotMatch(viewer, /grid-cols-\[1fr_auto_1fr\]/);
 });
 
+test('base: the side panel is 280 px wide and the right panel 320 px, set inline on the grid of the page', () => {
+	assert.match(page, /\$\{ui\.sidebarOpen && !band \? '280px' : '0px'\} minmax\(0, 1fr\) \$\{ui\.inspectorOpen \? '320px' : '0px'\}/);
+	assert.match(page, /<main class="grid min-h-0 overflow-hidden border-t border-line" style:grid-template-columns=\{columns\}>/);
+	assert.doesNotMatch(page, /'300px'|'304px'/);
+});
+
 test('base: Media, the Sounds panel and the console import with the same two icon buttons', () => {
 	const buttons = read('../components/panels/ImportButtons.svelte');
 	assert.match(buttons, /icon: 'folder', label: t\('panels\.media\.import'\), size: 'sm', class: 'vp-h7', tooltip: t\('panels\.media\.importTip'\), kbd: key\('import'\), onclick: \(\) => openImport\(kind\)/);
