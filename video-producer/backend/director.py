@@ -47,6 +47,17 @@ MAX_FPS = 60
 LTX_FRAME_STEP = 8
 DISTILLED = "distilled"
 DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
+UPSCALE_FIELD = "upscale"
+
+SHEET = reception.SHEET
+SHEET_ID = reception.SHEET_ID
+SHEET_PREFIX = "sheet:"
+SHEET_HEADING = "### Reference Sheet Description"
+TARGET_HEADING = "### Target Description"
+SHEET_ROWS = ("Top Row", "Bottom Row")
+SHEET_KINDS = {bible.CHARACTERS: "Character", bible.PLACES: "Setting"}
+SHEET_PLACES = {1: ("",), 2: ("Left", "Right"), 3: ("Left", "Center", "Right")}
+SHEET_AGAIN = {"en": "The same character, {label}, seen again.", "fr": "Le même personnage, {label}, vu à nouveau."}
 
 QUALITIES = ("draft", "final")
 REFERENCE_IMAGE_BUDGETS = {"draft": "1", "final": "0"}
@@ -223,6 +234,7 @@ class ShotPlan:
     chain: Optional[str] = None
     video: List["VideoCut"] = field(default_factory=list)
     video_labels: Dict[int, str] = field(default_factory=dict)
+    sheet: Optional["SheetPlan"] = None
 
     @property
     def needs_audio(self) -> bool:
@@ -231,8 +243,8 @@ class ShotPlan:
 
     @property
     def needs_cut(self) -> bool:
-        """True when a file of the shot's sound or of one of its reference video tracks must be cut before its takes are created."""
-        return self.needs_audio or bool(self.video)
+        """True when a file of the shot's sound, of one of its reference video tracks or of its reference sheet must be made before its takes are created."""
+        return self.needs_audio or bool(self.video) or self.sheet is not None
 
     def summary(self) -> Dict[str, Any]:
         """The shot as the estimate reports it."""
@@ -249,6 +261,7 @@ class ShotPlan:
             "audio": self.audio.summary() if self.audio is not None else None,
             "video": {"tracks": [cut.slot for cut in self.video]} if self.video else None,
             "chain": self.chain,
+            "sheet": self.sheet.trace() if self.sheet is not None else None,
         }
 
     def request_for(self, take_id: Optional[str] = None, seed: Optional[int] = None) -> Dict[str, Any]:
@@ -326,6 +339,39 @@ class VideoCut:
             "seconds": self.seconds,
             "size": list(self.size),
             "items": [piece.item_id for piece in self.pieces],
+        }
+
+
+@dataclass(frozen=True)
+class SheetPanel:
+    reference_id: str
+    asset_id: str
+    card_id: str
+    kind: str
+    box: reception.Box
+
+
+@dataclass
+class SheetPlan:
+    size: Tuple[int, int]
+    frames: int
+    fps: float
+    panels: List[SheetPanel]
+
+    @property
+    def seconds(self) -> float:
+        return round(self.frames / self.fps, 6)
+
+    def trace(self) -> Dict[str, Any]:
+        """What a take receives of the sheet: its size and frames, then each picture with its card and its box."""
+        return {
+            "size": list(self.size),
+            "frames": self.frames,
+            "fps": self.fps,
+            "panels": [
+                {"reference_id": panel.reference_id, "asset_id": panel.asset_id, "card_id": panel.card_id, "kind": panel.kind, "box": list(panel.box)}
+                for panel in self.panels
+            ],
         }
 
 
@@ -683,7 +729,7 @@ def mixed_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any
 
 def audio_behavior(preset: Preset, profile: Optional[str]) -> str:
     """How an engine takes the sound of a shot: as a guide in MiniMax-H3's reference mode, mixed onto the take when its director mode declares audio, else not at all."""
-    if reception.takes_references(profile):
+    if reception.takes_references(profile, bible.family(preset.id, preset.cloud)):
         return CONDITION
     if preset.cloud:
         return IGNORED
@@ -842,6 +888,50 @@ def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = 
 def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> str:
     """The prompt of a shot outside MiniMax-H3's reference mode, as compose_shot writes it."""
     return compose_shot(doc, clip, engine)[0]
+
+
+def _sheet_place(index: int, count: int, row: str) -> str:
+    places = SHEET_PLACES.get(count)
+    where = places[index] if places else f"Panel {index + 1}"
+    return " ".join(part for part in (row, where) if part) or "Sheet"
+
+
+def sheet_lines(doc: Mapping[str, Any], panels: Sequence[SheetPanel]) -> str:
+    """The description of a sheet, one line per picture as the IC-LoRA's examples write it: its place on the sheet and its kind in bold, then the words of its card; a character's second picture says it is the same character again."""
+    language = _language(doc)
+    found = {card.id: card for kind in (bible.CHARACTERS, bible.PLACES) for card in bible.cards(doc, kind)}
+    characters = [panel for panel in panels if panel.kind == bible.CHARACTERS and panel.card_id in found]
+    places = [panel for panel in panels if panel.kind == bible.PLACES and panel.card_id in found]
+    lines: List[str] = []
+    seen: Set[str] = set()
+    for index, panel in enumerate(characters):
+        card = found[panel.card_id]
+        words = SHEET_AGAIN[language].format(label=card.label) if card.id in seen else bible.named(card, language, initial=True)
+        seen.add(card.id)
+        lines.append(f"**{_sheet_place(index, len(characters), SHEET_ROWS[0] if places else '')} ({SHEET_KINDS[panel.kind]}):** {words}")
+    for panel in places:
+        lines.append(f"**{SHEET_ROWS[1] if characters else 'Sheet'} ({SHEET_KINDS[panel.kind]}):** {bible.named(found[panel.card_id], language, initial=True)}")
+    return "\n".join(lines)
+
+
+def compose_sheet(doc: Mapping[str, Any], clip: Mapping[str, Any], panels: Sequence[SheetPanel]) -> Tuple[str, bible.ReferencePart]:
+    """The prompt of a shot made from its reference sheet, in the two parts of the IC-LoRA's examples: the sheet described picture by picture, then the shot in the LTX form, its cast re-announced after the action and the lines. Both parts made from the cast can be replaced by the shot."""
+    instruction = cite_tracks(shot_instruction(doc, clip), {})
+    characters, place = bible.cast_of(doc, clip)
+    language = _language(doc)
+    lines = dialogue.lines_of(doc, clip)
+    spoken = dialogue.ltx_lines(doc, lines, language) if lines else ""
+    reference = bible.reference_part(
+        clip,
+        bible.SHEET_LAYOUT,
+        {bible.SHEET_PART: sheet_lines(doc, panels), bible.CAST_PART: " ".join(bible.prose(characters, place, language))},
+    )
+    sheet, cast = reference.sent[bible.SHEET_PART], reference.sent[bible.CAST_PART]
+    target = " ".join(
+        [*([_sentence(instruction)] if instruction else []), *([spoken] if spoken else []), *([cast] if cast else []), *(_sentence(line) for line in direction_lines(doc))]
+    )
+    blocks = [*([SHEET_HEADING, sheet] if sheet else []), TARGET_HEADING, target]
+    return "\n\n".join(block for block in blocks if block), reference
 
 
 def _bible_warnings(
@@ -1390,7 +1480,10 @@ def project_options(context: _Context, fields: models.Fields, warnings: List[Dic
 
 def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
     preset, doc, shot_id = context.preset, context.doc, clip["id"]
-    refs = reception.takes_references(context.profile)
+    engine = bible.family(preset.id, preset.cloud)
+    if reception.takes_sheet(engine, context.profile):
+        return _sheet_plan(context, clip, warnings)
+    refs = reception.takes_references(context.profile, engine)
     mode = REFS_MODE if refs else preset.main_mode
     if mode is None or mode not in preset.modes:
         raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
@@ -1400,7 +1493,6 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     fps = preset.fps
     sent: List[SentReference] = []
     audio: Optional[ShotAudio] = None
-    engine = bible.family(preset.id, preset.cloud)
     video: List[VideoCut] = []
     labels: Dict[int, str] = {}
     if refs:
@@ -1488,6 +1580,127 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         chain=_chain_of(context, shot_id, chained, director_mode),
         video=video,
         video_labels=labels,
+    )
+
+
+def _card_pictures(user: User, doc: Mapping[str, Any], card: bible.Card, excluded: Collection[str]) -> List[Tuple[str, str]]:
+    found = {reference["id"]: reference for reference in doc.get("references") or [] if isinstance(reference, Mapping) and isinstance(reference.get("id"), str)}
+    pictures: List[Tuple[str, str]] = []
+    for reference_id in card.references:
+        reference = found.get(reference_id)
+        asset = _asset(doc, reference.get("assetId")) if reference is not None and reference_id not in excluded else None
+        if asset is None or asset.get("kind") != "image":
+            continue
+        resolved = _resolve(user, asset)
+        if resolved is not None and resolved["media_type"] == "image":
+            pictures.append((reference_id, str(asset["id"])))
+    return pictures
+
+
+def sheet_panels(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], size: Tuple[int, int], warnings: List[Dict[str, Any]]) -> List[SheetPanel]:
+    """The pictures a shot's reference sheet shows, with their boxes: the first pictures of each character cast in it, in the order of the bible and up to the table's counts, then the first picture of its place; the pictures it leaves out are not used. A cast card without a picture, the characters over the count, boxes smaller than the table's least edge and props that are only words are each said by a warning."""
+    shot_id = clip["id"]
+    excluded = excluded_references(doc, shot_id)
+    characters, place = bible.cast_of(doc, clip)
+    pictured: List[Tuple[bible.Card, List[Tuple[str, str]]]] = []
+    for card in characters:
+        pictures = _card_pictures(user, doc, card, excluded)
+        if pictures:
+            pictured.append((card, pictures[: SHEET["images"]]))
+        else:
+            warnings.append(note("sheet_card_without_image", f"{card.label} has no picture: it is not on the sheet, only in the words of the prompt.", shot_id=shot_id, card_id=card.id, label=card.label))
+    setting = _card_pictures(user, doc, place, excluded)[:1] if place is not None else []
+    if place is not None and not setting:
+        warnings.append(note("sheet_card_without_image", f"{place.label} has no picture: it is not on the sheet, only in the words of the prompt.", shot_id=shot_id, card_id=place.id, label=place.label))
+    kept, left = pictured[: SHEET["characters"]], pictured[SHEET["characters"] :]
+    if not kept and not setting:
+        raise DirectorError("sheet_no_image", "No card cast in this shot has a picture: there is nothing to put on its sheet.", shot_id=shot_id)
+    boxes, setting_box = reception.sheet_layout(size, [len(pictures) for _, pictures in kept], bool(setting))
+    panels: List[SheetPanel] = []
+    for card, pictures in kept:
+        for reference_id, asset_id in pictures:
+            panels.append(SheetPanel(reference_id, asset_id, card.id, bible.CHARACTERS, boxes[len(panels)]))
+    if setting and place is not None and setting_box is not None:
+        panels.append(SheetPanel(setting[0][0], setting[0][1], place.id, bible.PLACES, setting_box))
+    edge = min((min(box[2], box[3]) for box in boxes), default=None)
+    if left or (edge is not None and edge < SHEET["leastEdge"]):
+        names = [card.label for card, _ in left]
+        message = f"The sheet holds {SHEET['characters']} characters: {', '.join(names)} left out." if names else f"The pictures of the sheet are {edge} px on their short side, too small to hold a face."
+        warnings.append(note("sheet_crowded", message, shot_id=shot_id, left_out=names, edge=edge))
+    props = [card.label for card, _ in kept if card.props]
+    if props:
+        warnings.append(note("sheet_props_text_only", f"The props of {', '.join(props)} are words only: they are not on the sheet.", shot_id=shot_id, labels=props))
+    return panels
+
+
+def _sheet_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
+    preset, doc, shot_id = context.preset, context.doc, clip["id"]
+    if context.quality == "final":
+        raise DirectorError(
+            "sheet_final_size",
+            "A shot made from its reference sheet is not rendered again at the final size, where the sheet doubles a sequence 12 GB cannot hold: its final goes through an upscaler.",
+            shot_id=shot_id,
+        )
+    lora = sheet_lora()
+    if lora is None:
+        raise DirectorError(
+            "sheet_lora_missing",
+            f"Install the Ingredients IC-LoRA {SHEET['lora']} ({SHEET['repo']} on Hugging Face) to make this shot from its reference sheet.",
+            shot_id=shot_id,
+            file=SHEET["lora"],
+            repo=SHEET["repo"],
+        )
+    mode = preset.main_mode
+    if mode is None or mode not in preset.modes:
+        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
+    fields = context.mode_fields(mode)
+    size = reception.sheet_size(aspect_of(doc))
+    resolution = f"{size[0]}x{size[1]}"
+    if list(size) != list(SHEET["size"]):
+        warnings.append(
+            note("sheet_off_bucket", f"The sheet makes this shot at {resolution}, a size the IC-LoRA was not trained at.", shot_id=shot_id, size=resolution)
+        )
+    fps = float(SHEET["fps"]) if "fps" in fields else preset.fps
+    wanted = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
+    frames = guided_frames(wanted, fps)
+    seconds = round(frames / fps, 6)
+    panels = sheet_panels(context.user, doc, clip, size, warnings)
+    if shot_frames(doc, shot_id)[0] is not None or shot_id in context.chained:
+        warnings.append(note("sheet_first_frame", "The sheet makes the shot without a first frame: the picture it would start from is not used.", shot_id=shot_id))
+    prompt, reference = compose_sheet(doc, clip, panels)
+    _bible_warnings(doc, clip, prompt, bible.LTX, warnings, reference)
+    _dialogue_warnings(doc, clip, bible.LTX, seconds, warnings, None)
+    audio = _shot_mux(context, clip, seconds, warnings)
+    _ignored_tracks(doc, clip, seconds, warnings)
+    document = sheet_document(prompt, fps, seconds, resolution, lora, sheet_value(shot_id))
+    mixed = audio is not None and audio.behavior == MUX
+    if mixed:
+        document = audio_document(document, seconds, fps, catalog.director_of(preset.variables))
+    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, context.quality))
+    resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if mixed else ())
+    form = request["form_data"]
+    form.update(resolved.values)
+    chosen = project_options(context, fields, warnings)
+    form.update(chosen.values)
+    form.update(distilled_form(fields, resolved))
+    if UPSCALE_FIELD in fields:
+        form[UPSCALE_FIELD] = OFF
+    return ShotPlan(
+        shot_id=shot_id,
+        profile=context.profile,
+        director_mode="director",
+        preset_mode=mode,
+        seconds=seconds,
+        resolution=resolution,
+        fps=fps,
+        prompt_text=prompt,
+        request=request,
+        missing_models=[name for name in resolved.missing if name not in chosen.values],
+        seed=chosen.seed,
+        audio=audio,
+        work_scale=engine_options.work_scale(fields, form) * reception.sheet_work(form),
+        reference=reference,
+        sheet=SheetPlan(size, frames, fps, panels),
     )
 
 
@@ -1995,14 +2208,29 @@ def build_upscale(
     )
 
 
-def guide_lora() -> Optional[str]:
-    """The installed Layout-To-Render IC-LoRA as model:<id>, or None."""
+def installed_lora(filename: str) -> Optional[str]:
+    """An installed LoRA file as model:<id>, or None."""
     try:
-        model_id = core_bridge.installed_model_for_file(GUIDE_LORA)
+        model_id = core_bridge.installed_model_for_file(filename)
     except Exception:
-        logger.warning("[VIDEO-PRODUCER] Could not look up the model file %s", GUIDE_LORA, exc_info=True)
+        logger.warning("[VIDEO-PRODUCER] Could not look up the model file %s", filename, exc_info=True)
         return None
     return f"{models.MODEL_REF}{model_id}" if model_id else None
+
+
+def guide_lora() -> Optional[str]:
+    """The installed Layout-To-Render IC-LoRA as model:<id>, or None."""
+    return installed_lora(GUIDE_LORA)
+
+
+def sheet_lora() -> Optional[str]:
+    """The installed Ingredients IC-LoRA as model:<id>, or None."""
+    return installed_lora(SHEET["lora"])
+
+
+def sheet_ready(user: User) -> bool:
+    """True when the user can make takes from a reference sheet: one of the sheet's presets is theirs and the IC-LoRA is installed."""
+    return any(find_preset(user, preset_id) is not None for preset_id in SHEET["presets"]) and sheet_lora() is not None
 
 
 def guided_preset(user: User) -> Optional[Preset]:
@@ -2035,20 +2263,36 @@ def distilled_form(fields: models.Fields, resolved: models.ResolvedModels) -> Di
     return {name: value for name, value in {"speed_profile": DISTILLED, **DISTILLED_RECIPE}.items() if name in fields}
 
 
-def guided_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str) -> Dict[str, Any]:
-    """A director document of one segment whose IC-LoRA entry takes a draft video as its reference, the LoRA and the reference both at strength 1: below 1 LTX-2.5 copies the reference instead of following it."""
+def ic_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], entry_id: str, lora: str, video: str) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes a video as its reference, the LoRA and the reference both at strength 1."""
     document = _document(prompt, fps, seconds, resolution)
     document["mode"] = "director"
     document["segments"][0].update(start=0.0, end=seconds)
     document["ic_lora"] = [
         {
-            "id": GUIDE_ID,
+            "id": entry_id,
             "lora": {"model": lora, "strength": 1.0},
             "reference": {"path": video, "relative_path": video, "type": "video"},
             "strength": 1.0,
         }
     ]
     return document
+
+
+def guided_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes a draft video as its reference, the LoRA and the reference both at strength 1: below 1 LTX-2.5 copies the reference instead of following it."""
+    return ic_document(prompt, fps, seconds, resolution, GUIDE_ID, lora, video)
+
+
+def sheet_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes the shot's reference sheet as its reference, at the full strength the Ingredients IC-LoRA ships for."""
+    return ic_document(prompt, fps, seconds, resolution, SHEET_ID, lora, video)
+
+
+def sheet_value(shot_id: str) -> str:
+    """The stand-in a request carries for the video of a shot's reference sheet until it is made."""
+    return f"{SHEET_PREFIX}{shot_id}"
+
 
 
 def is_guided(plan: ShotPlan) -> bool:

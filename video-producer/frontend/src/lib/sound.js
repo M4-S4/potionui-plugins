@@ -1,6 +1,7 @@
 import { joinRuns, laneAudible, sliceChain } from './tracks.js';
 import { excludedLanesOf, excludedOf, isGlobal, ownsReference } from './shots.js';
 import { voiceReferences } from './bible.js';
+import formats from './formatstable.js';
 
 export { excludedLanesOf, setExcludedLanes } from './shots.js';
 
@@ -96,7 +97,7 @@ export function soundReferences(doc, clip) {
 
 export function audioBehavior(preset, profile) {
 	if (!preset) return null;
-	if (profile === 'Ref2VA') return CONDITION;
+	if (profile === 'Ref2VA' && !formats.engines.ltx.presets.includes(preset.id)) return CONDITION;
 	if (preset.cloud) return IGNORED;
 	return preset.audioMux ? MUX : IGNORED;
 }

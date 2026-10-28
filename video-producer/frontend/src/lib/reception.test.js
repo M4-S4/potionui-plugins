@@ -11,7 +11,7 @@ export async function load(url, context, next) {
 }`;
 register(`data:text/javascript,${encodeURIComponent(hooks)}`, import.meta.url);
 
-const { FAMILIES, LIMITS, ORDER, VIDEO_TRACKS, cardReception, cutSize, familyOf, layoutOf, mediaKey, projectReception, receptionOf, shotReception, takesReferences, videoCap, videoFrames, videoPieces, videoRegion } = await import('./reception.js');
+const { FAMILIES, LIMITS, ORDER, SHEET, VIDEO_TRACKS, cardReception, cutSize, familyOf, layoutOf, mediaKey, projectReception, receptionOf, shotReception, takesReferences, takesSheet, videoCap, videoFrames, videoPieces, videoRegion } = await import('./reception.js');
 const { MAX_VREF_TRACKS, VREF_ROLES } = await import('./vrefs.js');
 const { PROFILES } = await import('./generation.js');
 const { CONDITION, audioBehavior } = await import('./sound.js');
@@ -48,7 +48,10 @@ test('the table names only engine families the page can tell apart, and a last r
 	assert.equal(familyOf({ id: engines.h3.preset }), 'h3');
 	assert.equal(familyOf({ id: engines.cloud.preset, cloud: true }), 'cloud');
 	assert.equal(familyOf({ id: engines.wan.preset }), 'other');
+	assert.equal(familyOf({ id: engines.ltx.preset }), 'ltx');
 	assert.equal(layoutOf('h3', 'Ref2VA'), 'refs');
+	assert.equal(layoutOf('ltx', 'Ref2VA'), 'sheet');
+	assert.equal(layoutOf('ltx', 'FL2VA'), 'cast');
 	assert.equal(layoutOf('h3', 'Hybrid AV'), 'subjects');
 	assert.equal(layoutOf('other', 'FL2VA'), 'cast');
 });
@@ -225,4 +228,41 @@ test('shotReception: tracks of the shot count among its sounds before the global
 	const clip = doc.clips[2];
 	assert.equal(shotReception(doc, clip, engineFor(doc)(clip), 2).statuses.get('g-voice'), 'trimmed');
 	assert.equal(shotReception(doc, clip, engineFor(doc)(clip), 1).statuses.get('g-voice'), 'sent');
+});
+
+const sheetDoc = () => {
+	const picture = (id) => ({ id: `a-${id}`, kind: 'image', origin: { kind: 'library', itemId: `i-${id}` } });
+	const reference = (id, asset = `a-${id}`) => ({ id, assetId: asset, scope: { type: 'global' } });
+	const ids = ['f1', 'f2', 'f3', 'g1', 'h1', 'k1', 'q1', 'q2'];
+	return {
+		assets: [...ids.map(picture), { id: 'a-gone', kind: 'image', origin: null }, { id: 'a-voice', kind: 'audio', origin: { kind: 'library', itemId: 'i-voice' } }],
+		references: [...ids.map((id) => reference(id)), reference('gone', 'a-gone'), reference('voice', 'a-voice'), reference('loose')],
+		bible: {
+			characters: [
+				{ id: 'c-f', label: 'Fisher', references: ['gone', 'f1', 'f2', 'f3'] },
+				{ id: 'c-g', label: 'Girl', references: ['g1'] },
+				{ id: 'c-n', label: 'Nobody', references: [] },
+				{ id: 'c-h', label: 'Hal', references: ['h1'] },
+				{ id: 'c-k', label: 'Kim', references: ['k1'] }
+			],
+			places: [{ id: 'p-q', label: 'Quay', references: ['q1', 'q2'] }]
+		},
+		clips: [{ id: 's1', start: 0, dur: 5, cast: { characters: ['c-f', 'c-g', 'c-n', 'c-h', 'c-k'], place: 'p-q' } }]
+	};
+};
+
+test('shotReception: on LTX-2.5 in Ref2VA the cast goes on one sheet, two pictures per character for three characters, one of the place', () => {
+	const doc = sheetDoc();
+	const ltx = { id: engines.ltx.preset, cloud: false, audioMux: true, profiles: ['FL2VA', 'Ref2VA'] };
+	assert.ok(takesSheet('ltx', 'Ref2VA') && !takesSheet('h3', 'Ref2VA') && !takesSheet('ltx', 'FL2VA'));
+	assert.equal(takesReferences('Ref2VA', 'ltx'), false);
+	assert.deepEqual([SHEET.characters, SHEET.images, SHEET.size, SHEET.fps], [3, 2, [768, 448], 24]);
+	const shot = shotReception(doc, doc.clips[0], { preset: engines.ltx.preset, profile: 'Ref2VA', info: ltx });
+	assert.equal(shot.layout, 'sheet');
+	assert.deepEqual(Object.fromEntries(shot.statuses), {
+		f1: 'sent', f2: 'sent', f3: 'trimmed', gone: 'missing', g1: 'sent', h1: 'sent', k1: 'trimmed', q1: 'sent', q2: 'trimmed', voice: 'mixed', loose: 'ignored'
+	});
+	const plain = shotReception(doc, doc.clips[0], { preset: engines.ltx.preset, profile: 'FL2VA', info: ltx });
+	assert.equal(plain.layout, 'cast');
+	assert.ok([...plain.statuses.values()].every((status) => ['ignored', 'mixed'].includes(status)));
 });

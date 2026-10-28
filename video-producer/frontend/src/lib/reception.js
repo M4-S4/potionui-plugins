@@ -1,15 +1,18 @@
 import table from './reception.json';
+import formats from './formatstable.js';
 import { isH3, presetProfiles } from './generation.js';
-import { excludedVrefsOf, isGlobal, isShared, ownsReference, shotReferences } from './shots.js';
+import { excludedOf, excludedVrefsOf, isGlobal, isShared, ownsReference, shotReferences } from './shots.js';
 import { referencePromptOf } from './refprompt.js';
-import { CHARACTERS, PLACES, cardsOf, shotsCasting, voiceReferences } from './bible.js';
+import { CHARACTERS, PLACES, castCards, cardsOf, shotsCasting, voiceReferences } from './bible.js';
 import { MUX, audioBehavior } from './sound.js';
 import { trackItemsOf, videoTracksOf } from './vrefs.js';
 
 export const LIMITS = table.limits;
 export const ORDER = table.order;
 export const VIDEO_TRACKS = table.videoTracks;
-export const FAMILIES = ['cloud', 'h3'];
+export const SHEET = table.sheet;
+export const FAMILIES = ['cloud', 'h3', 'ltx'];
+const LTX_IDS = formats.engines.ltx.presets;
 export const RECEIVED = ['sent', 'mixed'];
 export const NOT_CAST = 'not_cast';
 export const ASIDE = ['excluded', NOT_CAST];
@@ -126,8 +129,9 @@ export function shotVideoTracks(doc, clip, seconds) {
 	return found;
 }
 
-export const takesReferences = (profile) => table.references.includes(profile);
-export const familyOf = (info) => (info?.cloud ? 'cloud' : isH3(info) ? 'h3' : 'other');
+export const takesSheet = (family, profile) => SHEET.families.includes(family) && SHEET.profiles.includes(profile);
+export const takesReferences = (profile, family = null) => table.references.includes(profile) && !takesSheet(family, profile);
+export const familyOf = (info) => (info?.cloud ? 'cloud' : isH3(info) ? 'h3' : LTX_IDS.includes(info?.id) ? 'ltx' : 'other');
 
 const matches = (rule, family, profile) => (!rule.profiles || rule.profiles.includes(profile)) && (!rule.families || rule.families.includes(family));
 
@@ -172,6 +176,39 @@ function mediaStatuses(doc, own, cast, shared, tracks, videos, tracked, counts) 
 	return statuses;
 }
 
+function sheetStatuses(doc, clip, statuses) {
+	const skip = new Set(excludedOf(clip));
+	const chosen = castCards(doc, clip?.cast);
+	const references = doc?.references ?? [];
+	let pictured = 0;
+	const place = (card, most, room) => {
+		let shown = 0;
+		for (const id of card?.references ?? []) {
+			const reference = references.find((r) => r?.id === id);
+			if (!reference || skip.has(id)) continue;
+			const asset = assetOf(doc, reference.assetId);
+			if (asset?.kind !== 'image') continue;
+			if (mediaKey(asset) === null) statuses.set(id, 'missing');
+			else if (room && shown < most) {
+				statuses.set(id, 'sent');
+				shown += 1;
+			} else statuses.set(id, 'trimmed');
+		}
+	};
+	const readable = (card) => (card?.references ?? []).some((id) => {
+		const reference = references.find((r) => r?.id === id);
+		const asset = reference && !skip.has(id) ? assetOf(doc, reference.assetId) : null;
+		return asset?.kind === 'image' && mediaKey(asset) !== null;
+	});
+	for (const card of chosen.characters) {
+		const has = readable(card);
+		place(card, SHEET.images, has && pictured < SHEET.characters);
+		if (has) pictured += 1;
+	}
+	if (chosen.place) place(chosen.place, 1, true);
+	return statuses;
+}
+
 export function shotReception(doc, clip, engine, tracks = 0) {
 	const { inherited, cast, own } = shotReferences(doc, clip);
 	const fromCast = cast.filter((x) => !x.excluded).map((x) => x.reference);
@@ -189,13 +226,14 @@ export function shotReception(doc, clip, engine, tracks = 0) {
 	if (state !== 'ready') {
 		statuses = new Map([...own, ...fromCast, ...shared].map((r) => [r.id, state]));
 		for (const x of going) tracked.set(x.track.id, state);
-	} else if (takesReferences(profile)) {
+	} else if (takesReferences(profile, familyOf(info))) {
 		counts = Object.fromEntries(Object.keys(LIMITS).map((kind) => [kind, 0]));
 		statuses = mediaStatuses(doc, own, fromCast, shared, tracks, going.filter((x) => x.status === 'ready'), tracked, counts);
 	} else {
 		const mixes = audioBehavior(info, profile) === MUX;
 		const voices = voiceReferences(doc);
 		statuses = new Map([...own, ...fromCast, ...shared].map((r) => [r.id, mixes && assetOf(doc, r.assetId)?.kind === 'audio' && !voices.has(r.id) ? 'mixed' : 'ignored']));
+		if (takesSheet(familyOf(info), profile)) sheetStatuses(doc, clip, statuses);
 		for (const x of going) tracked.set(x.track.id, 'ignored');
 	}
 	for (const x of inherited) if (x.notCast && !x.excluded) statuses.set(x.reference.id, NOT_CAST);

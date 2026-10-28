@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List, Mapping, Optional
 
-from . import core_bridge, engine_options, models, presets
+from . import core_bridge, engine_options, models, presets, reception
 from .core_bridge import CLOUD_ENGINE, User
 
 logger = logging.getLogger("plugins.video-producer")
@@ -148,9 +148,12 @@ def director_modes(variables: Optional[Mapping[str, Any]]) -> List[str]:
 
 
 def profiles(preset_id: str, variables: Optional[Mapping[str, Any]], modes: List[str]) -> List[str]:
-    """The generation profiles a preset can run."""
+    """The generation profiles a preset can run: Ref2VA for MiniMax-H3 when it has a References mode, and for the presets that make it from a reference sheet when their director mode takes an IC-LoRA."""
     if not director_of(variables):
         return []
+    if preset_id in reception.SHEET["presets"]:
+        director = (director_of(variables).get("modes") or {}).get("director")
+        return [FL2VA, *([REF2VA] if isinstance(director, Mapping) and director.get("ic_lora") else [])]
     if preset_id not in presets.MINIMAX_H3_PRESETS:
         return [FL2VA]
     return [FL2VA, *([REF2VA] if REFS_MODE in modes else []), HYBRID_AV]

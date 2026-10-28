@@ -3,7 +3,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { doc, asset, select, clipLabel } from '../../lib/state.svelte.js';
 	import { refTypeLabel, shotReceptionFor, engineTitle, receptionVerdict, refMediaKind, setSent, addShotReference } from '../../lib/references.js';
-	import { LIMITS, takesReferences } from '../../lib/reception.js';
+	import { LIMITS, SHEET, familyOf, takesReferences, takesSheet } from '../../lib/reception.js';
 	import { isGlobal, shotReferences } from '../../lib/shots.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { typeIcon } from '../../lib/reftags.js';
@@ -21,6 +21,7 @@
 	const notice = $derived.by(() => {
 		if (shot.state === 'unknown') return { text: t('panels.director.refs.shotUnknown'), tone: 'text-fg-muted' };
 		if (shot.state === 'blocked') return { text: t('panels.director.refs.shotBlocked', { engine, profile: shot.engine.profile }), tone: 'text-warning' };
+		if (takesSheet(familyOf(shot.engine.info), shot.engine.profile)) return { text: t('panels.director.refs.shotSheet', { engine, characters: SHEET.characters, images: SHEET.images }), tone: 'text-fg-muted' };
 		if (takesReferences(shot.engine.profile)) return { text: t('panels.director.refs.shotMedia', { engine, image: LIMITS.image, video: LIMITS.video, audio: LIMITS.audio }), tone: 'text-fg-muted' };
 		return { text: t('panels.director.refs.shotNoMedia', { engine }), tone: 'text-fg-muted' };
 	});

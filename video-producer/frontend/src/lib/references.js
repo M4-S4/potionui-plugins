@@ -9,7 +9,7 @@ import { effectiveEngine } from './engine.js';
 import { optionFor, withProfile } from './generation.js';
 import { engineChoices, engineOptionLabel } from './production.svelte.js';
 import { excludedOf, setExcluded, touch } from './shots.js';
-import { LIMITS, cardReception, projectReception, receptionOf, shotReception, takesReferences } from './reception.js';
+import { LIMITS, cardReception, familyOf, projectReception, receptionOf, shotReception, takesReferences } from './reception.js';
 
 export const families = [
 	{
@@ -119,7 +119,7 @@ export function engineOf(clip, source = doc) {
 function tracksFor(source) {
 	return (clip) => {
 		const engine = engineOf(clip, source);
-		return engine.info && takesReferences(engine.profile) ? (shotSound(source, clip, engine.info, engine.profile)?.lanes.length ?? 0) : 0;
+		return engine.info && takesReferences(engine.profile, familyOf(engine.info)) ? (shotSound(source, clip, engine.info, engine.profile)?.lanes.length ?? 0) : 0;
 	};
 }
 

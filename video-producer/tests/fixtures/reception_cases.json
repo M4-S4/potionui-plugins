@@ -1,7 +1,7 @@
 {
 	"engines": {
 		"wan": { "preset": "01KX47WANVIDEO0000000000TV", "model": null, "cloud": false, "audio_mux": false, "profiles": ["FL2VA"] },
-		"ltx": { "preset": "01KX47LTX25VIDEO00000000TV", "model": null, "cloud": false, "audio_mux": true, "profiles": ["FL2VA"] },
+		"ltx": { "preset": "01KX47LTX25VIDEO00000000TV", "model": null, "cloud": false, "audio_mux": true, "profiles": ["FL2VA", "Ref2VA"] },
 		"h3": { "preset": "01KX47H3MINIMAX000000000VA", "model": null, "cloud": false, "audio_mux": true, "profiles": ["FL2VA", "Ref2VA", "Hybrid AV"] },
 		"cloud": { "preset": "01M3SV8HJTGT3JPPH2BA5MP6PR", "model": "cm-veo", "cloud": true, "audio_mux": false, "profiles": ["FL2VA"] }
 	},
