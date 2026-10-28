@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from backend import director, estimate, formats, keyframes, presets, projects, takes
 from backend.exports import fcpxml, video
@@ -67,6 +68,24 @@ def test_the_draft_and_final_sizes_are_the_page_s(case):
     options, preset_id, ratio = CASES["options"][case["options"]], CASES["presets"][case["preset"]], formats.ratio_of(case["format"])
     assert formats.draft_size(options, case["setting"], ratio, preset_id) == case["draft"]
     assert formats.final_size(options, ratio, preset_id) == case["final"]
+
+
+@pytest.mark.parametrize("key, folder", [("wan13", "Wan2.1-T2V-1.3B-8GB"), ("wan5b", "Wan2.2-TI2V-5B-8GB")])
+def test_the_shared_cases_carry_the_sizes_the_8_gb_presets_ship(key, folder):
+    shipped = yaml.safe_load((PLUGIN_ROOT / "presets" / folder / "files" / "form" / "resolutions_480p.yml").read_text(encoding="utf-8"))
+
+    assert CASES["options"][key] == [item["value"] for item in shipped]
+
+
+@pytest.mark.parametrize("key, preset_id", [("wan13", presets.WAN21_T2V_1_3B_8GB), ("wan5b", presets.WAN22_TI2V_5B_8GB)])
+def test_the_8_gb_presets_make_square_and_4_5_films_at_their_own_ratio(key, preset_id):
+    options = CASES["options"][key]
+
+    for name in ("1:1", "4:5"):
+        ratio = formats.ratio_of(name)
+        size = formats.parse_size(formats.final_size(options, ratio, preset_id))
+        assert formats.fit(size[0] / size[1], ratio) == formats.EXACT, (key, name)
+        assert formats.draft_size(options, "832x480", ratio, preset_id) == formats.final_size(options, ratio, preset_id), (key, name)
 
 
 @pytest.mark.parametrize("case", CASES["picks"], ids=lambda case: f"{case['preset']}-{case['chosen']}")

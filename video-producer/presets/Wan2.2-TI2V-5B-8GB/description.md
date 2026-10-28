@@ -1,4 +1,4 @@
-Generate a video from a prompt with Wan 2.2's 5B TI2V model, set up for a graphics card with **8 GB of VRAM** and **32 GB of system RAM**. Clips of up to 5 seconds at 24 fps (121 frames), the frame rate the model was trained at, in 832×480 or 480×832, 30 steps, CFG 5. Text to video only: PotionUI does not run this model's image conditioning, so a shot's first or last frame is not used.
+Generate a video from a prompt with Wan 2.2's 5B TI2V model, set up for a graphics card with **8 GB of VRAM** and **32 GB of system RAM**. Clips of up to 5 seconds at 24 fps (121 frames), the frame rate the model was trained at, in 832×480, 480×832, 640×640 (square) or 576×704 (4:5 portrait), 30 steps, CFG 5. Text to video only: PotionUI does not run this model's image conditioning, so a shot's first or last frame is not used.
 
 **Files.** The 5B DiT (9.31 GB, fp16), the fp8 UMT5-XXL text encoder (6.27 GB) and the Wan 2.2 VAE (1.31 GB, 48 channels, not interchangeable with the Wan 2.1 VAE). The model pickers recommend only these files.
 
