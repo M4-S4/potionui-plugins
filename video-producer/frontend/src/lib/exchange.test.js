@@ -103,3 +103,16 @@ test('the four formats regenerate the backend golden files byte for byte (media=
 		assert.ok(made.equals(golden), `${format} differs from reference.${format} at the byte level`);
 	}
 });
+
+test('formats: a slowed shot reads the source its speed covers, with an M2 line, a time warp and a time map', () => {
+	const doc = sampleDoc();
+	doc.clips = [{ ...doc.clips[0], dur: 4, srcIn: 1, speed: 0.5 }];
+	const options = optionsFor(doc);
+	const lines = edl(doc, options).split('\r\n');
+	assert.equal(lines[3], '001  VP001    V     C        00:00:01:00 00:00:03:00 00:00:00:00 00:00:04:00');
+	assert.equal(lines[4], `M2   VP001          ${(doc.fps * 0.5).toFixed(1).padStart(5, '0')}                00:00:01:00`);
+	const clip = JSON.parse(otio(doc, options)).tracks.children[0].children[0];
+	assert.equal(clip.source_range.duration.value, 2 * doc.fps);
+	assert.deepEqual(clip.effects, [{ OTIO_SCHEMA: 'LinearTimeWarp.1', name: '', effect_name: 'LinearTimeWarp', metadata: {}, time_scalar: 0.5 }]);
+	assert.match(fcpxml(doc, options), new RegExp(`<timeMap><timept time="${doc.fps}/${doc.fps}s" value="${doc.fps}/${doc.fps}s" interp="linear"/><timept time="${5 * doc.fps}/${doc.fps}s" value="${3 * doc.fps}/${doc.fps}s" interp="linear"/></timeMap></asset-clip>`));
+});

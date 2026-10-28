@@ -34,6 +34,7 @@
 	} from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { shotWaitText } from '../../lib/chain.svelte.js';
+	import { speedOf } from '../../lib/cadence.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
@@ -325,15 +326,16 @@
 		const range = shotDurationLimit(c);
 		const d0 = c.dur;
 		const in0 = c.srcIn;
+		const speed = speedOf(c);
 		drag(e, {
 			onMove: (dx) => {
 				const dt = dx / pps;
 				let limit = false;
 				if (edge === 'start') {
-					const nIn = clamp(in0 + dt, 0, in0 + d0 - 0.4);
+					const nIn = clamp(in0 + dt * speed, 0, in0 + (d0 - 0.4) * speed);
 					limit = nIn <= 0.001;
 					c.srcIn = round(nIn, 0.04);
-					c.dur = round(d0 - (nIn - in0), 0.04);
+					c.dur = round(d0 - (nIn - in0) / speed, 0.04);
 				} else {
 					const nd = clamp(d0 + dt, 0.4, range.max);
 					limit = nd >= range.max - 0.001;
@@ -790,6 +792,7 @@
 			{#if ownEngine}<span class="flex shrink-0" role="img" aria-label={ownEngine} title={ownEngine} data-own-engine><Icon name="sliders" class="h-3 w-3" /></span>{/if}
 			<span class="min-w-0 flex-1 truncate">{clipLabel(c)}</span>
 			{#if takes > 1 && w > 120}<span class="shrink-0 rounded-sm border border-current/40 px-1 text-2xs">{t('timeline.clip.takes', { count: takes })}</span>{/if}
+			{#if speedOf(c) < 1 && w > 60}<span class="vp-tc shrink-0 rounded-sm border border-current/40 px-1 text-2xs" title={t('timeline.clip.speedTip', { value: Math.round(speedOf(c) * 100) })} data-clip-speed={speedOf(c)}>{t('inspector.speed.value', { value: Math.round(speedOf(c) * 100) })}</span>{/if}
 		</div>
 		{#if activity.state === 'running'}
 			{@const percent = Math.round(activity.progress)}

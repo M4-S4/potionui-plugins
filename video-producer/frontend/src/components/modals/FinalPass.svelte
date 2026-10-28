@@ -65,6 +65,7 @@
 	const conforming = $derived(conform && interpolator !== null);
 	const cadence = $derived(est?.cadence ?? null);
 	const slowShots = $derived(cadence?.shots.length ?? 0);
+	const slowedShots = $derived(cadence?.slowed.length ?? 0);
 	const nearRows = $derived(plan.included.filter((row) => cadence?.near.includes(row.clip.id)));
 	const nearFps = $derived(nearRows.map((row) => row.source?.fps).find((fps) => typeof fps === 'number') ?? null);
 	const interpolatorText = $derived(interpolator === 'rtx' ? t('generation.cadence.interpolator.rtx') : t('generation.cadence.interpolator.rife'));
@@ -173,6 +174,7 @@
 					<HostUi name="Switch" props={{ id: 'vp-final-pass-conform', checked: conforming, disabled: interpolator === null, size: 'lg', label: t('generation.finalPass.cadence.conform', { fps: cadence.fps, count: slowShots }), onchange: (v) => (conform = Boolean(v)) }} />
 				</div>
 				<p class="text-xs text-fg-subtle">{interpolator === null ? t('generation.cadence.noInterpolator') : conforming ? t('generation.finalPass.cadence.with', { name: interpolatorText }) : t('generation.finalPass.cadence.off')}</p>
+				{#if slowedShots}<p class="text-xs text-fg-subtle">{t('generation.finalPass.cadence.slowed', { count: slowedShots })}</p>{/if}
 			</section>
 		{/if}
 		{#if nearRows.length && nearFps !== null}

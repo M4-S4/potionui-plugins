@@ -232,5 +232,14 @@
 	"vref.deleteEmpty": "The track is empty.",
 	"vref.track": "Track",
 	"vref.itemHint": "Each shot receives the part of this video that falls in its window.",
-	"vref.remove": "Remove from the track"
+	"vref.remove": "Remove from the track",
+	"speed.label": "Speed",
+	"speed.value": "{value}%",
+	"speed.hint": "Slowed to {value}%: the shot lasts longer on the timeline and the sound of its take is muted.",
+	"speed.ready": "Slowed to {value}%: the {fps} fps version is ready, the export reads it.",
+	"speed.making": "Slowed to {value}%: the {fps} fps version is on its way.",
+	"speed.failed": "Slowed to {value}%: the {fps} fps version failed; the export repeats frames.",
+	"speed.needed": "Slowed to {value}%: without its {fps} fps version, the export repeats frames.",
+	"speed.noInterpolator": "Slowed to {value}%: no interpolator is ready for its {fps} fps version; the export repeats frames.",
+	"speed.prepare": "Prepare"
 }

@@ -28,6 +28,10 @@ RTX_LEAST = (0, 2)
 
 HALF_FLOW_SHORT_SIDE = 1440
 
+FACTORS = (2, 4)
+
+speed_of = formats.speed_of
+
 
 def _positive(value: Any) -> Optional[float]:
     if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0:
@@ -50,6 +54,28 @@ def needs_conform(take_fps: Any, fps: Any) -> bool:
     """Whether a take at this frame rate is slower than the film's by the table's share or more, so that the export would repeat its frames."""
     source, target = _positive(take_fps), _positive(fps)
     return source is not None and target is not None and source < target * (1 - formats.SLOWER) - 1e-9
+
+
+def needed_fps(doc: Mapping[str, Any], clip: Optional[Mapping[str, Any]], take_fps: Any) -> Optional[float]:
+    """The frame rate a take needs on a shot: the film's divided by the shot's speed, when the take is slower than that by the table's share or more; None when it needs no version."""
+    film = target_of(doc)
+    if film is None:
+        return None
+    fps = film / speed_of(clip)
+    return fps if needs_conform(take_fps, fps) else None
+
+
+def passes(take_fps: Any, fps: float, film: int) -> List[Tuple[float, Optional[int]]]:
+    """How a take reaches a frame rate, as (frame rate, multiplier) steps: one step to a frame rate the interpolators take, else a multiplier of the film's rate, from the take when it already runs at it and from its version at the film's rate otherwise."""
+    if float(fps).is_integer() and int(fps) in formats.CADENCES:
+        return [(float(fps), None)]
+    factor = round(fps / film)
+    if factor not in FACTORS or abs(factor * film - fps) > 1e-6:
+        raise ValueError(f"{fps} fps is not a multiple of the film's {film} fps that an interpolator makes")
+    source = _positive(take_fps)
+    if source is not None and abs(source - film) < 1e-6:
+        return [(float(fps), factor)]
+    return [(float(film), None), (float(fps), factor)]
 
 
 def choice_of(doc: Mapping[str, Any]) -> str:
@@ -113,11 +139,12 @@ def _short_side(take: Mapping[str, Any]) -> int:
     return min(sizes) if sizes else 0
 
 
-def build_request(user: User, take: Mapping[str, Any], fps: int, interpolator: str) -> Tuple[Dict[str, Any], List[str]]:
-    """The request that brings a finished take to a frame rate, duration and sound kept, and the models it misses: RIFE 4.25 with cuts detected and half flow from 1440 up, or Frame Generation Medium; DirectorError when the take's video is gone."""
+def build_request(user: User, take: Mapping[str, Any], fps: float, interpolator: str, factor: Optional[int] = None) -> Tuple[Dict[str, Any], List[str]]:
+    """The request that brings a finished take, or a finished version of it, to a frame rate, or multiplies its rate, duration and sound kept, and the models it misses: RIFE 4.25 with cuts detected and half flow from 1440 up, or Frame Generation Medium; DirectorError when the video is gone."""
     preset_id = PRESET_OF[interpolator]
     media = director.source_video(user, take)
-    form: Dict[str, Any] = {"input_video": media["value"], TARGET_FIELD: int(fps), "keep_audio": True, "scene_detection": True}
+    rate = {TARGET_FIELD: 0, "factor": int(factor)} if factor else {TARGET_FIELD: int(fps)}
+    form: Dict[str, Any] = {"input_video": media["value"], **rate, "keep_audio": True, "scene_detection": True}
     if media.get("origin"):
         form["input_video__origin"] = media["origin"]
     if interpolator == RTX:

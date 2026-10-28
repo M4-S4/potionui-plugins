@@ -476,6 +476,12 @@ A take keeps the frame rate of its engine (Wan 16 fps, MiniMax H3 24 fps, LTX 25
 - **Where.** In **Make the film final**, the **Frame rate** line offers **Conform to 25 fps (3 takes)**, on by default: the upscale comes first, then the interpolation, and the estimate adds the time of the versions. **Make final** has the same switch for a take slower than the film. The **Export** window counts the shots that will stutter and offers **Conform** with the estimated time. On a take card, the chip **16 → 25 fps** says its version is ready (with the percentage while it is made); **Conform to 25 fps** starts it for a finished take slower than the film.
 - A version belongs to its take: a new take placed on the shot, a final take for example, needs its own. The viewer always plays the take itself.
 
+### Slow motion
+
+A shot can play its take slowed down: **Speed** 100 % (the default), 50 % or 25 %, in the Duration section of the inspector and under the duration of the shot editor. The shot keeps the part of the take it shows: its duration grows to match (a 2-second shot at 50 % lasts 4 seconds) and the shots after it move. The sound of the take is muted on a slowed shot; the timeline audio stays. The viewer plays the take slowed down, without interpolation.
+
+For the export, a slowed shot needs a version of its take at the frame rate of the film divided by its speed: 50 fps for a 25 fps film at 50 %, 100 fps at 25 %. It is made like a conform, with the same interpolator; past 60 fps, in two steps (the film's rate first, then ×2 or ×4). The inspector says where that version stands, with **Prepare**; the final pass orders it with the conform; the **Export** window counts the slowed shots waiting for theirs, with **Prepare the slow motion**. Without it, the export repeats frames. The files for other software carry the speed of the shot.
+
 ### Make the film final
 
 Once each shot of the Storyboard has its **Final** take, make the whole film final in one go: **Production › Make the film final…**, or **Final film** in the header of the Storyboard (band and grid), at the bottom of the **Review** view of Director AI, and on the **Move to final** card of **Synopsis and breakdown › To produce**. The button gives the shots at final quality out of the generated shots ("Final film 3/8"), a spinner while final takes run, and a check once the whole film is final.

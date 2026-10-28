@@ -1,5 +1,6 @@
 import { laneCode } from './tracks.js';
 import { BOX, deliverySize, ratioOf } from './formats.js';
+import { speedOf } from './cadence.js';
 
 export const EXCHANGE = {
 	fcpxml: { ext: 'fcpxml', mime: 'application/xml' },
@@ -79,9 +80,11 @@ export function fcpxml(doc, { label }) {
 		(c, i) =>
 			`\t\t<asset id="r${i + 2}" name="${esc(label(c))}" start="0s" duration="${rt(assetOf(doc, c.assetId).srcDur ?? c.srcIn + c.dur)}" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/${esc(encodeURI(file(c)))}"/></asset>`
 	);
+	const timeMap = (c) =>
+		`<timeMap><timept time="${rt(c.srcIn)}" value="${rt(c.srcIn)}" interp="linear"/><timept time="${rt(c.srcIn + c.dur)}" value="${rt(c.srcIn + c.dur * speedOf(c))}" interp="linear"/></timeMap>`;
 	const spine = doc.clips.map((c) =>
 		file(c)
-			? `\t\t\t\t\t\t<asset-clip ref="r${media.indexOf(c) + 2}" name="${esc(label(c))}" offset="${rt(c.start)}" start="${rt(c.srcIn)}" duration="${rt(c.dur)}"/>`
+			? `\t\t\t\t\t\t<asset-clip ref="r${media.indexOf(c) + 2}" name="${esc(label(c))}" offset="${rt(c.start)}" start="${rt(c.srcIn)}" duration="${rt(c.dur)}"${speedOf(c) === 1 ? '/>' : `>${timeMap(c)}</asset-clip>`}`
 			: `\t\t\t\t\t\t<gap name="${esc(label(c))}" offset="${rt(c.start)}" start="0s" duration="${rt(c.dur)}"/>`
 	);
 	return `<?xml version="1.0" encoding="UTF-8"?>
@@ -117,10 +120,11 @@ export function otio(doc, { label }) {
 			? {
 					OTIO_SCHEMA: 'Clip.2',
 					name: label(c),
-					source_range: range(c.srcIn, c.dur),
+					source_range: range(c.srcIn, c.dur * speedOf(c)),
 					media_references: reference(file(c)),
 					active_media_reference_key: 'DEFAULT_MEDIA',
-					metadata: { video_producer: { stage: c.stage, take: c.take } }
+					metadata: { video_producer: { stage: c.stage, take: c.take } },
+					...(speedOf(c) === 1 ? {} : { effects: [{ OTIO_SCHEMA: 'LinearTimeWarp.1', name: '', effect_name: 'LinearTimeWarp', metadata: {}, time_scalar: speedOf(c) }] })
 				}
 			: { OTIO_SCHEMA: 'Gap.1', name: label(c), source_range: range(0, c.dur) }
 	);
@@ -156,7 +160,9 @@ export function edl(doc, { label }) {
 		const file = fileOf(doc, c, label);
 		const n = String(i + 1).padStart(3, '0');
 		const reel = file ? `VP${n}` : 'BL';
-		lines.push(`${n}  ${reel.padEnd(8)} V     C        ${tcode(c.srcIn)} ${tcode(c.srcIn + c.dur)} ${tcode(c.start)} ${tcode(c.start + c.dur)}`);
+		const speed = speedOf(c);
+		lines.push(`${n}  ${reel.padEnd(8)} V     C        ${tcode(c.srcIn)} ${tcode(c.srcIn + c.dur * speed)} ${tcode(c.start)} ${tcode(c.start + c.dur)}`);
+		if (speed !== 1) lines.push(`M2   ${reel.padEnd(8)}       ${(doc.fps * speed).toFixed(1).padStart(5, '0')}                ${tcode(c.srcIn)}`);
 		lines.push(`* FROM CLIP NAME: ${oneLine(label(c))}`);
 		if (file) lines.push(`* SOURCE FILE: ${oneLine(file)}`);
 		lines.push('');

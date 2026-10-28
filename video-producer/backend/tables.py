@@ -122,7 +122,9 @@ _COLUMNS = {
         error_message TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         started_at TIMESTAMP,
-        finished_at TIMESTAMP
+        finished_at TIMESTAMP,
+        factor INTEGER,
+        source_rendition_id TEXT
     """,
 }
 
@@ -155,6 +157,8 @@ _ADDED_COLUMNS: Tuple[Tuple[str, str, str], ...] = (
     ("video_producer_takes", "video_refs", "TEXT"),
     ("video_producer_export_jobs", "stems", "INTEGER NOT NULL DEFAULT 0"),
     ("video_producer_export_jobs", "ratio", "TEXT"),
+    ("video_producer_renditions", "factor", "INTEGER"),
+    ("video_producer_renditions", "source_rendition_id", "TEXT"),
 )
 
 _INDEXES = (

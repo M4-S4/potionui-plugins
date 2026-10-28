@@ -53,7 +53,7 @@ def format_name(doc: Mapping[str, Any], fps: str) -> str:
 
 
 def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict[str, str]]], locale: str = "en") -> str:
-    """The sequence as FCPXML 1.10."""
+    """The sequence as FCPXML 1.10; a slowed shot carries a linear time map from its timeline time to the seconds of source its speed covers."""
     time = Timebase(doc)
     media = [(index, clip) for index, clip in enumerate(doc["clips"]) if files.get(("clips", index))]
     width, height = frame(doc)
@@ -70,7 +70,16 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
     spine = []
     for index, clip in enumerate(doc["clips"]):
         name = esc(clip_label(doc, clip, locale))
-        if index in refs:
+        speed = formats.speed_of(clip)
+        if index in refs and speed != 1:
+            spine.append(
+                f'\t\t\t\t\t\t<asset-clip ref="r{refs[index]}" name="{name}" offset="{time.rational(clip["start"])}" '
+                f'start="{time.rational(clip["srcIn"])}" duration="{time.rational(clip["dur"])}">'
+                f'<timeMap><timept time="{time.rational(clip["srcIn"])}" value="{time.rational(clip["srcIn"])}" interp="linear"/>'
+                f'<timept time="{time.rational(clip["srcIn"] + clip["dur"])}" value="{time.rational(clip["srcIn"] + clip["dur"] * speed)}" interp="linear"/>'
+                "</timeMap></asset-clip>"
+            )
+        elif index in refs:
             spine.append(
                 f'\t\t\t\t\t\t<asset-clip ref="r{refs[index]}" name="{name}" offset="{time.rational(clip["start"])}" '
                 f'start="{time.rational(clip["srcIn"])}" duration="{time.rational(clip["dur"])}"/>'

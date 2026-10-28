@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+from .. import formats
 from .common import UNDEFINED, Timebase, asset_of, clip_label, js_json
 
 
@@ -11,7 +12,7 @@ def reference(entry: Optional[Mapping[str, str]]) -> Dict[str, Any]:
 
 
 def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict[str, str]]], locale: str = "en") -> str:
-    """The sequence as an OpenTimelineIO timeline: the shots on V1, one audio track per lane named A1, A2… by its position."""
+    """The sequence as an OpenTimelineIO timeline: the shots on V1, a slowed shot with the source range its speed covers and a linear time warp, one audio track per lane named A1, A2… by its position."""
     time = Timebase(doc)
 
     def span(start: Any, dur: Any) -> Dict[str, Any]:
@@ -25,16 +26,18 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
     for index, clip in enumerate(doc["clips"]):
         entry = files.get(("clips", index))
         if entry:
-            video.append(
-                {
-                    "OTIO_SCHEMA": "Clip.2",
-                    "name": clip_label(doc, clip, locale),
-                    "source_range": span(clip["srcIn"], clip["dur"]),
-                    "media_references": reference(entry),
-                    "active_media_reference_key": "DEFAULT_MEDIA",
-                    "metadata": {"video_producer": {"stage": clip.get("stage", UNDEFINED), "take": clip.get("take", UNDEFINED)}},
-                }
-            )
+            speed = formats.speed_of(clip)
+            item: Dict[str, Any] = {
+                "OTIO_SCHEMA": "Clip.2",
+                "name": clip_label(doc, clip, locale),
+                "source_range": span(clip["srcIn"], clip["dur"] * speed),
+                "media_references": reference(entry),
+                "active_media_reference_key": "DEFAULT_MEDIA",
+                "metadata": {"video_producer": {"stage": clip.get("stage", UNDEFINED), "take": clip.get("take", UNDEFINED)}},
+            }
+            if speed != 1:
+                item["effects"] = [{"OTIO_SCHEMA": "LinearTimeWarp.1", "name": "", "effect_name": "LinearTimeWarp", "metadata": {}, "time_scalar": speed}]
+            video.append(item)
         else:
             video.append({"OTIO_SCHEMA": "Gap.1", "name": clip_label(doc, clip, locale), "source_range": span(0, clip["dur"])})
     lanes = []

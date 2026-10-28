@@ -347,5 +347,7 @@
 	"card.cadence.conformedTip": "Version à {to} i/s prête : l’export la lit au lieu de répéter les images de cette prise à {from} i/s.",
 	"card.cadence.conformingTip": "Version à {to} i/s en cours, faite à partir de cette prise à {from} i/s.",
 	"card.cadence.slowTip": "Cette prise est à {from} i/s dans un film à {to} i/s : l’export répète des images. Conformer en fait une version à {to} i/s.",
-	"card.cadence.failedTip": "La version à {to} i/s de cette prise à {from} i/s a échoué : {error}. Conformer la relance."
+	"card.cadence.failedTip": "La version à {to} i/s de cette prise à {from} i/s a échoué : {error}. Conformer la relance.",
+	"finalPass.cadence.slowed.one": "Dont {count} plan ralenti, porté à la cadence du film divisée par sa vitesse.",
+	"finalPass.cadence.slowed.other": "Dont {count} plans ralentis, portés à la cadence du film divisée par leur vitesse."
 }

@@ -1,11 +1,12 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, itemsOf, pickedClips, globalPrompt, clipAt, secs, onRestore, openDirector, generates, directorShot } from './state.svelte.js';
+import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, itemsOf, pickedClips, globalPrompt, clipAt, secs, onRestore, openDirector, generates, directorShot, relayout } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
 import { confirm, openHostModal } from './host.js';
 import { finalsToSync, labelOf, marksOf, relabel, releasedLabel } from './labels.js';
-import { durationLimit, generationCounts, releaseOverrun } from './shots.js';
+import { durationLimit, generationCounts, releaseOverrun, setSpeed } from './shots.js';
+import { speedOf } from './cadence.js';
 import { effectiveEngine, projectQuality, shotEngineOf } from './engine.js';
 import { CONDITION, audioBehavior, shotSound } from './sound.js';
 import { fieldTitle, presetFields } from './options.js';
@@ -533,9 +534,22 @@ function syncFinals() {
 	}
 }
 
+function engineMax(clip) {
+	return optionFor(engineChoices(), effectiveEngine(clip, doc))?.info.limits.maxDuration ?? null;
+}
+
 export function shotDurationLimit(clip) {
-	const option = optionFor(engineChoices(), effectiveEngine(clip, doc));
-	return durationLimit(doc, clip, option?.info.limits.maxDuration ?? null);
+	return durationLimit(doc, clip, engineMax(clip));
+}
+
+export function setClipSpeed(clip, speed) {
+	if (!clip || speedOf(clip) === speed) return;
+	act(() => {
+		const before = clip.dur;
+		if (!setSpeed(doc, clip, speed, engineMax(clip))) return;
+		fitShot(clip, before);
+		relayout();
+	});
 }
 
 export function releaseTake(released) {

@@ -476,6 +476,12 @@ Une prise garde la cadence de son moteur (Wan 16 i/s, MiniMax H3 24 i/s, LTX 25 
 - **Où.** Dans **Passer le film en final**, la ligne **Cadence** propose **Conformer à 25 i/s (3 prises)**, cochée d’office : l’agrandissement se fait d’abord, puis l’interpolation, et l’estimation ajoute le temps des versions. **Passer en final** a la même case pour une prise plus lente que le film. La fenêtre **Exporter** compte les plans qui seront saccadés et propose **Conformer** avec le temps estimé. Sur la carte d’une prise, la pastille **16 → 25 i/s** dit que sa version est prête (avec le pourcentage pendant qu’elle se fait) ; **Conformer à 25 i/s** la lance pour une prise terminée plus lente que le film.
 - Une version appartient à sa prise : une nouvelle prise posée sur le plan, une prise finale par exemple, a besoin de la sienne. Le visualiseur lit toujours la prise elle-même.
 
+### Le ralenti
+
+Un plan peut lire sa prise ralentie : **Vitesse** 100 % (par défaut), 50 % ou 25 %, dans la section Durée de l’inspecteur et sous la durée de l’éditeur de plan. Le plan garde la partie de la prise qu’il montre : sa durée s’allonge d’autant (un plan de 2 s à 50 % dure 4 s) et les plans suivants se décalent. Le son de la prise est coupé sur un plan ralenti ; l’audio de la timeline reste. Le visualiseur lit la prise ralentie, sans interpolation.
+
+Pour l’export, un plan ralenti demande une version de sa prise à la cadence du film divisée par sa vitesse : 50 i/s pour un film à 25 i/s à 50 %, 100 i/s à 25 %. Elle se fait comme une conformation, avec le même interpolateur ; au-delà de 60 i/s, en deux temps (d’abord la cadence du film, puis ×2 ou ×4). L’inspecteur dit où en est cette version, avec **Préparer** ; la passe finale la commande avec la conformation ; la fenêtre **Exporter** compte les plans ralentis qui attendent la leur, avec **Préparer les ralentis**. Sans elle, l’export répète des images. Les fichiers pour d’autres logiciels décrivent la vitesse du plan.
+
 ### Passer le film en final
 
 Quand chaque plan du Storyboard a sa prise **Finale**, passez tout le film en final d’un coup : **Production › Passer le film en final…**, ou **Film final** dans l’en-tête du Storyboard (bande et grille), en bas de la vue **Revue** de Director AI, et sur la carte **Passage en final** de **Synopsis et découpage › À produire**. Le bouton donne les plans en qualité finale sur les plans générés (« Film final 3/8 »), une roue pendant que des finales tournent, et une coche quand tout le film est en final.

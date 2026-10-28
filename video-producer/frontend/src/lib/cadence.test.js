@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CADENCES, DEFAULT_CADENCE, INTERPOLATORS, SLOWER, exportCadence, interpolatorChoice, interpolatorsReady, isActiveRendition, nearlyAsFast, needsConform, pickInterpolator, placedTakes, renditionFor, takeCadence, targetOf } from './cadence.js';
+import { CADENCES, DEFAULT_CADENCE, INTERPOLATORS, SLOWER, SLOW_SPEEDS, SPEEDS, exportCadence, neededFps, shotCadence, sourceSeconds, speedOf, interpolatorChoice, interpolatorsReady, isActiveRendition, nearlyAsFast, needsConform, pickInterpolator, placedTakes, renditionFor, takeCadence, targetOf } from './cadence.js';
 import { createClient, normalizePassEstimate, normalizeRendition, normalizeRenditionEstimate } from './api.js';
 
 const table = JSON.parse(readFileSync(new URL('../../../backend/formats.json', import.meta.url), 'utf-8'));
@@ -67,7 +67,7 @@ test('a take card shows the version of the take at the film rate, on its way, fa
 	assert.equal(takeCadence(take('t', 24), [], doc).state, 'near');
 	assert.equal(takeCadence(take('t', 16, { status: 'running' }), [], doc).state, 'none');
 	assert.equal(takeCadence(take('t', 16, { kind: 'keyframe' }), [], doc).state, 'none');
-	assert.deepEqual(takeCadence(take('t', 16), [], doc), { state: 'slow', from: 16, to: 25, rendition: null });
+	assert.deepEqual(takeCadence(take('t', 16), [], doc), { state: 'slow', from: 16, to: 25, speed: 1, rendition: null });
 	assert.equal(takeCadence(take('t', 16), [rendition('t', 'queued')], doc).state, 'conforming');
 	assert.equal(takeCadence(take('t', 16), [rendition('t', 'waiting')], doc).state, 'conforming');
 	assert.equal(takeCadence(take('t', 16), [rendition('t', 'done')], doc).state, 'conformed');
@@ -96,19 +96,20 @@ test('the export counts the placed takes that will stutter, the versions on thei
 		]
 	};
 	const found = exportCadence(doc, takes, [rendition('b', 'running'), rendition('e', 'done')]);
-	assert.deepEqual(found.slow.map((x) => x.id), ['a']);
+	assert.deepEqual(found.slow.map((x) => x.id), ['a', 'a']);
+	assert.deepEqual(found.slowed, []);
 	assert.deepEqual(found.rates, [16]);
 	assert.deepEqual(found.conforming.map((x) => x.id), ['b']);
 	assert.deepEqual(found.conformed.map((x) => x.id), ['e']);
 	assert.deepEqual(found.near, [{ fps: 24, count: 1 }]);
 	assert.equal(found.fps, 25);
-	assert.deepEqual(placedTakes(doc, takes).map((item) => item.take.id), ['a', 'b', 'c', 'd', 'e']);
+	assert.deepEqual(placedTakes(doc, takes).map((item) => item.take.id), ['a', 'b', 'c', 'd', 'e', 'a']);
 });
 
 test('the versions at a frame rate and their estimate are read from the API', () => {
 	assert.deepEqual(
 		normalizeRendition({ id: 'r1', take_id: 't1', shot_id: 's1', fps: 25, source_fps: 16, interpolator: 'rife', status: 'running', progress: 40, step: 'RIFE', width: 832, height: 480, duration_s: 4, url: '/u.mp4', created_at: 'c' }),
-		{ id: 'r1', takeId: 't1', shotId: 's1', fps: 25, sourceFps: 16, interpolator: 'rife', status: 'running', progress: 40, step: 'RIFE', width: 832, height: 480, durationS: 4, errorCode: null, errorMessage: null, url: '/u.mp4', createdAt: 'c', finishedAt: null }
+		{ id: 'r1', takeId: 't1', shotId: 's1', fps: 25, sourceFps: 16, interpolator: 'rife', factor: null, sourceRenditionId: null, status: 'running', progress: 40, step: 'RIFE', width: 832, height: 480, durationS: 4, errorCode: null, errorMessage: null, url: '/u.mp4', createdAt: 'c', finishedAt: null }
 	);
 	assert.equal(normalizeRendition({ id: 'r1' }), null);
 	assert.equal(normalizeRendition({ id: 'r1', take_id: 't1', status: 'odd', interpolator: 'high' }).status, 'queued');
@@ -121,7 +122,7 @@ test('the versions at a frame rate and their estimate are read from the API', ()
 		seconds: 12.5
 	});
 	const pass = normalizePassEstimate({ shots: [], vram: null, time: {}, quota: null, blocks: [], warnings: [], cadence: { fps: 25, choice: 'rife', interpolator: null, ready: {}, shots: ['s1'], near: ['s2'], seconds: null } });
-	assert.deepEqual(pass.cadence, { fps: 25, choice: 'rife', interpolator: null, ready: { rife: false, rtx: false }, shots: ['s1'], near: ['s2'], seconds: null });
+	assert.deepEqual(pass.cadence, { fps: 25, choice: 'rife', interpolator: null, ready: { rife: false, rtx: false }, shots: ['s1'], slowed: [], near: ['s2'], seconds: null });
 });
 
 test('the client orders, estimates, lists and cancels versions, and asks a final take to conform', async () => {
@@ -153,4 +154,26 @@ test('the client orders, estimates, lists and cancels versions, and asks a final
 		['POST', '/renditions/r1/cancel', {}],
 		['POST', '/projects/p1/takes/t1/final', { method: 'upscale', target: 'fhd1080', conform: true }]
 	]);
+});
+
+test('a slowed shot plays its take at a speed of the table and needs the film rate divided by it', () => {
+	assert.deepEqual(SPEEDS, table.cadence.speeds);
+	assert.deepEqual(SLOW_SPEEDS, [0.5, 0.25]);
+	assert.deepEqual([{}, { speed: 0.5 }, { speed: 0.25 }, { speed: 0.75 }, null].map(speedOf), [1, 0.5, 0.25, 1, 1]);
+	assert.equal(sourceSeconds({ dur: 4, speed: 0.5 }), 2);
+	assert.equal(neededFps({ fps: 25 }, { speed: 0.5 }, take('t', 16)), 50);
+	assert.equal(neededFps({ fps: 25 }, { speed: 0.25 }, take('t', 25)), 100);
+	assert.equal(neededFps({ fps: 25 }, { speed: 0.5 }, take('t', 50)), null);
+	assert.equal(neededFps({ fps: 25 }, {}, take('t', 25)), null);
+});
+
+test('a slowed shot shows the version at its rate, and the export counts the slowed shots apart', () => {
+	const doc = { fps: 25, assets: [{ id: 'gen-a', resultId: 'a' }, { id: 'gen-b', resultId: 'b' }], clips: [{ id: 's1', assetId: 'gen-a', speed: 0.5 }, { id: 's2', assetId: 'gen-b' }] };
+	const takes = [take('a', 25, { shotId: 's1' }), take('b', 16, { shotId: 's2' })];
+	assert.deepEqual(shotCadence(takes[0], doc.clips[0], [], doc), { state: 'slow', from: 25, to: 50, speed: 0.5, rendition: null });
+	assert.equal(shotCadence(takes[0], doc.clips[0], [{ id: 'r', takeId: 'a', fps: 50, status: 'done' }], doc).state, 'conformed');
+	assert.equal(takeCadence(takes[0], [], doc).to, 50);
+	const found = exportCadence(doc, takes, []);
+	assert.deepEqual(found.slowed.map((x) => x.id), ['a']);
+	assert.deepEqual(found.slow.map((x) => x.id), ['b']);
 });

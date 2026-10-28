@@ -1,4 +1,5 @@
 import { ulid } from './ulid.js';
+import { speedOf } from './cadence.js';
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -21,7 +22,7 @@ export function laneAudible(doc, lane) {
 
 export function clipSoundAudible(doc, clip) {
 	const video = videoTrack(doc);
-	return !video.mute && !clip?.mute && (!anySolo(doc) || video.solo);
+	return !video.mute && !clip?.mute && speedOf(clip) === 1 && (!anySolo(doc) || video.solo);
 }
 
 export function laneCode(lanes, id) {

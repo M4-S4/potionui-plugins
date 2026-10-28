@@ -118,5 +118,6 @@
 	"vref.takeOnly": "A take is dropped on a reference video track (vref).",
 	"vref.takeBusy": "{label} is taken under this shot",
 	"vref.takeMove": "Move to {label} at {time}",
-	"vref.takeCopy": "Copy to {label} at {time}"
+	"vref.takeCopy": "Copy to {label} at {time}",
+	"clip.speedTip": "Slowed to {value}%"
 }

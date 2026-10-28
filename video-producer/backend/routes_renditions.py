@@ -42,7 +42,7 @@ def list_renditions(project_id: str, user: User = Depends(get_current_active_use
 
 @router.post("/projects/{project_id}/renditions/estimate")
 def estimate_renditions(project_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """Which of some takes are slower than the film, which interpolator would bring them to its frame rate and how long it would take; None when it was never measured."""
+    """Which of some takes are slower than their shot needs (the film's frame rate divided by the shot's speed), which interpolator would bring them to it and how long it would take; None when it was never measured."""
     ids, choice = _order(body)
     project = access.project_for(user, project_id)
     owner = access.owner_of(user, project)
@@ -55,10 +55,8 @@ def estimate_renditions(project_id: str, body: Any = Body(default=None), user: U
     work: Optional[float] = 0.0
     for take_id in ids:
         take = access.take_in(project, take_id)
-        if fps is None or take.get("kind") == takes.KEYFRAME or not cadence.needs_conform(take.get("fps"), fps):
-            continue
-        current = renditions.current_for(take_id, fps)
-        if current is not None:
+        needed = cadence.needed_fps(doc, renditions.shot_of(project, take.get("shot_id")), take.get("fps"))
+        if needed is None or take.get("kind") == takes.KEYFRAME or renditions.current_for(take_id, needed) is not None:
             continue
         slow.append(take_id)
         part = cadence.seconds_for(interpolator, take.get("backend_id"), renditions.size_of(take), take.get("duration_s"))
@@ -78,7 +76,7 @@ async def order_renditions(project_id: str, body: Any = Body(default=None), user
     refused: List[Dict[str, Any]] = []
     for take in sources:
         try:
-            ordered.append(renditions.order(owner, project, take, choice))
+            ordered.append(renditions.order(owner, project, take, choice, renditions.shot_of(project, take.get("shot_id"))))
         except renditions.Refused as exc:
             refused.append({"take_id": take["id"], **exc.block})
     if ordered:

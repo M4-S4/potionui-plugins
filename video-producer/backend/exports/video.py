@@ -331,9 +331,9 @@ def any_solo(doc: Mapping[str, Any]) -> bool:
 
 
 def clip_heard(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> bool:
-    """Whether a shot's own sound is in the mix: neither the video track nor the shot muted, and the video track soloed when any track is."""
+    """Whether a shot's own sound is in the mix: neither the video track nor the shot muted, the shot not slowed down, and the video track soloed when any track is."""
     video = video_track(doc)
-    return not video["mute"] and not clip.get("mute") and (not any_solo(doc) or video["solo"])
+    return not video["mute"] and not clip.get("mute") and formats.speed_of(clip) == 1 and (not any_solo(doc) or video["solo"])
 
 
 def audible(doc: Mapping[str, Any]) -> List[Tuple[Mapping[str, Any], Mapping[str, Any]]]:
@@ -382,7 +382,7 @@ def _source_length(doc: Mapping[str, Any], clip: Mapping[str, Any], lengths: Map
 
 @dataclass(frozen=True)
 class Shot:
-    """What one segment of the timeline plays: the file entry (None for black), where it starts in its source, whether it is a still, the length of its source, whether its sound is heard and whether its picture is."""
+    """What one segment of the timeline plays: the file entry (None for black), where it starts in its source, whether it is a still, the length of its source, whether its sound is heard, whether its picture is, and the speed it plays its source at."""
 
     dur: float
     clip: Optional[Mapping[str, Any]]
@@ -392,6 +392,12 @@ class Shot:
     source_end: Optional[float]
     sound: bool
     blind: bool
+    speed: float = 1.0
+
+    @property
+    def span(self) -> float:
+        """The seconds of its source the segment plays."""
+        return self.dur * self.speed
 
 
 def _shots(
@@ -413,7 +419,8 @@ def _shots(
             entry = None
         elif entry is not None and clip["id"] in blind and not sound:
             entry = None
-        shots.append(Shot(dur, clip, entry, start, still, source_end, sound, clip is not None and clip["id"] in blind))
+        speed = 1.0 if clip is None or still else formats.speed_of(clip)
+        shots.append(Shot(dur, clip, entry, start, still, source_end, sound, clip is not None and clip["id"] in blind, speed))
     return shots
 
 
@@ -453,7 +460,7 @@ class _Inputs:
         if shot.still:
             return self.add(path, shot.start + shot.dur)
         index = self.add(path) if self.opens(shot) else self.reading[path][0]
-        self.reading[path] = (index, shot.start + shot.dur)
+        self.reading[path] = (index, shot.start + shot.span)
         return index
 
 
@@ -761,10 +768,10 @@ def _assembly(
                 graph.append(black)
             else:
                 # one frame of slack: a file can end a frame before its probed length
-                pad = shot.dur if shot.source_end is None else min(shot.dur, max(shot.start + shot.dur - shot.source_end, 0.0) + 1 / rate)
+                pad = shot.dur if shot.source_end is None else min(shot.dur, max(shot.start + shot.span - shot.source_end, 0.0) / shot.speed + 1 / rate)
                 video = [
-                    f"trim=start={num(shot.start)}:duration={length}",
-                    "setpts=PTS-STARTPTS",
+                    f"trim=start={num(shot.start)}:duration={num(shot.span)}",
+                    "setpts=PTS-STARTPTS" if shot.speed == 1 else f"setpts=(PTS-STARTPTS)/{num(shot.speed)}",
                     f"fps={fps}",
                     *(["deflicker"] if not shot.still and shot.clip.get("deflicker") is True else []),
                     *_match(shot.clip, options, cwd),
@@ -1259,7 +1266,7 @@ async def render(
     report: Callable[[float, str], bool],
     on_process: Optional[Callable[[Any], Any]] = None,
 ) -> Dict[str, Any]:
-    """Assemble, transcode and store one export, each take read from its version at the film's frame rate when it has a finished one: the video of its format, packed in a ZIP with its stems when the job asks for them, the web and social videos also stored in the requester's library; returns its file and library item, raises ExportError."""
+    """Assemble, transcode and store one export, each shot reading the finished version of its take at the frame rate it needs (the film's divided by its speed) when there is one: the video of its format, packed in a ZIP with its stems when the job asks for them, the web and social videos also stored in the requester's library; returns its file and library item, raises ExportError."""
     from .. import renditions
 
     doc = project["doc"]
@@ -1278,8 +1285,14 @@ async def render(
     mezzanine, final = folder / MEZZANINE, folder / file_name(project["name"], resolution, fmt, ratio=ratio)
     _, total = timeline(doc)
     try:
-        read = renditions.with_versions(project["id"], takes.list_takes(project["id"]), fps_of(doc))
-        shots, sounds = await asyncio.to_thread(media.local_inputs, doc, read, resolver, folder)
+        found = takes.list_takes(project["id"])
+        shots, sounds = await asyncio.to_thread(media.local_inputs, doc, found, resolver, folder)
+        for shot_id, version in renditions.shot_versions(project["id"], doc, found).items():
+            if shots.get(shot_id) is None:
+                continue
+            path = await asyncio.to_thread(resolver.local, "history", version["file_path"], folder)
+            if path is not None:
+                shots[shot_id] = {**shots[shot_id], "name": path.name, "path": str(path)}
         if not any(shots.values()):
             raise ExportError("ffmpeg_failed", "No shot of the sequence has a file to assemble.")
         paths = {

@@ -523,6 +523,7 @@ export function normalizePassCadence(value) {
 		interpolator: interpolatorName(value.interpolator),
 		ready: normalizeInterpolatorsReady(value.ready),
 		shots: Array.isArray(value.shots) ? value.shots.filter((id) => text(id)) : [],
+		slowed: Array.isArray(value.slowed) ? value.slowed.filter((id) => text(id)) : [],
 		near: Array.isArray(value.near) ? value.near.filter((id) => text(id)) : [],
 		seconds: number(value.seconds)
 	};
@@ -544,6 +545,8 @@ export function normalizeRendition(value) {
 		fps: number(value.fps),
 		sourceFps: number(value.source_fps),
 		interpolator: interpolatorName(value.interpolator),
+		factor: [2, 4].includes(value.factor) ? value.factor : null,
+		sourceRenditionId: text(value.source_rendition_id) || null,
 		status: RENDITION_STATES.includes(value.status) ? value.status : 'queued',
 		progress: number(value.progress),
 		step: progressText(value.step),

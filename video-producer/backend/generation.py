@@ -645,12 +645,12 @@ async def final(
     rtx_source: str = upscalers.DEFAULT_RTX_SOURCE,
     conform: bool = False,
 ) -> Dict[str, Any]:
-    """A final take of a finished take: upscaled by the chosen upscaler, rendered again by LTX-2.5 following its video, or rendered again at the largest size; when asked and the final take is slower than the film, its version at the film's frame rate made after it, Blocked when no interpolator can."""
+    """A final take of a finished take: upscaled by the chosen upscaler, rendered again by LTX-2.5 following its video, or rendered again at the largest size; when asked and the final take is slower than its shot needs (the film's frame rate divided by the shot's speed), its version at that frame rate made after it, Blocked when no interpolator can."""
     from . import renditions
 
     plan, preset_id, native = await final_plan(owner, project, source, method, target, upscaler, rtx_source)
     if conform:
-        needed, interpolator = renditions.interpolator_for(owner, project.get("doc") or {}, plan.fps)
+        needed, interpolator = renditions.interpolator_for(owner, project.get("doc") or {}, plan.fps, clip=renditions.shot_of(project, source["shot_id"]))
         if needed and interpolator is None:
             raise Blocked([cadence.missing_note(cadence.choice_of(project.get("doc") or {}))])
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))

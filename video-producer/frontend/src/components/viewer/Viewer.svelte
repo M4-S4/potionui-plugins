@@ -4,6 +4,7 @@
 	import { ui, doc, asset, clipAt, tc, seqDuration, clipLabel, promptOf } from '../../lib/state.svelte.js';
 	import { addToTimeline } from '../../lib/importer.js';
 	import { insertResult, findTake } from '../../lib/production.svelte.js';
+	import { speedOf } from '../../lib/cadence.js';
 	import { togglePlay, seek } from '../../lib/playback.svelte.js';
 	import { clipFilter, fadeOpacity } from '../../lib/look.js';
 	import { assetThumb, takeThumb } from '../../lib/media.js';
@@ -71,7 +72,9 @@
 	$effect(() => {
 		const el = video;
 		if (!el || !liveVideo || !clip) return;
-		const target = Math.max(0, ui.playhead - clip.start + clip.srcIn);
+		const speed = speedOf(clip);
+		const target = Math.max(0, (ui.playhead - clip.start) * speed + clip.srcIn);
+		if (el.playbackRate !== speed) el.playbackRate = speed;
 		if (ui.playing) {
 			if (el.paused) el.play().catch(() => {});
 			if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
