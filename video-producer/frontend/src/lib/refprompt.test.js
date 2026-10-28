@@ -14,7 +14,8 @@ const reference = {
 };
 
 test('reference prompt: a replacement keeps only the parts of its layout, as text, with its base', () => {
-	assert.deepEqual(Object.keys(LAYOUTS), ['refs', 'subjects', 'cast']);
+	assert.deepEqual(Object.keys(LAYOUTS), ['refs', 'subjects', 'cast', 'sheet']);
+	assert.deepEqual(LAYOUTS.sheet, ['sheet', 'cast']);
 	assert.deepEqual(migrateReferencePrompt({ layout: 'cast', parts: { cast: 'Mine.', citations: 'x', extra: 3 }, base: { cast: 'Old.', summary: 'y' } }), { layout: 'cast', parts: { cast: 'Mine.' }, base: { cast: 'Old.' } });
 	assert.deepEqual(migrateReferencePrompt({ layout: 'cast', parts: { cast: 4 } }), { layout: 'cast', parts: {}, base: {} });
 	for (const bad of [null, 'x', { layout: 'prose', parts: {} }, { layout: 'toString', parts: {} }, { layout: 'cast' }]) assert.equal(migrateReferencePrompt(bad), null);

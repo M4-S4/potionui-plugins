@@ -36,7 +36,7 @@ def test_the_table_names_kinds_profiles_layouts_and_families_the_plugin_knows():
     assert set(table["limits"]) == set(director.LABELS)
     assert set(table["references"]) <= set(catalog.PROFILES)
     assert {rule["layout"] for rule in table["layouts"]} <= set(bible.LAYOUTS)
-    assert {family for rule in table["layouts"] for family in rule.get("families", ())} <= {bible.H3, bible.CLOUD}
+    assert {family for rule in table["layouts"] for family in rule.get("families", ())} <= {bible.H3, bible.CLOUD, bible.LTX}
     assert set(table["layouts"][-1]) == {"layout"}
     assert director.REFERENCE_LIMITS == reception.LIMITS
     assert reception.ORDER == ("own", "cast", "tracks", "shared")

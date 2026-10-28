@@ -37,7 +37,7 @@ def _ffmpeg() -> bool:
 
 def _features(user: User) -> Dict[str, Any]:
     ready = upscalers.ready(user)
-    return {"upscaler": any(ready.values()), "upscalers": ready, "guided": director.guided_ready(user)}
+    return {"upscaler": any(ready.values()), "upscalers": ready, "guided": director.guided_ready(user), "sheet": director.sheet_ready(user)}
 
 
 @router.get("/me")

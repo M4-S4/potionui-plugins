@@ -19,6 +19,12 @@ ORDER: Tuple[str, ...] = tuple(TABLE["order"])
 
 VIDEO_TRACKS: Dict[str, Any] = TABLE["videoTracks"]
 
+SHEET: Dict[str, Any] = TABLE["sheet"]
+
+SHEET_ID = "ic-sheet"
+
+Box = Tuple[int, int, int, int]
+
 MOTION = "motion"
 CONTINUATION = "continuation"
 UNDER = "under"
@@ -29,9 +35,57 @@ TAKE = "take"
 EPSILON = 1e-6
 
 
-def takes_references(profile: Optional[str]) -> bool:
-    """Whether a profile sends the references themselves to the engine, each kind within its limit."""
-    return profile in TABLE["references"]
+def takes_sheet(family: Optional[str], profile: Optional[str]) -> bool:
+    """Whether an engine family makes a profile's takes from a reference sheet: one picture of the cast's cards, sent as a still video to an IC-LoRA."""
+    return family in SHEET["families"] and profile in SHEET["profiles"]
+
+
+def takes_references(profile: Optional[str], family: Optional[str] = None) -> bool:
+    """Whether a profile sends the references themselves to the engine, each kind within its limit; an engine family that makes it from a reference sheet sends the sheet instead."""
+    return profile in TABLE["references"] and not takes_sheet(family, profile)
+
+
+def sheet_size(aspect: float) -> Tuple[int, int]:
+    """The width and height of a sheet take: the size the IC-LoRA was trained at when the aspect is within the table's tolerance of it, else the size on the table's grid closest to its pixel count at that aspect."""
+    width, height = (int(side) for side in SHEET["size"])
+    trained = width / height
+    ratio = aspect if aspect > 0 else trained
+    if abs(ratio / trained - 1) <= SHEET["tolerance"]:
+        return width, height
+    multiple = SHEET["multiple"]
+    wide = math.sqrt(width * height * ratio)
+    return max(multiple, round(wide / multiple) * multiple), max(multiple, round(wide / ratio / multiple) * multiple)
+
+
+def sheet_frames(seconds: float) -> int:
+    """The 1 + 8k frame count LTX renders at the sheet's rate closest to seconds, the lower one on a tie."""
+    step = SHEET["frameStep"]
+    frames = max(1, round(seconds * SHEET["fps"]))
+    return 1 + step * max(0, math.ceil((frames - 1) / step - 0.5))
+
+
+def sheet_layout(size: Tuple[int, int], counts: Sequence[int], place: bool) -> Tuple[List[Box], Optional[Box]]:
+    """The boxes of a sheet on its black canvas, as x, y, width and height: one per picture of the characters, left to right in a band across the top, then the place in a band across the bottom; a band takes the whole height when the other is empty."""
+    width, height = size
+    gap = SHEET["gap"]
+    cells = sum(count for count in counts if count > 0)
+    top = (round(height * SHEET["split"]) if place else height) if cells else 0
+    boxes: List[Box] = []
+    if cells:
+        each = (width - gap * (cells + 1)) // cells
+        left = (width - cells * each - (cells - 1) * gap) // 2
+        tall = top - gap - (gap // 2 if place else gap)
+        boxes = [(left + index * (each + gap), gap, each, tall) for index in range(cells)]
+    setting = (gap, top + (gap // 2 if cells else gap), width - 2 * gap, height - top - gap - (gap // 2 if cells else gap)) if place else None
+    return boxes, setting
+
+
+def sheet_work(form: Mapping[str, Any]) -> float:
+    """How much longer than the same take without a sheet a request runs: the table's measured factor when its director document sends a sheet, else 1."""
+    document = form.get("video_director") if isinstance(form, Mapping) else None
+    entries = document.get("ic_lora") if isinstance(document, Mapping) else None
+    sent = any(isinstance(entry, Mapping) and entry.get("id") == SHEET_ID for entry in entries or [])
+    return float(SHEET["work"]) if sent else 1.0
 
 
 def _matches(rule: Mapping[str, Any], family: str, profile: Optional[str]) -> bool:

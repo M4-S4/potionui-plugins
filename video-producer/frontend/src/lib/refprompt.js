@@ -1,7 +1,8 @@
 export const LAYOUTS = {
 	refs: ['subject_definitions', 'retention_analysis', 'citations'],
 	subjects: ['subject_definitions'],
-	cast: ['cast']
+	cast: ['cast'],
+	sheet: ['sheet', 'cast']
 };
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);

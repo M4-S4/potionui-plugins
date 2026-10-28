@@ -12,7 +12,7 @@ import { fieldTitle, presetFields } from './options.js';
 import { prioritized } from './queue.js';
 import { laneTitle } from './tracks.js';
 import { clearRemoved, isRemoved, pruneRemoved } from './removedtakes.js';
-import { LIMITS, leastSeconds } from './reception.js';
+import { LIMITS, SHEET, leastSeconds } from './reception.js';
 import { withSendings } from './vreftracks.svelte.js';
 
 const ESTIMATE_DELAY = 500;
@@ -243,6 +243,18 @@ function baseNoteText(note) {
 	if (code === 'reference_prompt_changed') return t('generation.warn.referenceChanged', { shot: shotName(data.shot_id) });
 	if (code === 'reference_prompt_ignored') return t('generation.warn.referenceIgnored', { shot: shotName(data.shot_id) });
 	if (code === 'reference_unlinked') return t('generation.warn.referenceUnlinked', { shot: shotName(data.shot_id), names: (Array.isArray(data.names) ? data.names : []).join(', '), count: Array.isArray(data.names) ? data.names.length : 1 });
+	if (code === 'sheet_lora_missing') return t('generation.block.sheetLora', { file: data.file ?? '—' });
+	if (code === 'sheet_no_image') return t('generation.block.sheetNoImage', { shot: shotName(data.shot_id) });
+	if (code === 'sheet_final_size') return t('generation.block.sheetFinal', { shot: shotName(data.shot_id) });
+	if (code === 'sheet_ffmpeg_missing') return t('generation.block.sheetFfmpeg');
+	if (code === 'sheet_source_missing') return t('generation.block.sheetSource', { shot: shotName(data.shot_id) });
+	if (code === 'sheet_failed') return t('generation.block.sheetFailed', { shot: shotName(data.shot_id) });
+	if (code === 'sheet_card_without_image') return t('generation.warn.sheetCardWithoutImage', { shot: shotName(data.shot_id), label: data.label ?? '—' });
+	if (code === 'sheet_crowded' && Array.isArray(data.left_out) && data.left_out.length) return t('generation.warn.sheetCrowded', { shot: shotName(data.shot_id), count: SHEET.characters, labels: data.left_out.join(', ') });
+	if (code === 'sheet_crowded') return t('generation.warn.sheetSmall', { shot: shotName(data.shot_id), edge: data.edge ?? '—' });
+	if (code === 'sheet_props_text_only') return t('generation.warn.sheetProps', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });
+	if (code === 'sheet_off_bucket') return t('generation.warn.sheetOffBucket', { shot: shotName(data.shot_id), size: String(data.size ?? '—').replace('x', '×') });
+	if (code === 'sheet_first_frame') return t('generation.warn.sheetFirstFrame', { shot: shotName(data.shot_id) });
 	if (code === 'dialogue_ignored') return t('generation.warn.dialogueIgnored', { shot: shotName(data.shot_id) });
 	if (code === 'dialogue_speaker_unknown') return t('generation.warn.dialogueSpeakerUnknown', { shot: shotName(data.shot_id) });
 	if (code === 'dialogue_speaker_not_cast') return t('generation.warn.dialogueSpeakerNotCast', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });

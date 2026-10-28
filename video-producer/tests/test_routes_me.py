@@ -200,7 +200,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "presets": [],
             "measured": {},
             "keyframe_presets": [],
-            "features": {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "guided": False},
+            "features": {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "guided": False, "sheet": False},
             "upscale_targets": ["hd720", "fhd1080", "qhd1440", "uhd2160"],
             "ffmpeg": False,
         },
@@ -989,12 +989,12 @@ def test_me_gives_a_cloud_preset_the_modes_of_all_its_preset_modes(client, store
 
 def test_me_turns_the_upscaler_feature_on_with_seedvr2(client, store, no_container, catalog):
     catalog.presets = [_wan()]
-    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "guided": False}
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "guided": False, "sheet": False}
 
     catalog.presets = [_wan(), _seedvr2()]
     data = client.get(ME_URL).json()["data"]
 
-    assert data["features"] == {"upscaler": True, "upscalers": {"seedvr2": True, "rtx": False}, "guided": False}
+    assert data["features"] == {"upscaler": True, "upscalers": {"seedvr2": True, "rtx": False}, "guided": False, "sheet": False}
     assert data["upscale_targets"] == ["hd720", "fhd1080", "qhd1440", "uhd2160"]
 
 
@@ -1016,7 +1016,7 @@ def test_me_reports_rtx_ready_with_its_target_field_and_nvidia_vfx(client, store
     assert features["upscaler"] is ready
 
 
-def test_me_turns_the_guided_feature_on_with_ltx_2_5_and_its_layout_to_render_ic_lora(client, store, no_container, catalog, monkeypatch):
+def test_me_turns_the_guided_and_sheet_features_on_with_ltx_2_5_and_their_ic_loras(client, store, no_container, catalog, monkeypatch):
     ltx = _description(
         presets.LTX_2_5,
         "LTX-2.5",
@@ -1028,7 +1028,10 @@ def test_me_turns_the_guided_feature_on_with_ltx_2_5_and_its_layout_to_render_ic
     assert client.get(ME_URL).json()["data"]["features"]["guided"] is False
 
     monkeypatch.setattr(core_bridge, "installed_model_for_file", lambda filename: "lora-1" if filename == director.GUIDE_LORA else None)
-    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "guided": True}
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "guided": True, "sheet": False}
+
+    monkeypatch.setattr(core_bridge, "installed_model_for_file", lambda filename: "lora-2" if filename == director.SHEET["lora"] else None)
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "guided": False, "sheet": True}
 
     catalog.presets = [_wan()]
     assert client.get(ME_URL).json()["data"]["features"]["guided"] is False

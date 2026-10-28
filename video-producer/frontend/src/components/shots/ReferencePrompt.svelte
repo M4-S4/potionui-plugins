@@ -16,12 +16,14 @@
 		if (name === 'subject_definitions') return t('modals.shot.reference.part.subjects');
 		if (name === 'retention_analysis') return t('modals.shot.reference.part.retention');
 		if (name === 'citations') return t('modals.shot.reference.part.citations');
+		if (name === 'sheet') return t('modals.shot.reference.part.sheet');
 		return t('modals.shot.reference.part.cast');
 	}
 
 	function hint(layout) {
 		if (layout === 'refs') return t('modals.shot.reference.hint.refs');
 		if (layout === 'subjects') return t('modals.shot.reference.hint.subjects');
+		if (layout === 'sheet') return t('modals.shot.reference.hint.sheet');
 		return t('modals.shot.reference.hint.cast');
 	}
 </script>

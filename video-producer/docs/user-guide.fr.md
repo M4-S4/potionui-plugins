@@ -404,12 +404,14 @@ Le **Profil** de la barre Production, rappelé aussi sur la ligne **Moteur** de 
 | Profil | Wan 2.1 / 2.2 et ses presets (8 GB), LTX-2 / 2.3, LTX-2.5, modèles cloud | MiniMax H3 | MiniMax H3 Fast et VDN, MiniMax H3 (12 GB), MiniMax H3 Fast (12 GB) |
 |---|---|---|---|
 | FL2VA | Oui | Oui | Oui |
-| Ref2VA | Grisé | Oui | Grisé |
+| Ref2VA | Grisé, sauf LTX-2.5 (planche) | Oui | Grisé |
 | Hybrid AV | Grisé | Oui | Oui |
 
 - Un profil grisé porte un badge tel que « Ref2VA · Hybrid AV : MiniMax H3 seulement », avec l’explication « Wan 2.1 / 2.2 ne sait pas générer Ref2VA, Hybrid AV : les images de référence (Ref2VA) et le son généré (Hybrid AV) demandent MiniMax H3. » Dans la vue **Références**, le badge **Non transmis à ce moteur** vous dit que le moteur ignore les références (« Les références ne partent qu’avec le profil Ref2VA sur MiniMax H3 ; Wan 2.1 / 2.2 les ignore. »).
 - **FL2VA** utilise les frames liées au plan : une frame de début et une de fin donnent une prise « première et dernière frames », une frame de début seule « première frame », et aucune frame « texte seul », avec l’avertissement ci-dessus. Le chapitre 12 montre comment prendre la première image dans le plan précédent.
 - **Ref2VA** envoie à MiniMax H3 les références du plan, puis les images des fiches qu’il distribue, puis les références globales : au plus 9 images, 3 vidéos et 3 fichiers audio. La distribution choisit les images : une image liée à une fiche part dans tous les plans qui distribuent la fiche, même rattachée à un autre plan, et une image du projet liée à une fiche ne part que dans les plans qui la distribuent. Une vidéo de la famille **Guides de mouvement** est la source du mouvement du plan : MiniMax H3 reprend son mouvement dans les sujets du plan.
+- **Ref2VA sur LTX-2.5**, une fois l’IC-LoRA Ingredients installé par votre administrateur, fait le plan d’après une **planche** : les deux premières images d’au plus trois personnages distribués dans le plan, côte à côte, et une image de son lieu en dessous, sur fond noir. Le plan ne part d’aucune image et n’est pas enchaîné au précédent ; il est fait en 768×448 et à 24 images par seconde, et son final passe par un agrandisseur (**Générer à nouveau en pleine résolution** est refusé). Donnez à chaque personnage un gros plan net du visage et une vue en pied : la planche tient ce que montrent les images, et les accessoires écrits sur la fiche n’y sont pas.
+- Une vidéo faite avec LTX-2.5 relève de la licence de Lightricks, qui demande de dire qu’elle est générée par IA là où la loi l’exige : dites-le quand vous la publiez.
 - **Hybrid AV** fonctionne comme FL2VA sur MiniMax H3, dont le modèle produit l’image et le son ensemble.
 - Un plan peut prendre un autre profil que le projet dans son éditeur de plan (chapitre 4).
 
@@ -637,7 +639,7 @@ Les trois profils H3 et ce que chacun demande sur la plage :
 | Profil | Sens | Il demande | Moteurs |
 |---|---|---|---|
 | FL2VA | Continuité entre les images de départ et d’arrivée. | Des frames de départ et d’arrivée sur la plage. Sans aucune frame, les plans sont générés à partir du texte seul. | Tous. |
-| Ref2VA | Préserver l’identité des références pendant l’action. | Une référence d’identité (personnage, objet). La génération suit vos références. | MiniMax H3 seulement (pas ses variantes Fast et VDN, ni les presets (12 GB)). |
+| Ref2VA | Préserver l’identité des références pendant l’action. | Une référence d’identité (personnage, objet). La génération suit vos références. | MiniMax H3 (pas ses variantes Fast et VDN, ni les presets (12 GB)), et LTX-2.5 par sa planche. |
 | Hybrid AV | La bande son, le rythme et le dialogue guident l’image. | Une piste audio existante sur la plage (dialogue ou musique). | MiniMax H3, Fast et VDN, et les presets (12 GB). |
 
 Le moteur, et non le tableau, a le dernier mot : la page grise un profil que le moteur choisi ne sait pas générer (chapitre 8). Les pistes audio du projet ne sont pas envoyées au moteur : MiniMax H3 produit le son lui-même.

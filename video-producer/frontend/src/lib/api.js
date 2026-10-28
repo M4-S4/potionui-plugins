@@ -409,7 +409,7 @@ function shotFrame(data) {
 }
 
 const ENGINE_FAMILIES = ['h3', 'ltx', 'wan', 'cloud', 'other'];
-const REFERENCE_LAYOUTS = ['refs', 'subjects', 'cast'];
+const REFERENCE_LAYOUTS = ['refs', 'subjects', 'cast', 'sheet'];
 
 function promptParts(value) {
 	return Object.fromEntries(Object.entries(isObject(value) ? value : {}).filter(([, part]) => typeof part === 'string'));

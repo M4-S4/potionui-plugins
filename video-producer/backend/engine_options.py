@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
-from . import models
+from . import models, reception
 
 NUMBER_TYPES = ("slider", "number", "stepper", "integer")
 FLAG_TYPES = ("checkbox", "boolean", "gate")
@@ -226,11 +226,11 @@ def work_scale(fields: models.Fields, values: Mapping[str, Any]) -> float:
 
 
 def take_scale(take: Mapping[str, Any]) -> float:
-    """The work scale of a take's request against its mode's defaults, so that its measure counts as one made at those defaults; 1 when it cannot be told."""
+    """The work scale of a take's request against its mode's defaults, a sheet counting for the table's measured factor, so that its measure counts as one made at those defaults without a sheet; 1 when it cannot be told."""
     request = take.get("request") if isinstance(take.get("request"), Mapping) else {}
     form = request.get("form_data") if isinstance(request.get("form_data"), Mapping) else {}
     preset_id, mode = take.get("preset_id"), take.get("mode")
     if not form or not isinstance(preset_id, str) or not isinstance(mode, str):
         return 1.0
-    scale = work_scale(models.form_fields(preset_id, mode), form)
+    scale = work_scale(models.form_fields(preset_id, mode), form) * reception.sheet_work(form)
     return scale if scale > 0 else 1.0
