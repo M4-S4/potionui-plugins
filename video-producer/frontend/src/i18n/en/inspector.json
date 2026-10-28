@@ -232,5 +232,6 @@
 	"vref.deleteEmpty": "The track is empty.",
 	"vref.track": "Track",
 	"vref.itemHint": "Each shot receives the part of this video that falls in its window.",
-	"vref.remove": "Remove from the track"
+	"vref.remove": "Remove from the track",
+	"match.anchorVref": "End of {label}"
 }

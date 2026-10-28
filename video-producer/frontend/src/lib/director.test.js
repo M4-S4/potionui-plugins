@@ -124,7 +124,7 @@ test('director: casting a card where it is cited touches only those shots, and t
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf-8');
 
 test('director: each view of the right panel keeps the kinds it can show, and anything else stays selected elsewhere', () => {
-	assert.deepEqual(PANEL_KINDS, { review: ['clip'], direction: ['clip'], bible: [], references: ['reference', 'clip'] });
+	assert.deepEqual(PANEL_KINDS, { review: ['clip'], direction: ['clip'], bible: [], references: ['reference', 'clip', 'vtrack'] });
 	const shot = { kind: 'clip', id: 's2' };
 	const sound = { kind: 'audio', id: 'a1' };
 	const reference = { kind: 'reference', id: 'r1' };
@@ -133,6 +133,8 @@ test('director: each view of the right panel keeps the kinds it can show, and an
 	assert.deepEqual(panelSelection('review', reference), { shown: null, elsewhere: reference });
 	assert.deepEqual(panelSelection('references', reference), { shown: reference, elsewhere: null });
 	assert.deepEqual(panelSelection('references', shot), { shown: shot, elsewhere: null });
+	assert.deepEqual(panelSelection('references', { kind: 'vtrack', id: 't1' }), { shown: { kind: 'vtrack', id: 't1' }, elsewhere: null });
+	assert.deepEqual(panelSelection('review', { kind: 'vtrack', id: 't1' }), { shown: null, elsewhere: { kind: 'vtrack', id: 't1' } });
 	for (const kind of ['audio', 'title', 'prompt', 'frame', 'marker', 'lane']) assert.equal(panelSelection('references', { kind, id: 'x' }).shown, null, kind);
 	assert.deepEqual(panelSelection('bible', shot), { shown: null, elsewhere: shot });
 	assert.deepEqual(panelSelection('review', null), { shown: null, elsewhere: null });
@@ -336,7 +338,8 @@ test('director: the Review has its own panel, about the take, its failure, the s
 	const take = read('../components/director/ReviewTake.svelte');
 	assert.match(take, /const parts = \$derived\(take\.promptText \? missingWords\(today, take\.promptText\) : \[\{ text: today, mark: false \}\]\);/);
 	assert.match(take, /\{#if stale\}\n\t<section class="space-y-2" data-take-since>/);
-	assert.match(take, /<p class="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-line-strong p-2\.5 text-xs leading-5 text-fg-muted">\{take\.promptText\}<\/p>/);
+	assert.match(take, /<p class="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-line-strong p-2\.5 text-xs leading-5 text-fg-muted">\{#each pieces as piece, j \(j\)\}\{piece\.text\}/);
+	assert.match(take, /const pieces = \$derived\(take\.promptText \? labelParts\(take\.promptText, labels\) : \[\]\);/);
 	assert.match(take, /<ShotSummary \{clip\} \/>/);
 	assert.match(read('../components/director/ShotSummary.svelte'), /onclick: \(\) => showInStoryboard\(clip\)/);
 	assert.match(read('../components/director/ReviewFailure.svelte'), /failureFixes\(take\)/);
@@ -359,7 +362,7 @@ test('director: Alt+1 to Alt+4 open the views, the old dock and its tabs are gon
 
 test('director: References has its own panel, which reads what each engine gets from the rule the server applies', () => {
 	const aside = read('../components/director/ReferenceAside.svelte');
-	assert.match(aside, /\{#if reference\}\n\t+<ReferenceChosen \{reference\} \/>\n\t+\{:else if clip\}\n\t+<ReferenceShot \{clip\} \/>\n\t+\{:else\}\n\t+<ReferenceProject \/>/);
+	assert.match(aside, /\{#if reference\}\n\t+<ReferenceChosen \{reference\} \/>\n\t+\{:else if track\}\n\t+<ReferenceTrack \{track\} \/>\n\t+\{:else if clip\}\n\t+<ReferenceShot \{clip\} \/>\n\t+\{:else\}\n\t+<ReferenceProject \/>/);
 	assert.match(aside, /onclick: deleteSelection \}\}>\{t\('inspector\.reference\.remove'\)\}/);
 	assert.match(read('./references.js'), /export const reception = \(reference, source = doc\) => receptionOf\(reference, source, \(clip\) => engineOf\(clip, source\), tracksFor\(source\)\);/);
 	assert.match(read('./reception.js'), /^import table from '\.\/reception\.json';/);

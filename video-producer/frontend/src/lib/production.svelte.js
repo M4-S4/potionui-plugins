@@ -13,6 +13,7 @@ import { prioritized } from './queue.js';
 import { laneTitle } from './tracks.js';
 import { clearRemoved, isRemoved, pruneRemoved } from './removedtakes.js';
 import { LIMITS, leastSeconds } from './reception.js';
+import { withSendings } from './vreftracks.svelte.js';
 
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
@@ -102,11 +103,13 @@ export function engineLabel() {
 export function selectEngine(key) {
 	const option = engineChoices().find((o) => o.key === key);
 	if (!option) return;
-	act(() => {
-		doc.engine.preset = option.preset;
-		doc.engine.model = option.model;
-		doc.engine.backend = option.backend;
-	});
+	withSendings(() =>
+		act(() => {
+			doc.engine.preset = option.preset;
+			doc.engine.model = option.model;
+			doc.engine.backend = option.backend;
+		})
+	);
 }
 
 export function shotEngineText(clip) {
@@ -226,6 +229,8 @@ function baseNoteText(note) {
 	if (code === 'video_track_short') return t('generation.warn.videoTrackShort', { shot: shotName(data.shot_id), track: `vref${data.slot ?? ''}`, seconds: secs(leastSeconds()) });
 	if (code === 'video_track_missing') return t('generation.warn.videoTrackMissing', { shot: shotName(data.shot_id), track: `vref${data.slot ?? ''}` });
 	if (code === 'video_tag_ignored') return t('generation.warn.videoTagIgnored', { shot: shotName(data.shot_id), track: `vref${data.slot ?? ''}` });
+	if (code === 'vref_step_time') return t('generation.warn.vrefStepTime', { shot: shotName(data.shot_id), scale: formatNumber(Number(data.scale) || 1, { maximumFractionDigits: 1, minimumFractionDigits: 1 }), rows: formatNumber(Number(data.rows) || 0), base: formatNumber(Number(data.base_rows) || 0) });
+	if (code === 'vref_rows_high') return t('generation.warn.vrefRowsHigh', { shot: shotName(data.shot_id), rows: formatNumber(Number(data.rows) || 0), limit: formatNumber(Number(data.limit) || 0) });
 	if (code === 'video_ffmpeg_missing') return t('generation.block.videoFfmpeg');
 	if (code === 'video_source_missing') return t('generation.block.videoSource', { shot: shotName(data.shot_id) });
 	if (code === 'video_cut_failed' || code === 'video_store_failed') return t('generation.block.videoCut', { shot: shotName(data.shot_id) });

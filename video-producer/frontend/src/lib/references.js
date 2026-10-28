@@ -116,6 +116,12 @@ export function engineOf(clip, source = doc) {
 	return { ...engine, info: option ? { ...option.info, cloud: option.kind === 'cloud' || option.info.cloud } : null, label: option?.label ?? null };
 }
 
+export function engineOfTake(take) {
+	const engine = { preset: take?.presetId ?? null, model: take?.modelId ?? null, profile: take?.profile ?? null };
+	const option = optionFor(engineChoices(), engine);
+	return { ...engine, info: option ? { ...option.info, cloud: option.kind === 'cloud' || option.info.cloud } : null, label: option?.label ?? null };
+}
+
 function tracksFor(source) {
 	return (clip) => {
 		const engine = engineOf(clip, source);
@@ -125,6 +131,7 @@ function tracksFor(source) {
 
 export const reception = (reference, source = doc) => receptionOf(reference, source, (clip) => engineOf(clip, source), tracksFor(source));
 export const shotReceptionFor = (clip) => shotReception(doc, clip, engineOf(clip), tracksFor(doc)(clip));
+export const takeReceptionFor = (clip, take) => shotReception(doc, clip, engineOfTake(take));
 export const shotReceptionIn = (source, clip) => shotReception(source, clip, engineOf(clip, source), tracksFor(source)(clip));
 export const projectReceptionFor = () => projectReception(doc, (clip) => engineOf(clip), tracksFor(doc));
 export const cardReceptionFor = (kind, card) => cardReception(doc, kind, card, (clip) => engineOf(clip), tracksFor(doc));

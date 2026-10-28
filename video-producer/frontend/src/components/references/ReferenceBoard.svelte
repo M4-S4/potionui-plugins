@@ -2,7 +2,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, asset, select, secs, clipLabel } from '../../lib/state.svelte.js';
-	import { families, addReference, refMediaKind, referenceTagText, engineOf, engineTitle } from '../../lib/references.js';
+	import { families, addReference, refMediaKind, referenceTagText, engineOf, engineTitle, shotReceptionFor } from '../../lib/references.js';
 	import { typeIcon } from '../../lib/reftags.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { assetThumb } from '../../lib/media.js';
@@ -17,6 +17,10 @@
 	import ZoneHeader from '../shell/ZoneHeader.svelte';
 	import Icon from '../Icon.svelte';
 	import RefTags from './RefTags.svelte';
+	import { trackItemsOf, videoTracksOf } from '../../lib/vrefs.js';
+	import { receivingCount, vrefLabel } from '../../lib/vreftracks.js';
+	import { roleLabel } from '../../lib/vreftracks.svelte.js';
+	import { TAG_CLASS } from '../../lib/reftags.js';
 
 	let q = $state('');
 	const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -35,6 +39,15 @@
 		{ id: 'global', title: t('references.group.global'), hint: t('references.group.globalHint'), refs: list.filter(isGlobal) },
 		{ id: 'shot', title: t('references.group.shot'), hint: t('references.group.shotHint'), refs: list.filter((r) => !isGlobal(r)) }
 	]);
+	const tracks = $derived(
+		ui.refSpace === 'all' || ui.refSpace === 'mouvement' ? videoTracksOf(doc).filter((track) => !q || norm(`${vrefLabel(track.slot)} ${track.name ?? ''} ${roleLabel(track.role)}`).includes(norm(q))) : []
+	);
+	const receptions = $derived(tracks.length ? doc.clips.map(shotReceptionFor) : []);
+	const trackThumb = (track) => {
+		const first = trackItemsOf(doc, track.id)[0];
+		return first ? assetThumb(asset(first.assetId)) : null;
+	};
+	const isTrack = (track) => ui.selection?.kind === 'vtrack' && ui.selection.id === track.id;
 	const fam = (id) => families.find((f) => f.id === id);
 	const isSel = (r) => ui.selection?.kind === 'reference' && ui.selection.id === r.id;
 	const family = $derived(ui.refSpace === 'all' ? null : (fam(ui.refSpace) ?? null));
@@ -78,7 +91,7 @@
 		</p>
 	{/if}
 	<div class="flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-5">
-		{#if !inFamily}
+		{#if !inFamily && !tracks.length}
 			<div class="m-auto w-full max-w-lg">
 				<HostUi name="EmptyState" props={emptyProps} />
 			</div>
@@ -144,5 +157,44 @@
 				{/if}
 			</section>
 		{/each}
+		{#if tracks.length}
+			<section data-reference-tracks>
+				<div class="mb-3 flex items-baseline gap-2">
+					<h3 class="text-sm font-semibold">{t('references.group.tracks')}</h3>
+					<span class="text-xs text-fg-subtle">{t('references.groupHint', { hint: t('references.group.tracksHint'), count: tracks.length })}</span>
+				</div>
+				<ul class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+					{#each tracks as track (track.id)}
+						{@const thumb = trackThumb(track)}
+						{@const count = receivingCount(receptions, track.id)}
+						<li class="rounded-xl border bg-surface-1 p-2 transition-[border-color,box-shadow,opacity] duration-150 {isTrack(track) ? 'border-signal shadow-[0_0_0_1px_rgb(var(--signal))]' : 'border-line-strong hover:border-line-hover'} {track.off ? 'opacity-50' : ''}" data-reference-track-card={track.id}>
+							<div role="button" tabindex="0" class="group w-full text-left" onclick={() => select('vtrack', track.id)} onkeydown={(e) => activateOnKey(e, () => select('vtrack', track.id))}>
+								<div class="relative aspect-video overflow-hidden rounded-lg bg-surface-3">
+									{#if thumb}
+										<img src={thumb} alt="" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100" draggable="false" />
+									{:else}
+										<div class="flex h-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgb(var(--viz-8)/0.25),transparent_60%)]"><Icon name="film" class="h-7 w-7 text-fg-muted" /></div>
+									{/if}
+								</div>
+								<div class="space-y-1 px-1 pb-0.5 pt-2">
+									<div class="flex min-w-0 items-center gap-1.5">
+										<span class="{TAG_CLASS} vp-tc shrink-0">{vrefLabel(track.slot)}</span>
+										<span class="truncate text-sm font-medium">{track.name || t('inspector.kind.vtrack')}</span>
+									</div>
+									<div class="truncate text-xs text-fg-subtle">{roleLabel(track.role)}</div>
+									{#if track.off}
+										<div class="text-xs text-fg-subtle">{t('lib.vref.verdict.off')}</div>
+									{:else if count}
+										<div class="text-xs text-success">{t('references.trackReceived', { count })}</div>
+									{:else}
+										<div class="text-xs text-fg-subtle">{t('timeline.vref.nobody')}</div>
+									{/if}
+								</div>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 	</div>
 </section>

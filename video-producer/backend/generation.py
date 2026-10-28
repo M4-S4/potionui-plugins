@@ -164,7 +164,8 @@ def create(
             "chain": chain,
             "chain_wait": bool(chain) and chain["state"] == chaining.WAITING,
             "frame_role": frame_role,
-            "video_refs": [cut.trace() for cut in plan.video] or None,
+            "video_refs": plan.video_trace(),
+            "track_scale": plan.track_scale,
         }
     )
     if minutes > 0 and core_bridge.record_limit_event(owner.id, limits.GPU_MINUTES, minutes, limit_ref(take_id)):
@@ -381,7 +382,7 @@ def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
     duration_ms = state_duration_ms(state)
     seconds = 1.0 if keyframe else float(take.get("duration_s") or 0)
     if duration_ms and backend_id and seconds > 0 and take.get("resolution") and take.get("preset_id"):
-        takes.add_calibration(take["preset_id"], backend_id, take["resolution"], seconds * engine_options.take_scale(take), duration_ms)
+        takes.add_calibration(take["preset_id"], backend_id, take["resolution"], seconds * engine_options.take_scale(take) * takes.track_scale(take), duration_ms)
     _adjust(take, duration_ms)
     takes.close_jobs(take["id"])
     _notify(take, done=True)

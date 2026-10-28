@@ -27,5 +27,9 @@
 	"noSound": "No sound attached: choose one in the Inspector.",
 	"noImage": "No image attached: choose one in the Inspector.",
 	"noVideo": "No video attached: choose one in the Inspector.",
-	"file": "File: {file}"
+	"file": "File: {file}",
+	"group.tracks": "Reference video tracks",
+	"group.tracksHint": "only MiniMax-H3 in Ref2VA takes them",
+	"trackReceived.one": "Taken by {count} shot",
+	"trackReceived.other": "Taken by {count} shots"
 }

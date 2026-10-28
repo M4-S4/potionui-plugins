@@ -7,12 +7,16 @@ import { frameStem, seamPick, takeStems } from './continuity.js';
 import { roleKind } from './seam.js';
 import { DEFAULT_STRENGTH, gapOf, labStats, movedStats, transferOf } from './match.js';
 import { showShot } from './monitor.svelte.js';
+import { CONTINUATION, shotVideoTracks } from './reception.js';
+import { trackItemsOf } from './vrefs.js';
+import { vrefLabel } from './vreftracks.js';
 
 const SAMPLE = 128;
 const TIMEOUT = 20000;
 const SEEK_FLOOR = 0.001;
 const LAST_FRAME = 0.04;
 const TAKE_POINTS = [0.15, 0.5, 0.85];
+const EDGE = 1e-6;
 
 export const matchState = $state({ busy: null });
 
@@ -39,6 +43,20 @@ function previousAnchor(clip, index) {
 	return { kind: 'previous', id: prev.id, label: t('inspector.match.anchorPrevious', { shot: clipLabel(prev) }), image, media: image ? null : media, at };
 }
 
+export function suiteAnchors(clip) {
+	if (!clip) return [];
+	return shotVideoTracks(doc, clip, clip.dur)
+		.filter((x) => x.status === 'ready' && x.track.role === CONTINUATION)
+		.flatMap((x) => {
+			const end = x.window[1];
+			const item = trackItemsOf(doc, x.track.id).find((i) => i.start < end - EDGE && i.start + i.dur > end - EDGE);
+			const media = item ? asset(item.assetId) : null;
+			if (!media?.src || media.kind !== 'video') return [];
+			const at = (item.srcIn ?? 0) + Math.max(0, end - item.start - LAST_FRAME);
+			return [{ kind: 'vref', id: x.track.id, slot: x.slot, label: t('inspector.match.anchorVref', { label: vrefLabel(x.slot) }), image: null, media, at }];
+		});
+}
+
 export function anchorsOf(clip) {
 	const index = clip ? doc.clips.indexOf(clip) : -1;
 	if (index < 0) return [];
@@ -59,6 +77,7 @@ export function anchorsOf(clip) {
 		if (!image || (shot && reference.scope.shotId !== clip.id)) continue;
 		list.push({ kind: 'reference', id: reference.id, label: t('inspector.match.anchorReference', { name: reference.name || image.name }), image, own: shot });
 	}
+	list.push(...suiteAnchors(clip));
 	const last = previous ? previousAnchor(clip, index) : null;
 	if (last) list.push(last);
 	return list;
@@ -66,6 +85,7 @@ export function anchorsOf(clip) {
 
 function rank(anchor) {
 	if (anchor.kind === 'keyframe' && !anchor.carried) return anchor.first ? 0 : 1;
+	if (anchor.kind === 'vref') return 0.5;
 	if (anchor.kind === 'reference' && anchor.own) return 2;
 	if (anchor.kind === 'previous') return 3;
 	if (anchor.kind === 'keyframe') return 4;
@@ -204,6 +224,12 @@ export async function autoMatch(clip, anchor) {
 	} finally {
 		matchState.busy = null;
 	}
+}
+
+export function matchToSuite(clip, trackId) {
+	const anchor = suiteAnchors(clip).find((a) => a.id === trackId);
+	if (!anchor) return toast(t('inspector.match.noAnchor'), 'warning');
+	return autoMatch(clip, anchor);
 }
 
 export function clearMatch(clip) {

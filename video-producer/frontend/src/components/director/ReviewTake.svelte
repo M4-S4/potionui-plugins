@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
-	import { ui, doc } from '../../lib/state.svelte.js';
+	import { ui, doc, secs } from '../../lib/state.svelte.js';
 	import { takesOf, toggleCompare } from '../../lib/production.svelte.js';
 	import { instructionOf } from '../../lib/bible.js';
 	import { missingWords } from '../../lib/director.js';
@@ -16,6 +16,11 @@
 	import { commandById } from '../../lib/commands.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import ShotSummary from './ShotSummary.svelte';
+	import { TAG_CLASS } from '../../lib/reftags.js';
+	import { labelParts, trackOf, vrefLabel } from '../../lib/vreftracks.js';
+	import { roleLabel, sentSeconds, showTrack, sideText, trackName } from '../../lib/vreftracks.svelte.js';
+	import { engineTitle, takeReceptionFor } from '../../lib/references.js';
+	import { matchState, matchToSuite, suiteAnchors } from '../../lib/match.svelte.js';
 
 	let { clip, take } = $props();
 
@@ -54,6 +59,23 @@
 		].filter(Boolean)
 	);
 
+	const refs = $derived(take.videoRefs ?? []);
+	const labels = $derived(refs.filter((r) => r.label).map((r) => ({ slot: r.slot, label: r.label })));
+	const pieces = $derived(take.promptText ? labelParts(take.promptText, labels) : []);
+	const asTaken = $derived(take.kind === 'render' && take.presetId ? takeReceptionFor(clip, take) : null);
+	const unsent = $derived(asTaken ? asTaken.videoTracks.filter((x) => x.status === 'ignored' && !refs.some((r) => r.slot === x.slot)) : []);
+	const unsentEngine = $derived(asTaken ? engineTitle(asTaken.engine) : '');
+	const suites = $derived(placed ? suiteAnchors(clip) : []);
+	const refTrack = (r) => (r.trackId ? trackOf(doc, r.trackId) : null);
+	const refName = (r) => {
+		const track = refTrack(r);
+		return track ? trackName(track) : vrefLabel(r.slot);
+	};
+	const refTip = (slot) => {
+		const r = refs.find((x) => x.slot === slot);
+		return r ? t('panels.director.pick.vrefTip', { label: r.label ?? '', track: refName(r), role: roleLabel(r.role) }) : vrefLabel(slot);
+	};
+
 	function toFinal() {
 		ui.preview = null;
 		ui.compare = withFinal ? null : [final.id, take.id];
@@ -80,12 +102,36 @@
 		{#if take.promptText}<span class="vp-tc text-2xs text-fg-subtle">{t('panels.story.chars', { chars: formatNumber(take.promptText.length) })}</span>{/if}
 	</div>
 	{#if take.promptText}
-		<p class="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-line-strong p-2.5 text-xs leading-5 text-fg-muted">{take.promptText}</p>
+		<p class="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-line-strong p-2.5 text-xs leading-5 text-fg-muted">{#each pieces as piece, j (j)}{piece.text}{#if piece.slot}<span class="{TAG_CLASS} vp-tc ml-0.5 align-baseline" title={refTip(piece.slot)} data-sent-vref={piece.slot}>{vrefLabel(piece.slot)}</span>{/if}{/each}</p>
 		<p class="text-xs text-fg-subtle">{t('panels.director.pick.sentHint')}</p>
 	{:else}
 		<p class="text-xs text-fg-subtle">{t('panels.director.pick.noSent')}</p>
 	{/if}
+	{#if refs.length}
+		<ul class="space-y-1 text-xs" data-take-vrefs>
+			{#each refs as r (r.slot)}
+				<li class="flex items-baseline gap-2">
+					<button type="button" class="{TAG_CLASS} vp-tc shrink-0 border-success text-success hover:text-fg" title={t('panels.director.pick.vrefSee', { track: refName(r) })} onclick={() => r.trackId && showTrack(r.trackId)}>{vrefLabel(r.slot)}</button>
+					<span class="min-w-0 flex-1 text-fg-muted">{t('panels.director.pick.vrefSent', { role: roleLabel(r.role), seconds: sentSeconds(r.frames), side: sideText(r.role), start: secs(r.start ?? 0), end: secs(r.end ?? 0) })}{#if r.label}<span class="text-fg-subtle"> → {r.label}</span>{/if}</span>
+				</li>
+			{/each}
+		</ul>
+		<p class="text-xs text-fg-subtle" data-take-vrefs-again>{t('panels.director.pick.vrefAgain', { labels: refs.map((r) => vrefLabel(r.slot)).join(', '), count: refs.length })}</p>
+	{/if}
+	{#if unsent.length}
+		<p class="text-xs text-fg-subtle" data-take-vrefs-unsent>{t('panels.director.pick.vrefUnsent', { labels: unsent.map((x) => vrefLabel(x.slot)).join(', '), engine: unsentEngine, count: unsent.length })}</p>
+	{/if}
 </section>
+
+{#if suites.length}
+	<section class="space-y-2" data-take-suite>
+		<div class="vp-section-title">{t('panels.director.pick.suite')}</div>
+		{#each suites as anchor (anchor.id)}
+			<p class="text-xs text-fg-subtle">{t('panels.director.pick.suiteText', { label: vrefLabel(anchor.slot) })}</p>
+			<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName('palette'), disabled: Boolean(matchState.busy), onclick: () => matchToSuite(clip, anchor.id) }}>{t('panels.director.pick.suiteMatch')}</HostUi>
+		{/each}
+	</section>
+{/if}
 
 <section class="space-y-2">
 	<div class="vp-section-title">{t('panels.director.pick.compare')}</div>

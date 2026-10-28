@@ -11,6 +11,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { BAND_STEP } from '../../lib/band.js';
 	import { applyQuick } from '../../lib/band.svelte.js';
+	import { withSendings } from '../../lib/vreftracks.svelte.js';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import ChainSwitch from '../shots/ChainSwitch.svelte';
@@ -58,7 +59,7 @@
 	function pickEngine(value) {
 		const { preset, model, backend, ...rest } = own;
 		const option = engineChoices().find((o) => o.key === value);
-		applyQuick(clip, { engine: option ? { ...rest, preset: option.preset, model: option.model, backend: option.backend } : rest });
+		withSendings(() => applyQuick(clip, { engine: option ? { ...rest, preset: option.preset, model: option.model, backend: option.backend } : rest }));
 	}
 
 	const editor = () => (ui.modal = { type: 'shot', id: clip.id });
