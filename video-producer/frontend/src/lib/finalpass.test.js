@@ -168,7 +168,7 @@ test('the page reads a guided take and the estimate of a pass shot by shot', () 
 test('the final pass opens from the Production menu, the two Storyboard headers, the Review footer and the To produce tab', () => {
 	assert.match(source('./commands.js'), /command\('assemble', assembleChosen\), command\('final-pass', openFinalPass\)\]/);
 	for (const path of ['../components/storyboard/BandView.svelte', '../components/storyboard/StoryboardView.svelte', '../components/director/ReviewView.svelte']) {
-		assert.match(source(path), /<FinalPassButton( room=\{countsEl\})? \/>/, path);
+		assert.match(source(path), /<FinalPassButton( room=\{countsEl\}| short=\{tight\})? \/>/, path);
 	}
 	assert.match(source('../components/storyboard/StoryWindow.svelte'), /<FinalPassButton variant="secondary" \/>/);
 	assert.match(source('../components/modals/Modals.svelte'), /m\?\.type === 'final-pass'\}\n\t\t<FinalPass \/>/);

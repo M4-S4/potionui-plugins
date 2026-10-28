@@ -60,7 +60,7 @@
 	const player = $derived(isPlayer(ui.workspace));
 	const band = $derived(bandView());
 	const bare = $derived(band || ui.workspace === 'director');
-	const columns = $derived(player ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '300px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '304px' : '0px'}`);
+	const columns = $derived(player ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '280px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '320px' : '0px'}`);
 	let inspectorBefore = null;
 
 	$effect(() => {

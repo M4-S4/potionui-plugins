@@ -36,6 +36,8 @@
 	let listEl = $state();
 	let compact = $state(false);
 	let fullWidth = 0;
+	let tight = $state(false);
+	let roomy = 0;
 	const cols = { s: 'grid-cols-[repeat(auto-fill,minmax(164px,1fr))]', m: 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))]', l: 'grid-cols-[repeat(auto-fill,minmax(320px,1fr))]' };
 	const sizes = $derived([
 		{ id: 's', label: t('storyboard.size.small'), cls: 'vp-icon-s' },
@@ -68,6 +70,27 @@
 		});
 		observer.observe(countsEl);
 		return () => observer.disconnect();
+	});
+
+	$effect(() => {
+		const head = countsEl?.parentElement;
+		if (!head) return;
+		const fit = () => {
+			if (!tight && head.scrollWidth > head.clientWidth + 1) {
+				roomy = head.scrollWidth;
+				tight = true;
+			} else if (tight && head.clientWidth >= roomy) {
+				tight = false;
+			}
+		};
+		const resized = new ResizeObserver(fit);
+		const changed = new MutationObserver(fit);
+		resized.observe(head);
+		changed.observe(head, { childList: true, subtree: true, characterData: true });
+		return () => {
+			resized.disconnect();
+			changed.disconnect();
+		};
 	});
 
 	function primaryLabel(stage) {
@@ -174,14 +197,20 @@
 			{/if}
 		</div>
 		<div class="flex shrink-0 items-center gap-3">
-			{#if colorFixes}
+			{#if colorFixes && tight}
+				<HostUi name="IconButton" props={{ icon: hostIconName('palette'), label: t('storyboard.matchAll', { count: colorFixes }), tooltip: t('storyboard.matchAll', { count: colorFixes }), size: 'xs', onclick: matchAll }} />
+			{:else if colorFixes}
 				<HostUi name="Tooltip" props={{ text: t('storyboard.matchAllTip'), wrapperClass: 'inline-flex' }}>
 					<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: hostIconName('palette'), onclick: matchAll }}>{t('storyboard.matchAll', { count: colorFixes })}</HostUi>
 				</HostUi>
 			{/if}
-			<FinalPassButton />
-			<ViewSwitch />
-			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => addShot() }}>{t('storyboard.addShot')}</HostUi>
+			<FinalPassButton short={tight} />
+			<ViewSwitch short={tight} />
+			{#if tight}
+				<HostUi name="IconButton" props={{ icon: 'plus', label: t('storyboard.addShot'), tooltip: t('storyboard.addShot'), size: 'xs', onclick: () => addShot() }} />
+			{:else}
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', onclick: () => addShot() }}>{t('storyboard.addShot')}</HostUi>
+			{/if}
 			<div class="vp-seg" role="group" aria-label={t('storyboard.size.group')}>
 				{#each sizes as s (s.id)}
 					<HostUi name="IconButton" props={{ icon: hostIconName('grid'), label: s.label, tooltip: s.label, size: 'xs', class: s.cls, ariaPressed: size === s.id, onclick: () => (size = s.id) }} />
