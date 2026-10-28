@@ -211,7 +211,7 @@ def painted(monkeypatch, export_storage):
     return Painted(monkeypatch)
 
 
-FACE = {"x": 20.0, "y": 8.0, "width": 16.0, "height": 16.0, "score": 0.9}
+FACE = {"x": 20.0, "y": 8.0, "width": 32.0, "height": 32.0, "score": 0.9}
 
 
 def _with_faces(core, colors):
@@ -238,6 +238,21 @@ def test_with_the_face_detector_a_take_and_a_card_are_compared_on_their_cropped_
     assert (marin["kind"], marin["method"], marin["seen"], marin["status"]) == ("character", "face", 0.75, "done")
     assert marin["score"] > 0.99
     assert report["faces"] == {"model": "face_detection_yunet_2023mar.onnx", "available": True}
+
+
+def test_a_face_too_small_to_read_counts_as_none(core, make_project, painted):
+    project, _, second = _placed(make_project, core, cast=True)
+    painted.takes[second["id"]] = [(0.0, BLUE, RED), (4.0, BLUE, RED)]
+    painted.images["uploads/marin.png"] = (BLUE, RED)
+    core.faces["available"] = True
+    core.face_boxes[BLUE] = [{**FACE, "height": looks.MIN_FACE - 1.0}]
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    marin = _report(core, project)["takes"][1]["cards"][0]
+
+    assert (marin["method"], marin["seen"]) == ("whole", 0.0)
 
 
 def test_a_take_without_a_face_falls_back_on_the_whole_image_and_says_none_was_seen(core, make_project, painted):

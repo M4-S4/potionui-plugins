@@ -29,9 +29,10 @@ CAST_LOW = 0.60
 FACE_LOW = 0.70
 PLACE_LOW = 0.55
 FINAL_LOW = 0.80
-DRIFT_LOW = 0.75
+DRIFT_LOW = 0.80
 
 FACE_SCALE = 1.8
+MIN_FACE = 32
 FACES = "faces"
 FACE = "face"
 WHOLE = "whole"
@@ -217,8 +218,9 @@ def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path) -> List[Opti
         return found
     crops: List[Tuple[int, Path]] = []
     for index, ((_, path), faces) in enumerate(zip(picked, boxes)):
-        if faces:
-            crops.append((index, _face_crop(Path(path), faces[0], folder / f"face-{index:02d}.png")))
+        large = [face for face in faces if float(face["height"]) >= MIN_FACE]
+        if large:
+            crops.append((index, _face_crop(Path(path), large[0], folder / f"face-{index:02d}.png")))
     vectors = core_bridge.embed_images([str(path) for _, path in crops]) if crops else []
     for (index, _), vector in zip(crops, vectors):
         found[index] = vector

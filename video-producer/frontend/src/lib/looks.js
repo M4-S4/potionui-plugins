@@ -10,7 +10,7 @@ export const CAST_LOW = 0.6;
 export const FACE_LOW = 0.7;
 export const PLACE_LOW = 0.55;
 export const FINAL_LOW = 0.8;
-export const DRIFT_LOW = 0.75;
+export const DRIFT_LOW = 0.8;
 const KINDS = ['character', 'place'];
 const METHODS = ['face', 'whole'];
 const share = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null);
