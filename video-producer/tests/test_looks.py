@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from PIL import Image
 
-from backend import estimate, generation, looks, presets, projects, takes, tracker
+from backend import bible, estimate, generation, looks, presets, projects, takes, tracker
 from backend.estimate import Order
 
 from .test_chain_frame import FFMPEG, TAKE_FILE, _luma, library, video
@@ -179,6 +179,19 @@ def test_a_take_is_scored_against_the_pictures_of_each_bible_card_of_its_shot_s_
     assert (marin["card_id"], marin["label"], marin["status"]) == ("c-marin", "Marin", "done")
     assert marin["score"] > 0.99
     assert (lina["status"], lina["score"]) == ("no_images", None)
+
+
+def test_a_card_picture_from_the_history_counts_though_the_core_stores_its_type_in_capitals(core):
+    ref = {"kind": "history", "generation_id": "g-marin", "file_id": "0"}
+    core.add_media(ref, "generations/2026-10-27/g-marin/0.png", "IMAGE")
+    doc = {
+        "assets": [{"id": "marin", "kind": "image", "origin": {"kind": "history", "generationId": "g-marin", "fileId": "0"}}],
+        "references": [{"id": "r-marin", "assetId": "marin"}],
+        "bible": {"characters": [{"id": "c-marin", "label": "Marin", "references": ["r-marin"]}], "places": []},
+    }
+    card = bible.cards(doc, "characters")[0]
+
+    assert looks._card_images(core.users["user-1"], doc, card) == [("c-marin", ref, "generations/2026-10-27/g-marin/0.png")]
 
 
 def test_a_look_of_another_model_counts_as_missing(core, make_project, frames):
