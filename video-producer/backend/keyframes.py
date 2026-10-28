@@ -3,7 +3,7 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import core_bridge, director, estimate, formats, generation, limits, models, takes
+from . import bible, core_bridge, director, estimate, formats, generation, limits, models, takes
 from .core_bridge import CLOUD_ENGINE, EDIT_TASK, User
 from .director import ShotPlan, note
 from .generation import Blocked
@@ -72,6 +72,8 @@ TEXT: Dict[str, Dict[str, str]] = {
         "frame_last": "Image {n} is the opening frame of the same shot: keep its place, characters, costumes, light and colours.",
         SETTING: "Image {n} shows the setting{name}: keep its place, light and colours.",
         CHARACTER: "Keep the face, hair, body and costume of {name} from image {n}.",
+        "character_card": "Keep the face, hair, body and costume of {name} from image {n}: {words}",
+        "setting_card": "Image {n} shows the setting ({name}): keep its place, light and colours. {words}",
         OBJECT: "Keep the look of {name} from image {n}.",
         STYLE: "Follow the style, palette and lighting of image {n}, not its content.",
         "character_name": "the character",
@@ -86,6 +88,8 @@ TEXT: Dict[str, Dict[str, str]] = {
         "frame_last": "L'image {n} est la première image du même plan : garder son lieu, ses personnages, leurs costumes, sa lumière et ses couleurs.",
         SETTING: "L'image {n} montre le décor{name} : garder son lieu, sa lumière et ses couleurs.",
         CHARACTER: "Garder le visage, les cheveux, la silhouette et le costume de {name} de l'image {n}.",
+        "character_card": "Garder le visage, les cheveux, la silhouette et le costume de {name} de l'image {n} : {words}",
+        "setting_card": "L'image {n} montre le décor ({name}) : garder son lieu, sa lumière et ses couleurs. {words}",
         OBJECT: "Garder l'apparence de {name} de l'image {n}.",
         STYLE: "Suivre le style, la palette et la lumière de l'image {n}, pas son contenu.",
         "character_name": "le personnage",
@@ -172,10 +176,11 @@ class Picture:
     asset_id: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
+    card: Optional[bible.Card] = None
 
     def summary(self, rank: int) -> Dict[str, Any]:
-        """The picture as the estimate reports it, with its rank among the images sent."""
-        return {"rank": rank, "asset_id": self.asset_id, "role": self.role, "name": self.name, "origin": self.origin}
+        """The picture as the estimate reports it, with its rank among the images sent and the card of the bible it shows."""
+        return {"rank": rank, "asset_id": self.asset_id, "role": self.role, "name": self.name, "origin": self.origin, "card_id": self.card.id if self.card else None}
 
 
 @dataclass
@@ -429,7 +434,7 @@ def _dimension(value: Any) -> Optional[int]:
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
 
 
-def _picture(user: User, doc: Mapping[str, Any], asset_id: Any, role: str, name: str, origin: str) -> Optional[Picture]:
+def _picture(user: User, doc: Mapping[str, Any], asset_id: Any, role: str, name: str, origin: str, card: Optional[bible.Card] = None) -> Optional[Picture]:
     asset = _asset(doc, asset_id)
     if asset is None or asset.get("kind") != IMAGE:
         return None
@@ -444,7 +449,20 @@ def _picture(user: User, doc: Mapping[str, Any], asset_id: Any, role: str, name:
         asset_id=str(asset_id),
         width=_dimension(asset.get("width")),
         height=_dimension(asset.get("height")),
+        card=card,
     )
+
+
+def _cast_cards(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> List[bible.Card]:
+    characters, place = bible.cast_of(doc, clip)
+    return [*characters, *([place] if place is not None else [])]
+
+
+def card_of_asset(doc: Mapping[str, Any], clip: Mapping[str, Any], asset_id: Any) -> Optional[bible.Card]:
+    """The card of the bible a picture of the project shows: the card of a reference made of it, a card the shot casts first."""
+    cards = [card for reference in doc.get("references") or [] if isinstance(reference, Mapping) and asset_id and reference.get("assetId") == asset_id for card in [bible.card_for_reference(doc, reference.get("id"))] if card is not None]
+    cast = {card.id for card in _cast_cards(doc, clip)}
+    return next((card for card in cards if card.id in cast), cards[0] if cards else None)
 
 
 def _frame_base(doc: Mapping[str, Any], shot_id: str, role: str) -> Optional[Mapping[str, Any]]:
@@ -471,18 +489,19 @@ def default_pictures(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any]
     if base is not None:
         add(_picture(user, doc, base.get("assetId"), FRAME, "", FRAME))
     for reference in _shot_references(doc, clip["id"]):
-        add(_picture(user, doc, reference.get("assetId"), _role_of(reference), str(reference.get("name") or ""), REFERENCE))
+        add(_picture(user, doc, reference.get("assetId"), _role_of(reference), str(reference.get("name") or ""), REFERENCE, bible.card_for_reference(doc, reference.get("id"))))
     rank = {value: index for index, value in enumerate(PICTURE_ROLES)}
     return sorted(found, key=lambda picture: rank[picture.role])
 
 
 def chosen_pictures(
-    user: User, doc: Mapping[str, Any], chosen: Sequence[Mapping[str, Any]], warnings: List[Dict[str, Any]]
+    user: User, doc: Mapping[str, Any], chosen: Sequence[Mapping[str, Any]], warnings: List[Dict[str, Any]], clip: Optional[Mapping[str, Any]] = None
 ) -> List[Picture]:
-    """The pictures a body names, in its order, each an image asset of the project the user may read; the others are left out with a warning."""
+    """The pictures a body names, in its order, each an image asset of the project the user may read, with the card it shows; the others are left out with a warning."""
     found: List[Picture] = []
     for item in chosen:
-        picture = _picture(user, doc, item["asset_id"], item["role"], item["name"], FRAME if item["role"] == FRAME else REFERENCE)
+        card = card_of_asset(doc, clip or {}, item["asset_id"]) if item["role"] != FRAME else None
+        picture = _picture(user, doc, item["asset_id"], item["role"], item["name"], FRAME if item["role"] == FRAME else REFERENCE, card)
         if picture is None:
             warnings.append(
                 note("reference_unavailable", "A picture is not an image of the project you can read: it is left out.", asset_id=item["asset_id"])
@@ -511,19 +530,45 @@ def _crop_line(doc: Mapping[str, Any], working: Optional[float], language: str) 
 
 
 def picture_lines(pictures: Sequence[Picture], role: str, language: str) -> List[str]:
-    """What the prompt says of each picture sent, by its rank."""
+    """What the prompt says of each picture sent, by its rank: a picture of a card of the bible by the card's tag and words, the others by their name."""
     text = TEXT[language]
     lines = []
     for rank, picture in enumerate(pictures, start=1):
+        words = bible.description(picture.card, language) if picture.card is not None else ""
         if picture.role == FRAME:
             lines.append(text["frame_last" if role == LAST else "frame_first"].format(n=rank))
+        elif picture.role == SETTING and words:
+            lines.append(text["setting_card"].format(n=rank, name=picture.card.label, words=words[:1].upper() + words[1:]))
+        elif picture.role == CHARACTER and words:
+            lines.append(text["character_card"].format(n=rank, name=picture.card.label, words=words))
         elif picture.role == SETTING:
-            lines.append(text[SETTING].format(n=rank, name=f" ({picture.name})" if picture.name else ""))
+            name = picture.card.label if picture.card is not None else picture.name
+            lines.append(text[SETTING].format(n=rank, name=f" ({name})" if name else ""))
         elif picture.role in (CHARACTER, OBJECT):
-            lines.append(text[picture.role].format(n=rank, name=picture.name or text[f"{picture.role}_name"]))
+            name = picture.card.label if picture.card is not None and picture.role == CHARACTER else picture.name
+            lines.append(text[picture.role].format(n=rank, name=name or text[f"{picture.role}_name"]))
         else:
             lines.append(text[STYLE].format(n=rank))
     return lines
+
+
+def unseen_lines(doc: Mapping[str, Any], clip: Mapping[str, Any], pictures: Sequence[Picture], language: str) -> List[str]:
+    """The cards a shot casts that no picture sent shows, as the cast of a Wan prompt reads them."""
+    shown = {picture.card.id for picture in pictures if picture.card is not None}
+    characters, place = bible.cast_of(doc, clip)
+    return bible.prose([card for card in characters if card.id not in shown], place if place is not None and place.id not in shown else None, language)
+
+
+def kept_pictures(pictures: Sequence[Picture], limit: int, cast: Sequence[bible.Card]) -> List[Picture]:
+    """The pictures a model that takes at most limit of them gets: the framing first, then the pictures of the cards the shot casts, then the others in their order, each kept where it was."""
+    ids = {card.id for card in cast}
+
+    def rank(index: int) -> Tuple[int, int]:
+        picture = pictures[index]
+        first = 0 if picture.role == FRAME else 1 if picture.card is not None and picture.card.id in ids else 2
+        return first, index
+
+    return [pictures[index] for index in sorted(sorted(range(len(pictures)), key=rank)[:limit])]
 
 
 def keyframe_prompt(
@@ -534,7 +579,7 @@ def keyframe_prompt(
     instruction: Optional[str] = None,
     working: Optional[float] = None,
 ) -> str:
-    """The edit prompt of a start or end image: the frame it is, in the ratio the shot's video engine makes its takes in (working) with the part the film keeps when it crops them, the instruction given (else the shot's) without the reference video tracks it cites, the project's direction, what to keep of each picture, and a still with no text."""
+    """The edit prompt of a start or end image: the frame it is, in the ratio the shot's video engine makes its takes in (working) with the part the film keeps when it crops them, the instruction given (else the shot's) without the reference video tracks it cites, the project's direction, what to keep of each picture, a picture of a card with the card's words, then the cards the shot casts that no picture shows, word for word, and a still with no text."""
     language = _language(doc)
     text = TEXT[language]
     own = director.cite_tracks((instruction or "").strip() or director.shot_instruction(doc, clip), {})
@@ -544,6 +589,7 @@ def keyframe_prompt(
         own,
         *director.direction_lines(doc),
         *picture_lines(pictures, role, language),
+        *unseen_lines(doc, clip, pictures, language),
         text["still"],
     ]
     return "\n".join(line for line in lines if line)
@@ -633,13 +679,18 @@ def build(user: User, doc: Mapping[str, Any], shot_id: str, order: Order) -> Key
     if order.pictures is None:
         pictures = default_pictures(user, doc, clip, order.role)
     else:
-        pictures = chosen_pictures(user, doc, order.pictures, built.warnings)
+        pictures = chosen_pictures(user, doc, order.pictures, built.warnings, clip)
     limit = preset.limit(order.model_id)
     if len(pictures) > limit:
         built.warnings.append(
-            note("references_trimmed", f"The model takes at most {limit} {'picture' if limit == 1 else 'pictures'}: the last ones are left out.", sent=limit, found=len(pictures))
+            note(
+                "references_trimmed",
+                f"The model takes at most {limit} {'picture' if limit == 1 else 'pictures'}: the framing and the pictures of the cast are kept first, the last of the others are left out.",
+                sent=limit,
+                found=len(pictures),
+            )
         )
-        pictures = pictures[:limit]
+        pictures = kept_pictures(pictures, limit, _cast_cards(doc, clip))
     built.pictures = pictures
     if not pictures:
         built.blocks.append(note("no_references", "Add an identity or 3D set picture to the shot first.", shot_id=shot_id))

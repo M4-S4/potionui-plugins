@@ -232,13 +232,37 @@ def test_deleting_a_take_or_its_project_drops_their_looks(core, make_project, fr
     assert looks.rows([looks.take_key(second["id"])]) == {}
 
 
-def test_a_start_image_candidate_never_asks_for_a_look(core, make_project):
-    project = make_project(clips=[{"id": "s1", "start": 0, "dur": 4}])
-    candidate = _done(project["id"], "s1", kind=takes.KEYFRAME)
+def test_a_start_image_candidate_asks_for_its_look_and_is_reported_with_its_cast_cards(core, make_project, frames):
+    project, _, second = _placed(make_project, core, cast=True)
+    candidate = _done(project["id"], "s2", kind=takes.KEYFRAME, file_path="generations/x/k.png")
+    frames.takes[candidate["id"]] = [(0.0, RED)]
+    frames.images["uploads/marin.png"] = RED
 
     looks.queue_take(candidate)
+    assert _run() is True
+    assert _run() is True
+    report = _report(core, project)
 
-    assert looks.rows([looks.take_key(candidate["id"])]) == {}
+    row = looks.rows([looks.take_key(candidate["id"])])[looks.take_key(candidate["id"])]
+    assert (row["status"], row["kind"]) == ("done", "take")
+    assert [item["take_id"] for item in report["takes"]] == [report["takes"][0]["take_id"], second["id"]]
+    (found,) = report["candidates"]
+    assert (found["take_id"], found["shot_id"], found["status"]) == (candidate["id"], "s2", "done")
+    marin, lina = found["cards"]
+    assert (marin["card_id"], marin["status"]) == ("c-marin", "done") and marin["score"] > 0.99
+    assert lina["status"] == "no_images"
+
+
+def test_a_start_image_candidate_is_looked_at_once_as_the_image_it_is(core, make_project, tmp_path, monkeypatch):
+    project = make_project(clips=[{"id": "s1", "start": 0, "dur": 4}])
+    candidate = _done(project["id"], "s1", kind=takes.KEYFRAME, file_path="generations/x/k.png")
+    image = tmp_path / "k.png"
+    Image.new("RGB", (16, 9), RED).save(image)
+    monkeypatch.setattr(looks.media.Resolver, "local", lambda self, kind, value, folder: image)
+
+    picked = asyncio.run(looks._take_frames(core.users["user-1"], candidate, tmp_path))
+
+    assert picked == [(0.0, image)]
 
 
 def test_the_routes_report_and_ask_for_the_looks_of_the_caller_s_project(client, core, make_project, frames, app, make_user):

@@ -13,6 +13,8 @@
 	import { MAKE, RETRIEVE, draftChained, frameNotes, retrieveChoices, retrieves } from '../../lib/shotimages.js';
 	import { neighborsOf, retrieveImages, shotImages } from '../../lib/shotimages.svelte.js';
 	import { PICTURE_ICONS, TAG_CLASS } from '../../lib/reftags.js';
+	import { bestCandidate, candidateLook, candidateScore, percent } from '../../lib/looks.js';
+	import { currentLooks, refreshLooks } from '../../lib/looks.svelte.js';
 	import Icon from '../Icon.svelte';
 
 	let { clip, draft, onaccept, focus = false } = $props();
@@ -38,6 +40,9 @@
 	const estimate = $derived(keyframeState.estimate);
 	const candidates = $derived(keyframeState.list.filter((take) => take.shotId === clip.id));
 	const flying = $derived(candidates.filter(inFlight).length);
+	const looks = $derived(currentLooks());
+	const finished = $derived(candidates.filter(usable).length);
+	const best = $derived(bestCandidate(looks, candidates.filter((take) => usable(take) && take.label !== 'rejected').map((take) => take.id)));
 	const ready = $derived(Boolean(runnable) && pictures.length > 0 && !blocked(estimate) && !keyframeState.starting && !keyframeState.estimating);
 	const sources = $derived(neighborsOf(clip, draft));
 	const retrieveOptions = $derived(retrieveChoices(sources));
@@ -63,6 +68,10 @@
 	$effect(() => {
 		const shotId = clip.id;
 		return untrack(() => openKeyframes(shotId));
+	});
+
+	$effect(() => {
+		if (finished) untrack(() => refreshLooks());
 	});
 
 	$effect(() => {
@@ -294,6 +303,8 @@
 					{#each candidates as take (take.id)}
 						{@const roles = acceptedRoles(take, draft)}
 						{@const done = usable(take)}
+						{@const look = done ? candidateLook(looks, take.id) : null}
+						{@const score = candidateScore(look)}
 						<li class="overflow-hidden rounded-lg border {roles.length ? 'border-signal ring-1 ring-signal' : 'border-line-strong'} {take.label === 'rejected' ? 'opacity-60' : ''}">
 							<div class="relative bg-surface-3">
 								{#if done}
@@ -309,6 +320,12 @@
 								<span class="absolute left-1 top-1 rounded bg-black/60 px-1 text-xs font-semibold text-white">{take.variant}</span>
 								{#if take.frameRole}<span class="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-2xs text-white" data-frame-role={take.frameRole}>{take.frameRole === 'last' ? t('keyframes.card.forLast') : t('keyframes.card.forFirst')}</span>{/if}
 								{#if roles.length}<span class="absolute right-1 top-1 rounded bg-signal px-1 text-2xs font-medium text-white">{roles.map(roleText).join(' · ')}</span>{/if}
+								{#if score !== null}
+									<span class="absolute bottom-1 right-1 flex items-center gap-1" data-candidate-look={take.id}>
+										{#if best === take.id}<span class="rounded bg-success px-1 text-2xs font-medium text-white" title={t('keyframes.card.bestTip')} data-candidate-best>{t('keyframes.card.best')}</span>{/if}
+										<span class="rounded bg-black/60 px-1 text-2xs text-white" title={t('keyframes.card.lookTip', { cards: look.cards.filter((c) => c.score !== null).map((c) => `${c.label} ${percent(c.score)} %`).join(', ') })}>{t('keyframes.card.look', { score: percent(score) })}</span>
+									</span>
+								{/if}
 							</div>
 							<div class="flex flex-wrap items-center gap-0.5 border-t border-line p-0.5">
 								{#if done}
