@@ -464,6 +464,8 @@ BRIDGED = (
     "run_on_app_loop",
     "image_embedder",
     "embed_images",
+    "face_detector",
+    "detect_faces",
     "generation_active",
     "module_available",
 )
@@ -507,6 +509,8 @@ class FakeCore:
         self.counter = 0
         self.busy = False
         self.embedder = {"model": "google/siglip-base-patch16-224", "slug": "local-google-siglip-base-patch16-224", "device": "cpu", "available": True, "loaded": False}
+        self.faces = {"model": "face_detection_yunet_2023mar.onnx", "available": False}
+        self.face_boxes = {}
         self.embedded = []
         self.modules = set()
         for user_id in ("user-1", "user-2"):
@@ -738,6 +742,21 @@ class FakeCore:
             norm = sum(v * v for v in values) ** 0.5
             vectors.append([v / norm for v in values])
         return vectors
+
+    def face_detector(self):
+        return dict(self.faces)
+
+    def detect_faces(self, paths):
+        from PIL import Image
+
+        if not self.faces["available"]:
+            raise FileNotFoundError("face_detection_yunet_2023mar.onnx is not in a detection_bbox folder of the model roots")
+        found = []
+        for path in paths:
+            with Image.open(path) as image:
+                color = image.convert("RGB").getpixel((0, 0))
+            found.append([dict(box) for box in self.face_boxes.get(color, [])])
+        return found
 
     def generation_active(self):
         return self.busy

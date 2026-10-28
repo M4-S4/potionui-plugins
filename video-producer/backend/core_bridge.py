@@ -256,6 +256,16 @@ def embed_images(paths: Sequence[str]) -> List[List[float]]:
     return [list(vector) for vector in api_media.embed_images(list(paths))]
 
 
+def face_detector() -> Dict[str, Any]:
+    """The face detector of the application: the file of its model and whether it is on this server."""
+    return dict(api_media.face_detector())
+
+
+def detect_faces(paths: Sequence[str]) -> List[List[Dict[str, float]]]:
+    """The faces found in image files, best first, as boxes in pixels with their score; FileNotFoundError without the detector's model file."""
+    return [list(found) for found in api_media.detect_faces(list(paths))]
+
+
 def generation_active() -> bool:
     """True while the application's generation queue holds a generation, pending or running."""
     return bool(api_generation.generation_active())

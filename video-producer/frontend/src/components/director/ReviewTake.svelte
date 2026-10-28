@@ -9,7 +9,7 @@
 	import { isStale } from '../../lib/shots.js';
 	import { seamChainOf } from '../../lib/chain.svelte.js';
 	import { currentLooks, lookState, measureLooks } from '../../lib/looks.svelte.js';
-	import { percent, takeLook } from '../../lib/looks.js';
+	import { driftOf, finalLook, lowCard as cardIsLow, lowDrift, lowFinal, percent, takeLook } from '../../lib/looks.js';
 	import { seam } from '../../lib/continuity.svelte.js';
 	import { seamImage } from '../../lib/seam.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
@@ -38,7 +38,9 @@
 	const looks = $derived(currentLooks());
 	const look = $derived(takeLook(looks, take.id));
 	const unmeasured = $derived(Boolean(look) && ['missing', 'failed', 'unavailable'].includes(look.status) && Boolean(looks?.embedder.available));
-	const lowCard = (card) => card.status === 'done' && card.score < looks.thresholds.cast;
+	const lowCard = (card) => cardIsLow(looks, card);
+	const fromDraft = $derived(finalLook(looks, take.id));
+	const methodText = (card) => (card.kind === 'place' ? t('panels.director.pick.lookPlace') : card.method === 'face' ? t('panels.director.pick.lookFace', { seen: percent(card.seen) }) : card.seen === 0 ? t('panels.director.pick.lookNoFace') : '');
 	const endOf = (c) => seamImage(doc, c.id, 'last')?.src ?? clipThumb(c);
 	const startOf = (c) => seamImage(doc, c.id, 'first')?.src ?? clipThumb(c);
 	const verdict = (i) => {
@@ -117,7 +119,7 @@
 	</section>
 {/if}
 
-{#if look?.cards.length}
+{#if look?.cards.length || fromDraft?.status === 'done'}
 	<section class="space-y-2" data-take-looks>
 		<div class="flex items-center gap-2">
 			<span class="vp-section-title min-w-0 flex-1">{t('panels.director.pick.looks')}</span>
@@ -125,12 +127,18 @@
 		</div>
 		<ul class="space-y-1 text-xs">
 			{#each look.cards as card (card.cardId)}
-				<li class="flex items-center gap-2" data-take-look={card.status}>
-					<span class="min-w-0 flex-1 truncate text-fg-muted">{card.label}</span>
-					<span class="shrink-0 {lowCard(card) ? 'text-warning' : 'text-fg-subtle'}">{#if card.status === 'done'}<span class="vp-tc">{percent(card.score)} %</span>{#if lowCard(card)}{` · ${t('panels.director.pick.lookLow')}`}{/if}{:else}{t(`panels.director.pick.lookState.${card.status}`)}{/if}</span>
+				{@const drift = driftOf(looks, take.id, card.cardId)}
+				<li class="space-y-0.5" data-take-look={card.status} data-look-method={card.method ?? ''}>
+					<div class="flex items-center gap-2">
+						<span class="min-w-0 flex-1 truncate text-fg-muted">{card.label}</span>
+						<span class="shrink-0 {lowCard(card) ? 'text-warning' : 'text-fg-subtle'}">{#if card.status === 'done'}<span class="vp-tc">{percent(card.score)} %</span>{#if lowCard(card)}{` · ${t('panels.director.pick.lookLow')}`}{/if}{:else}{t(`panels.director.pick.lookState.${card.status}`)}{/if}</span>
+					</div>
+					{#if card.status === 'done' && methodText(card)}<div class="truncate text-2xs text-fg-subtle">{methodText(card)}</div>{/if}
+					{#if lowDrift(looks, drift)}<div class="text-2xs text-warning" data-look-drift>{t('panels.director.pick.lookDrift', { score: percent(drift.score) })}</div>{/if}
 				</li>
 			{/each}
 		</ul>
+		{#if fromDraft?.status === 'done'}<p class="text-xs {lowFinal(looks, fromDraft) ? 'text-warning' : 'text-fg-subtle'}" data-look-final>{lowFinal(looks, fromDraft) ? t('panels.director.pick.lookFinalLow', { score: percent(fromDraft.score) }) : t('panels.director.pick.lookFinal', { score: percent(fromDraft.score) })}</p>{/if}
 		<p class="text-xs text-fg-subtle">{t('panels.director.pick.lookHint')}</p>
 	</section>
 {/if}

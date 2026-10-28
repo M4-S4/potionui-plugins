@@ -7,10 +7,17 @@ const count = (value) => (Number.isInteger(value) && value > 0 ? value : 0);
 
 export const SEAM_LOW = 0.7;
 export const CAST_LOW = 0.6;
+export const FACE_LOW = 0.7;
+export const PLACE_LOW = 0.55;
+export const FINAL_LOW = 0.8;
+export const DRIFT_LOW = 0.8;
+const KINDS = ['character', 'place'];
+const METHODS = ['face', 'whole'];
+const share = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null);
 
 function normalizeCard(value) {
 	if (!isObject(value) || !text(value.card_id)) return null;
-	return { cardId: value.card_id, label: text(value.label), score: score(value.score), status: state(value.status) };
+	return { cardId: value.card_id, label: text(value.label), kind: KINDS.includes(value.kind) ? value.kind : 'character', score: score(value.score), status: state(value.status), method: METHODS.includes(value.method) ? value.method : null, seen: share(value.seen) };
 }
 
 function normalizeTakeLook(value) {
@@ -23,16 +30,37 @@ function normalizeSeamLook(value) {
 	return { shotId: value.shot_id, previousId: text(value.previous_id) || null, fromTake: text(value.from_take) || null, toTake: text(value.to_take) || null, score: score(value.score), status: state(value.status) };
 }
 
+function normalizeFinal(value) {
+	if (!isObject(value) || !text(value.take_id)) return null;
+	return { takeId: value.take_id, parentId: text(value.parent_id) || null, shotId: text(value.shot_id) || null, score: score(value.score), face: score(value.face), status: state(value.status) };
+}
+
+function normalizeDrift(value) {
+	if (!isObject(value) || !text(value.take_id) || !text(value.card_id)) return null;
+	return { takeId: value.take_id, cardId: value.card_id, shotId: text(value.shot_id) || null, score: score(value.score) };
+}
+
 export function normalizeLooks(value) {
 	const data = isObject(value) ? value : {};
 	const embedder = isObject(data.embedder) ? data.embedder : {};
+	const faces = isObject(data.faces) ? data.faces : {};
 	const thresholds = isObject(data.thresholds) ? data.thresholds : {};
 	return {
 		embedder: { model: text(embedder.model) || null, available: embedder.available === true },
-		thresholds: { seam: score(thresholds.seam) ?? SEAM_LOW, cast: score(thresholds.cast) ?? CAST_LOW },
+		faces: { model: text(faces.model) || null, available: faces.available === true },
+		thresholds: {
+			seam: score(thresholds.seam) ?? SEAM_LOW,
+			cast: score(thresholds.cast) ?? CAST_LOW,
+			face: score(thresholds.face) ?? FACE_LOW,
+			place: score(thresholds.place) ?? PLACE_LOW,
+			final: score(thresholds.final) ?? FINAL_LOW,
+			drift: score(thresholds.drift) ?? DRIFT_LOW
+		},
 		seams: (Array.isArray(data.seams) ? data.seams : []).map(normalizeSeamLook).filter(Boolean),
 		takes: (Array.isArray(data.takes) ? data.takes : []).map(normalizeTakeLook).filter(Boolean),
 		candidates: (Array.isArray(data.candidates) ? data.candidates : []).map(normalizeTakeLook).filter(Boolean),
+		finals: (Array.isArray(data.finals) ? data.finals : []).map(normalizeFinal).filter(Boolean),
+		drift: (Array.isArray(data.drift) ? data.drift : []).map(normalizeDrift).filter(Boolean),
 		missing: count(data.missing),
 		queued: count(data.queued)
 	};
@@ -60,7 +88,19 @@ export function bestCandidate(looks, takeIds) {
 	return scored.reduce((best, item) => (item[1] > best[1] ? item : best))[0];
 }
 
-export const lowCards = (looks, look) => (look?.cards ?? []).filter((c) => c.status === 'done' && c.score !== null && c.score < looks.thresholds.cast);
+export const cardThreshold = (looks, card) => (card.kind === 'place' ? looks.thresholds.place : card.method === 'face' ? looks.thresholds.face : looks.thresholds.cast);
+
+export const lowCard = (looks, card) => card?.status === 'done' && card.score !== null && card.score < cardThreshold(looks, card);
+
+export const lowCards = (looks, look) => (look?.cards ?? []).filter((c) => lowCard(looks, c));
+
+export const finalLook = (looks, takeId) => (looks && takeId ? (looks.finals.find((x) => x.takeId === takeId) ?? null) : null);
+
+export const lowFinal = (looks, found) => found?.status === 'done' && found.score !== null && found.score < looks.thresholds.final;
+
+export const driftOf = (looks, takeId, cardId) => (looks && takeId ? (looks.drift.find((x) => x.takeId === takeId && x.cardId === cardId) ?? null) : null);
+
+export const lowDrift = (looks, found) => Boolean(found) && found.score !== null && found.score < looks.thresholds.drift;
 
 export function castIssues(looks, clips) {
 	if (!looks) return [];
