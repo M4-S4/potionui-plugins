@@ -13,6 +13,7 @@
 	"matchAll": "Raccorder les couleurs ({count})",
 	"matchAllTip": "Raccorde la couleur de chaque plan au précédent, du premier raccord au dernier, en une seule action que Ctrl+Z annule",
 	"seam.compareTakes": "Comparer les prises",
+	"seam.reanchor": "Corriger l’image de début",
 	"chain.label": "Partir de la fin du plan précédent",
 	"chain.off": "Le plan part de son texte ou d’une première image à lui.",
 	"chain.textOnly": "Le moteur de ce plan génère à partir du texte seul : il n’utilise pas cette image.",

@@ -2,6 +2,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { matchToPrevious } from '../../lib/continuity.svelte.js';
 	import { compareSeamTakes } from '../../lib/band.svelte.js';
+	import { reanchorImage } from '../../lib/references.js';
 	import SeamAction from '../takes/SeamAction.svelte';
 
 	let { clip, issue } = $props();
@@ -18,6 +19,8 @@
 	<button type="button" class={link} data-seam-fix="color" onclick={(e) => run(e, matchToPrevious)}>{t('panels.story.matchColor')}</button>
 {:else if issue.kind === 'identity'}
 	<button type="button" class={link} data-seam-fix="identity" onclick={(e) => run(e, compareSeamTakes)}>{t('storyboard.seam.compareTakes')}</button>
+{:else if issue.kind === 'chain_drift'}
+	<button type="button" class={link} data-seam-fix="reanchor" onclick={(e) => run(e, reanchorImage)}>{t('storyboard.seam.reanchor')}</button>
 {:else if issue.kind.startsWith('chain_')}
 	<span class="shrink-0" data-seam-fix="chain"><SeamAction {clip} /></span>
 {/if}

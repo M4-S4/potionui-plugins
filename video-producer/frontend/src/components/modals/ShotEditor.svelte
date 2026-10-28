@@ -213,7 +213,7 @@
 						<button type="button" class="flex min-h-6 items-center gap-1 text-xs text-fg-muted hover:text-fg" onclick={openLibrary}><Icon name="wand" class="h-3.5 w-3.5" />{t('modals.prompt.library')}</button>
 					</div>
 					<!-- svelte-ignore a11y_autofocus -->
-					<textarea id={textId} class="input w-full text-md" rows="5" bind:this={textEl} bind:value={draft.text} onblur={(e) => (caret = e.currentTarget.selectionStart)} autofocus={focus !== 'keyframes'} placeholder={t('modals.prompt.placeholder')}></textarea>
+					<textarea id={textId} class="input w-full text-md" rows="5" bind:this={textEl} bind:value={draft.text} onblur={(e) => (caret = e.currentTarget.selectionStart)} autofocus={focus !== 'keyframes' && focus !== 'reanchor'} placeholder={t('modals.prompt.placeholder')}></textarea>
 					{#each issues as issue, i (i)}
 						{#if issue.level === 'conflict'}
 							<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{issue.text}</HostUi>
@@ -385,7 +385,7 @@
 					{/if}
 					{#if sounding && behavior}<SoundNote {behavior} />{/if}
 				</section>
-				<KeyframeCandidates {clip} {draft} focus={focus === 'keyframes'} onaccept={(role, assetId) => (draft[role] = assetId)} />
+				<KeyframeCandidates {clip} {draft} focus={focus === 'keyframes' || focus === 'reanchor'} framing={focus === 'reanchor'} onaccept={(role, assetId) => (draft[role] = assetId)} />
 			</div>
 
 			<div class="space-y-4">

@@ -91,7 +91,7 @@ export const isPictureReference = (reference) => SPACES.includes(reference?.spac
 
 export const pictureRole = (reference) => (reference.space === 'decors3d' ? 'setting' : (TYPE_ROLES[reference.type] ?? 'character'));
 
-export function draftPictures(doc, clip, draft, role = 'first') {
+export function draftPictures(doc, clip, draft, role = 'first', framing = false) {
 	if (!doc || !clip || !draft) return [];
 	const found = [];
 	const add = (asset, pictureRole, name, origin) => {
@@ -99,7 +99,7 @@ export function draftPictures(doc, clip, draft, role = 'first') {
 		found.push({ assetId: asset.id, role: pictureRole, name: name || '', origin });
 	};
 	const first = imageAsset(doc, draft.first);
-	if (first && (role === 'last' || role === 'both')) add(first, 'frame', '', 'frame');
+	if (first && (role === 'last' || role === 'both' || framing)) add(first, 'frame', '', 'frame');
 	const { inherited, cast } = shotReferences(doc, clip, draft.exclude ?? [], draft.cast);
 	const fromCast = cast.filter((x) => !x.excluded).map((x) => x.reference);
 	const shared = inherited.filter(isShared).map((x) => x.reference);

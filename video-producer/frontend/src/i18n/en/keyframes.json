@@ -53,6 +53,7 @@
 	"make": "Make {count} candidates for the {role}",
 	"gallery": "Candidates",
 	"none": "No candidate yet.",
+	"reanchor": "Correcting the start image: the current one is sent as the framing, the pictures of the cards keep the characters.",
 	"card.open": "Open candidate {variant} full size",
 	"card.queued": "Waiting",
 	"card.running": "Generating · {percent}%",

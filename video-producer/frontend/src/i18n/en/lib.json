@@ -148,6 +148,7 @@
 	"chain.refresh": "Use the new last frame",
 	"chain.refreshTip": "“{shot}” changed after its last frame was taken: take its new last frame as the first frame of this shot",
 	"chain.stale": "The first frame of “{shot}” is out of date: “{previous}” changed after its last frame was taken",
+	"chain.drift": "“{shot}” starts from the last frame of “{previous}”, which drifts from the card “{name}” (resemblance {score} %): the chain carries the drift on",
 	"chain.offer": "“{previous}” now has an image: its last frame can open “{shot}”",
 	"chain.taken": "First frame of “{shot}”: the last frame of “{previous}”",
 	"chain.shotOn": "“{shot}” starts from the end of “{previous}”",

@@ -35,6 +35,11 @@ function normalizeFinal(value) {
 	return { takeId: value.take_id, parentId: text(value.parent_id) || null, shotId: text(value.shot_id) || null, score: score(value.score), face: score(value.face), status: state(value.status) };
 }
 
+function normalizeChain(value) {
+	if (!isObject(value) || !text(value.shot_id) || !text(value.from_take)) return null;
+	return { shotId: value.shot_id, previousId: text(value.previous_id) || null, fromTake: value.from_take, cards: (Array.isArray(value.cards) ? value.cards : []).map(normalizeCard).filter(Boolean) };
+}
+
 function normalizeDrift(value) {
 	if (!isObject(value) || !text(value.take_id) || !text(value.card_id)) return null;
 	return { takeId: value.take_id, cardId: value.card_id, shotId: text(value.shot_id) || null, score: score(value.score) };
@@ -61,6 +66,7 @@ export function normalizeLooks(value) {
 		candidates: (Array.isArray(data.candidates) ? data.candidates : []).map(normalizeTakeLook).filter(Boolean),
 		finals: (Array.isArray(data.finals) ? data.finals : []).map(normalizeFinal).filter(Boolean),
 		drift: (Array.isArray(data.drift) ? data.drift : []).map(normalizeDrift).filter(Boolean),
+		chains: (Array.isArray(data.chains) ? data.chains : []).map(normalizeChain).filter(Boolean),
 		missing: count(data.missing),
 		queued: count(data.queued)
 	};
@@ -93,6 +99,13 @@ export const cardThreshold = (looks, card) => (card.kind === 'place' ? looks.thr
 export const lowCard = (looks, card) => card?.status === 'done' && card.score !== null && card.score < cardThreshold(looks, card);
 
 export const lowCards = (looks, look) => (look?.cards ?? []).filter((c) => lowCard(looks, c));
+
+export function chainLook(looks, from, to) {
+	if (!looks || !from?.take || !to) return null;
+	return looks.chains.find((c) => c.shotId === to.id && c.previousId === from.id && c.fromTake === from.take) ?? null;
+}
+
+export const chainDrifts = (looks, from, to) => lowCards(looks, chainLook(looks, from, to));
 
 export const finalLook = (looks, takeId) => (looks && takeId ? (looks.finals.find((x) => x.takeId === takeId) ?? null) : null);
 

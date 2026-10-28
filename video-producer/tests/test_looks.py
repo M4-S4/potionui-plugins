@@ -344,6 +344,33 @@ def test_the_takes_of_one_character_are_compared_from_shot_to_shot_once_three_sh
     assert drift["s3"]["take_id"] == placed[2]["id"] and drift["s3"]["card_id"] == "c-marin"
 
 
+def test_the_last_frame_a_chained_shot_starts_from_is_scored_against_the_cards_of_that_shot(core, make_project, frames):
+    project, first, second = _placed(make_project, core, cast=True)
+    stored = projects.get_project(project["id"])
+    doc = stored["doc"]
+    doc["clips"][1]["cast"] = {"characters": ["c-marin"]}
+    projects.save_project(project["id"], doc, stored["version"])
+    frames.takes[first["id"]] = [(0.0, RED), (4.0, BLUE)]
+    frames.takes[second["id"]] = [(0.0, RED)]
+    frames.images["uploads/marin.png"] = RED
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    (chain,) = _report(core, project)["chains"]
+
+    assert (chain["shot_id"], chain["previous_id"], chain["from_take"]) == ("s2", "s1", first["id"])
+    (marin,) = chain["cards"]
+    assert (marin["card_id"], marin["status"], marin["method"]) == ("c-marin", "done", "whole")
+    assert marin["score"] < looks.CAST_LOW
+
+    stored = projects.get_project(project["id"])
+    doc = stored["doc"]
+    doc["clips"][1]["firstFromPrevious"] = False
+    projects.save_project(project["id"], doc, stored["version"])
+    assert _report(core, project)["chains"] == []
+
+
 def test_a_card_picture_from_the_history_counts_though_the_core_stores_its_type_in_capitals(core):
     ref = {"kind": "history", "generation_id": "g-marin", "file_id": "0"}
     core.add_media(ref, "generations/2026-10-27/g-marin/0.png", "IMAGE")
