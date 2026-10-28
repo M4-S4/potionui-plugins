@@ -70,9 +70,12 @@ def test_the_draft_and_final_sizes_are_the_page_s(case):
     assert formats.final_size(options, ratio, preset_id) == case["final"]
 
 
-@pytest.mark.parametrize("key, folder", [("wan13", "Wan2.1-T2V-1.3B-8GB"), ("wan5b", "Wan2.2-TI2V-5B-8GB")])
-def test_the_shared_cases_carry_the_sizes_the_8_gb_presets_ship(key, folder):
-    shipped = yaml.safe_load((PLUGIN_ROOT / "presets" / folder / "files" / "form" / "resolutions_480p.yml").read_text(encoding="utf-8"))
+@pytest.mark.parametrize(
+    "key, folder, name",
+    [("wan13", "Wan2.1-T2V-1.3B-8GB", "resolutions_480p.yml"), ("wan5b", "Wan2.2-TI2V-5B-8GB", "resolutions_480p.yml"), ("wan12", "Wan2.2-14B-Lightning-12GB", "resolutions_540p.yml")],
+)
+def test_the_shared_cases_carry_the_sizes_the_tier_presets_ship(key, folder, name):
+    shipped = yaml.safe_load((PLUGIN_ROOT / "presets" / folder / "files" / "form" / name).read_text(encoding="utf-8"))
 
     assert CASES["options"][key] == [item["value"] for item in shipped]
 
@@ -86,6 +89,21 @@ def test_the_8_gb_presets_make_square_and_4_5_films_at_their_own_ratio(key, pres
         size = formats.parse_size(formats.final_size(options, ratio, preset_id))
         assert formats.fit(size[0] / size[1], ratio) == formats.EXACT, (key, name)
         assert formats.draft_size(options, "832x480", ratio, preset_id) == formats.final_size(options, ratio, preset_id), (key, name)
+
+
+def test_lightning_12_gb_keeps_every_take_of_every_format_within_its_half_megapixel_list():
+    options = CASES["options"]["wan12"]
+    largest = max(width * height for width, height in map(formats.parse_size, options))
+    plans = [case for case in CASES["plans"] if case["preset"] == "wan12"]
+
+    assert largest == 960 * 544
+    assert plans
+    for case in plans:
+        for size in (case["draft"], case["final"]):
+            if size is not None:
+                width, height = formats.parse_size(size)
+                assert width * height <= largest, case
+    assert {case["format"]: case["final"] for case in plans if case["setting"] == "832x480"}["16:9"] == "960x544"
 
 
 @pytest.mark.parametrize("case", CASES["picks"], ids=lambda case: f"{case['preset']}-{case['chosen']}")

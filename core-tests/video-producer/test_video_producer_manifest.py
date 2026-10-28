@@ -1329,6 +1329,7 @@ SHIPPED_PRESETS = {
         description_mentions=("12 GB of VRAM",),
         changed_fields={
             "speed_profile": {"configuration", "default"},
+            "resolution": {"configuration"},
             "text_encoder": {"configuration"},
             "vae": {"configuration"},
             "t2v_high_noise_model": {"configuration"},
@@ -1352,10 +1353,11 @@ SHIPPED_PRESETS = {
             "t2v_low_noise_model": [WAN_14B_LOW_DIT],
         },
         hidden_tabs=WAN_HIDDEN_TABS,
+        own_resolutions=("832x480", "480x832", "960x544", "544x960", "640x480", "480x640", "832x624", "624x832", "640x640", "720x720", "576x720", "640x800"),
         speed_options=("fast", "custom"),
         reacted={"steps": 6, "cfg": 1.0},
-        draft=("832x480", "480x832", "720x720", "576x720"),
-        final=("1280x720", "720x1280", "1024x1024", "832x1040"),
+        draft=("832x480", "480x832", "640x640", "576x720"),
+        final=("960x544", "544x960", "720x720", "640x800"),
     ),
     H3_12GB: Shipped(
         name="MiniMax-H3 (12 GB)",

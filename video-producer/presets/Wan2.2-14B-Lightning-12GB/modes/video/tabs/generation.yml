@@ -23,8 +23,7 @@ fields:
         label: "Resolution"
         configuration:
           files:
-            - { path: "{{ paths._shared }}/resolutions/video.yml", group: "Video" }
-            - { path: "{{ paths._shared }}/resolutions/social_media_video.yml", group: "Social Media" }
+            - { path: "{{ paths.preset }}/files/form/resolutions_540p.yml", group: "540p" }
         default: "832x480"
 
       - name: "fps"
