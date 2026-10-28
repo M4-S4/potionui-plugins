@@ -139,11 +139,11 @@ def test_a_ref2va_shot_on_ltx_2_5_is_made_from_its_reference_sheet_in_one_distil
     assert plan.needs_cut and plan.summary()["sheet"]["frames"] == 121
     assert plan.reference.layout == bible.SHEET_LAYOUT
     assert plan.prompt_text == (
-        "### Reference Sheet Description\n\n"
-        "**Top Row Left (Character):** Fisher: an old fisherman with a white beard and a yellow oilskin.\n"
-        "**Top Row Right (Character):** The same character, Fisher, seen again.\n"
-        "**Bottom Row (Setting):** Quay: a stone harbour quay with a red lighthouse.\n\n"
-        "### Target Description\n\n"
+        "### Reference Sheet Description "
+        "**Top Row Left (Character):** A frontal close-up of the face of an old fisherman with a white beard and a yellow oilskin. "
+        "**Top Row Right (Character):** The same character shown full body, standing, front view. "
+        "**Bottom Row (Setting):** A stone harbour quay with a red lighthouse. "
+        "### Target Description "
         f"{INSTRUCTION} Fisher: an old fisherman with a white beard and a yellow oilskin. Setting — Quay: a stone harbour quay with a red lighthouse."
     )
     assert plan.work_scale == pytest.approx(8 / 24 * 2.1)
@@ -180,7 +180,7 @@ def test_the_sheet_says_what_it_leaves_out(core, make_doc):
     assert _codes(plans) == ["sheet_card_without_image", "sheet_crowded", "sheet_props_text_only", "sheet_first_frame"]
     crowded = next(item for item in plans.warnings if item["code"] == "sheet_crowded")
     assert crowded["data"]["left_out"] == ["Kim"]
-    assert "**Top Row Panel 4 (Character):** Hal: a sailor." in plan.prompt_text
+    assert "**Top Row Panel 3 (Character):** A frontal close-up of the face of a girl in a red coat. **Top Row Panel 4 (Character):** A frontal close-up of the face of a sailor. " in plan.prompt_text
     assert plan.request["form_data"]["video_director"]["media"] == []
 
 
@@ -235,7 +235,7 @@ def test_the_sheet_part_of_the_prompt_can_be_replaced_by_the_shot(core, make_doc
 
     plan = _plans(core, doc).shots[0]
 
-    assert plan.prompt_text == f"### Reference Sheet Description\n\n**Top Row (Character):** Mine.\n\n### Target Description\n\n{INSTRUCTION}"
+    assert plan.prompt_text == f"### Reference Sheet Description **Top Row (Character):** Mine. ### Target Description {INSTRUCTION}"
 
 
 def test_the_measure_of_a_sheet_take_counts_as_one_made_without_the_sheet(core, make_doc):
