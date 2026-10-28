@@ -105,7 +105,7 @@ def test_a_project_may_set_the_options_of_its_preset_but_not_those_the_plugin_fi
     assert names == ["speed_profile", "seed", "generate_audio", "steps", "cfg", "sampler", "upscale", "manual_sigmas", "model", "text_encoder", "video_vae", "audio_vae", "loras"]
     assert engine_options.editable("model", fields["model"], cloud=True) is False
     assert engine_options.editable("generate_audio", {**fields["generate_audio"], "bound": True}) is False
-    for name in ("resolution", "fps", "video_director", "references", "quantity", "prompt", "aspect_ratio"):
+    for name in ("resolution", "fps", "video_director", "references", "quantity", "prompt", "aspect_ratio", "reference_image_budget"):
         assert engine_options.editable(name, _spec("select", options=("a",))) is False
     assert engine_options.editable("media", _spec("image")) is False
 

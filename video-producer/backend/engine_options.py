@@ -14,7 +14,9 @@ LORA_TYPE = "lora_picker"
 
 EDITABLE_TYPES = (*NUMBER_TYPES, *FLAG_TYPES, *CHOICE_TYPES, *TEXT_TYPES, SEED_TYPE, MODEL_TYPE, LORA_TYPE)
 
-MANAGED = ("video_director", "references", "quantity", "resolution", "fps", "prompt", "negative_prompt", "aspect_ratio")
+REFERENCE_IMAGE_BUDGET = "reference_image_budget"
+
+MANAGED = ("video_director", "references", "quantity", "resolution", "fps", "prompt", "negative_prompt", "aspect_ratio", REFERENCE_IMAGE_BUDGET)
 CLOUD_MANAGED = ("model",)
 
 SEED = "seed"

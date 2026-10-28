@@ -487,6 +487,42 @@ def test_ref2va_sends_its_own_references_then_the_pictures_of_its_cast_whatever_
     assert "the cyclist" not in plan.prompt_text
 
 
+def _ref2va_doc(make_doc, core):
+    core.use_h3()
+    core.add_media({"kind": "library", "item_id": "lib-1"}, "uploads/hero.png", "image")
+    assets = [{"id": "hero", "kind": "image", "origin": {"kind": "library", "itemId": "lib-1"}}]
+    references = [{"id": "r1", "assetId": "hero", "scope": {"type": "global"}}]
+    return make_doc(clips=[SHOT], references=references, assets=assets, direction={"mode": "Ref2VA"})
+
+
+@pytest.mark.parametrize(("quality", "budget"), [("draft", "1"), ("final", "0")])
+def test_a_ref2va_take_encodes_its_reference_images_at_its_own_size_in_draft_and_up_to_the_cap_in_final(core, make_doc, quality, budget):
+    doc = _ref2va_doc(make_doc, core)
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3, quality=quality).shots
+
+    assert plan.request["form_data"]["reference_image_budget"] == budget
+
+
+def test_the_project_options_cannot_change_the_reference_image_budget_the_quality_sets(core, make_doc):
+    doc = _ref2va_doc(make_doc, core)
+    doc["engine"]["options"] = {presets.MINIMAX_H3: {"reference_image_budget": "0"}}
+
+    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
+
+    assert plans.shots[0].request_for()["form_data"]["reference_image_budget"] == "1"
+    assert plans.warnings == []
+
+
+def test_a_mode_without_the_reference_image_budget_is_sent_none(core, make_doc):
+    core.use_h3()
+
+    (plan,) = _plans(core, make_doc(clips=[SHOT]), preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.preset_mode == "video"
+    assert "reference_image_budget" not in plan.request_for()["form_data"]
+
+
 def test_ref2va_without_any_reference_is_blocked(core, make_doc):
     core.use_h3()
 
