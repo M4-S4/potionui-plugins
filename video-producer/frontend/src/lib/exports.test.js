@@ -99,8 +99,9 @@ test('normalizeJob: camelCase, bounded progress, known states and steps only', (
 	const job = normalizeJob({
 		id: 'j1',
 		project_id: 'p1',
-		format: 'web',
+		format: 'social',
 		resolution: '1080p',
+		ratio: '4:5',
 		stems: true,
 		status: 'done',
 		progress: 140,
@@ -114,8 +115,9 @@ test('normalizeJob: camelCase, bounded progress, known states and steps only', (
 	assert.deepEqual(job, {
 		id: 'j1',
 		projectId: 'p1',
-		format: 'web',
+		format: 'social',
 		resolution: '1080p',
+		ratio: '4:5',
 		stems: true,
 		status: 'done',
 		progress: 100,
@@ -127,7 +129,7 @@ test('normalizeJob: camelCase, bounded progress, known states and steps only', (
 		finishedAt: '2026-10-17T10:01:00Z'
 	});
 	const odd = normalizeJob({ id: 7, status: 'exploded', step: 'paint', progress: null, error: { code: 'ffmpeg_failed', message: 'x' }, file: { size: 3 } });
-	assert.deepEqual([odd.id, odd.status, odd.step, odd.progress, odd.file], ['7', 'queued', null, 0, null]);
+	assert.deepEqual([odd.id, odd.status, odd.step, odd.progress, odd.file, odd.ratio], ['7', 'queued', null, 0, null, null]);
 	assert.deepEqual(odd.error, { code: 'ffmpeg_failed', message: 'x' });
 	assert.equal(normalizeJob({}), null);
 	assert.equal(normalizeJob(null), null);

@@ -58,7 +58,7 @@ test('monitor: the viewer grades the placed take of a preview and of each side o
 	assert.match(viewer, /\{#key Boolean\(resultLut\)\}\n\t+<video\n\t+bind:this=\{resultVideo\}/);
 	assert.match(viewer, /controls=\{!resultLut\}\n\t+autoplay=\{Boolean\(resultLut\)\}\n\t+loop=\{Boolean\(resultLut\)\}/);
 	assert.match(viewer, /style:filter=\{resultShot \? clipFilter\(resultShot\) : null\}/);
-	assert.match(viewer, /\{#if resultLut && resultVideo\}<MatchCanvas source=\{resultVideo\} lut=\{resultLut\} filter=\{clipFilter\(resultShot\)\} \/>\{\/if\}/);
+	assert.match(viewer, /\{#if resultLut && resultVideo\}<MatchCanvas source=\{resultVideo\} lut=\{resultLut\} filter=\{clipFilter\(resultShot\)\} cover=\{resultFit !== BARS\} \/>\{\/if\}/);
 	assert.match(viewer, /\{#each compareRes as res \(res\.id\)\}\n\t+\{@const shot = placedOn\(doc\.clips, res\)\}\n\t+\{@const look = shot \? lutOf\(shot\) : null\}/);
 	assert.match(viewer, /bind:this=\{sides\[res\.id\]\}/);
 	assert.match(viewer, /style:filter=\{shot \? clipFilter\(shot\) : null\}/);

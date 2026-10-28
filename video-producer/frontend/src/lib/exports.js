@@ -75,6 +75,7 @@ export function normalizeJob(value) {
 		projectId: idText(value.project_id),
 		format: text(value.format) || null,
 		resolution: text(value.resolution) || null,
+		ratio: text(value.ratio) || null,
 		stems: value.stems === true,
 		status: JOB_STATES.includes(value.status) ? value.status : 'queued',
 		progress: progress === null ? 0 : Math.min(100, Math.max(0, progress)),

@@ -119,6 +119,7 @@
 	"properties.resolution": "Resolution",
 	"properties.fps": "Frame rate",
 	"properties.fpsValue": "{fps} fps",
+	"properties.resolutionValue": "{resolution} · {size}",
 	"properties.chain": "Start each new shot from the previous one",
 	"properties.chainHelp": "A new shot takes as its first frame the image at the end of the previous shot’s cut. You can change it in the shot editor; when the previous shot changes, the seam says so instead of replacing it.",
 	"properties.chainTextOnly": "{engine} generates from text only: it does not use these first frames.",
@@ -138,5 +139,8 @@
 	"shortcuts.pickToggle": "Add the shot to the selection, or take it out",
 	"shortcuts.pickRange": "Pick every shot from the chosen one to this one",
 	"shortcuts.pickAdd": "Add those shots to the selection",
-	"shortcuts.clearPicked": "Clear the selection"
+	"shortcuts.clearPicked": "Clear the selection",
+	"picker.none": "Nothing matches “{query}”",
+	"picker.apply": "Apply",
+	"picker.cancel": "Back to the list"
 }

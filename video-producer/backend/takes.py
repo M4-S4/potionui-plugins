@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .core_bridge import generate_ulid
 
@@ -480,6 +480,25 @@ def calibrated_sizes(preset_id: str, backend_id: Optional[str]) -> List[str]:
             (preset_id, backend_id),
         )
         return [str(row["resolution"]) for row in cursor.fetchall()]
+
+
+def measured_sizes(preset_ids: Iterable[str]) -> Dict[str, Dict[str, List[str]]]:
+    """The resolutions each of these presets was measured at, by backend; a preset never measured is left out."""
+    from src.plugin_api import db
+
+    wanted = sorted({str(preset_id) for preset_id in preset_ids if preset_id})
+    if not wanted:
+        return {}
+    found: Dict[str, Dict[str, List[str]]] = {}
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            f"SELECT DISTINCT preset_id, backend_id, resolution FROM {CALIBRATION} "
+            f"WHERE preset_id IN ({', '.join('?' for _ in wanted)}) ORDER BY preset_id, backend_id, resolution",
+            tuple(wanted),
+        )
+        for row in cursor.fetchall():
+            found.setdefault(str(row["preset_id"]), {}).setdefault(str(row["backend_id"]), []).append(str(row["resolution"]))
+    return found
 
 
 def chain_waiting() -> List[Dict[str, Any]]:

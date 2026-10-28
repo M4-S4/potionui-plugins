@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, secs } from '../../lib/state.svelte.js';
 	import { labelTake, promoteToFinal, retryTake, cancelTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable } from '../../lib/production.svelte.js';
 	import { FAILURE_CODES, isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
@@ -11,6 +11,8 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { canLabel, labelOf, toggledLabel } from '../../lib/labels.js';
 	import { isStale } from '../../lib/shots.js';
+	import { formatValue, ratioText } from '../../lib/formats.js';
+	import { framed, percent, sizeOf } from '../../lib/framing.js';
 	import Icon from '../Icon.svelte';
 
 	let { take, clip, onchoose = null, chosen = false } = $props();
@@ -60,6 +62,14 @@
 	}
 
 	const resolution = $derived(take.width && take.height ? `${take.width}×${take.height}` : (take.resolution ?? '').replace('x', '×') || '—');
+	const shown = $derived(done ? framed(sizeOf(take), doc) : null);
+	const framing = $derived.by(() => {
+		if (!shown || shown.mode === 'exact') return null;
+		const ratio = ratioText(shown.ratio);
+		const aspect = formatValue(doc.aspect);
+		if (shown.mode === 'crop') return { text: t('generation.card.framedCrop', { ratio }), tip: t('generation.card.framedCropTip', { ratio, aspect, loss: percent(shown.loss) }) };
+		return { text: t('generation.card.framedBars', { ratio }), tip: t('generation.card.framedBarsTip', { ratio, aspect }) };
+	});
 	const tone = $derived(take.status === 'failed' ? 'text-danger' : take.status === 'cancelled' ? 'text-fg-subtle' : 'text-signal');
 	const dot = $derived(take.status === 'failed' ? 'bg-danger' : take.status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
 	const errorText = $derived(FAILURE_CODES.includes(take.errorCode) ? t(`generation.failed.${take.errorCode}`, { id: take.generationId ?? '—' }) : take.errorMessage || t('generation.card.error', { code: take.errorCode ?? '—' }));
@@ -109,7 +119,7 @@
 					{#if stale}<span class="flex min-w-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></span>{/if}
 				</div>
 				<div class="truncate text-fg-muted">{modeText()}</div>
-				<div class="truncate text-fg-subtle"><span class="vp-tc">{resolution}</span>{#if parent}{' · ' + t('generation.card.from', { variant: parent.variant })}{/if}</div>
+				<div class="truncate text-fg-subtle"><span class="vp-tc">{resolution}</span>{#if framing}<span class="ml-1 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted" title={framing.tip}>{framing.text}</span>{/if}{#if parent}{' · ' + t('generation.card.from', { variant: parent.variant })}{/if}</div>
 				<div class="vp-tc truncate text-fg-subtle">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>
 				<div class="truncate text-fg-subtle" title={engineText}>{engineText}</div>
 			</div>

@@ -14,6 +14,9 @@
 	import { lutOf } from '../../lib/match.js';
 	import { placedOn } from '../../lib/monitor.js';
 	import { aspectOf } from '../../lib/generation.js';
+	import { BARS, RESOLUTION_NAMES, formatValue } from '../../lib/formats.js';
+	import { fitClass, formatSections, framed, sizeOf } from '../../lib/framing.js';
+	import { formatGroupText, setFormat, setResolution } from '../../lib/framing.svelte.js';
 	import MatchCanvas from './MatchCanvas.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -22,7 +25,7 @@
 	let w = $state(0);
 	let h = $state(0);
 	let sideW = $state(0);
-	const ratios = { '16:9': 16 / 9, '2.39:1': 2.39, '9:16': 9 / 16, '1:1': 1, '4:5': 0.8 };
+	const formats = $derived(formatSections(doc));
 	const r = $derived(aspectOf(doc.aspect, doc.resolution));
 	const box = $derived(w / h > r ? { w: h * r, h } : { w, h: w / r });
 
@@ -52,6 +55,14 @@
 	let sides = $state({});
 	const graded = (shot) => Boolean(shot) && (clipFilter(shot) !== 'none' || Boolean(lutOf(shot)));
 	let failed = $state({});
+	let natural = $state({});
+	const measure = (src, el) => {
+		const size = el.videoWidth ? [el.videoWidth, el.videoHeight] : el.naturalWidth ? [el.naturalWidth, el.naturalHeight] : null;
+		if (size) natural[src] = size;
+	};
+	const fitFor = (src, item) => framed(natural[src] ?? sizeOf(item), doc)?.mode ?? BARS;
+	const liveFit = $derived(liveVideo || liveImage ? fitFor(liveVideo ?? liveImage, a) : BARS);
+	const resultFit = $derived(previewResult ? fitFor(previewResult.url, previewResult) : BARS);
 	const mark = (src, el, withSize = false) => {
 		const reason = mediaFailure(el, { video: withSize });
 		if (reason) failed[src] = reason;
@@ -139,7 +150,7 @@
 							<video
 								bind:this={resultVideo}
 								src={previewResult.url}
-								class="h-full w-full object-contain"
+								class="h-full w-full {fitClass(resultFit)}"
 								controls={!resultLut}
 								autoplay={Boolean(resultLut)}
 								loop={Boolean(resultLut)}
@@ -149,9 +160,9 @@
 								aria-label={takeLabel(previewResult)}
 								style:filter={resultShot ? clipFilter(resultShot) : null}
 								onerror={(e) => mark(previewResult.url, e.currentTarget)}
-								onloadedmetadata={(e) => mark(previewResult.url, e.currentTarget, true)}
+								onloadedmetadata={(e) => (mark(previewResult.url, e.currentTarget, true), measure(previewResult.url, e.currentTarget))}
 							></video>
-							{#if resultLut && resultVideo}<MatchCanvas source={resultVideo} lut={resultLut} filter={clipFilter(resultShot)} />{/if}
+							{#if resultLut && resultVideo}<MatchCanvas source={resultVideo} lut={resultLut} filter={clipFilter(resultShot)} cover={resultFit !== BARS} />{/if}
 						{/key}
 					{:else if takeThumb(previewResult)}
 						<img src={takeThumb(previewResult)} alt="" class="h-full w-full object-cover" />
@@ -206,7 +217,7 @@
 						<video
 							bind:this={video}
 							src={liveVideo}
-							class="h-full w-full object-contain"
+							class="h-full w-full {fitClass(liveFit)}"
 							muted
 							playsinline
 							preload="auto"
@@ -214,13 +225,13 @@
 							style:opacity={fadeOpacity(clip, time)}
 							style:filter={clipFilter(clip)}
 							onerror={(e) => mark(liveVideo, e.currentTarget)}
-							onloadedmetadata={(e) => mark(liveVideo, e.currentTarget, true)}
+							onloadedmetadata={(e) => (mark(liveVideo, e.currentTarget, true), measure(liveVideo, e.currentTarget))}
 						></video>
-						{#if lut && video}<MatchCanvas source={video} {lut} filter={clipFilter(clip)} fade={fadeOpacity(clip, time)} />{/if}
+						{#if lut && video}<MatchCanvas source={video} {lut} filter={clipFilter(clip)} fade={fadeOpacity(clip, time)} cover={liveFit !== BARS} />{/if}
 					{/key}
 				{:else if liveImage}
-					<img bind:this={picture} src={liveImage} alt={a.name} class="h-full w-full object-contain" style:opacity={fadeOpacity(clip, time)} style:filter={clipFilter(clip)} />
-					{#if lut && picture}<MatchCanvas source={picture} {lut} filter={clipFilter(clip)} fade={fadeOpacity(clip, time)} />{/if}
+					<img bind:this={picture} src={liveImage} alt={a.name} class="h-full w-full {fitClass(liveFit)}" style:opacity={fadeOpacity(clip, time)} style:filter={clipFilter(clip)} onload={(e) => measure(liveImage, e.currentTarget)} />
+					{#if lut && picture}<MatchCanvas source={picture} {lut} filter={clipFilter(clip)} fade={fadeOpacity(clip, time)} cover={liveFit !== BARS} />{/if}
 				{:else if clip && a}
 					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center text-white/70">
 						<Icon name="film" class="h-7 w-7" />
@@ -290,15 +301,13 @@
 				props={{ icon: 'grid', label: t('viewer.guides'), size: 'sm', class: 'vp-h7 vp-toggle', ariaPressed: ui.guides, kbd: key('guides'), onclick: () => (ui.guides = !ui.guides) }}
 			/>
 			<HostUi name="Tooltip" props={{ text: t('viewer.aspect') }}>
-				<select class="vp-popup" bind:value={doc.aspect} aria-label={t('viewer.aspect')}>
-					{#each Object.keys(ratios) as k (k)}<option value={k}>{k}</option>{/each}
+				<select class="vp-popup" value={formatValue(doc.aspect)} onchange={(e) => setFormat(e.currentTarget.value)} aria-label={t('viewer.aspect')}>
+					{#each formats as section (section.id)}<optgroup label={formatGroupText(section.id)}>{#each section.rows as row (row.value)}<option value={row.value}>{row.value}</option>{/each}</optgroup>{/each}
 				</select>
 			</HostUi>
 			<HostUi name="Tooltip" props={{ text: t('viewer.resolutionTip', { fps: doc.fps }) }}>
-				<select class="vp-popup" bind:value={doc.resolution} aria-label={t('viewer.resolution')}>
-					<option value="720p">720p</option>
-					<option value="1080p">1080p</option>
-					<option value="4K">{t('viewer.uhd')}</option>
+				<select class="vp-popup" value={doc.resolution} onchange={(e) => setResolution(e.currentTarget.value)} aria-label={t('viewer.resolution')}>
+					{#each RESOLUTION_NAMES as r (r)}<option value={r}>{r === '4K' ? t('viewer.uhd') : r}</option>{/each}
 				</select>
 			</HostUi>
 			<HostUi

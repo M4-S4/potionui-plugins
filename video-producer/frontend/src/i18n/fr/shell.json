@@ -119,6 +119,7 @@
 	"properties.resolution": "Résolution",
 	"properties.fps": "Cadence",
 	"properties.fpsValue": "{fps} i/s",
+	"properties.resolutionValue": "{resolution} · {size}",
 	"properties.chain": "Ouvrir chaque nouveau plan sur le précédent",
 	"properties.chainHelp": "Un nouveau plan prend comme première image l’image de fin de la portion montée du plan précédent. Vous pouvez la changer dans l’éditeur de plan ; quand le plan précédent change, le raccord le signale au lieu de la remplacer.",
 	"properties.chainTextOnly": "{engine} génère à partir du texte seul : il n’utilise pas ces premières images.",
@@ -138,5 +139,8 @@
 	"shortcuts.pickToggle": "Ajouter le plan à la sélection, ou l’en retirer",
 	"shortcuts.pickRange": "Choisir les plans du plan choisi jusqu’à celui-ci",
 	"shortcuts.pickAdd": "Ajouter ces plans à la sélection",
-	"shortcuts.clearPicked": "Vider la sélection"
+	"shortcuts.clearPicked": "Vider la sélection",
+	"picker.none": "Rien ne correspond à « {query} »",
+	"picker.apply": "Appliquer",
+	"picker.cancel": "Revenir à la liste"
 }
