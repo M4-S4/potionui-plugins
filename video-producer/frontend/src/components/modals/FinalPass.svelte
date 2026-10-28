@@ -8,7 +8,7 @@
 	import { chosenSize, formatValue } from '../../lib/formats.js';
 	import { changedRatio } from '../../lib/framing.js';
 	import { presetById } from '../../lib/production.svelte.js';
-	import { passFlying, passPlan } from '../../lib/finalpass.js';
+	import { passFlying, passPlan, upscalerReady } from '../../lib/finalpass.js';
 	import { cancelFinalPass, guidedReady, guidedResolution, passNoteText, passState, passTargets, savedChoice, schedulePassEstimate, startFinalPass, stopPassEstimate } from '../../lib/finalpass.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
@@ -26,7 +26,7 @@
 	const flying = $derived(passFlying(takeStore.list));
 	const progress = $derived(flying.length ? flying.reduce((sum, x) => sum + (x.status === 'running' ? Math.min(100, Math.max(0, x.progress ?? 0)) : 0), 0) / flying.length : 0);
 	const ownUpscale = $derived(plan.included.some((row) => upscalesItself(row.source?.presetId)));
-	const upscaleReady = $derived(ui.me?.features?.upscaler === true || plan.included.every((row) => upscalesItself(row.source?.presetId)));
+	const upscaleReady = $derived(upscalerReady(upscaler, ui.me, plan.included.map((row) => row.source?.presetId)));
 	const guided = $derived(guidedReady());
 	const usable = $derived(method === 'upscale' ? upscaleReady : method === 'guided' ? guided : true);
 	const est = $derived(passState.data);
@@ -49,13 +49,22 @@
 	]);
 	const upscalers = $derived([
 		{ id: 'auto', label: t('generation.finalPass.upscaler.auto') },
-		{ id: 'seedvr2', label: t('generation.finalPass.upscaler.seedvr2'), disabled: ui.me?.features?.upscaler !== true }
+		{ id: 'rtx', label: t('generation.finalPass.upscaler.rtx'), disabled: ui.me?.features?.upscalers?.rtx !== true },
+		{ id: 'seedvr2', label: t('generation.finalPass.upscaler.seedvr2'), disabled: ui.me?.features?.upscalers?.seedvr2 !== true },
+		...(ownUpscale ? [{ id: 'engine', label: t('generation.finalPass.upscaler.engine') }] : [])
 	]);
+
+	function upscaleHint(id) {
+		if (id === 'rtx') return t('generation.finalPass.hint.rtx');
+		if (id === 'seedvr2') return t('generation.finalPass.hint.seedvr2');
+		if (id === 'engine') return t('generation.finalPass.hint.engine');
+		return t('generation.finalPass.hint.upscale');
+	}
 
 	const hint = $derived.by(() => {
 		if (method === 'guided') return guided ? t('generation.finalPass.hint.guided', { res: guidedResolution() }) : t('generation.finalPass.hint.guidedMissing');
 		if (method === 'render') return t('generation.finalPass.hint.render');
-		return upscaleReady ? t('generation.finalPass.hint.upscale') : t('generation.block.upscaleUnsupported');
+		return upscaleReady ? upscaleHint(upscaler) : t('generation.block.upscaleUnsupported');
 	});
 	const soundText = $derived(method === 'render' ? t('generation.finalPass.sound.render') : method === 'guided' ? t('generation.finalPass.sound.guided') : t('generation.finalPass.sound.upscale'));
 
@@ -90,6 +99,7 @@
 	}
 
 	function targetLabel(id) {
+		if (id === 'auto') return t('generation.target.auto');
 		if (id === 'hd720') return t('generation.target.hd720');
 		if (id === 'fhd1080') return t('generation.target.fhd1080');
 		if (id === 'qhd1440') return t('generation.target.qhd1440');
@@ -120,13 +130,12 @@
 			<p class="text-xs text-fg-subtle">{hint}</p>
 			{#if method === 'render'}<p class="flex items-start gap-1.5 text-xs text-fg-muted"><Icon name="info" class="mt-0.5 h-3 w-3 shrink-0" />{guided ? t('generation.finalPass.placement') : t('generation.finalPass.placementNoGuided')}</p>{/if}
 			{#if method === 'upscale'}
+				<div class="flex items-center gap-3">
+					<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.upscaler.label')}</span>
+					<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.upscaler.label'), items: upscalers, selected: upscaler, onSelect: (id) => (upscaler = id) }} />
+				</div>
 				<HostUi name="SegmentedControl" props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.final.target'), items: targets.map((id) => ({ id, label: targetLabel(id), disabled: !upscaleReady })), selected: target, onSelect: (id) => (target = id) }} />
-				{#if ownUpscale}
-					<div class="flex items-center gap-3">
-						<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.upscaler.label')}</span>
-						<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.upscaler.label'), items: upscalers, selected: upscaler, onSelect: (id) => (upscaler = id) }} />
-					</div>
-				{/if}
+				{#if target === 'auto'}<p class="text-xs text-fg-subtle">{t('generation.finalPass.targetAuto')}</p>{/if}
 			{/if}
 			<p class="flex items-start gap-1.5 text-xs text-fg-subtle"><Icon name="wave" class="mt-0.5 h-3 w-3 shrink-0" />{soundText}</p>
 			{#if oldRatio}<p class="text-xs text-fg-subtle">{t('generation.finalPass.oldRatio', { count: oldRatio, aspect: formatValue(doc.aspect) })}</p>{/if}

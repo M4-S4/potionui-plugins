@@ -1,10 +1,10 @@
 <script>
-	import { untrack } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, toast, clipLabel } from '../../lib/state.svelte.js';
-	import { makeFinal, upscaleAvailable, findTake, presetById } from '../../lib/production.svelte.js';
-	import { UPSCALE_TARGETS, aspectOf, finalResolution, upscaleTargetFor, upscalesItself } from '../../lib/generation.js';
+	import { makeFinal, findTake, presetById } from '../../lib/production.svelte.js';
+	import { UPSCALE_TARGETS, aspectOf, canUpscale as autoUpscale, finalResolution, upscalesItself } from '../../lib/generation.js';
+	import { AUTO_TARGET, upscalerReady } from '../../lib/finalpass.js';
 	import { chosenSize } from '../../lib/formats.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { guidedReady, guidedResolution } from '../../lib/finalpass.svelte.js';
@@ -15,18 +15,33 @@
 
 	const take = $derived(findTake(takeId));
 	const clip = $derived(doc.clips.find((c) => c.id === take?.shotId));
-	const targets = $derived(ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS);
-	const canUpscale = $derived(upscaleAvailable(take));
+	const targets = $derived([AUTO_TARGET, ...(ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS)]);
 	const h3 = $derived(upscalesItself(take?.presetId));
+	let upscaler = $state('auto');
+	const canUpscale = $derived(upscaler === 'auto' ? autoUpscale(take, ui.me) : upscalerReady(upscaler, ui.me, take ? [take.presetId] : []));
+	const upscalers = $derived([
+		{ id: 'auto', label: t('generation.finalPass.upscaler.auto') },
+		{ id: 'rtx', label: t('generation.finalPass.upscaler.rtx'), disabled: ui.me?.features?.upscalers?.rtx !== true },
+		{ id: 'seedvr2', label: t('generation.finalPass.upscaler.seedvr2'), disabled: ui.me?.features?.upscalers?.seedvr2 !== true },
+		...(h3 ? [{ id: 'engine', label: t('generation.finalPass.upscaler.engine') }] : [])
+	]);
 	const renderRes = $derived((finalResolution(presetById(take?.presetId), aspectOf(doc.aspect, doc.resolution), chosenSize(doc, take?.presetId, 'final')) ?? take?.resolution ?? '—').replace('x', '×'));
-	let target = $state(untrack(() => upscaleTargetFor(doc.resolution, ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS)));
+	let target = $state(AUTO_TARGET);
 	const guided = $derived(guidedReady());
 	const guidedRes = $derived(guidedResolution());
 	let sending = $state(false);
 
 	const close = () => (ui.modal = null);
 
+	function upscaleHint(id) {
+		if (id === 'rtx') return t('generation.finalPass.hint.rtx');
+		if (id === 'seedvr2') return t('generation.finalPass.hint.seedvr2');
+		if (id === 'engine' || h3) return t('generation.final.upscaleH3');
+		return t('generation.final.upscaleHint');
+	}
+
 	function targetLabel(id) {
+		if (id === 'auto') return t('generation.target.auto');
 		if (id === 'hd720') return t('generation.target.hd720');
 		if (id === 'fhd1080') return t('generation.target.fhd1080');
 		if (id === 'qhd1440') return t('generation.target.qhd1440');
@@ -36,9 +51,9 @@
 
 	async function send(method) {
 		if (!take || sending) return;
-		const message = method === 'upscale' ? t('generation.final.startedUpscale', { target: targetLabel(target) }) : method === 'guided' ? t('generation.final.startedGuided', { res: guidedRes }) : t('generation.final.startedRender', { res: renderRes });
+		const message = method === 'upscale' ? (target === AUTO_TARGET ? t('generation.final.startedUpscaleAuto') : t('generation.final.startedUpscale', { target: targetLabel(target) })) : method === 'guided' ? t('generation.final.startedGuided', { res: guidedRes }) : t('generation.final.startedRender', { res: renderRes });
 		sending = true;
-		const ok = await makeFinal(take.id, method, target);
+		const ok = await makeFinal(take.id, method, target, upscaler);
 		sending = false;
 		if (!ok) return;
 		close();
@@ -60,11 +75,16 @@
 						<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.final.unavailable')}</HostUi>
 					{/if}
 				</div>
-				<p class="text-xs text-fg-subtle">{canUpscale ? (h3 ? t('generation.final.upscaleH3') : t('generation.final.upscaleHint')) : t('generation.block.upscaleUnsupported')}</p>
+				<p class="text-xs text-fg-subtle">{canUpscale ? upscaleHint(upscaler) : t('generation.block.upscaleUnsupported')}</p>
+				<div class="flex items-center gap-3">
+					<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.upscaler.label')}</span>
+					<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.upscaler.label'), items: upscalers, selected: upscaler, onSelect: (id) => (upscaler = id) }} />
+				</div>
 				<HostUi
 					name="SegmentedControl"
 					props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.final.target'), items: targets.map((id) => ({ id, label: targetLabel(id), disabled: !canUpscale })), selected: target, onSelect: (id) => (target = id) }}
 				/>
+				{#if target === AUTO_TARGET}<p class="text-xs text-fg-subtle">{t('generation.finalPass.targetAuto')}</p>{/if}
 			</section>
 			{#if guided}<p class="text-xs text-fg-subtle">{t('generation.final.guidedHint', { res: guidedRes })}</p>{/if}
 			<p class="text-xs text-fg-subtle">{t('generation.final.renderHint', { res: renderRes })}</p>
@@ -76,7 +96,7 @@
 		{/if}
 			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', onclick: close }}>{t('generation.final.cancel')}</HostUi>
 			{#if canUpscale}
-				<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('arrow-up'), disabled: sending, onclick: () => send('upscale') }}>{t('generation.final.upscaleAction', { target: targetLabel(target) })}</HostUi>
+				<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('arrow-up'), disabled: sending, onclick: () => send('upscale') }}>{target === AUTO_TARGET ? t('generation.final.upscaleActionAuto') : t('generation.final.upscaleAction', { target: targetLabel(target) })}</HostUi>
 			{/if}
 		{/snippet}
 	</Modal>

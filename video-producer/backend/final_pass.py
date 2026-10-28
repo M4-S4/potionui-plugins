@@ -1,15 +1,12 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import catalog, director, estimate, generation, limits, takes
+from . import director, estimate, generation, limits, takes, upscalers
 from .core_bridge import User
 from .director import ShotPlan, note
 from .generation import Blocked, TakeError
 
-AUTO = "auto"
-SEEDVR2 = "seedvr2"
-
-UPSCALERS = (AUTO, SEEDVR2)
+AUTO = upscalers.AUTO
 
 MAX_TAKES = 200
 
@@ -60,11 +57,11 @@ def parse_order(body: Any) -> Order:
     if method not in generation.METHODS:
         raise PassError(f"method must be one of: {', '.join(generation.METHODS)}.")
     target = body.get("target")
-    if target not in catalog.UPSCALE_TARGETS:
-        raise PassError(f"target must be one of: {', '.join(catalog.UPSCALE_TARGETS)}.")
+    if target not in upscalers.TARGETS:
+        raise PassError(f"target must be one of: {', '.join(upscalers.TARGETS)}.")
     upscaler = body.get("upscaler", AUTO)
-    if upscaler not in UPSCALERS:
-        raise PassError(f"upscaler must be one of: {', '.join(UPSCALERS)}.")
+    if upscaler not in upscalers.CHOICES:
+        raise PassError(f"upscaler must be one of: {', '.join(upscalers.CHOICES)}.")
     return Order(takes=list(dict.fromkeys(ids)), method=method, target=target, upscaler=upscaler)
 
 
@@ -99,7 +96,7 @@ async def _plan_all(owner: User, project: Mapping[str, Any], order: Order, sourc
             _add(blocks, note("final_running", "A final take of this take is already queued or running."), shot_id)
             continue
         try:
-            plan, preset_id, native = await generation.final_plan(owner, project, source, order.method, order.target, order.upscaler == AUTO)
+            plan, preset_id, native = await generation.final_plan(owner, project, source, order.method, order.target, order.upscaler)
         except TakeError as exc:
             _add(blocks, note(exc.code, exc.message), shot_id)
             continue

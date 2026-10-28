@@ -1,10 +1,12 @@
-import { UPSCALE_TARGETS, isInFlight, upscaleTargetFor } from './generation.js';
+import { UPSCALE_TARGETS, isInFlight, upscalesItself } from './generation.js';
 import { labelOf } from './labels.js';
 import { isStale } from './shots.js';
 
 export const PASS_METHODS = ['upscale', 'guided', 'render'];
 export const GUIDED_PRESET = '01KX47LTX25VIDEO00000000TV';
-export const UPSCALERS = ['auto', 'seedvr2'];
+export const UPSCALERS = ['auto', 'rtx', 'seedvr2', 'engine'];
+export const AUTO_TARGET = 'auto';
+export const PASS_TARGETS = [AUTO_TARGET, ...UPSCALE_TARGETS];
 export const PASS_STATES = ['ready', 'running', 'done', 'missing', 'source'];
 
 const finished = (take) => take?.status === 'done' && Boolean(take.url);
@@ -58,16 +60,25 @@ export function migratePass(value) {
 	if (!isObject(value)) return null;
 	const kept = {};
 	if (PASS_METHODS.includes(value.method)) kept.method = value.method;
-	if (UPSCALE_TARGETS.includes(value.target)) kept.target = value.target;
+	if (PASS_TARGETS.includes(value.target)) kept.target = value.target;
 	if (UPSCALERS.includes(value.upscaler)) kept.upscaler = value.upscaler;
 	return Object.keys(kept).length ? kept : null;
 }
 
-export function passChoice(saved, resolution, targets = UPSCALE_TARGETS, guided = false) {
+export function passChoice(saved, targets = PASS_TARGETS, guided = false) {
 	const kept = migratePass(saved) ?? {};
 	const method = kept.method === 'guided' && !guided ? 'upscale' : (kept.method ?? 'upscale');
-	const target = targets.includes(kept.target) ? kept.target : upscaleTargetFor(resolution, targets);
+	const target = targets.includes(kept.target) ? kept.target : (targets[0] ?? AUTO_TARGET);
 	return { method, target, upscaler: kept.upscaler ?? 'auto' };
+}
+
+export function upscalerReady(upscaler, me, presetIds = []) {
+	const ready = me?.features?.upscalers ?? {};
+	const own = presetIds.every((id) => upscalesItself(id));
+	if (upscaler === 'rtx') return ready.rtx === true;
+	if (upscaler === 'seedvr2') return ready.seedvr2 === true;
+	if (upscaler === 'engine') return own;
+	return me?.features?.upscaler === true || own;
 }
 
 export function passBody(sources, choice) {

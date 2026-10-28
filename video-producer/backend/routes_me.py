@@ -3,7 +3,7 @@ from typing import Any, Dict, Iterable, List, NoReturn, Optional
 
 from fastapi import APIRouter, Body, Depends
 
-from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, director, keyframes, limits, projects, settings, takes
+from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, director, keyframes, limits, projects, settings, takes, upscalers
 from .core_bridge import AccountType, User, get_current_active_user
 from .responses import fail, ok
 
@@ -35,6 +35,11 @@ def _ffmpeg() -> bool:
         return False
 
 
+def _features(user: User) -> Dict[str, Any]:
+    ready = upscalers.ready(user)
+    return {"upscaler": any(ready.values()), "upscalers": ready, "guided": director.guided_ready(user)}
+
+
 @router.get("/me")
 def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
     """The signed-in user's locale, last project, role, quota, engines, video presets (with the options the project may set in each mode the Video Director runs them in, and the sizes each was measured at by backend) and features, the presets that edit a start image from several pictures, ffmpeg, and the plugin settings."""
@@ -51,7 +56,7 @@ def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
             "presets": video_presets,
             "measured": _measured(video_presets),
             "keyframe_presets": [preset.summary() for preset in keyframes.image_presets(user)],
-            "features": {"upscaler": any(preset["upscaler"] for preset in video_presets), "guided": director.guided_ready(user)},
+            "features": _features(user),
             "upscale_targets": list(catalog.UPSCALE_TARGETS),
             "ffmpeg": _ffmpeg(),
         }

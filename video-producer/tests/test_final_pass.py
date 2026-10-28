@@ -64,7 +64,7 @@ def guided(core, monkeypatch):
         ({"takes": ["t1", ""], "method": "upscale", "target": "fhd1080"}, "non-empty list"),
         ({"takes": ["t1"], "method": "remaster", "target": "fhd1080"}, "method must be one of: upscale, render, guided."),
         ({"takes": ["t1"], "method": "upscale", "target": "8k"}, "target must be one of"),
-        ({"takes": ["t1"], "method": "upscale", "target": "fhd1080", "upscaler": "rtx"}, "upscaler must be one of: auto, seedvr2."),
+        ({"takes": ["t1"], "method": "upscale", "target": "fhd1080", "upscaler": "turbo"}, "upscaler must be one of: auto, seedvr2, rtx, engine."),
     ],
 )
 def test_a_malformed_final_pass_is_refused(body, message):

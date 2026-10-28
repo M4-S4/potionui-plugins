@@ -694,8 +694,9 @@ export function createClient(api, save) {
 		async deleteTake(projectId, takeId) {
 			return mapped(await call(api, 'delete', takePath(projectId, takeId)), (data) => (text(data.deleted) ? { deleted: data.deleted } : null));
 		},
-		async finalTake(projectId, takeId, method, target) {
-			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/final`, { method, target }), pickTake);
+		async finalTake(projectId, takeId, method, target, upscaler = 'auto') {
+			const body = method === 'upscale' && upscaler !== 'auto' ? { method, target, upscaler } : { method, target };
+			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/final`, body), pickTake);
 		},
 		async finalPassEstimate(projectId, body, signal) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/final-pass/estimate`, body, signal), normalizePassEstimate);

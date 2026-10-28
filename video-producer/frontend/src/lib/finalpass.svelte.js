@@ -4,7 +4,7 @@ import { project, getClient, flushSave, projectGone } from './project.svelte.js'
 import { takeStore } from './takes.svelte.js';
 import { cancelTake, followTakes, noteText, presetById } from './production.svelte.js';
 import { UPSCALE_TARGETS, aspectOf, finalResolution } from './generation.js';
-import { GUIDED_PRESET, passBody, passChoice, passFlying } from './finalpass.js';
+import { AUTO_TARGET, GUIDED_PRESET, passBody, passChoice, passFlying } from './finalpass.js';
 
 const ESTIMATE_DELAY = 400;
 
@@ -22,7 +22,7 @@ export function openFinalPass() {
 }
 
 export function passTargets() {
-	return ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS;
+	return [AUTO_TARGET, ...(ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS)];
 }
 
 export const guidedReady = () => ui.me?.features?.guided === true;
@@ -32,7 +32,7 @@ export function guidedResolution() {
 }
 
 export function savedChoice() {
-	return passChoice(doc.finalPass, doc.resolution, passTargets(), guidedReady());
+	return passChoice(doc.finalPass, passTargets(), guidedReady());
 }
 
 function remember(choice) {

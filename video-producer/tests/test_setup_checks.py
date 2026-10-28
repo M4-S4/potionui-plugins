@@ -425,10 +425,37 @@ def test_an_error_reading_the_presets_is_a_step_still_to_do(monkeypatch, caplog)
     assert "catalog is down" in caplog.text
 
 
-def test_the_upscaler_check_looks_at_seedvr2_only(preset_states):
+def test_the_upscaler_check_looks_at_seedvr2_then_rtx_upscale(preset_states):
     UpscalerReady().evaluate(CONTEXT)
 
-    assert preset_states.asked == [presets.SEEDVR2]
+    assert preset_states.asked == [presets.SEEDVR2, presets.RTX_UPSCALE]
+
+
+@pytest.mark.parametrize(
+    "seedvr2, module, description",
+    [
+        (True, True, "SeedVR2 is installed and assigned. RTX Upscale is ready as well, for fast final takes."),
+        (True, False, "SeedVR2 is installed and assigned. RTX Upscale also needs the nvidia-vfx package on the server."),
+        (False, True, "Final takes are upscaled with RTX Upscale. SeedVR2, which restores and adds detail, is not installed."),
+    ],
+)
+def test_an_assigned_rtx_upscale_is_named_and_counts_without_seedvr2(preset_states, monkeypatch, seedvr2, module, description):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: module and name == "nvvfx")
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True, assigned=True)
+    if seedvr2:
+        preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+
+    assert UpscalerReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description=description)
+
+
+def test_an_rtx_upscale_without_nvidia_vfx_does_not_replace_seedvr2(preset_states, monkeypatch):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: False)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True, assigned=True)
+
+    result = UpscalerReady().evaluate(CONTEXT)
+
+    assert result.done is False
+    assert result.description.endswith("RTX Upscale also needs the nvidia-vfx package on the server.")
 
 
 def test_an_installed_and_assigned_upscaler_is_done(preset_states):

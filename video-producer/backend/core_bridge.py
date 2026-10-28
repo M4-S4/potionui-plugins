@@ -1,3 +1,4 @@
+import importlib.util
 import logging
 import re
 import shutil
@@ -235,6 +236,14 @@ def find_ffprobe() -> Optional[str]:
     if sibling is not None and sibling.is_file():
         return str(sibling)
     return shutil.which("ffprobe")
+
+
+def module_available(name: str) -> bool:
+    """Whether a Python module could be imported here, without importing it."""
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def image_embedder() -> Dict[str, Any]:

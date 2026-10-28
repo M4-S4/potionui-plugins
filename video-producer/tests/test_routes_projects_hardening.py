@@ -203,7 +203,7 @@ def test_a_missing_required_field_is_refused_at_every_level(api, starter):
         "$.clips[0].dur",
         "$.assets[0].kind",
         "$.lanes[0].inserts[0].type",
-        "$.engine.post.upscale",
+        "$.engine.quality",
         "$.hybrid.style",
     )
     for path in paths:

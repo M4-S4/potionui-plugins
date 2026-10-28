@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Optional, Sequence, Set
 from urllib.parse import urlencode
 
-from . import PLUGIN_ID, core_bridge, presets
+from . import PLUGIN_ID, core_bridge, presets, upscalers
 from .core_bridge import CLOUD_ENGINE, NATIVE_DRIVERS, PresetState, SetupCheck, SetupCheckContext, SetupCheckResult
 
 logger = logging.getLogger("plugins.video-producer")
@@ -143,8 +143,31 @@ class VideoPresetsReady(SetupCheck):
         )
 
 
+def _rtx_state() -> Optional[PresetState]:
+    try:
+        state = core_bridge.preset_state(presets.RTX_UPSCALE)
+    except Exception as exc:
+        logger.warning("[VIDEO-PRODUCER] Setup check: could not read the RTX Upscale preset: %s", exc)
+        return None
+    return state if state.loaded else None
+
+
+def _rtx_ready(state: Optional[PresetState]) -> bool:
+    return bool(state and state.installed and state.assigned and core_bridge.module_available(upscalers.RTX_MODULE))
+
+
+def _rtx_note(state: Optional[PresetState]) -> str:
+    if state is None:
+        return ""
+    if _rtx_ready(state):
+        return f" {state.name} is ready as well, for fast final takes."
+    if state.installed and state.assigned:
+        return f" {state.name} also needs the nvidia-vfx package on the server."
+    return ""
+
+
 class UpscalerReady(SetupCheck):
-    """SeedVR2 is installed, so draft takes can be upscaled into final takes."""
+    """SeedVR2 or RTX Upscale is installed, so draft takes can be upscaled into final takes."""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
         try:
@@ -152,25 +175,32 @@ class UpscalerReady(SetupCheck):
         except Exception as exc:
             logger.warning("[VIDEO-PRODUCER] Setup check: could not read the SeedVR2 preset: %s", exc)
             return _unchecked("the SeedVR2 preset", "Open presets", PRESETS_HREF)
-        if not state.loaded:
-            return SetupCheckResult(
-                done=False,
-                description="The SeedVR2 preset is not available on this instance; final takes need it.",
-                action_label="Open presets",
-                action_href=PRESETS_HREF,
-            )
+        rtx = _rtx_state()
+        note = _rtx_note(rtx)
         if state.installed and state.assigned:
-            return SetupCheckResult(done=True, description=f"{state.name} is installed and assigned.")
+            return SetupCheckResult(done=True, description=f"{state.name} is installed and assigned.{note}")
         if state.installed:
             return SetupCheckResult(
                 done=True,
-                description=f"{state.name} is installed. Assign it to the users or groups who make final takes.",
+                description=f"{state.name} is installed. Assign it to the users or groups who make final takes.{note}",
+            )
+        if _rtx_ready(rtx):
+            return SetupCheckResult(
+                done=True,
+                description=f"Final takes are upscaled with {rtx.name}. SeedVR2, which restores and adds detail, is not installed.",
+            )
+        if not state.loaded:
+            return SetupCheckResult(
+                done=False,
+                description=f"The SeedVR2 preset is not available on this instance; final takes need it.{note}",
+                action_label="Open presets",
+                action_href=PRESETS_HREF,
             )
         return SetupCheckResult(
             done=False,
             description=(
                 f"Final takes are upscaled with {state.name}. Install it, "
-                "then assign it to the users or groups who make final takes."
+                f"then assign it to the users or groups who make final takes.{note}"
             ),
             action_label=f"Open {state.name}",
             action_href=admin_href(tab="presets", id=state.id),

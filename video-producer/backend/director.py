@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, dialogue, engine_options, formats, models, presets, reception, settings
+from . import bible, catalog, core_bridge, dialogue, engine_options, formats, models, presets, reception, settings, upscalers
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -35,7 +35,7 @@ REFERENCE_LIMITS = reception.LIMITS
 SEEDVR2_MODE = "video_upscale"
 H3_UPSCALE_MODE = "upscale"
 
-UPSCALE_SHORT_SIDES = {"hd720": 720, "fhd1080": 1080, "qhd1440": 1440, "uhd2160": 2160}
+UPSCALE_SHORT_SIDES = upscalers.UPSCALE_SHORT_SIDES
 H3_TARGET_SIZES = {"hd720": "hd", "fhd1080": "hd", "qhd1440": "2k", "uhd2160": "2k"}
 H3_TARGET_BACK = {"hd": "fhd1080", "2k": "qhd1440"}
 
@@ -1891,23 +1891,42 @@ def h3_target_size(fields: models.Fields, target: str) -> str:
 
 
 def upscale_target(take: Mapping[str, Any]) -> str:
-    """The upscale target an upscale take was asked for."""
+    """The upscale target an upscale take was asked for: SeedVR2's named target, RTX's short side, or MiniMax-H3's size."""
     form = (take.get("request") or {}).get("form_data") or {}
     target = form.get("resolution_target")
     if target in UPSCALE_SHORT_SIDES:
         return str(target)
+    short = form.get(upscalers.RTX_TARGET_FIELD)
+    named = next((name for name, side in UPSCALE_SHORT_SIDES.items() if side == short), None)
+    if named is not None:
+        return named
     return H3_TARGET_BACK.get(str(form.get("target_size")), "fhd1080")
 
 
-def build_upscale(user: User, source: Mapping[str, Any], target: str, own_mode: bool = True) -> ShotPlan:
-    """The final take of a finished take upscaled: a MiniMax-H3 preset's own Upscale mode for its takes unless own_mode is False, SeedVR2 otherwise."""
-    source_preset = source.get("preset_id")
-    own = find_preset(user, str(source_preset), video=False) if own_mode and source_preset in presets.MINIMAX_H3_PRESETS else None
-    h3 = own is not None and H3_UPSCALE_MODE in own.modes
-    preset_id = own.id if h3 else presets.SEEDVR2
-    mode = H3_UPSCALE_MODE if h3 else SEEDVR2_MODE
-    preset = own if h3 else find_preset(user, presets.SEEDVR2, video=False)
-    if preset is None or mode not in preset.modes:
+def _own_upscale(user: User, source: Mapping[str, Any]) -> Optional[Preset]:
+    preset_id = source.get("preset_id")
+    if preset_id not in presets.MINIMAX_H3_PRESETS:
+        return None
+    return find_preset(user, str(preset_id), video=False)
+
+
+def _upscaler_preset(user: User, source: Mapping[str, Any], upscaler: str) -> Tuple[Preset, str]:
+    own = _own_upscale(user, source) if upscaler in (upscalers.AUTO, upscalers.ENGINE) else None
+    if own is not None and H3_UPSCALE_MODE in own.modes:
+        return own, H3_UPSCALE_MODE
+    if upscaler == upscalers.ENGINE:
+        name = own.name if own is not None else "The engine of this take"
+        raise DirectorError(
+            "upscale_unsupported",
+            f"{name} has no Upscale mode: pick another upscaler, or render the take again at full resolution.",
+            preset_id=source.get("preset_id"),
+        )
+    preset_id = upscalers.PRESET_OF.get(upscaler, presets.SEEDVR2)
+    preset = find_preset(user, preset_id, video=False)
+    if upscaler == upscalers.AUTO and (preset is None or SEEDVR2_MODE not in preset.modes) and upscalers.ready(user)[upscalers.RTX]:
+        preset_id = presets.RTX_UPSCALE
+        preset = find_preset(user, preset_id, video=False)
+    if preset is None or SEEDVR2_MODE not in preset.modes:
         if own is not None:
             raise DirectorError(
                 "upscale_unsupported",
@@ -1915,6 +1934,27 @@ def build_upscale(user: User, source: Mapping[str, Any], target: str, own_mode: 
                 preset_id=own.id,
             )
         raise DirectorError("no_preset", "The upscaler preset is not available to you.", preset_id=preset_id)
+    if preset_id == presets.RTX_UPSCALE and not upscalers.rtx_target_field(preset_id):
+        raise DirectorError(
+            "upscaler_outdated",
+            f"This version of {preset.name} cannot be asked for a size: update the NVIDIA RTX Upscale plugin.",
+            preset_id=preset_id,
+        )
+    if preset_id == presets.RTX_UPSCALE and not core_bridge.module_available(upscalers.RTX_MODULE):
+        raise DirectorError(
+            "upscaler_missing",
+            f"{preset.name} needs the nvidia-vfx package on the server: ask an administrator to install it.",
+            preset_id=preset_id,
+        )
+    return preset, SEEDVR2_MODE
+
+
+def build_upscale(user: User, source: Mapping[str, Any], target: str, upscaler: str = upscalers.AUTO) -> ShotPlan:
+    """The final take of a finished take upscaled to a named target: Auto uses a MiniMax-H3 preset's own Upscale mode for its takes and SeedVR2 otherwise, RTX when SeedVR2 is missing and RTX is ready; Engine only the own mode; SeedVR2 and RTX their preset's video mode."""
+    preset, mode = _upscaler_preset(user, source, upscaler)
+    preset_id = preset.id
+    h3 = mode == H3_UPSCALE_MODE
+    rtx = preset_id == presets.RTX_UPSCALE
     fields = models.form_fields(preset_id, mode)
     media = source_video(user, source)
     form: Dict[str, Any] = {"input_video": media["value"], "seed": -1}
@@ -1924,6 +1964,9 @@ def build_upscale(user: User, source: Mapping[str, Any], target: str, own_mode: 
         form["target_size"] = h3_target_size(fields, target)
         if "quantity" in fields:
             form["quantity"] = 1
+    elif rtx:
+        form.pop("seed")
+        form.update({"intent": "upscale", "quality": "ultra", upscalers.RTX_TARGET_FIELD: UPSCALE_SHORT_SIDES[target], "keep_audio": True})
     else:
         form["restoration_intent"] = "faithful"
         form["resolution_target"] = target

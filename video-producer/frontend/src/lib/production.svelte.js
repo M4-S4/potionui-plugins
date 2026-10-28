@@ -206,6 +206,8 @@ function baseNoteText(note) {
 	if (code === 'no_references') return t('generation.block.noReferences', { shot: shotName(data.shot_id) });
 	if (code === 'source_unavailable') return t('generation.block.sourceUnavailable');
 	if (code === 'upscale_unsupported') return t('generation.block.upscaleUnsupported');
+	if (code === 'upscaler_outdated') return t('generation.block.upscalerOutdated');
+	if (code === 'upscaler_missing') return t('generation.block.upscalerMissing');
 	if (code === 'vram_stream') return t('generation.warn.vramStream');
 	if (code === 'vram_unknown') return t('generation.warn.vramUnknown');
 	if (code === 'time_unknown') return t('generation.warn.timeUnknown');
@@ -433,11 +435,11 @@ export function promoteToFinal(takeId) {
 	ui.modal = { type: 'final', take: take.id };
 }
 
-export async function makeFinal(takeId, method, target) {
+export async function makeFinal(takeId, method, target, upscaler = 'auto') {
 	const take = takeById(takeId);
 	if (!take) return false;
 	const projectId = project.id;
-	const result = await getClient().finalTake(projectId, take.id, method, target);
+	const result = await getClient().finalTake(projectId, take.id, method, target, upscaler);
 	if (projectId !== project.id) return false;
 	if (!result.ok) {
 		failed(result.error, t('generation.toast.finalFailed'));

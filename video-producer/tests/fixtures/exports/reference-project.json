@@ -292,11 +292,6 @@
       "overlap": 1,
       "windowLen": 5,
       "loras": [],
-      "post": {
-        "upscale": false,
-        "interpolation": true,
-        "denoise": true
-      },
       "variants": 2,
       "backend": "local",
       "consistency": 70,

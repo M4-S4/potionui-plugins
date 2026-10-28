@@ -144,6 +144,7 @@ function currentReference(r) {
 const RETIRED_KEYS = ['controls', 'plans3d', 'scenes'];
 export const RETIRED_ASSET_KEYS = ['synth', 'transcript', 'character', 'lipSync'];
 export const RETIRED_LANE_KEYS = ['automation'];
+export const RETIRED_ENGINE_KEYS = ['post'];
 const without = (item, keys) => (isObject(item) && keys.some((key) => key in item) ? Object.fromEntries(Object.entries(item).filter(([key]) => !keys.includes(key))) : item);
 export const workshopSound = (a) => isObject(a) && Boolean(a.synth) && !a.src && !a.origin;
 
@@ -200,7 +201,7 @@ export function migrate(doc) {
 	for (const key of RETIRED_KEYS) delete next[key];
 	migrateSounds(next);
 	if ('bible' in doc) next.bible = migrateBible(doc.bible);
-	if (isObject(doc.engine)) next.engine = migrateOptions(doc.engine);
+	if (isObject(doc.engine)) next.engine = without(migrateOptions(doc.engine), RETIRED_ENGINE_KEYS);
 	if ('removedTakes' in doc) {
 		const removed = removedIds(doc.removedTakes);
 		if (removed.length) next.removedTakes = removed;

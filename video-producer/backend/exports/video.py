@@ -299,15 +299,15 @@ def _fades(item: Mapping[str, Any], dur: float, name: str) -> List[str]:
 
 
 def fit_filter(width: int, height: int, keep: float) -> str:
-    """The filters that bring a picture to the frame: scaled to cover it and cropped at its centre when the narrower of its ratio and the frame's keeps at least keep of the wider, else scaled inside it with black bars; keep 0 always crops (formats.keep_share)."""
+    """The filters that bring a picture to the frame, scaled by Lanczos: scaled to cover it and cropped at its centre when the narrower of its ratio and the frame's keeps at least keep of the wider, else scaled inside it with black bars; keep 0 always crops (formats.keep_share)."""
     if keep <= 0:
-        return f"scale={width}:{height}:force_original_aspect_ratio=increase:force_divisible_by=2,crop={width}:{height}"
+        return f"scale={width}:{height}:force_original_aspect_ratio=increase:force_divisible_by=2:flags=lanczos,crop={width}:{height}"
     ratio = num(width / height)
     covers = f"gte(min(a,{ratio})/max(a,{ratio}),{num(keep)})"
     scaled_width = f"if({covers},ceil(max({width},{height}*a)/2)*2,trunc(min({width},{height}*a)/2)*2)"
     scaled_height = f"if({covers},ceil(max({height},{width}/a)/2)*2,trunc(min({height},{width}/a)/2)*2)"
     return (
-        f"scale=w='{scaled_width}':h='{scaled_height}',"
+        f"scale=w='{scaled_width}':h='{scaled_height}':flags=lanczos,"
         f"crop=w='min(iw,{width})':h='min(ih,{height})',"
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black"
     )

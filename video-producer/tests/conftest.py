@@ -215,6 +215,7 @@ WAN_ID = "01KX47WANVIDEO0000000000TV"
 H3_ID = "01KX47H3MINIMAX000000000VA"
 LTX25_ID = "01KX47LTX25VIDEO00000000TV"
 SEEDVR2_ID = "01KXB7C553THYMSMKY1QSYESFM"
+RTX_ID = "01KXRTXUPSCALE0000000000RU"
 OPENROUTER_ID = "01M3SV8HJTGT3JPPH2BA5MP6PR"
 
 WAN_RESOLUTIONS = (
@@ -373,6 +374,19 @@ def seedvr2_video_fields():
     }
 
 
+def rtx_video_fields(target=True):
+    fields = {
+        "intent": _plain("select", "upscale", ("upscale", "upscale_highbitrate", "denoise", "deblur")),
+        "quality": _plain("select", "ultra", ("low", "medium", "high", "ultra")),
+        "input_video": _plain("video", required=True),
+        "keep_audio": _plain("checkbox", True),
+        "scale": _plain("slider", 2.0),
+    }
+    if target:
+        fields["target_short_side"] = _plain("number", 0)
+    return fields
+
+
 def seedvr2_image_fields():
     return {
         "input_image": _plain("image", required=True),
@@ -451,6 +465,7 @@ BRIDGED = (
     "image_embedder",
     "embed_images",
     "generation_active",
+    "module_available",
 )
 
 
@@ -493,6 +508,7 @@ class FakeCore:
         self.busy = False
         self.embedder = {"model": "google/siglip-base-patch16-224", "slug": "local-google-siglip-base-patch16-224", "device": "cpu", "available": True, "loaded": False}
         self.embedded = []
+        self.modules = set()
         for user_id in ("user-1", "user-2"):
             self.add_user(user_id)
         self.add_user("admin-1", admin=True)
@@ -555,6 +571,14 @@ class FakeCore:
             category="utility",
             variables=SEEDVR2_VARS,
         )
+
+    def use_rtx(self, target=True, installed=True):
+        if installed:
+            self.modules.add("nvvfx")
+        return self.add_preset(RTX_ID, "RTX Upscale", {"upscale": {}, "video_upscale": rtx_video_fields(target)}, category="utility")
+
+    def module_available(self, name):
+        return name in self.modules
 
     def use_openrouter(self, model=None):
         model = model or cloud_model()

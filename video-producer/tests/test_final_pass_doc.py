@@ -25,7 +25,7 @@ def test_a_document_may_keep_the_choice_of_its_final_pass(starter):
     [
         ({"method": "remaster"}, "$.finalPass.method", "'remaster' is not one of"),
         ({"target": "8k"}, "$.finalPass.target", "'8k' is not one of"),
-        ({"upscaler": "rtx"}, "$.finalPass.upscaler", "'rtx' is not one of"),
+        ({"upscaler": "turbo"}, "$.finalPass.upscaler", "'turbo' is not one of"),
         ({"redo": True}, "$.finalPass", "Additional properties are not allowed"),
         ("upscale", "$.finalPass", "'upscale' is not of type 'object'"),
     ],

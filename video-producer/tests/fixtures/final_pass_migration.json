@@ -1,7 +1,9 @@
 [
   {"value": {"method": "upscale", "target": "fhd1080", "upscaler": "auto"}, "expected": {"method": "upscale", "target": "fhd1080", "upscaler": "auto"}},
   {"value": {"method": "guided"}, "expected": {"method": "guided"}},
-  {"value": {"method": "render", "target": "8k", "upscaler": "rtx", "redo": true}, "expected": {"method": "render"}},
+  {"value": {"method": "render", "target": "8k", "upscaler": "turbo", "redo": true}, "expected": {"method": "render"}},
+  {"value": {"method": "upscale", "target": "auto", "upscaler": "rtx"}, "expected": {"method": "upscale", "target": "auto", "upscaler": "rtx"}},
+  {"value": {"target": "auto", "upscaler": "engine"}, "expected": {"target": "auto", "upscaler": "engine"}},
   {"value": {"target": "uhd2160", "upscaler": "seedvr2"}, "expected": {"target": "uhd2160", "upscaler": "seedvr2"}},
   {"value": {}, "expected": null},
   {"value": {"method": "remaster"}, "expected": null},

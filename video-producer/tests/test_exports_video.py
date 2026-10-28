@@ -152,7 +152,7 @@ def test_a_shot_with_a_file_is_trimmed_fitted_graded_and_faded(make_doc):
     assert graph[0] == (
         "[0:v]trim=start=0.5:duration=2.5,setpts=PTS-STARTPTS,fps=24,"
         "scale=w='if(gte(min(a,1.777778)/max(a,1.777778),0.7),ceil(max(1280,720*a)/2)*2,trunc(min(1280,720*a)/2)*2)'"
-        ":h='if(gte(min(a,1.777778)/max(a,1.777778),0.7),ceil(max(720,1280/a)/2)*2,trunc(min(720,1280/a)/2)*2)',"
+        ":h='if(gte(min(a,1.777778)/max(a,1.777778),0.7),ceil(max(720,1280/a)/2)*2,trunc(min(720,1280/a)/2)*2)':flags=lanczos,"
         "crop=w='min(iw,1280)':h='min(ih,720)',pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,"
         "setsar=1,format=yuv420p,tpad=stop_mode=clone:stop_duration=2.5,trim=duration=2.5,"
         "eq=contrast=1.2:saturation=0.8:brightness=0.05,colortemperature=temperature=6000:pl=1,"
@@ -189,7 +189,7 @@ def test_social_crops_the_middle_of_the_picture_to_9_16(make_doc):
 
     first = _graph(doc, {"c1": {"name": "1.mp4", "path": "/media/1.mp4"}}, fmt="social", resolution="1080p")[0]
 
-    assert "scale=1080:1920:force_original_aspect_ratio=increase:force_divisible_by=2,crop=1080:1920" in first
+    assert "scale=1080:1920:force_original_aspect_ratio=increase:force_divisible_by=2:flags=lanczos,crop=1080:1920" in first
 
 
 def test_a_shot_without_file_is_black_and_silent_for_its_duration(make_doc):

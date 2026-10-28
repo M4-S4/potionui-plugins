@@ -308,7 +308,7 @@ def test_a_missing_assets_collection_is_refused_with_its_path(starter):
         (lambda d: d.update(theme="dark"), "$", "'theme' was unexpected"),
         (lambda d: d["clips"][0].update(extra=1), "$.clips[0]", "'extra' was unexpected"),
         (lambda d: d["lanes"][0]["inserts"][0].update(cutoff=8000), "$.lanes[0].inserts[0]", "'cutoff' was unexpected"),
-        (lambda d: d["engine"]["post"].update(sharpen=True), "$.engine.post", "'sharpen' was unexpected"),
+        (lambda d: d["engine"].update(post={"upscale": True}), "$.engine", "'post' was unexpected"),
         (lambda d: d["clips"][2].update(start="10"), "$.clips[2].start", "'10' is not of type 'number'"),
         (lambda d: d["clips"][0].update(stage="done"), "$.clips[0].stage", "'done' is not one of"),
         (lambda d: d["clips"][0].update(flag="maybe"), "$.clips[0].flag", "'maybe' is not one of"),

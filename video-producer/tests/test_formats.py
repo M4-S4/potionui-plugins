@@ -319,10 +319,10 @@ def test_the_fit_filter_crops_always_for_social_and_follows_the_framing_otherwis
     assert video.fit_share(doc, "web") == pytest.approx(0.7)
     assert video.fit_share(bars, "master") == pytest.approx(0.97)
     assert video.fit_share(crop, "archive") == 0.0
-    assert video.fit_filter(1080, 1920, 0) == "scale=1080:1920:force_original_aspect_ratio=increase:force_divisible_by=2,crop=1080:1920"
+    assert video.fit_filter(1080, 1920, 0) == "scale=1080:1920:force_original_aspect_ratio=increase:force_divisible_by=2:flags=lanczos,crop=1080:1920"
     assert video.fit_filter(1920, 804, 0.7) == (
         "scale=w='if(gte(min(a,2.38806)/max(a,2.38806),0.7),ceil(max(1920,804*a)/2)*2,trunc(min(1920,804*a)/2)*2)'"
-        ":h='if(gte(min(a,2.38806)/max(a,2.38806),0.7),ceil(max(804,1920/a)/2)*2,trunc(min(804,1920/a)/2)*2)',"
+        ":h='if(gte(min(a,2.38806)/max(a,2.38806),0.7),ceil(max(804,1920/a)/2)*2,trunc(min(804,1920/a)/2)*2)':flags=lanczos,"
         "crop=w='min(iw,1920)':h='min(ih,804)',pad=1920:804:(ow-iw)/2:(oh-ih)/2:color=black"
     )
 

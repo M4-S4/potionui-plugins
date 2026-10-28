@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { emptyDoc, migrate } from './starter.js';
 import { normalizePassEstimate, normalizeTake } from './api.js';
-import { GUIDED_PRESET, PASS_METHODS, UPSCALERS, migratePass, passBody, passChoice, passFlying, passPlan, passProgress, passShot } from './finalpass.js';
+import { GUIDED_PRESET, PASS_METHODS, PASS_TARGETS, UPSCALERS, migratePass, passBody, passChoice, passFlying, passPlan, passProgress, passShot, upscalerReady } from './finalpass.js';
 
 const t = (key) => key;
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -80,14 +80,29 @@ test('passFlying lists the final takes made from another take that are queued or
 	assert.deepEqual(passFlying(list).map((x) => x.id), ['a', 'b']);
 });
 
-test('the choice of the pass keeps what it knows, falls back to upscale and to the target of the project', () => {
-	assert.deepEqual(passChoice(null, '1080p'), { method: 'upscale', target: 'fhd1080', upscaler: 'auto' });
-	assert.deepEqual(passChoice({ method: 'render', target: 'uhd2160', upscaler: 'seedvr2' }, '720p'), { method: 'render', target: 'uhd2160', upscaler: 'seedvr2' });
-	assert.deepEqual(passChoice({ method: 'guided' }, '4K'), { method: 'upscale', target: 'uhd2160', upscaler: 'auto' });
-	assert.deepEqual(passChoice({ method: 'guided' }, '4K', undefined, true).method, 'guided');
-	assert.equal(passChoice({ target: 'uhd2160' }, '720p', ['hd720', 'fhd1080']).target, 'hd720');
+test('the choice of the pass keeps what it knows, falls back to upscale and to the first target, Auto', () => {
+	assert.deepEqual(passChoice(null), { method: 'upscale', target: 'auto', upscaler: 'auto' });
+	assert.deepEqual(passChoice({ method: 'render', target: 'uhd2160', upscaler: 'seedvr2' }), { method: 'render', target: 'uhd2160', upscaler: 'seedvr2' });
+	assert.deepEqual(passChoice({ method: 'guided', target: 'auto', upscaler: 'rtx' }), { method: 'upscale', target: 'auto', upscaler: 'rtx' });
+	assert.deepEqual(passChoice({ method: 'guided' }, undefined, true).method, 'guided');
+	assert.equal(passChoice({ target: 'uhd2160' }, ['hd720', 'fhd1080']).target, 'hd720');
 	assert.deepEqual(PASS_METHODS, ['upscale', 'guided', 'render']);
-	assert.deepEqual(UPSCALERS, ['auto', 'seedvr2']);
+	assert.deepEqual(UPSCALERS, ['auto', 'rtx', 'seedvr2', 'engine']);
+	assert.deepEqual(PASS_TARGETS, ['auto', 'hd720', 'fhd1080', 'qhd1440', 'uhd2160']);
+});
+
+test('an upscaler is ready when the server says so, the engine only for takes that upscale themselves', () => {
+	const h3 = '01KX47H3MINIMAX000000000VA';
+	const me = { features: { upscaler: true, upscalers: { seedvr2: true, rtx: false } } };
+	assert.equal(upscalerReady('auto', me, ['wan']), true);
+	assert.equal(upscalerReady('seedvr2', me, ['wan']), true);
+	assert.equal(upscalerReady('rtx', me, ['wan']), false);
+	assert.equal(upscalerReady('rtx', { features: { upscalers: { rtx: true } } }, ['wan']), true);
+	assert.equal(upscalerReady('engine', me, ['wan', h3]), false);
+	assert.equal(upscalerReady('engine', me, [h3]), true);
+	assert.equal(upscalerReady('auto', { features: { upscaler: false } }, [h3]), true);
+	assert.equal(upscalerReady('auto', { features: { upscaler: false } }, [h3, 'wan']), false);
+	assert.equal(upscalerReady('seedvr2', null, ['wan']), false);
 });
 
 test('the body of the pass sends the upscaler only when it is not automatic', () => {
@@ -107,6 +122,13 @@ test('migrating keeps the known values of the final pass and drops the key when 
 		assert.deepEqual(migrate(next), next);
 		assert.deepEqual(migratePass(value), expected);
 	}
+});
+
+test('migrating drops the retired post-processing switches of the engine', () => {
+	const doc = emptyDoc(t);
+	const next = migrate({ ...doc, engine: { ...doc.engine, post: { upscale: false, interpolation: true, denoise: true } } });
+	assert.equal('post' in next.engine, false);
+	assert.deepEqual(next.engine, migrate(doc).engine);
 });
 
 test('the page reads a guided take and the estimate of a pass shot by shot', () => {
