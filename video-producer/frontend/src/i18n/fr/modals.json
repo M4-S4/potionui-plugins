@@ -79,6 +79,8 @@
 	"shot.exclude": "Exclure",
 	"shot.excludeLabel": "Exclure {name} pour ce plan",
 	"shot.noInherited": "Aucune référence globale dans le projet.",
+	"shot.notCast": "Sa fiche n’est pas distribuée dans ce plan : elle ne part pas.",
+	"shot.fromCast": "D’une fiche distribuée, rattachée à un autre plan",
 	"shot.own": "Propres au plan",
 	"shot.addReference": "Ajouter au plan",
 	"shot.newReference": "Nouvelle référence",

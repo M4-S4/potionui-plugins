@@ -303,6 +303,18 @@ def test_the_edit_request_sends_the_shot_pictures_settings_first_with_its_prompt
     assert built.plan.resolution == "1360x768" and built.warnings == []
 
 
+def test_the_start_image_takes_the_pictures_of_the_cards_the_shot_casts_and_not_a_global_one_of_a_card_it_does_not_cast(core, qwen, scene):
+    scene["bible"] = {"characters": [{"id": "c-lea", "label": "Léa", "text": "", "references": ["r-lea", "r-other"]}], "places": []}
+    next(ref for ref in scene["references"] if ref["id"] == "r-other")["assetId"] = "capture"
+
+    alone = _build(core, scene)
+    scene["clips"][0]["cast"] = {"characters": ["c-lea"]}
+    cast = _build(core, scene)
+
+    assert [(picture.asset_id, picture.role) for picture in alone.pictures] == [("cafe", "setting"), ("hat", "object")]
+    assert [(picture.asset_id, picture.role) for picture in cast.pictures] == [("cafe", "setting"), ("lea", "character"), ("capture", "character"), ("hat", "object")]
+
+
 def test_the_start_image_is_only_the_starting_point_of_the_end_image_a_former_3d_capture_included(core, qwen, scene):
     scene["frames"] = [{"id": "f1", "shotId": "s1", "time": 0, "assetId": "capture", "role": "first", "strength": 100, "sceneId": "sc1"}]
 

@@ -70,7 +70,7 @@ for (const c of cases) {
 				continue;
 			}
 			const ids = (status) => doc.references.filter((r) => shot.statuses.get(r.id) === status).map((r) => r.id);
-			found[clip.id] = { layout: shot.layout, ignoredLayout: shot.ignoredLayout, sent: ids('sent'), trimmed: ids('trimmed'), mixed: ids('mixed'), excluded: ids('excluded') };
+			found[clip.id] = { layout: shot.layout, ignoredLayout: shot.ignoredLayout, sent: ids('sent'), trimmed: ids('trimmed'), mixed: ids('mixed'), excluded: ids('excluded'), notCast: ids('not_cast') };
 			if (doc.vrefTracks) {
 				const slots = (status) => shot.videoTracks.filter((x) => x.status === status).map((x) => x.slot);
 				found[clip.id].tracks = Object.fromEntries(['sent', 'trimmed', 'short', 'missing', 'ignored', 'excluded', 'off'].map((status) => [status, slots(status)]));
@@ -82,7 +82,7 @@ for (const c of cases) {
 }
 
 test('the table orders the references, bounds the reference video tracks and names the roles and sizes the page knows', () => {
-	assert.deepEqual(ORDER, ['own', 'tracks', 'shared']);
+	assert.deepEqual(ORDER, ['own', 'cast', 'tracks', 'shared']);
 	assert.equal(VIDEO_TRACKS.max, MAX_VREF_TRACKS);
 	assert.deepEqual(Object.keys(VIDEO_TRACKS.roles), VREF_ROLES);
 	assert.deepEqual(Object.values(VIDEO_TRACKS.roles), ['under', 'before']);
@@ -156,6 +156,28 @@ test('receptionOf: the shots a reference goes to, grouped by engine, profile and
 	assert.deepEqual(receptionOf(doc.references[1], doc, engineFor(doc)).linked, { kind: 'characters', card: doc.bible.characters[0], voice: true });
 });
 
+test('receptionOf: a picture of a card goes to the shots that cast the card, whatever its scope, and the shots that do not cast it come last', () => {
+	const doc = caseDoc('the cast chooses the pictures');
+	const back = receptionOf(doc.references[1], doc, engineFor(doc));
+	assert.deepEqual(
+		back.groups.map((g) => [g.engine?.preset ?? null, g.engine?.profile ?? null, g.status, shots(g)]),
+		[
+			[engines.h3.preset, 'Ref2VA', 'sent', ['s1', 's2']],
+			[engines.wan.preset, 'FL2VA', 'ignored', ['s4']]
+		]
+	);
+	const cyclist = receptionOf(doc.references[2], doc, engineFor(doc));
+	assert.deepEqual(
+		cyclist.groups.map((g) => [g.engine?.preset ?? null, g.status, shots(g)]),
+		[
+			[engines.h3.preset, 'sent', ['s2']],
+			[null, 'not_cast', ['s1', 's3', 's4']]
+		]
+	);
+	assert.deepEqual(cyclist.going.map((c) => c.id), ['s2']);
+	assert.deepEqual(cyclist.cast.map((c) => c.id), ['s2']);
+});
+
 test('receptionOf: a reference of one shot goes to that shot only, and an engine the page does not know says so', () => {
 	const doc = caseDoc('Ref2VA sends');
 	const own = receptionOf(doc.references[3], doc, engineFor(doc));
@@ -170,11 +192,11 @@ test('projectReception: one line per engine and profile with what its shots get'
 	assert.deepEqual(
 		groups.map((g) => [g.engine.preset, g.engine.profile, g.references, shots(g), g.counts]),
 		[
-			[engines.ltx.preset, 'FL2VA', false, ['s1'], { mixed: 1, ignored: 2 }],
-			[engines.wan.preset, 'FL2VA', false, ['s2'], { ignored: 3 }],
+			[engines.ltx.preset, 'FL2VA', false, ['s1'], { mixed: 1, ignored: 1, not_cast: 1 }],
+			[engines.wan.preset, 'FL2VA', false, ['s2'], { ignored: 2, not_cast: 1 }],
 			[engines.h3.preset, 'Ref2VA', true, ['s3'], { sent: 3 }],
-			[engines.h3.preset, 'FL2VA', false, ['s4'], { mixed: 1, ignored: 2 }],
-			[engines.cloud.preset, 'FL2VA', false, ['s5'], { ignored: 3 }]
+			[engines.h3.preset, 'FL2VA', false, ['s4'], { mixed: 1, ignored: 1, not_cast: 1 }],
+			[engines.cloud.preset, 'FL2VA', false, ['s5'], { ignored: 2, not_cast: 1 }]
 		]
 	);
 	assert.deepEqual(projectReception({ clips: [] }, engineFor(doc)), []);

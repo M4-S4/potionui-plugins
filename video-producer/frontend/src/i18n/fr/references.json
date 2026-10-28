@@ -14,6 +14,7 @@
 	"highlight.one": "Surlignée : la référence qui part avec {shot}, choisi dans {space}.",
 	"highlight.other": "Surlignées : les {count} références qui partent avec {shot}, choisi dans {space}.",
 	"excludedFrom": "exclue de {shot}",
+	"notCastIn": "fiche non distribuée dans {shot}",
 	"dragHint": "Glissez sur la piste Frames pour l’ancrer à un moment",
 	"empty.global": "Aucune référence pour tout le projet.",
 	"empty.globalIn": "Aucune référence pour tout le projet dans « {family} ».",

@@ -39,7 +39,7 @@ def test_the_table_names_kinds_profiles_layouts_and_families_the_plugin_knows():
     assert {family for rule in table["layouts"] for family in rule.get("families", ())} <= {bible.H3, bible.CLOUD}
     assert set(table["layouts"][-1]) == {"layout"}
     assert director.REFERENCE_LIMITS == reception.LIMITS
-    assert reception.ORDER == ("own", "tracks", "shared")
+    assert reception.ORDER == ("own", "cast", "tracks", "shared")
     assert projects.VREF_ROLES == (reception.MOTION, reception.CONTINUATION)
     assert projects.MAX_VREF_TRACKS == reception.VIDEO_TRACKS["max"] == 3
     assert set(reception.VIDEO_TRACKS["roles"].values()) == {reception.UNDER, reception.BEFORE}
@@ -104,10 +104,11 @@ def _tracks(doc, shot_id, composed, plan):
 
 
 def _received(doc, shot_id, composed, plan, values):
-    excluded = director.excluded_references(doc, shot_id)
-    own = [ref for ref in doc["references"] if (ref.get("scope") or {}).get("shotId") == shot_id]
-    shared = [ref for ref in doc["references"] if (ref.get("scope") or {}).get("type") != "shot"]
-    kept = [ref for ref in doc["references"] if ref in own or (ref in shared and ref["id"] not in excluded)]
+    groups = director.shot_reference_groups(doc, shot_id)
+    going = {ref["id"] for ref in (*groups.own, *groups.cast, *groups.shared)}
+    kept = [ref for ref in doc["references"] if ref["id"] in going]
+    left = {ref["id"] for ref in groups.excluded}
+    aside = {ref["id"] for ref in groups.not_cast}
     sent = plan.request["form_data"].get("references") or []
     guided = plan.director_mode == catalog.REFS_MODE
     mixed = plan.audio.references if plan.audio is not None and plan.audio.behavior == director.MUX else []
@@ -117,7 +118,8 @@ def _received(doc, shot_id, composed, plan, values):
         "sent": [ref["id"] for ref in kept if values.get(ref["assetId"]) in sent],
         "trimmed": [ref["id"] for ref in kept if guided and ref["assetId"] in values and values[ref["assetId"]] not in sent],
         "mixed": [ref["id"] for ref in kept if ref["assetId"] in mixed],
-        "excluded": [ref["id"] for ref in shared if ref["id"] in excluded],
+        "excluded": [ref["id"] for ref in doc["references"] if ref["id"] in left],
+        "notCast": [ref["id"] for ref in doc["references"] if ref["id"] in aside],
         **(_tracks(doc, shot_id, composed, plan) if projects.VREF_TRACKS in doc else {}),
     }
 

@@ -455,22 +455,12 @@ def _frame_base(doc: Mapping[str, Any], shot_id: str, role: str) -> Optional[Map
 
 
 def _shot_references(doc: Mapping[str, Any], shot_id: str) -> List[Mapping[str, Any]]:
-    excluded = director.excluded_references(doc, shot_id)
-    scoped, shared = [], []
-    for reference in doc.get("references") or []:
-        if reference.get("space") not in SPACES or not reference.get("assetId"):
-            continue
-        scope = reference.get("scope")
-        if isinstance(scope, Mapping) and scope.get("type") == "shot":
-            if scope.get("shotId") == shot_id:
-                scoped.append(reference)
-        elif reference.get("id") not in excluded:
-            shared.append(reference)
-    return [*scoped, *shared]
+    groups = director.shot_reference_groups(doc, shot_id)
+    return [reference for reference in (*groups.own, *groups.cast, *groups.shared) if reference.get("space") in SPACES and reference.get("assetId")]
 
 
 def default_pictures(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], role: str) -> List[Picture]:
-    """What a shot sends to make its start or end image: its start image (for the end image), then its Décors and Identité pictures, its own before the global ones it does not exclude; settings before characters, objects and styles."""
+    """What a shot sends to make its start or end image: its start image (for the end image), then its Décors and Identité pictures, its own, then the ones of the cards it casts, then the global ones linked to no card that it does not exclude; settings before characters, objects and styles."""
     found: List[Picture] = []
 
     def add(picture: Optional[Picture]) -> None:

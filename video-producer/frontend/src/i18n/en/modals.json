@@ -79,6 +79,8 @@
 	"shot.exclude": "Exclude",
 	"shot.excludeLabel": "Exclude {name} for this shot",
 	"shot.noInherited": "No global reference in the project.",
+	"shot.notCast": "Its card is not cast in this shot: it is not sent.",
+	"shot.fromCast": "From a cast card, attached to another shot",
 	"shot.own": "This shot only",
 	"shot.addReference": "Add to the shot",
 	"shot.newReference": "New reference",

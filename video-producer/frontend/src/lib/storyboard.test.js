@@ -128,6 +128,36 @@ test('references: a shot inherits the global references, may exclude some, and k
 	assert.deepEqual(excludedOf({ referenceOverrides: { exclude: 'g1' } }), []);
 });
 
+test('references: a shot sends the pictures of the cards it casts whatever their scope, and not a global picture of a card it leaves out of its cast', () => {
+	const doc = {
+		references: [
+			{ id: 'style', scope: { type: 'global' } },
+			{ id: 'c-face', scope: { type: 'global' } },
+			{ id: 'f-back', scope: { type: 'shot', shotId: 's2' } },
+			{ id: 'f-face', scope: { type: 'global' } },
+			{ id: 'quay', scope: { type: 'global' } },
+			{ id: 'own', scope: { type: 'shot', shotId: 's1' } }
+		],
+		bible: {
+			characters: [
+				{ id: 'cyclist', label: 'Cyclist', references: ['c-face'] },
+				{ id: 'fisher', label: 'Fisherman', references: ['f-face', 'f-back', 'gone'] },
+				{ id: 'nameless', label: '', references: ['style'] }
+			],
+			places: [{ id: 'harbour', label: 'Quay', references: ['quay'] }]
+		}
+	};
+	const clip = { id: 's1', cast: { characters: ['fisher'], place: 'harbour' }, referenceOverrides: { exclude: ['f-back'] } };
+
+	const { inherited, cast, own } = shotReferences(doc, clip);
+	assert.deepEqual(cast.map((x) => [x.reference.id, x.excluded]), [['f-face', false], ['f-back', true], ['quay', false]]);
+	assert.deepEqual(inherited.map((x) => [x.reference.id, x.cast, x.notCast]), [['style', false, false], ['c-face', false, true], ['f-face', true, false], ['quay', true, false]]);
+	assert.deepEqual(own.map((r) => r.id), ['own']);
+	assert.deepEqual(sentReferences(doc, clip).map((r) => r.id), ['own', 'f-face', 'quay', 'style']);
+	assert.deepEqual(sentReferences(doc, { ...clip, cast: { characters: ['cyclist'] } }).map((r) => r.id), ['own', 'c-face', 'style']);
+	assert.deepEqual(shotReferences(doc, clip, [], { characters: [] }).cast, []);
+});
+
 test('references: the overrides keep their other keys and vanish when nothing is excluded', () => {
 	const clip = { id: 's1' };
 	setExcluded(clip, ['g1', 'g1', '', 'g2']);

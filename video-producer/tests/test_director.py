@@ -454,6 +454,39 @@ def test_ref2va_runs_the_h3_refs_mode_with_the_shot_references_then_the_global_o
     )
 
 
+def test_ref2va_sends_its_own_references_then_the_pictures_of_its_cast_whatever_their_scope_then_the_global_ones_linked_to_no_card(core, make_doc):
+    core.use_h3()
+    names = ("own", "fisher", "fisher-back", "quay", "cyclist", "style")
+    for name in names:
+        core.add_media({"kind": "library", "item_id": f"lib-{name}"}, f"uploads/{name}.png", "image")
+    assets = [{"id": name, "kind": "image", "origin": {"kind": "library", "itemId": f"lib-{name}"}} for name in names]
+    references = [
+        {"id": "r-style", "assetId": "style", "scope": {"type": "global"}},
+        {"id": "r-quay", "assetId": "quay", "space": "decors3d", "scope": {"type": "global"}},
+        {"id": "r-cyclist", "assetId": "cyclist", "scope": {"type": "global"}},
+        {"id": "r-fisher-back", "assetId": "fisher-back", "scope": {"type": "shot", "shotId": "s2"}},
+        {"id": "r-fisher", "assetId": "fisher", "scope": {"type": "global"}},
+        {"id": "r-own", "assetId": "own", "scope": {"type": "shot", "shotId": "s1"}},
+    ]
+    clips = [{**SHOT, "cast": {"characters": ["fisher"], "place": "quay"}}, {"id": "s2", "start": 4, "dur": 4}]
+    doc = make_doc(clips=clips, references=references, assets=assets, direction={"mode": "Ref2VA"})
+    doc["bible"] = {
+        "characters": [
+            {"id": "cyclist", "label": "the cyclist", "text": "", "references": ["r-cyclist"]},
+            {"id": "fisher", "label": "the fisherman", "text": "", "references": ["r-fisher", "r-fisher-back"]},
+        ],
+        "places": [{"id": "quay", "label": "the quay", "text": "", "references": ["r-quay"]}],
+    }
+
+    plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
+    groups = director.shot_reference_groups(doc, "s1")
+
+    (plan,) = plans.shots
+    assert plan.request["form_data"]["references"] == ["uploads/own.png", "uploads/fisher.png", "uploads/fisher-back.png", "uploads/quay.png", "uploads/style.png"]
+    assert [ref["id"] for ref in groups.not_cast] == ["r-cyclist"]
+    assert "the cyclist" not in plan.prompt_text
+
+
 def test_ref2va_without_any_reference_is_blocked(core, make_doc):
     core.use_h3()
 

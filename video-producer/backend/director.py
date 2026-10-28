@@ -430,10 +430,59 @@ def shot_engine(doc: Mapping[str, Any], shot_id: str) -> Dict[str, Any]:
 
 
 def excluded_references(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
-    """The ids of the global references the shot leaves out."""
+    """The ids of the references of the project or of the cards it casts that the shot leaves out."""
     overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
     exclude = overrides.get("exclude") if isinstance(overrides, Mapping) else None
     return {str(item) for item in exclude if isinstance(item, str)} if isinstance(exclude, list) else set()
+
+
+@dataclass(frozen=True)
+class ShotReferences:
+    own: List[Dict[str, Any]]
+    cast: List[Dict[str, Any]]
+    shared: List[Dict[str, Any]]
+    excluded: List[Dict[str, Any]]
+    not_cast: List[Dict[str, Any]]
+
+
+def _scoped(reference: Mapping[str, Any]) -> bool:
+    scope = reference.get("scope")
+    return isinstance(scope, Mapping) and scope.get("type") == "shot"
+
+
+def shot_reference_groups(doc: Mapping[str, Any], shot_id: str) -> ShotReferences:
+    """The references a shot can send, by step of the table: its own; the ones of the cards it casts, whatever their scope, card by card in the order of the bible with its place last, each card's in the order it lists them; the global ones linked to no card. A reference the shot leaves out is not sent, nor a global one linked only to cards it does not cast."""
+    excluded = excluded_references(doc, shot_id)
+    references = [reference for reference in doc.get("references") or [] if isinstance(reference, Mapping)]
+    found: Dict[str, Dict[str, Any]] = {}
+    for reference in references:
+        if isinstance(reference.get("id"), str):
+            found.setdefault(reference["id"], reference)
+    own = [reference for reference in references if _scoped(reference) and reference["scope"].get("shotId") == shot_id]
+    placed = {reference["id"] for reference in own if isinstance(reference.get("id"), str)}
+    cast: List[Dict[str, Any]] = []
+    left: List[Dict[str, Any]] = []
+    characters, place = bible.cast_of(doc, clip_of(doc, shot_id) or {})
+    for card in [*characters, *([place] if place is not None else [])]:
+        for reference_id in card.references:
+            reference = found.get(reference_id)
+            if reference is None or reference_id in placed:
+                continue
+            placed.add(reference_id)
+            (left if reference_id in excluded else cast).append(reference)
+    linked = {reference_id for kind in (bible.CHARACTERS, bible.PLACES) for card in bible.cards(doc, kind) for reference_id in card.references}
+    shared: List[Dict[str, Any]] = []
+    not_cast: List[Dict[str, Any]] = []
+    for reference in references:
+        if _scoped(reference) or reference.get("id") in placed:
+            continue
+        if reference.get("id") in excluded:
+            left.append(reference)
+        elif reference.get("id") in linked:
+            not_cast.append(reference)
+        else:
+            shared.append(reference)
+    return ShotReferences(own, cast, shared, left, not_cast)
 
 
 def excluded_lanes(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
@@ -619,19 +668,9 @@ def _asset_kind(doc: Mapping[str, Any], asset_id: Any) -> Optional[str]:
 
 
 def audio_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
-    """The references of the shot whose media is a sound: its own, then the global ones it does not exclude."""
-    excluded = excluded_references(doc, shot_id)
-    scoped, shared = [], []
-    for reference in doc.get("references") or []:
-        if _asset_kind(doc, reference.get("assetId")) != "audio":
-            continue
-        scope = reference.get("scope")
-        if isinstance(scope, Mapping) and scope.get("type") == "shot":
-            if scope.get("shotId") == shot_id:
-                scoped.append(reference)
-        elif reference.get("id") not in excluded:
-            shared.append(reference)
-    return [*scoped, *shared]
+    """The references of the shot whose media is a sound, as it sends them: its own, the ones of the cards it casts, then the global ones linked to no card that it does not exclude."""
+    groups = shot_reference_groups(doc, shot_id)
+    return [reference for reference in (*groups.own, *groups.cast, *groups.shared) if _asset_kind(doc, reference.get("assetId")) == "audio"]
 
 
 def mixed_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
@@ -1170,16 +1209,8 @@ def reference_media(
     tracks: Sequence[str] = (),
     videos: Sequence[VideoCut] = (),
 ) -> List[SentReference]:
-    """What a shot sends as references, within the per-kind limits and in the order of the table: its own references, the cut of each of its reference tracks (a track: placeholder until the cut is stored) and of each of its reference video tracks (a vtrack: placeholder), then the global ones it does not exclude; each with its rank among the references of its kind."""
-    scoped, shared = [], []
-    excluded = excluded_references(doc, shot_id)
-    for reference in doc.get("references") or []:
-        scope = reference.get("scope")
-        if isinstance(scope, Mapping) and scope.get("type") == "shot":
-            if scope.get("shotId") == shot_id:
-                scoped.append(reference)
-        elif reference.get("id") not in excluded:
-            shared.append(reference)
+    """What a shot sends as references, within the per-kind limits and in the order of the table: its own references, the ones of the cards it casts, the cut of each of its reference tracks (a track: placeholder until the cut is stored) and of each of its reference video tracks (a vtrack: placeholder), then the global ones linked to no card that it does not exclude; each with its rank among the references of its kind."""
+    groups = shot_reference_groups(doc, shot_id)
     sent: List[SentReference] = []
     counts = {kind: 0 for kind in REFERENCE_LIMITS}
 
@@ -1201,7 +1232,10 @@ def reference_media(
 
     for step in reception.ORDER:
         if step == "own":
-            for reference in scoped:
+            for reference in groups.own:
+                add(REFERENCE, reference.get("assetId"), reference)
+        elif step == "cast":
+            for reference in groups.cast:
                 add(REFERENCE, reference.get("assetId"), reference)
         elif step == "tracks":
             for lane_id in tracks:
@@ -1210,7 +1244,7 @@ def reference_media(
                 item = {"trackId": cut.track_id, "slot": cut.slot, "role": cut.role}
                 add(VTRACK, None, item, "video", {"value": f"{VTRACK_PREFIX}{cut.track_id}", "media_type": "video"})
         else:
-            for reference in shared:
+            for reference in groups.shared:
                 add(REFERENCE, reference.get("assetId"), reference)
     return sent
 

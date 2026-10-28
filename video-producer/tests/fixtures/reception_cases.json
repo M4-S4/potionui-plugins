@@ -28,9 +28,9 @@
 				]
 			},
 			"expected": {
-				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] },
-				"s2": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": ["g-b"] },
-				"s3": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] }
+				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s2": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": ["g-b"], "notCast": [] },
+				"s3": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] }
 			}
 		},
 		{
@@ -56,8 +56,8 @@
 				]
 			},
 			"expected": {
-				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] },
-				"s2": { "layout": "refs", "ignoredLayout": false, "sent": ["g-a", "o-s2"], "trimmed": [], "mixed": [], "excluded": ["g-b"] }
+				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s2": { "layout": "refs", "ignoredLayout": false, "sent": ["g-a", "o-s2"], "trimmed": [], "mixed": [], "excluded": ["g-b"], "notCast": [] }
 			}
 		},
 		{
@@ -86,7 +86,7 @@
 				]
 			},
 			"expected": {
-				"s1": { "layout": "refs", "ignoredLayout": false, "sent": ["g-v2", "g-v3", "g-img", "g-dup", "o-v1"], "trimmed": ["g-v4"], "mixed": [], "excluded": [] }
+				"s1": { "layout": "refs", "ignoredLayout": false, "sent": ["g-v2", "g-v3", "g-img", "g-dup", "o-v1"], "trimmed": ["g-v4"], "mixed": [], "excluded": [], "notCast": [] }
 			}
 		},
 		{
@@ -97,7 +97,7 @@
 				"clips": [
 					{ "id": "s1", "start": 0, "dur": 4 },
 					{ "id": "s2", "start": 4, "dur": 4, "engine": { "preset": "01KX47WANVIDEO0000000000TV", "model": null } },
-					{ "id": "s3", "start": 8, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null, "profile": "Ref2VA" } },
+					{ "id": "s3", "start": 8, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null, "profile": "Ref2VA" }, "cast": { "characters": ["lina"] } },
 					{ "id": "s4", "start": 12, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null } },
 					{ "id": "s5", "start": 16, "dur": 4, "engine": { "preset": "01M3SV8HJTGT3JPPH2BA5MP6PR", "model": "cm-veo" } }
 				],
@@ -117,11 +117,11 @@
 				}
 			},
 			"expected": {
-				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": ["g-rain"], "excluded": [] },
-				"s2": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] },
-				"s3": { "layout": "refs", "ignoredLayout": false, "sent": ["g-rain", "g-voice", "g-img"], "trimmed": [], "mixed": [], "excluded": [] },
-				"s4": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": ["g-rain"], "excluded": [] },
-				"s5": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] }
+				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": ["g-rain"], "excluded": [], "notCast": ["g-img"] },
+				"s2": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["g-img"] },
+				"s3": { "layout": "refs", "ignoredLayout": false, "sent": ["g-rain", "g-voice", "g-img"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s4": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": ["g-rain"], "excluded": [], "notCast": ["g-img"] },
+				"s5": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["g-img"] }
 			}
 		},
 		{
@@ -140,11 +140,11 @@
 				"references": [{ "id": "o-s3", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "shot", "shotId": "s3" } }]
 			},
 			"expected": {
-				"s1": { "layout": "cast", "ignoredLayout": true, "sent": [], "trimmed": [], "mixed": [], "excluded": [] },
-				"s2": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] },
-				"s3": { "layout": "refs", "ignoredLayout": true, "sent": ["o-s3"], "trimmed": [], "mixed": [], "excluded": [] },
-				"s4": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] },
-				"s5": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] }
+				"s1": { "layout": "cast", "ignoredLayout": true, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s2": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s3": { "layout": "refs", "ignoredLayout": true, "sent": ["o-s3"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s4": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s5": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] }
 			}
 		},
 		{
@@ -160,7 +160,7 @@
 				"references": [{ "id": "g-a", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } }]
 			},
 			"expected": {
-				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [] },
+				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
 				"s2": { "blocked": true }
 			}
 		},
@@ -184,7 +184,7 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [0, 2.333]}}
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [0, 2.333]}}
 			}
 		},
 		{
@@ -210,10 +210,10 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
-				"s2": {"layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
-				"s3": {"layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
-				"s4": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}}
+				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
+				"s2": {"layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
+				"s3": {"layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
+				"s4": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}}
 			}
 		},
 		{
@@ -243,7 +243,7 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["o1", "o2", "o3"], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [1], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}}
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["o1", "o2", "o3"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [1], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}}
 			}
 		},
 		{
@@ -274,7 +274,7 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["o1"], "trimmed": ["g1"], "mixed": [], "excluded": [], "tracks": {"sent": [1, 2], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [2, 4.333], "2": [2, 4.333]}}
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["o1"], "trimmed": ["g1"], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [1, 2], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [2, 4.333], "2": [2, 4.333]}}
 			}
 		},
 		{
@@ -301,8 +301,8 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [1], "off": []}, "windows": {}},
-				"s2": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [1], "off": []}, "windows": {}}
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [1], "off": []}, "windows": {}},
+				"s2": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [1], "off": []}, "windows": {}}
 			}
 		},
 		{
@@ -332,9 +332,9 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}},
-				"s2": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [1.667, 4]}},
-				"s3": {"layout": "refs", "ignoredLayout": false, "sent": ["f3"], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [1], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}}
+				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}},
+				"s2": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [1.667, 4]}},
+				"s3": {"layout": "refs", "ignoredLayout": false, "sent": ["f3"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [1], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}}
 			}
 		},
 		{
@@ -361,8 +361,8 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": [1]}, "windows": {}},
-				"s2": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": [1]}, "windows": {}}
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": [1]}, "windows": {}},
+				"s2": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": [1]}, "windows": {}}
 			}
 		},
 		{
@@ -387,7 +387,7 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [0, 3.542]}}
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [0, 3.542]}}
 			}
 		},
 		{
@@ -413,7 +413,7 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [1], "ignored": [], "excluded": [], "off": []}, "windows": {}}
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [1], "ignored": [], "excluded": [], "off": []}, "windows": {}}
 			}
 		},
 		{
@@ -437,8 +437,87 @@
 				]
 			},
 			"expected": {
-				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
+				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
 				"s2": {"blocked": true}
+			}
+		},
+		{
+			"name": "the cast chooses the pictures: a shot sends the pictures of the cards it casts whatever their scope, its own first, and not a global picture of a card it does not cast",
+			"doc": {
+				"engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null },
+				"direction": { "mode": "Ref2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4, "cast": { "characters": ["fisher"], "place": "quay" } },
+					{ "id": "s2", "start": 4, "dur": 4, "cast": { "characters": ["cyclist"] } },
+					{ "id": "s3", "start": 8, "dur": 4 },
+					{ "id": "s4", "start": 12, "dur": 4, "engine": { "preset": "01KX47WANVIDEO0000000000TV", "model": null, "profile": "FL2VA" }, "cast": { "characters": ["fisher"] } }
+				],
+				"assets": [
+					{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } },
+					{ "id": "i2", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i2" } },
+					{ "id": "i3", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i3" } },
+					{ "id": "i4", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i4" } },
+					{ "id": "i5", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i5" } }
+				],
+				"references": [
+					{ "id": "f-face", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "f-body", "space": "identite", "type": "Personnage", "assetId": "i2", "role": "Identité", "scope": { "type": "shot", "shotId": "s2" } },
+					{ "id": "c-face", "space": "identite", "type": "Personnage", "assetId": "i3", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "q-pic", "space": "decors3d", "type": "Décor", "assetId": "i4", "role": "Décor", "scope": { "type": "global" } },
+					{ "id": "g-style", "space": "identite", "type": "Style", "assetId": "i5", "role": "Style", "scope": { "type": "global" } }
+				],
+				"bible": {
+					"characters": [
+						{ "id": "fisher", "label": "Fisherman", "text": "an old fisherman", "props": "", "references": ["f-face", "f-body"] },
+						{ "id": "cyclist", "label": "Cyclist", "text": "a young cyclist", "props": "", "references": ["c-face"] }
+					],
+					"places": [{ "id": "quay", "label": "Quay", "text": "a stone quay", "references": ["q-pic"] }]
+				}
+			},
+			"expected": {
+				"s1": { "layout": "refs", "ignoredLayout": false, "sent": ["f-face", "f-body", "q-pic", "g-style"], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["c-face"] },
+				"s2": { "layout": "refs", "ignoredLayout": false, "sent": ["f-body", "c-face", "g-style"], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["f-face", "q-pic"] },
+				"s3": { "layout": "refs", "ignoredLayout": false, "sent": ["g-style"], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["f-face", "c-face", "q-pic"] },
+				"s4": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["c-face", "q-pic"] }
+			}
+		},
+		{
+			"name": "a shot leaves out a picture of a card it casts, even one attached to another shot, and a picture linked to two cards goes when one of them is cast",
+			"doc": {
+				"engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null },
+				"direction": { "mode": "Ref2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4, "cast": { "characters": ["fisher"] }, "referenceOverrides": { "exclude": ["f-body", "g-style"] } },
+					{ "id": "s2", "start": 4, "dur": 4, "cast": { "characters": ["cyclist"] }, "referenceOverrides": { "exclude": ["c-face"] } },
+					{ "id": "s3", "start": 8, "dur": 4 }
+				],
+				"assets": [
+					{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } },
+					{ "id": "i2", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i2" } },
+					{ "id": "i3", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i3" } },
+					{ "id": "i4", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i4" } },
+					{ "id": "i5", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i5" } }
+				],
+				"references": [
+					{ "id": "f-face", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "f-body", "space": "identite", "type": "Personnage", "assetId": "i2", "role": "Identité", "scope": { "type": "shot", "shotId": "s3" } },
+					{ "id": "c-face", "space": "identite", "type": "Personnage", "assetId": "i3", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "duo", "space": "identite", "type": "Personnage", "assetId": "i4", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "g-style", "space": "identite", "type": "Style", "assetId": "i5", "role": "Style", "scope": { "type": "global" } }
+				],
+				"bible": {
+					"characters": [
+						{ "id": "fisher", "label": "Fisherman", "text": "an old fisherman", "props": "", "references": ["f-face", "f-body", "duo"] },
+						{ "id": "cyclist", "label": "Cyclist", "text": "a young cyclist", "props": "", "references": ["c-face", "duo"] },
+						{ "id": "nameless", "label": "", "text": "a card without a label", "props": "", "references": ["g-style"] }
+					],
+					"places": []
+				}
+			},
+			"expected": {
+				"s1": { "layout": "refs", "ignoredLayout": false, "sent": ["f-face", "duo"], "trimmed": [], "mixed": [], "excluded": ["f-body", "g-style"], "notCast": ["c-face"] },
+				"s2": { "layout": "refs", "ignoredLayout": false, "sent": ["duo", "g-style"], "trimmed": [], "mixed": [], "excluded": ["c-face"], "notCast": ["f-face"] },
+				"s3": { "layout": "refs", "ignoredLayout": false, "sent": ["f-body", "g-style"], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["f-face", "c-face", "duo"] }
 			}
 		}
 	]

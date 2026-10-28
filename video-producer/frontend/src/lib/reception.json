@@ -5,7 +5,7 @@
     "audio": 3
   },
   "references": ["Ref2VA"],
-  "order": ["own", "tracks", "shared"],
+  "order": ["own", "cast", "tracks", "shared"],
   "videoTracks": {
     "max": 3,
     "fps": 24,

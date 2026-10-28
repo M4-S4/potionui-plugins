@@ -1,7 +1,7 @@
 import { labelOf } from './labels.js';
 import { SEAM_STRENGTH, frameTime, framesOf } from './seam.js';
 import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
-import { castOf, migrateCast, sameCast, setCast } from './bible.js';
+import { KINDS, castCards, castOf, cardsOf, migrateCast, sameCast, setCast, usable } from './bible.js';
 import { linesOf, migrateDialogue, sameDialogue, setDialogue } from './dialogue.js';
 import { migrateReferencePrompt, referencePromptOf, sameReferencePrompt, setReferencePrompt } from './refprompt.js';
 import { merge3 } from './merge.js';
@@ -83,18 +83,37 @@ export function setExcludedVrefs(clip, ids) {
 	setOverride(clip, 'excludeVrefs', ids);
 }
 
-export function shotReferences(doc, clip, excluded = excludedOf(clip)) {
+const cardReferences = (card) => idList(card?.references);
+
+export function shotReferences(doc, clip, excluded = excludedOf(clip), cast = clip?.cast) {
 	const references = Array.isArray(doc?.references) ? doc.references : [];
 	const skip = new Set(excluded);
+	const own = references.filter((r) => ownsReference(clip, r));
+	const placed = new Set(own.map((r) => r.id));
+	const chosen = castCards(doc, cast);
+	const fromCast = [];
+	for (const card of [...chosen.characters, ...(chosen.place ? [chosen.place] : [])]) {
+		for (const id of cardReferences(card)) {
+			const reference = references.find((r) => r?.id === id);
+			if (!reference || placed.has(id)) continue;
+			placed.add(id);
+			fromCast.push({ reference, excluded: skip.has(id) });
+		}
+	}
+	const linked = new Set(KINDS.flatMap((kind) => cardsOf(doc, kind).filter(usable).flatMap(cardReferences)));
+	const casting = new Set(fromCast.map((x) => x.reference.id));
 	return {
-		inherited: references.filter(isGlobal).map((reference) => ({ reference, excluded: skip.has(reference.id) })),
-		own: references.filter((r) => ownsReference(clip, r))
+		inherited: references.filter(isGlobal).map((reference) => ({ reference, excluded: skip.has(reference.id), cast: casting.has(reference.id), notCast: !casting.has(reference.id) && linked.has(reference.id) })),
+		cast: fromCast,
+		own
 	};
 }
 
+export const isShared = (x) => !x.excluded && !x.cast && !x.notCast;
+
 export function sentReferences(doc, clip) {
-	const { inherited, own } = shotReferences(doc, clip);
-	return [...own, ...inherited.filter((x) => !x.excluded).map((x) => x.reference)];
+	const { inherited, cast, own } = shotReferences(doc, clip);
+	return [...own, ...cast.filter((x) => !x.excluded).map((x) => x.reference), ...inherited.filter(isShared).map((x) => x.reference)];
 }
 
 export const revisionOf = (clip) => (Number.isInteger(clip?.revision) && clip.revision > 0 ? clip.revision : 0);

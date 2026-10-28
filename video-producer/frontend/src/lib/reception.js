@@ -1,6 +1,6 @@
 import table from './reception.json';
 import { isH3, presetProfiles } from './generation.js';
-import { excludedVrefsOf, isGlobal, ownsReference, shotReferences } from './shots.js';
+import { excludedVrefsOf, isGlobal, isShared, ownsReference, shotReferences } from './shots.js';
 import { referencePromptOf } from './refprompt.js';
 import { CHARACTERS, PLACES, cardsOf, shotsCasting, voiceReferences } from './bible.js';
 import { MUX, audioBehavior } from './sound.js';
@@ -11,7 +11,9 @@ export const ORDER = table.order;
 export const VIDEO_TRACKS = table.videoTracks;
 export const FAMILIES = ['cloud', 'h3'];
 export const RECEIVED = ['sent', 'mixed'];
-export const STATUSES = ['sent', 'trimmed', 'missing', 'mixed', 'ignored', 'excluded', 'blocked', 'unknown'];
+export const NOT_CAST = 'not_cast';
+export const ASIDE = ['excluded', NOT_CAST];
+export const STATUSES = ['sent', 'trimmed', 'missing', 'mixed', 'ignored', 'excluded', NOT_CAST, 'blocked', 'unknown'];
 export const TRACK_STATUSES = ['sent', 'trimmed', 'short', 'missing', 'ignored', 'excluded', 'off', 'blocked', 'unknown'];
 export const MOTION = 'motion';
 export const CONTINUATION = 'continuation';
@@ -142,7 +144,7 @@ export function mediaKey(asset) {
 
 const assetOf = (doc, id) => (id ? ((doc?.assets ?? []).find((a) => a.id === id) ?? null) : null);
 
-function mediaStatuses(doc, own, shared, tracks, videos, tracked, counts) {
+function mediaStatuses(doc, own, cast, shared, tracks, videos, tracked, counts) {
 	const seen = new Set();
 	const statuses = new Map();
 	const add = (reference) => {
@@ -157,6 +159,7 @@ function mediaStatuses(doc, own, shared, tracks, videos, tracked, counts) {
 	};
 	for (const step of ORDER) {
 		if (step === 'own') own.forEach(add);
+		else if (step === 'cast') cast.forEach(add);
 		else if (step === 'tracks') {
 			counts.audio = Math.min(LIMITS.audio, counts.audio + tracks);
 			for (const video of videos) {
@@ -170,8 +173,9 @@ function mediaStatuses(doc, own, shared, tracks, videos, tracked, counts) {
 }
 
 export function shotReception(doc, clip, engine, tracks = 0) {
-	const { inherited, own } = shotReferences(doc, clip);
-	const shared = inherited.filter((x) => !x.excluded).map((x) => x.reference);
+	const { inherited, cast, own } = shotReferences(doc, clip);
+	const fromCast = cast.filter((x) => !x.excluded).map((x) => x.reference);
+	const shared = inherited.filter(isShared).map((x) => x.reference);
 	const info = engine?.info ?? null;
 	const profile = engine?.profile ?? null;
 	const state = !info ? 'unknown' : presetProfiles(info).includes(profile) ? 'ready' : 'blocked';
@@ -183,18 +187,19 @@ export function shotReception(doc, clip, engine, tracks = 0) {
 	let statuses;
 	let counts = null;
 	if (state !== 'ready') {
-		statuses = new Map([...own, ...shared].map((r) => [r.id, state]));
+		statuses = new Map([...own, ...fromCast, ...shared].map((r) => [r.id, state]));
 		for (const x of going) tracked.set(x.track.id, state);
 	} else if (takesReferences(profile)) {
 		counts = Object.fromEntries(Object.keys(LIMITS).map((kind) => [kind, 0]));
-		statuses = mediaStatuses(doc, own, shared, tracks, going.filter((x) => x.status === 'ready'), tracked, counts);
+		statuses = mediaStatuses(doc, own, fromCast, shared, tracks, going.filter((x) => x.status === 'ready'), tracked, counts);
 	} else {
 		const mixes = audioBehavior(info, profile) === MUX;
 		const voices = voiceReferences(doc);
-		statuses = new Map([...own, ...shared].map((r) => [r.id, mixes && assetOf(doc, r.assetId)?.kind === 'audio' && !voices.has(r.id) ? 'mixed' : 'ignored']));
+		statuses = new Map([...own, ...fromCast, ...shared].map((r) => [r.id, mixes && assetOf(doc, r.assetId)?.kind === 'audio' && !voices.has(r.id) ? 'mixed' : 'ignored']));
 		for (const x of going) tracked.set(x.track.id, 'ignored');
 	}
-	for (const x of inherited) if (x.excluded) statuses.set(x.reference.id, 'excluded');
+	for (const x of inherited) if (x.notCast && !x.excluded) statuses.set(x.reference.id, NOT_CAST);
+	for (const x of [...inherited, ...cast]) if (x.excluded) statuses.set(x.reference.id, 'excluded');
 	const videoTracks = found.map((x) => ({ track: x.track, slot: x.slot, status: tracked.get(x.track.id), frames: x.frames ?? 0, window: tracked.get(x.track.id) === 'sent' ? x.window : null, region: x.region, span: x.span }));
 	return { clip, engine, state, layout, overridden: Boolean(override) && override.layout === layout, ignoredLayout: Boolean(override) && override.layout !== layout, statuses, videoTracks, counts };
 }
@@ -219,24 +224,26 @@ function grouped(items, keyOf, make) {
 	return groups;
 }
 
+const castsReference = (doc, clip, reference) => shotReferences(doc, clip).cast.some((x) => x.reference.id === reference?.id);
+
 export function receptionOf(reference, doc, engineOf, tracksOf = () => 0) {
 	const shots = (doc?.clips ?? [])
-		.filter((clip) => isGlobal(reference) || ownsReference(clip, reference))
+		.filter((clip) => isGlobal(reference) || ownsReference(clip, reference) || castsReference(doc, clip, reference))
 		.map((clip) => {
 			const shot = shotReception(doc, clip, engineOf(clip), tracksOf(clip));
 			return { ...shot, status: shot.statuses.get(reference.id) };
 		});
 	const groups = grouped(
 		shots,
-		(shot) => (shot.status === 'excluded' ? 'excluded' : `${engineKey(shot.engine)}|${shot.status}`),
-		(shot) => ({ engine: shot.status === 'excluded' ? null : shot.engine, status: shot.status })
+		(shot) => (ASIDE.includes(shot.status) ? shot.status : `${engineKey(shot.engine)}|${shot.status}`),
+		(shot) => ({ engine: ASIDE.includes(shot.status) ? null : shot.engine, status: shot.status })
 	);
 	const linked = linkedCard(doc, reference);
 	return {
 		reference,
 		shots,
-		groups: [...groups.filter((g) => g.status !== 'excluded'), ...groups.filter((g) => g.status === 'excluded')],
-		going: shots.filter((shot) => shot.status !== 'excluded').map((shot) => shot.clip),
+		groups: [...groups.filter((g) => !ASIDE.includes(g.status)), ...ASIDE.flatMap((status) => groups.filter((g) => g.status === status))],
+		going: shots.filter((shot) => !ASIDE.includes(shot.status)).map((shot) => shot.clip),
 		linked,
 		cast: linked && !linked.voice ? shotsCasting(doc, linked.kind, linked.card.id) : []
 	};

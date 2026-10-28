@@ -4,7 +4,7 @@
 	import { doc, asset, select, clipLabel } from '../../lib/state.svelte.js';
 	import { refTypeLabel, shotReceptionFor, engineTitle, receptionVerdict, refMediaKind, setSent, addShotReference } from '../../lib/references.js';
 	import { LIMITS, takesReferences } from '../../lib/reception.js';
-	import { shotReferences } from '../../lib/shots.js';
+	import { isGlobal, shotReferences } from '../../lib/shots.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { typeIcon } from '../../lib/reftags.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -14,6 +14,7 @@
 
 	const shot = $derived(shotReceptionFor(clip));
 	const lists = $derived(shotReferences(doc, clip));
+	const borrowed = $derived(lists.cast.filter((x) => !isGlobal(x.reference)));
 	const engine = $derived(engineTitle(shot.engine));
 	const number = $derived(String(doc.clips.indexOf(clip) + 1).padStart(2, '0'));
 	const thumb = $derived(clipThumb(clip));
@@ -54,7 +55,8 @@
 			{@const small = assetThumb(asset(r.assetId))}
 			<div class="flex min-h-7 items-center gap-2" data-reference-row={r.id}>
 				<span class="flex h-6 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-3 text-fg-muted">{#if small}<img src={small} alt="" class="h-full w-full object-cover" />{:else}<Icon name={typeIcon(r)} class="h-3 w-3" />{/if}</span>
-				<button type="button" class="min-w-0 flex-1 truncate text-left text-xs {x.excluded ? 'text-fg-subtle line-through' : 'text-fg-muted hover:text-fg'}" onclick={() => select('reference', r.id)}>{r.name || refTypeLabel(r.type)}</button>
+				<button type="button" class="min-w-0 flex-1 truncate text-left text-xs {x.excluded || x.notCast ? 'text-fg-subtle line-through' : 'text-fg-muted hover:text-fg'}" onclick={() => select('reference', r.id)}>{r.name || refTypeLabel(r.type)}</button>
+				{#if !x.excluded && x.notCast}<span class="shrink-0 text-2xs text-fg-subtle" data-reference-not-cast>{t('panels.director.refs.notCast')}</span>{/if}
 				{#if !x.excluded && flagged(r)}<span class="shrink-0 text-2xs text-warning">{receptionVerdict(shot.statuses.get(r.id), kindOf(r)).text}</span>{/if}
 				<span class="inline-flex shrink-0 overflow-hidden rounded border border-line-strong text-2xs" role="group" aria-label={t('panels.director.refs.sendsLabel', { name: r.name || refTypeLabel(r.type), shot: number })}>
 					<button type="button" class="px-1.5 py-0.5 {x.excluded ? 'text-fg-subtle hover:text-fg' : 'bg-surface-3 text-fg'}" aria-pressed={!x.excluded} onclick={() => setSent(clip, r.id, true)}>{t('panels.director.refs.sends')}</button>
@@ -65,6 +67,25 @@
 			<p class="text-xs text-fg-subtle">{t('panels.director.refs.noGlobals')}</p>
 		{/each}
 	</section>
+
+	{#if borrowed.length}
+		<section class="space-y-1.5" data-reference-cast>
+			<div class="vp-section-title">{t('panels.director.refs.fromCast', { count: borrowed.length })}</div>
+			{#each borrowed as x (x.reference.id)}
+				{@const r = x.reference}
+				{@const small = assetThumb(asset(r.assetId))}
+				<div class="flex min-h-7 items-center gap-2" data-reference-row={r.id}>
+					<span class="flex h-6 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-3 text-fg-muted">{#if small}<img src={small} alt="" class="h-full w-full object-cover" />{:else}<Icon name={typeIcon(r)} class="h-3 w-3" />{/if}</span>
+					<button type="button" class="min-w-0 flex-1 truncate text-left text-xs {x.excluded ? 'text-fg-subtle line-through' : 'text-fg-muted hover:text-fg'}" onclick={() => select('reference', r.id)}>{r.name || refTypeLabel(r.type)}</button>
+					{#if !x.excluded && flagged(r)}<span class="shrink-0 text-2xs text-warning">{receptionVerdict(shot.statuses.get(r.id), kindOf(r)).text}</span>{/if}
+					<span class="inline-flex shrink-0 overflow-hidden rounded border border-line-strong text-2xs" role="group" aria-label={t('panels.director.refs.sendsLabel', { name: r.name || refTypeLabel(r.type), shot: number })}>
+						<button type="button" class="px-1.5 py-0.5 {x.excluded ? 'text-fg-subtle hover:text-fg' : 'bg-surface-3 text-fg'}" aria-pressed={!x.excluded} onclick={() => setSent(clip, r.id, true)}>{t('panels.director.refs.sends')}</button>
+						<button type="button" class="px-1.5 py-0.5 {x.excluded ? 'bg-surface-3 text-fg' : 'text-fg-subtle hover:text-fg'}" aria-pressed={x.excluded} onclick={() => setSent(clip, r.id, false)}>{t('panels.director.refs.excluded')}</button>
+					</span>
+				</div>
+			{/each}
+		</section>
+	{/if}
 
 	<section class="space-y-1.5" data-reference-owns>
 		<div class="vp-section-title">{t('panels.director.refs.owns', { shot: number, count: lists.own.length })}</div>
