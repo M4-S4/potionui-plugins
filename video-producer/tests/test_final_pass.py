@@ -204,6 +204,7 @@ def test_a_retried_upscale_keeps_the_upscaler_its_take_was_made_with(core, make_
 
 
 def test_an_rtx_pass_follows_the_kind_of_source_asked_for_and_a_retry_keeps_it(core, make_project):
+    core.use_wan()
     core.use_rtx()
     project, drafts = _drafts(core, make_project, clips=SHOTS[:1])
     (final,) = _start(core, _pass(core, project, drafts, upscaler="rtx", rtx_source="clean"), project)
