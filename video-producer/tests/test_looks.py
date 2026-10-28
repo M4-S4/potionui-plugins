@@ -105,7 +105,8 @@ def test_a_finished_take_asks_for_its_look_which_the_tracker_computes_when_nothi
 
     row = looks.rows([looks.take_key(take["id"])])[looks.take_key(take["id"])]
     assert (row["status"], row["model"], row["kind"]) == ("done", "local-google-siglip-base-patch16-224", "take")
-    assert [at for at, _ in row["frames"]] == [0.0, 4.0]
+    assert [frame[0] for frame in row["frames"]] == [0.0, 4.0]
+    assert [frame[2] for frame in row["frames"]] == [None, None]
     assert frames.calls == [take["id"]]
 
 
@@ -159,7 +160,7 @@ def test_a_seam_compares_the_end_of_the_cut_before_with_the_start_of_the_cut_aft
 
     assert seam["status"] == "done"
     assert (seam["score"] < looks.SEAM_LOW) is low
-    assert _report(core, project)["thresholds"] == {"seam": looks.SEAM_LOW, "cast": looks.CAST_LOW}
+    assert _report(core, project)["thresholds"] == {"seam": looks.SEAM_LOW, "cast": looks.CAST_LOW, "face": looks.FACE_LOW, "place": looks.PLACE_LOW, "final": looks.FINAL_LOW, "drift": looks.DRIFT_LOW}
 
 
 def test_a_take_is_scored_against_the_pictures_of_each_bible_card_of_its_shot_s_cast(core, make_project, frames):
@@ -179,6 +180,153 @@ def test_a_take_is_scored_against_the_pictures_of_each_bible_card_of_its_shot_s_
     assert (marin["card_id"], marin["label"], marin["status"]) == ("c-marin", "Marin", "done")
     assert marin["score"] > 0.99
     assert (lina["status"], lina["score"]) == ("no_images", None)
+
+
+class Painted(Frames):
+    async def take_frames(self, owner, take, folder):
+        self.calls.append(take["id"])
+        found = []
+        for index, (at, color, face) in enumerate(self.takes[take["id"]]):
+            path = folder / f"t{index}.png"
+            image = Image.new("RGB", (64, 36), color)
+            if face is not None:
+                image.paste(face, (20, 8, 36, 24))
+            image.save(path)
+            found.append((at, path))
+        return found
+
+    async def image_frames(self, owner, source, folder):
+        self.calls.append(source["value"])
+        color, face = self.images[source["value"]]
+        path = folder / "image.png"
+        image = Image.new("RGB", (64, 36), color)
+        if face is not None:
+            image.paste(face, (20, 8, 36, 24))
+        image.save(path)
+        return [(None, path)]
+
+
+@pytest.fixture
+def painted(monkeypatch, export_storage):
+    return Painted(monkeypatch)
+
+
+FACE = {"x": 20.0, "y": 8.0, "width": 16.0, "height": 16.0, "score": 0.9}
+
+
+def _with_faces(core, colors):
+    core.faces["available"] = True
+    for color in colors:
+        core.face_boxes[color] = [FACE]
+
+
+def test_with_the_face_detector_a_take_and_a_card_are_compared_on_their_cropped_faces_by_the_median_of_the_images_that_show_one(core, make_project, painted):
+    project, _, second = _placed(make_project, core, cast=True)
+    painted.takes[second["id"]] = [(0.0, BLUE, RED), (1.0, BLUE, RED), (2.0, BLUE, GREEN), (3.0, GREEN, None)]
+    painted.images["uploads/marin.png"] = (BLUE, RED)
+    _with_faces(core, [BLUE])
+
+    report = _report(core, project, enqueue=True)
+    while _run():
+        pass
+    report = _report(core, project)
+
+    row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
+    assert row["model"] == "local-google-siglip-base-patch16-224+faces"
+    assert [frame[2] is not None for frame in row["frames"]] == [True, True, True, False]
+    marin = next(card for card in next(item for item in report["takes"] if item["take_id"] == second["id"])["cards"] if card["card_id"] == "c-marin")
+    assert (marin["kind"], marin["method"], marin["seen"], marin["status"]) == ("character", "face", 0.75, "done")
+    assert marin["score"] > 0.99
+    assert report["faces"] == {"model": "face_detection_yunet_2023mar.onnx", "available": True}
+
+
+def test_a_take_without_a_face_falls_back_on_the_whole_image_and_says_none_was_seen(core, make_project, painted):
+    project, _, second = _placed(make_project, core, cast=True)
+    painted.takes[second["id"]] = [(0.0, RED, None), (4.0, BLUE, None)]
+    painted.images["uploads/marin.png"] = (RED, None)
+    core.faces["available"] = True
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    marin = _report(core, project)["takes"][1]["cards"][0]
+
+    assert (marin["method"], marin["seen"]) == ("whole", 0.0)
+    assert marin["score"] > 0.99
+
+
+def test_a_look_measured_before_the_face_detector_counts_as_missing_once_it_is_here(core, make_project, frames):
+    project, first, _ = _placed(make_project, core)
+    frames.takes[first["id"]] = [(0.0, RED)]
+    looks.queue_take(first)
+    assert _run() is True
+
+    core.faces["available"] = True
+    report = _report(core, project)
+
+    assert next(item for item in report["takes"] if item["take_id"] == first["id"])["status"] == "missing"
+
+
+def test_the_place_cast_in_a_shot_is_scored_on_the_whole_image_by_the_median_of_its_images(core, make_project, frames):
+    project, _, second = _placed(make_project, core, cast=True)
+    stored = projects.get_project(project["id"])
+    doc = stored["doc"]
+    core.add_media({"kind": "library", "item_id": "it-quay"}, "uploads/quay.png")
+    doc["assets"].append({**doc["assets"][-1], "id": "quay", "name": "quay.png", "origin": {"kind": "library", "itemId": "it-quay"}})
+    doc["references"].append({"id": "r-quay", "name": "Quay", "space": "decors3d", "type": "Décor", "assetId": "quay", "role": "Décor", "scope": None})
+    doc["bible"]["places"] = [{"id": "p-quay", "label": "Quay", "text": "", "references": ["r-quay"]}]
+    doc["clips"][1]["cast"] = {"characters": ["c-marin"], "place": "p-quay"}
+    projects.save_project(project["id"], doc, stored["version"])
+    frames.takes[second["id"]] = [(0.0, BLUE), (1.0, BLUE), (2.0, RED)]
+    frames.images["uploads/marin.png"] = RED
+    frames.images["uploads/quay.png"] = BLUE
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    cards = {card["card_id"]: card for card in _report(core, project)["takes"][1]["cards"]}
+
+    assert (cards["p-quay"]["kind"], cards["p-quay"]["method"], cards["p-quay"]["seen"]) == ("place", "whole", None)
+    assert cards["p-quay"]["score"] > 0.99
+    assert cards["c-marin"]["score"] > 0.99
+
+
+def test_a_final_take_is_compared_with_the_draft_it_comes_from_image_by_image(core, make_project, frames):
+    project, first, _ = _placed(make_project, core)
+    final = _done(project["id"], "s1", quality="final", parent_take_id=first["id"], file_path="generations/x/s1-final.mp4")
+    frames.takes[first["id"]] = [(0.0, RED), (2.0, BLUE)]
+    frames.takes[final["id"]] = [(0.0, RED), (1.0, RED), (2.0, GREEN)]
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    (found,) = _report(core, project)["finals"]
+
+    assert (found["take_id"], found["parent_id"], found["shot_id"], found["status"], found["face"]) == (final["id"], first["id"], "s1", "done", None)
+    assert found["score"] > 0.99
+
+
+def test_the_takes_of_one_character_are_compared_from_shot_to_shot_once_three_show_its_face(core, make_project, painted):
+    project = make_project(clips=[{"id": f"s{n}", "start": 4 * (n - 1), "dur": 4} for n in (1, 2, 3)])
+    placed = [_done(project["id"], f"s{n}") for n in (1, 2, 3)]
+    doc = projects.get_project(project["id"])["doc"]
+    shape = {key: None for key in ("origin", "width", "height", "fps", "res", "role", "synth", "transcript", "character", "lipSync")}
+    for clip, take in zip(doc["clips"], placed):
+        doc["assets"].append({**shape, **ASSET, "id": f"gen-{take['id']}", "name": take["id"], "resultId": take["id"]})
+        clip.update({"assetId": f"gen-{take['id']}", "take": take["id"], "stage": "draft", "cast": {"characters": ["c-marin"]}})
+    doc["bible"] = {"characters": [{"id": "c-marin", "label": "Marin", "text": "", "props": "", "references": []}], "places": []}
+    projects.save_project(project["id"], doc, projects.get_project(project["id"])["version"])
+    painted.takes.update({placed[0]["id"]: [(0.0, BLUE, RED)], placed[1]["id"]: [(0.0, BLUE, RED)], placed[2]["id"]: [(0.0, BLUE, GREEN)]})
+    _with_faces(core, [BLUE])
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    drift = {item["shot_id"]: item for item in _report(core, project)["drift"]}
+
+    assert set(drift) == {"s1", "s2", "s3"}
+    assert drift["s3"]["score"] < drift["s1"]["score"] == drift["s2"]["score"]
+    assert drift["s3"]["take_id"] == placed[2]["id"] and drift["s3"]["card_id"] == "c-marin"
 
 
 def test_a_card_picture_from_the_history_counts_though_the_core_stores_its_type_in_capitals(core):

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CAST_LOW, SEAM_LOW, bestCandidate, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
+import { CAST_LOW, DRIFT_LOW, FACE_LOW, FINAL_LOW, PLACE_LOW, SEAM_LOW, bestCandidate, cardThreshold, driftOf, finalLook, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -24,12 +24,12 @@ const payload = {
 test('normalizeLooks keeps the seams and takes the server measured, with its thresholds and counts', () => {
 	const looks = normalizeLooks(payload);
 	assert.deepEqual(looks.embedder, { model: 'google/siglip-base-patch16-224', available: true });
-	assert.deepEqual(looks.thresholds, { seam: 0.7, cast: 0.6 });
+	assert.deepEqual(looks.thresholds, { seam: 0.7, cast: 0.6, face: FACE_LOW, place: PLACE_LOW, final: FINAL_LOW, drift: DRIFT_LOW });
 	assert.deepEqual(looks.seams[0], { shotId: 's2', previousId: 's1', fromTake: 't1', toTake: 't2', score: 0.52, status: 'done' });
 	assert.equal(looks.takes.length, 2);
 	assert.deepEqual(looks.takes[1], { takeId: 'bad', shotId: null, status: 'missing', cards: [] });
 	assert.deepEqual([looks.missing, looks.queued], [3, 0]);
-	assert.deepEqual(normalizeLooks(null), { embedder: { model: null, available: false }, thresholds: { seam: SEAM_LOW, cast: CAST_LOW }, seams: [], takes: [], candidates: [], missing: 0, queued: 0 });
+	assert.deepEqual(normalizeLooks(null), { embedder: { model: null, available: false }, faces: { model: null, available: false }, thresholds: { seam: SEAM_LOW, cast: CAST_LOW, face: FACE_LOW, place: PLACE_LOW, final: FINAL_LOW, drift: DRIFT_LOW }, seams: [], takes: [], candidates: [], finals: [], drift: [], missing: 0, queued: 0 });
 });
 
 test('a start image candidate is scored by the mean of its cast cards, and the closest stands out only among two scored ones or more', () => {
@@ -56,6 +56,38 @@ test('the candidate window shows the likeness of each candidate and the closest 
 	assert.match(window, /\{#if best === take\.id\}/);
 	assert.match(window, /if \(finished\) untrack\(\(\) => refreshLooks\(\)\)/);
 	assert.doesNotMatch(window, /acceptCandidate\(best/);
+});
+
+test('a card is judged by the threshold of how it was measured, a final by its draft, and a take by the other shots of its character', () => {
+	const looks = normalizeLooks({
+		thresholds: { seam: 0.7, cast: 0.6, face: 0.72, place: 0.5, final: 0.8, drift: 0.75 },
+		takes: [
+			{
+				take_id: 't1',
+				shot_id: 's1',
+				status: 'done',
+				cards: [
+					{ card_id: 'c1', label: 'Marin', kind: 'character', method: 'face', seen: 0.75, score: 0.71, status: 'done' },
+					{ card_id: 'c2', label: 'Lina', kind: 'character', method: 'whole', seen: 0, score: 0.65, status: 'done' },
+					{ card_id: 'p1', label: 'Quai', kind: 'place', method: 'whole', seen: null, score: 0.52, status: 'done' },
+					{ card_id: 'c3', label: 'Malo', kind: 'other', method: 'magic', seen: 2, score: 0.9, status: 'done' }
+				]
+			}
+		],
+		finals: [{ take_id: 'f1', parent_id: 't1', shot_id: 's1', score: 0.78, face: null, status: 'done' }, { parent_id: 'x' }],
+		drift: [{ card_id: 'c1', shot_id: 's1', take_id: 't1', score: 0.7 }, { card_id: 'c1' }]
+	});
+	const [marin, lina, quay, malo] = looks.takes[0].cards;
+	assert.deepEqual([marin.kind, marin.method, marin.seen], ['character', 'face', 0.75]);
+	assert.deepEqual([malo.kind, malo.method, malo.seen], ['character', null, null]);
+	assert.deepEqual([cardThreshold(looks, marin), cardThreshold(looks, lina), cardThreshold(looks, quay)], [0.72, 0.6, 0.5]);
+	assert.deepEqual(lowCards(looks, looks.takes[0]).map((c) => c.cardId), ['c1']);
+	assert.equal(lowFinal(looks, finalLook(looks, 'f1')), true);
+	assert.equal(finalLook(looks, 't1'), null);
+	assert.equal(lowDrift(looks, driftOf(looks, 't1', 'c1')), true);
+	assert.equal(driftOf(looks, 't1', 'c2'), null);
+	assert.equal(looks.finals.length, 1);
+	assert.equal(looks.drift.length, 1);
 });
 
 test('a seam look counts only for the takes placed on its two shots now, and warns under the seam threshold', () => {
@@ -93,7 +125,7 @@ test('wiring: the measured look feeds the seams, the review, To check and the St
 	assert.doesNotMatch(source('../components/director/DirectorSummary.svelte'), /vp-sim|simulatedTip/);
 	assert.match(source('../components/storyboard/SeamPanel.svelte'), /\{#if issue\.kind === 'identity'\}<span class="mt-0\.5 block text-2xs text-fg-subtle" data-look-hint>\{t\('lib\.continuity\.lookHint'\)\}/);
 	const take = source('../components/director/ReviewTake.svelte');
-	assert.match(take, /\{#if look\?\.cards\.length\}\n\t<section class="space-y-2" data-take-looks>/);
+	assert.match(take, /\{#if look\?\.cards\.length \|\| fromDraft\?\.status === 'done'\}\n\t<section class="space-y-2" data-take-looks>/);
 	assert.match(take, /onclick: measureLooks \}\}>\{t\('panels\.director\.pick\.measure'\)\}/);
 	const summary = source('../components/director/DirectorSummary.svelte');
 	assert.match(summary, /const lookIssues = \$derived\(castIssues\(looks, doc\.clips\)\);/);

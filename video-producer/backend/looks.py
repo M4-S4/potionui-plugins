@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import shutil
+import statistics
 import struct
 import tempfile
 from pathlib import Path
@@ -25,6 +26,17 @@ END_MARGIN = 0.05
 
 SEAM_LOW = 0.70
 CAST_LOW = 0.60
+FACE_LOW = 0.70
+PLACE_LOW = 0.55
+FINAL_LOW = 0.80
+DRIFT_LOW = 0.75
+
+FACE_SCALE = 1.8
+FACES = "faces"
+FACE = "face"
+WHOLE = "whole"
+CHARACTER = "character"
+PLACE = "place"
 
 TAKE = "take"
 IMAGE = "image"
@@ -169,6 +181,50 @@ def embedder() -> Dict[str, Any]:
     return {"model": info.get("model"), "slug": info.get("slug"), "available": bool(info.get("available"))}
 
 
+def face_detector() -> Dict[str, Any]:
+    """The face detector of the application, as far as the looks need it: its model file and whether it can detect here."""
+    try:
+        info = core_bridge.face_detector()
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not read the face detector", exc_info=True)
+        return {"model": None, "available": False}
+    return {"model": info.get("model"), "available": bool(info.get("available"))}
+
+
+def measure_key(info: Mapping[str, Any], faces: Mapping[str, Any]) -> Optional[str]:
+    """The name a look is measured under: the embedder's slug, marked when the faces are cropped too, so that a look measured without the face detector counts as missing once it is here."""
+    slug = info.get("slug")
+    return f"{slug}+{FACES}" if slug and faces.get("available") else slug
+
+
+def _face_crop(path: Path, box: Mapping[str, float], output: Path) -> Path:
+    from PIL import Image
+
+    with Image.open(path) as image:
+        picture = image.convert("RGB")
+    side = min(max(float(box["width"]), float(box["height"])) * FACE_SCALE, float(max(picture.width, picture.height)))
+    left = min(max(float(box["x"]) + float(box["width"]) / 2 - side / 2, 0.0), max(picture.width - side, 0.0))
+    top = min(max(float(box["y"]) + float(box["height"]) / 2 - side / 2, 0.0), max(picture.height - side, 0.0))
+    picture.crop((round(left), round(top), round(min(left + side, picture.width)), round(min(top + side, picture.height)))).save(output)
+    return output
+
+
+def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path) -> List[Optional[List[float]]]:
+    found: List[Optional[List[float]]] = [None] * len(picked)
+    try:
+        boxes = core_bridge.detect_faces([str(path) for _, path in picked])
+    except FileNotFoundError:
+        return found
+    crops: List[Tuple[int, Path]] = []
+    for index, ((_, path), faces) in enumerate(zip(picked, boxes)):
+        if faces:
+            crops.append((index, _face_crop(Path(path), faces[0], folder / f"face-{index:02d}.png")))
+    vectors = core_bridge.embed_images([str(path) for _, path in crops]) if crops else []
+    for (index, _), vector in zip(crops, vectors):
+        found[index] = vector
+    return found
+
+
 def _ffmpeg() -> str:
     found = core_bridge.find_ffmpeg()
     if not found:
@@ -216,9 +272,9 @@ def _cast_images(owner: Any, project: Mapping[str, Any], shot_id: str) -> List[T
     clip = director.clip_of(doc, shot_id)
     if clip is None:
         return []
-    characters, _ = bible.cast_of(doc, clip)
+    characters, place = bible.cast_of(doc, clip)
     found = []
-    for card in characters:
+    for card in [*characters, *([place] if place is not None else [])]:
         found.extend(_card_images(owner, doc, card))
     return found
 
@@ -236,8 +292,8 @@ def _card_images(owner: Any, doc: Mapping[str, Any], card: bible.Card) -> List[T
     return found
 
 
-async def compute(row: Mapping[str, Any], model: str) -> None:
-    """Compute one queued look: the images of a take at its sample times, or a stored image, embedded by the image embedder of the application; the look of a take also asks for the images of the bible cards of its shot's cast."""
+async def compute(row: Mapping[str, Any], model: str, faces: bool = False) -> None:
+    """Compute one queued look: the images of a take at its sample times, or a stored image, embedded by the image embedder of the application, with faces the best face of each image cropped and embedded too; the look of a take also asks for the images of the bible cards of its shot's cast."""
     owner = core_bridge.get_user(row.get("user_id")) if row.get("user_id") else None
     if owner is None:
         return _mark(row["key"], FAILED, error="The owner of this media no longer exists.")
@@ -253,13 +309,14 @@ async def compute(row: Mapping[str, Any], model: str) -> None:
         else:
             picked = await _image_frames(owner, row["source"], folder)
         vectors = await asyncio.to_thread(core_bridge.embed_images, [str(path) for _, path in picked])
+        crops = await asyncio.to_thread(_face_vectors, picked, folder) if faces else [None] * len(picked)
     except (chain.ChainError, MediaRefError) as exc:
         return _mark(row["key"], FAILED, error=getattr(exc, "message", None) or str(exc))
     except FileNotFoundError as exc:
         return _mark(row["key"], UNAVAILABLE, error=str(exc))
     finally:
         await asyncio.to_thread(shutil.rmtree, folder, True)
-    _mark(row["key"], DONE, model=model, frames=[[at, pack(vector)] for (at, _), vector in zip(picked, vectors)])
+    _mark(row["key"], DONE, model=model, frames=[[at, pack(vector), pack(face) if face else None] for (at, _), vector, face in zip(picked, vectors, crops)])
     if row["kind"] == TAKE:
         from . import projects
 
@@ -290,8 +347,9 @@ async def run_once() -> bool:
     if not info["available"] or not info["slug"]:
         _unavailable_all(f"The weights of {info['model'] or 'the image embedder'} are not on this server.")
         return False
+    faces = face_detector()
     try:
-        await compute(row, info["slug"])
+        await compute(row, measure_key(info, faces), faces["available"])
     except Exception as exc:
         logger.warning("[VIDEO-PRODUCER] Could not compute the look of %s", row["key"], exc_info=True)
         _mark(row["key"], FAILED, error=str(exc) or "The look could not be computed.")
@@ -311,7 +369,19 @@ def _state(row: Optional[Mapping[str, Any]], model: Optional[str]) -> str:
 
 
 def _vectors(row: Mapping[str, Any]) -> List[Tuple[Optional[float], Tuple[float, ...]]]:
-    return [(at, unpack(vector)) for at, vector in row["frames"]]
+    return [(frame[0], unpack(frame[1])) for frame in row["frames"]]
+
+
+def _faces(row: Mapping[str, Any]) -> List[Tuple[Optional[float], Tuple[float, ...]]]:
+    return [(frame[0], unpack(frame[2])) for frame in row["frames"] if len(frame) > 2 and frame[2]]
+
+
+def _signature(faces: Sequence[Tuple[Optional[float], Tuple[float, ...]]]) -> Optional[Tuple[float, ...]]:
+    if not faces:
+        return None
+    total = [sum(values) for values in zip(*(face for _, face in faces))]
+    norm = sum(value * value for value in total) ** 0.5
+    return tuple(value / norm for value in total) if norm else None
 
 
 def _near(frames: List[Tuple[Optional[float], Tuple[float, ...]]], at: float) -> Tuple[float, ...]:
@@ -349,22 +419,80 @@ def _seams(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]], f
 
 
 def _cards(take_row: Optional[Mapping[str, Any]], images: Sequence[Tuple[str, Dict[str, Any], str]], cards: Sequence[bible.Card], found: Mapping[str, Mapping[str, Any]], model: Optional[str]) -> List[Dict[str, Any]]:
-    frames = _vectors(take_row) if _current(take_row, model) else []
+    current = _current(take_row, model)
+    frames = _vectors(take_row) if current else []
+    faces = _faces(take_row) if current else []
+    cropping = bool(model and model.endswith(f"+{FACES}"))
     result = []
     for card in cards:
+        kind = PLACE if card.kind == bible.PLACES else CHARACTER
+        entry = {"card_id": card.id, "label": card.label, "kind": kind, "score": None, "method": None, "seen": None}
         mine = [value for card_id, _, value in images if card_id == card.id]
         if not mine:
-            result.append({"card_id": card.id, "label": card.label, "score": None, "status": "no_images"})
+            result.append({**entry, "status": "no_images"})
             continue
         ready = [found.get(image_key(value)) for value in mine]
         done = [row for row in ready if _current(row, model)]
         if not frames or not done:
             states = [_state(row, model) for row in ready] + ([_state(take_row, model)] if not frames else [])
             state = next((s for s in (FAILED, UNAVAILABLE, QUEUED, MISSING) if s in states), MISSING)
-            result.append({"card_id": card.id, "label": card.label, "score": None, "status": state})
+            result.append({**entry, "status": state})
             continue
-        score = max(cosine(vector, image) for _, vector in frames for row in done for _, image in _vectors(row))
-        result.append({"card_id": card.id, "label": card.label, "score": round(score, 3), "status": DONE})
+        pictures = [image for row in done for _, image in _vectors(row)]
+        portraits = [face for row in done for _, face in _faces(row)]
+        if kind == PLACE:
+            score = statistics.median(max(cosine(vector, image) for image in pictures) for _, vector in frames)
+            result.append({**entry, "score": round(score, 3), "method": WHOLE, "status": DONE})
+        elif faces and portraits:
+            score = statistics.median(max(cosine(face, portrait) for portrait in portraits) for _, face in faces)
+            result.append({**entry, "score": round(score, 3), "method": FACE, "seen": round(len(faces) / len(frames), 3), "status": DONE})
+        else:
+            score = max(cosine(vector, image) for _, vector in frames for image in pictures)
+            result.append({**entry, "score": round(score, 3), "method": WHOLE, "seen": 0.0 if cropping else None, "status": DONE})
+    return result
+
+
+def _finals(project_takes: Sequence[Mapping[str, Any]], found: Mapping[str, Mapping[str, Any]], model: Optional[str]) -> List[Dict[str, Any]]:
+    by_id = {take["id"]: take for take in project_takes}
+    result = []
+    for take in project_takes:
+        parent = by_id.get(take.get("parent_take_id") or "")
+        if take.get("quality") != "final" or parent is None:
+            continue
+        rows_of = [found.get(take_key(take["id"])), found.get(take_key(parent["id"]))]
+        states = [_state(row, model) for row in rows_of]
+        entry = {"take_id": take["id"], "parent_id": parent["id"], "shot_id": take["shot_id"], "score": None, "face": None}
+        if states != [DONE, DONE]:
+            result.append({**entry, "status": next(s for s in (FAILED, UNAVAILABLE, QUEUED, MISSING) if s in states)})
+            continue
+        mine, theirs = _vectors(rows_of[0]), _vectors(rows_of[1])
+        score = statistics.median(cosine(vector, _near(theirs, at or 0.0)) for at, vector in mine)
+        faces, parent_faces = _faces(rows_of[0]), _faces(rows_of[1])
+        face = statistics.median(max(cosine(item, other) for _, other in parent_faces) for _, item in faces) if faces and parent_faces else None
+        result.append({**entry, "score": round(score, 3), "face": round(face, 3) if face is not None else None, "status": DONE})
+    return result
+
+
+def _drift(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]], found: Mapping[str, Mapping[str, Any]], model: Optional[str]) -> List[Dict[str, Any]]:
+    placed: List[Tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    for clip in doc.get("clips") or []:
+        take = placed_take(doc, clip, project_takes)
+        if take is not None:
+            placed.append((clip, take))
+    result = []
+    for card in bible.cards(doc, bible.CHARACTERS):
+        signed = []
+        for clip, take in placed:
+            row = found.get(take_key(take["id"]))
+            if card.id in {item.id for item in bible.cast_of(doc, clip)[0]} and _current(row, model):
+                signature = _signature(_faces(row))
+                if signature is not None:
+                    signed.append((clip, take, signature))
+        if len(signed) < 3:
+            continue
+        for clip, take, signature in signed:
+            others = [cosine(signature, other) for _, item, other in signed if item["id"] != take["id"]]
+            result.append({"card_id": card.id, "shot_id": clip["id"], "take_id": take["id"], "score": round(sum(others) / len(others), 3)})
     return result
 
 
@@ -372,7 +500,8 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
     """The looks of a project's finished takes, from the stored ones: the score of each seam between two placed takes, at the end of the cut of the first and the start of the cut of the second, and for each take and each start or end image candidate the score of each bible card of its shot's cast, the best match of its images with the card's pictures. With enqueue, every look missing for the project is asked for first."""
     doc = project["doc"]
     info = embedder()
-    model = info["slug"]
+    faces = face_detector()
+    model = measure_key(info, faces)
     project_takes = [take for take in takes.list_takes(project["id"]) if take["status"] == "done" and take.get("file_path")]
     candidates = [take for take in takes.list_keyframes(project["id"]) if take["status"] == "done" and take.get("file_path")]
     shots = {take["shot_id"] for take in (*project_takes, *candidates)}
@@ -393,18 +522,22 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
         found = rows(keys)
     def measured(take: Mapping[str, Any]) -> Dict[str, Any]:
         clip = director.clip_of(doc, take["shot_id"])
-        characters = bible.cast_of(doc, clip)[0] if clip is not None else []
+        characters, place = bible.cast_of(doc, clip) if clip is not None else ([], None)
         row = found.get(take_key(take["id"]))
-        return {"take_id": take["id"], "shot_id": take["shot_id"], "status": _state(row, model), "cards": _cards(row, images.get(take["shot_id"], []), characters, found, model)}
+        cast = [*characters, *([place] if place is not None else [])]
+        return {"take_id": take["id"], "shot_id": take["shot_id"], "status": _state(row, model), "cards": _cards(row, images.get(take["shot_id"], []), cast, found, model)}
 
     takes_out = [measured(take) for take in project_takes]
     states = [_state(found.get(key), model) for key in keys]
     return {
         "embedder": {"model": info["model"], "available": info["available"]},
-        "thresholds": {"seam": SEAM_LOW, "cast": CAST_LOW},
+        "faces": {"model": faces["model"], "available": faces["available"]},
+        "thresholds": {"seam": SEAM_LOW, "cast": CAST_LOW, "face": FACE_LOW, "place": PLACE_LOW, "final": FINAL_LOW, "drift": DRIFT_LOW},
         "seams": _seams(doc, project_takes, found, model),
         "takes": takes_out,
         "candidates": [measured(take) for take in candidates],
+        "finals": _finals(project_takes, found, model),
+        "drift": _drift(doc, project_takes, found, model),
         "missing": sum(1 for state in states if state in (MISSING, FAILED, UNAVAILABLE)),
         "queued": sum(1 for state in states if state == QUEUED),
     }
