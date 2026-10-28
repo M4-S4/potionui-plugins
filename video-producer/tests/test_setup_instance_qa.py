@@ -129,7 +129,10 @@ def test_the_instance_replica_reports_four_steps_done_and_the_full_h3_dit_to_do(
     assert report[1][1].description.startswith(
         "Installed and assigned: Wan 2.1 / 2.2, MiniMax-H3, MiniMax-H3-Fast, MiniMax-H3 (12 GB), MiniMax-H3-Fast (12 GB)."
     )
-    assert report[2][1].description == "SeedVR2 is installed and assigned."
+    assert report[2][1].description == (
+        "SeedVR2 is installed and assigned. No interpolator is ready: takes slower than the film repeat frames in the export "
+        "until Video Tools with RIFE 4.25 is installed."
+    )
     assert report[3][1].description == "ffmpeg is available."
     last = report[4][1]
     assert last.description.startswith("MiniMax-H3 is missing its DiT. Download one of the files its model pickers recommend;")
