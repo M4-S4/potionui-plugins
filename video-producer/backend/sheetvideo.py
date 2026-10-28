@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-from typing import Any, List, Sequence
+from typing import Any, List, Sequence, Tuple
 
 from . import reception
 from .director import SheetPlan
@@ -11,16 +11,31 @@ SUFFIX = ".mp4"
 ENCODER = ("-c:v", "libx264", "-preset", "slow", "-crf", "10", "-tune", "stillimage", "-pix_fmt", "yuv420p")
 
 
+def bands(boxes: Sequence[reception.Box]) -> List[Tuple[reception.Box, List[int]]]:
+    """The band of each run of pictures that share one, in order, with the input numbers of its pictures (input 0 being the canvas)."""
+    found: List[Tuple[reception.Box, List[int]]] = []
+    for index, box in enumerate(boxes, start=1):
+        if found and found[-1][0] == box:
+            found[-1][1].append(index)
+        else:
+            found.append((box, [index]))
+    return found
+
+
 def sheet_graph(boxes: Sequence[reception.Box]) -> str:
-    """The filter graph of a sheet: each picture scaled to fit its box without cropping and centred in it over the black canvas of input 0, one after the other."""
+    """The filter graph of a sheet, as the measured sheet was drawn: in each band, its pictures scaled whole to its height and put side by side with the table's gap between them, the row shrunk to fit the band's width when it is wider, then centred in the band over the black canvas of input 0."""
+    gap = reception.SHEET["gap"]
     graph: List[str] = []
     base = "0:v"
-    for index, (x, y, width, height) in enumerate(boxes, start=1):
-        graph.append(
-            f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,format=yuv420p[p{index}]"
-        )
-        graph.append(f"[{base}][p{index}]overlay=x={x}+({width}-overlay_w)/2:y={y}+({height}-overlay_h)/2:eof_action=repeat:format=yuv420[b{index}]")
-        base = f"b{index}"
+    for number, ((x, y, width, height), inputs) in enumerate(bands(boxes), start=1):
+        for position, index in enumerate(inputs):
+            pad = f",pad=iw+{gap}:ih:0:0:color=black" if position < len(inputs) - 1 else ""
+            graph.append(f"[{index}:v]scale=-2:{height}:flags=lanczos,setsar=1,format=yuv420p{pad}[p{index}]")
+        joined = "".join(f"[p{index}]" for index in inputs)
+        stack = f"{joined}hstack=inputs={len(inputs)}," if len(inputs) > 1 else joined
+        graph.append(f"{stack}scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1[r{number}]")
+        graph.append(f"[{base}][r{number}]overlay=x={x}+({width}-overlay_w)/2:y={y}+({height}-overlay_h)/2:eof_action=repeat:format=yuv420[b{number}]")
+        base = f"b{number}"
     graph.append(f"[{base}]format=yuv420p,setsar=1[vout]")
     return ";".join(graph)
 

@@ -1693,6 +1693,13 @@ def _card_pictures(user: User, doc: Mapping[str, Any], card: bible.Card, exclude
     return pictures
 
 
+def _picture_size(doc: Mapping[str, Any], asset_id: str) -> Optional[Tuple[int, int]]:
+    asset = _asset(doc, asset_id) or {}
+    width, height = asset.get("width"), asset.get("height")
+    sized = all(isinstance(side, int) and not isinstance(side, bool) and side > 0 for side in (width, height))
+    return (int(width), int(height)) if sized else None
+
+
 def sheet_panels(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], size: Tuple[int, int], warnings: List[Dict[str, Any]]) -> List[SheetPanel]:
     """The pictures a shot's reference sheet shows, with their boxes: the first pictures of each character cast in it, in the order of the bible and up to the table's counts, then the first picture of its place; the pictures it leaves out are not used. A cast card without a picture, the characters over the count, boxes smaller than the table's least edge and props that are only words are each said by a warning."""
     shot_id = clip["id"]
@@ -1718,7 +1725,7 @@ def sheet_panels(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], si
             panels.append(SheetPanel(reference_id, asset_id, card.id, bible.CHARACTERS, boxes[len(panels)]))
     if setting and place is not None and setting_box is not None:
         panels.append(SheetPanel(setting[0][0], setting[0][1], place.id, bible.PLACES, setting_box))
-    edge = min((min(box[2], box[3]) for box in boxes), default=None)
+    edge = reception.sheet_edge(boxes[0], [_picture_size(doc, panel.asset_id) for panel in panels if panel.kind == bible.CHARACTERS]) if boxes else None
     if left or (edge is not None and edge < SHEET["leastEdge"]):
         names = [card.label for card, _ in left]
         message = f"The sheet holds {SHEET['characters']} characters: {', '.join(names)} left out." if names else f"The pictures of the sheet are {edge} px on their short side, too small to hold a face."
