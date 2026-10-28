@@ -13,6 +13,7 @@
 	"matchAll": "Match colors ({count})",
 	"matchAllTip": "Matches the color of each shot to the previous one, from the first seam to the last, in one step that Ctrl+Z undoes",
 	"seam.compareTakes": "Compare the takes",
+	"seam.reanchor": "Correct the start image",
 	"chain.label": "Start from the end of the previous shot",
 	"chain.off": "The shot starts from its text or from a first frame of its own.",
 	"chain.textOnly": "The engine of this shot generates from text only: it does not use this frame.",

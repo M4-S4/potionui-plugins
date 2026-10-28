@@ -53,6 +53,7 @@
 	"make": "Créer {count} candidates pour l’{role}",
 	"gallery": "Candidates",
 	"none": "Aucune candidate pour l’instant.",
+	"reanchor": "Correction de l’image de début : l’image actuelle part comme cadrage, les images des fiches gardent les personnages.",
 	"card.open": "Ouvrir la candidate {variant} en grand",
 	"card.queued": "En attente",
 	"card.running": "Génération · {percent} %",

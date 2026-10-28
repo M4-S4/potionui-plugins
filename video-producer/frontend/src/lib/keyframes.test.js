@@ -108,6 +108,17 @@ test('the pictures sent follow the cast of the editor: the pictures of a cast ca
 	assert.deepEqual(cast.map((p) => p.assetId), ['cafe', 'lea', 'hat']);
 });
 
+test('correcting a start image sends the current one as the framing, before the pictures of the shot', () => {
+	const doc = scene();
+
+	const plain = draftPictures(doc, doc.clips[0], draftOf(doc, { first: 'capture' }), 'first');
+	const framed = draftPictures(doc, doc.clips[0], draftOf(doc, { first: 'capture' }), 'first', true);
+
+	assert.ok(plain.every((p) => p.role !== 'frame'));
+	assert.deepEqual(framed[0], { assetId: 'capture', role: 'frame', name: '', origin: 'frame' });
+	assert.deepEqual(framed.slice(1).map((p) => p.assetId), plain.map((p) => p.assetId));
+});
+
 test('the start image is the framing of the end image only, a former 3D capture included', () => {
 	const doc = scene();
 	doc.frames = [{ id: 'f1', shotId: 's1', time: 0, assetId: 'capture', role: 'first', strength: 100, sceneId: 'sc1' }];

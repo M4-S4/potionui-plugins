@@ -387,5 +387,5 @@ test('director: References has its own panel, which reads what each engine gets 
 	const keyframes = read('../components/shots/KeyframeCandidates.svelte');
 	assert.match(keyframes, /tick\(\)\.then\(\(\) => root\?\.scrollIntoView\(\{ block: 'start' \}\)\);/);
 	assert.match(keyframes, /aria-controls="\{id\}-body" autofocus=\{focus\}/);
-	assert.match(read('../components/modals/ShotEditor.svelte'), /autofocus=\{focus !== 'keyframes'\}/);
+	assert.match(read('../components/modals/ShotEditor.svelte'), /autofocus=\{focus !== 'keyframes' && focus !== 'reanchor'\}/);
 });

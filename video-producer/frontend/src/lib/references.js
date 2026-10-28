@@ -178,6 +178,10 @@ export function startImage(clip) {
 	if (clip) ui.modal = { type: 'shot', id: clip.id, focus: 'keyframes' };
 }
 
+export function reanchorImage(clip) {
+	if (clip) ui.modal = { type: 'shot', id: clip.id, focus: 'reanchor' };
+}
+
 export function addCardImage(card, space, assetId) {
 	if (!card || !assetId) return null;
 	const type = typesOf(space)[0];

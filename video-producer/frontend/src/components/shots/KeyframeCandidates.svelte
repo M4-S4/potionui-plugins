@@ -17,7 +17,7 @@
 	import { currentLooks, refreshLooks } from '../../lib/looks.svelte.js';
 	import Icon from '../Icon.svelte';
 
-	let { clip, draft, onaccept, focus = false } = $props();
+	let { clip, draft, onaccept, focus = false, framing = false } = $props();
 
 	const id = $props.id();
 	let open = $state(false);
@@ -34,7 +34,7 @@
 	const option = $derived(absent ? null : chosenOption(options, stored));
 	const runnable = $derived(option && !option.disabled ? option : null);
 	const target = $derived(runnable ?? (absent ? { key: '', preset: stored.preset, model: stored.model, maxImages: null } : null));
-	const pictures = $derived(draftPictures(doc, clip, draft, choice));
+	const pictures = $derived(draftPictures(doc, clip, draft, choice, framing && choice === 'first'));
 	const limit = $derived(runnable?.maxImages ?? pictures.length);
 	const body = $derived(making && target ? requestBody({ option: target, role: choice, count, prompt: draft.text, pictures }) : null);
 	const estimate = $derived(keyframeState.estimate);
@@ -189,6 +189,7 @@
 	{#if open}
 		<div id="{id}-body" class="space-y-2.5 rounded-lg border border-line-strong p-2.5">
 			<p class="text-xs leading-5 text-fg-subtle">{t('keyframes.hint')}</p>
+			{#if framing && choice === 'first'}<p class="text-xs leading-5 text-fg-muted" data-reanchor>{t('keyframes.reanchor')}</p>{/if}
 			<div class="space-y-1">
 				<span class="vp-label block">{t('keyframes.roleLabel')}</span>
 				{#each [['make', MAKE, t('keyframes.makeGroup')], ['retrieve', RETRIEVE, t('keyframes.retrieveGroup')]] as [group, values, label] (group)}

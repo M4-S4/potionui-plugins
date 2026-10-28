@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CAST_LOW, DRIFT_LOW, FACE_LOW, FINAL_LOW, PLACE_LOW, SEAM_LOW, bestCandidate, cardThreshold, driftOf, finalLook, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
+import { CAST_LOW, chainDrifts, chainLook, DRIFT_LOW, FACE_LOW, FINAL_LOW, PLACE_LOW, SEAM_LOW, bestCandidate, cardThreshold, driftOf, finalLook, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -29,7 +29,7 @@ test('normalizeLooks keeps the seams and takes the server measured, with its thr
 	assert.equal(looks.takes.length, 2);
 	assert.deepEqual(looks.takes[1], { takeId: 'bad', shotId: null, status: 'missing', cards: [] });
 	assert.deepEqual([looks.missing, looks.queued], [3, 0]);
-	assert.deepEqual(normalizeLooks(null), { embedder: { model: null, available: false }, faces: { model: null, available: false }, thresholds: { seam: SEAM_LOW, cast: CAST_LOW, face: FACE_LOW, place: PLACE_LOW, final: FINAL_LOW, drift: DRIFT_LOW }, seams: [], takes: [], candidates: [], finals: [], drift: [], missing: 0, queued: 0 });
+	assert.deepEqual(normalizeLooks(null), { embedder: { model: null, available: false }, faces: { model: null, available: false }, thresholds: { seam: SEAM_LOW, cast: CAST_LOW, face: FACE_LOW, place: PLACE_LOW, final: FINAL_LOW, drift: DRIFT_LOW }, seams: [], takes: [], candidates: [], finals: [], drift: [], chains: [], missing: 0, queued: 0 });
 });
 
 test('a start image candidate is scored by the mean of its cast cards, and the closest stands out only among two scored ones or more', () => {
@@ -88,6 +88,26 @@ test('a card is judged by the threshold of how it was measured, a final by its d
 	assert.equal(driftOf(looks, 't1', 'c2'), null);
 	assert.equal(looks.finals.length, 1);
 	assert.equal(looks.drift.length, 1);
+});
+
+test('a chain look counts for the take the previous shot plays now, and its drifting cards are those under their threshold', () => {
+	const looks = normalizeLooks({
+		chains: [
+			{ shot_id: 's2', previous_id: 's1', from_take: 't1', cards: [{ card_id: 'c1', label: 'Marin', kind: 'character', method: 'face', seen: 1, score: 0.6, status: 'done' }, { card_id: 'c2', label: 'Lina', kind: 'character', method: 'whole', seen: null, score: 0.9, status: 'done' }] },
+			{ shot_id: 's3' }
+		]
+	});
+	assert.equal(looks.chains.length, 1);
+	assert.equal(chainLook(looks, { id: 's1', take: 't1' }, { id: 's2' }).fromTake, 't1');
+	assert.equal(chainLook(looks, { id: 's1', take: 't9' }, { id: 's2' }), null);
+	assert.deepEqual(chainDrifts(looks, { id: 's1', take: 't1' }, { id: 's2' }).map((c) => c.cardId), ['c1']);
+	assert.deepEqual(chainDrifts(null, { id: 's1', take: 't1' }, { id: 's2' }), []);
+});
+
+test('a drifting chain is a seam issue whose fix opens the start images of the next shot with its current one as the framing', () => {
+	assert.match(source('./continuity.svelte.js'), /if \(drift\) out\.issues\.push\(\{ kind: 'chain_drift'/);
+	assert.match(source('../components/storyboard/SeamFix.svelte'), /\{:else if issue\.kind === 'chain_drift'\}\n\t<button type="button" class=\{link\} data-seam-fix="reanchor" onclick=\{\(e\) => run\(e, reanchorImage\)\}>/);
+	assert.match(source('./references.js'), /export function reanchorImage\(clip\) \{\n\tif \(clip\) ui\.modal = \{ type: 'shot', id: clip\.id, focus: 'reanchor' \};/);
 });
 
 test('a seam look counts only for the takes placed on its two shots now, and warns under the seam threshold', () => {

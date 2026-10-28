@@ -10,7 +10,7 @@ import { chainState } from './chain.js';
 import { chainBusy } from './chain.svelte.js';
 import { showShot } from './monitor.svelte.js';
 import { currentLooks } from './looks.svelte.js';
-import { lowSeam, percent, seamLook } from './looks.js';
+import { chainDrifts, lowSeam, percent, seamLook } from './looks.js';
 
 const stats = $state({});
 const pending = new Set();
@@ -97,6 +97,8 @@ export function seam(i) {
 	const chain = chainState(doc, i);
 	if (chain?.state === 'stale') out.issues.push({ kind: 'chain_stale', text: t('lib.chain.stale', { shot: clipLabel(b), previous: clipLabel(a) }), fix: false });
 	if (chain?.state === 'offer' && !chainBusy(b.id)) out.issues.push({ kind: 'chain_offer', text: t('lib.chain.offer', { shot: clipLabel(b), previous: clipLabel(a) }), fix: false });
+	const drift = chainDrifts(currentLooks(), a, b)[0];
+	if (drift) out.issues.push({ kind: 'chain_drift', text: t('lib.chain.drift', { shot: clipLabel(b), previous: clipLabel(a), name: drift.label, score: percent(drift.score) }), fix: false, score: drift.score });
 	return out;
 }
 

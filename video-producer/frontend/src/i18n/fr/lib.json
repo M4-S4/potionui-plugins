@@ -148,6 +148,7 @@
 	"chain.refresh": "Reprendre la nouvelle dernière image",
 	"chain.refreshTip": "« {shot} » a changé depuis que sa dernière image a été reprise : reprendre sa nouvelle dernière image comme première image de ce plan",
 	"chain.stale": "La première image de « {shot} » est périmée : « {previous} » a changé depuis que sa dernière image a été reprise",
+	"chain.drift": "« {shot} » part de la dernière image de « {previous} », qui s’éloigne de la fiche « {name} » (ressemblance {score} %) : l’enchaînement transmet la dérive",
 	"chain.offer": "« {previous} » a maintenant une image : sa dernière image peut ouvrir « {shot} »",
 	"chain.taken": "Première image de « {shot} » : la dernière image de « {previous} »",
 	"chain.shotOn": "« {shot} » part de la fin de « {previous} »",

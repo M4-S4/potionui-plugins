@@ -454,6 +454,34 @@ def _cards(take_row: Optional[Mapping[str, Any]], images: Sequence[Tuple[str, Di
     return result
 
 
+def _chained(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> bool:
+    own = clip.get("firstFromPrevious")
+    return own if isinstance(own, bool) else doc.get("firstFromPrevious") is not False
+
+
+def chained_pairs(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]]) -> List[Tuple[Mapping[str, Any], Mapping[str, Any], Mapping[str, Any]]]:
+    """The neighbor shots whose second starts from the last frame of the first and casts characters, with the take the first plays."""
+    clips = doc.get("clips") or []
+    found = []
+    for before, after in zip(clips, clips[1:]):
+        take = placed_take(doc, before, project_takes)
+        if take is not None and _chained(doc, after) and bible.cast_of(doc, after)[0]:
+            found.append((before, after, take))
+    return found
+
+
+def _chains(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]], images: Mapping[str, Sequence[Tuple[str, Dict[str, Any], str]]], found: Mapping[str, Mapping[str, Any]], model: Optional[str]) -> List[Dict[str, Any]]:
+    result = []
+    for before, after, take in chained_pairs(doc, project_takes):
+        row = found.get(take_key(take["id"]))
+        if _current(row, model) and row["frames"]:
+            end = _cut(before)[1]
+            row = {**row, "frames": [min(row["frames"], key=lambda frame: abs((frame[0] or 0.0) - end))]}
+        cards = _cards(row, images.get(after["id"], []), bible.cast_of(doc, after)[0], found, model)
+        result.append({"shot_id": after["id"], "previous_id": before["id"], "from_take": take["id"], "cards": cards})
+    return result
+
+
 def _finals(project_takes: Sequence[Mapping[str, Any]], found: Mapping[str, Mapping[str, Any]], model: Optional[str]) -> List[Dict[str, Any]]:
     by_id = {take["id"]: take for take in project_takes}
     result = []
@@ -506,7 +534,7 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
     model = measure_key(info, faces)
     project_takes = [take for take in takes.list_takes(project["id"]) if take["status"] == "done" and take.get("file_path")]
     candidates = [take for take in takes.list_keyframes(project["id"]) if take["status"] == "done" and take.get("file_path")]
-    shots = {take["shot_id"] for take in (*project_takes, *candidates)}
+    shots = {take["shot_id"] for take in (*project_takes, *candidates)} | {after["id"] for _, after, _ in chained_pairs(doc, project_takes)}
     images = {shot_id: _cast_images(owner, project, shot_id) for shot_id in shots}
     keys = [take_key(take["id"]) for take in (*project_takes, *candidates)] + [image_key(value) for found in images.values() for _, _, value in found]
     found = rows(keys)
@@ -539,6 +567,7 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
         "takes": takes_out,
         "candidates": [measured(take) for take in candidates],
         "finals": _finals(project_takes, found, model),
+        "chains": _chains(doc, project_takes, images, found, model),
         "drift": _drift(doc, project_takes, found, model),
         "missing": sum(1 for state in states if state in (MISSING, FAILED, UNAVAILABLE)),
         "queued": sum(1 for state in states if state == QUEUED),
