@@ -20,6 +20,8 @@ from src.plugin_api.cloud import CLOUD_ENGINE
 
 CONTEXT = SetupCheckContext(plugin_id="video-producer", settings={})
 
+NO_INTERPOLATOR = " No interpolator is ready: takes slower than the film repeat frames in the export until Video Tools with RIFE 4.25 is installed."
+
 BACKENDS_HREF = "/admin?tab=backends"
 PRESETS_HREF = "/admin?tab=presets"
 README_HREF = "/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME"
@@ -428,15 +430,15 @@ def test_an_error_reading_the_presets_is_a_step_still_to_do(monkeypatch, caplog)
 def test_the_upscaler_check_looks_at_seedvr2_then_rtx_upscale(preset_states):
     UpscalerReady().evaluate(CONTEXT)
 
-    assert preset_states.asked == [presets.SEEDVR2, presets.RTX_UPSCALE]
+    assert preset_states.asked == [presets.SEEDVR2, presets.RTX_UPSCALE, presets.VIDEO_TOOLS]
 
 
 @pytest.mark.parametrize(
     "seedvr2, module, description",
     [
-        (True, True, "SeedVR2 is installed and assigned. RTX Upscale is ready as well, for fast final takes."),
-        (True, False, "SeedVR2 is installed and assigned. RTX Upscale also needs the nvidia-vfx package on the server."),
-        (False, True, "Final takes are upscaled with RTX Upscale. SeedVR2, which restores and adds detail, is not installed."),
+        (True, True, "SeedVR2 is installed and assigned. RTX Upscale is ready as well, for fast final takes." + NO_INTERPOLATOR),
+        (True, False, "SeedVR2 is installed and assigned. RTX Upscale also needs the nvidia-vfx package on the server." + NO_INTERPOLATOR),
+        (False, True, "Final takes are upscaled with RTX Upscale. SeedVR2, which restores and adds detail, is not installed." + NO_INTERPOLATOR),
     ],
 )
 def test_an_assigned_rtx_upscale_is_named_and_counts_without_seedvr2(preset_states, monkeypatch, seedvr2, module, description):
@@ -455,13 +457,13 @@ def test_an_rtx_upscale_without_nvidia_vfx_does_not_replace_seedvr2(preset_state
     result = UpscalerReady().evaluate(CONTEXT)
 
     assert result.done is False
-    assert result.description.endswith("RTX Upscale also needs the nvidia-vfx package on the server.")
+    assert result.description.endswith("RTX Upscale also needs the nvidia-vfx package on the server." + NO_INTERPOLATOR)
 
 
 def test_an_installed_and_assigned_upscaler_is_done(preset_states):
     preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
 
-    assert UpscalerReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="SeedVR2 is installed and assigned.")
+    assert UpscalerReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="SeedVR2 is installed and assigned." + NO_INTERPOLATOR)
 
 
 def test_an_installed_upscaler_is_done_but_asks_to_assign_it(preset_states):
@@ -471,7 +473,7 @@ def test_an_installed_upscaler_is_done_but_asks_to_assign_it(preset_states):
 
     assert result == SetupCheckResult(
         done=True,
-        description="SeedVR2 is installed. Assign it to the users or groups who make final takes.",
+        description="SeedVR2 is installed. Assign it to the users or groups who make final takes." + NO_INTERPOLATOR,
     )
 
 
@@ -482,7 +484,7 @@ def test_an_upscaler_that_is_not_installed_asks_to_install_it(preset_states):
         done=False,
         description=(
             "Final takes are upscaled with SeedVR2. Install it, "
-            "then assign it to the users or groups who make final takes."
+            "then assign it to the users or groups who make final takes." + NO_INTERPOLATOR
         ),
         action_label="Open SeedVR2",
         action_href=f"/admin?tab=presets&id={presets.SEEDVR2}",
@@ -492,10 +494,40 @@ def test_an_upscaler_that_is_not_installed_asks_to_install_it(preset_states):
 def test_an_upscaler_preset_that_is_not_loaded_is_reported_as_unavailable(preset_states):
     assert UpscalerReady().evaluate(CONTEXT) == SetupCheckResult(
         done=False,
-        description="The SeedVR2 preset is not available on this instance; final takes need it.",
+        description="The SeedVR2 preset is not available on this instance; final takes need it." + NO_INTERPOLATOR,
         action_label="Open presets",
         action_href=PRESETS_HREF,
     )
+
+
+@pytest.mark.parametrize(
+    "tools, frame_generation, note",
+    [
+        (True, False, " Takes slower than the film are brought to its frame rate with RIFE, through Video Tools."),
+        (False, True, " Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation."),
+        (True, True, " Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation."),
+    ],
+)
+def test_the_upscaler_check_says_which_interpolator_brings_slower_takes_to_the_film_s_frame_rate(preset_states, monkeypatch, tools, frame_generation, note):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: name == "nvvfx")
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: "0.2.0.0" if frame_generation and name == "nvidia-vfx" else None)
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True, assigned=True)
+    if tools:
+        preset_states.set(presets.VIDEO_TOOLS, name="Video Tools", installed=True, assigned=True)
+
+    result = UpscalerReady().evaluate(CONTEXT)
+
+    assert result.description == "SeedVR2 is installed and assigned. RTX Upscale is ready as well, for fast final takes." + note
+
+
+def test_nvidia_vfx_older_than_0_2_brings_no_frame_generation(preset_states, monkeypatch):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: name == "nvvfx")
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: "0.1.0.0")
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True, assigned=True)
+
+    assert UpscalerReady().evaluate(CONTEXT).description.endswith(NO_INTERPOLATOR)
 
 
 def test_an_error_reading_the_upscaler_is_a_step_still_to_do(monkeypatch, caplog):

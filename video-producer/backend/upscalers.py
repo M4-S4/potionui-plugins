@@ -13,6 +13,8 @@ ENGINE = "engine"
 
 CHOICES = (AUTO, SEEDVR2, RTX, ENGINE)
 
+INTERPOLATORS = (AUTO, "rife", RTX)
+
 PRESET_OF = {SEEDVR2: presets.SEEDVR2, RTX: presets.RTX_UPSCALE}
 
 MODE = "video_upscale"

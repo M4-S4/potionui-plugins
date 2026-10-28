@@ -23,6 +23,8 @@
 	import { CROP_LOSS, RESOLUTION_NAMES, deliverySize, framingOf } from '../../lib/formats.js';
 	import { filmRatio, percent } from '../../lib/framing.js';
 	import { setFraming, setResolution } from '../../lib/framing.svelte.js';
+	import { CADENCES, interpolatorChoice, interpolatorsReady } from '../../lib/cadence.js';
+	import { rememberInterpolator } from '../../lib/finalpass.svelte.js';
 	import FormatPicker from '../shell/FormatPicker.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -202,10 +204,15 @@
 					>
 					<label class="space-y-1"
 						><span class="vp-label">{t('shell.properties.fps')}</span><select class="input vp-dense" bind:value={doc.fps}
-							>{#each [24, 25, 30] as fps}<option value={fps}>{t('shell.properties.fpsValue', { fps })}</option>{/each}</select
+							>{#each CADENCES as fps (fps)}<option value={fps}>{t('shell.properties.fpsValue', { fps })}</option>{/each}</select
 						></label
 					>
 				</div>
+				<label class="block space-y-1"
+					><span class="vp-label">{t('shell.properties.interpolator.label')}</span><select class="input vp-dense" value={interpolatorChoice(doc)} onchange={(e) => rememberInterpolator(e.currentTarget.value)}
+						><option value="auto">{t('shell.properties.interpolator.auto')}</option><option value="rife" disabled={!interpolatorsReady(ui.me).rife}>{t('shell.properties.interpolator.rife')}</option><option value="rtx" disabled={!interpolatorsReady(ui.me).rtx}>{t('shell.properties.interpolator.rtx')}</option></select
+					><span class="block text-xs text-fg-subtle">{t('shell.properties.interpolator.help')}</span></label
+				>
 				<div class="space-y-1">
 					<div class="flex items-center justify-between gap-3">
 						<span class="vp-label">{t('project.framing.label')}</span>

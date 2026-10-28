@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Optional, Sequence, Set
 from urllib.parse import urlencode
 
-from . import PLUGIN_ID, core_bridge, presets, upscalers
+from . import PLUGIN_ID, cadence, core_bridge, presets, upscalers
 from .core_bridge import CLOUD_ENGINE, NATIVE_DRIVERS, PresetState, SetupCheck, SetupCheckContext, SetupCheckResult
 
 logger = logging.getLogger("plugins.video-producer")
@@ -166,8 +166,23 @@ def _rtx_note(state: Optional[PresetState]) -> str:
     return ""
 
 
+def _cadence_note(rtx: Optional[PresetState]) -> str:
+    try:
+        tools = core_bridge.preset_state(presets.VIDEO_TOOLS)
+    except Exception as exc:
+        logger.warning("[VIDEO-PRODUCER] Setup check: could not read the Video Tools preset: %s", exc)
+        tools = None
+    frame_generation = _rtx_ready(rtx) and cadence.frame_generation_installed()
+    rife = bool(tools and tools.loaded and tools.installed and tools.assigned)
+    if frame_generation:
+        return " Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation."
+    if rife:
+        return f" Takes slower than the film are brought to its frame rate with RIFE, through {tools.name}."
+    return " No interpolator is ready: takes slower than the film repeat frames in the export until Video Tools with RIFE 4.25 is installed."
+
+
 class UpscalerReady(SetupCheck):
-    """SeedVR2 or RTX Upscale is installed, so draft takes can be upscaled into final takes."""
+    """SeedVR2 or RTX Upscale is installed, so draft takes can be upscaled into final takes; the note says which interpolator brings slower takes to the film's frame rate."""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
         try:
@@ -176,7 +191,8 @@ class UpscalerReady(SetupCheck):
             logger.warning("[VIDEO-PRODUCER] Setup check: could not read the SeedVR2 preset: %s", exc)
             return _unchecked("the SeedVR2 preset", "Open presets", PRESETS_HREF)
         rtx = _rtx_state()
-        note = _rtx_note(rtx)
+        frame_rate = _cadence_note(rtx)
+        note = _rtx_note(rtx) + frame_rate
         if state.installed and state.assigned:
             return SetupCheckResult(done=True, description=f"{state.name} is installed and assigned.{note}")
         if state.installed:
@@ -187,7 +203,7 @@ class UpscalerReady(SetupCheck):
         if _rtx_ready(rtx):
             return SetupCheckResult(
                 done=True,
-                description=f"Final takes are upscaled with {rtx.name}. SeedVR2, which restores and adds detail, is not installed.",
+                description=f"Final takes are upscaled with {rtx.name}. SeedVR2, which restores and adds detail, is not installed.{frame_rate}",
             )
         if not state.loaded:
             return SetupCheckResult(

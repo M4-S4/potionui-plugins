@@ -4,10 +4,10 @@ from typing import Any, Dict, List, NoReturn, Optional, Tuple
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import FileResponse, Response
 
-from . import access, core_bridge, projects, settings, takes
+from . import access, core_bridge, projects, renditions, settings, takes
 from .core_bridge import AccountType, LimitExceeded, MediaRefError, User, get_current_active_user
 from .exports import EXCHANGE, content_disposition, jobs, render, video
-from .exports.common import timing_error
+from .exports.common import fps_of, timing_error
 from .exports.media import MEDIA_MODES, Resolver, basename, exportable, files_of
 from .responses import fail, ok
 
@@ -66,7 +66,7 @@ def list_exports(project_id: str, user: User = Depends(get_current_active_user))
 def exchange_export(
     project_id: str, fmt: str, media: str = Query("path"), user: User = Depends(get_current_active_user)
 ) -> Response:
-    """The sequence as FCPXML, OpenTimelineIO, EDL or SubRip, naming each shot's real file by path or by name."""
+    """The sequence as FCPXML, OpenTimelineIO, EDL or SubRip, naming each shot's real file by path or by name, the version of its take at the film's frame rate when it has a finished one."""
     if fmt not in EXCHANGE:
         _invalid(f"The format must be one of: {', '.join(EXCHANGE)}.")
     if media not in MEDIA_MODES:
@@ -75,7 +75,11 @@ def exchange_export(
     _timed(project["doc"], frames=fmt != "srt")
     locale = _locale(user)
     files = {} if fmt == "srt" else files_of(
-        project["doc"], takes.list_takes(project_id), Resolver(access.owner_of(user, project)), media=media, locale=locale
+        project["doc"],
+        renditions.with_versions(project_id, takes.list_takes(project_id), fps_of(project["doc"])),
+        Resolver(access.owner_of(user, project)),
+        media=media,
+        locale=locale,
     )
     target = EXCHANGE[fmt]
     return Response(

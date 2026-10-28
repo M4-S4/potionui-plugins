@@ -3,7 +3,7 @@ from typing import Any, Dict, Iterable, List, NoReturn, Optional
 
 from fastapi import APIRouter, Body, Depends
 
-from . import PLUGIN_ID, PLUGIN_VERSION, catalog, core_bridge, director, keyframes, limits, projects, settings, takes, upscalers
+from . import PLUGIN_ID, PLUGIN_VERSION, cadence, catalog, core_bridge, director, keyframes, limits, projects, settings, takes, upscalers
 from .core_bridge import AccountType, User, get_current_active_user
 from .responses import fail, ok
 
@@ -37,7 +37,7 @@ def _ffmpeg() -> bool:
 
 def _features(user: User) -> Dict[str, Any]:
     ready = upscalers.ready(user)
-    return {"upscaler": any(ready.values()), "upscalers": ready, "guided": director.guided_ready(user)}
+    return {"upscaler": any(ready.values()), "upscalers": ready, "interpolators": cadence.ready(user), "guided": director.guided_ready(user)}
 
 
 @router.get("/me")

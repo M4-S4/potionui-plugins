@@ -231,5 +231,12 @@
 	"shot.vref.cite": "Cite",
 	"shot.vref.citeTip": "Add {tag} to the instruction, at the cursor. In Ref2VA the mention goes as the video of the track; with another engine it is left out.",
 	"shot.vref.cited": "{tag} cited",
-	"shot.vref.citedAs": "{tag} → {label}"
+	"shot.vref.citedAs": "{tag} → {label}",
+	"export.cadence.label": "Frame rate",
+	"export.cadence.slow.one": "{count} shot at {rates} fps will stutter in this {fps} fps film.",
+	"export.cadence.slow.other": "{count} shots at {rates} fps will stutter in this {fps} fps film.",
+	"export.cadence.conform": "Conform",
+	"export.cadence.conformTime": "Conform (≈ {duration})",
+	"export.cadence.conforming.one": "{count} version at {fps} fps on its way: the export uses it once it is ready.",
+	"export.cadence.conforming.other": "{count} versions at {fps} fps on their way: the export uses them once they are ready."
 }

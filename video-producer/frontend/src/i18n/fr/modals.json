@@ -231,5 +231,12 @@
 	"shot.vref.cite": "Citer",
 	"shot.vref.citeTip": "Ajouter {tag} à l’instruction, au curseur. En Ref2VA, la mention part comme la vidéo de la piste ; avec un autre moteur, elle est retirée.",
 	"shot.vref.cited": "{tag} cité",
-	"shot.vref.citedAs": "{tag} → {label}"
+	"shot.vref.citedAs": "{tag} → {label}",
+	"export.cadence.label": "Cadence",
+	"export.cadence.slow.one": "{count} plan à {rates} i/s sera saccadé dans ce film à {fps} i/s.",
+	"export.cadence.slow.other": "{count} plans à {rates} i/s seront saccadés dans ce film à {fps} i/s.",
+	"export.cadence.conform": "Conformer",
+	"export.cadence.conformTime": "Conformer (≈ {duration})",
+	"export.cadence.conforming.one": "{count} version à {fps} i/s en cours : l’export la prendra une fois prête.",
+	"export.cadence.conforming.other": "{count} versions à {fps} i/s en cours : l’export les prendra une fois prêtes."
 }

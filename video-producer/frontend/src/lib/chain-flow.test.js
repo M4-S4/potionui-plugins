@@ -39,6 +39,9 @@ bindClient({
 	async listTakes(id) {
 		return { ok: true, data: projects.get(id).takes.map((x) => copy(x)) };
 	},
+	async listRenditions() {
+		return { ok: true, data: [] };
+	},
 	async queue(id) {
 		const active = projects.get(id).takes.filter((x) => x.status === 'queued' || x.status === 'running');
 		return { ok: true, data: { takes: active.map((x) => copy(x)), keyframes: [], slots: null, elsewhere: null, positions: {} } };

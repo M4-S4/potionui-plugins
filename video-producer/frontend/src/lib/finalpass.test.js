@@ -81,9 +81,9 @@ test('passFlying lists the final takes made from another take that are queued or
 });
 
 test('the choice of the pass keeps what it knows, falls back to upscale and to the first target, Auto', () => {
-	assert.deepEqual(passChoice(null), { method: 'upscale', target: 'auto', upscaler: 'auto', rtxSource: 'compressed' });
-	assert.deepEqual(passChoice({ method: 'render', target: 'uhd2160', upscaler: 'seedvr2' }), { method: 'render', target: 'uhd2160', upscaler: 'seedvr2', rtxSource: 'compressed' });
-	assert.deepEqual(passChoice({ method: 'guided', target: 'auto', upscaler: 'rtx', rtxSource: 'clean' }), { method: 'upscale', target: 'auto', upscaler: 'rtx', rtxSource: 'clean' });
+	assert.deepEqual(passChoice(null), { method: 'upscale', target: 'auto', upscaler: 'auto', rtxSource: 'compressed', interpolator: 'auto', conform: true });
+	assert.deepEqual(passChoice({ method: 'render', target: 'uhd2160', upscaler: 'seedvr2' }), { method: 'render', target: 'uhd2160', upscaler: 'seedvr2', rtxSource: 'compressed', interpolator: 'auto', conform: true });
+	assert.deepEqual(passChoice({ method: 'guided', target: 'auto', upscaler: 'rtx', rtxSource: 'clean', interpolator: 'rife' }), { method: 'upscale', target: 'auto', upscaler: 'rtx', rtxSource: 'clean', interpolator: 'rife', conform: true });
 	assert.equal(passChoice({ rtxSource: 'raw' }).rtxSource, DEFAULT_RTX_SOURCE);
 	assert.deepEqual(RTX_SOURCES, ['compressed', 'clean']);
 	assert.deepEqual(passChoice({ method: 'guided' }, undefined, true).method, 'guided');
@@ -116,6 +116,8 @@ test('the body of the pass sends the upscaler only when it is not automatic', ()
 test('the body of the pass asks RTX for a clean source only when chosen, compressed being the default of the server', () => {
 	assert.deepEqual(passBody(['d1'], { method: 'upscale', target: 'fhd1080', upscaler: 'rtx', rtxSource: 'compressed' }), { takes: ['d1'], method: 'upscale', target: 'fhd1080', upscaler: 'rtx' });
 	assert.deepEqual(passBody(['d1'], { method: 'upscale', target: 'fhd1080', upscaler: 'rtx', rtxSource: 'clean' }), { takes: ['d1'], method: 'upscale', target: 'fhd1080', upscaler: 'rtx', rtx_source: 'clean' });
+	assert.deepEqual(passBody(['d1'], { method: 'render', target: 'hd720', upscaler: 'auto', conform: true }), { takes: ['d1'], method: 'render', target: 'hd720', conform: true });
+	assert.deepEqual(passBody(['d1'], { method: 'upscale', target: 'hd720', upscaler: 'auto', conform: false }), { takes: ['d1'], method: 'upscale', target: 'hd720' });
 	assert.deepEqual(passBody(['d1'], { method: 'render', target: 'fhd1080', upscaler: 'rtx', rtxSource: 'clean' }), { takes: ['d1'], method: 'render', target: 'fhd1080' });
 });
 

@@ -15,6 +15,7 @@ from .routes_me import router as me_router
 from .routes_media import router as media_router
 from .routes_projects import router as projects_router
 from .routes_prompts import router as prompts_router
+from .routes_renditions import router as renditions_router
 from .routes_takes import router as takes_router
 
 router = APIRouter(prefix="/api/plugins/video-producer", tags=["video-producer"])
@@ -37,3 +38,4 @@ router.include_router(chain_router)
 router.include_router(keyframes_router)
 router.include_router(final_pass_router)
 router.include_router(looks_router)
+router.include_router(renditions_router)

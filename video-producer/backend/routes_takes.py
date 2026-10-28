@@ -111,7 +111,7 @@ async def delete_take(project_id: str, take_id: str, user: User = Depends(get_cu
 async def final_take(
     project_id: str, take_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
-    """Start the final take of a finished take, by upscale with the chosen upscaler (auto unless the body names one, RTX tuned for a compressed source unless the body says clean) or by a new render at the largest size."""
+    """Start the final take of a finished take, by upscale with the chosen upscaler (auto unless the body names one, RTX tuned for a compressed source unless the body says clean) or by a new render at the largest size; with conform, its version at the film's frame rate after it when it is slower than the film."""
     body = _object(body)
     method, target, upscaler = body.get("method"), body.get("target"), body.get("upscaler", upscalers.AUTO)
     if method not in generation.METHODS:
@@ -123,10 +123,13 @@ async def final_take(
     rtx_source = body.get("rtx_source", upscalers.DEFAULT_RTX_SOURCE)
     if rtx_source not in upscalers.RTX_SOURCES:
         _invalid(f"rtx_source must be one of: {', '.join(upscalers.RTX_SOURCES)}.")
+    conform = body.get("conform", False)
+    if not isinstance(conform, bool):
+        _invalid("conform must be true or false.")
     project = access.project_for(user, project_id)
     source = access.take_in(project, take_id)
     try:
-        take = await generation.final(access.owner_of(user, project), project, source, method, target, upscaler, rtx_source)
+        take = await generation.final(access.owner_of(user, project), project, source, method, target, upscaler, rtx_source, conform)
     except Blocked as exc:
         blocked(exc)
     except TakeError as exc:

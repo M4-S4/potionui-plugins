@@ -1,6 +1,7 @@
 import { UPSCALE_TARGETS, isInFlight, upscalesItself } from './generation.js';
 import { labelOf } from './labels.js';
 import { isStale } from './shots.js';
+import { INTERPOLATORS } from './cadence.js';
 
 export const PASS_METHODS = ['upscale', 'guided', 'render'];
 export const GUIDED_PRESET = '01KX47LTX25VIDEO00000000TV';
@@ -65,6 +66,7 @@ export function migratePass(value) {
 	if (PASS_TARGETS.includes(value.target)) kept.target = value.target;
 	if (UPSCALERS.includes(value.upscaler)) kept.upscaler = value.upscaler;
 	if (RTX_SOURCES.includes(value.rtxSource)) kept.rtxSource = value.rtxSource;
+	if (INTERPOLATORS.includes(value.interpolator)) kept.interpolator = value.interpolator;
 	return Object.keys(kept).length ? kept : null;
 }
 
@@ -72,7 +74,7 @@ export function passChoice(saved, targets = PASS_TARGETS, guided = false) {
 	const kept = migratePass(saved) ?? {};
 	const method = kept.method === 'guided' && !guided ? 'upscale' : (kept.method ?? 'upscale');
 	const target = targets.includes(kept.target) ? kept.target : (targets[0] ?? AUTO_TARGET);
-	return { method, target, upscaler: kept.upscaler ?? 'auto', rtxSource: kept.rtxSource ?? DEFAULT_RTX_SOURCE };
+	return { method, target, upscaler: kept.upscaler ?? 'auto', rtxSource: kept.rtxSource ?? DEFAULT_RTX_SOURCE, interpolator: kept.interpolator ?? 'auto', conform: true };
 }
 
 export function upscalerReady(upscaler, me, presetIds = []) {
@@ -93,5 +95,6 @@ export function passBody(sources, choice) {
 	const body = { takes: [...sources], method: choice.method, target: choice.target };
 	if (choice.method === 'upscale' && choice.upscaler !== 'auto') body.upscaler = choice.upscaler;
 	if (choice.method === 'upscale' && RTX_SOURCES.includes(choice.rtxSource) && choice.rtxSource !== DEFAULT_RTX_SOURCE) body.rtx_source = choice.rtxSource;
+	if (choice.conform === true) body.conform = true;
 	return body;
 }

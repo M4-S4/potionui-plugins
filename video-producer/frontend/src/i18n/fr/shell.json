@@ -142,5 +142,10 @@
 	"shortcuts.clearPicked": "Vider la sélection",
 	"picker.none": "Rien ne correspond à « {query} »",
 	"picker.apply": "Appliquer",
-	"picker.cancel": "Revenir à la liste"
+	"picker.cancel": "Revenir à la liste",
+	"properties.interpolator.label": "Interpolateur",
+	"properties.interpolator.auto": "Auto",
+	"properties.interpolator.rife": "RIFE 4.25",
+	"properties.interpolator.rtx": "NVIDIA Frame Generation",
+	"properties.interpolator.help": "Pour conformer les prises plus lentes que le film. Auto prend NVIDIA Frame Generation (Medium) quand il est installé, RIFE 4.25 sinon."
 }

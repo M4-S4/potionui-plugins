@@ -16,6 +16,8 @@
 	import { TAG_CLASS } from '../../lib/reftags.js';
 	import { takeTracks, vrefLabel } from '../../lib/vreftracks.js';
 	import { roleLabel, trackName } from '../../lib/vreftracks.svelte.js';
+	import { interpolatorChoice, pickInterpolator, takeCadence } from '../../lib/cadence.js';
+	import { conformTakes, renditionStore } from '../../lib/renditions.svelte.js';
 	import Icon from '../Icon.svelte';
 	import TakeToRefs from './TakeToRefs.svelte';
 
@@ -39,6 +41,17 @@
 	const vrefs = $derived(done ? takeTracks(doc, take.id) : []);
 	const parent = $derived(take.parentTakeId ? findTake(take.parentTakeId) : null);
 	const progress = $derived(take.status === 'running' ? Math.round(Math.min(100, Math.max(0, take.progress ?? 0))) : 0);
+	const cadence = $derived(takeCadence(take, renditionStore.list, doc));
+	const interpolator = $derived(pickInterpolator(interpolatorChoice(doc), ui.me));
+	const cadenceRate = $derived({ from: cadence.from, to: cadence.to });
+	const cadenceProgress = $derived(cadence.rendition?.status === 'running' && cadence.rendition.progress != null ? Math.round(cadence.rendition.progress) : null);
+	const cadenceTip = $derived.by(() => {
+		if (cadence.state === 'conformed') return t('generation.card.cadence.conformedTip', cadenceRate);
+		if (cadence.state === 'conforming') return t('generation.card.cadence.conformingTip', cadenceRate);
+		if (interpolator === null) return t('generation.cadence.noInterpolator');
+		if (cadence.state === 'failed') return t('generation.card.cadence.failedTip', { ...cadenceRate, error: cadence.rendition?.errorMessage || '—' });
+		return t('generation.card.cadence.slowTip', cadenceRate);
+	});
 	const engineText = $derived.by(() => {
 		const preset = presetById(take.presetId);
 		const model = take.modelId ? (ui.me?.engines ?? []).flatMap((e) => e.models).find((m) => m.id === take.modelId) : null;
@@ -133,6 +146,13 @@
 				<div class="flex min-w-0 items-center gap-1.5">
 					<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[label]}">{t(`generation.label.${label}`)}</span>
 					{#each vrefs as track (track.id)}<span class="{TAG_CLASS} vp-tc shrink-0" title={t('generation.card.refs.chipTip', { track: trackName(track), role: roleLabel(track.role) })} data-take-vref={track.slot}>{vrefLabel(track.slot)}</span>{/each}
+					{#if cadence.state === 'conformed'}
+						<span class="vp-tc shrink-0 rounded-sm border border-success/60 px-1 text-2xs text-success" title={cadenceTip} data-take-cadence="conformed">{t('generation.card.cadence.rate', cadenceRate)}</span>
+					{:else if cadence.state === 'conforming'}
+						<span class="vp-tc shrink-0 rounded-sm border border-signal/60 px-1 text-2xs text-signal" title={cadenceTip} data-take-cadence="conforming">{cadenceProgress === null ? t('generation.card.cadence.rate', cadenceRate) : t('generation.card.cadence.progress', { ...cadenceRate, value: cadenceProgress })}</span>
+					{:else if cadence.state === 'slow' || cadence.state === 'failed'}
+						<button type="button" class="vp-tc shrink-0 rounded-sm border border-warning/60 px-1 text-2xs {cadence.state === 'failed' ? 'text-danger' : 'text-warning'} disabled:opacity-60" title={cadenceTip} data-take-cadence={cadence.state} disabled={interpolator === null || renditionStore.sending} onclick={() => conformTakes([take.id])}>{t('generation.card.cadence.conform', { fps: cadence.to })}</button>
+					{/if}
 					{#if stale}<span class="flex min-w-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></span>{/if}
 				</div>
 				<div class="truncate text-fg-muted">{modeText()}</div>

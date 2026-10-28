@@ -1259,7 +1259,9 @@ async def render(
     report: Callable[[float, str], bool],
     on_process: Optional[Callable[[Any], Any]] = None,
 ) -> Dict[str, Any]:
-    """Assemble, transcode and store one export: the video of its format, packed in a ZIP with its stems when the job asks for them, the web and social videos also stored in the requester's library; returns its file and library item, raises ExportError."""
+    """Assemble, transcode and store one export, each take read from its version at the film's frame rate when it has a finished one: the video of its format, packed in a ZIP with its stems when the job asks for them, the web and social videos also stored in the requester's library; returns its file and library item, raises ExportError."""
+    from .. import renditions
+
     doc = project["doc"]
     untimed = timing_error(doc)
     if untimed is not None:
@@ -1276,7 +1278,8 @@ async def render(
     mezzanine, final = folder / MEZZANINE, folder / file_name(project["name"], resolution, fmt, ratio=ratio)
     _, total = timeline(doc)
     try:
-        shots, sounds = await asyncio.to_thread(media.local_inputs, doc, takes.list_takes(project["id"]), resolver, folder)
+        read = renditions.with_versions(project["id"], takes.list_takes(project["id"]), fps_of(doc))
+        shots, sounds = await asyncio.to_thread(media.local_inputs, doc, read, resolver, folder)
         if not any(shots.values()):
             raise ExportError("ffmpeg_failed", "No shot of the sequence has a file to assemble.")
         paths = {

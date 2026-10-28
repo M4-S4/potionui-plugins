@@ -9,6 +9,7 @@
 	import { changedRatio } from '../../lib/framing.js';
 	import { presetById } from '../../lib/production.svelte.js';
 	import { passFlying, passPlan, rtxSourceShown, upscalerReady } from '../../lib/finalpass.js';
+	import { interpolatorChoice, pickInterpolator } from '../../lib/cadence.js';
 	import { cancelFinalPass, guidedReady, guidedResolution, passNoteText, passState, passTargets, savedChoice, schedulePassEstimate, startFinalPass, stopPassEstimate } from '../../lib/finalpass.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
@@ -19,6 +20,7 @@
 	let target = $state(initial.target);
 	let upscaler = $state(initial.upscaler);
 	let rtxSource = $state(initial.rtxSource);
+	let conform = $state(initial.conform);
 	let redo = $state(false);
 
 	const plan = $derived(passPlan(doc.clips, takeStore.list, redo));
@@ -59,6 +61,13 @@
 		{ id: 'clean', label: t('generation.finalPass.rtxSource.clean') }
 	]);
 	const rtxShown = $derived(rtxSourceShown(upscaler, ui.me));
+	const interpolator = $derived(pickInterpolator(interpolatorChoice(doc), ui.me));
+	const conforming = $derived(conform && interpolator !== null);
+	const cadence = $derived(est?.cadence ?? null);
+	const slowShots = $derived(cadence?.shots.length ?? 0);
+	const nearRows = $derived(plan.included.filter((row) => cadence?.near.includes(row.clip.id)));
+	const nearFps = $derived(nearRows.map((row) => row.source?.fps).find((fps) => typeof fps === 'number') ?? null);
+	const interpolatorText = $derived(interpolator === 'rtx' ? t('generation.cadence.interpolator.rtx') : t('generation.cadence.interpolator.rife'));
 
 	function upscaleHint(id) {
 		if (id === 'rtx') return t('generation.finalPass.hint.rtx');
@@ -86,6 +95,7 @@
 		else if (quota?.applies && quota.limit !== null) lines.push(t('generation.estimate.quota', { need: minutes(quota.neededMinutes), remaining: minutes(quota.remaining), limit: minutes(quota.limit) }));
 		else if (quota && !quota.applies) lines.push(t('generation.estimate.noQuota'));
 		if (method === 'guided' && est.shots.length) lines.push(t('generation.finalPass.estimate.sounds', { count: sounds, total: est.shots.length }));
+		if (conforming && slowShots) lines.push(cadence.seconds != null ? t('generation.finalPass.estimate.cadence', { count: slowShots, fps: cadence.fps, duration: fmtDuration(cadence.seconds) }) : t('generation.finalPass.estimate.cadenceUnknown', { count: slowShots, fps: cadence.fps }));
 		return lines;
 	});
 
@@ -115,7 +125,7 @@
 
 	$effect(() => {
 		const list = sources;
-		const choice = { method, target, upscaler, rtxSource };
+		const choice = { method, target, upscaler, rtxSource, conform: conforming };
 		const ready = usable;
 		untrack(() => (ready ? schedulePassEstimate(list, choice) : stopPassEstimate()));
 	});
@@ -123,7 +133,7 @@
 	$effect(() => () => stopPassEstimate());
 
 	async function start() {
-		if (await startFinalPass(sources, { method, target, upscaler, rtxSource })) close();
+		if (await startFinalPass(sources, { method, target, upscaler, rtxSource, conform: conforming })) close();
 	}
 </script>
 
@@ -153,6 +163,21 @@
 			<p class="flex items-start gap-1.5 text-xs text-fg-subtle"><Icon name="wave" class="mt-0.5 h-3 w-3 shrink-0" />{soundText}</p>
 			{#if oldRatio}<p class="text-xs text-fg-subtle">{t('generation.finalPass.oldRatio', { count: oldRatio, aspect: formatValue(doc.aspect) })}</p>{/if}
 		</section>
+
+		{#if slowShots}
+			<section class="space-y-1.5" aria-label={t('generation.finalPass.cadence.label')}>
+				<div class="flex items-center gap-3">
+					<span class="vp-label">{t('generation.finalPass.cadence.label')}</span>
+					<span class="flex-1"></span>
+					<label for="vp-final-pass-conform" class="text-xs text-fg-muted">{t('generation.finalPass.cadence.conform', { fps: cadence.fps, count: slowShots })}</label>
+					<HostUi name="Switch" props={{ id: 'vp-final-pass-conform', checked: conforming, disabled: interpolator === null, size: 'lg', label: t('generation.finalPass.cadence.conform', { fps: cadence.fps, count: slowShots }), onchange: (v) => (conform = Boolean(v)) }} />
+				</div>
+				<p class="text-xs text-fg-subtle">{interpolator === null ? t('generation.cadence.noInterpolator') : conforming ? t('generation.finalPass.cadence.with', { name: interpolatorText }) : t('generation.finalPass.cadence.off')}</p>
+			</section>
+		{/if}
+		{#if nearRows.length && nearFps !== null}
+			<p class="flex items-start gap-1.5 text-xs text-fg-subtle"><Icon name="info" class="mt-0.5 h-3 w-3 shrink-0" />{t('generation.cadence.near', { count: nearRows.length, fps: nearFps, film: cadence.fps })}</p>
+		{/if}
 
 		<section class="space-y-2" aria-label={t('generation.finalPass.shots')}>
 			<div class="flex items-center gap-2">
