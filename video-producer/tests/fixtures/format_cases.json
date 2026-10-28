@@ -51,11 +51,15 @@
 			"832x480",
 			"480x832",
 			"640x480",
-			"480x640"
+			"480x640",
+			"640x640",
+			"576x720"
 		],
 		"wan5b": [
 			"832x480",
-			"480x832"
+			"480x832",
+			"640x640",
+			"576x704"
 		]
 	},
 	"presets": {
@@ -1720,24 +1724,24 @@
 			"preset": "wan13",
 			"format": "1:1",
 			"setting": "832x480",
-			"draft": "640x480",
-			"final": "640x480"
+			"draft": "640x640",
+			"final": "640x640"
 		},
 		{
 			"options": "wan13",
 			"preset": "wan13",
 			"format": "1:1",
 			"setting": "960x544",
-			"draft": "640x480",
-			"final": "640x480"
+			"draft": "640x640",
+			"final": "640x640"
 		},
 		{
 			"options": "wan13",
 			"preset": "wan13",
 			"format": "1:1",
 			"setting": "1280x720",
-			"draft": "640x480",
-			"final": "640x480"
+			"draft": "640x640",
+			"final": "640x640"
 		},
 		{
 			"options": "wan13",
@@ -1745,31 +1749,31 @@
 			"format": "1:1",
 			"setting": null,
 			"draft": null,
-			"final": "640x480"
+			"final": "640x640"
 		},
 		{
 			"options": "wan13",
 			"preset": "wan13",
 			"format": "4:5",
 			"setting": "832x480",
-			"draft": "480x640",
-			"final": "480x640"
+			"draft": "576x720",
+			"final": "576x720"
 		},
 		{
 			"options": "wan13",
 			"preset": "wan13",
 			"format": "4:5",
 			"setting": "960x544",
-			"draft": "480x640",
-			"final": "480x640"
+			"draft": "576x720",
+			"final": "576x720"
 		},
 		{
 			"options": "wan13",
 			"preset": "wan13",
 			"format": "4:5",
 			"setting": "1280x720",
-			"draft": "480x640",
-			"final": "480x640"
+			"draft": "576x720",
+			"final": "576x720"
 		},
 		{
 			"options": "wan13",
@@ -1777,7 +1781,7 @@
 			"format": "4:5",
 			"setting": null,
 			"draft": null,
-			"final": "480x640"
+			"final": "576x720"
 		},
 		{
 			"options": "wan13",
@@ -2040,24 +2044,24 @@
 			"preset": "wan5b",
 			"format": "1:1",
 			"setting": "832x480",
-			"draft": "832x480",
-			"final": "832x480"
+			"draft": "640x640",
+			"final": "640x640"
 		},
 		{
 			"options": "wan5b",
 			"preset": "wan5b",
 			"format": "1:1",
 			"setting": "960x544",
-			"draft": "832x480",
-			"final": "832x480"
+			"draft": "640x640",
+			"final": "640x640"
 		},
 		{
 			"options": "wan5b",
 			"preset": "wan5b",
 			"format": "1:1",
 			"setting": "1280x720",
-			"draft": "832x480",
-			"final": "832x480"
+			"draft": "640x640",
+			"final": "640x640"
 		},
 		{
 			"options": "wan5b",
@@ -2065,31 +2069,31 @@
 			"format": "1:1",
 			"setting": null,
 			"draft": null,
-			"final": "832x480"
+			"final": "640x640"
 		},
 		{
 			"options": "wan5b",
 			"preset": "wan5b",
 			"format": "4:5",
 			"setting": "832x480",
-			"draft": "480x832",
-			"final": "480x832"
+			"draft": "576x704",
+			"final": "576x704"
 		},
 		{
 			"options": "wan5b",
 			"preset": "wan5b",
 			"format": "4:5",
 			"setting": "960x544",
-			"draft": "480x832",
-			"final": "480x832"
+			"draft": "576x704",
+			"final": "576x704"
 		},
 		{
 			"options": "wan5b",
 			"preset": "wan5b",
 			"format": "4:5",
 			"setting": "1280x720",
-			"draft": "480x832",
-			"final": "480x832"
+			"draft": "576x704",
+			"final": "576x704"
 		},
 		{
 			"options": "wan5b",
@@ -2097,7 +2101,7 @@
 			"format": "4:5",
 			"setting": null,
 			"draft": null,
-			"final": "480x832"
+			"final": "576x704"
 		},
 		{
 			"options": "wan5b",

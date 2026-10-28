@@ -1275,10 +1275,10 @@ SHIPPED_PRESETS = {
         defaults={**WAN_DEFAULTS, "speed_profile": "balanced", "resolution": "832x480", "fps": 16, "cfg": 6.0, "t2v_loras_high": [], "t2v_loras_low": []},
         recommended={"text_encoder": [UMT5], "vae": [WAN21_VAE], "t2v_high_noise_model": [WAN_1_3B_DIT], "t2v_low_noise_model": []},
         hidden_tabs=WAN_HIDDEN_TABS,
-        own_resolutions=("832x480", "480x832", "640x480", "480x640"),
+        own_resolutions=("832x480", "480x832", "640x480", "480x640", "640x640", "576x720"),
         speed_options=("balanced", "custom"),
-        draft=("832x480", "480x832"),
-        final=("832x480", "480x832"),
+        draft=("832x480", "480x832", "640x640", "576x720"),
+        final=("832x480", "480x832", "640x640", "576x720"),
     ),
     WAN_5B_8GB: Shipped(
         name="Wan 2.2 TI2V 5B (8 GB)",
@@ -1305,10 +1305,10 @@ SHIPPED_PRESETS = {
         defaults={**WAN_DEFAULTS, "speed_profile": "balanced", "resolution": "832x480", "fps": 24, "cfg": 5.0, "t2v_loras_high": [], "t2v_loras_low": []},
         recommended={"text_encoder": [UMT5], "vae": [WAN22_VAE], "t2v_high_noise_model": [WAN_5B_DIT], "t2v_low_noise_model": []},
         hidden_tabs=WAN_HIDDEN_TABS,
-        own_resolutions=("832x480", "480x832"),
+        own_resolutions=("832x480", "480x832", "640x640", "576x704"),
         speed_options=("balanced", "custom"),
-        draft=("832x480", "480x832"),
-        final=("832x480", "480x832"),
+        draft=("832x480", "480x832", "640x640", "576x704"),
+        final=("832x480", "480x832", "640x640", "576x704"),
     ),
     WAN_LIGHTNING_12GB: Shipped(
         name="Wan 2.2 14B Lightning (12 GB)",
@@ -1350,8 +1350,8 @@ SHIPPED_PRESETS = {
         hidden_tabs=WAN_HIDDEN_TABS,
         speed_options=("fast", "custom"),
         reacted={"steps": 6, "cfg": 1.0},
-        draft=("832x480", "480x832"),
-        final=("1280x720", "720x1280"),
+        draft=("832x480", "480x832", "720x720", "576x720"),
+        final=("1280x720", "720x1280", "1024x1024", "832x1040"),
     ),
     H3_12GB: Shipped(
         name="MiniMax-H3 (12 GB)",
@@ -1719,8 +1719,8 @@ def test_the_plugin_drafts_the_shipped_presets_at_832x480_and_finishes_them_at_t
             assert {"sha256": WAN2GP_SHA256, "filename": WAN2GP_DIT} in fields["model"]["recommendations"]
 
 
-@pytest.mark.parametrize("aspect, side", [(16 / 9, 0), (9 / 16, 1)])
-def test_the_plugin_drafts_the_wan_presets_at_832x480_and_finishes_them_at_the_largest_size_they_offer(shipped_presets, aspect, side):
+@pytest.mark.parametrize("aspect, side", [(16 / 9, 0), (9 / 16, 1), (1, 2), (4 / 5, 3)])
+def test_the_plugin_drafts_the_wan_presets_near_832x480_and_finishes_them_at_the_largest_size_they_offer_for_the_format(shipped_presets, aspect, side):
     bridge = _load("backend.core_bridge")
     models = _load("backend.models")
     director = _load("backend.director")

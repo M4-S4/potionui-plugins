@@ -1,2 +1,4 @@
 - { value: "832x480", ratio: [16, 9], description: "480p Landscape" }
 - { value: "480x832", ratio: [9, 16], description: "480p Portrait" }
+- { value: "640x640", ratio: [1, 1], description: "Square" }
+- { value: "576x704", ratio: [4, 5], description: "Portrait 4:5" }

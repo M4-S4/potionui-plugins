@@ -1,4 +1,4 @@
-Generate a short video from a prompt with Wan 2.1's 1.3B text-to-video model, set up for a graphics card with **8 GB of VRAM** and **32 GB of system RAM**. It is the smallest local video model PotionUI runs: 480p clips of up to 5 seconds at 16 fps, 30 steps, CFG 6. Text to video only: a shot's first or last frame is not used.
+Generate a short video from a prompt with Wan 2.1's 1.3B text-to-video model, set up for a graphics card with **8 GB of VRAM** and **32 GB of system RAM**. It is the smallest local video model PotionUI runs: 480p clips of up to 5 seconds at 16 fps (832×480, 480×832, 640×480, 480×640, 640×640 or 576×720), 30 steps, CFG 6. Text to video only: a shot's first or last frame is not used.
 
 **Files.** The 1.3B DiT (2.64 GB, fp16), the fp8 UMT5-XXL text encoder (6.27 GB) and the Wan 2.1 VAE. The model pickers recommend only these files.
 
