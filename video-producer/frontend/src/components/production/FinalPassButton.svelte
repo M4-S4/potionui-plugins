@@ -9,7 +9,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 
-	let { variant = 'ghost', room = null } = $props();
+	let { variant = 'ghost', room = null, short = false } = $props();
 
 	const pass = $derived(passProgress(doc.clips, takeStore.list));
 	const tip = $derived.by(() => {
@@ -50,7 +50,7 @@
 		{#if variant === 'ghost'}
 			<button type="button" class="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-2 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg" aria-label={tip} bind:offsetWidth={width} onclick={openFinalPass}>
 				{#if pass.running}<HostUi name="Spinner" props={{ size: 'sm' }} />{:else}<Icon name={pass.complete ? 'check' : 'arrow-up'} class="h-3.5 w-3.5 {pass.complete ? 'text-success' : ''}" />{/if}
-				{t('generation.finalPass.button')}
+				{#if !short}{t('generation.finalPass.button')}{/if}
 				<span class="vp-tc {pass.complete ? 'text-success' : 'text-fg'}">{t('generation.finalPass.count', { done: pass.done, total: pass.generated })}</span>
 			</button>
 		{:else}

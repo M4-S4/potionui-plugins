@@ -94,6 +94,18 @@ test('base: the side panel is 280 px wide and the right panel 320 px, set inline
 	assert.doesNotMatch(page, /'300px'|'304px'/);
 });
 
+test('base: the header of the Storyboard grid folds its button labels into icons when it runs out of room, and unfolds them when the room is back', () => {
+	const grid = read('../components/storyboard/StoryboardView.svelte');
+	assert.match(grid, /const head = countsEl\?\.parentElement;/);
+	assert.match(grid, /if \(!tight && head\.scrollWidth > head\.clientWidth \+ 1\) \{\n\t+roomy = head\.scrollWidth;\n\t+tight = true;\n\t+\} else if \(tight && head\.clientWidth >= roomy\) \{\n\t+tight = false;/);
+	assert.match(grid, /<FinalPassButton short=\{tight\} \/>\n\t+<ViewSwitch short=\{tight\} \/>/);
+	assert.match(grid, /\{#if tight\}\n\t+<HostUi name="IconButton" props=\{\{ icon: 'plus', label: t\('storyboard\.addShot'\), tooltip: t\('storyboard\.addShot'\)/);
+	assert.match(grid, /\{#if colorFixes && tight\}\n\t+<HostUi name="IconButton" props=\{\{ icon: hostIconName\('palette'\), label: t\('storyboard\.matchAll', \{ count: colorFixes \}\)/);
+	assert.match(read('../components/storyboard/ViewSwitch.svelte'), /<span class=\{short \? 'sr-only' : ''\}>\{t\('storyboard\.view\.grid'\)\}<\/span>/);
+	assert.match(read('../components/production/FinalPassButton.svelte'), /\{#if !short\}\{t\('generation\.finalPass\.button'\)\}\{\/if\}/);
+	assert.doesNotMatch(read('../components/storyboard/BandView.svelte'), /short=/);
+});
+
 test('base: Media, the Sounds panel and the console import with the same two icon buttons', () => {
 	const buttons = read('../components/panels/ImportButtons.svelte');
 	assert.match(buttons, /icon: 'folder', label: t\('panels\.media\.import'\), size: 'sm', class: 'vp-h7', tooltip: t\('panels\.media\.importTip'\), kbd: key\('import'\), onclick: \(\) => openImport\(kind\)/);
