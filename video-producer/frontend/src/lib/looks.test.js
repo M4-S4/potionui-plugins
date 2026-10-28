@@ -105,7 +105,7 @@ test('a chain look counts for the take the previous shot plays now, and its drif
 });
 
 test('a drifting chain is a seam issue whose fix opens the start images of the next shot with its current one as the framing', () => {
-	assert.match(source('./continuity.svelte.js'), /if \(drift\) out\.issues\.push\(\{ kind: 'chain_drift'/);
+	assert.match(source('./continuity.svelte.js'), /const drift = chain \? chainDrifts\(currentLooks\(\), a, b\)\[0\] : null;\n\tif \(drift\) out\.issues\.push\(\{ kind: 'chain_drift'/);
 	assert.match(source('../components/storyboard/SeamFix.svelte'), /\{:else if issue\.kind === 'chain_drift'\}\n\t<button type="button" class=\{link\} data-seam-fix="reanchor" onclick=\{\(e\) => run\(e, reanchorImage\)\}>/);
 	assert.match(source('./references.js'), /export function reanchorImage\(clip\) \{\n\tif \(clip\) ui\.modal = \{ type: 'shot', id: clip\.id, focus: 'reanchor' \};/);
 });

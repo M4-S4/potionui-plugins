@@ -97,7 +97,7 @@ export function seam(i) {
 	const chain = chainState(doc, i);
 	if (chain?.state === 'stale') out.issues.push({ kind: 'chain_stale', text: t('lib.chain.stale', { shot: clipLabel(b), previous: clipLabel(a) }), fix: false });
 	if (chain?.state === 'offer' && !chainBusy(b.id)) out.issues.push({ kind: 'chain_offer', text: t('lib.chain.offer', { shot: clipLabel(b), previous: clipLabel(a) }), fix: false });
-	const drift = chainDrifts(currentLooks(), a, b)[0];
+	const drift = chain ? chainDrifts(currentLooks(), a, b)[0] : null;
 	if (drift) out.issues.push({ kind: 'chain_drift', text: t('lib.chain.drift', { shot: clipLabel(b), previous: clipLabel(a), name: drift.label, score: percent(drift.score) }), fix: false, score: drift.score });
 	return out;
 }
