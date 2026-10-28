@@ -216,6 +216,7 @@ H3_ID = "01KX47H3MINIMAX000000000VA"
 LTX25_ID = "01KX47LTX25VIDEO00000000TV"
 SEEDVR2_ID = "01KXB7C553THYMSMKY1QSYESFM"
 RTX_ID = "01KXRTXUPSCALE0000000000RU"
+VIDEO_TOOLS_ID = "01KXVIDEOTOOLS0000000000VT"
 OPENROUTER_ID = "01M3SV8HJTGT3JPPH2BA5MP6PR"
 
 WAN_RESOLUTIONS = (
@@ -387,6 +388,33 @@ def rtx_video_fields(target=True):
     return fields
 
 
+def rife_fields(target=True):
+    fields = {
+        "input_video": _plain("video", required=True),
+        "model": _model("vfi", sha256=None, filename="flownet_v4.25.pth"),
+        "factor": _plain("select", 2),
+        "keep_audio": _plain("checkbox", True),
+        "scene_detection": _plain("checkbox", True),
+        "flow_scale": _plain("select", 1.0),
+    }
+    if target:
+        fields["target_fps"] = _plain("select", 0)
+    return fields
+
+
+def frame_generation_fields(target=True):
+    fields = {
+        "input_video": _plain("video", required=True),
+        "factor": _plain("select", 2),
+        "mode": _plain("select", "medium", ("low", "medium", "high")),
+        "keep_audio": _plain("checkbox", True),
+        "scene_detection": _plain("checkbox", True),
+    }
+    if target:
+        fields["target_fps"] = _plain("select", 0)
+    return fields
+
+
 def seedvr2_image_fields():
     return {
         "input_image": _plain("image", required=True),
@@ -468,6 +496,7 @@ BRIDGED = (
     "detect_faces",
     "generation_active",
     "module_available",
+    "package_version",
 )
 
 
@@ -513,6 +542,7 @@ class FakeCore:
         self.face_boxes = {}
         self.embedded = []
         self.modules = set()
+        self.versions = {}
         for user_id in ("user-1", "user-2"):
             self.add_user(user_id)
         self.add_user("admin-1", admin=True)
@@ -583,6 +613,22 @@ class FakeCore:
 
     def module_available(self, name):
         return name in self.modules
+
+    def package_version(self, name):
+        return self.versions.get(name)
+
+    def use_video_tools(self, target=True):
+        return self.add_preset(VIDEO_TOOLS_ID, "Video Tools", {"interpolate": rife_fields(target)}, category="utility")
+
+    def use_frame_generation(self, version="0.2.0.0", target=True):
+        self.modules.add("nvvfx")
+        self.versions["nvidia-vfx"] = version
+        return self.add_preset(
+            RTX_ID,
+            "RTX Upscale",
+            {"upscale": {}, "video_upscale": rtx_video_fields(), "interpolate": frame_generation_fields(target)},
+            category="utility",
+        )
 
     def use_openrouter(self, model=None):
         model = model or cloud_model()

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import director, estimate, generation, limits, takes, upscalers
+from . import cadence, director, estimate, generation, limits, renditions, takes, upscalers
 from .core_bridge import User
 from .director import ShotPlan, note
 from .generation import Blocked, TakeError
@@ -22,6 +22,7 @@ class Order:
     target: str
     upscaler: str = AUTO
     rtx_source: str = upscalers.DEFAULT_RTX_SOURCE
+    conform: bool = False
 
 
 @dataclass
@@ -31,6 +32,7 @@ class Planned:
     preset_id: str
     native: bool
     minutes: float = 0.0
+    conform: bool = False
 
 
 @dataclass
@@ -46,7 +48,7 @@ class Evaluation:
 
 
 def parse_order(body: Any) -> Order:
-    """The takes, method, target, upscaler and kind of source for RTX a body asks for; PassError for a malformed one."""
+    """The takes, method, target, upscaler, kind of source for RTX and whether to bring the slower finals to the film's frame rate a body asks for; PassError for a malformed one."""
     if not isinstance(body, dict):
         raise PassError("The request body must be a JSON object.")
     ids = body.get("takes")
@@ -66,7 +68,10 @@ def parse_order(body: Any) -> Order:
     rtx_source = body.get("rtx_source", upscalers.DEFAULT_RTX_SOURCE)
     if rtx_source not in upscalers.RTX_SOURCES:
         raise PassError(f"rtx_source must be one of: {', '.join(upscalers.RTX_SOURCES)}.")
-    return Order(takes=list(dict.fromkeys(ids)), method=method, target=target, upscaler=upscaler, rtx_source=rtx_source)
+    conform = body.get("conform", False)
+    if not isinstance(conform, bool):
+        raise PassError("conform must be true or false.")
+    return Order(takes=list(dict.fromkeys(ids)), method=method, target=target, upscaler=upscaler, rtx_source=rtx_source, conform=conform)
 
 
 def _add(blocks: List[Dict[str, Any]], block: Mapping[str, Any], shot_id: str) -> None:
@@ -147,6 +152,7 @@ def _quota(status: Mapping[str, Any], needed: float, applies: bool) -> Dict[str,
 def _shot(item: Planned, method: str) -> Dict[str, Any]:
     plan = item.plan
     return {
+        "conform": item.conform,
         "shot_id": plan.shot_id,
         "take_id": item.source["id"],
         "method": method,
@@ -159,8 +165,35 @@ def _shot(item: Planned, method: str) -> Dict[str, Any]:
     }
 
 
+def _cadence(owner: User, project: Mapping[str, Any], order: Order, planned: List[Planned], backend_id: Optional[str]) -> Dict[str, Any]:
+    doc = project.get("doc") or {}
+    fps = cadence.target_of(doc)
+    choice = cadence.choice_of(doc)
+    found = cadence.ready(owner)
+    interpolator = cadence.pick(choice, found)
+    slow = [item for item in planned if fps is not None and cadence.needs_conform(item.plan.fps, fps)]
+    near = [item for item in planned if fps is not None and item not in slow and isinstance(item.plan.fps, (int, float)) and 0 < item.plan.fps < fps]
+    work: Optional[float] = 0.0
+    for item in slow:
+        item.conform = order.conform
+        part = cadence.seconds_for(interpolator, item.source.get("backend_id") or backend_id, item.plan.resolution, item.plan.seconds)
+        work = None if part is None or work is None else work + part
+    result: Dict[str, Any] = {
+        "fps": fps,
+        "choice": choice,
+        "interpolator": interpolator,
+        "ready": found,
+        "shots": [item.plan.shot_id for item in slow],
+        "near": [item.plan.shot_id for item in near],
+        "seconds": round(work, 1) if slow and work is not None and interpolator is not None else None,
+    }
+    if order.conform and slow and interpolator is None:
+        result["block"] = True
+    return result
+
+
 async def evaluate(owner: User, project: Mapping[str, Any], order: Order, sources: List[Dict[str, Any]]) -> Evaluation:
-    """What making these takes final would need in memory, time and GPU minutes, and what blocks it, shot by shot: each final planned as a single final take would be, its minutes measured on the backend of its source; the blocks name their shots."""
+    """What making these takes final would need in memory, time and GPU minutes, and what blocks it, shot by shot: each final planned as a single final take would be, its minutes measured on the backend of its source; which finals would be slower than the film, what bringing them to its frame rate would take and with which interpolator; the blocks name their shots."""
     planned, blocks = await _plan_all(owner, project, order, sources)
     vram, warnings = await _vram(owner, planned)
     work: Optional[float] = 0.0
@@ -181,10 +214,14 @@ async def evaluate(owner: User, project: Mapping[str, Any], order: Order, source
         blocks.append(estimate.quota_block(quota))
     if planned and seconds is None:
         warnings.append(note("time_unknown", "No take of this preset was measured at this resolution yet."))
+    frame_rate = _cadence(owner, project, order, planned, vram.get("backend_id"))
+    if frame_rate.pop("block", None) is not None:
+        blocks.append(cadence.missing_note(frame_rate["choice"]))
     payload = {
         "shots": [_shot(item, order.method) for item in planned],
         "vram": vram,
         "time": {"seconds": seconds, "samples": samples},
+        "cadence": frame_rate,
         "quota": quota,
         "blocks": blocks,
         "warnings": warnings,
@@ -193,7 +230,7 @@ async def evaluate(owner: User, project: Mapping[str, Any], order: Order, source
 
 
 async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation) -> List[Dict[str, Any]]:
-    """Create the final take of every planned take, the sound of each cut and its first frame bound first, then hand what fits to the core; Blocked when anything blocks, nothing created then."""
+    """Create the final take of every planned take, the sound of each cut and its first frame bound first, and when asked the version at the film's frame rate of each slower final, made after it; then hand what fits to the core; Blocked when anything blocks, nothing created then."""
     if evaluation.blocked:
         raise Blocked(evaluation.payload["blocks"])
     planned = evaluation.planned
@@ -211,5 +248,8 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
         )
         for item in planned
     ]
+    for item, take in zip(planned, created):
+        if item.conform:
+            renditions.order_quietly(owner, project, take)
     await generation.pump(owner)
     return [takes.get_take(take["id"]) for take in created]

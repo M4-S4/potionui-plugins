@@ -8,6 +8,7 @@
 	import { chosenSize } from '../../lib/formats.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { guidedReady, guidedResolution, rememberRtxSource, savedChoice } from '../../lib/finalpass.svelte.js';
+	import { interpolatorChoice, needsConform, pickInterpolator, targetOf } from '../../lib/cadence.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
 
@@ -36,6 +37,11 @@
 	const guided = $derived(guidedReady());
 	const guidedRes = $derived(guidedResolution());
 	let sending = $state(false);
+	let conform = $state(true);
+	const filmFps = $derived(targetOf(doc));
+	const slow = $derived(filmFps !== null && needsConform(take?.fps, filmFps));
+	const interpolator = $derived(pickInterpolator(interpolatorChoice(doc), ui.me));
+	const conforming = $derived(slow && conform && interpolator !== null);
 
 	const close = () => (ui.modal = null);
 
@@ -60,7 +66,7 @@
 		const message = method === 'upscale' ? (target === AUTO_TARGET ? t('generation.final.startedUpscaleAuto') : t('generation.final.startedUpscale', { target: targetLabel(target) })) : method === 'guided' ? t('generation.final.startedGuided', { res: guidedRes }) : t('generation.final.startedRender', { res: renderRes });
 		sending = true;
 		if (method === 'upscale') rememberRtxSource(rtxSource);
-		const ok = await makeFinal(take.id, method, target, upscaler, rtxSource);
+		const ok = await makeFinal(take.id, method, target, upscaler, rtxSource, conforming);
 		sending = false;
 		if (!ok) return;
 		close();
@@ -102,6 +108,16 @@
 			</section>
 			{#if guided}<p class="text-xs text-fg-subtle">{t('generation.final.guidedHint', { res: guidedRes })}</p>{/if}
 			<p class="text-xs text-fg-subtle">{t('generation.final.renderHint', { res: renderRes })}</p>
+			{#if slow}
+				<section class="space-y-1.5" aria-label={t('generation.finalPass.cadence.label')}>
+					<div class="flex items-center gap-3">
+						<label for="vp-make-final-conform" class="text-sm text-fg">{t('generation.final.conform', { from: take.fps, fps: filmFps })}</label>
+						<span class="flex-1"></span>
+						<HostUi name="Switch" props={{ id: 'vp-make-final-conform', checked: conforming, disabled: interpolator === null, size: 'lg', label: t('generation.final.conform', { from: take.fps, fps: filmFps }), onchange: (v) => (conform = Boolean(v)) }} />
+					</div>
+					<p class="text-xs text-fg-subtle">{interpolator === null ? t('generation.cadence.noInterpolator') : conforming ? t('generation.finalPass.cadence.with', { name: interpolator === 'rtx' ? t('generation.cadence.interpolator.rtx') : t('generation.cadence.interpolator.rife') }) : t('generation.finalPass.cadence.off')}</p>
+				</section>
+			{/if}
 		</div>
 		{#snippet footer()}
 			<HostUi name="Button" props={{ variant: canUpscale ? 'secondary' : 'primary', size: 'sm', class: guided ? '' : 'mr-auto', disabled: sending, onclick: () => send('render') }}>{t('generation.final.render')}</HostUi>

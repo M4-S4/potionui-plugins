@@ -159,7 +159,7 @@ def test_on_boot_loaded_by_the_core_creates_the_plugin_tables(loader, manifest, 
         cursor.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'video_producer_%'")
         created = {row["name"] for row in cursor.fetchall()}
     assert created == set(_load("backend.tables").TABLE_NAMES)
-    assert len(created) == 7
+    assert len(created) == 8
 
 
 def test_api_module_loads_and_exposes_the_router(loader, manifest):
@@ -213,6 +213,10 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("GET", f"{base}/projects/{{project_id}}/looks"),
         ("POST", f"{base}/projects/{{project_id}}/looks"),
         ("POST", f"{base}/projects/{{project_id}}/final-pass"),
+        ("GET", f"{base}/projects/{{project_id}}/renditions"),
+        ("POST", f"{base}/projects/{{project_id}}/renditions/estimate"),
+        ("POST", f"{base}/projects/{{project_id}}/renditions"),
+        ("POST", f"{base}/renditions/{{rendition_id}}/cancel"),
     }
 
 

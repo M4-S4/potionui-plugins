@@ -95,6 +95,35 @@ _COLUMNS = {
         started_at TIMESTAMP,
         finished_at TIMESTAMP
     """,
+    "video_producer_renditions": """
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        shot_id TEXT NOT NULL,
+        take_id TEXT NOT NULL,
+        user_id TEXT,
+        fps REAL NOT NULL,
+        source_fps REAL,
+        interpolator TEXT NOT NULL,
+        preset_id TEXT,
+        mode TEXT,
+        resolution TEXT,
+        status TEXT NOT NULL,
+        generation_id TEXT,
+        request TEXT,
+        file_path TEXT,
+        file_id TEXT,
+        width INTEGER,
+        height INTEGER,
+        duration_s REAL,
+        backend_id TEXT,
+        progress REAL,
+        step TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        started_at TIMESTAMP,
+        finished_at TIMESTAMP
+    """,
 }
 
 TABLE_NAMES = tuple(_COLUMNS)
@@ -140,6 +169,10 @@ _INDEXES = (
     ("idx_video_producer_looks_status", "video_producer_looks", "status, updated_at"),
     ("idx_video_producer_export_jobs_project", "video_producer_export_jobs", "project_id, created_at"),
     ("idx_video_producer_export_jobs_status", "video_producer_export_jobs", "status, created_at"),
+    ("idx_video_producer_renditions_take", "video_producer_renditions", "take_id, fps"),
+    ("idx_video_producer_renditions_project", "video_producer_renditions", "project_id, created_at"),
+    ("idx_video_producer_renditions_generation", "video_producer_renditions", "generation_id"),
+    ("idx_video_producer_renditions_status", "video_producer_renditions", "status, created_at"),
 )
 
 

@@ -5,6 +5,8 @@ from urllib.parse import quote
 from .. import formats
 from .common import Timebase, asset_of, clip_label, js_number, seq_duration
 
+NAMED_RATES = ("24", "25", "30", "50", "60")
+
 _URI_SAFE = ";,/?:@&=+$!*'()#"
 
 _PATH_SAFE = ";,/:@&=+$!*'()"
@@ -44,8 +46,8 @@ def frame(doc: Mapping[str, Any]) -> Tuple[int, int]:
 
 
 def format_name(doc: Mapping[str, Any], fps: str) -> str:
-    """The name attribute of the sequence's format, kept for a 16:9 frame and left out for the other formats, which no named format describes."""
-    if frame(doc) != formats.delivery_size(formats.BOX, doc.get("resolution")):
+    """The name attribute of the sequence's format, kept for a 16:9 frame at a named frame rate and left out otherwise, as for the other formats, which no named format describes."""
+    if frame(doc) != formats.delivery_size(formats.BOX, doc.get("resolution")) or fps not in NAMED_RATES:
         return ""
     return f' name="FFVideoFormat{doc["resolution"]}{fps}"'
 

@@ -3,7 +3,7 @@ import logging
 import secrets
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple
 
-from . import chaining, core_bridge, director, engine_options, estimate, limits, looks, models, notifications, projects, settings, soundtrack, takes, upscalers
+from . import cadence, chaining, core_bridge, director, engine_options, estimate, limits, looks, models, notifications, projects, settings, soundtrack, takes, upscalers
 from .core_bridge import AccountType, GenerationNotFoundException, IdempotencyKeyConflict, User
 from .director import DirectorError, ShotPlan, note
 from .estimate import Evaluation
@@ -251,7 +251,7 @@ def _pump_lock(user_id: str) -> asyncio.Lock:
 
 
 async def pump(user: Optional[User]) -> int:
-    """Hand the user's queued takes to the core while they have fewer than max_parallel_jobs in flight, one pump at a time per user."""
+    """Hand the user's queued takes, then their queued versions at a frame rate, to the core while they have fewer than max_parallel_jobs of both in flight, one pump at a time per user."""
     if user is None:
         return 0
     async with _pump_lock(user.id):
@@ -259,7 +259,9 @@ async def pump(user: Optional[User]) -> int:
 
 
 async def _pump(user: User) -> int:
-    free = int(settings.get_setting("max_parallel_jobs")) - takes.in_flight(user.id)
+    from . import renditions
+
+    free = int(settings.get_setting("max_parallel_jobs")) - takes.in_flight(user.id) - renditions.in_flight(user.id)
     submitted = 0
     for take in takes.waiting(user.id):
         if free <= 0:
@@ -274,7 +276,7 @@ async def _pump(user: User) -> int:
         if started:
             free -= 1
             submitted += 1
-    return submitted
+    return submitted + await renditions.submit(user, free)
 
 
 def _project_name(project_id: str) -> str:
@@ -323,7 +325,8 @@ def cancel_local(take: Mapping[str, Any]) -> bool:
     return True
 
 
-def _output(files: List[Dict[str, Any]], kind: str) -> Optional[Dict[str, Any]]:
+def output_of(files: List[Dict[str, Any]], kind: str) -> Optional[Dict[str, Any]]:
+    """The first file of a generation of a kind, video or image, or None."""
     found = [
         item
         for item in files
@@ -358,7 +361,7 @@ def finish_done(take: Mapping[str, Any], user: User, state: Mapping[str, Any]) -
     except GenerationNotFoundException:
         return fail_take(take, "generation_not_found", "The generation of this take is no longer available.")
     keyframe = take.get("kind") == takes.KEYFRAME
-    output = _output(files, "image" if keyframe else "video")
+    output = output_of(files, "image" if keyframe else "video")
     if output is None:
         missing = "an image" if keyframe else "a video"
         return fail_take(take, "no_output", f"The generation finished without {missing}.")
@@ -474,9 +477,13 @@ def settle_from_hook(
     error_code: Optional[str] = None,
     message: Optional[str] = None,
 ) -> bool:
-    """End the take of a generation the core reports finished; False when no take is waiting on it."""
+    """End the take, or the version at a frame rate, of a generation the core reports finished; False when nothing is waiting on it."""
     take = takes.take_for_generation(str(generation_id or ""))
-    if take is None or take["status"] not in takes.ACTIVE:
+    if take is None:
+        from . import renditions
+
+        return renditions.settle_from_hook(generation_id, status, duration=duration, error_code=error_code, message=message)
+    if take["status"] not in takes.ACTIVE:
         return False
     if status == "cancelled":
         return cancel_local(take)
@@ -517,9 +524,12 @@ async def cancel(owner: User, take: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 async def delete(owner: User, take: Mapping[str, Any]) -> bool:
-    """Delete a take, cancelling it first while it is queued or running; the host generation is kept."""
+    """Delete a take with its versions at a frame rate, cancelling them first while they are queued or running; the host generations are kept."""
+    from . import renditions
+
     if take["status"] in takes.ACTIVE:
         await cancel(owner, take)
+    await renditions.drop_for_take(owner, take["id"])
     return takes.delete_take(take["id"])
 
 
@@ -634,19 +644,28 @@ async def final(
     target: str,
     upscaler: str = upscalers.AUTO,
     rtx_source: str = upscalers.DEFAULT_RTX_SOURCE,
+    conform: bool = False,
 ) -> Dict[str, Any]:
-    """A final take of a finished take: upscaled by the chosen upscaler, rendered again by LTX-2.5 following its video, or rendered again at the largest size."""
+    """A final take of a finished take: upscaled by the chosen upscaler, rendered again by LTX-2.5 following its video, or rendered again at the largest size; when asked and the final take is slower than the film, its version at the film's frame rate made after it, Blocked when no interpolator can."""
+    from . import renditions
+
     plan, preset_id, native = await final_plan(owner, project, source, method, target, upscaler, rtx_source)
+    if conform:
+        needed, interpolator = renditions.interpolator_for(owner, project.get("doc") or {}, plan.fps)
+        if needed and interpolator is None:
+            raise Blocked([cadence.missing_note(cadence.choice_of(project.get("doc") or {}))])
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     await with_sound(owner, project, [plan])
     await with_first(owner, [(source, plan)])
     take = create_final(owner, project, source, method, plan, preset_id, minutes)
+    if conform:
+        renditions.order_quietly(owner, project, take)
     await pump(owner)
     return takes.get_take(take["id"])
 
 
 async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, Any]) -> Dict[str, Any]:
-    """A new take like a failed or cancelled one: same shot, seed, quality and preset; a rendered take of a shot that starts from the last image of the previous shot waits for it again."""
+    """A new take like a failed or cancelled one: same shot, seed, quality and preset; a rendered take of a shot that starts from the last image of the previous shot waits for it again, and a take that was to have a version at the film's frame rate orders it again."""
     if source["status"] not in RETRYABLE:
         raise TakeError(409, "take_not_retryable", "Only a failed or cancelled take can be retried.")
     found: Dict[str, chaining.Wait] = {}
@@ -687,5 +706,9 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
         revision=revision,
         chain=chaining.record(found.get(plan.shot_id) if plan.chain else None, source.get("variant") or variant_letter(0), [], core_bridge.generate_ulid()),
     )
+    from . import renditions
+
+    if renditions.list_for_take(source["id"]):
+        renditions.order_quietly(owner, project, take)
     await pump(owner)
     return takes.get_take(take["id"])

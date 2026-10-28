@@ -42,6 +42,9 @@ bindClient({
 	async listTakes(id) {
 		return { ok: true, data: projects.get(id).takes.map((x) => copy(x)) };
 	},
+	async listRenditions() {
+		return { ok: true, data: [] };
+	},
 	async queue() {
 		return { ok: true, data: { takes: [], keyframes: [], slots: null, elsewhere: null, positions: {} } };
 	},

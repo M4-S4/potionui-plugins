@@ -41,6 +41,12 @@ CROP_LOSS = float(TABLE["framing"]["crop"])
 
 SIZES: Dict[str, Any] = TABLE["sizes"]
 
+CADENCES: Tuple[int, ...] = tuple(int(value) for value in TABLE["cadence"]["values"])
+
+DEFAULT_CADENCE: int = int(TABLE["cadence"]["default"])
+
+SLOWER = float(TABLE["cadence"]["slower"])
+
 ENGINES: Dict[str, Dict[str, Any]] = TABLE["engines"]
 
 AUTO, CROP, BARS = "auto", "crop", "bars"

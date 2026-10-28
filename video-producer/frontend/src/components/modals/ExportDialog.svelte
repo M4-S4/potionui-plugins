@@ -24,6 +24,9 @@
 		jobErrorText
 	} from '../../lib/exports.svelte.js';
 	import { findTake } from '../../lib/production.svelte.js';
+	import { takeStore } from '../../lib/takes.svelte.js';
+	import { exportCadence, interpolatorChoice, pickInterpolator } from '../../lib/cadence.js';
+	import { conformEstimate, conformTakes, estimateConform, renditionStore } from '../../lib/renditions.svelte.js';
 	import { announcer } from '../../lib/announce.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
@@ -64,6 +67,14 @@
 	const largest = $derived(largestTake(doc.clips, findTake));
 	const enlarged = $derived(upscaled(largest, frame, social ? CROP : (framed(largest, doc)?.mode ?? BARS)));
 	const cues = $derived(subtitleCues());
+	const cadence = $derived(exportCadence(doc, takeStore.list, renditionStore.list));
+	const slowIds = $derived(cadence.slow.map((take) => take.id));
+	const interpolator = $derived(pickInterpolator(interpolatorChoice(doc), ui.me));
+	const conformLabel = $derived(conformEstimate.seconds != null ? t('modals.export.cadence.conformTime', { duration: secs(conformEstimate.seconds) }) : t('modals.export.cadence.conform'));
+	$effect(() => {
+		const ids = slowIds;
+		if (interpolator !== null) estimateConform(ids);
+	});
 	const targets = {
 		fcpxml: { label: 'FCPXML', ext: EXCHANGE.fcpxml.ext },
 		otio: { label: 'OpenTimelineIO', ext: EXCHANGE.otio.ext },
@@ -209,6 +220,26 @@
 				{t('modals.export.fileInfo', { size: `${frame[0]}×${frame[1]}`, fps: doc.fps, aspect: social ? ratio : formatValue(doc.aspect) })}{stems ? ` · ${t('modals.export.fileStems')}` : ''} · {t('exports.real')}
 				{#if enlarged}<p class="mt-1 text-fg-subtle">{t('modals.export.upscaled', { size: `${largest[0]}×${largest[1]}`, frame: `${frame[0]}×${frame[1]}` })}</p>{/if}
 			</div>
+			{#if cadence.slow.length || cadence.conforming.length || cadence.near.length}
+				<section class="space-y-1.5 text-xs" aria-label={t('modals.export.cadence.label')}>
+					{#if cadence.slow.length}
+						<div class="flex items-center gap-2">
+							<Icon name="alert" class="h-3.5 w-3.5 shrink-0 text-warning" />
+							<span class="min-w-0 flex-1 text-fg">{t('modals.export.cadence.slow', { count: cadence.slow.length, rates: cadence.rates.join(', '), fps: cadence.fps })}</span>
+							{#if interpolator !== null}
+								<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', disabled: renditionStore.sending, onclick: () => conformTakes(slowIds) }}>{conformLabel}</HostUi>
+							{/if}
+						</div>
+						{#if interpolator === null}<p class="pl-5 text-fg-subtle">{t('generation.cadence.noInterpolator')}</p>{/if}
+					{/if}
+					{#if cadence.conforming.length}
+						<p class="flex items-center gap-2 text-fg-muted"><HostUi name="Spinner" props={{ size: 'sm' }} />{t('modals.export.cadence.conforming', { count: cadence.conforming.length, fps: cadence.fps })}</p>
+					{/if}
+					{#each cadence.near as item (item.fps)}
+						<p class="flex gap-1.5 text-fg-subtle"><Icon name="info" class="h-3.5 w-3.5 shrink-0" />{t('generation.cadence.near', { count: item.count, fps: item.fps, film: cadence.fps })}</p>
+					{/each}
+				</section>
+			{/if}
 
 			{#if job}
 				<section class="rounded-lg border border-line-strong p-3" aria-label={t('exports.progress')}>

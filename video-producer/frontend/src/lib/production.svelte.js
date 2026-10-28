@@ -14,6 +14,7 @@ import { laneTitle } from './tracks.js';
 import { clearRemoved, isRemoved, pruneRemoved } from './removedtakes.js';
 import { LIMITS, SHEET, leastSeconds } from './reception.js';
 import { withSendings } from './vreftracks.svelte.js';
+import { loadRenditions, stopRenditions } from './renditions.svelte.js';
 
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
@@ -211,6 +212,9 @@ function baseNoteText(note) {
 	if (code === 'upscale_unsupported') return t('generation.block.upscaleUnsupported');
 	if (code === 'upscaler_outdated') return t('generation.block.upscalerOutdated');
 	if (code === 'upscaler_missing') return t('generation.block.upscalerMissing');
+	if (code === 'interpolator_missing') return data.interpolator === 'rtx' ? t('generation.block.frameGenerationMissing') : t('generation.block.interpolatorMissing');
+	if (code === 'cadence_unknown') return t('generation.block.cadenceUnknown');
+	if (code === 'not_slower') return t('generation.block.notSlower');
 	if (code === 'vram_stream') return t('generation.warn.vramStream');
 	if (code === 'vram_unknown') return t('generation.warn.vramUnknown');
 	if (code === 'time_unknown') return t('generation.warn.timeUnknown');
@@ -453,11 +457,11 @@ export function promoteToFinal(takeId) {
 	ui.modal = { type: 'final', take: take.id };
 }
 
-export async function makeFinal(takeId, method, target, upscaler = 'auto', rtxSource = 'compressed') {
+export async function makeFinal(takeId, method, target, upscaler = 'auto', rtxSource = 'compressed', conform = false) {
 	const take = takeById(takeId);
 	if (!take) return false;
 	const projectId = project.id;
-	const result = await getClient().finalTake(projectId, take.id, method, target, upscaler, rtxSource);
+	const result = await getClient().finalTake(projectId, take.id, method, target, upscaler, rtxSource, conform);
 	if (projectId !== project.id) return false;
 	if (!result.ok) {
 		failed(result.error, t('generation.toast.finalFailed'));
@@ -465,6 +469,7 @@ export async function makeFinal(takeId, method, target, upscaler = 'auto', rtxSo
 	}
 	upsertTake(result.data);
 	track();
+	if (conform) loadRenditions(projectId);
 	return true;
 }
 
@@ -837,9 +842,11 @@ async function openTakes(projectId) {
 	setTakes(projectId, result.data);
 	applyAll();
 	track();
+	loadRenditions(projectId);
 }
 
 function stopTracking() {
+	stopRenditions();
 	clearInterval(pollTimer);
 	pollTimer = null;
 	clearTimeout(refreshTimer);

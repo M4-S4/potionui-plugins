@@ -62,10 +62,12 @@ export function sequenceFrame(doc) {
 	return deliverySize(ratio === null || ratio < 1 / 4 || ratio > 4 ? BOX : ratio, doc.resolution);
 }
 
+const NAMED_RATES = ['24', '25', '30', '50', '60'];
+
 function formatName(doc) {
 	const [width, height] = sequenceFrame(doc);
 	const [boxWidth, boxHeight] = deliverySize(BOX, doc.resolution);
-	return width === boxWidth && height === boxHeight ? ` name="FFVideoFormat${doc.resolution}${doc.fps}"` : '';
+	return width === boxWidth && height === boxHeight && NAMED_RATES.includes(String(doc.fps)) ? ` name="FFVideoFormat${doc.resolution}${doc.fps}"` : '';
 }
 
 export function fcpxml(doc, { label }) {

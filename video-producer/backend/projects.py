@@ -57,13 +57,20 @@ VREF_ROLES = tuple(reception.VIDEO_TRACKS["roles"])
 
 MAX_VREF_TRACKS = int(reception.VIDEO_TRACKS["max"])
 
-FINAL_PASS_CHOICES = {"method": ("upscale", "guided", "render"), "target": upscalers.TARGETS, "upscaler": upscalers.CHOICES, "rtxSource": upscalers.RTX_SOURCES}
+FINAL_PASS_CHOICES = {
+    "method": ("upscale", "guided", "render"),
+    "target": upscalers.TARGETS,
+    "upscaler": upscalers.CHOICES,
+    "rtxSource": upscalers.RTX_SOURCES,
+    "interpolator": upscalers.INTERPOLATORS,
+}
 
 PROJECTS = "video_producer_projects"
 VERSIONS = "video_producer_versions"
 TAKES = "video_producer_takes"
 JOBS = "video_producer_jobs"
 LOOKS = "video_producer_looks"
+RENDITIONS = "video_producer_renditions"
 
 ID = {"type": "string", "minLength": 1}
 REF = {"type": ["string", "null"], "minLength": 1}
@@ -941,12 +948,13 @@ def save_project(project_id: str, doc: Any, expected_version: int, label: Option
 
 
 def delete_project(project_id: str) -> bool:
-    """Delete a project with its versions, takes and jobs; False when there was no such project."""
+    """Delete a project with its versions, takes, their versions at a frame rate and jobs; False when there was no such project."""
     from src.plugin_api import db
 
     with db.get_cursor() as cursor:
         cursor.execute(f"DELETE FROM {JOBS} WHERE take_id IN (SELECT id FROM {TAKES} WHERE project_id = ?)", (project_id,))
         cursor.execute(f"DELETE FROM {LOOKS} WHERE key IN (SELECT 'take:' || id FROM {TAKES} WHERE project_id = ?)", (project_id,))
+        cursor.execute(f"DELETE FROM {RENDITIONS} WHERE project_id = ?", (project_id,))
         cursor.execute(f"DELETE FROM {TAKES} WHERE project_id = ?", (project_id,))
         cursor.execute(f"DELETE FROM {VERSIONS} WHERE project_id = ?", (project_id,))
         cursor.execute(f"DELETE FROM {PROJECTS} WHERE id = ?", (project_id,))

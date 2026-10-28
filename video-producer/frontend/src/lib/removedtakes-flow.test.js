@@ -40,6 +40,9 @@ function makeServer() {
 		async listTakes(id) {
 			return { ok: true, data: projects.get(id).takes.map((x) => ({ ...x })) };
 		},
+		async listRenditions() {
+			return { ok: true, data: [] };
+		},
 		async labelTake(id, takeId, label) {
 			const take = projects.get(id).takes.find((x) => x.id === takeId);
 			Object.assign(take, marksOf(label));

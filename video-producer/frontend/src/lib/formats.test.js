@@ -113,4 +113,6 @@ test('the export of a social video of another ratio names it, and the FCPXML fra
 	const xml = fcpxml(scope, { label: () => '' });
 	assert.ok(xml.includes('<format id="r1" frameDuration="1/25s" width="1920" height="804"/>'));
 	assert.ok(fcpxml({ ...scope, aspect: '16:9' }, { label: () => '' }).includes('name="FFVideoFormat1080p25"'));
+	assert.ok(fcpxml({ ...scope, aspect: '16:9', fps: 50 }, { label: () => '' }).includes('name="FFVideoFormat1080p50"'));
+	assert.ok(!fcpxml({ ...scope, aspect: '16:9', fps: 48 }, { label: () => '' }).includes('name="FFVideoFormat'));
 });

@@ -426,4 +426,7 @@ def test_the_fcpxml_frame_is_the_delivery_frame_and_only_a_16_9_one_is_named(mak
 
     assert fcpxml.frame(scope) == (1920, 804) and fcpxml.format_name(scope, "25") == ""
     assert fcpxml.frame(wide) == (2560, 1440) and fcpxml.format_name(wide, "25") == ' name="FFVideoFormat1440p25"'
+    assert [fcpxml.format_name(wide, rate) for rate in ("24", "30", "48", "50", "60")] == [
+        ' name="FFVideoFormat1440p24"', ' name="FFVideoFormat1440p30"', "", ' name="FFVideoFormat1440p50"', ' name="FFVideoFormat1440p60"'
+    ]
     assert '<format id="r1" frameDuration="1/25s" width="1920" height="804"/>' in fcpxml.render({**scope, "fps": 25}, {})

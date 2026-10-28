@@ -142,5 +142,10 @@
 	"shortcuts.clearPicked": "Clear the selection",
 	"picker.none": "Nothing matches “{query}”",
 	"picker.apply": "Apply",
-	"picker.cancel": "Back to the list"
+	"picker.cancel": "Back to the list",
+	"properties.interpolator.label": "Interpolator",
+	"properties.interpolator.auto": "Auto",
+	"properties.interpolator.rife": "RIFE 4.25",
+	"properties.interpolator.rtx": "NVIDIA Frame Generation",
+	"properties.interpolator.help": "Brings takes slower than the film to its frame rate. Auto takes NVIDIA Frame Generation (Medium) when it is installed, RIFE 4.25 otherwise."
 }

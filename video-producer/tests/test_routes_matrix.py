@@ -7,7 +7,7 @@ from typing import Any, Callable, NamedTuple, Optional
 import pytest
 from fastapi.routing import APIRoute
 
-from backend import chain, core_bridge, presets, settings, takes, tracker
+from backend import chain, core_bridge, presets, projects, renditions, settings, takes, tracker
 from backend.api import router
 from backend.exports import jobs, video
 from src.plugin_api import get_current_active_user
@@ -162,6 +162,14 @@ class World:
         self.core.fields[(EDIT_PRESET, "edit")] = {"source_image": pictures}
         return KEYFRAMES
 
+    def conformable(self):
+        self.core.use_video_tools()
+        return {"takes": [self.done["id"]]}
+
+    def rendition(self) -> str:
+        self.core.use_video_tools()
+        return renditions.order(self.core.users["user-1"], projects.get_project(self.pid), self.done)["id"]
+
     def waiting(self):
         fields = {"project_id": self.pid, "shot_id": "s2", "user_id": "user-1", "quality": "draft", "kind": "render"}
         return [takes.create_take(fields) for _ in range(2)][-1]
@@ -191,7 +199,9 @@ class World:
             rows = [tuple(row) for row in cursor.fetchall()]
             cursor.execute("SELECT id, status FROM video_producer_export_jobs ORDER BY id")
             exports = [tuple(row) for row in cursor.fetchall()]
-        return projects, versions, rows, exports, dict(self.store), len(self.core.submitted), len(self.core.cancelled)
+            cursor.execute("SELECT id, status FROM video_producer_renditions ORDER BY id")
+            versions_at_a_rate = [tuple(row) for row in cursor.fetchall()]
+        return projects, versions, rows, exports, versions_at_a_rate, dict(self.store), len(self.core.submitted), len(self.core.cancelled)
 
     def send(self, method: str, call: Call):
         if call.who == ANONYMOUS:
@@ -360,6 +370,27 @@ ROUTES = {
             f"/projects/{w.pid}/final-pass", {"takes": [w.done["id"]], "method": "upscale", "target": "fhd1080"}, 404, "project_not_found", "user-2"
         ),
         invalid=lambda w: Call(f"/projects/{w.pid}/final-pass", {"takes": [w.done["id"]], "method": "upscale", "target": "8k"}, 422, "invalid_request"),
+    ),
+    "GET /projects/{id}/renditions": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/renditions", check=lambda r: _data(r) == {"renditions": []}),
+        denied=lambda w: Call(f"/projects/{w.pid}/renditions", status=404, code="project_not_found", who="user-2"),
+    ),
+    "POST /projects/{id}/renditions/estimate": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/renditions/estimate", {"takes": [w.done["id"]]}, check=lambda r: _data(r)["takes"] == [w.done["id"]]),
+        denied=lambda w: Call(f"/projects/{w.pid}/renditions/estimate", {"takes": [w.done["id"]]}, 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/renditions/estimate", {"takes": []}, 422, "invalid_request"),
+    ),
+    "POST /projects/{id}/renditions": Route(
+        success=lambda w: Call(
+            f"/projects/{w.pid}/renditions", w.conformable(), 202,
+            check=lambda r: [item["take_id"] for item in _data(r)["renditions"]] == [w.done["id"]],
+        ),
+        denied=lambda w: Call(f"/projects/{w.pid}/renditions", w.conformable(), 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/renditions", {"takes": [w.done["id"]], "interpolator": "high"}, 422, "invalid_request"),
+    ),
+    "POST /renditions/{rendition}/cancel": Route(
+        success=lambda w: Call(f"/renditions/{w.rendition()}/cancel", check=lambda r: _data(r)["rendition"]["status"] == "cancelled"),
+        denied=lambda w: Call(f"/renditions/{w.rendition()}/cancel", status=404, code="rendition_not_found", who="user-2"),
     ),
     "DELETE /projects/{id}/takes/{take}": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes/{w.done['id']}", check=lambda r: _data(r) == {"deleted": w.done["id"]}),

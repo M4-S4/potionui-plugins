@@ -524,9 +524,79 @@ function normalizePassShot(value) {
 	};
 }
 
+export function normalizeInterpolatorsReady(value) {
+	const ready = isObject(value) ? value : {};
+	return { rife: ready.rife === true, rtx: ready.rtx === true };
+}
+
+const INTERPOLATOR_NAMES = ['rife', 'rtx'];
+
+function interpolatorName(value) {
+	return INTERPOLATOR_NAMES.includes(value) ? value : null;
+}
+
+function choiceName(value) {
+	return value === 'auto' || INTERPOLATOR_NAMES.includes(value) ? value : 'auto';
+}
+
+export function normalizePassCadence(value) {
+	if (!isObject(value)) return null;
+	return {
+		fps: number(value.fps),
+		choice: choiceName(value.choice),
+		interpolator: interpolatorName(value.interpolator),
+		ready: normalizeInterpolatorsReady(value.ready),
+		shots: Array.isArray(value.shots) ? value.shots.filter((id) => text(id)) : [],
+		near: Array.isArray(value.near) ? value.near.filter((id) => text(id)) : [],
+		seconds: number(value.seconds)
+	};
+}
+
 export function normalizePassEstimate(value) {
 	const estimate = normalizeEstimate(value);
-	return estimate ? { ...estimate, shots: list(value.shots, normalizePassShot) ?? [] } : null;
+	return estimate ? { ...estimate, shots: list(value.shots, normalizePassShot) ?? [], cadence: normalizePassCadence(value.cadence) } : null;
+}
+
+const RENDITION_STATES = ['waiting', 'queued', 'running', 'done', 'failed', 'cancelled'];
+
+export function normalizeRendition(value) {
+	if (!isObject(value) || !text(value.id) || !text(value.take_id)) return null;
+	return {
+		id: value.id,
+		takeId: value.take_id,
+		shotId: text(value.shot_id) || null,
+		fps: number(value.fps),
+		sourceFps: number(value.source_fps),
+		interpolator: interpolatorName(value.interpolator),
+		status: RENDITION_STATES.includes(value.status) ? value.status : 'queued',
+		progress: number(value.progress),
+		step: progressText(value.step),
+		width: number(value.width),
+		height: number(value.height),
+		durationS: number(value.duration_s),
+		errorCode: text(value.error_code) || null,
+		errorMessage: text(value.error_message) || null,
+		url: text(value.url) || null,
+		createdAt: text(value.created_at) || null,
+		finishedAt: text(value.finished_at) || null
+	};
+}
+
+export function normalizeRenditionEstimate(value) {
+	if (!isObject(value)) return null;
+	return {
+		fps: number(value.fps),
+		choice: choiceName(value.choice),
+		interpolator: interpolatorName(value.interpolator),
+		ready: normalizeInterpolatorsReady(value.ready),
+		takes: Array.isArray(value.takes) ? value.takes.filter((id) => text(id)) : [],
+		seconds: number(value.seconds)
+	};
+}
+
+function normalizeRefusal(value) {
+	if (!isObject(value) || !text(value.take_id)) return null;
+	return { takeId: value.take_id, code: text(value.code) || 'refused', message: text(value.message) };
 }
 
 export function normalizeQueue(value) {
@@ -718,10 +788,28 @@ export function createClient(api, save) {
 		async deleteTake(projectId, takeId) {
 			return mapped(await call(api, 'delete', takePath(projectId, takeId)), (data) => (text(data.deleted) ? { deleted: data.deleted } : null));
 		},
-		async finalTake(projectId, takeId, method, target, upscaler = 'auto', rtxSource = 'compressed') {
+		async finalTake(projectId, takeId, method, target, upscaler = 'auto', rtxSource = 'compressed', conform = false) {
 			const body = method === 'upscale' && upscaler !== 'auto' ? { method, target, upscaler } : { method, target };
 			if (method === 'upscale' && rtxSource === 'clean') body.rtx_source = rtxSource;
+			if (conform === true) body.conform = true;
 			return mapped(await call(api, 'post', `${takePath(projectId, takeId)}/final`, body), pickTake);
+		},
+		async listRenditions(projectId) {
+			return mapped(await call(api, 'get', `${projectPath(projectId)}/renditions`), (data) => list(data.renditions, normalizeRendition));
+		},
+		async renditionsEstimate(projectId, takes, interpolator = null, signal) {
+			const body = interpolator ? { takes: [...takes], interpolator } : { takes: [...takes] };
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/renditions/estimate`, body, signal), normalizeRenditionEstimate);
+		},
+		async orderRenditions(projectId, takes, interpolator = null) {
+			const body = interpolator ? { takes: [...takes], interpolator } : { takes: [...takes] };
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/renditions`, body), (data) => ({
+				renditions: list(data.renditions, normalizeRendition) ?? [],
+				refused: list(data.refused, normalizeRefusal) ?? []
+			}));
+		},
+		async cancelRendition(renditionId) {
+			return mapped(await call(api, 'post', `/renditions/${encodeURIComponent(renditionId)}/cancel`, {}), (data) => normalizeRendition(data.rendition));
 		},
 		async finalPassEstimate(projectId, body, signal) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/final-pass/estimate`, body, signal), normalizePassEstimate);

@@ -1,3 +1,4 @@
+import importlib.metadata
 import importlib.util
 import logging
 import re
@@ -244,6 +245,14 @@ def module_available(name: str) -> bool:
         return importlib.util.find_spec(name) is not None
     except (ImportError, ValueError):
         return False
+
+
+def package_version(name: str) -> Optional[str]:
+    """The installed version of a Python distribution, read from its metadata without importing it; None when it is not installed."""
+    try:
+        return importlib.metadata.version(name)
+    except Exception:
+        return None
 
 
 def image_embedder() -> Dict[str, Any]:
