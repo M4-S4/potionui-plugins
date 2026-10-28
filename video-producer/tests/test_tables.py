@@ -26,6 +26,7 @@ _EXPECTED_COLUMNS = {
         "id", "project_id", "shot_id", "take_id", "user_id", "fps", "source_fps", "interpolator", "preset_id", "mode",
         "resolution", "status", "generation_id", "request", "file_path", "file_id", "width", "height", "duration_s",
         "backend_id", "progress", "step", "error_code", "error_message", "created_at", "started_at", "finished_at",
+        "factor", "source_rendition_id",
     ],
 }
 
@@ -284,3 +285,26 @@ def test_a_versions_table_from_an_older_version_gets_the_source_version_and_keep
     with plugin_db.get_cursor() as cursor:
         cursor.execute("SELECT id, version, label, source_version FROM video_producer_versions")
         assert [tuple(row) for row in cursor.fetchall()] == [("v-1", 1, "First", None)]
+
+
+def test_a_renditions_table_from_the_first_version_gets_the_columns_of_slow_motion_and_keeps_its_rows(plugin_db):
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute(
+            "CREATE TABLE video_producer_renditions (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, shot_id TEXT NOT NULL, "
+            "take_id TEXT NOT NULL, user_id TEXT, fps REAL NOT NULL, source_fps REAL, interpolator TEXT NOT NULL, preset_id TEXT, "
+            "mode TEXT, resolution TEXT, status TEXT NOT NULL, generation_id TEXT, request TEXT, file_path TEXT, file_id TEXT, "
+            "width INTEGER, height INTEGER, duration_s REAL, backend_id TEXT, progress REAL, step TEXT, error_code TEXT, "
+            "error_message TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, started_at TIMESTAMP, finished_at TIMESTAMP)"
+        )
+        cursor.execute(
+            "INSERT INTO video_producer_renditions (id, project_id, shot_id, take_id, user_id, fps, interpolator, status) "
+            "VALUES ('r-1', 'p-1', 's1', 't-1', 'user-1', 25, 'rife', 'done')"
+        )
+
+    create_tables()
+
+    columns = _columns(plugin_db, "video_producer_renditions")
+    assert {"factor", "source_rendition_id"} <= set(columns)
+    with plugin_db.get_cursor() as cursor:
+        cursor.execute("SELECT id, status, factor, source_rendition_id FROM video_producer_renditions")
+        assert [tuple(row) for row in cursor.fetchall()] == [("r-1", "done", None, None)]
