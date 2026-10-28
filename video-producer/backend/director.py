@@ -129,6 +129,8 @@ REFS_TEXT: Dict[str, Dict[str, str]] = {
 
 ROLES_BY_SPACE = {"identite": "character", "decors3d": "setting", "mouvement": "motion"}
 
+CHARACTER_TYPE = "Personnage"
+
 
 class DirectorError(Exception):
     """A shot the plugin cannot turn into a generation request."""
@@ -812,7 +814,7 @@ def direction_lines(doc: Mapping[str, Any]) -> List[str]:
 
 
 def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> Tuple[str, bible.ReferencePart]:
-    """The shot's prompt and the part of it made from its cast: the instruction without the reference video tracks it cites, its lines when the engine speaks, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, re-announced after the action and the lines in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines. A part the shot replaces for itself goes as it is in the same place."""
+    """The shot's prompt and the part of it made from its cast: the instruction without the reference video tracks it cites, its lines when the engine speaks, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, with the first mention of each character's tag in the instruction followed by its subject unless the shot replaces that part for itself, re-announced after the action and the lines in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines. A part the shot replaces for itself goes as it is in the same place."""
     instruction = cite_tracks(shot_instruction(doc, clip), {})
     direction = direction_lines(doc)
     characters, place = bible.cast_of(doc, clip)
@@ -821,10 +823,13 @@ def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = 
     layout = reception.layout(engine)
     if layout == bible.SUBJECTS_LAYOUT:
         cast = [*characters, *([place] if place is not None else [])]
+        numbers = {card.id: index for index, card in enumerate(cast, 1)}
         subjects = " ".join(bible.definition(card, index, language) for index, card in enumerate(cast, 1))
-        spoken = dialogue.h3_lines(doc, lines, {card.id: index for index, card in enumerate(cast, 1)}) if lines else ""
-        plain = [line for line in [instruction, spoken, *direction] if line]
+        spoken = dialogue.h3_lines(doc, lines, numbers) if lines else ""
         reference = bible.reference_part(clip, layout, {bible.SUBJECT_DEFINITIONS: subjects})
+        if not reference.overridden:
+            instruction = bible.tag_subjects(instruction, characters, numbers)
+        plain = [line for line in [instruction, spoken, *direction] if line]
         part = reference.sent[bible.SUBJECT_DEFINITIONS]
         return "\n\n".join(text for text in (f"subject_definitions: {part}" if part else "", "\n".join(plain)) if text), reference
     spoken = dialogue.ltx_lines(doc, lines, language) if engine == bible.LTX and lines else ""
@@ -889,6 +894,28 @@ def _bible_warnings(
                 "reference_prompt_changed",
                 "The references or the cast of the shot changed since it replaced the part of its prompt made from them: its own text is still sent.",
                 shot_id=clip["id"],
+            )
+        )
+
+
+def _unlinked_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], warnings: List[Dict[str, Any]]) -> None:
+    unlinked = [
+        entry.item
+        for entry in sent
+        if entry.origin == REFERENCE
+        and entry.role == "character"
+        and str((entry.item or {}).get("type") or CHARACTER_TYPE) == CHARACTER_TYPE
+        and bible.card_for_reference(doc, (entry.item or {}).get("id")) is None
+    ]
+    if unlinked:
+        names = [str(item.get("name") or item.get("id")) for item in unlinked]
+        warnings.append(
+            note(
+                "reference_unlinked",
+                f"{', '.join(names)}: a character picture the shot sends is linked to no card of the bible, so no words tie it to the instruction.",
+                shot_id=clip["id"],
+                references=[str(item.get("id")) for item in unlinked],
+                names=names,
             )
         )
 
@@ -975,10 +1002,12 @@ def _subjects(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[Se
     subject = 0
     for entry in sent:
         if entry.role in ("character", "setting"):
-            subject += 1
             card = bible.card_for_reference(doc, (entry.item or {}).get("id")) if entry.origin == REFERENCE else None
+            if card is not None and card.id in numbers:
+                continue
+            subject += 1
             if card is not None:
-                numbers.setdefault(card.id, subject)
+                numbers[card.id] = subject
     characters, place = bible.cast_of(doc, clip)
     for card in [*characters, *([place] if place is not None else [])]:
         if card.id not in numbers:
@@ -988,7 +1017,7 @@ def _subjects(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[Se
 
 
 def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> Tuple[str, bible.ReferencePart]:
-    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself with its lines, its sound and its score. A reference linked to a card of the bible is defined with the card's words, and a sound that is the voice of a character as that character's voice; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places. A reference video track is defined, kept and cited by its role, as the source of the motion of the shot or as the footage it continues, a continuation adding its task to the summary, and each @vrefN of the instruction becomes the label its track goes as."""
+    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself with its lines, its sound and its score. The pictures linked to one card of the bible make one subject, defined once with the card's words and the pictures that show it, kept and cited once, as MiniMax's guide cites every picture of a subject in its definition; a picture linked to no card is a subject of its own, and a sound that is the voice of a character is defined as that character's voice; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The first mention of the tag of each character cast is followed by its subject in the instruction, unless the shot replaces that part for itself. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places. A reference video track is defined, kept and cited by its role, as the source of the motion of the shot or as the footage it continues, a continuation adding its task to the summary, and each @vrefN of the instruction becomes the label its track goes as."""
     language = _language(doc)
     text = REFS_TEXT[language]
     numbers = _subjects(doc, clip, sent)
@@ -996,31 +1025,49 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
     retention: List[str] = []
     citations: List[str] = []
     defined: Set[str] = set()
-    subject = 0
+    pictured: Dict[str, Dict[str, Any]] = {}
+    items: List[Dict[str, Any]] = []
     for entry in sent:
         role = entry.role
         if role in ("character", "setting"):
-            subject += 1
-            kept = "character" if role == "character" else "setting"
             card = bible.card_for_reference(doc, (entry.item or {}).get("id")) if entry.origin == REFERENCE else None
+            if card is not None and card.id in pictured:
+                pictured[card.id]["labels"].append(entry.label)
+                continue
+            item = {"card": card, "role": role, "labels": [entry.label]}
             if card is not None:
-                defined.add(card.id)
-                definitions.append(bible.definition(card, subject, language, shown=entry.label))
-            else:
-                definitions.append(text[f"define_{role}"].format(subject=subject, label=entry.label))
-            retention.append(text[f"keep_{kept}"].format(subject=subject))
-            citations.append(text[f"cite_{kept}"].format(subject=subject))
+                pictured[card.id] = item
+            items.append(item)
             continue
         owner = dialogue.voice_owner(doc, (entry.item or {}).get("id")) if role == "audio" and entry.origin == REFERENCE else None
         if owner is not None:
             who = f"<Subject {numbers[owner.id]}>" if owner.id in numbers else owner.label
-            definitions.append(text["define_voice"].format(label=entry.label, who=who))
-            retention.append(text["keep_voice"].format(label=entry.label, who=who))
+            item = {"definition": text["define_voice"].format(label=entry.label, who=who), "retention": text["keep_voice"].format(label=entry.label, who=who)}
         else:
-            definitions.append(text[f"define_{role}"].format(label=entry.label))
-            retention.append(text[f"keep_{role}"].format(label=entry.label))
+            item = {"definition": text[f"define_{role}"].format(label=entry.label), "retention": text[f"keep_{role}"].format(label=entry.label)}
         if entry.origin == VTRACK:
-            citations.append(text[f"cite_{role}"].format(label=entry.label))
+            item["citation"] = text[f"cite_{role}"].format(label=entry.label)
+        items.append(item)
+    subject = 0
+    for item in items:
+        if "labels" not in item:
+            definitions.append(item["definition"])
+            retention.append(item["retention"])
+            if "citation" in item:
+                citations.append(item["citation"])
+            continue
+        subject += 1
+        card = item["card"]
+        shown = bible.listed(item["labels"], language)
+        if card is not None:
+            defined.add(card.id)
+            definitions.append(bible.definition(card, subject, language, shown=shown))
+            kept = "character" if card.kind == bible.CHARACTERS else "setting"
+        else:
+            definitions.append(text[f"define_{item['role']}"].format(subject=subject, label=shown))
+            kept = "character" if item["role"] == "character" else "setting"
+        retention.append(text[f"keep_{kept}"].format(subject=subject))
+        citations.append(text[f"cite_{kept}"].format(subject=subject))
     characters, place = bible.cast_of(doc, clip)
     for card in [*characters, *([place] if place is not None else [])]:
         if card.id not in defined:
@@ -1040,6 +1087,8 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
     parts = reference.sent
     labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
     instruction = cite_tracks(shot_instruction(doc, clip), labels)
+    if not reference.overridden:
+        instruction = bible.tag_subjects(instruction, characters, numbers)
     lines = dialogue.lines_of(doc, clip)
     spoken = dialogue.h3_lines(doc, lines, numbers, refs=True) if lines else ""
     shot = [*([_sentence(instruction)] if instruction else []), parts[bible.CITATIONS], spoken]
@@ -1431,6 +1480,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
                 sent={str((entry.item or {}).get("assetId")): entry.value for entry in sounds if entry.origin == REFERENCE},
             )
         prompt, reference = compose_refs(doc, clip, sent, seconds)
+        _unlinked_warnings(doc, clip, sent, warnings)
         labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
     else:
         prompt, reference = compose_shot(doc, clip, engine)

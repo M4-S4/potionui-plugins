@@ -47,6 +47,7 @@ TEXT: Dict[str, Dict[str, str]] = {
         "define_setting": "<Subject {subject}> is the setting, {card}",
         "shown_character": "<Subject {subject}> is the character shown in {label}, {card}",
         "shown_setting": "<Subject {subject}> is the setting shown in {label}, {card}",
+        "and": "and",
     },
     "fr": {
         "named": "{label} : {description}",
@@ -56,6 +57,7 @@ TEXT: Dict[str, Dict[str, str]] = {
         "define_setting": "<Subject {subject}> est le décor, {card}",
         "shown_character": "<Subject {subject}> est le personnage montré par {label}, {card}",
         "shown_setting": "<Subject {subject}> est le décor montré par {label}, {card}",
+        "and": "et",
     },
 }
 
@@ -194,6 +196,13 @@ def prose(characters: Sequence[Card], place: Optional[Card], language: str) -> L
     return lines
 
 
+def listed(labels: Sequence[str], language: str) -> str:
+    """Labels as a list in the prompt language: "<Picture 1>", "<Picture 1> and <Picture 2>", "<Picture 1>, <Picture 2> and <Picture 3>"."""
+    if len(labels) < 2:
+        return "".join(labels)
+    return f"{', '.join(labels[:-1])} {_language(language)['and']} {labels[-1]}"
+
+
 def definition(card: Card, subject: int, language: str, shown: Optional[str] = None) -> str:
     """The MiniMax-H3 definition of a card as a subject, tied to the reference that shows it when one is sent."""
     text = _language(language)
@@ -225,6 +234,56 @@ def names(text: str, label: str) -> bool:
     """Whether a text names a label as whole words, ignoring case, accents and spacing."""
     wanted = _folded(label)
     return bool(wanted) and re.search(rf"(?<!\w){re.escape(wanted)}(?!\w)", _folded(text)) is not None
+
+
+def _folded_with_places(text: str) -> Tuple[str, List[int]]:
+    folded: List[str] = []
+    places: List[int] = []
+    for index, char in enumerate(text):
+        if char.isspace():
+            if folded and folded[-1] != " ":
+                folded.append(" ")
+                places.append(index)
+            continue
+        for part in unicodedata.normalize("NFKD", char.lower()):
+            if not unicodedata.category(part).startswith("M"):
+                folded.append(part)
+                places.append(index)
+    return "".join(folded), places
+
+
+def mention(text: str, label: str) -> Optional[Tuple[int, int]]:
+    """Where a text first names a label as whole words, ignoring case, accents and spacing, as names reads it: the start and the end of that mention in the text itself, or None."""
+    wanted = _folded(label)
+    if not wanted:
+        return None
+    folded, places = _folded_with_places(text)
+    match = re.search(rf"(?<!\w){re.escape(wanted)}(?!\w)", folded)
+    if match is None:
+        return None
+    return places[match.start()], places[match.end() - 1] + 1
+
+
+SUBJECT_AFTER = re.compile(r"\s*\(?\s*<Subject \d+>")
+
+
+def tag_subjects(instruction: str, characters: Sequence[Card], subjects: Mapping[str, int]) -> str:
+    """The instruction of a shot with the first mention of the tag of each character it casts followed by that character's subject, "The old fisherman (<Subject 1>) mends a net", as MiniMax-H3's guide reuses <Subject N> in the description; a tag the instruction already follows with a subject is left as it is, and of two mentions that overlap the first one wins."""
+    found: List[Tuple[int, int, int]] = []
+    for card in characters:
+        if card.id not in subjects:
+            continue
+        span = mention(instruction, card.label)
+        if span is None or SUBJECT_AFTER.match(instruction, span[1]):
+            continue
+        found.append((span[0], span[1], subjects[card.id]))
+    kept: List[Tuple[int, int, int]] = []
+    for span in sorted(found):
+        if not kept or span[0] >= kept[-1][1]:
+            kept.append(span)
+    for start, end, subject in reversed(kept):
+        instruction = f"{instruction[:end]} (<Subject {subject}>){instruction[end:]}"
+    return instruction
 
 
 def missing_labels(instruction: str, characters: Sequence[Card]) -> List[str]:

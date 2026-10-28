@@ -286,6 +286,8 @@
 	"warn.sizeInvalid": "{engine} ne sait pas faire de prises en {size} : la taille choisie par le projet est laissée de côté.",
 	"warn.bibleLabelMissing": "« {shot} » : l’instruction ne nomme pas {labels}, distribué dans le plan.",
 	"warn.promptTooLong": "« {shot} » : le prompt prend environ {tokens} jetons, plus que les {limit} que lit le moteur ; sa fin risque d’être ignorée.",
+	"warn.referenceUnlinked.one": "« {shot} » : {names} montre un personnage mais n’est liée à aucune fiche de la bible ; aucun mot ne la relie à l’instruction. Liez-la à une fiche pour la décrire.",
+	"warn.referenceUnlinked.other": "« {shot} » : {names} montrent des personnages mais ne sont liées à aucune fiche de la bible ; aucun mot ne les relie à l’instruction. Liez-les à des fiches pour les décrire.",
 	"warn.referenceChanged": "« {shot} » : ses références ou sa distribution ont changé depuis le remplacement de la partie du prompt qui en est tirée ; le texte remplacé part toujours.",
 	"warn.referenceIgnored": "« {shot} » : la partie du prompt tirée de ses références a été remplacée pour un autre moteur ; c’est la partie composée qui part.",
 	"warn.dialogueIgnored": "« {shot} » : ce moteur ne génère pas de parole ; les répliques du plan ne sont pas envoyées.",
