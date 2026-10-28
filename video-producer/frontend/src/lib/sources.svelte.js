@@ -189,9 +189,19 @@ async function decodePeaks(src) {
 }
 
 export function audioPeaks(a) {
-	if (!a?.src || a.kind !== 'audio' || typeof window === 'undefined') return null;
+	if (!a?.src || (a.kind !== 'audio' && a.kind !== 'video') || typeof window === 'undefined') return null;
 	const known = peaks.get(a.src);
 	if (known !== undefined) return known || null;
 	decodePeaks(a.src);
 	return null;
+}
+
+export function heardSound(src) {
+	if (!src || typeof window === 'undefined') return null;
+	const known = peaks.get(src);
+	if (known === undefined) {
+		decodePeaks(src);
+		return null;
+	}
+	return Boolean(known) && known.values.some((value) => value > 0);
 }

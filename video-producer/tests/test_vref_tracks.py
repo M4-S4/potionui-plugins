@@ -195,6 +195,30 @@ def test_a_track_cited_but_not_sent_is_left_out_of_the_text_and_said(core, make_
     assert director.cite_tracks("Go @vref1", {1: "<Video 3>"}) == "Go <Video 3>"
 
 
+def test_the_prompts_route_says_the_label_each_track_of_a_shot_goes_as(core, client, make_doc, make_project):
+    core.use_h3()
+    core.use_wan()
+    _media(core)
+    references = [{"id": "o", "space": "mouvement", "type": "Control video", "assetId": "own", "role": "Mouvement", "scope": {"type": "shot", "shotId": "s1"}}]
+    clips = [{"id": "s1", "start": 4, "dur": 4}, {"id": "s2", "start": 8, "dur": 4, "engine": {"preset": presets.WAN, "model": None, "profile": "FL2VA"}}]
+    doc = _doc(
+        make_doc,
+        clips=clips,
+        tracks=[_walk(1), _walk(3, "continuation")],
+        items=[_item("i1", "t1", "walk", 0, 12), _item("i3", "t3", "dock", 0, 12)],
+        references=references,
+        prompts=[_instruction("Lina walks as in @vref3.", "s1")],
+    )
+    project = make_project(doc=doc)
+
+    response = client.post(f"/api/plugins/video-producer/projects/{project['id']}/prompts", json={"shots": ["s1", "s2"], "preset_id": presets.MINIMAX_H3, "doc": doc})
+
+    composed = {item["shot_id"]: item for item in response.json()["data"]["prompts"]}
+    assert composed["s1"]["video_tracks"] == [{"slot": 1, "track_id": "t1", "label": "<Video 2>"}, {"slot": 3, "track_id": "t3", "label": "<Video 3>"}]
+    assert "Lina walks as in <Video 3>." in composed["s1"]["prompt"]
+    assert composed["s2"]["video_tracks"] == []
+
+
 def test_a_start_image_is_not_asked_for_the_tracks_the_shot_cites(make_doc):
     from backend import keyframes
 
@@ -247,7 +271,7 @@ def test_the_cut_is_written_at_the_size_of_the_take_by_default_and_at_the_canvas
     _media(core)
     doc = _doc(make_doc, tracks=[_walk()], items=[_item("i1", "t1", "walk", 0, 12)])
 
-    assert reception.VIDEO_TRACKS["size"] == reception.DRAFT
+    assert reception.VIDEO_TRACKS["size"] == reception.TAKE
     draft = _plans(core, doc).shots[0]
     vertical = _plans(core, {**doc, "aspect": "9:16"}).shots[0]
     monkeypatch.setitem(reception.VIDEO_TRACKS, "size", reception.CANVAS)
@@ -346,7 +370,7 @@ def uploads(monkeypatch, tmp_path):
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
-@pytest.mark.parametrize("size", [reception.CANVAS, reception.DRAFT])
+@pytest.mark.parametrize("size", [reception.CANVAS, reception.TAKE])
 def test_ffmpeg_writes_the_cut_of_a_track_with_exactly_its_frames_at_its_size_and_without_sound(core, make_doc, films, uploads, export_storage, monkeypatch, size):
     core.use_h3()
     _media(core)

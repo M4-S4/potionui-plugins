@@ -226,5 +226,10 @@
 	"engine.sizeCloud": "Un modèle cloud reçoit le ratio qu’il propose le plus proche du film : il n’y a pas de taille à choisir.",
 	"shot.sizeLine": "{draft} en brouillon, {final} en final",
 	"shot.sizeCropped": "recadrée en {aspect}",
-	"shot.sizeBars": "entre deux bandes en {aspect}"
+	"shot.sizeBars": "entre deux bandes en {aspect}",
+	"shot.vref.labelTip": "{label} : {track} · {role}",
+	"shot.vref.cite": "Citer",
+	"shot.vref.citeTip": "Ajouter {tag} à l’instruction, au curseur. En Ref2VA, la mention part comme la vidéo de la piste ; avec un autre moteur, elle est retirée.",
+	"shot.vref.cited": "{tag} cité",
+	"shot.vref.citedAs": "{tag} → {label}"
 }

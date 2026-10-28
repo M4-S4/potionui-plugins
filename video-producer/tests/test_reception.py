@@ -43,7 +43,7 @@ def test_the_table_names_kinds_profiles_layouts_and_families_the_plugin_knows():
     assert projects.VREF_ROLES == (reception.MOTION, reception.CONTINUATION)
     assert projects.MAX_VREF_TRACKS == reception.VIDEO_TRACKS["max"] == 3
     assert set(reception.VIDEO_TRACKS["roles"].values()) == {reception.UNDER, reception.BEFORE}
-    assert reception.VIDEO_TRACKS["size"] in reception.VIDEO_TRACKS["sizes"] == [reception.CANVAS, reception.DRAFT]
+    assert reception.VIDEO_TRACKS["size"] in reception.VIDEO_TRACKS["sizes"] == [reception.CANVAS, reception.TAKE]
     assert reception.video_frames(reception.least_seconds()) == reception.VIDEO_TRACKS["minFrames"] == 56
 
 

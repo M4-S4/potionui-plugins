@@ -221,6 +221,7 @@ class ShotPlan:
     reference: Optional[bible.ReferencePart] = None
     chain: Optional[str] = None
     video: List["VideoCut"] = field(default_factory=list)
+    video_labels: Dict[int, str] = field(default_factory=dict)
 
     @property
     def needs_audio(self) -> bool:
@@ -1398,6 +1399,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     audio: Optional[ShotAudio] = None
     engine = bible.family(preset.id, preset.cloud)
     video: List[VideoCut] = []
+    labels: Dict[int, str] = {}
     if refs:
         window = condition_window(doc, clip, seconds)
         tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
@@ -1426,6 +1428,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
                 sent={str((entry.item or {}).get("assetId")): entry.value for entry in sounds if entry.origin == REFERENCE},
             )
         prompt, reference = compose_refs(doc, clip, sent, seconds)
+        labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
     else:
         prompt, reference = compose_shot(doc, clip, engine)
         audio = _shot_mux(context, clip, seconds, warnings)
@@ -1481,6 +1484,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         reference=reference,
         chain=_chain_of(context, shot_id, chained, director_mode),
         video=video,
+        video_labels=labels,
     )
 
 

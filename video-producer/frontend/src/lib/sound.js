@@ -57,6 +57,10 @@ export function joinPlan(doc, item) {
 const itemsUnder = (doc, laneId, [start, end]) =>
 	(doc?.audio ?? []).filter((item) => item.lane === laneId && item.dur > EPSILON && Math.min(end, item.start + item.dur) - Math.max(start, item.start) > EPSILON);
 
+export const freeReferenceLane = (doc, span) => (doc?.lanes ?? []).find((lane) => isReferenceLane(lane) && !itemsUnder(doc, lane.id, span).length) ?? null;
+
+export const takeSound = ({ id, assetId, lane, start, dur, fromTake }) => ({ id, assetId, lane, start, dur, srcIn: 0, fadeIn: 0, fadeOut: 0, gain: 0, fromTake });
+
 export function conditionWindow(doc, clip) {
 	const margin = referenceMargin(doc?.engine);
 	return [Math.max(0, clip.start - margin), clip.start + clip.dur + margin];

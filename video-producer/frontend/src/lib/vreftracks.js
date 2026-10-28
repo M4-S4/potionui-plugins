@@ -1,4 +1,4 @@
-import { MAX_VREF_TRACKS, VREF_ITEMS, VREF_ROLES, VREF_TRACKS, videoTracksOf } from './vrefs.js';
+import { MAX_VREF_TRACKS, VREF_ITEMS, VREF_ROLES, VREF_TRACKS, trackItemsOf, videoTracksOf } from './vrefs.js';
 import { VIDEO_TRACKS, videoCap, videoFrames } from './reception.js';
 import { excludedVrefsOf, setExcludedVrefs } from './shots.js';
 
@@ -6,6 +6,7 @@ export const VREF_COLOR = 'viz-8';
 export const VREF_FALLBACK = 5;
 export const LONGEST_SECONDS = 15;
 export const ROW_PREFIX = 'vtrack:';
+const EPSILON = 1e-6;
 
 export const vrefLabel = (slot) => `vref${slot}`;
 
@@ -38,10 +39,20 @@ export function addVrefTrack(doc, id, name = '') {
 
 export const itemSpan = (srcDur) => (Number.isFinite(srcDur) && srcDur > 0 ? srcDur : VREF_FALLBACK);
 
-export function addVrefItem(doc, { id, track, assetId, start, srcDur }) {
+export function addVrefItem(doc, { id, track, assetId, start, srcDur, fromTake = null }) {
 	const item = { id, track, assetId, start, dur: itemSpan(srcDur), srcIn: 0 };
+	if (typeof fromTake === 'string' && fromTake) item.fromTake = fromTake;
 	listOf(doc, VREF_ITEMS).push(item);
 	return item;
+}
+
+export const overlaps = (item, start, end) => Math.min(end, item.start + item.dur) - Math.max(start, item.start) > EPSILON;
+
+export const trackBusy = (doc, trackId, start, end) => trackItemsOf(doc, trackId).some((item) => overlaps(item, start, end));
+
+export function takeTracks(doc, takeId) {
+	const ids = new Set((Array.isArray(doc?.[VREF_ITEMS]) ? doc[VREF_ITEMS] : []).filter((item) => takeId && item?.fromTake === takeId).map((item) => item.track));
+	return videoTracksOf(doc).filter((track) => ids.has(track.id));
 }
 
 export function fitVrefItems(doc, assetId, srcDur) {
@@ -52,6 +63,37 @@ export function fitVrefItems(doc, assetId, srcDur) {
 }
 
 const tagOf = (slot) => new RegExp(`(?<![0-9A-Za-z_])@vref${slot}(?![0-9A-Za-z_])`, 'i');
+const TAGS = /(?<![0-9A-Za-z_])@vref([1-9])(?![0-9A-Za-z_])/gi;
+
+export const vrefTag = (slot) => `@${vrefLabel(slot)}`;
+
+export const citedSlots = (text) => [...new Set([...String(text ?? '').matchAll(TAGS)].map((match) => Number(match[1])))];
+
+export function citeTrack(text, slot, at = null) {
+	const value = String(text ?? '');
+	const where = Number.isInteger(at) ? Math.min(Math.max(at, 0), value.length) : value.length;
+	if (citedSlots(value).includes(slot)) return { text: value, caret: where, added: false };
+	const before = value.slice(0, where);
+	const after = value.slice(where);
+	const lead = before && !/[\s([]$/.test(before) ? ' ' : '';
+	const tail = /^[\p{L}\p{N}_@]/u.test(after) ? ' ' : '';
+	const head = `${before}${lead}${vrefTag(slot)}`;
+	return { text: `${head}${tail}${after}`, caret: head.length, added: true };
+}
+
+const escaped = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export function labelParts(text, tracks) {
+	const value = String(text ?? '');
+	const known = (tracks ?? []).filter((track) => track?.label && Number.isInteger(track.slot));
+	if (!known.length || !value) return value ? [{ text: value, slot: null }] : [];
+	const slots = new Map(known.map((track) => [track.label, track.slot]));
+	const pattern = new RegExp(`(${known.map((track) => escaped(track.label)).join('|')})`);
+	return value
+		.split(pattern)
+		.filter((part) => part !== '')
+		.map((part) => ({ text: part, slot: slots.get(part) ?? null }));
+}
 
 export function citingShots(doc, slot) {
 	const tag = tagOf(slot);

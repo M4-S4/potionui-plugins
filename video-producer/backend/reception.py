@@ -24,7 +24,7 @@ CONTINUATION = "continuation"
 UNDER = "under"
 BEFORE = "before"
 CANVAS = "canvas"
-DRAFT = "draft"
+TAKE = "take"
 
 EPSILON = 1e-6
 
@@ -113,7 +113,7 @@ def video_pieces(items: Sequence[Mapping[str, Any]], role: Any, start: float, se
 def cut_size(aspect: float, resolution: Optional[Tuple[int, int]] = None, setting: Optional[str] = None) -> Tuple[int, int]:
     """The width and height a track's cut is written at: MiniMax-H3's own canvas for the aspect (short edge, capped area, both sides to the multiple), or the size of the shot's own take."""
     chosen = setting if setting in VIDEO_TRACKS["sizes"] else VIDEO_TRACKS["size"]
-    if chosen == DRAFT and resolution:
+    if chosen == TAKE and resolution:
         return int(resolution[0]), int(resolution[1])
     canvas = VIDEO_TRACKS["canvas"]
     edge, most, multiple = canvas["shortEdge"], canvas["maxPixels"], canvas["multiple"]

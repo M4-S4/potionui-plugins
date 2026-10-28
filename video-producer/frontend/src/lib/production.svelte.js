@@ -591,7 +591,7 @@ export function showDetails(take) {
 	ui.paletteOpen = false;
 }
 
-function ensureTakeAsset(take) {
+export function ensureTakeAsset(take) {
 	const id = `gen-${take.id}`;
 	if (asset(id)) return id;
 	if (!take.url) return null;

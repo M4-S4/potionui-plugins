@@ -5,7 +5,7 @@ import { ulid } from './ulid.js';
 import { resetTakes, takeStore } from './takes.svelte.js';
 import { compileRules, conflictIds, conflictRule } from './rules.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
-import { joinPlan } from './sound.js';
+import { joinPlan, setReferenceLane } from './sound.js';
 import { isGlobal, touch } from './shots.js';
 import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
@@ -28,6 +28,8 @@ export const ui = $state({
 	issue: null,
 	reveal: null,
 	vrefField: null,
+	vrefSound: false,
+	dragTake: null,
 	reviewPick: null,
 	selectedIn: null,
 	refSpace: 'all',
@@ -572,6 +574,13 @@ function newLane(role = 'Ambiance') {
 
 export function laneForRole(role) {
 	return laneFor(doc, role) ?? newLane(role);
+}
+
+export function newReferenceLane() {
+	newLane('Ambiance');
+	const lane = doc.lanes.at(-1);
+	setReferenceLane(lane, true);
+	return lane;
 }
 
 export function addAudioLane() {

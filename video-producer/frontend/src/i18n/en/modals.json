@@ -226,5 +226,10 @@
 	"engine.sizeCloud": "A cloud model gets the ratio it offers closest to the film: there is no size to choose.",
 	"shot.sizeLine": "{draft} in draft, {final} in final",
 	"shot.sizeCropped": "cropped to {aspect}",
-	"shot.sizeBars": "between bars in {aspect}"
+	"shot.sizeBars": "between bars in {aspect}",
+	"shot.vref.labelTip": "{label}: {track} · {role}",
+	"shot.vref.cite": "Cite",
+	"shot.vref.citeTip": "Add {tag} to the instruction, at the cursor. In Ref2VA the mention goes as the video of the track; with another engine it is left out.",
+	"shot.vref.cited": "{tag} cited",
+	"shot.vref.citedAs": "{tag} → {label}"
 }

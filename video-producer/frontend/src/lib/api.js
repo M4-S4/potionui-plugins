@@ -409,6 +409,11 @@ function normalizeReference(value) {
 	};
 }
 
+function normalizeTrackLabel(value) {
+	if (!isObject(value) || !Number.isInteger(value.slot) || !text(value.label)) return null;
+	return { slot: value.slot, trackId: text(value.track_id) || null, label: value.label };
+}
+
 function normalizeComposed(value) {
 	if (!isObject(value) || !text(value.shot_id)) return null;
 	return {
@@ -418,6 +423,7 @@ function normalizeComposed(value) {
 		engine: ENGINE_FAMILIES.includes(value.engine) ? value.engine : 'other',
 		prompt: text(value.prompt),
 		reference: normalizeReference(value.reference),
+		videoTracks: list(value.video_tracks, normalizeTrackLabel) ?? [],
 		warnings: list(value.warnings, normalizeNote) ?? []
 	};
 }

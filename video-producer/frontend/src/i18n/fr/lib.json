@@ -273,5 +273,10 @@
 	"vref.deleteConfirm": "Supprimer la piste",
 	"toast.vrefDeleted": "Piste {label} supprimée",
 	"media.use.vrefs.one": "{count} morceau d’une piste de référence vidéo, retiré",
-	"media.use.vrefs.other": "{count} morceaux de pistes de référence vidéo, retirés"
+	"media.use.vrefs.other": "{count} morceaux de pistes de référence vidéo, retirés",
+	"vref.take.busy": "{label} est occupée sous {shot}.",
+	"vref.take.busyHere": "{label} est occupée à cet endroit.",
+	"vref.take.moved": "Prise {variant} déplacée dans {label} : le plan {shot} est à générer.",
+	"vref.take.copied": "Prise {variant} copiée dans {label}.",
+	"vref.take.withSound": "Son son est sur {lane}."
 }
