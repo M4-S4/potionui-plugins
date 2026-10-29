@@ -37,7 +37,6 @@
 	"delete.message": "“{name}” and its versions will be deleted. This cannot be undone.",
 	"delete.messageCurrent": "“{name}” is the open project: it will be deleted with its versions, and the previous project will open instead. This cannot be undone.",
 	"delete.messageLast": "“{name}” is the open project and the only one saved: it will be deleted with its versions, and an empty project will take its place. This cannot be undone.",
-	"delete.cancel": "Cancel",
 	"delete.confirm": "Delete",
 	"delete.label": "Delete “{name}”",
 	"versions.title": "Version history",

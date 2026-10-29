@@ -157,7 +157,7 @@
 					{#if stale}<span class="flex min-w-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></span>{/if}
 				</div>
 				<details class="text-fg-subtle" data-take-details>
-					<summary class="-mx-0.5 inline-block min-h-5 cursor-pointer rounded px-0.5 hover:text-fg" onclick={(e) => e.stopPropagation()}>{t('generation.card.technical')}</summary>
+					<summary onclick={(e) => e.stopPropagation()}>{t('generation.card.technical')}</summary>
 					<div class="truncate">{modeText()}</div>
 					<div class="truncate"><span class="vp-tc">{resolution}</span>{#if framing}<span class="ml-1 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted" title={framing.tip}>{framing.text}</span>{/if}</div>
 					<div class="vp-tc truncate">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>

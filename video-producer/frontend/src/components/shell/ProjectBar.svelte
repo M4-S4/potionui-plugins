@@ -40,20 +40,22 @@
 
 <header class="vp-projectbar">
 	<div class="flex min-w-0 items-center gap-2">
-		<HostUi
-			name="IconButton"
-			props={{
-				icon: hostIconName('panel-left'),
-				label: t('shell.project.showSidebar'),
-				size: 'sm',
-				class: 'vp-h7 vp-toggle',
-				ariaPressed: (bandView() ? ui.storyOpen : ui.sidebarOpen) && !player,
-				disabled: player,
-				tooltip: commandById('sidebar')?.label,
-				kbd: commandById('sidebar')?.key,
-				onclick: toggleSidebar
-			}}
-		/>
+		<span class="contents" data-vp-drawer-toggle>
+			<HostUi
+				name="IconButton"
+				props={{
+					icon: hostIconName('panel-left'),
+					label: t('shell.project.showSidebar'),
+					size: 'sm',
+					class: 'vp-h7 vp-toggle',
+					ariaPressed: (bandView() ? ui.storyOpen : ui.sidebarOpen) && !player,
+					disabled: player,
+					tooltip: commandById('sidebar')?.label,
+					kbd: commandById('sidebar')?.key,
+					onclick: toggleSidebar
+				}}
+			/>
+		</span>
 		<div class="flex min-w-0 flex-col">
 			<input class="vp-projectbar-name" bind:value={doc.name} onchange={nameChanged} aria-label={t('shell.project.name')} />
 			<HostUi name="Tooltip" props={tip('save')}>
@@ -86,11 +88,11 @@
 	<div class="flex min-w-0 items-center justify-end gap-0.5">
 		<Dropdown label={t('shell.project.import')} labelClass="vp-wide-only" title={t('shell.project.importTip')} icon="upload" size="sm" align="right" items={importItems} />
 		<HostUi name="Tooltip" props={{ text: t('shell.project.exportTip'), kbd: commandById('export')?.key }}>
-			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: hostIconName('export'), ariaLabel: t('shell.project.exportTip'), onclick: () => (ui.modal = { type: 'export' }) }}><span class="vp-wide-only">{t('shell.project.export')}</span></HostUi>
+			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: hostIconName('export'), onclick: () => (ui.modal = { type: 'export' }) }}><span class="vp-wide-only">{t('shell.project.export')}</span></HostUi>
 		</HostUi>
 		<div class="vp-divider"></div>
 		<HostUi name="Tooltip" props={tip('assistant')}>
-			<button type="button" class="vp-assistant" aria-label={t('shell.project.assistant')} onclick={() => chat.open()}>
+			<button type="button" class="vp-assistant" onclick={() => chat.open()}>
 				<span class="vp-assistant-ring"></span>
 				<Icon name="sparkles" class="h-3.5 w-3.5 text-ai-1" /><span class="vp-wide-only">{t('shell.project.assistant')}</span>
 			</button>
@@ -99,19 +101,21 @@
 			name="IconButton"
 			props={{ icon: 'search', label: t('shell.project.search'), size: 'sm', class: 'vp-h7', tooltip: t('shell.project.search'), kbd: commandById('palette')?.key, onclick: () => (ui.paletteOpen = true) }}
 		/>
-		<HostUi
-			name="IconButton"
-			props={{
-				icon: hostIconName('panel-right'),
-				label: t('shell.project.showInspector'),
-				size: 'sm',
-				class: 'vp-h7 vp-toggle',
-				ariaPressed: ui.inspectorOpen && !player,
-				disabled: player,
-				tooltip: commandById('inspector')?.label,
-				kbd: commandById('inspector')?.key,
-				onclick: () => (ui.inspectorOpen = !ui.inspectorOpen)
-			}}
-		/>
+		<span class="contents" data-vp-drawer-toggle>
+			<HostUi
+				name="IconButton"
+				props={{
+					icon: hostIconName('panel-right'),
+					label: t('shell.project.showInspector'),
+					size: 'sm',
+					class: 'vp-h7 vp-toggle',
+					ariaPressed: ui.inspectorOpen && !player,
+					disabled: player,
+					tooltip: commandById('inspector')?.label,
+					kbd: commandById('inspector')?.key,
+					onclick: () => (ui.inspectorOpen = !ui.inspectorOpen)
+				}}
+			/>
+		</span>
 	</div>
 </header>

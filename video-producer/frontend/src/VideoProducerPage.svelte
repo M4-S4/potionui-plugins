@@ -7,7 +7,7 @@
 	import { disposeExports, resumeExports } from './lib/exports.svelte.js';
 	import { detectLocale, getLocale, requestCause, setLocale, t } from './i18n/index.svelte.js';
 	import { ms } from './lib/motion.js';
-	import { ui, doc, applyMe, bottomKey, bandView, generates, dispose as disposeState, toast } from './lib/state.svelte.js';
+	import { ui, doc, applyMe, bottomKey, bandView, closeDrawer, drawerMode, generates, sidebarShown, dispose as disposeState, toast } from './lib/state.svelte.js';
 	import { project, bindClient, currentJson, disposeProject, flushSave, noteChange, openLatestOrStarter } from './lib/project.svelte.js';
 	import { startProduction } from './lib/production.svelte.js';
 	import { startLooks } from './lib/looks.svelte.js';
@@ -18,6 +18,7 @@
 	import { isPlayer } from './lib/workspaces.js';
 	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
 	import { viewport, watchViewport } from './lib/viewport.svelte.js';
+	import { closesOnOutsidePointer, drawerFocus } from './lib/drawer.js';
 	import { startAssistant } from './lib/assistant.svelte.js';
 	import MenuBar from './components/shell/MenuBar.svelte';
 	import ProjectBar from './components/shell/ProjectBar.svelte';
@@ -57,16 +58,33 @@
 	const player = $derived(isPlayer(ui.workspace));
 	const band = $derived(bandView());
 	const bare = $derived(band || ui.workspace === 'director');
-	const drawers = $derived(viewport.narrow && !player);
+	const drawers = $derived(drawerMode());
+	const leftOpen = $derived(drawers && sidebarShown());
+	const rightOpen = $derived(drawers && ui.inspectorOpen);
 	const columns = $derived(player || drawers ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '280px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '320px' : '0px'}`);
 	let inspectorBefore = null;
+	let wideBefore = null;
 
 	$effect(() => {
-		if (!viewport.narrow) return;
+		const narrow = viewport.narrow;
 		untrack(() => {
-			ui.sidebarOpen = false;
-			ui.inspectorOpen = false;
+			if (narrow && wideBefore === null) {
+				wideBefore = { sidebar: ui.sidebarOpen, inspector: ui.inspectorOpen };
+				ui.sidebarOpen = false;
+				ui.inspectorOpen = false;
+			} else if (!narrow && wideBefore !== null) {
+				ui.sidebarOpen = wideBefore.sidebar;
+				ui.inspectorOpen = wideBefore.inspector;
+				wideBefore = null;
+			}
 		});
+	});
+
+	$effect(() => {
+		if (!leftOpen && !rightOpen) return;
+		const onpointerdown = (e) => closesOnOutsidePointer(root, e.target) && closeDrawer();
+		document.addEventListener('pointerdown', onpointerdown, true);
+		return () => document.removeEventListener('pointerdown', onpointerdown, true);
 	});
 
 	$effect(() => {
@@ -121,7 +139,7 @@
 		setHeaderHidden?.(true);
 		registerIcons();
 		const release = keyboard.suppress();
-		const onkeydown = (e) => phase === 'ready' && handleKeydown(e, root);
+		const onkeydown = (e) => phase === 'ready' && !viewport.tiny && handleKeydown(e, root);
 		window.addEventListener('keydown', onkeydown);
 		const stopAssistant = startAssistant();
 		const onvisibility = () => document.visibilityState === 'hidden' && flushSave();
@@ -192,12 +210,13 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div bind:this={root} tabindex="-1" class="vp-root bg-canvas font-sans text-base text-fg antialiased" lang={locale} ondragover={refuseStrayFiles} ondrop={refuseStrayFiles}>
 	{#if viewport.tiny}
-		<div class="flex min-h-0 flex-1 items-center justify-center p-6" data-vp-too-narrow>
+		<div class="vp-too-narrow" data-vp-too-narrow>
 			<div class="w-full max-w-lg">
 				<HostUi name="EmptyState" props={{ icon: 'warning', title: t('shell.app.narrow'), description: t('shell.app.narrowHint') }} />
 			</div>
 		</div>
-	{:else if phase === 'loading'}
+	{/if}
+	{#if phase === 'loading'}
 		<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6">
 			<HostUi name="Spinner" props={{ size: 'lg' }} />
 			<p class="text-sm text-fg-muted">{t('shell.app.loading')}</p>
@@ -218,12 +237,17 @@
 			</div>
 		</div>
 	{:else}
-		<div class="grid min-h-0 flex-1 overflow-hidden" style="grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto auto">
+		<div class="grid min-h-0 flex-1 overflow-hidden" style="grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto auto" inert={viewport.tiny}>
 			<MenuBar />
 			<ProjectBar />
 
 			<main class="grid min-h-0 overflow-hidden border-t border-line" class:vp-drawers={drawers} style:grid-template-columns={columns}>
-				{#if !player}<LeftPanel />{/if}
+				{#if !player}
+					<div class="vp-drawer" data-vp-drawer="start" role={drawers ? 'dialog' : undefined} aria-modal={drawers ? 'true' : undefined} aria-label={drawers ? t('panels.left.label') : undefined} tabindex="-1" hidden={drawers && !leftOpen} use:drawerFocus={leftOpen}>
+						<LeftPanel />
+					</div>
+				{/if}
+				{#if leftOpen || rightOpen}<div class="vp-drawer-veil" aria-hidden="true"></div>{/if}
 				{#key center}
 					<div class="grid min-h-0 min-w-0" in:fade={{ duration: ms(160) }}>
 						{#if center === 'story'}
@@ -235,7 +259,11 @@
 						{/if}
 					</div>
 				{/key}
-				{#if !player}<RightPanel />{/if}
+				{#if !player}
+					<div class="vp-drawer" data-vp-drawer="end" role={drawers ? 'dialog' : undefined} aria-modal={drawers ? 'true' : undefined} aria-label={drawers ? t('panels.right.label') : undefined} tabindex="-1" hidden={drawers && !rightOpen} use:drawerFocus={rightOpen}>
+						<RightPanel />
+					</div>
+				{/if}
 			</main>
 
 			<div>
@@ -1015,24 +1043,62 @@
 				display: inline;
 			}
 		}
+		.vp-root .vp-too-narrow {
+			position: absolute;
+			inset: 0;
+			z-index: 40;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 1.5rem;
+			background-color: rgb(var(--canvas));
+		}
+		.vp-root .vp-drawer {
+			display: contents;
+		}
 		.vp-root .vp-drawers {
 			position: relative;
 		}
-		.vp-root .vp-drawers > aside {
+		.vp-root .vp-drawers > .vp-drawer {
 			position: absolute;
 			top: 0;
 			bottom: 0;
 			z-index: 20;
+			display: grid;
 			width: 280px;
 			max-width: 100%;
 			box-shadow: var(--shadow-overlay);
+			outline: none;
 		}
-		.vp-root .vp-drawers > aside:first-child {
+		.vp-root .vp-drawers > .vp-drawer[hidden] {
+			display: none;
+		}
+		.vp-root .vp-drawers > .vp-drawer[data-vp-drawer='start'] {
 			left: 0;
 		}
-		.vp-root .vp-drawers > aside:last-child {
+		.vp-root .vp-drawers > .vp-drawer[data-vp-drawer='end'] {
 			right: 0;
 			width: 320px;
+		}
+		.vp-root .vp-drawers > .vp-drawer > aside {
+			min-height: 0;
+		}
+		.vp-root .vp-drawer-veil {
+			position: absolute;
+			inset: 0;
+			z-index: 19;
+			background-color: rgb(0 0 0 / 0.25);
+		}
+		.vp-root [data-take-details] > summary {
+			display: inline-block;
+			min-height: 1.25rem;
+			margin-inline: -0.125rem;
+			padding-inline: 0.125rem;
+			border-radius: 4px;
+			cursor: pointer;
+		}
+		.vp-root [data-take-details] > summary:hover {
+			color: rgb(var(--fg));
 		}
 		.vp-root .vp-production-wrap {
 			height: auto;
@@ -1050,7 +1116,15 @@
 		}
 		@media (max-width: 1279px) {
 			.vp-root .vp-wide-only {
-				display: none;
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				margin: -1px;
+				padding: 0;
+				overflow: hidden;
+				clip-path: inset(50%);
+				white-space: nowrap;
+				border: 0;
 			}
 			.vp-root .vp-projectbar-name {
 				width: 10rem;

@@ -15,6 +15,7 @@ import { picking, pruned } from './picking.js';
 import { same } from './merge.js';
 import { citingShots, removeVrefTrack, trackOf, vrefLabel } from './vreftracks.js';
 import { viewport } from './viewport.svelte.js';
+import { isPlayer } from './workspaces.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -116,6 +117,16 @@ export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const round = (v, s = 0.1) => +(Math.round(v / s) * s).toFixed(3);
 
 export const bandView = () => ui.workspace === 'storyboard' && ui.storyView === 'band';
+export const drawerMode = () => viewport.narrow && !isPlayer(ui.workspace);
+export const sidebarShown = () => ui.sidebarOpen && !bandView();
+
+export function closeDrawer() {
+	if (!drawerMode()) return false;
+	if (ui.inspectorOpen) ui.inspectorOpen = false;
+	else if (sidebarShown()) ui.sidebarOpen = false;
+	else return false;
+	return true;
+}
 
 export const directorView = () => viewOf(ui.directorView, takeStore.list);
 

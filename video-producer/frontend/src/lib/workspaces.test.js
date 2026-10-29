@@ -55,8 +55,8 @@ test('workspaces: every workspace and its command have a label in both languages
 test('workspaces: Play keeps the viewer with the splitter and the timeline under it, without the side panels; only Director AI and Storyboard show the Production bar', () => {
 	const page = source('../VideoProducerPage.svelte');
 	assert.match(page, /const player = \$derived\(isPlayer\(ui\.workspace\)\);/);
-	assert.match(page, /\{#if !player\}<LeftPanel \/>\{\/if\}/);
-	assert.match(page, /\{#if !player\}<RightPanel \/>\{\/if\}/);
+	assert.match(page, /\{#if !player\}\s*<div class="vp-drawer" data-vp-drawer="start"[^>]*>\s*<LeftPanel \/>\s*<\/div>\s*\{\/if\}/);
+	assert.match(page, /\{#if !player\}\s*<div class="vp-drawer" data-vp-drawer="end"[^>]*>\s*<RightPanel \/>\s*<\/div>\s*\{\/if\}/);
 	assert.match(page, /<Viewer \{player\} \/>/);
 	assert.match(page, /<div>\s*\{#if !bare\}<Splitter \/>\{\/if\}\s*\{#if generates\(\)\}<ProductionBar \/>\{\/if\}\s*<\/div>/);
 	assert.match(page, /const bare = \$derived\(band \|\| ui\.workspace === 'director'\);/);

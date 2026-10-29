@@ -12,7 +12,7 @@
 
 	const id = `dropdown:${ulid()}`;
 	const open = $derived(ui.menuOpen === id);
-	const button = $derived({ variant, size, icon: hostIconName(icon), class: className, ariaLabel: labelClass ? title || label : undefined, ariaExpanded: open, ariaHaspopup: 'menu', onclick: () => (ui.menuOpen = open ? null : id) });
+	const button = $derived({ variant, size, icon: hostIconName(icon), class: className, ariaExpanded: open, ariaHaspopup: 'menu', onclick: () => (ui.menuOpen = open ? null : id) });
 
 	function run(item) {
 		if (item.disabled) return;

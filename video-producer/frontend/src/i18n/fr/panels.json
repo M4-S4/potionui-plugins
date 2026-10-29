@@ -1,5 +1,6 @@
 {
 	"left.label": "Panneau contextuel",
+	"right.label": "Panneau de détail",
 	"media.title": "Médias",
 	"media.count.one": "{count} élément",
 	"media.count.other": "{count} éléments",

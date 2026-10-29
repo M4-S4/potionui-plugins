@@ -35,11 +35,11 @@ test('vocabulary: the mark of a take is Retenue / Selected, the quality stays Br
 	assert.equal(en.commands['cmd.final-pass'], 'Final render of the film…');
 });
 
-test('vocabulary: no French text calls a take Finale, the pass Film final or Passer en final; no English text says Final film, Make final or Final take', () => {
+test('vocabulary: no French text calls a take Finale or prise finale, the pass Film final or Passer en final; no English text says Final film, Make final or Final take, whatever the case', () => {
 	for (const domain of DOMAINS) {
-		const fr = Object.entries(json('fr', domain)).filter(([, text]) => /\bFinales?\b|Film final|Passer (?:en|le film en|la prise en) final|prise Finale/.test(text));
+		const fr = Object.entries(json('fr', domain)).filter(([, text]) => /\bFinales?\b/.test(text) || /prises? finales?|film final|passer (?:en|le film en|la prise en) final/i.test(text));
 		assert.deepEqual(fr, [], `fr/${domain}`);
-		const en = Object.entries(json('en', domain)).filter(([, text]) => /Final film|Make (?:take |the film |\{count\} shots? )?final\b|Final take\b/.test(text));
+		const en = Object.entries(json('en', domain)).filter(([, text]) => /Final film|Make (?:take |the film |\{count\} shots? )?final\b|Final takes?\b/i.test(text));
 		assert.deepEqual(en, [], `en/${domain}`);
 	}
 });
@@ -52,7 +52,13 @@ test('vocabulary: a take card shows the quality, the duration, the engine and th
 	const details = card.indexOf('<details class="text-fg-subtle" data-take-details>');
 	assert.ok(quality > 0 && quality < engine && engine < mark && mark < details);
 	const inside = card.slice(details, card.indexOf('</details>'));
-	assert.match(inside, /\{t\('generation\.card\.technical'\)\}<\/summary>/);
+	assert.match(inside, /<summary onclick=\{\(e\) => e\.stopPropagation\(\)\}>\{t\('generation\.card\.technical'\)\}<\/summary>/);
+	assert.match(read('../VideoProducerPage.svelte'), /\.vp-root \[data-take-details\] > summary \{\n\t\t\tdisplay: inline-block;\n\t\t\tmin-height: 1\.25rem;\n\t\t\tmargin-inline: -0\.125rem;/);
+	assert.equal(json('fr', 'lib')['toast.useTakeFinal'], '« {shot} » utilise la prise en qualité finale {variant}');
+	assert.equal(json('en', 'lib')['toast.useTakeFinal'], '“{shot}” uses final-quality take {variant}');
+	assert.equal(json('en', 'generation')['finalPass.state.ready'], 'To render');
+	assert.equal(json('en', 'generation')['finalPass.runningTitle'], 'Final renders in progress');
+	assert.equal(json('fr', 'generation')['finalPass.runningTitle'], 'Rendus finaux en cours');
 	assert.match(inside, /onclick=\{\(e\) => e\.stopPropagation\(\)\}/);
 	for (const part of ['{modeText()}', '{resolution}', "t('generation.card.seed'", '{backendText}']) assert.ok(inside.includes(part), part);
 	assert.doesNotMatch(card.slice(0, details), /modeText\(\)\}|\{resolution\}|card\.seed|\{backendText\}<\/div>/);

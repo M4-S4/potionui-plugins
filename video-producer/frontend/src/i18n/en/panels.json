@@ -1,5 +1,6 @@
 {
 	"left.label": "Context panel",
+	"right.label": "Detail panel",
 	"media.title": "Media",
 	"media.count.one": "{count} item",
 	"media.count.other": "{count} items",

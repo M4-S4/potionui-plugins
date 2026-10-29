@@ -60,7 +60,7 @@
 		const current = p.id === project.id;
 		const next = current ? (projects.find((x) => x.id !== p.id)?.id ?? null) : null;
 		const message = !current ? t('project.delete.message', { name: nameOf(p) }) : next ? t('project.delete.messageCurrent', { name: nameOf(p) }) : t('project.delete.messageLast', { name: nameOf(p) });
-		const ok = await confirm({ title: t('project.delete.title'), message, variant: 'danger', confirmLabel: t('project.delete.confirm'), cancelLabel: t('project.delete.cancel') });
+		const ok = await confirm({ title: t('project.delete.title'), message, variant: 'danger', confirmLabel: t('project.delete.confirm') });
 		if (!ok || !alive) return;
 		busy = true;
 		const result = await deleteProject(p.id, next);

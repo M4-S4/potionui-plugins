@@ -98,15 +98,15 @@ test('base: under 1280 px the side panels become drawers over the centre, closed
 	const viewport = read('viewport.svelte.js');
 	assert.match(viewport, /export const NARROW_WIDTH = 1280;/);
 	assert.match(viewport, /export const TINY_WIDTH = 640;/);
-	assert.match(page, /const drawers = \$derived\(viewport\.narrow && !player\);/);
+	assert.match(page, /const drawers = \$derived\(drawerMode\(\)\);/);
 	assert.match(page, /const columns = \$derived\(player \|\| drawers \? 'minmax\(0, 1fr\)' : `/);
-	assert.match(page, /if \(!viewport\.narrow\) return;\n\t\tuntrack\(\(\) => \{\n\t\t\tui\.sidebarOpen = false;\n\t\t\tui\.inspectorOpen = false;/);
+	assert.match(page, /if \(narrow && wideBefore === null\) \{\n\t\t\t\twideBefore = \{ sidebar: ui\.sidebarOpen, inspector: ui\.inspectorOpen \};\n\t\t\t\tui\.sidebarOpen = false;\n\t\t\t\tui\.inspectorOpen = false;/);
 	assert.match(rule('.vp-drawers'), /position: relative;/);
-	assert.match(rule('.vp-drawers > aside'), /position: absolute;[\s\S]*z-index: 20;[\s\S]*width: 280px;/);
-	assert.match(rule('.vp-drawers > aside:last-child'), /right: 0;[\s\S]*width: 320px;/);
+	assert.match(rule('.vp-drawers > .vp-drawer'), /position: absolute;[\s\S]*z-index: 20;[\s\S]*width: 280px;/);
+	assert.match(rule(".vp-drawers > .vp-drawer[data-vp-drawer='end']"), /right: 0;[\s\S]*width: 320px;/);
 	assert.match(rule('.vp-production-wrap'), /height: auto;[\s\S]*flex-wrap: wrap;/);
 	assert.match(rule('.vp-production-wrap > [data-vp-engine]'), /order: 1;[\s\S]*flex-basis: 100%;/);
-	assert.match(page, /\{#if viewport\.tiny\}[\s\S]*t\('shell\.app\.narrow'\)[\s\S]*t\('shell\.app\.narrowHint'\)[\s\S]*\{:else if phase === 'loading'\}/);
+	assert.match(page, /\{#if viewport\.tiny\}\s*<div class="vp-too-narrow" data-vp-too-narrow>[\s\S]*t\('shell\.app\.narrow'\)[\s\S]*t\('shell\.app\.narrowHint'\)[\s\S]*\{\/if\}\s*\{#if phase === 'loading'\}/);
 	const state = read('state.svelte.js');
 	assert.match(state, /sidebarOpen: !viewport\.narrow,/);
 	assert.match(state, /inspectorOpen: !viewport\.narrow && \(typeof window === 'undefined' \|\| window\.innerWidth >= 1360\),/);
@@ -116,13 +116,52 @@ test('base: under 1280 px the side panels become drawers over the centre, closed
 	assert.match(bar, /<div class="flex shrink-0 items-center gap-2" data-vp-actions>/);
 	const header = read('../components/shell/ProjectBar.svelte');
 	assert.equal(header.match(/(?:labelClass|class)="vp-wide-only"/g)?.length, 3);
-	assert.match(read('../components/shell/Dropdown.svelte'), /ariaLabel: labelClass \? title \|\| label : undefined/);
 	assert.match(header, /aria-label=\{workspaceLabel\(w\.id\)\} title=\{workspaceLabel\(w\.id\)\}/);
 	assert.match(header, /<span class="vp-workspace-label">\{workspaceLabel\(w\.id\)\}<\/span>/);
 	for (const locale of ['en', 'fr']) {
 		const shell = JSON.parse(read(`../i18n/${locale}/shell.json`));
 		assert.match(shell['app.narrow'], /1280 px/);
 	}
+});
+
+test('base: a drawer is a dialog that Escape closes before the selection, that a pointer outside closes, that takes the focus when it opens and gives it back when it closes; the side panels come back as they were above 1280 px', () => {
+	const state = read('state.svelte.js');
+	assert.match(state, /export const drawerMode = \(\) => viewport\.narrow && !isPlayer\(ui\.workspace\);/);
+	assert.match(state, /export function closeDrawer\(\) \{\n\tif \(!drawerMode\(\)\) return false;\n\tif \(ui\.inspectorOpen\) ui\.inspectorOpen = false;\n\telse if \(sidebarShown\(\)\) ui\.sidebarOpen = false;\n\telse return false;\n\treturn true;\n\}/);
+	assert.match(read('commands.js'), /else if \(ui\.storyOpen && bandView\(\)\) ui\.storyOpen = false;\n\telse if \(!closeDrawer\(\)\) select\(null\);/);
+	for (const side of ['start', 'end']) {
+		const open = side === 'start' ? 'leftOpen' : 'rightOpen';
+		const label = side === 'start' ? 'panels.left.label' : 'panels.right.label';
+		assert.match(page, new RegExp(`<div class="vp-drawer" data-vp-drawer="${side}" role=\\{drawers \\? 'dialog' : undefined\\} aria-modal=\\{drawers \\? 'true' : undefined\\} aria-label=\\{drawers \\? t\\('${label.replace('.', '\\.')}'\\) : undefined\\} tabindex="-1" hidden=\\{drawers && !${open}\\} use:drawerFocus=\\{${open}\\}>`));
+	}
+	assert.match(page, /\{#if leftOpen \|\| rightOpen\}<div class="vp-drawer-veil" aria-hidden="true"><\/div>\{\/if\}/);
+	assert.match(page, /const onpointerdown = \(e\) => closesOnOutsidePointer\(root, e\.target\) && closeDrawer\(\);\n\t\tdocument\.addEventListener\('pointerdown', onpointerdown, true\);/);
+	assert.match(page, /\} else if \(!narrow && wideBefore !== null\) \{\n\t\t\t\tui\.sidebarOpen = wideBefore\.sidebar;\n\t\t\t\tui\.inspectorOpen = wideBefore\.inspector;\n\t\t\t\twideBefore = null;/);
+	assert.match(rule('.vp-drawer'), /display: contents;/);
+	assert.match(rule('.vp-drawers > .vp-drawer[hidden]'), /display: none;/);
+	assert.match(rule('.vp-drawer-veil'), /position: absolute;[\s\S]*inset: 0;[\s\S]*z-index: 19;/);
+	const drawer = read('drawer.js');
+	assert.match(drawer, /trigger = document\.activeElement;[\s\S]*await tick\(\);[\s\S]*\(node\.querySelector\(FOCUSABLE\) \?\? node\)\.focus\(\{ preventScroll: true \}\);/);
+	assert.match(drawer, /if \(node\.contains\(document\.activeElement\) \|\| document\.activeElement === document\.body\) restoreFocus\(trigger, null\);/);
+	assert.match(drawer, /const KEEPS = '\.vp-drawer, \[data-vp-drawer-toggle\], \.vp-modal-backdrop, \.vp-palette-backdrop, \.vp-menu, \[data-vp-menu\], \.vp-toasts, \.vp-uploads';/);
+	assert.equal(read('../components/shell/ProjectBar.svelte').match(/<span class="contents" data-vp-drawer-toggle>/g)?.length, 2);
+	for (const locale of ['en', 'fr']) assert.ok(JSON.parse(read(`../i18n/${locale}/panels.json`))['right.label'], locale);
+});
+
+test('base: under 640 px the message covers the page without unmounting it, and the shortcuts rest', () => {
+	assert.match(page, /<div class="grid min-h-0 flex-1 overflow-hidden" style="[^"]*" inert=\{viewport\.tiny\}>/);
+	assert.match(page, /const onkeydown = \(e\) => phase === 'ready' && !viewport\.tiny && handleKeydown\(e, root\);/);
+	assert.match(rule('.vp-too-narrow'), /position: absolute;[\s\S]*inset: 0;[\s\S]*z-index: 40;[\s\S]*background-color: rgb\(var\(--canvas\)\);/);
+	assert.match(page, /<Modals version=\{ui\.me\?\.version \?\? null\} \{setLanguage\} \/>\s*<CommandPalette \/>\s*<Toasts \/>\s*<Uploads \/>\s*\{\/if\}/);
+});
+
+test('base: Import, Export and Assistant keep their visible label as accessible name; under 1280 px the label is only hidden from sight', () => {
+	const header = read('../components/shell/ProjectBar.svelte');
+	assert.doesNotMatch(header, /ariaLabel: t\('shell\.project\.exportTip'\)|aria-label=\{t\('shell\.project\.assistant'\)\}/);
+	assert.doesNotMatch(read('../components/shell/Dropdown.svelte'), /ariaLabel/);
+	const wide = page.slice(page.indexOf('@media (max-width: 1279px)'));
+	assert.match(wide, /\.vp-root \.vp-wide-only \{\n\t\t\t\tposition: absolute;\n\t\t\t\twidth: 1px;\n\t\t\t\theight: 1px;[\s\S]*?clip-path: inset\(50%\);/);
+	assert.doesNotMatch(wide.slice(0, wide.indexOf('.vp-projectbar-name')), /display: none/);
 });
 
 test('base: the header of the Storyboard grid folds its button labels into icons when it runs out of room, and unfolds them when the room is back', () => {
