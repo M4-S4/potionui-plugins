@@ -820,6 +820,18 @@ class ObjectStorage:
                 raise ConnectionError("the object store dropped the connection")
             yield data[offset : offset + 4096]
 
+    def copy(self, kind, key, target):
+        if not self.exists(key):
+            return False
+        try:
+            with Path(target).open("wb") as handle:
+                for chunk in self.get_stream(key, 1 << 20):
+                    handle.write(chunk)
+        except BaseException:
+            Path(target).unlink(missing_ok=True)
+            raise
+        return True
+
 
 STORED_TAKE = {"id": "r1", "status": "done", "file_path": "generations/2026-10-18/g/1.mp4", "generation_id": "g", "file_id": "f"}
 
@@ -827,8 +839,8 @@ STORED_TAKE = {"id": "r1", "status": "done", "file_path": "generations/2026-10-1
 @pytest.fixture
 def object_storage(monkeypatch, export_storage):
     storage = ObjectStorage({})
-    container = SimpleNamespace(file_service=SimpleNamespace(storage_driver=storage), media_store=SimpleNamespace(storage_driver=storage))
-    monkeypatch.setattr(core_bridge, "api_hooks", SimpleNamespace(get_container=lambda: container))
+    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda kind, key: storage.local_path(key))
+    monkeypatch.setattr(core_bridge.api_media, "copy_media_file", storage.copy)
     monkeypatch.setattr(takes, "list_takes", lambda project_id: [STORED_TAKE])
     return storage
 
