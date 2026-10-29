@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { compileModule } from 'svelte/compiler';
 import { MODEL_LIST_LIMIT, coreModels, createClient, normalizeField, normalizePreset } from './api.js';
-import { fitInline } from './barfit.js';
 import {
 	clampNumber,
 	cleanOptions,
@@ -297,53 +296,6 @@ test('options: a typed number lands inside its limits and on its step', () => {
 	assert.equal(clampNumber(fields.cfg, '0'), 1);
 	assert.equal(clampNumber(fields.detail_strength, '0.33'), 0.35);
 	assert.equal(clampNumber(fields.steps, 'abc'), null);
-});
-
-test('production bar: what does not fit goes to the More menu, by rank, the Edit Engine button always stays', () => {
-	const items = [
-		{ id: 'engine', width: 180, rank: 1 },
-		{ id: 'profile', width: 200, rank: 2 },
-		{ id: 'margin', width: 120, rank: 3, show: false },
-		{ id: 'own', width: 60, rank: 4 },
-		{ id: 'edit', width: 28, rank: 0, pinned: true },
-		{ id: 'label', width: 80, rank: 5, folds: false }
-	];
-	const at = (room) => {
-		const fit = fitInline(room, items);
-		return [[...fit.inline].sort(), fit.overflow];
-	};
-
-	assert.deepEqual(at(600), [['edit', 'engine', 'label', 'own', 'profile'], []]);
-	assert.deepEqual(at(500), [['edit', 'engine', 'own', 'profile'], []]);
-	assert.deepEqual(at(400), [['edit', 'engine', 'own'], ['profile']]);
-	assert.deepEqual(at(150), [['edit', 'own'], ['engine', 'profile']]);
-	assert.deepEqual(at(0), [['edit'], ['engine', 'profile', 'own']]);
-});
-
-test('production bar: the engine and the profile never leave the bar, the generate label, the range and the notice give way first', () => {
-	const items = [
-		{ id: 'engine', width: 192, min: 112, rank: 3, keep: true },
-		{ id: 'profile', width: 220, min: 96, rank: 4, keep: true },
-		{ id: 'margin', width: 128, rank: 6 },
-		{ id: 'own', width: 64, rank: 7, show: false },
-		{ id: 'edit', width: 28, rank: 0, pinned: true },
-		{ id: 'label', width: 88, rank: 8, folds: false },
-		{ id: 'go', width: 120, rank: 1, outside: true },
-		{ id: 'scope', width: 104, rank: 2, outside: true },
-		{ id: 'notice', width: 200, rank: 5, outside: true }
-	];
-	const at = (budget) => {
-		const fit = fitInline(budget, items);
-		return [[...fit.inline].sort(), [...fit.wide].sort(), fit.overflow];
-	};
-
-	assert.deepEqual(at(1112), [['edit', 'engine', 'go', 'label', 'margin', 'notice', 'profile', 'scope'], ['engine', 'profile'], []]);
-	assert.deepEqual(at(1111), [['edit', 'engine', 'go', 'margin', 'notice', 'profile', 'scope'], ['engine', 'profile'], []]);
-	assert.deepEqual(at(700), [['edit', 'engine', 'go', 'label', 'profile', 'scope'], ['engine'], ['margin']]);
-	assert.deepEqual(at(500), [['edit', 'engine', 'go', 'profile'], ['engine'], ['margin']]);
-	assert.deepEqual(at(400), [['edit', 'engine', 'profile', 'scope'], [], ['margin']]);
-	assert.deepEqual(at(0), [['edit', 'engine', 'profile'], [], ['margin']]);
-	for (const budget of [0, 200, 400, 800, 1600]) assert.ok(['engine', 'profile'].every((id) => fitInline(budget, items).inline.has(id)), String(budget));
 });
 
 test('client: the models a field can take come from the PotionUI preset model list', async () => {

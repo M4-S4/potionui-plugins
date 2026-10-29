@@ -1,11 +1,8 @@
 import { labelOf } from './labels.js';
 
-export const DECK_STATES = ['ready', 'blocked', 'running', 'done', 'failed'];
-
 export const DECK_TONES = { ready: 'muted', blocked: 'warning', running: 'signal', done: 'success', failed: 'danger' };
 
 export const DECK_HEIGHT = 92;
-export const DECK_COMPACT_HEIGHT = 56;
 export const DECK_COMPACT_CENTRE = 420;
 
 export function deckCompact({ narrow = false, centre = Infinity, deck = DECK_HEIGHT } = {}) {

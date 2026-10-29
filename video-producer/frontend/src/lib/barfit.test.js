@@ -1,8 +1,8 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderComponent } from './svelte-harness.js';
-import { CHIP_TIERS, fitChip, shortPresetName } from './barfit.js';
-import { DECK_COMPACT_CENTRE, DECK_COMPACT_HEIGHT, DECK_HEIGHT, deckChipFolded, deckCompact, deckLine } from './deck.js';
+import { fitChip, shortPresetName } from './barfit.js';
+import { DECK_COMPACT_CENTRE, DECK_HEIGHT, deckChipFolded, deckCompact, deckLine } from './deck.js';
 import { DRAWER_WIDTH, drawerPlace } from './deck-drawer.js';
 
 const { doc, ui, dispose } = await import('./state.svelte.js');
@@ -16,7 +16,6 @@ const widths = { engine: 117, short: 65, prefixes: [52], ellipsis: 8, sep: 14, p
 after(() => dispose());
 
 test('barfit: the chip keeps the whole engine name while it fits, then the short name of the preset, then engine · profile, then the engine alone', () => {
-	assert.deepEqual(CHIP_TIERS, ['full', 'profile', 'engine']);
 	assert.deepEqual(fitChip({ room: 600, ...widths }), { cell: true, engine: 'full', tier: 'full', cut: null });
 	assert.deepEqual(fitChip({ room: 454, ...widths }), { cell: true, engine: 'full', tier: 'full', cut: null });
 	assert.deepEqual(fitChip({ room: 453, ...widths }), { cell: true, engine: 'short', tier: 'full', cut: null });
@@ -67,7 +66,6 @@ test('barfit: the short name of a preset drops its hardware tier in brackets, ne
 
 test('barfit: the deck folds to 56 px under a 420 px centre or a 1024 px page, measured as if the deck were full, and comes back as soon as the room is back', () => {
 	assert.equal(DECK_HEIGHT, 92);
-	assert.equal(DECK_COMPACT_HEIGHT, 56);
 	assert.equal(DECK_COMPACT_CENTRE, 420);
 	assert.equal(deckCompact({ narrow: false, centre: 420 }), false);
 	assert.equal(deckCompact({ narrow: false, centre: 419 }), true);

@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { clean, renderComponent, textOf } from './svelte-harness.js';
-import { DECK_STATES, DECK_TONES, DECK_UNBLOCK, deckActions, deckCell, deckChip, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, deckUnblock, deckUnblockLabel, latestDone, remainingSeconds, selectedEverywhere } from './deck.js';
+import { DECK_TONES, DECK_UNBLOCK, deckActions, deckCell, deckChip, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, deckUnblock, deckUnblockLabel, latestDone, remainingSeconds, selectedEverywhere } from './deck.js';
 import { failureText } from './generation.js';
 
 const { doc, ui, generates, dispose } = await import('./state.svelte.js');
@@ -32,7 +32,6 @@ function scene(takes = []) {
 const inlineActions = (html) => [...clean(html).matchAll(/<button type="button" class="vp-deck-inline-action[^"]*"[^>]*>(.*?)<\/button>/g)].map((m) => textOf(m[1]));
 
 test('deck: five states with the tones of the host, running first, then blocked, then the end of the last batch', () => {
-	assert.deepEqual(DECK_STATES, ['ready', 'blocked', 'running', 'done', 'failed']);
 	assert.deepEqual(DECK_TONES, { ready: 'muted', blocked: 'warning', running: 'signal', done: 'success', failed: 'danger' });
 	assert.equal(deckState({ state: 'ready', missing: [] }), 'ready');
 	assert.equal(deckState({ state: 'running', missing: ['x'] }), 'running');
@@ -41,7 +40,7 @@ test('deck: five states with the tones of the host, running first, then blocked,
 	assert.equal(deckState({ state: 'done', missing: [] }), 'done');
 	assert.equal(deckState({ state: 'failed', missing: [] }), 'failed');
 	assert.equal(deckState({ state: 'ready' }), 'ready');
-	for (const state of DECK_STATES) assert.equal(deckTone(state), DECK_TONES[state]);
+	for (const state of Object.keys(DECK_TONES)) assert.equal(deckTone(state), DECK_TONES[state]);
 	assert.equal(deckTone('other'), 'muted');
 });
 
