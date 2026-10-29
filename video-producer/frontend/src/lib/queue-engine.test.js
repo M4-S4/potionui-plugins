@@ -1,17 +1,29 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { clean, hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { createClient, normalizeQueue, normalizeTake } from './api.js';
 import { SEED_MAX, effectiveEngine, hasOwnEngine, migrateShotEngine, projectQuality, randomSeed, setShotEngine, shotEngineOf, validSeed } from './engine.js';
 import { canPrioritize, handedOver, isWaiting, prioritized, queueOrder } from './queue.js';
 import { applyShotDraft, revisionOf, shotDraft } from './shots.js';
 import { emptyDoc, migrate } from './starter.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const WAN = '01KX47WANVIDEO0000000000TV';
 const LTX = '01KX47LTX25VIDEO00000000TV';
 const at = (n) => `2026-10-23T10:00:0${n}+00:00`;
 const take = (id, extra = {}) => ({ id, shotId: 's1', status: 'queued', generationId: null, priority: 0, createdAt: at(0), ...extra });
+
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { project, bindClient, flushSave } = await import('./project.svelte.js');
+const { estimateRequest, openQueue, QUEUE_MENU } = await import('./production.svelte.js');
+const { setTakes, takeStore } = await import('./takes.svelte.js');
+const { commandById } = await import('./commands.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+after(() => {
+	dispose();
+	bindClient(null);
+});
 
 test('queue: the takes handed to the engine come first, then the waiting ones by priority, then oldest first', () => {
 	const list = [
@@ -154,41 +166,105 @@ test('engine: the shot editor reads and writes the shot settings in one step, wi
 	assert.ok(!('engine' in clip));
 });
 
-test('engine: the request keeps its shape, the shot settings travel in the saved document', () => {
-	const production = source('./production.svelte.js');
-	const body = production.slice(production.indexOf('function requestBody('), production.indexOf('export function estimateRequest('));
+const DECK = new URL('../components/production/ProductionDeck.svelte', import.meta.url).href;
+const STATUS_BAR = new URL('../components/shell/StatusBar.svelte', import.meta.url).href;
+const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-	assert.match(body, /shots: clips\.map\(\(c\) => c\.id\), quality, variants: counts\.variants, preset_id: option\.preset, model_id: option\.model/);
-	assert.doesNotMatch(body, /engine/);
-	assert.match(production, /const saved = await flushSave\(\);/);
+function scene() {
+	project.id = 'p1';
+	project.version = 1;
+	project.status = 'saved';
+	ui.me = { engines: [{ id: 'native', kind: 'local', name: 'Local' }], presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }, { id: LTX, name: 'LTX 2', video: true, cloud: false, profiles: ['FL2VA'] }] };
+	Object.assign(ui, { workspace: 'storyboard', storyView: 'grid', selection: null, picked: [], dirty: false, modal: null, menuOpen: null, toasts: [] });
+	Object.assign(ui.production, { target: 'sequence', quality: 'draft', state: 'ready', progress: 0, running: 0, step: '', lastCount: 0, startedAt: null, lastSeconds: null, failed: 0, failedVariant: null, failedTake: null });
+	doc.engine = { backend: 'native', preset: WAN, model: null, variants: 2 };
+	doc.clips = [
+		{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo', take: null, assetId: null },
+		{ id: 's2', start: 4, dur: 4, label: 'Two', stage: 'todo', take: null, assetId: null }
+	];
+	doc.prompts = doc.clips.map((c, i) => ({ id: `p${i + 1}`, shotId: c.id, start: c.start, dur: 4, strength: 75, text: `Shot ${i + 1} at dawn.` }));
+	setTakes('p1', []);
+}
+
+test('engine: the request keeps its shape, the shot settings travel in the saved document', async () => {
+	scene();
+	setShotEngine(doc.clips[1], { preset: LTX, model: null, seed: 7 });
+	assert.deepEqual(shotEngineOf(doc.clips[1]), { preset: LTX, model: null, seed: 7 });
+
+	const request = estimateRequest();
+	assert.deepEqual(request.body, { shots: ['s1', 's2'], quality: 'draft', variants: 2, preset_id: WAN, model_id: null });
+	assert.deepEqual(JSON.parse(request.key), ['p1', 1, request.body]);
+
+	const saved = [];
+	bindClient({
+		async saveProject(id, next, version) {
+			saved.push([id, next, version]);
+			return { ok: true, data: { version: version + 1, updatedAt: '2026-10-29T10:00:00Z' } };
+		}
+	});
+	ui.dirty = true;
+	assert.equal(await flushSave(), true);
+	assert.equal(saved.length, 1);
+	assert.deepEqual([saved[0][0], saved[0][2], saved[0][1].clips[1].engine, saved[0][1].clips[0].engine], ['p1', 1, { preset: LTX, model: null, seed: 7 }, undefined]);
+	assert.equal(project.version, 2);
+	bindClient(null);
 });
 
-test('workshop: the advanced workshop, its commands, the local window queue and the Hybrid weights are gone', () => {
+test('workshop: the advanced workshop, its commands, the local window queue and the Hybrid weights are gone', async () => {
 	assert.equal(existsSync(new URL('../components/modals/AdvancedWorkshop.svelte', import.meta.url)), false);
-	const commands = source('./commands.js');
-	for (const id of ['advanced', 'hybrid']) assert.doesNotMatch(commands, new RegExp(`command\\('${id}'`));
-	assert.match(commands, /command\('engine', openEngineSettings\)/);
-	assert.match(commands, /command\('queue', openQueue, \{ keys: 'alt\+mod\+g' \}\)/);
-	const production = source('./production.svelte.js');
-	assert.doesNotMatch(production, /queueWindow|generateQueue|production\.queue/);
-	assert.doesNotMatch(source('./state.svelte.js'), /queue: \[\]/);
-	for (const path of ['../components/director/DirectorSummary.svelte', '../components/production/ProductionDeck.svelte', '../components/modals/Modals.svelte']) {
-		assert.doesNotMatch(source(path), /type: 'advanced'|AdvancedWorkshop|doc\.hybrid|doc\.profiles/, path);
-	}
-	assert.doesNotMatch(source('./starter.js'), /hybrid|profiles:/);
+	assert.equal(commandById('advanced'), null);
+	assert.equal(commandById('hybrid'), null);
+	scene();
+	commandById('engine').run();
+	assert.deepEqual(ui.modal, { type: 'engine', preset: null });
+	assert.equal(commandById('queue').keys, 'alt+mod+g');
+	ui.menuOpen = null;
+	commandById('queue').run();
+	assert.equal(ui.menuOpen, QUEUE_MENU);
+	assert.ok(!('queue' in ui));
+	const fresh = emptyDoc((key) => key);
+	assert.ok(!('hybrid' in fresh) && !('profiles' in fresh));
+	ui.modal = { type: 'advanced' };
+	const html = clean(await renderComponent(MODALS));
+	assert.equal(textOf(html), '');
+	assert.doesNotMatch(html, /role="dialog"/);
+	ui.modal = null;
 });
 
-test('queue: the queue opens as a list above the queue button of the production deck, from the deck, the status bar and the Production menu', () => {
-	const deck = source('../components/production/ProductionDeck.svelte');
-	assert.match(deck, /const queueOpen = \$derived\(ui\.menuOpen === QUEUE_MENU\);/);
-	assert.match(deck, /onclick=\{\(\) => \(ui\.menuOpen = queueOpen \? null : QUEUE_MENU\)\}/);
-	assert.match(deck, /\{#if queueOpen\}\n\t{6}<div class="vp-menu overflow-auto"[^>]*role="dialog"[^>]*>\n\t{7}<QueuePanel \/>/);
-	const production = source('./production.svelte.js');
-	assert.match(production, /export function openQueue\(\) \{\n\tif \(!generates\(\)\) ui\.workspace = 'director';\n\tui\.menuOpen = QUEUE_MENU;\n\}/);
-	assert.match(source('../components/shell/StatusBar.svelte'), /data-vp-menu onclick=\{openQueue\}/);
-	assert.doesNotMatch(source('./state.svelte.js'), /dockTab/);
-	const panel = source('../components/panels/QueuePanel.svelte');
-	assert.match(panel, /const ordered = \$derived\(queueOrder\(takeStore\.list\)\);/);
-	assert.match(panel, /onclick: \(\) => prioritizeTake\(take\)/);
-	assert.match(panel, /onclick: \(\) => cancelTake\(take\)/);
+test('queue: the queue opens as a list above the queue button of the production deck, from the deck, the status bar and the Production menu', async () => {
+	scene();
+	const waiting = (id, shotId, extra = {}) => ({ id, shotId, status: 'queued', label: 'draft', quality: 'draft', variant: 'A', url: null, generationId: null, priority: 0, progress: 0, createdAt: at(1), ...extra });
+	setTakes('p1', [waiting('q1', 's1'), waiting('r1', 's2', { status: 'running', generationId: 'g1', progress: 40, step: 'Sampling', createdAt: at(0) }), waiting('q2', 's1', { variant: 'B', createdAt: at(2) })]);
+
+	ui.workspace = 'timeline';
+	openQueue();
+	assert.deepEqual([ui.workspace, ui.menuOpen], ['director', QUEUE_MENU]);
+	ui.workspace = 'storyboard';
+	ui.menuOpen = null;
+	openQueue();
+	assert.deepEqual([ui.workspace, ui.menuOpen], ['storyboard', QUEUE_MENU]);
+	assert.equal(commandById('queue').menu, t('shell.menu.production'));
+
+	const deck = clean(await renderComponent(DECK));
+	assert.match(deck, new RegExp(`<button type="button" class="vp-deck-icon-button" aria-label="${escaped(t('production.queueLabel'))}" aria-expanded="true" aria-haspopup="dialog">`));
+	assert.match(deck, new RegExp(`<div class="vp-menu overflow-auto" role="dialog" aria-label="${escaped(t('panels.queue.title'))}"[^>]*><div class="flex flex-col gap-3 p-3">`));
+	const ordered = queueOrder(takeStore.list);
+	assert.deepEqual([...deck.matchAll(/data-take="([^"]*)"/g)].map((m) => m[1]), ordered.map((take) => take.id));
+	assert.equal(ordered[0].id, 'r1');
+	assert.ok(deck.includes(t('panels.queue.count', { count: 3 })));
+	const buttons = hostUis(deck, 'IconButton');
+	assert.deepEqual(buttons.filter((p) => p.label === t('panels.queue.cancel', { variant: 'A' })).length, 2);
+	assert.deepEqual(ordered.map((take) => buttons.find((p) => p.label === t('panels.queue.prioritize', { variant: take.variant }) && p.disabled === !canPrioritize(take, ordered)) !== undefined), [true, true, true]);
+	assert.match(deck, /role="progressbar"[^>]*aria-valuenow="40"/);
+
+	ui.menuOpen = null;
+	const closed = clean(await renderComponent(DECK));
+	assert.match(closed, /aria-expanded="false" aria-haspopup="dialog"/);
+	assert.doesNotMatch(closed, /data-take=/);
+
+	const bar = clean(await renderComponent(STATUS_BAR));
+	assert.match(bar, new RegExp(`<button type="button" class="flex h-6 items-center gap-1 hover:text-fg hover:underline" data-vp-menu="">.*?${escaped(t('shell.status.queue', { count: 3 }))}</button>`));
+	setTakes('p1', []);
+	assert.doesNotMatch(clean(await renderComponent(STATUS_BAR)), /data-vp-menu/);
 });

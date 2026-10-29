@@ -1,11 +1,22 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { clean, renderComponent } from './svelte-harness.js';
 import { ADD_RANGE, RANGE, TOGGLE, inOrder, picking, pruned, ranged, toggled } from './picking.js';
 import { pickMode } from './keyboard.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const ORDER = ['s1', 's2', 's3', 's4', 's5', 's6'];
+
+globalThis.document = { body: {}, querySelector: () => null };
+
+const { doc, ui, select, pickClip, pickedClips, deleteSelection, undo, act, dispose } = await import('./state.svelte.js');
+const { project } = await import('./project.svelte.js');
+const { handleKeydown } = await import('./commands.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+after(() => {
+	dispose();
+	delete globalThis.document;
+});
 
 test('picking: Ctrl+click starts the set from the chosen shot, adds the clicked one and makes it the active shot', () => {
 	assert.deepEqual(toggled(ORDER, [], 's2', 's5'), { picked: ['s2', 's5'], active: 's5' });
@@ -52,37 +63,109 @@ test('picking: Ctrl (⌘ on a Mac) toggles, Shift picks a range, both add the ra
 	assert.equal(pickMode(e({}), false), null);
 });
 
+const GRID = new URL('../components/storyboard/StoryboardView.svelte', import.meta.url).href;
+const BAND_LANES = new URL('../components/storyboard/BandLanes.svelte', import.meta.url).href;
+const BAND_VIEW = new URL('../components/storyboard/BandView.svelte', import.meta.url).href;
+const TIMELINE = new URL('../components/timeline/Timeline.svelte', import.meta.url).href;
+const INSPECTOR = new URL('../components/inspector/Inspector.svelte', import.meta.url).href;
+
+function shots() {
+	project.id = 'p1';
+	doc.clips = ORDER.map((id, i) => ({ id, start: i * 4, dur: 4, label: `Shot ${id.slice(1)}`, stage: 'todo', take: null, assetId: null }));
+	doc.prompts = [];
+	doc.frames = [];
+	Object.assign(ui, { workspace: 'storyboard', storyView: 'grid', selection: null, picked: [], modal: null, paletteOpen: false, toasts: [] });
+}
+
+const key = (name) => ({ key: name, code: name, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, target: null, preventDefault() {} });
+
 test('picking: the state keeps ui.selection as the active shot and the picked shots apart, any plain selection clears them', () => {
-	const state = source('state.svelte.js');
-	assert.match(state, /\tselection: null,\n\tpicked: \[\],/);
-	assert.match(state, /ui\.selection = kind \? \{ kind, id \} : null;\n\tif \(ui\.picked\.length\) ui\.picked = \[\];/);
-	assert.match(state, /const next = picking\(order, pruned\(order, ui\.picked\), active, id, mode\);\n\tui\.selection = next\.active \? \{ kind: 'clip', id: next\.active \} : null;\n\tui\.picked = next\.picked;/);
-	assert.match(state, /if \(ui\.picked\.length\) ui\.picked = pruned\(doc\.clips\.map\(\(c\) => c\.id\), ui\.picked\);/);
-	assert.match(state, /selection: null, picked: \[\], preview: null/);
-	assert.match(state, /const picked = pickedClips\(\);\n\tif \(picked\.length\) return deleteShots\(picked\);/);
+	shots();
+	select('clip', 's1');
+	assert.deepEqual([ui.selection, ui.picked], [{ kind: 'clip', id: 's1' }, []]);
+
+	pickClip('s3', TOGGLE);
+	let expected = picking(ORDER, [], 's1', 's3', TOGGLE);
+	assert.deepEqual([ui.selection, ui.picked], [{ kind: 'clip', id: expected.active }, expected.picked]);
+	assert.deepEqual(pickedClips().map((c) => c.id), expected.picked);
+	pickClip('s5', RANGE);
+	expected = picking(ORDER, expected.picked, expected.active, 's5', RANGE);
+	assert.deepEqual([ui.selection.id, ui.picked], [expected.active, expected.picked]);
+
+	select('clip', 's2');
+	assert.deepEqual([ui.selection, ui.picked, pickedClips()], [{ kind: 'clip', id: 's2' }, [], []]);
+
+	pickClip('s4', TOGGLE);
+	assert.ok(ui.picked.includes('s4'));
+	act(() => doc.clips.splice(3, 1));
+	const stale = [...ui.picked];
+	const order = doc.clips.map((c) => c.id);
+	pickClip('s6', TOGGLE);
+	expected = picking(order, pruned(order, stale), 's4', 's6', TOGGLE);
+	assert.deepEqual([ui.selection.id, ui.picked], [expected.active, expected.picked]);
+	assert.ok(!ui.picked.includes('s4'));
+	undo();
+	assert.deepEqual(doc.clips.map((c) => c.id), ORDER);
+	assert.ok(!ui.picked.includes('s4'));
+
+	select('clip', 's1');
+	pickClip('s2', TOGGLE);
+	assert.deepEqual(pickedClips().map((c) => c.id), ['s1', 's2']);
+	deleteSelection();
+	assert.deepEqual([doc.clips.map((c) => c.id), ui.selection, ui.picked], [['s3', 's4', 's5', 's6'], null, []]);
 });
 
-test('picking: the grid, the band and the V1 track pick with the same modifiers and show the picked shots', () => {
-	const grid = source('../components/storyboard/StoryboardView.svelte');
-	assert.match(grid, /onclick=\{\(e\) => pick\(c, e\)\}/);
-	assert.match(grid, /const mode = e \? pickMode\(e\) : null;\n\t\tif \(mode\) return pickClip\(c\.id, mode\);/);
-	assert.match(grid, /data-picked=\{picked \? '' : null\}/);
-	const band = source('../components/storyboard/BandLanes.svelte');
-	assert.match(band, /const mode = e\.button === 0 \? pickMode\(e\) : null;\n\t\tif \(mode\) \{\n\t\t\te\.preventDefault\(\);\n\t\t\te\.stopPropagation\(\);\n\t\t\treturn pickClip\(c\.id, mode\);/);
-	const timeline = source('../components/timeline/Timeline.svelte');
-	assert.match(timeline, /const mode = e\.button === 0 && ui\.tool !== 'blade' \? pickMode\(e\) : null;/);
-	for (const view of [grid, band, timeline]) assert.match(view, /data-picked=\{picked \? '' : null\}/);
-	assert.match(source('../components/storyboard/BandView.svelte'), /\{#if multi\}\n\t\t\t\t\t<PickedSummary \/>/);
-	assert.match(source('../components/inspector/Inspector.svelte'), /\{#if multi\}\n\t\t\t<PickedSummary \/>/);
+test('picking: the grid, the band and the V1 track pick with the same modifiers and show the picked shots', async () => {
+	for (const mac of [false, true]) {
+		const mod = mac ? { metaKey: true } : { ctrlKey: true };
+		assert.equal(pickMode({ ctrlKey: false, metaKey: false, shiftKey: false, ...mod }, mac), TOGGLE);
+		assert.equal(pickMode({ ctrlKey: false, metaKey: false, shiftKey: true }, mac), RANGE);
+		assert.equal(pickMode({ ctrlKey: false, metaKey: false, shiftKey: true, ...mod }, mac), ADD_RANGE);
+		assert.equal(pickMode({ ctrlKey: false, metaKey: false, shiftKey: false }, mac), null);
+		assert.equal(pickMode({ ctrlKey: mac, metaKey: !mac, shiftKey: false }, mac), null);
+	}
+
+	shots();
+	ui.selection = { kind: 'clip', id: 's1' };
+	ui.picked = ['s1', 's3'];
+	const grid = clean(await renderComponent(GRID));
+	assert.deepEqual([...grid.matchAll(/data-story-shot="([^"]*)" data-picked=""/g)].map((m) => m[1]), ['s1', 's3']);
+	ui.storyView = 'band';
+	const lanes = clean(await renderComponent(BAND_LANES));
+	assert.deepEqual([...lanes.matchAll(/data-picked=""[^>]*data-band-shot="([^"]*)"/g)].map((m) => m[1]), ['s1', 's3']);
+	const timeline = clean(await renderComponent(TIMELINE));
+	assert.deepEqual([...timeline.matchAll(/data-picked=""[^>]*aria-label="([^"]*)"/g)].map((m) => m[1]), [t('timeline.clip.label', { name: 'Shot 1', stage: t('lib.stage.todo'), dur: '4.0 s' }), t('timeline.clip.label', { name: 'Shot 3', stage: t('lib.stage.todo'), dur: '4.0 s' })]);
+	assert.match(clean(await renderComponent(BAND_VIEW)), /data-picked-summary="2"/);
+	assert.match(clean(await renderComponent(INSPECTOR)), /data-picked-summary="2"/);
+	ui.picked = [];
+	assert.doesNotMatch(clean(await renderComponent(BAND_VIEW)), /data-picked-summary/);
+	assert.doesNotMatch(clean(await renderComponent(INSPECTOR)), /data-picked-summary/);
+	assert.doesNotMatch(clean(await renderComponent(GRID)), /data-picked=""/);
 });
 
-test('scrolling: the grid of the Storyboard is bounded by its cell, so its list scrolls, and brings the chosen shot into view', () => {
-	const grid = source('../components/storyboard/StoryboardView.svelte');
-	assert.match(grid, /<section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label=\{t\('storyboard\.title'\)\}>/);
-	assert.match(grid, /<div bind:this=\{listEl\} class="min-h-0 flex-1 overflow-auto p-5" role="list"/);
-	assert.match(grid, /if \(id && listEl\) queueMicrotask\(\(\) => reveal\(id\)\);/);
-	assert.match(source('../components/storyboard/BandView.svelte'), /<section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas"/);
-	const commands = source('commands.js');
-	assert.match(commands, /\{ spec: 'arrowup', run: vertical\(-1\), repeat: true, when: \(\) => ui\.workspace === 'storyboard' \},/);
-	assert.match(commands, /return \(\) => \(bandView\(\) \? cycleTake\(delta\) : stepShot\(delta \* gridColumns\(\)\)\);/);
+test('scrolling: the grid of the Storyboard is bounded by its cell, so its list scrolls, and the arrows walk its rows or the takes of the band', async () => {
+	shots();
+	const grid = clean(await renderComponent(GRID));
+	assert.match(grid, new RegExp(`^<section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label="${t('storyboard.title')}">`));
+	assert.match(grid, /<div class="min-h-0 flex-1 overflow-auto p-5" role="list"><div class="grid [^"]*" data-story-grid="">/);
+	ui.storyView = 'band';
+	assert.match(clean(await renderComponent(BAND_VIEW)), new RegExp(`^<section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label="${t('storyboard.title')}">`));
+
+	ui.storyView = 'grid';
+	select('clip', 's1');
+	handleKeydown(key('ArrowDown'), null);
+	assert.deepEqual([ui.selection.id, ui.playhead], ['s2', 4.01]);
+	handleKeydown(key('ArrowDown'), null);
+	handleKeydown(key('ArrowUp'), null);
+	assert.equal(ui.selection.id, 's2');
+	handleKeydown(key('ArrowUp'), null);
+	handleKeydown(key('ArrowUp'), null);
+	assert.equal(ui.selection.id, 's1');
+	ui.storyView = 'band';
+	handleKeydown(key('ArrowDown'), null);
+	assert.equal(ui.selection.id, 's1');
+	ui.workspace = 'timeline';
+	ui.playhead = 0;
+	handleKeydown(key('ArrowDown'), null);
+	assert.deepEqual([ui.selection.id, ui.playhead], ['s1', 0]);
 });

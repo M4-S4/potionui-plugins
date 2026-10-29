@@ -1,6 +1,6 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { clean, renderComponent } from './svelte-harness.js';
 import { aggregate, activityStep } from './generation.js';
 import { canLabel, finalsToSync, labelGroups, labelOf, legacyLabel, marksOf, rejectedCount, relabel, releasedLabel, toggledLabel, visibleTakes } from './labels.js';
 import {
@@ -29,8 +29,18 @@ import {
 } from './shots.js';
 import { migrate } from './starter.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const take = (id, extra = {}) => ({ id, shotId: 's1', status: 'done', url: `/v/${id}.mp4`, label: 'draft', ...extra });
+
+const { doc, ui, act, undo, dispose } = await import('./state.svelte.js');
+const { project, bindClient } = await import('./project.svelte.js');
+const { estimateRequest, startGeneration, startProduction } = await import('./production.svelte.js');
+const { setTakes, takeStore } = await import('./takes.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+after(() => {
+	dispose();
+	bindClient(null);
+});
 
 test('labels: the former marks give the label, a stored label wins over them', () => {
 	assert.deepEqual([legacyLabel(true, null), legacyLabel(1, 'reject'), legacyLabel(false, 'keep'), legacyLabel(0, 'reject'), legacyLabel(false, null)], ['final', 'final', 'candidate', 'rejected', 'draft']);
@@ -70,15 +80,6 @@ test('labels: the takes are grouped final, candidates, drafts, rejected, and the
 	assert.equal(rejectedCount(takes), 2);
 });
 
-test('labels: after an undo or a redo the final follows the take the shot plays, and a shot that plays none keeps no final', () => {
-	const takes = [take('a', { label: 'final' }), take('b', { label: 'candidate' }), take('c', { shotId: 's2', label: 'final' }), take('d', { shotId: 's3' }), take('e', { shotId: 's4', status: 'running', url: null })];
-	const clips = [{ id: 's1', take: 'b' }, { id: 's2', take: null }, { id: 's3', take: 'd' }, { id: 's4', take: 'e' }];
-
-	assert.deepEqual(finalsToSync(clips, takes), [['b', 'final'], ['c', 'candidate'], ['d', 'final']]);
-	assert.deepEqual(finalsToSync([{ id: 's1', take: 'a' }], takes), []);
-	assert.match(source('./production.svelte.js'), /const offRestore = onRestore\(syncFinals\);/);
-});
-
 test('drafts: a shot keeps its own number from 1 to 8, else the project number', () => {
 	const engine = { variants: 2 };
 
@@ -100,14 +101,6 @@ test('drafts: the request gives the project number and only the shots that diffe
 	assert.deepEqual(generationCounts(clips, engine, 3), { variants: 3, shot_variants: {} });
 	assert.deepEqual(generationCounts([{ id: 's1', drafts: 8 }], { variants: 9 }), { variants: 8, shot_variants: {} });
 	assert.equal(takeCount(clips, engine), 8);
-});
-
-test('drafts: the page sends the counts of the shots in the generate and estimate requests', () => {
-	const production = source('./production.svelte.js');
-
-	assert.match(production, /if \(Object\.keys\(counts\.shot_variants\)\.length\) body\.shot_variants = counts\.shot_variants;/);
-	assert.match(production, /requestBody\(clips, ui\.production\.quality, generationCounts\(clips, doc\.engine\), option\)/);
-	assert.match(production, /const counts = generationCounts\(clips, doc\.engine, opts\.variants\);/);
 });
 
 test('references: a shot inherits the global references, may exclude some, and keeps its own', () => {
@@ -366,15 +359,98 @@ test('progress: the shot activity averages the takes in flight and names the ste
 	assert.equal(activityStep(aggregate([{ status: 'done' }])), '');
 });
 
-test('progress: the timeline block and the storyboard card show the same shot activity', () => {
-	const timeline = source('../components/timeline/Timeline.svelte');
-	const storyboard = source('../components/storyboard/StoryboardView.svelte');
+const GRID = new URL('../components/storyboard/StoryboardView.svelte', import.meta.url).href;
+const TIMELINE = new URL('../components/timeline/Timeline.svelte', import.meta.url).href;
+const WAN = '01KX47WANVIDEO0000000000TV';
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-	assert.match(timeline, /import \{ takesOf, shotActivity, shotEngineText(, \w+)* \} from '\.\.\/\.\.\/lib\/production\.svelte\.js';/);
-	assert.match(timeline, /\{@const activity = shotActivity\(c\.id\)\}/);
-	assert.match(timeline, /\{#if activity\.state === 'running'\}/);
-	for (const page of [timeline, storyboard]) {
-		assert.match(page, /\{@const waiting = (busy|activity\.state === 'running') && !activity\.running \? shotWaitText\(c\.id\) : ''\}/);
-		assert.match(page, /activityStep\(activity\) \|\| \(activity\.running \? t\('generation\.state\.running'\) : waiting \|\| t\('lib\.status\.queued'\)\)/);
-	}
+function scene(clips) {
+	project.id = 'p1';
+	project.version = 1;
+	project.status = 'saved';
+	ui.me = { engines: [{ id: 'native', kind: 'local', name: 'Local' }], presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }] };
+	Object.assign(ui, { workspace: 'storyboard', storyView: 'grid', selection: null, picked: [], dirty: false, modal: null, menuOpen: null, toasts: [], pxPerSec: 60 });
+	Object.assign(ui.production, { target: 'sequence', quality: 'draft', state: 'ready', progress: 0, running: 0, step: '', lastCount: 0, startedAt: null, lastSeconds: null, failed: 0, failedVariant: null, failedTake: null });
+	doc.engine = { backend: 'native', preset: WAN, model: null, variants: 2 };
+	doc.direction.univers = 'A harbour at dawn.';
+	doc.clips = clips.map((clip, i) => ({ start: i * 4, dur: 4, label: `Shot ${i + 1}`, stage: 'todo', take: null, assetId: null, ...clip }));
+	doc.prompts = doc.clips.map((c, i) => ({ id: `p${i + 1}`, shotId: c.id, start: c.start, dur: 4, strength: 75, text: `Shot ${i + 1} at dawn.` }));
+	doc.frames = [];
+}
+
+test('labels: after an undo or a redo the final follows the take the shot plays, and a shot that plays none keeps no final', async () => {
+	const takes = [take('a', { label: 'final' }), take('b', { label: 'candidate' }), take('c', { shotId: 's2', label: 'final' }), take('d', { shotId: 's3' }), take('e', { shotId: 's4', status: 'running', url: null })];
+	const clips = [{ id: 's1', take: 'b' }, { id: 's2', take: null }, { id: 's3', take: 'd' }, { id: 's4', take: 'e' }];
+
+	assert.deepEqual(finalsToSync(clips, takes), [['b', 'final'], ['c', 'candidate'], ['d', 'final']]);
+	assert.deepEqual(finalsToSync([{ id: 's1', take: 'a' }], takes), []);
+
+	scene([{ id: 's1', take: 'b', assetId: 'gen-b', stage: 'draft' }]);
+	const sent = [];
+	bindClient({
+		async labelTake(projectId, takeId, label) {
+			sent.push([projectId, takeId, label]);
+			return { ok: true, data: { ...takeStore.list.find((x) => x.id === takeId), ...marksOf(label) } };
+		}
+	});
+	const stop = startProduction();
+	setTakes('p1', [take('a', { label: 'final' }), take('b', { label: 'candidate' })]);
+	act(() => (doc.clips[0].label = 'Shot 1 bis'));
+	assert.deepEqual(sent, []);
+	undo();
+	await settle();
+	assert.deepEqual(sent, [['p1', 'b', 'final']]);
+	assert.deepEqual(takeStore.list.map(labelOf), ['candidate', 'final']);
+	stop();
+	bindClient(null);
+});
+
+test('drafts: the page sends the counts of the shots in the generate and estimate requests', async () => {
+	scene([{ id: 's1', drafts: 3 }, { id: 's2' }, { id: 's3', drafts: 1 }]);
+	const sent = [];
+	bindClient({
+		async saveProject(id, next, version) {
+			return { ok: true, data: { version: version + 1, updatedAt: '2026-10-29T10:00:00Z' } };
+		},
+		async generate(id, body) {
+			sent.push(body);
+			return { ok: true, data: [] };
+		}
+	});
+
+	const request = estimateRequest();
+	assert.deepEqual([request.body.shots, request.body.variants, request.body.shot_variants], [['s1', 's2', 's3'], 2, { s1: 3, s3: 1 }]);
+
+	await startGeneration();
+	await startGeneration({ variants: 4 });
+	assert.deepEqual(sent.map((body) => [body.shots, body.variants, body.shot_variants]), [[['s1', 's2', 's3'], 2, { s1: 3, s3: 1 }], [['s1', 's2', 's3'], 4, undefined]]);
+	assert.ok(!('shot_variants' in sent[1]));
+	bindClient(null);
+});
+
+test('progress: the timeline block and the storyboard card show the same shot activity', async () => {
+	scene([{ id: 's1' }, { id: 's2' }, { id: 's3' }]);
+	const flying = (id, shotId, extra = {}) => ({ id, shotId, status: 'queued', label: 'draft', quality: 'draft', variant: 'A', url: null, generationId: null, progress: 0, createdAt: '2026-10-29T10:00:00Z', ...extra });
+	setTakes('p1', [flying('r1', 's1', { status: 'running', generationId: 'g1', progress: 40, step: 'Sampling' }), flying('q1', 's1', { variant: 'B' }), flying('q2', 's2'), take('d1', { shotId: 's3' })]);
+	assert.deepEqual(doc.clips.map((c) => activityStep(aggregate(takeStore.list.filter((x) => x.shotId === c.id)))), ['Sampling', '', '']);
+
+	const grid = clean(await renderComponent(GRID));
+	const cards = grid.split('data-story-shot="').slice(1);
+	const gridActivity = cards.map((card) => {
+		const text = card.match(/<span class="max-w-\[90%\] truncate text-xs text-white"[^>]*>([^<]*)<\/span>/);
+		const bar = card.match(/role="progressbar"[^>]*aria-valuemax="100"( aria-valuenow="(\d+)")?/);
+		return [card.slice(0, card.indexOf('"')), text ? text[1] : null, bar ? (bar[2] ? Number(bar[2]) : null) : undefined];
+	});
+
+	const timeline = clean(await renderComponent(TIMELINE));
+	const blocks = timeline.split('<div class="vp-touch-none group absolute bottom-1 top-1 ').slice(1);
+	const timelineActivity = blocks.map((block) => {
+		const name = block.match(/aria-label="Shot ([^"]*?), /);
+		const text = block.match(/<span class="min-w-0 truncate">([^<]*)<\/span>/);
+		const bar = block.match(/role="progressbar"[^>]*aria-valuemax="100"( aria-valuenow="(\d+)")?/);
+		return [doc.clips.find((c) => c.label === name[1]).id, text ? text[1] : null, bar ? (bar[2] ? Number(bar[2]) : null) : undefined];
+	});
+
+	assert.deepEqual(gridActivity, [['s1', 'Sampling', 20], ['s2', t('lib.status.queued'), null], ['s3', null, undefined]]);
+	assert.deepEqual(timelineActivity, gridActivity);
 });

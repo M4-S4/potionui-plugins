@@ -1,15 +1,34 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { clean, renderComponent, textOf } from './svelte-harness.js';
+import enViewer from '../i18n/en/viewer.json' with { type: 'json' };
+import frViewer from '../i18n/fr/viewer.json' with { type: 'json' };
+import enStoryboard from '../i18n/en/storyboard.json' with { type: 'json' };
+import frStoryboard from '../i18n/fr/storyboard.json' with { type: 'json' };
 import { placedOn, seamShots, shownShots } from './monitor.js';
+import { lutOf } from './match.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const viewerJson = (locale) => JSON.parse(source(`../i18n/${locale}/viewer.json`));
 const shot = (id, start, extra = {}) => ({ id, start, dur: 4, take: null, assetId: null, ...extra });
 const clips = [shot('s1', 0, { take: 't1', assetId: 'gen-t1' }), shot('s2', 4, { take: 't2', assetId: 'gen-t2' }), shot('s3', 8, { assetId: 'a3' })];
 const takes = { t1: { id: 't1', shotId: 's1' }, t1b: { id: 't1b', shotId: 's1' }, t2: { id: 't2', shotId: 's2' } };
 const find = { take: (id) => takes[id] ?? null, asset: (id) => (id === 'a3' ? { id } : null) };
 const view = (extra = {}) => ({ clips, playhead: 1, ...extra });
+
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { clipFilter, colorPresetLabel, colorPresets } = await import('./look.js');
+const { project } = await import('./project.svelte.js');
+const { setTakes } = await import('./takes.svelte.js');
+const { showShot } = await import('./monitor.svelte.js');
+const { clearMatch } = await import('./match.svelte.js');
+const { matchToPrevious } = await import('./continuity.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+globalThis.Image = class {};
+
+after(() => {
+	dispose();
+	delete globalThis.Image;
+});
 
 test('monitor: a take is placed on its shot only while the shot plays it, with its own media', () => {
 	assert.equal(placedOn(clips, takes.t1), clips[0]);
@@ -51,76 +70,165 @@ test('monitor: the seam of the band shows the shot and the one before it, over a
 	assert.deepEqual(shownShots(view({ seam: 's3', preview: { kind: 'result', id: 't1' }, compare: ['t1', 't2'] }), find), ['s2', 's3']);
 });
 
-test('monitor: the viewer grades the placed take of a preview and of each side of a comparison, filter and LUT, and leaves the other takes and the media raw', () => {
-	const viewer = source('../components/viewer/Viewer.svelte');
-	assert.match(viewer, /const resultShot = \$derived\(previewResult \? placedOn\(doc\.clips, previewResult\) : null\);/);
-	assert.match(viewer, /const resultLut = \$derived\(resultShot \? lutOf\(resultShot\) : null\);/);
-	assert.match(viewer, /\{#key Boolean\(resultLut\)\}\n\t+<video\n\t+bind:this=\{resultVideo\}/);
-	assert.match(viewer, /controls=\{!resultLut\}\n\t+autoplay=\{Boolean\(resultLut\)\}\n\t+loop=\{Boolean\(resultLut\)\}/);
-	assert.match(viewer, /style:filter=\{resultShot \? clipFilter\(resultShot\) : null\}/);
-	assert.match(viewer, /\{#if resultLut && resultVideo\}<MatchCanvas source=\{resultVideo\} lut=\{resultLut\} filter=\{clipFilter\(resultShot\)\} cover=\{resultFit !== BARS\} \/>\{\/if\}/);
-	assert.match(viewer, /\{#each compareRes as res \(res\.id\)\}\n\t+\{@const shot = placedOn\(doc\.clips, res\)\}\n\t+\{@const look = shot \? lutOf\(shot\) : null\}/);
-	assert.match(viewer, /bind:this=\{sides\[res\.id\]\}/);
-	assert.match(viewer, /style:filter=\{shot \? clipFilter\(shot\) : null\}/);
-	assert.match(viewer, /\{#if look && sides\[res\.id\]\}<MatchCanvas source=\{sides\[res\.id\]\} lut=\{look\} filter=\{clipFilter\(shot\)\} \/>\{\/if\}/);
-	assert.match(viewer, /const graded = \(shot\) => Boolean\(shot\) && \(clipFilter\(shot\) !== 'none' \|\| Boolean\(lutOf\(shot\)\)\);/);
-	assert.match(viewer, /\{takeLabel\(res\)\}\{#if graded\(shot\)\} <span class="text-white\/60">\{t\('viewer\.graded'\)\}<\/span>\{\/if\}/);
-	assert.match(viewer, /\{t\('viewer\.outOfCut'\)\}\{#if graded\(resultShot\)\} \{t\('viewer\.graded'\)\}\{\/if\}/);
-	const media = viewer.slice(viewer.indexOf('{:else if previewAsset}'), viewer.indexOf('{:else if clip && !a}'));
-	assert.ok(media.length > 0);
-	assert.doesNotMatch(media, /filter|MatchCanvas/);
-	assert.equal(viewerJson('fr').graded, '· étalonnage du plan');
-	assert.equal(viewerJson('en').graded, '· shot grade');
+const VIEWER = new URL('../components/viewer/Viewer.svelte', import.meta.url).href;
+const BAND_MONITOR = new URL('../components/storyboard/BandMonitor.svelte', import.meta.url).href;
+const MATCH_CANVAS = new URL('../components/viewer/MatchCanvas.svelte', import.meta.url).href;
+const COLOR_CONTROLS = new URL('../components/inspector/ColorControls.svelte', import.meta.url).href;
+const COLOR_SECTION = new URL('../components/inspector/ColorSection.svelte', import.meta.url).href;
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const GRADED = { exposure: 0.3, contrast: 110, saturation: 90, temperature: 20, preset: 'Lumière dorée' };
+const RAW = { exposure: 0, contrast: 100, saturation: 100, temperature: 0, preset: 'Original' };
+const MATCH = { anchor: 'reference', anchorId: 'r1', assetId: 'gen-t1', strength: 80, source: [50, 0, 0, 10, 5, 5], target: [60, 5, -5, 12, 6, 6] };
+const done = (id, shotId, extra = {}) => ({ id, shotId, status: 'done', label: 'draft', quality: 'draft', variant: 'A', url: `/${id}.mp4`, thumbUrl: `/${id}.jpg`, createdAt: `2026-10-29T10:0${id.slice(-1)}:00Z`, ...extra });
+const videoTags = (html) => [...clean(html).matchAll(/<video [^>]*>/g)].map((m) => m[0]);
+
+function scene() {
+	project.id = 'p1';
+	Object.assign(ui, { workspace: 'timeline', preview: null, compare: null, seamCompare: null, selection: null, picked: [], playhead: 1, reviewMonitor: false, toasts: [] });
+	doc.clips = [
+		{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'draft', take: 't1', assetId: 'gen-t1', srcIn: 0, ...GRADED, match: { ...MATCH } },
+		{ id: 's2', start: 4, dur: 4, label: 'Two', stage: 'draft', take: 't2', assetId: 'gen-t2', srcIn: 0, ...RAW },
+		{ id: 's3', start: 8, dur: 4, label: 'Three', stage: 'todo', take: null, assetId: null, srcIn: 0, ...RAW }
+	];
+	doc.assets = [
+		{ id: 'gen-t1', kind: 'video', name: 'Take 1', src: null, origin: { kind: 'history', generationId: 'g1', fileId: 'f1' }, srcDur: 4, generated: true, resultId: 't1' },
+		{ id: 'gen-t2', kind: 'video', name: 'Take 2', src: null, origin: { kind: 'history', generationId: 'g2', fileId: 'f2' }, srcDur: 4, generated: true, resultId: 't2' },
+		{ id: 'lib', kind: 'video', name: 'Rushes', src: '/lib.mp4', origin: { kind: 'library', itemId: 'u1' }, srcDur: 6, generated: false },
+		{ id: 'img1', kind: 'image', name: 'End of one', src: '/img1.png', origin: { kind: 'library', itemId: 'u2' }, generated: false },
+		{ id: 'img2', kind: 'image', name: 'Start of two', src: '/img2.png', origin: { kind: 'library', itemId: 'u3' }, generated: false }
+	];
+	doc.frames = [
+		{ id: 'f1', shotId: 's1', role: 'last', time: 4, assetId: 'img1' },
+		{ id: 'f2', shotId: 's2', role: 'first', time: 4, assetId: 'img2' }
+	];
+	setTakes('p1', [done('t1', 's1'), done('t2', 's2'), done('t3', 's1', { variant: 'B' })]);
+	return doc.clips;
+}
+
+function seamScene() {
+	const [graded, raw] = scene();
+	Object.assign(ui, { workspace: 'storyboard', storyView: 'band', selection: { kind: 'clip', id: 's2' }, seamCompare: 's2' });
+	return [graded, raw];
+}
+
+test('monitor: the viewer grades the placed take of a preview and of each side of a comparison, filter and LUT, and leaves the other takes and the media raw', async () => {
+	const [graded, raw] = scene();
+	assert.ok(lutOf(graded) && clipFilter(graded) !== 'none');
+	assert.ok(!lutOf(raw) && clipFilter(raw) === 'none');
+	const gradedFilter = `style="filter: ${escaped(clipFilter(graded))};"`;
+
+	ui.preview = { kind: 'result', id: 't1' };
+	let html = clean(await renderComponent(VIEWER));
+	let [tag] = videoTags(html);
+	assert.match(tag, new RegExp(gradedFilter));
+	assert.match(tag, /autoplay=""/);
+	assert.match(tag, /loop=""/);
+	assert.doesNotMatch(tag, /controls/);
+	assert.match(textOf(html), new RegExp(`${escaped(t('viewer.outOfCut'))}\\s*${escaped(t('viewer.graded'))}`));
+
+	ui.preview = { kind: 'result', id: 't3' };
+	html = clean(await renderComponent(VIEWER));
+	[tag] = videoTags(html);
+	assert.match(tag, /controls=""/);
+	assert.doesNotMatch(tag, /style="filter|autoplay|loop/);
+	assert.ok(textOf(html).includes(t('viewer.outOfCut')) && !textOf(html).includes(t('viewer.graded')));
+
+	ui.preview = { kind: 'result', id: 't2' };
+	html = clean(await renderComponent(VIEWER));
+	[tag] = videoTags(html);
+	assert.match(tag, /controls=""/);
+	assert.match(tag, /style="filter: none;"/);
+	assert.ok(!textOf(html).includes(t('viewer.graded')));
+
+	ui.preview = null;
+	ui.compare = ['t1', 't2'];
+	html = clean(await renderComponent(VIEWER));
+	const sides = videoTags(html);
+	assert.equal(sides.length, 2);
+	assert.match(sides[0], new RegExp(gradedFilter));
+	assert.match(sides[1], /style="filter: none;"/);
+	assert.match(html, new RegExp(`One · Draft A<span class="text-white/60">${escaped(t('viewer.graded'))}</span></span>`));
+	assert.match(html, /Two · Draft A<\/span>/);
+
+	ui.compare = null;
+	ui.preview = { kind: 'asset', id: 'lib' };
+	html = clean(await renderComponent(VIEWER));
+	[tag] = videoTags(html);
+	assert.match(tag, /src="\/lib\.mp4"[^>]*controls=""/);
+	assert.doesNotMatch(tag, /style=/);
+	assert.ok(textOf(html).includes(t('viewer.sourceMedia')) && !textOf(html).includes(t('viewer.graded')));
+	assert.equal(frViewer.graded, '· étalonnage du plan');
+	assert.equal(enViewer.graded, '· shot grade');
 });
 
-test('monitor: the seam of the band and its side thumbnails show each image through the grade of its own shot', () => {
-	const band = source('../components/storyboard/BandMonitor.svelte');
-	assert.match(band, /\[\[lastSrc, t\('storyboard\.band\.endOf', \{ n: num\(index - 1\) \}\), prev, index - 1\], \[firstSrc, t\('storyboard\.band\.startOf', \{ n: num\(index\) \}\), clip, index\]\] as \[src, caption, shot, at\], k \(caption\)\}\n\t+\{@const look = lutOf\(shot\)\}/);
-	assert.match(band, /<img bind:this=\{stills\[k\]\} \{src\} alt="" class="h-full w-full object-cover" style:filter=\{clipFilter\(shot\)\} \/>/);
-	assert.match(band, /\{#if src && look && stills\[k\]\}<MatchCanvas source=\{stills\[k\]\} lut=\{look\} filter=\{clipFilter\(shot\)\} cover \/>\{\/if\}/);
-	assert.match(band, /\{#if src\}<img \{src\} alt="" class="h-full w-full object-cover" style:filter=\{clipFilter\(shot\)\} \/>\{\/if\}<\/span>/);
-	const canvas = source('../components/viewer/MatchCanvas.svelte');
-	assert.match(canvas, /let \{ source, lut, filter = 'none', fade = 1, cover = false \} = \$props\(\);/);
-	assert.match(canvas, /class="pointer-events-none absolute inset-0 h-full w-full \{cover \? 'object-cover' : 'object-contain'\}"/);
+test('monitor: the seam of the band shows each still through the grade of its own shot, and the LUT canvas composes the filter, the fade and the fit it is given', async () => {
+	const [graded] = seamScene();
+	const html = clean(await renderComponent(BAND_MONITOR));
+	const stills = [...html.matchAll(/<img src="([^"]*)" alt="" class="h-full w-full object-cover" style="filter: ([^"]*);"/g)].map((m) => [m[1], m[2]]);
+	assert.deepEqual(stills, [['/img1.png', clipFilter(graded)], ['/img2.png', 'none']]);
+	assert.ok(html.includes(t('storyboard.band.endOf', { n: '01' })) && html.includes(t('storyboard.band.startOf', { n: '02' })));
+
+	const covering = clean(await renderComponent(MATCH_CANVAS, { source: null, lut: null, filter: 'sepia(0.08)', fade: 0.5, cover: true }));
+	assert.match(covering, /<canvas class="pointer-events-none absolute inset-0 h-full w-full object-cover" aria-hidden="true" style="filter: sepia\(0\.08\) brightness\(0\.5\); visibility: hidden;">/);
+	const plain = clean(await renderComponent(MATCH_CANVAS, { source: null, lut: null }));
+	assert.match(plain, /object-contain" aria-hidden="true" style="filter: none; visibility: hidden;"/);
+	const faded = clean(await renderComponent(MATCH_CANVAS, { source: null, lut: null, filter: 'none', fade: -1 }));
+	assert.match(faded, /style="filter: brightness\(0\); visibility: hidden;"/);
 });
 
-test('monitor: the seam of the band carries the color controls of both its shots, folded by default, without the button that applies to every shot', () => {
-	const band = source('../components/storyboard/BandMonitor.svelte');
-	assert.match(band, /let grading = \$state\(\[false, false\]\);/);
-	assert.match(band, /const roomy = \$derived\(w >= 1150\);\n\tconst beside = \$derived\(roomy \|\| grading\.some\(Boolean\)\);\n\tconst gradeColumn = \$derived\(roomy \? '240px' : 'minmax\(180px, 200px\)'\);/);
-	assert.match(band, /style:grid-template-columns=\{beside \? `\$\{gradeColumn\} minmax\(0, 300px\) minmax\(0, 300px\) \$\{gradeColumn\}` : 'repeat\(2, minmax\(0, 300px\)\)'\}/);
-	assert.match(band, /style:grid-template-areas=\{beside \? '"grade0 still0 still1 grade1" "grade0 seam seam grade1"' : '"still0 still1" "grade0 grade1" "seam seam"'\}/);
-	assert.match(band, /<div class="relative aspect-video w-full overflow-hidden rounded [^\n]*style:grid-area="still\{k\}">/);
-	assert.match(band, /<div class="min-w-0 \{beside \? 'overflow-y-auto' : ''\}" style:grid-area="grade\{k\}" style:max-height=\{beside \? `\$\{Math\.max\(160, h - 64\)\}px` : null\} data-seam-grade=\{shot\.id\}>/);
-	assert.match(band, /<div class="flex min-w-0" style:grid-area="seam"><SeamPanel \{clip\} title=\{false\} compare=\{false\} \/><\/div>/);
-	assert.match(band, /aria-expanded=\{grading\[k\]\}\n\t+aria-controls="\{id\}-grade-\{k\}"\n\t+onclick=\{\(\) => \(grading\[k\] = !grading\[k\]\)\}/);
-	assert.match(band, /\{t\('storyboard\.band\.grade', \{ n: num\(at\) \}\)\}<\/span>\n\t+<span class="shrink-0 truncate text-fg" style:max-width="50%">\{colorPresetLabel\(shot\.preset\)\}<\/span>/);
-	assert.match(band, /\{#if grading\[k\]\}\n\t+<div id="\{id\}-grade-\{k\}" class="mt-1 space-y-3 rounded-lg border border-line-strong bg-surface-1 p-2\.5">\n\t+<ColorControls clip=\{shot\} compact all=\{false\} \/>/);
-	assert.match(band, /<div class="flex min-h-0 flex-col overflow-auto bg-canvas p-3">\n\t+<div class="m-auto flex w-full flex-col items-center gap-2">/);
-	assert.doesNotMatch(band, /h-\[168px\] w-\[300px\]/);
-	const controls = source('../components/inspector/ColorControls.svelte');
-	assert.match(controls, /let \{ clip, compact = false, all = true \} = \$props\(\);/);
-	assert.match(controls, /<select class="vp-popup min-w-0 flex-1" value=\{clip\.preset\} onchange=\{\(e\) => apply\(e\.currentTarget\.value\)\}>\n\t+\{#if !\(clip\.preset in colorPresets\)\}<option value=\{clip\.preset\} disabled>\{colorPresetLabel\(clip\.preset\)\}<\/option>\{\/if\}/);
-	assert.match(controls, /\{#if !compact\}<div class="vp-section-title">\{t\('inspector\.color\.fine'\)\}<\/div>\{\/if\}/);
-	assert.match(controls, /onclick: \(\) => apply\('Original'\) \}\}>\{t\('inspector\.color\.reset'\)\}<\/HostUi>\n\t+\{#if all\}<HostUi name="Button"[^\n]*onclick: applyAll \}\}>\{t\('inspector\.color\.applyAll'\)\}<\/HostUi>\{\/if\}/);
-	assert.match(source('../components/inspector/ColorSection.svelte'), /\{#key clip\.id\}<MatchSection \{clip\} \/>\{\/key\}\n\n\t<ColorControls \{clip\} \/>\n\{\/if\}/);
-	for (const locale of ['en', 'fr']) assert.match(JSON.parse(source(`../i18n/${locale}/storyboard.json`))['band.grade'], /\{n\}/);
+test('monitor: the seam of the band carries the color controls of both its shots, folded by default, without the button that applies to every shot', async () => {
+	const [graded] = seamScene();
+	const html = clean(await renderComponent(BAND_MONITOR));
+	assert.deepEqual([...html.matchAll(/data-seam-grade="([^"]*)" style="grid-area: (grade\d);"/g)].map((m) => [m[1], m[2]]), [['s1', 'grade0'], ['s2', 'grade1']]);
+	assert.equal((html.match(/aria-expanded="false" aria-controls="[^"]+-grade-\d"/g) ?? []).length, 2);
+	assert.match(html, /grid-template-columns: repeat\(2, minmax\(0, 300px\)\); grid-template-areas: &quot;still0 still1&quot; &quot;grade0 grade1&quot; &quot;seam seam&quot;;/);
+	assert.match(html, new RegExp(`${escaped(t('storyboard.band.grade', { n: '01' }))}</span> <span class="shrink-0 truncate text-fg" style="max-width: 50%;">${escaped(colorPresetLabel(graded.preset))}</span>`));
+	assert.match(html, new RegExp(`${escaped(t('storyboard.band.grade', { n: '02' }))}</span> <span class="shrink-0 truncate text-fg" style="max-width: 50%;">${escaped(colorPresetLabel('Original'))}</span>`));
+	assert.match(html, /<div class="flex min-w-0" style="grid-area: seam;"><div class="flex w-full flex-col gap-2\.5" data-seam-panel="s2">/);
+	assert.doesNotMatch(html, /<select|vp-section-title/);
+	assert.ok(!html.includes(t('inspector.color.applyAll')) && !html.includes(t('inspector.color.reset')));
+	for (const dictionary of [enStoryboard, frStoryboard]) assert.match(dictionary['band.grade'], /\{n\}/);
+
+	const compact = clean(await renderComponent(COLOR_CONTROLS, { clip: { ...graded, preset: 'Weird' }, compact: true, all: false }));
+	assert.match(compact, /<select class="vp-popup min-w-0 flex-1"><option value="Weird" disabled="" selected="">Weird<\/option>/);
+	assert.equal((compact.match(/<option /g) ?? []).length, Object.keys(colorPresets).length + 1);
+	assert.doesNotMatch(compact, /vp-section-title|aria-pressed/);
+	assert.ok(compact.includes(t('inspector.color.reset')) && !compact.includes(t('inspector.color.fine')) && !compact.includes(t('inspector.color.applyAll')));
+
+	const full = clean(await renderComponent(COLOR_CONTROLS, { clip: graded }));
+	assert.equal((full.match(/aria-pressed="true"/g) ?? []).length, 1);
+	assert.equal((full.match(/aria-pressed="false"/g) ?? []).length, Object.keys(colorPresets).length - 1);
+	assert.doesNotMatch(full, /<select/);
+	for (const key of ['inspector.color.presets', 'inspector.color.fine', 'inspector.color.reset', 'inspector.color.applyAll']) assert.ok(full.includes(t(key)), key);
+
+	const section = clean(await renderComponent(COLOR_SECTION, { clip: graded }));
+	for (const key of ['inspector.color.scope', 'inspector.match.title', 'inspector.color.presets', 'inspector.color.applyAll']) assert.ok(section.includes(t(key)), key);
+	doc.assets.push({ id: 'snd', kind: 'audio', name: 'Voice', src: '/voice.wav', origin: { kind: 'library', itemId: 'u4' }, generated: false });
+	const silent = clean(await renderComponent(COLOR_SECTION, { clip: { ...graded, assetId: 'snd' } }));
+	assert.equal(textOf(silent), t('inspector.color.pending'));
 });
 
 test('monitor: every color change of a shot brings that shot to the monitor', () => {
-	const color = source('../components/inspector/ColorControls.svelte');
-	assert.match(color, /function set\(k, v\) \{\n\t\tclip\[k\] = v;\n\t\tshowShot\(clip\);\n\t\}/);
-	assert.match(color, /function apply\(name\) \{\n\t\tact\(\(\) => Object\.assign\(clip, colorPresets\[name\], \{ preset: name \}\)\);\n\t\tshowShot\(clip\);\n\t\}/);
-	assert.match(color, /act\(\(\) => doc\.clips\.forEach\(\(c\) => Object\.assign\(c, p\)\)\);\n\t\tshowShot\(clip\);/);
-	assert.match(source('../components/inspector/ColorSection.svelte'), /onclick=\{\(\) => matchToPrevious\(clip\)\}/);
-	const matching = source('../components/inspector/MatchSection.svelte');
-	assert.match(matching, /function setStrength\(v\) \{\n\t\tclip\.match\.strength = v;\n\t\tshowShot\(clip\);\n\t\}/);
-	assert.match(matching, /format=\{strength\} onchange=\{setStrength\}/);
-	const continuity = source('./continuity.svelte.js');
-	assert.match(continuity, /clip\.preset = 'Raccord';\n\}/);
-	assert.match(continuity, /act\(\(\) => correct\(clip, ca, cb\)\);\n\tshowShot\(clip\);/);
-	assert.match(continuity, /for \(const step of plan\) correct\(step\.clip, step\.from, step\.to\);\n\t\}\);\n\tshowShot\(plan\[0\]\.clip\);/);
-	const lib = source('./match.svelte.js');
-	assert.match(lib, /act\(\(\) => \(live\.match = \{[^\n]+\}\)\);\n\t\tshowShot\(live\);/);
-	assert.match(lib, /act\(\(\) => delete clip\.match\);\n\tshowShot\(clip\);/);
+	const [graded, raw, empty] = scene();
+	Object.assign(ui, { selection: { kind: 'clip', id: 's2' }, playhead: 5, preview: { kind: 'result', id: 't3' } });
+	clearMatch(graded);
+	assert.equal(graded.match, undefined);
+	assert.deepEqual([ui.preview, ui.compare, ui.selection, ui.playhead], [null, null, { kind: 'clip', id: 's1' }, 0.01]);
+
+	Object.assign(ui, { selection: { kind: 'clip', id: 's2' }, playhead: 5, preview: { kind: 'result', id: 't1' } });
+	showShot(graded);
+	assert.deepEqual([ui.preview, ui.selection.id, ui.playhead], [{ kind: 'result', id: 't1' }, 's1', 0.01]);
+
+	Object.assign(ui, { workspace: 'director', directorView: 'review', reviewMonitor: false, compare: ['t1', 't2'], preview: null });
+	showShot(empty);
+	assert.deepEqual([ui.preview, ui.compare, ui.reviewMonitor, ui.selection.id, ui.playhead], [null, null, true, 's3', 8.01]);
+
+	const before = { ...raw };
+	const notes = [];
+	const host = window.__potionui.notifications;
+	host.toast = (level, message) => notes.push([level, message]);
+	matchToPrevious(raw);
+	host.toast = () => {};
+	assert.deepEqual({ ...raw }, before);
+	assert.deepEqual(notes, [['warning', t('lib.continuity.pending')]]);
 });
