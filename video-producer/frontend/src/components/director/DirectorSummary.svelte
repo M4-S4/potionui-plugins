@@ -7,7 +7,7 @@
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { seams, matchToPrevious, seamTip } from '../../lib/continuity.svelte.js';
 	import { currentLooks, lookState, measureLooks } from '../../lib/looks.svelte.js';
-	import { castIssues, percent, pushInIssues } from '../../lib/looks.js';
+	import { castIssues, identityIssues, percent, pushInIssues } from '../../lib/looks.js';
 	import { review, reviewFix, reviewText, seamNames, suggest } from '../../lib/assistant.svelte.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { CHARACTERS, PLACES, cardsOf, labelOf } from '../../lib/bible.js';
@@ -41,6 +41,7 @@
 	const looks = $derived(currentLooks());
 	const lookIssues = $derived(castIssues(looks, doc.clips));
 	const pushIns = $derived(pushInIssues(looks, doc.clips));
+	const faceChanges = $derived(identityIssues(looks, doc.clips));
 	const unmeasured = $derived(looks?.embedder.available ? looks.missing : 0);
 	const failed = $derived(doc.clips.filter((c) => reviewState(takesOf(c)).failed));
 	const checked = $derived(review.current?.projectId === project.id ? review.current : null);
@@ -48,7 +49,7 @@
 	const own = $derived(doc.clips.filter(hasOwnEngine).length);
 	const vrefTracks = $derived(videoTracksOf(doc));
 	const trackChecks = $derived(vrefTracks.length ? trackIssues(doc.clips.map(shotReceptionFor), vrefTracks) : []);
-	const total = $derived(conflicts.length + bibleIssues.length + seamIssues.length + failed.length + lookIssues.length + pushIns.length + trackChecks.length);
+	const total = $derived(conflicts.length + bibleIssues.length + seamIssues.length + failed.length + lookIssues.length + pushIns.length + faceChanges.length + trackChecks.length);
 	const lines = $derived({
 		review: t('panels.director.sum.review', counts),
 		direction: conflicts.length ? t('panels.director.sum.conflicts', { chars, count: conflicts.length }) : t('panels.director.sum.direction', { chars }),
@@ -184,6 +185,14 @@
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" data-look-push-in={item.clip.id} onclick={() => showInReview(item.clip)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
 						<span class="min-w-0 flex-1">{t('panels.director.check.pushIn', { shot: num(item.clip), ratio: formatNumber(item.pushIn, { maximumFractionDigits: 1 }) })}</span>
+					</button>
+				</li>
+			{/each}
+			{#each faceChanges as item (`${item.kind}:${item.clip.id}`)}
+				<li>
+					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" data-look-identity={item.clip.id} onclick={() => showInReview(item.clip)}>
+						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
+						<span class="min-w-0 flex-1">{item.kind === 'seam' ? t('panels.director.check.identitySeam', { shot: num(item.clip), previous: num(item.previous), score: percent(item.score) }) : t('panels.director.check.identity', { shot: num(item.clip), score: percent(item.score) })}</span>
 					</button>
 				</li>
 			{/each}

@@ -31,10 +31,15 @@ PLACE_LOW = 0.55
 FINAL_LOW = 0.80
 DRIFT_LOW = 0.80
 PUSH_IN_HIGH = 1.5
+IDENTITY_LOW = 0.60
 
 FACE_SCALE = 1.8
 MIN_FACE = 32
+FRONTAL_SCORE = 0.9
+FRONTAL_TURN = 0.35
+FRONTAL_EYES = 0.35
 FACES = "faces"
+IDENTITY = "identity"
 FACE = "face"
 WHOLE = "whole"
 CHARACTER = "character"
@@ -193,10 +198,32 @@ def face_detector() -> Dict[str, Any]:
     return {"model": info.get("model"), "available": bool(info.get("available"))}
 
 
-def measure_key(info: Mapping[str, Any], faces: Mapping[str, Any]) -> Optional[str]:
-    """The name a look is measured under: the embedder's slug, marked when the faces are cropped too, so that a look measured without the face detector counts as missing once it is here."""
+def identifier() -> Dict[str, Any]:
+    """The face recognition model of the application, as far as the looks need it: its model file and whether it is there."""
+    try:
+        info = core_bridge.face_identifier()
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not read the face recognition model", exc_info=True)
+        return {"model": None, "available": False}
+    return {"model": info.get("model"), "available": bool(info.get("available"))}
+
+
+def measure_key(info: Mapping[str, Any], faces: Mapping[str, Any], identity: Optional[Mapping[str, Any]] = None) -> Optional[str]:
+    """The name a look is measured under: the embedder's slug, marked when the faces are cropped too and again when they are identified, so that a look measured without the face detector or the face recognition counts as missing once it is here."""
     slug = info.get("slug")
-    return f"{slug}+{FACES}" if slug and faces.get("available") else slug
+    if not slug or not faces.get("available"):
+        return slug
+    return f"{slug}+{FACES}+{IDENTITY}" if identity and identity.get("available") else f"{slug}+{FACES}"
+
+
+def frontal(face: Mapping[str, Any]) -> bool:
+    """True for a face seen from the front, which a face recognition can read: a sure detection, the nose near the middle of the eyes and the eyes far enough apart for the width of the face."""
+    points = face.get("landmarks") or []
+    if len(points) < 3 or float(face.get("score") or 0) < FRONTAL_SCORE or float(face.get("width") or 0) <= 0:
+        return False
+    (right_x, right_y), (left_x, left_y), (nose_x, _) = points[0], points[1], points[2]
+    span = ((left_x - right_x) ** 2 + (left_y - right_y) ** 2) ** 0.5
+    return span > 0 and abs(nose_x - (right_x + left_x) / 2) / span <= FRONTAL_TURN and span / float(face["width"]) >= FRONTAL_EYES
 
 
 def _face_crop(path: Path, box: Mapping[str, float], output: Path) -> Path:
@@ -229,27 +256,38 @@ def follow(followed: Optional[Mapping[str, Any]], faces: Sequence[Mapping[str, A
     return best if overlap(followed, best) > 0 else None
 
 
-def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path) -> List[Tuple[Optional[List[float]], Optional[float]]]:
+def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path, identify: bool = False) -> List[Tuple[Optional[List[float]], Optional[float], Optional[List[float]]]]:
     found: List[Optional[List[float]]] = [None] * len(picked)
     heights: List[Optional[float]] = [None] * len(picked)
+    identities: List[Optional[List[float]]] = [None] * len(picked)
     try:
         boxes = core_bridge.detect_faces([str(path) for _, path in picked])
     except FileNotFoundError:
-        return list(zip(found, heights))
+        return list(zip(found, heights, identities))
     crops: List[Tuple[int, Path]] = []
+    readable: List[Tuple[int, str, Any]] = []
     followed: Optional[Mapping[str, Any]] = None
     for index, ((_, path), faces) in enumerate(zip(picked, boxes)):
         face = follow(followed, faces)
         if face is not None:
             followed = face
             heights[index] = round(float(face["height"]), 1)
+            if identify and float(face["height"]) >= MIN_FACE and frontal(face):
+                readable.append((index, str(path), face["landmarks"]))
         large = [face for face in faces if float(face["height"]) >= MIN_FACE]
         if large:
             crops.append((index, _face_crop(Path(path), large[0], folder / f"face-{index:02d}.png")))
     vectors = core_bridge.embed_images([str(path) for _, path in crops]) if crops else []
     for (index, _), vector in zip(crops, vectors):
         found[index] = vector
-    return list(zip(found, heights))
+    if readable:
+        try:
+            read = core_bridge.identify_faces([(path, landmarks) for _, path, landmarks in readable])
+        except FileNotFoundError:
+            read = []
+        for (index, _, _), vector in zip(readable, read):
+            identities[index] = vector
+    return list(zip(found, heights, identities))
 
 
 def _ffmpeg() -> str:
@@ -319,8 +357,8 @@ def _card_images(owner: Any, doc: Mapping[str, Any], card: bible.Card) -> List[T
     return found
 
 
-async def compute(row: Mapping[str, Any], model: str, faces: bool = False) -> None:
-    """Compute one queued look: the images of a take at its sample times, or a stored image, embedded by the image embedder of the application, with faces the best face of each image cropped and embedded too; the look of a take also asks for the images of the bible cards of its shot's cast."""
+async def compute(row: Mapping[str, Any], model: str, faces: bool = False, identity: bool = False) -> None:
+    """Compute one queued look: the images of a take at its sample times, or a stored image, embedded by the image embedder of the application, with faces the best face of each image cropped and embedded too, and with identity the followed face identified where it is seen from the front; the look of a take also asks for the images of the bible cards of its shot's cast."""
     owner = core_bridge.get_user(row.get("user_id")) if row.get("user_id") else None
     if owner is None:
         return _mark(row["key"], FAILED, error="The owner of this media no longer exists.")
@@ -336,14 +374,14 @@ async def compute(row: Mapping[str, Any], model: str, faces: bool = False) -> No
         else:
             picked = await _image_frames(owner, row["source"], folder)
         vectors = await asyncio.to_thread(core_bridge.embed_images, [str(path) for _, path in picked])
-        crops = await asyncio.to_thread(_face_vectors, picked, folder) if faces else [(None, None)] * len(picked)
+        crops = await asyncio.to_thread(_face_vectors, picked, folder, identity) if faces else [(None, None, None)] * len(picked)
     except (chain.ChainError, MediaRefError) as exc:
         return _mark(row["key"], FAILED, error=getattr(exc, "message", None) or str(exc))
     except FileNotFoundError as exc:
         return _mark(row["key"], UNAVAILABLE, error=str(exc))
     finally:
         await asyncio.to_thread(shutil.rmtree, folder, True)
-    _mark(row["key"], DONE, model=model, frames=[[at, pack(vector), pack(face) if face else None, height] for (at, _), vector, (face, height) in zip(picked, vectors, crops)])
+    _mark(row["key"], DONE, model=model, frames=[[at, pack(vector), pack(face) if face else None, height, pack(known) if known else None] for (at, _), vector, (face, height, known) in zip(picked, vectors, crops)])
     if row["kind"] == TAKE:
         from . import projects
 
@@ -375,8 +413,9 @@ async def run_once() -> bool:
         _unavailable_all(f"The weights of {info['model'] or 'the image embedder'} are not on this server.")
         return False
     faces = face_detector()
+    identity = identifier()
     try:
-        await compute(row, measure_key(info, faces), faces["available"])
+        await compute(row, measure_key(info, faces, identity), faces["available"], faces["available"] and identity["available"])
     except Exception as exc:
         logger.warning("[VIDEO-PRODUCER] Could not compute the look of %s", row["key"], exc_info=True)
         _mark(row["key"], FAILED, error=str(exc) or "The look could not be computed.")
@@ -388,7 +427,7 @@ def _current(row: Optional[Mapping[str, Any]], model: Optional[str]) -> bool:
 
 
 def _unsized(row: Optional[Mapping[str, Any]], model: Optional[str]) -> bool:
-    return _current(row, model) and str(model or "").endswith(f"+{FACES}") and any(len(frame) < 4 for frame in row["frames"] or [])
+    return _current(row, model) and f"+{FACES}" in str(model or "") and any(len(frame) < 4 for frame in row["frames"] or [])
 
 
 def _state(row: Optional[Mapping[str, Any]], model: Optional[str]) -> str:
@@ -413,6 +452,22 @@ def push_in(row: Optional[Mapping[str, Any]], model: Optional[str]) -> Optional[
         return None
     heights = [float(frame[3]) for frame in row["frames"] or [] if len(frame) > 3 and frame[3]]
     return round(max(heights) / heights[0], 2) if len(heights) > 1 else None
+
+
+def _identities(row: Mapping[str, Any]) -> List[Tuple[Optional[float], Tuple[float, ...]]]:
+    return [(frame[0], unpack(frame[4])) for frame in row["frames"] or [] if len(frame) > 4 and frame[4]]
+
+
+def identity_drift(row: Optional[Mapping[str, Any]], model: Optional[str]) -> Optional[Dict[str, Any]]:
+    """How much of the first face a take shows from the front is left at its lowest, by face recognition, and when: the cosine of each later frontal image with the first, or None without two such images."""
+    if not _current(row, model):
+        return None
+    known = _identities(row)
+    if len(known) < 2:
+        return None
+    first = known[0][1]
+    at, score = min(((at, cosine(first, vector)) for at, vector in known[1:]), key=lambda item: item[1])
+    return {"score": round(score, 3), "at": at}
 
 
 def _signature(faces: Sequence[Tuple[Optional[float], Tuple[float, ...]]]) -> Optional[Tuple[float, ...]]:
@@ -449,19 +504,28 @@ def _seams(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]], f
             continue
         rows_of = [found.get(take_key(left["id"])), found.get(take_key(right["id"]))]
         states = [_state(row, model) for row in rows_of]
-        score = None
+        score = identity = None
         if states == [DONE, DONE]:
             score = round(cosine(_near(_vectors(rows_of[0]), _cut(before)[1]), _near(_vectors(rows_of[1]), _cut(after)[0])), 3)
+            if _chained(doc, after):
+                identity = _seam_identity(rows_of[0], rows_of[1], _cut(before)[1], _cut(after)[0])
         state = DONE if score is not None else next(s for s in (FAILED, UNAVAILABLE, QUEUED, MISSING) if s in states)
-        seams.append({"shot_id": after["id"], "previous_id": before["id"], "from_take": left["id"], "to_take": right["id"], "score": score, "status": state})
+        seams.append({"shot_id": after["id"], "previous_id": before["id"], "from_take": left["id"], "to_take": right["id"], "score": score, "identity": identity, "status": state})
     return seams
+
+
+def _seam_identity(before: Mapping[str, Any], after: Mapping[str, Any], end: float, start: float) -> Optional[float]:
+    left, right = _identities(before), _identities(after)
+    if not left or not right:
+        return None
+    return round(cosine(_near(left, end), _near(right, start)), 3)
 
 
 def _cards(take_row: Optional[Mapping[str, Any]], images: Sequence[Tuple[str, Dict[str, Any], str]], cards: Sequence[bible.Card], found: Mapping[str, Mapping[str, Any]], model: Optional[str]) -> List[Dict[str, Any]]:
     current = _current(take_row, model)
     frames = _vectors(take_row) if current else []
     faces = _faces(take_row) if current else []
-    cropping = bool(model and model.endswith(f"+{FACES}"))
+    cropping = f"+{FACES}" in str(model or "")
     result = []
     for card in cards:
         kind = PLACE if card.kind == bible.PLACES else CHARACTER
@@ -568,7 +632,8 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
     doc = project["doc"]
     info = embedder()
     faces = face_detector()
-    model = measure_key(info, faces)
+    identity = identifier()
+    model = measure_key(info, faces, identity)
     project_takes = [take for take in takes.list_takes(project["id"]) if take["status"] == "done" and take.get("file_path")]
     candidates = [take for take in takes.list_keyframes(project["id"]) if take["status"] == "done" and take.get("file_path")]
     shots = {take["shot_id"] for take in (*project_takes, *candidates)} | {after["id"] for _, after, _ in chained_pairs(doc, project_takes)}
@@ -594,14 +659,15 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
         characters, place = bible.cast_of(doc, clip) if clip is not None else ([], None)
         row = found.get(take_key(take["id"]))
         cast = [*characters, *([place] if place is not None else [])]
-        return {"take_id": take["id"], "shot_id": take["shot_id"], "status": _state(row, model), "cards": _cards(row, images.get(take["shot_id"], []), cast, found, model), "push_in": push_in(row, model)}
+        return {"take_id": take["id"], "shot_id": take["shot_id"], "status": _state(row, model), "cards": _cards(row, images.get(take["shot_id"], []), cast, found, model), "push_in": push_in(row, model), "identity": identity_drift(row, model)}
 
     takes_out = [measured(take) for take in project_takes]
     states = [_state(found.get(key), model) for key in keys]
     return {
         "embedder": {"model": info["model"], "available": info["available"]},
         "faces": {"model": faces["model"], "available": faces["available"]},
-        "thresholds": {"seam": SEAM_LOW, "cast": CAST_LOW, "face": FACE_LOW, "place": PLACE_LOW, "final": FINAL_LOW, "drift": DRIFT_LOW, "push_in": PUSH_IN_HIGH},
+        "identity": {"model": identity["model"], "available": identity["available"]},
+        "thresholds": {"seam": SEAM_LOW, "cast": CAST_LOW, "face": FACE_LOW, "place": PLACE_LOW, "final": FINAL_LOW, "drift": DRIFT_LOW, "push_in": PUSH_IN_HIGH, "identity": IDENTITY_LOW},
         "seams": _seams(doc, project_takes, found, model),
         "takes": takes_out,
         "candidates": [measured(take) for take in candidates],

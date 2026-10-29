@@ -12,10 +12,17 @@ export const PLACE_LOW = 0.55;
 export const FINAL_LOW = 0.8;
 export const DRIFT_LOW = 0.8;
 export const PUSH_IN_HIGH = 1.5;
+export const IDENTITY_LOW = 0.6;
 const KINDS = ['character', 'place'];
 const METHODS = ['face', 'whole'];
 const share = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null);
 const ratio = (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null);
+const time = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null);
+
+function normalizeIdentity(value) {
+	if (!isObject(value) || score(value.score) === null) return null;
+	return { score: value.score, at: time(value.at) };
+}
 
 function normalizeCard(value) {
 	if (!isObject(value) || !text(value.card_id)) return null;
@@ -24,12 +31,12 @@ function normalizeCard(value) {
 
 function normalizeTakeLook(value) {
 	if (!isObject(value) || !text(value.take_id)) return null;
-	return { takeId: value.take_id, shotId: text(value.shot_id) || null, status: state(value.status), cards: (Array.isArray(value.cards) ? value.cards : []).map(normalizeCard).filter(Boolean), pushIn: ratio(value.push_in) };
+	return { takeId: value.take_id, shotId: text(value.shot_id) || null, status: state(value.status), cards: (Array.isArray(value.cards) ? value.cards : []).map(normalizeCard).filter(Boolean), pushIn: ratio(value.push_in), identity: normalizeIdentity(value.identity) };
 }
 
 function normalizeSeamLook(value) {
 	if (!isObject(value) || !text(value.shot_id)) return null;
-	return { shotId: value.shot_id, previousId: text(value.previous_id) || null, fromTake: text(value.from_take) || null, toTake: text(value.to_take) || null, score: score(value.score), status: state(value.status) };
+	return { shotId: value.shot_id, previousId: text(value.previous_id) || null, fromTake: text(value.from_take) || null, toTake: text(value.to_take) || null, score: score(value.score), identity: score(value.identity), status: state(value.status) };
 }
 
 function normalizeFinal(value) {
@@ -51,10 +58,12 @@ export function normalizeLooks(value) {
 	const data = isObject(value) ? value : {};
 	const embedder = isObject(data.embedder) ? data.embedder : {};
 	const faces = isObject(data.faces) ? data.faces : {};
+	const identity = isObject(data.identity) ? data.identity : {};
 	const thresholds = isObject(data.thresholds) ? data.thresholds : {};
 	return {
 		embedder: { model: text(embedder.model) || null, available: embedder.available === true },
 		faces: { model: text(faces.model) || null, available: faces.available === true },
+		identity: { model: text(identity.model) || null, available: identity.available === true },
 		thresholds: {
 			seam: score(thresholds.seam) ?? SEAM_LOW,
 			cast: score(thresholds.cast) ?? CAST_LOW,
@@ -62,7 +71,8 @@ export function normalizeLooks(value) {
 			place: score(thresholds.place) ?? PLACE_LOW,
 			final: score(thresholds.final) ?? FINAL_LOW,
 			drift: score(thresholds.drift) ?? DRIFT_LOW,
-			pushIn: ratio(thresholds.push_in) ?? PUSH_IN_HIGH
+			pushIn: ratio(thresholds.push_in) ?? PUSH_IN_HIGH,
+			identity: score(thresholds.identity) ?? IDENTITY_LOW
 		},
 		seams: (Array.isArray(data.seams) ? data.seams : []).map(normalizeSeamLook).filter(Boolean),
 		takes: (Array.isArray(data.takes) ? data.takes : []).map(normalizeTakeLook).filter(Boolean),
@@ -135,6 +145,23 @@ export function pushInIssues(looks, clips) {
 	return clips.flatMap((clip) => {
 		const look = clip.take ? takeLook(looks, clip.take) : null;
 		return pushedIn(looks, look) ? [{ clip, takeId: look.takeId, pushIn: look.pushIn }] : [];
+	});
+}
+
+export const faceChanged = (looks, look) => Boolean(looks) && look?.status === 'done' && look.identity !== null && look.identity.score < looks.thresholds.identity;
+
+export const seamFaceChanged = (looks, seam) => Boolean(looks) && seam?.status === 'done' && seam.identity !== null && seam.identity < looks.thresholds.identity;
+
+export function identityIssues(looks, clips) {
+	if (!looks) return [];
+	return clips.flatMap((clip, index) => {
+		const look = clip.take ? takeLook(looks, clip.take) : null;
+		const previous = index ? clips[index - 1] : null;
+		const seam = previous ? seamLook(looks, previous, clip) : null;
+		return [
+			...(faceChanged(looks, look) ? [{ kind: 'take', clip, takeId: look.takeId, score: look.identity.score, at: look.identity.at }] : []),
+			...(seamFaceChanged(looks, seam) ? [{ kind: 'seam', clip, previous, takeId: clip.take, score: seam.identity }] : [])
+		];
 	});
 }
 

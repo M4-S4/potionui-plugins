@@ -346,6 +346,88 @@ def test_a_take_measured_with_faces_before_the_heights_were_kept_is_measured_aga
     assert after == {first["id"]: "queued", second["id"]: "done"}
 
 
+GRAY = (128, 128, 128)
+DARK = (10, 10, 10)
+FRONT = {"x": 18.0, "y": 6.0, "width": 20.0, "height": 32.0, "score": 0.93, "landmarks": [[22.0, 12.0], [34.0, 12.0], [28.0, 16.0], [24.0, 20.0], [32.0, 20.0]]}
+PROFILE = {**FRONT, "landmarks": [[22.0, 12.0], [34.0, 12.0], [35.0, 16.0], [24.0, 20.0], [32.0, 20.0]]}
+
+
+def _with_identity(core):
+    core.faces["available"] = True
+    core.identity["available"] = True
+    core.face_boxes[GRAY] = [FRONT]
+    core.face_boxes[DARK] = [PROFILE]
+    core.identities.update({RED: [1.0, 0.0], GREEN: [0.6, 0.8], BLUE: [0.0, 1.0]})
+
+
+def test_a_look_is_measured_under_the_faces_and_the_face_recognition_it_had():
+    info = {"slug": "local-siglip"}
+
+    assert looks.measure_key(info, {"available": False}, {"available": True}) == "local-siglip"
+    assert looks.measure_key(info, {"available": True}) == "local-siglip+faces"
+    assert looks.measure_key(info, {"available": True}, {"available": False}) == "local-siglip+faces"
+    assert looks.measure_key(info, {"available": True}, {"available": True}) == "local-siglip+faces+identity"
+
+
+def test_a_face_counts_as_seen_from_the_front_with_a_sure_detection_its_nose_between_its_eyes_and_its_eyes_apart():
+    assert looks.frontal(FRONT) is True
+    assert looks.frontal(PROFILE) is False
+    assert looks.frontal({**FRONT, "score": 0.8}) is False
+    assert looks.frontal({**FRONT, "width": 40.0}) is False
+    assert looks.frontal({**FRONT, "landmarks": []}) is False
+
+
+def test_with_the_face_recognition_a_take_says_how_much_of_its_first_frontal_face_is_left_and_when(core, make_project, painted):
+    project, _, second = _placed(make_project, core)
+    painted.takes[second["id"]] = [(0.0, GRAY, RED), (1.0, GRAY, GREEN), (2.0, DARK, BLUE), (3.0, GRAY, BLUE)]
+    _with_identity(core)
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    report = _report(core, project)
+
+    row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
+    assert row["model"] == "local-google-siglip-base-patch16-224+faces+identity"
+    assert [frame[4] is not None for frame in row["frames"]] == [True, True, False, True]
+    assert next(item for item in report["takes"] if item["take_id"] == second["id"])["identity"] == {"score": 0.0, "at": 3.0}
+    assert report["identity"] == {"model": "glintr100.onnx", "available": True}
+    assert report["thresholds"]["identity"] == looks.IDENTITY_LOW
+
+
+@pytest.mark.parametrize("chained, expected", [(True, 0.6), (False, None)])
+def test_a_chained_seam_compares_the_last_face_of_the_first_take_with_the_first_face_of_the_second(core, make_project, painted, chained, expected):
+    project, first, second = _placed(make_project, core)
+    stored = projects.get_project(project["id"])
+    doc = stored["doc"]
+    doc["clips"][1]["firstFromPrevious"] = chained
+    projects.save_project(project["id"], doc, stored["version"])
+    painted.takes[first["id"]] = [(0.0, GRAY, BLUE), (4.0, GRAY, RED)]
+    painted.takes[second["id"]] = [(0.0, GRAY, GREEN), (4.0, GRAY, BLUE)]
+    _with_identity(core)
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    (seam,) = _report(core, project)["seams"]
+
+    assert seam["identity"] == expected
+
+
+def test_a_look_measured_before_the_face_recognition_counts_as_missing_once_it_is_here(core, make_project, painted):
+    project, first, _ = _placed(make_project, core)
+    painted.takes[first["id"]] = [(0.0, GRAY, RED)]
+    core.faces["available"] = True
+    core.face_boxes[GRAY] = [FRONT]
+    looks.queue_take(first)
+    assert _run() is True
+    assert next(item for item in _report(core, project)["takes"] if item["take_id"] == first["id"])["status"] == "done"
+
+    core.identity["available"] = True
+
+    assert next(item for item in _report(core, project)["takes"] if item["take_id"] == first["id"])["status"] == "missing"
+
+
 def test_a_look_measured_before_the_face_detector_counts_as_missing_once_it_is_here(core, make_project, frames):
     project, first, _ = _placed(make_project, core)
     frames.takes[first["id"]] = [(0.0, RED)]
