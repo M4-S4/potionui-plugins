@@ -211,6 +211,24 @@ def _face_crop(path: Path, box: Mapping[str, float], output: Path) -> Path:
     return output
 
 
+def overlap(a: Mapping[str, Any], b: Mapping[str, Any]) -> float:
+    """The share of the smaller of two face boxes that the other covers, 0 when they do not meet."""
+    width = min(float(a["x"]) + float(a["width"]), float(b["x"]) + float(b["width"])) - max(float(a["x"]), float(b["x"]))
+    height = min(float(a["y"]) + float(a["height"]), float(b["y"]) + float(b["height"])) - max(float(a["y"]), float(b["y"]))
+    smaller = min(float(a["width"]) * float(a["height"]), float(b["width"]) * float(b["height"]))
+    return width * height / smaller if width > 0 and height > 0 and smaller > 0 else 0.0
+
+
+def follow(followed: Optional[Mapping[str, Any]], faces: Sequence[Mapping[str, Any]]) -> Optional[Mapping[str, Any]]:
+    """The face of an image that goes on with the one followed so far: the best face when none is followed yet, else the face whose box covers most of it, or None when no face meets it."""
+    if not faces:
+        return None
+    if followed is None:
+        return faces[0]
+    best = max(faces, key=lambda face: overlap(followed, face))
+    return best if overlap(followed, best) > 0 else None
+
+
 def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path) -> List[Tuple[Optional[List[float]], Optional[float]]]:
     found: List[Optional[List[float]]] = [None] * len(picked)
     heights: List[Optional[float]] = [None] * len(picked)
@@ -219,9 +237,12 @@ def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path) -> List[Tupl
     except FileNotFoundError:
         return list(zip(found, heights))
     crops: List[Tuple[int, Path]] = []
+    followed: Optional[Mapping[str, Any]] = None
     for index, ((_, path), faces) in enumerate(zip(picked, boxes)):
-        if faces:
-            heights[index] = round(float(faces[0]["height"]), 1)
+        face = follow(followed, faces)
+        if face is not None:
+            followed = face
+            heights[index] = round(float(face["height"]), 1)
         large = [face for face in faces if float(face["height"]) >= MIN_FACE]
         if large:
             crops.append((index, _face_crop(Path(path), large[0], folder / f"face-{index:02d}.png")))

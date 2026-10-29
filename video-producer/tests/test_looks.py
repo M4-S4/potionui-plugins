@@ -271,7 +271,7 @@ def test_a_take_without_a_face_falls_back_on_the_whole_image_and_says_none_was_s
     assert marin["score"] > 0.99
 
 
-def test_a_take_keeps_the_height_of_its_best_face_and_says_how_many_times_it_grows(core, make_project, painted):
+def test_a_take_keeps_the_height_of_the_face_it_follows_and_says_how_many_times_it_grows(core, make_project, painted):
     project, _, second = _placed(make_project, core, cast=True)
     painted.takes[second["id"]] = [(0.0, BLUE, RED), (1.0, GREEN, RED), (2.0, RED, None), (3.0, GREEN, RED)]
     painted.images["uploads/marin.png"] = (GREEN, RED)
@@ -289,6 +289,31 @@ def test_a_take_keeps_the_height_of_its_best_face_and_says_how_many_times_it_gro
     assert [frame[2] is not None for frame in row["frames"]] == [False, True, False, True]
     assert next(item for item in report["takes"] if item["take_id"] == second["id"])["push_in"] == 2.5
     assert report["thresholds"]["push_in"] == looks.PUSH_IN_HIGH
+
+
+def test_with_two_people_the_push_in_follows_the_face_of_the_first_image_and_not_the_best_face_of_each(core, make_project, painted):
+    project, first, second = _placed(make_project, core)
+    painted.takes[first["id"]] = [(0.0, RED, None)]
+    painted.takes[second["id"]] = [(0.0, BLUE, None), (1.0, GREEN, None), (2.0, RED, None), (3.0, GREEN, None)]
+    core.faces["available"] = True
+    marin = {"x": 2.0, "y": 4.0, "width": 10.0, "height": 10.0, "score": 0.9}
+    lina = {"x": 40.0, "y": 4.0, "width": 20.0, "height": 20.0, "score": 0.8}
+    core.face_boxes[BLUE] = [marin, lina]
+    core.face_boxes[GREEN] = [{**lina, "x": 38.0, "y": 2.0, "width": 24.0, "height": 24.0, "score": 0.95}, {**marin, "x": 1.0, "y": 3.0, "width": 12.0, "height": 12.0, "score": 0.7}]
+    core.face_boxes[RED] = [{**lina, "x": 38.0, "y": 2.0, "width": 24.0, "height": 24.0}]
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+
+    row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
+    assert [frame[3] for frame in row["frames"]] == [10.0, 12.0, None, 12.0]
+    assert next(item for item in _report(core, project)["takes"] if item["take_id"] == second["id"])["push_in"] == 1.2
+    assert looks.overlap(marin, lina) == 0.0
+    assert looks.overlap(marin, {**marin, "x": 7.0}) == 0.5
+    assert looks.follow(None, [lina, marin]) is lina
+    assert looks.follow(marin, [lina]) is None
+    assert looks.follow(marin, []) is None
 
 
 def test_a_take_says_no_push_in_under_two_images_with_a_face_or_without_its_look(core, make_project, painted):
