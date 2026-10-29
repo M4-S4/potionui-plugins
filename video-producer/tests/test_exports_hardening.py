@@ -420,7 +420,7 @@ def test_an_absurd_duration_is_refused_and_not_a_server_error(quiet, make_projec
     assert response.status_code < 500
 
 
-def test_fractional_times_are_rounded_one_by_one_so_neighbours_can_miss_by_one_frame(make_doc):
+def test_fractional_times_keep_neighbours_frame_for_frame_in_step(make_doc):
     clips = [_shot(index, start=index * 0.333, dur=0.333) for index in range(12)]
     doc = _doc(make_doc, clips)
 
@@ -428,8 +428,8 @@ def test_fractional_times_are_rounded_one_by_one_so_neighbours_can_miss_by_one_f
 
     items = root.findall(".//spine/asset-clip")
     drift = [_frames(b.get("offset")) - _frames(a.get("offset")) - _frames(a.get("duration")) for a, b in zip(items, items[1:])]
-    assert set(drift) == {0, 1}
-    assert max(abs(value) for value in drift) <= 1
+    assert set(drift) == {0}
+    assert sorted({_frames(item.get("duration")) for item in items}) == [8, 9]
 
 
 def test_a_shot_whose_asset_is_missing_is_a_gap_named_after_its_label_or_a_default(make_doc):
