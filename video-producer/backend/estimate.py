@@ -20,7 +20,7 @@ FLOOR_FACTOR = 10.0
 
 
 class OrderError(ValueError):
-    """A body the estimate and generate routes refuse."""
+    """A request body a route refuses as malformed."""
 
 
 @dataclass(frozen=True)

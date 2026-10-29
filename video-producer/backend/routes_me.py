@@ -8,7 +8,7 @@ from .core_bridge import AccountType, User, get_current_active_user
 from .responses import fail, ok
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("plugins.video-producer")
 
 ME_KEYS = ("locale", "last_project_id")
 

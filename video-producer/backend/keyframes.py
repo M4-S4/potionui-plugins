@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from . import bible, core_bridge, director, estimate, formats, generation, limits, models, takes
 from .core_bridge import CLOUD_ENGINE, EDIT_TASK, User
 from .director import ShotPlan, note
+from .estimate import OrderError
 from .generation import Blocked
 
 logger = logging.getLogger("plugins.video-producer")
@@ -98,10 +99,6 @@ TEXT: Dict[str, Dict[str, str]] = {
         "crop": "Le film n'en garde que la partie centrale au format {aspect} : y garder l'action.",
     },
 }
-
-
-class OrderError(ValueError):
-    """A body the start image routes refuse."""
 
 
 @dataclass(frozen=True)
