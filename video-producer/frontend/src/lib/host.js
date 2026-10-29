@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.svelte.js';
 import { hostIcons } from './icons.js';
 
 const FLOORS = { overlay: 1000, toast: 10000, tooltip: 11000 };
@@ -20,7 +21,7 @@ export function toast(level, message, duration) {
 
 export async function confirm(options) {
 	const host = api()?.confirm;
-	if (typeof host === 'function') return Boolean(await host(options));
+	if (typeof host === 'function') return Boolean(await host({ cancelLabel: t('lib.cancel'), ...options }));
 	if (typeof window !== 'undefined' && typeof window.confirm === 'function') return window.confirm(options?.message ?? '');
 	return false;
 }

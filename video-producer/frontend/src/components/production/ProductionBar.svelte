@@ -46,6 +46,7 @@
 	import { shotNumbers } from '../../lib/director.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import { withSendings } from '../../lib/vreftracks.svelte.js';
+	import { viewport } from '../../lib/viewport.svelte.js';
 
 	const p = $derived(ui.production);
 	const ready = $derived(readiness());
@@ -63,6 +64,7 @@
 	const busy = $derived(status === 'running');
 	const blocked = $derived(ready.missing.length > 0);
 	const notes = $derived(blocked ? [...ready.missing, ...ready.warnings] : ready.warnings);
+	const noticeLabel = $derived(notes.length > 1 ? t('production.notices', { count: notes.length, text: notes[0] }) : (notes[0] ?? ''));
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
 	const picked = $derived(pickedClips().length);
 	const byShots = $derived(ui.workspace === 'director' && (picked > 0 || p.target === 'clip'));
@@ -231,7 +233,7 @@
 	}
 </script>
 
-<div class="flex h-11 items-center gap-2 border-b border-line bg-surface-1 px-3" role="region" aria-label={t('production.region')}>
+<div class="flex h-11 items-center gap-2 border-b border-line bg-surface-1 px-3" class:vp-production-wrap={viewport.narrow} role="region" aria-label={t('production.region')}>
 	<HostUi name="SegmentedControl" props={{ items: targets, selected: picked ? 'picked' : p.target, variant: 'toggle', ariaLabel: t('production.target.label'), onSelect: pick }} />
 	<span class="flex shrink-0" use:watch={'scope'}>
 		{#if fit.inline.has('scope')}
@@ -304,7 +306,7 @@
 	</div>
 
 	<div class="sr-only" aria-live="polite">{spoken}</div>
-	<div class="flex shrink-0 items-center gap-2">
+	<div class="flex shrink-0 items-center gap-2" data-vp-actions>
 		{#if busy}
 			<div class="w-44" in:fade={{ duration: ms(120) }}>
 				<div class="flex justify-between gap-2 text-xs">
@@ -322,7 +324,7 @@
 			</HostUi>
 		{/if}
 		{#if notes.length}
-			<InfoTip lines={notes} wrapperClass="flex shrink-0">
+			<InfoTip lines={notes} label={noticeLabel} wrapperClass="flex shrink-0">
 				<span class="vp-notice text-xs text-warning"><Icon name="alert" class="h-3.5 w-3.5 shrink-0" /><span class="vp-notice-text" use:watch={'notice'}>{#if fit.inline.has('notice')}{notes[0]}{/if}</span></span>
 			</InfoTip>
 		{/if}

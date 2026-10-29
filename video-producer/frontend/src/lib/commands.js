@@ -21,6 +21,7 @@ import {
 	addShot,
 	proposeShots,
 	bandView,
+	closeDrawer,
 	secs,
 	openDirector,
 	directorView,
@@ -394,7 +395,7 @@ function escape() {
 	} else if (ui.reviewMonitor) ui.reviewMonitor = false;
 	else if (ui.seamCompare) ui.seamCompare = null;
 	else if (ui.storyOpen && bandView()) ui.storyOpen = false;
-	else select(null);
+	else if (!closeDrawer()) select(null);
 }
 
 function goToShot(next) {

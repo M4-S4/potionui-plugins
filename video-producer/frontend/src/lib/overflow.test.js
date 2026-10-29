@@ -1,0 +1,53 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { shadeOf } from './scrollshade.js';
+
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
+const page = read('../VideoProducerPage.svelte');
+const rule = (selector) => page.match(new RegExp(`\\.vp-root ${selector.replace(/[.[\]()'=>]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+
+test('overflow: a row of pills that scrolls fades the side it hides, and the wheel scrolls it sideways', () => {
+	assert.equal(shadeOf(0, 300, 300), 'none');
+	assert.equal(shadeOf(0, 300, 301), 'none');
+	assert.equal(shadeOf(0, 300, 500), 'end');
+	assert.equal(shadeOf(200, 300, 500), 'start');
+	assert.equal(shadeOf(100, 300, 500), 'both');
+	const action = read('scrollshade.js');
+	assert.match(action, /node\.setAttribute\('data-shade', shadeOf\(node\.scrollLeft, node\.clientWidth, node\.scrollWidth\)\)/);
+	assert.match(action, /if \(node\.scrollWidth <= node\.clientWidth \|\| Math\.abs\(event\.deltaY\) <= Math\.abs\(event\.deltaX\)\) return;\n\t\tnode\.scrollLeft \+= event\.deltaY;\n\t\tevent\.preventDefault\(\);/);
+	assert.match(read('../components/shell/FilterPills.svelte'), /<div class="vp-pills no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto p-1 \{className\}" role="tablist" aria-label=\{label\} use:scrollShade>/);
+	for (const shade of ['end', 'start', 'both']) assert.match(rule(`.vp-pills[data-shade='${shade}']`), /mask-image: linear-gradient\(to right, /, shade);
+});
+
+test('overflow: the menus of the menu bar grow to their longest label on one line, with the shortcut at the right', () => {
+	const menubar = read('../components/shell/MenuBar.svelte');
+	assert.match(menubar, /<div class="vp-menu vp-menu-list top-7 left-0" role="menu"/);
+	assert.match(menubar, /<span class="vp-menu-label flex-1">\{item\.label\}<\/span>\n\t+\{#if item\.key\}<span class="vp-menu-key">\{item\.key\}<\/span>\{\/if\}/);
+	assert.match(rule('.vp-menu.vp-menu-list'), /width: max-content;[\s\S]*max-width: calc\(100vw - 1rem\);/);
+	assert.match(rule('.vp-menu-label'), /white-space: nowrap;/);
+	assert.match(rule('.vp-menu-key'), /white-space: nowrap;/);
+});
+
+test('overflow: the warning of the Production bar keeps its whole text in its tooltip and names itself for a screen reader, with the count of warnings', () => {
+	assert.match(read('../components/shell/InfoTip.svelte'), /aria-label=\{label \|\| undefined\} aria-describedby=\{id\}/);
+	const bar = read('../components/production/ProductionBar.svelte');
+	assert.match(bar, /const noticeLabel = \$derived\(notes\.length > 1 \? t\('production\.notices', \{ count: notes\.length, text: notes\[0\] \}\) : \(notes\[0\] \?\? ''\)\);/);
+	assert.match(bar, /<InfoTip lines=\{notes\} label=\{noticeLabel\} wrapperClass="flex shrink-0">/);
+	assert.match(rule('.vp-notice'), /max-width: 320px;/);
+	for (const locale of ['en', 'fr']) {
+		const production = JSON.parse(read(`../i18n/${locale}/production.json`));
+		assert.match(production['notices.other'], /^\{count\} .*\{text\}$/, locale);
+	}
+});
+
+test('overflow: the seam panel puts the action under the whole text, and the seam popover widens, fits the window and follows its own height', () => {
+	const panel = read('../components/storyboard/SeamPanel.svelte');
+	assert.match(panel, /<div class="min-w-0 flex-1">\n\t+<span class="block text-fg-muted">\{issue\.text\}[\s\S]*<\/span>\n\t+\{#if !issue\.fix \|\| n === firstFix\}<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><SeamFix \{clip\} \{issue\} \/><\/div>\{\/if\}\n\t+<\/div>/);
+	const grid = read('../components/storyboard/StoryboardView.svelte');
+	assert.match(grid, /<div class="vp-menu w-96 overflow-y-auto p-3" style:position="fixed" style:max-width="calc\(100vw - 1rem\)" role="dialog"/);
+	assert.match(grid, /node\.style\.maxHeight = `\$\{window\.innerHeight - 16\}px`;/);
+	assert.match(grid, /const above = a\.top - 6 - r\.height >= 8;/);
+	assert.match(grid, /below \? a\.bottom \+ 6 : above \? a\.top - r\.height - 6 : clamp\(window\.innerHeight - 8 - r\.height, 8, a\.bottom \+ 6\)/);
+	assert.match(grid, /const resized = new ResizeObserver\(place\);\n\t+resized\.observe\(node\);\n\t+window\.addEventListener\('resize', place\);/);
+});

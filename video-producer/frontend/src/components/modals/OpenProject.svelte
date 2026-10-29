@@ -56,13 +56,21 @@
 	}
 
 	async function remove(p) {
-		const ok = await confirm({ title: t('project.delete.title'), message: t('project.delete.message', { name: nameOf(p) }), variant: 'danger', confirmLabel: t('project.delete.confirm') });
+		if (busy) return;
+		const current = p.id === project.id;
+		const next = current ? (projects.find((x) => x.id !== p.id)?.id ?? null) : null;
+		const message = !current ? t('project.delete.message', { name: nameOf(p) }) : next ? t('project.delete.messageCurrent', { name: nameOf(p) }) : t('project.delete.messageLast', { name: nameOf(p) });
+		const ok = await confirm({ title: t('project.delete.title'), message, variant: 'danger', confirmLabel: t('project.delete.confirm') });
 		if (!ok || !alive) return;
-		const result = await deleteProject(p.id);
+		busy = true;
+		const result = await deleteProject(p.id, next);
+		busy = false;
+		if (!alive) return;
 		if (!result.ok) return toast(t('project.toast.deleteFailed'), 'error');
+		toast(t('project.toast.deleted', { name: nameOf(p) }));
+		if (current) return load();
 		projects = projects.filter((x) => x.id !== p.id);
 		if (picked === p.id) picked = project.id;
-		toast(t('project.toast.deleted', { name: nameOf(p) }));
 	}
 
 	onMount(() => {
@@ -99,9 +107,7 @@
 							</span>
 							{#if p.id === project.id}<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('shell.open.current')}</HostUi>{/if}
 						</label>
-						{#if p.id !== project.id}
-							<HostUi name="IconButton" props={{ icon: 'trash', label: t('project.delete.label', { name: nameOf(p) }), tooltip: t('project.delete.title'), size: 'sm', class: 'vp-h7', onclick: () => remove(p) }} />
-						{/if}
+						<HostUi name="IconButton" props={{ icon: 'trash', label: t('project.delete.label', { name: nameOf(p) }), tooltip: t('project.delete.title'), size: 'sm', class: 'vp-h7', disabled: busy, onclick: () => remove(p) }} />
 					</div>
 				{/each}
 			</div>

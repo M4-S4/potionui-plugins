@@ -146,11 +146,25 @@
 		ui.menuOpen = SEAM_MENU + c.id;
 	}
 	function placeSeamMenu(node) {
-		const r = node.getBoundingClientRect();
-		const a = seamAnchor ?? { left: 8, right: 8 + r.width, top: 8, bottom: 8 };
-		const below = a.bottom + 6 + r.height <= window.innerHeight - 8;
-		node.style.left = `${clamp(a.right - r.width, 8, window.innerWidth - r.width - 8)}px`;
-		node.style.top = `${below ? a.bottom + 6 : Math.max(8, a.top - r.height - 6)}px`;
+		const place = () => {
+			node.style.maxHeight = `${window.innerHeight - 16}px`;
+			const r = node.getBoundingClientRect();
+			const a = seamAnchor ?? { left: 8, right: 8 + r.width, top: 8, bottom: 8 };
+			const below = a.bottom + 6 + r.height <= window.innerHeight - 8;
+			const above = a.top - 6 - r.height >= 8;
+			node.style.left = `${clamp(a.right - r.width, 8, window.innerWidth - r.width - 8)}px`;
+			node.style.top = `${below ? a.bottom + 6 : above ? a.top - r.height - 6 : clamp(window.innerHeight - 8 - r.height, 8, a.bottom + 6)}px`;
+		};
+		place();
+		const resized = new ResizeObserver(place);
+		resized.observe(node);
+		window.addEventListener('resize', place);
+		return {
+			destroy() {
+				resized.disconnect();
+				window.removeEventListener('resize', place);
+			}
+		};
 	}
 	function closeSeamMenu() {
 		if (seamClip) ui.menuOpen = null;
@@ -363,7 +377,7 @@
 	</div>
 	{#if seamClip}
 		{#key seamClip.id}
-			<div class="vp-menu w-80 p-3" style:position="fixed" role="dialog" aria-label={t('storyboard.seamIssue')} data-vp-menu use:overlayLayer use:placeSeamMenu>
+			<div class="vp-menu w-96 overflow-y-auto p-3" style:position="fixed" style:max-width="calc(100vw - 1rem)" role="dialog" aria-label={t('storyboard.seamIssue')} data-vp-menu use:overlayLayer use:placeSeamMenu>
 				<SeamPanel clip={seamClip} />
 			</div>
 		{/key}

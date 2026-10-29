@@ -52,12 +52,12 @@
 		if (cadence.state === 'failed') return t('generation.card.cadence.failedTip', { ...cadenceRate, error: cadence.rendition?.errorMessage || '—' });
 		return t('generation.card.cadence.slowTip', cadenceRate);
 	});
-	const engineText = $derived.by(() => {
+	const engineName = $derived.by(() => {
 		const preset = presetById(take.presetId);
 		const model = take.modelId ? (ui.me?.engines ?? []).flatMap((e) => e.models).find((m) => m.id === take.modelId) : null;
-		const name = model?.name ?? (preset ? presetLabel(preset) : '');
-		return [name, take.backendId ? backendName(take.backendId) : ''].filter(Boolean).join(' · ') || '—';
+		return (model?.name ?? (preset ? presetLabel(preset) : '')) || '—';
 	});
+	const backendText = $derived(take.backendId ? backendName(take.backendId) : '');
 
 	function qualityText() {
 		if (take.kind === 'upscale') return t('generation.card.upscale');
@@ -136,13 +136,14 @@
 			</button>
 			<div class="min-w-0 flex-1 space-y-0.5 text-xs leading-4">
 				<div class="flex items-center gap-1.5">
-					<span class="truncate font-medium text-fg">{qualityText()}</span>
+					<span class="truncate font-medium text-fg">{qualityText()}{#if parent}<span class="font-normal text-fg-subtle">{' · ' + t('generation.card.from', { variant: parent.variant })}</span>{/if}</span>
 					{#if take.status !== 'done'}
 						<span class="ml-auto flex shrink-0 items-center gap-1 {tone}"><span class="h-1.5 w-1.5 rounded-full {dot}"></span>{stateText(take.status)}</span>
 					{:else if take.durationS}
 						<span class="vp-tc ml-auto shrink-0 text-fg-subtle">{secs(take.durationS)}</span>
 					{/if}
 				</div>
+				<div class="truncate text-fg-muted" title={[engineName, backendText].filter(Boolean).join(' · ')} data-take-engine>{engineName}</div>
 				<div class="flex min-w-0 items-center gap-1.5">
 					<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[label]}">{t(`generation.label.${label}`)}</span>
 					{#each vrefs as track (track.id)}<span class="{TAG_CLASS} vp-tc shrink-0" title={t('generation.card.refs.chipTip', { track: trackName(track), role: roleLabel(track.role) })} data-take-vref={track.slot}>{vrefLabel(track.slot)}</span>{/each}
@@ -155,10 +156,13 @@
 					{/if}
 					{#if stale}<span class="flex min-w-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="alert" class="h-3 w-3 shrink-0" /><span class="truncate">{t('generation.card.stale')}</span></span>{/if}
 				</div>
-				<div class="truncate text-fg-muted">{modeText()}</div>
-				<div class="truncate text-fg-subtle"><span class="vp-tc">{resolution}</span>{#if framing}<span class="ml-1 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted" title={framing.tip}>{framing.text}</span>{/if}{#if parent}{' · ' + t('generation.card.from', { variant: parent.variant })}{/if}</div>
-				<div class="vp-tc truncate text-fg-subtle">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>
-				<div class="truncate text-fg-subtle" title={engineText}>{engineText}</div>
+				<details class="text-fg-subtle" data-take-details>
+					<summary onclick={(e) => e.stopPropagation()}>{t('generation.card.technical')}</summary>
+					<div class="truncate">{modeText()}</div>
+					<div class="truncate"><span class="vp-tc">{resolution}</span>{#if framing}<span class="ml-1 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted" title={framing.tip}>{framing.text}</span>{/if}</div>
+					<div class="vp-tc truncate">{t('generation.card.seed', { seed: take.seed === null || take.seed === undefined ? '—' : String(take.seed) })}</div>
+					{#if backendText}<div class="truncate" title={backendText}>{backendText}</div>{/if}
+				</details>
 			</div>
 		</div>
 		{#if flying}

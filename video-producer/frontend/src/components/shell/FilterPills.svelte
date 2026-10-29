@@ -1,10 +1,11 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
+	import { scrollShade } from '../../lib/scrollshade.js';
 
 	let { items, value, onselect, label, class: className = '', children } = $props();
 </script>
 
-<div class="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto p-1 {className}" role="tablist" aria-label={label}>
+<div class="vp-pills no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto p-1 {className}" role="tablist" aria-label={label} use:scrollShade>
 	{#each items as item (item.id)}
 		{#if item.tip}
 			<HostUi name="Tooltip" props={{ text: item.tip }}>{@render pill(item)}</HostUi>

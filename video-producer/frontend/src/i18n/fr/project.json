@@ -35,6 +35,8 @@
 	"open.confirm": "Ouvrir",
 	"delete.title": "Supprimer le projet",
 	"delete.message": "« {name} » et ses versions seront supprimés. Cette action est irréversible.",
+	"delete.messageCurrent": "« {name} » est le projet ouvert : il sera supprimé avec ses versions, et le projet précédent s’ouvrira à sa place. Cette action est irréversible.",
+	"delete.messageLast": "« {name} » est le projet ouvert et le seul enregistré : il sera supprimé avec ses versions, et un projet vide le remplacera. Cette action est irréversible.",
 	"delete.confirm": "Supprimer",
 	"delete.label": "Supprimer « {name} »",
 	"versions.title": "Historique des versions",
