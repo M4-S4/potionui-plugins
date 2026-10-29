@@ -1,17 +1,23 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { clean, renderComponent } from './svelte-harness.js';
 import { findShortcut, formatShortcut, matchShortcut, parseShortcut, requiredMods } from './keyboard.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const plugin = join(here, '..', '..', '..');
-const source = readFileSync(join(here, 'commands.js'), 'utf-8');
-const calls = [...source.matchAll(/(?<![\w$.])command\(\s*'([a-z0-9-]+)'/g)];
-const commands = calls.map((call, i) => {
-	const chunk = source.slice(call.index, calls[i + 1]?.index ?? source.length);
-	return { id: call[1], spec: /\bkeys:\s*'([^']+)'/.exec(chunk)?.[1] ?? null, alias: /\balias:\s*'([^']+)'/.exec(chunk)?.[1] ?? null };
+const { ui, dispose } = await import('./state.svelte.js');
+const { allCommands, handleKeydown, pointerShortcuts } = await import('./commands.js');
+const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
+const commands = allCommands.map((c) => ({ id: c.id, spec: c.keys, alias: c.alias, repeat: c.repeat, global: c.global }));
+
+globalThis.document = { body: {}, querySelector: () => null };
+
+after(() => {
+	dispose();
+	delete globalThis.document;
 });
 const bound = commands.filter((c) => c.spec);
 const specs = bound.flatMap((c) => [c.spec, c.alias].filter(Boolean));
@@ -151,23 +157,46 @@ test('shortcuts: every shortcut that is shown fires with exactly its keys and wi
 	assert.ok(!matchShortcut({ key: 'k', ctrlKey: true, metaKey: false, altKey: false, shiftKey: false }, 'mod+k', true));
 });
 
-test('shortcuts: the key handler looks every key up in the table of the commands, with the guards the guides describe', () => {
-	const handler = source.slice(source.indexOf('export function handleKeydown'));
-	assert.match(handler, /findShortcut\(e, keymap, IS_MAC\)/);
-	assert.match(source, /\.\.\.allCommands\.flatMap\(\(c\) =>\n\t\t\[c\.keys, c\.alias\]\.filter\(Boolean\)\.map\(\(spec\) => \(\{ spec, id: c\.id, run: c\.press, global: c\.global, claim: c\.claim, typing: c\.typing, repeat: c\.repeat, single: isSingleKey\(spec\) \}\)\)\n\t\),/);
-	assert.match(source, /get aliasKey\(\) \{\n\t\t\treturn alias \? shortcutLabel\(alias\) : '';\n\t\t\}/);
-	assert.match(readFileSync(join(here, '../components/modals/Modals.svelte'), 'utf-8'), /<kbd class="vp-kbd text-xs">\{c\.key\}<\/kbd>\{#if c\.alias\}<kbd class="vp-kbd text-xs">\{c\.aliasKey\}<\/kbd>\{\/if\}/);
-	assert.match(handler, /if \(hit\.when && !hit\.when\(\)\) return;/);
-	assert.match(handler, /if \(\(target && target !== document\.body && root && !root\.contains\(target\)\) \|\| ui\.hostModal \|\| \(hostOverlayOpen\(\) && !overChat\(e\)\)\) \{/);
-	assert.match(source, /const OVER_CHAT = \['undo', 'redo'\];/);
-	assert.match(handler, /!hit\.global && \(isTypingTarget\(target, e\) \|\| ui\.modal \|\| ui\.paletteOpen\)/);
-	assert.match(handler, /hit\.single && !ui\.singleKeyShortcuts/);
-	assert.match(handler, /e\.repeat && !hit\.repeat/);
-	assert.doesNotMatch(source, /withMod|sidebarCombo|1 \/ 25/);
-	const repeating = commands.filter((c) => new RegExp(`command\\('${c.id}'[^\\n]*repeat: true`).test(source)).map((c) => c.id);
-	assert.deepEqual(repeating, ['undo', 'redo', 'delete']);
-	const global = commands.filter((c) => new RegExp(`command\\('${c.id}'[^\\n]*global: true`).test(source)).map((c) => c.id);
-	assert.deepEqual(global, ['shortcuts', 'palette']);
+test('shortcuts: the key handler looks every key up in the table of the commands, with the guards the guides describe', async () => {
+	assert.deepEqual(commands.filter((c) => c.repeat).map((c) => c.id), ['undo', 'redo', 'delete']);
+	assert.deepEqual(commands.filter((c) => c.global).map((c) => c.id), ['shortcuts', 'palette']);
+	const press = (spec, extra = {}) => {
+		const e = { ...eventFor(spec, false), target: null, repeat: false, prevented: false, preventDefault() { this.prevented = true; }, ...extra };
+		handleKeydown(e, null);
+		return e;
+	};
+	Object.assign(ui, { modal: null, paletteOpen: false, hostModal: false, singleKeyShortcuts: true, workspace: 'mixer', snapping: true, selection: null });
+	press('n');
+	assert.equal(ui.snapping, false);
+	ui.singleKeyShortcuts = false;
+	press('n');
+	assert.equal(ui.snapping, false);
+	ui.singleKeyShortcuts = true;
+	press('n', { target: { tagName: 'INPUT', type: 'text' } });
+	assert.equal(ui.snapping, false);
+	ui.modal = { type: 'about' };
+	press('n');
+	assert.equal(ui.snapping, false);
+	press('mod+k');
+	assert.equal(ui.paletteOpen, true);
+	Object.assign(ui, { paletteOpen: false, modal: null, hostModal: true });
+	assert.equal(press('mod+g').prevented, true);
+	press('n');
+	assert.equal(ui.snapping, false);
+	ui.hostModal = false;
+	assert.deepEqual([press('n', { repeat: true }).prevented, ui.snapping], [true, false]);
+	press('n');
+	assert.equal(ui.snapping, true);
+	assert.equal(press('arrowup').prevented, false);
+	ui.workspace = 'storyboard';
+	assert.equal(press('arrowup').prevented, true);
+	ui.workspace = 'mixer';
+	ui.modal = { type: 'shortcuts' };
+	const html = clean(await renderComponent(MODALS));
+	const redo = allCommands.find((c) => c.id === 'redo');
+	assert.ok(html.includes(`<kbd class="vp-kbd text-xs">${redo.key}</kbd><kbd class="vp-kbd text-xs">${redo.aliasKey}</kbd>`));
+	assert.equal((html.match(/<kbd class="vp-kbd text-xs">/g) ?? []).length, bound.length + bound.filter((c) => c.alias).length + pointerShortcuts().length);
+	ui.modal = null;
 });
 
 function tableOf(file) {

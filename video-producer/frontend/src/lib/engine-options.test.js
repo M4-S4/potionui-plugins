@@ -1,7 +1,7 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { compileModule } from 'svelte/compiler';
+import { hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { MODEL_LIST_LIMIT, coreModels, createClient, normalizeField, normalizePreset } from './api.js';
 import {
 	clampNumber,
@@ -25,8 +25,6 @@ import {
 } from './options.js';
 import { emptyDoc, migrate } from './starter.js';
 import { chainState } from './chain.js';
-
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 async function reactive() {
 	const code = compileModule('export function live(value) { const state = $state(value); return state; }', { generate: 'client', filename: 'live.svelte.js' }).js.code;
@@ -87,6 +85,17 @@ function h3Preset() {
 }
 
 const fieldsOf = (preset) => presetFields(preset);
+
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+const { engineLabel, noteText, openEngineSettings } = await import('./production.svelte.js');
+const DECK = new URL('../components/production/ProductionDeck.svelte', import.meta.url).href;
+const DRAWER = new URL('../components/production/ProductionDrawer.svelte', import.meta.url).href;
+const SUMMARY = new URL('../components/director/DirectorSummary.svelte', import.meta.url).href;
+const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
+const WAN = '01KX47WANVIDEO0000000000TV';
+
+after(() => dispose());
 
 test('options: a preset brings the options of each mode the director runs, its main mode first', () => {
 	const ltx = ltxPreset();
@@ -319,40 +328,37 @@ test('client: the models a field can take come from the PotionUI preset model li
 	assert.equal(refused.ok, false);
 });
 
-test('pages: the engine settings live in the Settings drawer of the production deck and the Edit Engine window, the Director AI summary only points there', () => {
-	const deck = source('../components/production/ProductionDeck.svelte');
-	const drawer = source('../components/production/ProductionDrawer.svelte');
-	for (const page of [deck, drawer]) {
-		assert.match(page, /const profileItems = \$derived\(supportedProfiles\(\)\.map\(\(m\) => \(\{ id: m, label: m \}\)\)\);/);
-		assert.doesNotMatch(page, /disabled: !supported/);
-	}
-	assert.match(drawer, /\{#if rows\.includes\('profile'\)\}/);
-	assert.match(drawer, /\{#if control === 'popup'\}\s*<select class="vp-popup min-w-0" value=\{doc\.direction\.mode\}/);
-	assert.match(drawer, /onSelect: setProfile \}\} \/>/);
-	assert.match(drawer, /\{#if rows\.includes\('margin'\)\}/);
-	assert.match(drawer, /<SizePicker preset=\{engine\.info\} quality="draft" backend=\{engine\.backend\} value=\{chosenSize\(doc, engine\.preset, 'draft'\)\} onselect=\{\(v\) => setEngineSize\(engine\.preset, 'draft', v\)\} variant="field" triggerId=\{ids\.draft\} \/>/);
-	assert.match(drawer, /<SizePicker preset=\{engine\.info\} quality="final" backend=\{engine\.backend\} value=\{chosenSize\(doc, engine\.preset, 'final'\)\} onselect=\{\(v\) => setEngineSize\(engine\.preset, 'final', v\)\} variant="field" triggerId=\{ids\.final\} \/>/);
-	assert.match(drawer, /<DraftsField \{clips\} label=\{false\} disabled=\{!clips\.length\} id=\{ids\.drafts\} \/>/);
-	assert.match(deck, /onSelect: setProjectQuality/);
-	assert.match(drawer, /onclick: \(\) => openEngineSettings\(engine\?\.preset\)/);
-	assert.match(deck, /const moreOpen = \$derived\(ui\.menuOpen === MORE\);/);
-	assert.doesNotMatch(deck, /held|nested|startsWith\('picker:'\)/);
-	assert.match(deck, /class="vp-deck-chip" aria-label=\{folded \? chipFull\.join\(' · '\) : undefined\} aria-expanded=\{ui\.deckDrawer\} aria-haspopup="dialog" onclick=\{toggleDrawer\}/);
-	assert.doesNotMatch(deck, /SizePicker|DraftsField|selectEngine|setReferenceMargin|openEngineSettings/);
-	assert.doesNotMatch(deck, /min-\[1400px\]|fitInline/);
-
-	const summary = source('../components/director/DirectorSummary.svelte');
-	for (const gone of ['selectEngine', 'setProjectQuality', 'DraftsField', 'setReferenceMargin', 'SegmentedControl', 'dockFocus']) assert.doesNotMatch(summary, new RegExp(gone), gone);
-	assert.match(summary, /t\('panels\.director\.sum\.engine', \{ engine: engineLabel\(\), profile: doc\.direction\.mode \}\)/);
-	assert.match(summary, /onclick: \(\) => openEngineSettings\(\)/);
-
-	const production = source('./production.svelte.js');
-	assert.match(production, /ui\.modal = \{ type: 'engine', preset: typeof preset === 'string' && preset \? preset : null \};/);
-	assert.match(production, /code === 'engine_option_invalid'/);
-	assert.match(source('../components/modals/Modals.svelte'), /\{:else if m\?\.type === 'engine'\}\n\t\t<EngineEditor preset=\{m\.preset \?\? null\} \/>/);
-	assert.doesNotMatch(source('./state.svelte.js'), /dockFocus/);
-
-	const editor = source('../components/modals/EngineEditor.svelte');
-	assert.match(editor, /drafts\[chosen\] = cleanOptions\(fields, next\);/);
-	assert.match(editor, /for \(const \[id, kept\] of updates\) setPresetOptions\(doc\.engine, id, kept\);/);
+test('pages: the engine settings live in the Settings drawer of the production deck and the Edit Engine window, the Director AI summary only points there', async () => {
+	ui.me = { engines: [{ id: 'native', kind: 'local', name: 'Local' }], presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA', 'Ref2VA'], resolutions: ['832x480', '1280x720'] }] };
+	doc.engine = { backend: 'native', preset: WAN, model: null };
+	doc.direction.mode = 'FL2VA';
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo' }];
+	const drawer = await renderComponent(DRAWER, { anchor: null, clips: doc.clips, onclose() {} });
+	const profile = hostUis(drawer, 'SegmentedControl').find((props) => props.ariaLabel === t('production.profile.label'));
+	assert.deepEqual([profile.items.map((item) => item.id), profile.selected], [['FL2VA', 'Ref2VA'], 'FL2VA']);
+	for (const key of ['production.drawer.draftSize', 'production.drawer.finalSize', 'production.drawer.drafts']) assert.match(drawer, new RegExp(`<label class="vp-deck-drawer-label" for="[^"]+">${t(key)}</label>`), key);
+	assert.ok(textOf(drawer).includes(t('production.editEngine')));
+	doc.direction.mode = 'Hybrid AV';
+	const popup = await renderComponent(DRAWER, { anchor: null, clips: doc.clips, onclose() {} });
+	assert.ok(popup.includes(`<option value="Hybrid AV" disabled="" selected="">${t('production.drawer.unsupported', { profile: 'Hybrid AV' })}</option>`));
+	assert.equal(hostUis(popup, 'SegmentedControl').some((props) => props.ariaLabel === t('production.profile.label')), false);
+	doc.direction.mode = 'FL2VA';
+	const deck = await renderComponent(DECK);
+	assert.match(deck, /class="vp-deck-chip"[^>]*aria-haspopup="dialog"/);
+	for (const key of ['production.drawer.draftSize', 'production.editEngine']) assert.equal(textOf(deck).includes(t(key)), false, key);
+	const summary = await renderComponent(SUMMARY);
+	assert.ok(textOf(summary).includes(t('panels.director.sum.engine', { engine: engineLabel(), profile: 'FL2VA' })));
+	assert.ok(textOf(summary).includes(t('production.editEngine')));
+	assert.ok(hostUis(summary, 'Button').some((props) => props.variant === 'ghost'));
+	assert.equal(hostUis(summary, 'SegmentedControl').length, 0);
+	assert.equal(textOf(summary).includes(t('production.drawer.draftSize')), false);
+	ui.menuOpen = 'deck-more';
+	openEngineSettings(WAN);
+	assert.deepEqual([ui.modal, ui.menuOpen], [{ type: 'engine', preset: WAN }, null]);
+	openEngineSettings({ preset: WAN });
+	assert.deepEqual(ui.modal, { type: 'engine', preset: null });
+	const modals = await renderComponent(MODALS);
+	assert.ok(textOf(modals).includes(t('modals.engine.title')));
+	ui.modal = null;
+	assert.ok(noteText({ code: 'engine_option_invalid', data: { preset_id: WAN, fields: ['steps'] } }).includes(engineLabel()));
 });

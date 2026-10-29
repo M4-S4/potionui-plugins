@@ -1,6 +1,7 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { renderComponent, textOf } from './svelte-harness.js';
 import { drawGraded, gradePixels } from './grade.js';
 import {
 	LUT_SIZE,
@@ -22,10 +23,20 @@ import {
 } from './match.js';
 
 const fixture = JSON.parse(readFileSync(new URL('../../../tests/fixtures/color_match.json', import.meta.url), 'utf8'));
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const close = (actual, expected, tolerance) => actual.every((v, i) => Math.abs(v - expected[i]) <= tolerance);
 const match = (fields = {}) => ({ anchor: 'keyframe', anchorId: 'f1', assetId: 'a1', strength: 100, source: [50, 0, 0, 20, 8, 8], target: [50, 0, 0, 20, 8, 8], ...fields });
 const image = (colors) => new Uint8ClampedArray(colors.flatMap(([r, g, b, a = 255]) => [r, g, b, a]));
+
+const { doc, dispose } = await import('./state.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+const COLOR_SECTION = new URL('../components/inspector/ColorSection.svelte', import.meta.url).href;
+
+globalThis.Image = class {};
+
+after(() => {
+	dispose();
+	delete globalThis.Image;
+});
 
 test('toLab and fromLab: CIELAB D65 of sRGB, white at L 100, red at its textbook value, and back to the same color', () => {
 	assert.ok(close(toLab([1, 1, 1]), [100, 0, 0], 0.01));
@@ -154,16 +165,22 @@ test('drawGraded with a LUT: drawn without the canvas filter, the LUT first and 
 	assert.deepEqual([...graded].slice(0, 3), [...lifted].slice(0, 3).map((v) => Math.min(255, v * 2)));
 });
 
-test('the viewer and the inspector preview a matched shot through its LUT, never through a CSS filter alone', () => {
-	const viewer = source('../components/viewer/Viewer.svelte');
-	assert.match(viewer, /const lut = \$derived\(mode === 'sequence' && clip \? lutOf\(clip\) : null\);/);
-	assert.match(viewer, /<MatchCanvas source=\{video\} \{lut\}/);
-	assert.match(viewer, /<MatchCanvas source=\{picture\} \{lut\}/);
-	assert.doesNotMatch(viewer, /style:opacity=\{lut/);
-	const canvas = source('../components/viewer/MatchCanvas.svelte');
-	assert.match(canvas, /renderer\.draw\(source, lut\)/);
-	assert.match(canvas, /style:visibility=\{live \? 'visible' : 'hidden'\}/);
-	assert.match(source('../components/inspector/ColorSection.svelte'), /\{#key clip\.id\}<MatchSection \{clip\} \/>\{\/key\}/);
-	assert.match(source('../components/inspector/MatchSection.svelte'), /drawGraded\(g, img, canvas\.width, canvas\.height, \[\], current\)/);
-	assert.match(source('./lutgl.js'), /texImage3D\(gl\.TEXTURE_3D, 0, gl\.RGBA8, lut\.size, lut\.size, lut\.size/);
+test('the inspector previews a matched shot through its LUT, in a matched tile the unmatched shot does not get', async () => {
+	const look = { exposure: 0, contrast: 100, saturation: 100, temperature: 0, preset: 'Original' };
+	doc.assets = [{ id: 'a0', kind: 'image', name: 'Before', src: '/m/a0.png' }, { id: 'a1', kind: 'image', name: 'Still', src: '/m/a1.png' }];
+	doc.frames = [];
+	doc.clips = [
+		{ id: 's0', start: 0, dur: 4, srcIn: 0, assetId: 'a0', label: 'Zero', stage: 'draft', ...look },
+		{ id: 's1', start: 4, dur: 4, srcIn: 0, assetId: 'a1', label: 'One', stage: 'draft', ...look, match: match({ anchor: 'previous', anchorId: null, assetId: 'a1', target: [58, 3, -2, 20, 8, 8] }) }
+	];
+	const matched = doc.clips[1];
+	assert.ok(lutOf(matched));
+	assert.equal(lutOf(doc.clips[0]), null);
+	const section = await renderComponent(COLOR_SECTION, { clip: matched });
+	assert.ok(textOf(section).includes(t('inspector.match.title')));
+	assert.ok(section.includes(`aria-label="${t('inspector.match.matchedTile')}"`));
+	assert.match(section, /<canvas[^>]*aria-label=/);
+	const plain = await renderComponent(COLOR_SECTION, { clip: doc.clips[0] });
+	assert.ok(textOf(plain).includes(t('inspector.match.title')));
+	assert.doesNotMatch(plain, /<canvas/);
 });

@@ -211,6 +211,7 @@ test('emptyDoc: an untitled project with no shot and the four empty lanes', () =
 const { doc, ui, dispose } = await import('./state.svelte.js');
 const { project } = await import('./project.svelte.js');
 const { estimateState, noteText, readiness } = await import('./production.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
 const WAN = '01KX47WANVIDEO0000000000TV';
 
 after(() => dispose());
@@ -251,9 +252,12 @@ test('readiness: an FL2VA shot without a frame warns instead of blocking, so the
 });
 
 test('readiness: a text-only engine that ignores a shot frame warns about that shot in both languages, as a warning rather than a note', () => {
-	const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'production.svelte.js'), 'utf-8');
-	assert.match(source, /code === 'text_only_preset'\) return t\('generation\.warn\.textOnly', \{ shot: shotName\(data\.shot_id\) \}\)/);
-	assert.match(source, /const INFO_WARNINGS = \['time_unknown', 'vram_unknown', 'audio_condition'\];/);
+	productionScene();
+	estimateState.data = { blocks: [], warnings: [{ code: 'text_only_preset', data: { shot_id: 's1' } }, { code: 'time_unknown' }, { code: 'vram_unknown' }, { code: 'audio_condition' }] };
+	const ready = readiness();
+	assert.deepEqual(ready.warnings, [t('generation.warn.textOnly', { shot: 'Opening' })]);
+	assert.deepEqual(ready.notes, [noteText({ code: 'time_unknown' }), noteText({ code: 'vram_unknown' }), noteText({ code: 'audio_condition' })]);
+	estimateState.data = null;
 	assert.equal(dictionaries.en['generation.warn.textOnly'], 'This engine generates from text only: the frames linked to “{shot}” will not be used.');
 	assert.equal(dictionaries.fr['generation.warn.textOnly'], 'Ce moteur génère à partir du texte seul : les frames liées à « {shot} » ne seront pas utilisées.');
 	const missing = [];

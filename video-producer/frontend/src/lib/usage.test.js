@@ -1,11 +1,17 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { hostUis, renderComponent } from './svelte-harness.js';
 import { migrate, newAsset } from './starter.js';
 import { releaseOverrun } from './shots.js';
 import { USE_KINDS, assetUses, removeAsset, useCount } from './usage.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { deleteAsset } = await import('./assets.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+const MEDIA_BROWSER = new URL('../components/panels/MediaBrowser.svelte', import.meta.url).href;
+const USE_KEYS = { shots: 'lib.media.use.shots', sounds: 'lib.media.use.sounds', vrefs: 'lib.media.use.vrefs', references: 'lib.media.use.references', edges: 'lib.media.use.edges', frames: 'lib.media.use.frames' };
+
+after(() => dispose());
 const ids = (list) => list.map((item) => item.id);
 
 function makeDoc() {
@@ -108,19 +114,31 @@ test('a released shot looks the same whether its take was overrun or its media r
 	assert.deepEqual(shape(overrun), shape(removed.clips[0]));
 });
 
-test('the media browser removes a media after a confirmation that lists its uses, in one undoable step, without a server call', () => {
-	const browser = source('../components/panels/MediaBrowser.svelte');
-	assert.match(browser, /import \{ deleteAsset \} from '\.\.\/\.\.\/lib\/assets\.svelte\.js';/);
-	assert.match(browser, /icon: 'trash', label: t\('panels\.media\.deleteNamed', \{ name: a\.name \}\), size: 'xs', tooltip: t\('panels\.media\.deleteTip'\), onclick: \(e\) => \(e\.stopPropagation\(\), deleteAsset\(a\.id\)\)/);
-	assert.match(browser, /icon: 'trash', label: t\('panels\.media\.delete'\), size: 'xs', tooltip: t\('panels\.media\.deleteTip'\), onclick: \(\) => deleteAsset\(cur\.id\)/);
-	const assets = source('./assets.svelte.js');
-	assert.match(assets, /await confirm\(\{ title: t\('lib\.media\.deleteTitle', \{ name \}\), message: deleteText\(a, assetUses\(doc, id\)\), variant: 'danger', confirmLabel: t\('lib\.media\.deleteConfirm'\) \}\)/);
-	assert.match(assets, /act\(\(\) => \(removed = removeAsset\(doc, id\)\)\);/);
-	assert.match(assets, /for \(const released of removed\.released\) releaseTake\(released\);/);
-	assert.match(assets, /toast\(t\('lib\.toast\.mediaRemoved', \{ name \}\), 'info', \{ label: t\('shell\.toast\.undo'\), run: undo \}\);/);
-	assert.doesNotMatch(assets, /getClient|fetch\(/);
-	for (const kind of USE_KINDS) assert.match(assets, new RegExp(`t\\('lib\\.media\\.use\\.${kind}', \\{ count \\}\\)`), kind);
-	const production = source('./production.svelte.js');
-	assert.match(production, /export function releaseTake\(released\) \{/);
-	assert.match(production, /\treleaseTake\(released\);\n\ttoast\(t\('lib\.toast\.takeReleased'/);
+test('the media browser removes a media after a confirmation that lists its uses, in one undoable step', async () => {
+	Object.assign(doc, makeDoc());
+	Object.assign(ui, { mediaCollection: 'all', mediaQuery: '', preview: null, selection: null });
+	const browser = await renderComponent(MEDIA_BROWSER);
+	const trash = hostUis(browser, 'IconButton').filter((props) => props.icon === 'trash');
+	assert.deepEqual(trash.map((props) => props.label), doc.assets.map((a) => t('panels.media.deleteNamed', { name: a.name })));
+	assert.ok(trash.every((props) => props.tooltip === t('panels.media.deleteTip')));
+	const asked = [];
+	window.__potionui.confirm = async (options) => {
+		asked.push(options);
+		return asked.length > 1;
+	};
+	assert.equal(await deleteAsset('pic'), false);
+	assert.ok(doc.assets.some((a) => a.id === 'pic'));
+	ui.toasts.length = 0;
+	assert.equal(await deleteAsset('pic'), true);
+	assert.equal(asked.length, 2);
+	assert.equal(asked[1].title, t('lib.media.deleteTitle', { name: 'Port' }));
+	assert.deepEqual([asked[1].variant, asked[1].confirmLabel, asked[1].cancelLabel], ['danger', t('lib.media.deleteConfirm'), t('lib.cancel')]);
+	const uses = assetUses(makeDoc(), 'pic');
+	for (const kind of USE_KINDS) if (uses[kind].length) assert.ok(asked[1].message.includes(t(USE_KEYS[kind], { count: uses[kind].length })), kind);
+	assert.equal(doc.assets.some((a) => a.id === 'pic'), false);
+	const toast = ui.toasts.at(-1);
+	assert.deepEqual([toast.message, toast.level, toast.action.label], [t('lib.toast.mediaRemoved', { name: 'Port' }), 'info', t('shell.toast.undo')]);
+	toast.action.run();
+	assert.ok(doc.assets.some((a) => a.id === 'pic'));
+	window.__potionui.confirm = async () => true;
 });

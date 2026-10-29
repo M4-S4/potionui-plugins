@@ -1,11 +1,19 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { clean, renderComponent, textOf } from './svelte-harness.js';
 import { RETIRED_ASSET_KEYS, emptyDoc, migrate, newAsset, workshopSound } from './starter.js';
 
 const t = (key) => key;
 const CASE = JSON.parse(readFileSync(new URL('../../../tests/fixtures/retired_sound_migration.json', import.meta.url), 'utf8'));
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { allCommands } = await import('./commands.js');
+const playback = await import('./playback.svelte.js');
+const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
+const CONSOLE = new URL('../components/mixer/Console.svelte', import.meta.url).href;
+const MIXER_PANEL = new URL('../components/panels/MixerPanel.svelte', import.meta.url).href;
+
+after(() => dispose());
 
 function oldDoc() {
 	const doc = emptyDoc(t);
@@ -39,12 +47,18 @@ test('a workshop sound names a synthesis and has no file; a new asset and a new 
 	assert.ok(emptyDoc(t).lanes.every((lane) => !('automation' in lane)));
 });
 
-test('the Sound design workshop, the browser synthesis and the Auto button are gone', () => {
-	const commands = source('./commands.js');
-	for (const id of ['voice', 'sd-ambience', 'sd-foley', 'sd-texture', 'sd-impact', 'sd-music']) assert.ok(!commands.includes(`command('${id}'`), id);
-	assert.doesNotMatch(commands, /modal\('sound'/);
-	assert.doesNotMatch(source('../components/modals/Modals.svelte'), /SoundDesign|type === 'sound'/);
-	assert.doesNotMatch(source('./playback.svelte.js'), /createOscillator|SYNTH_BY_ROLE|audition/);
-	assert.doesNotMatch(source('../components/mixer/Console.svelte'), /automation|mixer\.auto/);
-	assert.doesNotMatch(source('../components/panels/MixerPanel.svelte'), /soundMetaPrepared/);
+test('the Sound design workshop, the browser synthesis and the Auto button are gone', async () => {
+	const ids = allCommands.map((c) => c.id);
+	for (const id of ['voice', 'sd-ambience', 'sd-foley', 'sd-texture', 'sd-impact', 'sd-music']) assert.equal(ids.includes(id), false, id);
+	ui.modal = { type: 'sound' };
+	assert.equal(clean(await renderComponent(MODALS)).trim(), '');
+	ui.modal = null;
+	for (const name of ['audition', 'SYNTH_BY_ROLE', 'createOscillator']) assert.equal(name in playback, false, name);
+	const migrated = migrate(oldDoc());
+	Object.assign(doc, migrated);
+	const console = await renderComponent(CONSOLE);
+	assert.doesNotMatch(console, /automation|mixer\.auto/i);
+	const panel = await renderComponent(MIXER_PANEL);
+	assert.doesNotMatch(panel, /automation|soundMetaPrepared/i);
+	for (const sound of doc.assets.filter((a) => a.kind === 'audio' && a.src)) assert.ok(textOf(panel).includes(sound.name), sound.name);
 });

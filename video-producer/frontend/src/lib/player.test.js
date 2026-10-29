@@ -1,12 +1,17 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import './svelte-harness.js';
 import { advance } from './player.js';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const source = (file) => readFileSync(join(here, file), 'utf-8');
+const { doc, ui, seqDuration, dispose } = await import('./state.svelte.js');
+const { handleKeydown } = await import('./commands.js');
+
+globalThis.document = { body: {}, querySelector: () => null };
+
+after(() => {
+	dispose();
+	delete globalThis.document;
+});
 
 test('advance: playback moves on and stops at the end of the cut when the loop is off', () => {
 	assert.deepEqual(advance(2, 0.5, { end: 10 }), { t: 2.5, stop: false });
@@ -20,10 +25,18 @@ test('advance: the loop goes back to the In point at the end of the range, and t
 	assert.deepEqual(advance(9.8, 0.5, { loop: true, range: { in: 2, out: 12 }, end: 10 }), { t: 10, stop: true });
 });
 
-test('playback: every frame of the clock goes through advance, and End seeks to the end of the cut outside the Storyboard', () => {
-	const playback = source('playback.svelte.js');
-	assert.match(playback, /const next = advance\(ui\.playhead, dt, \{ loop: ui\.loop, range: ui\.range, end: seqDuration\(\) \}\);\n\tui\.playhead = next\.t;\n\tif \(next\.stop\) return pause\(\);/);
-	const commands = source('commands.js');
-	assert.match(commands, /\{ spec: 'home', run: edge\(false\) \},\n\t\{ spec: 'end', run: edge\(true\) \},/);
-	assert.match(commands, /if \(ui\.workspace !== 'storyboard'\) return seek\(last \? seqDuration\(\) : 0\);/);
+test('playback: End seeks to the end of the cut and Home to its start outside the Storyboard, and go to the last or the first shot inside it', () => {
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo' }, { id: 's2', start: 4, dur: 4, label: 'Two', stage: 'todo' }, { id: 's3', start: 8, dur: 4, label: 'Three', stage: 'todo' }];
+	Object.assign(ui, { workspace: 'mixer', modal: null, paletteOpen: false, hostModal: false, playhead: 2, selection: null, storyView: 'grid' });
+	const press = (key) => handleKeydown({ key, target: null, preventDefault() {} }, null);
+	press('End');
+	assert.equal(ui.playhead, seqDuration());
+	press('Home');
+	assert.equal(ui.playhead, 0);
+	ui.workspace = 'storyboard';
+	ui.playhead = 2;
+	press('End');
+	assert.deepEqual([ui.selection, ui.playhead], [{ kind: 'clip', id: 's3' }, 8.01]);
+	press('Home');
+	assert.deepEqual([ui.selection, ui.playhead], [{ kind: 'clip', id: 's1' }, 0.01]);
 });

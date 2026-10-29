@@ -1,9 +1,13 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { CHOICES, frameNotes, nextShot, nextSource, previousSource, retrieveChoices, sidesOf, startOfCut, takesLastFrame, targetsEnd, targetsStart } from './shotimages.js';
+import { renderComponent, textOf } from './svelte-harness.js';
+import { CHOICES, MAKE, RETRIEVE, frameNotes, nextShot, nextSource, previousSource, retrieveChoices, sidesOf, startOfCut, takesLastFrame, targetsEnd, targetsStart } from './shotimages.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const { doc: store, dispose } = await import('./state.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+const SHOT_EDITOR = new URL('../components/modals/ShotEditor.svelte', import.meta.url).href;
+
+after(() => dispose());
 
 function film(extra = {}) {
 	return {
@@ -106,16 +110,11 @@ test('the engine of the shot says whether it takes a start and an end image', ()
 	assert.deepEqual(frameNotes({ option: h3, profile: 'FL2VA', choice: 'both' }), []);
 });
 
-test('the panel offers the six choices in two rows, greys the retrieve ones with their reason and says what the engine leaves out', () => {
-	const panel = source('../components/shots/KeyframeCandidates.svelte');
-
-	assert.match(panel, /\['make', MAKE, t\('keyframes\.makeGroup'\)\], \['retrieve', RETRIEVE, t\('keyframes\.retrieveGroup'\)\]/);
-	assert.match(panel, /disabled=\{off\}\n\t+title=\{off \? choiceReason\(/);
-	assert.match(panel, /data-retrieve-reason=\{o\.id\}/);
-	assert.match(panel, /frameNotes\(\{ option: engineOption, profile: engine\.profile, choice, hasStart: Boolean\(draft\.first\), chained: linked \}\)/);
-	assert.match(panel, /onclick: \(\) => retrieveImages\(clip, draft, choice\)/);
-	assert.match(panel, /<option value=\{o\.key\} disabled=\{o\.disabled\}>\{optionLabel\(o\)\}<\/option>/);
-	assert.match(panel, /data-frame-role=\{take\.frameRole\}/);
-	const editor = source('../components/modals/ShotEditor.svelte');
-	assert.match(editor, /<KeyframeCandidates \{clip\} \{draft\} focus=\{focus === 'keyframes' \|\| focus === 'reanchor'\} framing=\{focus === 'reanchor'\} onaccept=\{\(role, assetId\) => \(draft\[role\] = assetId\)\} \/>/);
+test('the panel offers the six choices in two rows, three to make and three to retrieve, and the shot editor carries it under its own title', async () => {
+	assert.deepEqual([MAKE, RETRIEVE], [['first', 'last', 'both'], ['previous', 'next', 'neighbors']]);
+	assert.deepEqual(CHOICES, [...MAKE, ...RETRIEVE]);
+	Object.assign(store, film());
+	const html = await renderComponent(SHOT_EDITOR, { id: 's2' });
+	assert.match(html, /<section class="space-y-2" aria-labelledby="[^"]+-title" data-shot-images="">/);
+	assert.ok(textOf(html).includes(t('keyframes.title')));
 });

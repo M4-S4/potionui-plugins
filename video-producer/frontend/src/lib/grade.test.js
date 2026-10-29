@@ -1,9 +1,16 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { renderComponent } from './svelte-harness.js';
 import { drawGraded, filterOf, gradePixels, lookSteps, lumaHistogram } from './grade.js';
 
 const pixel = (r, g, b) => new Uint8ClampedArray([r, g, b, 255]);
+
+const { doc, dispose } = await import('./state.svelte.js');
+const { shotFrame } = await import('./media.js');
+const { colorPresets } = await import('./look.js');
+const CONTROLS = new URL('../components/inspector/ColorControls.svelte', import.meta.url).href;
+
+after(() => dispose());
 
 test('lookSteps and filterOf: the CSS filter of a clip, none when the look is neutral', () => {
 	assert.equal(filterOf(lookSteps({ exposure: 0, contrast: 100, saturation: 100, temperature: 0 })), 'none');
@@ -74,15 +81,18 @@ test('lumaHistogram: 64 bins of the Rec. 709 luma, scaled to the fullest bin', (
 	assert.deepEqual(lumaHistogram(new Uint8ClampedArray(0)), new Array(64).fill(0));
 });
 
-test('color preview: presets and histogram take a picture of the shot, its frame at the in point first, never the video file', () => {
-	const section = readFileSync(new URL('../components/inspector/ColorSection.svelte', import.meta.url), 'utf8');
-	const controls = readFileSync(new URL('../components/inspector/ColorControls.svelte', import.meta.url), 'utf8');
-	const media = readFileSync(new URL('./media.js', import.meta.url), 'utf8');
-	assert.match(section, /const picture = \$derived\(shotFrame\(clip\)\);/);
-	assert.match(section, /img\.src = picture;/);
-	assert.match(controls, /const picture = \$derived\(shotFrame\(clip\)\);/);
-	assert.match(controls, /<img src=\{picture\}/);
-	for (const source of [section, controls]) assert.doesNotMatch(source, /src=\{a\.src\}|img\.src = a\.src/);
-	assert.match(section, /bins = lumaHistogram\(drawGraded\(g, img, 160, 90, steps, lut\)\);/);
-	assert.match(media, /return videoFrame\(a, c\.srcIn \?\? 0\) \?\? assetThumb\(a\);/);
+test('color preview: presets and histogram take a picture of the shot, its frame at the in point first, never the video file', async () => {
+	const look = { exposure: 0, contrast: 100, saturation: 100, temperature: 0, preset: 'Original' };
+	doc.assets = [{ id: 'v', kind: 'video', name: 'Clip', src: '/m/v.mp4', srcDur: 5 }, { id: 'p', kind: 'image', name: 'Still', src: '/m/still.png' }, { id: 's', kind: 'audio', name: 'Voice', src: '/m/voice.mp3' }];
+	doc.clips = [{ id: 's1', start: 0, dur: 4, srcIn: 1.2, assetId: 'v', label: 'One', stage: 'draft', ...look }, { id: 's2', start: 4, dur: 4, srcIn: 0, assetId: 'p', label: 'Two', stage: 'draft', ...look }, { id: 's3', start: 8, dur: 4, srcIn: 0, assetId: 's', label: 'Three', stage: 'draft', ...look }];
+	assert.equal(shotFrame(doc.clips[0]), null);
+	assert.equal(shotFrame(doc.clips[1]), '/m/still.png');
+	assert.equal(shotFrame(doc.clips[2]), null);
+	assert.equal(shotFrame({ assetId: 'gone' }), null);
+	const presets = Object.keys(colorPresets).length;
+	const video = await renderComponent(CONTROLS, { clip: doc.clips[0] });
+	assert.doesNotMatch(video, /src="\/m\/v\.mp4"/);
+	assert.equal((video.match(/<span class="block aspect-video w-full bg-surface-3">/g) ?? []).length, presets);
+	const still = await renderComponent(CONTROLS, { clip: doc.clips[1] });
+	assert.equal((still.match(/<img src="\/m\/still\.png"/g) ?? []).length, presets);
 });

@@ -1,11 +1,18 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { moves, undoneAction } from './keepframing.js';
 import { applyShotDraft, inputsChanged, keepsFraming, migrateShots, setKeepFraming, shotDraft } from './shots.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const json = (path) => JSON.parse(source(path));
+const { doc, ui, clipLabel, dispose } = await import('./state.svelte.js');
+const { noteText } = await import('./production.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+const SHOT_EDITOR = new URL('../components/modals/ShotEditor.svelte', import.meta.url).href;
+
+after(() => dispose());
 const WALK = 'The fisherman walks slowly along the stone quay toward the lighthouse, then stops and looks at the boats.';
 const IN_PLACE = 'The fisherman stands still on the stone quay, turns his head to look at the boats moored on the right, then turns back toward the camera. He stays where he is.';
 
@@ -66,17 +73,24 @@ test('the migration keeps the option only as true', () => {
 	assert.deepEqual(doc.clips, [{ id: 's1', keepFraming: true }, { id: 's2' }, { id: 's3' }]);
 });
 
-test('wiring: the editor switch and warning, the option on the push-in alert that never generates by itself, the estimate warnings, in English and French', () => {
-	const editor = source('../components/modals/ShotEditor.svelte');
-	assert.match(editor, /<HostUi name="Switch" props=\{\{ id: 'vp-shot-keep-framing', checked: draft\.keepFraming === true, size: 'lg', label: t\('modals\.shot\.keepFraming'\), onchange: \(v\) => \(draft\.keepFraming = Boolean\(v\)\) \}\} \/>/);
-	assert.match(editor, /\{#if undoneAction\(draft\)\}<p class="text-xs text-warning" data-action-undone>\{t\('modals\.shot\.actionUndone'\)\}<\/p>\{\/if\}/);
-	const review = source('../components/director/ReviewTake.svelte');
-	assert.match(review, /\{#if pushedIn\(looks, look\) && !keepsFraming\(clip\)\}<button type="button"[^>]*data-keep-framing-next onclick=\{keepFramingNext\}>\{t\('panels\.director\.pick\.keepFraming'\)\}<\/button>\{\/if\}/);
-	assert.match(review, /function keepFramingNext\(\) \{\n\t\tact\(\(\) => \{\n\t\t\tsetKeepFraming\(clip, true\);\n\t\t\ttouch\(clip\);\n\t\t\}\);\n\t\}/);
-	assert.doesNotMatch(review, /startGeneration/);
-	const production = source('./production.svelte.js');
+test('wiring: the editor switch and warning, the estimate warnings naming their shot, in English and French', async () => {
+	ui.me = null;
+	doc.assets = [{ id: 'a', kind: 'image', name: 'Start', src: '/m/start.png' }];
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo', keepFraming: true }];
+	doc.prompts = [{ id: 'p1', shotId: 's1', start: 0, dur: 4, strength: 75, text: WALK }];
+	doc.frames = [{ id: 'f1', shotId: 's1', time: 0, assetId: 'a', role: 'first', strength: 100 }];
+	const kept = await renderComponent(SHOT_EDITOR, { id: 's1' });
+	const toggle = hostUis(kept, 'Switch').find((props) => props.id === 'vp-shot-keep-framing');
+	assert.deepEqual([toggle.checked, toggle.label], [true, t('modals.shot.keepFraming')]);
+	assert.match(kept, /data-action-undone/);
+	assert.ok(textOf(kept).includes(t('modals.shot.actionUndone')));
+	delete doc.clips[0].keepFraming;
+	const free = await renderComponent(SHOT_EDITOR, { id: 's1' });
+	assert.equal(hostUis(free, 'Switch').find((props) => props.id === 'vp-shot-keep-framing').checked, false);
+	assert.doesNotMatch(free, /data-action-undone/);
+	const shot = clipLabel(doc.clips[0]);
 	for (const [code, key] of [['keep_framing_unavailable', 'keepFramingUnavailable'], ['keep_framing_last_frame', 'keepFramingLast'], ['action_undone', 'actionUndone']]) {
-		assert.match(production, new RegExp(`code === '${code}'\\) return t\\('generation\\.warn\\.${key}', \\{ shot: shotName\\(data\\.shot_id\\) \\}\\)`));
+		assert.equal(noteText({ code, data: { shot_id: 's1' } }), t(`generation.warn.${key}`, { shot }));
 		for (const locale of ['en', 'fr']) assert.ok(json(`../i18n/${locale}/generation.json`)[`warn.${key}`], `${locale} warn.${key}`);
 	}
 	for (const locale of ['en', 'fr']) {

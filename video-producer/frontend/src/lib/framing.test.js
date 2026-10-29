@@ -1,6 +1,7 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { renderComponent } from './svelte-harness.js';
+import { RESOLUTION_NAMES } from './formats.js';
 import { changedRatio, costOf, customFormat, customSize, engineSize, exportFrame, fitClass, formatChange, formatSections, framed, glyph, largestTake, measuredFor, percent, sameSizes, sizeOf, sizeSections, tierOf, upscaled } from './framing.js';
 
 const WAN = '01KX47WANVIDEO0000000000TV';
@@ -10,7 +11,11 @@ const options = (values) => values.map((value) => ({ value, label: value }));
 const wan = { id: WAN, resolutions: options(['1280x720', '720x1280', '832x480', '480x832', '1024x1024', '720x720']) };
 const ltx = { id: LTX, resolutions: options(['1280x720', '832x480', '960x544']) };
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-3, `${actual} != ${expected}`);
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { setTakes } = await import('./takes.svelte.js');
+const VIEWER = new URL('../components/viewer/Viewer.svelte', import.meta.url).href;
+
+after(() => dispose());
 
 test('framing: a take is cropped like the export up to 30 % of loss, then put between bars, as the project says', () => {
 	assert.deepEqual(sizeOf({ width: 1280, height: 720 }), [1280, 720]);
@@ -148,13 +153,24 @@ test('framing: the export frame follows the film or the social ratio, and a note
 	assert.ok(!upscaled(null, [1920, 1080]));
 });
 
-test('framing: the viewer crops or puts bars like the export, on the shot and on a previewed take, and the menus list every format and resolution', () => {
-	const viewer = source('../components/viewer/Viewer.svelte');
-	assert.match(viewer, /const liveFit = \$derived\(liveVideo \|\| liveImage \? fitFor\(liveVideo \?\? liveImage, a\) : BARS\);/);
-	assert.match(viewer, /src=\{liveVideo\}\n\t+class="h-full w-full \{fitClass\(liveFit\)\}"/);
-	assert.match(viewer, /src=\{previewResult\.url\}\n\t+class="h-full w-full \{fitClass\(resultFit\)\}"/);
-	assert.match(viewer, /class="h-full w-full \{fitClass\(liveFit\)\}" style:opacity/);
-	assert.match(viewer, /\{#each formats as section \(section\.id\)\}<optgroup label=\{formatGroupText\(section\.id\)\}>/);
-	assert.match(viewer, /\{#each RESOLUTION_NAMES as r \(r\)\}/);
-	assert.doesNotMatch(viewer, /bind:value=\{doc\.(aspect|resolution)\}/);
+test('framing: the viewer crops or puts bars like the export, on the shot and on a previewed take, and the menus list every format and resolution', async () => {
+	doc.aspect = '16:9';
+	doc.assets = [{ id: 'tall', kind: 'video', name: 'Tall', src: '/m/tall.mp4', width: 1080, height: 1920 }, { id: 'wide', kind: 'image', name: 'Wide', src: '/m/wide.png', width: 1920, height: 1200 }];
+	doc.clips = [{ id: 's1', start: 0, dur: 4, srcIn: 0, assetId: 'tall', label: 'One', stage: 'draft' }, { id: 's2', start: 4, dur: 4, srcIn: 0, assetId: 'wide', label: 'Two', stage: 'draft' }];
+	Object.assign(ui, { preview: null, compare: null, playhead: 1 });
+	const tall = await renderComponent(VIEWER);
+	assert.equal(fitClass(framed([1080, 1920], doc).mode), 'object-contain');
+	assert.match(tall, /<video[^>]*src="\/m\/tall\.mp4"[^>]*class="h-full w-full object-contain"/);
+	ui.playhead = 5;
+	const wide = await renderComponent(VIEWER);
+	assert.match(wide, new RegExp(`<img[^>]*src="/m/wide.png"[^>]*class="h-full w-full ${fitClass(framed([1920, 1200], doc).mode)}"`));
+	setTakes('p1', [{ id: 't1', shotId: 's1', status: 'done', label: 'draft', quality: 'draft', variant: 'A', url: '/t/t1.mp4', width: 480, height: 832, createdAt: '2026-10-29T10:00:00Z' }]);
+	ui.preview = { kind: 'result', id: 't1' };
+	const result = await renderComponent(VIEWER);
+	assert.match(result, /<video[^>]*src="\/t\/t1\.mp4"[^>]*class="h-full w-full object-contain"/);
+	ui.preview = null;
+	const sections = formatSections(doc);
+	assert.equal((result.match(/<optgroup label="/g) ?? []).length, sections.length);
+	for (const section of sections) for (const row of section.rows) assert.ok(result.includes(`<option value="${row.value}"`), row.value);
+	for (const name of RESOLUTION_NAMES) assert.ok(result.includes(`<option value="${name}"`), name);
 });
