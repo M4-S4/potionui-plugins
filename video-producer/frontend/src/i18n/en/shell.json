@@ -2,6 +2,8 @@
 	"app.name": "Video Producer",
 	"app.loading": "Loading Video Producer…",
 	"app.retry": "Retry",
+	"app.narrow": "Video Producer needs a screen at least 1280 px wide.",
+	"app.narrowHint": "Widen the window or open Video Producer on a larger screen: the project stays saved.",
 	"menubar.label": "Video Producer menus",
 	"menu.app": "Video Producer",
 	"menu.file": "File",

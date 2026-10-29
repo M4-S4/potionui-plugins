@@ -46,6 +46,7 @@
 	import { shotNumbers } from '../../lib/director.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import { withSendings } from '../../lib/vreftracks.svelte.js';
+	import { viewport } from '../../lib/viewport.svelte.js';
 
 	const p = $derived(ui.production);
 	const ready = $derived(readiness());
@@ -231,7 +232,7 @@
 	}
 </script>
 
-<div class="flex h-11 items-center gap-2 border-b border-line bg-surface-1 px-3" role="region" aria-label={t('production.region')}>
+<div class="flex h-11 items-center gap-2 border-b border-line bg-surface-1 px-3" class:vp-production-wrap={viewport.narrow} role="region" aria-label={t('production.region')}>
 	<HostUi name="SegmentedControl" props={{ items: targets, selected: picked ? 'picked' : p.target, variant: 'toggle', ariaLabel: t('production.target.label'), onSelect: pick }} />
 	<span class="flex shrink-0" use:watch={'scope'}>
 		{#if fit.inline.has('scope')}
@@ -304,7 +305,7 @@
 	</div>
 
 	<div class="sr-only" aria-live="polite">{spoken}</div>
-	<div class="flex shrink-0 items-center gap-2">
+	<div class="flex shrink-0 items-center gap-2" data-vp-actions>
 		{#if busy}
 			<div class="w-44" in:fade={{ duration: ms(120) }}>
 				<div class="flex justify-between gap-2 text-xs">

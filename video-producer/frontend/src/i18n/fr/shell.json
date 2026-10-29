@@ -2,6 +2,8 @@
 	"app.name": "Video Producer",
 	"app.loading": "Chargement de Video Producer…",
 	"app.retry": "Réessayer",
+	"app.narrow": "Video Producer demande un écran d’au moins 1280 px.",
+	"app.narrowHint": "Agrandissez la fenêtre ou ouvrez Video Producer sur un écran plus large : le projet reste enregistré.",
 	"menubar.label": "Menus de Video Producer",
 	"menu.app": "Video Producer",
 	"menu.file": "Fichier",

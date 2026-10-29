@@ -14,6 +14,7 @@ import { promptShot, reviewPickOf, viewOf, viewShot, witnessOf } from './directo
 import { picking, pruned } from './picking.js';
 import { same } from './merge.js';
 import { citingShots, removeVrefTrack, trackOf, vrefLabel } from './vreftracks.js';
+import { viewport } from './viewport.svelte.js';
 import sharedRules from './rules.json';
 
 export { newAsset, newClip };
@@ -34,8 +35,8 @@ export const ui = $state({
 	reviewPick: null,
 	selectedIn: null,
 	refSpace: 'all',
-	sidebarOpen: true,
-	inspectorOpen: typeof window === 'undefined' || window.innerWidth >= 1360,
+	sidebarOpen: !viewport.narrow,
+	inspectorOpen: !viewport.narrow && (typeof window === 'undefined' || window.innerWidth >= 1360),
 	bottomView: 'timeline',
 	selection: null,
 	picked: [],
@@ -241,7 +242,7 @@ export function select(kind, id) {
 	ui.reviewPick = null;
 	ui.selection = kind ? { kind, id } : null;
 	if (ui.picked.length) ui.picked = [];
-	if (kind && ui.workspace !== 'mixer' && !bandView()) ui.inspectorOpen = true;
+	if (kind && ui.workspace !== 'mixer' && !bandView() && !viewport.narrow) ui.inspectorOpen = true;
 }
 export function pickedClips() {
 	if (ui.picked.length < 2) return [];
@@ -256,7 +257,7 @@ export function pickClip(id, mode) {
 	const next = picking(order, pruned(order, ui.picked), active, id, mode);
 	ui.selection = next.active ? { kind: 'clip', id: next.active } : null;
 	ui.picked = next.picked;
-	if (next.active && ui.workspace !== 'mixer' && !bandView()) ui.inspectorOpen = true;
+	if (next.active && ui.workspace !== 'mixer' && !bandView() && !viewport.narrow) ui.inspectorOpen = true;
 }
 export function pickAll() {
 	if (!doc.clips.length) return;

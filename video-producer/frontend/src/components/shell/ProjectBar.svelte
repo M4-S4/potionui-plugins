@@ -77,22 +77,22 @@
 
 	<div class="vp-seg-lg" role="tablist" aria-label={t('shell.workspace.group')}>
 		{#each WORKSPACES as w (w.id)}
-			<button type="button" role="tab" aria-selected={ui.workspace === w.id} onclick={(e) => pick(e, w.id)}>
-				<Icon name={w.icon} class="h-3.5 w-3.5" />{workspaceLabel(w.id)}
+			<button type="button" role="tab" aria-selected={ui.workspace === w.id} aria-label={workspaceLabel(w.id)} title={workspaceLabel(w.id)} onclick={(e) => pick(e, w.id)}>
+				<Icon name={w.icon} class="h-3.5 w-3.5" /><span class="vp-workspace-label">{workspaceLabel(w.id)}</span>
 			</button>
 		{/each}
 	</div>
 
 	<div class="flex min-w-0 items-center justify-end gap-0.5">
-		<Dropdown label={t('shell.project.import')} title={t('shell.project.importTip')} icon="upload" size="sm" align="right" items={importItems} />
+		<Dropdown label={t('shell.project.import')} labelClass="vp-wide-only" title={t('shell.project.importTip')} icon="upload" size="sm" align="right" items={importItems} />
 		<HostUi name="Tooltip" props={{ text: t('shell.project.exportTip'), kbd: commandById('export')?.key }}>
-			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: hostIconName('export'), onclick: () => (ui.modal = { type: 'export' }) }}>{t('shell.project.export')}</HostUi>
+			<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: hostIconName('export'), ariaLabel: t('shell.project.exportTip'), onclick: () => (ui.modal = { type: 'export' }) }}><span class="vp-wide-only">{t('shell.project.export')}</span></HostUi>
 		</HostUi>
 		<div class="vp-divider"></div>
 		<HostUi name="Tooltip" props={tip('assistant')}>
-			<button type="button" class="vp-assistant" onclick={() => chat.open()}>
+			<button type="button" class="vp-assistant" aria-label={t('shell.project.assistant')} onclick={() => chat.open()}>
 				<span class="vp-assistant-ring"></span>
-				<Icon name="sparkles" class="h-3.5 w-3.5 text-ai-1" />{t('shell.project.assistant')}
+				<Icon name="sparkles" class="h-3.5 w-3.5 text-ai-1" /><span class="vp-wide-only">{t('shell.project.assistant')}</span>
 			</button>
 		</HostUi>
 		<HostUi

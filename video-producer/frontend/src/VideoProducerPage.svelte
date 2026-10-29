@@ -17,6 +17,7 @@
 	import { handleKeydown } from './lib/commands.js';
 	import { isPlayer } from './lib/workspaces.js';
 	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
+	import { viewport, watchViewport } from './lib/viewport.svelte.js';
 	import { startAssistant } from './lib/assistant.svelte.js';
 	import MenuBar from './components/shell/MenuBar.svelte';
 	import ProjectBar from './components/shell/ProjectBar.svelte';
@@ -60,8 +61,17 @@
 	const player = $derived(isPlayer(ui.workspace));
 	const band = $derived(bandView());
 	const bare = $derived(band || ui.workspace === 'director');
-	const columns = $derived(player ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '280px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '320px' : '0px'}`);
+	const drawers = $derived(viewport.narrow && !player);
+	const columns = $derived(player || drawers ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '280px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '320px' : '0px'}`);
 	let inspectorBefore = null;
+
+	$effect(() => {
+		if (!viewport.narrow) return;
+		untrack(() => {
+			ui.sidebarOpen = false;
+			ui.inspectorOpen = false;
+		});
+	});
 
 	$effect(() => {
 		const inBand = band;
@@ -122,12 +132,14 @@
 		document.addEventListener('visibilitychange', onvisibility);
 		const stopProduction = startProduction();
 		const stopLooks = startLooks();
+		const stopViewport = watchViewport();
 		load();
 		return () => {
 			alive = false;
 			loadSeq += 1;
 			saveSeq += 1;
 			document.removeEventListener('visibilitychange', onvisibility);
+			stopViewport();
 			stopProduction();
 			stopLooks();
 			disposeExports();
@@ -183,7 +195,13 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div bind:this={root} tabindex="-1" class="vp-root bg-canvas font-sans text-base text-fg antialiased" lang={locale} ondragover={refuseStrayFiles} ondrop={refuseStrayFiles}>
-	{#if phase === 'loading'}
+	{#if viewport.tiny}
+		<div class="flex min-h-0 flex-1 items-center justify-center p-6" data-vp-too-narrow>
+			<div class="w-full max-w-lg">
+				<HostUi name="EmptyState" props={{ icon: 'warning', title: t('shell.app.narrow'), description: t('shell.app.narrowHint') }} />
+			</div>
+		</div>
+	{:else if phase === 'loading'}
 		<div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6">
 			<HostUi name="Spinner" props={{ size: 'lg' }} />
 			<p class="text-sm text-fg-muted">{t('shell.app.loading')}</p>
@@ -208,7 +226,7 @@
 			<MenuBar />
 			<ProjectBar />
 
-			<main class="grid min-h-0 overflow-hidden border-t border-line" style:grid-template-columns={columns}>
+			<main class="grid min-h-0 overflow-hidden border-t border-line" class:vp-drawers={drawers} style:grid-template-columns={columns}>
 				{#if !player}<LeftPanel />{/if}
 				{#key center}
 					<div class="grid min-h-0 min-w-0" in:fade={{ duration: ms(160) }}>
@@ -992,6 +1010,52 @@
 		@media (min-width: 1280px) {
 			.vp-root .vp-cost {
 				display: inline;
+			}
+		}
+		.vp-root .vp-drawers {
+			position: relative;
+		}
+		.vp-root .vp-drawers > aside {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			z-index: 20;
+			width: 280px;
+			max-width: 100%;
+			box-shadow: var(--shadow-overlay);
+		}
+		.vp-root .vp-drawers > aside:first-child {
+			left: 0;
+		}
+		.vp-root .vp-drawers > aside:last-child {
+			right: 0;
+			width: 320px;
+		}
+		.vp-root .vp-production-wrap {
+			height: auto;
+			min-height: 2.75rem;
+			flex-wrap: wrap;
+			row-gap: 0.375rem;
+			padding-block: 0.375rem;
+		}
+		.vp-root .vp-production-wrap > [data-vp-engine] {
+			order: 1;
+			flex-basis: 100%;
+		}
+		.vp-root .vp-production-wrap > [data-vp-actions] {
+			margin-left: auto;
+		}
+		@media (max-width: 1279px) {
+			.vp-root .vp-wide-only {
+				display: none;
+			}
+			.vp-root .vp-projectbar-name {
+				width: 10rem;
+			}
+		}
+		@media (max-width: 899px) {
+			.vp-root .vp-workspace-label {
+				display: none;
 			}
 		}
 		.vp-root .vp-notice {

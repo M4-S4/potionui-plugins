@@ -8,11 +8,11 @@
 	import { ulid } from '../../lib/ulid.js';
 	import Icon from '../Icon.svelte';
 
-	let { label, icon = 'plus', items, title = '', variant = 'ghost', size = 'xs', class: className = '', align = 'left' } = $props();
+	let { label, labelClass = '', icon = 'plus', items, title = '', variant = 'ghost', size = 'xs', class: className = '', align = 'left' } = $props();
 
 	const id = `dropdown:${ulid()}`;
 	const open = $derived(ui.menuOpen === id);
-	const button = $derived({ variant, size, icon: hostIconName(icon), class: className, ariaExpanded: open, ariaHaspopup: 'menu', onclick: () => (ui.menuOpen = open ? null : id) });
+	const button = $derived({ variant, size, icon: hostIconName(icon), class: className, ariaLabel: labelClass ? title || label : undefined, ariaExpanded: open, ariaHaspopup: 'menu', onclick: () => (ui.menuOpen = open ? null : id) });
 
 	function run(item) {
 		if (item.disabled) return;
@@ -24,10 +24,10 @@
 <div class="relative" data-vp-menu>
 	{#if title}
 		<HostUi name="Tooltip" props={{ text: title }}>
-			<HostUi name="Button" props={button}>{label}<Icon name="chevron-down" class="h-3 w-3 opacity-60" /></HostUi>
+			<HostUi name="Button" props={button}><span class={labelClass}>{label}</span><Icon name="chevron-down" class="h-3 w-3 opacity-60" /></HostUi>
 		</HostUi>
 	{:else}
-		<HostUi name="Button" props={button}>{label}<Icon name="chevron-down" class="h-3 w-3 opacity-60" /></HostUi>
+		<HostUi name="Button" props={button}><span class={labelClass}>{label}</span><Icon name="chevron-down" class="h-3 w-3 opacity-60" /></HostUi>
 	{/if}
 	{#if open}
 		<div class="vp-menu top-8 {align === 'right' ? 'right-0' : 'left-0'}" role="menu" use:overlayLayer in:fly={{ y: -4, duration: ms(120) }}>
