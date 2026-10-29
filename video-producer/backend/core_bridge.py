@@ -1,7 +1,6 @@
 import importlib.metadata
 import importlib.util
 import logging
-import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -117,11 +116,7 @@ NATIVE_DRIVERS = ("native.local", "native.remote")
 
 SOURCE_PREFIX = "source-"
 
-_COPY_CHUNK = 1 << 20
-
 _FILE_UNAVAILABLE = "ModelFileUnavailable"
-
-_PATH_VARIABLE = re.compile(r"\{\{\s*paths\.(preset|_shared)\s*\}\}")
 
 EDIT_TASK = "img_edit"
 
@@ -315,47 +310,31 @@ def storage_directory() -> Path:
     return Path(Settings(SettingRepository()).get_file_storage_directory()).resolve()
 
 
-def _media_driver(kind: str) -> Any:
-    container = api_hooks.get_container()
-    return container.file_service.storage_driver if kind == "history" else container.media_store.storage_driver
-
-
 def media_file_path(kind: str, value: str) -> Optional[str]:
-    """The absolute path on this server of a history or library media key, or None on object storage. Temporary: reads the container."""
-    path = _media_driver(kind).local_path(value)
-    return None if path is None else str(Path(path).resolve())
+    """The absolute path on this server of a history or library media key, or None on object storage."""
+    path = api_media.media_local_path(kind, value)
+    return None if path is None else str(path)
 
 
 def local_media_file(kind: str, value: str, folder: Path) -> Optional[Path]:
-    """A local file holding a history or library media key, streamed into the folder as source-<key> on object storage; None when missing. Temporary: reads the container."""
-    driver = _media_driver(kind)
-    path = driver.local_path(value)
+    """A local file holding a history or library media key, streamed into the folder as source-<key> on object storage; None when missing."""
+    path = api_media.media_local_path(kind, value)
     if path is not None:
-        return Path(path) if Path(path).is_file() else None
-    if not driver.exists(value):
-        return None
+        return path if path.is_file() else None
     target = Path(folder) / f"{SOURCE_PREFIX}{value.replace('/', '_')}"
-    try:
-        with target.open("wb") as handle:
-            for chunk in driver.get_stream(value, _COPY_CHUNK):
-                handle.write(chunk)
-    except BaseException:
-        target.unlink(missing_ok=True)
-        raise
-    return target
+    return target if api_media.copy_media_file(kind, value, target) else None
 
 
 def upload_item(user_id: str, value: str) -> Optional[Dict[str, Any]]:
-    """The library item an uploads/ key of the user is: its id, file name and size, or None. Temporary: reads the container."""
-    filename = value.replace("\\", "/").rsplit("/", 1)[-1]
-    upload = api_hooks.get_container().media_store.upload_repo.get_by_filename(filename, user_id)
+    """The library item an uploads/ key of the user is: its id, file name and size, or None."""
+    upload = api_media.find_upload(user_id, value)
     if upload is None:
         return None
     return {
-        "item_id": upload.id,
-        "filename": upload.original_filename or filename,
-        "width": upload.width,
-        "height": upload.height,
+        "item_id": upload["id"],
+        "filename": upload["filename"],
+        "width": upload["width"],
+        "height": upload["height"],
     }
 
 
@@ -370,32 +349,27 @@ def list_presets(user: User) -> List[api_presets.PresetDescription]:
 
 
 def enabled_cloud_video_models(backend_id: str) -> int:
-    """How many video models are turned on in a cloud backend's catalog. Temporary: reads the container."""
-    repository = api_hooks.get_container().cloud_catalog.repository
-    return sum(1 for entry in repository.list_enabled(backend_id) if "video" in (entry.outputs or []))
+    """How many video models are turned on in a cloud backend's catalog."""
+    return sum(1 for entry in api_cloud.enabled_cloud_models(backend_id) if "video" in (entry.outputs or []))
 
 
 def preset_state(preset_id: str) -> PresetState:
-    """Whether a preset is loaded, installed and assigned to anyone. Temporary: reads the container for install state."""
+    """Whether a preset is loaded, installed and assigned to anyone."""
     description = api_presets.describe_preset(preset_id)
     if description is None:
         return PresetState(id=preset_id, name=preset_id, loaded=False, installed=False, assigned=False)
-    collaborators = api_hooks.get_container().preset_collaborators
-    installed = bool(collaborators.db_repo.is_preset_installed(preset_id))
-    assigned = False
-    if installed:
-        summary = collaborators.db_repo.get_preset_assignment_summary(preset_id) or {}
-        groups = collaborators.group_repo.get_group_count_for_preset(preset_id) or 0
-        assigned = int(summary.get("total_assignments") or 0) + int(groups) > 0
-    return PresetState(id=preset_id, name=description.name, loaded=True, installed=installed, assigned=assigned)
+    install = api_presets.preset_install_state(preset_id)
+    return PresetState(
+        id=preset_id, name=description.name, loaded=True, installed=install.installed, assigned=install.assigned
+    )
 
 
 def preset_model_hashes(
     preset_id: str, field_names: Sequence[str], modes: Optional[Sequence[str]] = None
 ) -> Dict[str, Set[str]]:
-    """SHA-256 of the files a preset recommends for each named model field, in every mode or only in the named ones. Temporary: reads the container."""
+    """SHA-256 of the files a preset recommends for each named model field, in every mode or only in the named ones."""
     hashes: Dict[str, Set[str]] = {name: set() for name in field_names}
-    template = api_hooks.get_container().file_preset_repository.find_preset_by_id(preset_id)
+    template = api_presets.preset_template(preset_id)
     if template is None:
         return hashes
     for name, mode in (template.modes or {}).items():
@@ -483,18 +457,25 @@ async def cancel_generation(user: User, generation_id: str) -> bool:
     return bool(await api_generation.cancel_generation(user, generation_id))
 
 
+def _stored_state(user: User, generation_id: str) -> Dict[str, Any]:
+    stored = dict(api_generation.generation_record(user, generation_id) or {})
+    if getattr(user, "account_type", None) == AccountType.ADMIN:
+        failure = api_generation.generation_failure(user, generation_id) or {}
+        stored["error_detail"] = failure.get("detail")
+    return stored
+
+
 def generation_state(user: User, generation_id: str) -> Dict[str, Any]:
-    """The status of a generation the user may read, with its backend, start, duration and failure details. Temporary: reads the container for the stored row."""
+    """The status of a generation the user may read, with its backend, start, duration and failure details, the raw error for an administrator only."""
     payload = dict(api_generation.generation_state(user, generation_id))
     missing = [key for key in _STORED_STATE_KEYS if key not in payload]
     if not missing:
         return payload
     try:
-        row = api_hooks.get_container().generation_repository.get_by_id(generation_id)
+        stored = _stored_state(user, generation_id)
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not read the stored row of generation %s", generation_id, exc_info=True)
-        row = None
-    stored = {**row.to_dict(), "error_detail": getattr(row, "error_detail", None)} if row is not None else {}
+        stored = {}
     for key in missing:
         payload[key] = stored.get(key)
     return payload
@@ -543,11 +524,10 @@ def _cloud_summary(model_id: str, entry: Any) -> Dict[str, Any]:
 
 
 def cloud_video_models(backend_id: str) -> List[Dict[str, Any]]:
-    """The video models turned on in a cloud backend's catalog. Temporary: reads the container."""
-    repository = api_hooks.get_container().cloud_catalog.repository
+    """The video models turned on in a cloud backend's catalog."""
     return [
         _cloud_summary(entry.model_id, entry)
-        for entry in repository.list_enabled(backend_id)
+        for entry in api_cloud.enabled_cloud_models(backend_id)
         if "video" in (entry.outputs or []) and entry.model_id
     ]
 
@@ -569,8 +549,8 @@ def _params(spec: Any) -> List[Dict[str, Any]]:
 
 
 def cloud_model(model_id: str) -> Optional[Dict[str, Any]]:
-    """An enabled cloud video model with its parameters and media inputs, or None. Temporary: reads the container."""
-    resolved = api_hooks.get_container().cloud_capabilities.resolve(model_id)
+    """An enabled cloud video model with its parameters and media inputs, or None."""
+    resolved = api_cloud.resolve_cloud_model(model_id)
     if resolved is None or "video" not in (resolved.entry.outputs or []):
         return None
     spec = resolved.spec
@@ -591,8 +571,7 @@ def _reference_limit(spec: Any) -> int:
 
 
 def cloud_edit_models(backend_id: str) -> List[Dict[str, Any]]:
-    """The models turned on in a cloud backend's catalog that edit a picture from reference pictures, with their parameters and the most references they take. Temporary: reads the container."""
-    repository = api_hooks.get_container().cloud_catalog.repository
+    """The models turned on in a cloud backend's catalog that edit a picture from reference pictures, with their parameters and the most references they take."""
     return [
         {
             "id": entry.model_id,
@@ -601,7 +580,7 @@ def cloud_edit_models(backend_id: str) -> List[Dict[str, Any]]:
             "params": _params(entry.spec),
             "max_images": _reference_limit(entry.spec),
         }
-        for entry in repository.list_enabled(backend_id)
+        for entry in api_cloud.enabled_cloud_models(backend_id)
         if entry.model_id and EDIT_TASK in (entry.tasks or [])
     ]
 
@@ -617,8 +596,10 @@ def _option(item: Any) -> Optional[Dict[str, str]]:
     return {"value": str(item), "label": str(item)}
 
 
-def _option_file(path: str, roots: Mapping[str, str]) -> List[Any]:
-    resolved = Path(_PATH_VARIABLE.sub(lambda match: roots[match.group(1)], path))
+def _option_file(path: str, preset_id: str) -> List[Any]:
+    resolved = api_presets.resolve_preset_path(preset_id, path)
+    if resolved is None:
+        return []
     try:
         data = yaml.safe_load(resolved.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError):
@@ -629,14 +610,14 @@ def _option_file(path: str, roots: Mapping[str, str]) -> List[Any]:
     return list(data) if isinstance(data, list) else []
 
 
-def _options(configuration: Mapping[str, Any], roots: Mapping[str, str]) -> List[Dict[str, str]]:
+def _options(configuration: Mapping[str, Any], preset_id: str) -> List[Dict[str, str]]:
     items = list(configuration.get("options") or [])
     single = configuration.get("file")
     if isinstance(single, Mapping) and single.get("path"):
-        items.extend(_option_file(str(single["path"]), roots))
+        items.extend(_option_file(str(single["path"]), preset_id))
     for entry in configuration.get("files") or []:
         if isinstance(entry, Mapping) and entry.get("path"):
-            items.extend(_option_file(str(entry["path"]), roots))
+            items.extend(_option_file(str(entry["path"]), preset_id))
     options: List[Dict[str, str]] = []
     for option in (_option(item) for item in items):
         if option is not None and all(seen["value"] != option["value"] for seen in options):
@@ -720,7 +701,7 @@ def _plain(value: Any) -> Any:
     return value if value is None or isinstance(value, (str, int, float, bool)) else str(value)
 
 
-def _describe_fields(fields: Any, roots: Mapping[str, str], out: Dict[str, Dict[str, Any]], scope: _Scope = _Scope()) -> None:
+def _describe_fields(fields: Any, preset_id: str, out: Dict[str, Dict[str, Any]], scope: _Scope = _Scope()) -> None:
     for form_field in fields or []:
         configuration = getattr(form_field, "configuration", None) or {}
         label = getattr(form_field, "label", None)
@@ -734,7 +715,7 @@ def _describe_fields(fields: Any, roots: Mapping[str, str], out: Dict[str, Dict[
         )
         if form_field.name and form_field.name not in out:
             kind = form_field.type
-            options = _registry_options(kind, configuration) if kind in REGISTRY_FIELDS else _options(configuration, roots)
+            options = _registry_options(kind, configuration) if kind in REGISTRY_FIELDS else _options(configuration, preset_id)
             out[form_field.name] = {
                 "type": kind,
                 "required": bool(form_field.required),
@@ -758,25 +739,23 @@ def _describe_fields(fields: Any, roots: Mapping[str, str], out: Dict[str, Dict[
                 child = _Scope(group=[*inner.group, str(label)], advanced=inner.advanced, hidden=inner.hidden, gate=inner.gate)
             else:
                 child = inner
-            _describe_fields(form_field.children, roots, out, child)
+            _describe_fields(form_field.children, preset_id, out, child)
 
 
 def preset_driver(preset_id: str) -> Optional[str]:
-    """The backend driver a preset declares, such as cloud.openrouter, or None. Temporary: reads the container."""
-    template = api_hooks.get_container().file_preset_repository.find_preset_by_id(preset_id)
+    """The backend driver a preset declares, such as cloud.openrouter, or None."""
+    template = api_presets.preset_template(preset_id)
     driver = getattr(template, "driver", None) if template is not None else None
     return str(driver) if driver else None
 
 
 def preset_form_fields(preset_id: str, mode: str) -> Optional[Dict[str, Dict[str, Any]]]:
-    """Type, required flag, default, options and recommended files (SHA-256, file name) of each field of a preset mode, with its label, the labels of the tabs and sections around it, its audience, whether the form hides it, the gate it sits in, its limits, its reactions and the most items a multiple field takes; or None. Temporary: reads the container."""
-    repository = api_hooks.get_container().file_preset_repository
-    template = repository.find_preset_by_id(preset_id)
+    """Type, required flag, default, options and recommended files (SHA-256, file name) of each field of a preset mode, with its label, the labels of the tabs and sections around it, its audience, whether the form hides it, the gate it sits in, its limits, its reactions and the most items a multiple field takes; or None."""
+    template = api_presets.preset_template(preset_id)
     if template is None or mode not in (template.modes or {}):
         return None
-    roots = {"preset": str(template.path), "_shared": str(repository.preset_loader.shared_path)}
     forms = sorted(template.modes[mode].forms or [], key=lambda form: (not form.default, form.order, form.name))
     fields: Dict[str, Dict[str, Any]] = {}
     for form in forms:
-        _describe_fields(form.fields, roots, fields)
+        _describe_fields(form.fields, preset_id, fields)
     return fields

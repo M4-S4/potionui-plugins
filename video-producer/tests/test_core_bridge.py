@@ -1,24 +1,21 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from backend import core_bridge
 from backend.core_bridge import PresetState
+from src.plugin_api import AccountType
 from src.plugin_api.limits import LimitStatus
+from src.plugin_api.presets import PresetInstallState
 
 LOGGER = "plugins.video-producer"
 
 
 _ModelFileUnavailable = type("ModelFileUnavailable", (Exception,), {})
-
-
-def _container(monkeypatch, **parts):
-    container = SimpleNamespace(**parts)
-    monkeypatch.setattr(core_bridge, "api_hooks", SimpleNamespace(get_container=lambda: container))
-    return container
 
 
 def _raise(message):
@@ -208,7 +205,6 @@ def test_enabled_backends_are_the_entries_of_list_backends_as_they_come(monkeypa
         },
     ]
     monkeypatch.setattr(core_bridge, "api_backends", SimpleNamespace(list_backends=lambda: entries))
-    _container(monkeypatch)
 
     assert core_bridge.enabled_backends() == entries
 
@@ -234,25 +230,21 @@ def test_enabled_cloud_video_models_counts_the_entries_with_a_video_output(monke
         SimpleNamespace(outputs=None),
         SimpleNamespace(outputs=[]),
     ]
-    repository = SimpleNamespace(list_enabled=lambda backend_id: asked.append(backend_id) or entries)
-    _container(monkeypatch, cloud_catalog=SimpleNamespace(repository=repository))
+    monkeypatch.setattr(core_bridge.api_cloud, "enabled_cloud_models", lambda backend_id: asked.append(backend_id) or entries)
 
     assert core_bridge.enabled_cloud_video_models("c-1") == 2
     assert asked == ["c-1"]
 
 
-def _presets(monkeypatch, name="Wan", installed=True, summary=None, groups=0):
+def _presets(monkeypatch, name="Wan", installed=True, assigned=False):
     monkeypatch.setattr(
         core_bridge,
         "api_presets",
-        SimpleNamespace(describe_preset=lambda preset_id: None if name is None else SimpleNamespace(name=name)),
+        SimpleNamespace(
+            describe_preset=lambda preset_id: None if name is None else SimpleNamespace(name=name),
+            preset_install_state=lambda preset_id: PresetInstallState(installed=installed, assigned=installed and assigned),
+        ),
     )
-    db_repo = SimpleNamespace(
-        is_preset_installed=lambda preset_id: installed,
-        get_preset_assignment_summary=lambda preset_id: summary,
-    )
-    group_repo = SimpleNamespace(get_group_count_for_preset=lambda preset_id: groups)
-    _container(monkeypatch, preset_collaborators=SimpleNamespace(db_repo=db_repo, group_repo=group_repo))
 
 
 def test_a_preset_the_core_does_not_know_is_not_loaded(monkeypatch):
@@ -264,28 +256,21 @@ def test_a_preset_the_core_does_not_know_is_not_loaded(monkeypatch):
 
 
 def test_a_loaded_preset_that_is_not_installed_is_never_assigned(monkeypatch):
-    _presets(monkeypatch, installed=False, summary={"total_assignments": 4}, groups=2)
+    _presets(monkeypatch, installed=False, assigned=True)
 
     assert core_bridge.preset_state("01ABC") == PresetState(
         id="01ABC", name="Wan", loaded=True, installed=False, assigned=False
     )
 
 
-def test_an_installed_preset_assigned_to_users_is_assigned(monkeypatch):
-    _presets(monkeypatch, summary={"total_assignments": 2})
+def test_an_installed_preset_assigned_to_anyone_is_assigned(monkeypatch):
+    _presets(monkeypatch, assigned=True)
 
     assert core_bridge.preset_state("01ABC") == PresetState(id="01ABC", name="Wan", loaded=True, installed=True, assigned=True)
 
 
-def test_an_installed_preset_assigned_to_a_group_only_is_assigned(monkeypatch):
-    _presets(monkeypatch, summary={"total_assignments": 0}, groups=1)
-
-    assert core_bridge.preset_state("01ABC").assigned is True
-
-
-@pytest.mark.parametrize("summary", [None, {}, {"total_assignments": 0}, {"total_assignments": None}])
-def test_an_installed_preset_with_no_assignment_is_not_assigned(monkeypatch, summary):
-    _presets(monkeypatch, summary=summary, groups=0)
+def test_an_installed_preset_with_no_assignment_is_not_assigned(monkeypatch):
+    _presets(monkeypatch, assigned=False)
 
     state = core_bridge.preset_state("01ABC")
 
@@ -305,8 +290,7 @@ def _template(*modes):
 
 
 def _hashes(monkeypatch, template, preset_id="01ABC"):
-    repository = SimpleNamespace(find_preset_by_id=lambda requested: template if requested == preset_id else None)
-    _container(monkeypatch, file_preset_repository=repository)
+    monkeypatch.setattr(core_bridge.api_presets, "preset_template", lambda requested: template if requested == preset_id else None)
 
 
 def test_the_recommended_hashes_are_grouped_by_the_named_model_fields(monkeypatch):
@@ -538,35 +522,62 @@ class _Row:
         return dict(self.values)
 
 
-def test_the_state_of_a_live_generation_is_completed_from_its_stored_row(monkeypatch):
+def _live_generation(monkeypatch, record, failure=None):
+    asked = []
+
+    def generation_failure(user, generation_id):
+        asked.append(user.id)
+        return failure
+
     monkeypatch.setattr(
         core_bridge,
         "api_generation",
-        SimpleNamespace(generation_state=lambda user, generation_id: {"id": generation_id, "status": "running", "progress": 0.5}),
+        SimpleNamespace(
+            generation_state=lambda user, generation_id: {"id": generation_id, "status": "running", "progress": 0.5},
+            generation_record=lambda user, generation_id: record,
+            generation_failure=generation_failure,
+        ),
     )
-    row = _Row(
-        backend_id="b-local",
-        started_at="2026-10-17T10:00:00+00:00",
-        duration_ms=None,
-        error_code=None,
-        error_user_message=None,
-        error_message=None,
-    )
-    row.error_detail = "RuntimeError: boom"
-    _container(monkeypatch, generation_repository=SimpleNamespace(get_by_id={"gen-1": row}.get))
+    return asked
+
+
+_STORED = {
+    "backend_id": "b-local",
+    "started_at": "2026-10-17T10:00:00+00:00",
+    "duration_ms": None,
+    "error_code": None,
+    "error_user_message": None,
+    "error_message": None,
+}
+
+
+def test_the_state_of_a_live_generation_is_completed_from_its_stored_row(monkeypatch):
+    asked = _live_generation(monkeypatch, dict(_STORED), failure={"detail": "RuntimeError: boom"})
 
     assert core_bridge.generation_state(SimpleNamespace(id="user-1"), "gen-1") == {
         "id": "gen-1",
         "status": "running",
         "progress": 0.5,
-        "backend_id": "b-local",
-        "started_at": "2026-10-17T10:00:00+00:00",
-        "duration_ms": None,
-        "error_code": None,
-        "error_user_message": None,
-        "error_message": None,
-        "error_detail": "RuntimeError: boom",
+        **_STORED,
+        "error_detail": None,
     }
+    assert asked == []
+
+
+def test_an_administrator_also_gets_the_raw_error_of_a_generation(monkeypatch):
+    asked = _live_generation(monkeypatch, dict(_STORED), failure={"detail": "RuntimeError: boom"})
+    admin = SimpleNamespace(id="admin-1", account_type=AccountType.ADMIN)
+
+    assert core_bridge.generation_state(admin, "gen-1")["error_detail"] == "RuntimeError: boom"
+    assert asked == ["admin-1"]
+
+
+def test_a_live_generation_not_yet_stored_keeps_its_stored_keys_empty(monkeypatch):
+    _live_generation(monkeypatch, None)
+
+    state = core_bridge.generation_state(SimpleNamespace(id="user-1"), "gen-1")
+
+    assert {key: state[key] for key in _STORED} == dict.fromkeys(_STORED)
 
 
 def test_the_state_of_a_stored_generation_needs_no_second_read(monkeypatch):
@@ -581,15 +592,24 @@ def test_the_state_of_a_stored_generation_needs_no_second_read(monkeypatch):
         "error_message": None,
         "error_detail": None,
     }
-    monkeypatch.setattr(core_bridge, "api_generation", SimpleNamespace(generation_state=lambda user, generation_id: stored))
-    _container(monkeypatch, generation_repository=SimpleNamespace(get_by_id=_raise("must not be asked")))
+    monkeypatch.setattr(
+        core_bridge,
+        "api_generation",
+        SimpleNamespace(generation_state=lambda user, generation_id: stored, generation_record=_raise("must not be asked")),
+    )
 
     assert core_bridge.generation_state(SimpleNamespace(id="user-1"), "gen-1") == stored
 
 
 def test_a_stored_row_that_cannot_be_read_leaves_its_keys_empty(monkeypatch, caplog):
-    monkeypatch.setattr(core_bridge, "api_generation", SimpleNamespace(generation_state=lambda user, generation_id: {"status": "pending"}))
-    _container(monkeypatch, generation_repository=SimpleNamespace(get_by_id=_raise("database is locked")))
+    monkeypatch.setattr(
+        core_bridge,
+        "api_generation",
+        SimpleNamespace(
+            generation_state=lambda user, generation_id: {"status": "pending"},
+            generation_record=_raise("database is locked"),
+        ),
+    )
 
     state = core_bridge.generation_state(SimpleNamespace(id="user-1"), "gen-1")
 
@@ -666,7 +686,7 @@ def _entry(slug, outputs=("video",), model_id="cm-1", **spec):
 
 def test_the_cloud_video_models_of_a_backend_are_the_enabled_entries_with_a_catalog_model(monkeypatch):
     entries = [_entry("veo"), _entry("flux", outputs=("image",)), _entry("orphan", model_id=None)]
-    _container(monkeypatch, cloud_catalog=SimpleNamespace(repository=SimpleNamespace(list_enabled=lambda backend_id: entries)))
+    monkeypatch.setattr(core_bridge.api_cloud, "enabled_cloud_models", lambda backend_id: entries)
 
     assert core_bridge.cloud_video_models("b-cloud") == [
         {
@@ -688,7 +708,7 @@ def test_a_cloud_model_comes_with_its_parameters_and_media_inputs(monkeypatch):
     media = SimpleNamespace(role="first_frame", tasks=frozenset({"img2video"}))
     entry = _entry("veo", params=(param,), inputs=(media,))
     resolved = {"cm-1": SimpleNamespace(entry=entry, spec=entry.spec, backend_id="b-cloud")}
-    _container(monkeypatch, cloud_capabilities=SimpleNamespace(resolve=resolved.get))
+    monkeypatch.setattr(core_bridge.api_cloud, "resolve_cloud_model", resolved.get)
 
     model = core_bridge.cloud_model("cm-1")
 
@@ -702,7 +722,7 @@ def test_a_cloud_model_comes_with_its_parameters_and_media_inputs(monkeypatch):
 
 def test_a_cloud_model_that_makes_no_video_is_none(monkeypatch):
     entry = _entry("flux", outputs=("image",))
-    _container(monkeypatch, cloud_capabilities=SimpleNamespace(resolve=lambda model_id: SimpleNamespace(entry=entry, spec=entry.spec)))
+    monkeypatch.setattr(core_bridge.api_cloud, "resolve_cloud_model", lambda model_id: SimpleNamespace(entry=entry, spec=entry.spec))
 
     assert core_bridge.cloud_model("cm-1") is None
 
@@ -716,11 +736,17 @@ def _form(name, fields, default=False, order=0):
 
 
 def _templates(monkeypatch, template, shared):
-    repository = SimpleNamespace(
-        find_preset_by_id=lambda preset_id: template if preset_id == "01ABC" else None,
-        preset_loader=SimpleNamespace(shared_path=shared),
-    )
-    _container(monkeypatch, file_preset_repository=repository)
+    roots = {"{{ paths.preset }}": template.path, "{{paths._shared}}": str(shared)}
+
+    def resolve(preset_id, path):
+        if preset_id != "01ABC":
+            return None
+        for variable, root in roots.items():
+            path = path.replace(variable, root)
+        return Path(path)
+
+    monkeypatch.setattr(core_bridge.api_presets, "preset_template", lambda preset_id: template if preset_id == "01ABC" else None)
+    monkeypatch.setattr(core_bridge.api_presets, "resolve_preset_path", resolve)
 
 
 def test_the_fields_of_a_mode_carry_their_options_and_recommended_files(monkeypatch, tmp_path):
@@ -920,46 +946,37 @@ def test_an_installed_model_is_found_by_file_name_too(monkeypatch):
 
 def test_the_driver_of_a_preset_is_read_from_its_template(monkeypatch):
     templates = {"01CLOUD": SimpleNamespace(driver="cloud.openrouter"), "01NATIVE": SimpleNamespace(driver=None)}
-    _container(monkeypatch, file_preset_repository=SimpleNamespace(find_preset_by_id=templates.get))
+    monkeypatch.setattr(core_bridge.api_presets, "preset_template", templates.get)
 
     assert core_bridge.preset_driver("01CLOUD") == "cloud.openrouter"
     assert core_bridge.preset_driver("01NATIVE") is None
     assert core_bridge.preset_driver("01NONE") is None
 
 
-class _Driver:
-    def __init__(self, root=None, blobs=None, break_after=None):
-        self.root = root
-        self.blobs = blobs or {}
-        self.break_after = break_after
-        self.chunk_sizes = []
+def _media(monkeypatch, local=None, stored=None, uploads=None, broken=False):
+    copies = []
 
-    def local_path(self, key):
-        return None if self.root is None else self.root / key
+    def media_local_path(kind, key):
+        root = (local or {}).get(kind)
+        return None if root is None else (root / key).resolve()
 
-    def exists(self, key):
-        return key in self.blobs
+    def copy_media_file(kind, key, target):
+        copies.append((kind, key, Path(target)))
+        if key not in (stored or {}):
+            return False
+        if broken:
+            raise ConnectionError("the object store dropped the connection")
+        Path(target).write_bytes(stored[key])
+        return True
 
-    def get_stream(self, key, chunk_size=65536):
-        self.chunk_sizes.append(chunk_size)
-        data = self.blobs[key]
-        for number, offset in enumerate(range(0, len(data), 1000)):
-            if self.break_after is not None and number >= self.break_after:
-                raise ConnectionError("the object store dropped the connection")
-            yield data[offset : offset + 1000]
-
-
-def _media_container(monkeypatch, history, library, uploads=None):
-    repository = SimpleNamespace(get_by_filename=lambda name, user_id: (uploads or {}).get((name, user_id)))
-    _container(
-        monkeypatch,
-        file_service=SimpleNamespace(storage_driver=history),
-        media_store=SimpleNamespace(storage_driver=library, upload_repo=repository),
-    )
+    monkeypatch.setattr(core_bridge.api_media, "media_local_path", media_local_path)
+    monkeypatch.setattr(core_bridge.api_media, "copy_media_file", copy_media_file)
+    monkeypatch.setattr(core_bridge.api_media, "find_upload", lambda user_id, key: (uploads or {}).get((user_id, key)))
+    return copies
 
 
 def test_media_file_path_is_the_absolute_local_path_of_a_key_or_none_on_object_storage(monkeypatch, tmp_path):
-    _media_container(monkeypatch, _Driver(tmp_path / "history"), _Driver())
+    _media(monkeypatch, local={"history": tmp_path / "history"})
 
     assert core_bridge.media_file_path("history", "generations/d/g/1.mp4") == str((tmp_path / "history" / "generations/d/g/1.mp4").resolve())
     assert core_bridge.media_file_path("library", "uploads/a.mp4") is None
@@ -969,48 +986,49 @@ def test_local_media_file_uses_the_local_file_or_copies_the_bytes_into_the_folde
     root = tmp_path / "storage"
     (root / "generations").mkdir(parents=True)
     (root / "generations" / "1.mp4").write_bytes(b"video")
-    _media_container(monkeypatch, _Driver(root), _Driver(blobs={"uploads/a.wav": b"sound"}))
+    copies = _media(monkeypatch, local={"history": root}, stored={"uploads/a.wav": b"sound"})
     folder = tmp_path / "job"
     folder.mkdir()
 
-    assert core_bridge.local_media_file("history", "generations/1.mp4", folder) == root / "generations" / "1.mp4"
+    assert core_bridge.local_media_file("history", "generations/1.mp4", folder) == (root / "generations" / "1.mp4").resolve()
     assert core_bridge.local_media_file("history", "generations/missing.mp4", folder) is None
     copied = core_bridge.local_media_file("library", "uploads/a.wav", folder)
     assert copied.parent == folder and copied.read_bytes() == b"sound"
     assert core_bridge.local_media_file("library", "uploads/gone.wav", folder) is None
+    assert [kind for kind, _, _ in copies] == ["library", "library"]
 
 
-def test_an_object_storage_source_is_streamed_into_the_folder_in_chunks_and_never_read_whole(monkeypatch, tmp_path):
-    blob = bytes(range(256)) * 40
-    library = _Driver(blobs={"uploads/big.mp4": blob})
-    _media_container(monkeypatch, _Driver(), library)
+def test_an_object_storage_source_is_copied_into_the_folder_under_its_source_name(monkeypatch, tmp_path):
+    copies = _media(monkeypatch, stored={"uploads/big.mp4": b"\0" * 4096})
     folder = tmp_path / "job"
     folder.mkdir()
 
     copied = core_bridge.local_media_file("library", "uploads/big.mp4", folder)
 
-    assert copied == folder / f"{core_bridge.SOURCE_PREFIX}uploads_big.mp4" and copied.read_bytes() == blob
-    assert library.chunk_sizes and library.chunk_sizes[0] >= 1 << 16
+    assert copied == folder / f"{core_bridge.SOURCE_PREFIX}uploads_big.mp4"
+    assert copies == [("library", "uploads/big.mp4", copied)]
 
 
-def test_a_stream_that_breaks_leaves_no_half_copy_in_the_folder(monkeypatch, tmp_path):
-    library = _Driver(blobs={"uploads/big.mp4": b"x" * 5000}, break_after=2)
-    _media_container(monkeypatch, _Driver(), library)
-    folder = tmp_path / "job"
-    folder.mkdir()
+def test_a_copy_that_breaks_lets_its_error_through(monkeypatch, tmp_path):
+    _media(monkeypatch, stored={"uploads/big.mp4": b"x" * 5000}, broken=True)
 
     with pytest.raises(ConnectionError):
-        core_bridge.local_media_file("library", "uploads/big.mp4", folder)
-
-    assert list(folder.iterdir()) == []
+        core_bridge.local_media_file("library", "uploads/big.mp4", tmp_path)
 
 
 def test_upload_item_reads_the_library_item_of_an_uploads_key_of_the_user(monkeypatch):
-    upload = SimpleNamespace(id="item-1", original_filename="cut.mp4", width=1920, height=1080)
-    _media_container(monkeypatch, _Driver(), _Driver(), uploads={("0f0e.mp4", "user-1"): upload})
+    upload = {"id": "item-1", "filename": "cut.mp4", "width": 1920, "height": 1080}
+    _media(monkeypatch, uploads={("user-1", "uploads/0f0e.mp4"): upload})
 
     assert core_bridge.upload_item("user-1", "uploads/0f0e.mp4") == {"item_id": "item-1", "filename": "cut.mp4", "width": 1920, "height": 1080}
     assert core_bridge.upload_item("user-2", "uploads/0f0e.mp4") is None
+
+
+def test_the_bridge_reads_the_core_only_through_the_plugin_api():
+    source = Path(core_bridge.__file__).read_text(encoding="utf-8")
+
+    assert "get_container" not in source
+    assert "Temporary" not in source
 
 
 def test_storage_directory_is_the_applications_file_storage_directory_made_absolute(monkeypatch, tmp_path):

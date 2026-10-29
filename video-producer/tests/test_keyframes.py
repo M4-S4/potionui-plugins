@@ -709,11 +709,6 @@ def test_the_project_remembers_the_edit_preset_and_model_of_its_start_images(mak
         projects.validate_doc(doc)
 
 
-def _bridge(monkeypatch, **parts):
-    container = SimpleNamespace(**parts)
-    monkeypatch.setattr(core_bridge, "api_hooks", SimpleNamespace(get_container=lambda: container))
-
-
 def test_the_bridge_lists_the_cloud_models_that_edit_from_references_with_their_limit(monkeypatch):
     def entry(model_id, tasks, inputs):
         spec = SimpleNamespace(params=(), inputs=inputs)
@@ -722,7 +717,7 @@ def test_the_bridge_lists_the_cloud_models_that_edit_from_references_with_their_
     reference = SimpleNamespace(role="reference", tasks=frozenset({"img_edit"}), max_items=14)
     frame = SimpleNamespace(role="first_frame", tasks=frozenset({"img2video"}), max_items=1)
     entries = [entry("nano", ("txt2img", "img_edit"), (reference,)), entry("veo", ("img2video",), (frame,)), entry("bare", ("img_edit",), ())]
-    _bridge(monkeypatch, cloud_catalog=SimpleNamespace(repository=SimpleNamespace(list_enabled=lambda backend_id: entries)))
+    monkeypatch.setattr(core_bridge.api_cloud, "enabled_cloud_models", lambda backend_id: entries)
 
     assert core_bridge.cloud_edit_models("b-google") == [
         {"id": "nano", "name": "Nano", "provider_model_id": "google/nano", "params": [], "max_images": 14},
@@ -736,8 +731,7 @@ def test_the_bridge_gives_a_multiple_field_its_most_items(monkeypatch, tmp_path)
 
     form = SimpleNamespace(name="custom", default=True, order=0, fields=[form_field("source_image", "image", {"multi": True, "max_items": 10}), form_field("seed", "seed")])
     template = SimpleNamespace(path=str(tmp_path), modes={"edit": SimpleNamespace(forms=[form])})
-    repository = SimpleNamespace(find_preset_by_id=lambda preset_id: template, preset_loader=SimpleNamespace(shared_path=tmp_path))
-    _bridge(monkeypatch, file_preset_repository=repository)
+    monkeypatch.setattr(core_bridge.api_presets, "preset_template", lambda preset_id: template)
 
     fields = core_bridge.preset_form_fields(QWEN, "edit")
 
