@@ -1,0 +1,12 @@
+- { value: "832x480", ratio: [16, 9], description: "480p Landscape" }
+- { value: "480x832", ratio: [9, 16], description: "480p Portrait" }
+- { value: "960x544", ratio: [16, 9], description: "540p Landscape" }
+- { value: "544x960", ratio: [9, 16], description: "540p Portrait" }
+- { value: "640x480", ratio: [4, 3], description: "Classic" }
+- { value: "480x640", ratio: [3, 4], description: "Classic Portrait" }
+- { value: "832x624", ratio: [4, 3], description: "Classic 540p" }
+- { value: "624x832", ratio: [3, 4], description: "Classic 540p Portrait" }
+- { value: "640x640", ratio: [1, 1], description: "Square" }
+- { value: "720x720", ratio: [1, 1], description: "Square 540p" }
+- { value: "576x720", ratio: [4, 5], description: "Portrait 4:5" }
+- { value: "640x800", ratio: [4, 5], description: "Portrait 4:5 540p" }

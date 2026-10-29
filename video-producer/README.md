@@ -207,7 +207,7 @@ Video Producer ships five presets of its own, each set up for one size of graphi
 |---|---|---|---|---|
 | **Wan 2.1 T2V 1.3B (8 GB)** | 8 GB | 32 GB | Text to video, 832×480, 480×832, 640×480, 480×640, 640×640 or 576×720, 16 fps, up to 5 s, 30 steps, CFG 6 | `vp-wan21-t2v-1-3b-8gb` (2.84 GB to download if nothing is there yet, 9.8 GB in all) |
 | **Wan 2.2 TI2V 5B (8 GB)** | 8 GB | 32 GB | Text to video, 832×480, 480×832, 640×640 or 576×704, 24 fps, up to 5 s, 30 steps, CFG 5 | `vp-wan22-ti2v-5b-8gb` (18.1 GB in all) |
-| **Wan 2.2 14B Lightning (12 GB)** | 12 GB | 64 GB | Text to video, 832×480 or 480×832 in draft, 16 fps, up to 5 s, 6 steps, CFG 1, with the lightx2v LoRA pair | `vp-wan22-14b-lightning-12gb` (about 38 GB) |
+| **Wan 2.2 14B Lightning (12 GB)** | 12 GB | 64 GB | Text to video, 832×480 or 480×832 in draft and 960×544 or 544×960 in final, its own sizes of up to about half a megapixel (1280×720 runs out of memory on 12 GB), 16 fps, up to 5 s, 6 steps, CFG 1, with the lightx2v LoRA pair | `vp-wan22-14b-lightning-12gb` (about 38 GB) |
 | **MiniMax-H3 (12 GB)** | 12 GB | 64 GB | Video and sound, 832×480 by default, 24 fps, up to 15 s, 20 steps | `vp-minimax-h3-12gb` (about 40 GB) |
 | **MiniMax-H3-Fast (12 GB)** | 12 GB | 64 GB | Video and sound, the same canvas, 8 steps | `vp-minimax-h3-fast-12gb` (about 41 GB) |
 
@@ -307,14 +307,14 @@ One table, `backend/formats.json`, holds the formats of the film, the delivery s
 
 What it gives with the shipped lists, at the default draft setting (draft / final):
 
-| Film | Wan 14B | LTX | MiniMax-H3 | Wan 2.1 1.3B (8 GB) | Wan 2.2 5B (8 GB) |
-|---|---|---|---|---|---|
-| 16:9 | 832×480 / 1280×720 | 832×480 / 1280×704 | 832×480 / 1344×768 | 832×480 | 832×480 |
-| 2.39:1, 2:1, 1.85:1 | as 16:9, cropped | as 16:9, cropped | as 16:9, cropped | as 16:9, cropped | as 16:9, cropped |
-| 4:3 | 720×576 / 1040×832, cropped 6 % | 704×576 / 1024×832, cropped 8 % | 640×480 / 1024×768 | 640×480 | 832×480, cropped 23 % |
-| 1:1 | 720×720 / 1024×1024 | 704×704 / 1024×1024 | 640×640 / 768×768 | 640×640 | 640×640 |
-| 4:5 | 576×720 / 832×1040 | 576×704 / 832×1024 | 480×640 / 768×1024, cropped 6 % | 576×720 | 576×704 (2 % off, cropped without a word) |
-| 9:16 | 480×832 / 720×1280 | 480×832 / 704×1280 | 480×832 / 768×1344 | 480×832 | 480×832 |
+| Film | Wan 14B | Wan 14B Lightning (12 GB) | LTX | MiniMax-H3 | Wan 2.1 1.3B (8 GB) | Wan 2.2 5B (8 GB) |
+|---|---|---|---|---|---|---|
+| 16:9 | 832×480 / 1280×720 | 832×480 / 960×544 | 832×480 / 1280×704 | 832×480 / 1344×768 | 832×480 | 832×480 |
+| 2.39:1, 2:1, 1.85:1 | as 16:9, cropped | as 16:9, cropped | as 16:9, cropped | as 16:9, cropped | as 16:9, cropped | as 16:9, cropped |
+| 4:3 | 720×576 / 1040×832, cropped 6 % | 640×480 / 832×624 | 704×576 / 1024×832, cropped 8 % | 640×480 / 1024×768 | 640×480 | 832×480, cropped 23 % |
+| 1:1 | 720×720 / 1024×1024 | 640×640 / 720×720 | 704×704 / 1024×1024 | 640×640 / 768×768 | 640×640 | 640×640 |
+| 4:5 | 576×720 / 832×1040 | 576×720 / 640×800 | 576×704 / 832×1024 | 480×640 / 768×1024, cropped 6 % | 576×720 | 576×704 (2 % off, cropped without a word) |
+| 9:16 | 480×832 / 720×1280 | 480×832 / 544×960 | 480×832 / 704×1280 | 480×832 / 768×1344 | 480×832 | 480×832 |
 
 From the project, a take uses the direction, the shot prompts, the frames, the references, the aspect ratio, the shots, the number of drafts of each shot and the engine settings a shot sets for itself; from the page it takes the engine and the quality of the request.
 

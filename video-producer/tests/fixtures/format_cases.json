@@ -60,6 +60,20 @@
 			"480x832",
 			"640x640",
 			"576x704"
+		],
+		"wan12": [
+			"832x480",
+			"480x832",
+			"960x544",
+			"544x960",
+			"640x480",
+			"480x640",
+			"832x624",
+			"624x832",
+			"640x640",
+			"720x720",
+			"576x720",
+			"640x800"
 		]
 	},
 	"presets": {
@@ -68,6 +82,7 @@
 		"h3": "01M54HN72B0KY7H63BKQ16T253",
 		"wan13": "01M57QPEMDPKHHW83YSEYBN0WZ",
 		"wan5b": "01M57QPEMDPKHHW83YSEYBN0X0",
+		"wan12": "01M57QPEMDPKHHW83YSEYBN0X1",
 		"other": null
 	},
 	"ratios": [
@@ -2198,6 +2213,326 @@
 			"setting": null,
 			"draft": null,
 			"final": "832x480"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2.39:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2.39:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2.39:1",
+			"setting": "1280x720",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2.39:1",
+			"setting": null,
+			"draft": null,
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2:1",
+			"setting": "1280x720",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2:1",
+			"setting": null,
+			"draft": null,
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "1.85:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "1.85:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "1.85:1",
+			"setting": "1280x720",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "1.85:1",
+			"setting": null,
+			"draft": null,
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "16:9",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "16:9",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "16:9",
+			"setting": "1280x720",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "16:9",
+			"setting": null,
+			"draft": null,
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "4:3",
+			"setting": "832x480",
+			"draft": "640x480",
+			"final": "832x624"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "4:3",
+			"setting": "960x544",
+			"draft": "832x624",
+			"final": "832x624"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "4:3",
+			"setting": "1280x720",
+			"draft": "832x624",
+			"final": "832x624"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "4:3",
+			"setting": null,
+			"draft": null,
+			"final": "832x624"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "1:1",
+			"setting": "832x480",
+			"draft": "640x640",
+			"final": "720x720"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "1:1",
+			"setting": "960x544",
+			"draft": "720x720",
+			"final": "720x720"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "1:1",
+			"setting": "1280x720",
+			"draft": "720x720",
+			"final": "720x720"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "1:1",
+			"setting": null,
+			"draft": null,
+			"final": "720x720"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "4:5",
+			"setting": "832x480",
+			"draft": "576x720",
+			"final": "640x800"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "4:5",
+			"setting": "960x544",
+			"draft": "640x800",
+			"final": "640x800"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "4:5",
+			"setting": "1280x720",
+			"draft": "640x800",
+			"final": "640x800"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "4:5",
+			"setting": null,
+			"draft": null,
+			"final": "640x800"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "9:16",
+			"setting": "832x480",
+			"draft": "480x832",
+			"final": "544x960"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "9:16",
+			"setting": "960x544",
+			"draft": "544x960",
+			"final": "544x960"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "9:16",
+			"setting": "1280x720",
+			"draft": "544x960",
+			"final": "544x960"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "9:16",
+			"setting": null,
+			"draft": null,
+			"final": "544x960"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2.35:1",
+			"setting": "832x480",
+			"draft": "832x480",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2.35:1",
+			"setting": "960x544",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2.35:1",
+			"setting": "1280x720",
+			"draft": "960x544",
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "2.35:1",
+			"setting": null,
+			"draft": null,
+			"final": "960x544"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "3:2",
+			"setting": "832x480",
+			"draft": "640x480",
+			"final": "832x624"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "3:2",
+			"setting": "960x544",
+			"draft": "832x624",
+			"final": "832x624"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "3:2",
+			"setting": "1280x720",
+			"draft": "832x624",
+			"final": "832x624"
+		},
+		{
+			"options": "wan12",
+			"preset": "wan12",
+			"format": "3:2",
+			"setting": null,
+			"draft": null,
+			"final": "832x624"
 		},
 		{
 			"options": "wan",
