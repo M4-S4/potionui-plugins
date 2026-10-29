@@ -448,11 +448,14 @@ def test_put_me_cannot_probe_for_projects_of_others_by_telling_them_apart(app, a
 
 
 @pytest.fixture
-def core_without_media(monkeypatch):
-    def refuse(user, ref):
-        raise AssertionError(f"the route asked the core to resolve a ref it should have refused: {ref!r}")
+def core_refusing_odd_ids(monkeypatch):
+    def resolve(user, ref):
+        ids = [value for key, value in ref.items() if key != "kind"]
+        if all(isinstance(value, str) and value for value in ids):
+            raise AssertionError(f"the core was asked for a well-formed ref this test never sends: {ref!r}")
+        raise core_bridge.MediaRefError("invalid_ref", "A media reference needs text ids.")
 
-    monkeypatch.setattr(core_bridge, "resolve_media", refuse)
+    monkeypatch.setattr(core_bridge, "resolve_media", resolve)
 
 
 @pytest.mark.parametrize(
@@ -471,7 +474,7 @@ def core_without_media(monkeypatch):
     ],
     ids=repr,
 )
-def test_a_media_origin_whose_ids_are_not_text_is_an_invalid_ref(api, core_without_media, origin):
+def test_a_media_origin_whose_ids_are_not_text_is_an_invalid_ref(api, core_refusing_odd_ids, origin):
     response = api.post(RESOLVE_URL, json={"origin": origin})
 
     assert response.status_code == 422
