@@ -296,3 +296,19 @@ def test_the_fcpxml_asset_of_a_slowed_shot_of_unknown_length_covers_the_source_i
     made = render("fcpxml", doc, {("clips", 0): {"name": "1.mp4", "path": "/srv/1.mp4"}})
 
     assert re.search(r'<asset id="r2" name="[^"]*" start="0s" duration="75/25s"', made)
+
+
+def test_a_shot_shorter_than_half_a_frame_still_lasts_one_frame_in_the_fcpxml_and_the_otio(make_doc):
+    clips = [{"id": "c1", "assetId": "a1", "start": 0, "dur": 0.01, "srcIn": 0, "label": "S1"}, {"id": "c2", "assetId": "a1", "start": 4.52, "dur": 0.01, "srcIn": 0, "label": "S2"}]
+    doc = make_doc(clips=clips, assets=[{"id": "a1", "kind": "video", "name": "x", "srcDur": 6}])
+    doc["fps"] = 25
+    files = {("clips", index): {"name": "1.mp4", "path": f"/srv/{index}.mp4"} for index in range(2)}
+
+    time = Timebase(doc)
+    fcpxml = render("fcpxml", doc, files)
+    video = json.loads(render("otio", doc, files))["tracks"]["children"][0]
+
+    assert [time.span(clip["start"], clip["dur"]) for clip in clips] == [1, 1]
+    assert len(re.findall(r'<asset-clip [^>]*duration="1/25s"', fcpxml)) == 2
+    assert 'duration="0/25s"' not in fcpxml
+    assert [item["source_range"]["duration"]["value"] for item in video["children"] if item["OTIO_SCHEMA"] != "Gap.1"] == [1, 1]

@@ -157,8 +157,8 @@ class Timebase:
         return f"{frames}/{js_number(self.fps)}s"
 
     def span(self, start: Any, seconds: Any) -> int:
-        """The frames an item from start for seconds covers on the timeline: from the frame its start falls on to the frame its end falls on, so that items that follow each other stay frame for frame in step."""
-        return self.frames(start + seconds) - self.frames(start)
+        """The frames an item from start for seconds covers on the timeline: from the frame its start falls on to the frame its end falls on, so that items that follow each other stay frame for frame in step, and one frame at least."""
+        return max(1, self.frames(start + seconds) - self.frames(start))
 
     def timecode(self, seconds: Any) -> str:
         count = self.frames(seconds)
