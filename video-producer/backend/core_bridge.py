@@ -6,7 +6,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 import yaml
 
@@ -270,9 +270,19 @@ def face_detector() -> Dict[str, Any]:
     return dict(api_media.face_detector())
 
 
-def detect_faces(paths: Sequence[str]) -> List[List[Dict[str, float]]]:
-    """The faces found in image files, best first, as boxes in pixels with their score; FileNotFoundError without the detector's model file."""
+def detect_faces(paths: Sequence[str]) -> List[List[Dict[str, Any]]]:
+    """The faces found in image files, best first, as boxes in pixels with their score and their five landmarks; FileNotFoundError without the detector's model file."""
     return [list(found) for found in api_media.detect_faces(list(paths))]
+
+
+def face_identifier() -> Dict[str, Any]:
+    """The face recognition model of the application: the file of its model, where it is looked for and whether it is there."""
+    return dict(api_media.face_identifier())
+
+
+def identify_faces(faces: Sequence[Tuple[str, Sequence[Sequence[float]]]]) -> List[List[float]]:
+    """The identity vectors of faces, each an image file and the five landmarks of the face in it; FileNotFoundError without the model file."""
+    return [list(vector) for vector in api_media.identify_faces([(path, landmarks) for path, landmarks in faces])]
 
 
 def generation_active() -> bool:

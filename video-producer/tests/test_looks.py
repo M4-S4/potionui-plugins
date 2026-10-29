@@ -107,6 +107,7 @@ def test_a_finished_take_asks_for_its_look_which_the_tracker_computes_when_nothi
     assert (row["status"], row["model"], row["kind"]) == ("done", "local-google-siglip-base-patch16-224", "take")
     assert [frame[0] for frame in row["frames"]] == [0.0, 4.0]
     assert [frame[2] for frame in row["frames"]] == [None, None]
+    assert [frame[3] for frame in row["frames"]] == [None, None]
     assert frames.calls == [take["id"]]
 
 
@@ -150,7 +151,7 @@ def test_a_seam_compares_the_end_of_the_cut_before_with_the_start_of_the_cut_aft
     frames.takes[second["id"]] = [(0.0, GREEN), (1.0, start), (4.0, GREEN)]
 
     before = _report(core, project)
-    assert before["seams"] == [{"shot_id": "s2", "previous_id": "s1", "from_take": first["id"], "to_take": second["id"], "score": None, "status": "missing"}]
+    assert before["seams"] == [{"shot_id": "s2", "previous_id": "s1", "from_take": first["id"], "to_take": second["id"], "score": None, "identity": None, "status": "missing"}]
     assert before["missing"] == 2
 
     _report(core, project, enqueue=True)
@@ -160,7 +161,7 @@ def test_a_seam_compares_the_end_of_the_cut_before_with_the_start_of_the_cut_aft
 
     assert seam["status"] == "done"
     assert (seam["score"] < looks.SEAM_LOW) is low
-    assert _report(core, project)["thresholds"] == {"seam": looks.SEAM_LOW, "cast": looks.CAST_LOW, "face": looks.FACE_LOW, "place": looks.PLACE_LOW, "final": looks.FINAL_LOW, "drift": looks.DRIFT_LOW}
+    assert _report(core, project)["thresholds"] == {"seam": looks.SEAM_LOW, "cast": looks.CAST_LOW, "face": looks.FACE_LOW, "place": looks.PLACE_LOW, "final": looks.FINAL_LOW, "drift": looks.DRIFT_LOW, "push_in": looks.PUSH_IN_HIGH, "identity": looks.IDENTITY_LOW}
 
 
 def test_a_take_is_scored_against_the_pictures_of_each_bible_card_of_its_shot_s_cast(core, make_project, frames):
@@ -268,6 +269,163 @@ def test_a_take_without_a_face_falls_back_on_the_whole_image_and_says_none_was_s
 
     assert (marin["method"], marin["seen"]) == ("whole", 0.0)
     assert marin["score"] > 0.99
+
+
+def test_a_take_keeps_the_height_of_the_face_it_follows_and_says_how_many_times_it_grows(core, make_project, painted):
+    project, _, second = _placed(make_project, core, cast=True)
+    painted.takes[second["id"]] = [(0.0, BLUE, RED), (1.0, GREEN, RED), (2.0, RED, None), (3.0, GREEN, RED)]
+    painted.images["uploads/marin.png"] = (GREEN, RED)
+    core.faces["available"] = True
+    core.face_boxes[BLUE] = [{**FACE, "height": 16.0}]
+    core.face_boxes[GREEN] = [{**FACE, "height": 40.0}, {**FACE, "height": 60.0, "score": 0.6}]
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    report = _report(core, project)
+
+    row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
+    assert [frame[3] for frame in row["frames"]] == [16.0, 40.0, None, 40.0]
+    assert [frame[2] is not None for frame in row["frames"]] == [False, True, False, True]
+    assert next(item for item in report["takes"] if item["take_id"] == second["id"])["push_in"] == 2.5
+    assert report["thresholds"]["push_in"] == looks.PUSH_IN_HIGH
+
+
+def test_with_two_people_the_push_in_follows_the_face_of_the_first_image_and_not_the_best_face_of_each(core, make_project, painted):
+    project, first, second = _placed(make_project, core)
+    painted.takes[first["id"]] = [(0.0, RED, None)]
+    painted.takes[second["id"]] = [(0.0, BLUE, None), (1.0, GREEN, None), (2.0, RED, None), (3.0, GREEN, None)]
+    core.faces["available"] = True
+    marin = {"x": 2.0, "y": 4.0, "width": 10.0, "height": 10.0, "score": 0.9}
+    lina = {"x": 40.0, "y": 4.0, "width": 20.0, "height": 20.0, "score": 0.8}
+    core.face_boxes[BLUE] = [marin, lina]
+    core.face_boxes[GREEN] = [{**lina, "x": 38.0, "y": 2.0, "width": 24.0, "height": 24.0, "score": 0.95}, {**marin, "x": 1.0, "y": 3.0, "width": 12.0, "height": 12.0, "score": 0.7}]
+    core.face_boxes[RED] = [{**lina, "x": 38.0, "y": 2.0, "width": 24.0, "height": 24.0}]
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+
+    row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
+    assert [frame[3] for frame in row["frames"]] == [10.0, 12.0, None, 12.0]
+    assert next(item for item in _report(core, project)["takes"] if item["take_id"] == second["id"])["push_in"] == 1.2
+    assert looks.overlap(marin, lina) == 0.0
+    assert looks.overlap(marin, {**marin, "x": 7.0}) == 0.5
+    assert looks.follow(None, [lina, marin]) is lina
+    assert looks.follow(marin, [lina]) is None
+    assert looks.follow(marin, []) is None
+
+
+def test_a_take_says_no_push_in_under_two_images_with_a_face_or_without_its_look(core, make_project, painted):
+    project, first, second = _placed(make_project, core, cast=True)
+    painted.takes[first["id"]] = [(0.0, BLUE, RED), (4.0, RED, None)]
+    painted.takes[second["id"]] = [(0.0, RED, None)]
+    painted.images["uploads/marin.png"] = (BLUE, RED)
+    _with_faces(core, [BLUE])
+
+    assert all(item["push_in"] is None for item in _report(core, project, enqueue=True)["takes"])
+    while _run():
+        pass
+
+    assert [item["push_in"] for item in _report(core, project)["takes"]] == [None, None]
+
+
+def test_a_take_measured_with_faces_before_the_heights_were_kept_is_measured_again(core, make_project, frames):
+    project, first, second = _placed(make_project, core)
+    core.faces["available"] = True
+    model = "local-google-siglip-base-patch16-224+faces"
+    for take in (first, second):
+        looks.queue_take(take)
+    looks._mark(looks.take_key(first["id"]), "done", model=model, frames=[[0.0, looks.pack([1.0, 0.0]), None]])
+    looks._mark(looks.take_key(second["id"]), "done", model=model, frames=[[0.0, looks.pack([1.0, 0.0]), None, None]])
+
+    before = {item["take_id"]: item["status"] for item in _report(core, project)["takes"]}
+    after = {item["take_id"]: item["status"] for item in _report(core, project, enqueue=True)["takes"]}
+
+    assert before == {first["id"]: "done", second["id"]: "done"}
+    assert after == {first["id"]: "queued", second["id"]: "done"}
+
+
+GRAY = (128, 128, 128)
+DARK = (10, 10, 10)
+FRONT = {"x": 18.0, "y": 6.0, "width": 20.0, "height": 32.0, "score": 0.93, "landmarks": [[22.0, 12.0], [34.0, 12.0], [28.0, 16.0], [24.0, 20.0], [32.0, 20.0]]}
+PROFILE = {**FRONT, "landmarks": [[22.0, 12.0], [34.0, 12.0], [35.0, 16.0], [24.0, 20.0], [32.0, 20.0]]}
+
+
+def _with_identity(core):
+    core.faces["available"] = True
+    core.identity["available"] = True
+    core.face_boxes[GRAY] = [FRONT]
+    core.face_boxes[DARK] = [PROFILE]
+    core.identities.update({RED: [1.0, 0.0], GREEN: [0.6, 0.8], BLUE: [0.0, 1.0]})
+
+
+def test_a_look_is_measured_under_the_faces_and_the_face_recognition_it_had():
+    info = {"slug": "local-siglip"}
+
+    assert looks.measure_key(info, {"available": False}, {"available": True}) == "local-siglip"
+    assert looks.measure_key(info, {"available": True}) == "local-siglip+faces"
+    assert looks.measure_key(info, {"available": True}, {"available": False}) == "local-siglip+faces"
+    assert looks.measure_key(info, {"available": True}, {"available": True}) == "local-siglip+faces+identity"
+
+
+def test_a_face_counts_as_seen_from_the_front_with_a_sure_detection_its_nose_between_its_eyes_and_its_eyes_apart():
+    assert looks.frontal(FRONT) is True
+    assert looks.frontal(PROFILE) is False
+    assert looks.frontal({**FRONT, "score": 0.8}) is False
+    assert looks.frontal({**FRONT, "width": 40.0}) is False
+    assert looks.frontal({**FRONT, "landmarks": []}) is False
+
+
+def test_with_the_face_recognition_a_take_says_how_much_of_its_first_frontal_face_is_left_and_when(core, make_project, painted):
+    project, _, second = _placed(make_project, core)
+    painted.takes[second["id"]] = [(0.0, GRAY, RED), (1.0, GRAY, GREEN), (2.0, DARK, BLUE), (3.0, GRAY, BLUE)]
+    _with_identity(core)
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    report = _report(core, project)
+
+    row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
+    assert row["model"] == "local-google-siglip-base-patch16-224+faces+identity"
+    assert [frame[4] is not None for frame in row["frames"]] == [True, True, False, True]
+    assert next(item for item in report["takes"] if item["take_id"] == second["id"])["identity"] == {"score": 0.0, "at": 3.0}
+    assert report["identity"] == {"model": "glintr100.onnx", "available": True}
+    assert report["thresholds"]["identity"] == looks.IDENTITY_LOW
+
+
+@pytest.mark.parametrize("chained, expected", [(True, 0.6), (False, None)])
+def test_a_chained_seam_compares_the_last_face_of_the_first_take_with_the_first_face_of_the_second(core, make_project, painted, chained, expected):
+    project, first, second = _placed(make_project, core)
+    stored = projects.get_project(project["id"])
+    doc = stored["doc"]
+    doc["clips"][1]["firstFromPrevious"] = chained
+    projects.save_project(project["id"], doc, stored["version"])
+    painted.takes[first["id"]] = [(0.0, GRAY, BLUE), (4.0, GRAY, RED)]
+    painted.takes[second["id"]] = [(0.0, GRAY, GREEN), (4.0, GRAY, BLUE)]
+    _with_identity(core)
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    (seam,) = _report(core, project)["seams"]
+
+    assert seam["identity"] == expected
+
+
+def test_a_look_measured_before_the_face_recognition_counts_as_missing_once_it_is_here(core, make_project, painted):
+    project, first, _ = _placed(make_project, core)
+    painted.takes[first["id"]] = [(0.0, GRAY, RED)]
+    core.faces["available"] = True
+    core.face_boxes[GRAY] = [FRONT]
+    looks.queue_take(first)
+    assert _run() is True
+    assert next(item for item in _report(core, project)["takes"] if item["take_id"] == first["id"])["status"] == "done"
+
+    core.identity["available"] = True
+
+    assert next(item for item in _report(core, project)["takes"] if item["take_id"] == first["id"])["status"] == "missing"
 
 
 def test_a_look_measured_before_the_face_detector_counts_as_missing_once_it_is_here(core, make_project, frames):

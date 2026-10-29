@@ -9,7 +9,7 @@
 	import { isStale } from '../../lib/shots.js';
 	import { seamChainOf } from '../../lib/chain.svelte.js';
 	import { currentLooks, lookState, measureLooks } from '../../lib/looks.svelte.js';
-	import { driftOf, finalLook, lowCard as cardIsLow, lowDrift, lowFinal, percent, takeLook } from '../../lib/looks.js';
+	import { driftOf, faceChanged, finalLook, lowCard as cardIsLow, lowDrift, lowFinal, percent, pushedIn, takeLook } from '../../lib/looks.js';
 	import { seam } from '../../lib/continuity.svelte.js';
 	import { seamImage } from '../../lib/seam.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
@@ -184,6 +184,8 @@
 				</li>
 			{/each}
 		</ul>
+		{#if pushedIn(looks, look)}<p class="text-xs text-warning" data-look-push-in>{t('panels.director.pick.lookPushIn', { ratio: formatNumber(look.pushIn, { maximumFractionDigits: 1 }) })}</p>{/if}
+		{#if faceChanged(looks, look)}<p class="text-xs text-warning" data-look-identity>{t('panels.director.pick.lookIdentity', { score: percent(look.identity.score), at: formatNumber(look.identity.at ?? 0, { maximumFractionDigits: 1 }) })}</p>{/if}
 		{#if fromDraft?.status === 'done'}<p class="text-xs {lowFinal(looks, fromDraft) ? 'text-warning' : 'text-fg-subtle'}" data-look-final>{lowFinal(looks, fromDraft) ? t('panels.director.pick.lookFinalLow', { score: percent(fromDraft.score) }) : t('panels.director.pick.lookFinal', { score: percent(fromDraft.score) })}</p>{/if}
 		<p class="text-xs text-fg-subtle">{t('panels.director.pick.lookHint')}</p>
 	</section>

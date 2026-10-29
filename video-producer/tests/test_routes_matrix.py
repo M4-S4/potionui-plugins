@@ -293,7 +293,7 @@ ROUTES = {
         invalid=lambda w: Call(f"/projects/{w.pid}/generate", {**ORDER, "quality": "best"}, 422, "invalid_request"),
     ),
     "GET /projects/{id}/looks": Route(
-        success=lambda w: Call(f"/projects/{w.pid}/looks", check=lambda r: _data(r)["thresholds"] == {"seam": 0.7, "cast": 0.6, "face": 0.7, "place": 0.55, "final": 0.8, "drift": 0.8}),
+        success=lambda w: Call(f"/projects/{w.pid}/looks", check=lambda r: _data(r)["thresholds"] == {"seam": 0.7, "cast": 0.6, "face": 0.7, "place": 0.55, "final": 0.8, "drift": 0.8, "push_in": 1.5, "identity": 0.6}),
         denied=lambda w: Call(f"/projects/{w.pid}/looks", status=404, code="project_not_found", who="user-2"),
     ),
     "POST /projects/{id}/looks": Route(

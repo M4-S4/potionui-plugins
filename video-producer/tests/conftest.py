@@ -494,6 +494,8 @@ BRIDGED = (
     "embed_images",
     "face_detector",
     "detect_faces",
+    "face_identifier",
+    "identify_faces",
     "generation_active",
     "module_available",
     "package_version",
@@ -540,6 +542,8 @@ class FakeCore:
         self.embedder = {"model": "google/siglip-base-patch16-224", "slug": "local-google-siglip-base-patch16-224", "device": "cpu", "available": True, "loaded": False}
         self.faces = {"model": "face_detection_yunet_2023mar.onnx", "available": False}
         self.face_boxes = {}
+        self.identity = {"model": "glintr100.onnx", "path": "/models/face_recognition/auraface/glintr100.onnx", "available": False}
+        self.identities = {}
         self.embedded = []
         self.modules = set()
         self.versions = {}
@@ -803,6 +807,21 @@ class FakeCore:
                 color = image.convert("RGB").getpixel((0, 0))
             found.append([dict(box) for box in self.face_boxes.get(color, [])])
         return found
+
+    def face_identifier(self):
+        return dict(self.identity)
+
+    def identify_faces(self, faces):
+        from PIL import Image
+
+        if not self.identity["available"]:
+            raise FileNotFoundError("glintr100.onnx is not at /models/face_recognition/auraface/glintr100.onnx")
+        vectors = []
+        for path, landmarks in faces:
+            with Image.open(path) as image:
+                color = image.convert("RGB").getpixel(tuple(round(value) for value in landmarks[2]))
+            vectors.append(list(self.identities.get(color, [1.0, 0.0])))
+        return vectors
 
     def generation_active(self):
         return self.busy
