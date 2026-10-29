@@ -85,7 +85,7 @@
 	}
 
 	function outside(e) {
-		if (!isTopLayer(layer) || !closesOnOutsidePointer(anchor.closest('.vp-root'), e.target)) return;
+		if (!isTopLayer(layer) || !closesOnOutsidePointer(anchor?.closest('.vp-root') ?? null, e.target)) return;
 		if (e.target === backdrop) e.preventDefault();
 		onclose();
 	}

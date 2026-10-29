@@ -32,7 +32,7 @@ function fakeNode(sizes) {
 	return { node, handlers };
 }
 
-test('overflow: a row of pills that scrolls fades the side it hides, and the wheel scrolls it sideways', () => {
+test('overflow: a row of pills that scrolls fades the side it hides, and the wheel scrolls it sideways only while it can still move that way', () => {
 	assert.equal(shadeOf(0, 300, 300), 'none');
 	assert.equal(shadeOf(0, 300, 301), 'none');
 	assert.equal(shadeOf(0, 300, 500), 'end');
@@ -48,9 +48,17 @@ test('overflow: a row of pills that scrolls fades the side it hides, and the whe
 	assert.equal(node.attributes['data-shade'], 'both');
 	handlers.wheel({ deltaY: 10, deltaX: 30, preventDefault: () => (prevented += 1) });
 	assert.deepEqual([node.scrollLeft, prevented], [40, 1]);
+	handlers.wheel({ deltaY: 500, deltaX: 0, preventDefault: () => (prevented += 1) });
+	assert.deepEqual([node.scrollLeft, prevented], [200, 2]);
+	handlers.wheel({ deltaY: 40, deltaX: 0, preventDefault: () => (prevented += 1) });
+	assert.deepEqual([node.scrollLeft, prevented], [200, 2]);
+	handlers.wheel({ deltaY: -500, deltaX: 0, preventDefault: () => (prevented += 1) });
+	assert.deepEqual([node.scrollLeft, prevented], [0, 3]);
+	handlers.wheel({ deltaY: -40, deltaX: 0, preventDefault: () => (prevented += 1) });
+	assert.deepEqual([node.scrollLeft, prevented], [0, 3]);
 	node.scrollWidth = 300;
 	handlers.wheel({ deltaY: 40, deltaX: 0, preventDefault: () => (prevented += 1) });
-	assert.deepEqual([node.scrollLeft, prevented], [40, 1]);
+	assert.deepEqual([node.scrollLeft, prevented], [0, 3]);
 	action.destroy();
 	assert.deepEqual(Object.keys(handlers), []);
 });

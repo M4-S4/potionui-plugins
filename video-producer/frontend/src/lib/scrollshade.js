@@ -9,8 +9,10 @@ export function shadeOf(scrollLeft, clientWidth, scrollWidth, slack = 1) {
 export function scrollShade(node) {
 	const update = () => node.setAttribute('data-shade', shadeOf(node.scrollLeft, node.clientWidth, node.scrollWidth));
 	const wheel = (event) => {
-		if (node.scrollWidth <= node.clientWidth || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-		node.scrollLeft += event.deltaY;
+		if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+		const next = Math.max(0, Math.min(node.scrollWidth - node.clientWidth, node.scrollLeft + event.deltaY));
+		if (next === node.scrollLeft) return;
+		node.scrollLeft = next;
 		event.preventDefault();
 	};
 	update();
