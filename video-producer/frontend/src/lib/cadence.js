@@ -41,6 +41,12 @@ export function neededFps(doc, clip, take) {
 	return needsConform(take.fps, fps) ? fps : null;
 }
 
+export function finalCadence(doc, take) {
+	const clip = (doc?.clips ?? []).find((c) => c.id === take?.shotId) ?? null;
+	const fps = neededFps(doc, clip, take);
+	return { slow: fps !== null, from: positive(take?.fps), fps };
+}
+
 export function nearlyAsFast(takeFps, fps) {
 	const source = positive(takeFps);
 	const target = positive(fps);

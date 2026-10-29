@@ -1,6 +1,6 @@
 import { laneCode } from './tracks.js';
 import { BOX, deliverySize, ratioOf } from './formats.js';
-import { speedOf } from './cadence.js';
+import { sourceSeconds, speedOf } from './cadence.js';
 
 export const EXCHANGE = {
 	fcpxml: { ext: 'fcpxml', mime: 'application/xml' },
@@ -48,14 +48,16 @@ export function fileOf(doc, c, label) {
 
 function timing(doc) {
 	const frames = (sec) => Math.round(sec * doc.fps);
-	const rt = (sec) => `${frames(sec)}/${doc.fps}s`;
+	const count = (n) => `${n}/${doc.fps}s`;
+	const rt = (sec) => count(frames(sec));
+	const span = (start, dur) => frames(start + dur) - frames(start);
 	const tcode = (sec) => {
 		const f = frames(sec);
 		const p = (n) => String(n).padStart(2, '0');
 		const s = Math.floor(f / doc.fps);
 		return [p(Math.floor(s / 3600)), p(Math.floor((s % 3600) / 60)), p(s % 60), p(f % doc.fps)].join(':');
 	};
-	return { frames, rt, tcode };
+	return { frames, count, rt, span, tcode };
 }
 
 export function sequenceFrame(doc) {
@@ -72,20 +74,20 @@ function formatName(doc) {
 }
 
 export function fcpxml(doc, { label }) {
-	const { rt } = timing(doc);
+	const { frames, count, rt, span } = timing(doc);
 	const file = (c) => fileOf(doc, c, label);
 	const media = doc.clips.filter(file);
 	const res = sequenceFrame(doc);
 	const assets = media.map(
 		(c, i) =>
-			`\t\t<asset id="r${i + 2}" name="${esc(label(c))}" start="0s" duration="${rt(assetOf(doc, c.assetId).srcDur ?? c.srcIn + c.dur)}" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/${esc(encodeURI(file(c)))}"/></asset>`
+			`\t\t<asset id="r${i + 2}" name="${esc(label(c))}" start="0s" duration="${rt(assetOf(doc, c.assetId).srcDur ?? c.srcIn + sourceSeconds(c))}" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/${esc(encodeURI(file(c)))}"/></asset>`
 	);
 	const timeMap = (c) =>
-		`<timeMap><timept time="${rt(c.srcIn)}" value="${rt(c.srcIn)}" interp="linear"/><timept time="${rt(c.srcIn + c.dur)}" value="${rt(c.srcIn + c.dur * speedOf(c))}" interp="linear"/></timeMap>`;
+		`<timeMap><timept time="${rt(c.srcIn)}" value="${rt(c.srcIn)}" interp="linear"/><timept time="${count(frames(c.srcIn) + span(c.start, c.dur))}" value="${rt(c.srcIn + sourceSeconds(c, span(c.start, c.dur) / doc.fps))}" interp="linear"/></timeMap>`;
 	const spine = doc.clips.map((c) =>
 		file(c)
-			? `\t\t\t\t\t\t<asset-clip ref="r${media.indexOf(c) + 2}" name="${esc(label(c))}" offset="${rt(c.start)}" start="${rt(c.srcIn)}" duration="${rt(c.dur)}"${speedOf(c) === 1 ? '/>' : `>${timeMap(c)}</asset-clip>`}`
-			: `\t\t\t\t\t\t<gap name="${esc(label(c))}" offset="${rt(c.start)}" start="0s" duration="${rt(c.dur)}"/>`
+			? `\t\t\t\t\t\t<asset-clip ref="r${media.indexOf(c) + 2}" name="${esc(label(c))}" offset="${rt(c.start)}" start="${rt(c.srcIn)}" duration="${count(span(c.start, c.dur))}"${speedOf(c) === 1 ? '/>' : `>${timeMap(c)}</asset-clip>`}`
+			: `\t\t\t\t\t\t<gap name="${esc(label(c))}" offset="${rt(c.start)}" start="0s" duration="${count(span(c.start, c.dur))}"/>`
 	);
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE fcpxml>
@@ -110,34 +112,34 @@ ${spine.join('\n')}
 }
 
 export function otio(doc, { label }) {
-	const { frames } = timing(doc);
+	const { frames, span } = timing(doc);
 	const rate = doc.fps;
 	const file = (c) => fileOf(doc, c, label);
-	const range = (start, dur) => ({ OTIO_SCHEMA: 'TimeRange.1', start_time: { OTIO_SCHEMA: 'RationalTime.1', rate, value: frames(start) }, duration: { OTIO_SCHEMA: 'RationalTime.1', rate, value: frames(dur) } });
+	const range = (start, length) => ({ OTIO_SCHEMA: 'TimeRange.1', start_time: { OTIO_SCHEMA: 'RationalTime.1', rate, value: start }, duration: { OTIO_SCHEMA: 'RationalTime.1', rate, value: length } });
 	const reference = (url) => ({ DEFAULT_MEDIA: url ? { OTIO_SCHEMA: 'ExternalReference.1', target_url: url } : { OTIO_SCHEMA: 'MissingReference.1' } });
 	const video = doc.clips.map((c) =>
 		file(c)
 			? {
 					OTIO_SCHEMA: 'Clip.2',
 					name: label(c),
-					source_range: range(c.srcIn, c.dur),
+					source_range: range(frames(c.srcIn), span(c.start, c.dur)),
 					media_references: reference(file(c)),
 					active_media_reference_key: 'DEFAULT_MEDIA',
 					metadata: { video_producer: { stage: c.stage, take: c.take } },
 					...(speedOf(c) === 1 ? {} : { effects: [{ OTIO_SCHEMA: 'LinearTimeWarp.1', name: '', effect_name: 'LinearTimeWarp', metadata: {}, time_scalar: speedOf(c) }] })
 				}
-			: { OTIO_SCHEMA: 'Gap.1', name: label(c), source_range: range(0, c.dur) }
+			: { OTIO_SCHEMA: 'Gap.1', name: label(c), source_range: range(0, span(c.start, c.dur)) }
 	);
 	const lanes = doc.lanes.map((l) => {
 		const items = doc.audio.filter((a) => a.lane === l.id).sort((a, b) => a.start - b.start);
 		const children = [];
 		let at = 0;
 		for (const a of items) {
-			if (a.start > at) children.push({ OTIO_SCHEMA: 'Gap.1', source_range: range(0, a.start - at) });
+			if (a.start > at) children.push({ OTIO_SCHEMA: 'Gap.1', source_range: range(0, frames(a.start) - frames(at)) });
 			children.push({
 				OTIO_SCHEMA: 'Clip.2',
 				name: assetOf(doc, a.assetId)?.name,
-				source_range: range(a.srcIn, a.dur),
+				source_range: range(frames(a.srcIn), span(a.start, a.dur)),
 				media_references: reference(file(a)),
 				active_media_reference_key: 'DEFAULT_MEDIA',
 				metadata: { video_producer: { role: l.role, gain_db: a.gain } }

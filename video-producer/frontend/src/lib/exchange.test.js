@@ -131,3 +131,33 @@ test('formats: the OTIO video track of slowed shots lasts as long as the timelin
 	assert.equal(track.reduce((total, clip) => total + clip.source_range.duration.value, 0), seqDuration(doc) * doc.fps);
 	assert.deepEqual(track.map((clip) => clip.effects?.[0].time_scalar ?? null), [0.5, null, 0.25]);
 });
+
+function evenShots(fps, count) {
+	const doc = sampleDoc();
+	doc.fps = fps;
+	doc.clips = Array.from({ length: count }, (_, i) => ({ id: `c${i}`, assetId: 'a1', start: Math.round(i * 452) / 100, dur: 4.52, srcIn: 0, label: `S${i}`, stage: 'draft', take: null }));
+	doc.audio = [];
+	return doc;
+}
+
+test('formats: the FCPXML asset of a slowed shot of unknown length covers the source the shot shows', () => {
+	const doc = sampleDoc();
+	doc.clips = [{ ...doc.clips[2], dur: 4, srcIn: 1, speed: 0.5 }];
+	assert.match(fcpxml(doc, optionsFor(doc)), new RegExp(`<asset id="r2" name="[^"]*" start="0s" duration="${3 * doc.fps}/${doc.fps}s"`));
+});
+
+test('formats: off 25 fps, the FCPXML shots follow each other frame for frame and the OTIO video track keeps step with the audio', () => {
+	for (const fps of [24, 30]) {
+		const doc = evenShots(fps, 3);
+		const made = fcpxml(doc, optionsFor(doc));
+		const spine = [...made.matchAll(new RegExp(`<asset-clip [^>]*offset="(\\d+)/${fps}s" start="\\d+/${fps}s" duration="(\\d+)/${fps}s"`, 'g'))].map((m) => [Number(m[1]), Number(m[2])]);
+		assert.equal(spine.length, 3);
+		for (let i = 1; i < spine.length; i++) assert.equal(spine[i][0], spine[i - 1][0] + spine[i - 1][1], `${fps} fps, shot ${i}`);
+		assert.match(made, new RegExp(`<sequence format="r1" duration="${spine[2][0] + spine[2][1]}/${fps}s"`));
+		const long = evenShots(fps, 10);
+		long.audio = [{ id: 'u1', assetId: 'v1', lane: 'A1', start: 45.2, dur: 1, srcIn: 0, gain: 0 }];
+		const [video, voices] = JSON.parse(otio(long, optionsFor(long))).tracks.children;
+		assert.equal(video.children.reduce((total, clip) => total + clip.source_range.duration.value, 0), Math.round(45.2 * fps), `${fps} fps`);
+		assert.equal(voices.children[0].source_range.duration.value, Math.round(45.2 * fps), `${fps} fps`);
+	}
+});

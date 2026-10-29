@@ -8,7 +8,7 @@
 	import { chosenSize } from '../../lib/formats.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { guidedReady, guidedResolution, rememberRtxSource, savedChoice } from '../../lib/finalpass.svelte.js';
-	import { interpolatorChoice, needsConform, pickInterpolator, targetOf } from '../../lib/cadence.js';
+	import { finalCadence, interpolatorChoice, pickInterpolator } from '../../lib/cadence.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
 
@@ -38,8 +38,8 @@
 	const guidedRes = $derived(guidedResolution());
 	let sending = $state(false);
 	let conform = $state(true);
-	const filmFps = $derived(targetOf(doc));
-	const slow = $derived(filmFps !== null && needsConform(take?.fps, filmFps));
+	const cadence = $derived(finalCadence(doc, take));
+	const slow = $derived(cadence.slow);
 	const interpolator = $derived(pickInterpolator(interpolatorChoice(doc), ui.me));
 	const conforming = $derived(slow && conform && interpolator !== null);
 
@@ -111,9 +111,9 @@
 			{#if slow}
 				<section class="space-y-1.5" aria-label={t('generation.finalPass.cadence.label')}>
 					<div class="flex items-center gap-3">
-						<label for="vp-make-final-conform" class="text-sm text-fg">{t('generation.final.conform', { from: take.fps, fps: filmFps })}</label>
+						<label for="vp-make-final-conform" class="text-sm text-fg">{t('generation.final.conform', { from: take.fps, fps: cadence.fps })}</label>
 						<span class="flex-1"></span>
-						<HostUi name="Switch" props={{ id: 'vp-make-final-conform', checked: conforming, disabled: interpolator === null, size: 'lg', label: t('generation.final.conform', { from: take.fps, fps: filmFps }), onchange: (v) => (conform = Boolean(v)) }} />
+						<HostUi name="Switch" props={{ id: 'vp-make-final-conform', checked: conforming, disabled: interpolator === null, size: 'lg', label: t('generation.final.conform', { from: take.fps, fps: cadence.fps }), onchange: (v) => (conform = Boolean(v)) }} />
 					</div>
 					<p class="text-xs text-fg-subtle">{interpolator === null ? t('generation.cadence.noInterpolator') : conforming ? t('generation.finalPass.cadence.with', { name: interpolator === 'rtx' ? t('generation.cadence.interpolator.rtx') : t('generation.cadence.interpolator.rife') }) : t('generation.finalPass.cadence.off')}</p>
 				</section>

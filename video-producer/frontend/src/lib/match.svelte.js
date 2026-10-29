@@ -10,6 +10,7 @@ import { showShot } from './monitor.svelte.js';
 import { CONTINUATION, shotVideoTracks } from './reception.js';
 import { trackItemsOf } from './vrefs.js';
 import { vrefLabel } from './vreftracks.js';
+import { sourceSeconds } from './cadence.js';
 
 const SAMPLE = 128;
 const TIMEOUT = 20000;
@@ -39,7 +40,7 @@ function previousAnchor(clip, index) {
 	const media = prev ? asset(prev.assetId) : null;
 	if (!prev || !media || media.kind === 'audio' || !media.src) return null;
 	const image = seamPick(doc, index, takeStore.list)?.last ?? null;
-	const at = (prev.srcIn ?? 0) + Math.max(0, prev.dur - LAST_FRAME);
+	const at = (prev.srcIn ?? 0) + Math.max(0, sourceSeconds(prev) - LAST_FRAME);
 	return { kind: 'previous', id: prev.id, label: t('inspector.match.anchorPrevious', { shot: clipLabel(prev) }), image, media: image ? null : media, at };
 }
 
@@ -182,7 +183,7 @@ function videoPixels(src, times) {
 export function takeTimes(clip, media) {
 	const start = clip.srcIn ?? 0;
 	const end = typeof media?.srcDur === 'number' ? Math.max(0, media.srcDur - LAST_FRAME) : Infinity;
-	return TAKE_POINTS.map((p) => +Math.min(start + clip.dur * p, end).toFixed(3));
+	return TAKE_POINTS.map((p) => +Math.min(start + sourceSeconds(clip) * p, end).toFixed(3));
 }
 
 function takePixels(clip) {

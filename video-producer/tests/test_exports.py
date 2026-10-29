@@ -269,3 +269,30 @@ def test_the_four_formats_have_their_content_types():
         "edl": "text/plain; charset=utf-8",
         "srt": "application/x-subrip",
     }
+
+
+@pytest.mark.parametrize("fps", [24, 30])
+def test_off_25_fps_the_fcpxml_shots_follow_each_other_and_the_otio_tracks_keep_step(make_doc, fps):
+    clips = [{"id": f"c{i}", "assetId": "a1", "start": round(i * 452) / 100, "dur": 4.52, "srcIn": 0, "label": f"S{i}"} for i in range(10)]
+    doc = make_doc(clips=clips, assets=[{"id": "a1", "kind": "video", "name": "x", "srcDur": 6}])
+    doc["fps"] = fps
+    files = {("clips", index): {"name": "1.mp4", "path": f"/srv/{index}.mp4"} for index in range(10)}
+
+    spine = [(int(offset), int(length)) for offset, length in re.findall(rf'<asset-clip [^>]*offset="(\d+)/{fps}s" start="\d+/{fps}s" duration="(\d+)/{fps}s"', render("fcpxml", doc, files))]
+    doc["audio"] = [{"id": "u1", "assetId": None, "lane": doc["lanes"][0]["id"], "start": 45.2, "dur": 1, "srcIn": 0, "gain": 0}]
+    video, voices = json.loads(render("otio", doc, files))["tracks"]["children"][:2]
+
+    assert len(spine) == 10
+    assert all(spine[i][0] == spine[i - 1][0] + spine[i - 1][1] for i in range(1, 10))
+    assert spine[-1][0] + spine[-1][1] == js_round(45.2 * fps)
+    assert sum(clip["source_range"]["duration"]["value"] for clip in video["children"]) == js_round(45.2 * fps)
+    assert voices["children"][0]["source_range"]["duration"]["value"] == js_round(45.2 * fps)
+
+
+def test_the_fcpxml_asset_of_a_slowed_shot_of_unknown_length_covers_the_source_it_shows(make_doc):
+    doc = make_doc(clips=[{"id": "c1", "assetId": "a1", "start": 0, "dur": 4, "srcIn": 1, "speed": 0.5}], assets=[{"id": "a1", "kind": "video", "name": "x", "srcDur": None}])
+    doc["fps"] = 25
+
+    made = render("fcpxml", doc, {("clips", 0): {"name": "1.mp4", "path": "/srv/1.mp4"}})
+
+    assert re.search(r'<asset id="r2" name="[^"]*" start="0s" duration="75/25s"', made)

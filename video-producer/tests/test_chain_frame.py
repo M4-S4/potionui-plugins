@@ -149,6 +149,12 @@ def test_the_cut_of_a_shot_ends_at_its_source_in_plus_its_duration():
     assert chain.end_of({"dur": 4}) == 4.0
 
 
+def test_the_cut_of_a_slowed_shot_ends_where_its_take_stops_showing():
+    assert chain.end_of({"srcIn": 1, "dur": 4, "speed": 0.5}) == 3.0
+    assert chain.end_of({"srcIn": 0.5, "dur": 8, "speed": 0.25}) == 2.5
+    assert chain.end_of({"srcIn": 1, "dur": 4, "speed": 2}) == 5.0
+
+
 def test_the_command_decodes_from_one_second_before_the_end_and_drops_every_frame_from_the_end_on():
     late = chain.frame_command("ffmpeg", "in.mp4", 2.0, Path("out.png"))
     early = chain.frame_command("ffmpeg", "in.mp4", 0.6, Path("out.png"))

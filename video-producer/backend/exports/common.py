@@ -151,7 +151,14 @@ class Timebase:
         return js_round(seconds * self.fps)
 
     def rational(self, seconds: Any) -> str:
-        return f"{self.frames(seconds)}/{js_number(self.fps)}s"
+        return self.count(self.frames(seconds))
+
+    def count(self, frames: int) -> str:
+        return f"{frames}/{js_number(self.fps)}s"
+
+    def span(self, start: Any, seconds: Any) -> int:
+        """The frames an item from start for seconds covers on the timeline: from the frame its start falls on to the frame its end falls on, so that items that follow each other stay frame for frame in step."""
+        return self.frames(start + seconds) - self.frames(start)
 
     def timecode(self, seconds: Any) -> str:
         count = self.frames(seconds)

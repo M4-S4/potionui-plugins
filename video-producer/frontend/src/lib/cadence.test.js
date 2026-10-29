@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CADENCES, DEFAULT_CADENCE, INTERPOLATORS, SLOWER, SLOW_SPEEDS, SPEEDS, exportCadence, neededFps, shotCadence, sourceSeconds, speedOf, interpolatorChoice, interpolatorsReady, isActiveRendition, nearlyAsFast, needsConform, pickInterpolator, placedTakes, renditionFor, takeCadence, targetOf } from './cadence.js';
+import { CADENCES, DEFAULT_CADENCE, INTERPOLATORS, SLOWER, SLOW_SPEEDS, SPEEDS, exportCadence, finalCadence, neededFps, shotCadence, sourceSeconds, speedOf, interpolatorChoice, interpolatorsReady, isActiveRendition, nearlyAsFast, needsConform, pickInterpolator, placedTakes, renditionFor, takeCadence, targetOf } from './cadence.js';
 import { createClient, normalizePassEstimate, normalizeRendition, normalizeRenditionEstimate } from './api.js';
 
 const table = JSON.parse(readFileSync(new URL('../../../backend/formats.json', import.meta.url), 'utf-8'));
@@ -176,4 +176,18 @@ test('a slowed shot shows the version at its rate, and the export counts the slo
 	const found = exportCadence(doc, takes, []);
 	assert.deepEqual(found.slowed.map((x) => x.id), ['a']);
 	assert.deepEqual(found.slow.map((x) => x.id), ['b']);
+});
+
+test('finalCadence: a final take is brought to the rate its shot needs, the film rate divided by the speed of the shot', () => {
+	const doc = { fps: 25, clips: [{ id: 's1', dur: 4 }, { id: 's2', dur: 4, speed: 0.5 }, { id: 's3', dur: 4, speed: 0.25 }] };
+	assert.deepEqual(finalCadence(doc, { shotId: 's1', fps: 16 }), { slow: true, from: 16, fps: 25 });
+	assert.deepEqual(finalCadence(doc, { shotId: 's2', fps: 16 }), { slow: true, from: 16, fps: 50 });
+	assert.deepEqual(finalCadence(doc, { shotId: 's2', fps: 25 }), { slow: true, from: 25, fps: 50 });
+	assert.deepEqual(finalCadence(doc, { shotId: 's3', fps: 25 }), { slow: true, from: 25, fps: 100 });
+	assert.deepEqual(finalCadence(doc, { shotId: 's1', fps: 25 }), { slow: false, from: 25, fps: null });
+	assert.deepEqual(finalCadence(doc, { shotId: 'gone', fps: 16 }), { slow: true, from: 16, fps: 25 });
+	assert.deepEqual(finalCadence(doc, null), { slow: false, from: null, fps: null });
+	const single = readFileSync(new URL('../components/modals/MakeFinal.svelte', import.meta.url), 'utf8');
+	assert.match(single, /finalCadence\(doc, take\)/);
+	assert.doesNotMatch(single, /needsConform\(take\?\.fps, filmFps\)/);
 });
