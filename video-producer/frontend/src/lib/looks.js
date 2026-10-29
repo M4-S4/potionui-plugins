@@ -105,7 +105,9 @@ export function chainLook(looks, from, to) {
 	return looks.chains.find((c) => c.shotId === to.id && c.previousId === from.id && c.fromTake === from.take) ?? null;
 }
 
-export const chainDrifts = (looks, from, to) => lowCards(looks, chainLook(looks, from, to));
+export const chainThreshold = (looks, card) => (card.kind !== 'place' && card.method === 'face' ? looks.thresholds.drift : cardThreshold(looks, card));
+
+export const chainDrifts = (looks, from, to) => (chainLook(looks, from, to)?.cards ?? []).filter((c) => c.status === 'done' && c.score !== null && c.score < chainThreshold(looks, c));
 
 export const finalLook = (looks, takeId) => (looks && takeId ? (looks.finals.find((x) => x.takeId === takeId) ?? null) : null);
 

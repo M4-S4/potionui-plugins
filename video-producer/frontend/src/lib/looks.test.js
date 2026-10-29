@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CAST_LOW, chainDrifts, chainLook, DRIFT_LOW, FACE_LOW, FINAL_LOW, PLACE_LOW, SEAM_LOW, bestCandidate, cardThreshold, driftOf, finalLook, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
+import { CAST_LOW, chainDrifts, chainLook, chainThreshold, DRIFT_LOW, FACE_LOW, FINAL_LOW, PLACE_LOW, SEAM_LOW, bestCandidate, cardThreshold, driftOf, finalLook, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -90,18 +90,33 @@ test('a card is judged by the threshold of how it was measured, a final by its d
 	assert.equal(looks.drift.length, 1);
 });
 
-test('a chain look counts for the take the previous shot plays now, and its drifting cards are those under their threshold', () => {
+test('a chain look counts for the take the previous shot plays now, and its drifting cards are a face under the drift threshold or another card under its own threshold', () => {
 	const looks = normalizeLooks({
 		chains: [
-			{ shot_id: 's2', previous_id: 's1', from_take: 't1', cards: [{ card_id: 'c1', label: 'Marin', kind: 'character', method: 'face', seen: 1, score: 0.6, status: 'done' }, { card_id: 'c2', label: 'Lina', kind: 'character', method: 'whole', seen: null, score: 0.9, status: 'done' }] },
+			{
+				shot_id: 's2',
+				previous_id: 's1',
+				from_take: 't1',
+				cards: [
+					{ card_id: 'c1', label: 'Marin', kind: 'character', method: 'face', seen: 1, score: 0.6, status: 'done' },
+					{ card_id: 'c2', label: 'Lina', kind: 'character', method: 'whole', seen: null, score: 0.9, status: 'done' },
+					{ card_id: 'c3', label: 'Ana', kind: 'character', method: 'face', seen: 1, score: 0.75, status: 'done' },
+					{ card_id: 'c4', label: 'Tom', kind: 'character', method: 'whole', seen: null, score: 0.65, status: 'done' },
+					{ card_id: 'c5', label: 'Eva', kind: 'character', method: 'face', seen: 1, score: 0.85, status: 'done' },
+					{ card_id: 'c6', label: 'Leo', kind: 'character', method: 'face', seen: 1, score: 0.5, status: 'queued' }
+				]
+			},
 			{ shot_id: 's3' }
 		]
 	});
 	assert.equal(looks.chains.length, 1);
 	assert.equal(chainLook(looks, { id: 's1', take: 't1' }, { id: 's2' }).fromTake, 't1');
 	assert.equal(chainLook(looks, { id: 's1', take: 't9' }, { id: 's2' }), null);
-	assert.deepEqual(chainDrifts(looks, { id: 's1', take: 't1' }, { id: 's2' }).map((c) => c.cardId), ['c1']);
+	assert.deepEqual(chainDrifts(looks, { id: 's1', take: 't1' }, { id: 's2' }).map((c) => c.cardId), ['c1', 'c3']);
 	assert.deepEqual(chainDrifts(null, { id: 's1', take: 't1' }, { id: 's2' }), []);
+	assert.equal(chainThreshold(looks, { kind: 'character', method: 'face' }), DRIFT_LOW);
+	assert.equal(chainThreshold(looks, { kind: 'character', method: 'whole' }), CAST_LOW);
+	assert.equal(chainThreshold(looks, { kind: 'place', method: 'whole' }), PLACE_LOW);
 });
 
 test('a drifting chain is a seam issue whose fix opens the start images of the next shot with its current one as the framing', () => {
