@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-import src.plugin_api.generation as api_generation
 from backend import core_bridge, projects
 from src.plugin_api import AccountType, get_current_active_user
 
@@ -431,7 +430,10 @@ def test_put_me_cannot_probe_for_projects_of_others_by_telling_them_apart(app, a
 
 @pytest.fixture
 def core_without_media(monkeypatch):
-    monkeypatch.setattr(api_generation, "get_container", lambda: SimpleNamespace())
+    def refuse(user, ref):
+        raise AssertionError(f"the route asked the core to resolve a ref it should have refused: {ref!r}")
+
+    monkeypatch.setattr(core_bridge, "resolve_media", refuse)
 
 
 @pytest.mark.parametrize(
