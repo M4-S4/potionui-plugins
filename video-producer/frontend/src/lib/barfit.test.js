@@ -62,19 +62,19 @@ test('barfit: the short name of a preset drops its hardware tier in brackets, ne
 	assert.deepEqual(deckChipFolded({ ...parts, drafts: null }, { engine: 'full', tier: 'full' }, t), ['MiniMax H3 (12 GB)', 'FL2VA', '832×480', 'production.deck.draftsMixed']);
 });
 
-test('barfit: the deck folds to 56 px under a 440 px centre or a 1024 px page, measured as if the deck were full, and comes back as soon as the room is back', () => {
+test('barfit: the deck folds to 56 px under a 420 px centre or a 1024 px page, measured as if the deck were full, and comes back as soon as the room is back', () => {
 	assert.equal(DECK_HEIGHT, 92);
 	assert.equal(DECK_COMPACT_HEIGHT, 56);
-	assert.equal(DECK_COMPACT_CENTRE, 440);
-	assert.equal(deckCompact({ narrow: false, centre: 440 }), false);
-	assert.equal(deckCompact({ narrow: false, centre: 439 }), true);
-	assert.equal(deckCompact({ narrow: false, centre: 477 }), false);
-	assert.equal(deckCompact({ narrow: false, centre: 370 }), true);
+	assert.equal(DECK_COMPACT_CENTRE, 420);
+	assert.equal(deckCompact({ narrow: false, centre: 420 }), false);
+	assert.equal(deckCompact({ narrow: false, centre: 419 }), true);
+	assert.equal(deckCompact({ narrow: false, centre: 441 }), false);
+	assert.equal(deckCompact({ narrow: false, centre: 378 }), true);
 	assert.equal(deckCompact({ narrow: true, centre: 900 }), true);
-	assert.equal(deckCompact({ narrow: false, centre: 475, deck: 56 }), true);
-	assert.equal(deckCompact({ narrow: false, centre: 476, deck: 56 }), false);
-	assert.equal(deckCompact({ narrow: false, centre: 457, deck: 74 }), true);
-	assert.equal(deckCompact({ narrow: false, centre: 458, deck: 74 }), false);
+	assert.equal(deckCompact({ narrow: false, centre: 455, deck: 56 }), true);
+	assert.equal(deckCompact({ narrow: false, centre: 456, deck: 56 }), false);
+	assert.equal(deckCompact({ narrow: false, centre: 437, deck: 74 }), true);
+	assert.equal(deckCompact({ narrow: false, centre: 438, deck: 74 }), false);
 	assert.equal(deckCompact({ narrow: false }), false);
 	assert.equal(deckCompact(), false);
 	assert.equal(deckLine({ compact: false, eyebrow: 'Plan 03 · 8,0 s → 10,0 s', detail: { text: '1 prompt', warn: false } }), '1 prompt');
