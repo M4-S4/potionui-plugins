@@ -1,8 +1,29 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { clean, hostUis, renderComponent, textOf } from './svelte-harness.js';
+import enPanels from '../i18n/en/panels.json' with { type: 'json' };
+import frPanels from '../i18n/fr/panels.json' with { type: 'json' };
+import enInspector from '../i18n/en/inspector.json' with { type: 'json' };
+import frInspector from '../i18n/fr/inspector.json' with { type: 'json' };
+import enLib from '../i18n/en/lib.json' with { type: 'json' };
+import frLib from '../i18n/fr/lib.json' with { type: 'json' };
+import enProduction from '../i18n/en/production.json' with { type: 'json' };
+import frProduction from '../i18n/fr/production.json' with { type: 'json' };
+import enCommands from '../i18n/en/commands.json' with { type: 'json' };
+import frCommands from '../i18n/fr/commands.json' with { type: 'json' };
 import { CHARACTERS, PLACES, castOf } from './bible.js';
 import { PANEL_KINDS, REVIEW_FILTERS, VIEWS, cardImages, castWhereCited, citedWithout, defaultView, failureFixes, isCast, marked, markedPhrases, missingWords, nextToReview, panelSelection, promptShot, reviewChoice, reviewCounts, reviewFilterOf, reviewPickOf, reviewShots, reviewState, shotNumbers, toggledCast, unnamedIn, viewOf, viewShot, witnessOf } from './director.js';
+
+const { doc, ui, dispose, select, followIssue, allIssues, directorView, secs } = await import('./state.svelte.js');
+const { project } = await import('./project.svelte.js');
+const { setTakes, takeStore } = await import('./takes.svelte.js');
+const { showInReview, chooseShot, chooseTake, chooseSeam } = await import('./band.svelte.js');
+const { handleKeydown, commandById, spaceLabel } = await import('./commands.js');
+const { reception } = await import('./references.js');
+const { stages } = await import('./catalog.js');
+const { hostIconName } = await import('./icons.js');
+const { t } = await import('../i18n/index.svelte.js');
 
 const take = (id, shotId, fields = {}) => ({ id, shotId, status: 'done', url: `/t/${id}.mp4`, label: 'draft', createdAt: `2026-10-26T10:0${id.slice(-1)}:00Z`, ...fields });
 
@@ -121,8 +142,6 @@ test('director: casting a card where it is cited touches only those shots, and t
 	assert.deepEqual(cardImages(doc, null), []);
 });
 
-const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf-8');
-
 test('director: each view of the right panel keeps the kinds it can show, and anything else stays selected elsewhere', () => {
 	assert.deepEqual(PANEL_KINDS, { review: ['clip'], direction: ['clip'], bible: [], references: ['reference', 'clip', 'vtrack'] });
 	const shot = { kind: 'clip', id: 's2' };
@@ -182,107 +201,6 @@ test('director: shots are named by their numbers, three at most, and the Review 
 	assert.equal(reviewFilterOf('gone', { review: 0 }), 'all');
 });
 
-test('director: the right panel of Review and References filters the selection, keeps it, says where it stays and leaves the flag and the times out of Director AI', () => {
-	const inspector = read('../components/inspector/Inspector.svelte');
-	assert.match(inspector, /const s = \$derived\(ui\.selection\);/);
-	assert.doesNotMatch(inspector, /directorView|panelSelection|ElsewhereNote|shotNumber/);
-	assert.doesNotMatch(inspector, /ui\.selection = null/);
-	const note = read('../components/inspector/ElsewhereNote.svelte');
-	assert.match(note, /data-elsewhere=\{kind\}/);
-	assert.match(note, /space: spaceLabel\(ui\.selectedIn\) \?\? t\('inspector\.elsewhere\.space'\)/);
-	const aside = read('../components/director/ReferenceAside.svelte');
-	assert.match(aside, /const filtered = \$derived\(panelSelection\('references', ui\.selection\)\);/);
-	assert.match(aside, /\{#if filtered\.elsewhere\}<ElsewhereNote kind=\{filtered\.elsewhere\.kind\} \/>\{\/if\}/);
-	for (const file of ['ReferenceAside', 'ReferenceChosen', 'ReferenceShot', 'ReferenceProject', 'ReceptionList']) {
-		assert.doesNotMatch(read(`../components/director/${file}.svelte`), /secs\(|inspector\.section\.flag|ui\.playhead|shotIdAt/, file);
-	}
-	assert.match(read('./state.svelte.js'), /ui\.selectedIn = kind \? \(ui\.workspace === 'director' \? `director:\$\{directorView\(\)\}` : ui\.workspace\) : null;/);
-	const board = read('../components/references/ReferenceBoard.svelte');
-	assert.doesNotMatch(board, /ondblclick|seek\(/);
-	for (const locale of ['en', 'fr']) {
-		const keys = JSON.parse(read(`../i18n/${locale}/inspector.json`));
-		for (const kind of ['audio', 'title', 'prompt', 'frame', 'marker', 'reference', 'lane']) assert.match(keys[`elsewhere.${kind}`], /\{name\}.*\{space\}/, `${locale} ${kind}`);
-		assert.doesNotMatch(JSON.parse(read(`../i18n/${locale}/lib.json`))['refTag.shotTip'], /\{start\}|\{end\}/, locale);
-	}
-});
-
-test('director: a contradiction link makes its shot the sample, names it, and the panel marks the two sentences and edits the instruction', () => {
-	const view = read('../components/director/DirectionView.svelte');
-	assert.match(view, /onclick=\{\(\) => followIssue\(i\)\}>\{isShown\(i\) \? t\('panels\.director\.direction\.issueShown', \{ shot: num\(clip\) \}\) : t\('panels\.director\.direction\.issueLink', \{ shot: num\(clip\) \}\)\}<\/button>/);
-	assert.doesNotMatch(view, /select\('prompt'|seek\(|issuePrompt/);
-	const summary = read('../components/director/DirectorSummary.svelte');
-	assert.match(summary, /onclick=\{\(\) => followIssue\(i\)\}>/);
-	assert.doesNotMatch(summary, /seek\(/);
-	const aside = read('../components/director/DirectionAside.svelte');
-	assert.match(aside, /const marks = \$derived\(rule \? \[rule\.global, rule\.local\] : \[\]\);/);
-	assert.match(aside, /t\('panels\.director\.aside\.edit', \{ shot: num\(shot\) \}\)/);
-	assert.match(aside, /onclick=\{\(\) => \(ui\.witness = null\)\}>\{t\('panels\.director\.aside\.unpin'\)\}/);
-	assert.match(read('../components/shots/ComposedPrompt.svelte'), /\{#if part\.mark\}<mark /);
-	for (const locale of ['en', 'fr']) assert.match(JSON.parse(read(`../i18n/${locale}/panels.json`))['director.direction.issueLink'], /^\{shot\} · /, locale);
-});
-
-test('director: a shot chip of the Bible opens the Review on that shot and brings its row on screen', () => {
-	const bible = read('../components/director/BibleView.svelte');
-	assert.match(bible, /function goTo\(e, clip\) \{\n\t\te\.stopPropagation\(\);\n\t\tshowInReview\(clip\);\n\t\}/);
-	assert.match(bible, /title=\{t\('panels\.director\.bible\.chipTip', \{ shot: num\(clip\), name: clipLabel\(clip\) \}\)\}/);
-	assert.doesNotMatch(bible, /seek\(/);
-	const review = read('../components/director/ReviewView.svelte');
-	assert.match(review, /rows\?\.querySelector\(`\[data-review-shot="\$\{id\}"\]`\)\?\.scrollIntoView\(\{ block: 'start' \}\);\n\t\t\tui\.reveal = null;/);
-	assert.match(read('./band.svelte.js'), /export function showInReview\(clip\) \{[\s\S]*?openDirector\('review'\);\n\tpickShot\(clip\);\n\tui\.reveal = clip\.id;\n\}/);
-});
-
-test('director: the summary leads to the four views and the engine, the center shows one view, the right panel follows it', () => {
-	assert.match(read('../components/panels/LeftPanel.svelte'), /\{:else if ui\.workspace === 'director'\}\n\t\t<DirectorSummary \/>/);
-	const summary = read('../components/director/DirectorSummary.svelte');
-	assert.match(summary, /\{#each VIEWS as id \(id\)\}/);
-	assert.match(summary, /onclick=\{\(\) => \(ui\.directorView = id\)\}/);
-	assert.match(summary, /citedWithout\(doc, kind, card\)/);
-	assert.match(summary, /reviewState\(takesOf\(c\)\)\.failed/);
-	const center = read('../components/director/DirectorCenter.svelte');
-	for (const view of ['DirectionView', 'BibleView', 'ReferenceBoard', 'ReviewView']) assert.match(center, new RegExp(`<${view} />`));
-	const right = read('../components/panels/RightPanel.svelte');
-	assert.match(right, /\{#if view === 'review'\}\n\t<ReviewAside \/>\n\{:else if view === 'direction'\}\n\t<DirectionAside \/>\n\{:else if view === 'bible'\}\n\t<BibleAside \/>\n\{:else if view === 'references'\}\n\t<ReferenceAside \/>\n\{:else\}\n\t<Inspector \/>/);
-	assert.match(read('../components/director/DirectorViews.svelte'), /\{#if !ui\.sidebarOpen\}/);
-	assert.match(read('../components/director/DirectionAside.svelte'), /<ComposedPrompt source=\{doc\} shotId=\{shot\.id\} \{marks\} bind:current=\{composed\} \/>/);
-	assert.match(read('../components/director/BibleAside.svelte'), /onpick=\{\(id\) => addCardImage\(card, SPACES\[kind\], id\)\}/);
-});
-
-test('director: the Review lists the takes with their cards and compares them in the viewer, never generating by itself', () => {
-	const review = read('../components/director/ReviewView.svelte');
-	assert.match(review, /const taking = \$derived\(ui\.compare\?\.length === 2 \|\| ui\.preview\?\.kind === 'result'\);\n\tconst watching = \$derived\(ui\.reviewMonitor \|\| taking\);/);
-	assert.match(review, /\{#if watching\}\n\t\t<div class="relative grid min-h-0 shrink-0 border-b border-line" style:height="46%">\n\t\t\t<Viewer \/>/);
-	assert.match(review, /<TakeCard \{take\} clip=\{c\} onchoose=\{chooseTake\} chosen=\{picked\?\.take\?\.id === take\.id\} \/>/);
-	assert.match(review, /onclick: assembleChosen/);
-	assert.doesNotMatch(review, /startGeneration/);
-	for (const file of ['../components/inspector/Inspector.svelte', '../components/inspector/TakesSection.svelte', '../components/storyboard/ShotQuickEdit.svelte', '../components/storyboard/StoryboardView.svelte', '../components/viewer/Viewer.svelte', '../components/director/ReviewAside.svelte', '../components/director/ReviewTake.svelte', '../components/director/ReviewFailure.svelte', '../components/director/ReviewShot.svelte']) assert.doesNotMatch(read(file), /startGeneration/, file);
-});
-
-test('director: in the Review, a click in the block of a shot chooses the shot, a click on a card chooses its take, the seam line chooses the seam, and the monitor stays open on the cut once open', () => {
-	const review = read('../components/director/ReviewView.svelte');
-	assert.match(read('./band.svelte.js'), /export function chooseShot\(clip\) \{\n\tif \(!clip\) return;\n\tpickShot\(clip, clipAt\(ui\.playhead\)\?\.id !== clip\.id\);\n\tui\.reviewPick = \{ kind: 'shot', id: clip\.id \};\n\}/);
-	assert.match(review, /function choose\(e, c\) \{\n\t\tif \(e\.target\.closest\?\.\('button, a, input, select, textarea, label'\)\) return;\n\t\tchooseShot\(c\);\n\t\}/);
-	assert.match(review, /<div role="presentation" class="px-4 py-3" onclick=\{\(e\) => choose\(e, c\)\}>/);
-	assert.match(review, /<button type="button" class="mb-2 flex min-h-7 cursor-pointer items-center gap-2 rounded px-1\.5 text-left transition-colors hover:bg-surface-2"[^>]*onclick=\{\(\) => chooseShot\(c\)\}>/);
-	assert.match(review, /data-review-seam=\{c\.id\}\n\t+aria-current=\{seamOn\(c\) \? 'true' : undefined\}\n\t+onclick=\{\(e\) => chooseAt\(e, c\)\}/);
-	assert.match(review, /title=\{t\('panels\.director\.review\.seamTip'\)\} onclick=\{\(\) => chooseSeam\(c\)\}>/);
-	assert.match(review, /if \(ui\.selection\?\.kind !== 'clip' \|\| ui\.selection\.id !== id\) return void \(ui\.reveal = null\);\n\t\tif \(!shown\.some\(\(c\) => c\.id === id\)\) return void \(ui\.reviewFilter = 'all'\);/);
-	assert.match(review, /aria-current=\{isSel\(c\) \? 'true' : undefined\}>\n\t+\{#if isSel\(c\)\}<span class="absolute inset-y-0 left-0 w-0\.5 bg-signal" aria-hidden="true"><\/span>\{\/if\}/);
-	assert.match(review, /\$effect\(\(\) => \{\n\t\tif \(taking\) ui\.reviewMonitor = true;\n\t\}\);\n\t\$effect\(\(\) => \(\) => \(ui\.reviewMonitor = false\)\);/);
-	assert.match(review, /function closeMonitor\(\) \{\n\t\tui\.preview = null;\n\t\tui\.compare = null;\n\t\tui\.reviewMonitor = false;\n\t\}/);
-	assert.match(review, /label: t\('panels\.director\.review\.closeMonitor'\)[^\n]*onclick: closeMonitor/);
-	assert.match(review, /onclick=\{\(\) => openSeam\(c\)\}/);
-	assert.doesNotMatch(review, /function openSeam|select\('clip'/);
-	const card = read('../components/takes/TakeCard.svelte');
-	assert.match(card, /function open\(\) \{\n\t\tif \(onchoose\) onchoose\(take\);\n\t\telse previewTake\(take\);\n\t\}/);
-	assert.match(card, /function choose\(e\) \{\n\t\tif \(!onchoose \|\| e\.target\.closest\?\.\('button, a, input, select, textarea, label'\)\) return;\n\t\te\.stopPropagation\(\);\n\t\tonchoose\(take\);\n\t\}/);
-	assert.match(card, /<div role="presentation" class=\{onchoose \? 'cursor-pointer' : ''\} onclick=\{choose\}>/);
-	assert.match(card, /onclick=\{open\}>/);
-	assert.doesNotMatch(card, /ui\.preview = /);
-	assert.match(read('../components/storyboard/BandLanes.svelte'), /import \{ previewTake \} from '\.\.\/\.\.\/lib\/monitor\.svelte\.js';/);
-	assert.match(read('./commands.js'), /\} else if \(ui\.reviewMonitor\) ui\.reviewMonitor = false;\n\telse if \(ui\.seamCompare\) ui\.seamCompare = null;/);
-	for (const locale of ['en', 'fr']) assert.ok(JSON.parse(read(`../i18n/${locale}/panels.json`))['director.review.closeMonitor'], locale);
-});
-
 test('director: the Review panel shows the chosen take when it is finished or failed, the seam of the chosen shot, else the shot, else nothing', () => {
 	const doc = { clips };
 	const [s1, s2, s3, s4] = clips;
@@ -327,68 +245,362 @@ test('director: a failed take offers to retry, and the way out that fits its cau
 	assert.deepEqual(failureFixes(null), ['retry']);
 });
 
-test('director: the Review has its own panel, about the take, its failure, the shot or the seam, with nothing that sets a shot', () => {
-	const aside = read('../components/director/ReviewAside.svelte');
-	assert.match(aside, /const pick = \$derived\(reviewPick\(\)\);/);
-	assert.match(aside, /const elsewhere = \$derived\(panelSelection\('review', ui\.selection\)\.elsewhere\);/);
-	assert.match(aside, /\{#if elsewhere\}<ElsewhereNote kind=\{elsewhere\.kind\} \/>\{\/if\}/);
-	assert.match(aside, /\{#if pick\?\.kind === 'take'\}\n\t+<ReviewTake clip=\{pick\.clip\} \{take\} \/>\n\t+\{:else if pick\?\.kind === 'failed'\}\n\t+<ReviewFailure clip=\{pick\.clip\} \{take\} \/>\n\t+\{:else if pick\?\.kind === 'seam'\}\n\t+<ReviewSeam clip=\{pick\.clip\} previous=\{pick\.previous\} \/>\n\t+\{:else if pick\}\n\t+<ReviewShot clip=\{pick\.clip\} \/>\n\t+\{:else\}\n\t+<ReviewEmpty \/>/);
-	const panel = ['ReviewAside', 'ReviewTake', 'ReviewFailure', 'ReviewShot', 'ReviewSeam', 'ReviewEmpty', 'ShotSummary'].map((name) => read(`../components/director/${name}.svelte`)).join('\n');
-	for (const gone of [/labelTake|toggledLabel|rejectShort|candidateShort|finalShort/, /inspector\.field\.|inspector\.section\.(sound|fades|flag|duration|frames)/, /bladeAt|duplicateSelection|deleteSelection|deleteTake/, /TakesSection|TakeCard|inspector\.tab\.video|inspector\.flag/, /secs\(\w+\.start\)/]) assert.doesNotMatch(panel, gone, String(gone));
-	const take = read('../components/director/ReviewTake.svelte');
-	assert.match(take, /const parts = \$derived\(take\.promptText \? missingWords\(today, take\.promptText\) : \[\{ text: today, mark: false \}\]\);/);
-	assert.match(take, /\{#if stale\}\n\t<section class="space-y-2" data-take-since>/);
-	assert.match(take, /<p class="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-line-strong p-2\.5 text-xs leading-5 text-fg-muted">\{#each pieces as piece, j \(j\)\}\{piece\.text\}/);
-	assert.match(take, /const pieces = \$derived\(take\.promptText \? labelParts\(take\.promptText, labels\) : \[\]\);/);
-	assert.match(take, /<ShotSummary \{clip\} \/>/);
-	assert.match(read('../components/director/ShotSummary.svelte'), /onclick: \(\) => showInStoryboard\(clip\)/);
-	assert.match(read('../components/director/ReviewFailure.svelte'), /failureFixes\(take\)/);
-	assert.match(read('../components/director/ReviewSeam.svelte'), /<SeamPanel \{clip\} title=\{false\} compare=\{false\} \/>/);
-	assert.match(read('../components/director/ReviewShot.svelte'), /<ComposedPrompt source=\{doc\} shotId=\{clip\.id\} \/>/);
-	assert.match(read('./state.svelte.js'), /\tui\.witness = null;\n\tselect\('clip', clip\.id\);\n\tui\.reveal = clip\.id;\n\}/);
-});
+const url = (path) => new URL(path, import.meta.url).href;
+const RIGHT_PANEL = url('../components/panels/RightPanel.svelte');
+const LEFT_PANEL = url('../components/panels/LeftPanel.svelte');
+const CENTER = url('../components/director/DirectorCenter.svelte');
+const DIRECTOR_VIEWS = url('../components/director/DirectorViews.svelte');
+const DIRECTION_VIEW = url('../components/director/DirectionView.svelte');
+const DIRECTION_ASIDE = url('../components/director/DirectionAside.svelte');
+const SUMMARY = url('../components/director/DirectorSummary.svelte');
+const BIBLE_VIEW = url('../components/director/BibleView.svelte');
+const BIBLE_ASIDE = url('../components/director/BibleAside.svelte');
+const REVIEW_VIEW = url('../components/director/ReviewView.svelte');
+const REVIEW_ASIDE = url('../components/director/ReviewAside.svelte');
+const REFERENCE_ASIDE = url('../components/director/ReferenceAside.svelte');
+const REFERENCE_BOARD = url('../components/references/ReferenceBoard.svelte');
+const TAKE_CARD = url('../components/takes/TakeCard.svelte');
 
-test('director: Alt+1 to Alt+4 open the views, the old dock and its tabs are gone, Draft is grey and Edit Engine keeps its English name', () => {
-	const commands = read('./commands.js');
-	VIEWS.forEach((id, i) => assert.ok(commands.includes(`command('view-${id}', view('${id}'), { keys: 'alt+${i + 1}', check: isView('${id}') })`), id));
-	assert.ok(!existsSync(new URL('../components/panels/DirectorDock.svelte', import.meta.url)));
-	assert.ok(!existsSync(new URL('../components/panels/BibleSection.svelte', import.meta.url)));
-	assert.match(read('./catalog.js'), /return t\('lib\.stage\.draft'\);\n\t\t\},\n\t\ttone: 'text-fg-muted',\n\t\tdot: 'bg-fg-muted'/);
-	for (const locale of ['en', 'fr']) {
-		assert.equal(JSON.parse(read(`../i18n/${locale}/production.json`)).editEngine, 'Edit Engine');
-		assert.equal(JSON.parse(read(`../i18n/${locale}/commands.json`))['cmd.engine'], 'Edit Engine…');
+const done = (id, shotId, fields = {}) => ({ id, shotId, status: 'done', label: 'draft', quality: 'draft', variant: 'A', url: `/${id}.mp4`, createdAt: `2026-10-29T10:0${id.slice(-1)}:00Z`, ...fields });
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const has = (html, text) => new RegExp(escapeRe(text)).test(textOf(html));
+const label = (id) => commandById(id)?.label ?? '';
+const keydown = (fields) => handleKeydown({ target: null, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, preventDefault() {}, ...fields }, null);
+
+function scene({ clips = [], takes = [], prompts = [], references = [], audio = [], assets = [], direction = {}, bible = null, view = 'review' } = {}) {
+	project.id = 'p1';
+	Object.assign(ui, { workspace: 'director', directorView: view, selection: null, picked: [], preview: null, compare: null, reviewMonitor: false, reviewPick: null, witness: null, issue: null, reveal: null, selectedIn: null, reviewFilter: null, bibleCard: null, sidebarOpen: true, inspectorOpen: true, hideRejected: false, seamCompare: null, modal: null, menuOpen: null, paletteOpen: false, deckDrawer: false, playhead: 0 });
+	doc.clips = clips.map((clip, n) => ({ start: n * 4, dur: 4, label: `Shot ${n + 1}`, stage: 'draft', ...clip }));
+	doc.prompts = prompts;
+	doc.references = references;
+	doc.audio = audio;
+	doc.assets = assets;
+	doc.promptLanguage = 'en';
+	for (const key of ['univers', 'personnages', 'photographie', 'palette', 'rythme']) doc.direction[key] = direction[key] ?? '';
+	if (bible) doc.bible = bible;
+	setTakes('p1', takes);
+}
+
+after(() => dispose());
+
+test('director: the Review and References panels show the chosen shot, keep a sound chosen elsewhere behind a note that names it and its space, and References alone shows a reference', async () => {
+	const rain = { id: 'a1', assetId: 'au', lane: doc.lanes[0].id, start: 0, dur: 2, srcIn: 0, gain: 0 };
+	const poster = { id: 'r1', space: 'identite', type: 'Personnage', role: 'Identité', name: 'Poster', assetId: null, scope: { type: 'global' } };
+	scene({ clips: [{ id: 's1' }, { id: 's2' }], audio: [rain], references: [poster], assets: [{ id: 'au', kind: 'audio', name: 'Rain loop', src: '/rain.mp3', origin: null }] });
+
+	select('audio', 'a1');
+	assert.equal(ui.selectedIn, 'director:review');
+	let review = clean(await renderComponent(RIGHT_PANEL));
+	assert.match(review, /data-review-aside="none"/);
+	assert.match(review, /data-elsewhere="audio"/);
+	assert.ok(has(review, t('inspector.elsewhere.audio', { name: 'Rain loop', space: spaceLabel('director:review') })));
+	ui.directorView = 'references';
+	select('audio', 'a1');
+	assert.equal(ui.selectedIn, 'director:references');
+	let references = clean(await renderComponent(RIGHT_PANEL));
+	assert.match(references, /data-reference-aside="none"/);
+	assert.match(references, /data-elsewhere="audio"/);
+	assert.ok(has(references, t('inspector.elsewhere.audio', { name: 'Rain loop', space: spaceLabel('director:references') })));
+
+	select('clip', 's2');
+	references = clean(await renderComponent(RIGHT_PANEL));
+	assert.match(references, /data-reference-aside="shot"/);
+	assert.match(references, /data-reference-shot="s2"/);
+	assert.doesNotMatch(references, /data-elsewhere=/);
+	assert.ok(!has(references, t('inspector.section.flag')));
+	assert.ok(!has(references, secs(4)));
+	ui.directorView = 'review';
+	review = clean(await renderComponent(RIGHT_PANEL));
+	assert.match(review, /data-review-aside="shot"/);
+	assert.doesNotMatch(review, /data-elsewhere=/);
+
+	select('reference', 'r1');
+	review = clean(await renderComponent(RIGHT_PANEL));
+	assert.match(review, /data-review-aside="none"/);
+	assert.match(review, /data-elsewhere="reference"/);
+	ui.directorView = 'references';
+	references = clean(await renderComponent(RIGHT_PANEL));
+	assert.match(references, /data-reference-aside="reference"/);
+	assert.match(references, /data-reference-chosen="r1"/);
+
+	ui.workspace = 'storyboard';
+	select('clip', 's1');
+	assert.equal(ui.selectedIn, 'storyboard');
+	select(null);
+	assert.equal(ui.selectedIn, null);
+	for (const [locale, inspector, lib] of [['en', enInspector, enLib], ['fr', frInspector, frLib]]) {
+		for (const kind of ['audio', 'title', 'prompt', 'frame', 'marker', 'reference', 'lane']) assert.match(inspector[`elsewhere.${kind}`], /\{name\}.*\{space\}/, `${locale} ${kind}`);
+		assert.doesNotMatch(lib['refTag.shotTip'], /\{start\}|\{end\}/, locale);
 	}
 });
 
-test('director: References has its own panel, which reads what each engine gets from the rule the server applies', () => {
-	const aside = read('../components/director/ReferenceAside.svelte');
-	assert.match(aside, /\{#if reference\}\n\t+<ReferenceChosen \{reference\} \/>\n\t+\{:else if track\}\n\t+<ReferenceTrack \{track\} \/>\n\t+\{:else if clip\}\n\t+<ReferenceShot \{clip\} \/>\n\t+\{:else\}\n\t+<ReferenceProject \/>/);
-	assert.match(aside, /onclick: deleteSelection \}\}>\{t\('inspector\.reference\.remove'\)\}/);
-	assert.match(read('./references.js'), /export const reception = \(reference, source = doc\) => receptionOf\(reference, source, \(clip\) => engineOf\(clip, source\), tracksFor\(source\)\);/);
-	assert.match(read('./reception.js'), /^import table from '\.\/reception\.json';/);
-	const chosen = read('../components/director/ReferenceChosen.svelte');
-	assert.match(chosen, /const found = \$derived\(reception\(reference\)\);/);
-	assert.match(chosen, /\{ id: 'global', label: t\('inspector\.scope\.global'\) \},\n\t\t\{ id: 'shot', label: t\('inspector\.scope\.shot'\) \}/);
-	assert.match(chosen, /\} else if \(isGlobal\(reference\)\) pending = true;/);
-	assert.match(chosen, /<option value="" disabled>\{t\('panels\.director\.refs\.pickShot'\)\}<\/option>/);
-	assert.match(chosen, /<ReceptionList \{rows\} label=\{t\('panels\.director\.refs\.received'\)\} \/>/);
-	assert.match(chosen, /onclick=\{\(\) => showInReview\(c\)\}/);
-	assert.match(chosen, /onclick: \(\) => startImage\(target\)/);
-	const shot = read('../components/director/ReferenceShot.svelte');
-	assert.match(shot, /onclick=\{\(\) => setSent\(clip, r\.id, false\)\}/);
-	assert.match(shot, /onclick: \(\) => addShotReference\(clip\)/);
-	assert.match(read('../components/director/ReferenceProject.svelte'), /const groups = \$derived\(projectReceptionFor\(\)\);/);
-	const board = read('../components/references/ReferenceBoard.svelte');
-	assert.match(board, /const going = \$derived\(shot \? new Set\(sentReferences\(doc, shot\)\.map\(\(r\) => r\.id\)\) : null\);/);
-	assert.match(board, /data-reference-highlight=\{shot\.id\}/);
-	assert.match(board, /takesReferences\(project\.profile\)/);
-	assert.doesNotMatch(board, /supportedProfiles/);
-	const bible = read('../components/director/BibleAside.svelte');
-	assert.match(bible, /const received = \$derived\(card \? cardReceptionFor\(kind, card\) : null\);/);
-	assert.match(bible, /<ReceptionList \{rows\} label=\{t\('panels\.director\.bible\.received'\)\} \/>/);
-	assert.match(read('../components/modals/Modals.svelte'), /focus=\{m\.focus \?\? null\}/);
-	const keyframes = read('../components/shots/KeyframeCandidates.svelte');
-	assert.match(keyframes, /tick\(\)\.then\(\(\) => root\?\.scrollIntoView\(\{ block: 'start' \}\)\);/);
-	assert.match(keyframes, /aria-controls="\{id\}-body" autofocus=\{focus\}/);
-	assert.match(read('../components/modals/ShotEditor.svelte'), /autofocus=\{focus !== 'keyframes' && focus !== 'reanchor'\}/);
+test('director: a contradiction link makes its shot the sample and says so, the summary lists it, and the panel marks the two sentences, edits the instruction and can be unpinned', async () => {
+	scene({ clips: [{ id: 's1' }, { id: 's2' }], prompts: [{ id: 'p2', shotId: 's2', start: 4, dur: 4, text: 'Handheld, fast pan.' }], direction: { photographie: 'Slow, steady camera.' }, view: 'direction' });
+	const issue = allIssues()[0];
+	assert.equal(issue?.id, 'stableCamera');
+
+	let view = clean(await renderComponent(DIRECTION_VIEW));
+	assert.match(view, new RegExp(`aria-pressed="false"[^>]*>${escapeRe(t('panels.director.direction.issueLink', { shot: '02' }))}</button>`));
+	assert.ok(has(await renderComponent(SUMMARY), `02 · ${issue.text}`));
+
+	followIssue(issue);
+	assert.deepEqual([ui.workspace, directorView(), ui.issue, ui.witness, ui.selection, ui.reveal], ['director', 'direction', { prompt: 'p2', rule: 'stableCamera' }, null, { kind: 'clip', id: 's2' }, 's2']);
+	view = clean(await renderComponent(DIRECTION_VIEW));
+	assert.match(view, new RegExp(`aria-pressed="true"[^>]*>${escapeRe(t('panels.director.direction.issueShown', { shot: '02' }))}</button>`));
+
+	let aside = clean(await renderComponent(DIRECTION_ASIDE));
+	assert.match(aside, /data-witness="selection"/);
+	assert.ok(has(aside, t('panels.director.aside.followsIssue')));
+	const phrases = aside.match(/<dl[^>]*data-issue-phrases[^>]*>([\s\S]*?)<\/dl>/)?.[1] ?? '';
+	assert.deepEqual([...phrases.matchAll(/<mark[^>]*>([^<]*)<\/mark>/g)].map((m) => m[1]), ['Slow, steady camera.', 'Handheld, fast pan.']);
+	assert.ok(has(aside, t('panels.director.aside.edit', { shot: '02' })));
+	assert.doesNotMatch(aside, new RegExp(escapeRe(t('panels.director.aside.unpin'))));
+
+	ui.witness = 's1';
+	aside = clean(await renderComponent(DIRECTION_ASIDE));
+	assert.match(aside, /data-witness="pinned"/);
+	assert.ok(has(aside, t('panels.director.aside.unpin')));
+	assert.ok(has(aside, t('panels.director.aside.edit', { shot: '01' })));
+	assert.doesNotMatch(aside, /data-issue-phrases/);
+	for (const panels of [enPanels, frPanels]) assert.match(panels['director.direction.issueLink'], /^\{shot\} · /);
+});
+
+test('director: a shot chip of the Bible names the shot and its takes, and showing a shot in the Review opens that view on it, widening the filter when it hides the shot', async () => {
+	scene({ clips: [{ id: 's1', cast: { characters: ['lina'] } }, { id: 's2' }], takes: [done('t2', 's2', { label: 'candidate' })], bible: { characters: [{ id: 'lina', label: 'Lina', text: '', references: [], props: '' }], places: [] }, view: 'bible' });
+
+	const bible = clean(await renderComponent(BIBLE_VIEW));
+	assert.match(bible, new RegExp(`<button type="button" class="vp-tc[^"]*" title="${escapeRe(t('panels.director.bible.chipTip', { shot: '01', name: 'Shot 1' }))}">01</button>`));
+
+	showInReview(doc.clips[0]);
+	assert.deepEqual([ui.workspace, directorView(), ui.selection, ui.reveal, ui.reviewFilter], ['director', 'review', { kind: 'clip', id: 's1' }, 's1', 'all']);
+	const review = clean(await renderComponent(REVIEW_VIEW));
+	assert.match(review, /<section class="[^"]*" data-review-shot="s1" aria-label="Shot 1" aria-current="true">/);
+	assert.match(review, /<section class="[^"]*" data-review-shot="s2" aria-label="Shot 2">/);
+
+	ui.reviewFilter = 'review';
+	showInReview(doc.clips[1]);
+	assert.deepEqual([ui.selection, ui.reviewFilter], [{ kind: 'clip', id: 's2' }, 'review']);
+});
+
+test('director: the summary leads to the four views and the engine, the view strip appears only without the sidebar, the center shows one view and the right panel follows it', async () => {
+	scene({ clips: [{ id: 's1' }], bible: { characters: [{ id: 'lina', label: 'Lina', text: '', references: [], props: '' }], places: [] }, view: 'direction' });
+
+	const left = clean(await renderComponent(LEFT_PANEL));
+	assert.match(left, new RegExp(`<nav class="[^"]*" aria-label="${escapeRe(t('panels.director.views'))}">`));
+	for (const id of VIEWS) assert.match(left, new RegExp(`<span class="block text-sm font-medium text-fg">${escapeRe(label(`view-${id}`))}</span>`));
+	assert.match(left, new RegExp(`aria-current="page"[^>]*>(?:(?!</button>)[\\s\\S])*?<span class="block text-sm font-medium text-fg">${escapeRe(label('view-direction'))}</span>`));
+	assert.equal((left.match(/aria-current="page"/g) ?? []).length, 1);
+	assert.ok(has(left, t('panels.director.engine')));
+	assert.ok(has(left, t('production.editEngine')));
+
+	assert.doesNotMatch(clean(await renderComponent(DIRECTOR_VIEWS)), /role="group"/);
+	ui.sidebarOpen = false;
+	const strip = clean(await renderComponent(DIRECTOR_VIEWS));
+	assert.match(strip, new RegExp(`role="group" aria-label="${escapeRe(t('panels.director.views'))}"`));
+	for (const id of VIEWS) assert.match(strip, new RegExp(`aria-pressed="${id === 'direction'}" aria-label="${escapeRe(label(`view-${id}`))}"`));
+	ui.sidebarOpen = true;
+
+	const centers = { review: label('view-review'), direction: label('view-direction'), bible: label('view-bible'), references: t('references.title') };
+	const asides = { review: /data-review-aside=/, direction: new RegExp(`aria-label="${escapeRe(t('panels.director.aside.prompt'))}"`), bible: new RegExp(`aria-label="${escapeRe(t('panels.director.aside.card'))}"`), references: /data-reference-aside=/ };
+	for (const id of VIEWS) {
+		ui.directorView = id;
+		const center = clean(await renderComponent(CENTER));
+		assert.match(center, new RegExp(`^<section class="[^"]*" aria-label="${escapeRe(centers[id])}">`), id);
+		const right = clean(await renderComponent(RIGHT_PANEL));
+		assert.match(right, asides[id], id);
+		for (const other of VIEWS.filter((v) => v !== id)) assert.doesNotMatch(right, asides[other], `${id} shows ${other}`);
+	}
+	ui.directorView = 'direction';
+	assert.ok(has(await renderComponent(DIRECTION_ASIDE), t('modals.shot.composed')));
+	ui.bibleCard = 'lina';
+	assert.match(clean(await renderComponent(BIBLE_ASIDE)), new RegExp(`aria-label="${escapeRe(t('modals.shot.pickImage', { slot: t('panels.director.aside.addImage') }))}"`));
+	ui.workspace = 'storyboard';
+	assert.match(clean(await renderComponent(RIGHT_PANEL)), new RegExp(`^<aside class="[^"]*" aria-label="${escapeRe(t('inspector.title'))}"`));
+});
+
+test('director: the Review lists the takes of each shot as cards to choose, opens the viewer only to compare or preview, and offers to assemble the finals without generating anything', async () => {
+	scene({ clips: [{ id: 's1' }, { id: 's2' }], takes: [done('t1', 's1'), done('t2', 's1', { label: 'candidate', variant: 'B' }), done('t3', 's2')] });
+	ui.reviewFilter = 'all';
+
+	let review = clean(await renderComponent(REVIEW_VIEW));
+	for (const id of ['t1', 't2', 't3']) assert.match(review, new RegExp(`data-take-card="${id}"`));
+	assert.equal((review.match(/<div role="presentation" class="cursor-pointer"/g) ?? []).length, 3);
+	assert.doesNotMatch(review, new RegExp(`aria-label="${escapeRe(t('viewer.label'))}"`));
+	assert.ok(hostUis(review, 'Button').some((props) => props.disabled === true && props.icon === hostIconName('layers')));
+	assert.ok(has(review, t('panels.dock.results.assemble', { count: 0 })));
+	assert.ok(!has(review, label('generate')));
+
+	ui.compare = ['t1', 't2'];
+	review = clean(await renderComponent(REVIEW_VIEW));
+	assert.match(review, new RegExp(`aria-label="${escapeRe(t('viewer.label'))}"`));
+	assert.ok(hostUis(review, 'IconButton').some((props) => props.label === t('panels.director.review.closeMonitor')));
+
+	ui.compare = null;
+	ui.preview = { kind: 'result', id: 't3' };
+	review = clean(await renderComponent(REVIEW_VIEW));
+	assert.match(review, new RegExp(`aria-label="${escapeRe(t('viewer.label'))}"`));
+
+	ui.preview = null;
+	setTakes('p1', [done('t1', 's1', { label: 'final' }), done('t3', 's2')]);
+	review = clean(await renderComponent(REVIEW_VIEW));
+	assert.ok(hostUis(review, 'Button').some((props) => props.disabled === false && props.icon === hostIconName('layers')));
+	assert.ok(has(review, t('panels.dock.results.assemble', { count: 1 })));
+	assert.doesNotMatch(review, new RegExp(`aria-label="${escapeRe(t('viewer.label'))}"`));
+	assert.match(clean(await renderComponent(TAKE_CARD, { take: takeStore.list[0], clip: doc.clips[0], onchoose() {} })), /<div role="presentation" class="cursor-pointer"/);
+	assert.match(clean(await renderComponent(TAKE_CARD, { take: takeStore.list[0], clip: doc.clips[0] })), /<div role="presentation"><div class="flex gap-2.5 p-1.5">/);
+});
+
+test('director: choosing a shot, a take or a seam in the Review marks the shot current and sets the pick, and Escape closes the compare, then the monitor, then the seam compare', async () => {
+	scene({ clips: [{ id: 's1' }, { id: 's2' }], takes: [done('t3', 's2'), done('t7', 's2', { status: 'failed', url: null, variant: 'B' })] });
+	ui.reviewFilter = 'all';
+	ui.playhead = 1;
+
+	chooseShot(doc.clips[1]);
+	assert.deepEqual([ui.selection, ui.reviewPick, ui.witness, ui.reveal], [{ kind: 'clip', id: 's2' }, { kind: 'shot', id: 's2' }, null, null]);
+	assert.ok(ui.playhead >= 4 && ui.playhead < 8);
+	let review = clean(await renderComponent(REVIEW_VIEW));
+	assert.match(review, /data-review-shot="s2" aria-label="Shot 2" aria-current="true">\s*<span class="absolute inset-y-0 left-0 w-0\.5 bg-signal" aria-hidden="true"><\/span>/);
+	assert.doesNotMatch(review, /data-review-shot="s1" aria-label="Shot 1" aria-current/);
+
+	chooseTake(takeStore.list[0]);
+	assert.deepEqual([ui.reviewPick, ui.preview], [{ kind: 'take', id: 't3' }, { kind: 'result', id: 't3' }]);
+	review = clean(await renderComponent(REVIEW_VIEW));
+	assert.match(review, /aria-current="true" data-take-card="t3"/);
+	chooseTake(takeStore.list[1]);
+	assert.deepEqual([ui.reviewPick, ui.preview], [{ kind: 'take', id: 't7' }, null]);
+
+	chooseSeam(doc.clips[1]);
+	assert.deepEqual(ui.reviewPick, { kind: 'seam', id: 's2' });
+	chooseSeam(doc.clips[0]);
+	assert.deepEqual(ui.reviewPick, { kind: 'seam', id: 's2' });
+
+	Object.assign(ui, { compare: ['t3', 't7'], reviewMonitor: true, seamCompare: { shotId: 's2' } });
+	keydown({ key: 'Escape' });
+	assert.deepEqual([ui.compare, ui.reviewMonitor, ui.seamCompare], [null, true, { shotId: 's2' }]);
+	keydown({ key: 'Escape' });
+	assert.deepEqual([ui.compare, ui.reviewMonitor, ui.seamCompare], [null, false, { shotId: 's2' }]);
+	keydown({ key: 'Escape' });
+	assert.deepEqual([ui.compare, ui.reviewMonitor, ui.seamCompare], [null, false, null]);
+	for (const panels of [enPanels, frPanels]) assert.ok(panels['director.review.closeMonitor']);
+});
+
+test('director: the Review panel is about the chosen take, its failure, the seam or the shot, with the project when nothing is chosen, and never edits the shot itself', async () => {
+	const instruction = 'Lina runs along the quay, handheld.';
+	scene({ clips: [{ id: 's1' }, { id: 's2', revision: 2 }], prompts: [{ id: 'p2', shotId: 's2', start: 4, dur: 4, text: instruction }], takes: [done('t3', 's2', { promptText: 'Lina runs along the quay.', shotRevision: 1, generationId: 'g3' }), done('t7', 's2', { status: 'failed', url: null, variant: 'B', errorCode: 'cuda_oom' })] });
+	const fields = [t('inspector.section.flag'), t('inspector.section.duration'), t('inspector.field.name')];
+	const clean_ = async () => clean(await renderComponent(REVIEW_ASIDE));
+
+	let aside = await clean_();
+	assert.match(aside, /data-review-aside="none"/);
+	assert.ok(hostUis(aside, 'Button').length >= 1 && has(aside, t('inspector.projectProps')));
+	assert.match(aside, /data-review-counts/);
+
+	select('clip', 's2');
+	aside = await clean_();
+	assert.match(aside, /data-review-aside="shot"/);
+	assert.match(aside, /data-shot-takes="s2"/);
+	assert.match(aside, /data-shot-summary="s2"/);
+	assert.ok(has(aside, t('modals.shot.composed')));
+	assert.ok(has(aside, t('panels.director.pick.generate', { key: commandById('generate')?.key ?? '' })));
+	for (const field of fields) assert.ok(!has(aside, field), field);
+
+	ui.reviewPick = { kind: 'take', id: 't3' };
+	aside = await clean_();
+	assert.match(aside, /data-review-aside="take"/);
+	assert.match(aside, /data-take-since/);
+	assert.deepEqual([...aside.matchAll(/<mark[^>]*data-take-missing[^>]*>([^<]*)<\/mark>/g)].map((m) => m[1]), ['handheld']);
+	assert.match(aside, /data-take-sent/);
+	assert.ok(has(aside, 'Lina runs along the quay.'));
+	assert.match(aside, /data-shot-summary="s2"/);
+	assert.ok(hostUis(aside, 'Button').some((props) => props.icon === 'info'));
+	for (const field of fields) assert.ok(!has(aside, field), field);
+
+	ui.reviewPick = { kind: 'take', id: 't7' };
+	aside = await clean_();
+	assert.match(aside, /data-review-aside="failed"/);
+	assert.match(aside, /data-take-failure="cuda_oom"/);
+	assert.deepEqual([...aside.matchAll(/data-take-fix="([^"]+)"/g)].map((m) => m[1]), ['retry', 'engine', 'shorter']);
+	assert.ok(has(aside, t('panels.director.pick.fix.previous', { shot: '01' })) === false);
+
+	ui.reviewPick = { kind: 'seam', id: 's2' };
+	aside = await clean_();
+	assert.match(aside, /data-review-aside="seam"/);
+	assert.match(aside, /data-seam-pair="s2"/);
+	assert.ok(has(aside, t('panels.director.pick.gaps')));
+	assert.doesNotMatch(aside, /data-shot-summary/);
+
+	select('audio', 'none');
+	aside = await clean_();
+	assert.match(aside, /data-review-aside="none"/);
+	assert.doesNotMatch(aside, /data-elsewhere/);
+});
+
+test('director: Alt+1 to Alt+4 open the views, the old dock and its tabs are gone, Draft is grey and Edit Engine keeps its English name', () => {
+	scene({ clips: [{ id: 's1' }], takes: [done('t1', 's1')] });
+	ui.workspace = 'storyboard';
+	VIEWS.forEach((id, i) => {
+		keydown({ key: String(i + 1), code: `Digit${i + 1}`, altKey: true });
+		assert.deepEqual([ui.workspace, directorView()], ['director', id], id);
+	});
+	keydown({ key: '1', code: 'Digit1', altKey: true, shiftKey: true });
+	assert.equal(directorView(), 'references');
+	assert.ok(!existsSync(new URL('../components/panels/DirectorDock.svelte', import.meta.url)));
+	assert.ok(!existsSync(new URL('../components/panels/BibleSection.svelte', import.meta.url)));
+	assert.deepEqual([stages.draft.tone, stages.draft.dot], ['text-fg-muted', 'bg-fg-muted']);
+	assert.equal(stages.draft.label, t('lib.stage.draft'));
+	for (const [production, commands] of [[enProduction, enCommands], [frProduction, frCommands]]) {
+		assert.equal(production.editEngine, 'Edit Engine');
+		assert.equal(commands['cmd.engine'], 'Edit Engine…');
+	}
+});
+
+test('director: the References panel is about the reference, the shot or the project, reads what each engine gets, can remove a reference, and the board highlights the chosen shot', async () => {
+	const poster = { id: 'r1', space: 'identite', type: 'Personnage', role: 'Identité', name: 'Poster', assetId: null, scope: { type: 'global' } };
+	const hat = { id: 'r2', space: 'identite', type: 'Objet', role: 'Objet', name: 'Hat', assetId: null, scope: { type: 'shot', shotId: 's2' } };
+	scene({ clips: [{ id: 's1', cast: { characters: ['lina'] } }, { id: 's2' }], references: [poster, hat], bible: { characters: [{ id: 'lina', label: 'Lina', text: '', references: ['r1'], props: '' }], places: [] }, view: 'references' });
+
+	let aside = clean(await renderComponent(REFERENCE_ASIDE));
+	assert.match(aside, /data-reference-aside="none"/);
+	assert.match(aside, /data-reference-project/);
+	assert.match(aside, new RegExp(`<ul class="[^"]*" aria-label="${escapeRe(t('panels.director.refs.byEngine'))}" data-reception="">`));
+	assert.equal((aside.match(/data-reception-row=/g) ?? []).length, 1);
+	assert.ok(!has(aside, t('inspector.reference.remove')));
+
+	select('reference', 'r1');
+	aside = clean(await renderComponent(REFERENCE_ASIDE));
+	assert.match(aside, /data-reference-aside="reference"/);
+	assert.match(aside, /data-reference-chosen="r1"/);
+	const [scope] = hostUis(aside, 'SegmentedControl');
+	assert.deepEqual([scope.selected, scope.items.map((item) => item.id)], ['global', ['global', 'shot']]);
+	assert.doesNotMatch(aside, /data-reference-shot-pick/);
+	assert.match(aside, new RegExp(`<ul class="[^"]*" aria-label="${escapeRe(t('panels.director.refs.received'))}" data-reception="">`));
+	assert.ok(has(aside, t('panels.director.refs.cardText', { name: 'Lina', count: 1 })));
+	assert.ok(has(aside, t('inspector.reference.remove')));
+	const found = reception(poster);
+	assert.deepEqual([found.cast.map((c) => c.id), found.linked?.card.id, found.groups.length >= 1], [['s1'], 'lina', true]);
+
+	select('reference', 'r2');
+	aside = clean(await renderComponent(REFERENCE_ASIDE));
+	assert.equal(hostUis(aside, 'SegmentedControl')[0].selected, 'shot');
+	assert.match(aside, /<select class="vp-popup w-full"[^>]*data-reference-shot-pick="true">\s*<option value="s1">01 · Shot 1<\/option><option value="s2" selected="">02 · Shot 2<\/option>/);
+
+	select('clip', 's2');
+	aside = clean(await renderComponent(REFERENCE_ASIDE));
+	assert.match(aside, /data-reference-aside="shot"/);
+	assert.match(aside, /data-reference-shot="s2"/);
+	assert.match(aside, /data-reference-notice="/);
+	assert.match(aside, /data-reference-globals/);
+	assert.match(aside, /data-reference-row="r1"[\s\S]*?data-reference-not-cast[\s\S]*?aria-pressed="true"[^>]*>[^<]*<\/button>\s*<button[^>]*aria-pressed="false"/);
+	assert.match(aside, /data-reference-owns[\s\S]*data-reference-row="r2"/);
+	assert.ok(has(aside, t('panels.director.refs.addTo', { shot: '02' })));
+	const board = clean(await renderComponent(REFERENCE_BOARD));
+	assert.match(board, /data-reference-highlight="s2"/);
+	select(null);
+	assert.doesNotMatch(clean(await renderComponent(REFERENCE_BOARD)), /data-reference-highlight/);
+
+	ui.bibleCard = 'lina';
+	const bible = clean(await renderComponent(BIBLE_ASIDE));
+	assert.match(bible, /data-card-reception/);
+	assert.match(bible, new RegExp(`<ul class="[^"]*" aria-label="${escapeRe(t('panels.director.bible.received'))}" data-reception="">`));
+	assert.ok(has(bible, t('panels.director.refs.cardText', { name: 'Lina', count: 1 })));
 });
