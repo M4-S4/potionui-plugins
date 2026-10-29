@@ -3,7 +3,7 @@
 	"cmd.prefs": "Preferences…",
 	"cmd.shortcuts": "Keyboard shortcuts",
 	"cmd.palette": "Search commands…",
-	"cmd.new-project": "New project…",
+	"cmd.new-project": "New project",
 	"cmd.open": "Open…",
 	"cmd.save": "Save",
 	"cmd.versions": "Version history…",

@@ -78,6 +78,7 @@
 	"toast.shotsAdded.one": "{count} shot added to the storyboard",
 	"toast.shotsAdded.other": "{count} shots added to the storyboard",
 	"toast.newProject": "New empty project created",
+	"cancel": "Cancel",
 	"newProject.title": "New project",
 	"newProject.message": "Unsaved changes to “{name}” will be lost.",
 	"newProject.confirm": "Create an empty project",

@@ -293,9 +293,22 @@ export async function createProject(source = emptyDoc(t)) {
 	return result;
 }
 
-export async function deleteProject(id) {
+export async function deleteProject(id, nextId = null) {
+	const current = id === project.id;
+	if (current) {
+		clearTimeout(timer);
+		timer = null;
+		if (inFlight) await inFlight;
+	}
 	const result = await client.deleteProject(id);
-	if (result.ok && ui.me?.lastProjectId === id) ui.me.lastProjectId = null;
+	if (!result.ok) return result;
+	if (ui.me?.lastProjectId === id) ui.me.lastProjectId = null;
+	if (!current) return result;
+	lastSavedJson = null;
+	ui.dirty = false;
+	Object.assign(project, { id: null, version: 0, status: 'idle', error: null });
+	const opened = nextId ? await openProject(nextId) : await openCreated(emptyDoc(t));
+	if (!opened.ok) project.fatal = opened.error;
 	return result;
 }
 
