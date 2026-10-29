@@ -178,7 +178,7 @@
 			<span class="vp-section-title min-w-0 flex-1">{t('panels.director.pick.looks')}</span>
 			{#if unmeasured}<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', disabled: lookState.asking, onclick: measureLooks }}>{t('panels.director.pick.measure')}</HostUi>{/if}
 		</div>
-		<ul class="space-y-1 text-xs">
+		{#if look?.cards.length}<ul class="space-y-1 text-xs">
 			{#each look.cards as card (card.cardId)}
 				{@const drift = driftOf(looks, take.id, card.cardId)}
 				<li class="space-y-0.5" data-take-look={card.status} data-look-method={card.method ?? ''}>
@@ -190,7 +190,7 @@
 					{#if lowDrift(looks, drift)}<div class="text-2xs text-warning" data-look-drift>{t('panels.director.pick.lookDrift', { score: percent(drift.score) })}</div>{/if}
 				</li>
 			{/each}
-		</ul>
+		</ul>{/if}
 		{#if pushedIn(looks, look)}<p class="text-xs text-warning" data-look-push-in>{t('panels.director.pick.lookPushIn', { ratio: formatNumber(look.pushIn, { maximumFractionDigits: 1 }) })}</p>{/if}
 		{#if pushedIn(looks, look) && !keepsFraming(clip)}<button type="button" class="vp-link-hit text-left text-xs text-fg-muted underline decoration-line-hover underline-offset-2 hover:text-fg" data-keep-framing-next onclick={keepFramingNext}>{t('panels.director.pick.keepFraming')}</button>{/if}
 		{#if faceChanged(looks, look)}<p class="text-xs text-warning" data-look-identity>{t('panels.director.pick.lookIdentity', { score: percent(look.identity.score) })}</p>{/if}
