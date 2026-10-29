@@ -868,22 +868,23 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
     count = evaluation.payload["count"]
     letters = next_variants(project["id"], first.shot_id, count * len(evaluation.parts))
     runs = [part for part in evaluation.parts for _ in range(count)]
-    created = [
-        generation.create(
-            owner,
-            project["id"],
-            part.plan,
-            preset_id=part.plan.preset_id,
-            quality="draft",
-            kind=KEYFRAME,
-            seed=(base + rank) % generation.SEED_RANGE,
-            variant=letters[rank],
-            minutes=evaluation.minutes,
-            revision=revision,
-            frame_role=part.role,
-        )
-        for rank, part in enumerate(runs)
-    ]
+    with generation.reserving(owner, evaluation.minutes * len(runs)) as reserve:
+        created = [
+            generation.create(
+                owner,
+                project["id"],
+                part.plan,
+                preset_id=part.plan.preset_id,
+                quality="draft",
+                kind=KEYFRAME,
+                seed=(base + rank) % generation.SEED_RANGE,
+                variant=letters[rank],
+                minutes=evaluation.minutes if reserve else 0.0,
+                revision=revision,
+                frame_role=part.role,
+            )
+            for rank, part in enumerate(runs)
+        ]
     await generation.pump(owner)
     return [takes.get_take(take["id"]) for take in created]
 
@@ -912,26 +913,20 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
     if source["status"] not in generation.RETRYABLE:
         raise generation.TakeError(409, "take_not_retryable", "Only a failed or cancelled take can be retried.")
     plan = stored_plan(source)
-    minutes = 0.0
-    if not plan.cloud:
-        minutes = candidate_minutes(plan.preset_id, source.get("backend_id"), plan.resolution)[0]
-        quota = _quota(owner, minutes, True)
-        if quota["blocks"]:
-            raise Blocked([estimate.quota_block(quota)])
-        if not generation.reserves(quota):
-            minutes = 0.0
-    take = generation.create(
-        owner,
-        project["id"],
-        plan,
-        preset_id=plan.preset_id,
-        quality="draft",
-        kind=KEYFRAME,
-        seed=int(source["seed"]) if source.get("seed") is not None else generation.new_seed(),
-        variant=source.get("variant") or generation.variant_letter(0),
-        minutes=minutes,
-        revision=source.get("shot_revision"),
-        frame_role=source.get("frame_role"),
-    )
+    minutes = 0.0 if plan.cloud else candidate_minutes(plan.preset_id, source.get("backend_id"), plan.resolution)[0]
+    with generation.reserving(owner, minutes) as reserve:
+        take = generation.create(
+            owner,
+            project["id"],
+            plan,
+            preset_id=plan.preset_id,
+            quality="draft",
+            kind=KEYFRAME,
+            seed=int(source["seed"]) if source.get("seed") is not None else generation.new_seed(),
+            variant=source.get("variant") or generation.variant_letter(0),
+            minutes=minutes if reserve else 0.0,
+            revision=source.get("shot_revision"),
+            frame_role=source.get("frame_role"),
+        )
     await generation.pump(owner)
     return takes.get_take(take["id"])

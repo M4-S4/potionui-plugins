@@ -1,5 +1,6 @@
 import importlib
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -524,6 +525,7 @@ class FakeCore:
         self.refunded = []
         self.quota = {"limit": 600, "used": 0, "remaining": 600.0, "exempt": False, "resets_at": None}
         self.quotas = {}
+        self.metered = None
         self.memory = {
             "estimate": {"checkpoint_estimate_gb": 18.5},
             "device": {"kind": "local", "free_gb": 22.0, "total_gb": 24.0},
@@ -751,7 +753,18 @@ class FakeCore:
         self.refunded.append(ref_id)
         return 1
 
+    def spent(self):
+        return sum(units for _, kind, units, ref in self.recorded if kind == "video-producer.gpu_minutes" and ref not in self.refunded)
+
+    def meter(self, remaining, pause=0.0):
+        self.metered = (self.spent() + remaining, pause)
+
     def limit_status(self, user_id, kind):
+        if kind == "video-producer.gpu_minutes" and self.metered is not None:
+            limit, pause = self.metered
+            used = self.spent()
+            time.sleep(pause)
+            return {"limit": limit, "used": used, "remaining": max(0.0, limit - used), "exempt": False, "resets_at": None}
         if kind == "video-producer.gpu_minutes":
             return dict(self.quota)
         return dict(self.quotas.get(kind, {"limit": None, "used": None, "remaining": None, "exempt": False, "resets_at": None}))

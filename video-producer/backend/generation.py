@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import secrets
+import threading
+from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple
 
 from . import cadence, chaining, core_bridge, director, engine_options, estimate, limits, looks, models, notifications, projects, settings, soundtrack, takes, upscalers
@@ -29,6 +31,8 @@ RETRYABLE = ("failed", "cancelled")
 _SUBMITTING: Set[str] = set()
 
 _PUMP_LOCKS: Dict[str, Tuple[asyncio.AbstractEventLoop, asyncio.Lock]] = {}
+_QUOTA_LOCKS: Dict[str, threading.Lock] = {}
+_QUOTA_LOCKS_GUARD = threading.Lock()
 
 
 class Blocked(Exception):
@@ -110,6 +114,18 @@ def _require_quota(owner: User, minutes: float) -> bool:
     return reserves(status)
 
 
+def _quota_lock(user_id: str) -> threading.Lock:
+    with _QUOTA_LOCKS_GUARD:
+        return _QUOTA_LOCKS.setdefault(user_id, threading.Lock())
+
+
+@contextmanager
+def reserving(owner: User, minutes: float) -> Iterator[bool]:
+    """Hold the user's GPU minutes while the takes that need these minutes in all are created: their remaining minutes read again, Blocked when they no longer fit; yields whether the takes reserve."""
+    with _quota_lock(owner.id):
+        yield _require_quota(owner, minutes)
+
+
 async def with_sound(owner: User, project: Mapping[str, Any], plans: List[ShotPlan]) -> None:
     """Cut and store the sound each plan sends, once per plan, the cuts of all of them at most soundtrack.MEASURES at a time; Blocked by the first that cannot be, in the order of the plans."""
     try:
@@ -177,29 +193,31 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
     """Create the takes each shot asks for on its own engine, one per variant, in the order of the shots in the edit: a fresh seed each, or the shot's fixed seed for the first and the seeds after it for the others; a take that starts from the last image of the previous shot records what it waits for. Hand what fits to the core."""
     if evaluation.blocked:
         raise Blocked(evaluation.payload["blocks"])
-    quota = evaluation.payload["quota"]
-    reserve = bool(quota["applies"]) and reserves(quota)
+    applies = bool(evaluation.payload["quota"]["applies"])
     await with_sound(owner, project, evaluation.plans.shots)
     batch = core_bridge.generate_ulid()
     places = {clip.get("id"): index for index, clip in enumerate(project["doc"].get("clips") or [])}
+    plans = sorted(evaluation.plans.shots, key=lambda plan: places.get(plan.shot_id, len(places)))
+    needed = sum(evaluation.minutes.get(plan.shot_id, 0.0) * evaluation.count(plan.shot_id) for plan in plans if not plan.cloud) if applies else 0.0
     created: List[Dict[str, Any]] = []
-    for plan in sorted(evaluation.plans.shots, key=lambda plan: places.get(plan.shot_id, len(places))):
-        for index, letter in enumerate(next_variants(project["id"], plan.shot_id, plan.quality, evaluation.count(plan.shot_id))):
-            created.append(
-                create(
-                    owner,
-                    project["id"],
-                    plan,
-                    preset_id=plan.preset_id,
-                    quality=plan.quality,
-                    kind=RENDER,
-                    seed=new_seed() if plan.seed is None else (plan.seed + index) % SEED_RANGE,
-                    variant=letter,
-                    minutes=evaluation.minutes.get(plan.shot_id, 0.0) if reserve and not plan.cloud else 0.0,
-                    revision=director.shot_revision(project["doc"], plan.shot_id),
-                    chain=chaining.record(evaluation.waits.get(plan.shot_id), letter, created, batch),
+    with reserving(owner, needed) as reserve:
+        for plan in plans:
+            for index, letter in enumerate(next_variants(project["id"], plan.shot_id, plan.quality, evaluation.count(plan.shot_id))):
+                created.append(
+                    create(
+                        owner,
+                        project["id"],
+                        plan,
+                        preset_id=plan.preset_id,
+                        quality=plan.quality,
+                        kind=RENDER,
+                        seed=new_seed() if plan.seed is None else (plan.seed + index) % SEED_RANGE,
+                        variant=letter,
+                        minutes=evaluation.minutes.get(plan.shot_id, 0.0) if applies and reserve and not plan.cloud else 0.0,
+                        revision=director.shot_revision(project["doc"], plan.shot_id),
+                        chain=chaining.record(evaluation.waits.get(plan.shot_id), letter, created, batch),
+                    )
                 )
-            )
     await pump(owner)
     return [takes.get_take(take["id"]) for take in created]
 
@@ -539,7 +557,8 @@ def _checked(plan: ShotPlan, preset_id: str, native: bool, owner: User, backend_
     if not native:
         return 0.0
     minutes = estimate.plan_minutes(plan, preset_id, backend_id)
-    return minutes if _require_quota(owner, minutes) else 0.0
+    _require_quota(owner, minutes)
+    return minutes
 
 
 async def _render_plan(
@@ -657,7 +676,8 @@ async def final(
     minutes = _checked(plan, preset_id, native, owner, source.get("backend_id"))
     await with_sound(owner, project, [plan])
     await with_first(owner, [(source, plan)])
-    take = create_final(owner, project, source, method, plan, preset_id, minutes)
+    with reserving(owner, minutes) as reserve:
+        take = create_final(owner, project, source, method, plan, preset_id, minutes if reserve else 0.0)
     if conform:
         renditions.order_quietly(owner, project, take)
     await pump(owner)
@@ -692,20 +712,21 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
     await with_sound(owner, project, [plan])
     if parent is not None:
         await with_first(owner, [(parent, plan)])
-    take = create(
-        owner,
-        project["id"],
-        plan,
-        preset_id=preset_id,
-        quality=source["quality"],
-        kind=source["kind"],
-        seed=int(source["seed"]) if source.get("seed") is not None else new_seed(),
-        variant=source.get("variant") or variant_letter(0),
-        minutes=minutes,
-        parent_take_id=source.get("parent_take_id"),
-        revision=revision,
-        chain=chaining.record(found.get(plan.shot_id) if plan.chain else None, source.get("variant") or variant_letter(0), [], core_bridge.generate_ulid()),
-    )
+    with reserving(owner, minutes) as reserve:
+        take = create(
+            owner,
+            project["id"],
+            plan,
+            preset_id=preset_id,
+            quality=source["quality"],
+            kind=source["kind"],
+            seed=int(source["seed"]) if source.get("seed") is not None else new_seed(),
+            variant=source.get("variant") or variant_letter(0),
+            minutes=minutes if reserve else 0.0,
+            parent_take_id=source.get("parent_take_id"),
+            revision=revision,
+            chain=chaining.record(found.get(plan.shot_id) if plan.chain else None, source.get("variant") or variant_letter(0), [], core_bridge.generate_ulid()),
+        )
     from . import renditions
 
     if renditions.list_for_take(source["id"]):

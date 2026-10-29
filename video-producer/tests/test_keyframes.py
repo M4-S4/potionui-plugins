@@ -791,3 +791,19 @@ def test_a_candidate_stored_before_the_image_it_is_made_for_has_none(client, cor
     take = takes.create_take({"project_id": project["id"], "shot_id": "s1", "user_id": "user-1", "quality": "draft", "kind": "keyframe", "variant": "A"})
 
     assert takes.public(takes.get_take(take["id"]))["frame_role"] is None
+
+
+def test_two_candidate_requests_whose_estimates_both_fit_the_quota_cannot_both_reserve_it(core, qwen, scene):
+    project = projects.create_project("user-1", scene)
+    user = core.users["user-1"]
+    core.meter(3.0)
+    evaluations = [asyncio.run(keyframes.evaluate(user, user, project, "s1", _order(count=2))) for _ in range(2)]
+    assert [(evaluation.blocked, evaluation.payload["quota"]["needed_minutes"]) for evaluation in evaluations] == [(False, 2.0), (False, 2.0)]
+
+    made = asyncio.run(keyframes.start(user, project, evaluations[0]))
+    with pytest.raises(generation.Blocked) as caught:
+        asyncio.run(keyframes.start(user, project, evaluations[1]))
+
+    assert [take["units_reserved"] for take in made] == [1.0, 1.0]
+    assert [block["code"] for block in caught.value.blocks] == ["quota_exceeded"]
+    assert core.spent() == 2.0 and len(takes.list_keyframes(project["id"], "s1")) == 2

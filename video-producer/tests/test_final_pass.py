@@ -379,3 +379,30 @@ def test_another_users_project_has_no_final_pass(client, core, make_project):
     response = client.post(f"{BASE}/projects/{other['id']}/final-pass/estimate", json={"takes": ["t"], "method": "render", "target": "hd720"})
 
     assert response.status_code == 404 and response.json()["detail"]["error"] == "project_not_found"
+
+
+def test_two_final_passes_that_each_fit_the_quota_cannot_both_reserve_it(core, make_project, monkeypatch):
+    core.use_wan()
+    core.use_seedvr2()
+    project, drafts = _drafts(core, make_project)
+    monkeypatch.setattr(estimate, "take_minutes", lambda seconds, ratio: 8.0)
+    core.meter(10.0)
+    evaluations = [_pass(core, project, [draft]) for draft in drafts]
+    assert [evaluation.payload["blocks"] for evaluation in evaluations] == [[], []]
+    sound = generation.with_sound
+
+    async def slow(*args):
+        await asyncio.sleep(0.01)
+        return await sound(*args)
+
+    monkeypatch.setattr(generation, "with_sound", slow)
+    user = core.users["user-1"]
+
+    async def together():
+        return await asyncio.gather(*(final_pass.start(user, project, evaluation) for evaluation in evaluations), return_exceptions=True)
+
+    results = asyncio.run(together())
+
+    assert [[take["units_reserved"] for take in result] for result in results if isinstance(result, list)] == [[8.0]]
+    assert [[block["code"] for block in result.blocks] for result in results if isinstance(result, Blocked)] == [["quota_exceeded"]]
+    assert len([take for take in takes.list_takes(project["id"]) if take["quality"] == "final"]) == 1

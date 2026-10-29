@@ -1,5 +1,6 @@
 import asyncio
 import itertools
+import threading
 
 import pytest
 
@@ -28,6 +29,21 @@ def _start(core, project, owner="user-1", **fields):
 
 def _tick():
     return asyncio.run(tracker.Tracker().tick())
+
+
+def _slow_sound(monkeypatch):
+    sound = generation.with_sound
+
+    async def slow(*args):
+        await asyncio.sleep(0.01)
+        return await sound(*args)
+
+    monkeypatch.setattr(generation, "with_sound", slow)
+
+
+async def _together(*requests):
+    results = await asyncio.gather(*requests, return_exceptions=True)
+    return [result for result in results if not isinstance(result, BaseException)], [result for result in results if isinstance(result, BaseException)]
 
 
 def _done_take(core, make_project, preset_id=presets.WAN, **project_parts):
@@ -794,3 +810,65 @@ def test_a_classified_failure_keeps_the_hook_message_first(core, make_project):
 
     failed = takes.get_take(take["id"])
     assert (failed["error_code"], failed["error_message"]) == ("cuda_oom", "Ran out of GPU memory (VRAM) during generation.")
+
+
+def test_two_requests_whose_estimates_both_fit_the_quota_cannot_both_reserve_it(core, make_project, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS[:1])
+    user = core.users["user-1"]
+    monkeypatch.setattr(estimate, "take_minutes", lambda seconds, ratio: 8.0)
+    core.meter(10.0)
+    order = Order(shots=["s1"], quality="draft", variants=1, preset_id=presets.WAN)
+    evaluations = [asyncio.run(estimate.evaluate(user, user, project["doc"], order)) for _ in range(2)]
+    assert [(evaluation.blocked, evaluation.payload["quota"]["remaining"]) for evaluation in evaluations] == [(False, 10.0), (False, 10.0)]
+    _slow_sound(monkeypatch)
+
+    made, refused = asyncio.run(_together(*(generation.start(user, project, evaluation) for evaluation in evaluations)))
+
+    assert [[take["units_reserved"] for take in created] for created in made] == [[8.0]]
+    assert [(type(exc), exc.blocks) for exc in refused] == [(Blocked, [{"code": "quota_exceeded", "message": refused[0].blocks[0]["message"], "data": {"needed_minutes": 8.0, "remaining": 2.0}}])]
+    assert core.spent() == 8.0 and len(takes.list_takes(project["id"])) == 1
+
+
+def test_two_finals_that_each_fit_the_quota_cannot_both_reserve_it(core, make_project, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS[:1])
+    drafts = _start(core, project, shots=["s1"], variants=2)
+    for draft in drafts:
+        core.complete(draft["generation_id"])
+    _tick()
+    sources = [takes.get_take(draft["id"]) for draft in drafts]
+    assert [source["status"] for source in sources] == ["done", "done"]
+    user = core.users["user-1"]
+    monkeypatch.setattr(estimate, "take_minutes", lambda seconds, ratio: 8.0)
+    core.meter(10.0)
+    _slow_sound(monkeypatch)
+
+    made, refused = asyncio.run(_together(*(generation.final(user, project, source, "render", "fhd1080") for source in sources)))
+
+    assert [take["units_reserved"] for take in made] == [8.0]
+    assert [[block["code"] for block in exc.blocks] for exc in refused] == [["quota_exceeded"]]
+    assert len([take for take in takes.list_takes(project["id"]) if take["quality"] == "final"]) == 1
+
+
+def test_the_quota_is_read_and_reserved_by_one_request_at_a_time_across_threads(core):
+    user = core.users["user-1"]
+    core.meter(10.0, pause=0.05)
+    outcomes = []
+
+    def request(number):
+        try:
+            with generation.reserving(user, 8.0) as reserve:
+                core.record_limit_event(user.id, GPU, 8.0, f"video-producer:t-{number}")
+            outcomes.append(reserve)
+        except Blocked as exc:
+            outcomes.append(exc.blocks[0]["code"])
+
+    threads = [threading.Thread(target=request, args=(number,)) for number in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcomes, key=str) == [True, "quota_exceeded"]
+    assert core.spent() == 8.0

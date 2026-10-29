@@ -40,7 +40,6 @@ class Evaluation:
     order: Order
     planned: List[Planned]
     payload: Dict[str, Any]
-    reserve: bool = False
 
     @property
     def blocked(self) -> bool:
@@ -229,7 +228,7 @@ async def evaluate(owner: User, project: Mapping[str, Any], order: Order, source
         "blocks": blocks,
         "warnings": warnings,
     }
-    return Evaluation(order=order, planned=planned, payload=payload, reserve=generation.reserves(status))
+    return Evaluation(order=order, planned=planned, payload=payload)
 
 
 async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation) -> List[Dict[str, Any]]:
@@ -239,18 +238,19 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
     planned = evaluation.planned
     await generation.with_sound(owner, project, [item.plan for item in planned])
     await generation.with_first(owner, [(item.source, item.plan) for item in planned])
-    created = [
-        generation.create_final(
-            owner,
-            project,
-            item.source,
-            evaluation.order.method,
-            item.plan,
-            item.preset_id,
-            item.minutes if evaluation.reserve and item.native else 0.0,
-        )
-        for item in planned
-    ]
+    with generation.reserving(owner, sum(item.minutes for item in planned if item.native)) as reserve:
+        created = [
+            generation.create_final(
+                owner,
+                project,
+                item.source,
+                evaluation.order.method,
+                item.plan,
+                item.preset_id,
+                item.minutes if reserve and item.native else 0.0,
+            )
+            for item in planned
+        ]
     for item, take in zip(planned, created):
         if item.conform:
             renditions.order_quietly(owner, project, take)
