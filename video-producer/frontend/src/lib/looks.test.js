@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CAST_LOW, chainDrifts, chainLook, chainThreshold, DRIFT_LOW, FACE_LOW, FINAL_LOW, IDENTITY_LOW, PLACE_LOW, PUSH_IN_HIGH, SEAM_LOW, bestCandidate, cardThreshold, driftOf, faceChanged, finalLook, identityIssues, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, pushedIn, pushInIssues, seamFaceChanged, seamLook, takeLook } from './looks.js';
+import { CAST_LOW, chainDrifts, chainLook, chainThreshold, DRIFT_LOW, FACE_LOW, FINAL_LOW, IDENTITY_LOW, PLACE_LOW, PUSH_IN_HIGH, SEAM_LOW, bestCandidate, cardThreshold, driftOf, faceChanged, finalLook, identityIssues, issueKey, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, pushedIn, pushInIssues, seamFaceChanged, seamLook, STATES, takeLook } from './looks.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -230,4 +230,24 @@ test('wiring: the measured look feeds the seams, the review, To check and the St
 	const store = source('./looks.svelte.js');
 	assert.match(store, /onTake\(\(take, live\) => live && take\.status === 'done' && schedule\(\)\)/);
 	assert.match(source('./api.js'), /async measureLooks\(projectId\) \{\n\t\t\treturn mapped\(await call\(api, 'post', `\$\{projectPath\(projectId\)\}\/looks`, \{\}\), normalizeLooks\);/);
+});
+
+test('every state a look can have is translated in English and in French', () => {
+	for (const locale of ['en', 'fr']) {
+		const panels = JSON.parse(source(`../i18n/${locale}/panels.json`));
+		for (const state of STATES.filter((value) => value !== 'done')) assert.ok(panels[`director.pick.lookState.${state}`], `${locale} director.pick.lookState.${state}`);
+	}
+	const looks = normalizeLooks({ takes: [{ take_id: 't1', status: 'done', cards: [{ card_id: 'c1', label: 'Lina', score: null, status: 'no_images' }, { card_id: 'c2', label: 'Marin', score: null, status: 'strange' }] }] });
+	assert.deepEqual(looks.takes[0].cards.map((card) => card.status), ['no_images', 'missing']);
+});
+
+test('the alerts of To check are keyed by shot, so shots that share a take never share a key', () => {
+	const card = { cardId: 'c1' };
+	assert.equal(issueKey({ clip: { id: 's1' }, takeId: 't1', card }), 'look:s1:t1:c1');
+	assert.equal(issueKey({ clip: { id: 's2' }, takeId: 't1', pushIn: 2 }), 'look:s2:t1');
+	assert.equal(issueKey({ kind: 'seam', clip: { id: 's2' }, previous: { id: 's1' }, takeId: 't1', score: 0.3 }), 'seam:s2:t1');
+	assert.notEqual(issueKey({ kind: 'take', clip: { id: 's2' }, takeId: 't1' }), issueKey({ kind: 'seam', clip: { id: 's2' }, takeId: 't1' }));
+	const summary = source('../components/director/DirectorSummary.svelte');
+	for (const list of ['lookIssues', 'pushIns', 'faceChanges']) assert.ok(summary.includes(`{#each ${list} as item (issueKey(item))}`), list);
+	assert.doesNotMatch(summary, /\(item\.takeId\)|`\$\{item\.takeId\}/);
 });
