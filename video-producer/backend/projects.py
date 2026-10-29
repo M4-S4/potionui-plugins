@@ -236,6 +236,7 @@ CLIP = _object(
         "referencePrompt": REFERENCE_PROMPT,
         "dialogue": _array(LINE),
         "firstFromPrevious": FLAG,
+        "keepFraming": FLAG,
         "speed": _enum(*formats.SLOW_SPEEDS),
     },
 )

@@ -1,12 +1,12 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, act, secs } from '../../lib/state.svelte.js';
 	import { takesOf, toggleCompare } from '../../lib/production.svelte.js';
 	import { instructionOf } from '../../lib/bible.js';
 	import { missingWords } from '../../lib/director.js';
 	import { labelOf } from '../../lib/labels.js';
-	import { isStale } from '../../lib/shots.js';
+	import { isStale, keepsFraming, setKeepFraming, touch } from '../../lib/shots.js';
 	import { seamChainOf } from '../../lib/chain.svelte.js';
 	import { currentLooks, lookState, measureLooks } from '../../lib/looks.svelte.js';
 	import { driftOf, faceChanged, finalLook, lowCard as cardIsLow, lowDrift, lowFinal, percent, pushedIn, takeLook } from '../../lib/looks.js';
@@ -45,6 +45,13 @@
 	const unmeasured = $derived(Boolean(look) && ['missing', 'failed', 'unavailable'].includes(look.status) && Boolean(looks?.embedder.available));
 	const lowCard = (card) => cardIsLow(looks, card);
 	const fromDraft = $derived(finalLook(looks, take.id));
+
+	function keepFramingNext() {
+		act(() => {
+			setKeepFraming(clip, true);
+			touch(clip);
+		});
+	}
 	const methodText = (card) => (card.kind === 'place' ? t('panels.director.pick.lookPlace') : card.method === 'face' ? t('panels.director.pick.lookFace', { seen: percent(card.seen) }) : card.seen === 0 ? t('panels.director.pick.lookNoFace') : '');
 	const endOf = (c) => seamImage(doc, c.id, 'last')?.src ?? clipThumb(c);
 	const startOf = (c) => seamImage(doc, c.id, 'first')?.src ?? clipThumb(c);
@@ -185,6 +192,7 @@
 			{/each}
 		</ul>
 		{#if pushedIn(looks, look)}<p class="text-xs text-warning" data-look-push-in>{t('panels.director.pick.lookPushIn', { ratio: formatNumber(look.pushIn, { maximumFractionDigits: 1 }) })}</p>{/if}
+		{#if pushedIn(looks, look) && !keepsFraming(clip)}<button type="button" class="vp-link-hit text-left text-xs text-fg-muted underline decoration-line-hover underline-offset-2 hover:text-fg" data-keep-framing-next onclick={keepFramingNext}>{t('panels.director.pick.keepFraming')}</button>{/if}
 		{#if faceChanged(looks, look)}<p class="text-xs text-warning" data-look-identity>{t('panels.director.pick.lookIdentity', { score: percent(look.identity.score) })}</p>{/if}
 		{#if fromDraft?.status === 'done'}<p class="text-xs {lowFinal(looks, fromDraft) ? 'text-warning' : 'text-fg-subtle'}" data-look-final>{lowFinal(looks, fromDraft) ? t('panels.director.pick.lookFinalLow', { score: percent(fromDraft.score) }) : t('panels.director.pick.lookFinal', { score: percent(fromDraft.score) })}</p>{/if}
 		<p class="text-xs text-fg-subtle">{t('panels.director.pick.lookHint')}</p>

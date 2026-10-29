@@ -15,6 +15,7 @@
 	import { roleLabel, trackVerdict, withSendings } from '../../lib/vreftracks.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { SHOT_CAP, applyShotDraft, inputsChanged, isGlobal, isShared, overrunsTake, rebaseDraft, shotDraft, shotReferences } from '../../lib/shots.js';
+	import { undoneAction } from '../../lib/keepframing.js';
 	import { SPEEDS } from '../../lib/cadence.js';
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
 	import { laneTitle } from '../../lib/tracks.js';
@@ -420,6 +421,9 @@
 						<MediaPicker title={t('inspector.frames.first')} value={draft.first} onpick={(v) => (draft.first = v)} />
 						<MediaPicker title={t('inspector.frames.last')} value={draft.last} onpick={(v) => (draft.last = v)} />
 					</div>
+					<HostUi name="Switch" props={{ id: 'vp-shot-keep-framing', checked: draft.keepFraming === true, size: 'lg', label: t('modals.shot.keepFraming'), onchange: (v) => (draft.keepFraming = Boolean(v)) }} />
+					<p class="text-xs text-fg-subtle" data-keep-framing>{draft.keepFraming && draft.last ? t('modals.shot.keepFramingLast') : t('modals.shot.keepFramingHint')}</p>
+					{#if undoneAction(draft)}<p class="text-xs text-warning" data-action-undone>{t('modals.shot.actionUndone')}</p>{/if}
 				</section>
 				<section class="space-y-1.5">
 					<div class="vp-section-title">{t('generation.drafts.label')}</div>

@@ -221,6 +221,9 @@ function baseNoteText(note) {
 	if (code === 'time_unknown') return t('generation.warn.timeUnknown');
 	if (code === 'fl2va_no_frame') return t('generation.warn.noFrame', { shot: shotName(data.shot_id) });
 	if (code === 'text_only_preset') return t('generation.warn.textOnly', { shot: shotName(data.shot_id) });
+	if (code === 'keep_framing_unavailable') return t('generation.warn.keepFramingUnavailable', { shot: shotName(data.shot_id) });
+	if (code === 'keep_framing_last_frame') return t('generation.warn.keepFramingLast', { shot: shotName(data.shot_id) });
+	if (code === 'action_undone') return t('generation.warn.actionUndone', { shot: shotName(data.shot_id) });
 	if (code === 'duration_clamped') return t('generation.warn.durationClamped', { shot: shotName(data.shot_id), max: secs(Number(data.max) || 0) });
 	if (code === 'audio_condition') return t('generation.warn.audioCondition', { shot: shotName(data.shot_id) });
 	if (code === 'audio_mux') return t('generation.warn.audioMux', { shot: shotName(data.shot_id) });
