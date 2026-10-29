@@ -29,4 +29,6 @@ export async function renderComponent(url, props = {}) {
 
 export const hostUis = (html, name) => [...html.matchAll(/<host-ui data-host="([^"]*)" data-props="([^"]*)">/g)].filter(([, found]) => !name || found === name).map(([, , props]) => JSON.parse(props.replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&amp;', '&')));
 
+export const clean = (html) => html.replace(/<!--[^>]*-->/g, '');
+
 export const textOf = (html) => html.replace(/<[^>]+>/g, ' ').replace(/<!--[^>]*-->/g, ' ').replace(/\s+/g, ' ').trim();

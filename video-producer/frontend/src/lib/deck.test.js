@@ -1,12 +1,35 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { clean, renderComponent, textOf } from './svelte-harness.js';
 import { DECK_STATES, DECK_TONES, DECK_UNBLOCK, deckActions, deckCell, deckChip, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, deckUnblock, deckUnblockLabel, latestDone, remainingSeconds, selectedEverywhere } from './deck.js';
 import { failureText } from './generation.js';
 
-const t = (key, params = {}) => `${key}${Object.keys(params).length ? JSON.stringify(params) : ''}`;
+const { doc, ui, generates, dispose } = await import('./state.svelte.js');
+const { project } = await import('./project.svelte.js');
+const { setTakes } = await import('./takes.svelte.js');
+const { t: tr } = await import('../i18n/index.svelte.js');
+
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const t =(key, params = {}) => `${key}${Object.keys(params).length ? JSON.stringify(params) : ''}`;
 const fmt = (s) => `${Math.round(s)}s`;
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
+const DECK = new URL('../components/production/ProductionDeck.svelte', import.meta.url).href;
+const WAN = '01KX47WANVIDEO0000000000TV';
+
+after(() => dispose());
+
+function scene(takes = []) {
+	project.id = 'p1';
+	ui.me = { engines: [{ id: 'native', kind: 'local', name: 'Local' }], presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }] };
+	ui.workspace = 'storyboard';
+	ui.selection = { kind: 'clip', id: 's1' };
+	doc.engine = { backend: 'native', preset: WAN, model: null };
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo', take: null }];
+	doc.prompts = [{ id: 'pr1', shotId: 's1', start: 0, dur: 4, strength: 75, text: 'A walk along the river.' }];
+	Object.assign(ui.production, { target: 'clip', state: 'ready', progress: 0, running: 0, step: '', lastCount: 0, startedAt: null, lastSeconds: null, failed: 0, failedVariant: null, failedTake: null, quality: 'draft' });
+	setTakes('p1', takes);
+}
+
+const inlineActions = (html) => [...clean(html).matchAll(/<button type="button" class="vp-deck-inline-action[^"]*"[^>]*>(.*?)<\/button>/g)].map((m) => textOf(m[1]));
 
 test('deck: five states with the tones of the host, running first, then blocked, then the end of the last batch', () => {
 	assert.deepEqual(DECK_STATES, ['ready', 'blocked', 'running', 'done', 'failed']);
@@ -119,48 +142,6 @@ test('deck: in the compact mode each state keeps its title and its first action,
 	assert.equal(deckLine({ compact: true, eyebrow: 'PLAN 03', detail: { text: '1 prompt', warn: false, whole: false } }), 'PLAN 03 · 1 prompt');
 });
 
-test('deck: the four states wire their actions in the component, the Estimated cell opens a popover that the page places, closes and refocuses like the other menus', () => {
-	const deck = source('../components/production/ProductionDeck.svelte');
-	const page = source('../VideoProducerPage.svelte');
-	assert.match(deck, /const failedTake = \$derived\(state === 'failed' \? takeById\(p\.failedTake\) : null\);/);
-	assert.match(deck, /const failure = \$derived\(failedTake \? failureText\(failedTake, t\) : ''\);/);
-	assert.match(deck, /const oom = \$derived\(failedTake\?\.errorCode === 'cuda_oom'\);/);
-	assert.match(deck, /const recent = \$derived\(latestDone\(takeStore\.list\)\);/);
-	assert.match(deck, /const finalReady = \$derived\(selectedEverywhere\(doc\.clips, takeStore\.list\)\);/);
-	assert.match(deck, /const unblock = \$derived\(state === 'blocked' \? deckUnblock\(ready\.reasons\[0\]\) : null\);/);
-	assert.match(deck, /const actions = \$derived\(deckActions\(detail\.actions, compact\)\);/);
-	assert.match(deck, /\{#if actions\.includes\('unblock'\) && unblock\}\n\t+<button type="button" class="vp-deck-inline-action" onclick=\{unblockNow\}>\{deckUnblockLabel\(unblock\.action, t\)\}<\/button>/);
-	assert.match(deck, /if \(unblock\.action === 'direction'\) return openDirector\('direction'\);\n\t+if \(unblock\.action === 'review'\) return openDirector\('review'\);\n\t+if \(unblock\.action === 'engine'\) return toggleDrawer\(\);\n\t+const id = unblock\.shotId \?\? clips\[0\]\?\.id \?\? null;\n\t+if \(id\) ui\.modal = \{ type: 'shot', id \};/);
-	assert.match(deck, /\{#if actions\.includes\('results'\)\}\n\t+<button type="button" class="vp-deck-inline-action" onclick=\{openResults\}>/);
-	assert.match(deck, /\{#if actions\.includes\('compare'\)\}[\s\S]*onclick=\{compareLast\}><Icon name="compare"/);
-	assert.match(deck, /ui\.compare = \[older\.id\];\n\t+toggleCompare\(newer\.id\);\n\t+openResults\(\);/);
-	assert.match(deck, /\{#if actions\.includes\('finalPass'\)\}[\s\S]*onclick=\{openFinalPass\}><Icon name="arrow-up" class="h-3 w-3" \/>\{t\('generation\.finalPass\.title'\)\}/);
-	assert.match(deck, /\{#if actions\.includes\('retry'\) && failedTake\}[\s\S]*onclick=\{\(\) => retryTake\(failedTake\)\}><Icon name="refresh" class="h-3 w-3" \/>\{t\('generation\.card\.retry'\)\}/);
-	assert.match(deck, /\{#if actions\.includes\('details'\) && failedTake\}[\s\S]*onclick=\{\(\) => showDetails\(failedTake\)\}>\{t\('production\.deck\.details'\)\}/);
-	assert.match(deck, /class:text-warning=\{cell\.warn \|\| cell\.vramWarn\}/);
-	assert.match(deck, /<button bind:this=\{cellEl\} type="button" class="vp-deck-timing" aria-haspopup="dialog" aria-expanded=\{estimateOpen\} onclick=\{toggleEstimate\}>/);
-	assert.match(deck, /const ESTIMATE = 'deck-estimate';\n\t+const moreOpen = \$derived\(ui\.menuOpen === MORE\);\n\t+const estimateOpen = \$derived\(ui\.menuOpen === ESTIMATE\);/);
-	assert.match(deck, /<div class="vp-menu vp-deck-popover" role="dialog" aria-label=\{t\('production\.deck\.estimateTitle'\)\} tabindex="-1" hidden=\{!estimateOpen\} use:overlayLayer use:anchoredPopover=\{\(\) => cellEl\?\.getBoundingClientRect\(\) \?\? null\} use:drawerFocus=\{estimateOpen\}>/);
-	assert.match(deck, /\{#each cellLines as text, i \(i\)\}<li>\{text\}<\/li>\{\/each\}/);
-	assert.match(deck, /\{#if estNotes\.length\}\n\t+<ul class="vp-deck-popover-notes">/);
-	assert.match(deck, /if \(!showCell && estimateOpen\) ui\.menuOpen = null;/);
-	assert.doesNotMatch(deck, /<InfoTip lines=\{cellLines\}/);
-	assert.match(page, /\.vp-root \.vp-deck-popover \{ position: fixed; width: 22rem; max-width: calc\(100vw - 1rem\); overflow: auto;/);
-	assert.match(page, /\.vp-root \.vp-deck-popover-notes \{[^}]*color: rgb\(var\(--warning\)\);/);
-	const commands = source('./commands.js');
-	assert.match(commands, /else if \(ui\.menuOpen\) ui\.menuOpen = null;\n\t+else if \(ui\.deckDrawer\) ui\.deckDrawer = false;/);
-	assert.match(source('../components/shell/MenuBar.svelte'), /if \(ui\.menuOpen && !e\.target\?\.closest\?\.\('\[data-vp-menu\]'\)\) ui\.menuOpen = null;/);
-	const production = source('./production.svelte.js');
-	assert.match(production, /const block = \(code, text, shotId = null\) => \{\n\t+missing\.push\(text\);\n\t+reasons\.push\(\{ code, shotId \}\);/);
-	assert.match(production, /block\(noShot \? 'noShot' : 'noRange', noShot \? t\('lib\.block\.noShot'\) : t\('lib\.block\.noRange'\)\);/);
-	assert.match(production, /block\('noDirection', t\('lib\.block\.noDirection'\)\);/);
-	assert.match(production, /block\('emptyPrompts', t\('lib\.block\.emptyPrompts', \{ count: empty\.length \}\), empty\[0\]\.shotId \?\? null\);/);
-	assert.match(production, /block\(doc\.engine\?\.preset \? 'unavailable' : 'noEngine', doc\.engine\?\.preset \? t\('generation\.block\.unavailable'\) : t\('generation\.block\.noEngine'\)\);/);
-	assert.match(production, /return \{ range, items, missing, reasons, warnings, notes, gaps, est, noEngine \};/);
-	assert.match(production, /p\.failedTake = failedTakes\[0\]\?\.id \?\? null;/);
-	assert.match(source('../components/takes/TakeCard.svelte'), /const errorText = \$derived\(failureText\(take, t\)\);/);
-});
-
 test('deck: the cell reads Estimated, then Elapsed with the remaining time, then Last', () => {
 	assert.deepEqual(deckCell({ state: 'ready', timeText: '≈ 2 min 10', vramText: '9,2 Go', cloud: false, over: false }, t, fmt), { label: 'production.deck.estimated', value: '≈ 2 min 10', sub: '9,2 Go', warn: false, vramWarn: false });
 	assert.deepEqual(deckCell({ state: 'ready', timeText: '≈ 2 min', vramText: '—', cloud: true, over: true }, t, fmt), { label: 'production.deck.estimated', value: '≈ 2 min', sub: '', warn: true, vramWarn: false });
@@ -188,55 +169,63 @@ test('deck: the chip sums up the engine, the profile, the size and the drafts', 
 	assert.deepEqual(deckChip({ engine: 'LTX-2.5', profile: '', size: '', drafts: null }, t), ['LTX-2.5', 'production.deck.draftsMixed']);
 });
 
-test('deck: the page mounts the deck under the timeline, before the status bar, in Storyboard and Director AI only; the 44 px bar is gone', () => {
-	const page = source('../VideoProducerPage.svelte');
-	assert.match(page, /grid-template-rows: auto auto minmax\(0, 1fr\) auto auto auto auto/);
-	assert.match(page, /<div>\s*\{#if !bare\}<Splitter \/>\{\/if\}\s*<\/div>/);
-	assert.match(page, /<\/section>\s*\{#if generates\(\)\}<ProductionDeck \/>\{\/if\}\s*<StatusBar \/>/);
-	assert.doesNotMatch(page, /ProductionBar/);
-	assert.throws(() => source('../components/production/ProductionBar.svelte'));
-	assert.match(source('../components/production/ProductionDeck.svelte'), /class="vp-deck-grid"/);
-	assert.match(page, /\.vp-root \.vp-deck-grid \{[^}]*grid-template-columns: minmax\(0, 1\.1fr\) auto minmax\(0, 1\.25fr\)/);
-	assert.match(page, /\.vp-root \.vp-deck \{[^}]*height: 92px/);
-	for (const rule of ['vp-deck-status', 'vp-deck-thumb', 'vp-deck-eyebrow', 'vp-deck-dot', 'vp-deck-title', 'vp-deck-detail', 'vp-deck-inline-action', 'vp-deck-run', 'vp-deck-generate', 'vp-deck-mark', 'vp-deck-mark-orbit', 'vp-deck-utility', 'vp-deck-timing', 'vp-deck-cell-label', 'vp-deck-cell-value', 'vp-deck-icon-button', 'vp-deck-queue-count', 'vp-deck-progress-track', 'vp-deck-progress-fill']) {
-		assert.match(page, new RegExp(`\\.vp-root \\.${rule}\\b`), rule);
+test('deck: a deck without engine is blocked, names what unblocks it and keeps its mark disabled; Storyboard and Director AI are the workspaces that show it', async () => {
+	scene();
+	ui.me = null;
+	const html = await renderComponent(DECK);
+	assert.match(html, /class="vp-deck" role="region"[^>]*data-state="blocked"/);
+	assert.deepEqual(inlineActions(html), [tr('production.deck.unblock.engine')]);
+	assert.match(html, /class="vp-deck-generate"[^>]*disabled=""[^>]*data-generate="start"/);
+	assert.match(textOf(html), new RegExp(escaped(tr('production.deck.blocked'))));
+	for (const [workspace, shown] of [['storyboard', true], ['director', true], ['player', false], ['references', false]]) {
+		ui.workspace = workspace;
+		assert.equal(generates(), shown, workspace);
 	}
-	assert.match(page, /@keyframes vp-deck-mark-orbit/);
-	assert.match(page, /@keyframes vp-deck-indeterminate/);
+	ui.workspace = 'storyboard';
 });
 
-test('deck: the mark generates or cancels, Ctrl+G stays the command, the queue and More buttons are named, and the title is announced', () => {
-	const deck = source('../components/production/ProductionDeck.svelte');
-	const drawer = source('../components/production/ProductionDrawer.svelte');
-	assert.match(deck, /onclick=\{\(\) => \(busy \? cancelGeneration\(\) : startGeneration\(\)\)\}/);
-	assert.match(deck, /disabled=\{blocked && !busy\}/);
-	assert.match(deck, /kbd: commandById\('generate'\)\?\.key/);
-	assert.match(deck, /class:is-cancel=\{busy\}/);
-	assert.match(deck, /data-generate=\{busy \? 'cancel' : 'start'\}/);
-	assert.match(deck, /aria-label=\{t\('production\.queueLabel'\)\}/);
-	assert.match(deck, /aria-label=\{t\('production\.more'\)\}/);
-	assert.match(deck, /aria-live="polite"/);
-	assert.match(deck, /role="region" aria-label=\{t\('production\.region'\)\}/);
-	assert.match(deck, /const queueOpen = \$derived\(ui\.menuOpen === QUEUE_MENU\);/);
-	assert.match(deck, /onclick=\{\(\) => \(ui\.menuOpen = queueOpen \? null : QUEUE_MENU\)\}/);
-	assert.match(deck, /<QueuePanel \/>/);
-	assert.match(deck, /onSelect: setProjectQuality/);
-	assert.match(deck, /onSelect: pick/);
-	assert.match(drawer, /act\(\(\) => setReferenceMargin\(doc\.engine, value\)\)/);
-	assert.match(drawer, /onclick: \(\) => openEngineSettings\(engine\?\.preset\)/);
-	assert.doesNotMatch(deck, /FinalPassButton|fitInline/);
-	assert.match(deck, /const profileItems = \$derived\(supportedProfiles\(\)\.map\(\(m\) => \(\{ id: m, label: m \}\)\)\);/);
-	assert.doesNotMatch(deck, /disabled: !supported/);
+test('deck: a ready deck counts the prompts and the takes, and its mark starts the generation', async () => {
+	scene();
+	const html = await renderComponent(DECK);
+	assert.match(html, /data-state="ready"/);
+	assert.deepEqual(inlineActions(html), []);
+	assert.match(html, /class="vp-deck-generate"[^>]*data-generate="start"/);
+	assert.doesNotMatch(html, /class="vp-deck-generate"[^>]*disabled=""/);
+	assert.match(textOf(html), new RegExp(`${tr('production.count.prompts', { count: 1 })} · ${tr('production.count.takes', { count: 1 })}`));
 });
 
-test('deck: the production state remembers when a batch started, how long the last one took and what failed', () => {
-	const production = source('./production.svelte.js');
-	assert.match(production, /if \(p\.state !== 'running'\) p\.startedAt = Date\.now\(\);/);
-	assert.match(production, /p\.lastSeconds = p\.startedAt \? Math\.round\(\(Date\.now\(\) - p\.startedAt\) \/ 1000\) : null;/);
-	assert.match(production, /p\.failed = failedTakes\.length;/);
-	assert.match(production, /p\.failedVariant = failedTakes\[0\]\?\.variant \?\? null;/);
-	assert.match(production, /p\.state = done\.length \? 'done' : failedTakes\.length \? 'failed' : 'ready';/);
-	const state = source('./state.svelte.js');
-	assert.match(state, /startedAt: null,\n\t\tlastSeconds: null,\n\t\tfailed: 0,\n\t\tfailedVariant: null,\n\t\tfailedTake: null,/);
-	assert.match(state, /Object\.assign\(ui\.production, \{ state: 'ready', progress: 0, running: 0, step: '', lastCount: 0, startedAt: null, lastSeconds: null, failed: 0, failedVariant: null, failedTake: null \}\);/);
+test('deck: a running deck shows the progress of the running take, its mark cancels, and the queue can take more', async () => {
+	scene([{ id: 'tr', shotId: 's1', status: 'running', variant: 'A', progress: 40, step: 'Step 18/40', createdAt: '2026-10-29T10:00:00Z' }]);
+	Object.assign(ui.production, { state: 'running', running: 1, progress: 40, step: 'Step 18/40', startedAt: Date.now() });
+	const html = await renderComponent(DECK);
+	assert.match(html, /data-state="running"/);
+	assert.match(html, /role="progressbar"[^>]*aria-valuenow="40"/);
+	assert.match(html, /class="vp-deck-generate is-cancel"[^>]*data-generate="cancel"/);
+	assert.equal(inlineActions(html).length, 1);
+	assert.match(inlineActions(html)[0], new RegExp(`^${tr('production.enqueue')}`));
+	assert.match(textOf(html), /Step 18\/40/);
+});
+
+test('deck: a finished batch offers the Review, Compare with two finished takes, and the final render once every shot has a selected take', async () => {
+	const done = (id, label, createdAt) => ({ id, shotId: 's1', status: 'done', label, variant: id.toUpperCase(), url: `/${id}.mp4`, createdAt });
+	scene([done('a', 'draft', '2026-10-29T10:00:01Z'), done('b', 'draft', '2026-10-29T10:00:02Z')]);
+	Object.assign(ui.production, { state: 'done', lastCount: 2 });
+	const two = await renderComponent(DECK);
+	assert.match(two, /data-state="done"/);
+	assert.deepEqual(inlineActions(two), [tr('production.deck.results'), tr('production.deck.compare')]);
+	setTakes('p1', [done('a', 'final', '2026-10-29T10:00:01Z')]);
+	const one = await renderComponent(DECK);
+	assert.deepEqual(inlineActions(one), [tr('production.deck.results'), tr('generation.finalPass.title')]);
+});
+
+test('deck: a failed batch carries the plain-language message of the take, Retry and Details, and the Review alone once the take is gone', async () => {
+	scene([{ id: 'tf', shotId: 's1', status: 'failed', variant: 'B', errorCode: 'cuda_oom', generationId: 'g-1', createdAt: '2026-10-29T10:00:00Z' }]);
+	Object.assign(ui.production, { state: 'failed', failed: 1, failedVariant: 'B', failedTake: 'tf' });
+	const html = await renderComponent(DECK);
+	assert.match(html, /data-state="failed"/);
+	assert.match(textOf(html), new RegExp(escaped(tr('generation.failed.cuda_oom', { id: 'g-1' }))));
+	assert.deepEqual(inlineActions(html), [tr('generation.card.retry'), tr('production.deck.details')]);
+	setTakes('p1', []);
+	const gone = await renderComponent(DECK);
+	assert.deepEqual(inlineActions(gone), [tr('production.deck.results')]);
 });

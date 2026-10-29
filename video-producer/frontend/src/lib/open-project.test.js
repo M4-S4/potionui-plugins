@@ -1,35 +1,72 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import './svelte-harness.js';
+import enCommands from '../i18n/en/commands.json' with { type: 'json' };
+import frCommands from '../i18n/fr/commands.json' with { type: 'json' };
+import enProject from '../i18n/en/project.json' with { type: 'json' };
+import frProject from '../i18n/fr/project.json' with { type: 'json' };
+import enLib from '../i18n/en/lib.json' with { type: 'json' };
+import frLib from '../i18n/fr/lib.json' with { type: 'json' };
 
-const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
-const json = (locale, domain) => JSON.parse(read(`../i18n/${locale}/${domain}.json`));
+const asked = [];
+globalThis.window.__potionui.confirm = async (options) => (asked.push(options), true);
 
-test('projects: New project creates at once, so its label carries no ellipsis in either language', () => {
-	assert.equal(json('fr', 'commands')['cmd.new-project'], 'Nouveau projet');
-	assert.equal(json('en', 'commands')['cmd.new-project'], 'New project');
-	assert.match(read('commands.js'), /command\('new-project', \(\) => createProject\(\)\)/);
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { project, bindClient } = await import('./project.svelte.js');
+const { commandById } = await import('./commands.js');
+const { confirm } = await import('./host.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+const copy = (value) => JSON.parse(JSON.stringify(value));
+const server = { projects: new Map(), created: 0 };
+bindClient({
+	async getProject(id) {
+		const p = server.projects.get(id);
+		return p ? { ok: true, data: { id, name: p.doc.name, version: p.version, doc: copy(p.doc), createdAt: null, updatedAt: null } } : { ok: false, error: { status: 404, code: 'project_not_found', message: '', data: null } };
+	},
+	async saveProject(id, next, version) {
+		const p = server.projects.get(id);
+		if (!p) return { ok: false, error: { status: 404, code: 'project_not_found', message: '', data: null } };
+		p.doc = copy(next);
+		p.version = version + 1;
+		return { ok: true, data: { version: p.version, updatedAt: null } };
+	},
+	async createProject(source) {
+		server.created += 1;
+		const id = `new${server.created}`;
+		server.projects.set(id, { version: 1, doc: copy(source) });
+		return { ok: true, data: { id, version: 1, doc: copy(source), createdAt: null, updatedAt: null } };
+	},
+	async listProjects() {
+		return { ok: true, data: [...server.projects.keys()].map((id) => ({ id, name: server.projects.get(id).doc.name })) };
+	},
+	saveLastProject() {}
 });
 
-test('projects: Open a project lets the open project be deleted too, after a confirmation in the current language, and switches to the previous project or to an empty one', () => {
-	const modal = read('../components/modals/OpenProject.svelte');
-	assert.doesNotMatch(modal, /\{#if p\.id !== project\.id\}\s*<HostUi name="IconButton" props=\{\{ icon: 'trash'/);
-	assert.match(modal, /<HostUi name="IconButton" props=\{\{ icon: 'trash', label: t\('project\.delete\.label', \{ name: nameOf\(p\) \}\), tooltip: t\('project\.delete\.title'\), size: 'sm', class: 'vp-h7', disabled: busy, onclick: \(\) => remove\(p\) \}\} \/>/);
-	assert.match(modal, /const current = p\.id === project\.id;\n\t\tconst next = current \? \(projects\.find\(\(x\) => x\.id !== p\.id\)\?\.id \?\? null\) : null;/);
-	assert.match(modal, /confirmLabel: t\('project\.delete\.confirm'\) \}\);/);
-	assert.doesNotMatch(modal, /cancelLabel/);
-	assert.match(modal, /const result = await deleteProject\(p\.id, next\);/);
-	assert.match(modal, /if \(current\) return load\(\);/);
-	for (const locale of ['en', 'fr']) {
-		const project = json(locale, 'project');
-		assert.equal(project['delete.cancel'], undefined, locale);
-		assert.match(project['delete.messageCurrent'], /\{name\}/, locale);
-		assert.match(project['delete.messageLast'], /\{name\}/, locale);
+after(() => dispose());
+
+test('projects: New project creates at once without asking anything when nothing waits to be saved, so its label carries no ellipsis in either language', async () => {
+	assert.equal(frCommands['cmd.new-project'], 'Nouveau projet');
+	assert.equal(enCommands['cmd.new-project'], 'New project');
+	ui.dirty = false;
+	await commandById('new-project').run();
+	assert.equal(server.created, 1);
+	assert.equal(project.id, 'new1');
+	assert.equal(doc.name, t('lib.default.project'));
+	assert.deepEqual(asked, []);
+});
+
+test('projects: a confirmation always offers Cancel in the current language, and the texts of a deletion name the project', async () => {
+	await confirm({ title: 'Delete', message: 'Sure?', confirmLabel: 'Delete' });
+	assert.equal(asked.at(-1).cancelLabel, t('lib.cancel'));
+	assert.equal(asked.at(-1).confirmLabel, 'Delete');
+	assert.equal(frLib.cancel, 'Annuler');
+	assert.equal(enLib.cancel, 'Cancel');
+	for (const [locale, texts] of [['en', enProject], ['fr', frProject]]) {
+		assert.equal(texts['delete.cancel'], undefined, locale);
+		assert.match(texts['delete.message'], /\{name\}/, locale);
+		assert.match(texts['delete.messageCurrent'], /\{name\}/, locale);
+		assert.match(texts['delete.messageLast'], /\{name\}/, locale);
+		assert.ok(texts['delete.confirm'], locale);
 	}
-	assert.equal(json('fr', 'lib').cancel, 'Annuler');
-	assert.equal(json('en', 'lib').cancel, 'Cancel');
-	assert.match(read('host.js'), /return Boolean\(await host\(\{ cancelLabel: t\('lib\.cancel'\), \.\.\.options \}\)\);/);
-	const store = read('project.svelte.js');
-	assert.match(store, /export async function deleteProject\(id, nextId = null\) \{\n\tconst current = id === project\.id;/);
-	assert.match(store, /const opened = nextId \? await openProject\(nextId\) : await openCreated\(emptyDoc\(t\)\);\n\tif \(!opened\.ok\) project\.fatal = opened\.error;/);
 });

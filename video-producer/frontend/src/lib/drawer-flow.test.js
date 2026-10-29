@@ -1,11 +1,58 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { DRAWER_INSET, DRAWER_MAX_HEIGHT, DRAWER_WIDTH, drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from './deck-drawer.js';
 import { deckChip } from './deck.js';
 
-const t = (key, params = {}) => `${key}${Object.keys(params).length ? JSON.stringify(params) : ''}`;
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
+class FakeNode {
+	constructor(parent = null, selectors = []) {
+		this.parent = parent;
+		this.selectors = selectors;
+	}
+	contains(other) {
+		for (let node = other; node; node = node.parent) if (node === this) return true;
+		return false;
+	}
+}
+class FakeElement extends FakeNode {
+	closest(list) {
+		const wanted = list.split(',').map((s) => s.trim());
+		for (let node = this; node; node = node.parent) if (node.selectors?.some((s) => wanted.includes(s))) return node;
+		return null;
+	}
+}
+globalThis.Node = FakeNode;
+globalThis.Element = FakeElement;
+globalThis.document = { body: {}, querySelector: () => null };
+
+const { closesOnOutsidePointer } = await import('./drawer.js');
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { handleKeydown } = await import('./commands.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+const t2 = (key, params = {}) => `${key}${Object.keys(params).length ? JSON.stringify(params) : ''}`;
+const DECK = new URL('../components/production/ProductionDeck.svelte', import.meta.url).href;
+const DRAWER = new URL('../components/production/ProductionDrawer.svelte', import.meta.url).href;
+const WAN = '01KX47WANVIDEO0000000000TV';
+const H3 = '01KX47H3MINIMAX000000000VA';
+
+after(() => {
+	dispose();
+	delete globalThis.Node;
+	delete globalThis.Element;
+	delete globalThis.document;
+});
+
+function engines() {
+	ui.me = {
+		engines: [{ id: 'native', kind: 'local', name: 'Local' }],
+		presets: [
+			{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'], resolutions: ['832x480', '1280x720'] },
+			{ id: H3, name: 'MiniMax-H3', video: true, cloud: false, profiles: ['FL2VA', 'Ref2VA'] }
+		]
+	};
+	doc.engine = { backend: 'native', preset: WAN, model: null };
+}
 
 test('drawer: the rows follow the engine, the profile, the sizes, the sound and the shots with their own engine', () => {
 	assert.deepEqual(drawerRows(), ['engine', 'drafts', 'edit']);
@@ -22,9 +69,9 @@ test('drawer: the profile is a segmented control when the current one is support
 	assert.deepEqual(profileOptions({ items, current: 'Ref2VA' }), items);
 	assert.deepEqual(profileOptions({ items, current: 'Hybrid AV' }), [{ id: 'Hybrid AV', label: 'Hybrid AV', unsupported: true }, ...items]);
 	assert.deepEqual(profileOptions({ items, current: '' }), items);
-	assert.equal(profileHint('FL2VA', t), 'production.profile.fl2va');
-	assert.equal(profileHint('Ref2VA', t), 'production.profile.ref2va');
-	assert.equal(profileHint('Hybrid AV', t), 'production.profile.hybrid');
+	assert.equal(profileHint('FL2VA', t2), 'production.profile.fl2va');
+	assert.equal(profileHint('Ref2VA', t2), 'production.profile.ref2va');
+	assert.equal(profileHint('Hybrid AV', t2), 'production.profile.hybrid');
 });
 
 test('drawer: it is 440 px wide, never wider than the plugin root, never taller than the space above the deck, which the backdrop covers', () => {
@@ -52,75 +99,71 @@ test('drawer: Tab cycles inside the dialog, and comes back in when the focus esc
 	assert.equal(tabTarget({ list: [] }), null);
 });
 
-test('drawer: it shares the outside-click rule of the side drawers, keeps its own layer, and Escape closes it after the menus and before the side drawers', () => {
-	const shared = source('./drawer.js');
-	assert.match(shared, /const KEEPS = '\.vp-drawer, \.vp-deck-drawer, \[data-vp-drawer-toggle\], \.vp-modal-backdrop, \.vp-palette-backdrop, \.vp-menu, \[data-vp-menu\], \.vp-toasts, \.vp-uploads';/);
-	assert.match(shared, /export function closesOnOutsidePointer\(root, target\)/);
-	assert.doesNotMatch(source('./deck-drawer.js'), /drawerCloses|closesOnOutsidePointer|drawerFocus/);
-	const state = source('./state.svelte.js');
-	assert.match(state, /\tmenuOpen: null,\n\tdeckDrawer: false,\n/);
-	assert.match(state, /\tui\.menuOpen = null;\n\tui\.deckDrawer = false;\n/);
-	assert.match(source('./commands.js'), /\telse if \(ui\.menuOpen\) ui\.menuOpen = null;\n\telse if \(ui\.deckDrawer\) ui\.deckDrawer = false;\n\telse if \(ui\.preview \|\| ui\.compare\) \{/);
-	assert.match(source('./commands.js'), /\telse if \(!closeDrawer\(\)\) select\(null\);/);
-});
-
-test('drawer: the chip of the deck opens it, keeps the focus to give it back, and the More menu keeps the results, the queue and the final pass only', () => {
-	const deck = source('../components/production/ProductionDeck.svelte');
-	assert.match(deck, /import ProductionDrawer from '\.\/ProductionDrawer\.svelte';/);
-	assert.doesNotMatch(deck, /drawerOpen/);
-	assert.match(deck, /<button bind:this=\{chipEl\} type="button" class="vp-deck-chip" aria-label=\{folded \? chipFull\.join\(' · '\) : undefined\} aria-expanded=\{ui\.deckDrawer\} aria-haspopup="dialog" onclick=\{toggleDrawer\}>/);
-	assert.match(deck, /function toggleDrawer\(\) \{\n\t\tif \(ui\.deckDrawer\) \{\n\t\t\tui\.deckDrawer = false;\n\t\t\treturn;\n\t\t\}\n\t\tsetReturnFocus\(chipEl\);\n\t\tui\.menuOpen = null;\n\t\tui\.deckDrawer = true;\n\t\}/);
-	assert.match(deck, /\{#if ui\.deckDrawer\}\n\t\t<ProductionDrawer anchor=\{deckEl\} \{clips\} \{engineTip\} onclose=\{\(\) => \(ui\.deckDrawer = false\)\} \/>\n\t\{\/if\}/);
-	assert.match(deck, /<div bind:this=\{deckEl\} class="vp-deck" class:is-compact=\{compact\} role="region"/);
-	const more = deck.slice(deck.indexOf('{#if moreOpen}'), deck.indexOf('{#if ui.deckDrawer}'));
-	assert.match(more, /role="menu" aria-label=\{t\('production\.more'\)\}/);
-	assert.equal((more.match(/role="menuitem"/g) ?? []).length, 3);
-	assert.match(more, /fromMore\(openResults\)/);
-	assert.match(more, /fromMore\(\(\) => setTimeout\(openQueue\)\)/);
-	assert.match(more, /fromMore\(openFinalPass\)/);
-	for (const gone of ['engineSelect', 'profilePicker', 'marginField', 'ownShots', '@render', 'engine-more']) assert.doesNotMatch(deck, new RegExp(gone), gone);
-});
-
-test('drawer: it is a modal layer of 440 px over the deck that Escape, the Close button and a pointer outside close, with the focus trapped and given back', () => {
-	const drawer = source('../components/production/ProductionDrawer.svelte');
-	assert.match(drawer, /let \{ anchor, clips = \[\], engineTip = '', onclose \} = \$props\(\);/);
-	assert.match(drawer, /layer = openLayer\(dialog, \{ refocus: initialFocus, close: onclose \}\);/);
-	assert.match(drawer, /closeLayer\(layer\);/);
-	assert.match(drawer, /if \(e\.key === 'Escape'\) \{\n\t\t\te\.preventDefault\(\);\n\t\t\te\.stopPropagation\(\);\n\t\t\tcloseTopLayer\(\);/);
-	assert.match(drawer, /tabTarget\(\{ shift: e\.shiftKey, list: focusables\(dialog\), active: document\.activeElement, inside: dialog\.contains\(document\.activeElement\) \}\)/);
-	assert.match(drawer, /document\.addEventListener\('pointerdown', outside, true\);/);
-	assert.match(drawer, /if \(!isTopLayer\(layer\) \|\| !closesOnOutsidePointer\(anchor\.closest\('\.vp-root'\), e\.target\)\) return;/);
-	assert.match(drawer, /const menu = ui\.menuOpen;\n\t\tif \(menu && !String\(menu\)\.startsWith\('picker:'\)\) onclose\(\);/);
-	assert.match(drawer, /if \(e\.target === backdrop\) e\.preventDefault\(\);/);
-	assert.match(drawer, /drawerPlace\(\{ deck: anchor\.getBoundingClientRect\(\), root: anchor\.closest\('\.vp-root'\)\?\.getBoundingClientRect\(\) \?\? null, full: viewport\.compact \}\)/);
-	assert.match(drawer, /class="vp-deck-backdrop" role="presentation"/);
-	assert.match(drawer, /class="vp-deck-drawer"\n\trole="dialog"\n\taria-modal="true"\n\taria-label=\{t\('production\.drawer\.title'\)\}\n\ttabindex="-1"/);
-	assert.match(drawer, /<h2>\{t\('production\.drawer\.title'\)\}<span class="vp-deck-drawer-sub"> \{t\('production\.drawer\.subtitle'\)\}<\/span><\/h2>/);
-	assert.match(drawer, /class="vp-deck-drawer-close" aria-label=\{t\('production\.drawer\.close'\)\} onclick=\{onclose\}/);
-	assert.match(drawer, /withSendings\(\(\) => act\(\(\) => \(doc\.direction\.mode = m\)\)\)/);
-	assert.match(drawer, /act\(\(\) => setReferenceMargin\(doc\.engine, value\)\)/);
-	assert.match(drawer, /onchange=\{\(e\) => selectEngine\(e\.currentTarget\.value\)\}/);
-	assert.match(drawer, /\{#if rows\.includes\('own'\)\}\n\t\t\t\t<p class="vp-deck-drawer-help">\{t\('production\.drawer\.own', \{ count: own \}\)\}<\/p>/);
-	assert.match(drawer, /\{t\('production\.editEngine'\)\}\{#if setCount\}<span class="vp-deck-badge vp-tc ml-1\.5">\{setCount\}<\/span>\{\/if\}/);
-	const page = source('../VideoProducerPage.svelte');
-	for (const rule of ['vp-deck-backdrop', 'vp-deck-drawer', 'vp-deck-drawer-header', 'vp-deck-drawer-body', 'vp-deck-drawer-close', 'vp-deck-drawer-grid', 'vp-deck-drawer-label', 'vp-deck-drawer-row', 'vp-deck-drawer-hint', 'vp-deck-drawer-help']) {
-		assert.match(page, new RegExp(`\\.vp-root \\.${rule}\\b`), rule);
+test('drawer: a pointer inside the plugin root closes it, unless it lands on a drawer, a menu, a modal, a toast or a drawer toggle', () => {
+	const root = new FakeElement(null, ['.vp-root']);
+	const plain = new FakeElement(root);
+	assert.equal(closesOnOutsidePointer(root, plain), true);
+	for (const keep of ['.vp-drawer', '.vp-deck-drawer', '[data-vp-drawer-toggle]', '.vp-modal-backdrop', '.vp-palette-backdrop', '.vp-menu', '[data-vp-menu]', '.vp-toasts', '.vp-uploads']) {
+		const inside = new FakeElement(new FakeElement(root, [keep]));
+		assert.equal(closesOnOutsidePointer(root, inside), false, keep);
 	}
-	assert.match(page, /@keyframes vp-deck-drawer-in/);
-	assert.match(page, /\.vp-root \.vp-deck-drawer \{ position: absolute; right: 0; bottom: 100%;/);
-	assert.match(page, /\.vp-root \.vp-deck-drawer-header \{ height: 56px;/);
-	assert.match(page, /\.vp-root \.vp-deck-backdrop \{ position: absolute; left: 0; right: 0; bottom: calc\(100% \+ 1px\); background: rgb\(var\(--scrim\) \/ \.32\);/);
+	assert.equal(closesOnOutsidePointer(root, new FakeElement(new FakeElement(null, ['.vp-root']))), false);
+	assert.equal(closesOnOutsidePointer(null, plain), false);
+	assert.equal(closesOnOutsidePointer(root, null), false);
+});
+
+test('drawer: Escape closes the menus first, then the deck drawer, then the preview and the compare', () => {
+	Object.assign(ui, { paletteOpen: false, modal: null, menuOpen: 'deck-more', deckDrawer: true, preview: { kind: 'result', id: 't1' }, compare: null });
+	const escape = () => handleKeydown({ key: 'Escape', target: null, preventDefault() {} }, null);
+	escape();
+	assert.deepEqual([ui.menuOpen, ui.deckDrawer, ui.preview?.id], [null, true, 't1']);
+	escape();
+	assert.deepEqual([ui.menuOpen, ui.deckDrawer, ui.preview?.id], [null, false, 't1']);
+	escape();
+	assert.deepEqual([ui.menuOpen, ui.deckDrawer, ui.preview], [null, false, null]);
+	handleKeydown({ key: 'Escape', target: null, shiftKey: true, preventDefault() {} }, null);
+	assert.equal(ui.deckDrawer, false);
+});
+
+test('drawer: the chip of the deck opens it as a modal dialog over the deck, with its title and a Close button, and the chip says whether it is open', async () => {
+	engines();
+	ui.deckDrawer = false;
+	const closed = await renderComponent(DECK);
+	assert.match(closed, /<button[^>]*class="vp-deck-chip"[^>]*aria-expanded="false"[^>]*aria-haspopup="dialog"/);
+	assert.doesNotMatch(closed, /role="dialog"[^>]*aria-modal="true"/);
+	ui.deckDrawer = true;
+	const open = await renderComponent(DECK);
+	assert.match(open, /<button[^>]*class="vp-deck-chip"[^>]*aria-expanded="true"/);
+	assert.match(open, new RegExp(`class="vp-deck-drawer"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-label="${t('production.drawer.title')}"`));
+	assert.match(open, /<h2>[^<]*<span class="vp-deck-drawer-sub">/);
+	assert.match(open, new RegExp(`class="vp-deck-drawer-close" aria-label="${t('production.drawer.close')}"`));
+	assert.match(open, /class="vp-deck-backdrop" role="presentation"/);
+	ui.deckDrawer = false;
+});
+
+test('drawer: its rows follow the engine of the project, it counts the shots with their own engine, and the engine button carries the count of options set', async () => {
+	engines();
+	doc.clips = [
+		{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo', engine: { preset: H3, model: null } },
+		{ id: 's2', start: 4, dur: 4, label: 'Two', stage: 'todo', engine: { preset: H3, model: null } },
+		{ id: 's3', start: 8, dur: 4, label: 'Three', stage: 'todo' }
+	];
+	const html = await renderComponent(DRAWER, { anchor: null, clips: doc.clips, engineTip: 'Wan', onclose() {} });
+	assert.match(html, new RegExp(`<label class="vp-deck-drawer-label" for="[^"]+">${t('production.drawer.engine')}</label>`));
+	assert.match(html, new RegExp(`<option value="${WAN}\|" selected="">`));
+	assert.match(html, new RegExp(`<label class="vp-deck-drawer-label" for="[^"]+">${t('production.drawer.draftSize')}</label>`));
+	assert.match(html, new RegExp(`<p class="vp-deck-drawer-help">${t('production.drawer.own', { count: 2 })}</p>`));
+	assert.match(textOf(html), new RegExp(t('production.editEngine')));
+	assert.doesNotMatch(html, /vp-deck-drawer-label" id=/);
+	ui.me = { ...ui.me, presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }] };
+	doc.clips = [];
+	const plain = await renderComponent(DRAWER, { anchor: null, clips: [], onclose() {} });
+	assert.doesNotMatch(plain, new RegExp(t('production.drawer.draftSize')));
+	assert.doesNotMatch(plain, /vp-deck-drawer-help/);
+	assert.ok(hostUis(plain, 'Button').length >= 1);
 });
 
 test('drawer: the chip reads the same engine, profile, size and drafts the drawer writes', () => {
-	const deck = source('../components/production/ProductionDeck.svelte');
-	assert.match(deck, /const engineName = \$derived\(engine \? \(cloud \? engine\.label : presetLabel\(engine\.info\)\) : groups\.length \? engineLabel\(\) : t\('generation\.engine\.none'\)\);/);
-	assert.match(deck, /const chipParts = \$derived\(\{ engine: engineName, short: engineShort, prefixes: enginePrefixes, profile: showProfile \? doc\.direction\.mode : '', size: sizes \? \(p\.quality === 'draft' \? draftRes : finalRes\) : '', drafts: clips\.length \? sharedDrafts\(clips, doc\.engine\) : 1 \}\);/);
-	assert.match(deck, /const chipFull = \$derived\(deckChip\(chipParts, t\)\);/);
-	assert.match(deck, /const chip = \$derived\(deckChipFolded\(chipParts, fit, t\)\);/);
-	assert.match(deck, /const showProfile = \$derived\(profileItems\.length > 1 \|\| profileControl\(\{ items: profileItems, current: doc\.direction\.mode \}\) === 'popup'\);/);
-	assert.match(deck, /chosenSize\(doc, engine\?\.preset, 'draft'\)/);
-	assert.match(deck, /chosenSize\(doc, engine\?\.preset, 'final'\)/);
-	assert.deepEqual(deckChip({ engine: 'MiniMax H3', profile: 'Ref2VA', size: '1344×768', drafts: 3 }, t), ['MiniMax H3', 'Ref2VA', '1344×768', 'production.deck.drafts{"count":3}']);
-	assert.deepEqual(deckChip({ engine: 'MiniMax H3', profile: '', size: '832×480', drafts: null }, t), ['MiniMax H3', '832×480', 'production.deck.draftsMixed']);
+	assert.deepEqual(deckChip({ engine: 'MiniMax H3', profile: 'Ref2VA', size: '1344×768', drafts: 3 }, t2), ['MiniMax H3', 'Ref2VA', '1344×768', 'production.deck.drafts{"count":3}']);
+	assert.deepEqual(deckChip({ engine: 'MiniMax H3', profile: '', size: '832×480', drafts: null }, t2), ['MiniMax H3', '832×480', 'production.deck.draftsMixed']);
 });
