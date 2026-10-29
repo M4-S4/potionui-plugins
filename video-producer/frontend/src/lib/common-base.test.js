@@ -33,7 +33,7 @@ test('base: the centre areas share one header template, icon, title and counter 
 
 test('base: every filter is one row of pills with their count, drawn by one component', () => {
 	const pills = read('../components/shell/FilterPills.svelte');
-	assert.match(pills, /class="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto p-1 \{className\}" role="tablist"/);
+	assert.match(pills, /class="vp-pills no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto p-1 \{className\}" role="tablist"/);
 	assert.match(pills, /\{#if item\.count != null\}<span class="vp-tc text-2xs text-fg-subtle">\{item\.count\}<\/span>\{\/if\}/);
 	for (const path of ['../components/panels/MediaBrowser.svelte', '../components/references/ReferenceBoard.svelte', '../components/director/ReviewView.svelte', '../components/mixer/Console.svelte']) {
 		const source = read(path);

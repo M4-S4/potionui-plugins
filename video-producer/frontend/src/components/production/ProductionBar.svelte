@@ -64,6 +64,7 @@
 	const busy = $derived(status === 'running');
 	const blocked = $derived(ready.missing.length > 0);
 	const notes = $derived(blocked ? [...ready.missing, ...ready.warnings] : ready.warnings);
+	const noticeLabel = $derived(notes.length > 1 ? t('production.notices', { count: notes.length, text: notes[0] }) : (notes[0] ?? ''));
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
 	const picked = $derived(pickedClips().length);
 	const byShots = $derived(ui.workspace === 'director' && (picked > 0 || p.target === 'clip'));
@@ -323,7 +324,7 @@
 			</HostUi>
 		{/if}
 		{#if notes.length}
-			<InfoTip lines={notes} wrapperClass="flex shrink-0">
+			<InfoTip lines={notes} label={noticeLabel} wrapperClass="flex shrink-0">
 				<span class="vp-notice text-xs text-warning"><Icon name="alert" class="h-3.5 w-3.5 shrink-0" /><span class="vp-notice-text" use:watch={'notice'}>{#if fit.inline.has('notice')}{notes[0]}{/if}</span></span>
 			</InfoTip>
 		{/if}

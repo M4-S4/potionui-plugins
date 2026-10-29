@@ -18,6 +18,8 @@
 	"count.references.other": "{count} références",
 	"conflicts.one": "{count} contradiction de direction à vérifier",
 	"conflicts.other": "{count} contradictions de direction à vérifier",
+	"notices.one": "{count} avertissement : {text}",
+	"notices.other": "{count} avertissements : {text}",
 	"quality.label": "Qualité",
 	"quality.draftTip": "Brouillon rapide en {resolution} : valider mouvement et cadrage",
 	"quality.finalTip": "Qualité finale en {resolution} : à réserver aux prises retenues",

@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 	import { overlayLayer } from '../../lib/host.js';
 
-	let { lines = [], wrapperClass = 'inline-flex', children } = $props();
+	let { lines = [], label = '', wrapperClass = 'inline-flex', children } = $props();
 
 	const id = `vp-tip-${Math.random().toString(36).slice(2, 10)}`;
 	let trigger = $state();
@@ -81,7 +81,7 @@
 	});
 </script>
 
-<button type="button" bind:this={trigger} class="{wrapperClass} min-h-6 items-center text-left" aria-describedby={id} onmouseenter={hoverIn} onmouseleave={hoverOut} onfocus={reveal} onblur={blur} onclick={toggle}>
+<button type="button" bind:this={trigger} class="{wrapperClass} min-h-6 items-center text-left" aria-label={label || undefined} aria-describedby={id} onmouseenter={hoverIn} onmouseleave={hoverOut} onfocus={reveal} onblur={blur} onclick={toggle}>
 	{@render children()}
 </button>
 <div

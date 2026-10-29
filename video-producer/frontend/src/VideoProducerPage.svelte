@@ -616,6 +616,13 @@
 		.vp-root .vp-menu :is([role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox']):is(:hover, :focus-visible) {
 			background-color: rgb(var(--signal) / 0.2);
 		}
+		.vp-root .vp-menu.vp-menu-list {
+			width: max-content;
+			max-width: calc(100vw - 1rem);
+		}
+		.vp-root .vp-menu-label {
+			white-space: nowrap;
+		}
 		.vp-root .vp-menu-sep {
 			margin: 0.25rem 0.5rem;
 			height: 1px;
@@ -1054,11 +1061,23 @@
 				display: none;
 			}
 		}
+		.vp-root .vp-pills[data-shade='end'] {
+			-webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+			mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+		}
+		.vp-root .vp-pills[data-shade='start'] {
+			-webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem);
+			mask-image: linear-gradient(to right, transparent, #000 2.5rem);
+		}
+		.vp-root .vp-pills[data-shade='both'] {
+			-webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+			mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+		}
 		.vp-root .vp-notice {
 			display: flex;
 			height: 1rem;
 			min-width: 0;
-			max-width: 220px;
+			max-width: 320px;
 			align-items: center;
 			justify-content: flex-end;
 			gap: 0.375rem;

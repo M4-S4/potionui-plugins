@@ -18,6 +18,8 @@
 	"count.references.other": "{count} references",
 	"conflicts.one": "{count} direction conflict to check",
 	"conflicts.other": "{count} direction conflicts to check",
+	"notices.one": "{count} warning: {text}",
+	"notices.other": "{count} warnings: {text}",
 	"quality.label": "Quality",
 	"quality.draftTip": "Quick draft in {resolution}: check motion and framing",
 	"quality.finalTip": "Final quality in {resolution}: keep it for the chosen takes",

@@ -43,7 +43,7 @@
 				{m.label}
 			</button>
 			{#if ui.menuOpen === m.id}
-				<div class="vp-menu top-7 left-0" role="menu" use:overlayLayer in:fly={{ y: -4, duration: ms(120) }}>
+				<div class="vp-menu vp-menu-list top-7 left-0" role="menu" use:overlayLayer in:fly={{ y: -4, duration: ms(120) }}>
 					{#each m.groups as group, gi}
 						{#if gi > 0}<div class="vp-menu-sep" role="separator"></div>{/if}
 						{#each group as item (item.id)}
@@ -51,8 +51,7 @@
 								<span class="w-3.5 shrink-0 text-signal">
 									{#if item.check?.()}<Icon name="check" class="h-3.5 w-3.5" />{/if}
 								</span>
-								<span class="flex-1">{item.label}</span>
-
+								<span class="vp-menu-label flex-1">{item.label}</span>
 								{#if item.key}<span class="vp-menu-key">{item.key}</span>{/if}
 							</button>
 						{/each}
