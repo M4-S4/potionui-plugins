@@ -237,6 +237,7 @@
 	"director.pick.lookFinal": "Close to its draft: {score} %",
 	"director.pick.lookFinalLow": "Far from its draft: {score} %",
 	"director.pick.lookPushIn": "The face grows ×{ratio} during the take: the engine redrew it, check that it is still the same person",
+	"director.pick.keepFraming": "Keep the framing for the next take",
 	"director.pick.lookIdentity": "The face changes during the take: at its end it keeps only {score} % of the face it starts with (face recognition, seen from the front)",
 	"director.pick.lookState.queued": "waiting, outside generations",
 	"director.pick.lookState.missing": "not measured",

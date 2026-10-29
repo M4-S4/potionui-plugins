@@ -123,6 +123,13 @@ export function touch(clip) {
 	if (clip) clip.revision = revisionOf(clip) + 1;
 }
 
+export const keepsFraming = (clip) => clip?.keepFraming === true;
+
+export function setKeepFraming(clip, on) {
+	if (on) clip.keepFraming = true;
+	else delete clip.keepFraming;
+}
+
 export function isStale(take, clip) {
 	if (!take || !clip) return false;
 	return (Number.isInteger(take.shotRevision) ? take.shotRevision : 0) < revisionOf(clip);
@@ -143,6 +150,7 @@ export function inputsChanged(before, after) {
 		Math.abs(Number(before.dur) - Number(after.dur)) > 1e-6 ||
 		before.first !== after.first ||
 		before.last !== after.last ||
+		Boolean(before.keepFraming) !== Boolean(after.keepFraming) ||
 		!sameList([...before.exclude].sort(), [...after.exclude].sort()) ||
 		!sameList([...(before.excludeLanes ?? [])].sort(), [...(after.excludeLanes ?? [])].sort()) ||
 		!sameList([...(before.excludeVrefs ?? [])].sort(), [...(after.excludeVrefs ?? [])].sort()) ||
@@ -161,6 +169,7 @@ function migrateClip(clip) {
 	if ('drafts' in next && !(Number.isInteger(next.drafts) && next.drafts >= MIN_DRAFTS && next.drafts <= MAX_STORED_DRAFTS)) delete next.drafts;
 	if ('revision' in next && !(Number.isInteger(next.revision) && next.revision >= 0)) delete next.revision;
 	if ('firstFromPrevious' in next && typeof next.firstFromPrevious !== 'boolean') delete next.firstFromPrevious;
+	if ('keepFraming' in next && next.keepFraming !== true) delete next.keepFraming;
 	if ('speed' in next && !SLOW_SPEEDS.includes(next.speed)) delete next.speed;
 	if ('referenceOverrides' in next) {
 		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next), excludeVrefs: excludedVrefsOf(next) }).filter(([, list]) => list.length);
@@ -250,6 +259,7 @@ export function shotDraft(doc, clip, engine) {
 		dialogue: linesOf(clip),
 		referencePrompt: referencePromptOf(clip),
 		firstFromPrevious: typeof clip.firstFromPrevious === 'boolean' ? clip.firstFromPrevious : null,
+		keepFraming: keepsFraming(clip),
 		speed: speedOf(clip)
 	};
 }
@@ -319,6 +329,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 		if (SLOW_SPEEDS.includes(draft.speed)) clip.speed = draft.speed;
 		else delete clip.speed;
 	}
+	if ('keepFraming' in draft && Boolean(draft.keepFraming) !== Boolean(before.keepFraming)) setKeepFraming(clip, draft.keepFraming);
 	const released = resized ? releaseOverrun(doc, clip, was) : null;
 	if (changed) touch(clip);
 	return { changed, resized, released };

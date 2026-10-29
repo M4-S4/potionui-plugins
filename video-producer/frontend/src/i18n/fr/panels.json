@@ -237,6 +237,7 @@
 	"director.pick.lookFinal": "Proche de son brouillon : {score} %",
 	"director.pick.lookFinalLow": "Loin de son brouillon : {score} %",
 	"director.pick.lookPushIn": "Le visage grossit ×{ratio} pendant la prise : le moteur l’a redessiné, vérifiez que c’est toujours la même personne",
+	"director.pick.keepFraming": "Garder le cadrage pour la prochaine prise",
 	"director.pick.lookIdentity": "Le visage change pendant la prise : à la fin, il ne garde que {score} % du visage du début (reconnaissance du visage, vu de face)",
 	"director.pick.lookState.queued": "en attente, hors génération",
 	"director.pick.lookState.missing": "pas mesurée",

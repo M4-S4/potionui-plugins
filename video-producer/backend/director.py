@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, dialogue, engine_options, formats, models, presets, reception, sequence, settings, upscalers
+from . import bible, catalog, core_bridge, dialogue, engine_options, formats, keepframing, models, presets, reception, sequence, settings, upscalers
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -1345,8 +1345,9 @@ def bind_frames(
     segment_id: Optional[str] = None,
     capabilities: Optional[Mapping[str, Any]] = None,
     first_media: Optional[Dict[str, Any]] = None,
+    keep: bool = False,
 ) -> Tuple[Dict[str, Any], str]:
-    """The request with the shot's first and last frames bound, on segment_id of a director document when given, and the composition mode that results; first_media, when given, is bound in place of the shot's first frame."""
+    """The request with the shot's first and last frames bound, on segment_id of a director document when given, and the composition mode that results; first_media, when given, is bound in place of the shot's first frame; with keep, a shot without a last frame of its own gets its first frame as its last one too, so that the engine keeps the framing."""
     first, last = shot_frames(doc, shot_id)
     first_media = first_media or _frame_media(user, doc, first)
     if first_media is None:
@@ -1358,6 +1359,8 @@ def bind_frames(
         logger.warning("[VIDEO-PRODUCER] Could not bind the first frame of shot %s", shot_id, exc_info=True)
         return request, "t2v"
     last_media = _frame_media(user, doc, last) if last_allowed else None
+    if last_media is None and keep and last_allowed and last is None:
+        last_media = first_media
     if last_media is None:
         return request, "i2v"
     try:
@@ -1365,6 +1368,20 @@ def bind_frames(
     except DirectorBindingError:
         logger.warning("[VIDEO-PRODUCER] Could not bind the last frame of shot %s", shot_id, exc_info=True)
         return request, "i2v"
+
+
+def framing_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], director_mode: str, warnings: List[Dict[str, Any]]) -> None:
+    """The warnings about the framing a shot keeps: an engine that takes no last frame here, a last frame of its own that is sent instead, and an action that asks for a move its last frame, the same as its first, undoes."""
+    shot_id = clip.get("id")
+    first, last = shot_frames(doc, shot_id)
+    keep = keepframing.keeps_framing(clip)
+    if keep and director_mode != "flf":
+        warnings.append(note("keep_framing_unavailable", "The engine of the shot takes no last frame here: its framing is not kept.", shot_id=shot_id))
+    elif keep and last is not None:
+        warnings.append(note("keep_framing_last_frame", "The shot has a last frame of its own: it is sent instead of its first frame.", shot_id=shot_id))
+    same = (keep and last is None) or (first is not None and last is not None and first.get("assetId") == last.get("assetId"))
+    if director_mode == "flf" and same and keepframing.moves(shot_instruction(doc, clip)):
+        warnings.append(note("action_undone", "The action asks the subject to move, but the last frame brings it back where it starts: the engine may add a double. Describe an action in place, or give another last frame.", shot_id=shot_id))
 
 
 def reference_media(
@@ -1635,9 +1652,11 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
             segment_id=SEGMENT_ID if mixed else None,
             capabilities=capabilities if mixed else None,
             first_media=chained,
+            keep=keepframing.keeps_framing(clip),
         )
         if director_mode == "t2v" and context.profile == FL2VA:
             warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
+    framing_warnings(doc, clip, director_mode, warnings)
     resolved = models.resolve_models(preset.id, mode, director_mode, fields, (AUDIO_VAE,) if mixed else ())
     request["form_data"].update(resolved.values)
     chosen = project_options(context, fields, warnings)
@@ -1992,10 +2011,11 @@ def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     director_mode = "t2v"
     if first_media is not None:
         request, director_mode = bind_frames(
-            context.user, doc, shot_id, request, last_allowed=_has_input(model, LAST_FRAME, IMG2VIDEO), first_media=first_media
+            context.user, doc, shot_id, request, last_allowed=_has_input(model, LAST_FRAME, IMG2VIDEO), first_media=first_media, keep=keepframing.keeps_framing(clip)
         )
     if director_mode == "t2v" and context.profile == FL2VA:
         warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
+    framing_warnings(doc, clip, director_mode, warnings)
     audio = _ignored_audio(doc, clip, seconds, warnings)
     params = {"duration_s": seconds, "resolution": resolution, "aspect_ratio": aspect}
     return ShotPlan(
