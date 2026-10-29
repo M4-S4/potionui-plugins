@@ -1100,20 +1100,6 @@
 		.vp-root [data-take-details] > summary:hover {
 			color: rgb(var(--fg));
 		}
-		.vp-root .vp-production-wrap {
-			height: auto;
-			min-height: 2.75rem;
-			flex-wrap: wrap;
-			row-gap: 0.375rem;
-			padding-block: 0.375rem;
-		}
-		.vp-root .vp-production-wrap > [data-vp-engine] {
-			order: 1;
-			flex-basis: 100%;
-		}
-		.vp-root .vp-production-wrap > [data-vp-actions] {
-			margin-left: auto;
-		}
 		@media (max-width: 1279px) {
 			.vp-root .vp-wide-only {
 				position: absolute;
@@ -1146,24 +1132,6 @@
 		.vp-root .vp-pills[data-shade='both'] {
 			-webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
 			mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
-		}
-		.vp-root .vp-notice {
-			display: flex;
-			height: 1rem;
-			min-width: 0;
-			max-width: 320px;
-			align-items: center;
-			justify-content: flex-end;
-			gap: 0.375rem;
-			overflow: hidden;
-		}
-		.vp-root .vp-notice-text {
-			min-width: 0;
-			flex: 0 1 auto;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-			line-height: 1rem;
 		}
 
 		.vp-root .vp-statusbar {
@@ -1219,6 +1187,7 @@
 		.vp-root .vp-deck-title { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; transition: opacity 250ms ease; }
 		.vp-root .vp-deck-detail { min-width: 0; min-height: 24px; display: flex; align-items: center; gap: 8px; color: rgb(var(--fg-muted)); font-size: 12px; line-height: 16px; white-space: nowrap; }
 		.vp-root .vp-deck-detail-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+		.vp-root .vp-deck-detail-text.is-whole { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
 		.vp-root .vp-deck-inline-action { height: 24px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: 0; border-radius: 4px; background: rgb(var(--surface-2)); color: rgb(var(--fg)); cursor: pointer; font-size: 12px; font-weight: 600; }
 		.vp-root .vp-deck-inline-action:hover:not(:disabled) { background: rgb(var(--surface-3)); }
 		.vp-root .vp-deck-inline-action:disabled { cursor: not-allowed; opacity: .4; }

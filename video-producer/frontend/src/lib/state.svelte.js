@@ -60,6 +60,7 @@ export const ui = $state({
 	compare: null,
 	modal: null,
 	menuOpen: null,
+	deckDrawer: false,
 	paletteOpen: false,
 	toasts: [],
 	dirty: false,
@@ -819,6 +820,7 @@ export function dispose() {
 	toastTimers.clear();
 	ui.toasts.length = 0;
 	ui.menuOpen = null;
+	ui.deckDrawer = false;
 	ui.paletteOpen = false;
 	ui.modal = null;
 }

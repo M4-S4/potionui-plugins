@@ -41,13 +41,6 @@ export function tabTarget({ shift = false, list = [], active = null, inside = tr
 	return active === last || !inside ? first : null;
 }
 
-export function drawerCloses({ target, dialog, toggle, top = true } = {}) {
-	if (!top || !target) return false;
-	if (dialog && typeof dialog.contains === 'function' && dialog.contains(target)) return false;
-	if (toggle && typeof toggle.contains === 'function' && toggle.contains(target)) return false;
-	return true;
-}
-
 export function profileHint(mode, t) {
 	if (mode === 'FL2VA') return t('production.profile.fl2va');
 	if (mode === 'Ref2VA') return t('production.profile.ref2va');

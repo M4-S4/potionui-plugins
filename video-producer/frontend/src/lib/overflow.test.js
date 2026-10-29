@@ -29,12 +29,15 @@ test('overflow: the menus of the menu bar grow to their longest label on one lin
 	assert.match(rule('.vp-menu-key'), /white-space: nowrap;/);
 });
 
-test('overflow: the warning of the Production bar keeps its whole text in its tooltip and names itself for a screen reader, with the count of warnings', () => {
+test('overflow: the warning of the production deck keeps its whole text, on two lines at most and in its tooltip, and names itself for a screen reader, with the count of warnings', () => {
 	assert.match(read('../components/shell/InfoTip.svelte'), /aria-label=\{label \|\| undefined\} aria-describedby=\{id\}/);
-	const bar = read('../components/production/ProductionBar.svelte');
-	assert.match(bar, /const noticeLabel = \$derived\(notes\.length > 1 \? t\('production\.notices', \{ count: notes\.length, text: notes\[0\] \}\) : \(notes\[0\] \?\? ''\)\);/);
-	assert.match(bar, /<InfoTip lines=\{notes\} label=\{noticeLabel\} wrapperClass="flex shrink-0">/);
-	assert.match(rule('.vp-notice'), /max-width: 320px;/);
+	const deck = read('../components/production/ProductionDeck.svelte');
+	assert.match(deck, /const noticeLabel = \$derived\(notes\.length > 1 \? t\('production\.notices', \{ count: notes\.length, text: notes\[0\] \}\) : \(notes\[0\] \?\? ''\)\);/);
+	assert.match(deck, /<InfoTip lines=\{notes\.length \? notes : \[detail\.text\]\} label=\{notes\.length \? noticeLabel : ''\} wrapperClass="flex min-w-0 items-center gap-1\.5">/);
+	assert.match(deck, /\{#if detail\.warn\}<Icon name="alert" class="h-3 w-3 shrink-0 text-warning" \/>\{\/if\}<span class="vp-deck-detail-text" class:text-warning=\{detail\.warn\} class:is-whole=\{detail\.warn\}>/);
+	assert.match(rule('.vp-deck-detail-text.is-whole'), /-webkit-line-clamp: 2;[\s\S]*white-space: normal;/);
+	assert.equal(rule('.vp-notice'), '');
+	assert.equal(rule('.vp-production-wrap'), '');
 	for (const locale of ['en', 'fr']) {
 		const production = JSON.parse(read(`../i18n/${locale}/production.json`));
 		assert.match(production['notices.other'], /^\{count\} .*\{text\}$/, locale);

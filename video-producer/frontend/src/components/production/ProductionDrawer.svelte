@@ -17,12 +17,13 @@
 	import { closeLayer, closeTopLayer, focusWithRing, isTopLayer, openLayer } from '../../lib/focus.js';
 	import { setEngineSize } from '../../lib/framing.svelte.js';
 	import { withSendings } from '../../lib/vreftracks.svelte.js';
-	import { drawerCloses, drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from '../../lib/deck-drawer.js';
+	import { closesOnOutsidePointer } from '../../lib/drawer.js';
+	import { drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from '../../lib/deck-drawer.js';
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import SizePicker from './SizePicker.svelte';
 
-	let { anchor, toggle = null, clips = [], engineTip = '', onclose } = $props();
+	let { anchor, clips = [], engineTip = '', onclose } = $props();
 
 	const uid = $props.id();
 	const ids = { engine: `${uid}-engine`, profile: `${uid}-profile`, draft: `${uid}-draft`, final: `${uid}-final`, drafts: `${uid}-drafts`, margin: `${uid}-margin` };
@@ -78,10 +79,15 @@
 	}
 
 	function outside(e) {
-		if (!drawerCloses({ target: e.target, dialog, toggle, top: isTopLayer(layer) })) return;
+		if (!isTopLayer(layer) || !closesOnOutsidePointer(anchor.closest('.vp-root'), e.target)) return;
 		if (e.target === backdrop) e.preventDefault();
 		onclose();
 	}
+
+	$effect(() => {
+		const menu = ui.menuOpen;
+		if (menu && !String(menu).startsWith('picker:')) onclose();
+	});
 
 	onMount(() => {
 		anchorTo();

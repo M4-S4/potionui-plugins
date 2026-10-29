@@ -385,7 +385,7 @@ test('pages: the engine settings live in the Settings drawer of the production d
 	assert.match(drawer, /onclick: \(\) => openEngineSettings\(engine\?\.preset\)/);
 	assert.match(deck, /const moreOpen = \$derived\(ui\.menuOpen === MORE\);/);
 	assert.doesNotMatch(deck, /held|nested|startsWith\('picker:'\)/);
-	assert.match(deck, /class="vp-deck-chip" aria-expanded=\{drawerOpen\} aria-haspopup="dialog" onclick=\{toggleDrawer\}/);
+	assert.match(deck, /class="vp-deck-chip" aria-expanded=\{ui\.deckDrawer\} aria-haspopup="dialog" onclick=\{toggleDrawer\}/);
 	assert.doesNotMatch(deck, /SizePicker|DraftsField|selectEngine|setReferenceMargin|openEngineSettings/);
 	assert.doesNotMatch(deck, /min-\[1400px\]|fitInline|ResizeObserver/);
 

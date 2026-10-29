@@ -1,15 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { DRAWER_INSET, DRAWER_MAX_HEIGHT, DRAWER_WIDTH, drawerCloses, drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from './deck-drawer.js';
+import { DRAWER_INSET, DRAWER_MAX_HEIGHT, DRAWER_WIDTH, drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from './deck-drawer.js';
 import { deckChip } from './deck.js';
 
 const t = (key, params = {}) => `${key}${Object.keys(params).length ? JSON.stringify(params) : ''}`;
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
-const node = (children = []) => {
-	const self = { children, contains: (el) => el === self || children.some((child) => (child.contains ? child.contains(el) : child === el)) };
-	return self;
-};
 
 test('drawer: the rows follow the engine, the profile, the sizes, the sound and the shots with their own engine', () => {
 	assert.deepEqual(drawerRows(), ['engine', 'drafts', 'edit']);
@@ -56,29 +52,27 @@ test('drawer: Tab cycles inside the dialog, and comes back in when the focus esc
 	assert.equal(tabTarget({ list: [] }), null);
 });
 
-test('drawer: a pointer outside the dialog and the chip closes it, unless another layer is on top', () => {
-	const field = {};
-	const dialog = node([field]);
-	const chip = {};
-	const toggle = node([chip]);
-	const elsewhere = {};
-	assert.equal(drawerCloses({ target: elsewhere, dialog, toggle, top: true }), true);
-	assert.equal(drawerCloses({ target: field, dialog, toggle, top: true }), false);
-	assert.equal(drawerCloses({ target: chip, dialog, toggle, top: true }), false);
-	assert.equal(drawerCloses({ target: elsewhere, dialog, toggle, top: false }), false);
-	assert.equal(drawerCloses({ target: null, dialog, toggle, top: true }), false);
-	assert.equal(drawerCloses({ target: elsewhere, dialog, toggle: null, top: true }), true);
+test('drawer: it shares the outside-click rule of the side drawers, keeps its own layer, and Escape closes it after the menus and before the side drawers', () => {
+	const shared = source('./drawer.js');
+	assert.match(shared, /const KEEPS = '\.vp-drawer, \.vp-deck-drawer, \[data-vp-drawer-toggle\], \.vp-modal-backdrop, \.vp-palette-backdrop, \.vp-menu, \[data-vp-menu\], \.vp-toasts, \.vp-uploads';/);
+	assert.match(shared, /export function closesOnOutsidePointer\(root, target\)/);
+	assert.doesNotMatch(source('./deck-drawer.js'), /drawerCloses|closesOnOutsidePointer|drawerFocus/);
+	const state = source('./state.svelte.js');
+	assert.match(state, /\tmenuOpen: null,\n\tdeckDrawer: false,\n/);
+	assert.match(state, /\tui\.menuOpen = null;\n\tui\.deckDrawer = false;\n/);
+	assert.match(source('./commands.js'), /\telse if \(ui\.menuOpen\) ui\.menuOpen = null;\n\telse if \(ui\.deckDrawer\) ui\.deckDrawer = false;\n\telse if \(ui\.preview \|\| ui\.compare\) \{/);
+	assert.match(source('./commands.js'), /\telse if \(!closeDrawer\(\)\) select\(null\);/);
 });
 
 test('drawer: the chip of the deck opens it, keeps the focus to give it back, and the More menu keeps the results, the queue and the final pass only', () => {
 	const deck = source('../components/production/ProductionDeck.svelte');
 	assert.match(deck, /import ProductionDrawer from '\.\/ProductionDrawer\.svelte';/);
-	assert.match(deck, /let drawerOpen = \$state\(false\);/);
-	assert.match(deck, /<button bind:this=\{chipEl\} type="button" class="vp-deck-chip" aria-expanded=\{drawerOpen\} aria-haspopup="dialog" onclick=\{toggleDrawer\}>/);
-	assert.match(deck, /function toggleDrawer\(\) \{\n\t\tif \(drawerOpen\) \{\n\t\t\tdrawerOpen = false;\n\t\t\treturn;\n\t\t\}\n\t\tsetReturnFocus\(chipEl\);\n\t\tui\.menuOpen = null;\n\t\tdrawerOpen = true;\n\t\}/);
-	assert.match(deck, /\{#if drawerOpen\}\n\t\t<ProductionDrawer anchor=\{deckEl\} toggle=\{chipEl\} \{clips\} \{engineTip\} onclose=\{\(\) => \(drawerOpen = false\)\} \/>\n\t\{\/if\}/);
+	assert.doesNotMatch(deck, /drawerOpen/);
+	assert.match(deck, /<button bind:this=\{chipEl\} type="button" class="vp-deck-chip" aria-expanded=\{ui\.deckDrawer\} aria-haspopup="dialog" onclick=\{toggleDrawer\}>/);
+	assert.match(deck, /function toggleDrawer\(\) \{\n\t\tif \(ui\.deckDrawer\) \{\n\t\t\tui\.deckDrawer = false;\n\t\t\treturn;\n\t\t\}\n\t\tsetReturnFocus\(chipEl\);\n\t\tui\.menuOpen = null;\n\t\tui\.deckDrawer = true;\n\t\}/);
+	assert.match(deck, /\{#if ui\.deckDrawer\}\n\t\t<ProductionDrawer anchor=\{deckEl\} \{clips\} \{engineTip\} onclose=\{\(\) => \(ui\.deckDrawer = false\)\} \/>\n\t\{\/if\}/);
 	assert.match(deck, /<div bind:this=\{deckEl\} class="vp-deck" role="region"/);
-	const more = deck.slice(deck.indexOf('{#if moreOpen}'), deck.indexOf('{#if drawerOpen}'));
+	const more = deck.slice(deck.indexOf('{#if moreOpen}'), deck.indexOf('{#if ui.deckDrawer}'));
 	assert.match(more, /role="menu" aria-label=\{t\('production\.more'\)\}/);
 	assert.equal((more.match(/role="menuitem"/g) ?? []).length, 3);
 	assert.match(more, /fromMore\(openResults\)/);
@@ -89,13 +83,14 @@ test('drawer: the chip of the deck opens it, keeps the focus to give it back, an
 
 test('drawer: it is a modal layer of 440 px over the deck that Escape, the Close button and a pointer outside close, with the focus trapped and given back', () => {
 	const drawer = source('../components/production/ProductionDrawer.svelte');
-	assert.match(drawer, /let \{ anchor, toggle = null, clips = \[\], engineTip = '', onclose \} = \$props\(\);/);
+	assert.match(drawer, /let \{ anchor, clips = \[\], engineTip = '', onclose \} = \$props\(\);/);
 	assert.match(drawer, /layer = openLayer\(dialog, \{ refocus: initialFocus, close: onclose \}\);/);
 	assert.match(drawer, /closeLayer\(layer\);/);
 	assert.match(drawer, /if \(e\.key === 'Escape'\) \{\n\t\t\te\.preventDefault\(\);\n\t\t\te\.stopPropagation\(\);\n\t\t\tcloseTopLayer\(\);/);
 	assert.match(drawer, /tabTarget\(\{ shift: e\.shiftKey, list: focusables\(dialog\), active: document\.activeElement, inside: dialog\.contains\(document\.activeElement\) \}\)/);
 	assert.match(drawer, /document\.addEventListener\('pointerdown', outside, true\);/);
-	assert.match(drawer, /drawerCloses\(\{ target: e\.target, dialog, toggle, top: isTopLayer\(layer\) \}\)/);
+	assert.match(drawer, /if \(!isTopLayer\(layer\) \|\| !closesOnOutsidePointer\(anchor\.closest\('\.vp-root'\), e\.target\)\) return;/);
+	assert.match(drawer, /const menu = ui\.menuOpen;\n\t\tif \(menu && !String\(menu\)\.startsWith\('picker:'\)\) onclose\(\);/);
 	assert.match(drawer, /if \(e\.target === backdrop\) e\.preventDefault\(\);/);
 	assert.match(drawer, /drawerPlace\(\{ deck: anchor\.getBoundingClientRect\(\), root: anchor\.closest\('\.vp-root'\)\?\.getBoundingClientRect\(\) \?\? null \}\)/);
 	assert.match(drawer, /class="vp-deck-backdrop" role="presentation"/);

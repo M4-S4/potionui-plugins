@@ -60,6 +60,7 @@
 	const busy = $derived(state === 'running');
 	const blocked = $derived(ready.missing.length > 0);
 	const notes = $derived(blocked ? [...ready.missing, ...ready.warnings] : ready.warnings);
+	const noticeLabel = $derived(notes.length > 1 ? t('production.notices', { count: notes.length, text: notes[0] }) : (notes[0] ?? ''));
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
 	const picked = $derived(pickedClips().length);
 	const target = $derived(picked ? 'picked' : p.target);
@@ -160,7 +161,6 @@
 	const primaryTip = $derived(busy ? t('production.deck.cancel') : t('production.generate'));
 	let deckEl = $state();
 	let chipEl = $state();
-	let drawerOpen = $state(false);
 
 	$effect(() => {
 		if (!busy) return;
@@ -203,13 +203,13 @@
 	}
 
 	function toggleDrawer() {
-		if (drawerOpen) {
-			drawerOpen = false;
+		if (ui.deckDrawer) {
+			ui.deckDrawer = false;
 			return;
 		}
 		setReturnFocus(chipEl);
 		ui.menuOpen = null;
-		drawerOpen = true;
+		ui.deckDrawer = true;
 	}
 
 	function fromMore(run) {
@@ -242,8 +242,8 @@
 				</div>
 				<div class="vp-deck-detail">
 					{#if detail.text}
-						<InfoTip lines={notes.length ? notes : [detail.text]} wrapperClass="flex min-w-0">
-							<span class="vp-deck-detail-text" class:text-warning={detail.warn}>{detail.text}</span>
+						<InfoTip lines={notes.length ? notes : [detail.text]} label={notes.length ? noticeLabel : ''} wrapperClass="flex min-w-0 items-center gap-1.5">
+							{#if detail.warn}<Icon name="alert" class="h-3 w-3 shrink-0 text-warning" />{/if}<span class="vp-deck-detail-text" class:text-warning={detail.warn} class:is-whole={detail.warn}>{detail.text}</span>
 						</InfoTip>
 					{/if}
 					{#if detail.actions.includes('conflicts')}
@@ -311,7 +311,7 @@
 			</InfoTip>
 			<div class="relative flex min-w-0 items-center gap-1" data-vp-menu>
 				<HostUi name="Tooltip" props={{ text: chipTip, wrapperClass: 'flex min-w-0' }}>
-					<button bind:this={chipEl} type="button" class="vp-deck-chip" aria-expanded={drawerOpen} aria-haspopup="dialog" onclick={toggleDrawer}>
+					<button bind:this={chipEl} type="button" class="vp-deck-chip" aria-expanded={ui.deckDrawer} aria-haspopup="dialog" onclick={toggleDrawer}>
 						<Icon name="sliders" class="h-4 w-4 shrink-0" />
 						<span class="vp-deck-chip-text">{#each chip as part, i (i)}{#if i}<span class="vp-deck-chip-dot">{' · '}</span>{/if}<span class={i === 0 ? 'vp-deck-chip-engine' : ''}>{part}</span>{/each}</span>
 						{#if setCount}<span class="vp-deck-badge vp-tc">{setCount}</span>{/if}
@@ -352,7 +352,7 @@
 			</div>
 		</section>
 	</div>
-	{#if drawerOpen}
-		<ProductionDrawer anchor={deckEl} toggle={chipEl} {clips} {engineTip} onclose={() => (drawerOpen = false)} />
+	{#if ui.deckDrawer}
+		<ProductionDrawer anchor={deckEl} {clips} {engineTip} onclose={() => (ui.deckDrawer = false)} />
 	{/if}
 </div>
