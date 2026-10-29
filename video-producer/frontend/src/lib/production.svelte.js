@@ -719,6 +719,7 @@ function updateProduction() {
 	const p = ui.production;
 	const agg = aggregate(takeStore.list);
 	if (agg.state === 'running' || run.starting > 0) {
+		if (p.state !== 'running') p.startedAt = Date.now();
 		p.state = 'running';
 		p.progress = agg.progress;
 		p.running = agg.running;
@@ -733,8 +734,12 @@ function updateProduction() {
 	p.step = '';
 	const done = finished.filter((x) => x.status === 'done');
 	const failedTakes = finished.filter((x) => x.status === 'failed');
+	p.lastSeconds = p.startedAt ? Math.round((Date.now() - p.startedAt) / 1000) : null;
+	p.startedAt = null;
 	p.lastCount = done.length;
-	p.state = done.length ? 'done' : 'ready';
+	p.failed = failedTakes.length;
+	p.failedVariant = failedTakes[0]?.variant ?? null;
+	p.state = done.length ? 'done' : failedTakes.length ? 'failed' : 'ready';
 	if (done.length) toast(doneMessage(done), 'success', { label: t('shell.toast.view'), run: () => openResults() });
 	if (failedTakes.length) toast(t('generation.toast.failed', { count: failedTakes.length }), 'error', { label: t('shell.toast.view'), run: () => openResults() });
 }

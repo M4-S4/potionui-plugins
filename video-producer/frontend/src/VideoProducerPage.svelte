@@ -34,7 +34,7 @@
 	import StoryboardView from './components/storyboard/StoryboardView.svelte';
 	import DirectorCenter from './components/director/DirectorCenter.svelte';
 	import RightPanel from './components/panels/RightPanel.svelte';
-	import ProductionBar from './components/production/ProductionBar.svelte';
+	import ProductionDeck from './components/production/ProductionDeck.svelte';
 	import Timeline from './components/timeline/Timeline.svelte';
 	import Console from './components/mixer/Console.svelte';
 
@@ -237,7 +237,7 @@
 			</div>
 		</div>
 	{:else}
-		<div class="grid min-h-0 flex-1 overflow-hidden" style="grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto auto" inert={viewport.tiny}>
+		<div class="grid min-h-0 flex-1 overflow-hidden" style="grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto auto auto" inert={viewport.tiny}>
 			<MenuBar />
 			<ProjectBar />
 
@@ -268,7 +268,6 @@
 
 			<div>
 				{#if !bare}<Splitter />{/if}
-				{#if generates()}<ProductionBar />{/if}
 			</div>
 
 			<section class="min-h-0 overflow-hidden" style:height={`${ui[bottomKey()]}px`} hidden={bare} aria-label={ui.bottomView === 'console' ? t('shell.layout.console') : t('shell.layout.timeline')}>
@@ -279,6 +278,7 @@
 				{/if}
 			</section>
 
+			{#if generates()}<ProductionDeck />{/if}
 			<StatusBar />
 		</div>
 
@@ -1194,6 +1194,66 @@
 		.vp-root .vp-statusbar-locale:hover {
 			background-color: rgb(var(--surface-2));
 			color: rgb(var(--fg));
+		}
+
+		@keyframes vp-deck-indeterminate { from { transform: translateX(-115%); } to { transform: translateX(325%); } }
+		@keyframes vp-deck-mark-orbit { to { transform: rotate(360deg); } }
+		.vp-root .vp-deck { position: relative; height: 92px; border-top: 1px solid rgb(var(--line)); background: rgb(var(--canvas)); color: rgb(var(--fg)); font-size: 13px; line-height: 20px; }
+		.vp-root .vp-deck-progress-track { position: absolute; z-index: 2; top: -1px; left: 0; right: 0; height: 3px; overflow: hidden; background: rgb(var(--signal) / .14); pointer-events: none; }
+		.vp-root .vp-deck-progress-fill { width: 0; height: 100%; background: rgb(var(--signal)); transition: width 320ms ease; }
+		.vp-root .vp-deck-progress-fill.is-indeterminate { width: 32%; animation: vp-deck-indeterminate 1.25s cubic-bezier(.4, 0, .2, 1) infinite; }
+		.vp-root .vp-deck-grid { height: 100%; display: grid; grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.25fr); align-items: center; gap: 20px; padding: 0 24px; }
+		.vp-root .vp-deck-status { min-width: 0; display: flex; align-items: center; gap: 24px; }
+		.vp-root .vp-deck-thumb { width: 60px; height: 60px; flex: none; border-radius: 6px; background: rgb(var(--surface-2)); display: grid; place-items: center; color: rgb(var(--fg-subtle)); overflow: hidden; position: relative; }
+		.vp-root .vp-deck-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+		.vp-root .vp-deck-clock { position: absolute; right: 3px; bottom: 3px; font: 600 10px/14px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgb(0 0 0 / .55); color: #fff; padding: 0 4px; border-radius: 3px; }
+		.vp-root .vp-deck-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+		.vp-root .vp-deck-eyebrow { overflow: hidden; color: rgb(var(--fg-subtle)); font: 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; text-overflow: ellipsis; white-space: nowrap; }
+		.vp-root .vp-deck-title-line { position: relative; min-width: 0; display: flex; align-items: center; }
+		.vp-root .vp-deck-dot { --status: var(--fg-subtle); position: absolute; width: 7px; height: 7px; margin-left: -15px; border-radius: 50%; background: rgb(var(--status)); box-shadow: 0 0 0 3px rgb(var(--status) / .16); }
+		.vp-root .vp-deck-dot.is-success { --status: var(--success); }
+		.vp-root .vp-deck-dot.is-signal { --status: var(--signal); }
+		.vp-root .vp-deck-dot.is-warning { --status: var(--warning); }
+		.vp-root .vp-deck-dot.is-danger { --status: var(--danger); }
+		.vp-root .vp-deck-title { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; transition: opacity 250ms ease; }
+		.vp-root .vp-deck-detail { min-width: 0; min-height: 24px; display: flex; align-items: center; gap: 8px; color: rgb(var(--fg-muted)); font-size: 12px; line-height: 16px; white-space: nowrap; }
+		.vp-root .vp-deck-detail-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+		.vp-root .vp-deck-inline-action { height: 24px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: 0; border-radius: 4px; background: rgb(var(--surface-2)); color: rgb(var(--fg)); cursor: pointer; font-size: 12px; font-weight: 600; }
+		.vp-root .vp-deck-inline-action:hover:not(:disabled) { background: rgb(var(--surface-3)); }
+		.vp-root .vp-deck-inline-action:disabled { cursor: not-allowed; opacity: .4; }
+		.vp-root .vp-deck-run { display: flex; align-items: center; justify-content: center; gap: 24px; }
+		.vp-root .vp-deck-generate { width: 70px; height: 70px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgb(var(--surface-2)); color: rgb(var(--accent)); cursor: pointer; transition: background-color 150ms ease; }
+		.vp-root .vp-deck-generate:hover:not(:disabled) { background: rgb(var(--surface-3)); }
+		.vp-root .vp-deck-generate:disabled { cursor: not-allowed; opacity: .4; }
+		.vp-root .vp-deck-mark { width: 60px; height: 60px; display: block; }
+		.vp-root .vp-deck-mark-orbit { transform-box: view-box; transform-origin: 24px 24px; }
+		.vp-root .vp-deck-generate.is-cancel .vp-deck-mark-orbit { animation: vp-deck-mark-orbit 3.2s linear infinite; }
+		.vp-root .vp-deck-utility { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+		.vp-root .vp-deck-timing { height: 48px; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; margin-right: 8px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: rgb(var(--fg)); white-space: nowrap; }
+		.vp-root button.vp-deck-timing { cursor: pointer; }
+		.vp-root button.vp-deck-timing:hover:not(:disabled) { background: rgb(var(--surface-2)); }
+		.vp-root button.vp-deck-timing:disabled { cursor: default; }
+		.vp-root .vp-deck-cell-label { color: rgb(var(--fg-subtle)); font: 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
+		.vp-root .vp-deck-cell-value { font: 600 16px/20px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+		.vp-root .vp-deck-cell-sub { font-weight: 400; color: rgb(var(--fg-muted)); }
+		.vp-root .vp-deck-icon-button { position: relative; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: rgb(var(--fg-muted)); cursor: pointer; }
+		.vp-root .vp-deck-icon-button:hover:not(:disabled),
+		.vp-root .vp-deck-icon-button[aria-expanded='true'] { background: rgb(var(--surface-2)); color: rgb(var(--fg)); }
+		.vp-root .vp-deck-icon-button:disabled { cursor: not-allowed; opacity: .4; }
+		.vp-root .vp-deck-queue-count { position: absolute; top: 2px; right: 0; min-width: 16px; padding: 0 3px; border-radius: 4px; background: rgb(var(--signal-solid)); color: rgb(var(--on-scrim)); font: 600 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; text-align: center; }
+		.vp-root .vp-deck-chip { min-width: 0; flex: 0 1 auto; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 4px; color: rgb(var(--fg-muted)); font-size: 12px; white-space: nowrap; }
+		.vp-root .vp-deck-chip:hover,
+		.vp-root .vp-deck-chip[aria-expanded='true'] { background: rgb(var(--surface-2)); color: rgb(var(--fg)); }
+		.vp-root .vp-deck-chip-text { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+		.vp-root .vp-deck-chip-engine { color: rgb(var(--fg)); font-weight: 500; }
+		.vp-root .vp-deck-chip-dot { color: rgb(var(--fg-subtle)); }
+		.vp-root .vp-deck-badge { display: inline-flex; align-items: center; height: 16px; padding: 0 5px; border-radius: 3px; background: rgb(var(--surface-3)); color: rgb(var(--fg-muted)); font-size: 11px; line-height: 16px; }
+		@media (prefers-reduced-motion: reduce) {
+			.vp-root .vp-deck-mark-orbit,
+			.vp-root .vp-deck-progress-fill { animation: none !important; }
+			.vp-root .vp-deck-title,
+			.vp-root .vp-deck-progress-fill,
+			.vp-root .vp-deck-generate { transition: none !important; }
 		}
 	}
 </style>
