@@ -4,7 +4,7 @@ export const DECK_TONES = { ready: 'muted', blocked: 'warning', running: 'signal
 
 export const DECK_HEIGHT = 92;
 export const DECK_COMPACT_HEIGHT = 56;
-export const DECK_COMPACT_CENTRE = 560;
+export const DECK_COMPACT_CENTRE = 440;
 
 export function deckCompact({ narrow = false, centre = Infinity, deck = DECK_HEIGHT } = {}) {
 	if (narrow) return true;
