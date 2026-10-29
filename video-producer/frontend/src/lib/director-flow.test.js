@@ -15,13 +15,14 @@ register(`data:text/javascript,${encodeURIComponent(hooks)}`, import.meta.url);
 globalThis.window = { __potionui: { confirm: async () => true, notifications: { toast() {} } } };
 globalThis.document = { body: {}, querySelector: () => null };
 
-const { doc, ui, replaceDoc, select, openDirector, directorShot, productionRange, allIssues, followIssue, followedIssue, issueRule, witness, reviewPick, dispose } = await import('./state.svelte.js');
+const { doc, ui, replaceDoc, select, bladeAt, duplicateSelection, openDirector, directorShot, productionRange, allIssues, followIssue, followedIssue, issueRule, witness, reviewPick, dispose } = await import('./state.svelte.js');
 const { jobClips, readiness } = await import('./production.svelte.js');
 const { showInReview, chooseTake, chooseSeam } = await import('./band.svelte.js');
 const { setTakes, takeStore } = await import('./takes.svelte.js');
 const { reception, setReferenceShot, setSent, addShotReference, linkReferenceCard, startImage } = await import('./references.js');
 const { emptyDoc, newAsset, newClip } = await import('./starter.js');
 const { t } = await import('../i18n/index.svelte.js');
+const { castIssues, identityIssues, issueKey, normalizeLooks, pushInIssues } = await import('./looks.js');
 
 after(() => {
 	dispose();
@@ -244,4 +245,23 @@ test('director flow: what a reference becomes follows the engine and the profile
 	linkReferenceCard(doc.references[0], 'characters', null);
 	assert.deepEqual(doc.bible.characters.map((c) => [...c.references]), [[], []]);
 	ui.me = me;
+});
+
+test('director flow: a cut or a copy of a shot whose take is flagged keeps one alert per shot in To check, each with its own key', () => {
+	project();
+	shotOf('s1').take = 't1';
+	select('clip', 's1');
+	bladeAt(2);
+	duplicateSelection();
+	const shared = doc.clips.filter((c) => c.take === 't1');
+	assert.equal(shared.length, 3);
+	const looks = normalizeLooks({
+		thresholds: { cast: 0.6, push_in: 1.5, identity: 0.6 },
+		takes: [{ take_id: 't1', shot_id: 's1', status: 'done', cards: [{ card_id: 'c1', label: 'Marin', score: 0.4, status: 'done' }, { card_id: 'c2', label: 'Lina', score: 0.3, status: 'done' }], push_in: 2.4, identity: { score: 0.3, at: 1 } }]
+	});
+	const lists = { cast: castIssues(looks, doc.clips), pushIn: pushInIssues(looks, doc.clips), identity: identityIssues(looks, doc.clips) };
+	assert.deepEqual([lists.cast.length, lists.pushIn.length, lists.identity.length], [6, 3, 3]);
+	assert.deepEqual(new Set(lists.pushIn.map((item) => item.takeId)), new Set(['t1']));
+	for (const [name, items] of Object.entries(lists)) assert.equal(new Set(items.map(issueKey)).size, items.length, name);
+	assert.deepEqual(lists.pushIn.map(issueKey), shared.map((c) => `look:${c.id}:t1`));
 });

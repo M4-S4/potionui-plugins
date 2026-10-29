@@ -1,7 +1,7 @@
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
 const score = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
-const STATES = ['done', 'queued', 'failed', 'unavailable', 'missing', 'no_images'];
+export const STATES = ['done', 'queued', 'failed', 'unavailable', 'missing', 'no_images'];
 const state = (value) => (STATES.includes(value) ? value : 'missing');
 const count = (value) => (Number.isInteger(value) && value > 0 ? value : 0);
 
@@ -164,5 +164,7 @@ export function identityIssues(looks, clips) {
 		];
 	});
 }
+
+export const issueKey = (item) => [item.kind ?? 'look', item.clip?.id, item.takeId, item.card?.cardId].filter((part) => part !== undefined && part !== null).join(':');
 
 export const percent = (value) => Math.round((value ?? 0) * 100);

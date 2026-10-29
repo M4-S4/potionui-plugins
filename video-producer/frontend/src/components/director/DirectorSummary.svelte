@@ -7,7 +7,7 @@
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { seams, matchToPrevious, seamTip } from '../../lib/continuity.svelte.js';
 	import { currentLooks, lookState, measureLooks } from '../../lib/looks.svelte.js';
-	import { castIssues, identityIssues, percent, pushInIssues } from '../../lib/looks.js';
+	import { castIssues, identityIssues, issueKey, percent, pushInIssues } from '../../lib/looks.js';
 	import { review, reviewFix, reviewText, seamNames, suggest } from '../../lib/assistant.svelte.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { CHARACTERS, PLACES, cardsOf, labelOf } from '../../lib/bible.js';
@@ -172,7 +172,7 @@
 					</button>
 				</li>
 			{/each}
-			{#each lookIssues as item (`${item.takeId}:${item.card.cardId}`)}
+			{#each lookIssues as item (issueKey(item))}
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" data-look-issue={item.clip.id} onclick={() => showInReview(item.clip)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
@@ -180,7 +180,7 @@
 					</button>
 				</li>
 			{/each}
-			{#each pushIns as item (item.takeId)}
+			{#each pushIns as item (issueKey(item))}
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" data-look-push-in={item.clip.id} onclick={() => showInReview(item.clip)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
@@ -188,7 +188,7 @@
 					</button>
 				</li>
 			{/each}
-			{#each faceChanges as item (`${item.kind}:${item.clip.id}`)}
+			{#each faceChanges as item (issueKey(item))}
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" data-look-identity={item.clip.id} onclick={() => showInReview(item.clip)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
