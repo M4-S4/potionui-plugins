@@ -25,7 +25,7 @@
 		scheduleEstimate,
 		estimateState
 	} from '../../lib/production.svelte.js';
-	import { aspectOf, draftResolution, finalResolution } from '../../lib/generation.js';
+	import { aspectOf, draftResolution, finalResolution, presetLabel } from '../../lib/generation.js';
 	import { chosenSize } from '../../lib/formats.js';
 	import { commandById } from '../../lib/commands.js';
 	import { hasOwnEngine } from '../../lib/engine.js';
@@ -78,13 +78,13 @@
 		return index < 0 ? '' : String(index + 1).padStart(2, '0');
 	};
 	const current = $derived(runningTake ? { variant: runningTake.variant, shot: shotNumber(runningTake) } : null);
-	const percent = $derived(Math.round(p.progress));
+	const percent = $derived(Math.round(runningTake ? Math.min(100, Math.max(0, runningTake.progress ?? 0)) : p.progress));
 	const title = $derived(deckTitle({ state, clips: clips.length, current, percent, lastCount: p.lastCount, failed: p.failed, failedVariant: p.failedVariant }, t));
 	const counts = $derived(
 		[
 			t('production.count.prompts', { count: it.prompts.length }),
-			t('production.count.frames', { count: it.frames.length }),
-			t('production.count.references', { count: it.references.length }),
+			it.frames.length ? t('production.count.frames', { count: it.frames.length }) : '',
+			it.references.length ? t('production.count.references', { count: it.references.length }) : '',
 			t('production.count.takes', { count: takeCount(clips, doc.engine) })
 		]
 			.filter(Boolean)
@@ -160,7 +160,7 @@
 	const setCount = $derived(optionCount(doc.engine, engine?.preset));
 	const editTip = $derived(engine ? t('production.editEngineTip', { engine: engine.label }) : t('production.editEngine'));
 	const sizes = $derived(Boolean(engine && !cloud && engine.info?.resolutions?.length));
-	const chip = $derived(deckChip({ engine: engine ? engine.label : groups.length ? engineLabel() : t('generation.engine.none'), profile: showProfile ? doc.direction.mode : '', size: sizes ? (p.quality === 'draft' ? draftRes : finalRes) : '', drafts: clips.length ? sharedDrafts(clips, doc.engine) : 1 }, t));
+	const chip = $derived(deckChip({ engine: engine ? (cloud ? engine.label : presetLabel(engine.info)) : groups.length ? engineLabel() : t('generation.engine.none'), profile: showProfile ? doc.direction.mode : '', size: sizes ? (p.quality === 'draft' ? draftRes : finalRes) : '', drafts: clips.length ? sharedDrafts(clips, doc.engine) : 1 }, t));
 	const chipTip = $derived([engineTip, showProfile ? profileHint(doc.direction.mode) : '', t('production.deck.chipTip')].filter(Boolean).join(' · '));
 	const MORE = 'engine-more';
 	let held = $state(false);
@@ -322,14 +322,14 @@
 			<InfoTip lines={cellLines} wrapperClass="vp-deck-timing">
 				<span class="vp-deck-cell-label">{cell.label}</span>
 				<span class="vp-deck-cell-value {cell.warn ? 'text-warning' : ''} {estimateState.loading && !busy ? 'opacity-60' : ''}">
-					{cell.value}{#if cell.sub}<span class="vp-deck-cell-sub" class:text-warning={cell.warn}> · {cell.sub}</span>{/if}
+					{cell.value}{#if cell.sub}<span class="vp-deck-cell-sub" class:text-warning={cell.warn}>{` · ${cell.sub}`}</span>{/if}
 				</span>
 			</InfoTip>
 			<div class="relative flex min-w-0 items-center gap-1" data-vp-menu>
 				<HostUi name="Tooltip" props={{ text: chipTip, wrapperClass: 'flex min-w-0' }}>
 					<button type="button" class="vp-deck-chip" aria-expanded={moreOpen} aria-haspopup="dialog" onclick={toggleMore}>
 						<Icon name="sliders" class="h-4 w-4 shrink-0" />
-						<span class="vp-deck-chip-text">{#each chip as part, i (i)}{#if i}<span class="vp-deck-chip-dot"> · </span>{/if}<span class={i === 0 ? 'vp-deck-chip-engine' : ''}>{part}</span>{/each}</span>
+						<span class="vp-deck-chip-text">{#each chip as part, i (i)}{#if i}<span class="vp-deck-chip-dot">{' · '}</span>{/if}<span class={i === 0 ? 'vp-deck-chip-engine' : ''}>{part}</span>{/each}</span>
 						{#if setCount}<span class="vp-deck-badge vp-tc">{setCount}</span>{/if}
 					</button>
 				</HostUi>
