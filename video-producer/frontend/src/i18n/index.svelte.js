@@ -138,6 +138,14 @@ export function has(key) {
 	return hasKey(DICTIONARIES, current, key);
 }
 
+export function requestCause(error) {
+	const code = error?.code;
+	if (code && has(`shell.error.${code}`)) return t(`shell.error.${code}`);
+	if (error?.message) return t('shell.error.returned', { message: error.message });
+	if (error?.status >= 500) return t('shell.error.server_error');
+	return t('shell.error.unknown');
+}
+
 export function formatNumber(value, options) {
 	return numberIn(current, value, options);
 }

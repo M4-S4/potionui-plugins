@@ -5,7 +5,7 @@
 	import { createClient } from './lib/api.js';
 	import { download } from './lib/exchange.js';
 	import { disposeExports, resumeExports } from './lib/exports.svelte.js';
-	import { detectLocale, getLocale, has, setLocale, t } from './i18n/index.svelte.js';
+	import { detectLocale, getLocale, requestCause, setLocale, t } from './i18n/index.svelte.js';
 	import { ms } from './lib/motion.js';
 	import { ui, doc, applyMe, bottomKey, bandView, generates, dispose as disposeState, toast } from './lib/state.svelte.js';
 	import { project, bindClient, currentJson, disposeProject, flushSave, noteChange, openLatestOrStarter } from './lib/project.svelte.js';
@@ -52,11 +52,7 @@
 
 	const client = $derived(createClient(api, download));
 	const locale = $derived(getLocale());
-	const errorText = $derived.by(() => {
-		const code = loadError?.code;
-		if (code && has(`shell.error.${code}`)) return t(`shell.error.${code}`);
-		return loadError?.status >= 500 ? t('shell.error.server_error') : t('shell.error.unknown');
-	});
+	const errorText = $derived(requestCause(loadError));
 	const center = $derived(ui.workspace === 'storyboard' ? 'story' : ui.workspace === 'director' ? 'director' : 'viewer');
 	const player = $derived(isPlayer(ui.workspace));
 	const band = $derived(bandView());

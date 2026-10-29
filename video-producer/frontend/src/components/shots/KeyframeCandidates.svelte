@@ -1,7 +1,7 @@
 <script>
 	import { tick, untrack } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
-	import { t, formatDuration, formatNumber } from '../../i18n/index.svelte.js';
+	import { t, formatDuration, formatNumber, requestCause } from '../../i18n/index.svelte.js';
 	import { doc, ui, asset, clipLabel } from '../../lib/state.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { FAILURE_CODES, optionFor } from '../../lib/generation.js';
@@ -280,8 +280,11 @@
 						<p class="text-xs text-fg-subtle">{t('keyframes.picturesNone')}</p>
 					{/if}
 				</div>
-				{#if keyframeState.error}
-					<p class="text-xs text-danger">{t('keyframes.estimate.failed')}</p>
+				{#if keyframeState.error && !keyframeState.estimating}
+					<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" data-estimate-error={keyframeState.error.code}>
+						<p class="min-w-0 flex-1 text-danger">{t('keyframes.estimate.failed')} {requestCause(keyframeState.error)}</p>
+						<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'refresh', disabled: !body, onclick: () => body && scheduleKeyframeEstimate(body, true) }}>{t('shell.app.retry')}</HostUi>
+					</div>
 				{:else if estimate && runnable}
 					<div class="space-y-1 text-xs">
 						<p class="text-fg-muted">{summary.join(' · ')}</p>

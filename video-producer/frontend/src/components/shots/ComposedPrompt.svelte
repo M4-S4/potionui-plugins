@@ -1,6 +1,6 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
-	import { t } from '../../i18n/index.svelte.js';
+	import { requestCause, t } from '../../i18n/index.svelte.js';
 	import { project, getClient } from '../../lib/project.svelte.js';
 	import { currentEngine, engineOptionLabel, noteText } from '../../lib/production.svelte.js';
 	import { marked } from '../../lib/director.js';
@@ -13,6 +13,8 @@
 	const DELAY = 400;
 	const ELSEWHERE = ['bible_label_missing', 'reference_prompt_changed', 'reference_prompt_ignored'];
 	const composed = $state({ loading: false, data: null, error: null });
+	let attempt = $state(0);
+	let tried = 0;
 
 	const option = $derived(currentEngine());
 	const body = $derived(
@@ -38,6 +40,8 @@
 
 	$effect(() => {
 		const payload = body;
+		const retrying = attempt !== tried;
+		tried = attempt;
 		if (!payload) {
 			composed.loading = false;
 			return;
@@ -48,12 +52,17 @@
 			const result = await getClient().prompts(project.id, JSON.parse(payload), controller.signal);
 			if (controller.signal.aborted) return;
 			Object.assign(composed, result.ok ? { loading: false, data: result.data, error: null } : { loading: false, data: null, error: result.error });
-		}, DELAY);
+		}, retrying ? 0 : DELAY);
 		return () => {
 			clearTimeout(timer);
 			controller.abort();
 		};
 	});
+
+	function retry() {
+		composed.error = null;
+		attempt += 1;
+	}
 </script>
 
 {#snippet labelled(text)}{#each labelParts(text, tracks) as piece, j (j)}{piece.text}{#if piece.slot}<span class="{TAG_CLASS} vp-tc ml-0.5 align-baseline" title={labelTip(piece.slot)} data-composed-vref={piece.slot}>{vrefLabel(piece.slot)}</span>{/if}{/each}{/snippet}
@@ -73,7 +82,10 @@
 				<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{noteText(w)}</HostUi>
 			{/each}
 		{:else if composed.error}
-			<p class="text-danger">{t('modals.shot.composedError')}</p>
+			<div class="flex flex-wrap items-center gap-x-3 gap-y-1" data-composed-error={composed.error.code}>
+				<p class="min-w-0 flex-1 text-danger">{t('modals.shot.composedError')} {requestCause(composed.error)}</p>
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'refresh', onclick: retry }}>{t('shell.app.retry')}</HostUi>
+			</div>
 		{:else if blocks.length}
 			{#each blocks as b, i (i)}<p class="text-warning">{noteText(b)}</p>{/each}
 		{:else}
