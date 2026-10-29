@@ -81,6 +81,7 @@ export const ui = $state({
 		lastSeconds: null,
 		failed: 0,
 		failedVariant: null,
+		failedTake: null,
 		quality: 'draft'
 	},
 	inspectorTab: 'video',
@@ -810,7 +811,7 @@ export function replaceDoc(next) {
 	past.length = 0;
 	future.length = 0;
 	Object.assign(ui, { selection: null, picked: [], preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, selectedIn: null, issue: null, reveal: null, reviewPick: null, dirty: false });
-	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0, startedAt: null, lastSeconds: null, failed: 0, failedVariant: null });
+	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0, startedAt: null, lastSeconds: null, failed: 0, failedVariant: null, failedTake: null });
 	resetTakes();
 	if (ui.playhead > seqDuration()) ui.playhead = 0;
 }

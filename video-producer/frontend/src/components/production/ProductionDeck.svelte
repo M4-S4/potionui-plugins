@@ -21,9 +21,12 @@
 		backendName,
 		estimateRequest,
 		scheduleEstimate,
-		estimateState
+		estimateState,
+		retryTake,
+		showDetails,
+		toggleCompare
 	} from '../../lib/production.svelte.js';
-	import { aspectOf, draftResolution, finalResolution, presetLabel } from '../../lib/generation.js';
+	import { aspectOf, draftResolution, failureText, finalResolution, presetLabel } from '../../lib/generation.js';
 	import { chosenSize } from '../../lib/formats.js';
 	import { commandById } from '../../lib/commands.js';
 	import { optionCount } from '../../lib/options.js';
@@ -31,7 +34,9 @@
 	import { overlayLayer } from '../../lib/host.js';
 	import { setReturnFocus } from '../../lib/focus.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
-	import { deckCell, deckChip, deckChipFolded, deckCompact, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, remainingSeconds } from '../../lib/deck.js';
+	import { deckActions, deckCell, deckChip, deckChipFolded, deckCompact, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, deckUnblock, deckUnblockLabel, latestDone, remainingSeconds, selectedEverywhere } from '../../lib/deck.js';
+	import { anchoredPopover } from '../../lib/popover.js';
+	import { drawerFocus } from '../../lib/drawer.js';
 	import { fitChip, shortPresetName } from '../../lib/barfit.js';
 	import { viewport } from '../../lib/viewport.svelte.js';
 	import { profileControl, profileHint } from '../../lib/deck-drawer.js';
@@ -43,7 +48,7 @@
 	import QueuePanel from '../panels/QueuePanel.svelte';
 	import { sharedDrafts, takeCount } from '../../lib/shots.js';
 	import { shotNumbers } from '../../lib/director.js';
-	import { flyingTakes, takeStore } from '../../lib/takes.svelte.js';
+	import { flyingTakes, takeById, takeStore } from '../../lib/takes.svelte.js';
 
 	const p = $derived(ui.production);
 	const ready = $derived(readiness());
@@ -89,8 +94,33 @@
 			.filter(Boolean)
 			.join(' · ')
 	);
-	const detail = $derived(deckDetail({ state, counts, missing: ready.missing, warnings: ready.warnings, conflicts: conflicts.length, step: p.step, queued: flying.length - p.running }, t));
-	const lastTake = $derived([...takeStore.list].filter((x) => x.status === 'done').sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0] ?? null);
+	const failedTake = $derived(state === 'failed' ? takeById(p.failedTake) : null);
+	const failure = $derived(failedTake ? failureText(failedTake, t) : '');
+	const oom = $derived(failedTake?.errorCode === 'cuda_oom');
+	const recent = $derived(latestDone(takeStore.list));
+	const lastTake = $derived(recent[0] ?? null);
+	const finalReady = $derived(selectedEverywhere(doc.clips, takeStore.list));
+	const unblock = $derived(state === 'blocked' ? deckUnblock(ready.reasons[0]) : null);
+	const detail = $derived(
+		deckDetail(
+			{
+				state,
+				counts,
+				missing: ready.missing,
+				warnings: ready.warnings,
+				conflicts: conflicts.length,
+				step: p.step,
+				queued: flying.length - p.running,
+				unblock: Boolean(unblock),
+				failure,
+				retry: Boolean(failedTake),
+				details: Boolean(failedTake?.generationId),
+				compare: recent.length >= 2,
+				finalPass: finalReady
+			},
+			t
+		)
+	);
 	const thumb = $derived.by(() => {
 		const clip = clips[0];
 		const own = clip ? clipThumb(clip) : null;
@@ -134,13 +164,14 @@
 		else if (quota && !quota.applies) lines.push(t('generation.estimate.noQuota'));
 		if (ui.isAdmin && est.cost) lines.push(est.cost.known && est.cost.totalUsd !== null ? t('generation.estimate.cost', { cost: money(est.cost.totalUsd) }) : t('generation.estimate.costUnknown'));
 		if (showCost || showQuota) lines.push(showCost ? money(est.cost.totalUsd) : t('production.estimate.quotaShort', { value: minutes(quota.neededMinutes) }));
-		return [...lines, ...ready.notes, ...notes];
+		return lines;
 	});
+	const estNotes = $derived([...ready.notes, ...notes]);
 	const over = $derived(Boolean(vram?.streams || quota?.blocks));
 	let now = $state(Date.now());
 	const elapsed = $derived(busy && p.startedAt ? Math.max(0, (now - p.startedAt) / 1000) : null);
-	const cell = $derived(deckCell({ state, timeText, vramText, cloud, over, elapsed, remaining: remainingSeconds(elapsed, p.progress), lastSeconds: p.lastSeconds, noEngine: ready.noEngine }, t, fmtDuration));
-	const cellLines = $derived(busy ? [p.step || t('generation.state.running')] : estLines);
+	const cell = $derived(deckCell({ state, timeText, vramText, cloud, over, oom, elapsed, remaining: remainingSeconds(elapsed, p.progress), lastSeconds: p.lastSeconds, noEngine: ready.noEngine }, t, fmtDuration));
+	const cellLines = $derived(busy ? [p.step || t('generation.state.running'), ...estLines] : estLines);
 	const queued = $derived(flying.length);
 	const queueTip = $derived(queued ? `${t('production.queue')} · ${t('production.queued', { count: queued })}` : t('production.queue'));
 	const engineTip = $derived.by(() => {
@@ -170,13 +201,17 @@
 	const cellText = $derived(showCell ? '' : `${cell.label} ${cell.value}${cell.sub ? ` · ${cell.sub}` : ''}`);
 	const chipTip = $derived([engineTip, showProfile ? profileHint(doc.direction.mode, t) : '', cellText, t('production.deck.chipTip')].filter(Boolean).join(' · '));
 	const line = $derived(deckLine({ compact, eyebrow, detail }));
+	const actions = $derived(deckActions(detail.actions, compact));
 	const CELL_PAD = 16;
 	const CELL_GAP = 6;
 	const MORE = 'deck-more';
+	const ESTIMATE = 'deck-estimate';
 	const moreOpen = $derived(ui.menuOpen === MORE);
+	const estimateOpen = $derived(ui.menuOpen === ESTIMATE);
 	const queueOpen = $derived(ui.menuOpen === QUEUE_MENU);
 	const primaryTip = $derived(busy ? t('production.deck.cancel') : t('production.generate'));
 	let deckEl = $state();
+	let cellEl = $state();
 	let chipEl = $state();
 	let chipTextEl = $state();
 	let groupEl = $state();
@@ -274,6 +309,31 @@
 		ui.menuOpen = moreOpen ? null : MORE;
 	}
 
+	function toggleEstimate() {
+		ui.menuOpen = estimateOpen ? null : ESTIMATE;
+	}
+
+	$effect(() => {
+		if (!showCell && estimateOpen) ui.menuOpen = null;
+	});
+
+	function unblockNow() {
+		if (!unblock) return;
+		if (unblock.action === 'direction') return openDirector('direction');
+		if (unblock.action === 'review') return openDirector('review');
+		if (unblock.action === 'engine') return toggleDrawer();
+		const id = unblock.shotId ?? clips[0]?.id ?? null;
+		if (id) ui.modal = { type: 'shot', id };
+	}
+
+	function compareLast() {
+		const [newer, older] = recent;
+		if (!newer || !older) return;
+		ui.compare = [older.id];
+		toggleCompare(newer.id);
+		openResults();
+	}
+
 	function toggleDrawer() {
 		if (ui.deckDrawer) {
 			ui.deckDrawer = false;
@@ -315,25 +375,48 @@
 				<div class="vp-deck-detail">
 					{#if line}
 						<InfoTip lines={notes.length ? notes : [line]} label={notes.length ? noticeLabel : ''} wrapperClass="flex min-w-0 items-center gap-1.5">
-							{#if detail.warn}<Icon name="alert" class="h-3 w-3 shrink-0 text-warning" />{/if}<span class="vp-deck-detail-text" class:text-warning={detail.warn} class:is-whole={detail.warn}>{line}</span>
+							{#if detail.warn}<Icon name="alert" class="h-3 w-3 shrink-0 text-warning" />{/if}<span class="vp-deck-detail-text" class:text-warning={detail.warn} class:is-whole={detail.warn || detail.whole}>{line}</span>
 						</InfoTip>
 					{/if}
-					{#if detail.actions.includes('conflicts')}
+					{#if actions.includes('conflicts')}
 						<HostUi name="Tooltip" props={{ text: conflicts.map((c) => c.text).join(' · ') }}>
 							<button type="button" class="vp-deck-inline-action text-warning" onclick={directionIssues}>
 								<Icon name="alert" class="h-3 w-3" />{t('production.conflicts', { count: conflicts.length })}
 							</button>
 						</HostUi>
 					{/if}
-					{#if detail.actions.includes('enqueue')}
+					{#if actions.includes('enqueue')}
 						<HostUi name="Tooltip" props={{ text: t('production.enqueueTip'), kbd: commandById('generate')?.key }}>
 							<button type="button" class="vp-deck-inline-action" disabled={blocked} onclick={() => startGeneration()}>
 								{t('production.enqueue')}<kbd class="vp-kbd vp-tc text-2xs text-fg-muted">{commandById('generate')?.key ?? ''}</kbd>
 							</button>
 						</HostUi>
 					{/if}
-					{#if detail.actions.includes('results')}
+					{#if actions.includes('unblock') && unblock}
+						<button type="button" class="vp-deck-inline-action" onclick={unblockNow}>{deckUnblockLabel(unblock.action, t)}</button>
+					{/if}
+					{#if actions.includes('results')}
 						<button type="button" class="vp-deck-inline-action" onclick={openResults}>{t('production.deck.results')}</button>
+					{/if}
+					{#if actions.includes('compare')}
+						<HostUi name="Tooltip" props={{ text: t('production.deck.compareTip') }}>
+							<button type="button" class="vp-deck-inline-action" onclick={compareLast}><Icon name="compare" class="h-3 w-3" />{t('production.deck.compare')}</button>
+						</HostUi>
+					{/if}
+					{#if actions.includes('finalPass')}
+						<HostUi name="Tooltip" props={{ text: t('production.deck.finalTip'), kbd: commandById('final-pass')?.key }}>
+							<button type="button" class="vp-deck-inline-action" onclick={openFinalPass}><Icon name="arrow-up" class="h-3 w-3" />{t('generation.finalPass.title')}</button>
+						</HostUi>
+					{/if}
+					{#if actions.includes('retry') && failedTake}
+						<HostUi name="Tooltip" props={{ text: t('production.deck.retryTip', { variant: failedTake.variant }) }}>
+							<button type="button" class="vp-deck-inline-action" onclick={() => retryTake(failedTake)}><Icon name="refresh" class="h-3 w-3" />{t('generation.card.retry')}</button>
+						</HostUi>
+					{/if}
+					{#if actions.includes('details') && failedTake}
+						<HostUi name="Tooltip" props={{ text: t('generation.card.detailsTip') }}>
+							<button type="button" class="vp-deck-inline-action" onclick={() => showDetails(failedTake)}>{t('production.deck.details')}</button>
+						</HostUi>
 					{/if}
 					{#if !busy && gapClip}<SeamAction clip={gapClip} variant="icon" />{/if}
 					{#if !busy && ready.noEngine && ui.isAdmin}
@@ -388,12 +471,27 @@
 				<span class="vp-deck-cell-value" data-rule="cell-value">{cell.value}{#if cell.sub}<span class="vp-deck-cell-sub">{` · ${cell.sub}`}</span>{/if}</span>
 			</span>
 			{#if showCell}
-				<InfoTip lines={cellLines} wrapperClass="vp-deck-timing">
-					<span class="vp-deck-cell-label">{cell.label}</span>
-					<span class="vp-deck-cell-value {cell.warn ? 'text-warning' : ''} {estimateState.loading && !busy ? 'opacity-60' : ''}">
-						{cell.value}{#if cell.sub}<span class="vp-deck-cell-sub" class:text-warning={cell.warn}>{` · ${cell.sub}`}</span>{/if}
-					</span>
-				</InfoTip>
+				<div class="flex shrink-0" data-vp-menu>
+					<HostUi name="Tooltip" props={{ text: estimateOpen ? '' : t('production.deck.cellTip'), wrapperClass: 'inline-flex' }}>
+						<button bind:this={cellEl} type="button" class="vp-deck-timing" aria-haspopup="dialog" aria-expanded={estimateOpen} onclick={toggleEstimate}>
+							<span class="vp-deck-cell-label">{cell.label}</span>
+							<span class="vp-deck-cell-value {cell.warn ? 'text-warning' : ''} {estimateState.loading && !busy ? 'opacity-60' : ''}">
+								{cell.value}{#if cell.sub}<span class="vp-deck-cell-sub" class:text-warning={cell.warn || cell.vramWarn}>{` · ${cell.sub}`}</span>{/if}
+							</span>
+						</button>
+					</HostUi>
+					<div class="vp-menu vp-deck-popover" role="dialog" aria-label={t('production.deck.estimateTitle')} tabindex="-1" hidden={!estimateOpen} use:overlayLayer use:anchoredPopover={() => cellEl?.getBoundingClientRect() ?? null} use:drawerFocus={estimateOpen}>
+						<div class="vp-deck-popover-title">{t('production.deck.estimateTitle')}</div>
+						<ul class="vp-deck-popover-lines">
+							{#each cellLines as text, i (i)}<li>{text}</li>{/each}
+						</ul>
+						{#if estNotes.length}
+							<ul class="vp-deck-popover-notes">
+								{#each estNotes as note, i (i)}<li><Icon name="alert" class="h-3 w-3 shrink-0" /><span>{note}</span></li>{/each}
+							</ul>
+						{/if}
+					</div>
+				</div>
 			{/if}
 			<div bind:this={groupEl} class="relative flex min-w-0 items-center gap-1" data-vp-menu>
 				<HostUi name="Tooltip" props={{ text: chipTip, wrapperClass: 'flex min-w-0' }}>

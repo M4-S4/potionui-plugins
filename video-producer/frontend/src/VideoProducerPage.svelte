@@ -1221,6 +1221,13 @@
 		.vp-root .vp-deck-cell-label { color: rgb(var(--fg-subtle)); font: 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
 		.vp-root .vp-deck-cell-value { font: 600 15px/20px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 		.vp-root .vp-deck-cell-sub { font-weight: 400; color: rgb(var(--fg-muted)); }
+		.vp-root .vp-deck-popover { position: fixed; width: 22rem; max-width: calc(100vw - 1rem); overflow: auto; padding: 10px 12px 12px; font-size: 12px; line-height: 16px; color: rgb(var(--fg)); }
+		.vp-root .vp-deck-popover:focus { outline: none; }
+		.vp-root .vp-deck-popover-title { margin-bottom: 6px; color: rgb(var(--fg-subtle)); font: 11px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
+		.vp-root .vp-deck-popover-lines, .vp-root .vp-deck-popover-notes { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; overflow-wrap: anywhere; }
+		.vp-root .vp-deck-popover-notes { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgb(var(--line)); color: rgb(var(--warning)); }
+		.vp-root .vp-deck-popover-notes li { display: flex; align-items: flex-start; gap: 6px; }
+		.vp-root .vp-deck-popover-notes svg { margin-top: 2px; }
 		.vp-root .vp-deck-icon-button { position: relative; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: rgb(var(--fg-muted)); cursor: pointer; }
 		.vp-root .vp-deck.is-compact .vp-deck-icon-button { width: 32px; height: 32px; }
 		.vp-root .vp-deck-icon-button:hover:not(:disabled),

@@ -92,7 +92,7 @@ test('barfit: the compact deck is drawn by the is-compact class, 56 px high, thu
 	assert.match(deck, /<div bind:this=\{deckEl\} class="vp-deck" class:is-compact=\{compact\}/);
 	assert.match(deck, /<span class="vp-deck-eyebrow" aria-hidden=\{compact\}>\{eyebrow\}<\/span>/);
 	assert.match(deck, /const showCell = \$derived\(!compact && fit\.cell\);/);
-	assert.match(deck, /\{#if showCell\}\n\t+<InfoTip lines=\{cellLines\} wrapperClass="vp-deck-timing">/);
+	assert.match(deck, /\{#if showCell\}\n\t+<div class="flex shrink-0" data-vp-menu>\n\t+<HostUi name="Tooltip" props=\{\{ text: estimateOpen \? '' : t\('production\.deck\.cellTip'\), wrapperClass: 'inline-flex' \}\}>\n\t+<button bind:this=\{cellEl\} type="button" class="vp-deck-timing" aria-haspopup="dialog" aria-expanded=\{estimateOpen\} onclick=\{toggleEstimate\}>/);
 	assert.match(deck, /const cellText = \$derived\(showCell \? '' : `\$\{cell\.label\} \$\{cell\.value\}\$\{cell\.sub \? ` · \$\{cell\.sub\}` : ''\}`\);/);
 	assert.match(deck, /const chipTip = \$derived\(\[engineTip, showProfile \? profileHint\(doc\.direction\.mode, t\) : '', cellText, t\('production\.deck\.chipTip'\)\]\.filter\(Boolean\)\.join\(' · '\)\);/);
 	const viewport = read('viewport.svelte.js');

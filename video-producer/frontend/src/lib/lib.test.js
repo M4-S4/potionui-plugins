@@ -211,7 +211,7 @@ test('emptyDoc: an untitled project with no shot and the four empty lanes', () =
 test('readiness: an FL2VA shot without a frame warns instead of blocking, so the starter project generates as is', () => {
 	const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'production.svelte.js'), 'utf-8');
 	const readiness = source.slice(source.indexOf('export function readiness'), source.indexOf('function blockedText'));
-	assert.match(readiness, /for \(const block of est\.blocks\) missing\.push\(noteText\(block\)\)/);
+	assert.match(readiness, /for \(const item of est\.blocks\) block\(item\.code, noteText\(item\), item\.data\?\.shot_id \?\? null\)/);
 	assert.match(readiness, /for \(const warning of est\.warnings\)/);
 	assert.doesNotMatch(readiness, /missing\.push\([^)]*(needFrame|noFrame)/);
 	assert.match(source, /code === 'fl2va_no_frame'\) return t\('generation\.warn\.noFrame'/);
