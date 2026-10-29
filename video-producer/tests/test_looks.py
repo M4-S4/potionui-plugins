@@ -151,7 +151,7 @@ def test_a_seam_compares_the_end_of_the_cut_before_with_the_start_of_the_cut_aft
     frames.takes[second["id"]] = [(0.0, GREEN), (1.0, start), (4.0, GREEN)]
 
     before = _report(core, project)
-    assert before["seams"] == [{"shot_id": "s2", "previous_id": "s1", "from_take": first["id"], "to_take": second["id"], "score": None, "status": "missing"}]
+    assert before["seams"] == [{"shot_id": "s2", "previous_id": "s1", "from_take": first["id"], "to_take": second["id"], "score": None, "identity": None, "status": "missing"}]
     assert before["missing"] == 2
 
     _report(core, project, enqueue=True)
@@ -161,7 +161,7 @@ def test_a_seam_compares_the_end_of_the_cut_before_with_the_start_of_the_cut_aft
 
     assert seam["status"] == "done"
     assert (seam["score"] < looks.SEAM_LOW) is low
-    assert _report(core, project)["thresholds"] == {"seam": looks.SEAM_LOW, "cast": looks.CAST_LOW, "face": looks.FACE_LOW, "place": looks.PLACE_LOW, "final": looks.FINAL_LOW, "drift": looks.DRIFT_LOW, "push_in": looks.PUSH_IN_HIGH}
+    assert _report(core, project)["thresholds"] == {"seam": looks.SEAM_LOW, "cast": looks.CAST_LOW, "face": looks.FACE_LOW, "place": looks.PLACE_LOW, "final": looks.FINAL_LOW, "drift": looks.DRIFT_LOW, "push_in": looks.PUSH_IN_HIGH, "identity": looks.IDENTITY_LOW}
 
 
 def test_a_take_is_scored_against_the_pictures_of_each_bible_card_of_its_shot_s_cast(core, make_project, frames):
