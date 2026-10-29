@@ -37,7 +37,9 @@
 	import { clipFilter } from '../../lib/look.js';
 	import { assetThumb, clipThumb } from '../../lib/media.js';
 	import { stages, audioRoleLabel, frameRoleLabel } from '../../lib/catalog.js';
-	import { takesOf, promoteToFinal, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
+	import { takesOf, promoteToFinal, findTake, shotActivity, engineLabel, soundBehaviorOf, shotDurationLimit, fitShot, setClipSpeed } from '../../lib/production.svelte.js';
+	import { SPEEDS, interpolatorChoice, pickInterpolator, shotCadence, speedOf } from '../../lib/cadence.js';
+	import { conformTakes, renditionStore } from '../../lib/renditions.svelte.js';
 	import { refMediaKind, refRoleLabel, refTypeLabel, typesOf } from '../../lib/references.js';
 	import { typeIcon } from '../../lib/reftags.js';
 	import RefTags from '../references/RefTags.svelte';
@@ -110,9 +112,19 @@
 	const setClipIn = (v) => {
 		const max = sourceLength(item);
 		item.srcIn = round(clamp(v, 0, max - 0.4), 0.04);
-		item.dur = Math.min(item.dur, max - item.srcIn);
+		item.dur = Math.min(item.dur, (max - item.srcIn) / speedOf(item));
 		relayout();
 	};
+	const speeds = $derived(SPEEDS.map((speed) => ({ id: String(speed), label: t('inspector.speed.value', { value: Math.round(speed * 100) }) })));
+	const interpolator = $derived(pickInterpolator(interpolatorChoice(doc), ui.me));
+	function slowText(found) {
+		const rate = { value: Math.round(found.speed * 100), fps: found.to };
+		if (found.state === 'conformed') return t('inspector.speed.ready', rate);
+		if (found.state === 'conforming') return t('inspector.speed.making', rate);
+		if (found.state === 'failed') return t('inspector.speed.failed', rate);
+		if (found.state === 'slow') return interpolator === null ? t('inspector.speed.noInterpolator', rate) : t('inspector.speed.needed', rate);
+		return t('inspector.speed.hint', rate);
+	}
 	const headThumb = $derived(!item ? null : s.kind === 'clip' ? clipThumb(item) : s.kind === 'frame' ? assetThumb(asset(item.assetId)) : null);
 	const frameImages = $derived(doc.assets.filter((x) => x.kind !== 'audio' && assetThumb(x)));
 	const fadeMax = $derived(item?.dur ? item.dur / 2 : 0);
@@ -323,12 +335,25 @@
 					<section class="space-y-2">
 						<div class="vp-section-title">{t('inspector.section.duration')}</div>
 						<NumField label={t('inspector.field.duration')} value={item.dur} min={0.4} step={0.04} unit="s" onchange={setClipDur} />
+						<div class="flex items-center justify-between gap-3">
+							<span class="text-xs text-fg-muted">{t('inspector.speed.label')}</span>
+							<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('inspector.speed.label'), items: speeds, selected: String(speedOf(item)), onSelect: (id) => setClipSpeed(item, Number(id)) }} />
+						</div>
+						{#if speedOf(item) < 1}
+							{@const found = shotCadence(take, item, renditionStore.list, doc)}
+							<div class="flex items-start gap-2 text-xs {found.state === 'failed' ? 'text-danger' : 'text-fg-subtle'}" data-shot-speed={found.state}>
+								<span class="min-w-0 flex-1">{slowText(found)}</span>
+								{#if (found.state === 'slow' || found.state === 'failed') && interpolator !== null}
+									<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', disabled: renditionStore.sending, onclick: () => conformTakes([take.id]) }}>{t('inspector.speed.prepare')}</HostUi>
+								{/if}
+							</div>
+						{/if}
 						{#if a}
 							<NumField label={t('inspector.field.sourceIn')} value={item.srcIn} min={0} step={0.04} unit="s" onchange={setClipIn} hint={t('inspector.field.sourceInHint')} />
 							{#if a.srcDur}
 								<div class="flex items-center gap-2 text-xs text-fg-subtle">
 									<div class="relative h-1.5 flex-1 rounded-full bg-surface-3">
-										<div class="absolute inset-y-0 rounded-full bg-viz-1" style:left="{(item.srcIn / a.srcDur) * 100}%" style:width="{(item.dur / a.srcDur) * 100}%"></div>
+										<div class="absolute inset-y-0 rounded-full bg-viz-1" style:left="{(item.srcIn / a.srcDur) * 100}%" style:width="{((item.dur * speedOf(item)) / a.srcDur) * 100}%"></div>
 									</div>
 									<span>{t('inspector.sourceLength', { duration: secs(a.srcDur) })}</span>
 								</div>

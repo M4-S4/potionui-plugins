@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyShotDraft, rebaseDraft, shotDraft } from './shots.js';
+import { applyShotDraft, durationLimit, migrateShots, rebaseDraft, setSpeed, shotDraft } from './shots.js';
+import { readFileSync } from 'node:fs';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const makeId = () => 'new-ref';
@@ -72,4 +73,31 @@ test('a prompt rewritten by the assistant while the editor left the text alone i
 
 	assert.deepEqual([untouched.draft.text, untouched.draft.dur, untouched.conflicts], ['Wide shot of the dock at night', 6, 0]);
 	assert.deepEqual([rewritten.draft.text, rewritten.conflicts], ['Close on the rider', 1]);
+});
+
+test('a slowed shot keeps the source it reads: its duration grows with 1/speed and its limits are counted on the timeline', () => {
+	const doc = { assets: [{ id: 'a1', generated: true, srcDur: 6 }, { id: 'm1', generated: false, srcDur: 5 }], clips: [] };
+	const clip = { id: 's1', assetId: 'a1', dur: 2, srcIn: 1 };
+	assert.equal(setSpeed(doc, clip, 0.5, 10), true);
+	assert.deepEqual([clip.speed, clip.dur], [0.5, 4]);
+	assert.deepEqual(durationLimit(doc, clip, 10), { max: 10, by: 'engine', take: 10 });
+	assert.equal(setSpeed(doc, clip, 0.25, 10), true);
+	assert.deepEqual([clip.speed, clip.dur], [0.25, 8]);
+	assert.equal(setSpeed(doc, clip, 1, 10), true);
+	assert.deepEqual(['speed' in clip, clip.dur], [false, 2]);
+	assert.equal(setSpeed(doc, clip, 1, 10), false);
+	const imported = { id: 's2', assetId: 'm1', dur: 2, srcIn: 1, speed: 0.5 };
+	assert.deepEqual(durationLimit(doc, imported), { max: 8, by: 'source', take: null });
+	const capped = { id: 's3', assetId: 'a1', dur: 4, srcIn: 0 };
+	setSpeed(doc, capped, 0.25, 10);
+	assert.equal(capped.dur, 10);
+});
+
+test('the speed of a shot is kept only when it is a slow speed of the table, as the server keeps it', () => {
+	const cases = JSON.parse(readFileSync(new URL('../../../tests/fixtures/speed_migration.json', import.meta.url), 'utf-8'));
+	for (const { value, expected } of cases) {
+		const [clip] = migrateShots({ clips: [{ id: 's1', speed: value }] }).clips;
+		assert.equal(clip.speed ?? null, expected, JSON.stringify(value));
+		assert.equal('speed' in clip, expected !== null);
+	}
 });

@@ -171,7 +171,9 @@ def _cadence(owner: User, project: Mapping[str, Any], order: Order, planned: Lis
     choice = cadence.choice_of(doc)
     found = cadence.ready(owner)
     interpolator = cadence.pick(choice, found)
-    slow = [item for item in planned if fps is not None and cadence.needs_conform(item.plan.fps, fps)]
+    needed = {id(item): cadence.needed_fps(doc, renditions.shot_of(project, item.plan.shot_id), item.plan.fps) for item in planned}
+    slow = [item for item in planned if needed[id(item)] is not None]
+    slowed = [item for item in slow if cadence.speed_of(renditions.shot_of(project, item.plan.shot_id)) < 1]
     near = [item for item in planned if fps is not None and item not in slow and isinstance(item.plan.fps, (int, float)) and 0 < item.plan.fps < fps]
     work: Optional[float] = 0.0
     for item in slow:
@@ -184,6 +186,7 @@ def _cadence(owner: User, project: Mapping[str, Any], order: Order, planned: Lis
         "interpolator": interpolator,
         "ready": found,
         "shots": [item.plan.shot_id for item in slow],
+        "slowed": [item.plan.shot_id for item in slowed],
         "near": [item.plan.shot_id for item in near],
         "seconds": round(work, 1) if slow and work is not None and interpolator is not None else None,
     }

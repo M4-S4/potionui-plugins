@@ -240,5 +240,8 @@
 	"export.cadence.conform": "Conform",
 	"export.cadence.conformTime": "Conform (≈ {duration})",
 	"export.cadence.conforming.one": "{count} version at {fps} fps on its way: the export uses it once it is ready.",
-	"export.cadence.conforming.other": "{count} versions at {fps} fps on their way: the export uses them once they are ready."
+	"export.cadence.conforming.other": "{count} versions at {fps} fps on their way: the export uses them once they are ready.",
+	"export.cadence.slowed.one": "{count} slowed shot waits for its version: the export repeats its frames.",
+	"export.cadence.slowed.other": "{count} slowed shots wait for their version: the export repeats their frames.",
+	"export.cadence.prepare": "Prepare the slow motion"
 }

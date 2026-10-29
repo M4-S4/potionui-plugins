@@ -233,5 +233,14 @@
 	"vref.track": "Piste",
 	"vref.itemHint": "Chaque plan reçoit la part de cette vidéo qui tombe dans sa fenêtre.",
 	"vref.remove": "Retirer de la piste",
-	"match.anchorVref": "Fin de {label}"
+	"match.anchorVref": "Fin de {label}",
+	"speed.label": "Vitesse",
+	"speed.value": "{value} %",
+	"speed.hint": "Ralenti à {value} % : le plan dure plus longtemps sur la timeline et le son de sa prise est coupé.",
+	"speed.ready": "Ralenti à {value} % : la version à {fps} i/s est prête, l’export la lit.",
+	"speed.making": "Ralenti à {value} % : la version à {fps} i/s est en cours.",
+	"speed.failed": "Ralenti à {value} % : la version à {fps} i/s a échoué ; l’export répète des images.",
+	"speed.needed": "Ralenti à {value} % : sans sa version à {fps} i/s, l’export répète des images.",
+	"speed.noInterpolator": "Ralenti à {value} % : aucun interpolateur n’est prêt pour sa version à {fps} i/s ; l’export répète des images.",
+	"speed.prepare": "Préparer"
 }

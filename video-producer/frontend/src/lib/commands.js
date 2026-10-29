@@ -29,6 +29,7 @@ import {
 } from './state.svelte.js';
 import { compareSeam, cycleTake, labelPreviewed, nudgeDuration, pickShot, previewed, selectedShot, shiftShot, stepShot as bandStep } from './band.svelte.js';
 import { BAND_STEP } from './band.js';
+import { speedOf } from './cadence.js';
 import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy, fitShot, setProjectQuality } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
 import { openGallery, openImport, openLocalImport } from './importer.js';
@@ -116,7 +117,7 @@ const nudgeTrim = (edge) => () => {
 		const at = ui.playhead;
 		if (edge === 'start' && at > s.start && at < s.start + s.dur) {
 			s.dur -= at - s.start;
-			if ('srcIn' in s) s.srcIn += at - s.start;
+			if ('srcIn' in s) s.srcIn += (at - s.start) * (doc.clips.includes(s) ? speedOf(s) : 1);
 			s.start = at;
 		} else if (edge === 'end' && at > s.start) {
 			const before = s.dur;

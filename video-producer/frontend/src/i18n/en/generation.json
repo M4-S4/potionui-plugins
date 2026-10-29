@@ -363,5 +363,7 @@
 	"card.cadence.conformedTip": "{to} fps version ready: the export reads it instead of repeating the frames of this {from} fps take.",
 	"card.cadence.conformingTip": "{to} fps version on its way, made from this {from} fps take.",
 	"card.cadence.slowTip": "This take runs at {from} fps in a {to} fps film: the export repeats frames. Conforming makes a {to} fps version of it.",
-	"card.cadence.failedTip": "The {to} fps version of this {from} fps take failed: {error}. Conform starts it again."
+	"card.cadence.failedTip": "The {to} fps version of this {from} fps take failed: {error}. Conform starts it again.",
+	"finalPass.cadence.slowed.one": "Including {count} slowed shot, brought to the film's frame rate divided by its speed.",
+	"finalPass.cadence.slowed.other": "Including {count} slowed shots, brought to the film's frame rate divided by their speed."
 }

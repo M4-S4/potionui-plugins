@@ -2,6 +2,7 @@ import { formatNumber, t } from '../i18n/index.svelte.js';
 import { emptyDoc, migrate, newAsset, newClip, promptLanguageOf } from './starter.js';
 import { confirm, toast as hostToast } from './host.js';
 import { ulid } from './ulid.js';
+import { speedOf } from './cadence.js';
 import { resetTakes, takeStore } from './takes.svelte.js';
 import { compileRules, conflictIds, conflictRule } from './rules.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
@@ -402,7 +403,7 @@ export function bladeAt(time = ui.playhead) {
 		const left = time - c.start;
 		const i = doc.clips.indexOf(c);
 		const kept = round(left, 0.04);
-		const b = { ...$state.snapshot(c), id: ulid(), start: round(c.start + kept, 0.04), dur: round(c.dur - left, 0.04), srcIn: c.srcIn + left, fadeIn: 0 };
+		const b = { ...$state.snapshot(c), id: ulid(), start: round(c.start + kept, 0.04), dur: round(c.dur - left, 0.04), srcIn: c.srcIn + left * speedOf(c), fadeIn: 0 };
 		c.dur = kept;
 		c.fadeOut = 0;
 		doc.clips.splice(i + 1, 0, b);

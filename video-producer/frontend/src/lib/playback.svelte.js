@@ -2,6 +2,7 @@ import { t } from '../i18n/index.svelte.js';
 import { ui, doc, asset, seqDuration, clamp, toast } from './state.svelte.js';
 import { mediaFailure } from './playable.js';
 import { clipSoundAudible, laneAudible } from './tracks.js';
+import { speedOf } from './cadence.js';
 import { advance } from './player.js';
 import mixRule from './mix.json';
 import { gainOf, reverbImpulse, stripOf } from './mix.js';
@@ -318,7 +319,7 @@ function follow(v, c, t) {
 		if (!el.paused) el.pause();
 		return;
 	}
-	const target = t - c.start + c.srcIn;
+	const target = (t - c.start) * speedOf(c) + c.srcIn;
 	if (el.paused) {
 		el.currentTime = target;
 		v.from = target;

@@ -240,5 +240,8 @@
 	"export.cadence.conform": "Conformer",
 	"export.cadence.conformTime": "Conformer (≈ {duration})",
 	"export.cadence.conforming.one": "{count} version à {fps} i/s en cours : l’export la prendra une fois prête.",
-	"export.cadence.conforming.other": "{count} versions à {fps} i/s en cours : l’export les prendra une fois prêtes."
+	"export.cadence.conforming.other": "{count} versions à {fps} i/s en cours : l’export les prendra une fois prêtes.",
+	"export.cadence.slowed.one": "{count} plan ralenti attend sa version : l’export répète ses images.",
+	"export.cadence.slowed.other": "{count} plans ralentis attendent leur version : l’export répète leurs images.",
+	"export.cadence.prepare": "Préparer les ralentis"
 }

@@ -273,6 +273,17 @@ def test_deleting_a_take_cancels_and_deletes_its_versions(core, make_project):
     assert ("user-1", generation_id) in core.cancelled
 
 
+def placed(project, drafts, fps=None):
+    doc = projects.get_project(project["id"])["doc"]
+    asset = {"kind": "video", "name": "", "src": None, "origin": None, "srcDur": 4, "width": 832, "height": 480, "fps": 16, "res": None, "generated": True, "quality": "draft", "role": None}
+    doc["assets"] = [{**asset, "id": f"gen-{take['id']}", "resultId": take["id"]} for take in drafts]
+    doc["clips"] = [{**clip, "assetId": f"gen-{take['id']}"} for clip, take in zip(doc["clips"], drafts)]
+    if fps is not None:
+        doc["fps"] = fps
+    projects.save_project(project["id"], doc, projects.get_project(project["id"])["version"])
+    return projects.get_project(project["id"])
+
+
 def test_an_export_reads_the_finished_version_of_a_slower_take_at_the_film_s_frame_rate(core, make_project):
     core.use_wan()
     core.use_video_tools()
@@ -281,15 +292,13 @@ def test_an_export_reads_the_finished_version_of_a_slower_take_at_the_film_s_fra
     _tick()
     _settle_all(core, fps=25.0)
     version = renditions.get(rendition["id"])
+    project = placed(project, drafts)
 
-    read = renditions.with_versions(project["id"], takes.list_takes(project["id"]), 25)
-    other = renditions.with_versions(project["id"], takes.list_takes(project["id"]), 30)
+    read = renditions.shot_versions(project["id"], project["doc"], takes.list_takes(project["id"]))
+    other = placed(project, drafts, fps=30)
 
-    by_id = {take["id"]: take for take in read}
-    assert by_id[drafts[0]["id"]]["file_path"] == version["file_path"]
-    assert by_id[drafts[0]["id"]]["fps"] == 25.0
-    assert by_id[drafts[1]["id"]]["file_path"] == drafts[1]["file_path"]
-    assert {take["id"]: take["file_path"] for take in other} == {take["id"]: take["file_path"] for take in drafts}
+    assert {shot: item["id"] for shot, item in read.items()} == {"s1": version["id"]}
+    assert renditions.shot_versions(other["id"], other["doc"], takes.list_takes(other["id"])) == {}
 
 
 def test_an_export_without_a_slower_take_reads_no_version(monkeypatch):
@@ -297,10 +306,9 @@ def test_an_export_without_a_slower_take_reads_no_version(monkeypatch):
         raise AssertionError("no version should be read")
 
     monkeypatch.setattr(renditions, "list_for_project", refuse)
+    doc = {"fps": 25, "assets": [{"id": "gen-t", "resultId": "t"}], "clips": [{"id": "s1", "assetId": "gen-t"}]}
 
-    assert renditions.with_versions("p", [{"id": "t", "status": "done", "fps": 25.0, "file_path": "a.mp4"}], 25) == [
-        {"id": "t", "status": "done", "fps": 25.0, "file_path": "a.mp4"}
-    ]
+    assert renditions.shot_versions("p", doc, [{"id": "t", "status": "done", "fps": 25.0, "file_path": "a.mp4"}]) == {}
 
 
 def test_the_final_pass_says_which_finals_are_slower_and_orders_their_versions(core, make_project):
@@ -321,6 +329,7 @@ def test_the_final_pass_says_which_finals_are_slower_and_orders_their_versions(c
         "interpolator": "rife",
         "ready": {"rife": True, "rtx": False},
         "shots": ["s1", "s2"],
+        "slowed": [],
         "near": [],
         "seconds": None,
     }

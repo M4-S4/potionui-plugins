@@ -221,7 +221,8 @@ test('shot editor: the draft reads the prompt, the frames, the references and th
 		cast: { characters: [], place: null },
 		dialogue: [],
 		referencePrompt: null,
-		firstFromPrevious: null
+		firstFromPrevious: null,
+		speed: 1
 	});
 });
 

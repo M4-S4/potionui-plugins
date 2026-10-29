@@ -118,5 +118,6 @@
 	"vref.takeOnly": "Une prise se dépose sur une piste de référence vidéo (vref).",
 	"vref.takeBusy": "{label} est occupée sous ce plan",
 	"vref.takeMove": "Déplacer dans {label} à {time}",
-	"vref.takeCopy": "Copier dans {label} à {time}"
+	"vref.takeCopy": "Copier dans {label} à {time}",
+	"clip.speedTip": "Ralenti à {value} %"
 }

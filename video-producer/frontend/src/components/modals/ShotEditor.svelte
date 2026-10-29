@@ -15,6 +15,7 @@
 	import { roleLabel, trackVerdict, withSendings } from '../../lib/vreftracks.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { SHOT_CAP, applyShotDraft, inputsChanged, isGlobal, isShared, overrunsTake, rebaseDraft, shotDraft, shotReferences } from '../../lib/shots.js';
+	import { SPEEDS } from '../../lib/cadence.js';
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
 	import { laneTitle } from '../../lib/tracks.js';
 	import { ulid } from '../../lib/ulid.js';
@@ -57,7 +58,15 @@
 	const inherited = $derived(lists.inherited);
 	const borrowed = $derived(lists.cast.filter((x) => !isGlobal(x.reference)));
 	const sentCount = $derived(draft.own.length + lists.cast.filter((x) => !x.excluded).length + inherited.filter(isShared).length);
-	const limit = $derived(clip ? shotDurationLimit({ ...clip, engine: draft.engine }) : { max: SHOT_CAP, by: null, take: null });
+	const limit = $derived(clip ? shotDurationLimit({ ...clip, engine: draft.engine, speed: draft.speed }) : { max: SHOT_CAP, by: null, take: null });
+	const speeds = $derived(SPEEDS.map((speed) => ({ id: String(speed), label: t('inspector.speed.value', { value: Math.round(speed * 100) }) })));
+
+	function setDraftSpeed(value) {
+		const next = Number(value);
+		if (!SPEEDS.includes(next) || next === draft.speed) return;
+		draft.dur = Math.round(((Number(draft.dur) || clip.dur) * (draft.speed ?? 1)) / next / 0.04) * 0.04;
+		draft.speed = next;
+	}
 	const beyondTake = $derived(clip ? overrunsTake(limit.take, clip.dur, +draft.dur) : false);
 	const issues = $derived(clip ? promptIssues({ text: draft.text, start: clip.start, dur: +draft.dur, shotId: clip.id }) : []);
 	const changed = $derived(Boolean(baseline) && inputsChanged(baseline, draft));
@@ -399,6 +408,11 @@
 					{#if limit.by === 'source'}<p class="text-xs text-fg-subtle">{t('modals.shot.durationMax', { max: secs(limit.max) })}</p>{/if}
 					{#if limit.by === 'engine'}<p class="text-xs text-fg-subtle">{t('modals.shot.durationEngine', { max: secs(limit.max) })}</p>{/if}
 					{#if beyondTake}<p class="text-xs text-warning">{t('modals.shot.durationBeyondTake', { take: secs(limit.take) })}</p>{/if}
+					<div class="flex items-center justify-between gap-3 pt-1">
+						<span class="vp-label">{t('inspector.speed.label')}</span>
+						<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('inspector.speed.label'), items: speeds, selected: String(draft.speed ?? 1), onSelect: setDraftSpeed }} />
+					</div>
+					{#if (draft.speed ?? 1) < 1}<p class="text-xs text-fg-subtle">{t('inspector.speed.hint', { value: Math.round(draft.speed * 100) })}</p>{/if}
 				</section>
 				<section class="space-y-1.5">
 					<div class="vp-section-title">{t('inspector.section.frames')}</div>

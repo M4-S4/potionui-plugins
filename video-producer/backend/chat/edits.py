@@ -1,7 +1,7 @@
 import math
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .. import bible
+from .. import bible, formats
 from ..core_bridge import generate_ulid
 from ..director import FIRST_ROLES, LAST_ROLES, shot_revision
 
@@ -255,20 +255,20 @@ def _source_length(media: Optional[Mapping[str, Any]]) -> Optional[float]:
 
 
 def take_length(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[float]:
-    """How long the generated take placed on a shot lasts from its in point, or None."""
+    """How long the generated take placed on a shot lasts on the timeline from its in point, slowed by the shot's speed, or None."""
     media = _media_of(doc, clip)
     if not media or not media.get("generated") or _source_length(media) is None:
         return None
-    return number(media["srcDur"]) - number(clip.get("srcIn"))
+    return (number(media["srcDur"]) - number(clip.get("srcIn"))) / formats.speed_of(clip)
 
 
 def duration_limit(doc: Mapping[str, Any], clip: Mapping[str, Any], engine_max: Optional[float] = None) -> Tuple[float, Optional[str]]:
-    """The longest a shot may last and what sets it, as the page's durationLimit: its engine over a generated take, else what its source media has left from its in point."""
+    """The longest a shot may last and what sets it, as the page's durationLimit: its engine over a generated take, else what its source media has left from its in point, slowed by the shot's speed."""
     media = _media_of(doc, clip)
     if media and media.get("generated"):
         return (engine_max, "engine") if engine_max and engine_max > 0 else (SHOT_CAP_S, None)
     length = _source_length(media)
-    return (length if length is not None else SHOT_CAP_S) - number(clip.get("srcIn")), "source" if length else None
+    return ((length if length is not None else SHOT_CAP_S) - number(clip.get("srcIn"))) / formats.speed_of(clip), "source" if length else None
 
 
 def release(clip: Dict[str, Any]) -> Optional[str]:

@@ -5,6 +5,7 @@ import { KINDS, castCards, castOf, cardsOf, migrateCast, sameCast, setCast, usab
 import { linesOf, migrateDialogue, sameDialogue, setDialogue } from './dialogue.js';
 import { migrateReferencePrompt, referencePromptOf, sameReferencePrompt, setReferencePrompt } from './refprompt.js';
 import { merge3 } from './merge.js';
+import { SLOW_SPEEDS, speedOf } from './cadence.js';
 
 export const MIN_DRAFTS = 1;
 export const MAX_DRAFTS = 8;
@@ -160,6 +161,7 @@ function migrateClip(clip) {
 	if ('drafts' in next && !(Number.isInteger(next.drafts) && next.drafts >= MIN_DRAFTS && next.drafts <= MAX_STORED_DRAFTS)) delete next.drafts;
 	if ('revision' in next && !(Number.isInteger(next.revision) && next.revision >= 0)) delete next.revision;
 	if ('firstFromPrevious' in next && typeof next.firstFromPrevious !== 'boolean') delete next.firstFromPrevious;
+	if ('speed' in next && !SLOW_SPEEDS.includes(next.speed)) delete next.speed;
 	if ('referenceOverrides' in next) {
 		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next), excludeVrefs: excludedVrefsOf(next) }).filter(([, list]) => list.length);
 		if (kept.length) next.referenceOverrides = Object.fromEntries(kept);
@@ -196,12 +198,24 @@ export const TAKE_SLACK = 0.05;
 export function durationLimit(doc, clip, engineMax = null) {
 	const media = (doc.assets ?? []).find((a) => a.id === clip?.assetId) ?? null;
 	const srcIn = clip?.srcIn ?? 0;
+	const speed = speedOf(clip);
 	const length = typeof media?.srcDur === 'number' ? media.srcDur : null;
 	if (media?.generated) {
-		const take = length === null ? null : length - srcIn;
+		const take = length === null ? null : (length - srcIn) / speed;
 		return engineMax > 0 ? { max: engineMax, by: 'engine', take } : { max: SHOT_CAP, by: null, take };
 	}
-	return { max: (length ?? SHOT_CAP) - srcIn, by: length ? 'source' : null, take: null };
+	return { max: ((length ?? SHOT_CAP) - srcIn) / speed, by: length ? 'source' : null, take: null };
+}
+
+export function setSpeed(doc, clip, speed, engineMax = null) {
+	const next = SLOW_SPEEDS.includes(speed) ? speed : 1;
+	const before = speedOf(clip);
+	if (next === before) return false;
+	const span = clip.dur * before;
+	if (next === 1) delete clip.speed;
+	else clip.speed = next;
+	clip.dur = snap(Math.max(MIN_SHOT, Math.min(span / next, durationLimit(doc, clip, engineMax).max)));
+	return true;
 }
 
 export const overrunsTake = (take, before, dur) => take !== null && dur > before + 1e-6 && dur > take + TAKE_SLACK;
@@ -235,7 +249,8 @@ export function shotDraft(doc, clip, engine) {
 		cast: castOf(clip),
 		dialogue: linesOf(clip),
 		referencePrompt: referencePromptOf(clip),
-		firstFromPrevious: typeof clip.firstFromPrevious === 'boolean' ? clip.firstFromPrevious : null
+		firstFromPrevious: typeof clip.firstFromPrevious === 'boolean' ? clip.firstFromPrevious : null,
+		speed: speedOf(clip)
 	};
 }
 
@@ -299,6 +314,10 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 	if ('firstFromPrevious' in draft && draft.firstFromPrevious !== before.firstFromPrevious) {
 		if (typeof draft.firstFromPrevious === 'boolean') clip.firstFromPrevious = draft.firstFromPrevious;
 		else delete clip.firstFromPrevious;
+	}
+	if ('speed' in draft && draft.speed !== before.speed) {
+		if (SLOW_SPEEDS.includes(draft.speed)) clip.speed = draft.speed;
+		else delete clip.speed;
 	}
 	const released = resized ? releaseOverrun(doc, clip, was) : null;
 	if (changed) touch(clip);

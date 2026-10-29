@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, Response
 from . import access, core_bridge, projects, renditions, settings, takes
 from .core_bridge import AccountType, LimitExceeded, MediaRefError, User, get_current_active_user
 from .exports import EXCHANGE, content_disposition, jobs, render, video
-from .exports.common import fps_of, timing_error
+from .exports.common import timing_error
 from .exports.media import MEDIA_MODES, Resolver, basename, exportable, files_of
 from .responses import fail, ok
 
@@ -66,7 +66,7 @@ def list_exports(project_id: str, user: User = Depends(get_current_active_user))
 def exchange_export(
     project_id: str, fmt: str, media: str = Query("path"), user: User = Depends(get_current_active_user)
 ) -> Response:
-    """The sequence as FCPXML, OpenTimelineIO, EDL or SubRip, naming each shot's real file by path or by name, the version of its take at the film's frame rate when it has a finished one."""
+    """The sequence as FCPXML, OpenTimelineIO, EDL or SubRip, naming each shot's real file by path or by name, the finished version of its take at the frame rate the shot needs when it has one."""
     if fmt not in EXCHANGE:
         _invalid(f"The format must be one of: {', '.join(EXCHANGE)}.")
     if media not in MEDIA_MODES:
@@ -74,13 +74,22 @@ def exchange_export(
     project = access.project_for(user, project_id)
     _timed(project["doc"], frames=fmt != "srt")
     locale = _locale(user)
+    found = takes.list_takes(project_id)
+    resolver = Resolver(access.owner_of(user, project))
+    versions = {} if fmt == "srt" else renditions.shot_versions(project_id, project["doc"], found)
     files = {} if fmt == "srt" else files_of(
         project["doc"],
-        renditions.with_versions(project_id, takes.list_takes(project_id), fps_of(project["doc"])),
-        Resolver(access.owner_of(user, project)),
+        found,
+        resolver,
         media=media,
         locale=locale,
     )
+    for index, clip in enumerate(project["doc"].get("clips") or []):
+        version = versions.get(clip.get("id"))
+        if version is not None and files.get(("clips", index)):
+            path = resolver.path("history", version["file_path"]) or version["file_path"]
+            name = basename(version["file_path"])
+            files[("clips", index)] = {"name": name, "path": name if media == "name" else path}
     target = EXCHANGE[fmt]
     return Response(
         content=render(fmt, project["doc"], files, locale=locale).encode("utf-8"),

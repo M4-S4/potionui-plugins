@@ -236,6 +236,7 @@ CLIP = _object(
         "referencePrompt": REFERENCE_PROMPT,
         "dialogue": _array(LINE),
         "firstFromPrevious": FLAG,
+        "speed": _enum(*formats.SLOW_SPEEDS),
     },
 )
 
@@ -563,6 +564,15 @@ def _chain_flag(clip: Any) -> Any:
     return {key: value for key, value in clip.items() if key != "firstFromPrevious"}
 
 
+def _speed(clip: Any) -> Any:
+    if not isinstance(clip, dict) or "speed" not in clip:
+        return clip
+    speed = clip["speed"]
+    if isinstance(speed, (int, float)) and not isinstance(speed, bool) and speed in formats.SLOW_SPEEDS:
+        return clip
+    return {key: value for key, value in clip.items() if key != "speed"}
+
+
 def _removed_takes(value: Any) -> List[str]:
     return list(dict.fromkeys(item for item in value if isinstance(item, str) and item)) if isinstance(value, list) else []
 
@@ -741,7 +751,7 @@ def migrate(doc: Any) -> Any:
     clips = doc.get("clips")
     if isinstance(clips, list):
         characters = _card_ids(doc, "characters")
-        cast = [_chain_flag(_spoken(_cast(clip, characters, _card_ids(doc, "places")), characters)) for clip in clips]
+        cast = [_speed(_chain_flag(_spoken(_cast(clip, characters, _card_ids(doc, "places")), characters))) for clip in clips]
         if any(new is not old for new, old in zip(cast, clips)):
             changes["clips"] = cast
     vrefs, gone = _vrefs({**doc, **changes})

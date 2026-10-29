@@ -45,6 +45,8 @@ COLUMNS = (
     "created_at",
     "started_at",
     "finished_at",
+    "factor",
+    "source_rendition_id",
 )
 
 PUBLIC = (
@@ -54,6 +56,8 @@ PUBLIC = (
     "fps",
     "source_fps",
     "interpolator",
+    "factor",
+    "source_rendition_id",
     "status",
     "progress",
     "step",
@@ -229,9 +233,9 @@ def size_of(take: Mapping[str, Any]) -> Optional[str]:
     return take.get("resolution")
 
 
-def _request(user: User, take: Mapping[str, Any], fps: int, interpolator: str, rendition_id: str) -> Dict[str, Any]:
+def _request(user: User, source: Mapping[str, Any], fps: float, interpolator: str, rendition_id: str, factor: Optional[int] = None) -> Dict[str, Any]:
     try:
-        request, missing = cadence.build_request(user, take, fps, interpolator)
+        request, missing = cadence.build_request(user, source, fps, interpolator, factor)
     except DirectorError as exc:
         raise Refused(exc.note()) from None
     if missing:
@@ -239,25 +243,19 @@ def _request(user: User, take: Mapping[str, Any], fps: int, interpolator: str, r
     return {**request, "idempotency_key": f"vp:rendition:{rendition_id}"}
 
 
-def order(owner: User, project: Mapping[str, Any], take: Mapping[str, Any], choice: Optional[str] = None) -> Dict[str, Any]:
-    """Bring a take to the film's frame rate: the version already finished or on its way, else a new one, queued for a finished take and waiting for one still being made; Refused when the take cannot be."""
-    doc = project.get("doc") or {}
-    fps = cadence.target_of(doc)
-    if fps is None:
-        raise Refused(note("cadence_unknown", "The frame rate of the film is not one a take can be brought to."))
-    if take.get("kind") == takes.KEYFRAME:
-        raise Refused(note("keyframe_take", "A start image candidate has no frame rate."))
-    if take["status"] not in ("done", *takes.ACTIVE):
-        raise Refused(note("take_not_done", "Only a finished take, or one still being made, can be brought to the film's frame rate."))
-    if not cadence.needs_conform(take.get("fps"), fps):
-        raise Refused(note("not_slower", "This take is not slower than the film: the export plays it as it is.", fps=take.get("fps")))
-    found = current_for(take["id"], fps)
-    if found is not None:
-        return found
-    chosen = cadence.choice_of(doc) if choice is None else choice
-    interpolator = cadence.pick(chosen, cadence.ready(owner))
-    if interpolator is None:
-        raise Refused(cadence.missing_note(chosen))
+def shot_of(project: Mapping[str, Any], shot_id: Any) -> Optional[Dict[str, Any]]:
+    """The shot of the film with this id, or None."""
+    return next((clip for clip in (project.get("doc") or {}).get("clips") or [] if clip.get("id") == shot_id), None)
+
+
+def placed_take(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> Optional[str]:
+    """The id of the take a shot shows, read from its asset; None when it shows no take."""
+    asset = next((item for item in doc.get("assets") or [] if item.get("id") == clip.get("assetId")), None)
+    result = (asset or {}).get("resultId")
+    return str(result) if result else None
+
+
+def _row(owner: User, project: Mapping[str, Any], take: Mapping[str, Any], fps: float, interpolator: str, factor: Optional[int], source: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     rendition_id = generate_ulid()
     fields: Dict[str, Any] = {
         "id": rendition_id,
@@ -270,28 +268,62 @@ def order(owner: User, project: Mapping[str, Any], take: Mapping[str, Any], choi
         "preset_id": cadence.PRESET_OF[interpolator],
         "mode": cadence.MODE,
         "status": WAITING,
+        "factor": factor,
+        "source_rendition_id": source["id"] if source is not None else None,
         **_source_fields(take),
     }
-    if take["status"] == "done":
-        fields.update(status=QUEUED, request=_request(owner, take, fps, interpolator, rendition_id))
+    ready = source["status"] == DONE if source is not None else take["status"] == "done"
+    if ready:
+        fields.update(status=QUEUED, request=_request(owner, source if source is not None else take, fps, interpolator, rendition_id, factor))
     return _create(fields)
 
 
-def interpolator_for(owner: User, doc: Mapping[str, Any], take_fps: Any, choice: Optional[str] = None) -> Tuple[bool, Optional[str]]:
-    """Whether a take at this frame rate needs a version at the film's, and the interpolator that would make it, None when none is ready."""
-    fps = cadence.target_of(doc)
-    if fps is None or not cadence.needs_conform(take_fps, fps):
+def order(
+    owner: User, project: Mapping[str, Any], take: Mapping[str, Any], choice: Optional[str] = None, clip: Optional[Mapping[str, Any]] = None
+) -> Dict[str, Any]:
+    """Bring a take to the frame rate a shot needs, the film's divided by its speed (the film's without a shot): the version already finished or on its way, else a new one, queued for a finished take and waiting for one still being made; past the frame rates an interpolator takes, a multiple of the film's rate made from the version at the film's rate, ordered as well when the take does not run at it; Refused when the take cannot be."""
+    doc = project.get("doc") or {}
+    film = cadence.target_of(doc)
+    if film is None:
+        raise Refused(note("cadence_unknown", "The frame rate of the film is not one a take can be brought to."))
+    if take.get("kind") == takes.KEYFRAME:
+        raise Refused(note("keyframe_take", "A start image candidate has no frame rate."))
+    if take["status"] not in ("done", *takes.ACTIVE):
+        raise Refused(note("take_not_done", "Only a finished take, or one still being made, can be brought to the film's frame rate."))
+    fps = cadence.needed_fps(doc, clip, take.get("fps"))
+    if fps is None:
+        raise Refused(note("not_slower", "This take is not slower than its shot: the export plays it as it is.", fps=take.get("fps")))
+    found = current_for(take["id"], fps)
+    if found is not None:
+        return found
+    chosen = cadence.choice_of(doc) if choice is None else choice
+    interpolator = cadence.pick(chosen, cadence.ready(owner))
+    if interpolator is None:
+        raise Refused(cadence.missing_note(chosen))
+    steps = cadence.passes(take.get("fps"), fps, film)
+    source: Optional[Dict[str, Any]] = None
+    if len(steps) == 2:
+        source = current_for(take["id"], steps[0][0]) or _row(owner, project, take, steps[0][0], interpolator, None, None)
+    rate, factor = steps[-1]
+    return _row(owner, project, take, rate, interpolator, factor, source)
+
+
+def interpolator_for(
+    owner: User, doc: Mapping[str, Any], take_fps: Any, choice: Optional[str] = None, clip: Optional[Mapping[str, Any]] = None
+) -> Tuple[bool, Optional[str]]:
+    """Whether a take at this frame rate needs a version on its shot, and the interpolator that would make it, None when none is ready."""
+    if cadence.needed_fps(doc, clip, take_fps) is None:
         return False, None
     return True, cadence.pick(cadence.choice_of(doc) if choice is None else choice, cadence.ready(owner))
 
 
 def order_quietly(owner: User, project: Mapping[str, Any], take: Mapping[str, Any], choice: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Order the version of a new take at the film's frame rate when it needs one; None when it does not or cannot have one."""
+    """Order the version a new take needs on its shot when it needs one; None when it does not or cannot have one."""
     try:
-        return order(owner, project, take, choice)
+        return order(owner, project, take, choice, shot_of(project, take.get("shot_id")))
     except Refused as exc:
         if exc.block["code"] != "not_slower":
-            logger.warning("[VIDEO-PRODUCER] Take %s gets no version at the film's frame rate: %s", take.get("id"), exc.block["message"])
+            logger.warning("[VIDEO-PRODUCER] Take %s gets no version at a frame rate: %s", take.get("id"), exc.block["message"])
         return None
 
 
@@ -300,14 +332,18 @@ def _prepare(rendition: Mapping[str, Any]) -> None:
     if take is None or take["status"] in ("failed", "cancelled"):
         settle(rendition["id"], "cancelled", error_code="take_ended", error_message="The take this version was waiting for did not finish.")
         return
-    if take["status"] != "done":
+    source = get(rendition["source_rendition_id"]) if rendition.get("source_rendition_id") else None
+    if rendition.get("source_rendition_id") and (source is None or source["status"] in ("failed", "cancelled")):
+        settle(rendition["id"], "cancelled", error_code="source_ended", error_message="The version at the film's frame rate this version was made from did not finish.")
+        return
+    if take["status"] != "done" or (source is not None and source["status"] != DONE):
         return
     user = core_bridge.get_user(rendition["user_id"]) if rendition.get("user_id") else None
     if user is None:
         fail(rendition, "user_not_found", "The owner of this version no longer exists.")
         return
     try:
-        request = _request(user, take, int(rendition["fps"]), rendition["interpolator"], rendition["id"])
+        request = _request(user, source or take, float(rendition["fps"]), rendition["interpolator"], rendition["id"], rendition.get("factor"))
     except Refused as exc:
         fail(rendition, exc.block["code"], exc.block["message"])
         return
@@ -501,19 +537,23 @@ async def drop_for_take(owner: User, take_id: str) -> int:
         return cursor.rowcount
 
 
-def with_versions(project_id: str, found: Iterable[Mapping[str, Any]], fps: Any) -> List[Dict[str, Any]]:
-    """The takes an export reads, each finished take slower than the film with a finished version at its frame rate pointing at that version's file."""
-    found = list(found)
-    slow = any(take.get("status") == "done" and cadence.needs_conform(take.get("fps"), fps) for take in found)
-    versions: Dict[str, Dict[str, Any]] = {}
-    for item in list_for_project(project_id) if slow else []:
-        if item["status"] == DONE and item.get("file_path") and _same_fps(item["fps"], fps):
-            versions[item["take_id"]] = item
-    swapped: List[Dict[str, Any]] = []
-    for take in found:
-        version = versions.get(take["id"]) if take.get("status") == "done" else None
-        if version is None:
-            swapped.append(dict(take))
-            continue
-        swapped.append({**take, "file_path": version["file_path"], "file_id": version["file_id"], "fps": version["fps"]})
-    return swapped
+def shot_versions(project_id: str, doc: Mapping[str, Any], found: Iterable[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """The finished version each shot of the film reads, keyed by shot id: the newest at the frame rate the shot needs for the finished take it shows, the film's divided by its speed."""
+    done = {take["id"]: take for take in found if take.get("status") == "done"}
+    wanted: Dict[str, Tuple[str, float]] = {}
+    for clip in doc.get("clips") or []:
+        take = done.get(placed_take(doc, clip) or "")
+        fps = cadence.needed_fps(doc, clip, take.get("fps")) if take is not None else None
+        if fps is not None:
+            wanted[clip["id"]] = (take["id"], fps)
+    if not wanted:
+        return {}
+    versions: Dict[Tuple[str, float], Dict[str, Any]] = {}
+    for item in list_for_project(project_id):
+        if item["status"] == DONE and item.get("file_path") and isinstance(item.get("fps"), (int, float)):
+            versions[(item["take_id"], round(float(item["fps"]), 6))] = item
+    return {
+        shot_id: versions[(take_id, round(float(fps), 6))]
+        for shot_id, (take_id, fps) in wanted.items()
+        if (take_id, round(float(fps), 6)) in versions
+    }

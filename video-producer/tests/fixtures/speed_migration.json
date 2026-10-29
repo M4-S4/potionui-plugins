@@ -1,0 +1,12 @@
+[
+  {"value": 0.5, "expected": 0.5},
+  {"value": 0.25, "expected": 0.25},
+  {"value": 1, "expected": null},
+  {"value": 0.75, "expected": null},
+  {"value": 2, "expected": null},
+  {"value": 0, "expected": null},
+  {"value": "0.5", "expected": null},
+  {"value": true, "expected": null},
+  {"value": null, "expected": null},
+  {"value": [0.5], "expected": null}
+]

@@ -47,6 +47,18 @@ DEFAULT_CADENCE: int = int(TABLE["cadence"]["default"])
 
 SLOWER = float(TABLE["cadence"]["slower"])
 
+SPEEDS: Tuple[float, ...] = tuple(float(value) for value in TABLE["cadence"]["speeds"])
+
+SLOW_SPEEDS: Tuple[float, ...] = tuple(value for value in SPEEDS if value < 1)
+
+
+def speed_of(clip: Optional[Mapping[str, Any]]) -> float:
+    """The speed a shot plays its take at: one of the slow speeds of the table, else 1."""
+    speed = (clip or {}).get("speed")
+    if isinstance(speed, (int, float)) and not isinstance(speed, bool) and speed in SLOW_SPEEDS:
+        return float(speed)
+    return 1.0
+
 ENGINES: Dict[str, Dict[str, Any]] = TABLE["engines"]
 
 AUTO, CROP, BARS = "auto", "crop", "bars"
