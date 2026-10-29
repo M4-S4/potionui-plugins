@@ -377,7 +377,7 @@ def test_a_face_counts_as_seen_from_the_front_with_a_sure_detection_its_nose_bet
     assert looks.frontal({**FRONT, "landmarks": []}) is False
 
 
-def test_with_the_face_recognition_a_take_says_how_much_of_its_first_frontal_face_is_left_and_when(core, make_project, painted):
+def test_with_the_face_recognition_a_take_says_how_much_of_its_first_frontal_face_is_left_at_its_end(core, make_project, painted):
     project, _, second = _placed(make_project, core)
     painted.takes[second["id"]] = [(0.0, GRAY, RED), (1.0, GRAY, GREEN), (2.0, DARK, BLUE), (3.0, GRAY, BLUE)]
     _with_identity(core)
@@ -393,6 +393,27 @@ def test_with_the_face_recognition_a_take_says_how_much_of_its_first_frontal_fac
     assert next(item for item in report["takes"] if item["take_id"] == second["id"])["identity"] == {"score": 0.0, "at": 3.0}
     assert report["identity"] == {"model": "glintr100.onnx", "available": True}
     assert report["thresholds"]["identity"] == looks.IDENTITY_LOW
+
+
+@pytest.mark.parametrize(
+    "images, expected",
+    [
+        ([(0.0, GRAY, RED), (1.0, GRAY, BLUE), (2.0, GRAY, RED), (3.0, GRAY, RED)], {"score": 1.0, "at": 3.0}),
+        ([(0.0, GRAY, RED), (1.0, GRAY, BLUE), (2.0, GRAY, GREEN), (3.0, GRAY, RED)], {"score": 0.8, "at": 3.0}),
+        ([(0.0, GRAY, RED), (1.0, GRAY, GREEN), (2.0, DARK, RED), (3.0, DARK, RED)], {"score": 0.6, "at": 1.0}),
+    ],
+    ids=["turned-and-back", "median-of-the-last-second", "last-frontal-image"],
+)
+def test_the_face_left_at_the_end_is_the_median_of_the_last_second_or_the_last_frontal_image(core, make_project, painted, images, expected):
+    project, _, second = _placed(make_project, core)
+    painted.takes[second["id"]] = images
+    _with_identity(core)
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+
+    assert next(item for item in _report(core, project)["takes"] if item["take_id"] == second["id"])["identity"] == expected
 
 
 @pytest.mark.parametrize("chained, expected", [(True, 0.6), (False, None)])
