@@ -23,11 +23,11 @@ export function profileOptions({ items = [], current = '' } = {}) {
 	return known || !current ? items : [{ id: current, label: current, unsupported: true }, ...items];
 }
 
-export function drawerPlace({ deck, root, width = DRAWER_WIDTH, inset = DRAWER_INSET, maxHeight = DRAWER_MAX_HEIGHT } = {}) {
+export function drawerPlace({ deck, root, full = false, width = DRAWER_WIDTH, inset = DRAWER_INSET, maxHeight = DRAWER_MAX_HEIGHT } = {}) {
 	const frame = root ?? deck;
 	const space = Math.max(0, deck.top - frame.top);
 	return {
-		width: Math.min(width, Math.max(0, frame.width - inset)),
+		width: full ? Math.max(0, frame.width) : Math.min(width, Math.max(0, frame.width - inset)),
 		maxHeight: Math.min(maxHeight, Math.max(0, space - inset)),
 		space
 	};

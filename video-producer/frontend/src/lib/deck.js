@@ -2,6 +2,15 @@ export const DECK_STATES = ['ready', 'blocked', 'running', 'done', 'failed'];
 
 export const DECK_TONES = { ready: 'muted', blocked: 'warning', running: 'signal', done: 'success', failed: 'danger' };
 
+export const DECK_HEIGHT = 92;
+export const DECK_COMPACT_HEIGHT = 56;
+export const DECK_COMPACT_CENTRE = 560;
+
+export function deckCompact({ narrow = false, centre = Infinity, deck = DECK_HEIGHT } = {}) {
+	if (narrow) return true;
+	return centre + deck - DECK_HEIGHT < DECK_COMPACT_CENTRE;
+}
+
 export function deckState({ state, missing }) {
 	if (state === 'running') return 'running';
 	if (missing?.length) return 'blocked';
@@ -49,4 +58,16 @@ export function deckCell({ state, timeText, vramText, cloud, over, elapsed, rema
 
 export function deckChip({ engine, profile, size, drafts }, t) {
 	return [engine, profile, size, drafts === null ? t('production.deck.draftsMixed') : t('production.deck.drafts', { count: drafts })].filter(Boolean);
+}
+
+export function deckChipFolded({ engine, short = engine, prefixes = [], profile, size, drafts }, fit, t) {
+	const name = fit.engine === 'full' ? engine : fit.engine === 'cut' && fit.cut >= 0 ? `${prefixes[fit.cut]}…` : short;
+	if (fit.tier === 'engine') return [name];
+	if (fit.tier === 'profile') return [name, profile].filter(Boolean);
+	return deckChip({ engine: name, profile, size, drafts }, t);
+}
+
+export function deckLine({ compact, eyebrow, detail }) {
+	if (!compact || detail.warn || !eyebrow) return detail.text;
+	return [eyebrow, detail.text].filter(Boolean).join(' · ');
 }

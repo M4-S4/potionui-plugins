@@ -1167,17 +1167,24 @@
 		@keyframes vp-deck-indeterminate { from { transform: translateX(-115%); } to { transform: translateX(325%); } }
 		@keyframes vp-deck-mark-orbit { to { transform: rotate(360deg); } }
 		.vp-root:has(.vp-deck) .vp-toasts { bottom: calc(2.5rem + 92px); }
-		.vp-root .vp-deck { position: relative; height: 92px; border-top: 1px solid rgb(var(--line)); background: rgb(var(--canvas)); color: rgb(var(--fg)); font-size: 13px; line-height: 20px; }
+		.vp-root:has(.vp-deck.is-compact) .vp-toasts { bottom: calc(2.5rem + 56px); }
+		.vp-root .vp-deck { position: relative; height: 92px; border-top: 1px solid rgb(var(--line)); background: rgb(var(--canvas)); color: rgb(var(--fg)); font-size: 13px; line-height: 20px; transition: height 180ms cubic-bezier(.2, .8, .2, 1); }
+		.vp-root .vp-deck.is-compact { height: 56px; }
 		.vp-root .vp-deck-progress-track { position: absolute; z-index: 2; top: -1px; left: 0; right: 0; height: 3px; overflow: hidden; background: rgb(var(--signal) / .14); pointer-events: none; }
 		.vp-root .vp-deck-progress-fill { width: 0; height: 100%; background: rgb(var(--signal)); transition: width 320ms ease; }
 		.vp-root .vp-deck-progress-fill.is-indeterminate { width: 32%; animation: vp-deck-indeterminate 1.25s cubic-bezier(.4, 0, .2, 1) infinite; }
 		.vp-root .vp-deck-grid { height: 100%; display: grid; grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.25fr); align-items: center; gap: 20px; padding: 0 24px; }
 		.vp-root .vp-deck-status { min-width: 0; display: flex; align-items: center; gap: 24px; }
-		.vp-root .vp-deck-thumb { width: 60px; height: 60px; flex: none; border-radius: 6px; background: rgb(var(--surface-2)); display: grid; place-items: center; color: rgb(var(--fg-subtle)); overflow: hidden; position: relative; }
+		.vp-root .vp-deck.is-compact .vp-deck-status { gap: 18px; }
+		.vp-root .vp-deck-thumb { width: 60px; height: 60px; flex: none; border-radius: 6px; background: rgb(var(--surface-2)); display: grid; place-items: center; color: rgb(var(--fg-subtle)); overflow: hidden; position: relative; transition: width 180ms cubic-bezier(.2, .8, .2, 1), height 180ms cubic-bezier(.2, .8, .2, 1); }
+		.vp-root .vp-deck.is-compact .vp-deck-thumb { width: 40px; height: 40px; }
 		.vp-root .vp-deck-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
-		.vp-root .vp-deck-clock { position: absolute; right: 3px; bottom: 3px; font: 600 10px/14px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgb(0 0 0 / .55); color: #fff; padding: 0 4px; border-radius: 3px; }
+		.vp-root .vp-deck-clock { position: absolute; right: 3px; bottom: 3px; font: 600 10px/14px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgb(0 0 0 / .55); color: #fff; padding: 0 4px; border-radius: 3px; white-space: nowrap; }
+		.vp-root .vp-deck.is-compact .vp-deck-clock { display: none; }
 		.vp-root .vp-deck-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-		.vp-root .vp-deck-eyebrow { overflow: hidden; color: rgb(var(--fg-subtle)); font: 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; text-overflow: ellipsis; white-space: nowrap; }
+		.vp-root .vp-deck.is-compact .vp-deck-copy { gap: 0; }
+		.vp-root .vp-deck-eyebrow { height: 16px; overflow: hidden; color: rgb(var(--fg-subtle)); font: 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; text-overflow: ellipsis; white-space: nowrap; transition: height 180ms cubic-bezier(.2, .8, .2, 1), opacity 120ms ease; }
+		.vp-root .vp-deck.is-compact .vp-deck-eyebrow { height: 0; opacity: 0; }
 		.vp-root .vp-deck-title-line { position: relative; min-width: 0; display: flex; align-items: center; }
 		.vp-root .vp-deck-dot { --status: var(--fg-subtle); position: absolute; width: 7px; height: 7px; margin-left: -15px; border-radius: 50%; background: rgb(var(--status)); box-shadow: 0 0 0 3px rgb(var(--status) / .16); }
 		.vp-root .vp-deck-dot.is-success { --status: var(--success); }
@@ -1185,20 +1192,28 @@
 		.vp-root .vp-deck-dot.is-warning { --status: var(--warning); }
 		.vp-root .vp-deck-dot.is-danger { --status: var(--danger); }
 		.vp-root .vp-deck-title { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; transition: opacity 250ms ease; }
+		.vp-root .vp-deck.is-compact .vp-deck-title { font-size: 13px; }
 		.vp-root .vp-deck-detail { min-width: 0; min-height: 24px; display: flex; align-items: center; gap: 8px; color: rgb(var(--fg-muted)); font-size: 12px; line-height: 16px; white-space: nowrap; }
+		.vp-root .vp-deck.is-compact .vp-deck-detail { min-height: 18px; }
 		.vp-root .vp-deck-detail-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 		.vp-root .vp-deck-detail-text.is-whole { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+		.vp-root .vp-deck.is-compact .vp-deck-detail-text.is-whole { -webkit-line-clamp: 1; }
 		.vp-root .vp-deck-inline-action { height: 24px; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: 0; border-radius: 4px; background: rgb(var(--surface-2)); color: rgb(var(--fg)); cursor: pointer; font-size: 12px; font-weight: 600; }
 		.vp-root .vp-deck-inline-action:hover:not(:disabled) { background: rgb(var(--surface-3)); }
 		.vp-root .vp-deck-inline-action:disabled { cursor: not-allowed; opacity: .4; }
 		.vp-root .vp-deck-run { display: flex; align-items: center; justify-content: center; gap: 24px; }
-		.vp-root .vp-deck-generate { width: 70px; height: 70px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgb(var(--surface-2)); color: rgb(var(--accent)); cursor: pointer; transition: background-color 150ms ease; }
+		.vp-root .vp-deck.is-compact .vp-deck-run { gap: 16px; }
+		.vp-root .vp-deck-generate { width: 70px; height: 70px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgb(var(--surface-2)); color: rgb(var(--accent)); cursor: pointer; transition: background-color 150ms ease, width 180ms cubic-bezier(.2, .8, .2, 1), height 180ms cubic-bezier(.2, .8, .2, 1); }
+		.vp-root .vp-deck.is-compact .vp-deck-generate { width: 48px; height: 48px; }
 		.vp-root .vp-deck-generate:hover:not(:disabled) { background: rgb(var(--surface-3)); }
 		.vp-root .vp-deck-generate:disabled { cursor: not-allowed; opacity: .4; }
-		.vp-root .vp-deck-mark { width: 60px; height: 60px; display: block; }
+		.vp-root .vp-deck-mark { width: 60px; height: 60px; display: block; transition: width 180ms cubic-bezier(.2, .8, .2, 1), height 180ms cubic-bezier(.2, .8, .2, 1); }
+		.vp-root .vp-deck.is-compact .vp-deck-mark { width: 42px; height: 42px; }
 		.vp-root .vp-deck-mark-orbit { transform-box: view-box; transform-origin: 24px 24px; }
 		.vp-root .vp-deck-generate.is-cancel .vp-deck-mark-orbit { animation: vp-deck-mark-orbit 3.2s linear infinite; }
-		.vp-root .vp-deck-utility { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+		.vp-root .vp-deck-utility { position: relative; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+		.vp-root .vp-deck-chip-ruler { position: absolute; top: 0; left: 0; height: 0; display: flex; overflow: hidden; visibility: hidden; pointer-events: none; font-size: 12px; white-space: pre; }
+		.vp-root .vp-deck-chip-ruler > * { flex: none; white-space: pre; }
 		.vp-root .vp-deck-timing { height: 48px; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; margin-right: 2px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: rgb(var(--fg)); white-space: nowrap; }
 		.vp-root button.vp-deck-timing { cursor: pointer; }
 		.vp-root button.vp-deck-timing:hover:not(:disabled) { background: rgb(var(--surface-2)); }
@@ -1207,11 +1222,13 @@
 		.vp-root .vp-deck-cell-value { font: 600 15px/20px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 		.vp-root .vp-deck-cell-sub { font-weight: 400; color: rgb(var(--fg-muted)); }
 		.vp-root .vp-deck-icon-button { position: relative; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: rgb(var(--fg-muted)); cursor: pointer; }
+		.vp-root .vp-deck.is-compact .vp-deck-icon-button { width: 32px; height: 32px; }
 		.vp-root .vp-deck-icon-button:hover:not(:disabled),
 		.vp-root .vp-deck-icon-button[aria-expanded='true'] { background: rgb(var(--surface-2)); color: rgb(var(--fg)); }
 		.vp-root .vp-deck-icon-button:disabled { cursor: not-allowed; opacity: .4; }
 		.vp-root .vp-deck-queue-count { position: absolute; top: 2px; right: 0; min-width: 16px; padding: 0 3px; border-radius: 4px; background: rgb(var(--signal-solid)); color: rgb(var(--on-scrim)); font: 600 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; text-align: center; }
 		.vp-root .vp-deck-chip { min-width: 0; flex: 0 1 auto; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border-radius: 4px; color: rgb(var(--fg-muted)); font-size: 12px; white-space: nowrap; }
+		.vp-root .vp-deck.is-compact .vp-deck-chip { height: 32px; }
 		.vp-root .vp-deck-chip:hover,
 		.vp-root .vp-deck-chip[aria-expanded='true'] { background: rgb(var(--surface-2)); color: rgb(var(--fg)); }
 		.vp-root .vp-deck-chip-text { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
@@ -1234,10 +1251,19 @@
 		.vp-root .vp-deck-drawer-row { min-width: 0; display: flex; align-items: center; gap: 8px; }
 		.vp-root .vp-deck-drawer-hint { color: rgb(var(--fg-subtle)); white-space: nowrap; }
 		.vp-root .vp-deck-drawer-help { grid-column: 1 / -1; margin: 0; font-size: 11px; line-height: 16px; color: rgb(var(--fg-subtle)); }
+		:root[data-motion='reduce'] .vp-root .vp-deck,
+		:root[data-motion='reduce'] .vp-root .vp-deck-thumb,
+		:root[data-motion='reduce'] .vp-root .vp-deck-eyebrow,
+		:root[data-motion='reduce'] .vp-root .vp-deck-generate,
+		:root[data-motion='reduce'] .vp-root .vp-deck-mark { transition: none; }
 		@media (prefers-reduced-motion: reduce) {
 			.vp-root .vp-deck-drawer { animation: none !important; }
 			.vp-root .vp-deck-mark-orbit,
 			.vp-root .vp-deck-progress-fill { animation: none !important; }
+			.vp-root .vp-deck,
+			.vp-root .vp-deck-thumb,
+			.vp-root .vp-deck-eyebrow,
+			.vp-root .vp-deck-mark,
 			.vp-root .vp-deck-title,
 			.vp-root .vp-deck-progress-fill,
 			.vp-root .vp-deck-generate { transition: none !important; }

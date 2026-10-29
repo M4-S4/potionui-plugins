@@ -116,7 +116,7 @@ test('deck: the mark generates or cancels, Ctrl+G stays the command, the queue a
 	assert.match(deck, /onSelect: pick/);
 	assert.match(drawer, /act\(\(\) => setReferenceMargin\(doc\.engine, value\)\)/);
 	assert.match(drawer, /onclick: \(\) => openEngineSettings\(engine\?\.preset\)/);
-	assert.doesNotMatch(deck, /FinalPassButton|fitInline|ResizeObserver/);
+	assert.doesNotMatch(deck, /FinalPassButton|fitInline/);
 	assert.match(deck, /const profileItems = \$derived\(supportedProfiles\(\)\.map\(\(m\) => \(\{ id: m, label: m \}\)\)\);/);
 	assert.doesNotMatch(deck, /disabled: !supported/);
 });

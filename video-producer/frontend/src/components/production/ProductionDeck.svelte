@@ -31,7 +31,9 @@
 	import { overlayLayer } from '../../lib/host.js';
 	import { setReturnFocus } from '../../lib/focus.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
-	import { deckCell, deckChip, deckDetail, deckEyebrow, deckState, deckTitle, deckTone, remainingSeconds } from '../../lib/deck.js';
+	import { deckCell, deckChip, deckChipFolded, deckCompact, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, remainingSeconds } from '../../lib/deck.js';
+	import { fitChip, shortPresetName } from '../../lib/barfit.js';
+	import { viewport } from '../../lib/viewport.svelte.js';
 	import { profileControl, profileHint } from '../../lib/deck-drawer.js';
 	import { openFinalPass } from '../../lib/finalpass.svelte.js';
 	import Icon from '../Icon.svelte';
@@ -153,14 +155,84 @@
 	const showProfile = $derived(profileItems.length > 1 || profileControl({ items: profileItems, current: doc.direction.mode }) === 'popup');
 	const setCount = $derived(optionCount(doc.engine, engine?.preset));
 	const sizes = $derived(Boolean(engine && !cloud && engine.info?.resolutions?.length));
-	const chip = $derived(deckChip({ engine: engine ? (cloud ? engine.label : presetLabel(engine.info)) : groups.length ? engineLabel() : t('generation.engine.none'), profile: showProfile ? doc.direction.mode : '', size: sizes ? (p.quality === 'draft' ? draftRes : finalRes) : '', drafts: clips.length ? sharedDrafts(clips, doc.engine) : 1 }, t));
-	const chipTip = $derived([engineTip, showProfile ? profileHint(doc.direction.mode, t) : '', t('production.deck.chipTip')].filter(Boolean).join(' · '));
+	const engineName = $derived(engine ? (cloud ? engine.label : presetLabel(engine.info)) : groups.length ? engineLabel() : t('generation.engine.none'));
+	const engineShort = $derived(shortPresetName(engineName));
+	const engineWords = $derived(engineShort.split(' ').filter(Boolean));
+	const enginePrefixes = $derived(engineWords.slice(0, -1).map((_, i) => engineWords.slice(0, i + 1).join(' ')));
+	const chipParts = $derived({ engine: engineName, short: engineShort, prefixes: enginePrefixes, profile: showProfile ? doc.direction.mode : '', size: sizes ? (p.quality === 'draft' ? draftRes : finalRes) : '', drafts: clips.length ? sharedDrafts(clips, doc.engine) : 1 });
+	const chipFull = $derived(deckChip(chipParts, t));
+	const draftsLabel = $derived(chipFull[chipFull.length - 1]);
+	let fit = $state({ cell: true, engine: 'full', tier: 'full', cut: null });
+	let compact = $state(false);
+	const chip = $derived(deckChipFolded(chipParts, fit, t));
+	const folded = $derived(chip.join(' · ') !== chipFull.join(' · '));
+	const showCell = $derived(!compact && fit.cell);
+	const cellText = $derived(showCell ? '' : `${cell.label} ${cell.value}${cell.sub ? ` · ${cell.sub}` : ''}`);
+	const chipTip = $derived([engineTip, showProfile ? profileHint(doc.direction.mode, t) : '', cellText, t('production.deck.chipTip')].filter(Boolean).join(' · '));
+	const line = $derived(deckLine({ compact, eyebrow, detail }));
+	const CELL_PAD = 16;
+	const CELL_GAP = 6;
 	const MORE = 'deck-more';
 	const moreOpen = $derived(ui.menuOpen === MORE);
 	const queueOpen = $derived(ui.menuOpen === QUEUE_MENU);
 	const primaryTip = $derived(busy ? t('production.deck.cancel') : t('production.generate'));
 	let deckEl = $state();
 	let chipEl = $state();
+	let chipTextEl = $state();
+	let groupEl = $state();
+	let utilityEl = $state();
+	let rulerEl = $state();
+
+	$effect(() => {
+		const narrow = viewport.compact;
+		if (!deckEl) return;
+		const centre = deckEl.closest('.vp-root')?.querySelector('main') ?? null;
+		const read = () => {
+			compact = deckCompact({ narrow, centre: centre ? centre.getBoundingClientRect().height : Infinity, deck: deckEl.getBoundingClientRect().height });
+		};
+		read();
+		if (!centre) return;
+		const resized = new ResizeObserver(read);
+		resized.observe(centre);
+		return () => resized.disconnect();
+	});
+
+	function measure() {
+		if (!utilityEl || !rulerEl || !chipEl || !chipTextEl || !groupEl) return;
+		const width = (rule) => rulerEl.querySelector(`[data-rule="${rule}"]`)?.getBoundingClientRect().width ?? 0;
+		const chrome = chipEl.getBoundingClientRect().width - chipTextEl.getBoundingClientRect().width;
+		const others = groupEl.getBoundingClientRect().width - chipEl.getBoundingClientRect().width;
+		const cellWidth = compact ? 0 : Math.max(width('cell-label'), width('cell-value')) + CELL_PAD;
+		fit = fitChip({
+			room: utilityEl.getBoundingClientRect().width - others - chrome,
+			engine: width('engine'),
+			short: width('short'),
+			prefixes: [...rulerEl.querySelectorAll('[data-rule="prefix"]')].map((el) => el.getBoundingClientRect().width),
+			ellipsis: width('ellipsis'),
+			sep: width('sep'),
+			profile: width('profile'),
+			size: width('size'),
+			drafts: width('drafts'),
+			cell: cellWidth,
+			cellGap: CELL_GAP
+		});
+	}
+
+	$effect(() => {
+		if (!utilityEl || !rulerEl || !groupEl) return;
+		compact;
+		measure();
+		const resized = new ResizeObserver(measure);
+		const changed = new MutationObserver(measure);
+		resized.observe(utilityEl);
+		resized.observe(groupEl);
+		resized.observe(rulerEl);
+		changed.observe(rulerEl, { childList: true, subtree: true, characterData: true });
+		return () => {
+			resized.disconnect();
+			changed.disconnect();
+		};
+	});
 
 	$effect(() => {
 		if (!busy) return;
@@ -218,7 +290,7 @@
 	}
 </script>
 
-<div bind:this={deckEl} class="vp-deck" role="region" aria-label={t('production.region')} data-state={state}>
+<div bind:this={deckEl} class="vp-deck" class:is-compact={compact} role="region" aria-label={t('production.region')} data-state={state}>
 	{#if busy}
 		<div class="vp-deck-progress-track" role="progressbar" aria-label={t('production.progress')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={p.running ? percent : undefined}>
 			<div class="vp-deck-progress-fill" class:is-indeterminate={!p.running} style:width="{p.running ? p.progress : 0}%"></div>
@@ -235,15 +307,15 @@
 				{/if}
 			</div>
 			<div class="vp-deck-copy">
-				<span class="vp-deck-eyebrow">{eyebrow}</span>
+				<span class="vp-deck-eyebrow" aria-hidden={compact}>{eyebrow}</span>
 				<div class="vp-deck-title-line">
 					<span class="vp-deck-dot is-{tone}"></span>
 					<span class="vp-deck-title" aria-live="polite">{title}</span>
 				</div>
 				<div class="vp-deck-detail">
-					{#if detail.text}
-						<InfoTip lines={notes.length ? notes : [detail.text]} label={notes.length ? noticeLabel : ''} wrapperClass="flex min-w-0 items-center gap-1.5">
-							{#if detail.warn}<Icon name="alert" class="h-3 w-3 shrink-0 text-warning" />{/if}<span class="vp-deck-detail-text" class:text-warning={detail.warn} class:is-whole={detail.warn}>{detail.text}</span>
+					{#if line}
+						<InfoTip lines={notes.length ? notes : [line]} label={notes.length ? noticeLabel : ''} wrapperClass="flex min-w-0 items-center gap-1.5">
+							{#if detail.warn}<Icon name="alert" class="h-3 w-3 shrink-0 text-warning" />{/if}<span class="vp-deck-detail-text" class:text-warning={detail.warn} class:is-whole={detail.warn}>{line}</span>
 						</InfoTip>
 					{/if}
 					{#if detail.actions.includes('conflicts')}
@@ -301,19 +373,33 @@
 			</HostUi>
 		</section>
 
-		<section class="vp-deck-utility">
+		<section bind:this={utilityEl} class="vp-deck-utility">
 			<div class="sr-only" aria-live="polite">{spoken}</div>
-			<InfoTip lines={cellLines} wrapperClass="vp-deck-timing">
-				<span class="vp-deck-cell-label">{cell.label}</span>
-				<span class="vp-deck-cell-value {cell.warn ? 'text-warning' : ''} {estimateState.loading && !busy ? 'opacity-60' : ''}">
-					{cell.value}{#if cell.sub}<span class="vp-deck-cell-sub" class:text-warning={cell.warn}>{` · ${cell.sub}`}</span>{/if}
-				</span>
-			</InfoTip>
-			<div class="relative flex min-w-0 items-center gap-1" data-vp-menu>
+			<span bind:this={rulerEl} class="vp-deck-chip-ruler" aria-hidden="true">
+				<span class="vp-deck-chip-engine" data-rule="engine">{engineName}</span>
+				<span class="vp-deck-chip-engine" data-rule="short">{engineShort}</span>
+				{#each enginePrefixes as prefix, i (i)}<span class="vp-deck-chip-engine" data-rule="prefix">{prefix}</span>{/each}
+				<span class="vp-deck-chip-engine" data-rule="ellipsis">…</span>
+				<span class="vp-deck-chip-dot" data-rule="sep">{' · '}</span>
+				<span data-rule="profile">{chipParts.profile}</span>
+				<span data-rule="size">{chipParts.size}</span>
+				<span data-rule="drafts">{draftsLabel}</span>
+				<span class="vp-deck-cell-label" data-rule="cell-label">{cell.label}</span>
+				<span class="vp-deck-cell-value" data-rule="cell-value">{cell.value}{#if cell.sub}<span class="vp-deck-cell-sub">{` · ${cell.sub}`}</span>{/if}</span>
+			</span>
+			{#if showCell}
+				<InfoTip lines={cellLines} wrapperClass="vp-deck-timing">
+					<span class="vp-deck-cell-label">{cell.label}</span>
+					<span class="vp-deck-cell-value {cell.warn ? 'text-warning' : ''} {estimateState.loading && !busy ? 'opacity-60' : ''}">
+						{cell.value}{#if cell.sub}<span class="vp-deck-cell-sub" class:text-warning={cell.warn}>{` · ${cell.sub}`}</span>{/if}
+					</span>
+				</InfoTip>
+			{/if}
+			<div bind:this={groupEl} class="relative flex min-w-0 items-center gap-1" data-vp-menu>
 				<HostUi name="Tooltip" props={{ text: chipTip, wrapperClass: 'flex min-w-0' }}>
-					<button bind:this={chipEl} type="button" class="vp-deck-chip" aria-expanded={ui.deckDrawer} aria-haspopup="dialog" onclick={toggleDrawer}>
+					<button bind:this={chipEl} type="button" class="vp-deck-chip" aria-label={folded ? chipFull.join(' · ') : undefined} aria-expanded={ui.deckDrawer} aria-haspopup="dialog" onclick={toggleDrawer}>
 						<Icon name="sliders" class="h-4 w-4 shrink-0" />
-						<span class="vp-deck-chip-text">{#each chip as part, i (i)}{#if i}<span class="vp-deck-chip-dot">{' · '}</span>{/if}<span class={i === 0 ? 'vp-deck-chip-engine' : ''}>{part}</span>{/each}</span>
+						<span bind:this={chipTextEl} class="vp-deck-chip-text">{#each chip as part, i (i)}{#if i}<span class="vp-deck-chip-dot">{' · '}</span>{/if}<span class={i === 0 ? 'vp-deck-chip-engine' : ''}>{part}</span>{/each}</span>
 						{#if setCount}<span class="vp-deck-badge vp-tc">{setCount}</span>{/if}
 					</button>
 				</HostUi>

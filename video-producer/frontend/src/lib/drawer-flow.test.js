@@ -68,10 +68,10 @@ test('drawer: the chip of the deck opens it, keeps the focus to give it back, an
 	const deck = source('../components/production/ProductionDeck.svelte');
 	assert.match(deck, /import ProductionDrawer from '\.\/ProductionDrawer\.svelte';/);
 	assert.doesNotMatch(deck, /drawerOpen/);
-	assert.match(deck, /<button bind:this=\{chipEl\} type="button" class="vp-deck-chip" aria-expanded=\{ui\.deckDrawer\} aria-haspopup="dialog" onclick=\{toggleDrawer\}>/);
+	assert.match(deck, /<button bind:this=\{chipEl\} type="button" class="vp-deck-chip" aria-label=\{folded \? chipFull\.join\(' · '\) : undefined\} aria-expanded=\{ui\.deckDrawer\} aria-haspopup="dialog" onclick=\{toggleDrawer\}>/);
 	assert.match(deck, /function toggleDrawer\(\) \{\n\t\tif \(ui\.deckDrawer\) \{\n\t\t\tui\.deckDrawer = false;\n\t\t\treturn;\n\t\t\}\n\t\tsetReturnFocus\(chipEl\);\n\t\tui\.menuOpen = null;\n\t\tui\.deckDrawer = true;\n\t\}/);
 	assert.match(deck, /\{#if ui\.deckDrawer\}\n\t\t<ProductionDrawer anchor=\{deckEl\} \{clips\} \{engineTip\} onclose=\{\(\) => \(ui\.deckDrawer = false\)\} \/>\n\t\{\/if\}/);
-	assert.match(deck, /<div bind:this=\{deckEl\} class="vp-deck" role="region"/);
+	assert.match(deck, /<div bind:this=\{deckEl\} class="vp-deck" class:is-compact=\{compact\} role="region"/);
 	const more = deck.slice(deck.indexOf('{#if moreOpen}'), deck.indexOf('{#if ui.deckDrawer}'));
 	assert.match(more, /role="menu" aria-label=\{t\('production\.more'\)\}/);
 	assert.equal((more.match(/role="menuitem"/g) ?? []).length, 3);
@@ -92,7 +92,7 @@ test('drawer: it is a modal layer of 440 px over the deck that Escape, the Close
 	assert.match(drawer, /if \(!isTopLayer\(layer\) \|\| !closesOnOutsidePointer\(anchor\.closest\('\.vp-root'\), e\.target\)\) return;/);
 	assert.match(drawer, /const menu = ui\.menuOpen;\n\t\tif \(menu && !String\(menu\)\.startsWith\('picker:'\)\) onclose\(\);/);
 	assert.match(drawer, /if \(e\.target === backdrop\) e\.preventDefault\(\);/);
-	assert.match(drawer, /drawerPlace\(\{ deck: anchor\.getBoundingClientRect\(\), root: anchor\.closest\('\.vp-root'\)\?\.getBoundingClientRect\(\) \?\? null \}\)/);
+	assert.match(drawer, /drawerPlace\(\{ deck: anchor\.getBoundingClientRect\(\), root: anchor\.closest\('\.vp-root'\)\?\.getBoundingClientRect\(\) \?\? null, full: viewport\.compact \}\)/);
 	assert.match(drawer, /class="vp-deck-backdrop" role="presentation"/);
 	assert.match(drawer, /class="vp-deck-drawer"\n\trole="dialog"\n\taria-modal="true"\n\taria-label=\{t\('production\.drawer\.title'\)\}\n\ttabindex="-1"/);
 	assert.match(drawer, /<h2>\{t\('production\.drawer\.title'\)\}<span class="vp-deck-drawer-sub"> \{t\('production\.drawer\.subtitle'\)\}<\/span><\/h2>/);
@@ -114,7 +114,10 @@ test('drawer: it is a modal layer of 440 px over the deck that Escape, the Close
 
 test('drawer: the chip reads the same engine, profile, size and drafts the drawer writes', () => {
 	const deck = source('../components/production/ProductionDeck.svelte');
-	assert.match(deck, /const chip = \$derived\(deckChip\(\{ engine: engine \? \(cloud \? engine\.label : presetLabel\(engine\.info\)\) : groups\.length \? engineLabel\(\) : t\('generation\.engine\.none'\), profile: showProfile \? doc\.direction\.mode : '', size: sizes \? \(p\.quality === 'draft' \? draftRes : finalRes\) : '', drafts: clips\.length \? sharedDrafts\(clips, doc\.engine\) : 1 \}, t\)\);/);
+	assert.match(deck, /const engineName = \$derived\(engine \? \(cloud \? engine\.label : presetLabel\(engine\.info\)\) : groups\.length \? engineLabel\(\) : t\('generation\.engine\.none'\)\);/);
+	assert.match(deck, /const chipParts = \$derived\(\{ engine: engineName, short: engineShort, prefixes: enginePrefixes, profile: showProfile \? doc\.direction\.mode : '', size: sizes \? \(p\.quality === 'draft' \? draftRes : finalRes\) : '', drafts: clips\.length \? sharedDrafts\(clips, doc\.engine\) : 1 \}\);/);
+	assert.match(deck, /const chipFull = \$derived\(deckChip\(chipParts, t\)\);/);
+	assert.match(deck, /const chip = \$derived\(deckChipFolded\(chipParts, fit, t\)\);/);
 	assert.match(deck, /const showProfile = \$derived\(profileItems\.length > 1 \|\| profileControl\(\{ items: profileItems, current: doc\.direction\.mode \}\) === 'popup'\);/);
 	assert.match(deck, /chosenSize\(doc, engine\?\.preset, 'draft'\)/);
 	assert.match(deck, /chosenSize\(doc, engine\?\.preset, 'final'\)/);

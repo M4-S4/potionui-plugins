@@ -33,7 +33,8 @@ test('overflow: the warning of the production deck keeps its whole text, on two 
 	assert.match(read('../components/shell/InfoTip.svelte'), /aria-label=\{label \|\| undefined\} aria-describedby=\{id\}/);
 	const deck = read('../components/production/ProductionDeck.svelte');
 	assert.match(deck, /const noticeLabel = \$derived\(notes\.length > 1 \? t\('production\.notices', \{ count: notes\.length, text: notes\[0\] \}\) : \(notes\[0\] \?\? ''\)\);/);
-	assert.match(deck, /<InfoTip lines=\{notes\.length \? notes : \[detail\.text\]\} label=\{notes\.length \? noticeLabel : ''\} wrapperClass="flex min-w-0 items-center gap-1\.5">/);
+	assert.match(deck, /<InfoTip lines=\{notes\.length \? notes : \[line\]\} label=\{notes\.length \? noticeLabel : ''\} wrapperClass="flex min-w-0 items-center gap-1\.5">/);
+	assert.match(deck, /const line = \$derived\(deckLine\(\{ compact, eyebrow, detail \}\)\);/);
 	assert.match(deck, /\{#if detail\.warn\}<Icon name="alert" class="h-3 w-3 shrink-0 text-warning" \/>\{\/if\}<span class="vp-deck-detail-text" class:text-warning=\{detail\.warn\} class:is-whole=\{detail\.warn\}>/);
 	assert.match(rule('.vp-deck-detail-text.is-whole'), /-webkit-line-clamp: 2;[\s\S]*white-space: normal;/);
 	assert.equal(rule('.vp-notice'), '');

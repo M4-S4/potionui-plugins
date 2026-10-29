@@ -18,6 +18,7 @@
 	import { setEngineSize } from '../../lib/framing.svelte.js';
 	import { withSendings } from '../../lib/vreftracks.svelte.js';
 	import { closesOnOutsidePointer } from '../../lib/drawer.js';
+	import { viewport } from '../../lib/viewport.svelte.js';
 	import { drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from '../../lib/deck-drawer.js';
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
@@ -55,8 +56,13 @@
 
 	function anchorTo() {
 		if (!anchor) return;
-		place = drawerPlace({ deck: anchor.getBoundingClientRect(), root: anchor.closest('.vp-root')?.getBoundingClientRect() ?? null });
+		place = drawerPlace({ deck: anchor.getBoundingClientRect(), root: anchor.closest('.vp-root')?.getBoundingClientRect() ?? null, full: viewport.compact });
 	}
+
+	$effect(() => {
+		viewport.compact;
+		anchorTo();
+	});
 
 	function initialFocus() {
 		const target = focusables(dialog).find((el) => !el.closest('[data-close]'));
