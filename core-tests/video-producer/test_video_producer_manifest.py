@@ -1466,6 +1466,12 @@ def _video_fields(preset):
     return _all_fields(form.fields)
 
 
+def _resolver(preset):
+    from src.features.presets.children_paths import resolve_children_path
+
+    return lambda path: resolve_children_path(path, Path(preset.path), SHARED_PRESETS)
+
+
 def _option_files(preset, field):
     from src.features.presets.children_paths import resolve_children_path
 
@@ -1654,7 +1660,7 @@ def test_the_plugin_runs_ref2va_on_the_12_gb_preset_with_its_refs_models(shipped
     preset = shipped_presets[H3_12GB]
     [form] = preset.modes["refs"].forms
     fields = {}
-    bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
+    bridge._describe_fields(form.fields, _resolver(preset), fields)
 
     assert models.model_fields(fields, "refs") == (["model", "text_encoder", "video_vae", "audio_vae"], [])
     assert fields["resolution"]["default"] == "832x480"
@@ -1669,7 +1675,7 @@ def test_the_reference_image_budgets_the_plugin_sends_are_choices_of_the_12_gb_r
     preset = shipped_presets[H3_12GB]
     [form] = preset.modes["refs"].forms
     fields = {}
-    bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
+    bridge._describe_fields(form.fields, _resolver(preset), fields)
 
     field = fields[engine_options.REFERENCE_IMAGE_BUDGET]
     assert set(director.REFERENCE_IMAGE_BUDGETS.values()) <= {option["value"] for option in field["options"]}
@@ -1712,7 +1718,7 @@ def test_the_plugin_drafts_the_shipped_presets_at_832x480_and_finishes_them_at_t
         preset = shipped_presets[preset_id]
         [form] = preset.modes["video"].forms
         fields = {}
-        bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
+        bridge._describe_fields(form.fields, _resolver(preset), fields)
         options = models.resolution_options(fields)
         values = [option["value"] for option in options]
 
@@ -1735,7 +1741,7 @@ def test_the_plugin_drafts_the_wan_presets_near_832x480_and_finishes_them_at_the
         preset = shipped_presets[preset_id]
         [form] = preset.modes["video"].forms
         fields = {}
-        bridge._describe_fields(form.fields, {"preset": preset.path, "_shared": str(SHARED_PRESETS)}, fields)
+        bridge._describe_fields(form.fields, _resolver(preset), fields)
         options = models.resolution_options(fields)
         values = [option["value"] for option in options]
 

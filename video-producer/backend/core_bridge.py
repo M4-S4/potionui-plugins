@@ -1,3 +1,4 @@
+import functools
 import importlib.metadata
 import importlib.util
 import logging
@@ -5,7 +6,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 import yaml
 
@@ -596,8 +597,11 @@ def _option(item: Any) -> Optional[Dict[str, str]]:
     return {"value": str(item), "label": str(item)}
 
 
-def _option_file(path: str, preset_id: str) -> List[Any]:
-    resolved = api_presets.resolve_preset_path(preset_id, path)
+PathResolver = Callable[[str], Optional[Path]]
+
+
+def _option_file(path: str, resolve: PathResolver) -> List[Any]:
+    resolved = resolve(path)
     if resolved is None:
         return []
     try:
@@ -610,14 +614,14 @@ def _option_file(path: str, preset_id: str) -> List[Any]:
     return list(data) if isinstance(data, list) else []
 
 
-def _options(configuration: Mapping[str, Any], preset_id: str) -> List[Dict[str, str]]:
+def _options(configuration: Mapping[str, Any], resolve: PathResolver) -> List[Dict[str, str]]:
     items = list(configuration.get("options") or [])
     single = configuration.get("file")
     if isinstance(single, Mapping) and single.get("path"):
-        items.extend(_option_file(str(single["path"]), preset_id))
+        items.extend(_option_file(str(single["path"]), resolve))
     for entry in configuration.get("files") or []:
         if isinstance(entry, Mapping) and entry.get("path"):
-            items.extend(_option_file(str(entry["path"]), preset_id))
+            items.extend(_option_file(str(entry["path"]), resolve))
     options: List[Dict[str, str]] = []
     for option in (_option(item) for item in items):
         if option is not None and all(seen["value"] != option["value"] for seen in options):
@@ -701,7 +705,7 @@ def _plain(value: Any) -> Any:
     return value if value is None or isinstance(value, (str, int, float, bool)) else str(value)
 
 
-def _describe_fields(fields: Any, preset_id: str, out: Dict[str, Dict[str, Any]], scope: _Scope = _Scope()) -> None:
+def _describe_fields(fields: Any, resolve: PathResolver, out: Dict[str, Dict[str, Any]], scope: _Scope = _Scope()) -> None:
     for form_field in fields or []:
         configuration = getattr(form_field, "configuration", None) or {}
         label = getattr(form_field, "label", None)
@@ -715,7 +719,7 @@ def _describe_fields(fields: Any, preset_id: str, out: Dict[str, Dict[str, Any]]
         )
         if form_field.name and form_field.name not in out:
             kind = form_field.type
-            options = _registry_options(kind, configuration) if kind in REGISTRY_FIELDS else _options(configuration, preset_id)
+            options = _registry_options(kind, configuration) if kind in REGISTRY_FIELDS else _options(configuration, resolve)
             out[form_field.name] = {
                 "type": kind,
                 "required": bool(form_field.required),
@@ -739,7 +743,7 @@ def _describe_fields(fields: Any, preset_id: str, out: Dict[str, Dict[str, Any]]
                 child = _Scope(group=[*inner.group, str(label)], advanced=inner.advanced, hidden=inner.hidden, gate=inner.gate)
             else:
                 child = inner
-            _describe_fields(form_field.children, preset_id, out, child)
+            _describe_fields(form_field.children, resolve, out, child)
 
 
 def preset_driver(preset_id: str) -> Optional[str]:
@@ -755,7 +759,8 @@ def preset_form_fields(preset_id: str, mode: str) -> Optional[Dict[str, Dict[str
     if template is None or mode not in (template.modes or {}):
         return None
     forms = sorted(template.modes[mode].forms or [], key=lambda form: (not form.default, form.order, form.name))
+    resolve = functools.partial(api_presets.resolve_preset_path, preset_id)
     fields: Dict[str, Dict[str, Any]] = {}
     for form in forms:
-        _describe_fields(form.fields, preset_id, fields)
+        _describe_fields(form.fields, resolve, fields)
     return fields
