@@ -107,6 +107,7 @@ def test_a_finished_take_asks_for_its_look_which_the_tracker_computes_when_nothi
     assert (row["status"], row["model"], row["kind"]) == ("done", "local-google-siglip-base-patch16-224", "take")
     assert [frame[0] for frame in row["frames"]] == [0.0, 4.0]
     assert [frame[2] for frame in row["frames"]] == [None, None]
+    assert [frame[3] for frame in row["frames"]] == [None, None]
     assert frames.calls == [take["id"]]
 
 
@@ -160,7 +161,7 @@ def test_a_seam_compares_the_end_of_the_cut_before_with_the_start_of_the_cut_aft
 
     assert seam["status"] == "done"
     assert (seam["score"] < looks.SEAM_LOW) is low
-    assert _report(core, project)["thresholds"] == {"seam": looks.SEAM_LOW, "cast": looks.CAST_LOW, "face": looks.FACE_LOW, "place": looks.PLACE_LOW, "final": looks.FINAL_LOW, "drift": looks.DRIFT_LOW}
+    assert _report(core, project)["thresholds"] == {"seam": looks.SEAM_LOW, "cast": looks.CAST_LOW, "face": looks.FACE_LOW, "place": looks.PLACE_LOW, "final": looks.FINAL_LOW, "drift": looks.DRIFT_LOW, "push_in": looks.PUSH_IN_HIGH}
 
 
 def test_a_take_is_scored_against_the_pictures_of_each_bible_card_of_its_shot_s_cast(core, make_project, frames):
@@ -268,6 +269,56 @@ def test_a_take_without_a_face_falls_back_on_the_whole_image_and_says_none_was_s
 
     assert (marin["method"], marin["seen"]) == ("whole", 0.0)
     assert marin["score"] > 0.99
+
+
+def test_a_take_keeps_the_height_of_its_best_face_and_says_how_many_times_it_grows(core, make_project, painted):
+    project, _, second = _placed(make_project, core, cast=True)
+    painted.takes[second["id"]] = [(0.0, BLUE, RED), (1.0, GREEN, RED), (2.0, RED, None), (3.0, GREEN, RED)]
+    painted.images["uploads/marin.png"] = (GREEN, RED)
+    core.faces["available"] = True
+    core.face_boxes[BLUE] = [{**FACE, "height": 16.0}]
+    core.face_boxes[GREEN] = [{**FACE, "height": 40.0}, {**FACE, "height": 60.0, "score": 0.6}]
+
+    _report(core, project, enqueue=True)
+    while _run():
+        pass
+    report = _report(core, project)
+
+    row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
+    assert [frame[3] for frame in row["frames"]] == [16.0, 40.0, None, 40.0]
+    assert [frame[2] is not None for frame in row["frames"]] == [False, True, False, True]
+    assert next(item for item in report["takes"] if item["take_id"] == second["id"])["push_in"] == 2.5
+    assert report["thresholds"]["push_in"] == looks.PUSH_IN_HIGH
+
+
+def test_a_take_says_no_push_in_under_two_images_with_a_face_or_without_its_look(core, make_project, painted):
+    project, first, second = _placed(make_project, core, cast=True)
+    painted.takes[first["id"]] = [(0.0, BLUE, RED), (4.0, RED, None)]
+    painted.takes[second["id"]] = [(0.0, RED, None)]
+    painted.images["uploads/marin.png"] = (BLUE, RED)
+    _with_faces(core, [BLUE])
+
+    assert all(item["push_in"] is None for item in _report(core, project, enqueue=True)["takes"])
+    while _run():
+        pass
+
+    assert [item["push_in"] for item in _report(core, project)["takes"]] == [None, None]
+
+
+def test_a_take_measured_with_faces_before_the_heights_were_kept_is_measured_again(core, make_project, frames):
+    project, first, second = _placed(make_project, core)
+    core.faces["available"] = True
+    model = "local-google-siglip-base-patch16-224+faces"
+    for take in (first, second):
+        looks.queue_take(take)
+    looks._mark(looks.take_key(first["id"]), "done", model=model, frames=[[0.0, looks.pack([1.0, 0.0]), None]])
+    looks._mark(looks.take_key(second["id"]), "done", model=model, frames=[[0.0, looks.pack([1.0, 0.0]), None, None]])
+
+    before = {item["take_id"]: item["status"] for item in _report(core, project)["takes"]}
+    after = {item["take_id"]: item["status"] for item in _report(core, project, enqueue=True)["takes"]}
+
+    assert before == {first["id"]: "done", second["id"]: "done"}
+    assert after == {first["id"]: "queued", second["id"]: "done"}
 
 
 def test_a_look_measured_before_the_face_detector_counts_as_missing_once_it_is_here(core, make_project, frames):

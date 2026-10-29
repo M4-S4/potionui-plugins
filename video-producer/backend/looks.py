@@ -30,6 +30,7 @@ FACE_LOW = 0.70
 PLACE_LOW = 0.55
 FINAL_LOW = 0.80
 DRIFT_LOW = 0.80
+PUSH_IN_HIGH = 1.5
 
 FACE_SCALE = 1.8
 MIN_FACE = 32
@@ -210,21 +211,24 @@ def _face_crop(path: Path, box: Mapping[str, float], output: Path) -> Path:
     return output
 
 
-def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path) -> List[Optional[List[float]]]:
+def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path) -> List[Tuple[Optional[List[float]], Optional[float]]]:
     found: List[Optional[List[float]]] = [None] * len(picked)
+    heights: List[Optional[float]] = [None] * len(picked)
     try:
         boxes = core_bridge.detect_faces([str(path) for _, path in picked])
     except FileNotFoundError:
-        return found
+        return list(zip(found, heights))
     crops: List[Tuple[int, Path]] = []
     for index, ((_, path), faces) in enumerate(zip(picked, boxes)):
+        if faces:
+            heights[index] = round(float(faces[0]["height"]), 1)
         large = [face for face in faces if float(face["height"]) >= MIN_FACE]
         if large:
             crops.append((index, _face_crop(Path(path), large[0], folder / f"face-{index:02d}.png")))
     vectors = core_bridge.embed_images([str(path) for _, path in crops]) if crops else []
     for (index, _), vector in zip(crops, vectors):
         found[index] = vector
-    return found
+    return list(zip(found, heights))
 
 
 def _ffmpeg() -> str:
@@ -311,14 +315,14 @@ async def compute(row: Mapping[str, Any], model: str, faces: bool = False) -> No
         else:
             picked = await _image_frames(owner, row["source"], folder)
         vectors = await asyncio.to_thread(core_bridge.embed_images, [str(path) for _, path in picked])
-        crops = await asyncio.to_thread(_face_vectors, picked, folder) if faces else [None] * len(picked)
+        crops = await asyncio.to_thread(_face_vectors, picked, folder) if faces else [(None, None)] * len(picked)
     except (chain.ChainError, MediaRefError) as exc:
         return _mark(row["key"], FAILED, error=getattr(exc, "message", None) or str(exc))
     except FileNotFoundError as exc:
         return _mark(row["key"], UNAVAILABLE, error=str(exc))
     finally:
         await asyncio.to_thread(shutil.rmtree, folder, True)
-    _mark(row["key"], DONE, model=model, frames=[[at, pack(vector), pack(face) if face else None] for (at, _), vector, face in zip(picked, vectors, crops)])
+    _mark(row["key"], DONE, model=model, frames=[[at, pack(vector), pack(face) if face else None, height] for (at, _), vector, (face, height) in zip(picked, vectors, crops)])
     if row["kind"] == TAKE:
         from . import projects
 
@@ -362,6 +366,10 @@ def _current(row: Optional[Mapping[str, Any]], model: Optional[str]) -> bool:
     return bool(row) and row["status"] == DONE and row["model"] == model
 
 
+def _unsized(row: Optional[Mapping[str, Any]], model: Optional[str]) -> bool:
+    return _current(row, model) and str(model or "").endswith(f"+{FACES}") and any(len(frame) < 4 for frame in row["frames"] or [])
+
+
 def _state(row: Optional[Mapping[str, Any]], model: Optional[str]) -> str:
     if row is None:
         return MISSING
@@ -376,6 +384,14 @@ def _vectors(row: Mapping[str, Any]) -> List[Tuple[Optional[float], Tuple[float,
 
 def _faces(row: Mapping[str, Any]) -> List[Tuple[Optional[float], Tuple[float, ...]]]:
     return [(frame[0], unpack(frame[2])) for frame in row["frames"] if len(frame) > 2 and frame[2]]
+
+
+def push_in(row: Optional[Mapping[str, Any]], model: Optional[str]) -> Optional[float]:
+    """How many times the face a take shows grows from the first image that shows one to the largest, or None without two such images."""
+    if not _current(row, model):
+        return None
+    heights = [float(frame[3]) for frame in row["frames"] or [] if len(frame) > 3 and frame[3]]
+    return round(max(heights) / heights[0], 2) if len(heights) > 1 else None
 
 
 def _signature(faces: Sequence[Tuple[Optional[float], Tuple[float, ...]]]) -> Optional[Tuple[float, ...]]:
@@ -540,7 +556,9 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
     found = rows(keys)
     if enqueue:
         for take in (*project_takes, *candidates):
-            if not _current(found.get(take_key(take["id"])), model) and _state(found.get(take_key(take["id"])), model) != QUEUED:
+            row = found.get(take_key(take["id"]))
+            stale = not _current(row, model) or (take.get("kind") != takes.KEYFRAME and _unsized(row, model))
+            if stale and _state(row, model) != QUEUED:
                 queue_take(take)
         unique: Dict[str, Tuple[str, Dict[str, Any], str]] = {}
         for items in images.values():
@@ -555,14 +573,14 @@ def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dic
         characters, place = bible.cast_of(doc, clip) if clip is not None else ([], None)
         row = found.get(take_key(take["id"]))
         cast = [*characters, *([place] if place is not None else [])]
-        return {"take_id": take["id"], "shot_id": take["shot_id"], "status": _state(row, model), "cards": _cards(row, images.get(take["shot_id"], []), cast, found, model)}
+        return {"take_id": take["id"], "shot_id": take["shot_id"], "status": _state(row, model), "cards": _cards(row, images.get(take["shot_id"], []), cast, found, model), "push_in": push_in(row, model)}
 
     takes_out = [measured(take) for take in project_takes]
     states = [_state(found.get(key), model) for key in keys]
     return {
         "embedder": {"model": info["model"], "available": info["available"]},
         "faces": {"model": faces["model"], "available": faces["available"]},
-        "thresholds": {"seam": SEAM_LOW, "cast": CAST_LOW, "face": FACE_LOW, "place": PLACE_LOW, "final": FINAL_LOW, "drift": DRIFT_LOW},
+        "thresholds": {"seam": SEAM_LOW, "cast": CAST_LOW, "face": FACE_LOW, "place": PLACE_LOW, "final": FINAL_LOW, "drift": DRIFT_LOW, "push_in": PUSH_IN_HIGH},
         "seams": _seams(doc, project_takes, found, model),
         "takes": takes_out,
         "candidates": [measured(take) for take in candidates],

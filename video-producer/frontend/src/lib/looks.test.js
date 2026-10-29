@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CAST_LOW, chainDrifts, chainLook, chainThreshold, DRIFT_LOW, FACE_LOW, FINAL_LOW, PLACE_LOW, SEAM_LOW, bestCandidate, cardThreshold, driftOf, finalLook, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, seamLook, takeLook } from './looks.js';
+import { CAST_LOW, chainDrifts, chainLook, chainThreshold, DRIFT_LOW, FACE_LOW, FINAL_LOW, PLACE_LOW, PUSH_IN_HIGH, SEAM_LOW, bestCandidate, cardThreshold, driftOf, finalLook, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, pushedIn, pushInIssues, seamLook, takeLook } from './looks.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -24,12 +24,12 @@ const payload = {
 test('normalizeLooks keeps the seams and takes the server measured, with its thresholds and counts', () => {
 	const looks = normalizeLooks(payload);
 	assert.deepEqual(looks.embedder, { model: 'google/siglip-base-patch16-224', available: true });
-	assert.deepEqual(looks.thresholds, { seam: 0.7, cast: 0.6, face: FACE_LOW, place: PLACE_LOW, final: FINAL_LOW, drift: DRIFT_LOW });
+	assert.deepEqual(looks.thresholds, { seam: 0.7, cast: 0.6, face: FACE_LOW, place: PLACE_LOW, final: FINAL_LOW, drift: DRIFT_LOW, pushIn: PUSH_IN_HIGH });
 	assert.deepEqual(looks.seams[0], { shotId: 's2', previousId: 's1', fromTake: 't1', toTake: 't2', score: 0.52, status: 'done' });
 	assert.equal(looks.takes.length, 2);
-	assert.deepEqual(looks.takes[1], { takeId: 'bad', shotId: null, status: 'missing', cards: [] });
+	assert.deepEqual(looks.takes[1], { takeId: 'bad', shotId: null, status: 'missing', cards: [], pushIn: null });
 	assert.deepEqual([looks.missing, looks.queued], [3, 0]);
-	assert.deepEqual(normalizeLooks(null), { embedder: { model: null, available: false }, faces: { model: null, available: false }, thresholds: { seam: SEAM_LOW, cast: CAST_LOW, face: FACE_LOW, place: PLACE_LOW, final: FINAL_LOW, drift: DRIFT_LOW }, seams: [], takes: [], candidates: [], finals: [], drift: [], chains: [], missing: 0, queued: 0 });
+	assert.deepEqual(normalizeLooks(null), { embedder: { model: null, available: false }, faces: { model: null, available: false }, thresholds: { seam: SEAM_LOW, cast: CAST_LOW, face: FACE_LOW, place: PLACE_LOW, final: FINAL_LOW, drift: DRIFT_LOW, pushIn: PUSH_IN_HIGH }, seams: [], takes: [], candidates: [], finals: [], drift: [], chains: [], missing: 0, queued: 0 });
 });
 
 test('a start image candidate is scored by the mean of its cast cards, and the closest stands out only among two scored ones or more', () => {
@@ -147,6 +147,31 @@ test('a take drifts from each card of its cast under the cast threshold, and the
 	const issues = castIssues(looks, [{ id: 's1', take: 't1' }, { id: 's2', take: 't2' }, { id: 's3', take: null }]);
 	assert.deepEqual(issues.map((i) => [i.clip.id, i.takeId, i.card.cardId]), [['s2', 't2', 'c1']]);
 	assert.deepEqual(castIssues(null, [{ id: 's2', take: 't2' }]), []);
+});
+
+test('a take whose face grows past the push-in threshold is said in its review and in To check', () => {
+	const looks = normalizeLooks({
+		thresholds: { push_in: 1.5 },
+		takes: [
+			{ take_id: 't1', shot_id: 's1', status: 'done', cards: [], push_in: 2.9 },
+			{ take_id: 't2', shot_id: 's2', status: 'done', cards: [], push_in: 1.4 },
+			{ take_id: 't3', shot_id: 's3', status: 'done', cards: [], push_in: null },
+			{ take_id: 't4', shot_id: 's4', status: 'queued', cards: [], push_in: 3 },
+			{ take_id: 't5', shot_id: 's5', status: 'done', cards: [], push_in: -2 }
+		]
+	});
+	assert.deepEqual(looks.takes.map((look) => look.pushIn), [2.9, 1.4, null, 3, null]);
+	assert.deepEqual(looks.takes.map((look) => pushedIn(looks, look)), [true, false, false, false, false]);
+	assert.equal(pushedIn(null, looks.takes[0]), false);
+	const clips = ['t1', 't2', 't3', 't4', 't5', null].map((take, n) => ({ id: `s${n + 1}`, take }));
+	assert.deepEqual(pushInIssues(looks, clips).map((i) => [i.clip.id, i.takeId, i.pushIn]), [['s1', 't1', 2.9]]);
+	assert.deepEqual(pushInIssues(null, clips), []);
+	const take = source('../components/director/ReviewTake.svelte');
+	assert.match(take, /\{#if pushedIn\(looks, look\)\}<p class="text-xs text-warning" data-look-push-in>\{t\('panels\.director\.pick\.lookPushIn', \{ ratio: formatNumber\(look\.pushIn, \{ maximumFractionDigits: 1 \}\) \}\)\}<\/p>\{\/if\}/);
+	const summary = source('../components/director/DirectorSummary.svelte');
+	assert.match(summary, /const pushIns = \$derived\(pushInIssues\(looks, doc\.clips\)\);/);
+	assert.match(summary, /lookIssues\.length \+ pushIns\.length \+ trackChecks\.length/);
+	assert.match(summary, /t\('panels\.director\.check\.pushIn', \{ shot: num\(item\.clip\), ratio: formatNumber\(item\.pushIn, \{ maximumFractionDigits: 1 \}\) \}\)/);
 });
 
 test('wiring: the measured look feeds the seams, the review, To check and the Storyboard, and is no longer simulated', () => {

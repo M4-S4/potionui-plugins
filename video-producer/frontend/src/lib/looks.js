@@ -11,9 +11,11 @@ export const FACE_LOW = 0.7;
 export const PLACE_LOW = 0.55;
 export const FINAL_LOW = 0.8;
 export const DRIFT_LOW = 0.8;
+export const PUSH_IN_HIGH = 1.5;
 const KINDS = ['character', 'place'];
 const METHODS = ['face', 'whole'];
 const share = (value) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null);
+const ratio = (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null);
 
 function normalizeCard(value) {
 	if (!isObject(value) || !text(value.card_id)) return null;
@@ -22,7 +24,7 @@ function normalizeCard(value) {
 
 function normalizeTakeLook(value) {
 	if (!isObject(value) || !text(value.take_id)) return null;
-	return { takeId: value.take_id, shotId: text(value.shot_id) || null, status: state(value.status), cards: (Array.isArray(value.cards) ? value.cards : []).map(normalizeCard).filter(Boolean) };
+	return { takeId: value.take_id, shotId: text(value.shot_id) || null, status: state(value.status), cards: (Array.isArray(value.cards) ? value.cards : []).map(normalizeCard).filter(Boolean), pushIn: ratio(value.push_in) };
 }
 
 function normalizeSeamLook(value) {
@@ -59,7 +61,8 @@ export function normalizeLooks(value) {
 			face: score(thresholds.face) ?? FACE_LOW,
 			place: score(thresholds.place) ?? PLACE_LOW,
 			final: score(thresholds.final) ?? FINAL_LOW,
-			drift: score(thresholds.drift) ?? DRIFT_LOW
+			drift: score(thresholds.drift) ?? DRIFT_LOW,
+			pushIn: ratio(thresholds.push_in) ?? PUSH_IN_HIGH
 		},
 		seams: (Array.isArray(data.seams) ? data.seams : []).map(normalizeSeamLook).filter(Boolean),
 		takes: (Array.isArray(data.takes) ? data.takes : []).map(normalizeTakeLook).filter(Boolean),
@@ -122,6 +125,16 @@ export function castIssues(looks, clips) {
 	return clips.flatMap((clip) => {
 		const look = clip.take ? takeLook(looks, clip.take) : null;
 		return lowCards(looks, look).map((card) => ({ clip, takeId: look.takeId, card }));
+	});
+}
+
+export const pushedIn = (looks, look) => Boolean(looks) && look?.status === 'done' && look.pushIn !== null && look.pushIn > looks.thresholds.pushIn;
+
+export function pushInIssues(looks, clips) {
+	if (!looks) return [];
+	return clips.flatMap((clip) => {
+		const look = clip.take ? takeLook(looks, clip.take) : null;
+		return pushedIn(looks, look) ? [{ clip, takeId: look.takeId, pushIn: look.pushIn }] : [];
 	});
 }
 
