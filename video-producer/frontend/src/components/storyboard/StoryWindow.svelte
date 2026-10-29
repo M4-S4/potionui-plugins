@@ -163,7 +163,7 @@
 									<input class="min-w-0 rounded border border-transparent bg-transparent px-1 text-sm font-medium hover:border-line-strong focus:border-signal focus:outline-none" bind:value={item.label} aria-label={t('panels.story.shotName', { n: i + 1 })} />
 									<input class="min-w-0 rounded border border-transparent bg-transparent px-1 text-xs text-fg-muted hover:border-line-strong focus:border-signal focus:outline-none" bind:value={item.prompt} aria-label={t('storyboard.story.itemPrompt', { n: i + 1 })} />
 								</div>
-								<span class="flex gap-1">{#each castNames(item.cast) as name (name)}<span class="inline-flex h-5 items-center gap-1 rounded border border-line-strong px-1.5 text-2xs text-fg-muted"><Icon name="user" class="h-3 w-3" />{name}</span>{/each}</span>
+								<span class="flex gap-1">{#each castNames(item.cast) as name, k (k)}<span class="inline-flex h-5 items-center gap-1 rounded border border-line-strong px-1.5 text-2xs text-fg-muted"><Icon name="user" class="h-3 w-3" />{name}</span>{/each}</span>
 								<span class="flex items-center justify-between">
 									<HostUi name="IconButton" props={{ icon: 'minus', label: t('storyboard.quick.shorter'), size: 'xs', onclick: () => nudge(item, -1) }} />
 									<span class="vp-tc text-xs">{secs(item.dur)}</span>

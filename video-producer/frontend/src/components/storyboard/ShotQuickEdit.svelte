@@ -102,7 +102,7 @@
 			<select class="vp-popup w-full" value={key} onchange={(e) => pickEngine(e.currentTarget.value)}>
 				<option value="">{t('modals.shot.asProject', { value: engineLabel() })}</option>
 				{#if key && !known}<option value={key}>{t('generation.engine.unavailable')}</option>{/if}
-				{#each groups as g (g.label)}
+				{#each groups as g, i (i)}
 					<optgroup label={g.label}>
 						{#each g.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
 					</optgroup>
@@ -132,7 +132,7 @@
 		<div class="flex min-w-0 flex-1 flex-col gap-1">
 			<span class="vp-label">{t('storyboard.quick.cast')}</span>
 			<div class="flex flex-wrap items-center gap-1">
-				{#each cast as name (name)}<span class="inline-flex h-5 items-center gap-1 rounded border border-line-strong px-1.5 text-2xs text-fg-muted"><Icon name="user" class="h-3 w-3" />{name}</span>{/each}
+				{#each cast as name, i (i)}<span class="inline-flex h-5 items-center gap-1 rounded border border-line-strong px-1.5 text-2xs text-fg-muted"><Icon name="user" class="h-3 w-3" />{name}</span>{/each}
 				{#if !cast.length}<span class="text-xs text-fg-subtle">{t('storyboard.quick.noCast')}</span>{/if}
 				{#if sound?.behavior}<span class="inline-flex"><SoundNote behavior={sound.behavior} compact /></span>{/if}
 			</div>

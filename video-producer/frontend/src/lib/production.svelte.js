@@ -207,6 +207,7 @@ function baseNoteText(note) {
 		const quota = estimateState.data?.quota;
 		return t('generation.block.quota', { need: minutes(data.needed_minutes ?? quota?.neededMinutes), remaining: minutes(data.remaining ?? quota?.remaining) });
 	}
+	if (code === 'quota_unrecorded') return t('generation.block.quotaUnrecorded');
 	if (code === 'no_model') return t('generation.block.noModel');
 	if (code === 'no_references') return t('generation.block.noReferences', { shot: shotName(data.shot_id) });
 	if (code === 'source_unavailable') return t('generation.block.sourceUnavailable');

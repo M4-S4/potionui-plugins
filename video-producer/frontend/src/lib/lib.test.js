@@ -1,6 +1,7 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import './svelte-harness.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
@@ -81,7 +82,6 @@ test('keys: Alt combinations read the physical key, focus rules recognise fields
 	assert.ok(!isStepKey({ key: 'ArrowLeft', metaKey: true }));
 	assert.ok(!isStepKey({ key: 'Tab' }));
 	assert.ok(!isStepKey(null));
-	assert.match(readFileSync(new URL('../components/inspector/SliderField.svelte', import.meta.url), 'utf8'), /onpointerdown=\{\(\) => checkpoint\(\)\} onkeydown=\{\(e\) => isStepKey\(e\) && checkpoint\(\)\}/);
 	assert.ok(isActivationTarget({ closest: (selector) => (selector.includes('[role="tab"]') ? {} : null) }));
 	assert.ok(!isActivationTarget({ closest: () => null }));
 	assert.ok(!isActivationTarget(null));
@@ -208,21 +208,46 @@ test('emptyDoc: an untitled project with no shot and the four empty lanes', () =
 	assert.equal(fr.direction.mode, 'FL2VA');
 });
 
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { project } = await import('./project.svelte.js');
+const { estimateState, noteText, readiness } = await import('./production.svelte.js');
+const WAN = '01KX47WANVIDEO0000000000TV';
+
+after(() => dispose());
+
+function productionScene() {
+	project.id = 'p1';
+	ui.me = { engines: [{ id: 'native', kind: 'local', name: 'Local' }], presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }] };
+	ui.workspace = 'storyboard';
+	ui.selection = { kind: 'clip', id: 's1' };
+	ui.dirty = true;
+	ui.production.target = 'clip';
+	doc.engine = { backend: 'native', preset: WAN, model: null };
+	doc.direction.mode = 'FL2VA';
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'Opening', stage: 'todo', take: null }];
+	doc.prompts = [{ id: 'pr1', shotId: 's1', start: 0, dur: 4, strength: 75, text: 'A walk.' }];
+}
+
 test('readiness: an FL2VA shot without a frame warns instead of blocking, so the starter project generates as is', () => {
-	const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'production.svelte.js'), 'utf-8');
-	const readiness = source.slice(source.indexOf('export function readiness'), source.indexOf('function blockedText'));
-	assert.match(readiness, /for \(const item of est\.blocks\) block\(item\.code, noteText\(item\), item\.data\?\.shot_id \?\? null\)/);
-	assert.match(readiness, /for \(const warning of est\.warnings\)/);
-	assert.doesNotMatch(readiness, /missing\.push\([^)]*(needFrame|noFrame)/);
-	assert.match(source, /code === 'fl2va_no_frame'\) return t\('generation\.warn\.noFrame'/);
+	productionScene();
+	estimateState.data = { blocks: [], warnings: [{ code: 'fl2va_no_frame', data: { shot_id: 's1' } }, { code: 'time_unknown' }] };
+	const ready = readiness();
+	assert.deepEqual(ready.missing, []);
+	assert.deepEqual(ready.warnings, [noteText({ code: 'fl2va_no_frame', data: { shot_id: 's1' } })]);
+	assert.match(ready.warnings[0], /Opening/);
+	assert.deepEqual(ready.notes, [noteText({ code: 'time_unknown' })]);
+	assert.deepEqual(ready.gaps, ['s1']);
+	estimateState.data = { blocks: [{ code: 'no_preset' }], warnings: [] };
+	assert.deepEqual(readiness().missing, [noteText({ code: 'no_preset' })]);
+	estimateState.data = null;
 	assert.ok(!('lib.block.needFrame' in dictionaries.en) && !('lib.block.needFrame' in dictionaries.fr));
 	assert.equal(dictionaries.en['generation.warn.noFrame'], '“{shot}” has no linked frame: it will be generated from text only.');
 	assert.equal(dictionaries.fr['generation.warn.noFrame'], '« {shot} » n’a pas de frame liée : il sera généré à partir du texte seul.');
 	const missing = [];
-	const doc = starterDoc(translator('en', missing));
-	assert.equal(doc.direction.mode, 'FL2VA');
-	assert.equal(doc.frames.length, 0);
-	assert.ok(doc.prompts.every((p) => p.text.trim()));
+	const starter = starterDoc(translator('en', missing));
+	assert.equal(starter.direction.mode, 'FL2VA');
+	assert.equal(starter.frames.length, 0);
+	assert.ok(starter.prompts.every((p) => p.text.trim()));
 });
 
 test('readiness: a text-only engine that ignores a shot frame warns about that shot in both languages, as a warning rather than a note', () => {

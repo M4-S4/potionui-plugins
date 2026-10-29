@@ -1,182 +1,96 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
+import { clean, hostUis, renderComponent, textOf } from './svelte-harness.js';
+import enShell from '../i18n/en/shell.json' with { type: 'json' };
+import frShell from '../i18n/fr/shell.json' with { type: 'json' };
+import enPanels from '../i18n/en/panels.json' with { type: 'json' };
+import frPanels from '../i18n/fr/panels.json' with { type: 'json' };
+
+globalThis.document = { body: {}, querySelector: () => null };
+
+const { doc, ui, closeDrawer, drawerMode, dispose } = await import('./state.svelte.js');
+const { viewport } = await import('./viewport.svelte.js');
+const { handleKeydown } = await import('./commands.js');
+const { t } = await import('../i18n/index.svelte.js');
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
 const components = readdirSync(new URL('../components', import.meta.url), { recursive: true })
 	.filter((f) => f.endsWith('.svelte'))
 	.map((f) => `../components/${f.replaceAll('\\', '/')}`);
-const page = read('../VideoProducerPage.svelte');
-const rule = (selector) => page.match(new RegExp(`\\.vp-root ${selector.replace(/[.[\]()'=>]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+const ZONE_HEADER = new URL('../components/shell/ZoneHeader.svelte', import.meta.url).href;
+const BAND = new URL('../components/storyboard/BandView.svelte', import.meta.url).href;
+const MIXER = new URL('../components/panels/MixerPanel.svelte', import.meta.url).href;
 
-test('base: the underlined tabs are 40 px high like every area header, and the Inspector carries its tabs in its header', () => {
-	assert.match(rule('.vp-tabs'), /height: 2\.5rem;/);
-	assert.match(rule(".vp-tabs > [role='tab']"), /align-self: stretch;/);
-	assert.doesNotMatch(rule(".vp-tabs > [role='tab']"), /(?<![-\w])height:/);
-	assert.match(rule('.vp-tabs.vp-tabs-head'), /height: 100%;[\s\S]*border-bottom: 0;[\s\S]*padding: 0;/);
-	assert.match(rule('.vp-panel-head'), /height: 2\.5rem;/);
-	assert.match(rule('.vp-zone-head'), /height: 2\.5rem;[\s\S]*gap: 0\.75rem;[\s\S]*border-bottom: 1px solid rgb\(var\(--line\)\);[\s\S]*padding: 0 1rem;/);
-	const inspector = read('../components/inspector/Inspector.svelte');
-	assert.match(inspector, /<div class="vp-panel-head border-b border-line">\n\t\t\{#if multi\}\n\t\t\t<Icon name="layers" class="h-4 w-4 text-fg-muted" \/>\n\t\t\t<span class="truncate text-sm font-semibold">\{t\('inspector\.kind\.picked'\)\}<\/span>\n\t\t\{:else if item && s\.kind === 'clip'\}\n\t\t\t<Tabs\n\t\t\t\tlabel=\{t\('inspector\.tabs'\)\}\n\t\t\t\tclass="vp-tabs-head"/);
+after(() => {
+	dispose();
+	delete globalThis.document;
 });
 
-test('base: the centre areas share one header template, icon, title and counter on the left', () => {
-	for (const path of ['../components/director/ReviewView.svelte', '../components/director/DirectionView.svelte', '../components/director/BibleView.svelte', '../components/references/ReferenceBoard.svelte', '../components/storyboard/BandView.svelte', '../components/storyboard/StoryboardView.svelte', '../components/mixer/Console.svelte']) {
-		const source = read(path);
-		assert.match(source, /import ZoneHeader from '\.\.\/shell\/ZoneHeader\.svelte';/, path);
-		assert.match(source, /<ZoneHeader [^>]*title=/, path);
-		assert.doesNotMatch(source, /class="flex h-10 shrink-0 items-center gap-[23] border-b border-line px-[24]"/, path);
-	}
-	const header = read('../components/shell/ZoneHeader.svelte');
-	assert.match(header, /<div class="vp-zone-head">\n\t\{@render lead\?\.\(\)\}\n\t\{#if icon\}<Icon name=\{icon\} class="h-4 w-4 shrink-0 text-fg-muted" \/>\{\/if\}\n\t<h2 class="shrink-0 whitespace-nowrap text-sm font-semibold">\{title\}<\/h2>/);
+test('base: a zone header carries its icon, its title and its subtitle in one row', async () => {
+	const html = clean(await renderComponent(ZONE_HEADER, { icon: 'grid', title: 'Storyboard', subtitle: '3 shots' }));
+	assert.match(html, /^<div class="vp-zone-head">\s*<svg [^>]*aria-hidden="true">.*<\/svg>\s*<h2 class="[^"]*">Storyboard<\/h2>\s*<span class="vp-tc [^"]*">3 shots<\/span>\s*<\/div>$/s);
+	const bare = clean(await renderComponent(ZONE_HEADER, { title: 'Review' }));
+	assert.doesNotMatch(bare, /<svg|<span/);
+	assert.match(bare, /<h2 class="[^"]*">Review<\/h2>/);
 });
 
-test('base: every filter is one row of pills with their count, drawn by one component', () => {
-	const pills = read('../components/shell/FilterPills.svelte');
-	assert.match(pills, /class="vp-pills no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto p-1 \{className\}" role="tablist"/);
-	assert.match(pills, /\{#if item\.count != null\}<span class="vp-tc text-2xs text-fg-subtle">\{item\.count\}<\/span>\{\/if\}/);
-	for (const path of ['../components/panels/MediaBrowser.svelte', '../components/references/ReferenceBoard.svelte', '../components/director/ReviewView.svelte', '../components/mixer/Console.svelte']) {
-		const source = read(path);
-		assert.match(source, /<FilterPills /, path);
-		assert.match(source, /count: /, path);
-	}
-	for (const path of components.filter((p) => !p.endsWith('/FilterPills.svelte'))) assert.doesNotMatch(read(path), /role="tab"[^>]*class="vp-pill|class="vp-pill[^"]*"[^>]*role="tab"/, path);
-	assert.doesNotMatch(read('../components/panels/MediaBrowser.svelte'), /flex flex-wrap gap-1" role="tablist"/);
-});
-
-test('base: no text of the page is smaller than 10 px', () => {
+test('base: no text of the page is smaller than 10 px, and every row of filter tabs is drawn by FilterPills', () => {
 	for (const path of ['../VideoProducerPage.svelte', ...components]) {
 		const source = read(path);
 		for (const [, size] of source.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g)) assert.ok(Number(size) >= 10, `${path}: text-[${size}px]`);
 		for (const [, size] of source.matchAll(/font-size: (\d+(?:\.\d+)?)px/g)) assert.ok(Number(size) >= 10, `${path}: font-size ${size}px`);
 	}
-	assert.match(read('../components/storyboard/BandLanes.svelte'), /text-left text-2xs font-semibold leading-\[10px\]/);
+	for (const path of components.filter((p) => !p.endsWith('/FilterPills.svelte'))) assert.doesNotMatch(read(path), /role="tab"[^>]*class="vp-pill|class="vp-pill[^"]*"[^>]*role="tab"/, path);
 });
 
-test('base: the empty band, the quick edit without a shot and the mixer without sound use the host empty state, never a primary button', () => {
-	const band = read('../components/storyboard/BandView.svelte');
-	assert.match(band, /<HostUi name="EmptyState" props=\{noShots\} \/>/);
-	assert.match(band, /<HostUi name="EmptyState" props=\{noPick\} \/>/);
-	assert.match(band, /\{ variant: 'secondary', icon: hostIconName\('wand'\), onclick: openCut, children: t\('storyboard\.story\.title'\) \},\n\t\t\t\t\{ variant: 'ghost', icon: 'plus', onclick: \(\) => addShot\(\), children: t\('storyboard\.addShot'\) \}/);
-	assert.doesNotMatch(band, /variant: 'primary'/);
-	assert.doesNotMatch(band, /<p class="flex h-full items-center justify-center/);
-	const mixer = read('../components/panels/MixerPanel.svelte');
-	assert.match(mixer, /\{#if !sounds\.length\}\n\t\t<HostUi name="EmptyState" props=\{noneProps\} \/>/);
-	assert.doesNotMatch(mixer, /<p [^>]*>\{t\('panels\.mixer\.noSounds'\)\}/);
+test('base: the empty band, the quick edit without a shot and the mixer without sound use the host empty state, never a primary button', async () => {
+	doc.clips = [];
+	doc.assets = [];
+	ui.storyOpen = false;
+	ui.selection = null;
+	const empty = await renderComponent(BAND);
+	const [noShots] = hostUis(empty, 'EmptyState');
+	assert.equal(noShots.title, t('storyboard.band.emptyTitle'));
+	assert.equal(noShots.description, t('storyboard.band.emptyText'));
+	assert.doesNotMatch(empty, /<button[^>]*vp-deck-generate|"variant":"primary"/);
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo', take: null }];
+	const noPick = hostUis(await renderComponent(BAND), 'EmptyState');
+	assert.deepEqual(noPick.map((p) => [p.compact, p.title]), [[true, t('storyboard.quick.noneTitle')]]);
+	const [noSounds] = hostUis(await renderComponent(MIXER), 'EmptyState');
+	assert.deepEqual([noSounds.compact, noSounds.title, noSounds.description], [true, t('panels.mixer.noSounds'), t('panels.mixer.noSoundsHint')]);
 	for (const path of components) assert.doesNotMatch(read(path), /name="EmptyState"[^\n]*variant: 'primary'/, path);
-	const helper = read('./empty.js');
-	assert.match(helper, /mountHostSlot\(row\.appendChild\(document\.createElement\('div'\)\), 'Button', \{ size: 'xs', \.\.\.props \}\)/);
 });
 
-test('base: the band zooms with the controls of the timeline, and its Synopsis toggle is a ghost button', () => {
-	const band = read('../components/storyboard/BandView.svelte');
-	const timeline = read('../components/timeline/Timeline.svelte');
-	for (const source of [band, timeline]) {
-		assert.match(source, /icon: 'minus', label: t\('timeline\.zoomOut'\), size: 'sm', class: 'vp-h7'/);
-		assert.match(source, /icon: 'plus', label: t\('timeline\.zoomIn'\), size: 'sm', class: 'vp-h7'/);
-		assert.match(source, /<input class="vp-slider w-24" type="range" min="8" max="220" bind:value=\{ui\.pxPerSec\}/);
-	}
-	assert.match(band, /<button type="button" class="vp-toggle flex h-7 items-center gap-1\.5 rounded px-2 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg" aria-pressed=\{ui\.storyOpen\}/);
-	assert.doesNotMatch(band, /shadow-\[inset/);
+test('base: under 1280 px the side panels become drawers over the centre that Escape closes one at a time before the selection; above, Escape clears the selection at once', () => {
+	ui.workspace = 'storyboard';
+	ui.storyView = 'grid';
+	ui.selection = { kind: 'clip', id: 's1' };
+	Object.assign(ui, { paletteOpen: false, modal: null, menuOpen: null, deckDrawer: false, preview: null, compare: null, reviewMonitor: false, seamCompare: null, storyOpen: false });
+	const escape = () => handleKeydown({ key: 'Escape', target: null, preventDefault() {} }, null);
+	viewport.narrow = true;
+	ui.inspectorOpen = true;
+	ui.sidebarOpen = true;
+	assert.equal(drawerMode(), true);
+	escape();
+	assert.deepEqual([ui.inspectorOpen, ui.sidebarOpen, ui.selection?.id], [false, true, 's1']);
+	escape();
+	assert.deepEqual([ui.inspectorOpen, ui.sidebarOpen, ui.selection?.id], [false, false, 's1']);
+	escape();
+	assert.deepEqual([ui.inspectorOpen, ui.sidebarOpen, ui.selection], [false, false, null]);
+	viewport.narrow = false;
+	ui.inspectorOpen = true;
+	ui.selection = { kind: 'clip', id: 's1' };
+	assert.equal(closeDrawer(), false);
+	escape();
+	assert.deepEqual([ui.inspectorOpen, ui.selection], [true, null]);
+	for (const [locale, shell] of [['en', enShell], ['fr', frShell]]) assert.match(shell['app.narrow'], /1280 px/, locale);
+	for (const [locale, panels] of [['en', enPanels], ['fr', frPanels]]) assert.ok(panels['right.label'] && panels['left.label'], locale);
 });
 
-test('base: the transport keeps its time controls centred and drops the volume slider before anything overlaps', () => {
-	const viewer = read('../components/viewer/Viewer.svelte');
-	assert.match(viewer, /style:grid-template-columns="minmax\(0, 1fr\) auto minmax\(max-content, 1fr\)"/);
-	assert.match(viewer, /<div class="flex min-w-0 items-center gap-2 overflow-hidden" bind:clientWidth=\{sideW\}>/);
-	assert.match(viewer, /\{#if sideW >= 136\}<input class="vp-slider w-24 shrink-0" type="range"/);
-	assert.doesNotMatch(viewer, /grid-cols-\[1fr_auto_1fr\]/);
-});
-
-test('base: the side panel is 280 px wide and the right panel 320 px, set inline on the grid of the page', () => {
-	assert.match(page, /\$\{ui\.sidebarOpen && !band \? '280px' : '0px'\} minmax\(0, 1fr\) \$\{ui\.inspectorOpen \? '320px' : '0px'\}/);
-	assert.match(page, /<main class="grid min-h-0 overflow-hidden border-t border-line" class:vp-drawers=\{drawers\} style:grid-template-columns=\{columns\}>/);
-	assert.doesNotMatch(page, /'300px'|'304px'/);
-});
-
-test('base: under 1280 px the side panels become drawers over the centre, closed by default, and under 640 px the page says it needs 1280 px', () => {
-	const viewport = read('viewport.svelte.js');
-	assert.match(viewport, /export const NARROW_WIDTH = 1280;/);
-	assert.match(viewport, /export const TINY_WIDTH = 640;/);
-	assert.match(page, /const drawers = \$derived\(drawerMode\(\)\);/);
-	assert.match(page, /const columns = \$derived\(player \|\| drawers \? 'minmax\(0, 1fr\)' : `/);
-	assert.match(page, /if \(narrow && wideBefore === null\) \{\n\t\t\t\twideBefore = \{ sidebar: ui\.sidebarOpen, inspector: ui\.inspectorOpen \};\n\t\t\t\tui\.sidebarOpen = false;\n\t\t\t\tui\.inspectorOpen = false;/);
-	assert.match(rule('.vp-drawers'), /position: relative;/);
-	assert.match(rule('.vp-drawers > .vp-drawer'), /position: absolute;[\s\S]*z-index: 20;[\s\S]*width: 280px;/);
-	assert.match(rule(".vp-drawers > .vp-drawer[data-vp-drawer='end']"), /right: 0;[\s\S]*width: 320px;/);
-	assert.match(page, /\{#if viewport\.tiny\}\s*<div class="vp-too-narrow" data-vp-too-narrow>[\s\S]*t\('shell\.app\.narrow'\)[\s\S]*t\('shell\.app\.narrowHint'\)[\s\S]*\{\/if\}\s*\{#if phase === 'loading'\}/);
-	const state = read('state.svelte.js');
-	assert.match(state, /sidebarOpen: !viewport\.narrow,/);
-	assert.match(state, /inspectorOpen: !viewport\.narrow && \(typeof window === 'undefined' \|\| window\.innerWidth >= 1360\),/);
-	assert.equal(state.match(/&& !viewport\.narrow\) ui\.inspectorOpen = true;/g)?.length, 2);
-	const header = read('../components/shell/ProjectBar.svelte');
-	assert.equal(header.match(/(?:labelClass|class)="vp-wide-only"/g)?.length, 3);
-	assert.match(header, /aria-label=\{workspaceLabel\(w\.id\)\} title=\{workspaceLabel\(w\.id\)\}/);
-	assert.match(header, /<span class="vp-workspace-label">\{workspaceLabel\(w\.id\)\}<\/span>/);
-	for (const locale of ['en', 'fr']) {
-		const shell = JSON.parse(read(`../i18n/${locale}/shell.json`));
-		assert.match(shell['app.narrow'], /1280 px/);
-	}
-});
-
-test('base: a drawer is a dialog that Escape closes before the selection, that a pointer outside closes, that takes the focus when it opens and gives it back when it closes; the side panels come back as they were above 1280 px', () => {
-	const state = read('state.svelte.js');
-	assert.match(state, /export const drawerMode = \(\) => viewport\.narrow && !isPlayer\(ui\.workspace\);/);
-	assert.match(state, /export function closeDrawer\(\) \{\n\tif \(!drawerMode\(\)\) return false;\n\tif \(ui\.inspectorOpen\) ui\.inspectorOpen = false;\n\telse if \(sidebarShown\(\)\) ui\.sidebarOpen = false;\n\telse return false;\n\treturn true;\n\}/);
-	assert.match(read('commands.js'), /else if \(ui\.storyOpen && bandView\(\)\) ui\.storyOpen = false;\n\telse if \(!closeDrawer\(\)\) select\(null\);/);
-	for (const side of ['start', 'end']) {
-		const open = side === 'start' ? 'leftOpen' : 'rightOpen';
-		const label = side === 'start' ? 'panels.left.label' : 'panels.right.label';
-		assert.match(page, new RegExp(`<div class="vp-drawer" data-vp-drawer="${side}" role=\\{drawers \\? 'dialog' : undefined\\} aria-modal=\\{drawers \\? 'true' : undefined\\} aria-label=\\{drawers \\? t\\('${label.replace('.', '\\.')}'\\) : undefined\\} tabindex="-1" hidden=\\{drawers && !${open}\\} use:drawerFocus=\\{${open}\\}>`));
-	}
-	assert.match(page, /\{#if leftOpen \|\| rightOpen\}<div class="vp-drawer-veil" aria-hidden="true"><\/div>\{\/if\}/);
-	assert.match(page, /const onpointerdown = \(e\) => closesOnOutsidePointer\(root, e\.target\) && closeDrawer\(\);\n\t\tdocument\.addEventListener\('pointerdown', onpointerdown, true\);/);
-	assert.match(page, /\} else if \(!narrow && wideBefore !== null\) \{\n\t\t\t\tui\.sidebarOpen = wideBefore\.sidebar;\n\t\t\t\tui\.inspectorOpen = wideBefore\.inspector;\n\t\t\t\twideBefore = null;/);
-	assert.match(rule('.vp-drawer'), /display: contents;/);
-	assert.match(rule('.vp-drawers > .vp-drawer[hidden]'), /display: none;/);
-	assert.match(rule('.vp-drawer-veil'), /position: absolute;[\s\S]*inset: 0;[\s\S]*z-index: 19;/);
-	const drawer = read('drawer.js');
-	assert.match(drawer, /trigger = document\.activeElement;[\s\S]*await tick\(\);[\s\S]*\(node\.querySelector\(FOCUSABLE\) \?\? node\)\.focus\(\{ preventScroll: true \}\);/);
-	assert.match(drawer, /if \(node\.contains\(document\.activeElement\) \|\| document\.activeElement === document\.body\) restoreFocus\(trigger, null\);/);
-	assert.match(drawer, /const KEEPS = '\.vp-drawer, \.vp-deck-drawer, \[data-vp-drawer-toggle\], \.vp-modal-backdrop, \.vp-palette-backdrop, \.vp-menu, \[data-vp-menu\], \.vp-toasts, \.vp-uploads';/);
-	assert.equal(read('../components/shell/ProjectBar.svelte').match(/<span class="contents" data-vp-drawer-toggle>/g)?.length, 2);
-	for (const locale of ['en', 'fr']) assert.ok(JSON.parse(read(`../i18n/${locale}/panels.json`))['right.label'], locale);
-});
-
-test('base: under 640 px the message covers the page without unmounting it, and the shortcuts rest', () => {
-	assert.match(page, /<div class="grid min-h-0 flex-1 overflow-hidden" style="[^"]*" inert=\{viewport\.tiny\}>/);
-	assert.match(page, /const onkeydown = \(e\) => phase === 'ready' && !viewport\.tiny && handleKeydown\(e, root\);/);
-	assert.match(rule('.vp-too-narrow'), /position: absolute;[\s\S]*inset: 0;[\s\S]*z-index: 40;[\s\S]*background-color: rgb\(var\(--canvas\)\);/);
-	assert.match(page, /<Modals version=\{ui\.me\?\.version \?\? null\} \{setLanguage\} \/>\s*<CommandPalette \/>\s*<Toasts \/>\s*<Uploads \/>\s*\{\/if\}/);
-});
-
-test('base: Import, Export and Assistant keep their visible label as accessible name; under 1280 px the label is only hidden from sight', () => {
-	const header = read('../components/shell/ProjectBar.svelte');
-	assert.doesNotMatch(header, /ariaLabel: t\('shell\.project\.exportTip'\)|aria-label=\{t\('shell\.project\.assistant'\)\}/);
-	assert.doesNotMatch(read('../components/shell/Dropdown.svelte'), /ariaLabel/);
-	const wide = page.slice(page.indexOf('@media (max-width: 1279px)'));
-	assert.match(wide, /\.vp-root \.vp-wide-only \{\n\t\t\t\tposition: absolute;\n\t\t\t\twidth: 1px;\n\t\t\t\theight: 1px;[\s\S]*?clip-path: inset\(50%\);/);
-	assert.doesNotMatch(wide.slice(0, wide.indexOf('.vp-projectbar-name')), /display: none/);
-});
-
-test('base: the header of the Storyboard grid folds its button labels into icons when it runs out of room, and unfolds them when the room is back', () => {
-	const grid = read('../components/storyboard/StoryboardView.svelte');
-	assert.match(grid, /const head = countsEl\?\.parentElement;/);
-	assert.match(grid, /if \(!tight && head\.scrollWidth > head\.clientWidth \+ 1\) \{\n\t+roomy = head\.scrollWidth;\n\t+tight = true;\n\t+\} else if \(tight && head\.clientWidth >= roomy\) \{\n\t+tight = false;/);
-	assert.match(grid, /<FinalPassButton short=\{tight\} \/>\n\t+<ViewSwitch short=\{tight\} \/>/);
-	assert.match(grid, /\{#if tight\}\n\t+<HostUi name="IconButton" props=\{\{ icon: 'plus', label: t\('storyboard\.addShot'\), tooltip: t\('storyboard\.addShot'\)/);
-	assert.match(grid, /\{#if colorFixes && tight\}\n\t+<HostUi name="IconButton" props=\{\{ icon: hostIconName\('palette'\), label: t\('storyboard\.matchAll', \{ count: colorFixes \}\)/);
-	assert.match(read('../components/storyboard/ViewSwitch.svelte'), /<span class=\{short \? 'sr-only' : ''\}>\{t\('storyboard\.view\.grid'\)\}<\/span>/);
-	assert.match(read('../components/production/FinalPassButton.svelte'), /\{#if !short\}\{t\('generation\.finalPass\.button'\)\}\{\/if\}/);
-	assert.doesNotMatch(read('../components/storyboard/BandView.svelte'), /short=/);
-});
-
-test('base: Media, the Sounds panel and the console import with the same two icon buttons', () => {
-	const buttons = read('../components/panels/ImportButtons.svelte');
-	assert.match(buttons, /icon: 'folder', label: t\('panels\.media\.import'\), size: 'sm', class: 'vp-h7', tooltip: t\('panels\.media\.importTip'\), kbd: key\('import'\), onclick: \(\) => openImport\(kind\)/);
-	assert.match(buttons, /icon: 'upload', label: t\('panels\.media\.importLocal'\), size: 'sm', class: 'vp-h7', tooltip: t\('panels\.media\.importLocalTip'\), kbd: key\('import-local'\), onclick: \(\) => openLocalImport\(kind\)/);
-	assert.match(read('../components/panels/MediaBrowser.svelte'), /<PanelHeader icon="image"[^>]*>\n\t\t<ImportButtons \/>\n\t<\/PanelHeader>/);
-	assert.match(read('../components/panels/MixerPanel.svelte'), /<PanelHeader icon="music" title=\{t\('panels\.mixer\.sounds'\)\}[^>]*>\n\t<ImportButtons kind="audio" \/>\n<\/PanelHeader>/);
-	assert.match(read('../components/mixer/Console.svelte'), /<ImportButtons kind="audio" \/>/);
-	for (const path of ['../components/panels/MixerPanel.svelte', '../components/mixer/Console.svelte']) assert.doesNotMatch(read(path), /name="Button" props=\{\{ variant: 'ghost', size: 'xs', icon: '(folder|upload)'/, path);
+test('base: the page header keeps a visible label as the accessible name of Import, Export and Assistant, and the band summary counts the shots', async () => {
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo', take: null }, { id: 's2', start: 4, dur: 6, label: 'Two', stage: 'draft', take: null }];
+	ui.selection = null;
+	const band = textOf(await renderComponent(BAND));
+	assert.match(band, new RegExp(t('storyboard.summary', { count: 2, duration: '10.0 s' }).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });

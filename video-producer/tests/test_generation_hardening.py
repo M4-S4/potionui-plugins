@@ -121,14 +121,14 @@ def test_a_refused_submit_does_not_take_the_slot_of_the_takes_behind_it(client, 
     assert takes.in_flight("user-1") == 1
 
 
-def test_a_reservation_the_core_could_not_record_is_not_refunded_when_the_submit_fails(client, core, project, monkeypatch):
+def test_a_reservation_the_core_could_not_record_refuses_the_request_and_stores_no_take(client, core, project, monkeypatch):
     monkeypatch.setattr(core_bridge, "record_limit_event", lambda *args: False)
-    core.refusal = RuntimeError("No backend")
 
-    (take,) = _generate(client, project["id"])
+    detail = _generate(client, project["id"], status=409)
 
-    assert (take["status"], take["units_reserved"]) == ("failed", 0)
-    assert core.refunded == []
+    assert [block["code"] for block in detail["data"]["blocks"]] == ["quota_unrecorded"]
+    assert takes.list_takes(project["id"]) == []
+    assert core.refunded == [] and core.submitted == []
 
 
 @pytest.mark.parametrize(

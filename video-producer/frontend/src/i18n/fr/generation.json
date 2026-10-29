@@ -11,6 +11,7 @@
 	"block.profileUnsupported": "{engine} ne sait pas générer le profil {profile} : passez en FL2VA ou sur MiniMax H3.",
 	"block.missingModels": "Modèles à installer pour ce preset : {fields}.",
 	"block.quota": "Quota GPU dépassé : {need} min nécessaires, {remaining} min restantes ce mois-ci.",
+	"block.quotaUnrecorded": "Les minutes GPU de cette prise n’ont pas pu être réservées : réessayez dans un instant.",
 	"block.noModel": "Choisissez un modèle cloud pour ce moteur.",
 	"block.generic": "La génération a été refusée : vérifiez les avertissements de la barre Production.",
 	"warn.vramStream": "Passera par la RAM de l’hôte, plus lent.",

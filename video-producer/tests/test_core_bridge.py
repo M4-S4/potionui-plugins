@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -1025,10 +1025,10 @@ def test_upload_item_reads_the_library_item_of_an_uploads_key_of_the_user(monkey
 
 
 def test_the_bridge_reads_the_core_only_through_the_plugin_api():
-    source = Path(core_bridge.__file__).read_text(encoding="utf-8")
+    core_modules = sorted(value.__name__ for value in vars(core_bridge).values() if isinstance(value, ModuleType) and value.__name__.startswith("src."))
 
-    assert "get_container" not in source
-    assert "Temporary" not in source
+    assert not hasattr(core_bridge, "get_container")
+    assert core_modules and all(name == "src.plugin_api" or name.startswith("src.plugin_api.") for name in core_modules), core_modules
 
 
 def test_storage_directory_is_the_applications_file_storage_directory_made_absolute(monkeypatch, tmp_path):

@@ -217,6 +217,77 @@ def test_a_take_shorter_than_reserved_refunds_and_records_its_real_minutes(core,
     assert core.recorded[-1] == ("user-1", GPU, 0.2, f"{ref}:actual")
 
 
+def test_a_take_whose_minutes_the_core_cannot_record_is_refused_and_leaves_nothing_behind(core, make_project, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS[:1])
+    monkeypatch.setattr(generation.core_bridge, "record_limit_event", lambda *args: False)
+
+    with pytest.raises(Blocked) as caught:
+        _start(core, project, shots=["s1"], variants=1)
+
+    assert [(block["code"], block["data"]["shot_id"]) for block in caught.value.blocks] == [("quota_unrecorded", "s1")]
+    assert takes.list_takes(project["id"]) == []
+    assert core.refunded == [] and core.submitted == []
+
+
+def test_a_batch_whose_second_take_cannot_reserve_drops_the_first_and_refunds_it(core, make_project, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS)
+    record = core.record_limit_event
+    monkeypatch.setattr(generation.core_bridge, "record_limit_event", lambda *args: record(*args) if len(core.recorded) == 0 else False)
+
+    with pytest.raises(Blocked) as caught:
+        _start(core, project, variants=1)
+
+    assert [block["code"] for block in caught.value.blocks] == ["quota_unrecorded"]
+    assert takes.list_takes(project["id"]) == []
+    assert len(core.recorded) == 1 and core.refunded == [core.recorded[0][3]]
+    assert core.submitted == []
+
+
+def test_a_retry_whose_minutes_the_core_cannot_record_is_refused(core, make_project, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS[:1])
+    (take,) = _start(core, project, shots=["s1"], variants=1)
+    core.fail("gen-1")
+    _tick()
+    monkeypatch.setattr(generation.core_bridge, "record_limit_event", lambda *args: False)
+
+    with pytest.raises(Blocked) as caught:
+        asyncio.run(generation.retry(core.users["user-1"], project, takes.get_take(take["id"])))
+
+    assert [block["code"] for block in caught.value.blocks] == ["quota_unrecorded"]
+    assert [item["id"] for item in takes.list_takes(project["id"])] == [take["id"]]
+    assert core.refunded == [f"video-producer:{take['id']}"]
+
+
+def test_a_refund_the_core_cannot_make_leaves_the_reservation_and_records_no_actual_minutes(core, make_project, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS[:1])
+    (take,) = _start(core, project, shots=["s1"], variants=1)
+    core.complete("gen-1", duration_ms=12000)
+    monkeypatch.setattr(generation.core_bridge, "refund_limit_event", lambda ref: 0)
+
+    _tick()
+
+    ref = f"video-producer:{take['id']}"
+    assert takes.get_take(take["id"])["status"] == "done"
+    assert core.recorded == [("user-1", GPU, round(4 * 10 / 60, 3), ref)]
+    assert core.refunded == []
+
+
+def test_cancelling_a_take_whose_refund_fails_still_cancels_it_and_records_nothing(core, make_project, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS[:1])
+    (take,) = _start(core, project, shots=["s1"], variants=1)
+    monkeypatch.setattr(generation.core_bridge, "refund_limit_event", lambda ref: 0)
+
+    cancelled = asyncio.run(generation.cancel(core.users["user-1"], take))
+
+    assert cancelled["status"] == "cancelled" and cancelled["units_reserved"] == round(4 * 10 / 60, 3)
+    assert core.recorded == [("user-1", GPU, round(4 * 10 / 60, 3), f"video-producer:{take['id']}")]
+
+
 def test_a_done_take_without_thumbnail_has_no_thumbnail_url(core, make_project):
     core.use_wan()
     project = make_project(clips=SHOTS[:1])

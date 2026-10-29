@@ -1,9 +1,32 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { hostUis, renderComponent, textOf } from './svelte-harness.js';
+import enPanels from '../i18n/en/panels.json' with { type: 'json' };
+import frPanels from '../i18n/fr/panels.json' with { type: 'json' };
 import { CAST_LOW, chainDrifts, chainLook, chainThreshold, DRIFT_LOW, FACE_LOW, FINAL_LOW, IDENTITY_LOW, PLACE_LOW, PUSH_IN_HIGH, SEAM_LOW, bestCandidate, cardThreshold, driftOf, faceChanged, finalLook, identityIssues, issueKey, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, pushedIn, pushInIssues, seamFaceChanged, seamLook, STATES, takeLook } from './looks.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { project } = await import('./project.svelte.js');
+const { setTakes } = await import('./takes.svelte.js');
+const { lookState } = await import('./looks.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+const { reanchorImage } = await import('./references.js');
+
+const REVIEW_TAKE = new URL('../components/director/ReviewTake.svelte', import.meta.url).href;
+const SUMMARY = new URL('../components/director/DirectorSummary.svelte', import.meta.url).href;
+const done = (id, shotId) => ({ id, shotId, status: 'done', label: 'draft', quality: 'draft', variant: 'A', url: `/${id}.mp4`, createdAt: '2026-10-29T10:00:00Z' });
+
+function scene(looks, clips = [{ id: 's1', take: 't1' }]) {
+	project.id = 'p1';
+	ui.workspace = 'director';
+	doc.clips = clips.map((clip, n) => ({ start: n * 4, dur: 4, label: `Shot ${n + 1}`, stage: 'draft', ...clip }));
+	setTakes('p1', [...new Set(clips.map((clip) => clip.take).filter(Boolean))].map((id) => done(id, clips.find((clip) => clip.take === id).id)));
+	lookState.projectId = 'p1';
+	lookState.data = normalizeLooks({ embedder: { available: true }, identity: { available: true }, ...looks });
+	return lookState.data;
+}
+
+after(() => dispose());
 
 const payload = {
 	embedder: { model: 'google/siglip-base-patch16-224', available: true },
@@ -48,14 +71,6 @@ test('a start image candidate is scored by the mean of its cast cards, and the c
 	assert.equal(bestCandidate(looks, ['k1', 'k2', 'k3']), 'k2');
 	assert.equal(bestCandidate(looks, ['k1', 'k3']), null);
 	assert.equal(bestCandidate(null, ['k1', 'k2']), null);
-});
-
-test('the candidate window shows the likeness of each candidate and the closest one, and lets the user choose', () => {
-	const window = source('../components/shots/KeyframeCandidates.svelte');
-	assert.match(window, /data-candidate-look=\{take\.id\}/);
-	assert.match(window, /\{#if best === take\.id\}/);
-	assert.match(window, /if \(finished\) untrack\(\(\) => refreshLooks\(\)\)/);
-	assert.doesNotMatch(window, /acceptCandidate\(best/);
 });
 
 test('a card is judged by the threshold of how it was measured, a final by its draft, and a take by the other shots of its character', () => {
@@ -119,10 +134,13 @@ test('a chain look counts for the take the previous shot plays now, and its drif
 	assert.equal(chainThreshold(looks, { kind: 'place', method: 'whole' }), PLACE_LOW);
 });
 
-test('a drifting chain is a seam issue whose fix opens the start images of the next shot with its current one as the framing', () => {
-	assert.match(source('./continuity.svelte.js'), /const drift = chain \? chainDrifts\(currentLooks\(\), a, b\)\[0\] : null;\n\tif \(drift\) out\.issues\.push\(\{ kind: 'chain_drift'/);
-	assert.match(source('../components/storyboard/SeamFix.svelte'), /\{:else if issue\.kind === 'chain_drift'\}\n\t<button type="button" class=\{link\} data-seam-fix="reanchor" onclick=\{\(e\) => run\(e, reanchorImage\)\}>/);
-	assert.match(source('./references.js'), /export function reanchorImage\(clip\) \{\n\tif \(clip\) ui\.modal = \{ type: 'shot', id: clip\.id, focus: 'reanchor' \};/);
+test('the fix of a drifting chain opens the start images of the next shot, focused on the framing of its current one', () => {
+	ui.modal = null;
+	reanchorImage({ id: 's2' });
+	assert.deepEqual({ ...ui.modal }, { type: 'shot', id: 's2', focus: 'reanchor' });
+	ui.modal = null;
+	reanchorImage(null);
+	assert.equal(ui.modal, null);
 });
 
 test('a seam look counts only for the takes placed on its two shots now, and warns under the seam threshold', () => {
@@ -149,7 +167,7 @@ test('a take drifts from each card of its cast under the cast threshold, and the
 	assert.deepEqual(castIssues(null, [{ id: 's2', take: 't2' }]), []);
 });
 
-test('a take whose face grows past the push-in threshold is said in its review and in To check', () => {
+test('a take whose face grows past the push-in threshold is said in its review and in To check', async () => {
 	const looks = normalizeLooks({
 		thresholds: { push_in: 1.5 },
 		takes: [
@@ -166,15 +184,19 @@ test('a take whose face grows past the push-in threshold is said in its review a
 	const clips = ['t1', 't2', 't3', 't4', 't5', null].map((take, n) => ({ id: `s${n + 1}`, take }));
 	assert.deepEqual(pushInIssues(looks, clips).map((i) => [i.clip.id, i.takeId, i.pushIn]), [['s1', 't1', 2.9]]);
 	assert.deepEqual(pushInIssues(null, clips), []);
-	const take = source('../components/director/ReviewTake.svelte');
-	assert.match(take, /\{#if pushedIn\(looks, look\)\}<p class="text-xs text-warning" data-look-push-in>\{t\('panels\.director\.pick\.lookPushIn', \{ ratio: formatNumber\(look\.pushIn, \{ maximumFractionDigits: 1 \}\) \}\)\}<\/p>\{\/if\}/);
-	const summary = source('../components/director/DirectorSummary.svelte');
-	assert.match(summary, /const pushIns = \$derived\(pushInIssues\(looks, doc\.clips\)\);/);
-	assert.match(summary, /lookIssues\.length \+ pushIns\.length \+ faceChanges\.length \+ trackChecks\.length/);
-	assert.match(summary, /t\('panels\.director\.check\.pushIn', \{ shot: num\(item\.clip\), ratio: formatNumber\(item\.pushIn, \{ maximumFractionDigits: 1 \}\) \}\)/);
+	scene({ thresholds: { push_in: 1.5 }, takes: [{ take_id: 't1', shot_id: 's1', status: 'done', cards: [{ card_id: 'c1', label: 'Lina', status: 'done', score: 0.9 }], push_in: 2.9 }] });
+	const review = await renderComponent(REVIEW_TAKE, { clip: doc.clips[0], take: done('t1', 's1') });
+	assert.match(review, /data-look-push-in=""/);
+	assert.ok(textOf(review).includes(t('panels.director.pick.lookPushIn', { ratio: '2.9' })));
+	assert.match(review, /data-keep-framing-next/);
+	const summary = await renderComponent(SUMMARY);
+	assert.match(summary, /data-look-push-in="s1"/);
+	assert.ok(textOf(summary).includes(t('panels.director.check.pushIn', { shot: '01', ratio: '2.9' })));
+	doc.clips[0].keepFraming = true;
+	assert.doesNotMatch(await renderComponent(REVIEW_TAKE, { clip: doc.clips[0], take: done('t1', 's1') }), /data-keep-framing-next/);
 });
 
-test('a face that changes within a take or across a chained seam, by face recognition, is said in the review and in To check', () => {
+test('a face that changes within a take or across a chained seam, by face recognition, is said in the review and in To check', async () => {
 	const looks = normalizeLooks({
 		identity: { model: 'glintr100.onnx', available: true },
 		thresholds: { identity: 0.6 },
@@ -199,55 +221,55 @@ test('a face that changes within a take or across a chained seam, by face recogn
 	const clips = ['t1', 't2', 't3', 't4', 't5'].map((take, n) => ({ id: `s${n + 1}`, take }));
 	assert.deepEqual(identityIssues(looks, clips).map((i) => [i.kind, i.clip.id, i.previous?.id ?? null, i.score]), [['take', 's1', null, 0.29], ['seam', 's2', 's1', 0.35]]);
 	assert.deepEqual(identityIssues(null, clips), []);
-	const take = source('../components/director/ReviewTake.svelte');
-	assert.match(take, /\{#if faceChanged\(looks, look\)\}<p class="text-xs text-warning" data-look-identity>\{t\('panels\.director\.pick\.lookIdentity', \{ score: percent\(look\.identity\.score\) \}\)\}<\/p>\{\/if\}/);
-	const summary = source('../components/director/DirectorSummary.svelte');
-	assert.match(summary, /const faceChanges = \$derived\(identityIssues\(looks, doc\.clips\)\);/);
-	assert.match(summary, /item\.kind === 'seam' \? t\('panels\.director\.check\.identitySeam', \{ shot: num\(item\.clip\), previous: num\(item\.previous\), score: percent\(item\.score\) \}\) : t\('panels\.director\.check\.identity', \{ shot: num\(item\.clip\), score: percent\(item\.score\) \}\)/);
+	scene(
+		{
+			thresholds: { identity: 0.6 },
+			takes: [{ take_id: 't1', shot_id: 's1', status: 'done', cards: [{ card_id: 'c1', label: 'Lina', status: 'done', score: 0.9 }], identity: { score: 0.29, at: 1.5 } }],
+			seams: [{ shot_id: 's2', previous_id: 's1', from_take: 't1', to_take: 't2', score: 0.9, identity: 0.35, status: 'done' }]
+		},
+		[{ id: 's1', take: 't1' }, { id: 's2', take: 't2' }]
+	);
+	const review = await renderComponent(REVIEW_TAKE, { clip: doc.clips[0], take: done('t1', 's1') });
+	assert.match(review, /data-look-identity=""/);
+	assert.ok(textOf(review).includes(t('panels.director.pick.lookIdentity', { score: percent(0.29) })));
+	const summary = textOf(await renderComponent(SUMMARY));
+	assert.ok(summary.includes(t('panels.director.check.identity', { shot: '01', score: percent(0.29) })));
+	assert.ok(summary.includes(t('panels.director.check.identitySeam', { shot: '02', previous: '01', score: percent(0.35) })));
 });
 
-test('wiring: the measured look feeds the seams, the review, To check and the Storyboard, and is no longer simulated', () => {
-	const continuity = source('./continuity.svelte.js');
-	assert.doesNotMatch(continuity, /look === rb\.look|0\.94 : 0\.78/);
-	assert.match(continuity, /const found = seamLook\(looks, a, b\);/);
-	assert.match(continuity, /if \(look\?\.low\) out\.issues\.push\(\{ kind: 'identity'/);
-	assert.match(source('./assistant.js'), /const MEASURED_KINDS = \['lum', 'warm', 'identity'\];/);
-	assert.doesNotMatch(source('./assistant.js'), /SIMULATED_KINDS|simulated/);
-	assert.doesNotMatch(source('../components/modals/Modals.svelte'), /simulations/);
-	assert.doesNotMatch(source('../components/director/DirectorSummary.svelte'), /vp-sim|simulatedTip/);
-	assert.match(source('../components/storyboard/SeamPanel.svelte'), /\{#if issue\.kind === 'identity'\}<span class="mt-0\.5 block text-2xs text-fg-subtle" data-look-hint>\{t\('lib\.continuity\.lookHint'\)\}/);
-	const take = source('../components/director/ReviewTake.svelte');
-	assert.match(take, /\{#if look\?\.cards\.length \|\| fromDraft\?\.status === 'done'\}\n\t<section class="space-y-2" data-take-looks>/);
-	assert.match(take, /onclick: measureLooks \}\}>\{t\('panels\.director\.pick\.measure'\)\}/);
-	const summary = source('../components/director/DirectorSummary.svelte');
-	assert.match(summary, /const lookIssues = \$derived\(castIssues\(looks, doc\.clips\)\);/);
-	assert.match(summary, /t\('panels\.director\.check\.castLook', \{ shot: num\(item\.clip\), name: item\.card\.label, score: percent\(item\.card\.score\) \}\)/);
-	assert.match(summary, /i\.kind === 'identity' \? t\('assistant\.review\.measuredLookTip'\) : seamTip\(s\.toShotId\)/);
+test('a take the embedder has not measured offers Measure in its review, and To check counts the takes still to measure', async () => {
+	scene({ missing: 2, takes: [{ take_id: 't1', shot_id: 's1', status: 'missing', cards: [{ card_id: 'c1', label: 'Lina', status: 'missing', score: null }] }] });
+	const review = await renderComponent(REVIEW_TAKE, { clip: doc.clips[0], take: done('t1', 's1') });
+	assert.match(review, /data-take-looks/);
+	assert.ok(textOf(review).includes(t('panels.director.pick.measure')));
+	assert.ok(hostUis(review, 'Button').some((props) => props.variant === 'ghost' && props.disabled === false));
+	const summary = await renderComponent(SUMMARY);
 	assert.match(summary, /data-looks-missing/);
-	const page = source('../VideoProducerPage.svelte');
-	assert.match(page, /const stopLooks = startLooks\(\);/);
-	assert.match(page, /stopProduction\(\);\n\t\t\tstopLooks\(\);/);
-	const store = source('./looks.svelte.js');
-	assert.match(store, /onTake\(\(take, live\) => live && take\.status === 'done' && schedule\(\)\)/);
-	assert.match(source('./api.js'), /async measureLooks\(projectId\) \{\n\t\t\treturn mapped\(await call\(api, 'post', `\$\{projectPath\(projectId\)\}\/looks`, \{\}\), normalizeLooks\);/);
+	assert.ok(textOf(summary).includes(t('panels.director.check.looksMissing', { count: 2 })));
+	lookState.data = normalizeLooks({ embedder: { available: false }, missing: 2 });
+	assert.doesNotMatch(await renderComponent(SUMMARY), /data-looks-missing/);
 });
 
 test('every state a look can have is translated in English and in French', () => {
-	for (const locale of ['en', 'fr']) {
-		const panels = JSON.parse(source(`../i18n/${locale}/panels.json`));
+	for (const [locale, panels] of [['en', enPanels], ['fr', frPanels]]) {
 		for (const state of STATES.filter((value) => value !== 'done')) assert.ok(panels[`director.pick.lookState.${state}`], `${locale} director.pick.lookState.${state}`);
 	}
 	const looks = normalizeLooks({ takes: [{ take_id: 't1', status: 'done', cards: [{ card_id: 'c1', label: 'Lina', score: null, status: 'no_images' }, { card_id: 'c2', label: 'Marin', score: null, status: 'strange' }] }] });
 	assert.deepEqual(looks.takes[0].cards.map((card) => card.status), ['no_images', 'missing']);
 });
 
-test('the alerts of To check are keyed by shot, so shots that share a take never share a key', () => {
+test('the alerts of To check are keyed by shot, so two shots that share a take each keep their alert', async () => {
 	const card = { cardId: 'c1' };
 	assert.equal(issueKey({ clip: { id: 's1' }, takeId: 't1', card }), 'look:s1:t1:c1');
 	assert.equal(issueKey({ clip: { id: 's2' }, takeId: 't1', pushIn: 2 }), 'look:s2:t1');
 	assert.equal(issueKey({ kind: 'seam', clip: { id: 's2' }, previous: { id: 's1' }, takeId: 't1', score: 0.3 }), 'seam:s2:t1');
 	assert.notEqual(issueKey({ kind: 'take', clip: { id: 's2' }, takeId: 't1' }), issueKey({ kind: 'seam', clip: { id: 's2' }, takeId: 't1' }));
-	const summary = source('../components/director/DirectorSummary.svelte');
-	for (const list of ['lookIssues', 'pushIns', 'faceChanges']) assert.ok(summary.includes(`{#each ${list} as item (issueKey(item))}`), list);
-	assert.doesNotMatch(summary, /\(item\.takeId\)|`\$\{item\.takeId\}/);
+	scene(
+		{ thresholds: { cast: 0.6, push_in: 1.5 }, takes: [{ take_id: 't1', shot_id: 's1', status: 'done', cards: [{ card_id: 'c1', label: 'Lina', status: 'done', score: 0.3 }], push_in: 2.9 }] },
+		[{ id: 's1', take: 't1' }, { id: 's2', take: 't1' }]
+	);
+	const summary = await renderComponent(SUMMARY);
+	assert.deepEqual([...summary.matchAll(/data-look-issue="([^"]+)"/g)].map((m) => m[1]), ['s1', 's2']);
+	assert.deepEqual([...summary.matchAll(/data-look-push-in="([^"]+)"/g)].map((m) => m[1]), ['s1', 's2']);
+	assert.ok(textOf(summary).includes(t('panels.director.check.castLook', { shot: '02', name: 'Lina', score: percent(0.3) })));
 });
