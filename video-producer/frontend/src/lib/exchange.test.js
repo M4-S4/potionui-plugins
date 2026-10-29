@@ -104,7 +104,7 @@ test('the four formats regenerate the backend golden files byte for byte (media=
 	}
 });
 
-test('formats: a slowed shot reads the source its speed covers, with an M2 line, a time warp and a time map', () => {
+test('formats: a slowed shot reads the source its speed covers, with an M2 line, a time map, and in OTIO its timeline duration with a time warp', () => {
 	const doc = sampleDoc();
 	doc.clips = [{ ...doc.clips[0], dur: 4, srcIn: 1, speed: 0.5 }];
 	const options = optionsFor(doc);
@@ -112,7 +112,22 @@ test('formats: a slowed shot reads the source its speed covers, with an M2 line,
 	assert.equal(lines[3], '001  VP001    V     C        00:00:01:00 00:00:03:00 00:00:00:00 00:00:04:00');
 	assert.equal(lines[4], `M2   VP001          ${(doc.fps * 0.5).toFixed(1).padStart(5, '0')}                00:00:01:00`);
 	const clip = JSON.parse(otio(doc, options)).tracks.children[0].children[0];
-	assert.equal(clip.source_range.duration.value, 2 * doc.fps);
+	assert.equal(clip.source_range.start_time.value, doc.fps);
+	assert.equal(clip.source_range.duration.value, 4 * doc.fps);
 	assert.deepEqual(clip.effects, [{ OTIO_SCHEMA: 'LinearTimeWarp.1', name: '', effect_name: 'LinearTimeWarp', metadata: {}, time_scalar: 0.5 }]);
 	assert.match(fcpxml(doc, options), new RegExp(`<timeMap><timept time="${doc.fps}/${doc.fps}s" value="${doc.fps}/${doc.fps}s" interp="linear"/><timept time="${5 * doc.fps}/${doc.fps}s" value="${3 * doc.fps}/${doc.fps}s" interp="linear"/></timeMap></asset-clip>`));
+});
+
+test('formats: the OTIO video track of slowed shots lasts as long as the timeline', () => {
+	const doc = sampleDoc();
+	doc.clips = [
+		{ ...doc.clips[0], start: 0, dur: 4, srcIn: 1, speed: 0.5 },
+		{ ...doc.clips[2], start: 4, dur: 2, srcIn: 0 },
+		{ ...doc.clips[0], id: 'c4', start: 6, dur: 8, srcIn: 0, speed: 0.25 }
+	];
+	const track = JSON.parse(otio(doc, optionsFor(doc))).tracks.children[0].children;
+	assert.deepEqual(track.map((clip) => clip.source_range.start_time.value), [doc.fps, 0, 0]);
+	assert.deepEqual(track.map((clip) => clip.source_range.duration.value), [4 * doc.fps, 2 * doc.fps, 8 * doc.fps]);
+	assert.equal(track.reduce((total, clip) => total + clip.source_range.duration.value, 0), seqDuration(doc) * doc.fps);
+	assert.deepEqual(track.map((clip) => clip.effects?.[0].time_scalar ?? null), [0.5, null, 0.25]);
 });

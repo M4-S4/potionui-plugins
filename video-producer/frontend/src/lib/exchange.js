@@ -120,7 +120,7 @@ export function otio(doc, { label }) {
 			? {
 					OTIO_SCHEMA: 'Clip.2',
 					name: label(c),
-					source_range: range(c.srcIn, c.dur * speedOf(c)),
+					source_range: range(c.srcIn, c.dur),
 					media_references: reference(file(c)),
 					active_media_reference_key: 'DEFAULT_MEDIA',
 					metadata: { video_producer: { stage: c.stage, take: c.take } },

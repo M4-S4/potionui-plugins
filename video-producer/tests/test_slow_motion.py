@@ -225,7 +225,8 @@ def test_the_exchange_files_carry_the_speed_of_a_slowed_shot(make_doc):
     assert edl[3] == "001  VP001    V     C        00:00:01:00 00:00:03:00 00:00:00:00 00:00:04:00"
     assert edl[4] == "M2   VP001          012.5                00:00:01:00"
     clip = otio["tracks"]["children"][0]["children"][0]
-    assert clip["source_range"]["duration"]["value"] == 50
+    assert clip["source_range"]["start_time"]["value"] == 25
+    assert clip["source_range"]["duration"]["value"] == 100
     assert clip["effects"] == [{"OTIO_SCHEMA": "LinearTimeWarp.1", "name": "", "effect_name": "LinearTimeWarp", "metadata": {}, "time_scalar": 0.5}]
     assert '<timeMap><timept time="25/25s" value="25/25s" interp="linear"/><timept time="125/25s" value="75/25s" interp="linear"/></timeMap></asset-clip>' in fcpxml
     ElementTree.fromstring(fcpxml.encode("utf-8"))
@@ -240,6 +241,27 @@ def test_the_otio_of_a_slowed_shot_reads_with_opentimelineio(make_doc):
 
     [clip] = timeline.video_tracks()[0]
     assert clip.effects[0].time_scalar == 0.25
+    assert timeline.duration().to_seconds() == 4
+
+
+def test_the_otio_track_of_a_slowed_shot_lasts_as_long_as_the_timeline(make_doc):
+    doc = make_doc(
+        clips=[
+            {"id": "c1", "assetId": "a1", "start": 0, "dur": 4, "srcIn": 1, "speed": 0.5},
+            {"id": "c2", "assetId": "a2", "start": 4, "dur": 2, "srcIn": 0},
+            {"id": "c3", "assetId": "a1", "start": 6, "dur": 8, "srcIn": 0, "speed": 0.25},
+        ],
+        assets=[{"id": "a1", "kind": "video", "name": "x", "srcDur": 6}, {"id": "a2", "kind": "video", "name": "y", "srcDur": 6}],
+    )
+    doc["fps"] = 25
+    files = {("clips", index): {"name": "1.mp4", "path": f"/srv/{index}.mp4"} for index in range(3)}
+
+    track = json.loads(render("otio", doc, files))["tracks"]["children"][0]["children"]
+
+    assert [clip["source_range"]["start_time"]["value"] for clip in track] == [25, 0, 0]
+    assert [clip["source_range"]["duration"]["value"] for clip in track] == [100, 50, 200]
+    assert sum(clip["source_range"]["duration"]["value"] for clip in track) == 14 * 25
+    assert [clip.get("effects", [{}])[0].get("time_scalar") for clip in track] == [0.5, None, 0.25]
 
 
 def test_the_assistant_bounds_a_slowed_shot_by_the_source_its_speed_covers(make_doc):

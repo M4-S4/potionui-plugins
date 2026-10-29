@@ -12,7 +12,7 @@ def reference(entry: Optional[Mapping[str, str]]) -> Dict[str, Any]:
 
 
 def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict[str, str]]], locale: str = "en") -> str:
-    """The sequence as an OpenTimelineIO timeline: the shots on V1, a slowed shot with the source range its speed covers and a linear time warp, one audio track per lane named A1, A2… by its position."""
+    """The sequence as an OpenTimelineIO timeline: the shots on V1, a slowed shot from its in point for its duration on the timeline with a linear time warp, one audio track per lane named A1, A2… by its position."""
     time = Timebase(doc)
 
     def span(start: Any, dur: Any) -> Dict[str, Any]:
@@ -30,7 +30,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
             item: Dict[str, Any] = {
                 "OTIO_SCHEMA": "Clip.2",
                 "name": clip_label(doc, clip, locale),
-                "source_range": span(clip["srcIn"], clip["dur"] * speed),
+                "source_range": span(clip["srcIn"], clip["dur"]),
                 "media_references": reference(entry),
                 "active_media_reference_key": "DEFAULT_MEDIA",
                 "metadata": {"video_producer": {"stage": clip.get("stage", UNDEFINED), "take": clip.get("take", UNDEFINED)}},
