@@ -1,8 +1,6 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import './svelte-harness.js';
 import { isUlid } from './ulid.js';
 import { migrate } from './starter.js';
 import {
@@ -23,7 +21,10 @@ import {
 	videoTrack
 } from './tracks.js';
 
-const here = dirname(fileURLToPath(import.meta.url));
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { addToTimeline, placeAsset } = await import('./importer.js');
+
+after(() => dispose());
 
 function lane(id, extra = {}) {
 	return { id, name: id, role: 'Ambiance', vol: 0, pan: 0, mute: false, solo: false, sends: { R1: -60, D1: -60 }, inserts: [], ...extra };
@@ -167,13 +168,6 @@ test('migrate: the document migration runs the track migration', () => {
 	assert.equal(next.lanes[0].id, 'A1');
 });
 
-test('preview: the playback engine applies the shared rule to lanes and shot sound', () => {
-	const source = readFileSync(join(here, 'playback.svelte.js'), 'utf-8');
-	assert.match(source, /import \{ clipSoundAudible, laneAudible \} from '\.\/tracks\.js';/);
-	assert.match(source, /stripOf\(mixRule, lane, doc\.aux, laneAudible\(doc, lane\)\)/);
-	assert.match(source, /clipSoundAudible\(doc, c\) \? envelope\(c, t\) : 0/);
-	assert.doesNotMatch(source, /lanes\.some\(\(l\) => l\.solo\)/, 'no second copy of the solo rule');
-});
 
 test('newSound: a placed sound spans its whole source, a stem of several minutes included, and 8 s while its length is unknown', () => {
 	const stem = newSound('stem', 'A2', 12.4, 435.072);
@@ -201,20 +195,44 @@ test('fitSounds: the length read late replaces the 8 s fallback of untouched ite
 	assert.deepEqual(fitSounds({}, 'stem', 12), []);
 });
 
-test('placing a sound: every path reads its length first and places the whole source, the 5 s shot default stays', () => {
-	const importer = readFileSync(join(here, 'importer.js'), 'utf-8');
-	const state = readFileSync(join(here, 'state.svelte.js'), 'utf-8');
-	assert.match(importer, /export async function placeAsset\(id, row, at\) \{\n\tawait probeAsset\(id\)\.catch\(\(\) => \{\}\);/);
-	assert.match(importer, /export async function addToTimeline\(id, at = null\) \{\n\tconst start = at \?\? ui\.playhead;\n\tif \(asset\(id\)\?\.kind === 'audio'\) await probeAsset\(id\)/);
-	assert.match(importer, /const end = await placeAsset\(id, target\.row, at\);/);
-	assert.match(importer, /newSound\(id, row\.id, start, a\.srcDur\)/);
-	assert.match(importer, /if \(target\.kind === 'audio'\) fitSounds\(doc, id, info\.srcDur\);/);
-	assert.match(state, /doc\.audio\.push\(newSound\(assetId, laneId, round\(at \?\? ui\.playhead, 0\.04\), a\.srcDur\)\)/);
-	assert.match(state, /newClip\(\{ assetId, dur: Math\.min\(5, a\.srcDur \?\? 5\)/);
-	for (const source of [importer, state]) assert.doesNotMatch(source, /Math\.min\(8|, 8\)/);
-	for (const path of ['../components/panels/MediaBrowser.svelte', '../components/panels/MixerPanel.svelte', '../components/viewer/Viewer.svelte']) {
-		const component = readFileSync(join(here, path), 'utf-8');
-		assert.match(component, /addToTimeline\(/, path);
-		assert.doesNotMatch(component, /addAssetToTimeline/, path);
+
+test('placing a sound: every path places the whole source once its length is known, and a shot keeps its 5 s default', async () => {
+	doc.clips = [];
+	doc.audio = [];
+	ui.playhead = 1;
+	ui.selection = null;
+	doc.assets = [
+		{ id: 'known', kind: 'audio', name: 'known.wav', src: '/k.wav', srcDur: 7, role: 'Musique' },
+		{ id: 'unknown', kind: 'audio', name: 'unknown.wav', src: '/u.wav', srcDur: null, role: 'Musique' },
+		{ id: 'long', kind: 'video', name: 'long.mp4', src: '/l.mp4', srcDur: 12, generated: false },
+		{ id: 'brief', kind: 'video', name: 'brief.mp4', src: '/b.mp4', srcDur: 3, generated: false },
+		{ id: 'blank', kind: 'video', name: 'blank.mp4', src: '/n.mp4', srcDur: null, generated: false }
+	];
+	await addToTimeline('known');
+	assert.deepEqual(doc.audio.map((x) => [x.assetId, x.start, x.dur, x.srcIn]), [['known', 1, 7, 0]]);
+	globalThis.document = {
+		createElement() {
+			const el = { removeAttribute() {}, load() {} };
+			Object.defineProperty(el, 'src', {
+				set() {
+					el.duration = 9;
+					queueMicrotask(() => el.onloadedmetadata());
+				}
+			});
+			return el;
+		}
+	};
+	try {
+		await addToTimeline('unknown', 3);
+		assert.equal(doc.assets[1].srcDur, 9);
+		assert.deepEqual(doc.audio.map((x) => [x.assetId, x.start, x.dur]), [['known', 1, 7], ['unknown', 3, 9]]);
+		const lane = doc.lanes[1];
+		assert.equal(await placeAsset('known', { id: lane.id, lane }, 2.02), 2.04 + 7);
+		assert.deepEqual(doc.audio.at(-1) && [doc.audio.at(-1).lane, doc.audio.at(-1).start, doc.audio.at(-1).dur], [lane.id, 2.04, 7]);
+		for (const id of ['long', 'brief', 'blank']) await addToTimeline(id);
+		assert.deepEqual(Object.fromEntries(doc.clips.map((c) => [c.assetId, c.dur])), { long: 5, brief: 3, blank: 5 });
+		assert.ok(doc.audio.every((x) => x.dur !== SOUND_FALLBACK));
+	} finally {
+		delete globalThis.document;
 	}
 });

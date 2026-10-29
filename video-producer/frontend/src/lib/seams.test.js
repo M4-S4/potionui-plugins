@@ -1,14 +1,36 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { clean, hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { chainAssetId, chainFrames, chainPlan, chainState, chainWaiting, normalizeChain, ownChain, placesTakeFrame, resetShotChain, seamChain, setChain, setShotChain, shotChained, takeFrameAsset } from './chain.js';
 import { colorPlanOf, colorsApart } from './continuity.js';
 import { canPrioritize, isWaiting, queueOrder } from './queue.js';
 import { normalizeTake } from './api.js';
 import { migrateShots } from './shots.js';
 import { frameErrorText, seamImage } from './seam.js';
+import { normalizeLooks } from './looks.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+globalThis.Image = class {
+	set src(value) {}
+};
+
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { project } = await import('./project.svelte.js');
+const { setTakes, upsertTake } = await import('./takes.svelte.js');
+const { waitText } = await import('./chain.svelte.js');
+const { lookState } = await import('./looks.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+const WAN = '01KX47WANVIDEO0000000000TV';
+const SEAM_PANEL = new URL('../components/storyboard/SeamPanel.svelte', import.meta.url).href;
+const CHAIN_CHIP = new URL('../components/storyboard/ChainChip.svelte', import.meta.url).href;
+const TAKE_CARD = new URL('../components/takes/TakeCard.svelte', import.meta.url).href;
+const STORYBOARD = new URL('../components/storyboard/StoryboardView.svelte', import.meta.url).href;
+const BAND_LANES = new URL('../components/storyboard/BandLanes.svelte', import.meta.url).href;
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const issuesOf = (html) => [...clean(html).matchAll(/data-seam-issue="([^"]*)"/g)].map((m) => m[1]);
+
+after(() => dispose());
 const media = { itemId: 'item-1', url: '/api/media/uploads/gen-t1-frame-4s.png', filename: 'gen-t1-frame-4s.png', width: 832, height: 480 };
 
 function sampleDoc() {
@@ -187,33 +209,6 @@ test('both migrations drop a shot’s own option that is not a boolean, from the
 	}
 });
 
-test('wiring: the seams of the storyboard carry their actions and the option of each shot', () => {
-	const grid = source('../components/storyboard/StoryboardView.svelte');
-	assert.match(grid, /data-seam-alert=\{c\.id\}\n\t+onclick=\{\(e\) => openSeamMenu\(e, c\)\}/);
-	assert.match(grid, /<SeamPanel clip=\{seamClip\} \/>/);
-	assert.match(grid, /\{#if i > 0\}<ChainChip clip=\{c\} \/>\{\/if\}/);
-	assert.match(grid, /onclick: matchAll \}\}>\{t\('storyboard\.matchAll', \{ count: colorFixes \}\)\}/);
-	assert.match(source('../components/storyboard/BandView.svelte'), /onclick: matchAll \}\}>\{t\('storyboard\.matchAll', \{ count: colorFixes \}\)\}/);
-	assert.match(source('../components/storyboard/BandLanes.svelte'), /\{#if i > 0 && w > 46\}<ChainChip clip=\{c\} small \/>\{\/if\}/);
-	assert.match(source('../components/storyboard/BandMonitor.svelte'), /<SeamPanel \{clip\} title=\{false\} compare=\{false\} \/>/);
-	assert.match(source('../components/storyboard/StoryWindow.svelte'), /\{#if check\.kind === 'seam'\}<SeamFix clip=\{check\.clip\} issue=\{check\.issue\} \/>\{\/if\}/);
-	const panel = source('../components/storyboard/SeamPanel.svelte');
-	assert.match(panel, /<SeamFix \{clip\} \{issue\} \/>/);
-	assert.match(panel, /<ChainSwitch \{clip\} \/>/);
-	const fix = source('../components/storyboard/SeamFix.svelte');
-	assert.match(fix, /onclick=\{\(e\) => run\(e, matchToPrevious\)\}/);
-	assert.match(fix, /onclick=\{\(e\) => run\(e, compareSeamTakes\)\}/);
-	assert.match(fix, /<SeamAction \{clip\} \/>/);
-	assert.match(source('../components/inspector/Inspector.svelte'), /<SeamAction clip=\{item\} variant="button" \/>\n\t+<ChainSwitch clip=\{item\} \/>/);
-	assert.match(source('../components/storyboard/ShotQuickEdit.svelte'), /<ChainSwitch \{clip\} \/>/);
-	assert.match(source('../components/panels/QueuePanel.svelte'), /const wait = waitText\(take\);\n\t\tif \(wait\) return wait;/);
-	assert.match(source('../components/takes/TakeCard.svelte'), /if \(status === 'queued'\) return waitText\(take\) \|\| t\('lib\.status\.queued'\);/);
-	const chain = source('./chain.svelte.js');
-	assert.match(chain, /^onTake\(placeTakeFrame\);$/m);
-	assert.match(source('./takes.svelte.js'), /for \(const take of takeStore\.list\) told\(take, false\);/);
-	assert.match(source('./takes.svelte.js'), /const stored = takeById\(take\.id\);\n\ttold\(stored, true\);/);
-	assert.doesNotMatch(source('../components/director/ReviewView.svelte'), /SeamPanel|SeamFix|ChainSwitch/);
-});
 
 test('frame errors: one text per code of the frame routes, the missing media named by the caller, anything else generic', () => {
 	const t = (key) => key;
@@ -228,4 +223,67 @@ test('frame errors: one text per code of the frame routes, the missing media nam
 	assert.equal(frameErrorText({ code: 'invalid_request' }, t), 'lib.seam.error.invalid');
 	assert.equal(frameErrorText({ code: 'something_else' }, t), 'lib.seam.error.generic');
 	assert.equal(frameErrorText(null, t), 'lib.seam.error.generic');
+});
+
+test('wiring: the seam panel carries the fix of each issue and the chain option of the shot, the chips say the chain of each shot, the cards say what a queued take waits for, and a taken frame lands on its shot as soon as the take is known', async () => {
+	project.id = 'p1';
+	ui.me = { engines: [{ id: 'native', kind: 'local', name: 'Local' }], presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }] };
+	ui.workspace = 'storyboard';
+	ui.storyView = 'grid';
+	doc.engine = { backend: 'native', preset: WAN, model: null };
+	const base = sampleDoc();
+	doc.clips = base.clips.map((c, i) => ({ ...c, label: ['One', 'Two', 'Three'][i] }));
+	doc.clips[0].assetId = 'own';
+	doc.assets = base.assets;
+	doc.frames = [];
+	setTakes('p1', []);
+	lookState.projectId = 'p1';
+	lookState.data = normalizeLooks(null);
+	const panel = clean(await renderComponent(SEAM_PANEL, { clip: doc.clips[1] }));
+	assert.match(panel, /data-seam-panel="s2"/);
+	assert.match(textOf(panel), new RegExp(escaped(t('storyboard.band.seamTitle', { n: '01', m: '02' }))));
+	assert.deepEqual(issuesOf(panel), ['chain_offer']);
+	assert.match(panel, new RegExp(`data-seam-fix="chain">[\\s\\S]*?<button[^>]*>${escaped(t('lib.seam.use'))}</button>`));
+	assert.match(panel, /data-chain-switch="ready"/);
+	assert.deepEqual(hostUis(panel, 'Switch').map((item) => item.checked), [true]);
+	assert.match(textOf(panel), new RegExp(escaped(t('storyboard.band.seamCompare'))));
+	const bare = clean(await renderComponent(SEAM_PANEL, { clip: doc.clips[1], title: false, compare: false }));
+	assert.doesNotMatch(textOf(bare), new RegExp(escaped(t('storyboard.band.seamCompare'))));
+	assert.doesNotMatch(textOf(bare), new RegExp(escaped(t('storyboard.band.seamTitle', { n: '01', m: '02' }))));
+	assert.equal(clean(await renderComponent(SEAM_PANEL, { clip: doc.clips[0] })), '');
+	doc.clips[0].take = 't1';
+	doc.clips[1].take = 't2';
+	lookState.data = normalizeLooks({ embedder: { available: true }, seams: [{ shot_id: 's2', previous_id: 's1', from_take: 't1', to_take: 't2', score: 0.4, status: 'done' }] });
+	const low = clean(await renderComponent(SEAM_PANEL, { clip: doc.clips[1] }));
+	assert.deepEqual(issuesOf(low), ['identity', 'chain_offer']);
+	assert.match(low, new RegExp(`data-seam-fix="identity"[^>]*>${escaped(t('storyboard.seam.compareTakes'))}</button>`));
+	lookState.data = normalizeLooks(null);
+	const chip = clean(await renderComponent(CHAIN_CHIP, { clip: doc.clips[1] }));
+	assert.match(chip, /aria-pressed="true"/);
+	assert.match(chip, /data-chain-chip="ready"/);
+	assert.match(chip, new RegExp(`aria-label="${escaped(t('storyboard.chain.chipOn', { previous: 'One' }))}"`));
+	assert.equal(clean(await renderComponent(CHAIN_CHIP, { clip: doc.clips[0] })), '');
+	doc.clips[1].firstFromPrevious = false;
+	const off = clean(await renderComponent(CHAIN_CHIP, { clip: doc.clips[1], small: true }));
+	assert.match(off, /aria-pressed="false"/);
+	assert.match(off, /data-chain-chip="off"/);
+	assert.match(off, new RegExp(`aria-label="${escaped(t('storyboard.chain.chipOff', { previous: 'One' }))}"`));
+	delete doc.clips[1].firstFromPrevious;
+	const grid = clean(await renderComponent(STORYBOARD));
+	assert.deepEqual([...grid.matchAll(/data-chain-chip="([^"]*)"/g)].map((m) => m[1]), ['ready', 'later']);
+	assert.match(grid, /data-seam-alert="s2"/);
+	assert.ok([...clean(await renderComponent(BAND_LANES)).matchAll(/data-chain-chip="/g)].length >= 1);
+	const waiting = { id: 't3', shotId: 's2', status: 'queued', label: 'draft', quality: 'draft', variant: 'B', url: null, createdAt: '2026-10-26T10:01:00Z', chain: { previous: 's1', after: 't1', state: 'waiting', batch: 'b1', source: null, frame: null } };
+	setTakes('p1', [{ id: 't1', shotId: 's1', status: 'running', label: 'draft', quality: 'draft', variant: 'A', url: null, createdAt: '2026-10-26T10:00:00Z' }, waiting]);
+	assert.equal(waitText(waiting), t('lib.chain.waitTake', { variant: 'A', shot: 'One' }));
+	assert.equal(waitText({ ...waiting, chain: { ...waiting.chain, after: null } }), t('lib.chain.waitFrame', { shot: 'One' }));
+	assert.equal(waitText({ ...waiting, status: 'running' }), '');
+	assert.match(textOf(await renderComponent(TAKE_CARD, { take: waiting, clip: doc.clips[1] })), new RegExp(escaped(t('lib.chain.waitTake', { variant: 'A', shot: 'One' }))));
+	doc.frames = [];
+	const take = taken('t2');
+	setTakes('p1', [take]);
+	assert.equal(seamImage(doc, 's2', 'first')?.id, chainAssetId(take));
+	const live = taken('t4', { shotId: 's3', chain: { ...taken('t4').chain, previous: 's2', after: 't2', batch: 'b2', source: { shotId: 's2', takeId: 't2', assetId: 'gen-t1', at: 4 } } });
+	upsertTake(live);
+	assert.equal(seamImage(doc, 's3', 'first')?.id, chainAssetId(live));
 });

@@ -1,14 +1,44 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { clean, hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { emptyDoc, migrate } from './starter.js';
 import { normalizePassEstimate, normalizeTake } from './api.js';
 import { DEFAULT_RTX_SOURCE, GUIDED_PRESET, PASS_METHODS, PASS_TARGETS, RTX_SOURCES, UPSCALERS, migratePass, passBody, passChoice, passFlying, passPlan, passProgress, passShot, rtxSourceShown, upscalerReady } from './finalpass.js';
 
 const t = (key) => key;
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const take = (id, shotId, extra = {}) => ({ id, shotId, status: 'done', url: `/v/${id}.mp4`, label: 'draft', quality: 'draft', kind: 'render', parentTakeId: null, createdAt: id, shotRevision: 0, variant: 'A', ...extra });
 const clip = (id, extra = {}) => ({ id, stage: 'draft', take: null, revision: 0, ...extra });
+
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { project } = await import('./project.svelte.js');
+const { setTakes } = await import('./takes.svelte.js');
+const { commandById } = await import('./commands.js');
+const { t: tr } = await import('../i18n/index.svelte.js');
+
+const WAN = '01KX47WANVIDEO0000000000TV';
+const FINAL_PASS = new URL('../components/modals/FinalPass.svelte', import.meta.url).href;
+const MAKE_FINAL = new URL('../components/modals/MakeFinal.svelte', import.meta.url).href;
+const PASS_BUTTON = new URL('../components/production/FinalPassButton.svelte', import.meta.url).href;
+const DECK = new URL('../components/production/ProductionDeck.svelte', import.meta.url).href;
+const STORYBOARD = new URL('../components/storyboard/StoryboardView.svelte', import.meta.url).href;
+const BAND = new URL('../components/storyboard/BandView.svelte', import.meta.url).href;
+const REVIEW = new URL('../components/director/ReviewView.svelte', import.meta.url).href;
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const buttons = (html) => [...clean(html).matchAll(/<host-ui data-host="Button" data-props="([^"]*)">(.*?)<\/host-ui>/g)].map(([, props, inner]) => ({ ...JSON.parse(props.replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&amp;', '&')), text: textOf(inner) }));
+
+after(() => dispose());
+
+function passScene(second = null, extra = []) {
+	project.id = 'p1';
+	ui.me = { engines: [{ id: 'native', kind: 'local', name: 'Local' }], presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }], features: {} };
+	ui.workspace = 'storyboard';
+	ui.menuOpen = null;
+	ui.modal = null;
+	doc.engine = { backend: 'native', preset: WAN, model: null };
+	doc.clips = [clip('s1', { start: 0, dur: 4, srcIn: 0, label: 'One', take: 't1' }), clip('s2', { start: 4, dur: 4, srcIn: 0, label: 'Two', take: second })];
+	setTakes('p1', [take('t1', 's1', { label: 'final', presetId: WAN }), ...(second ? [take(second, 's2', { label: 'final', presetId: WAN })] : []), ...extra]);
+}
 
 test('passShot reads each shot from its Final take: ready on a draft, done on a final, running while a final is in flight', () => {
 	const draft = take('d1', 's1', { label: 'final' });
@@ -167,23 +197,47 @@ test('the page reads a guided take and the estimate of a pass shot by shot', () 
 	assert.equal(normalizePassEstimate(null), null);
 });
 
-test('the final pass opens from the Production menu, the two Storyboard headers, the Review footer and the To produce tab', () => {
-	assert.match(source('./commands.js'), /command\('assemble', assembleChosen\), command\('final-pass', openFinalPass\)\]/);
-	for (const path of ['../components/storyboard/BandView.svelte', '../components/storyboard/StoryboardView.svelte', '../components/director/ReviewView.svelte']) {
-		assert.match(source(path), /<FinalPassButton( room=\{countsEl\}| short=\{tight\})? \/>/, path);
-	}
-	assert.match(source('../components/storyboard/StoryWindow.svelte'), /<FinalPassButton variant="secondary" \/>/);
-	assert.match(source('../components/modals/Modals.svelte'), /m\?\.type === 'final-pass'\}\n\t\t<FinalPass \/>/);
-	const deck = source('../components/production/ProductionDeck.svelte');
-	assert.doesNotMatch(deck, /FinalPassButton/);
-	assert.match(deck, /role="menuitem" onclick=\{\(\) => fromMore\(openFinalPass\)\}/);
+
+
+test('the final pass opens from the Production menu and the More menu of the deck, and its button on the Storyboard, the band and the Review counts the shots at final quality', async () => {
+	passScene();
+	const command = commandById('final-pass');
+	assert.equal(command.menuId, 'production');
+	command.run();
+	assert.deepEqual(ui.modal, { type: 'final-pass' });
+	ui.modal = null;
+	const button = clean(await renderComponent(PASS_BUTTON));
+	assert.match(button, new RegExp(`<button[^>]*aria-label="${escaped(tr('generation.finalPass.tipMissing', { done: 0, total: 2, count: 1 }))}"`));
+	assert.equal(textOf(button), `${tr('generation.finalPass.button')} ${tr('generation.finalPass.count', { done: 0, total: 2 })}`);
+	assert.equal(textOf(await renderComponent(PASS_BUTTON, { short: true })), tr('generation.finalPass.count', { done: 0, total: 2 }));
+	assert.deepEqual(buttons(await renderComponent(PASS_BUTTON, { variant: 'secondary' })).map((b) => [b.variant, b.text]), [['secondary', `${tr('generation.finalPass.button')} · ${tr('generation.finalPass.count', { done: 0, total: 2 })}`]]);
+	for (const page of [STORYBOARD, BAND, REVIEW]) assert.match(textOf(await renderComponent(page)), new RegExp(escaped(tr('generation.finalPass.button'))), page);
+	ui.menuOpen = 'deck-more';
+	const items = [...clean(await renderComponent(DECK)).matchAll(/role="menuitem"[^>]*>(.*?)<\/button>/g)].map((m) => textOf(m[1]));
+	assert.ok(items.includes(tr('generation.finalPass.title')), items.join(' | '));
+	ui.menuOpen = null;
+	doc.clips = [];
+	assert.equal(clean(await renderComponent(PASS_BUTTON)), '');
 });
 
-test('the window of the pass keeps one primary button and lets the per-take window offer the guided render', () => {
-	const pass = source('../components/modals/FinalPass.svelte');
-	assert.equal(pass.match(/variant: 'primary'/g).length, 1);
-	assert.match(pass, /plan\.missing\.length \? t\('generation\.finalPass\.startWithout'/);
-	assert.match(pass, /onclick: cancelFinalPass/);
-	const single = source('../components/modals/MakeFinal.svelte');
-	assert.match(single, /\{#if guided\}\n\t\t\t<HostUi name="Button" props=\{\{ variant: 'secondary', size: 'sm', class: 'mr-auto', disabled: sending, onclick: \(\) => send\('guided'\) \}\}>/);
+test('the window of the pass keeps one primary button, which goes without the missing shots, cancels a running pass from a secondary one, and the per-take window offers the guided render only when its engine is there', async () => {
+	passScene();
+	const missing = buttons(await renderComponent(FINAL_PASS));
+	assert.deepEqual(missing.filter((b) => b.variant === 'primary').map((b) => b.text), [tr('generation.finalPass.startWithout', { count: 1 })]);
+	assert.ok(!missing.some((b) => b.text === tr('generation.finalPass.cancelPass', { count: 1 })));
+	passScene('t2');
+	const whole = buttons(await renderComponent(FINAL_PASS));
+	assert.deepEqual(whole.filter((b) => b.variant === 'primary').map((b) => b.text), [tr('generation.finalPass.start', { count: 2 })]);
+	passScene('t2', [take('t3', 's1', { quality: 'final', kind: 'upscale', parentTakeId: 't1', status: 'running', url: null, presetId: WAN })]);
+	const running = buttons(await renderComponent(FINAL_PASS));
+	assert.equal(running.filter((b) => b.variant === 'primary').length, 1);
+	assert.deepEqual(running.filter((b) => b.text === tr('generation.finalPass.cancelPass', { count: 1 })).map((b) => b.variant), ['secondary']);
+	passScene();
+	const plain = buttons(await renderComponent(MAKE_FINAL, { takeId: 't1' }));
+	assert.equal(plain.filter((b) => b.variant === 'primary').length, 1);
+	assert.ok(!plain.some((b) => b.text === tr('generation.final.guided')));
+	ui.me = { ...ui.me, features: { guided: true } };
+	const guided = buttons(await renderComponent(MAKE_FINAL, { takeId: 't1' }));
+	assert.equal(guided.filter((b) => b.variant === 'primary').length, 1);
+	assert.deepEqual(guided.filter((b) => b.text === tr('generation.final.guided')).map((b) => [b.variant, b.class]), [['secondary', 'mr-auto']]);
 });

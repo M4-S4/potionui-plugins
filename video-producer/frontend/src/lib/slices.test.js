@@ -1,10 +1,9 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { clean, hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { JOIN_TOLERANCE, MAX_SLICES, SLICE_MAX, SLICE_MIN, SLICE_SECONDS, continues, joined, shotCuts, shotSlices, sliceChain, sliceCuts, sliceItem, sliceLength } from './tracks.js';
 import { isReferenceItem, joinPlan } from './sound.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const lane = (id, extra = {}) => ({ id, name: id, role: 'Musique', vol: 0, pan: 0, mute: false, solo: false, ...extra });
 const sound = (id, start, dur, extra = {}) => ({ id, assetId: 'stem', lane: 'A1', start, dur, srcIn: 0, fadeIn: 0, fadeOut: 0, gain: -6, ...extra });
 const ids = () => {
@@ -12,6 +11,24 @@ const ids = () => {
 	return () => `new-${++n}`;
 };
 const shape = (items) => items.map((x) => [x.id, x.start, x.dur, x.srcIn, x.fadeIn, x.fadeOut]);
+
+const { doc, ui, sliceAudio, joinAudio, sliceOnShots, undo, dispose } = await import('./state.svelte.js');
+const { commandById } = await import('./commands.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+const INSPECTOR = new URL('../components/inspector/Inspector.svelte', import.meta.url).href;
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const buttons = (html) => [...clean(html).matchAll(/<host-ui data-host="Button" data-props="([^"]*)">(.*?)<\/host-ui>/g)].map(([, props, inner]) => ({ ...JSON.parse(props.replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&amp;', '&')), text: textOf(inner) }));
+
+after(() => dispose());
+
+function pageScene(dur = 12) {
+	ui.sliceSeconds = SLICE_SECONDS;
+	doc.clips = [{ id: 's1', start: 0, dur: 4, srcIn: 0, stage: 'todo', label: 'One' }, { id: 's2', start: 4, dur: 4, srcIn: 0, stage: 'todo', label: 'Two' }];
+	doc.assets = [{ id: 'stem', kind: 'audio', name: 'stem.wav', src: '/s.wav', srcDur: 20 }];
+	doc.audio = [sound('a1', 0, dur, { lane: doc.lanes[0].id })];
+	ui.selection = { kind: 'audio', id: 'a1' };
+}
 
 function sliced(item, seconds, doc = { lanes: [lane('A1')], audio: [] }) {
 	const parts = sliceItem(item, seconds, ids());
@@ -141,25 +158,6 @@ test('joining: only clips of the same file on the same track that follow on, on 
 	);
 });
 
-test('the page slices and joins the selected audio clip through act(), from the Inspector, the command search and the keyboard', () => {
-	const state = source('./state.svelte.js');
-	assert.match(state, /sliceAudio\(seconds = ui\.sliceSeconds\)[\s\S]*?act\(\(\) => \{\n\t\tObject\.assign\(a, parts\[0\]\);/);
-	assert.match(state, /export function joinAudio\(\)[\s\S]*?act\(\(\) => \{\n\t\tfor \(const run of runs\.filter/);
-	assert.match(state, /sliceSeconds: SLICE_SECONDS/);
-	const commands = source('./commands.js');
-	assert.match(commands, /command\('audio-slice', \(\) => sliceAudio\(\), \{ keys: 'shift\+mod\+b', vars: \(\) => \(\{ dur: secs\(ui\.sliceSeconds\) \}\) \}\)/);
-	assert.match(commands, /command\('audio-join', joinAudio, \{ keys: 'alt\+mod\+b' \}\)/);
-	const inspector = source('../components/inspector/Inspector.svelte');
-	assert.match(inspector, /setReferenceItem\(item, audioLane, v\)/);
-	assert.match(inspector, /act\(\(\) => followLane\(item\)\)/);
-	assert.match(inspector, /undoable=\{false\} onchange=\{\(v\) => \(ui\.sliceSeconds = sliceLength\(v\)\)\}/);
-	assert.match(inspector, /onclick: \(\) => sliceAudio\(\)/);
-	assert.match(inspector, /onclick: joinAudio/);
-	assert.match(source('../components/inspector/NumField.svelte'), /if \(undoable\) checkpoint\(\);/);
-	const timeline = source('../components/timeline/Timeline.svelte');
-	assert.match(timeline, /\{@const reference = isReferenceItem\(a, row\.lane\)\}/);
-	assert.match(timeline, /\{#if reference\}<span class="flex shrink-0 text-signal" role="img"[^>]*data-reference-item><Icon name="sparkles"/);
-});
 
 const shot = (id, start, dur) => ({ id, start, dur });
 const spans = (parts) => parts.map((x) => [x.start, x.dur, x.srcIn]);
@@ -225,12 +223,68 @@ test('slicing on the shots: nothing to cut inside one shot, past the last shot o
 	assert.equal(shotCuts(sound('a', 0, 200), many).length, MAX_SLICES - 1);
 });
 
-test('the page slices on the shots the selected audio clip or every clip of the selected track, through act(), from the Inspector and the command search', () => {
-	const state = source('./state.svelte.js');
-	assert.match(state, /export function sliceOnShots\(\)[\s\S]*?doc\.audio\.filter\(\(x\) => x\.lane === lane\.id\)[\s\S]*?shotSlices\(\$state\.snapshot\(a\), doc\.clips\)[\s\S]*?act\(\(\) => \{\n\t\tfor \(const \{ a, parts \} of done\)/);
-	assert.match(source('./commands.js'), /command\('audio-slice-shots', sliceOnShots\)/);
-	const inspector = source('../components/inspector/Inspector.svelte');
-	assert.equal(inspector.match(/onclick: sliceOnShots/g).length, 2);
-	assert.match(inspector, /shotCuts\(audio, doc\.clips\)/);
-	assert.match(inspector, /doc\.audio\.filter\(\(x\) => x\.lane === item\.id\)\.map\(\(x\) => shotCuts\(x, doc\.clips\)\)/);
+
+test('the page slices and joins the selected audio clip in one undo step each, from the Inspector buttons, the command search and the keyboard', async () => {
+	pageScene();
+	assert.equal(ui.sliceSeconds, SLICE_SECONDS);
+	const before = JSON.stringify(doc);
+	sliceAudio();
+	assert.deepEqual(spans(doc.audio), spans(sliceItem(JSON.parse(before).audio[0], SLICE_SECONDS, ids())));
+	assert.equal(doc.audio[0].id, 'a1');
+	undo();
+	assert.equal(JSON.stringify(doc), before);
+	sliceAudio();
+	const sliced = JSON.stringify(doc);
+	ui.selection = { kind: 'audio', id: doc.audio[1].id };
+	joinAudio();
+	assert.deepEqual(spans(doc.audio), [[0, 12, 0]]);
+	assert.deepEqual(ui.selection, { kind: 'audio', id: 'a1' });
+	undo();
+	assert.equal(JSON.stringify(doc), sliced);
+	assert.deepEqual([commandById('audio-slice').keys, commandById('audio-join').keys], ['shift+mod+b', 'alt+mod+b']);
+	ui.selection = { kind: 'audio', id: 'a1' };
+	ui.sliceSeconds = 2;
+	commandById('audio-slice').run();
+	assert.deepEqual(spans(doc.audio).slice(0, 3), [[0, 2, 0], [2, 2, 2], [4, 1, 4]]);
+	commandById('audio-join').run();
+	assert.deepEqual(spans(doc.audio), [[0, 12, 0]]);
+	pageScene();
+	const html = await renderComponent(INSPECTOR);
+	assert.deepEqual(buttons(html).filter((b) => b.text === t('inspector.audio.slice')).map((b) => b.disabled), [false]);
+	assert.deepEqual(buttons(html).filter((b) => b.text === t('inspector.audio.join')).map((b) => b.disabled), [true]);
+	assert.deepEqual(hostUis(html, 'Switch').filter((item) => item.id === 'vp-audio-reference').map((item) => item.checked), [false]);
+	sliceAudio();
+	doc.audio[0].reference = true;
+	const parts = await renderComponent(INSPECTOR);
+	assert.deepEqual(buttons(parts).filter((b) => b.text === t('inspector.audio.join')).map((b) => b.disabled), [false]);
+	assert.deepEqual(hostUis(parts, 'Switch').filter((item) => item.id === 'vp-audio-reference').map((item) => item.checked), [true]);
+	assert.match(textOf(parts), new RegExp(escaped(t('inspector.section.slices'))));
+});
+
+test('the page slices on the shots the selected audio clip, or every clip of the selected track, in one undo step, from the Inspector and the command search', async () => {
+	pageScene();
+	const before = JSON.stringify(doc);
+	sliceOnShots();
+	assert.deepEqual(spans(doc.audio), spans(shotSlices(JSON.parse(before).audio[0], doc.clips, ids())));
+	undo();
+	assert.equal(JSON.stringify(doc), before);
+	doc.audio.push(sound('a2', 3, 2, { lane: doc.lanes[0].id }));
+	const two = JSON.stringify(doc);
+	ui.selection = { kind: 'lane', id: doc.lanes[0].id };
+	assert.equal(commandById('audio-slice-shots').menuId, 'edit-timeline');
+	commandById('audio-slice-shots').run();
+	const planned = JSON.parse(two).audio.map((item) => shotSlices(item, doc.clips, ids()));
+	assert.deepEqual(spans(doc.audio), planned.flatMap(spans));
+	undo();
+	assert.equal(JSON.stringify(doc), two);
+	pageScene();
+	const shots = (html) => buttons(html).filter((b) => b.text === t('inspector.audio.shots')).map((b) => b.disabled);
+	assert.deepEqual(shots(await renderComponent(INSPECTOR)), [false]);
+	doc.clips = [];
+	assert.deepEqual(shots(await renderComponent(INSPECTOR)), [true]);
+	pageScene();
+	ui.selection = { kind: 'lane', id: doc.lanes[0].id };
+	assert.deepEqual(shots(await renderComponent(INSPECTOR)), [false]);
+	doc.audio = [];
+	assert.deepEqual(shots(await renderComponent(INSPECTOR)), [true]);
 });

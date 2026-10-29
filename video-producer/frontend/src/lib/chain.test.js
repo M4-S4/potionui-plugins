@@ -1,11 +1,42 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { clean, hostUis, renderComponent } from './svelte-harness.js';
 import { chainOn, chainPlan, chainSource, chainState, cutEnd, frameAsset, ignoresFirstFrame, normalizeFrameSource, sameFrame, setChain, stillAsset } from './chain.js';
 import { framesOf, placeSeamFrame, seamImage } from './seam.js';
 import { seamPick } from './continuity.js';
 
-const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+globalThis.Image = class {
+	set src(value) {}
+};
+
+const { doc, ui, addShot, acceptProposal, adopt, bladeAt, undo, dispose } = await import('./state.svelte.js');
+const { project, bindClient } = await import('./project.svelte.js');
+const { setTakes } = await import('./takes.svelte.js');
+const { chainOf } = await import('./chain.svelte.js');
+const { useSeamFrame } = await import('./seam.svelte.js');
+const { seam } = await import('./continuity.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+const SEAM_ACTION = new URL('../components/takes/SeamAction.svelte', import.meta.url).href;
+const SEAM_FIX = new URL('../components/storyboard/SeamFix.svelte', import.meta.url).href;
+const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+after(() => dispose());
+
+function liveScene(previousAsset = 'pic') {
+	project.id = 'p1';
+	ui.selection = null;
+	ui.storyProposal = null;
+	ui.playhead = 0;
+	ui.modal = null;
+	delete doc.firstFromPrevious;
+	doc.clips = [{ id: 's1', assetId: previousAsset, take: previousAsset === 'gen-t1' ? 't1' : null, start: 0, dur: 4, srcIn: 0.5, stage: 'draft', label: 'One' }];
+	doc.assets = sampleDoc().assets;
+	doc.frames = [];
+	doc.prompts = [];
+	setTakes('p1', []);
+}
 let counter = 0;
 const makeId = () => `id-${++counter}`;
 const takeUrl = (gen, file) => `/api/media/generations/${gen}/${file}`;
@@ -185,25 +216,7 @@ test('ignoresFirstFrame: a local preset that composes from text only, never a cl
 	assert.equal(ignoresFirstFrame(null), false);
 });
 
-test('wiring: every path that adds shots tells the chain, inside the same undo step', () => {
-	const state = source('./state.svelte.js');
-	assert.match(state, /if \(prompt\) doc\.prompts\.push\(newPrompt\(c, prompt\)\);\n\t\tshotsAdded\(\[c\]\);\n\t\}\);/);
-	assert.match(state, /added\.push\(c\);\n\t\t\}\n\t\tshotsAdded\(added\);\n\t\}\);/);
-	assert.doesNotMatch(state.slice(state.indexOf('export function bladeAt'), state.indexOf('export function markerLabel')), /shotsAdded/);
-	const chain = source('./chain.svelte.js');
-	assert.match(chain, /^onShotsAdded\(chainShots\);$/m);
-	assert.match(source('./seam.svelte.js'), /from '\.\/chain\.svelte\.js';/);
-});
 
-test('wiring: the seam says a stale first frame and offers one, and its button takes the end frame', () => {
-	const continuity = source('./continuity.svelte.js');
-	assert.match(continuity, /kind: 'chain_stale'/);
-	assert.match(continuity, /kind: 'chain_offer'/);
-	const seam = source('./seam.svelte.js');
-	assert.match(seam, /if \(chainOf\(clip\)\?\.state === 'stale' \|\| \(await replaceAllowed\(clip, 'first'\)\)\) await takeEndFrame\(clip\);/);
-	assert.match(source('../components/takes/SeamAction.svelte'), /offer\?\.stale \? t\('lib\.chain\.refresh'\)/);
-	assert.match(source('../components/modals/Modals.svelte'), /setChain\(doc, v\)/);
-});
 
 test('the cut of a slowed shot ends where its take stops showing: its in point plus its duration times its speed', () => {
 	assert.equal(cutEnd({ srcIn: 1, dur: 4, speed: 0.5 }), 3);
@@ -212,4 +225,70 @@ test('the cut of a slowed shot ends where its take stops showing: its in point p
 	const doc = sampleDoc();
 	Object.assign(doc.clips[0], { srcIn: 0.5, dur: 4, speed: 0.5 });
 	assert.deepEqual(chainSource(doc, doc.clips[0]), { shotId: 's1', takeId: 't1', assetId: 'gen-t1', at: 2.5 });
+});
+
+test('wiring: every path that adds a shot gives it the end of the previous one inside the same undo step, and a blade cut does not', () => {
+	liveScene();
+	const before = JSON.stringify(doc);
+	const added = addShot('Two');
+	assert.deepEqual(seamImage(doc, added.id, 'first')?.frameOf, { shotId: 's1', takeId: null, assetId: 'pic', at: null });
+	undo();
+	assert.equal(JSON.stringify(doc), before);
+	ui.storyProposal = [{ keep: true, label: 'Three', dur: 4, prompt: 'A boat leaves the harbour.' }];
+	acceptProposal();
+	assert.equal(doc.clips.length, 2);
+	assert.equal(seamImage(doc, doc.clips[1].id, 'first')?.frameOf?.assetId, 'pic');
+	undo();
+	assert.equal(JSON.stringify(doc), before);
+	const next = JSON.parse(before);
+	next.clips.push({ id: 's9', assetId: null, take: null, start: 4, dur: 4, srcIn: 0, stage: 'todo', label: 'Nine' });
+	adopt(next);
+	assert.equal(seamImage(doc, 's9', 'first')?.frameOf?.assetId, 'pic');
+	undo();
+	assert.equal(JSON.stringify(doc), before);
+	bladeAt(2);
+	assert.equal(doc.clips.length, 2);
+	assert.equal(seamImage(doc, doc.clips[1].id, 'first') ?? null, null);
+});
+
+test('wiring: the seam says when the first frame is stale or when the previous shot can give one, and its action takes the new end frame without asking', async () => {
+	liveScene('gen-t1');
+	const calls = [];
+	const asked = [];
+	bindClient({
+		async saveProject(id, next, version) {
+			return { ok: true, data: { version: version + 1, updatedAt: null } };
+		},
+		async endFrame(projectId, shotId) {
+			calls.push([projectId, shotId]);
+			const media = { itemId: 'item-9', url: '/api/media/uploads/e-9.png', filename: 'wan_00001-frame-4.5s.png', width: 832, height: 480 };
+			return { ok: true, data: { media, source: { shotId: 's1', takeId: 't1', assetId: 'gen-t1', at: cutEnd(doc.clips[0]) } } };
+		}
+	});
+	window.__potionui.confirm = async (options) => (asked.push(options), false);
+	doc.clips.push({ id: 's2', assetId: null, take: null, start: 4, dur: 4, srcIn: 0, stage: 'todo', label: 'Two' });
+	assert.deepEqual(seam(1).issues.map((issue) => [issue.kind, issue.text]), [['chain_offer', t('lib.chain.offer', { shot: 'Two', previous: 'One' })]]);
+	const offer = clean(await renderComponent(SEAM_ACTION, { clip: doc.clips[1] }));
+	assert.match(offer, new RegExp(`<button[^>]*>${escaped(t('lib.seam.use'))}</button>`));
+	assert.doesNotMatch(offer.match(/<button[^>]*>/)[0], /\sdisabled(?!:)/);
+	extracted(doc, doc.clips[1], doc.clips[0], 3);
+	assert.deepEqual(seam(1).issues.map((issue) => [issue.kind, issue.text]), [['chain_stale', t('lib.chain.stale', { shot: 'Two', previous: 'One' })]]);
+	assert.equal(chainOf(doc.clips[1]).state, 'stale');
+	const stale = clean(await renderComponent(SEAM_ACTION, { clip: doc.clips[1] }));
+	assert.match(stale, new RegExp(`<button[^>]*>${escaped(t('lib.chain.refresh'))}</button>`));
+	const fix = clean(await renderComponent(SEAM_FIX, { clip: doc.clips[1], issue: seam(1).issues[0] }));
+	assert.match(fix, new RegExp(`data-seam-fix="chain">[\\s\\S]*<button[^>]*>${escaped(t('lib.chain.refresh'))}</button>`));
+	await useSeamFrame(doc.clips[1]);
+	assert.deepEqual([calls, asked], [[['p1', 's1']], []]);
+	assert.equal(chainOf(doc.clips[1]).state, 'fresh');
+	assert.deepEqual(seam(1).issues, []);
+	await useSeamFrame(doc.clips[1]);
+	assert.deepEqual([calls.length, asked.length], [1, 1]);
+	ui.modal = { type: 'project' };
+	const chainSwitch = async () => hostUis(await renderComponent(MODALS), 'Switch').filter((item) => item.id === 'vp-project-chain').map((item) => item.checked);
+	assert.deepEqual(await chainSwitch(), [true]);
+	setChain(doc, false);
+	assert.deepEqual(await chainSwitch(), [false]);
+	ui.modal = null;
+	window.__potionui.confirm = async () => true;
 });
