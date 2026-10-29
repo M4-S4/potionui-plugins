@@ -4,22 +4,20 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
-	import { ui, doc, act, secs, allIssues, fmtDuration, openDirector, pickedClips, clearPicked, clipLabel } from '../../lib/state.svelte.js';
+	import { ui, doc, secs, allIssues, fmtDuration, openDirector, pickedClips, clearPicked, clipLabel } from '../../lib/state.svelte.js';
 	import {
 		readiness,
 		startGeneration,
 		cancelGeneration,
 		QUEUE_MENU,
-		openEngineSettings,
+		openQueue,
 		openResults,
 		jobClips,
 		currentEngine,
 		engineGroups,
 		engineLabel,
-		selectEngine,
 		setProjectQuality,
 		supportedProfiles,
-		soundGuides,
 		backendName,
 		estimateRequest,
 		scheduleEstimate,
@@ -28,24 +26,22 @@
 	import { aspectOf, draftResolution, finalResolution, presetLabel } from '../../lib/generation.js';
 	import { chosenSize } from '../../lib/formats.js';
 	import { commandById } from '../../lib/commands.js';
-	import { hasOwnEngine } from '../../lib/engine.js';
 	import { optionCount } from '../../lib/options.js';
-	import { MAX_MARGIN, referenceMargin, setReferenceMargin } from '../../lib/sound.js';
 	import { announcer } from '../../lib/announce.js';
 	import { overlayLayer } from '../../lib/host.js';
+	import { setReturnFocus } from '../../lib/focus.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
 	import { deckCell, deckChip, deckDetail, deckEyebrow, deckState, deckTitle, deckTone, remainingSeconds } from '../../lib/deck.js';
+	import { profileControl, profileHint } from '../../lib/deck-drawer.js';
+	import { openFinalPass } from '../../lib/finalpass.svelte.js';
 	import Icon from '../Icon.svelte';
 	import InfoTip from '../shell/InfoTip.svelte';
 	import SeamAction from '../takes/SeamAction.svelte';
-	import DraftsField from '../shots/DraftsField.svelte';
-	import SizePicker from './SizePicker.svelte';
-	import { setEngineSize } from '../../lib/framing.svelte.js';
+	import ProductionDrawer from './ProductionDrawer.svelte';
 	import QueuePanel from '../panels/QueuePanel.svelte';
 	import { sharedDrafts, takeCount } from '../../lib/shots.js';
 	import { shotNumbers } from '../../lib/director.js';
 	import { flyingTakes, takeStore } from '../../lib/takes.svelte.js';
-	import { withSendings } from '../../lib/vreftracks.svelte.js';
 
 	const p = $derived(ui.production);
 	const ready = $derived(readiness());
@@ -153,31 +149,18 @@
 	});
 
 	const profileItems = $derived(supportedProfiles().map((m) => ({ id: m, label: m })));
-	const supported = $derived(profileItems.some((m) => m.id === doc.direction.mode));
-	const showProfile = $derived(profileItems.length > 1 || !supported);
-	const guided = $derived(soundGuides());
-	const own = $derived(doc.clips.filter(hasOwnEngine).length);
+	const showProfile = $derived(profileItems.length > 1 || profileControl({ items: profileItems, current: doc.direction.mode }) === 'popup');
 	const setCount = $derived(optionCount(doc.engine, engine?.preset));
-	const editTip = $derived(engine ? t('production.editEngineTip', { engine: engine.label }) : t('production.editEngine'));
 	const sizes = $derived(Boolean(engine && !cloud && engine.info?.resolutions?.length));
 	const chip = $derived(deckChip({ engine: engine ? (cloud ? engine.label : presetLabel(engine.info)) : groups.length ? engineLabel() : t('generation.engine.none'), profile: showProfile ? doc.direction.mode : '', size: sizes ? (p.quality === 'draft' ? draftRes : finalRes) : '', drafts: clips.length ? sharedDrafts(clips, doc.engine) : 1 }, t));
-	const chipTip = $derived([engineTip, showProfile ? profileHint(doc.direction.mode) : '', t('production.deck.chipTip')].filter(Boolean).join(' · '));
-	const MORE = 'engine-more';
-	let held = $state(false);
-	let nested = false;
-	const moreOpen = $derived(held && (ui.menuOpen === MORE || String(ui.menuOpen ?? '').startsWith('picker:')));
+	const chipTip = $derived([engineTip, showProfile ? profileHint(doc.direction.mode, t) : '', t('production.deck.chipTip')].filter(Boolean).join(' · '));
+	const MORE = 'deck-more';
+	const moreOpen = $derived(ui.menuOpen === MORE);
 	const queueOpen = $derived(ui.menuOpen === QUEUE_MENU);
 	const primaryTip = $derived(busy ? t('production.deck.cancel') : t('production.generate'));
-
-	$effect(() => {
-		const open = ui.menuOpen;
-		untrack(() => {
-			if (open === MORE) held = true;
-			else if (open === null && held && nested) ui.menuOpen = MORE;
-			else if (!String(open ?? '').startsWith('picker:')) held = false;
-			nested = held && String(open ?? '').startsWith('picker:');
-		});
-	});
+	let deckEl = $state();
+	let chipEl = $state();
+	let drawerOpen = $state(false);
 
 	$effect(() => {
 		if (!busy) return;
@@ -185,20 +168,6 @@
 		const timer = setInterval(() => (now = Date.now()), 1000);
 		return () => clearInterval(timer);
 	});
-
-	function profileHint(m) {
-		if (m === 'FL2VA') return t('production.profile.fl2va');
-		if (m === 'Ref2VA') return t('production.profile.ref2va');
-		return t('production.profile.hybrid');
-	}
-
-	function setProfile(m) {
-		if (m !== doc.direction.mode) withSendings(() => act(() => (doc.direction.mode = m)));
-	}
-
-	function setMargin(value) {
-		act(() => setReferenceMargin(doc.engine, value));
-	}
 
 	const voice = announcer();
 	let spoken = $state('');
@@ -232,9 +201,24 @@
 	function toggleMore() {
 		ui.menuOpen = moreOpen ? null : MORE;
 	}
+
+	function toggleDrawer() {
+		if (drawerOpen) {
+			drawerOpen = false;
+			return;
+		}
+		setReturnFocus(chipEl);
+		ui.menuOpen = null;
+		drawerOpen = true;
+	}
+
+	function fromMore(run) {
+		ui.menuOpen = null;
+		run();
+	}
 </script>
 
-<div class="vp-deck" role="region" aria-label={t('production.region')} data-state={state}>
+<div bind:this={deckEl} class="vp-deck" role="region" aria-label={t('production.region')} data-state={state}>
 	{#if busy}
 		<div class="vp-deck-progress-track" role="progressbar" aria-label={t('production.progress')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={p.running ? percent : undefined}>
 			<div class="vp-deck-progress-fill" class:is-indeterminate={!p.running} style:width="{p.running ? p.progress : 0}%"></div>
@@ -327,7 +311,7 @@
 			</InfoTip>
 			<div class="relative flex min-w-0 items-center gap-1" data-vp-menu>
 				<HostUi name="Tooltip" props={{ text: chipTip, wrapperClass: 'flex min-w-0' }}>
-					<button type="button" class="vp-deck-chip" aria-expanded={moreOpen} aria-haspopup="dialog" onclick={toggleMore}>
+					<button bind:this={chipEl} type="button" class="vp-deck-chip" aria-expanded={drawerOpen} aria-haspopup="dialog" onclick={toggleDrawer}>
 						<Icon name="sliders" class="h-4 w-4 shrink-0" />
 						<span class="vp-deck-chip-text">{#each chip as part, i (i)}{#if i}<span class="vp-deck-chip-dot">{' · '}</span>{/if}<span class={i === 0 ? 'vp-deck-chip-engine' : ''}>{part}</span>{/each}</span>
 						{#if setCount}<span class="vp-deck-badge vp-tc">{setCount}</span>{/if}
@@ -347,70 +331,28 @@
 					{/if}
 				</div>
 				<HostUi name="Tooltip" props={{ text: t('production.more'), wrapperClass: 'inline-flex' }}>
-					<button type="button" class="vp-deck-icon-button" aria-label={t('production.more')} aria-expanded={moreOpen} aria-haspopup="dialog" onclick={toggleMore}>
+					<button type="button" class="vp-deck-icon-button" aria-label={t('production.more')} aria-expanded={moreOpen} aria-haspopup="menu" onclick={toggleMore}>
 						<Icon name="more" class="h-[18px] w-[18px]" />
 					</button>
 				</HostUi>
 				{#if moreOpen}
-					<div class="vp-menu" style:right="0" style:bottom="2.75rem" style:width="22rem" role="dialog" aria-label={t('production.more')} use:overlayLayer in:fly={{ y: 4, duration: ms(120) }}>
-						<div class="space-y-3 p-2">
-							<div class="space-y-1"><span class="vp-label block">{t('production.engine.label')}</span>{@render engineSelect()}</div>
-							{#if showProfile}<div class="space-y-1"><span class="vp-label block">{t('production.profile.label')}</span>{@render profilePicker()}</div>{/if}
-							{#if sizes}
-								<div class="space-y-1">
-									<span class="vp-label block">{p.quality === 'draft' ? t('production.size.draftLabel', { engine: engine.label }) : t('production.size.finalLabel', { engine: engine.label })}</span>
-									<SizePicker preset={engine.info} quality={p.quality} backend={engine.backend} value={chosenSize(doc, engine.preset, p.quality)} onselect={(v) => setEngineSize(engine.preset, p.quality, v)} variant="popup" />
-								</div>
-							{/if}
-							<div class="space-y-1"><span class="vp-label block">{t('generation.drafts.label')}</span><DraftsField {clips} label={false} disabled={!clips.length} /></div>
-							{#if guided}<div class="space-y-1"><span class="vp-label block">{t('production.margin.label')}</span>{@render marginField()}</div>{/if}
-							{#if own > 0}{@render ownShots()}{/if}
-							<div class="vp-menu-sep"></div>
-							<HostUi name="Tooltip" props={{ text: editTip, kbd: commandById('engine')?.key, wrapperClass: 'flex' }}>
-								<button type="button" role="menuitem" onclick={() => openEngineSettings(engine?.preset)}>
-									<Icon name="sliders" class="h-3.5 w-3.5" />{t('production.editEngine')}{#if setCount}<span class="vp-deck-badge vp-tc">{setCount}</span>{/if}
-								</button>
-							</HostUi>
-							<button type="button" role="menuitem" onclick={openResults}><Icon name="layers" class="h-3.5 w-3.5" />{t('production.deck.results')}</button>
-						</div>
+					<div class="vp-menu" style:right="0" style:bottom="2.75rem" role="menu" aria-label={t('production.more')} use:overlayLayer in:fly={{ y: 4, duration: ms(120) }}>
+						<button type="button" role="menuitem" onclick={() => fromMore(openResults)}>
+							<Icon name="layers" class="h-3.5 w-3.5 shrink-0" /><span class="flex-1">{t('production.deck.results')}</span>{#if commandById('results')?.key}<span class="vp-menu-key">{commandById('results').key}</span>{/if}
+						</button>
+						<button type="button" role="menuitem" onclick={() => fromMore(() => setTimeout(openQueue))}>
+							<Icon name="list" class="h-3.5 w-3.5 shrink-0" /><span class="flex-1">{t('production.queue')}</span>{#if queued}<span class="vp-deck-badge vp-tc">{queued}</span>{/if}{#if commandById('queue')?.key}<span class="vp-menu-key">{commandById('queue').key}</span>{/if}
+						</button>
+						<div class="vp-menu-sep" role="separator"></div>
+						<button type="button" role="menuitem" onclick={() => fromMore(openFinalPass)}>
+							<Icon name="arrow-up" class="h-3.5 w-3.5 shrink-0" /><span class="flex-1">{t('generation.finalPass.title')}</span>{#if commandById('final-pass')?.key}<span class="vp-menu-key">{commandById('final-pass').key}</span>{/if}
+						</button>
 					</div>
 				{/if}
 			</div>
 		</section>
 	</div>
+	{#if drawerOpen}
+		<ProductionDrawer anchor={deckEl} toggle={chipEl} {clips} {engineTip} onclose={() => (drawerOpen = false)} />
+	{/if}
 </div>
-
-{#snippet engineSelect()}
-	<HostUi name="Tooltip" props={{ text: engineTip, wrapperClass: 'flex w-full min-w-0 items-center' }}>
-		<select class="vp-popup w-full min-w-0" value={engine?.key ?? ''} disabled={!groups.length} aria-label={t('production.engine.label')} onchange={(e) => selectEngine(e.currentTarget.value)}>
-			{#if !engine}<option value="" disabled>{groups.length ? engineLabel() : t('generation.engine.none')}</option>{/if}
-			{#each groups as g (g.label)}
-				<optgroup label={g.label}>
-					{#each g.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
-				</optgroup>
-			{/each}
-		</select>
-	</HostUi>
-{/snippet}
-
-{#snippet profilePicker()}
-	<HostUi name="Tooltip" props={{ text: profileHint(doc.direction.mode), wrapperClass: 'inline-flex' }}>
-		<HostUi name="SegmentedControl" props={{ items: profileItems, selected: doc.direction.mode, variant: 'toggle', ariaLabel: t('production.profile.label'), onSelect: setProfile }} />
-	</HostUi>
-{/snippet}
-
-{#snippet marginField()}
-	<HostUi name="Tooltip" props={{ text: t('production.margin.tip'), wrapperClass: 'inline-flex' }}>
-		<label class="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted">
-			<span>{t('production.margin.short')}</span>
-			<input class="input vp-dense vp-tc w-14" type="number" min="0" max={MAX_MARGIN} step="0.5" value={referenceMargin(doc.engine)} aria-label={t('production.margin.label')} onchange={(e) => setMargin(e.currentTarget.value)} />
-			<span>{t('production.margin.unit')}</span>
-		</label>
-	</HostUi>
-{/snippet}
-
-{#snippet ownShots()}
-	<HostUi name="Tooltip" props={{ text: t('production.own.tip'), wrapperClass: 'inline-flex' }}>
-		<span class="inline-flex min-h-6 items-center gap-1 whitespace-nowrap text-xs text-fg-muted"><Icon name="sliders" class="h-3 w-3" />{t('production.own', { count: own })}</span>
-	</HostUi>
-{/snippet}

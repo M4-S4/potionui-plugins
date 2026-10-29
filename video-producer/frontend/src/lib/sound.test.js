@@ -286,7 +286,7 @@ test('the pages say how the sound of a shot is taken: the shot editor, the Story
 	assert.match(source('../components/inspector/Inspector.svelte'), /setReferenceLane\(item, v\)/);
 	assert.match(source('../components/inspector/Inspector.svelte'), /checked: isReferenceItem\(item, audioLane\)/);
 	assert.match(source('../components/mixer/Console.svelte'), /setReferenceLane\(l, !isReferenceLane\(l\)\)/);
-	assert.match(source('../components/production/ProductionDeck.svelte'), /act\(\(\) => setReferenceMargin\(doc\.engine, value\)\)/);
+	assert.match(source('../components/production/ProductionDrawer.svelte'), /act\(\(\) => setReferenceMargin\(doc\.engine, value\)\)/);
 	const production = source('./production.svelte.js');
 	for (const code of ['audio_condition', 'audio_mux', 'audio_ignored', 'audio_track_muted', 'audio_track_empty', 'audio_track_silent', 'audio_only_references', 'audio_ffmpeg_missing', 'audio_source_missing']) {
 		assert.match(production, new RegExp(`code === '${code}'`));

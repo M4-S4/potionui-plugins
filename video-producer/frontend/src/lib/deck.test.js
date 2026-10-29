@@ -99,6 +99,7 @@ test('deck: the page mounts the deck under the timeline, before the status bar, 
 
 test('deck: the mark generates or cancels, Ctrl+G stays the command, the queue and More buttons are named, and the title is announced', () => {
 	const deck = source('../components/production/ProductionDeck.svelte');
+	const drawer = source('../components/production/ProductionDrawer.svelte');
 	assert.match(deck, /onclick=\{\(\) => \(busy \? cancelGeneration\(\) : startGeneration\(\)\)\}/);
 	assert.match(deck, /disabled=\{blocked && !busy\}/);
 	assert.match(deck, /kbd: commandById\('generate'\)\?\.key/);
@@ -113,9 +114,9 @@ test('deck: the mark generates or cancels, Ctrl+G stays the command, the queue a
 	assert.match(deck, /<QueuePanel \/>/);
 	assert.match(deck, /onSelect: setProjectQuality/);
 	assert.match(deck, /onSelect: pick/);
-	assert.match(deck, /act\(\(\) => setReferenceMargin\(doc\.engine, value\)\)/);
-	assert.match(deck, /onclick=\{\(\) => openEngineSettings\(engine\?\.preset\)\}/);
-	assert.doesNotMatch(deck, /FinalPass|fitInline|ResizeObserver/);
+	assert.match(drawer, /act\(\(\) => setReferenceMargin\(doc\.engine, value\)\)/);
+	assert.match(drawer, /onclick: \(\) => openEngineSettings\(engine\?\.preset\)/);
+	assert.doesNotMatch(deck, /FinalPassButton|fitInline|ResizeObserver/);
 	assert.match(deck, /const profileItems = \$derived\(supportedProfiles\(\)\.map\(\(m\) => \(\{ id: m, label: m \}\)\)\);/);
 	assert.doesNotMatch(deck, /disabled: !supported/);
 });

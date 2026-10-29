@@ -174,7 +174,9 @@ test('the final pass opens from the Production menu, the two Storyboard headers,
 	}
 	assert.match(source('../components/storyboard/StoryWindow.svelte'), /<FinalPassButton variant="secondary" \/>/);
 	assert.match(source('../components/modals/Modals.svelte'), /m\?\.type === 'final-pass'\}\n\t\t<FinalPass \/>/);
-	assert.doesNotMatch(source('../components/production/ProductionDeck.svelte'), /FinalPass/);
+	const deck = source('../components/production/ProductionDeck.svelte');
+	assert.doesNotMatch(deck, /FinalPassButton/);
+	assert.match(deck, /role="menuitem" onclick=\{\(\) => fromMore\(openFinalPass\)\}/);
 });
 
 test('the window of the pass keeps one primary button and lets the per-take window offer the guided render', () => {
