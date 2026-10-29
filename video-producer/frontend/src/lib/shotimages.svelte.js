@@ -3,18 +3,12 @@ import { doc, act, toast, clipLabel } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone } from './project.svelte.js';
 import { takeStore } from './takes.svelte.js';
 import { frameAsset, stillAsset } from './chain.js';
+import { frameErrorText } from './seam.js';
 import { draftChained, inPlace, neighborSources, sidesOf } from './shotimages.js';
 
 export const shotImages = $state({ busy: false });
 
 export const neighborsOf = (clip, draft) => neighborSources(doc, clip, draft, takeStore.list);
-
-function errorText(error) {
-	if (error?.code === 'no_media') return t('keyframes.retrieve.error.noMedia');
-	if (error?.code === 'ffmpeg_missing') return t('lib.chain.error.ffmpeg');
-	if (error?.code === 'extract_failed') return error?.data?.code === 'store_failed' ? t('lib.seam.error.store') : t('lib.seam.error.extract');
-	return t('lib.seam.error.generic');
-}
 
 const sameSource = (a, b) => a && b && a.shotId === b.shotId && a.assetId === b.assetId && a.at === b.at;
 
@@ -32,7 +26,7 @@ async function taken(side, source, name) {
 	if (projectId !== project.id) return null;
 	if (result.ok) return frameAsset(result.data.media, result.data.source, name);
 	if (result.error.code === 'project_not_found') projectGone(projectId);
-	else toast(errorText(result.error), result.error.status === 409 ? 'warning' : 'error');
+	else toast(frameErrorText(result.error, t, { noMedia: t('keyframes.retrieve.error.noMedia') }), result.error.status === 409 ? 'warning' : 'error');
 	return null;
 }
 

@@ -3,7 +3,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, secs } from '../../lib/state.svelte.js';
 	import { retryTake, openEngineSettings, backendName, presetById } from '../../lib/production.svelte.js';
-	import { FAILURE_CODES, presetLabel } from '../../lib/generation.js';
+	import { failureText, presetLabel } from '../../lib/generation.js';
 	import { instructionPromptOf } from '../../lib/bible.js';
 	import { failureFixes } from '../../lib/director.js';
 	import { showInReview, showInStoryboard } from '../../lib/band.svelte.js';
@@ -15,7 +15,7 @@
 
 	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const previous = $derived(doc.clips[doc.clips.indexOf(clip) - 1] ?? null);
-	const errorText = $derived(FAILURE_CODES.includes(take.errorCode) ? t(`generation.failed.${take.errorCode}`, { id: take.generationId ?? '—' }) : take.errorMessage || t('generation.card.error', { code: take.errorCode ?? '—' }));
+	const failure = $derived(failureText(take, t));
 	const resolution = $derived(take.width && take.height ? `${take.width}×${take.height}` : (take.resolution ?? '').replace('x', '×'));
 	const asked = $derived([resolution, secs(clip.dur)].filter(Boolean).join(' · '));
 	const engineText = $derived([presetLabel(presetById(take.presetId)) || '', take.profile, take.backendId ? backendName(take.backendId) : ''].filter(Boolean).join(' · ') || '—');
@@ -42,7 +42,7 @@
 <section class="space-y-2" data-take-failure={take.errorCode ?? ''}>
 	<div class="vp-section-title">{t('panels.director.pick.what')}</div>
 	<HostUi name="Alert" props={{ variant: 'danger', class: '[&>div]:text-fg', density: 'compact', icon: hostIconName('alert'), live: 'off' }}>
-		<p class="text-xs">{errorText}</p>
+		<p class="text-xs">{failure}</p>
 	</HostUi>
 	<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
 		<dt class="text-fg-subtle">{t('panels.director.pick.asked')}</dt>

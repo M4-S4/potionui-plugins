@@ -23,7 +23,7 @@ export const canShowLibrary = () => libraryAvailable();
 
 const knownError = (code) => EXPORT_ERROR_CODES.includes(code);
 
-export function errorText(error) {
+export function exportErrorText(error) {
 	const code = error?.code;
 	if (knownError(code)) return t(`exports.error.${code}`);
 	if (code === 'job_not_found' || code === 'not_found') return t('exports.failed.gone');
@@ -38,7 +38,7 @@ export function jobErrorText(job) {
 
 function failed(error) {
 	if (gone(error)) return projectGone(project.id);
-	toast(errorText(error), error?.status === 409 || error?.status === 429 ? 'warning' : 'error');
+	toast(exportErrorText(error), error?.status === 409 || error?.status === 429 ? 'warning' : 'error');
 }
 
 function reset(projectId) {

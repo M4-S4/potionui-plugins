@@ -53,7 +53,7 @@
 
 	const client = $derived(createClient(api, download));
 	const locale = $derived(getLocale());
-	const errorText = $derived(requestCause(loadError));
+	const loadCause = $derived(requestCause(loadError));
 	const center = $derived(ui.workspace === 'storyboard' ? 'story' : ui.workspace === 'director' ? 'director' : 'viewer');
 	const player = $derived(isPlayer(ui.workspace));
 	const band = $derived(bandView());
@@ -230,7 +230,7 @@
 						icon: 'warning',
 						tone: 'danger',
 						title: t('shell.error.meLoad'),
-						description: errorText,
+						description: loadCause,
 						actions: { slot: (el) => mountHostSlot(el, 'Button', { variant: 'secondary', size: 'sm', icon: 'refresh', onclick: load, children: t('shell.app.retry') }) }
 					}}
 				/>

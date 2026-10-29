@@ -6,6 +6,18 @@ export const LAST_ROLES = ['last', 'fin'];
 export const PREVIOUS_LAST = 'previous_last';
 export const SEAM_STRENGTH = 100;
 
+export function frameErrorText(error, t, { noMedia = t('lib.chain.error.noMedia') } = {}) {
+	const code = error?.code;
+	if (code === 'shot_not_found') return t('lib.seam.error.shot');
+	if (code === 'no_previous_take') return t('lib.seam.error.noTake');
+	if (code === 'no_media') return noMedia;
+	if (code === 'ffmpeg_missing') return t('lib.chain.error.ffmpeg');
+	if (code === 'workdir_unwritable') return t('lib.chain.error.workdir');
+	if (code === 'extract_failed') return error?.data?.code === 'store_failed' ? t('lib.seam.error.store') : t('lib.seam.error.extract');
+	if (code === 'invalid_request') return t('lib.seam.error.invalid');
+	return t('lib.seam.error.generic');
+}
+
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
 const integer = (value) => (Number.isInteger(value) ? value : null);

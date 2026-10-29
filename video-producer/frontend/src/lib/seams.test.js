@@ -6,7 +6,7 @@ import { colorPlanOf, colorsApart } from './continuity.js';
 import { canPrioritize, isWaiting, queueOrder } from './queue.js';
 import { normalizeTake } from './api.js';
 import { migrateShots } from './shots.js';
-import { seamImage } from './seam.js';
+import { frameErrorText, seamImage } from './seam.js';
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const media = { itemId: 'item-1', url: '/api/media/uploads/gen-t1-frame-4s.png', filename: 'gen-t1-frame-4s.png', width: 832, height: 480 };
@@ -213,4 +213,19 @@ test('wiring: the seams of the storyboard carry their actions and the option of 
 	assert.match(source('./takes.svelte.js'), /for \(const take of takeStore\.list\) told\(take, false\);/);
 	assert.match(source('./takes.svelte.js'), /const stored = takeById\(take\.id\);\n\ttold\(stored, true\);/);
 	assert.doesNotMatch(source('../components/director/ReviewView.svelte'), /SeamPanel|SeamFix|ChainSwitch/);
+});
+
+test('frame errors: one text per code of the frame routes, the missing media named by the caller, anything else generic', () => {
+	const t = (key) => key;
+	assert.equal(frameErrorText({ code: 'shot_not_found' }, t), 'lib.seam.error.shot');
+	assert.equal(frameErrorText({ code: 'no_previous_take' }, t), 'lib.seam.error.noTake');
+	assert.equal(frameErrorText({ code: 'no_media' }, t), 'lib.chain.error.noMedia');
+	assert.equal(frameErrorText({ code: 'no_media' }, t, { noMedia: 'keyframes.retrieve.error.noMedia' }), 'keyframes.retrieve.error.noMedia');
+	assert.equal(frameErrorText({ code: 'ffmpeg_missing' }, t), 'lib.chain.error.ffmpeg');
+	assert.equal(frameErrorText({ code: 'workdir_unwritable' }, t), 'lib.chain.error.workdir');
+	assert.equal(frameErrorText({ code: 'extract_failed' }, t), 'lib.seam.error.extract');
+	assert.equal(frameErrorText({ code: 'extract_failed', data: { code: 'store_failed' } }, t), 'lib.seam.error.store');
+	assert.equal(frameErrorText({ code: 'invalid_request' }, t), 'lib.seam.error.invalid');
+	assert.equal(frameErrorText({ code: 'something_else' }, t), 'lib.seam.error.generic');
+	assert.equal(frameErrorText(null, t), 'lib.seam.error.generic');
 });

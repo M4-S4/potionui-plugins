@@ -2,7 +2,7 @@ import { t } from '../i18n/index.svelte.js';
 import { doc, ui, act, toast, undo, clipLabel, secs } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone } from './project.svelte.js';
 import { confirm } from './host.js';
-import { PREVIOUS_LAST, framesOf, placeSeamFrame, playheadPick, previousShot, seamAsset } from './seam.js';
+import { PREVIOUS_LAST, frameErrorText, framesOf, placeSeamFrame, playheadPick, previousShot, seamAsset } from './seam.js';
 import { chainSource } from './chain.js';
 import { chainBusy, chainOf, takeEndFrame } from './chain.svelte.js';
 
@@ -16,15 +16,6 @@ export function seamOffer(clip) {
 	const ready = Boolean(chainSource(doc, prev));
 	const stale = chainOf(clip)?.state === 'stale';
 	return { previous: prev, ready, stale, busy: seamState.busy === clip.id || chainBusy(clip.id), reason: ready ? '' : t('lib.chain.noMedia', { shot: clipLabel(prev) }) };
-}
-
-function errorText(error) {
-	const code = error?.code;
-	if (code === 'shot_not_found') return t('lib.seam.error.shot');
-	if (code === 'no_previous_take') return t('lib.seam.error.noTake');
-	if (code === 'extract_failed') return error?.data?.code === 'store_failed' ? t('lib.seam.error.store') : t('lib.seam.error.extract');
-	if (code === 'invalid_request') return t('lib.seam.error.invalid');
-	return t('lib.seam.error.generic');
 }
 
 function replaceText(clip, kinds) {
@@ -62,7 +53,7 @@ export async function useSeamFrame(clip, source = PREVIOUS_LAST) {
 		if (projectId !== project.id) return;
 		if (!result.ok) {
 			if (result.error.code === 'project_not_found') return projectGone(projectId);
-			return toast(errorText(result.error), result.error.status === 409 ? 'warning' : 'error');
+			return toast(frameErrorText(result.error, t), result.error.status === 409 ? 'warning' : 'error');
 		}
 		const target = doc.clips.find((c) => c.id === clip.id);
 		if (!target) return;

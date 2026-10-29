@@ -90,7 +90,7 @@
 	});
 	const tone = $derived(take.status === 'failed' ? 'text-danger' : take.status === 'cancelled' ? 'text-fg-subtle' : 'text-signal');
 	const dot = $derived(take.status === 'failed' ? 'bg-danger' : take.status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
-	const errorText = $derived(failureText(take, t));
+	const failure = $derived(failureText(take, t));
 	const finalTip = $derived(upscaleAvailable(take) ? t('generation.card.finalTip') : hasNativeEngine(ui.me) ? t('generation.block.upscaleUnsupported') : t('generation.block.noNativeEngine'));
 
 	function open() {
@@ -180,7 +180,7 @@
 				{/if}
 			</div>
 		{:else if take.status === 'failed'}
-			<p class="px-2 pb-2 text-xs text-danger">{errorText}</p>
+			<p class="px-2 pb-2 text-xs text-danger">{failure}</p>
 		{/if}
 		<div class="flex flex-wrap items-center gap-0.5 border-t border-line p-0.5">
 			{#if done}
