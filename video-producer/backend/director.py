@@ -57,7 +57,8 @@ TARGET_HEADING = "### Target Description"
 SHEET_ROWS = ("Top Row", "Bottom Row")
 SHEET_KINDS = {bible.CHARACTERS: "Character", bible.PLACES: "Setting"}
 SHEET_PLACES = {1: ("",), 2: ("Left", "Right"), 3: ("Left", "Center", "Right")}
-SHEET_AGAIN = {"en": "The same character, {label}, seen again.", "fr": "Le même personnage, {label}, vu à nouveau."}
+SHEET_FACE = "A frontal close-up of the face of {words}"
+SHEET_BODY = "The same character shown full body, standing, front view."
 
 QUALITIES = ("draft", "final")
 REFERENCE_IMAGE_BUDGETS = {"draft": "1", "final": "0"}
@@ -920,9 +921,12 @@ def _sheet_place(index: int, count: int, row: str) -> str:
     return " ".join(part for part in (row, where) if part) or "Sheet"
 
 
+def _card_words(card: bible.Card) -> str:
+    return (card.text or card.label).strip().rstrip(".")
+
+
 def sheet_lines(doc: Mapping[str, Any], panels: Sequence[SheetPanel]) -> str:
-    """The description of a sheet, one line per picture as the IC-LoRA's examples write it: its place on the sheet and its kind in bold, then the words of its card; a character's second picture says it is the same character again."""
-    language = _language(doc)
+    """The description of a sheet in the form the measured takes kept the sheet out of the video with: each picture by its place on the sheet and its kind in bold, as a view of its card, the first picture of a character its face in close-up with the card's words, the second the same character full body, the place by its words; one line."""
     found = {card.id: card for kind in (bible.CHARACTERS, bible.PLACES) for card in bible.cards(doc, kind)}
     characters = [panel for panel in panels if panel.kind == bible.CHARACTERS and panel.card_id in found]
     places = [panel for panel in panels if panel.kind == bible.PLACES and panel.card_id in found]
@@ -930,16 +934,17 @@ def sheet_lines(doc: Mapping[str, Any], panels: Sequence[SheetPanel]) -> str:
     seen: Set[str] = set()
     for index, panel in enumerate(characters):
         card = found[panel.card_id]
-        words = SHEET_AGAIN[language].format(label=card.label) if card.id in seen else bible.named(card, language, initial=True)
+        words = SHEET_BODY if card.id in seen else _sentence(SHEET_FACE.format(words=_card_words(card)))
         seen.add(card.id)
         lines.append(f"**{_sheet_place(index, len(characters), SHEET_ROWS[0] if places else '')} ({SHEET_KINDS[panel.kind]}):** {words}")
     for panel in places:
-        lines.append(f"**{SHEET_ROWS[1] if characters else 'Sheet'} ({SHEET_KINDS[panel.kind]}):** {bible.named(found[panel.card_id], language, initial=True)}")
-    return "\n".join(lines)
+        words = _card_words(found[panel.card_id])
+        lines.append(f"**{SHEET_ROWS[1] if characters else 'Sheet'} ({SHEET_KINDS[panel.kind]}):** {_sentence(words[:1].upper() + words[1:])}")
+    return " ".join(lines)
 
 
 def compose_sheet(doc: Mapping[str, Any], clip: Mapping[str, Any], panels: Sequence[SheetPanel]) -> Tuple[str, bible.ReferencePart]:
-    """The prompt of a shot made from its reference sheet, in the two parts of the IC-LoRA's examples: the sheet described picture by picture, then the shot in the LTX form, its cast re-announced after the action and the lines. Both parts made from the cast can be replaced by the shot."""
+    """The prompt of a shot made from its reference sheet, in the two parts of the IC-LoRA's examples and on one line, as in the measured takes: the sheet described picture by picture, then the shot in the LTX form, its cast re-announced after the action and the lines. Both parts made from the cast can be replaced by the shot."""
     instruction = cite_tracks(shot_instruction(doc, clip), {})
     characters, place = bible.cast_of(doc, clip)
     language = _language(doc)
@@ -955,7 +960,7 @@ def compose_sheet(doc: Mapping[str, Any], clip: Mapping[str, Any], panels: Seque
         [*([_sentence(instruction)] if instruction else []), *([spoken] if spoken else []), *([cast] if cast else []), *(_sentence(line) for line in direction_lines(doc))]
     )
     blocks = [*([SHEET_HEADING, sheet] if sheet else []), TARGET_HEADING, target]
-    return "\n\n".join(block for block in blocks if block), reference
+    return " ".join(block for block in blocks if block), reference
 
 
 def _bible_warnings(
@@ -1688,6 +1693,13 @@ def _card_pictures(user: User, doc: Mapping[str, Any], card: bible.Card, exclude
     return pictures
 
 
+def _picture_size(doc: Mapping[str, Any], asset_id: str) -> Optional[Tuple[int, int]]:
+    asset = _asset(doc, asset_id) or {}
+    width, height = asset.get("width"), asset.get("height")
+    sized = all(isinstance(side, int) and not isinstance(side, bool) and side > 0 for side in (width, height))
+    return (int(width), int(height)) if sized else None
+
+
 def sheet_panels(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], size: Tuple[int, int], warnings: List[Dict[str, Any]]) -> List[SheetPanel]:
     """The pictures a shot's reference sheet shows, with their boxes: the first pictures of each character cast in it, in the order of the bible and up to the table's counts, then the first picture of its place; the pictures it leaves out are not used. A cast card without a picture, the characters over the count, boxes smaller than the table's least edge and props that are only words are each said by a warning."""
     shot_id = clip["id"]
@@ -1713,7 +1725,7 @@ def sheet_panels(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], si
             panels.append(SheetPanel(reference_id, asset_id, card.id, bible.CHARACTERS, boxes[len(panels)]))
     if setting and place is not None and setting_box is not None:
         panels.append(SheetPanel(setting[0][0], setting[0][1], place.id, bible.PLACES, setting_box))
-    edge = min((min(box[2], box[3]) for box in boxes), default=None)
+    edge = reception.sheet_edge(boxes[0], [_picture_size(doc, panel.asset_id) for panel in panels if panel.kind == bible.CHARACTERS]) if boxes else None
     if left or (edge is not None and edge < SHEET["leastEdge"]):
         names = [card.label for card, _ in left]
         message = f"The sheet holds {SHEET['characters']} characters: {', '.join(names)} left out." if names else f"The pictures of the sheet are {edge} px on their short side, too small to hold a face."

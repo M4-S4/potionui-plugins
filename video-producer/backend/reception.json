@@ -32,7 +32,7 @@
     "characters": 3,
     "images": 2,
     "gap": 8,
-    "split": 0.55,
+    "weights": [1.25, 1],
     "leastEdge": 96,
     "work": 2.1
   },

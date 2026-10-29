@@ -65,19 +65,30 @@ def sheet_frames(seconds: float) -> int:
 
 
 def sheet_layout(size: Tuple[int, int], counts: Sequence[int], place: bool) -> Tuple[List[Box], Optional[Box]]:
-    """The boxes of a sheet on its black canvas, as x, y, width and height: one per picture of the characters, left to right in a band across the top, then the place in a band across the bottom; a band takes the whole height when the other is empty."""
+    """The bands of a sheet on its black canvas, as x, y, width and height, as the measured sheet lays them out: the band of the characters across the top, given once for each of their pictures, which sit side by side at its height and centred in it, then the band of the place across the bottom; the bands share the height in the table's weights, at an even number of pixels, and a band takes the whole height when the other is empty."""
     width, height = size
     gap = SHEET["gap"]
     cells = sum(count for count in counts if count > 0)
-    top = (round(height * SHEET["split"]) if place else height) if cells else 0
-    boxes: List[Box] = []
-    if cells:
-        each = (width - gap * (cells + 1)) // cells
-        left = (width - cells * each - (cells - 1) * gap) // 2
-        tall = top - gap - (gap // 2 if place else gap)
-        boxes = [(left + index * (each + gap), gap, each, tall) for index in range(cells)]
-    setting = (gap, top + (gap // 2 if cells else gap), width - 2 * gap, height - top - gap - (gap // 2 if cells else gap)) if place else None
-    return boxes, setting
+    weights = [weight for weight, used in zip(SHEET["weights"], (cells > 0, place)) if used]
+    usable = height - gap * (len(weights) + 1)
+    bands: List[Box] = []
+    top = gap
+    for weight in weights:
+        tall = 2 * round(usable * weight / sum(weights) / 2)
+        bands.append((gap, top, width - 2 * gap, tall))
+        top += tall + gap
+    characters = bands.pop(0) if cells else None
+    return [characters] * cells if characters is not None else [], bands[0] if place else None
+
+
+def sheet_edge(band: Box, sizes: Sequence[Optional[Tuple[int, int]]]) -> Optional[int]:
+    """The short side, in pixels, of the smallest picture of a band once its pictures sit side by side at its height and are shrunk together to fit its width; None when the size of one of them is unknown."""
+    if not sizes or any(size is None or size[0] <= 0 or size[1] <= 0 for size in sizes):
+        return None
+    _, _, width, height = band
+    widths = [height * size[0] / size[1] for size in sizes if size is not None]
+    factor = min(1.0, width / (sum(widths) + SHEET["gap"] * (len(widths) - 1)))
+    return int(min(min(wide, height) * factor for wide in widths))
 
 
 def sheet_work(form: Mapping[str, Any]) -> float:

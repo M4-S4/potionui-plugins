@@ -72,11 +72,20 @@ def test_the_sheet_follows_the_size_rate_and_length_the_ingredients_ic_lora_was_
     assert reception.layout(bible.LTX, FL2VA) == bible.CAST_LAYOUT
 
 
-def test_the_sheet_puts_the_characters_in_a_band_across_the_top_and_the_place_across_the_bottom():
-    assert reception.sheet_layout((768, 448), [2], True) == ([(8, 8, 372, 234), (388, 8, 372, 234)], (8, 250, 752, 190))
-    assert reception.sheet_layout((768, 448), [2, 1, 1], True)[0] == [(8, 8, 182, 234), (198, 8, 182, 234), (388, 8, 182, 234), (578, 8, 182, 234)]
+def test_the_sheet_puts_the_characters_in_a_band_across_the_top_and_the_place_in_a_band_across_the_bottom_in_the_weights_of_the_table():
+    assert reception.SHEET["weights"] == [1.25, 1]
+    assert reception.sheet_layout((768, 448), [2], True) == ([(8, 8, 752, 236), (8, 8, 752, 236)], (8, 252, 752, 188))
+    assert reception.sheet_layout((768, 448), [2, 1, 1], True)[0] == [(8, 8, 752, 236)] * 4
     assert reception.sheet_layout((768, 448), [1], False) == ([(8, 8, 752, 432)], None)
     assert reception.sheet_layout((768, 448), [], True) == ([], (8, 8, 752, 432))
+
+
+def test_the_smallest_picture_of_a_band_is_reckoned_from_the_sizes_of_its_pictures_when_they_are_all_known():
+    band = (8, 8, 752, 236)
+    assert reception.sheet_edge(band, [(1024, 1024), (768, 1344)]) == 134
+    assert reception.sheet_edge(band, [(1024, 1024)] * 6) == 121
+    assert reception.sheet_edge(band, [(1024, 1024), None]) is None
+    assert reception.sheet_edge(band, []) is None
 
 
 def test_a_sheet_counts_for_the_measured_factor_in_the_time_of_its_take():
@@ -131,19 +140,19 @@ def test_a_ref2va_shot_on_ltx_2_5_is_made_from_its_reference_sheet_in_one_distil
         "frames": 121,
         "fps": 24.0,
         "panels": [
-            {"reference_id": "f1", "asset_id": "a-f1", "card_id": "c-f", "kind": "characters", "box": [8, 8, 372, 234]},
-            {"reference_id": "f2", "asset_id": "a-f2", "card_id": "c-f", "kind": "characters", "box": [388, 8, 372, 234]},
-            {"reference_id": "q1", "asset_id": "a-q1", "card_id": "p-q", "kind": "places", "box": [8, 250, 752, 190]},
+            {"reference_id": "f1", "asset_id": "a-f1", "card_id": "c-f", "kind": "characters", "box": [8, 8, 752, 236]},
+            {"reference_id": "f2", "asset_id": "a-f2", "card_id": "c-f", "kind": "characters", "box": [8, 8, 752, 236]},
+            {"reference_id": "q1", "asset_id": "a-q1", "card_id": "p-q", "kind": "places", "box": [8, 252, 752, 188]},
         ],
     }
     assert plan.needs_cut and plan.summary()["sheet"]["frames"] == 121
     assert plan.reference.layout == bible.SHEET_LAYOUT
     assert plan.prompt_text == (
-        "### Reference Sheet Description\n\n"
-        "**Top Row Left (Character):** Fisher: an old fisherman with a white beard and a yellow oilskin.\n"
-        "**Top Row Right (Character):** The same character, Fisher, seen again.\n"
-        "**Bottom Row (Setting):** Quay: a stone harbour quay with a red lighthouse.\n\n"
-        "### Target Description\n\n"
+        "### Reference Sheet Description "
+        "**Top Row Left (Character):** A frontal close-up of the face of an old fisherman with a white beard and a yellow oilskin. "
+        "**Top Row Right (Character):** The same character shown full body, standing, front view. "
+        "**Bottom Row (Setting):** A stone harbour quay with a red lighthouse. "
+        "### Target Description "
         f"{INSTRUCTION} Fisher: an old fisherman with a white beard and a yellow oilskin. Setting — Quay: a stone harbour quay with a red lighthouse."
     )
     assert plan.work_scale == pytest.approx(8 / 24 * 2.1)
@@ -180,7 +189,7 @@ def test_the_sheet_says_what_it_leaves_out(core, make_doc):
     assert _codes(plans) == ["sheet_card_without_image", "sheet_crowded", "sheet_props_text_only", "sheet_first_frame"]
     crowded = next(item for item in plans.warnings if item["code"] == "sheet_crowded")
     assert crowded["data"]["left_out"] == ["Kim"]
-    assert "**Top Row Panel 4 (Character):** Hal: a sailor." in plan.prompt_text
+    assert "**Top Row Panel 3 (Character):** A frontal close-up of the face of a girl in a red coat. **Top Row Panel 4 (Character):** A frontal close-up of the face of a sailor. " in plan.prompt_text
     assert plan.request["form_data"]["video_director"]["media"] == []
 
 
@@ -235,7 +244,7 @@ def test_the_sheet_part_of_the_prompt_can_be_replaced_by_the_shot(core, make_doc
 
     plan = _plans(core, doc).shots[0]
 
-    assert plan.prompt_text == f"### Reference Sheet Description\n\n**Top Row (Character):** Mine.\n\n### Target Description\n\n{INSTRUCTION}"
+    assert plan.prompt_text == f"### Reference Sheet Description **Top Row (Character):** Mine. ### Target Description {INSTRUCTION}"
 
 
 def test_the_measure_of_a_sheet_take_counts_as_one_made_without_the_sheet(core, make_doc):
@@ -247,15 +256,27 @@ def test_the_measure_of_a_sheet_take_counts_as_one_made_without_the_sheet(core, 
     assert engine_options.take_scale(take) == pytest.approx(8 / 24 * 2.1)
 
 
-def test_the_sheet_graph_scales_each_picture_into_its_box_without_cropping():
-    sheet = director.SheetPlan((768, 448), 121, 24.0, [director.SheetPanel("f1", "a-f1", "c-f", bible.CHARACTERS, (8, 8, 372, 234))])
+def test_the_sheet_graph_puts_the_pictures_of_a_band_side_by_side_at_its_height_and_centres_the_row_in_it():
+    top, bottom = (8, 8, 752, 236), (8, 252, 752, 188)
+    panels = [
+        director.SheetPanel("f1", "a-f1", "c-f", bible.CHARACTERS, top),
+        director.SheetPanel("f2", "a-f2", "c-f", bible.CHARACTERS, top),
+        director.SheetPanel("q1", "a-q1", "p-q", bible.PLACES, bottom),
+    ]
+    sheet = director.SheetPlan((768, 448), 121, 24.0, panels)
 
-    command = sheetvideo.sheet_command("ffmpeg", ["face.png"], sheet, Path("out.mp4"))
+    command = sheetvideo.sheet_command("ffmpeg", ["face.png", "body.png", "quay.png"], sheet, Path("out.mp4"))
 
+    assert sheetvideo.bands([panel.box for panel in panels]) == [(top, [1, 2]), (bottom, [3])]
     assert command[command.index("-filter_complex") + 1] == (
-        "[1:v]scale=372:234:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1,format=yuv420p[p1];"
-        "[0:v][p1]overlay=x=8+(372-overlay_w)/2:y=8+(234-overlay_h)/2:eof_action=repeat:format=yuv420[b1];"
-        "[b1]format=yuv420p,setsar=1[vout]"
+        "[1:v]scale=-2:236:flags=lanczos,setsar=1,format=yuv420p,pad=iw+8:ih:0:0:color=black[p1];"
+        "[2:v]scale=-2:236:flags=lanczos,setsar=1,format=yuv420p[p2];"
+        "[p1][p2]hstack=inputs=2,scale=752:236:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1[r1];"
+        "[0:v][r1]overlay=x=8+(752-overlay_w)/2:y=8+(236-overlay_h)/2:eof_action=repeat:format=yuv420[b1];"
+        "[3:v]scale=-2:188:flags=lanczos,setsar=1,format=yuv420p[p3];"
+        "[p3]scale=752:188:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,setsar=1[r2];"
+        "[b1][r2]overlay=x=8+(752-overlay_w)/2:y=252+(188-overlay_h)/2:eof_action=repeat:format=yuv420[b2];"
+        "[b2]format=yuv420p,setsar=1[vout]"
     )
     assert command[command.index("-frames:v") + 1] == "121"
     assert ["-f", "lavfi", "-i", "color=c=black:s=768x448:r=24"] == command[9:13]
@@ -320,6 +341,6 @@ def test_ffmpeg_writes_the_sheet_as_a_still_video_of_the_take_size_and_frames_an
     for frame in (0, 120):
         pixels = _gray(stored, 768, 448, frame)
         at = lambda x, y: pixels[y * 768 + x]
-        assert at(2, 2) < 30 and at(766, 446) < 30
-        assert at(8 + 186, 8 + 117) > 220 and at(388 + 186, 8 + 117) > 220 and at(384, 250 + 95) > 220
-        assert at(388 + 5, 8 + 117) < 30
+        assert at(2, 2) < 30 and at(766, 446) < 30 and at(150, 126) < 30 and at(620, 126) < 30
+        assert at(321, 126) > 220 and at(506, 126) > 220 and at(384, 346) > 220
+        assert at(443, 126) < 30
