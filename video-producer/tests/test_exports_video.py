@@ -403,8 +403,8 @@ def test_the_working_folder_is_the_deepest_folder_that_holds_every_file(tmp_path
 
 @pytest.mark.skipif(sys.platform != "win32", reason="drive letters exist on Windows only")
 def test_files_on_two_drives_have_no_working_folder_and_stay_absolute():
-    assert video.common_folder(["C:\media\a.mp4", "D:\work\out.mp4"]) is None
-    assert video.reach("D:\work\out.mp4", "C:\media") == "D:\work\out.mp4"
+    assert video.common_folder([r"C:\media\a.mp4", r"D:\work\out.mp4"]) is None
+    assert video.reach(r"D:\work\out.mp4", r"C:\media") == r"D:\work\out.mp4"
 
 
 def test_a_command_run_from_a_working_folder_names_its_input_files_relative_to_it(make_doc, tmp_path):
@@ -1093,8 +1093,12 @@ async def test_an_ffmpeg_that_never_starts_writing_is_killed_as_well(monkeypatch
 async def test_the_last_second_of_a_run_is_not_watched_so_the_file_can_be_finished(monkeypatch):
     _stalling(monkeypatch, 0.2)
     command = _python("import time; print('out_time_us=9500000', flush=True); time.sleep(1.0)")
+    processes, shares = [], []
 
-    await asyncio.wait_for(video.assemble(command, 10.0), timeout=30)
+    await asyncio.wait_for(video.assemble(command, 10.0, shares.append, processes.append), timeout=30)
+
+    assert processes[0].returncode == 0 and processes[-1] is None
+    assert shares == [pytest.approx(0.95)]
 
 
 def test_the_delivery_run_reports_its_progress_with_the_host_converters_settings(tmp_path):

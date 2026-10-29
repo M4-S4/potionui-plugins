@@ -904,9 +904,11 @@ def test_an_aspect_too_large_for_a_float_does_not_crash_the_job_planner(make_doc
     doc = _doc(make_doc, [_shot(0)], aspect="1e400:1")
 
     try:
-        frame_size(doc, "web", "1080p")
+        size = frame_size(doc, "web", "1080p")
     except OverflowError:
         pytest.fail("the frame size of an overflowing aspect raised OverflowError")
+
+    assert size == frame_size(_doc(make_doc, [_shot(0)], aspect="16:9"), "web", "1080p") == (1920, 1080)
 
 
 def test_the_file_name_of_an_export_fits_the_255_bytes_of_a_file_system(tmp_path):
