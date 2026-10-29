@@ -61,7 +61,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
     assets = []
     for index, clip in media:
         source = asset_of(doc, clip.get("assetId")) or {}
-        length = source.get("srcDur") if source.get("srcDur") is not None else clip["srcIn"] + clip["dur"]
+        length = source.get("srcDur") if source.get("srcDur") is not None else clip["srcIn"] + clip["dur"] * formats.speed_of(clip)
         assets.append(
             f'\t\t<asset id="r{refs[index]}" name="{esc(clip_label(doc, clip, locale))}" start="0s" '
             f'duration="{time.rational(length)}" hasVideo="1" format="r1">'
@@ -71,23 +71,24 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
     for index, clip in enumerate(doc["clips"]):
         name = esc(clip_label(doc, clip, locale))
         speed = formats.speed_of(clip)
+        length = time.span(clip["start"], clip["dur"])
         if index in refs and speed != 1:
             spine.append(
                 f'\t\t\t\t\t\t<asset-clip ref="r{refs[index]}" name="{name}" offset="{time.rational(clip["start"])}" '
-                f'start="{time.rational(clip["srcIn"])}" duration="{time.rational(clip["dur"])}">'
+                f'start="{time.rational(clip["srcIn"])}" duration="{time.count(length)}">'
                 f'<timeMap><timept time="{time.rational(clip["srcIn"])}" value="{time.rational(clip["srcIn"])}" interp="linear"/>'
-                f'<timept time="{time.rational(clip["srcIn"] + clip["dur"])}" value="{time.rational(clip["srcIn"] + clip["dur"] * speed)}" interp="linear"/>'
+                f'<timept time="{time.count(time.frames(clip["srcIn"]) + length)}" value="{time.rational(clip["srcIn"] + length / time.fps * speed)}" interp="linear"/>'
                 "</timeMap></asset-clip>"
             )
         elif index in refs:
             spine.append(
                 f'\t\t\t\t\t\t<asset-clip ref="r{refs[index]}" name="{name}" offset="{time.rational(clip["start"])}" '
-                f'start="{time.rational(clip["srcIn"])}" duration="{time.rational(clip["dur"])}"/>'
+                f'start="{time.rational(clip["srcIn"])}" duration="{time.count(length)}"/>'
             )
         else:
             spine.append(
                 f'\t\t\t\t\t\t<gap name="{name}" offset="{time.rational(clip["start"])}" start="0s" '
-                f'duration="{time.rational(clip["dur"])}"/>'
+                f'duration="{time.count(length)}"/>'
             )
     fps = js_number(time.fps)
     return (

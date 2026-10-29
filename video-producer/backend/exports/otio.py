@@ -15,11 +15,11 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
     """The sequence as an OpenTimelineIO timeline: the shots on V1, a slowed shot from its in point for its duration on the timeline with a linear time warp, one audio track per lane named A1, A2… by its position."""
     time = Timebase(doc)
 
-    def span(start: Any, dur: Any) -> Dict[str, Any]:
+    def span(start: int, length: int) -> Dict[str, Any]:
         return {
             "OTIO_SCHEMA": "TimeRange.1",
-            "start_time": {"OTIO_SCHEMA": "RationalTime.1", "rate": time.fps, "value": time.frames(start)},
-            "duration": {"OTIO_SCHEMA": "RationalTime.1", "rate": time.fps, "value": time.frames(dur)},
+            "start_time": {"OTIO_SCHEMA": "RationalTime.1", "rate": time.fps, "value": start},
+            "duration": {"OTIO_SCHEMA": "RationalTime.1", "rate": time.fps, "value": length},
         }
 
     video: List[Dict[str, Any]] = []
@@ -30,7 +30,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
             item: Dict[str, Any] = {
                 "OTIO_SCHEMA": "Clip.2",
                 "name": clip_label(doc, clip, locale),
-                "source_range": span(clip["srcIn"], clip["dur"]),
+                "source_range": span(time.frames(clip["srcIn"]), time.span(clip["start"], clip["dur"])),
                 "media_references": reference(entry),
                 "active_media_reference_key": "DEFAULT_MEDIA",
                 "metadata": {"video_producer": {"stage": clip.get("stage", UNDEFINED), "take": clip.get("take", UNDEFINED)}},
@@ -39,7 +39,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
                 item["effects"] = [{"OTIO_SCHEMA": "LinearTimeWarp.1", "name": "", "effect_name": "LinearTimeWarp", "metadata": {}, "time_scalar": speed}]
             video.append(item)
         else:
-            video.append({"OTIO_SCHEMA": "Gap.1", "name": clip_label(doc, clip, locale), "source_range": span(0, clip["dur"])})
+            video.append({"OTIO_SCHEMA": "Gap.1", "name": clip_label(doc, clip, locale), "source_range": span(0, time.span(clip["start"], clip["dur"]))})
     lanes = []
     audio = list(enumerate(doc.get("audio") or []))
     for position, lane in enumerate(doc.get("lanes") or [], start=1):
@@ -48,13 +48,13 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
         at: Any = 0
         for index, item in items:
             if item["start"] > at:
-                children.append({"OTIO_SCHEMA": "Gap.1", "source_range": span(0, item["start"] - at)})
+                children.append({"OTIO_SCHEMA": "Gap.1", "source_range": span(0, time.frames(item["start"]) - time.frames(at))})
             source = asset_of(doc, item.get("assetId"))
             children.append(
                 {
                     "OTIO_SCHEMA": "Clip.2",
                     "name": source.get("name", UNDEFINED) if source else UNDEFINED,
-                    "source_range": span(item["srcIn"], item["dur"]),
+                    "source_range": span(time.frames(item["srcIn"]), time.span(item["start"], item["dur"])),
                     "media_references": reference(files.get(("audio", index))),
                     "active_media_reference_key": "DEFAULT_MEDIA",
                     "metadata":{"video_producer": {"role": lane.get("role", UNDEFINED), "gain_db": item.get("gain", UNDEFINED)}},

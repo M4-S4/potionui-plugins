@@ -1,5 +1,6 @@
 import { newAsset } from './starter.js';
 import { framesOf, normalizeSeamMedia, seamAsset, seamImage } from './seam.js';
+import { sourceSeconds } from './cadence.js';
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
@@ -45,7 +46,7 @@ export function ignoresFirstFrame(option) {
 	return modes.length > 0 && !modes.includes('i2v');
 }
 
-export const cutEnd = (clip) => Math.round((Math.max(0, clip?.srcIn ?? 0) + Math.max(0, clip?.dur ?? 0)) * 1000) / 1000;
+export const cutEnd = (clip) => Math.round((Math.max(0, clip?.srcIn ?? 0) + Math.max(0, sourceSeconds(clip))) * 1000) / 1000;
 
 export function chainSource(doc, clip) {
 	const a = assetOf(doc, clip?.assetId);

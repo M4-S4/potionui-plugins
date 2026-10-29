@@ -204,3 +204,12 @@ test('wiring: the seam says a stale first frame and offers one, and its button t
 	assert.match(source('../components/takes/SeamAction.svelte'), /offer\?\.stale \? t\('lib\.chain\.refresh'\)/);
 	assert.match(source('../components/modals/Modals.svelte'), /setChain\(doc, v\)/);
 });
+
+test('the cut of a slowed shot ends where its take stops showing: its in point plus its duration times its speed', () => {
+	assert.equal(cutEnd({ srcIn: 1, dur: 4, speed: 0.5 }), 3);
+	assert.equal(cutEnd({ srcIn: 0.5, dur: 8, speed: 0.25 }), 2.5);
+	assert.equal(cutEnd({ srcIn: 1, dur: 4, speed: 2 }), 5);
+	const doc = sampleDoc();
+	Object.assign(doc.clips[0], { srcIn: 0.5, dur: 4, speed: 0.5 });
+	assert.deepEqual(chainSource(doc, doc.clips[0]), { shotId: 's1', takeId: 't1', assetId: 'gen-t1', at: 2.5 });
+});

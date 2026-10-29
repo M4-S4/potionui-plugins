@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import core_bridge, takes
+from . import core_bridge, formats, takes
 from .core_bridge import User
 from .exports import media
 from .exports.common import asset_of
@@ -35,8 +35,8 @@ def work_base() -> Path:
 
 
 def end_of(clip: Mapping[str, Any]) -> float:
-    """The time of its source the cut of a shot ends at, srcIn + dur, to the millisecond."""
-    return round(max(float(clip.get("srcIn") or 0), 0.0) + max(float(clip.get("dur") or 0), 0.0), 3)
+    """The time of its source the cut of a shot ends at, srcIn + dur × speed, to the millisecond: a slowed shot shows dur × speed seconds of its take."""
+    return round(max(float(clip.get("srcIn") or 0), 0.0) + max(float(clip.get("dur") or 0), 0.0) * formats.speed_of(clip), 3)
 
 
 def start_of(clip: Mapping[str, Any]) -> float:
