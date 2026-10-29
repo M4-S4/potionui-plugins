@@ -3,7 +3,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, secs } from '../../lib/state.svelte.js';
 	import { labelTake, promoteToFinal, retryTake, cancelTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable } from '../../lib/production.svelte.js';
-	import { FAILURE_CODES, isInFlight, presetLabel } from '../../lib/generation.js';
+	import { failureText, isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { extractable, extractAtPlayhead, seamState } from '../../lib/seam.svelte.js';
 	import { waitText } from '../../lib/chain.svelte.js';
@@ -90,7 +90,7 @@
 	});
 	const tone = $derived(take.status === 'failed' ? 'text-danger' : take.status === 'cancelled' ? 'text-fg-subtle' : 'text-signal');
 	const dot = $derived(take.status === 'failed' ? 'bg-danger' : take.status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
-	const errorText = $derived(FAILURE_CODES.includes(take.errorCode) ? t(`generation.failed.${take.errorCode}`, { id: take.generationId ?? '—' }) : take.errorMessage || t('generation.card.error', { code: take.errorCode ?? '—' }));
+	const errorText = $derived(failureText(take, t));
 	const finalTip = $derived(upscaleAvailable(take) ? t('generation.card.finalTip') : t('generation.block.upscaleUnsupported'));
 
 	function open() {

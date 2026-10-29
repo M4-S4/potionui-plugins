@@ -42,6 +42,11 @@ const CLOUD_DRIVERS = { '01M3SV8HJTGT3JPPH2BA5MP6PR': 'cloud.openrouter', '01M48
 const LEGACY_BACKENDS = { local: 'local', studio: 'remote', cloud: 'cloud' };
 const NATIVE_KINDS = ['local', 'remote'];
 
+export function failureText(take, t) {
+	if (FAILURE_CODES.includes(take?.errorCode)) return t(`generation.failed.${take.errorCode}`, { id: take.generationId ?? '—' });
+	return take?.errorMessage || t('generation.card.error', { code: take?.errorCode ?? '—' });
+}
+
 export const isInFlight = (take) => take?.status === 'queued' || take?.status === 'running';
 export const isH3 = (presetOrId) => MINIMAX_H3_IDS.includes(typeof presetOrId === 'string' ? presetOrId : presetOrId?.id);
 

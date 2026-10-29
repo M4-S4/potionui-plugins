@@ -94,7 +94,7 @@ test('base: the side panel is 280 px wide and the right panel 320 px, set inline
 	assert.doesNotMatch(page, /'300px'|'304px'/);
 });
 
-test('base: under 1280 px the side panels become drawers over the centre, closed by default, the Production bar wraps on two lines, and under 640 px the page says it needs 1280 px', () => {
+test('base: under 1280 px the side panels become drawers over the centre, closed by default, and under 640 px the page says it needs 1280 px', () => {
 	const viewport = read('viewport.svelte.js');
 	assert.match(viewport, /export const NARROW_WIDTH = 1280;/);
 	assert.match(viewport, /export const TINY_WIDTH = 640;/);
@@ -104,16 +104,11 @@ test('base: under 1280 px the side panels become drawers over the centre, closed
 	assert.match(rule('.vp-drawers'), /position: relative;/);
 	assert.match(rule('.vp-drawers > .vp-drawer'), /position: absolute;[\s\S]*z-index: 20;[\s\S]*width: 280px;/);
 	assert.match(rule(".vp-drawers > .vp-drawer[data-vp-drawer='end']"), /right: 0;[\s\S]*width: 320px;/);
-	assert.match(rule('.vp-production-wrap'), /height: auto;[\s\S]*flex-wrap: wrap;/);
-	assert.match(rule('.vp-production-wrap > [data-vp-engine]'), /order: 1;[\s\S]*flex-basis: 100%;/);
 	assert.match(page, /\{#if viewport\.tiny\}\s*<div class="vp-too-narrow" data-vp-too-narrow>[\s\S]*t\('shell\.app\.narrow'\)[\s\S]*t\('shell\.app\.narrowHint'\)[\s\S]*\{\/if\}\s*\{#if phase === 'loading'\}/);
 	const state = read('state.svelte.js');
 	assert.match(state, /sidebarOpen: !viewport\.narrow,/);
 	assert.match(state, /inspectorOpen: !viewport\.narrow && \(typeof window === 'undefined' \|\| window\.innerWidth >= 1360\),/);
 	assert.equal(state.match(/&& !viewport\.narrow\) ui\.inspectorOpen = true;/g)?.length, 2);
-	const bar = read('../components/production/ProductionBar.svelte');
-	assert.match(bar, /class:vp-production-wrap=\{viewport\.narrow\}/);
-	assert.match(bar, /<div class="flex shrink-0 items-center gap-2" data-vp-actions>/);
 	const header = read('../components/shell/ProjectBar.svelte');
 	assert.equal(header.match(/(?:labelClass|class)="vp-wide-only"/g)?.length, 3);
 	assert.match(header, /aria-label=\{workspaceLabel\(w\.id\)\} title=\{workspaceLabel\(w\.id\)\}/);
@@ -143,7 +138,7 @@ test('base: a drawer is a dialog that Escape closes before the selection, that a
 	const drawer = read('drawer.js');
 	assert.match(drawer, /trigger = document\.activeElement;[\s\S]*await tick\(\);[\s\S]*\(node\.querySelector\(FOCUSABLE\) \?\? node\)\.focus\(\{ preventScroll: true \}\);/);
 	assert.match(drawer, /if \(node\.contains\(document\.activeElement\) \|\| document\.activeElement === document\.body\) restoreFocus\(trigger, null\);/);
-	assert.match(drawer, /const KEEPS = '\.vp-drawer, \[data-vp-drawer-toggle\], \.vp-modal-backdrop, \.vp-palette-backdrop, \.vp-menu, \[data-vp-menu\], \.vp-toasts, \.vp-uploads';/);
+	assert.match(drawer, /const KEEPS = '\.vp-drawer, \.vp-deck-drawer, \[data-vp-drawer-toggle\], \.vp-modal-backdrop, \.vp-palette-backdrop, \.vp-menu, \[data-vp-menu\], \.vp-toasts, \.vp-uploads';/);
 	assert.equal(read('../components/shell/ProjectBar.svelte').match(/<span class="contents" data-vp-drawer-toggle>/g)?.length, 2);
 	for (const locale of ['en', 'fr']) assert.ok(JSON.parse(read(`../i18n/${locale}/panels.json`))['right.label'], locale);
 });

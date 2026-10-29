@@ -52,16 +52,17 @@ test('workspaces: every workspace and its command have a label in both languages
 	for (const locale of ['en', 'fr']) assert.equal(json(locale, 'shell')['workspace.director'], 'Director AI');
 });
 
-test('workspaces: Play keeps the viewer with the splitter and the timeline under it, without the side panels; only Director AI and Storyboard show the Production bar', () => {
+test('workspaces: Play keeps the viewer with the splitter and the timeline under it, without the side panels; only Director AI and Storyboard show the production deck', () => {
 	const page = source('../VideoProducerPage.svelte');
 	assert.match(page, /const player = \$derived\(isPlayer\(ui\.workspace\)\);/);
 	assert.match(page, /\{#if !player\}\s*<div class="vp-drawer" data-vp-drawer="start"[^>]*>\s*<LeftPanel \/>\s*<\/div>\s*\{\/if\}/);
 	assert.match(page, /\{#if !player\}\s*<div class="vp-drawer" data-vp-drawer="end"[^>]*>\s*<RightPanel \/>\s*<\/div>\s*\{\/if\}/);
 	assert.match(page, /<Viewer \{player\} \/>/);
-	assert.match(page, /<div>\s*\{#if !bare\}<Splitter \/>\{\/if\}\s*\{#if generates\(\)\}<ProductionBar \/>\{\/if\}\s*<\/div>/);
+	assert.match(page, /<div>\s*\{#if !bare\}<Splitter \/>\{\/if\}\s*<\/div>/);
+	assert.match(page, /<\/section>\s*\{#if generates\(\)\}<ProductionDeck \/>\{\/if\}\s*<StatusBar \/>/);
 	assert.match(page, /const bare = \$derived\(band \|\| ui\.workspace === 'director'\);/);
 	assert.match(source('state.svelte.js'), /export const generates = \(\) => ui\.workspace === 'director' \|\| ui\.workspace === 'storyboard';/);
-	const bottom = page.slice(page.indexOf('<Splitter />'), page.indexOf('<StatusBar />'));
+	const bottom = page.slice(page.indexOf('<Splitter />'), page.indexOf('<ProductionDeck />'));
 	assert.match(bottom, /<section class="min-h-0 overflow-hidden" style:height=\{`\$\{ui\[bottomKey\(\)\]\}px`\}/);
 	assert.match(bottom, /\{#if ui\.bottomView === 'console'\}\s*<Console \/>\s*\{:else\}\s*<Timeline \/>/);
 	assert.equal(bottom.match(/player/g), null);

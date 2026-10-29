@@ -367,26 +367,34 @@ export function readiness(opts = {}) {
 	const range = opts.clips?.length ? clipsRange(opts.clips) : picked.length ? clipsRange(picked) : productionRange();
 	const items = picked.length ? itemsOf(picked) : itemsIn(range);
 	const missing = [];
+	const reasons = [];
 	const warnings = [];
 	const notes = [];
 	const gaps = [];
-	if (range[1] - range[0] <= 0.05) missing.push(!opts.clips?.length && !picked.length && ui.production.target === 'clip' && directorShot() === null ? t('lib.block.noShot') : t('lib.block.noRange'));
-	if (!globalPrompt() && !items.prompts.length) missing.push(t('lib.block.noDirection'));
+	const block = (code, text, shotId = null) => {
+		missing.push(text);
+		reasons.push({ code, shotId });
+	};
+	if (range[1] - range[0] <= 0.05) {
+		const noShot = !opts.clips?.length && !picked.length && ui.production.target === 'clip' && directorShot() === null;
+		block(noShot ? 'noShot' : 'noRange', noShot ? t('lib.block.noShot') : t('lib.block.noRange'));
+	}
+	if (!globalPrompt() && !items.prompts.length) block('noDirection', t('lib.block.noDirection'));
 	const empty = items.prompts.filter((p) => !p.text.trim());
-	if (empty.length) missing.push(t('lib.block.emptyPrompts', { count: empty.length }));
+	if (empty.length) block('emptyPrompts', t('lib.block.emptyPrompts', { count: empty.length }), empty[0].shotId ?? null);
 	const noEngine = !currentEngine();
-	if (noEngine) missing.push(doc.engine?.preset ? t('generation.block.unavailable') : t('generation.block.noEngine'));
+	if (noEngine) block(doc.engine?.preset ? 'unavailable' : 'noEngine', doc.engine?.preset ? t('generation.block.unavailable') : t('generation.block.noEngine'));
 	const est = !opts.clips && !noEngine ? estimateState.data : null;
 	const request = est ? estimateRequest() : null;
 	const fresh = Boolean(request && (request.hold || request.key === estimateState.key));
 	if (est && fresh) {
-		for (const block of est.blocks) missing.push(noteText(block));
+		for (const item of est.blocks) block(item.code, noteText(item), item.data?.shot_id ?? null);
 		for (const warning of est.warnings) {
 			(INFO_WARNINGS.includes(warning.code) ? notes : warnings).push(noteText(warning));
 			if (warning.code === 'fl2va_no_frame' && warning.data?.shot_id) gaps.push(warning.data.shot_id);
 		}
 	}
-	return { range, items, missing, warnings, notes, gaps, est, noEngine };
+	return { range, items, missing, reasons, warnings, notes, gaps, est, noEngine };
 }
 
 function blockedText(error) {
@@ -719,6 +727,7 @@ function updateProduction() {
 	const p = ui.production;
 	const agg = aggregate(takeStore.list);
 	if (agg.state === 'running' || run.starting > 0) {
+		if (p.state !== 'running') p.startedAt = Date.now();
 		p.state = 'running';
 		p.progress = agg.progress;
 		p.running = agg.running;
@@ -733,8 +742,13 @@ function updateProduction() {
 	p.step = '';
 	const done = finished.filter((x) => x.status === 'done');
 	const failedTakes = finished.filter((x) => x.status === 'failed');
+	p.lastSeconds = p.startedAt ? Math.round((Date.now() - p.startedAt) / 1000) : null;
+	p.startedAt = null;
 	p.lastCount = done.length;
-	p.state = done.length ? 'done' : 'ready';
+	p.failed = failedTakes.length;
+	p.failedVariant = failedTakes[0]?.variant ?? null;
+	p.failedTake = failedTakes[0]?.id ?? null;
+	p.state = done.length ? 'done' : failedTakes.length ? 'failed' : 'ready';
 	if (done.length) toast(doneMessage(done), 'success', { label: t('shell.toast.view'), run: () => openResults() });
 	if (failedTakes.length) toast(t('generation.toast.failed', { count: failedTakes.length }), 'error', { label: t('shell.toast.view'), run: () => openResults() });
 }

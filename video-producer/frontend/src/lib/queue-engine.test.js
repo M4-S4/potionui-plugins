@@ -172,17 +172,17 @@ test('workshop: the advanced workshop, its commands, the local window queue and 
 	const production = source('./production.svelte.js');
 	assert.doesNotMatch(production, /queueWindow|generateQueue|production\.queue/);
 	assert.doesNotMatch(source('./state.svelte.js'), /queue: \[\]/);
-	for (const path of ['../components/director/DirectorSummary.svelte', '../components/production/ProductionBar.svelte', '../components/modals/Modals.svelte']) {
+	for (const path of ['../components/director/DirectorSummary.svelte', '../components/production/ProductionDeck.svelte', '../components/modals/Modals.svelte']) {
 		assert.doesNotMatch(source(path), /type: 'advanced'|AdvancedWorkshop|doc\.hybrid|doc\.profiles/, path);
 	}
 	assert.doesNotMatch(source('./starter.js'), /hybrid|profiles:/);
 });
 
-test('queue: the queue opens as a list under the queue button of the Production bar, from the bar, the status bar and the Production menu', () => {
-	const bar = source('../components/production/ProductionBar.svelte');
-	assert.match(bar, /const queueOpen = \$derived\(ui\.menuOpen === QUEUE_MENU\);/);
-	assert.match(bar, /onclick: \(\) => \(ui\.menuOpen = queueOpen \? null : QUEUE_MENU\)/);
-	assert.match(bar, /\{#if queueOpen\}\n\t\t\t<div class="vp-menu overflow-auto"[^>]*role="dialog"[^>]*>\n\t\t\t\t<QueuePanel \/>/);
+test('queue: the queue opens as a list above the queue button of the production deck, from the deck, the status bar and the Production menu', () => {
+	const deck = source('../components/production/ProductionDeck.svelte');
+	assert.match(deck, /const queueOpen = \$derived\(ui\.menuOpen === QUEUE_MENU\);/);
+	assert.match(deck, /onclick=\{\(\) => \(ui\.menuOpen = queueOpen \? null : QUEUE_MENU\)\}/);
+	assert.match(deck, /\{#if queueOpen\}\n\t{6}<div class="vp-menu overflow-auto"[^>]*role="dialog"[^>]*>\n\t{7}<QueuePanel \/>/);
 	const production = source('./production.svelte.js');
 	assert.match(production, /export function openQueue\(\) \{\n\tif \(!generates\(\)\) ui\.workspace = 'director';\n\tui\.menuOpen = QUEUE_MENU;\n\}/);
 	assert.match(source('../components/shell/StatusBar.svelte'), /data-vp-menu onclick=\{openQueue\}/);

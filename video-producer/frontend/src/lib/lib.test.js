@@ -87,8 +87,8 @@ test('keys: Alt combinations read the physical key, focus rules recognise fields
 	assert.ok(!isActivationTarget(null));
 });
 
-test('icons: 76 source editor icons, 28 missing names plus 10 vp- variants for the host, 6 aliases', () => {
-	assert.equal(Object.keys(paths).length, 76);
+test('icons: 76 source editor icons plus the More dots of the deck, 28 missing names plus 10 vp- variants for the host, 6 aliases', () => {
+	assert.equal(Object.keys(paths).length, 77);
 	assert.equal(HOST_MISSING.length, 28);
 	assert.equal(HOST_VARIANTS.length, 10);
 	assert.equal(Object.keys(HOST_ALIASES).length, 6);
@@ -211,7 +211,7 @@ test('emptyDoc: an untitled project with no shot and the four empty lanes', () =
 test('readiness: an FL2VA shot without a frame warns instead of blocking, so the starter project generates as is', () => {
 	const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'production.svelte.js'), 'utf-8');
 	const readiness = source.slice(source.indexOf('export function readiness'), source.indexOf('function blockedText'));
-	assert.match(readiness, /for \(const block of est\.blocks\) missing\.push\(noteText\(block\)\)/);
+	assert.match(readiness, /for \(const item of est\.blocks\) block\(item\.code, noteText\(item\), item\.data\?\.shot_id \?\? null\)/);
 	assert.match(readiness, /for \(const warning of est\.warnings\)/);
 	assert.doesNotMatch(readiness, /missing\.push\([^)]*(needFrame|noFrame)/);
 	assert.match(source, /code === 'fl2va_no_frame'\) return t\('generation\.warn\.noFrame'/);

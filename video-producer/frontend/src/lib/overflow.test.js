@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { shadeOf } from './scrollshade.js';
+import { popoverPosition } from './popover.js';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
 const page = read('../VideoProducerPage.svelte');
@@ -29,12 +30,16 @@ test('overflow: the menus of the menu bar grow to their longest label on one lin
 	assert.match(rule('.vp-menu-key'), /white-space: nowrap;/);
 });
 
-test('overflow: the warning of the Production bar keeps its whole text in its tooltip and names itself for a screen reader, with the count of warnings', () => {
+test('overflow: the warning of the production deck keeps its whole text, on two lines at most and in its tooltip, and names itself for a screen reader, with the count of warnings', () => {
 	assert.match(read('../components/shell/InfoTip.svelte'), /aria-label=\{label \|\| undefined\} aria-describedby=\{id\}/);
-	const bar = read('../components/production/ProductionBar.svelte');
-	assert.match(bar, /const noticeLabel = \$derived\(notes\.length > 1 \? t\('production\.notices', \{ count: notes\.length, text: notes\[0\] \}\) : \(notes\[0\] \?\? ''\)\);/);
-	assert.match(bar, /<InfoTip lines=\{notes\} label=\{noticeLabel\} wrapperClass="flex shrink-0">/);
-	assert.match(rule('.vp-notice'), /max-width: 320px;/);
+	const deck = read('../components/production/ProductionDeck.svelte');
+	assert.match(deck, /const noticeLabel = \$derived\(notes\.length > 1 \? t\('production\.notices', \{ count: notes\.length, text: notes\[0\] \}\) : \(notes\[0\] \?\? ''\)\);/);
+	assert.match(deck, /<InfoTip lines=\{notes\.length \? notes : \[line\]\} label=\{notes\.length \? noticeLabel : ''\} wrapperClass="flex min-w-0 items-center gap-1\.5">/);
+	assert.match(deck, /const line = \$derived\(deckLine\(\{ compact, eyebrow, detail \}\)\);/);
+	assert.match(deck, /\{#if detail\.warn\}<Icon name="alert" class="h-3 w-3 shrink-0 text-warning" \/>\{\/if\}<span class="vp-deck-detail-text" class:text-warning=\{detail\.warn\} class:is-whole=\{detail\.warn \|\| detail\.whole\}>/);
+	assert.match(rule('.vp-deck-detail-text.is-whole'), /-webkit-line-clamp: 2;[\s\S]*white-space: normal;/);
+	assert.equal(rule('.vp-notice'), '');
+	assert.equal(rule('.vp-production-wrap'), '');
 	for (const locale of ['en', 'fr']) {
 		const production = JSON.parse(read(`../i18n/${locale}/production.json`));
 		assert.match(production['notices.other'], /^\{count\} .*\{text\}$/, locale);
@@ -46,8 +51,13 @@ test('overflow: the seam panel puts the action under the whole text, and the sea
 	assert.match(panel, /<div class="min-w-0 flex-1">\n\t+<span class="block text-fg-muted">\{issue\.text\}[\s\S]*<\/span>\n\t+\{#if !issue\.fix \|\| n === firstFix\}<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><SeamFix \{clip\} \{issue\} \/><\/div>\{\/if\}\n\t+<\/div>/);
 	const grid = read('../components/storyboard/StoryboardView.svelte');
 	assert.match(grid, /<div class="vp-menu w-96 overflow-y-auto p-3" style:position="fixed" style:max-width="calc\(100vw - 1rem\)" role="dialog"/);
-	assert.match(grid, /node\.style\.maxHeight = `\$\{window\.innerHeight - 16\}px`;/);
-	assert.match(grid, /const above = a\.top - 6 - r\.height >= 8;/);
-	assert.match(grid, /below \? a\.bottom \+ 6 : above \? a\.top - r\.height - 6 : clamp\(window\.innerHeight - 8 - r\.height, 8, a\.bottom \+ 6\)/);
-	assert.match(grid, /const resized = new ResizeObserver\(place\);\n\t+resized\.observe\(node\);\n\t+window\.addEventListener\('resize', place\);/);
+	assert.match(grid, /use:anchoredPopover=\{\(\) => seamAnchor\}/);
+	const popover = read('./popover.js');
+	assert.match(popover, /node\.style\.maxHeight = `\$\{window\.innerHeight - 2 \* POPOVER_MARGIN\}px`;/);
+	assert.match(popover, /const above = a\.top - gap - panel\.height >= margin;/);
+	assert.match(popover, /below \? a\.bottom \+ gap : above \? a\.top - panel\.height - gap : clamp\(viewport\.height - margin - panel\.height, margin, a\.bottom \+ gap\)/);
+	assert.match(popover, /const resized = new ResizeObserver\(place\);\n\t+resized\.observe\(node\);\n\t+window\.addEventListener\('resize', place\);/);
+	assert.deepEqual(popoverPosition({ anchor: { left: 100, right: 300, top: 400, bottom: 440 }, panel: { width: 320, height: 200 }, viewport: { width: 1440, height: 900 } }), { left: 8, top: 446, maxHeight: 884 });
+	assert.deepEqual(popoverPosition({ anchor: { left: 1000, right: 1200, top: 800, bottom: 840 }, panel: { width: 352, height: 200 }, viewport: { width: 1440, height: 900 } }), { left: 848, top: 594, maxHeight: 884 });
+	assert.deepEqual(popoverPosition({ anchor: { left: 1300, right: 1420, top: 100, bottom: 140 }, panel: { width: 352, height: 880 }, viewport: { width: 1440, height: 900 } }), { left: 1068, top: 12, maxHeight: 884 });
 });

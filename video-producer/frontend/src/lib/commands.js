@@ -389,6 +389,7 @@ function escape() {
 	if (ui.paletteOpen) ui.paletteOpen = false;
 	else if (ui.modal) closeTopLayer() || (ui.modal = null);
 	else if (ui.menuOpen) ui.menuOpen = null;
+	else if (ui.deckDrawer) ui.deckDrawer = false;
 	else if (ui.preview || ui.compare) {
 		ui.preview = null;
 		ui.compare = null;

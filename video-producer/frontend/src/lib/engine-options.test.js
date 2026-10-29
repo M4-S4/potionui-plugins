@@ -367,20 +367,27 @@ test('client: the models a field can take come from the PotionUI preset model li
 	assert.equal(refused.ok, false);
 });
 
-test('pages: the engine settings live in the Production bar and the Edit Engine window, the Director AI summary only points there', () => {
-	const bar = source('../components/production/ProductionBar.svelte');
-	assert.match(bar, /const profileItems = \$derived\(supportedProfiles\(\)\.map\(\(m\) => \(\{ id: m, label: m \}\)\)\);/);
-	assert.doesNotMatch(bar, /disabled: !supported/);
-	assert.match(bar, /\{ id: 'margin', width: widths\.margin, rank: 6, show: guided \}/);
-	assert.match(bar, /\{ id: 'engine', width: ENGINE_WIDE, min: ENGINE_MIN, rank: 3, keep: true \}/);
-	assert.match(bar, /\{ id: 'profile', width: widths\.profile, min: widths\.compact, rank: 4, keep: true, show: showProfile \}/);
-	assert.doesNotMatch(bar, /fit\.overflow\.includes\('(engine|profile)'\)/);
-	assert.doesNotMatch(bar, /hostIconName\('dots'\)/);
-	assert.match(bar, /onSelect: setProjectQuality/);
-	assert.match(bar, /onclick: \(\) => openEngineSettings\(engine\?\.preset\)/);
-	assert.match(bar, /use:watch=\{'room'\} data-vp-engine/);
-	assert.match(bar, /observer \?\?= new ResizeObserver\(measure\);/);
-	assert.doesNotMatch(bar, /min-\[1400px\]/);
+test('pages: the engine settings live in the Settings drawer of the production deck and the Edit Engine window, the Director AI summary only points there', () => {
+	const deck = source('../components/production/ProductionDeck.svelte');
+	const drawer = source('../components/production/ProductionDrawer.svelte');
+	for (const page of [deck, drawer]) {
+		assert.match(page, /const profileItems = \$derived\(supportedProfiles\(\)\.map\(\(m\) => \(\{ id: m, label: m \}\)\)\);/);
+		assert.doesNotMatch(page, /disabled: !supported/);
+	}
+	assert.match(drawer, /\{#if rows\.includes\('profile'\)\}/);
+	assert.match(drawer, /\{#if control === 'popup'\}\s*<select class="vp-popup min-w-0" value=\{doc\.direction\.mode\}/);
+	assert.match(drawer, /onSelect: setProfile \}\} \/>/);
+	assert.match(drawer, /\{#if rows\.includes\('margin'\)\}/);
+	assert.match(drawer, /<SizePicker preset=\{engine\.info\} quality="draft" backend=\{engine\.backend\} value=\{chosenSize\(doc, engine\.preset, 'draft'\)\} onselect=\{\(v\) => setEngineSize\(engine\.preset, 'draft', v\)\} variant="field" triggerId=\{ids\.draft\} \/>/);
+	assert.match(drawer, /<SizePicker preset=\{engine\.info\} quality="final" backend=\{engine\.backend\} value=\{chosenSize\(doc, engine\.preset, 'final'\)\} onselect=\{\(v\) => setEngineSize\(engine\.preset, 'final', v\)\} variant="field" triggerId=\{ids\.final\} \/>/);
+	assert.match(drawer, /<DraftsField \{clips\} label=\{false\} disabled=\{!clips\.length\} id=\{ids\.drafts\} \/>/);
+	assert.match(deck, /onSelect: setProjectQuality/);
+	assert.match(drawer, /onclick: \(\) => openEngineSettings\(engine\?\.preset\)/);
+	assert.match(deck, /const moreOpen = \$derived\(ui\.menuOpen === MORE\);/);
+	assert.doesNotMatch(deck, /held|nested|startsWith\('picker:'\)/);
+	assert.match(deck, /class="vp-deck-chip" aria-label=\{folded \? chipFull\.join\(' · '\) : undefined\} aria-expanded=\{ui\.deckDrawer\} aria-haspopup="dialog" onclick=\{toggleDrawer\}/);
+	assert.doesNotMatch(deck, /SizePicker|DraftsField|selectEngine|setReferenceMargin|openEngineSettings/);
+	assert.doesNotMatch(deck, /min-\[1400px\]|fitInline/);
 
 	const summary = source('../components/director/DirectorSummary.svelte');
 	for (const gone of ['selectEngine', 'setProjectQuality', 'DraftsField', 'setReferenceMargin', 'SegmentedControl', 'dockFocus']) assert.doesNotMatch(summary, new RegExp(gone), gone);
