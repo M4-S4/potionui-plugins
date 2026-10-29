@@ -78,10 +78,16 @@ export function cloudPresetFor(engine, presets) {
 	);
 }
 
+export const nativeEngine = (me) => (me?.engines ?? []).find((e) => NATIVE_KINDS.includes(e.kind)) ?? null;
+
+export const hasNativeEngine = (me) => nativeEngine(me) !== null;
+
+export const rtxUnchecked = (me) => nativeEngine(me)?.kind === 'remote';
+
 export function engineOptions(me) {
 	const engines = me?.engines ?? [];
 	const presets = (me?.presets ?? []).filter((p) => p.video);
-	const native = engines.find((e) => NATIVE_KINDS.includes(e.kind));
+	const native = nativeEngine(me);
 	const options = [];
 	if (native) {
 		for (const preset of presets.filter((p) => !p.cloud)) {

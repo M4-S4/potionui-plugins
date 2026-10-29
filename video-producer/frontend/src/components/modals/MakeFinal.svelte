@@ -3,7 +3,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, toast, clipLabel } from '../../lib/state.svelte.js';
 	import { makeFinal, findTake, presetById } from '../../lib/production.svelte.js';
-	import { UPSCALE_TARGETS, aspectOf, canUpscale as autoUpscale, finalResolution, upscalesItself } from '../../lib/generation.js';
+	import { UPSCALE_TARGETS, aspectOf, canUpscale as autoUpscale, finalResolution, hasNativeEngine, rtxUnchecked, upscalesItself } from '../../lib/generation.js';
 	import { AUTO_TARGET, rtxSourceShown, upscalerReady } from '../../lib/finalpass.js';
 	import { chosenSize } from '../../lib/formats.js';
 	import { takeThumb } from '../../lib/media.js';
@@ -46,7 +46,7 @@
 	const close = () => (ui.modal = null);
 
 	function upscaleHint(id) {
-		if (id === 'rtx') return t('generation.finalPass.hint.rtx');
+		if (id === 'rtx') return rtxUnchecked(ui.me) ? t('generation.finalPass.hint.rtxUnchecked') : t('generation.finalPass.hint.rtx');
 		if (id === 'seedvr2') return t('generation.finalPass.hint.seedvr2');
 		if (id === 'engine' || h3) return t('generation.final.upscaleH3');
 		return t('generation.final.upscaleHint');
@@ -88,7 +88,7 @@
 						<HostUi name="Badge" props={{ variant: 'neutral', size: 'md' }}>{t('generation.final.unavailable')}</HostUi>
 					{/if}
 				</div>
-				<p class="text-xs text-fg-subtle">{canUpscale ? upscaleHint(upscaler) : t('generation.block.upscaleUnsupported')}</p>
+				<p class="text-xs text-fg-subtle">{canUpscale ? upscaleHint(upscaler) : hasNativeEngine(ui.me) ? t('generation.block.upscaleUnsupported') : t('generation.block.noNativeEngine')}</p>
 				<div class="flex items-center gap-3">
 					<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.upscaler.label')}</span>
 					<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.upscaler.label'), items: upscalers, selected: upscaler, onSelect: (id) => (upscaler = id) }} />
@@ -115,7 +115,7 @@
 						<span class="flex-1"></span>
 						<HostUi name="Switch" props={{ id: 'vp-make-final-conform', checked: conforming, disabled: interpolator === null, size: 'lg', label: t('generation.final.conform', { from: take.fps, fps: cadence.fps }), onchange: (v) => (conform = Boolean(v)) }} />
 					</div>
-					<p class="text-xs text-fg-subtle">{interpolator === null ? t('generation.cadence.noInterpolator') : conforming ? t('generation.finalPass.cadence.with', { name: interpolator === 'rtx' ? t('generation.cadence.interpolator.rtx') : t('generation.cadence.interpolator.rife') }) : t('generation.finalPass.cadence.off')}</p>
+					<p class="text-xs text-fg-subtle">{interpolator === null ? (hasNativeEngine(ui.me) ? t('generation.cadence.noInterpolator') : t('generation.cadence.noNativeEngine')) : conforming ? t('generation.finalPass.cadence.with', { name: interpolator === 'rtx' ? t('generation.cadence.interpolator.rtx') : t('generation.cadence.interpolator.rife') }) : t('generation.finalPass.cadence.off')}</p>
 				</section>
 			{/if}
 		</div>

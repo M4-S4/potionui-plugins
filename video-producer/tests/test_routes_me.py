@@ -200,7 +200,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "presets": [],
             "measured": {},
             "keyframe_presets": [],
-            "features": {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "interpolators": {"rife": False, "rtx": False}, "guided": False, "sheet": False},
+            "features": {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False, "rtx_checked": True}, "interpolators": {"rife": False, "rtx": False, "rtx_checked": True}, "guided": False, "sheet": False},
             "upscale_targets": ["hd720", "fhd1080", "qhd1440", "uhd2160"],
             "ffmpeg": False,
         },
@@ -987,15 +987,74 @@ def test_me_gives_a_cloud_preset_the_modes_of_all_its_preset_modes(client, store
     assert (preset["fps"], preset["fps_locked"], preset["profiles"]) == (24, True, ["FL2VA"])
 
 
+def _gpu():
+    return _backend("b-local", "This machine", execution_device="this_host_gpu", vram_total_gb=24.0, vram_free_gb=20.5)
+
+
+def _worker():
+    return _backend("b-remote", "Render box", driver="native.remote", execution_device="remote")
+
+
 def test_me_turns_the_upscaler_feature_on_with_seedvr2(client, store, no_container, catalog):
+    catalog.backends = [_gpu()]
     catalog.presets = [_wan()]
-    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "interpolators": {"rife": False, "rtx": False}, "guided": False, "sheet": False}
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False, "rtx_checked": True}, "interpolators": {"rife": False, "rtx": False, "rtx_checked": True}, "guided": False, "sheet": False}
 
     catalog.presets = [_wan(), _seedvr2()]
     data = client.get(ME_URL).json()["data"]
 
-    assert data["features"] == {"upscaler": True, "upscalers": {"seedvr2": True, "rtx": False}, "interpolators": {"rife": False, "rtx": False}, "guided": False, "sheet": False}
+    assert data["features"] == {"upscaler": True, "upscalers": {"seedvr2": True, "rtx": False, "rtx_checked": True}, "interpolators": {"rife": False, "rtx": False, "rtx_checked": True}, "guided": False, "sheet": False}
     assert data["upscale_targets"] == ["hd720", "fhd1080", "qhd1440", "uhd2160"]
+
+
+def test_me_turns_every_native_feature_off_when_only_cloud_backends_are_enabled(client, store, no_container, catalog, monkeypatch):
+    from backend import core_bridge
+
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: name == "nvvfx")
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: "0.2.0.0")
+    monkeypatch.setattr(core_bridge, "installed_model_for_file", lambda filename: "lora-1")
+    ltx = _description(
+        presets.LTX_2_5,
+        "LTX-2.5",
+        vars={"video_director": {"preset_modes": ["video"], "modes": {"t2v": {}, "director": {"ic_lora": True}}}},
+        modes={"video": _mode()},
+    )
+    catalog.presets = [_wan(), _seedvr2(), _rtx(), ltx]
+    catalog.fields[(presets.RTX_UPSCALE, "video_upscale")] = {"input_video": {"type": "video"}, "target_short_side": {"type": "number"}}
+    catalog.backends = [_gpu()]
+    with_native = client.get(ME_URL).json()["data"]["features"]
+    assert (with_native["upscaler"], with_native["upscalers"], with_native["guided"]) == (True, {"seedvr2": True, "rtx": True, "rtx_checked": True}, True)
+
+    catalog.backends = [_backend("b-cloud", "OpenRouter", engine=CLOUD_ENGINE, driver="cloud.openrouter")]
+
+    assert client.get(ME_URL).json()["data"]["features"] == {
+        "upscaler": False,
+        "upscalers": {"seedvr2": False, "rtx": False, "rtx_checked": True},
+        "interpolators": {"rife": False, "rtx": False, "rtx_checked": True},
+        "guided": False,
+        "sheet": False,
+    }
+
+
+def test_me_offers_rtx_on_a_remote_worker_without_checking_nvidia_vfx_here(client, store, no_container, catalog, monkeypatch):
+    from backend import core_bridge
+
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: False)
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: None)
+    catalog.presets = [_wan(), _rtx()]
+    catalog.fields[(presets.RTX_UPSCALE, "video_upscale")] = {"input_video": {"type": "video"}, "target_short_side": {"type": "number"}}
+    catalog.backends = [_worker()]
+
+    features = client.get(ME_URL).json()["data"]["features"]
+
+    assert features["upscalers"] == {"seedvr2": False, "rtx": True, "rtx_checked": False}
+    assert features["upscaler"] is True
+
+
+def test_me_leaves_out_a_native_backend_configured_with_no_gpu(client, store, no_container, catalog):
+    catalog.backends = [_backend("b-cpu", "Spare", execution_device="no_gpu"), _gpu()]
+
+    assert [listed["id"] for listed in client.get(ME_URL).json()["data"]["engines"]] == ["b-local"]
 
 
 def _rtx():
@@ -1009,10 +1068,11 @@ def test_me_reports_rtx_ready_with_its_target_field_and_nvidia_vfx(client, store
     monkeypatch.setattr(core_bridge, "module_available", lambda name: module and name == "nvvfx")
     catalog.presets = [_wan(), _rtx()]
     catalog.fields[(presets.RTX_UPSCALE, "video_upscale")] = {"input_video": {"type": "video"}, **({"target_short_side": {"type": "number"}} if target else {})}
+    catalog.backends = [_gpu()]
 
     features = client.get(ME_URL).json()["data"]["features"]
 
-    assert features["upscalers"] == {"seedvr2": False, "rtx": ready}
+    assert features["upscalers"] == {"seedvr2": False, "rtx": ready, "rtx_checked": True}
     assert features["upscaler"] is ready
 
 
@@ -1024,14 +1084,15 @@ def test_me_turns_the_guided_and_sheet_features_on_with_ltx_2_5_and_their_ic_lor
         modes={"video": _mode()},
     )
     catalog.presets = [_wan(), ltx]
+    catalog.backends = [_gpu()]
     monkeypatch.setattr(core_bridge, "installed_model_for_file", lambda filename: None)
     assert client.get(ME_URL).json()["data"]["features"]["guided"] is False
 
     monkeypatch.setattr(core_bridge, "installed_model_for_file", lambda filename: "lora-1" if filename == director.GUIDE_LORA else None)
-    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "interpolators": {"rife": False, "rtx": False}, "guided": True, "sheet": False}
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False, "rtx_checked": True}, "interpolators": {"rife": False, "rtx": False, "rtx_checked": True}, "guided": True, "sheet": False}
 
     monkeypatch.setattr(core_bridge, "installed_model_for_file", lambda filename: "lora-2" if filename == director.SHEET["lora"] else None)
-    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False}, "interpolators": {"rife": False, "rtx": False}, "guided": False, "sheet": True}
+    assert client.get(ME_URL).json()["data"]["features"] == {"upscaler": False, "upscalers": {"seedvr2": False, "rtx": False, "rtx_checked": True}, "interpolators": {"rife": False, "rtx": False, "rtx_checked": True}, "guided": False, "sheet": True}
 
     catalog.presets = [_wan()]
     assert client.get(ME_URL).json()["data"]["features"]["guided"] is False

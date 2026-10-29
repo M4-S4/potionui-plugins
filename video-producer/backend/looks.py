@@ -6,11 +6,10 @@ import os
 import shutil
 import statistics
 import struct
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from . import bible, chain, core_bridge, director, takes
+from . import bible, chain, core_bridge, director, takes, workdir
 from .core_bridge import MediaRefError
 from .exports import media
 from .exports.common import asset_of
@@ -363,9 +362,10 @@ async def compute(row: Mapping[str, Any], model: str, faces: bool = False, ident
     owner = core_bridge.get_user(row.get("user_id")) if row.get("user_id") else None
     if owner is None:
         return _mark(row["key"], FAILED, error="The owner of this media no longer exists.")
-    work = chain.work_base() / owner.id
-    work.mkdir(parents=True, exist_ok=True)
-    folder = Path(tempfile.mkdtemp(dir=work))
+    try:
+        folder = workdir.scratch(workdir.FRAMES, owner.id)
+    except workdir.WorkdirError as exc:
+        return _mark(row["key"], FAILED, error=exc.message)
     try:
         if row["kind"] == TAKE:
             take = takes.get_take(row["source"].get("take_id") or "")

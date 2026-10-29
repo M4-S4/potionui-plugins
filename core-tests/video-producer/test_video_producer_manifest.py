@@ -57,6 +57,7 @@ SETUP_CHECKS = (
     "backend.setup_checks:VideoEngineReady",
     "backend.setup_checks:VideoPresetsReady",
     "backend.setup_checks:UpscalerReady",
+    "backend.setup_checks:WorkFolderReady",
     "backend.setup_checks:FfmpegReady",
     "backend.setup_checks:MiniMaxH3Ready",
 )
@@ -67,6 +68,7 @@ SETUP_LABELS = (
     "Enable a native backend or a cloud video model",
     "Install and assign at least one Video Director preset (Wan, MiniMax-H3, LTX or a cloud video preset)",
     "Install SeedVR2 for final takes",
+    "Give Video Producer a writable work folder in the file storage directory",
     "Install ffmpeg for video delivery",
     "If a MiniMax-H3 preset is installed, install its five model files (DiT, text encoder, video VAE, audio VAE, "
     "and the latent upscaler of its Upscale mode)",
@@ -857,8 +859,10 @@ def _bridge(loader, manifest):
     return sys.modules["video_producer.backend.core_bridge"]
 
 
-def _fake_host(monkeypatch, bridge, *, backends, states, ffmpeg):
+def _fake_host(monkeypatch, bridge, *, backends, states, ffmpeg, storage=None):
     monkeypatch.setattr(bridge, "enabled_backends", lambda: backends)
+    if storage is not None:
+        monkeypatch.setattr(bridge, "storage_directory", lambda: storage)
     monkeypatch.setattr(bridge, "enabled_cloud_video_models", lambda backend_id: 0)
     monkeypatch.setattr(
         bridge,
@@ -872,20 +876,23 @@ def _fake_host(monkeypatch, bridge, *, backends, states, ffmpeg):
     monkeypatch.setattr(bridge, "find_ffprobe", lambda: ffmpeg and ffmpeg.replace("ffmpeg", "ffprobe"))
 
 
-def test_the_core_setup_report_runs_the_checks(loader, manifest, monkeypatch):
+LOCAL = {"id": "b-1", "name": "This machine", "engine": "native", "driver": "native.local", "execution_device": "this_host_gpu", "vram_total_gb": 12.0}
+
+
+def test_the_core_setup_report_runs_the_checks(loader, manifest, monkeypatch, tmp_path):
     bridge = _bridge(loader, manifest)
-    local = {"id": "b-1", "name": "This machine", "engine": "native", "driver": "native.local"}
     wan = bridge.PresetState(id=WAN, name="Wan", loaded=True, installed=True, assigned=False)
-    _fake_host(monkeypatch, bridge, backends=[local], states={WAN: wan}, ffmpeg="/usr/bin/ffmpeg")
+    _fake_host(monkeypatch, bridge, backends=[LOCAL], states={WAN: wan}, ffmpeg="/usr/bin/ffmpeg", storage=tmp_path)
 
     report = _setup(loader, manifest).report(manifest)
 
     assert (report.plugin_id, report.complete, report.remaining) == (PLUGIN_ID, False, 2)
-    assert [step.id for step in report.steps] == [f"{index}-check" for index in range(5)]
+    assert [step.id for step in report.steps] == [f"{index}-check" for index in range(6)]
     assert [step.label for step in report.steps] == [step["label"] for step in manifest.setup]
-    engine, presets, upscaler, ffmpeg, minimax = report.steps
+    engine, presets, upscaler, workdir, ffmpeg, minimax = report.steps
     assert (engine.status, engine.action) == ("done", None)
     assert engine.description == "Takes can run on This machine."
+    assert (workdir.status, workdir.action, workdir.description) == ("done", None, f"Work files are written in {tmp_path / 'video_producer'}.")
     assert (presets.status, presets.action.kind, presets.action.label) == ("todo", "link", "Assign presets")
     assert presets.action.href == f"/admin?tab=presets&id={WAN}"
     assert "Installed but assigned to no one: Wan." in presets.description
@@ -894,19 +901,19 @@ def test_the_core_setup_report_runs_the_checks(loader, manifest, monkeypatch):
     assert (minimax.status, minimax.action) == ("done", None)
 
 
-def test_the_core_setup_report_is_complete_when_everything_is_ready(loader, manifest, monkeypatch):
+def test_the_core_setup_report_is_complete_when_everything_is_ready(loader, manifest, monkeypatch, tmp_path):
     bridge = _bridge(loader, manifest)
-    local = {"id": "b-1", "name": "This machine", "engine": "native", "driver": "native.local"}
+    local = LOCAL
     states = {
         WAN: bridge.PresetState(id=WAN, name="Wan", loaded=True, installed=True, assigned=True),
         SEEDVR2: bridge.PresetState(id=SEEDVR2, name="SeedVR2", loaded=True, installed=True, assigned=True),
     }
-    _fake_host(monkeypatch, bridge, backends=[local], states=states, ffmpeg="/usr/bin/ffmpeg")
+    _fake_host(monkeypatch, bridge, backends=[local], states=states, ffmpeg="/usr/bin/ffmpeg", storage=tmp_path)
 
     report = _setup(loader, manifest).report(manifest)
 
     assert (report.complete, report.remaining) == (True, 0)
-    assert [step.status for step in report.steps] == ["done"] * 5
+    assert [step.status for step in report.steps] == ["done"] * 6
     assert all(step.action is None for step in report.steps)
 
 
@@ -916,41 +923,45 @@ def test_the_core_setup_report_shows_a_check_that_cannot_read_the_host_as_still_
     def broken(*args, **kwargs):
         raise RuntimeError("AppContainer not initialized yet")
 
-    for name in ("enabled_backends", "preset_state", "find_ffmpeg"):
+    for name in ("enabled_backends", "preset_state", "find_ffmpeg", "storage_directory"):
         monkeypatch.setattr(bridge, name, broken)
 
     report = _setup(loader, manifest).report(manifest)
 
-    assert (report.complete, report.remaining) == (False, 5)
-    assert [step.status for step in report.steps] == ["todo"] * 5
+    assert (report.complete, report.remaining) == (False, 6)
+    assert [step.status for step in report.steps] == ["todo"] * 6
     assert all(step.description.startswith("Could not check ") for step in report.steps)
     assert all(step.action.kind == "link" and step.action.href.startswith("/admin?tab=") for step in report.steps)
 
 
-def test_the_core_setup_report_shows_every_step_still_to_do_with_its_link(loader, manifest, monkeypatch):
+def test_the_core_setup_report_shows_every_step_still_to_do_with_its_link(loader, manifest, monkeypatch, tmp_path):
     bridge = _bridge(loader, manifest)
     states = {
         WAN: bridge.PresetState(id=WAN, name="Wan", loaded=True, installed=True, assigned=False),
         SEEDVR2: bridge.PresetState(id=SEEDVR2, name="SeedVR2", loaded=True, installed=False, assigned=False),
         MINIMAX_H3: bridge.PresetState(id=MINIMAX_H3, name="MiniMax-H3", loaded=True, installed=True, assigned=False),
     }
-    _fake_host(monkeypatch, bridge, backends=[], states=states, ffmpeg=None)
+    blocker = tmp_path / "storage"
+    blocker.write_text("not a directory", encoding="utf-8")
+    _fake_host(monkeypatch, bridge, backends=[], states=states, ffmpeg=None, storage=blocker)
     monkeypatch.setattr(bridge, "preset_model_hashes", lambda preset_id, names, modes=None: {name: {f"{name}-sha"} for name in names})
     monkeypatch.setattr(bridge, "describe_preset", lambda preset_id: None)
 
     report = _setup(loader, manifest).report(manifest)
 
-    assert (report.complete, report.remaining) == (False, 5)
+    assert (report.complete, report.remaining) == (False, 6)
     assert [step.label for step in report.steps] == list(SETUP_LABELS)
-    assert [step.status for step in report.steps] == ["todo"] * 5
+    assert [step.status for step in report.steps] == ["todo"] * 6
     assert [(step.action.kind, step.action.label, step.action.href) for step in report.steps] == [
         ("link", "Open backends", "/admin?tab=backends"),
         ("link", "Assign presets", f"/admin?tab=presets&id={WAN}"),
         ("link", "Open SeedVR2", f"/admin?tab=presets&id={SEEDVR2}"),
         ("link", "Read the guide", report.guide.href),
+        ("link", "Read the guide", report.guide.href),
         ("link", "Open MiniMax-H3", f"/admin?tab=presets&id={MINIMAX_H3}"),
     ]
-    assert report.steps[4].description.startswith("MiniMax-H3 is missing its DiT, text encoder, video VAE, audio VAE and latent upscaler.")
+    assert report.steps[3].description.startswith(f"Video Producer cannot write in {blocker / 'video_producer'}: ")
+    assert report.steps[5].description.startswith("MiniMax-H3 is missing its DiT, text encoder, video VAE, audio VAE and latent upscaler.")
 
 
 def test_the_setup_guide_points_at_the_admin_readme_the_ffmpeg_step_links_to(loader, manifest, monkeypatch):
@@ -960,10 +971,10 @@ def test_the_setup_guide_points_at_the_admin_readme_the_ffmpeg_step_links_to(loa
     report = _setup(loader, manifest).report(manifest)
 
     assert report.guide.title == "Video Producer: administration"
-    ffmpeg = report.steps[3]
+    ffmpeg = report.steps[4]
     assert (ffmpeg.status, ffmpeg.action.label) == ("todo", "Read the guide")
     assert ffmpeg.action.href == report.guide.href
-    assert [step.kind for step in report.steps] == ["check"] * 5
+    assert [step.kind for step in report.steps] == ["check"] * 6
 
 
 @pytest.fixture

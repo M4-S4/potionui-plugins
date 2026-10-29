@@ -159,6 +159,7 @@
 	"chain.waitFrame": "Attend la dernière image de « {shot} »",
 	"chain.error.noMedia": "Le plan précédent n’a ni prise ni vidéo dont reprendre une image.",
 	"chain.error.ffmpeg": "ffmpeg manque sur le serveur : la dernière image ne peut pas être reprise.",
+	"chain.error.workdir": "Le serveur ne peut pas écrire ses fichiers de travail : la dernière image ne peut pas être reprise. Demandez à un administrateur de vérifier le dossier de stockage des fichiers.",
 	"refs.added": "Référence ajoutée : choisissez son image et sa portée dans le panneau de droite",
 	"refs.selectOne": "Sélectionnez une référence.",
 	"refs.attached": "« {name} » associée à {start}–{end}",

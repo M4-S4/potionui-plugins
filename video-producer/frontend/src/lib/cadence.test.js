@@ -8,7 +8,7 @@ const table = JSON.parse(readFileSync(new URL('../../../backend/formats.json', i
 
 const take = (id, fps, extra = {}) => ({ id, fps, status: 'done', kind: 'render', url: `/x/${id}.mp4`, ...extra });
 const rendition = (takeId, status, extra = {}) => ({ id: `r-${takeId}-${status}`, takeId, fps: 25, status, ...extra });
-const me = (rife, rtx) => ({ features: { interpolators: { rife, rtx } } });
+const me = (rife, rtx, rtxChecked = true) => ({ features: { interpolators: { rife, rtx, rtxChecked } } });
 
 test('the cadences rule is the one of the formats table the server reads', () => {
 	assert.deepEqual(CADENCES, table.cadence.values);
@@ -53,12 +53,21 @@ test('the film asks for auto unless its final pass choices name an interpolator'
 });
 
 test('auto takes frame generation when it is ready and rife otherwise; a named one only when it is ready', () => {
-	assert.deepEqual(interpolatorsReady(null), { rife: false, rtx: false });
+	assert.deepEqual(interpolatorsReady(null), { rife: false, rtx: false, rtxChecked: true });
 	assert.equal(pickInterpolator('auto', me(true, true)), 'rtx');
 	assert.equal(pickInterpolator('auto', me(true, false)), 'rife');
 	assert.equal(pickInterpolator('auto', me(false, false)), null);
 	assert.equal(pickInterpolator('rife', me(true, true)), 'rife');
 	assert.equal(pickInterpolator('rtx', me(true, false)), null);
+});
+
+test('frame generation the server could not check on its remote worker is offered by name, and auto prefers rife to it', () => {
+	assert.deepEqual(interpolatorsReady(me(true, true, false)), { rife: true, rtx: true, rtxChecked: false });
+	assert.deepEqual(interpolatorsReady({ features: { interpolators: { rife: false, rtx: true, rtx_checked: false } } }), { rife: false, rtx: true, rtxChecked: false });
+	assert.equal(pickInterpolator('auto', me(true, true, false)), 'rife');
+	assert.equal(pickInterpolator('auto', me(false, true, false)), 'rtx');
+	assert.equal(pickInterpolator('rtx', me(true, true, false)), 'rtx');
+	assert.equal(pickInterpolator('rife', me(false, true, false)), null);
 });
 
 test('a take card shows the version of the take at the film rate, on its way, failed, or still to make', () => {
@@ -117,12 +126,13 @@ test('the versions at a frame rate and their estimate are read from the API', ()
 		fps: 25,
 		choice: 'auto',
 		interpolator: 'rtx',
-		ready: { rife: true, rtx: true },
+		ready: { rife: true, rtx: true, rtxChecked: true },
 		takes: ['t1'],
 		seconds: 12.5
 	});
+	assert.deepEqual(normalizeRenditionEstimate({ fps: 25, choice: 'auto', interpolator: 'rife', ready: { rife: true, rtx: true, rtx_checked: false }, takes: [], seconds: null }).ready, { rife: true, rtx: true, rtxChecked: false });
 	const pass = normalizePassEstimate({ shots: [], vram: null, time: {}, quota: null, blocks: [], warnings: [], cadence: { fps: 25, choice: 'rife', interpolator: null, ready: {}, shots: ['s1'], near: ['s2'], seconds: null } });
-	assert.deepEqual(pass.cadence, { fps: 25, choice: 'rife', interpolator: null, ready: { rife: false, rtx: false }, shots: ['s1'], slowed: [], near: ['s2'], seconds: null });
+	assert.deepEqual(pass.cadence, { fps: 25, choice: 'rife', interpolator: null, ready: { rife: false, rtx: false, rtxChecked: true }, shots: ['s1'], slowed: [], near: ['s2'], seconds: null });
 });
 
 test('the client orders, estimates, lists and cancels versions, and asks a final take to conform', async () => {

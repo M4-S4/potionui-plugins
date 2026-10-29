@@ -526,7 +526,7 @@ function normalizePassShot(value) {
 
 export function normalizeInterpolatorsReady(value) {
 	const ready = isObject(value) ? value : {};
-	return { rife: ready.rife === true, rtx: ready.rtx === true };
+	return { rife: ready.rife === true, rtx: ready.rtx === true, rtxChecked: ready.rtx_checked !== false };
 }
 
 const INTERPOLATOR_NAMES = ['rife', 'rtx'];

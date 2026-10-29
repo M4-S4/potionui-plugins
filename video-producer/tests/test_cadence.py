@@ -84,13 +84,38 @@ def test_the_film_asks_for_auto_unless_its_final_pass_choices_name_an_interpolat
 
 
 def test_no_interpolator_is_ready_without_video_tools_or_frame_generation(core):
-    assert cadence.ready(core.users["user-1"]) == {"rife": False, "rtx": False}
+    assert cadence.ready(core.users["user-1"]) == {"rife": False, "rtx": False, "rtx_checked": True}
 
 
 def test_rife_is_ready_with_video_tools_that_takes_a_target_frame_rate(core):
     core.use_video_tools()
 
-    assert cadence.ready(core.users["user-1"]) == {"rife": True, "rtx": False}
+    assert cadence.ready(core.users["user-1"]) == {"rife": True, "rtx": False, "rtx_checked": True}
+
+
+def test_without_a_native_engine_no_interpolator_is_ready(core):
+    core.use_video_tools()
+    core.use_frame_generation()
+    core.cloud_only()
+
+    assert cadence.ready(core.users["user-1"]) == {"rife": False, "rtx": False, "rtx_checked": True}
+
+
+def test_on_a_remote_worker_frame_generation_is_offered_unchecked_and_auto_prefers_rife(core):
+    core.use_frame_generation(version=None)
+    core.modules.discard("nvvfx")
+    core.use_worker()
+
+    found = cadence.ready(core.users["user-1"])
+
+    assert found == {"rife": False, "rtx": True, "rtx_checked": False}
+    assert cadence.pick("auto", found) == "rtx"
+    assert cadence.pick("rtx", found) == "rtx"
+    core.use_video_tools()
+    found = cadence.ready(core.users["user-1"])
+    assert found == {"rife": True, "rtx": True, "rtx_checked": False}
+    assert cadence.pick("auto", found) == "rife"
+    assert cadence.pick("rtx", found) == "rtx"
 
 
 def test_rife_is_not_ready_with_a_video_tools_older_than_the_target_frame_rate(core):
@@ -137,6 +162,7 @@ def test_an_rtx_upscale_without_its_interpolate_mode_brings_no_frame_generation(
     ],
 )
 def test_auto_takes_frame_generation_when_it_is_ready_and_rife_otherwise(choice, found, picked):
+    assert cadence.pick(choice, {**found, "rtx_checked": True}) == picked
     assert cadence.pick(choice, found) == picked
 
 

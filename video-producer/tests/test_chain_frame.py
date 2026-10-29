@@ -295,6 +295,19 @@ def test_without_ffmpeg_the_frame_cannot_be_taken(client, make_project, library,
     assert response.status_code == 503 and response.json()["detail"]["error"] == "ffmpeg_missing"
 
 
+def test_without_a_writable_work_folder_the_frame_cannot_be_taken(client, make_project, library, export_storage, tmp_path, monkeypatch):
+    project, _, _ = _placed(make_project)
+    library.files[("history", TAKE_FILE)] = tmp_path / "1.mp4"
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "ffmpeg")
+    (export_storage / "video_producer").write_text("not a directory", encoding="utf-8")
+
+    response = _end_frame(client, project["id"])
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["error"] == "workdir_unwritable"
+    assert response.json()["detail"]["message"].startswith(f"Video Producer cannot write in {export_storage / 'video_producer' / 'frames' / 'user-1'}: ")
+
+
 def test_the_end_frame_leaves_the_document_alone(client, make_project, library):
     project, _, _ = _placed(make_project)
     before = projects.get_project(project["id"])

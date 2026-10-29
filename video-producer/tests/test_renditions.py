@@ -327,7 +327,7 @@ def test_the_final_pass_says_which_finals_are_slower_and_orders_their_versions(c
         "fps": 25,
         "choice": "auto",
         "interpolator": "rife",
-        "ready": {"rife": True, "rtx": False},
+        "ready": {"rife": True, "rtx": False, "rtx_checked": True},
         "shots": ["s1", "s2"],
         "slowed": [],
         "near": [],
@@ -400,7 +400,7 @@ def test_the_routes_estimate_order_list_and_cancel_versions(client, core, make_p
         "fps": 25,
         "choice": "auto",
         "interpolator": "rife",
-        "ready": {"rife": True, "rtx": False},
+        "ready": {"rife": True, "rtx": False, "rtx_checked": True},
         "takes": ids,
         "seconds": None,
     }

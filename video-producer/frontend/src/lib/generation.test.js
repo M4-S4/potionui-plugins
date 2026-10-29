@@ -7,6 +7,9 @@ import {
 	canUpscale,
 	draftResolution,
 	engineOptions,
+	hasNativeEngine,
+	nativeEngine,
+	rtxUnchecked,
 	finalResolution,
 	isInFlight,
 	migrateEngine,
@@ -452,4 +455,19 @@ test('takes: a done take becomes a gen-<takeId> asset, H3 upscales by itself', (
 		]).map((x) => x.id),
 		['a', 'b', 'c']
 	);
+});
+
+test('the native engine is the first local or remote backend of /me, and RTX is unchecked by the server when that engine is a remote worker', () => {
+	assert.equal(nativeEngine(me).id, 'native');
+	assert.equal(hasNativeEngine(me), true);
+	assert.equal(rtxUnchecked(me), false);
+	const remoteFirst = { ...me, engines: me.engines.filter((e) => e.kind !== 'local') };
+	assert.equal(nativeEngine(remoteFirst).id, 'studio');
+	assert.equal(rtxUnchecked(remoteFirst), true);
+	const cloudOnly = { ...me, engines: me.engines.filter((e) => e.kind === 'cloud') };
+	assert.equal(nativeEngine(cloudOnly), null);
+	assert.equal(hasNativeEngine(cloudOnly), false);
+	assert.equal(rtxUnchecked(cloudOnly), false);
+	assert.deepEqual(engineOptions(cloudOnly).map((o) => o.kind), ['cloud', 'cloud']);
+	assert.equal(hasNativeEngine(null), false);
 });

@@ -69,17 +69,55 @@ def test_the_upscaler_of_a_take_is_read_from_its_preset():
 
 def test_rtx_is_ready_only_with_its_video_mode_its_target_field_and_nvidia_vfx(core):
     user = core.users["user-1"]
-    assert upscalers.ready(user) == {"seedvr2": False, "rtx": False}
+    assert upscalers.ready(user) == {"seedvr2": False, "rtx": False, "rtx_checked": True}
 
     core.use_seedvr2()
     core.use_rtx(installed=False)
-    assert upscalers.ready(user) == {"seedvr2": True, "rtx": False}
+    assert upscalers.ready(user) == {"seedvr2": True, "rtx": False, "rtx_checked": True}
 
     core.modules.add("nvvfx")
-    assert upscalers.ready(user) == {"seedvr2": True, "rtx": True}
+    assert upscalers.ready(user) == {"seedvr2": True, "rtx": True, "rtx_checked": True}
 
     core.use_rtx(target=False)
     assert upscalers.ready(user)["rtx"] is False
+
+
+def test_without_a_native_engine_no_upscaler_is_ready_and_no_upscale_is_planned(core):
+    core.use_seedvr2()
+    core.use_rtx()
+    core.use_h3()
+    _video(core)
+    core.cloud_only()
+
+    assert upscalers.ready(core.users["user-1"]) == {"seedvr2": False, "rtx": False, "rtx_checked": True}
+    for upscaler in ("auto", "seedvr2", "rtx", "engine"):
+        with pytest.raises(DirectorError) as caught:
+            director.build_upscale(core.users["user-1"], _source(preset_id=presets.MINIMAX_H3), "fhd1080", upscaler)
+        assert caught.value.code == "no_native_engine"
+        assert caught.value.message == (
+            "An upscaler runs on a native backend of this instance, and none is enabled: "
+            "enable the native backend of this machine or a native remote worker."
+        )
+
+
+def test_on_a_remote_worker_rtx_is_offered_without_nvidia_vfx_here_and_said_unchecked(core):
+    core.use_rtx(installed=False)
+    core.use_worker()
+    _video(core)
+
+    assert upscalers.ready(core.users["user-1"]) == {"seedvr2": False, "rtx": True, "rtx_checked": False}
+    assert director.build_upscale(core.users["user-1"], _source(), "fhd1080", "rtx").request["preset_id"] == presets.RTX_UPSCALE
+    assert director.build_upscale(core.users["user-1"], _source(), "fhd1080").request["preset_id"] == presets.RTX_UPSCALE
+
+
+def test_the_native_engine_of_the_readiness_is_the_first_of_the_engines_given(core):
+    core.use_rtx(installed=False)
+    local, remote = dict(core.backends[0]), {"id": "b-remote", "name": "Render box", "engine": "native", "driver": "native.remote", "execution_device": "remote"}
+    core.backends = [local, remote]
+
+    assert upscalers.ready(core.users["user-1"])["rtx_checked"] is True
+    assert upscalers.ready(core.users["user-1"], [{**remote, "kind": "remote"}]) == {"seedvr2": False, "rtx": True, "rtx_checked": False}
+    assert upscalers.ready(core.users["user-1"], []) == {"seedvr2": False, "rtx": False, "rtx_checked": True}
 
 
 def test_rtx_upscales_a_take_to_the_short_side_of_its_target_without_a_seed_tuned_for_a_compressed_source(core):

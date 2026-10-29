@@ -2,10 +2,11 @@ import copy
 import logging
 import math
 import re
+import shutil
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, dialogue, engine_options, formats, keepframing, models, presets, reception, sequence, settings, upscalers
+from . import bible, catalog, core_bridge, dialogue, engine_options, formats, keepframing, models, presets, reception, sequence, settings, upscalers, workdir
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -2169,7 +2170,8 @@ def _build(
         )
     cutting = [plan.shot_id for plan in plans.shots if plan.needs_audio]
     filming = [plan.shot_id for plan in plans.shots if plan.video]
-    if (cutting or filming) and not core_bridge.find_ffmpeg():
+    chaining = [plan.shot_id for plan in plans.shots if plan.chain]
+    if (cutting or filming or chaining) and not core_bridge.find_ffmpeg():
         if cutting:
             plans.blocks.append(
                 note("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shots cannot be cut.", shot_ids=cutting)
@@ -2180,6 +2182,14 @@ def _build(
                     "video_ffmpeg_missing",
                     "ffmpeg is not available on this server: the reference video tracks of the shots cannot be cut.",
                     shot_ids=filming,
+                )
+            )
+        if chaining:
+            plans.blocks.append(
+                note(
+                    "chain_ffmpeg_missing",
+                    "ffmpeg is not available on this server: the last image of the previous shot cannot be taken for the shots that start from it.",
+                    shot_ids=chaining,
                 )
             )
     return plans
@@ -2251,7 +2261,19 @@ def _own_upscale(user: User, source: Mapping[str, Any]) -> Optional[Preset]:
     return find_preset(user, str(preset_id), video=False)
 
 
+def native_engine_or_block(what: str) -> Dict[str, Any]:
+    """The native backend the takes of native presets run on; DirectorError when only cloud backends are enabled, saying what cannot be made."""
+    engine = catalog.native_engine()
+    if engine is None:
+        raise DirectorError(
+            "no_native_engine",
+            f"{what} runs on a native backend of this instance, and none is enabled: enable the native backend of this machine or a native remote worker.",
+        )
+    return engine
+
+
 def _upscaler_preset(user: User, source: Mapping[str, Any], upscaler: str) -> Tuple[Preset, str]:
+    engine = native_engine_or_block("An upscaler")
     own = _own_upscale(user, source) if upscaler in (upscalers.AUTO, upscalers.ENGINE) else None
     if own is not None and H3_UPSCALE_MODE in own.modes:
         return own, H3_UPSCALE_MODE
@@ -2264,7 +2286,7 @@ def _upscaler_preset(user: User, source: Mapping[str, Any], upscaler: str) -> Tu
         )
     preset_id = upscalers.PRESET_OF.get(upscaler, presets.SEEDVR2)
     preset = find_preset(user, preset_id, video=False)
-    if upscaler == upscalers.AUTO and (preset is None or SEEDVR2_MODE not in preset.modes) and upscalers.ready(user)[upscalers.RTX]:
+    if upscaler == upscalers.AUTO and (preset is None or SEEDVR2_MODE not in preset.modes) and upscalers.ready(user, [engine])[upscalers.RTX]:
         preset_id = presets.RTX_UPSCALE
         preset = find_preset(user, preset_id, video=False)
     if preset is None or SEEDVR2_MODE not in preset.modes:
@@ -2281,7 +2303,7 @@ def _upscaler_preset(user: User, source: Mapping[str, Any], upscaler: str) -> Tu
             f"This version of {preset.name} cannot be asked for a size: update the NVIDIA RTX Upscale plugin.",
             preset_id=preset_id,
         )
-    if preset_id == presets.RTX_UPSCALE and not core_bridge.module_available(upscalers.RTX_MODULE):
+    if preset_id == presets.RTX_UPSCALE and upscalers.nvvfx(engine) is False:
         raise DirectorError(
             "upscaler_missing",
             f"{preset.name} needs the nvidia-vfx package on the server: ask an administrator to install it.",
@@ -2430,17 +2452,25 @@ def take_asset(doc: Mapping[str, Any], take_id: Any) -> Optional[Dict[str, Any]]
 
 
 def draft_sound(user: User, doc: Mapping[str, Any], source: Mapping[str, Any]) -> bool:
-    """True when the video of a finished take has a sound the project can mix again: its asset is in the project and ffprobe hears an audio stream in its file on this server."""
+    """True when the video of a finished take has a sound the project can mix again: its asset is in the project and ffprobe hears an audio stream in its file, read where the storage keeps it or streamed into a work folder of the user when the storage is not a local disk; DirectorError when that folder cannot be written."""
     if take_asset(doc, source.get("id")) is None:
         return False
     try:
-        path = core_bridge.media_file_path("history", source_video(user, source)["value"])
-        probe = core_bridge.probe_video(path) if path else None
+        value = source_video(user, source)["value"]
     except DirectorError:
         return False
+    try:
+        folder = workdir.scratch(workdir.FRAMES, user.id)
+    except workdir.WorkdirError as exc:
+        raise DirectorError(exc.code, exc.message) from None
+    try:
+        path = core_bridge.local_media_file("history", value, folder)
+        probe = core_bridge.probe_video(path) if path else None
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not read the sound of take %s", source.get("id"), exc_info=True)
         return False
+    finally:
+        shutil.rmtree(folder, True)
     return bool(probe is not None and probe.has_audio)
 
 
@@ -2485,6 +2515,7 @@ def bind_first(user: User, plan: ShotPlan, media: Mapping[str, Any]) -> None:
 
 def build_guided(user: User, doc: Mapping[str, Any], source: Mapping[str, Any], sound: bool = False) -> ShotPlan:
     """The final take of a finished take rendered again by LTX-2.5 following its video through the Layout-To-Render IC-LoRA: the largest size of the preset, the frame rate of the take and its length cut to the frames LTX renders, the shot's prompt in the LTX form and the project's options for the preset; with sound, the sound of the take mixed onto the new one. It starts from the picture guided_first gives, else from the first frame of the take's video, bound later."""
+    native_engine_or_block("A guided final")
     preset = guided_preset(user)
     if preset is None:
         raise DirectorError("guided_unavailable", "LTX-2.5 is not available to you: a guided final needs it.", preset_id=presets.LTX_2_5)

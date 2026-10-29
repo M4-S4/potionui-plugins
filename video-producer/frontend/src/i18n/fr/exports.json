@@ -37,6 +37,7 @@
 	"error.not_ready": "La vidéo n’est pas encore prête.",
 	"error.invalid_request": "Le serveur a refusé cette demande d’export.",
 	"error.invalid_doc": "Le serveur a refusé le projet enregistré : rien n’a été exporté.",
+	"error.workdir_unwritable": "Le serveur ne peut pas écrire dans son dossier d’export : le dossier de stockage des fichiers doit être un dossier local inscriptible. Demandez à un administrateur de le vérifier.",
 	"error.ffmpeg_failed": "ffmpeg n’a pas pu assembler la vidéo.",
 	"error.transcode_failed": "La vidéo n’a pas pu être convertie.",
 	"error.store_failed": "L’export n’a pas pu être enregistré.",

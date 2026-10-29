@@ -12,6 +12,12 @@ VIDEO_PRODUCER = "video_producer"
 
 NATIVE_KINDS = {"native.local": "local", "native.remote": "remote"}
 
+READY = "ready"
+REMOTE = "remote"
+NO_GPU = "no_gpu"
+UNREAD = "unread"
+UNESTABLISHED = "unestablished"
+
 FL2VA = "FL2VA"
 REF2VA = "Ref2VA"
 HYBRID_AV = "Hybrid AV"
@@ -46,6 +52,16 @@ def engine_kind(backend: Dict[str, Any]) -> Optional[str]:
     return NATIVE_KINDS.get(backend.get("driver") or "")
 
 
+def gpu_state(backend: Mapping[str, Any]) -> str:
+    """Where a native backend would run a take, from what its running instance reports: ready (this host's GPU, whose memory was read), remote (a worker, whose GPU this server cannot see), no_gpu (configured with none), unread (this host, but no GPU could be read: no CUDA, a broken driver or a device without an explicit ordinal) or unestablished (not running)."""
+    device = backend.get("execution_device")
+    if device in (REMOTE, NO_GPU):
+        return device
+    if device == "this_host_gpu":
+        return READY if _positive(backend.get("vram_total_gb")) else UNREAD
+    return UNESTABLISHED
+
+
 def _cloud_models(backend_id: str) -> List[Dict[str, Any]]:
     try:
         return core_bridge.cloud_video_models(backend_id)
@@ -55,7 +71,7 @@ def _cloud_models(backend_id: str) -> List[Dict[str, Any]]:
 
 
 def video_engines() -> List[Dict[str, Any]]:
-    """The enabled native and cloud backends, highest priority first, a cloud one with its video models; empty when they cannot be read."""
+    """The enabled native and cloud backends takes can run on, highest priority first, a cloud one with its video models, a native one configured with no GPU left out; empty when they cannot be read."""
     try:
         backends = core_bridge.enabled_backends()
     except Exception:
@@ -64,13 +80,19 @@ def video_engines() -> List[Dict[str, Any]]:
     engines = []
     for backend in backends:
         kind = engine_kind(backend)
-        if kind is None:
+        if kind is None or (kind != "cloud" and gpu_state(backend) == NO_GPU):
             continue
         engine = {**{key: backend.get(key) for key in ENGINE_KEYS}, "kind": kind}
         if kind == "cloud":
             engine["models"] = _cloud_models(backend.get("id"))
         engines.append(engine)
     return engines
+
+
+def native_engine(engines: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
+    """The native backend the takes of native presets run on: the first of the engines, listed when not given, that is this machine's or a remote worker; None without any, when only cloud backends are enabled."""
+    found = video_engines() if engines is None else engines
+    return next((engine for engine in found if engine.get("kind") in NATIVE_KINDS.values()), None)
 
 
 def is_video_preset(description: Any) -> bool:

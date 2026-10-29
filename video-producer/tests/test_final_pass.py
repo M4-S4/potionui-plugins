@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -42,7 +43,7 @@ def _start(core, evaluation, project, owner="user-1"):
 
 
 @pytest.fixture
-def guided(core, monkeypatch):
+def guided(core, monkeypatch, export_storage):
     core.use_ltx25()
     framed = []
 
@@ -51,7 +52,7 @@ def guided(core, monkeypatch):
         return {"value": f"uploads/first-{len(framed)}.png", "media_type": "image"}
 
     monkeypatch.setattr(core_bridge, "extract_frame", extract_frame)
-    monkeypatch.setattr(core_bridge, "media_file_path", lambda kind, value: f"/storage/{value}")
+    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, folder: Path(f"/storage/{value}"))
     monkeypatch.setattr(core_bridge, "probe_video", lambda path: SimpleNamespace(has_audio=False))
     return framed
 
@@ -295,6 +296,67 @@ def test_a_guided_final_mixes_the_sound_of_its_draft_onto_the_new_take(core, mak
     form = core.submitted[-1][1]["form_data"]
     assert form["video_director"]["audio"] == [director.mux_entry("uploads/draft-sound.wav", round(65 / 16, 6))]
     assert form["audio_vae"] == "model:id-ltx25_audio_vae-sha"
+
+
+def test_the_sound_of_a_draft_kept_in_object_storage_is_heard_from_a_streamed_copy_that_is_removed(core, make_project, monkeypatch, export_storage):
+    core.use_wan()
+    project, drafts = _drafts(core, make_project, clips=SHOTS[:1])
+    project["doc"]["assets"].append({"id": f"gen-{drafts[0]['id']}", "kind": "video", "resultId": drafts[0]["id"]})
+    key = f"generations/x/{drafts[0]['generation_id']}.mp4"
+    copies = []
+
+    def copy_media_file(kind, value, target):
+        copies.append((kind, value, Path(target)))
+        Path(target).write_bytes(b"\0" * 64)
+        return True
+
+    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda kind, value: None)
+    monkeypatch.setattr(core_bridge.api_media, "copy_media_file", copy_media_file)
+    monkeypatch.setattr(core_bridge, "probe_video", lambda path: SimpleNamespace(has_audio=Path(path).is_file()))
+
+    assert director.draft_sound(core.users["user-1"], project["doc"], drafts[0]) is True
+    ((kind, value, copy),) = copies
+    assert (kind, value, copy.name) == ("history", key, f"source-{key.replace('/', '_')}")
+    assert copy.parent.parent == export_storage / "video_producer" / "frames" / "user-1"
+    assert not copy.parent.exists()
+
+
+def test_a_draft_whose_file_is_gone_from_the_storage_has_no_sound(core, make_project, monkeypatch, export_storage):
+    core.use_wan()
+    project, drafts = _drafts(core, make_project, clips=SHOTS[:1])
+    project["doc"]["assets"].append({"id": f"gen-{drafts[0]['id']}", "kind": "video", "resultId": drafts[0]["id"]})
+    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda kind, value: None)
+    monkeypatch.setattr(core_bridge.api_media, "copy_media_file", lambda kind, value, target: False)
+    probed = []
+    monkeypatch.setattr(core_bridge, "probe_video", lambda path: probed.append(path) or SimpleNamespace(has_audio=True))
+
+    assert director.draft_sound(core.users["user-1"], project["doc"], drafts[0]) is False
+    assert probed == []
+
+
+def test_a_guided_pass_is_blocked_when_the_work_folder_cannot_be_written(core, make_project, guided, monkeypatch, tmp_path):
+    core.use_wan()
+    project, drafts = _drafts(core, make_project, clips=SHOTS[:1])
+    project["doc"]["assets"].append({"id": f"gen-{drafts[0]['id']}", "kind": "video", "resultId": drafts[0]["id"]})
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+    monkeypatch.setattr(core_bridge, "storage_directory", lambda: blocker)
+
+    (block,) = _pass(core, project, drafts, method="guided").payload["blocks"]
+
+    assert block["code"] == "workdir_unwritable"
+    assert block["message"].startswith(f"Video Producer cannot write in {blocker / 'video_producer' / 'frames' / 'user-1'}: ")
+
+
+def test_a_guided_pass_is_blocked_when_only_cloud_backends_are_enabled(core, make_project, guided):
+    core.use_wan()
+    project, drafts = _drafts(core, make_project, clips=SHOTS[:1])
+    core.cloud_only()
+
+    (block,) = _pass(core, project, drafts, method="guided").payload["blocks"]
+
+    assert block["code"] == "no_native_engine"
+    assert block["message"].startswith("A guided final runs on a native backend of this instance, and none is enabled: ")
 
 
 @pytest.mark.parametrize(

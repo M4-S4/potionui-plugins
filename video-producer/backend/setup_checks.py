@@ -1,8 +1,8 @@
 import logging
-from typing import Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from urllib.parse import urlencode
 
-from . import PLUGIN_ID, cadence, core_bridge, presets, upscalers
+from . import PLUGIN_ID, cadence, catalog, core_bridge, presets, upscalers, workdir
 from .core_bridge import CLOUD_ENGINE, NATIVE_DRIVERS, PresetState, SetupCheck, SetupCheckContext, SetupCheckResult
 
 logger = logging.getLogger("plugins.video-producer")
@@ -18,7 +18,11 @@ H3_UPSCALER_ROLE = ("upscale_model", "latent upscaler")
 
 H3_UPSCALE_MODE = "upscale"
 
-NO_GPU = "no_gpu"
+GPU_WHY = {
+    catalog.NO_GPU: "no GPU is configured",
+    catalog.UNREAD: "no GPU could be read for it (no CUDA device, a broken NVIDIA driver, or a device set without an explicit ordinal)",
+    catalog.UNESTABLISHED: "it is not running",
+}
 
 
 def admin_href(**params: str) -> str:
@@ -48,15 +52,24 @@ def _unchecked(what: str, action_label: str, action_href: str) -> SetupCheckResu
     )
 
 
+def _idle_text(idle: Sequence[Tuple[Mapping[str, Any], str]]) -> str:
+    parts = []
+    for why in GPU_WHY:
+        names = [backend["name"] for backend, state in idle if state == why]
+        if names:
+            parts.append(f"Takes cannot run on {', '.join(names)}: {GPU_WHY[why]}. ")
+    return "".join(parts)
+
+
 class VideoEngineReady(SetupCheck):
-    """A native backend that has a GPU is enabled, or a cloud backend has a video model turned on."""
+    """A native backend whose GPU this server could read, or a running native remote worker, is enabled, or a cloud backend has a video model turned on."""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
         try:
             backends = core_bridge.enabled_backends()
-            natives = [backend for backend in backends if backend["driver"] in NATIVE_DRIVERS]
-            native = [backend for backend in natives if backend.get("execution_device") != NO_GPU]
-            idle = [backend for backend in natives if backend.get("execution_device") == NO_GPU]
+            natives = [(backend, catalog.gpu_state(backend)) for backend in backends if backend["driver"] in NATIVE_DRIVERS]
+            native = [backend for backend, state in natives if state in (catalog.READY, catalog.REMOTE)]
+            idle = [(backend, state) for backend, state in natives if state in GPU_WHY]
             cloud = [
                 (backend, core_bridge.enabled_cloud_video_models(backend["id"]))
                 for backend in backends
@@ -70,10 +83,8 @@ class VideoEngineReady(SetupCheck):
             engines = [backend["name"] for backend in native] + [
                 f"{backend['name']} ({count} video model{'s' if count != 1 else ''})" for backend, count in with_video
             ]
-            return SetupCheckResult(done=True, description=f"Takes can run on {', '.join(engines)}.")
-        without_gpu = ""
-        if idle:
-            without_gpu = f"Takes cannot run on {', '.join(backend['name'] for backend in idle)}: no GPU is configured. "
+            return SetupCheckResult(done=True, description=f"{_idle_text(idle)}Takes can run on {', '.join(engines)}.")
+        without_gpu = _idle_text(idle)
         if cloud:
             return SetupCheckResult(
                 done=False,
@@ -84,7 +95,7 @@ class VideoEngineReady(SetupCheck):
                 action_label="Open catalog",
                 action_href=admin_href(tab="backends", backend=cloud[0][0]["id"], view="catalog"),
             )
-        enable = "Give a native backend a GPU, enable a native remote worker," if idle else (
+        enable = "Give a native backend a GPU this server can read, start or enable a native remote worker," if idle else (
             "Enable the native backend of this machine or a native remote worker,"
         )
         return SetupCheckResult(
@@ -152,32 +163,36 @@ def _rtx_state() -> Optional[PresetState]:
     return state if state.loaded else None
 
 
-def _rtx_ready(state: Optional[PresetState]) -> bool:
-    return bool(state and state.installed and state.assigned and core_bridge.module_available(upscalers.RTX_MODULE))
+def _rtx_ready(state: Optional[PresetState], engine: Optional[Mapping[str, Any]]) -> bool:
+    return bool(state and state.installed and state.assigned and upscalers.nvvfx(engine) is not False)
 
 
-def _rtx_note(state: Optional[PresetState]) -> str:
+def _rtx_note(state: Optional[PresetState], engine: Optional[Mapping[str, Any]]) -> str:
     if state is None:
         return ""
-    if _rtx_ready(state):
+    if _rtx_ready(state, engine):
+        if upscalers.nvvfx(engine) is None:
+            return f" {state.name} is assigned as well, for fast final takes, if the nvidia-vfx package is installed on {engine['name']}, which this server cannot check."
         return f" {state.name} is ready as well, for fast final takes."
     if state.installed and state.assigned:
         return f" {state.name} also needs the nvidia-vfx package on the server."
     return ""
 
 
-def _cadence_note(rtx: Optional[PresetState]) -> str:
+def _cadence_note(rtx: Optional[PresetState], engine: Optional[Mapping[str, Any]]) -> str:
     try:
         tools = core_bridge.preset_state(presets.VIDEO_TOOLS)
     except Exception as exc:
         logger.warning("[VIDEO-PRODUCER] Setup check: could not read the Video Tools preset: %s", exc)
         tools = None
-    frame_generation = _rtx_ready(rtx) and cadence.frame_generation_installed()
+    frame_generation = cadence.frame_generation_installed(engine) if _rtx_ready(rtx, engine) else False
     rife = bool(tools and tools.loaded and tools.installed and tools.assigned)
     if frame_generation:
         return " Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation."
     if rife:
         return f" Takes slower than the film are brought to its frame rate with RIFE, through {tools.name}."
+    if frame_generation is None:
+        return f" Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation if nvidia-vfx 0.2 or later is installed on {engine['name']}, which this server cannot check."
     return " No interpolator is ready: takes slower than the film repeat frames in the export until Video Tools with RIFE 4.25 is installed."
 
 
@@ -190,9 +205,10 @@ class UpscalerReady(SetupCheck):
         except Exception as exc:
             logger.warning("[VIDEO-PRODUCER] Setup check: could not read the SeedVR2 preset: %s", exc)
             return _unchecked("the SeedVR2 preset", "Open presets", PRESETS_HREF)
+        engine = catalog.native_engine()
         rtx = _rtx_state()
-        frame_rate = _cadence_note(rtx)
-        note = _rtx_note(rtx) + frame_rate
+        frame_rate = _cadence_note(rtx, engine)
+        note = _rtx_note(rtx, engine) + frame_rate
         if state.installed and state.assigned:
             return SetupCheckResult(done=True, description=f"{state.name} is installed and assigned.{note}")
         if state.installed:
@@ -200,7 +216,7 @@ class UpscalerReady(SetupCheck):
                 done=True,
                 description=f"{state.name} is installed. Assign it to the users or groups who make final takes.{note}",
             )
-        if _rtx_ready(rtx):
+        if _rtx_ready(rtx, engine):
             return SetupCheckResult(
                 done=True,
                 description=f"Final takes are upscaled with {rtx.name}. SeedVR2, which restores and adds detail, is not installed.{frame_rate}",
@@ -221,6 +237,28 @@ class UpscalerReady(SetupCheck):
             action_label=f"Open {state.name}",
             action_href=admin_href(tab="presets", id=state.id),
         )
+
+
+class WorkFolderReady(SetupCheck):
+    """The plugin's work folder under the file storage directory can be created and written to: exports, the frames taken from the shots and the sound cuts are made there, whatever storage keeps the media."""
+
+    def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
+        try:
+            folder = workdir.check()
+        except workdir.WorkdirError as exc:
+            return SetupCheckResult(
+                done=False,
+                description=(
+                    f"{exc.message} Exports, the frames taken from the shots and the sound cuts are written there; "
+                    "set a writable file storage directory in Admin → Settings, or mount one into the container."
+                ),
+                action_label="Read the guide",
+                action_href=README_HREF,
+            )
+        except Exception as exc:
+            logger.warning("[VIDEO-PRODUCER] Setup check: could not look at the work folder: %s", exc)
+            return _unchecked("the work folder", "Read the guide", README_HREF)
+        return SetupCheckResult(done=True, description=f"Work files are written in {folder}.")
 
 
 class FfmpegReady(SetupCheck):

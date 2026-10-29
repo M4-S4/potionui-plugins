@@ -3,7 +3,7 @@ import math
 import re
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import core_bridge, director, estimate, formats, models, presets, upscalers
+from . import catalog, core_bridge, director, estimate, formats, models, presets, upscalers
 from .core_bridge import User
 
 logger = logging.getLogger("plugins.video-producer")
@@ -11,6 +11,8 @@ logger = logging.getLogger("plugins.video-producer")
 CHOICES = upscalers.INTERPOLATORS
 
 AUTO, RIFE, RTX = CHOICES
+
+RTX_CHECKED = upscalers.RTX_CHECKED
 
 PRESET_OF = {RIFE: presets.VIDEO_TOOLS, RTX: presets.RTX_UPSCALE}
 
@@ -97,25 +99,34 @@ def _runnable(user: User, preset_id: str) -> bool:
     return any(item.id == preset_id and MODE in (item.modes or {}) for item in descriptions)
 
 
-def frame_generation_installed() -> bool:
-    """Whether nvidia-vfx 0.2 or later, which brings NVIDIA Frame Generation, is installed on the server."""
-    return core_bridge.module_available(upscalers.RTX_MODULE) and _version(core_bridge.package_version(RTX_PACKAGE)) >= RTX_LEAST
+def frame_generation_installed(engine: Optional[Mapping[str, Any]]) -> Optional[bool]:
+    """Whether nvidia-vfx 0.2 or later, which brings NVIDIA Frame Generation, is installed where the RTX pipes run; None when that is a remote worker, whose packages this server cannot see."""
+    module = upscalers.nvvfx(engine)
+    if module is None:
+        return None
+    return module and _version(core_bridge.package_version(RTX_PACKAGE)) >= RTX_LEAST
 
 
-def ready(user: User) -> Dict[str, bool]:
-    """The interpolators this user can run: RIFE through Video Tools with a target frame rate; NVIDIA Frame Generation through RTX Upscale with a target frame rate and a model choice, nvidia-vfx 0.2 or later installed."""
+def ready(user: User, engines: Optional[List[Dict[str, Any]]] = None) -> Dict[str, bool]:
+    """The interpolators this user can run, both on the native engine, none without one: RIFE through Video Tools with a target frame rate; NVIDIA Frame Generation through RTX Upscale with a target frame rate and a model choice, nvidia-vfx 0.2 or later installed where it runs, which rtx_checked says was looked up here rather than left to a remote worker."""
+    engine = catalog.native_engine(engines)
+    if engine is None:
+        return {RIFE: False, RTX: False, RTX_CHECKED: True}
+    installed = frame_generation_installed(engine)
     rife = _runnable(user, presets.VIDEO_TOOLS) and TARGET_FIELD in models.form_fields(presets.VIDEO_TOOLS, MODE)
     rtx = False
-    if _runnable(user, presets.RTX_UPSCALE) and frame_generation_installed():
+    if _runnable(user, presets.RTX_UPSCALE) and installed is not False:
         fields = models.form_fields(presets.RTX_UPSCALE, MODE)
         rtx = TARGET_FIELD in fields and RTX_MODEL_FIELD in fields
-    return {RIFE: bool(rife), RTX: bool(rtx)}
+    return {RIFE: bool(rife), RTX: bool(rtx), RTX_CHECKED: installed is not None}
 
 
 def pick(choice: str, found: Mapping[str, bool]) -> Optional[str]:
-    """The interpolator a choice runs on: Auto takes Frame Generation when it is ready, RIFE otherwise; a named one only when it is ready."""
+    """The interpolator a choice runs on: Auto takes Frame Generation when it is ready and was checked here, else RIFE when it is ready, else Frame Generation left to a remote worker to check; a named one only when it is ready."""
     if choice == AUTO:
-        return RTX if found.get(RTX) else RIFE if found.get(RIFE) else None
+        if found.get(RTX) and found.get(RTX_CHECKED, True):
+            return RTX
+        return RIFE if found.get(RIFE) else RTX if found.get(RTX) else None
     return choice if found.get(choice) else None
 
 

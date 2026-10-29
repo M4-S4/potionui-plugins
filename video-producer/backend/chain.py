@@ -2,11 +2,10 @@ import asyncio
 import logging
 import os
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from . import core_bridge, formats, takes
+from . import core_bridge, formats, takes, workdir
 from .core_bridge import User
 from .exports import media
 from .exports.common import asset_of
@@ -31,7 +30,7 @@ class ChainError(Exception):
 
 def work_base() -> Path:
     """The folder the frames of every user are written in before they are stored."""
-    return core_bridge.storage_directory() / "video_producer" / "frames"
+    return workdir.area(workdir.FRAMES)
 
 
 def end_of(clip: Mapping[str, Any]) -> float:
@@ -190,9 +189,10 @@ async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset
     end = end_of(clip)
     at = start_of(clip) if first else end
     take = media.take_of(asset, shot_takes)
-    base = work_base() / owner.id
-    base.mkdir(parents=True, exist_ok=True)
-    folder = Path(tempfile.mkdtemp(dir=base))
+    try:
+        folder = workdir.scratch(workdir.FRAMES, owner.id)
+    except workdir.WorkdirError as exc:
+        raise ChainError(exc.code, exc.message, 503) from None
     try:
         source = await asyncio.to_thread(resolver.local, found.kind, found.value, folder)
         if source is None:

@@ -500,7 +500,32 @@ BRIDGED = (
     "generation_active",
     "module_available",
     "package_version",
+    "enabled_backends",
 )
+
+LOCAL_BACKEND = {
+    "id": "b-local",
+    "name": "This machine",
+    "engine": "native",
+    "driver": "native.local",
+    "execution_device": "this_host_gpu",
+    "max_concurrent_runs": 1,
+    "vram_total_gb": 24.0,
+    "vram_free_gb": 22.0,
+    "is_default": True,
+}
+
+REMOTE_BACKEND = {
+    "id": "b-remote",
+    "name": "Render box",
+    "engine": "native",
+    "driver": "native.remote",
+    "execution_device": "remote",
+    "max_concurrent_runs": 1,
+    "vram_total_gb": None,
+    "vram_free_gb": None,
+    "is_default": False,
+}
 
 
 class FakeCore:
@@ -549,6 +574,7 @@ class FakeCore:
         self.embedded = []
         self.modules = set()
         self.versions = {}
+        self.backends = [dict(LOCAL_BACKEND)]
         for user_id in ("user-1", "user-2"):
             self.add_user(user_id)
         self.add_user("admin-1", admin=True)
@@ -619,6 +645,15 @@ class FakeCore:
 
     def module_available(self, name):
         return name in self.modules
+
+    def enabled_backends(self):
+        return [dict(backend) for backend in self.backends]
+
+    def use_worker(self):
+        self.backends = [dict(REMOTE_BACKEND)]
+
+    def cloud_only(self):
+        self.backends = []
 
     def package_version(self, name):
         return self.versions.get(name)

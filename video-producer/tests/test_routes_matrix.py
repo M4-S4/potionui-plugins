@@ -76,7 +76,6 @@ class World:
         monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
         monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe")
         monkeypatch.setattr(core_bridge, "media_file_path", lambda kind, value: f"/srv/storage/{value}")
-        monkeypatch.setattr(core_bridge, "enabled_backends", lambda: [])
         monkeypatch.setattr(core_bridge, "preset_driver", lambda preset_id: None)
         monkeypatch.setattr(core_bridge, "extract_frame", self._extract_frame)
         monkeypatch.setattr(core_bridge, "upload_item", self._upload_item)

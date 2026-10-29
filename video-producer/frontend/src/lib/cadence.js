@@ -60,12 +60,12 @@ export function interpolatorChoice(doc) {
 
 export function interpolatorsReady(me) {
 	const ready = me?.features?.interpolators ?? {};
-	return { rife: ready.rife === true, rtx: ready.rtx === true };
+	return { rife: ready.rife === true, rtx: ready.rtx === true, rtxChecked: ready.rtxChecked !== false && ready.rtx_checked !== false };
 }
 
 export function pickInterpolator(choice, me) {
 	const ready = interpolatorsReady(me);
-	if (choice === 'auto') return ready.rtx ? 'rtx' : ready.rife ? 'rife' : null;
+	if (choice === 'auto') return ready.rtx && ready.rtxChecked ? 'rtx' : ready.rife ? 'rife' : ready.rtx ? 'rtx' : null;
 	return ready[choice] ? choice : null;
 }
 

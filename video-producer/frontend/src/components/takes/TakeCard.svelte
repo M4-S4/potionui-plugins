@@ -3,7 +3,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, secs } from '../../lib/state.svelte.js';
 	import { labelTake, promoteToFinal, retryTake, cancelTake, deleteTake, showDetails, toggleCompare, findTake, backendName, presetById, upscaleAvailable } from '../../lib/production.svelte.js';
-	import { failureText, isInFlight, presetLabel } from '../../lib/generation.js';
+	import { failureText, hasNativeEngine, isInFlight, presetLabel } from '../../lib/generation.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { extractable, extractAtPlayhead, seamState } from '../../lib/seam.svelte.js';
 	import { waitText } from '../../lib/chain.svelte.js';
@@ -48,7 +48,7 @@
 	const cadenceTip = $derived.by(() => {
 		if (cadence.state === 'conformed') return t('generation.card.cadence.conformedTip', cadenceRate);
 		if (cadence.state === 'conforming') return t('generation.card.cadence.conformingTip', cadenceRate);
-		if (interpolator === null) return t('generation.cadence.noInterpolator');
+		if (interpolator === null) return hasNativeEngine(ui.me) ? t('generation.cadence.noInterpolator') : t('generation.cadence.noNativeEngine');
 		if (cadence.state === 'failed') return t('generation.card.cadence.failedTip', { ...cadenceRate, error: cadence.rendition?.errorMessage || '—' });
 		return t('generation.card.cadence.slowTip', cadenceRate);
 	});
@@ -91,7 +91,7 @@
 	const tone = $derived(take.status === 'failed' ? 'text-danger' : take.status === 'cancelled' ? 'text-fg-subtle' : 'text-signal');
 	const dot = $derived(take.status === 'failed' ? 'bg-danger' : take.status === 'cancelled' ? 'bg-fg-subtle' : 'bg-signal');
 	const errorText = $derived(failureText(take, t));
-	const finalTip = $derived(upscaleAvailable(take) ? t('generation.card.finalTip') : t('generation.block.upscaleUnsupported'));
+	const finalTip = $derived(upscaleAvailable(take) ? t('generation.card.finalTip') : hasNativeEngine(ui.me) ? t('generation.block.upscaleUnsupported') : t('generation.block.noNativeEngine'));
 
 	function open() {
 		if (onchoose) onchoose(take);

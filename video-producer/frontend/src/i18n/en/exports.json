@@ -37,6 +37,7 @@
 	"error.not_ready": "The video is not ready yet.",
 	"error.invalid_request": "The server refused this export request.",
 	"error.invalid_doc": "The saved project was refused by the server: nothing was exported.",
+	"error.workdir_unwritable": "The server cannot write in its export folder: the file storage directory must be a local, writable folder. Ask an administrator to check it.",
 	"error.ffmpeg_failed": "ffmpeg could not assemble the video.",
 	"error.transcode_failed": "The video could not be converted.",
 	"error.store_failed": "The export could not be saved.",

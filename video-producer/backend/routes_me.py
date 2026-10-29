@@ -35,15 +35,23 @@ def _ffmpeg() -> bool:
         return False
 
 
-def _features(user: User) -> Dict[str, Any]:
-    ready = upscalers.ready(user)
-    return {"upscaler": any(ready.values()), "upscalers": ready, "interpolators": cadence.ready(user), "guided": director.guided_ready(user), "sheet": director.sheet_ready(user)}
+def _features(user: User, engines: List[Dict[str, Any]]) -> Dict[str, Any]:
+    ready = upscalers.ready(user, engines)
+    native = catalog.native_engine(engines) is not None
+    return {
+        "upscaler": ready[upscalers.SEEDVR2] or ready[upscalers.RTX],
+        "upscalers": ready,
+        "interpolators": cadence.ready(user, engines),
+        "guided": native and director.guided_ready(user),
+        "sheet": native and director.sheet_ready(user),
+    }
 
 
 @router.get("/me")
 def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
     """The signed-in user's locale, last project, role, quota, engines, video presets (with the options the project may set in each mode the Video Director runs them in, and the sizes each was measured at by backend) and features, the presets that edit a start image from several pictures, ffmpeg, and the plugin settings."""
     video_presets = catalog.video_presets(user)
+    engines = catalog.video_engines()
     return ok(
         {
             "locale": settings.user_locale(user.id),
@@ -52,11 +60,11 @@ def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
             "limits": {"gpu_minutes": limits.gpu_minutes_status(user.id)},
             "settings": settings.all_settings(),
             "plugin": {"id": PLUGIN_ID, "version": PLUGIN_VERSION},
-            "engines": catalog.video_engines(),
+            "engines": engines,
             "presets": video_presets,
             "measured": _measured(video_presets),
             "keyframe_presets": [preset.summary() for preset in keyframes.image_presets(user)],
-            "features": _features(user),
+            "features": _features(user, engines),
             "upscale_targets": list(catalog.UPSCALE_TARGETS),
             "ffmpeg": _ffmpeg(),
         }

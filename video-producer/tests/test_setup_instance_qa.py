@@ -51,16 +51,18 @@ INSTALLED = (presets.WAN, presets.MINIMAX_H3, presets.MINIMAX_H3_FAST, presets.M
 
 
 class Instance:
-    """The state this instance reported: a native backend, five video presets and SeedVR2 installed and assigned, ffmpeg with ffprobe, and the DiT of the 12 GB variant on disk but none of the DiTs the full MiniMax-H3 preset recommends."""
+    """The state this instance reported: a native backend whose 12 GB GPU was read, five video presets and SeedVR2 installed and assigned, a writable file storage directory, ffmpeg with ffprobe, and the DiT of the 12 GB variant on disk but none of the DiTs the full MiniMax-H3 preset recommends."""
 
-    def __init__(self, monkeypatch):
+    def __init__(self, monkeypatch, storage):
         self.disk = set(INSTANCE_DISK)
         self.installed = set(INSTALLED)
         self.assigned = set(INSTALLED)
-        self.backends = [{"id": "native", "name": "Local Generation", "engine": "native", "driver": "native.local"}]
+        self.backends = [{"id": "native", "name": "Local Generation", "engine": "native", "driver": "native.local", "execution_device": "this_host_gpu", "vram_total_gb": 12.0, "vram_free_gb": 11.2}]
         self.ffmpeg = "/usr/bin/ffmpeg"
         self.ffprobe = "/usr/bin/ffprobe"
+        self.storage = storage
         monkeypatch.setattr(core_bridge, "enabled_backends", lambda: list(self.backends))
+        monkeypatch.setattr(core_bridge, "storage_directory", lambda: self.storage)
         monkeypatch.setattr(core_bridge, "enabled_cloud_video_models", lambda backend_id: 0)
         monkeypatch.setattr(core_bridge, "preset_state", self._state)
         monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: self.ffmpeg)
@@ -104,8 +106,8 @@ class Instance:
 
 
 @pytest.fixture
-def instance(monkeypatch):
-    return Instance(monkeypatch)
+def instance(monkeypatch, tmp_path):
+    return Instance(monkeypatch, tmp_path)
 
 
 def _checks():
@@ -121,10 +123,10 @@ def _run():
     return [(label, check.evaluate(CONTEXT)) for label, check in _checks()]
 
 
-def test_the_instance_replica_reports_four_steps_done_and_the_full_h3_dit_to_do(instance):
+def test_the_instance_replica_reports_five_steps_done_and_the_full_h3_dit_to_do(instance):
     report = _run()
 
-    assert [result.done for _, result in report] == [True, True, True, True, False]
+    assert [result.done for _, result in report] == [True, True, True, True, True, False]
     assert report[0][1].description == "Takes can run on Local Generation."
     assert report[1][1].description.startswith(
         "Installed and assigned: Wan 2.1 / 2.2, MiniMax-H3, MiniMax-H3-Fast, MiniMax-H3 (12 GB), MiniMax-H3-Fast (12 GB)."
@@ -133,8 +135,9 @@ def test_the_instance_replica_reports_four_steps_done_and_the_full_h3_dit_to_do(
         "SeedVR2 is installed and assigned. No interpolator is ready: takes slower than the film repeat frames in the export "
         "until Video Tools with RIFE 4.25 is installed."
     )
-    assert report[3][1].description == "ffmpeg is available."
-    last = report[4][1]
+    assert report[3][1].description == f"Work files are written in {instance.storage / 'video_producer'}."
+    assert report[4][1].description == "ffmpeg is available."
+    last = report[5][1]
     assert last.description.startswith("MiniMax-H3 is missing its DiT. Download one of the files its model pickers recommend;")
     assert "12 GB" not in last.description and "Fast" not in last.description
     assert (last.action_label, last.action_href) == ("Open MiniMax-H3", f"/admin?tab=presets&id={presets.MINIMAX_H3}")
@@ -143,7 +146,7 @@ def test_the_instance_replica_reports_four_steps_done_and_the_full_h3_dit_to_do(
 def test_the_dit_of_the_12_gb_variant_on_disk_is_not_a_dit_of_the_full_preset(instance):
     instance.disk.discard(RANK8)
 
-    last = _run()[4][1]
+    last = _run()[5][1]
 
     assert last.done is False
     assert "MiniMax-H3 is missing its DiT." in last.description
@@ -155,8 +158,8 @@ def test_a_recommended_dit_on_disk_completes_the_last_step_and_the_whole_setup(i
 
     report = _run()
 
-    assert [result.done for _, result in report] == [True] * 5
-    assert report[4][1].action_label is None and report[4][1].action_href is None
+    assert [result.done for _, result in report] == [True] * 6
+    assert report[5][1].action_label is None and report[5][1].action_href is None
 
 
 @pytest.mark.parametrize(
@@ -171,7 +174,7 @@ def test_a_recommended_dit_on_disk_completes_the_last_step_and_the_whole_setup(i
 def test_each_other_missing_h3_file_is_reported_by_its_role_on_top_of_the_dit(instance, gone, label):
     instance.disk.discard(gone)
 
-    last = _run()[4][1]
+    last = _run()[5][1]
 
     assert last.done is False
     assert f"MiniMax-H3 is missing its DiT and {label}." in last.description
@@ -181,12 +184,15 @@ def test_each_other_missing_h3_file_is_reported_by_its_role_on_top_of_the_dit(in
     "mutate, index, fragment, href",
     [
         (lambda i: setattr(i, "backends", []), 0, "Enable the native backend of this machine", "/admin?tab=backends"),
+        (lambda i: i.backends[0].update(execution_device="this_host_gpu", vram_total_gb=None), 0, "Takes cannot run on Local Generation: no GPU could be read for it", "/admin?tab=backends"),
+        (lambda i: i.backends[0].update(execution_device="unestablished"), 0, "Takes cannot run on Local Generation: it is not running.", "/admin?tab=backends"),
         (lambda i: setattr(i, "assigned", set()), 1, "Installed but assigned to no one", f"/admin?tab=presets&id={presets.WAN}"),
         (lambda i: setattr(i, "installed", {presets.WAN, presets.MINIMAX_H3}), 2, "Final takes are upscaled with SeedVR2", f"/admin?tab=presets&id={presets.SEEDVR2}"),
-        (lambda i: setattr(i, "ffmpeg", None), 3, "ffmpeg is missing", "/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME"),
-        (lambda i: setattr(i, "ffprobe", None), 3, "ffprobe is missing", "/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME"),
+        (lambda i: ((i.storage / "blocker").write_text("x", encoding="utf-8"), setattr(i, "storage", i.storage / "blocker")), 3, "Video Producer cannot write in", "/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME"),
+        (lambda i: setattr(i, "ffmpeg", None), 4, "ffmpeg is missing", "/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME"),
+        (lambda i: setattr(i, "ffprobe", None), 4, "ffprobe is missing", "/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME"),
     ],
-    ids=["no-engine", "no-assignment", "no-seedvr2", "no-ffmpeg", "no-ffprobe"],
+    ids=["no-engine", "gpu-unread", "not-running", "no-assignment", "no-seedvr2", "no-workdir", "no-ffmpeg", "no-ffprobe"],
 )
 def test_each_step_turns_to_do_alone_with_its_text_and_link(instance, mutate, index, fragment, href):
     mutate(instance)
@@ -196,12 +202,12 @@ def test_each_step_turns_to_do_alone_with_its_text_and_link(instance, mutate, in
     assert fragment in report[index][1].description
     assert report[index][1].action_href == href
     assert report[index][1].done is False
-    done_elsewhere = [result.done for position, (_, result) in enumerate(report) if position not in (index, 4)]
+    done_elsewhere = [result.done for position, (_, result) in enumerate(report) if position not in (index, 5)]
     if index != 1:
         assert all(done_elsewhere)
 
 
-@pytest.mark.parametrize("broken", ["enabled_backends", "preset_state", "find_ffmpeg", "preset_model_hashes"])
+@pytest.mark.parametrize("broken", ["enabled_backends", "preset_state", "storage_directory", "find_ffmpeg", "preset_model_hashes"])
 def test_a_core_error_makes_the_dependent_steps_to_do_with_a_link_and_never_raises(instance, monkeypatch, broken):
     def raiser(*args, **kwargs):
         raise RuntimeError("core unavailable")

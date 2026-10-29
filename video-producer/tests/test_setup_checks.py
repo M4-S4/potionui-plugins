@@ -13,6 +13,7 @@ from backend.setup_checks import (
     UpscalerReady,
     VideoEngineReady,
     VideoPresetsReady,
+    WorkFolderReady,
     admin_href,
 )
 from src.plugin_api import SetupCheck, SetupCheckContext, SetupCheckResult
@@ -26,10 +27,12 @@ BACKENDS_HREF = "/admin?tab=backends"
 PRESETS_HREF = "/admin?tab=presets"
 README_HREF = "/admin?tab=docs&doc=plugin%2Fvideo-producer%2FREADME"
 
-ALL_CHECKS = (VideoEngineReady, VideoPresetsReady, UpscalerReady, FfmpegReady, MiniMaxH3Ready)
+ALL_CHECKS = (VideoEngineReady, VideoPresetsReady, UpscalerReady, WorkFolderReady, FfmpegReady, MiniMaxH3Ready)
+
+GPU_UNREAD = "no GPU could be read for it (no CUDA device, a broken NVIDIA driver, or a device set without an explicit ordinal)"
 
 
-def _backend(backend_id, name, engine="native", driver="native.local", device="unestablished"):
+def _backend(backend_id, name, engine="native", driver="native.local", device="unestablished", vram=None):
     return {
         "id": backend_id,
         "name": name,
@@ -40,9 +43,17 @@ def _backend(backend_id, name, engine="native", driver="native.local", device="u
         "quick_actions": [],
         "execution_device": device,
         "max_concurrent_runs": None,
-        "vram_total_gb": None,
-        "vram_free_gb": None,
+        "vram_total_gb": vram,
+        "vram_free_gb": vram,
     }
+
+
+def _gpu(backend_id, name):
+    return _backend(backend_id, name, device="this_host_gpu", vram=12.0)
+
+
+def _worker(backend_id, name):
+    return _backend(backend_id, name, driver="native.remote", device="remote")
 
 
 def _cloud(backend_id, name):
@@ -56,6 +67,13 @@ def _state(preset_id, name=None, loaded=True, installed=False, assigned=False):
 def _raise(message):
     def raiser(*args, **kwargs):
         raise RuntimeError(message)
+
+    return raiser
+
+
+def _raise_os(message):
+    def raiser(*args, **kwargs):
+        raise OSError(30, message)
 
     return raiser
 
@@ -171,8 +189,8 @@ def test_the_module_helpers_build_admin_links():
     )
 
 
-def test_a_native_local_backend_is_an_engine(engines):
-    engines.backends = [_backend("b-1", "This machine")]
+def test_a_native_local_backend_whose_gpu_was_read_is_an_engine(engines):
+    engines.backends = [_gpu("b-1", "This machine")]
 
     assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(
         done=True, description="Takes can run on This machine."
@@ -180,11 +198,55 @@ def test_a_native_local_backend_is_an_engine(engines):
     assert engines.asked == []
 
 
-@pytest.mark.parametrize("device", ["this_host_gpu", "remote", "unestablished"])
-def test_a_native_backend_on_a_gpu_a_worker_or_not_yet_running_is_an_engine(engines, device):
-    engines.backends = [_backend("b-1", "This machine", device=device)]
+@pytest.mark.parametrize("driver, device", [("native.local", "this_host_gpu"), ("native.remote", "remote")])
+def test_a_native_backend_on_a_read_gpu_or_a_running_worker_is_an_engine(engines, driver, device):
+    engines.backends = [_backend("b-1", "This machine", driver=driver, device=device, vram=12.0 if device == "this_host_gpu" else None)]
 
     assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="Takes can run on This machine.")
+
+
+def test_a_native_backend_on_cuda_whose_gpu_could_not_be_read_is_not_an_engine(engines):
+    engines.backends = [_backend("b-1", "This machine", device="this_host_gpu")]
+
+    result = VideoEngineReady().evaluate(CONTEXT)
+
+    assert result.done is False
+    assert result.description == (
+        f"Takes cannot run on This machine: {GPU_UNREAD}. "
+        "Give a native backend a GPU this server can read, start or enable a native remote worker, "
+        "or add a cloud backend and turn on a video model in its catalog."
+    )
+    assert (result.action_label, result.action_href) == ("Open backends", BACKENDS_HREF)
+
+
+@pytest.mark.parametrize("driver", ["native.local", "native.remote"])
+def test_a_native_backend_that_is_not_running_is_not_an_engine(engines, driver):
+    engines.backends = [_backend("b-1", "Render box", driver=driver, device="unestablished")]
+
+    result = VideoEngineReady().evaluate(CONTEXT)
+
+    assert result.done is False
+    assert result.description.startswith("Takes cannot run on Render box: it is not running. ")
+
+
+def test_the_backends_that_cannot_run_takes_are_named_by_cause_before_the_engines(engines):
+    engines.backends = [
+        _backend("b-1", "Spare", device="no_gpu"),
+        _backend("b-2", "Laptop", device="this_host_gpu"),
+        _backend("b-3", "Old box", driver="native.remote", device="unestablished"),
+        _gpu("b-4", "This machine"),
+        _worker("b-5", "Render box"),
+    ]
+
+    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=True,
+        description=(
+            "Takes cannot run on Spare: no GPU is configured. "
+            f"Takes cannot run on Laptop: {GPU_UNREAD}. "
+            "Takes cannot run on Old box: it is not running. "
+            "Takes can run on This machine, Render box."
+        ),
+    )
 
 
 def test_a_native_local_backend_without_a_gpu_is_not_an_engine(engines):
@@ -194,7 +256,7 @@ def test_a_native_local_backend_without_a_gpu_is_not_an_engine(engines):
         done=False,
         description=(
             "Takes cannot run on This machine: no GPU is configured. "
-            "Give a native backend a GPU, enable a native remote worker, "
+            "Give a native backend a GPU this server can read, start or enable a native remote worker, "
             "or add a cloud backend and turn on a video model in its catalog."
         ),
         action_label="Open backends",
@@ -212,17 +274,21 @@ def test_every_native_backend_without_a_gpu_is_named_and_none_is_an_engine(engin
     assert result.description.startswith("Takes cannot run on This machine, Spare: no GPU is configured. ")
 
 
-def test_a_native_backend_without_a_gpu_is_left_out_when_another_engine_exists(engines):
-    engines.backends = [_backend("b-1", "This machine", device="no_gpu"), _backend("b-2", "Render box", driver="native.remote", device="remote")]
+def test_a_native_backend_without_a_gpu_is_named_but_another_engine_still_counts(engines):
+    engines.backends = [_backend("b-1", "This machine", device="no_gpu"), _worker("b-2", "Render box")]
 
-    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="Takes can run on Render box.")
+    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=True, description="Takes cannot run on This machine: no GPU is configured. Takes can run on Render box."
+    )
 
 
 def test_a_native_backend_without_a_gpu_does_not_hide_a_cloud_video_model(engines):
     engines.backends = [_backend("b-1", "This machine", device="no_gpu"), _cloud("c-1", "OpenRouter")]
     engines.video_models = {"c-1": 2}
 
-    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="Takes can run on OpenRouter (2 video models).")
+    assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=True, description="Takes cannot run on This machine: no GPU is configured. Takes can run on OpenRouter (2 video models)."
+    )
 
 
 def test_a_native_backend_without_a_gpu_and_a_cloud_backend_without_video_model_ask_for_the_catalog_and_say_why(engines):
@@ -239,16 +305,19 @@ def test_a_native_backend_without_a_gpu_and_a_cloud_backend_without_video_model_
     )
 
 
-def test_a_backend_that_reports_no_execution_device_still_counts_as_an_engine(engines):
+def test_a_backend_that_reports_no_execution_device_is_not_running_and_not_an_engine(engines):
     backend = _backend("b-1", "This machine")
     del backend["execution_device"]
     engines.backends = [backend]
 
-    assert VideoEngineReady().evaluate(CONTEXT).done is True
+    result = VideoEngineReady().evaluate(CONTEXT)
+
+    assert result.done is False
+    assert result.description.startswith("Takes cannot run on This machine: it is not running. ")
 
 
 def test_a_native_remote_worker_is_an_engine(engines):
-    engines.backends = [_backend("b-1", "Render box", driver="native.remote")]
+    engines.backends = [_worker("b-1", "Render box")]
 
     result = VideoEngineReady().evaluate(CONTEXT)
 
@@ -274,7 +343,7 @@ def test_a_cloud_backend_with_several_video_models_says_how_many(engines):
 
 
 def test_native_and_cloud_engines_are_listed_together_native_first(engines):
-    engines.backends = [_cloud("c-1", "OpenRouter"), _backend("b-1", "This machine"), _cloud("c-2", "Gemini")]
+    engines.backends = [_cloud("c-1", "OpenRouter"), _gpu("b-1", "This machine"), _cloud("c-2", "Gemini")]
     engines.video_models = {"c-1": 2, "c-2": 0}
 
     assert VideoEngineReady().evaluate(CONTEXT) == SetupCheckResult(
@@ -283,7 +352,7 @@ def test_native_and_cloud_engines_are_listed_together_native_first(engines):
 
 
 def test_a_cloud_backend_without_video_model_is_left_out_when_a_native_engine_exists(engines):
-    engines.backends = [_backend("b-1", "This machine"), _cloud("c-1", "Gemini")]
+    engines.backends = [_gpu("b-1", "This machine"), _cloud("c-1", "Gemini")]
 
     assert VideoEngineReady().evaluate(CONTEXT).description == "Takes can run on This machine."
 
@@ -530,6 +599,51 @@ def test_nvidia_vfx_older_than_0_2_brings_no_frame_generation(preset_states, mon
     assert UpscalerReady().evaluate(CONTEXT).description.endswith(NO_INTERPOLATOR)
 
 
+@pytest.mark.parametrize(
+    "tools, note",
+    [
+        (False, " Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation if nvidia-vfx 0.2 or later is installed on Render box, which this server cannot check."),
+        (True, " Takes slower than the film are brought to its frame rate with RIFE, through Video Tools."),
+    ],
+)
+def test_on_a_remote_worker_rtx_upscale_counts_without_nvidia_vfx_here_and_the_check_says_it_cannot_see_the_worker(engines, preset_states, monkeypatch, tools, note):
+    engines.backends = [_worker("b-1", "Render box")]
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: False)
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: None)
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True, assigned=True)
+    if tools:
+        preset_states.set(presets.VIDEO_TOOLS, name="Video Tools", installed=True, assigned=True)
+
+    result = UpscalerReady().evaluate(CONTEXT)
+
+    assert result.done is True
+    assert result.description == (
+        "SeedVR2 is installed and assigned. RTX Upscale is assigned as well, for fast final takes, "
+        "if the nvidia-vfx package is installed on Render box, which this server cannot check." + note
+    )
+
+
+def test_on_a_remote_worker_rtx_upscale_alone_still_upscales_the_final_takes(engines, preset_states, monkeypatch):
+    engines.backends = [_worker("b-1", "Render box")]
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: False)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True, assigned=True)
+
+    result = UpscalerReady().evaluate(CONTEXT)
+
+    assert result.done is True
+    assert result.description.startswith("Final takes are upscaled with RTX Upscale. SeedVR2, which restores and adds detail, is not installed.")
+
+
+def test_on_this_machine_the_nvidia_vfx_check_is_the_one_of_this_process(engines, preset_states, monkeypatch):
+    engines.backends = [_gpu("b-1", "This machine")]
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: False)
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True, assigned=True)
+
+    assert UpscalerReady().evaluate(CONTEXT).description == "SeedVR2 is installed and assigned. RTX Upscale also needs the nvidia-vfx package on the server." + NO_INTERPOLATOR
+
+
 def test_an_error_reading_the_upscaler_is_a_step_still_to_do(monkeypatch, caplog):
     monkeypatch.setattr(core_bridge, "preset_state", _raise("db is locked"))
 
@@ -543,6 +657,53 @@ def test_an_error_reading_the_upscaler_is_a_step_still_to_do(monkeypatch, caplog
         action_href=PRESETS_HREF,
     )
     assert "db is locked" in caplog.text
+
+
+def test_a_writable_work_folder_is_created_under_the_file_storage_directory_and_left_empty(monkeypatch, tmp_path):
+    monkeypatch.setattr(core_bridge, "storage_directory", lambda: tmp_path)
+
+    result = WorkFolderReady().evaluate(CONTEXT)
+
+    assert result == SetupCheckResult(done=True, description=f"Work files are written in {tmp_path / 'video_producer'}.")
+    assert (tmp_path / "video_producer").is_dir() and list((tmp_path / "video_producer").iterdir()) == []
+
+
+def test_a_file_storage_directory_that_cannot_hold_the_work_folder_is_a_step_to_do(monkeypatch, tmp_path):
+    blocker = tmp_path / "storage"
+    blocker.write_text("not a directory", encoding="utf-8")
+    monkeypatch.setattr(core_bridge, "storage_directory", lambda: blocker)
+
+    result = WorkFolderReady().evaluate(CONTEXT)
+
+    assert result.done is False
+    assert result.description.startswith(f"Video Producer cannot write in {blocker / 'video_producer'}: ")
+    assert "set a writable file storage directory in Admin → Settings, or mount one into the container." in result.description
+    assert (result.action_label, result.action_href) == ("Read the guide", README_HREF)
+
+
+def test_a_work_folder_that_cannot_be_written_to_is_a_step_to_do(monkeypatch, tmp_path):
+    monkeypatch.setattr(core_bridge, "storage_directory", lambda: tmp_path)
+    monkeypatch.setattr(setup_checks.workdir.tempfile, "NamedTemporaryFile", _raise_os("Read-only file system"))
+
+    result = WorkFolderReady().evaluate(CONTEXT)
+
+    assert result.done is False
+    assert result.description.startswith(f"Video Producer cannot write in {tmp_path / 'video_producer'}: Read-only file system.")
+
+
+def test_an_error_reading_the_file_storage_directory_is_a_step_still_to_do(monkeypatch, caplog):
+    monkeypatch.setattr(core_bridge, "storage_directory", _raise("settings are down"))
+
+    with caplog.at_level(logging.WARNING, logger="plugins.video-producer"):
+        result = WorkFolderReady().evaluate(CONTEXT)
+
+    assert result == SetupCheckResult(
+        done=False,
+        description="Could not check the work folder; see the server log.",
+        action_label="Read the guide",
+        action_href=README_HREF,
+    )
+    assert "settings are down" in caplog.text
 
 
 def test_ffmpeg_and_ffprobe_on_the_path_is_done(monkeypatch):
@@ -842,8 +1003,9 @@ def test_an_error_reading_the_h3_files_is_a_step_still_to_do(preset_states, mode
 
 
 @pytest.mark.parametrize("check", ALL_CHECKS)
-def test_a_check_ignores_the_plugin_settings(check, engines, preset_states, models, monkeypatch):
+def test_a_check_ignores_the_plugin_settings(check, engines, preset_states, models, monkeypatch, tmp_path):
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: None)
+    monkeypatch.setattr(core_bridge, "storage_directory", lambda: tmp_path)
     other = SetupCheckContext(plugin_id="video-producer", settings={"draft_resolution": "1280x720"})
 
     assert check().evaluate(other) == check().evaluate(CONTEXT)
@@ -858,6 +1020,7 @@ SETUP = (
         "Install and assign at least one Video Director preset (Wan, MiniMax-H3, LTX or a cloud video preset)",
     ),
     (UpscalerReady, "Install SeedVR2 for final takes"),
+    (WorkFolderReady, "Give Video Producer a writable work folder in the file storage directory"),
     (FfmpegReady, "Install ffmpeg for video delivery"),
     (
         MiniMaxH3Ready,
@@ -873,7 +1036,7 @@ def _manifest_setup():
     return yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["setup"]
 
 
-def test_the_manifest_declares_exactly_the_five_checks_these_tests_cover():
+def test_the_manifest_declares_exactly_the_six_checks_these_tests_cover():
     assert [(step["kind"], step["check"], step["label"]) for step in _manifest_setup()] == [
         ("check", f"backend.setup_checks:{check.__name__}", label) for check, label in SETUP
     ]
@@ -886,12 +1049,13 @@ def _h3_files(models, present):
     models.present = {f"{role}-sha" for role in (*H3_ROLES, "upscale_model") if role in present}
 
 
-def _arrange(state, check, engines, preset_states, models, monkeypatch):
+def _arrange(state, check, engines, preset_states, models, monkeypatch, tmp_path):
     if state == "unchecked":
         broken = {
             VideoEngineReady: "enabled_backends",
             VideoPresetsReady: "preset_state",
             UpscalerReady: "preset_state",
+            WorkFolderReady: "storage_directory",
             FfmpegReady: "find_ffmpeg",
             MiniMaxH3Ready: "preset_model_hashes",
         }[check]
@@ -900,7 +1064,14 @@ def _arrange(state, check, engines, preset_states, models, monkeypatch):
         return
     done = state == "done"
     if check is VideoEngineReady:
-        engines.backends = [_backend("b-1", "This machine")] if done else []
+        engines.backends = [_gpu("b-1", "This machine")] if done else []
+    elif check is WorkFolderReady:
+        blocker = tmp_path / "storage"
+        if done:
+            blocker.mkdir()
+        else:
+            blocker.write_text("not a directory", encoding="utf-8")
+        monkeypatch.setattr(core_bridge, "storage_directory", lambda: blocker)
     elif check is VideoPresetsReady:
         preset_states.set(presets.WAN, name="Wan 2.1 / 2.2", installed=True, assigned=done)
     elif check is UpscalerReady:
@@ -935,6 +1106,9 @@ SETUP_STATES = [
         f"{PRESETS_HREF}&id={presets.SEEDVR2}",
     ),
     (UpscalerReady, "unchecked", "Could not check the SeedVR2 preset; see the server log.", "Open presets", PRESETS_HREF),
+    (WorkFolderReady, "done", "Work files are written in ", None, None),
+    (WorkFolderReady, "todo", "Video Producer cannot write in ", "Read the guide", README_HREF),
+    (WorkFolderReady, "unchecked", "Could not check the work folder; see the server log.", "Read the guide", README_HREF),
     (FfmpegReady, "done", "ffmpeg is available.", None, None),
     (FfmpegReady, "todo", "ffmpeg is missing.", "Read the guide", README_HREF),
     (FfmpegReady, "todo-ffprobe", "ffprobe is missing.", "Read the guide", README_HREF),
@@ -963,9 +1137,9 @@ SETUP_STATES = [
     ids=[f"{check.__name__}-{state}" for check, state, *_ in SETUP_STATES],
 )
 def test_each_manifest_check_is_done_to_do_or_not_checkable_with_its_text_and_link(
-    check, state, text, action_label, action_href, engines, preset_states, models, monkeypatch, caplog
+    check, state, text, action_label, action_href, engines, preset_states, models, monkeypatch, caplog, tmp_path
 ):
-    _arrange(state, check, engines, preset_states, models, monkeypatch)
+    _arrange(state, check, engines, preset_states, models, monkeypatch, tmp_path)
 
     with caplog.at_level(logging.WARNING, logger="plugins.video-producer"):
         result = check().evaluate(CONTEXT)

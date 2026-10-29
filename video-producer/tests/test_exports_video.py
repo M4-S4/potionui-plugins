@@ -883,6 +883,21 @@ async def test_a_source_on_object_storage_is_streamed_into_the_job_and_only_the_
     assert abs(core_bridge.probe_video(folder / "Aube_720p.mp4").duration - 1.0) < 0.15
 
 
+async def test_a_job_folder_that_cannot_be_created_fails_the_export_as_an_unwritable_work_folder(make_doc, object_storage, monkeypatch, export_storage, make_user):
+    object_storage.blobs[STORED_TAKE["file_path"]] = b"\0" * 20000
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: str(export_storage / "no-ffmpeg"))
+    (export_storage / "video_producer").write_text("not a directory", encoding="utf-8")
+    user = make_user()
+
+    with pytest.raises(ExportError) as caught:
+        await video.render(JOB, _stored_project(make_doc), user, user, lambda progress, step: True)
+
+    assert caught.value.code == "workdir_unwritable"
+    assert caught.value.message.startswith(f"Video Producer cannot write in {_folder_of(export_storage)}: ")
+    assert "The file storage directory must be a local, writable folder on this server" in caught.value.message
+    assert object_storage.chunk_sizes == []
+
+
 async def test_the_source_copies_are_deleted_when_ffmpeg_cannot_run(make_doc, object_storage, monkeypatch, export_storage, make_user):
     object_storage.blobs[STORED_TAKE["file_path"]] = b"\0" * 20000
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: str(export_storage / "no-ffmpeg"))

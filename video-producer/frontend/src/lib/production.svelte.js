@@ -211,6 +211,8 @@ function baseNoteText(note) {
 	if (code === 'no_references') return t('generation.block.noReferences', { shot: shotName(data.shot_id) });
 	if (code === 'source_unavailable') return t('generation.block.sourceUnavailable');
 	if (code === 'upscale_unsupported') return t('generation.block.upscaleUnsupported');
+	if (code === 'no_native_engine') return t('generation.block.noNativeEngine');
+	if (code === 'workdir_unwritable') return t('generation.block.workdir');
 	if (code === 'upscaler_outdated') return t('generation.block.upscalerOutdated');
 	if (code === 'upscaler_missing') return t('generation.block.upscalerMissing');
 	if (code === 'interpolator_missing') return data.interpolator === 'rtx' ? t('generation.block.frameGenerationMissing') : t('generation.block.interpolatorMissing');
@@ -244,6 +246,7 @@ function baseNoteText(note) {
 	if (code === 'video_cut_failed' || code === 'video_store_failed') return t('generation.block.videoCut', { shot: shotName(data.shot_id) });
 	if (code === 'audio_only_references') return t('generation.block.audioOnly', { shot: shotName(data.shot_id) });
 	if (code === 'audio_ffmpeg_missing') return t('generation.block.audioFfmpeg');
+	if (code === 'chain_ffmpeg_missing') return t('generation.block.chainFfmpeg');
 	if (code === 'audio_source_missing') return t('generation.block.audioSource', { shot: shotName(data.shot_id) });
 	if (code === 'audio_cut_failed' || code === 'audio_store_failed') return t('generation.block.audioCut', { shot: shotName(data.shot_id) });
 	if (code === 'bible_label_missing') return t('generation.warn.bibleLabelMissing', { shot: shotName(data.shot_id), labels: (Array.isArray(data.labels) ? data.labels : []).join(', ') });

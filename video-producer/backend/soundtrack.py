@@ -5,13 +5,12 @@ import math
 import os
 import re
 import shutil
-import tempfile
 import time
 from functools import partial
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import core_bridge, director, sheetvideo, takes, vreftrack
+from . import core_bridge, director, sheetvideo, takes, vreftrack, workdir
 from .core_bridge import User
 from .director import MUX, TRACK_PREFIX, VTRACK_PREFIX, Plans, SheetPlan, ShotPlan, TrackCut, VideoCut
 from .exports import media
@@ -65,7 +64,7 @@ class SoundError(Exception):
 
 def work_base() -> Path:
     """The folder the cuts of every user are written in before they are stored."""
-    return core_bridge.storage_directory() / "video_producer" / "audio"
+    return workdir.area(workdir.AUDIO)
 
 
 def seek_point(item: Mapping[str, Any], origin: float) -> float:
@@ -301,9 +300,7 @@ async def _measure(ffmpeg: str, sources: _Sources, owner: User, cut: TrackCut, k
     folder: Optional[Path] = None
     try:
         async with _slots():
-            base = work_base() / owner.id
-            base.mkdir(parents=True, exist_ok=True)
-            folder = Path(tempfile.mkdtemp(dir=base))
+            folder = workdir.scratch(workdir.AUDIO, owner.id)
             level = await track_peak(ffmpeg, sources.into(folder), cut)
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not measure the reference track %s of shot %s", cut.lane_id, cut.shot_id, exc_info=True)
@@ -489,18 +486,18 @@ async def attach_all(owner: User, project: Mapping[str, Any], plans: Sequence[Sh
         raise SoundError("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shot cannot be cut.", sounding[0].shot_id)
     ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     doc = project["doc"]
-    base = work_base() / owner.id
-    base.mkdir(parents=True, exist_ok=True)
     sources = _Sources(owner, doc, project["id"], None)
     work: List[Tuple[ShotPlan, Path, List[Tuple[str, "asyncio.Task[Path]"]]]] = []
     try:
         for plan in sounding:
-            folder = Path(tempfile.mkdtemp(dir=base))
+            try:
+                folder = workdir.scratch(workdir.AUDIO, owner.id)
+            except workdir.WorkdirError as exc:
+                raise SoundError(exc.code, exc.message, plan.shot_id) from None
             tasks: List[Tuple[str, "asyncio.Task[Path]"]] = []
             work.append((plan, folder, tasks))
             for index, (key, run) in enumerate(_jobs(ffmpeg, doc, plan)):
-                place = folder / str(index)
-                place.mkdir()
+                place = workdir.make(folder / str(index))
                 tasks.append((key, asyncio.ensure_future(_bounded(run, sources.into(place)))))
         for plan, folder, tasks in work:
             stored: Dict[str, str] = {}

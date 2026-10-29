@@ -26,6 +26,7 @@
 	import { findTake } from '../../lib/production.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { exportCadence, interpolatorChoice, pickInterpolator } from '../../lib/cadence.js';
+	import { hasNativeEngine } from '../../lib/generation.js';
 	import { conformEstimate, conformTakes, estimateConform, renditionStore } from '../../lib/renditions.svelte.js';
 	import { announcer } from '../../lib/announce.js';
 	import { hostIconName } from '../../lib/icons.js';
@@ -231,7 +232,7 @@
 								<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', disabled: renditionStore.sending, onclick: () => conformTakes(slowIds) }}>{conformLabel}</HostUi>
 							{/if}
 						</div>
-						{#if interpolator === null}<p class="pl-5 text-fg-subtle">{t('generation.cadence.noInterpolator')}</p>{/if}
+						{#if interpolator === null}<p class="pl-5 text-fg-subtle">{hasNativeEngine(ui.me) ? t('generation.cadence.noInterpolator') : t('generation.cadence.noNativeEngine')}</p>{/if}
 					{/if}
 					{#if cadence.slowed.length}
 						<div class="flex items-center gap-2">

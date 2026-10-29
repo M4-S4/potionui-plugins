@@ -25,6 +25,7 @@ function errorText(error) {
 	if (code === 'shot_not_found') return t('lib.seam.error.shot');
 	if (code === 'no_media') return t('lib.chain.error.noMedia');
 	if (code === 'ffmpeg_missing') return t('lib.chain.error.ffmpeg');
+	if (code === 'workdir_unwritable') return t('lib.chain.error.workdir');
 	if (code === 'extract_failed') return error?.data?.code === 'store_failed' ? t('lib.seam.error.store') : t('lib.seam.error.extract');
 	return t('lib.seam.error.generic');
 }

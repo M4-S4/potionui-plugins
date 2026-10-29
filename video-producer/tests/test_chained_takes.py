@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import chain, chaining, estimate, generation, presets, projects, takes, tracker
+from backend import chain, chaining, core_bridge, estimate, generation, presets, projects, takes, tracker
 from backend.chain import ChainError
 from backend.estimate import Order
 from backend.tables import create_tables
@@ -79,6 +79,32 @@ def _paths(request):
 
 def _waits(make_doc, shots, **parts):
     return chaining.waits("", make_doc(**parts), shots)
+
+
+def test_without_ffmpeg_the_shots_that_start_from_the_previous_one_are_blocked_before_any_take_is_made(core, make_project, slots, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS)
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: None)
+
+    evaluation = _evaluate(core, project, ["s1", "s2", "s3"])
+
+    assert [(block["code"], block["data"]) for block in evaluation.payload["blocks"]] == [
+        ("chain_ffmpeg_missing", {"shot_ids": ["s2", "s3"]}),
+    ]
+    assert evaluation.payload["blocks"][0]["message"] == "ffmpeg is not available on this server: the last image of the previous shot cannot be taken for the shots that start from it."
+    with pytest.raises(generation.Blocked):
+        asyncio.run(generation.start(core.users["user-1"], project, evaluation))
+    assert takes.list_takes(project["id"]) == []
+
+
+def test_with_ffmpeg_or_without_a_chain_nothing_blocks(core, make_project, slots, monkeypatch):
+    core.use_wan()
+    project = make_project(clips=SHOTS)
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: None)
+
+    assert _evaluate(core, project, ["s1"]).payload["blocks"] == []
+    monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "ffmpeg")
+    assert _evaluate(core, project, ["s1", "s2"]).payload["blocks"] == []
 
 
 def test_a_shot_after_one_of_the_same_order_waits_for_its_take_of_the_same_letter(core, make_project, slots):

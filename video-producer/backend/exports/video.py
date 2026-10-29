@@ -11,7 +11,7 @@ from typing import Any, Callable, Collection, Dict, Iterable, List, Mapping, Opt
 
 import psutil
 
-from .. import core_bridge, director, formats, takes
+from .. import core_bridge, director, formats, takes, workdir
 from ..core_bridge import User
 from . import levels, match, media, slug
 from .common import asset_of, fps_of, seq_duration, timing_error
@@ -180,7 +180,7 @@ def last_line(text: str, limit: int = MESSAGE_LIMIT) -> str:
 
 def exports_base() -> Path:
     """The export cache of every user."""
-    return core_bridge.storage_directory() / "video_producer" / "exports"
+    return workdir.area(workdir.EXPORTS)
 
 
 def exports_root(user_id: str) -> Path:
@@ -1274,7 +1274,10 @@ async def render(
     if untimed is not None:
         raise ExportError("ffmpeg_failed", untimed)
     folder = job_folder(job)
-    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        workdir.make(folder)
+    except workdir.WorkdirError as exc:
+        raise ExportError(exc.code, exc.message) from None
     ffmpeg = core_bridge.find_ffmpeg()
     if not ffmpeg:
         raise ExportError("ffmpeg_failed", "ffmpeg is not available on this server.")

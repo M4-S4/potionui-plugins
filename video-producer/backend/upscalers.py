@@ -1,7 +1,7 @@
 import logging
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
-from . import core_bridge, formats, models, presets
+from . import catalog, core_bridge, formats, models, presets
 from .core_bridge import User
 
 logger = logging.getLogger("plugins.video-producer")
@@ -20,6 +20,7 @@ PRESET_OF = {SEEDVR2: presets.SEEDVR2, RTX: presets.RTX_UPSCALE}
 MODE = "video_upscale"
 
 RTX_MODULE = "nvvfx"
+RTX_CHECKED = "rtx_checked"
 RTX_TARGET_FIELD = "target_short_side"
 
 RTX_INTENTS = {"compressed": "upscale_highbitrate", "clean": "upscale"}
@@ -66,11 +67,22 @@ def rtx_target_field(preset_id: str = presets.RTX_UPSCALE) -> bool:
     return RTX_TARGET_FIELD in models.form_fields(preset_id, MODE)
 
 
-def ready(user: User) -> Dict[str, bool]:
-    """The upscalers this user can run: SeedVR2 with its video mode; RTX with its video mode, a target short side and the nvidia-vfx module importable."""
+def nvvfx(engine: Optional[Mapping[str, Any]]) -> Optional[bool]:
+    """Whether the nvidia-vfx module is importable where the RTX pipes run: looked up in this process when the native engine is this machine's, None when it is a remote worker, whose packages this server cannot see."""
+    if engine is not None and engine.get("kind") == "remote":
+        return None
+    return core_bridge.module_available(RTX_MODULE)
+
+
+def ready(user: User, engines: Optional[List[Dict[str, Any]]] = None) -> Dict[str, bool]:
+    """The upscalers this user can run, both on the native engine, none without one: SeedVR2 with its video mode; RTX with its video mode, a target short side and the nvidia-vfx module importable where it runs, which rtx_checked says was looked up here rather than left to a remote worker."""
+    engine = catalog.native_engine(engines)
+    if engine is None:
+        return {SEEDVR2: False, RTX: False, RTX_CHECKED: True}
+    module = nvvfx(engine)
     seedvr2 = _runnable(user, presets.SEEDVR2) is not None
-    rtx = _runnable(user, presets.RTX_UPSCALE) is not None and rtx_target_field() and core_bridge.module_available(RTX_MODULE)
-    return {SEEDVR2: seedvr2, RTX: bool(rtx)}
+    rtx = _runnable(user, presets.RTX_UPSCALE) is not None and rtx_target_field() and module is not False
+    return {SEEDVR2: seedvr2, RTX: bool(rtx), RTX_CHECKED: module is not None}
 
 
 def _aspect(doc: Mapping[str, Any]) -> float:

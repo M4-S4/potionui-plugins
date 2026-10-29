@@ -159,6 +159,7 @@
 	"chain.waitFrame": "Waiting for the last frame of “{shot}”",
 	"chain.error.noMedia": "The previous shot has no take or video to take a frame from.",
 	"chain.error.ffmpeg": "ffmpeg is missing on the server: the last frame cannot be taken.",
+	"chain.error.workdir": "The server cannot write its work files: the last frame cannot be taken. Ask an administrator to check the file storage directory.",
 	"refs.added": "Reference added: choose its picture and scope in the right panel",
 	"refs.selectOne": "Select a reference.",
 	"refs.attached": "“{name}” attached to {start}–{end}",

@@ -4,7 +4,7 @@
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, clipLabel, fmtDuration } from '../../lib/state.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
-	import { aspectOf, finalResolution, upscalesItself } from '../../lib/generation.js';
+	import { aspectOf, finalResolution, hasNativeEngine, rtxUnchecked, upscalesItself } from '../../lib/generation.js';
 	import { chosenSize, formatValue } from '../../lib/formats.js';
 	import { changedRatio } from '../../lib/framing.js';
 	import { presetById } from '../../lib/production.svelte.js';
@@ -71,7 +71,7 @@
 	const interpolatorText = $derived(interpolator === 'rtx' ? t('generation.cadence.interpolator.rtx') : t('generation.cadence.interpolator.rife'));
 
 	function upscaleHint(id) {
-		if (id === 'rtx') return t('generation.finalPass.hint.rtx');
+		if (id === 'rtx') return rtxUnchecked(ui.me) ? t('generation.finalPass.hint.rtxUnchecked') : t('generation.finalPass.hint.rtx');
 		if (id === 'seedvr2') return t('generation.finalPass.hint.seedvr2');
 		if (id === 'engine') return t('generation.finalPass.hint.engine');
 		return t('generation.finalPass.hint.upscale');
@@ -80,7 +80,7 @@
 	const hint = $derived.by(() => {
 		if (method === 'guided') return guided ? t('generation.finalPass.hint.guided', { res: guidedResolution() }) : t('generation.finalPass.hint.guidedMissing');
 		if (method === 'render') return t('generation.finalPass.hint.render');
-		return upscaleReady ? upscaleHint(upscaler) : t('generation.block.upscaleUnsupported');
+		return upscaleReady ? upscaleHint(upscaler) : hasNativeEngine(ui.me) ? t('generation.block.upscaleUnsupported') : t('generation.block.noNativeEngine');
 	});
 	const soundText = $derived(method === 'render' ? t('generation.finalPass.sound.render') : method === 'guided' ? t('generation.finalPass.sound.guided') : t('generation.finalPass.sound.upscale'));
 
@@ -173,7 +173,7 @@
 					<label for="vp-final-pass-conform" class="text-xs text-fg-muted">{t('generation.finalPass.cadence.conform', { fps: cadence.fps, count: slowShots })}</label>
 					<HostUi name="Switch" props={{ id: 'vp-final-pass-conform', checked: conforming, disabled: interpolator === null, size: 'lg', label: t('generation.finalPass.cadence.conform', { fps: cadence.fps, count: slowShots }), onchange: (v) => (conform = Boolean(v)) }} />
 				</div>
-				<p class="text-xs text-fg-subtle">{interpolator === null ? t('generation.cadence.noInterpolator') : conforming ? t('generation.finalPass.cadence.with', { name: interpolatorText }) : t('generation.finalPass.cadence.off')}</p>
+				<p class="text-xs text-fg-subtle">{interpolator === null ? (hasNativeEngine(ui.me) ? t('generation.cadence.noInterpolator') : t('generation.cadence.noNativeEngine')) : conforming ? t('generation.finalPass.cadence.with', { name: interpolatorText }) : t('generation.finalPass.cadence.off')}</p>
 				{#if slowedShots}<p class="text-xs text-fg-subtle">{t('generation.finalPass.cadence.slowed', { count: slowedShots })}</p>{/if}
 			</section>
 		{/if}
