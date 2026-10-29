@@ -200,7 +200,7 @@ test('a face that changes within a take or across a chained seam, by face recogn
 	assert.deepEqual(identityIssues(looks, clips).map((i) => [i.kind, i.clip.id, i.previous?.id ?? null, i.score]), [['take', 's1', null, 0.29], ['seam', 's2', 's1', 0.35]]);
 	assert.deepEqual(identityIssues(null, clips), []);
 	const take = source('../components/director/ReviewTake.svelte');
-	assert.match(take, /\{#if faceChanged\(looks, look\)\}<p class="text-xs text-warning" data-look-identity>\{t\('panels\.director\.pick\.lookIdentity', \{ score: percent\(look\.identity\.score\), at: formatNumber\(look\.identity\.at \?\? 0, \{ maximumFractionDigits: 1 \}\) \}\)\}<\/p>\{\/if\}/);
+	assert.match(take, /\{#if faceChanged\(looks, look\)\}<p class="text-xs text-warning" data-look-identity>\{t\('panels\.director\.pick\.lookIdentity', \{ score: percent\(look\.identity\.score\) \}\)\}<\/p>\{\/if\}/);
 	const summary = source('../components/director/DirectorSummary.svelte');
 	assert.match(summary, /const faceChanges = \$derived\(identityIssues\(looks, doc\.clips\)\);/);
 	assert.match(summary, /item\.kind === 'seam' \? t\('panels\.director\.check\.identitySeam', \{ shot: num\(item\.clip\), previous: num\(item\.previous\), score: percent\(item\.score\) \}\) : t\('panels\.director\.check\.identity', \{ shot: num\(item\.clip\), score: percent\(item\.score\) \}\)/);

@@ -31,7 +31,8 @@ PLACE_LOW = 0.55
 FINAL_LOW = 0.80
 DRIFT_LOW = 0.80
 PUSH_IN_HIGH = 1.5
-IDENTITY_LOW = 0.60
+IDENTITY_LOW = 0.50
+END_WINDOW = 1.0
 
 FACE_SCALE = 1.8
 MIN_FACE = 32
@@ -459,15 +460,17 @@ def _identities(row: Mapping[str, Any]) -> List[Tuple[Optional[float], Tuple[flo
 
 
 def identity_drift(row: Optional[Mapping[str, Any]], model: Optional[str]) -> Optional[Dict[str, Any]]:
-    """How much of the first face a take shows from the front is left at its lowest, by face recognition, and when: the cosine of each later frontal image with the first, or None without two such images."""
+    """How much of the first face a take shows from the front is left at its end, by face recognition: the median cosine with the first of its frontal images of the last second, or of its last frontal image when that second shows none, and the time of the last one; None without two frontal images. A face turned away and back in between does not count, a face that ends as someone else does."""
     if not _current(row, model):
         return None
     known = _identities(row)
     if len(known) < 2:
         return None
-    first = known[0][1]
-    at, score = min(((at, cosine(first, vector)) for at, vector in known[1:]), key=lambda item: item[1])
-    return {"score": round(score, 3), "at": at}
+    first, later = known[0][1], known[1:]
+    end = max(float(frame[0] or 0.0) for frame in row["frames"])
+    last = [(at, vector) for at, vector in later if float(at or 0.0) >= end - END_WINDOW] or later[-1:]
+    score = statistics.median(cosine(first, vector) for _, vector in last)
+    return {"score": round(score, 3), "at": last[-1][0]}
 
 
 def _signature(faces: Sequence[Tuple[Optional[float], Tuple[float, ...]]]) -> Optional[Tuple[float, ...]]:
