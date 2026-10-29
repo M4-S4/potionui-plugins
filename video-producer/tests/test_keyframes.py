@@ -787,6 +787,22 @@ def test_a_candidate_stored_before_the_image_it_is_made_for_has_none(client, cor
     assert takes.public(takes.get_take(take["id"]))["frame_role"] is None
 
 
+def test_candidates_whose_second_reservation_the_core_cannot_record_are_refused_together(core, qwen, scene, monkeypatch):
+    project = projects.create_project("user-1", scene)
+    user = core.users["user-1"]
+    core.meter(10.0)
+    evaluation = asyncio.run(keyframes.evaluate(user, user, project, "s1", _order(count=2)))
+    record = core.record_limit_event
+    monkeypatch.setattr(generation.core_bridge, "record_limit_event", lambda *args: record(*args) if len(core.recorded) == 0 else False)
+
+    with pytest.raises(generation.Blocked) as caught:
+        asyncio.run(keyframes.start(user, project, evaluation))
+
+    assert [block["code"] for block in caught.value.blocks] == ["quota_unrecorded"]
+    assert takes.list_keyframes(project["id"], "s1") == []
+    assert len(core.recorded) == 1 and core.refunded == [core.recorded[0][3]] and core.spent() == 0.0
+
+
 def test_two_candidate_requests_whose_estimates_both_fit_the_quota_cannot_both_reserve_it(core, qwen, scene):
     project = projects.create_project("user-1", scene)
     user = core.users["user-1"]

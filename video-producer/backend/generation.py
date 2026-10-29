@@ -150,9 +150,36 @@ def create(
     chain: Optional[Dict[str, Any]] = None,
     frame_role: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Store one take of a plan, with the GPU minutes it reserves, for a shot that starts from the last image of the previous shot what it waits for, and for a start or end image candidate the image it is made for."""
-    size = models.parse_size(plan.resolution)
+    """Store one take of a plan, with the GPU minutes it reserves, for a shot that starts from the last image of the previous shot what it waits for, and for a start or end image candidate the image it is made for; Blocked, nothing stored, when the core cannot record the minutes."""
     take_id = core_bridge.generate_ulid()
+    reserved = minutes if minutes > 0 else 0.0
+    if reserved > 0 and not core_bridge.record_limit_event(owner.id, limits.GPU_MINUTES, reserved, limit_ref(take_id)):
+        raise Blocked([note("quota_unrecorded", "The GPU minutes of this take could not be reserved: try again in a moment.", shot_id=plan.shot_id)])
+    try:
+        return _store(owner, project_id, plan, take_id, reserved, preset_id, quality, kind, seed, variant, parent_take_id, revision, chain, frame_role)
+    except Exception:
+        if reserved > 0:
+            core_bridge.refund_limit_event(limit_ref(take_id))
+        raise
+
+
+def _store(
+    owner: User,
+    project_id: str,
+    plan: ShotPlan,
+    take_id: str,
+    reserved: float,
+    preset_id: str,
+    quality: str,
+    kind: str,
+    seed: int,
+    variant: str,
+    parent_take_id: Optional[str],
+    revision: Optional[int],
+    chain: Optional[Dict[str, Any]],
+    frame_role: Optional[str],
+) -> Dict[str, Any]:
+    size = models.parse_size(plan.resolution)
     takes.create_take(
         {
             "id": take_id,
@@ -182,11 +209,23 @@ def create(
             "frame_role": frame_role,
             "video_refs": plan.video_trace(),
             "track_scale": plan.track_scale,
+            "units_reserved": reserved,
         }
     )
-    if minutes > 0 and core_bridge.record_limit_event(owner.id, limits.GPU_MINUTES, minutes, limit_ref(take_id)):
-        takes.update_active(take_id, units_reserved=minutes)
     return takes.get_take(take_id)
+
+
+@contextmanager
+def whole_batch(created: List[Dict[str, Any]]) -> Iterator[None]:
+    """Create the takes of one request together: when one of them is Blocked, the ones created before it are dropped and their minutes refunded, and the request is refused as a whole."""
+    try:
+        yield
+    except Blocked:
+        for take in created:
+            _refund(take)
+            takes.delete_take(take["id"])
+        created.clear()
+        raise
 
 
 async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation) -> List[Dict[str, Any]]:
@@ -200,7 +239,7 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
     plans = sorted(evaluation.plans.shots, key=lambda plan: places.get(plan.shot_id, len(places)))
     needed = sum(evaluation.minutes.get(plan.shot_id, 0.0) * evaluation.count(plan.shot_id) for plan in plans if not plan.cloud) if applies else 0.0
     created: List[Dict[str, Any]] = []
-    with reserving(owner, needed) as reserve:
+    with reserving(owner, needed) as reserve, whole_batch(created):
         for plan in plans:
             for index, letter in enumerate(next_variants(project["id"], plan.shot_id, plan.quality, evaluation.count(plan.shot_id))):
                 created.append(
@@ -362,8 +401,10 @@ def _adjust(take: Mapping[str, Any], duration_ms: Optional[int]) -> None:
     if actual > reserved + 1e-6:
         core_bridge.record_limit_event(take["user_id"], limits.GPU_MINUTES, round(actual - reserved, 3), f"{ref}:adjust")
     elif actual < reserved - 1e-6:
-        core_bridge.refund_limit_event(ref)
-        core_bridge.record_limit_event(take["user_id"], limits.GPU_MINUTES, actual, f"{ref}:actual")
+        if core_bridge.refund_limit_event(ref) > 0:
+            core_bridge.record_limit_event(take["user_id"], limits.GPU_MINUTES, actual, f"{ref}:actual")
+        else:
+            logger.warning("[VIDEO-PRODUCER] Take %s keeps its %s reserved minutes: the core did not refund them, so its %s actual minutes are not recorded", take["id"], reserved, actual)
 
 
 def state_duration_ms(state: Mapping[str, Any]) -> Optional[int]:

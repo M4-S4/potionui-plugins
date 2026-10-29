@@ -868,23 +868,24 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
     count = evaluation.payload["count"]
     letters = next_variants(project["id"], first.shot_id, count * len(evaluation.parts))
     runs = [part for part in evaluation.parts for _ in range(count)]
-    with generation.reserving(owner, evaluation.minutes * len(runs)) as reserve:
-        created = [
-            generation.create(
-                owner,
-                project["id"],
-                part.plan,
-                preset_id=part.plan.preset_id,
-                quality="draft",
-                kind=KEYFRAME,
-                seed=(base + rank) % generation.SEED_RANGE,
-                variant=letters[rank],
-                minutes=evaluation.minutes if reserve else 0.0,
-                revision=revision,
-                frame_role=part.role,
+    created: List[Dict[str, Any]] = []
+    with generation.reserving(owner, evaluation.minutes * len(runs)) as reserve, generation.whole_batch(created):
+        for rank, part in enumerate(runs):
+            created.append(
+                generation.create(
+                    owner,
+                    project["id"],
+                    part.plan,
+                    preset_id=part.plan.preset_id,
+                    quality="draft",
+                    kind=KEYFRAME,
+                    seed=(base + rank) % generation.SEED_RANGE,
+                    variant=letters[rank],
+                    minutes=evaluation.minutes if reserve else 0.0,
+                    revision=revision,
+                    frame_role=part.role,
+                )
             )
-            for rank, part in enumerate(runs)
-        ]
     await generation.pump(owner)
     return [takes.get_take(take["id"]) for take in created]
 
