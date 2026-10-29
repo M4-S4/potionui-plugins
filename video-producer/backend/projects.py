@@ -997,7 +997,7 @@ def list_versions(project_id: str) -> List[Dict[str, Any]]:
 
 
 def restore_version(project_id: str, version: int) -> Dict[str, Any]:
-    """Make a stored version the project's next version."""
+    """Make a stored version the project's next version, checked like a document being saved."""
     from src.plugin_api import db
 
     keep = _versions_kept()
@@ -1011,7 +1011,7 @@ def restore_version(project_id: str, version: int) -> Dict[str, Any]:
         if stored is None:
             raise VersionNotFound(version)
         doc, current, at = migrate(json.loads(stored["doc"])), project["version"], _now()
-        text = canonical(doc)
+        text = validate_doc(doc)
         _advance(cursor, project_id, current, text, doc["name"], at)
         _append_version(cursor, project_id, current + 1, text, at, source_version=version, keep=keep)
     return {"id": project_id, "name": doc["name"], "version": current + 1, "doc": doc, "updated_at": at}

@@ -231,6 +231,25 @@ def test_a_document_over_four_mebibytes_is_too_large_to_create_or_save(api, proj
     assert _count(project_db, "SELECT COUNT(*) FROM video_producer_versions") == 1
 
 
+def test_a_stored_version_that_no_longer_passes_the_checks_of_a_saved_document_cannot_be_restored(api, project_db, starter):
+    created = _create(api, starter)
+    broken = copy.deepcopy(starter)
+    broken["unexpected"] = 1
+    huge = _named(starter, "Huge")
+    huge["synopsis"] = "x" * projects.MAX_DOC_BYTES
+
+    for stored, code in ((broken, "invalid_doc"), (huge, "doc_too_large")):
+        with project_db.get_cursor() as cursor:
+            cursor.execute("UPDATE video_producer_versions SET doc = ? WHERE project_id = ? AND version = 1", (projects.canonical(stored), created["id"]))
+
+        response = api.post(_url(created["id"], "versions", 1, "restore"))
+
+        assert response.status_code == 422, response.text
+        assert _detail(response)["error"] == code
+    assert api.get(_url(created["id"])).json()["data"]["project"]["version"] == 1
+    assert _count(project_db, "SELECT COUNT(*) FROM video_producer_versions") == 1
+
+
 def test_the_size_limit_counts_bytes_not_characters(api, starter):
     accented = _named(starter, "Accents")
     accented["synopsis"] = "é" * (projects.MAX_DOC_BYTES // 2)

@@ -141,6 +141,8 @@ def restore_version(project_id: str, version: str, user: User = Depends(get_curr
         restored = projects.restore_version(project_id, number)
     except VersionNotFound:
         _version_not_found(version)
+    except DocError as exc:
+        _doc_error(exc)
     except VersionConflict as exc:
         _conflict(exc)
     except ProjectNotFound:
