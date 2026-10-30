@@ -241,3 +241,18 @@ test('the window of the pass keeps one primary button, which goes without the mi
 	assert.equal(guided.filter((b) => b.variant === 'primary').length, 1);
 	assert.deepEqual(guided.filter((b) => b.text === tr('generation.final.guided')).map((b) => [b.variant, b.class]), [['secondary', 'mr-auto']]);
 });
+
+test('the final pass and the Make final window draw their upscaler, RTX source and size from one control', async () => {
+	passScene('t2');
+	ui.me = { ...ui.me, features: { upscaler: true, upscalers: { rtx: true, seedvr2: false } } };
+	const method = tr('generation.finalPass.method.label');
+	const controls = async (url, props) => hostUis(await renderComponent(url, props), 'SegmentedControl').filter((c) => c.ariaLabel !== method);
+	const pass = await controls(FINAL_PASS);
+	const single = await controls(MAKE_FINAL, { takeId: 't1' });
+	const labels = [tr('generation.finalPass.upscaler.label'), tr('generation.finalPass.rtxSource.label'), tr('generation.final.target')];
+	assert.deepEqual(pass.map((c) => c.ariaLabel), labels);
+	assert.deepEqual(single.map((c) => c.ariaLabel), labels);
+	assert.deepEqual(single[0].items, pass[0].items);
+	assert.deepEqual(single[1].items, pass[1].items);
+	assert.deepEqual(single[2].items.map((item) => item.label), pass[2].items.map((item) => item.label));
+});

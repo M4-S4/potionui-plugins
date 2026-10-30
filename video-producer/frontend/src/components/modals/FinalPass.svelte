@@ -14,6 +14,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 	import Modal from './Modal.svelte';
+	import UpscaleControls from './UpscaleControls.svelte';
 
 	const initial = untrack(savedChoice);
 	let method = $state(initial.method);
@@ -48,16 +49,6 @@
 		{ id: 'upscale', label: t('generation.finalPass.method.upscale') },
 		{ id: 'guided', label: t('generation.finalPass.method.guided'), disabled: !guided },
 		{ id: 'render', label: t('generation.finalPass.method.render') }
-	]);
-	const upscalers = $derived([
-		{ id: 'auto', label: t('generation.finalPass.upscaler.auto') },
-		{ id: 'rtx', label: t('generation.finalPass.upscaler.rtx'), disabled: ui.me?.features?.upscalers?.rtx !== true },
-		{ id: 'seedvr2', label: t('generation.finalPass.upscaler.seedvr2'), disabled: ui.me?.features?.upscalers?.seedvr2 !== true },
-		...(ownUpscale ? [{ id: 'engine', label: t('generation.finalPass.upscaler.engine') }] : [])
-	]);
-	const rtxSources = $derived([
-		{ id: 'compressed', label: t('generation.finalPass.rtxSource.compressed') },
-		{ id: 'clean', label: t('generation.finalPass.rtxSource.clean') }
 	]);
 	const rtxShown = $derived(rtxSourceShown(upscaler, ui.me));
 	const interpolator = $derived(pickInterpolator(interpolatorChoice(doc), ui.me));
@@ -114,15 +105,6 @@
 		return [t('generation.finalPass.take', { variant: take.variant }), size].filter(Boolean).join(' · ');
 	}
 
-	function targetLabel(id) {
-		if (id === 'auto') return t('generation.target.auto');
-		if (id === 'hd720') return t('generation.target.hd720');
-		if (id === 'fhd1080') return t('generation.target.fhd1080');
-		if (id === 'qhd1440') return t('generation.target.qhd1440');
-		if (id === 'uhd2160') return t('generation.target.uhd2160');
-		return id;
-	}
-
 	$effect(() => {
 		const list = sources;
 		const choice = { method, target, upscaler, rtxSource, conform: conforming };
@@ -146,19 +128,7 @@
 			<p class="text-xs text-fg-subtle">{hint}</p>
 			{#if method === 'render'}<p class="flex items-start gap-1.5 text-xs text-fg-muted"><Icon name="info" class="mt-0.5 h-3 w-3 shrink-0" />{guided ? t('generation.finalPass.placement') : t('generation.finalPass.placementNoGuided')}</p>{/if}
 			{#if method === 'upscale'}
-				<div class="flex items-center gap-3">
-					<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.upscaler.label')}</span>
-					<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.upscaler.label'), items: upscalers, selected: upscaler, onSelect: (id) => (upscaler = id) }} />
-				</div>
-				{#if rtxShown}
-					<div class="flex items-center gap-3">
-						<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.rtxSource.label')}</span>
-						<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.rtxSource.label'), items: rtxSources, selected: rtxSource, onSelect: (id) => (rtxSource = id) }} />
-					</div>
-					<p class="text-xs text-fg-subtle">{rtxSource === 'clean' ? t('generation.finalPass.rtxSource.cleanHint') : t('generation.finalPass.rtxSource.compressedHint')}</p>
-				{/if}
-				<HostUi name="SegmentedControl" props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.final.target'), items: targets.map((id) => ({ id, label: targetLabel(id), disabled: !upscaleReady })), selected: target, onSelect: (id) => (target = id) }} />
-				{#if target === 'auto'}<p class="text-xs text-fg-subtle">{t('generation.finalPass.targetAuto')}</p>{/if}
+				<UpscaleControls bind:upscaler bind:rtxSource bind:target {targets} ready={upscaleReady} engine={ownUpscale} {rtxShown} />
 			{/if}
 			<p class="flex items-start gap-1.5 text-xs text-fg-subtle"><Icon name="wave" class="mt-0.5 h-3 w-3 shrink-0" />{soundText}</p>
 			{#if oldRatio}<p class="text-xs text-fg-subtle">{t('generation.finalPass.oldRatio', { count: oldRatio, aspect: formatValue(doc.aspect) })}</p>{/if}
