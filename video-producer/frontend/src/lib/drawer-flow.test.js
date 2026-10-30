@@ -27,6 +27,7 @@ globalThis.Element = FakeElement;
 globalThis.document = { body: {}, querySelector: () => null };
 
 const { closesOnOutsidePointer, holdFocus, keepsFocus, openDrawers, soleDrawer } = await import('./drawer.js');
+const { closeLayer, openLayer, setReturnFocus } = await import('./focus.js');
 const { doc, ui, dispose } = await import('./state.svelte.js');
 const { viewport } = await import('./viewport.svelte.js');
 const { commandById, handleKeydown, toggleSidebar } = await import('./commands.js');
@@ -432,4 +433,40 @@ test('drawer: under 1280 px a side drawer, the Settings drawer and a menu of the
 	const page = readFileSync(new URL('../VideoProducerPage.svelte', import.meta.url), 'utf-8');
 	assert.match(page, /\$effect\(\(\) => \{\s*const now = openDrawers\(\);\s*untrack\(\(\) => \(drawersWere = soleDrawer\(drawersWere, now\)\)\);\s*\}\);/);
 	assert.ok(page.indexOf('soleDrawer(drawersWere') > page.indexOf('wideBefore = { sidebar'));
+});
+
+test('drawer: when the Settings drawer opens and the rule closes a side drawer that still held the focus, closing it gives the focus to the chip, not to a control hidden with the side drawer', () => {
+	class Focusable extends FakeElement {
+		constructor(parent, selectors) {
+			super(parent, selectors);
+			this.isConnected = true;
+		}
+		focus() {
+			document.activeElement = this;
+		}
+	}
+	globalThis.HTMLElement = FakeElement;
+	try {
+		const root = new FakeElement(null, ['.vp-root']);
+		const side = new FakeElement(root, ['.vp-drawer']);
+		const inside = new Focusable(side, ['button']);
+		const chip = new Focusable(new FakeElement(root, ['.vp-deck']), ['button']);
+		const settings = new FakeElement(root, ['.vp-deck-drawer']);
+		document.activeElement = inside;
+		setReturnFocus(chip);
+		const layer = openLayer(settings, { refocus() {}, close() {} });
+		side.selectors.push('[hidden]');
+		closeLayer(layer);
+		assert.equal(document.activeElement, chip);
+		side.selectors.pop();
+		document.activeElement = inside;
+		setReturnFocus(chip);
+		const again = openLayer(settings, { refocus() {}, close() {} });
+		document.activeElement = null;
+		closeLayer(again);
+		assert.equal(document.activeElement, inside);
+	} finally {
+		delete globalThis.HTMLElement;
+		delete document.activeElement;
+	}
 });
