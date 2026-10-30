@@ -8,6 +8,7 @@ export const TYPE_KEYS = { Personnage: 'character', Décor: 'set', Objet: 'objec
 export const TYPE_ICONS = { Personnage: 'user', Décor: 'mountain', Objet: 'diamond', Style: 'palette', 'Capture 3D': 'cube', 'Control video': 'film', Trajectoire: 'route', Voix: 'mic', Musique: 'music', Ambiance: 'wave' };
 export const FAMILY_ICONS = { identite: 'user', decors3d: 'cube', mouvement: 'route', [SOUND_SPACE]: 'wave' };
 export const ROLE_KEYS = { Identité: 'identity', Style: 'style', Décor: 'set', Objet: 'object', Mouvement: 'motion', Caméra: 'camera', [SOUND_ROLE]: 'sound' };
+export const REFERENCE_ROLES = ['Identité', 'Style', 'Décor', 'Objet', 'Mouvement', 'Caméra'];
 export const DEFAULT_ROLES = { identite: 'Identité', decors3d: 'Décor', mouvement: 'Mouvement', [SOUND_SPACE]: SOUND_ROLE };
 export const CARD_ICONS = { [CHARACTERS]: 'user', [PLACES]: 'mountain' };
 export const PICTURE_ICONS = { frame: 'image', setting: 'mountain', character: 'user', object: 'diamond', style: 'palette' };

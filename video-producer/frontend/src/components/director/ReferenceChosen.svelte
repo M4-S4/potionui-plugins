@@ -9,7 +9,7 @@
 	import { isPictureReference } from '../../lib/keyframes.js';
 	import { showInReview } from '../../lib/band.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
-	import { typeIcon } from '../../lib/reftags.js';
+	import { typeIcon, REFERENCE_ROLES } from '../../lib/reftags.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import AudioPicker from '../shots/AudioPicker.svelte';
@@ -125,7 +125,7 @@
 				<label class="flex items-center gap-2">
 					<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
 					<select class="input vp-dense min-w-0 flex-1" value={reference.role} onchange={(e) => act(() => (reference.role = e.currentTarget.value))}>
-						{#each ['Identité', 'Style', 'Décor', 'Objet', 'Mouvement', 'Caméra'] as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
+						{#each REFERENCE_ROLES as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
 					</select>
 				</label>
 			{/if}

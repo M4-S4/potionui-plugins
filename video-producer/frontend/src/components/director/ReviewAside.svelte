@@ -4,7 +4,7 @@
 	import { ui, doc, secs, clipLabel, reviewPick, shotNumber } from '../../lib/state.svelte.js';
 	import { panelSelection } from '../../lib/director.js';
 	import { showDetails } from '../../lib/production.svelte.js';
-	import { labelOf } from '../../lib/labels.js';
+	import { labelOf, LABEL_TONES } from '../../lib/labels.js';
 	import { stages } from '../../lib/catalog.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
@@ -20,7 +20,6 @@
 	const pick = $derived(reviewPick());
 	const elsewhere = $derived(panelSelection('review', ui.selection).elsewhere);
 	const take = $derived(pick?.take ?? null);
-	const labelTone = { final: 'border-signal text-signal', candidate: 'border-success/60 text-success', rejected: 'border-danger/60 text-danger', draft: 'border-line-strong text-fg-muted' };
 
 	const head = $derived.by(() => {
 		if (take) return { icon: 'layers', title: t('panels.director.pick.take'), sub: `${shotNumber(pick.clip)} · ${take.variant}` };
@@ -52,7 +51,7 @@
 				<div class="truncate text-sm font-medium">{shotNumber(pick.clip)} · {clipLabel(pick.clip)}{take ? ` · ${take.variant}` : ''}</div>
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-subtle">
 					{#if pick.kind === 'take'}
-						<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[labelOf(take)]}">{t(`generation.label.${labelOf(take)}`)}</span>
+						<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {LABEL_TONES[labelOf(take)]}">{t(`generation.label.${labelOf(take)}`)}</span>
 						<span class="whitespace-nowrap">{pick.clip.take === take.id ? t('panels.director.pick.placed') : t('panels.director.pick.notPlaced')}</span>
 					{:else if pick.kind === 'failed'}
 						<span class="shrink-0 text-danger">{t('lib.status.failed')}</span>

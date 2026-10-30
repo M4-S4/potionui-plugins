@@ -8,7 +8,7 @@
 	import { canPrioritize, handedOver, queueOrder } from '../../lib/queue.js';
 	import { waitText } from '../../lib/chain.svelte.js';
 	import { presetLabel } from '../../lib/generation.js';
-	import { labelOf } from '../../lib/labels.js';
+	import { labelOf, LABEL_TONES } from '../../lib/labels.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 
@@ -16,7 +16,6 @@
 	const slots = $derived(queueState.slots);
 	const elsewhere = $derived(queueState.elsewhere);
 	const others = $derived((elsewhere?.waiting ?? 0) + (elsewhere?.inFlight ?? 0));
-	const labelTone = { final: 'border-signal text-signal', candidate: 'border-success/60 text-success', rejected: 'border-danger/60 text-danger', draft: 'border-line-strong text-fg-muted' };
 
 	const clipOf = (take) => doc.clips.find((c) => c.id === take.shotId) ?? null;
 	const progress = (take) => (take.status === 'running' ? Math.round(Math.min(100, Math.max(0, take.progress ?? 0))) : 0);
@@ -75,7 +74,7 @@
 					</div>
 					<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
 						<span>{take.quality === 'final' ? t('lib.stage.final') : t('lib.stage.draft')}</span>
-						<span class="rounded-sm border px-1 text-2xs {labelTone[label]}">{t(`generation.label.${label}`)}</span>
+						<span class="rounded-sm border px-1 text-2xs {LABEL_TONES[label]}">{t(`generation.label.${label}`)}</span>
 						{#if engineText(take)}<span class="min-w-0 truncate text-fg-subtle">{engineText(take)}</span>{/if}
 					</div>
 					<div class="mt-1.5 flex items-center gap-2">

@@ -9,7 +9,7 @@
 	import { waitText } from '../../lib/chain.svelte.js';
 	import { previewTake } from '../../lib/monitor.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
-	import { canLabel, labelOf, toggledLabel } from '../../lib/labels.js';
+	import { canLabel, labelOf, toggledLabel, LABEL_TONES } from '../../lib/labels.js';
 	import { isStale } from '../../lib/shots.js';
 	import { formatValue, ratioText } from '../../lib/formats.js';
 	import { framed, percent, sizeOf } from '../../lib/framing.js';
@@ -26,7 +26,6 @@
 	const active = $derived(clip?.take === take.id);
 	const label = $derived(labelOf(take));
 	const stale = $derived(isStale(take, clip));
-	const labelTone = { final: 'border-signal text-signal', candidate: 'border-success/60 text-success', rejected: 'border-danger/60 text-danger', draft: 'border-line-strong text-fg-muted' };
 	const choices = $derived([
 		{ id: 'rejected', text: t('generation.card.rejectShort'), aria: t('generation.card.reject', { variant: take.variant }), tip: t('generation.card.rejectTip') },
 		{ id: 'candidate', text: t('generation.card.candidateShort'), aria: t('generation.card.candidate', { variant: take.variant }), tip: t('generation.card.candidateTip') },
@@ -145,7 +144,7 @@
 				</div>
 				<div class="truncate text-fg-muted" title={[engineName, backendText].filter(Boolean).join(' · ')} data-take-engine>{engineName}</div>
 				<div class="flex min-w-0 items-center gap-1.5">
-					<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[label]}">{t(`generation.label.${label}`)}</span>
+					<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {LABEL_TONES[label]}">{t(`generation.label.${label}`)}</span>
 					{#each vrefs as track (track.id)}<span class="{TAG_CLASS} vp-tc shrink-0" title={t('generation.card.refs.chipTip', { track: trackName(track), role: roleLabel(track.role) })} data-take-vref={track.slot}>{vrefLabel(track.slot)}</span>{/each}
 					{#if cadence.state === 'conformed'}
 						<span class="vp-tc shrink-0 rounded-sm border border-success/60 px-1 text-2xs text-success" title={cadenceTip} data-take-cadence="conformed">{t('generation.card.cadence.rate', cadenceRate)}</span>

@@ -1,5 +1,6 @@
 export const LABELS = ['draft', 'rejected', 'candidate', 'final'];
 export const GROUP_ORDER = ['final', 'candidate', 'draft', 'rejected'];
+export const LABEL_TONES = { final: 'border-signal text-signal', candidate: 'border-success/60 text-success', rejected: 'border-danger/60 text-danger', draft: 'border-line-strong text-fg-muted' };
 
 export function legacyLabel(chosen, flag) {
 	if (chosen === true || chosen === 1) return 'final';
