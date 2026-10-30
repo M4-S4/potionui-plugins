@@ -7,7 +7,7 @@
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { stages } from '../../lib/catalog.js';
 	import { seam, matchToPrevious } from '../../lib/continuity.svelte.js';
-	import { labelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
+	import { takeLabelOf, rejectedCount, visibleTakes } from '../../lib/labels.js';
 	import { shotStale } from '../../lib/shots.js';
 	import { sections } from '../../lib/band.js';
 	import { chooseSeam, chooseShot, chooseTake, openSeam } from '../../lib/band.svelte.js';
@@ -28,7 +28,7 @@
 	const filter = $derived(reviewFilterOf(ui.reviewFilter, counts));
 	const shown = $derived(reviewShots(doc.clips, takeStore.list, filter));
 	const rejected = $derived(rejectedCount(takeStore.list));
-	const chosen = $derived(takeStore.list.filter((r) => labelOf(r) === 'final' && r.status === 'done').length);
+	const chosen = $derived(takeStore.list.filter((r) => takeLabelOf(r) === 'final' && r.status === 'done').length);
 	const withFinal = $derived(counts.final);
 	const end = $derived(doc.clips.reduce((m, c) => Math.max(m, c.start + c.dur), 0));
 	const parts = $derived(sections(doc.markers, end));

@@ -1,5 +1,5 @@
 import { isInFlight } from './generation.js';
-import { labelOf } from './labels.js';
+import { takeLabelOf } from './labels.js';
 import { CHARACTERS, castOf, instructionOf, names, setCast, shotsCasting, usable } from './bible.js';
 import { shotNumberAt, touch } from './shots.js';
 
@@ -20,9 +20,9 @@ export function viewOf(chosen, takes) {
 export function reviewState(takes) {
 	const list = takes ?? [];
 	const latest = [...list].sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? ''))).at(-1);
-	const final = list.some((x) => finished(x) && labelOf(x) === 'final');
+	const final = list.some((x) => finished(x) && takeLabelOf(x) === 'final');
 	const failed = latest?.status === 'failed';
-	const open = !final && list.some((x) => finished(x) && labelOf(x) !== 'rejected');
+	const open = !final && list.some((x) => finished(x) && takeLabelOf(x) !== 'rejected');
 	return { running: list.some(isInFlight), final, failed, review: failed || open };
 }
 
@@ -161,7 +161,7 @@ export function reviewPickOf(doc, takes, pick, selection) {
 
 export function nextToReview(clips, takes) {
 	for (const clip of reviewShots(clips, takes, 'review')) {
-		const open = (takes ?? []).filter((x) => x.shotId === clip.id && finished(x) && labelOf(x) !== 'rejected');
+		const open = (takes ?? []).filter((x) => x.shotId === clip.id && finished(x) && takeLabelOf(x) !== 'rejected');
 		const take = open.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0];
 		if (take) return { clip, take };
 	}

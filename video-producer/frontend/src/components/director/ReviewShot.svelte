@@ -3,7 +3,7 @@
 	import { doc, shotNumber } from '../../lib/state.svelte.js';
 	import { takesOf } from '../../lib/production.svelte.js';
 	import { isInFlight } from '../../lib/generation.js';
-	import { labelOf } from '../../lib/labels.js';
+	import { takeLabelOf } from '../../lib/labels.js';
 	import { waitText } from '../../lib/chain.svelte.js';
 	import { chooseTake } from '../../lib/band.svelte.js';
 	import { commandById } from '../../lib/commands.js';
@@ -21,7 +21,7 @@
 		if (take.status === 'queued') return waitText(take) || t('lib.status.queued');
 		if (take.status === 'failed') return t('lib.status.failed');
 		if (take.status === 'cancelled') return t('lib.status.cancelled');
-		return t(`generation.label.${labelOf(take)}`);
+		return t(`generation.label.${takeLabelOf(take)}`);
 	}
 </script>
 

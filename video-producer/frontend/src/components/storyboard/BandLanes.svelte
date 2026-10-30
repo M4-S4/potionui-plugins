@@ -3,7 +3,7 @@
 	import { ui, doc, asset, clamp, round, relayout, secs, clipLabel, promptOf, sourceLength, isPicked, pickClip } from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot, soundOf } from '../../lib/production.svelte.js';
 	import { activityStep } from '../../lib/generation.js';
-	import { labelOf } from '../../lib/labels.js';
+	import { takeLabelOf } from '../../lib/labels.js';
 	import { shotStale, shotNumberAt } from '../../lib/shots.js';
 	import { castLabels } from '../../lib/bible.js';
 	import { seamImage } from '../../lib/seam.js';
@@ -408,7 +408,7 @@
 	{@const w = Math.max(6, x(c.dur) - 3)}
 	{@const isSel = sel?.id === c.id}
 	{#each order.slice(0, 4) as take, r (take.id)}
-		{@const label = labelOf(take)}
+		{@const label = takeLabelOf(take)}
 		{@const shown = ui.preview?.kind === 'result' && ui.preview.id === take.id}
 		<button
 			type="button"

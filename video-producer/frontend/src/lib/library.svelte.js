@@ -1,7 +1,7 @@
 import { t } from '../i18n/index.svelte.js';
 import { doc } from './state.svelte.js';
 import { PROMPT_LANGUAGES, promptLanguageOf } from './starter.js';
-import { castCards, labelOf } from './bible.js';
+import { castCards, cardLabel } from './bible.js';
 
 export const promptLocale = () => promptLanguageOf(doc.promptLanguage);
 
@@ -143,9 +143,9 @@ export const missingVars = (text) => [...new Set([...text.matchAll(VAR)].map((m)
 export function defaultVars(cast = null) {
 	const { characters, place } = castCards(doc, cast);
 	const ref = doc.references.find((r) => r.role === 'Identité' && r.type === 'Personnage');
-	const subject = characters.length ? labelOf(characters[0]) : ref?.name ? ref.name.split(/\s+[—–-]\s+/)[0].trim() : '';
+	const subject = characters.length ? cardLabel(characters[0]) : ref?.name ? ref.name.split(/\s+[—–-]\s+/)[0].trim() : '';
 	const locale = promptLocale();
-	return { subject, place: place ? labelOf(place) : t('library.default.place', null, locale), action: '', emotion: '', lens: t('library.default.lens', null, locale), light: t('library.default.light', null, locale), duration: t('library.default.duration', null, locale) };
+	return { subject, place: place ? cardLabel(place) : t('library.default.place', null, locale), action: '', emotion: '', lens: t('library.default.lens', null, locale), light: t('library.default.light', null, locale), duration: t('library.default.duration', null, locale) };
 }
 
 export const assistantParts = {

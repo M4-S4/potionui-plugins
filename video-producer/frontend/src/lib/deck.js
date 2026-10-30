@@ -1,4 +1,4 @@
-import { labelOf } from './labels.js';
+import { takeLabelOf } from './labels.js';
 
 export const DECK_TONES = { ready: 'muted', blocked: 'warning', running: 'signal', done: 'success', failed: 'danger' };
 
@@ -94,7 +94,7 @@ export function latestDone(takes, count = 2) {
 }
 
 export function selectedEverywhere(clips, takes) {
-	return clips.length > 0 && clips.every((clip) => takes.some((take) => take.shotId === clip.id && take.status === 'done' && labelOf(take) === 'final'));
+	return clips.length > 0 && clips.every((clip) => takes.some((take) => take.shotId === clip.id && take.status === 'done' && takeLabelOf(take) === 'final'));
 }
 
 export function deckChip({ engine, profile, size, drafts }, t) {

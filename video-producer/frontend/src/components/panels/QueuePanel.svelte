@@ -8,7 +8,7 @@
 	import { canPrioritize, handedOver, queueOrder } from '../../lib/queue.js';
 	import { waitText } from '../../lib/chain.svelte.js';
 	import { presetLabel } from '../../lib/generation.js';
-	import { labelOf, LABEL_TONES } from '../../lib/labels.js';
+	import { takeLabelOf, LABEL_TONES } from '../../lib/labels.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
 
@@ -65,7 +65,7 @@
 	{:else}
 		<ol class="space-y-1.5" aria-label={t('panels.queue.title')}>
 			{#each ordered as take (take.id)}
-				{@const label = labelOf(take)}
+				{@const label = takeLabelOf(take)}
 				{@const running = take.status === 'running'}
 				<li class="rounded-lg border p-2 {running ? 'border-signal/60' : 'border-line-strong'}" data-take={take.id}>
 					<div class="flex items-center gap-2">

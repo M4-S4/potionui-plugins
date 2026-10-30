@@ -10,7 +10,7 @@
 	import { castIssues, identityIssues, issueKey, percent, pushInIssues } from '../../lib/looks.js';
 	import { review, reviewFix, reviewText, seamNames, suggest } from '../../lib/assistant.svelte.js';
 	import { project } from '../../lib/project.svelte.js';
-	import { CHARACTERS, PLACES, cardsOf, labelOf } from '../../lib/bible.js';
+	import { CHARACTERS, PLACES, cardsOf, cardLabel } from '../../lib/bible.js';
 	import { VIEWS, VIEW_ICONS, citedWithout, promptShot, reviewCounts, reviewState, unnamedIn } from '../../lib/director.js';
 	import { hasOwnEngine } from '../../lib/engine.js';
 	import { isGlobal } from '../../lib/shots.js';
@@ -148,7 +148,7 @@
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" onclick={() => openCard(item)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
-						<span class="min-w-0 flex-1">{item.cited ? t('panels.director.check.cited', { shot: shotNumber(item.clip), name: labelOf(item.card) }) : t('panels.director.check.unnamed', { shot: shotNumber(item.clip), name: labelOf(item.card) })}</span>
+						<span class="min-w-0 flex-1">{item.cited ? t('panels.director.check.cited', { shot: shotNumber(item.clip), name: cardLabel(item.card) }) : t('panels.director.check.unnamed', { shot: shotNumber(item.clip), name: cardLabel(item.card) })}</span>
 					</button>
 				</li>
 			{/each}

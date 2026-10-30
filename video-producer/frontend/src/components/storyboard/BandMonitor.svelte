@@ -3,7 +3,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { takesOf } from '../../lib/production.svelte.js';
-	import { labelOf } from '../../lib/labels.js';
+	import { takeLabelOf } from '../../lib/labels.js';
 	import { seam } from '../../lib/continuity.svelte.js';
 	import { seamPick } from '../../lib/continuity.js';
 	import { seamImage } from '../../lib/seam.js';
@@ -103,7 +103,7 @@
 			</div>
 		{/if}
 		{#if take}
-			{@const label = labelOf(take)}
+			{@const label = takeLabelOf(take)}
 			<div class="absolute bottom-14 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-line-strong bg-surface-3/95 py-1 pl-3 pr-1 text-xs text-fg shadow-floating backdrop-blur-xl">
 				<span>{t('storyboard.band.previewing', { variant: take.variant ?? '', n: takes.indexOf(take) + 1, count: takes.length })}</span>
 				<div class="vp-seg" role="group" aria-label={t('storyboard.band.labelGroup')}>

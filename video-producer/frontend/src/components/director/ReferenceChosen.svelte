@@ -5,7 +5,7 @@
 	import { families, refMediaKind, refRoleLabel, refTypeLabel, typesOf, reception, receptionVerdict, engineTitle, setReferenceShot, linkReferenceCard, startImage } from '../../lib/references.js';
 	import { engineOptionLabel } from '../../lib/production.svelte.js';
 	import { isGlobal } from '../../lib/shots.js';
-	import { SPACES, cardsOf, labelOf } from '../../lib/bible.js';
+	import { SPACES, cardsOf, cardLabel } from '../../lib/bible.js';
 	import { isPictureReference } from '../../lib/keyframes.js';
 	import { showInReview } from '../../lib/band.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
@@ -28,7 +28,7 @@
 	const kind = $derived(media?.kind ?? refMediaKind(reference.space, reference.type) ?? 'image');
 	const family = $derived(families.find((f) => f.id === reference.space) ?? null);
 	const cardKind = $derived(found.linked && !found.linked.voice ? found.linked.kind : (Object.keys(SPACES).find((k) => SPACES[k] === reference.space) ?? null));
-	const cards = $derived(cardKind ? cardsOf(doc, cardKind).filter((c) => labelOf(c)) : []);
+	const cards = $derived(cardKind ? cardsOf(doc, cardKind).filter((c) => cardLabel(c)) : []);
 	const cardId = $derived(cardKind ? (cardsOf(doc, cardKind).find((c) => (c.references ?? []).includes(reference.id))?.id ?? '') : '');
 	const open = $derived(editing ?? !reference.assetId);
 	const scope = $derived(!isGlobal(reference) || pending ? 'shot' : 'global');
@@ -150,12 +150,12 @@
 			<dd class="min-w-0">
 				<select class="vp-popup w-full" value={cardId} onchange={(e) => linkReferenceCard(reference, cardKind, e.currentTarget.value || null)} aria-label={t('panels.director.refs.card')}>
 					<option value="">{t('panels.director.refs.noCard')}</option>
-					{#each cards as c (c.id)}<option value={c.id}>{labelOf(c)}</option>{/each}
+					{#each cards as c (c.id)}<option value={c.id}>{cardLabel(c)}</option>{/each}
 				</select>
 			</dd>
 		{:else if linked?.voice}
 			<dt class="text-fg-subtle">{t('panels.director.refs.card')}</dt>
-			<dd class="min-w-0 truncate text-fg-muted">{t('panels.director.refs.voiceOf', { name: labelOf(linked.card) })}</dd>
+			<dd class="min-w-0 truncate text-fg-muted">{t('panels.director.refs.voiceOf', { name: cardLabel(linked.card) })}</dd>
 		{/if}
 	</dl>
 	{#if pending && isGlobal(reference)}<p class="text-xs text-fg-subtle">{t('panels.director.refs.pickShotHint')}</p>{/if}
@@ -168,7 +168,7 @@
 			<p class="text-xs text-fg-subtle">{t('panels.director.refs.noShots')}</p>
 		{/if}
 		{#if linked && !linked.voice}
-			<p class="text-xs text-fg-muted">{found.cast.length ? t('panels.director.refs.cardText', { name: labelOf(linked.card), count: found.cast.length }) : t('panels.director.refs.cardNone', { name: labelOf(linked.card) })}</p>
+			<p class="text-xs text-fg-muted">{found.cast.length ? t('panels.director.refs.cardText', { name: cardLabel(linked.card), count: found.cast.length }) : t('panels.director.refs.cardNone', { name: cardLabel(linked.card) })}</p>
 		{/if}
 		{#if blind.length}
 			<p class="text-xs text-fg-subtle">{startable ? t('panels.director.refs.blindStart', { count: blind.length, engines: blind.join(', ') }) : t('panels.director.refs.blind', { count: blind.length, engines: blind.join(', ') })}</p>

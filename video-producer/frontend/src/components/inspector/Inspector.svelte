@@ -58,7 +58,7 @@
 	import TakesSection from './TakesSection.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import CastField from '../shots/CastField.svelte';
-	import { CHARACTERS, cardsOf, instructionOf, labelOf, setCast } from '../../lib/bible.js';
+	import { CHARACTERS, cardsOf, instructionOf, cardLabel, setCast } from '../../lib/bible.js';
 	import { linesOf } from '../../lib/dialogue.js';
 	import { isGlobal, touch } from '../../lib/shots.js';
 	import ColorSection from './ColorSection.svelte';
@@ -213,7 +213,7 @@
 
 	function speakerName(id) {
 		const card = id ? cardsOf(doc, CHARACTERS).find((c) => c.id === id) : null;
-		return labelOf(card) || t('modals.shot.dialogue.unnamed');
+		return cardLabel(card) || t('modals.shot.dialogue.unnamed');
 	}
 
 	function openBible() {

@@ -4,7 +4,7 @@
 	import { ui, doc, secs, clipLabel, reviewPick, shotNumber } from '../../lib/state.svelte.js';
 	import { panelSelection } from '../../lib/director.js';
 	import { showDetails } from '../../lib/production.svelte.js';
-	import { labelOf, LABEL_TONES } from '../../lib/labels.js';
+	import { takeLabelOf, LABEL_TONES } from '../../lib/labels.js';
 	import { stages } from '../../lib/catalog.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
@@ -51,7 +51,7 @@
 				<div class="truncate text-sm font-medium">{shotNumber(pick.clip)} · {clipLabel(pick.clip)}{take ? ` · ${take.variant}` : ''}</div>
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-subtle">
 					{#if pick.kind === 'take'}
-						<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {LABEL_TONES[labelOf(take)]}">{t(`generation.label.${labelOf(take)}`)}</span>
+						<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {LABEL_TONES[takeLabelOf(take)]}">{t(`generation.label.${takeLabelOf(take)}`)}</span>
 						<span class="whitespace-nowrap">{pick.clip.take === take.id ? t('panels.director.pick.placed') : t('panels.director.pick.notPlaced')}</span>
 					{:else if pick.kind === 'failed'}
 						<span class="shrink-0 text-danger">{t('lib.status.failed')}</span>

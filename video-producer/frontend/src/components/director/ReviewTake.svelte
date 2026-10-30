@@ -5,7 +5,7 @@
 	import { takesOf, toggleCompare } from '../../lib/production.svelte.js';
 	import { instructionOf } from '../../lib/bible.js';
 	import { missingWords } from '../../lib/director.js';
-	import { labelOf } from '../../lib/labels.js';
+	import { takeLabelOf } from '../../lib/labels.js';
 	import { isStale, keepsFraming, setKeepFraming, touch } from '../../lib/shots.js';
 	import { seamChainOf } from '../../lib/chain.svelte.js';
 	import { currentLooks, lookState, measureLooks } from '../../lib/looks.svelte.js';
@@ -32,8 +32,8 @@
 	const today = $derived(instructionOf(doc, clip));
 	const parts = $derived(take.promptText ? missingWords(today, take.promptText) : [{ text: today, mark: false }]);
 	const missing = $derived(parts.some((p) => p.mark));
-	const final = $derived(takesOf(clip).find((x) => x.id !== take.id && labelOf(x) === 'final' && x.status === 'done' && x.url) ?? null);
-	const isFinal = $derived(labelOf(take) === 'final');
+	const final = $derived(takesOf(clip).find((x) => x.id !== take.id && takeLabelOf(x) === 'final' && x.status === 'done' && x.url) ?? null);
+	const isFinal = $derived(takeLabelOf(take) === 'final');
 	const withFinal = $derived(Boolean(final) && ui.compare?.length === 2 && ui.compare.includes(final.id) && ui.compare.includes(take.id));
 	const inCompare = $derived(!withFinal && Boolean(ui.compare?.includes(take.id)));
 	const nextChain = $derived(next ? seamChainOf(next) : null);

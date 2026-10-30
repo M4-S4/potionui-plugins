@@ -1,4 +1,4 @@
-import { labelOf } from './labels.js';
+import { takeLabelOf } from './labels.js';
 import { SEAM_STRENGTH, frameTime, framesOf } from './seam.js';
 import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
 import { KINDS, castCards, castOf, cardsOf, migrateCast, sameCast, setCast, usable } from './bible.js';
@@ -140,7 +140,7 @@ export function isStale(take, clip) {
 export function shotStale(clip, takes) {
 	const finished = (takes ?? []).filter((x) => x.status === 'done');
 	if (!finished.length) return false;
-	const placed = finished.find((x) => x.id === clip?.take) ?? finished.find((x) => labelOf(x) === 'final');
+	const placed = finished.find((x) => x.id === clip?.take) ?? finished.find((x) => takeLabelOf(x) === 'final');
 	return placed ? isStale(placed, clip) : finished.every((x) => isStale(x, clip));
 }
 

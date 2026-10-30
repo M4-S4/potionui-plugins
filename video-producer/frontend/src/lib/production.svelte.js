@@ -4,7 +4,7 @@ import { project, getClient, flushSave, projectGone, onLoaded } from './project.
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
 import { confirm, openHostModal } from './host.js';
-import { finalsToSync, labelOf, marksOf, relabel, releasedLabel } from './labels.js';
+import { finalsToSync, takeLabelOf, marksOf, relabel, releasedLabel } from './labels.js';
 import { durationLimit, generationCounts, releaseOverrun, setSpeed } from './shots.js';
 import { speedOf } from './cadence.js';
 import { effectiveEngine, projectQuality, shotEngineOf } from './engine.js';
@@ -550,7 +550,7 @@ function applyLabels(changes) {
 }
 
 async function sendLabel(take, label) {
-	const before = Object.fromEntries(realTakesOf(take.shotId).map((x) => [x.id, labelOf(x)]));
+	const before = Object.fromEntries(realTakesOf(take.shotId).map((x) => [x.id, takeLabelOf(x)]));
 	applyLabels(relabel(takeStore.list, take.id, label));
 	const projectId = project.id;
 	const result = await getClient().labelTake(projectId, take.id, label);
@@ -605,8 +605,8 @@ export function fitShot(clip, before) {
 
 export function labelTake(clip, take, label) {
 	if (!take) return;
-	if (label === 'final') return labelOf(take) === 'final' && clip?.take === take.id ? undefined : useTake(clip, take.id);
-	if (labelOf(take) === 'final' || labelOf(take) === label) return;
+	if (label === 'final') return takeLabelOf(take) === 'final' && clip?.take === take.id ? undefined : useTake(clip, take.id);
+	if (takeLabelOf(take) === 'final' || takeLabelOf(take) === label) return;
 	return sendLabel(take, label);
 }
 
@@ -667,7 +667,7 @@ function place(clip, take) {
 }
 
 function markChosen(take) {
-	if (labelOf(take) !== 'final') sendLabel(take, 'final');
+	if (takeLabelOf(take) !== 'final') sendLabel(take, 'final');
 }
 
 function applyDone(take) {
@@ -698,7 +698,7 @@ export function insertResult(id) {
 }
 
 export function assembleChosen() {
-	const chosen = takeStore.list.filter((x) => labelOf(x) === 'final' && x.status === 'done' && x.url && doc.clips.some((c) => c.id === x.shotId));
+	const chosen = takeStore.list.filter((x) => takeLabelOf(x) === 'final' && x.status === 'done' && x.url && doc.clips.some((c) => c.id === x.shotId));
 	if (!chosen.length) return toast(t('lib.toast.chooseFirst'), 'warning');
 	act(() => {
 		for (const take of chosen) place(doc.clips.find((c) => c.id === take.shotId), take);

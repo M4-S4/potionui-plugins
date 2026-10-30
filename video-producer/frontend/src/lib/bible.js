@@ -83,8 +83,8 @@ const castKey = (cast) => {
 export const sameCast = (a, b) => castKey(a) === castKey(b);
 
 export const cardsOf = (doc, kind) => (Array.isArray(doc?.bible?.[kind]) ? doc.bible[kind] : []);
-export const labelOf = (card) => clean(card?.label);
-export const usable = (card) => labelOf(card).length > 0;
+export const cardLabel = (card) => clean(card?.label);
+export const usable = (card) => cardLabel(card).length > 0;
 
 export function castCards(doc, cast) {
 	const { characters, place } = castOf({ cast });
@@ -96,7 +96,7 @@ export function castCards(doc, cast) {
 
 export function castLabels(doc, clip) {
 	const { characters, place } = castCards(doc, clip?.cast);
-	return [...characters, ...(place ? [place] : [])].map(labelOf);
+	return [...characters, ...(place ? [place] : [])].map(cardLabel);
 }
 
 export function shotsCasting(doc, kind, id) {
@@ -143,7 +143,7 @@ export function names(value, label) {
 }
 
 export function missingLabels(instruction, characters) {
-	return characters.filter((card) => !names(instruction, card.label)).map(labelOf);
+	return characters.filter((card) => !names(instruction, card.label)).map(cardLabel);
 }
 
 export function instructionPromptOf(doc, clip) {
@@ -186,6 +186,6 @@ export function convertDirection(doc, id) {
 }
 
 export function bibleContext(doc) {
-	const brief = (card) => ({ label: labelOf(card), text: clean(card.text) });
+	const brief = (card) => ({ label: cardLabel(card), text: clean(card.text) });
 	return { [CHARACTERS]: cardsOf(doc, CHARACTERS).filter(usable).map(brief), [PLACES]: cardsOf(doc, PLACES).filter(usable).map(brief) };
 }

@@ -3,7 +3,7 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, asset, toast, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { showInReview } from '../../lib/band.svelte.js';
-	import { CHARACTERS, PLACES, addCard, cardsOf, labelOf, newCard, shotsCasting, usable } from '../../lib/bible.js';
+	import { CHARACTERS, PLACES, addCard, cardsOf, cardLabel, newCard, shotsCasting, usable } from '../../lib/bible.js';
 	import { DEFAULT_LANGUAGE, LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
 	import { VIEW_ICONS, cardImages, castWhereCited, citedWithout, isCast, recast, unnamedIn } from '../../lib/director.js';
 	import { assetThumb } from '../../lib/media.js';
@@ -43,7 +43,7 @@
 		e.stopPropagation();
 		let shots = [];
 		act(() => (shots = castWhereCited(doc, kind, card)));
-		if (shots.length) toast(t('panels.director.bible.castDone', { name: labelOf(card), shots: numbers(shots) }), 'success');
+		if (shots.length) toast(t('panels.director.bible.castDone', { name: cardLabel(card), shots: numbers(shots) }), 'success');
 	}
 
 	function goTo(e, clip) {
@@ -52,7 +52,7 @@
 	}
 
 	function cellTip(clip, kind, card) {
-		const name = labelOf(card);
+		const name = cardLabel(card);
 		if (isCast(clip, kind, card.id)) return t('panels.director.bible.cellOn', { name, shot: shotNumber(clip) });
 		if (citedWithout(doc, kind, card).includes(clip)) return t('panels.director.bible.cellCited', { name, shot: shotNumber(clip) });
 		return t('panels.director.bible.cellOff', { name, shot: shotNumber(clip) });
@@ -104,7 +104,7 @@
 								{/each}
 							</span>
 							<span class="flex w-full min-w-0 items-center gap-2">
-								<span class="min-w-0 truncate text-sm font-semibold {usable(card) ? 'text-fg' : 'italic text-fg-subtle'}">{usable(card) ? labelOf(card) : t('panels.dock.bible.unnamed')}</span>
+								<span class="min-w-0 truncate text-sm font-semibold {usable(card) ? 'text-fg' : 'italic text-fg-subtle'}">{usable(card) ? cardLabel(card) : t('panels.dock.bible.unnamed')}</span>
 								<span class="flex shrink-0 items-center gap-1 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted"><Icon name={icon} class="h-3 w-3" />{kindLabel}</span>
 								<span class="flex-1"></span>
 								<span class="shrink-0 text-2xs text-fg-subtle">{t('panels.director.bible.images', { count: images.length })}</span>
@@ -141,7 +141,7 @@
 								<tr>
 									<th class="px-1 py-1"></th>
 									<th class="px-1 py-1"></th>
-									{#each cards as { card } (card.id)}<th class="truncate px-1 py-1 text-center font-medium text-fg-muted" style:max-width="6rem">{usable(card) ? labelOf(card) : t('panels.dock.bible.unnamed')}</th>{/each}
+									{#each cards as { card } (card.id)}<th class="truncate px-1 py-1 text-center font-medium text-fg-muted" style:max-width="6rem">{usable(card) ? cardLabel(card) : t('panels.dock.bible.unnamed')}</th>{/each}
 								</tr>
 							</thead>
 							<tbody>

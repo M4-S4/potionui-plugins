@@ -1,7 +1,7 @@
 <script>
 	import { t } from '../../i18n/index.svelte.js';
 	import { doc } from '../../lib/state.svelte.js';
-	import { CHARACTERS, PLACES, castCards, castOf, cardsOf, labelOf, missingLabels, usable } from '../../lib/bible.js';
+	import { CHARACTERS, PLACES, castCards, castOf, cardsOf, cardLabel, missingLabels, usable } from '../../lib/bible.js';
 
 	let { cast, text = '', onchange, onopen = null } = $props();
 
@@ -30,7 +30,7 @@
 						<li>
 							<label class="flex min-h-6 items-center gap-1.5 text-xs text-fg">
 								<input type="checkbox" checked={chosen.characters.includes(card.id)} onchange={(e) => toggle(card.id, e.currentTarget.checked)} />
-								{labelOf(card)}
+								{cardLabel(card)}
 							</label>
 						</li>
 					{/each}
@@ -42,7 +42,7 @@
 				<span class="text-xs font-medium text-fg-muted">{t('modals.shot.castPlace')}</span>
 				<select class="vp-popup w-full" value={chosen.place ?? ''} onchange={(e) => onchange({ ...chosen, place: e.currentTarget.value || null })}>
 					<option value="">{t('modals.shot.castNoPlace')}</option>
-					{#each places as card (card.id)}<option value={card.id}>{labelOf(card)}</option>{/each}
+					{#each places as card (card.id)}<option value={card.id}>{cardLabel(card)}</option>{/each}
 				</select>
 			</label>
 		{/if}

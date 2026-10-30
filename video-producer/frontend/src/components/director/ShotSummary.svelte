@@ -2,7 +2,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { doc } from '../../lib/state.svelte.js';
-	import { CHARACTERS, PLACES, castOf, cardsOf, instructionOf, labelOf } from '../../lib/bible.js';
+	import { CHARACTERS, PLACES, castOf, cardsOf, instructionOf, cardLabel } from '../../lib/bible.js';
 	import { effectiveEngine, hasOwnEngine } from '../../lib/engine.js';
 	import { engineOptionLabel } from '../../lib/production.svelte.js';
 	import { showInStoryboard } from '../../lib/band.svelte.js';
@@ -17,7 +17,7 @@
 		const own = castOf(clip);
 		const people = cardsOf(doc, CHARACTERS).filter((c) => own.characters.includes(c.id));
 		const place = cardsOf(doc, PLACES).find((c) => c.id === own.place);
-		return [...people.map((card) => [CHARACTERS, card]), ...(place ? [[PLACES, place]] : [])].filter(([, card]) => labelOf(card));
+		return [...people.map((card) => [CHARACTERS, card]), ...(place ? [[PLACES, place]] : [])].filter(([, card]) => cardLabel(card));
 	});
 	const engine = $derived(effectiveEngine(clip, doc));
 	const engineText = $derived([engineOptionLabel(engine.preset, engine.model), engine.profile, hasOwnEngine(clip) ? t('panels.director.pick.ownEngine') : ''].filter(Boolean).join(' · '));
@@ -35,7 +35,7 @@
 		<dt class="text-fg-subtle">{t('inspector.section.cast')}</dt>
 		<dd class="flex min-w-0 flex-wrap gap-1">
 			{#each cast as [kind, card] (card.id)}
-				<span class="inline-flex max-w-full items-center gap-1 rounded border border-line-strong px-1.5 text-fg-muted"><Icon name={CARD_ICONS[kind]} class="h-3 w-3 shrink-0" /><span class="truncate">{labelOf(card)}</span></span>
+				<span class="inline-flex max-w-full items-center gap-1 rounded border border-line-strong px-1.5 text-fg-muted"><Icon name={CARD_ICONS[kind]} class="h-3 w-3 shrink-0" /><span class="truncate">{cardLabel(card)}</span></span>
 			{:else}
 				<span class="text-fg-subtle">{t('panels.director.pick.nobody')}</span>
 			{/each}

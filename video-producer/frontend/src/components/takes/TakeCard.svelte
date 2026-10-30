@@ -9,7 +9,7 @@
 	import { waitText } from '../../lib/chain.svelte.js';
 	import { previewTake } from '../../lib/monitor.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
-	import { canLabel, labelOf, toggledLabel, LABEL_TONES } from '../../lib/labels.js';
+	import { canLabel, takeLabelOf, toggledLabel, LABEL_TONES } from '../../lib/labels.js';
 	import { isStale } from '../../lib/shots.js';
 	import { formatValue, ratioText } from '../../lib/formats.js';
 	import { framed, percent, sizeOf } from '../../lib/framing.js';
@@ -24,7 +24,7 @@
 	let { take, clip, onchoose = null, chosen = false } = $props();
 
 	const active = $derived(clip?.take === take.id);
-	const label = $derived(labelOf(take));
+	const label = $derived(takeLabelOf(take));
 	const stale = $derived(isStale(take, clip));
 	const choices = $derived([
 		{ id: 'rejected', text: t('generation.card.rejectShort'), aria: t('generation.card.reject', { variant: take.variant }), tip: t('generation.card.rejectTip') },

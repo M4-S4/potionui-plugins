@@ -1,5 +1,5 @@
 import { UPSCALE_TARGETS, isInFlight, upscalesItself } from './generation.js';
-import { labelOf } from './labels.js';
+import { takeLabelOf } from './labels.js';
 import { isStale } from './shots.js';
 import { INTERPOLATORS } from './cadence.js';
 import { isObject } from './values.js';
@@ -20,7 +20,7 @@ const newest = (list) => [...list].sort((a, b) => String(a.createdAt ?? '').loca
 export function passShot(clip, takes) {
 	if (clip?.stage === 'source') return { state: 'source', final: null, source: null, take: null, stale: false, failed: null };
 	const own = (takes ?? []).filter((x) => x.shotId === clip?.id && video(x));
-	const finals = own.filter((x) => finished(x) && labelOf(x) === 'final');
+	const finals = own.filter((x) => finished(x) && takeLabelOf(x) === 'final');
 	const final = finals.find((x) => x.id === clip?.take) ?? finals[0] ?? null;
 	const flying = own.find((x) => x.quality === 'final' && isInFlight(x)) ?? null;
 	const parent = final?.quality === 'final' ? (own.find((x) => x.id === final.parentTakeId && finished(x)) ?? null) : null;

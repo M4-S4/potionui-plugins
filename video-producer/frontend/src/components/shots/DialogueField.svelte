@@ -2,7 +2,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { doc } from '../../lib/state.svelte.js';
-	import { CHARACTERS, castOf, cardsOf, labelOf, usable } from '../../lib/bible.js';
+	import { CHARACTERS, castOf, cardsOf, cardLabel, usable } from '../../lib/bible.js';
 	import { newLine, nextSpeaker, spokenWords, wordLimit } from '../../lib/dialogue.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { ulid } from '../../lib/ulid.js';
@@ -35,7 +35,7 @@
 					<div class="flex items-center gap-2">
 						<select class="vp-popup min-w-0 flex-1" aria-label={t('modals.shot.dialogue.speaker')} value={line.speaker ?? ''} onchange={(e) => replace(i, { ...line, speaker: e.currentTarget.value || null })}>
 							<option value="">{t('modals.shot.dialogue.unnamed')}</option>
-							{#each characters as card (card.id)}<option value={card.id}>{labelOf(card)}</option>{/each}
+							{#each characters as card (card.id)}<option value={card.id}>{cardLabel(card)}</option>{/each}
 							{#if line.speaker && !known(line.speaker)}<option value={line.speaker}>{t('modals.shot.dialogue.missing')}</option>{/if}
 						</select>
 						<label class="flex min-h-6 shrink-0 items-center gap-1.5 text-xs text-fg-muted">

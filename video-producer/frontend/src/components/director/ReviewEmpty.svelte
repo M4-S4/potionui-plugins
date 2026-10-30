@@ -3,7 +3,7 @@
 	import { ui, doc, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { VIEWS, nextToReview, reviewCounts } from '../../lib/director.js';
-	import { labelOf } from '../../lib/labels.js';
+	import { takeLabelOf } from '../../lib/labels.js';
 	import { takeThumb } from '../../lib/media.js';
 	import { chooseTake } from '../../lib/band.svelte.js';
 	import { commandById } from '../../lib/commands.js';
@@ -42,7 +42,7 @@
 			<span class="block aspect-video w-20 shrink-0 overflow-hidden rounded bg-surface-3">{#if takeThumb(next.take)}<img src={takeThumb(next.take)} alt="" class="h-full w-full object-cover" />{/if}</span>
 			<span class="min-w-0 flex-1">
 				<span class="block truncate text-xs font-medium text-fg">{shotNumber(next.clip)} · {clipLabel(next.clip)}</span>
-				<span class="block truncate text-xs text-fg-subtle">{t('panels.director.pick.nextTake', { variant: next.take.variant, label: t(`generation.label.${labelOf(next.take)}`) })}</span>
+				<span class="block truncate text-xs text-fg-subtle">{t('panels.director.pick.nextTake', { variant: next.take.variant, label: t(`generation.label.${takeLabelOf(next.take)}`) })}</span>
 			</span>
 		</button>
 	</section>
