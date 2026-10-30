@@ -348,7 +348,6 @@ def test_docs_files_exist_and_the_admin_readme_comes_first(manifest):
     assert [(doc["path"], doc["audience"]) for doc in manifest.docs] == [
         ("README.md", "admin"),
         ("docs/user-guide.md", "user"),
-        ("docs/user-guide.fr.md", "user"),
     ]
     assert all(doc["title"] for doc in manifest.docs)
 

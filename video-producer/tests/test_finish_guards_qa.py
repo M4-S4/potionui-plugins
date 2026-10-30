@@ -10,7 +10,7 @@ I18N = PLUGIN / "frontend" / "src" / "i18n"
 SHOTS = PLUGIN / "docs" / "screenshots"
 DIST = PLUGIN / "frontend" / "dist" / "VideoProducerPage.js"
 ALLOWED_COMMENTS = {("backend/exports/video.py", "# one frame of slack: a file can end a frame before its probed length")}
-GUIDES = (PLUGIN / "docs" / "user-guide.md", PLUGIN / "docs" / "user-guide.fr.md")
+GUIDES = (PLUGIN / "docs" / "user-guide.md",)
 
 
 def test_nothing_is_simulated_any_more_in_the_dictionaries_the_readme_or_the_guides():
@@ -22,15 +22,15 @@ def test_nothing_is_simulated_any_more_in_the_dictionaries_the_readme_or_the_gui
     assert "## What stays simulated" not in readme and "Simulated features" not in readme
     for path in GUIDES:
         text = path.read_text(encoding="utf-8")
-        assert not re.search(r"Simulated features|Fonctions simulées|What is simulated|Ce qui est simulé|\*\*Simul", text), path.name
+        assert not re.search(r"Simulated features|What is simulated|\*\*Simul", text), path.name
 
 
-@pytest.mark.parametrize("path", GUIDES, ids=["guide-en", "guide-fr"])
+@pytest.mark.parametrize("path", GUIDES, ids=["guide-en"])
 def test_the_chapters_of_a_guide_follow_each_other_and_every_chapter_it_names_exists(path):
     text = path.read_text(encoding="utf-8")
     numbers = [int(number) for number in re.findall(r"^## (\d+)\. ", text, re.M)]
-    named = {int(number) for number in re.findall(r"(?:chapters?|chapitres?) (\d+)", text)}
-    named |= {int(number) for pair in re.findall(r"(?:chapters|chapitres) (\d+) (?:and|et) (\d+)", text) for number in pair}
+    named = {int(number) for number in re.findall(r"chapters? (\d+)", text)}
+    named |= {int(number) for pair in re.findall(r"chapters (\d+) and (\d+)", text) for number in pair}
 
     assert numbers == list(range(1, len(numbers) + 1))
     assert sorted(named - set(numbers)) == []

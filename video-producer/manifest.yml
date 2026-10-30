@@ -186,7 +186,3 @@ docs:
     title: "Video Producer: user guide"
     audience: "user"
     order: 20
-  - path: "docs/user-guide.fr.md"
-    title: "Video Producer : guide utilisateur"
-    audience: "user"
-    order: 21
