@@ -16,6 +16,7 @@ import { clearRemoved, isRemoved, pruneRemoved } from './removedtakes.js';
 import { LIMITS, SHEET, leastSeconds } from './reception.js';
 import { withSendings } from './vreftracks.svelte.js';
 import { loadRenditions, stopRenditions } from './renditions.svelte.js';
+import { DECK_MENU } from './deck.js';
 
 const ESTIMATE_DELAY = 500;
 const POLL_EVERY = 5000;
@@ -152,7 +153,7 @@ export function openQueue() {
 	ui.menuOpen = QUEUE_MENU;
 }
 
-export const QUEUE_MENU = 'queue';
+export const QUEUE_MENU = DECK_MENU.queue;
 
 function syncEngine() {
 	if (!doc.engine) return;

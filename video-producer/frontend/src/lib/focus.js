@@ -17,7 +17,7 @@ export function takeReturnFocus() {
 	return value;
 }
 
-const usable = (el) => typeof HTMLElement !== 'undefined' && el instanceof HTMLElement && el.isConnected && el !== document.body;
+const usable = (el) => typeof HTMLElement !== 'undefined' && el instanceof HTMLElement && el.isConnected && el !== document.body && !el.closest('[hidden]');
 
 export function restoreFocus(previous, fallback) {
 	const target = [previous, fallback, pluginRoot].find(usable);
