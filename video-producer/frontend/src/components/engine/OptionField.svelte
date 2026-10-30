@@ -5,6 +5,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { CHOICE_TYPES, FLAG_TYPES, LORA_TYPE, MODEL_TYPE, NUMBER_TYPES, SEED_MAX, SEED_TYPE, TEXT_TYPES, clampNumber, fieldTitle, integral, modelTypeOf } from '../../lib/options.js';
 	import LoraField from './LoraField.svelte';
+	import ModelsFailed from './ModelsFailed.svelte';
 
 	let { row, main = null, models = null, onchange, need = () => {} } = $props();
 	const id = $props.id();
@@ -19,6 +20,8 @@
 	const known = $derived((field.options ?? []).some((o) => o.value === row.value));
 	const listed = $derived((models?.list ?? []).some((m) => m.ref === row.value));
 	const recommended = $derived(field.recommended?.length ? t('modals.engine.recommendedFile', { file: field.recommended[0] }) : t('modals.engine.recommended'));
+
+	const retry = () => need(modelTypeOf(field));
 
 	$effect(() => {
 		const type = kind === MODEL_TYPE || kind === LORA_TYPE ? modelTypeOf(field) : null;
@@ -94,9 +97,9 @@
 				{#if row.set && !listed}<option value={row.value}>{models?.loading ? t('modals.engine.modelsLoading') : row.value}</option>{/if}
 				{#each models?.list ?? [] as m (m.id)}<option value={m.ref}>{m.name}</option>{/each}
 			</select>
-			{#if models?.failed}<p class="mt-0.5 text-xs text-warning">{t('modals.engine.modelsFailed')}</p>{/if}
+			{#if models?.failed}<ModelsFailed onretry={retry} />{/if}
 		{:else if kind === LORA_TYPE}
-			<LoraField {id} {row} {models} {onchange} />
+			<LoraField {id} {row} {models} {onchange} onretry={retry} />
 		{/if}
 		{#if row.set}<p class="mt-0.5 text-xs text-fg-subtle">{t('modals.engine.default', { value: described(row.base) })}</p>{/if}
 	</div>

@@ -222,6 +222,14 @@ export function sameOptions(a, b) {
 
 export const modelTypeOf = (field) => field?.limits?.model_type ?? (field?.type === LORA_TYPE ? 'lora' : null);
 
+export async function loadModels(models, presetId, type, client) {
+	const key = `${presetId}|${type}`;
+	if (!presetId || (models[key] && !models[key].failed)) return;
+	models[key] = { loading: true, list: [], failed: false };
+	const result = await client?.presetModels?.(presetId, type);
+	models[key] = result?.ok ? { loading: false, list: result.data, failed: false } : { loading: false, list: [], failed: true };
+}
+
 export function loraName(model, list) {
 	const file = String(model ?? '').replaceAll('\\', '/').split('/').pop();
 	const found = (list ?? []).find((entry) => entry.ref === model || (entry.file && entry.file === file));

@@ -7,7 +7,7 @@
 	import { presetLabel } from '../../lib/generation.js';
 	import { hasOwnEngine, shotEngineOf } from '../../lib/engine.js';
 	import { projectDrafts } from '../../lib/shots.js';
-	import { cleanOptions, groupsOf, mainMode, modelTypeOf, optionsOf, presetFields, resolveFields, sameOptions, setPresetOptions, stepCounts } from '../../lib/options.js';
+	import { cleanOptions, groupsOf, loadModels, mainMode, modelTypeOf, optionsOf, presetFields, resolveFields, sameOptions, setPresetOptions, stepCounts } from '../../lib/options.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
@@ -60,13 +60,7 @@
 		drafts[chosen] = cleanOptions(fields, next);
 	}
 
-	async function need(type) {
-		const key = `${chosen}|${type}`;
-		if (!chosen || models[key]) return;
-		models[key] = { loading: true, list: [], failed: false };
-		const result = await getClient()?.presetModels?.(chosen, type);
-		models[key] = result?.ok ? { loading: false, list: result.data, failed: false } : { loading: false, list: [], failed: true };
-	}
+	const need = (type) => loadModels(models, chosen, type, getClient());
 
 	function save() {
 		const updates = Object.entries($state.snapshot(drafts))

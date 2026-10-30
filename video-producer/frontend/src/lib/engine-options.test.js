@@ -8,6 +8,7 @@ import {
 	cleanOptions,
 	fieldTitle,
 	groupsOf,
+	loadModels,
 	loraName,
 	mainMode,
 	matches,
@@ -361,4 +362,42 @@ test('pages: the engine settings live in the Settings drawer of the production d
 	assert.ok(textOf(modals).includes(t('modals.engine.title')));
 	ui.modal = null;
 	assert.ok(noteText({ code: 'engine_option_invalid', data: { preset_id: WAN, fields: ['steps'] } }).includes(engineLabel()));
+});
+
+test('options: a model list that failed is asked again by the next need and by the Retry of its field, a list loaded or loading is not', async () => {
+	const asked = [];
+	let answer = { ok: false, error: { status: 500, code: 'server_error', message: '', data: null } };
+	const client = {
+		async presetModels(presetId, type) {
+			asked.push([presetId, type]);
+			return answer;
+		}
+	};
+	const models = {};
+	const key = `${LTX}|lora`;
+	await loadModels(models, LTX, 'lora', client);
+	assert.deepEqual(models[key], { loading: false, list: [], failed: true });
+	answer = { ok: true, data: [{ id: 'm1', ref: 'model:m1', name: 'Style', file: 'style.safetensors' }] };
+	const again = loadModels(models, LTX, 'lora', client);
+	assert.equal(models[key].loading, true);
+	await loadModels(models, LTX, 'lora', client);
+	await again;
+	await loadModels(models, LTX, 'lora', client);
+	await loadModels(models, null, 'lora', client);
+	assert.deepEqual(asked, [
+		[LTX, 'lora'],
+		[LTX, 'lora']
+	]);
+	assert.deepEqual(models[key].list.map((m) => m.name), ['Style']);
+	const OPTION_FIELD = new URL('../components/engine/OptionField.svelte', import.meta.url).href;
+	const [model, loras] = resolveFields(fieldsOf(ltxPreset()), {}).filter((row) => ['model', 'loras'].includes(row.field.name));
+	const failed = { loading: false, list: [], failed: true };
+	for (const row of [model, loras]) {
+		const html = await renderComponent(OPTION_FIELD, { row, models: failed, onchange() {} });
+		assert.ok(textOf(html).includes(t('modals.engine.modelsFailed')), row.field.name);
+		assert.ok(html.includes('data-models-failed'), row.field.name);
+		assert.ok(textOf(html).includes(t('modals.engine.modelsRetry')), row.field.name);
+	}
+	const loaded = await renderComponent(OPTION_FIELD, { row: model, models: { loading: false, list: [], failed: false }, onchange() {} });
+	assert.equal(loaded.includes('data-models-failed'), false);
 });
