@@ -21,7 +21,7 @@ from src.plugin_api.cloud import CLOUD_ENGINE
 
 CONTEXT = SetupCheckContext(plugin_id="video-producer", settings={})
 
-NO_INTERPOLATOR = " No interpolator is ready: takes slower than the film repeat frames in the export until Video Tools with RIFE 4.25 is installed."
+NO_INTERPOLATOR = " No interpolator is ready: takes slower than the film repeat frames in the export until Video Tools with RIFE 4.25 is installed and assigned."
 
 BACKENDS_HREF = "/admin?tab=backends"
 PRESETS_HREF = "/admin?tab=presets"
@@ -535,15 +535,132 @@ def test_an_installed_and_assigned_upscaler_is_done(preset_states):
     assert UpscalerReady().evaluate(CONTEXT) == SetupCheckResult(done=True, description="SeedVR2 is installed and assigned." + NO_INTERPOLATOR)
 
 
-def test_an_installed_upscaler_is_done_but_asks_to_assign_it(preset_states):
+def test_an_upscaler_installed_but_assigned_to_no_one_is_still_to_do_and_says_why_an_administrator_can_use_it(preset_states):
     preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True)
 
     result = UpscalerReady().evaluate(CONTEXT)
 
     assert result == SetupCheckResult(
-        done=True,
-        description="SeedVR2 is installed. Assign it to the users or groups who make final takes." + NO_INTERPOLATOR,
+        done=False,
+        description=(
+            "SeedVR2 is installed but assigned to no one: an administrator sees every installed preset and can use it, "
+            "other users only the presets assigned to them or to one of their groups." + NO_INTERPOLATOR
+            + " Assign SeedVR2 to the users or groups who make final takes."
+        ),
+        action_label="Assign SeedVR2",
+        action_href=f"/admin?tab=presets&id={presets.SEEDVR2}",
     )
+
+
+def test_upscalers_and_interpolators_installed_for_no_one_are_named_with_what_they_bring_and_the_first_upscaler_is_to_assign(preset_states, monkeypatch):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: name == "nvvfx")
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: "0.2.0.0" if name == "nvidia-vfx" else None)
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True)
+    preset_states.set(presets.VIDEO_TOOLS, name="Video Tools", installed=True)
+
+    result = UpscalerReady().evaluate(CONTEXT)
+
+    assert result == SetupCheckResult(
+        done=False,
+        description=(
+            "SeedVR2, RTX Upscale and Video Tools are installed but assigned to no one: an administrator sees every installed preset "
+            "and can use them, other users only the presets assigned to them or to one of their groups. "
+            "Only an administrator gets an interpolator: the takes of other users that are slower than the film repeat frames in the export "
+            "until RTX Upscale, with NVIDIA Frame Generation, or Video Tools, with RIFE 4.25, is assigned to them. "
+            "Assign SeedVR2 to the users or groups who make final takes."
+        ),
+        action_label="Assign SeedVR2",
+        action_href=f"/admin?tab=presets&id={presets.SEEDVR2}",
+    )
+
+
+def test_an_assigned_seedvr2_is_done_and_still_names_the_rtx_upscale_and_the_video_tools_assigned_to_no_one(preset_states, monkeypatch):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: name == "nvvfx")
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: "0.1.0.0")
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True)
+    preset_states.set(presets.VIDEO_TOOLS, name="Video Tools", installed=True)
+
+    assert UpscalerReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=True,
+        description=(
+            "SeedVR2 is installed and assigned. RTX Upscale and Video Tools are installed but assigned to no one: an administrator sees "
+            "every installed preset and can use them, other users only the presets assigned to them or to one of their groups. "
+            "Only an administrator gets an interpolator: the takes of other users that are slower than the film repeat frames in the export "
+            "until Video Tools, with RIFE 4.25, is assigned to them."
+        ),
+    )
+
+
+def test_an_assigned_rtx_upscale_makes_the_finals_while_seedvr2_waits_for_an_assignment(preset_states, monkeypatch):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: name == "nvvfx")
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: "0.2.0.0" if name == "nvidia-vfx" else None)
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True, assigned=True)
+
+    assert UpscalerReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=True,
+        description=(
+            "Final takes are upscaled with RTX Upscale. SeedVR2 is installed but assigned to no one: an administrator sees every "
+            "installed preset and can use it, other users only the presets assigned to them or to one of their groups. "
+            "Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation."
+        ),
+    )
+
+
+def test_without_seedvr2_an_rtx_upscale_assigned_to_no_one_is_the_upscaler_to_assign(preset_states, monkeypatch):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: name == "nvvfx")
+    monkeypatch.setattr(core_bridge, "package_version", lambda name: None)
+    preset_states.set(presets.SEEDVR2, name="SeedVR2")
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True)
+
+    assert UpscalerReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=False,
+        description=(
+            "SeedVR2, which restores and adds detail, is not installed. RTX Upscale is installed but assigned to no one: "
+            "an administrator sees every installed preset and can use it, other users only the presets assigned to them "
+            "or to one of their groups." + NO_INTERPOLATOR + " Assign RTX Upscale to the users or groups who make final takes."
+        ),
+        action_label="Assign RTX Upscale",
+        action_href=f"/admin?tab=presets&id={presets.RTX_UPSCALE}",
+    )
+
+
+def test_an_rtx_upscale_assigned_to_no_one_and_without_nvidia_vfx_asks_for_the_package_first(preset_states, monkeypatch):
+    monkeypatch.setattr(core_bridge, "module_available", lambda name: False)
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale", installed=True)
+
+    assert UpscalerReady().evaluate(CONTEXT).description == (
+        "SeedVR2 is installed and assigned. RTX Upscale also needs the nvidia-vfx package on the server." + NO_INTERPOLATOR
+    )
+
+
+def test_an_rtx_upscale_that_is_not_installed_is_named_too(preset_states):
+    preset_states.set(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+    preset_states.set(presets.RTX_UPSCALE, name="RTX Upscale")
+
+    assert UpscalerReady().evaluate(CONTEXT).description == (
+        "SeedVR2 is installed and assigned. RTX Upscale, for fast final takes, is not installed." + NO_INTERPOLATOR
+    )
+
+
+def test_an_error_reading_the_video_tools_counts_as_no_rife_and_is_logged(monkeypatch, caplog):
+    seedvr2 = _state(presets.SEEDVR2, name="SeedVR2", installed=True, assigned=True)
+
+    def reading(preset_id):
+        if preset_id == presets.VIDEO_TOOLS:
+            raise RuntimeError("tools are locked")
+        return seedvr2 if preset_id == presets.SEEDVR2 else _state(preset_id, loaded=False)
+
+    monkeypatch.setattr(core_bridge, "preset_state", reading)
+
+    with caplog.at_level(logging.WARNING, logger="plugins.video-producer"):
+        result = UpscalerReady().evaluate(CONTEXT)
+
+    assert result == SetupCheckResult(done=True, description="SeedVR2 is installed and assigned." + NO_INTERPOLATOR)
+    assert "could not read the Video Tools preset: tools are locked" in caplog.text
 
 
 def test_an_upscaler_that_is_not_installed_asks_to_install_it(preset_states):

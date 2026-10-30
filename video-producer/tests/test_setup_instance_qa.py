@@ -133,7 +133,7 @@ def test_the_instance_replica_reports_five_steps_done_and_the_full_h3_dit_to_do(
     )
     assert report[2][1].description == (
         "SeedVR2 is installed and assigned. No interpolator is ready: takes slower than the film repeat frames in the export "
-        "until Video Tools with RIFE 4.25 is installed."
+        "until Video Tools with RIFE 4.25 is installed and assigned."
     )
     assert report[3][1].description == f"Work files are written in {instance.storage / 'video_producer'}."
     assert report[4][1].description == "ffmpeg is available."
