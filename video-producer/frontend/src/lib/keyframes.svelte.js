@@ -10,6 +10,7 @@ const ESTIMATE_DELAY = 500;
 export const keyframeState = $state({ shotId: null, list: [], loaded: false, estimate: null, estimating: false, starting: false, error: null });
 
 let estimateKey = null;
+let estimates = 0;
 let estimateTimer = null;
 let pollTimer = null;
 let controller = null;
@@ -75,13 +76,19 @@ export function openKeyframes(shotId) {
 
 async function fireEstimate(body, key) {
 	const { shotId } = keyframeState;
-	if (!(await flushSave()) || !project.id || key !== estimateKey) return;
+	const mine = ++estimates;
+	const saved = await flushSave();
+	if (mine !== estimates || key !== estimateKey) return;
+	if (!saved || !project.id) {
+		keyframeState.estimating = false;
+		return;
+	}
 	const projectId = project.id;
 	controller?.abort();
 	controller = new AbortController();
 	keyframeState.estimating = true;
 	const result = await getClient().estimateKeyframes(projectId, shotId, body, controller.signal);
-	if (!current(projectId, shotId) || key !== estimateKey) return;
+	if (mine !== estimates || !current(projectId, shotId) || key !== estimateKey) return;
 	keyframeState.estimating = false;
 	if (result.ok) return Object.assign(keyframeState, { estimate: result.data, error: null });
 	if (result.error.code === 'aborted') return;

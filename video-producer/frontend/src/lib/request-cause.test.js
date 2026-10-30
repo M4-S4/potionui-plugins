@@ -10,7 +10,7 @@ const dictionaries = Object.fromEntries([['en', enShell], ['fr', frShell]].map((
 const { requestCause, setLocale, t } = await import('../i18n/index.svelte.js');
 const { project, bindClient } = await import('./project.svelte.js');
 const { keyframeState, openKeyframes, closeKeyframes, scheduleKeyframeEstimate } = await import('./keyframes.svelte.js');
-const { dispose } = await import('./state.svelte.js');
+const { doc, dispose } = await import('./state.svelte.js');
 
 after(() => {
 	closeKeyframes();
@@ -66,4 +66,34 @@ test('errors: a failed estimate of the start and end images keeps its cause unti
 	await settled();
 	assert.equal(asked.length, 2);
 	assert.deepEqual([keyframeState.error, keyframeState.estimate?.blocks], [null, []]);
+});
+
+test('errors: an estimate overtaken by a newer one leaves Make to the newer, which frees Make when the project cannot be saved before it', async () => {
+	const answers = [];
+	let saved = { ok: true, data: { version: 2, updatedAt: null } };
+	bindClient({
+		estimateKeyframes: () => new Promise((resolve) => answers.push(resolve)),
+		async keyframes() {
+			return { ok: true, data: [] };
+		},
+		async saveProject() {
+			return saved;
+		},
+		saveLastProject() {}
+	});
+	project.id = 'p1';
+	openKeyframes('s1');
+	const body = (count) => ({ option: { preset: 'x', model: null }, role: 'first', count, prompt: 'a', pictures: [] });
+	const settled = () => new Promise((resolve) => setTimeout(resolve, 700));
+	scheduleKeyframeEstimate(body(2));
+	await settled();
+	assert.deepEqual([answers.length, keyframeState.estimating], [1, true]);
+	saved = { ok: false, error: { status: 500, code: 'server_error', message: '', data: null } };
+	doc.name = 'Harbour at dawn';
+	scheduleKeyframeEstimate(body(3));
+	await settled();
+	assert.deepEqual([answers.length, keyframeState.estimating], [1, false]);
+	answers[0]({ ok: true, data: { blocks: [], warnings: [], quota: null } });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual([keyframeState.estimating, keyframeState.estimate, keyframeState.error], [false, null, null]);
 });
