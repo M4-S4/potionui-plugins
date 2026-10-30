@@ -36,6 +36,8 @@ configuration:
 speed_profiles:
   distilled:
     steps: 8
+  custom:
+    steps: 8
 
 vars:
   fps: 24

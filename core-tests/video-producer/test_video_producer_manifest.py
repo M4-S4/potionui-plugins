@@ -1199,7 +1199,8 @@ WAN_14B_HIGH_DIT = "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
 WAN_14B_LOW_DIT = "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
 LIGHTNING_HIGH_LORA = "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors"
 LIGHTNING_LOW_LORA = "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
-WAN_HIDDEN_TABS = ("I2V Models", "SVI Pro")
+WAN_HIDDEN = ("i2v DiT (high-noise / single)", "i2v DiT (low-noise expert)", "Image to video", "SVI Pro")
+WAN_HIDDEN_FIELDS = {"i2v_high_noise_model": {"visible"}, "i2v_low_noise_model": {"visible"}}
 H3_DEFAULTS = {"resolution": "832x480", "quantity": 1, "sampler": "res_multistep", "scheduler": "simple", "keyframe_pixel_budget": "1"}
 WAN_DEFAULTS = {"seed": -1, "sampler": "unipc", "schedule": "shift", "steps": 30}
 
@@ -1221,7 +1222,7 @@ class Shipped:
     changed_fields: Dict[str, Set[str]]
     defaults: Dict[str, Any]
     recommended: Dict[str, List[str]]
-    hidden_tabs: Tuple[str, ...] = ()
+    hidden: Tuple[str, ...] = ()
     own_resolutions: Optional[Tuple[str, ...]] = None
     speed_options: Tuple[str, ...] = ()
     reacted: Dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -1285,10 +1286,11 @@ SHIPPED_PRESETS = {
             "t2v_high_noise_model": {"configuration"},
             "t2v_low_noise_model": {"configuration"},
             "cfg": {"default", "reactions"},
+            **WAN_HIDDEN_FIELDS,
         },
         defaults={**WAN_DEFAULTS, "speed_profile": "balanced", "resolution": "832x480", "fps": 16, "cfg": 6.0, "t2v_loras_high": [], "t2v_loras_low": []},
         recommended={"text_encoder": [UMT5], "vae": [WAN21_VAE], "t2v_high_noise_model": [WAN_1_3B_DIT], "t2v_low_noise_model": []},
-        hidden_tabs=WAN_HIDDEN_TABS,
+        hidden=WAN_HIDDEN,
         own_resolutions=("832x480", "480x832", "640x480", "480x640", "640x640", "576x720"),
         speed_options=("balanced", "custom"),
         draft=("832x480", "480x832", "640x640", "576x720"),
@@ -1315,10 +1317,11 @@ SHIPPED_PRESETS = {
             "vae": {"configuration"},
             "t2v_high_noise_model": {"configuration"},
             "t2v_low_noise_model": {"configuration"},
+            **WAN_HIDDEN_FIELDS,
         },
         defaults={**WAN_DEFAULTS, "speed_profile": "balanced", "resolution": "832x480", "fps": 24, "cfg": 5.0, "t2v_loras_high": [], "t2v_loras_low": []},
         recommended={"text_encoder": [UMT5], "vae": [WAN22_VAE], "t2v_high_noise_model": [WAN_5B_DIT], "t2v_low_noise_model": []},
-        hidden_tabs=WAN_HIDDEN_TABS,
+        hidden=WAN_HIDDEN,
         own_resolutions=("832x480", "480x832", "640x640", "576x704"),
         speed_options=("balanced", "custom"),
         draft=("832x480", "480x832", "640x640", "576x704"),
@@ -1346,6 +1349,7 @@ SHIPPED_PRESETS = {
             "t2v_low_noise_model": {"configuration"},
             "t2v_loras_high": {"default"},
             "t2v_loras_low": {"default"},
+            **WAN_HIDDEN_FIELDS,
         },
         defaults={
             **WAN_DEFAULTS,
@@ -1362,7 +1366,7 @@ SHIPPED_PRESETS = {
             "t2v_high_noise_model": [WAN_14B_HIGH_DIT],
             "t2v_low_noise_model": [WAN_14B_LOW_DIT],
         },
-        hidden_tabs=WAN_HIDDEN_TABS,
+        hidden=WAN_HIDDEN,
         own_resolutions=("832x480", "480x832", "960x544", "544x960", "640x480", "480x640", "832x624", "624x832", "640x640", "720x720", "576x720", "640x800"),
         speed_options=("fast", "custom"),
         reacted={"steps": 6, "cfg": 1.0},
@@ -1587,13 +1591,13 @@ def test_the_shipped_forms_change_only_the_tier_defaults_models_and_files_of_the
         named, skeleton = _video_form(preset)
         source_named, source_skeleton = _video_form(source)
         assert skeleton == source_skeleton, preset_id
-        assert [field.label for field in _video_fields(preset) if field.visible is False] == list(shipped.hidden_tabs), preset_id
+        assert [field.label for field in _video_fields(preset) if field.visible is False] == list(shipped.hidden), preset_id
         for name, field in named.items():
             changed = shipped.changed_fields.get(name, set())
             assert field == dataclasses.replace(source_named[name], **{attr: getattr(field, attr) for attr in changed}), (preset_id, name)
         for mine, theirs in zip(_video_fields(preset), _video_fields(source)):
             if not mine.name:
-                hidden = {"visible": False} if mine.type == "tab" and mine.label in shipped.hidden_tabs else {}
+                hidden = {"visible": False} if mine.label in shipped.hidden else {}
                 assert dataclasses.replace(mine, children=None) == dataclasses.replace(theirs, children=None, **hidden), (preset_id, mine.label)
         assert {name: named[name].default for name in shipped.defaults} == shipped.defaults, preset_id
         if not shipped.is_wan:
