@@ -44,6 +44,7 @@ import { chat, confirm } from './host.js';
 import { detectMac, findShortcut, formatShortcut, hostModalOpen, hostOverlayOpen, isActivationTarget, isSingleKey, isTypingTarget } from './keyboard.js';
 import { frameDuration } from './timebase.js';
 import { closeTopLayer } from './focus.js';
+import { zoomIn, zoomOut } from './timeline.js';
 
 export const IS_MAC = detectMac();
 
@@ -286,8 +287,8 @@ export const menus = [
 			command('meters', mixer)
 		],
 		[
-			command('zoom-in', () => (ui.pxPerSec = Math.min(220, ui.pxPerSec * 1.25))),
-			command('zoom-out', () => (ui.pxPerSec = Math.max(8, ui.pxPerSec / 1.25))),
+			command('zoom-in', zoomIn),
+			command('zoom-out', zoomOut),
 			command('snap', () => (ui.snapping = !ui.snapping), { keys: 'n', check: () => ui.snapping })
 		]
 	]),

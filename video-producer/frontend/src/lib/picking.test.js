@@ -169,3 +169,35 @@ test('scrolling: the grid of the Storyboard is bounded by its cell, so its list 
 	handleKeydown(key('ArrowDown'), null);
 	assert.deepEqual([ui.selection.id, ui.playhead], ['s1', 0]);
 });
+
+test('the timeline and the band share one ruler, one zoom and one text for a trimmed shot', async () => {
+	const { ZOOM, dragText, rulerLabel, rulerTicks, trimText, zoomIn, zoomOut, zoomTo } = await import('./timeline.js');
+	assert.deepEqual(rulerTicks(200, 40, 2), [0, 2, 4, 6]);
+	assert.deepEqual([rulerLabel(90, 1), rulerLabel(605, 5), rulerLabel(1.5, 0.5)], ['1:30', '10:05', '1.5']);
+	ui.pxPerSec = 200;
+	zoomIn();
+	assert.equal(ui.pxPerSec, ZOOM.max);
+	ui.pxPerSec = 9;
+	zoomOut();
+	assert.equal(ui.pxPerSec, ZOOM.min);
+	assert.deepEqual([zoomTo(500), zoomTo(2), zoomTo(40)], [ZOOM.max, ZOOM.min, 40]);
+	ui.drag = { text: '', limit: false };
+	trimText({ by: 'engine', max: 5, take: null }, 9, 4, 5, true);
+	assert.deepEqual([ui.drag.text, ui.drag.limit], [t('timeline.drag.engineLimitAt', { dur: '5.0 s' }), true]);
+	trimText({ by: 'source', max: 5, take: null }, 6, 4, 5, true);
+	assert.equal(ui.drag.text, t('timeline.drag.sourceLimitAt', { dur: '6.0 s' }));
+	trimText({ by: 'engine', max: 10, take: 4 }, 9, 4, 6, false);
+	assert.deepEqual([ui.drag.text, ui.drag.limit], [t('timeline.drag.beyondTake', { dur: '6.0 s' }), false]);
+	trimText({ by: 'engine', max: 10, take: 8 }, 9, 4, 6, false);
+	assert.equal(ui.drag.text, t('timeline.drag.rippled', { dur: '6.0 s' }));
+	ui.drag = null;
+	dragText('ignored');
+	assert.equal(ui.drag, null);
+	ui.pxPerSec = 40;
+	shots();
+	const zoom = (html) => clean(html).match(/<input class="vp-slider w-24" type="range" min="(\d+)" max="(\d+)"[^>]*aria-label="([^"]*)"/).slice(1);
+	ui.storyView = 'band';
+	assert.deepEqual(zoom(await renderComponent(BAND_VIEW)), ['8', '220', t('timeline.zoom')]);
+	ui.workspace = 'edit';
+	assert.deepEqual(zoom(await renderComponent(TIMELINE)), ['8', '220', t('timeline.zoom')]);
+});

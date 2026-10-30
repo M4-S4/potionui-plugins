@@ -1,4 +1,6 @@
-import { ui, doc, checkpoint, discardLast, round } from './state.svelte.js';
+import { formatNumber, t } from '../i18n/index.svelte.js';
+import { ui, doc, checkpoint, discardLast, round, clamp, secs } from './state.svelte.js';
+import { overrunsTake } from './shots.js';
 
 let release = null;
 
@@ -95,6 +97,33 @@ export function snapMove(start, dur, id) {
 export function rulerStep(pps) {
 	for (const s of [0.5, 1, 2, 5, 10, 15, 30, 60]) if (s * pps >= 64) return s;
 	return 120;
+}
+
+export const rulerTicks = (width, pps, step) => Array.from({ length: Math.ceil(width / pps / step) + 1 }, (_, i) => i * step);
+
+export const rulerLabel = (v, step) => (step < 1 ? formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}`);
+
+export const ZOOM = { min: 8, max: 220, step: 1.25 };
+
+export const zoomTo = (pps) => clamp(pps, ZOOM.min, ZOOM.max);
+
+export function zoomIn() {
+	ui.pxPerSec = Math.min(ZOOM.max, ui.pxPerSec * ZOOM.step);
+}
+
+export function zoomOut() {
+	ui.pxPerSec = Math.max(ZOOM.min, ui.pxPerSec / ZOOM.step);
+}
+
+export function dragText(text, limit = false) {
+	if (!ui.drag) return;
+	ui.drag.text = text;
+	ui.drag.limit = limit;
+}
+
+export function trimText(range, sourceMax, from, dur, limit) {
+	if (limit) return dragText(range.by === 'engine' ? t('timeline.drag.engineLimitAt', { dur: secs(range.max) }) : t('timeline.drag.sourceLimitAt', { dur: secs(range.by === 'source' ? sourceMax : range.max) }), true);
+	dragText(overrunsTake(range.take, from, dur) ? t('timeline.drag.beyondTake', { dur: secs(dur) }) : t('timeline.drag.rippled', { dur: secs(dur) }));
 }
 
 export function waveform(seed, width, height, srcIn, pps) {

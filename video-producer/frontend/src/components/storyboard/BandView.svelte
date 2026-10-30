@@ -20,6 +20,7 @@
 	import PickedSummary from '../inspector/PickedSummary.svelte';
 	import PickedChip from './PickedChip.svelte';
 	import Icon from '../Icon.svelte';
+	import ZoomControls from '../timeline/ZoomControls.svelte';
 
 	let lanes = $state();
 	let countsEl = $state();
@@ -77,13 +78,7 @@
 		{/if}
 		<ViewSwitch />
 		<div class="flex shrink-0 items-center gap-1" role="group" aria-label={t('timeline.zoom')}>
-			<HostUi name="IconButton" props={{ icon: hostIconName('magnet'), label: t('timeline.snapping'), size: 'sm', class: 'vp-h7 vp-toggle', ariaPressed: ui.snapping, kbd: key('snap'), onclick: () => (ui.snapping = !ui.snapping) }} />
-			<HostUi name="IconButton" props={{ icon: 'minus', label: t('timeline.zoomOut'), size: 'sm', class: 'vp-h7', kbd: key('zoom-out'), onclick: () => (ui.pxPerSec = Math.max(8, ui.pxPerSec / 1.25)) }} />
-			<input class="vp-slider w-24" type="range" min="8" max="220" bind:value={ui.pxPerSec} aria-label={t('timeline.zoom')} />
-			<HostUi name="IconButton" props={{ icon: 'plus', label: t('timeline.zoomIn'), size: 'sm', class: 'vp-h7', kbd: key('zoom-in'), onclick: () => (ui.pxPerSec = Math.min(220, ui.pxPerSec * 1.25)) }} />
-			<HostUi name="Tooltip" props={{ text: t('timeline.fitTip') }}>
-				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: () => lanes?.fit() }}>{t('timeline.fit')}</HostUi>
-			</HostUi>
+			<ZoomControls onfit={() => lanes?.fit()} />
 		</div>
 		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'shrink-0', onclick: () => addShot(t('lib.default.shot'), '', 4, sel?.id ?? null) }}>{t('storyboard.addShot')}</HostUi>
 	</ZoneHeader>
