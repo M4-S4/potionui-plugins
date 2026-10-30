@@ -21,10 +21,61 @@ const components = readdirSync(new URL('../components', import.meta.url), { recu
 const ZONE_HEADER = new URL('../components/shell/ZoneHeader.svelte', import.meta.url).href;
 const BAND = new URL('../components/storyboard/BandView.svelte', import.meta.url).href;
 const MIXER = new URL('../components/panels/MixerPanel.svelte', import.meta.url).href;
+const SIDE_DRAWER = new URL('../components/shell/SideDrawer.svelte', import.meta.url).href;
+const PLUGIN_ROOT = { closest: () => null };
+const IN_PLUGIN = { closest: (selector) => (selector === '.vp-root' ? PLUGIN_ROOT : null) };
+const IN_HOST = { closest: () => null };
+const dialogsOf = (html, where = IN_PLUGIN) => (selector) => (selector.includes('[aria-modal="true"]') ? [...html.matchAll(/aria-modal="true"/g)].map(() => where) : []);
+const press = (key, code, alt = false) => {
+	let prevented = false;
+	handleKeydown({ key, code, altKey: alt, ctrlKey: false, metaKey: false, shiftKey: false, repeat: false, target: null, preventDefault: () => (prevented = true) }, null);
+	return prevented;
+};
 
 after(() => {
 	dispose();
 	delete globalThis.document;
+});
+
+test('base: under 1280 px a closed drawer is no dialog, so the shortcuts reach the page; an open one is a modal dialog that Escape closes before the preview, and only a dialog of the host holds the keys', async () => {
+	const page = read('../VideoProducerPage.svelte');
+	assert.match(page, /<SideDrawer side="start" label=\{t\('panels\.left\.label'\)\} \{drawers\} open=\{leftOpen\}>\s*<LeftPanel \/>\s*<\/SideDrawer>/);
+	assert.match(page, /<SideDrawer side="end" label=\{t\('panels\.right\.label'\)\} \{drawers\} open=\{rightOpen\}>\s*<RightPanel \/>\s*<\/SideDrawer>/);
+	assert.doesNotMatch(page, /aria-modal/);
+	Object.assign(ui, { workspace: 'storyboard', storyView: 'grid', directorView: 'review', paletteOpen: false, modal: null, menuOpen: null, deckDrawer: false, hostModal: false, preview: null, compare: null, reviewMonitor: false, seamCompare: null, storyOpen: false, inspectorOpen: false, sidebarOpen: false });
+	viewport.narrow = true;
+	try {
+		const closed = clean((await renderComponent(SIDE_DRAWER, { side: 'start', label: 'Library', drawers: true, open: false })) + (await renderComponent(SIDE_DRAWER, { side: 'end', label: 'Inspector', drawers: true, open: false })));
+		assert.equal(closed, '<div class="vp-drawer" data-vp-drawer="start" tabindex="-1" hidden=""></div><div class="vp-drawer" data-vp-drawer="end" tabindex="-1" hidden=""></div>');
+		document.querySelectorAll = dialogsOf(closed);
+		assert.ok(press('2', 'Digit2', true));
+		assert.deepEqual([ui.workspace, ui.directorView], ['director', 'direction']);
+		assert.ok(press('1', 'Digit1', true));
+		assert.equal(ui.directorView, 'review');
+		ui.workspace = 'storyboard';
+		ui.inspectorOpen = true;
+		ui.preview = { kind: 'result', id: 't1' };
+		const open = clean(await renderComponent(SIDE_DRAWER, { side: 'end', label: 'Inspector', drawers: true, open: true }));
+		assert.equal(open, '<div class="vp-drawer" data-vp-drawer="end" role="dialog" aria-modal="true" aria-label="Inspector" tabindex="-1"></div>');
+		document.querySelectorAll = dialogsOf(open);
+		press('Escape', 'Escape');
+		assert.deepEqual([ui.inspectorOpen, ui.preview?.id], [false, 't1']);
+		press('Escape', 'Escape');
+		assert.equal(ui.preview, null);
+		ui.deckDrawer = true;
+		assert.equal(press('2', 'Digit2', true), false);
+		assert.equal(ui.workspace, 'storyboard');
+		press('Escape', 'Escape');
+		assert.equal(ui.deckDrawer, false);
+		document.querySelectorAll = dialogsOf(open, IN_HOST);
+		assert.equal(press('2', 'Digit2', true), false);
+		assert.equal(ui.workspace, 'storyboard');
+		const wide = clean(await renderComponent(SIDE_DRAWER, { side: 'start', label: 'Library', drawers: false, open: false }));
+		assert.equal(wide, '<div class="vp-drawer" data-vp-drawer="start" tabindex="-1"></div>');
+	} finally {
+		delete document.querySelectorAll;
+		viewport.narrow = false;
+	}
 });
 
 test('base: a zone header carries its icon, its title and its subtitle in one row', async () => {

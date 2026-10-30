@@ -3,8 +3,9 @@ const MAC_GLYPHS = { ctrl: '⌃', alt: '⌥', shift: '⇧', mod: '⌘' };
 const MAC_KEYS = { backspace: '⌫', plus: '+', minus: '−' };
 const PC_KEYS = { plus: '+', minus: '−' };
 const ACTIVATION = 'button, [role="button"], a, [role="tab"], [role="menuitem"], input, textarea, select, [contenteditable="true"]';
-const HOST_OVERLAY = '[aria-modal="true"]:not(.vp-modal), button.ai-chat-trigger[aria-pressed="true"]';
-const HOST_MODAL = '[aria-modal="true"]:not(.vp-modal):not(.chat-shell)';
+const HOST_OVERLAY = '[aria-modal="true"], button.ai-chat-trigger[aria-pressed="true"]';
+const HOST_MODAL = '[aria-modal="true"]:not(.chat-shell)';
+const PLUGIN_ROOT = '.vp-root';
 const KEY_ALIASES = { space: ' ', plus: '+', minus: '-' };
 const SYMBOL = /^[^a-z0-9\s]$/;
 const CONTROL_INPUTS = ['range', 'checkbox', 'radio', 'color', 'button'];
@@ -105,12 +106,16 @@ export function isActivationTarget(el) {
 	return typeof el?.closest === 'function' && el.closest(ACTIVATION) !== null;
 }
 
+const fromHost = (el) => typeof el?.closest !== 'function' || el.closest(PLUGIN_ROOT) === null;
+
+const hostShows = (doc, selector) => [...(doc?.querySelectorAll?.(selector) ?? [])].some(fromHost);
+
 export function hostOverlayOpen(doc = typeof document === 'undefined' ? undefined : document) {
-	return !!doc?.querySelector(HOST_OVERLAY);
+	return hostShows(doc, HOST_OVERLAY);
 }
 
 export function hostModalOpen(doc = typeof document === 'undefined' ? undefined : document) {
-	return !!doc?.querySelector(HOST_MODAL);
+	return hostShows(doc, HOST_MODAL);
 }
 
 export function focusables(root) {
