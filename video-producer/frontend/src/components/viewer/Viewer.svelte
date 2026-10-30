@@ -141,7 +141,7 @@
 								{:else if takeThumb(res)}
 									<img src={takeThumb(res)} alt="" class="h-full w-full object-cover" />
 								{/if}
-								<span class="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur-sm">{takeLabel(res)}{#if graded(shot)} <span class="text-white/60">{t('viewer.graded')}</span>{/if}</span>
+								<span class="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-md bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur-sm">{takeLabel(res)}{#if graded(shot)}{' '}<span class="text-white/60">{t('viewer.graded')}</span>{/if}</span>
 							</div>
 						{/each}
 					</div>
@@ -171,7 +171,7 @@
 						<img src={takeThumb(previewResult)} alt="" class="h-full w-full object-cover" />
 					{/if}
 					<div class="absolute inset-x-0 flex items-center gap-2 px-3 text-sm text-white {playable(previewResult) ? 'top-0 bg-gradient-to-b from-black/80 to-transparent pb-8 pt-12' : 'bottom-0 bg-gradient-to-t from-black/80 to-transparent pb-2.5 pt-8'}">
-						<span class="flex-1">{takeLabel(previewResult)} <span class="text-white/60">{t('viewer.outOfCut')}{#if graded(resultShot)} {t('viewer.graded')}{/if}</span></span>
+						<span class="flex-1">{takeLabel(previewResult)} <span class="text-white/60">{t('viewer.outOfCut')}{#if graded(resultShot)}{' '}{t('viewer.graded')}{/if}</span></span>
 						{#if playable(previewResult)}
 							<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: () => insertResult(previewResult.id) }}>{t('viewer.useTake')}</HostUi>
 						{/if}

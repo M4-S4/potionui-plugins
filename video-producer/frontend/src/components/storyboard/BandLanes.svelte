@@ -429,7 +429,7 @@
 			onclick={() => (take.status === 'done' ? previewTake(take) : pickShot(c))}
 		>
 			{#if take.status === 'running'}<span class="absolute inset-y-0 left-0 bg-signal/50" style:width="{take.progress ?? 0}%"></span>{/if}
-			<span class="relative">{#if w > 26}{take.variant ?? ''}{#if isSel && w > 96 && take.status === 'done'} · {t(`generation.label.${label}`)}{/if}{/if}</span>
+			<span class="relative">{#if w > 26}{take.variant ?? ''}{#if isSel && w > 96 && take.status === 'done'}{' · '}{t(`generation.label.${label}`)}{/if}{/if}</span>
 		</button>
 	{/each}
 	{#if order.length > 4}<span class="vp-tc absolute text-[10px] text-fg-subtle" style:left="{x(starts[i]) + w - 22}px" style:top="48px">+{order.length - 4}</span>{/if}
