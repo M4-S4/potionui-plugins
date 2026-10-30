@@ -1,7 +1,3 @@
-########
-## MiniMax-H3 (12 GB): E2E test suite.
-## Authoring reference: docs/presets.md "Testing presets"
-########
 schema: 1
 
 cases:
@@ -29,9 +25,6 @@ cases:
       resolution: "832x480"
       not_black: true
 
-  # ref2va: the References mode. The reference image is a PLACEHOLDER, as in the
-  # base preset's case, and `model` pins the Ref2VA DiT, a different file from
-  # the fl2va one above.
   - name: "minimax-h3-12gb-ref2va"
     mode: "refs"
     kind: "video"

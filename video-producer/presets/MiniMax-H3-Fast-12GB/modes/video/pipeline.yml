@@ -1,6 +1,3 @@
-# Copy of content/presets/marketplace/MiniMax-H3-Fast/modes/video/pipeline.yml, whose
-# comments explain every pipe. The loader reads a mode's pipeline.yml from the
-# preset's own directory; the plugin's tests keep this copy identical.
 pipeline:
   - name: "model_loader/minimax_h3"
     id: "model_loader"
