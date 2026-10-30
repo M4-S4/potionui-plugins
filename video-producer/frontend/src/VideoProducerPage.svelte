@@ -1226,6 +1226,7 @@
 		.vp-root .vp-deck-cell-label { color: rgb(var(--fg-subtle)); font: 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
 		.vp-root .vp-deck-cell-value { font: 600 15px/20px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 		.vp-root .vp-deck-cell-sub { font-weight: 400; color: rgb(var(--fg-muted)); }
+		.vp-root .vp-deck-cell-sub.text-warning { color: rgb(var(--warning)); }
 		.vp-root .vp-deck-popover { position: fixed; width: 22rem; max-width: calc(100vw - 1rem); overflow: auto; padding: 10px 12px 12px; font-size: 12px; line-height: 16px; color: rgb(var(--fg)); }
 		.vp-root .vp-deck-popover:focus { outline: none; }
 		.vp-root .vp-deck-popover-title { margin-bottom: 6px; color: rgb(var(--fg-subtle)); font: 11px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }

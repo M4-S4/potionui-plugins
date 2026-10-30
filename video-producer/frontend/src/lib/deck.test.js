@@ -1,5 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { clean, renderComponent, textOf } from './svelte-harness.js';
 import { DECK_TONES, DECK_UNBLOCK, deckActions, deckCell, deckChip, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, deckUnblock, deckUnblockLabel, latestDone, remainingSeconds, selectedEverywhere } from './deck.js';
 import { failureText } from './generation.js';
@@ -229,4 +230,31 @@ test('deck: a failed batch carries the plain-language message of the take, Retry
 	setTakes('p1', []);
 	const gone = await renderComponent(DECK);
 	assert.deepEqual(inlineActions(gone), [tr('production.deck.results')]);
+});
+
+test('deck: the memory under the Estimated cell turns amber on cuda_oom and past the limits, the muted rule of the page giving way to text-warning there and nowhere else', async () => {
+	const page = readFileSync(new URL('../VideoProducerPage.svelte', import.meta.url), 'utf-8');
+	const style = page.slice(page.indexOf('<style>'));
+	const rules = [...style.matchAll(/^\t\t(\.vp-root [^{\n]+?) \{ ([^}\n]*) \}$/gm)].map(([, selectors, body]) => ({ selectors: selectors.split(',').map((s) => s.trim()), color: /(?:^|; )color: ([^;]+);/.exec(body)?.[1] ?? null }));
+	const colorOf = (classes) => {
+		let best = classes.includes('text-warning') ? { weight: 1, color: 'rgb(var(--warning))' } : { weight: 0, color: null };
+		for (const rule of rules) {
+			for (const selector of rule.selectors) {
+				const compound = /^\.vp-root ((?:\.[\w-]+)+)$/.exec(selector);
+				if (!compound || !rule.color) continue;
+				const needed = compound[1].split('.').filter(Boolean);
+				if (needed.every((name) => classes.includes(name)) && needed.length + 1 >= best.weight) best = { weight: needed.length + 1, color: rule.color };
+			}
+		}
+		return best.color;
+	};
+	assert.equal(colorOf(['vp-deck-cell-sub']), 'rgb(var(--fg-muted))');
+	assert.equal(colorOf(['vp-deck-cell-sub', 'text-warning']), 'rgb(var(--warning))');
+	assert.equal(colorOf(['vp-deck-cell-label', 'text-warning']), 'rgb(var(--fg-subtle))');
+	assert.deepEqual(style.match(/[^\s{};][^{};\n]*text-warning[^{};\n]*(?=\{)/g).map((selector) => selector.trim()), ['.vp-root .vp-deck-cell-sub.text-warning']);
+	scene([{ id: 'tf', shotId: 's1', status: 'failed', variant: 'B', errorCode: 'cuda_oom', generationId: 'g-1', createdAt: '2026-10-29T10:00:00Z' }]);
+	Object.assign(ui.production, { state: 'failed', failed: 1, failedVariant: 'B', failedTake: 'tf' });
+	assert.match(await renderComponent(DECK), /<button[^>]*class="vp-deck-timing"[\s\S]*?<span class="vp-deck-cell-sub text-warning">/);
+	setTakes('p1', [{ id: 'tf', shotId: 's1', status: 'failed', variant: 'B', errorCode: 'unclassified', generationId: 'g-1', createdAt: '2026-10-29T10:00:00Z' }]);
+	assert.match(await renderComponent(DECK), /<button[^>]*class="vp-deck-timing"[\s\S]*?<span class="vp-deck-cell-sub">/);
 });
