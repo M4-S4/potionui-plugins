@@ -18,6 +18,8 @@ from src.features.chat.context_builder import ChatContextBuilder
 from src.features.chat.modes.registry import ChatModeRegistry
 from src.features.chat.tool_dispatcher import ToolCallDispatcher
 from src.features.llm import context_budget
+from src.features.llm.harness.context import user_text
+from src.features.llm.harness.messages import Message, Role, TextPart
 from src.features.llm.tools.base import serialize_approval_preview
 from src.features.llm.tools.executor import ToolExecutor
 from src.features.llm.tools.registry import ToolRegistry
@@ -534,26 +536,32 @@ def test_the_context_contributor_named_by_the_manifest_is_importable_and_is_the_
     assert contributor({"video_producer": {"projectId": "p-1"}}, SimpleNamespace(mode=CHAT_MODE), "user-1").startswith("VIDEO PRODUCER: project")
 
 
+def _turn(index, role, text):
+    return Message(id=f"m{index}", role=role, parts=(TextPart(text),))
+
+
 async def test_the_core_folds_the_contributors_block_into_the_users_turn_and_nothing_else(chat):
     builder = ChatContextBuilder(SimpleNamespace(chat_mode_registry=chat.modes))
-    history = [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}, {"role": "user", "content": "Check the cuts"}]
+    history = [_turn(0, Role.USER, "Hello"), _turn(1, Role.ASSISTANT, "Hi"), _turn(2, Role.USER, "Check the cuts")]
+    earlier = history[:2]
     page = {"projectId": "p-1", "name": "Night ride", "projectVersion": 4, "promptLanguage": "fr", "shots": [{"id": "s1", "label": "Arrival", "start": 0, "dur": 4}]}
 
     await builder.inject_contributor_block(history, SimpleNamespace(mode=CHAT_MODE), {"video_producer": page}, "user-1")
 
-    assert history[:2] == [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}]
-    assert history[2]["content"].startswith('Check the cuts\n\n<context>\nVIDEO PRODUCER: project "Night ride" [p-1], saved version 4.')
-    assert history[2]["content"].endswith("</context>")
-    assert '1. [s1] "Arrival" 0–4 s' in history[2]["content"] and len(history) == 3
+    turn = user_text(history[2])
+    assert history[:2] == earlier
+    assert turn.startswith('Check the cuts\n\n<context>\nVIDEO PRODUCER: project "Night ride" [p-1], saved version 4.')
+    assert turn.endswith("</context>")
+    assert '1. [s1] "Arrival" 0–4 s' in turn and len(history) == 3
 
 
 async def test_a_turn_without_the_page_context_still_gets_a_block_that_says_so(chat):
     builder = ChatContextBuilder(SimpleNamespace(chat_mode_registry=chat.modes))
-    history = [{"role": "user", "content": "Write the prompt of shot 1"}]
+    history = [_turn(0, Role.USER, "Write the prompt of shot 1")]
 
     await builder.inject_contributor_block(history, SimpleNamespace(mode=CHAT_MODE), None, "user-1")
 
-    assert "the page is not open" in history[0]["content"]
+    assert "the page is not open" in user_text(history[0])
 
 
 async def test_the_core_runs_the_three_writing_tools_for_approval_and_the_check_straight_away(loader, manifest, mock_db, chat):
@@ -563,7 +571,7 @@ async def test_the_core_runs_the_three_writing_tools_for_approval_and_the_check_
     created = projects.create_project("user-1", starter)
     shot_id = created["doc"]["clips"][0]["id"]
     owner = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={"video_producer": {"projectId": created["id"]}})
-    executor = ToolExecutor(chat.tools, SimpleNamespace())
+    executor = ToolExecutor(chat.tools)
     calls = {
         "vp_write_shot_prompt": {"shot_id": shot_id, "text": "Low angle on the gate"},
         "vp_fix_conflicts": {"rewrites": [{"shot_id": shot_id, "text": "Low angle on the gate"}]},
@@ -598,7 +606,7 @@ async def test_the_core_reports_the_plugins_error_codes_untouched_for_a_model_th
     created = projects.create_project("user-1", starter)
     owner = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={"video_producer": {"projectId": created["id"]}})
     nowhere = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={})
-    executor = ToolExecutor(chat.tools, SimpleNamespace())
+    executor = ToolExecutor(chat.tools)
 
     misuse = {
         ("vp_write_shot_prompt", "shot_id"): (owner, {"shot_id": 3, "text": "x"}, "invalid_arguments"),
@@ -623,7 +631,7 @@ async def _stale_after_an_edit(chat, tool_name, arguments, edit):
     created = projects.create_project("user-1", starter)
     shot_id = created["doc"]["clips"][0]["id"]
     owner = ToolContext(user_id="user-1", mode_id=CHAT_MODE, session_metadata={"video_producer": {"projectId": created["id"]}})
-    executor = ToolExecutor(chat.tools, SimpleNamespace())
+    executor = ToolExecutor(chat.tools)
     dispatcher = ToolCallDispatcher(SimpleNamespace(tool_executor=executor))
     arguments = arguments(shot_id)
     result, _ = await executor._execute_tool(tool_name, owner, arguments)

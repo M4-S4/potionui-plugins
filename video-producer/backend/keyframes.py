@@ -13,9 +13,10 @@ logger = logging.getLogger("plugins.video-producer")
 
 KEYFRAME = takes.KEYFRAME
 
+COMBINE_MODE = "combine"
 EDIT_MODE = "edit"
 IMG2IMG_MODE = "img2img"
-IMAGE_MODES = (EDIT_MODE, IMG2IMG_MODE)
+IMAGE_MODES = (COMBINE_MODE, EDIT_MODE, IMG2IMG_MODE)
 MODEL_FIELD = "model"
 OUTPUT_SIZE = "output_size"
 IMAGE = "image"
@@ -361,7 +362,7 @@ def _image_preset(description: Any, cloud_backends: List[Dict[str, Any]]) -> Opt
 
 
 def image_presets(user: User) -> List[EditPreset]:
-    """Every image preset the user may run, each with the mode its start images use (edit, else image to image, the first whose models are installed) or why it cannot make one; usable ones first, local before cloud."""
+    """Every image preset the user may run, each with the mode its start images use (combine, else edit, else image to image, the first whose models are installed) or why it cannot make one; usable ones first, local before cloud."""
     try:
         descriptions = core_bridge.list_presets(user)
     except Exception:

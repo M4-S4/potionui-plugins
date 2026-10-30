@@ -217,6 +217,17 @@ def test_every_image_preset_is_listed_with_the_mode_its_start_images_use_or_why_
     assert listed[6]["usable"] is False and [preset.id for preset in keyframes.edit_presets(core.users["user-1"])] == [preset["id"] for preset in listed[:6]]
 
 
+def test_a_preset_that_combines_several_pictures_makes_its_start_images_there_rather_than_in_its_one_picture_edit(core):
+    combine = {**qwen_fields(), "images": qwen_fields()["source_image"]}
+    del combine["source_image"]
+    single = {**qwen_fields(), "source_image": _plain("image", required=True)}
+    add_image_preset(core, QWEN, "Qwen-Image-2.1", {"txt2img": {}, "edit": single, "combine": combine})
+
+    (preset,) = keyframes.image_presets(core.users["user-1"])
+
+    assert (preset.mode, preset.field, preset.max_images, preset.usable) == ("combine", "images", 10, True)
+
+
 def test_a_preset_whose_edit_models_are_missing_makes_its_start_images_from_one_picture_or_says_what_is_missing(core):
     edit = {**qwen_fields(max_items=3), "diffusion_model": _model("qwen_edit_2511")}
     add_image_preset(core, QWEN_EDIT, "Qwen-Image", {"txt2img": {}, "edit": edit, "img2img": img2img_fields("qwen_2512")})
