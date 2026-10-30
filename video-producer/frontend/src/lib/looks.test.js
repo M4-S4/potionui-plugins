@@ -1,4 +1,4 @@
-import { test, after } from 'node:test';
+import { test, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { hostUis, renderComponent, textOf } from './svelte-harness.js';
 import enPanels from '../i18n/en/panels.json' with { type: 'json' };
@@ -6,9 +6,9 @@ import frPanels from '../i18n/fr/panels.json' with { type: 'json' };
 import { CAST_LOW, chainDrifts, chainLook, chainThreshold, DRIFT_LOW, FACE_LOW, FINAL_LOW, IDENTITY_LOW, PLACE_LOW, PUSH_IN_HIGH, SEAM_LOW, bestCandidate, cardThreshold, driftOf, faceChanged, finalLook, identityIssues, issueKey, lowDrift, lowFinal, candidateLook, candidateScore, castIssues, lowCards, lowSeam, normalizeLooks, percent, pushedIn, pushInIssues, seamFaceChanged, seamLook, STATES, takeLook } from './looks.js';
 
 const { doc, ui, dispose } = await import('./state.svelte.js');
-const { project } = await import('./project.svelte.js');
+const { project, bindClient } = await import('./project.svelte.js');
 const { setTakes } = await import('./takes.svelte.js');
-const { lookState } = await import('./looks.svelte.js');
+const { lookState, measureLooks, startLooks } = await import('./looks.svelte.js');
 const { t } = await import('../i18n/index.svelte.js');
 const { reanchorImage } = await import('./references.js');
 
@@ -272,4 +272,43 @@ test('the alerts of To check are keyed by shot, so two shots that share a take e
 	assert.deepEqual([...summary.matchAll(/data-look-issue="([^"]+)"/g)].map((m) => m[1]), ['s1', 's2']);
 	assert.deepEqual([...summary.matchAll(/data-look-push-in="([^"]+)"/g)].map((m) => m[1]), ['s1', 's2']);
 	assert.ok(textOf(summary).includes(t('panels.director.check.castLook', { shot: '02', name: 'Lina', score: percent(0.3) })));
+});
+
+test('an older answer of the looks never replaces a newer one, and the poll goes on after a failed answer while looks are queued', async () => {
+	const answers = [];
+	const asked = () => new Promise((resolve) => answers.push(resolve));
+	const looks = (queued, missing = 0) => ({ ok: true, data: normalizeLooks({ embedder: { available: true }, queued, missing }) });
+	const settle = () => new Promise((resolve) => setImmediate(resolve));
+	bindClient({ looks: asked, measureLooks: async () => looks(2) });
+	Object.assign(project, { id: 'p-poll', version: 1 });
+	Object.assign(lookState, { projectId: 'p-poll', data: looks(0).data, asking: false });
+	mock.timers.enable({ apis: ['setTimeout'] });
+	const stop = startLooks();
+	try {
+		await settle();
+		mock.timers.tick(1500);
+		assert.equal(answers.length, 1);
+		await measureLooks();
+		assert.equal(lookState.data.queued, 2);
+		answers[0](looks(0, 2));
+		await settle();
+		assert.deepEqual([lookState.data.queued, lookState.data.missing], [2, 0]);
+		mock.timers.tick(8000);
+		assert.equal(answers.length, 2);
+		answers[1]({ ok: false, error: { status: 500, code: 'server_error', message: '', data: null } });
+		await settle();
+		assert.equal(lookState.data.queued, 2);
+		mock.timers.tick(8000);
+		assert.equal(answers.length, 3);
+		answers[2](looks(0));
+		await settle();
+		assert.equal(lookState.data.queued, 0);
+		mock.timers.tick(8000);
+		assert.equal(answers.length, 3);
+	} finally {
+		stop();
+		mock.timers.reset();
+		bindClient(null);
+		project.id = null;
+	}
 });

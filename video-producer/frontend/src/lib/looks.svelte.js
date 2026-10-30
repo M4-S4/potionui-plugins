@@ -12,23 +12,25 @@ export const lookState = $state({ projectId: null, data: null, asking: false });
 let alive = false;
 let timer = null;
 let poller = null;
+let asked = 0;
 
 export const currentLooks = () => (lookState.projectId && lookState.projectId === project.id ? lookState.data : null);
 
 function schedulePoll() {
 	clearTimeout(poller);
-	poller = alive && lookState.data?.queued ? setTimeout(refreshLooks, POLL) : null;
+	poller = alive && currentLooks()?.queued ? setTimeout(refreshLooks, POLL) : null;
 }
 
 export async function refreshLooks() {
 	const projectId = project.id;
 	const client = getClient();
 	if (!projectId || !client) return;
+	const mine = ++asked;
 	const result = await client.looks(projectId);
-	if (projectId !== project.id) return;
+	if (mine !== asked || projectId !== project.id) return;
 	if (!result.ok) {
-		if (result.error.code === 'project_not_found') projectGone(projectId);
-		return;
+		if (result.error.code === 'project_not_found') return projectGone(projectId);
+		return schedulePoll();
 	}
 	Object.assign(lookState, { projectId, data: result.data });
 	schedulePoll();
@@ -51,6 +53,7 @@ export async function measureLooks() {
 			if (result.error.code === 'project_not_found') return projectGone(projectId);
 			return toast(t('lib.looks.failed'), 'error');
 		}
+		asked += 1;
 		Object.assign(lookState, { projectId, data: result.data });
 		if (!result.data.embedder.available) toast(t('lib.looks.unavailable'), 'warning');
 		else toast(result.data.queued ? t('lib.looks.asked', { count: result.data.queued }) : t('lib.looks.none'), result.data.queued ? 'info' : 'success');
