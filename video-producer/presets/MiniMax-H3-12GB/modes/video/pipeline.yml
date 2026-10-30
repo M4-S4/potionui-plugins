@@ -200,7 +200,7 @@ pipeline:
       decode: true
       denoise: "{{ form.refine_denoise | default('0.45') | float }}"
       video_sigma_shift: "{{ form.refine_video_sigma_shift | default(9.0) }}"
-      steps: "{{ form.refine_steps | default(4) }}"
+      steps: "{{ form.refine_steps }}"
       sampler: "{{ form.refine_sampler }}"
       scheduler: "{{ form.scheduler }}"
       manual_sigmas: "{{ form.refine_manual_sigmas | default('') }}"

@@ -32,6 +32,10 @@ configuration:
     type: "model_tags"
     label: "Latent upscaler tags"
     description: "Only models with any of these tags appear in the Latent Upscaler picker."
+  matting_tags:
+    type: "model_tags"
+    label: "Matting model tags"
+    description: "Only models with any of these tags appear in the Matting Model picker."
 
 speed_profiles:
   quality:

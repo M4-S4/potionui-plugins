@@ -77,7 +77,7 @@ def test_the_shipped_image_presets_with_the_weights_of_the_test_machine_offer_th
     assert [(preset.name, preset.mode, preset.max_images, preset.reason) for preset in listed if preset.usable] == [
         ("Flux2", "img2img", 1, None),
         ("Qwen-Image", "img2img", 1, None),
-        ("Qwen-Image-2.1", "edit", 10, None),
+        ("Qwen-Image-2.1", "combine", 10, None),
     ]
     unusable = {preset.name: (preset.mode, preset.reason) for preset in listed if not preset.usable}
     assert unusable["FLUX 3 Klein (experimental)"] == ("edit", "missing_models")
@@ -90,7 +90,7 @@ def test_the_shipped_image_presets_with_the_weights_of_the_test_machine_offer_th
 def test_a_shipped_edit_preset_takes_several_pictures_and_an_image_to_image_one_takes_one(shipped):
     by_name = {preset.name: preset for preset in keyframes.image_presets(shipped)}
 
-    assert (by_name["Qwen-Image-2.1"].field, by_name["Qwen-Image-2.1"].max_images) == ("source_image", 10)
+    assert (by_name["Qwen-Image-2.1"].field, by_name["Qwen-Image-2.1"].max_images) == ("images", 10)
     assert (by_name["Flux2"].field, by_name["Flux2"].max_images) == ("source_image", 1)
     assert by_name["FLUX 3 Klein (experimental)"].max_images == 10 and "diffusion_model" in by_name["FLUX 3 Klein (experimental)"].missing
     assert by_name["FLUX 3 Klein (experimental)"].output_sizes[:2] == ("1024x1024", "1152x896")

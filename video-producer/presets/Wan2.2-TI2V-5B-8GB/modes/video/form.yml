@@ -8,14 +8,9 @@ fields:
         configuration: {icon: "generation", icon_display: "icon_only"}
         children: "{{ paths.preset }}/modes/video/tabs/generation.yml"
       - type: "tab"
-        label: "T2V Models"
-        configuration: {icon: "video", icon_display: "icon_only"}
-        children: "{{ paths.preset }}/modes/video/tabs/t2v_models.yml"
-      - type: "tab"
-        label: "I2V Models"
-        visible: false
-        configuration: {icon: "image", icon_display: "icon_only"}
-        children: "{{ paths._shared }}/../marketplace/Wan/modes/video/tabs/i2v_models.yml"
+        label: "LoRA"
+        configuration: {icon: "lora", icon_display: "icon_only"}
+        children: "{{ paths.preset }}/modes/video/tabs/lora.yml"
       - type: "tab"
         label: "SVI Pro"
         visible: false
