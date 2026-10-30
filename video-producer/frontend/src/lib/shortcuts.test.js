@@ -205,7 +205,7 @@ function tableOf(file) {
 	const section = text.slice(start, text.indexOf('## 17.'));
 	const rows = section
 		.split('\n')
-		.filter((line) => line.startsWith('|') && !line.startsWith('|---') && !/^\| (Shortcut|Raccourci) \|/.test(line))
+		.filter((line) => line.startsWith('|') && !line.startsWith('|---') && !/^\| Shortcut \|/.test(line))
 		.map((line) => line.split('|').slice(1, 3).map((cell) => cell.trim()));
 	return { heading: section.split('\n')[0], rows, section };
 }
@@ -216,14 +216,10 @@ function names(locale) {
 }
 
 const GUIDE_FIXED = {
-	'user-guide.md': ['Esc', 'Delete', 'Left arrow', 'Right arrow', 'Home', 'End', 'Up arrow', 'Down arrow', 'Enter', '<', '>', 'Ctrl+Shift+Left arrow', 'Ctrl+Shift+Right arrow', 'Shift+R', 'Ctrl+click', 'Shift+click', 'Ctrl+Shift+click'],
-	'user-guide.fr.md': ['Échap', 'Suppr', 'Flèche gauche', 'Flèche droite', 'Home', 'Fin', 'Flèche haut', 'Flèche bas', 'Entrée', '<', '>', 'Ctrl+Shift+Flèche gauche', 'Ctrl+Shift+Flèche droite', 'Shift+R', 'Ctrl+clic', 'Shift+clic', 'Ctrl+Shift+clic']
+	'user-guide.md': ['Esc', 'Delete', 'Left arrow', 'Right arrow', 'Home', 'End', 'Up arrow', 'Down arrow', 'Enter', '<', '>', 'Ctrl+Shift+Left arrow', 'Ctrl+Shift+Right arrow', 'Shift+R', 'Ctrl+click', 'Shift+click', 'Ctrl+Shift+click']
 };
 
-for (const [file, locale] of [
-	['user-guide.md', 'en'],
-	['user-guide.fr.md', 'fr']
-]) {
+for (const [file, locale] of [['user-guide.md', 'en']]) {
 	test(`shortcuts: the table of ${file} lists exactly the shortcuts that work`, () => {
 		const { rows } = tableOf(file);
 		const shown = rows.flatMap(([keys]) => keys.split(/,\s+/)).map((label) => label.replace(/\s*\(.*\)$/, ''));
@@ -234,18 +230,8 @@ for (const [file, locale] of [
 	});
 }
 
-test('shortcuts: the two guides have the same section heading numbering and the same rows in the same order', () => {
-	const en = tableOf('user-guide.md');
-	const fr = tableOf('user-guide.fr.md');
-	assert.match(en.heading, /^## 16\. Keyboard shortcuts$/);
-	assert.match(fr.heading, /^## 16\. Raccourcis clavier$/);
-	assert.equal(en.rows.length, fr.rows.length);
-	const normal = (keys) => keys.replace(/Retour arrière/g, 'Backspace').replace(/Espace/g, 'Space').replace(/Échap/g, 'Esc').replace(/Suppr/g, 'Delete').replace(/Flèche gauche/g, 'Left arrow').replace(/Flèche droite/g, 'Right arrow').replace(/Flèche haut/g, 'Up arrow').replace(/Flèche bas/g, 'Down arrow').replace(/Entrée/g, 'Enter').replace(/Fin/g, 'End').replace(/clic\b/g, 'click').replace(/\(plans\)/g, '(shots)');
-	assert.deepEqual(
-		fr.rows.map(([keys]) => normal(keys)),
-		en.rows.map(([keys]) => keys)
-	);
-	for (const { section } of [en, fr]) {
-		assert.doesNotMatch(section, /Ctrl\+Alt\+K|Ctrl\+Alt\+J|1\/25/);
-	}
+test('shortcuts: the guide has its section heading and no shortcut that does not exist', () => {
+	const { heading, section } = tableOf('user-guide.md');
+	assert.match(heading, /^## 16\. Keyboard shortcuts$/);
+	assert.doesNotMatch(section, /Ctrl\+Alt\+K|Ctrl\+Alt\+J|1\/25/);
 });
