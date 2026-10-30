@@ -1,11 +1,11 @@
 import { migrateVrefs } from './vrefs.js';
+import { isObject } from './values.js';
 
 const ABSENT = Symbol('absent');
 const SETS = new Set(['removedTakes', 'characters', 'exclude', 'excludeLanes', 'excludeVrefs']);
 const CONTAINERS = new Set(['cast', 'referenceOverrides']);
 const LINKED = ['prompts', 'frames'];
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const keyed = (list) => Array.isArray(list) && list.every((x) => isObject(x) && typeof x.id === 'string' && x.id) && new Set(list.map((x) => x.id)).size === list.length;
 const strings = (value) => value === ABSENT || (Array.isArray(value) && value.every((x) => typeof x === 'string'));
 const objectOrAbsent = (value) => value === ABSENT || isObject(value);

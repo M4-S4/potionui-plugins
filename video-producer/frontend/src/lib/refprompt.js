@@ -1,3 +1,5 @@
+import { isObject } from './values.js';
+
 export const LAYOUTS = {
 	refs: ['subject_definitions', 'retention_analysis', 'citations'],
 	subjects: ['subject_definitions'],
@@ -5,7 +7,6 @@ export const LAYOUTS = {
 	sheet: ['sheet', 'cast']
 };
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isLayout = (value) => typeof value === 'string' && Object.hasOwn(LAYOUTS, value);
 
 function picked(layout, parts) {

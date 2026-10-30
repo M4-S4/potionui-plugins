@@ -2,6 +2,7 @@ import { UPSCALE_TARGETS, isInFlight, upscalesItself } from './generation.js';
 import { labelOf } from './labels.js';
 import { isStale } from './shots.js';
 import { INTERPOLATORS } from './cadence.js';
+import { isObject } from './values.js';
 
 export const PASS_METHODS = ['upscale', 'guided', 'render'];
 export const GUIDED_PRESET = '01KX47LTX25VIDEO00000000TV';
@@ -14,7 +15,6 @@ export const PASS_STATES = ['ready', 'running', 'done', 'missing', 'source'];
 
 const finished = (take) => take?.status === 'done' && Boolean(take.url);
 const video = (take) => take?.kind !== 'keyframe';
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const newest = (list) => [...list].sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? ''))).at(-1) ?? null;
 
 export function passShot(clip, takes) {

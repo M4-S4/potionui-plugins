@@ -6,11 +6,11 @@ import { linesOf, migrateDialogue, sameDialogue, setDialogue } from './dialogue.
 import { migrateReferencePrompt, referencePromptOf, sameReferencePrompt, setReferencePrompt } from './refprompt.js';
 import { merge3 } from './merge.js';
 import { SLOW_SPEEDS, speedOf } from './cadence.js';
+import { isObject } from './values.js';
 
 export const MIN_DRAFTS = 1;
 export const MAX_DRAFTS = 8;
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const count = (value) => (Number.isInteger(value) ? Math.min(MAX_DRAFTS, Math.max(MIN_DRAFTS, value)) : null);
 
 export const projectDrafts = (engine) => count(engine?.variants) ?? MIN_DRAFTS;

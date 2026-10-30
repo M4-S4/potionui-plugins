@@ -1,3 +1,5 @@
+import { isObject } from './values.js';
+
 export const CHARACTERS = 'characters';
 export const PLACES = 'places';
 export const KINDS = [CHARACTERS, PLACES];
@@ -5,7 +7,6 @@ export const SPACES = { [CHARACTERS]: 'identite', [PLACES]: 'decors3d' };
 export const LABEL_MAX = 60;
 export const VOICE_SPACE = 'son';
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isId = (value) => typeof value === 'string' && value.length > 0;
 const words = (value) => (typeof value === 'string' ? value : '');
 const idList = (list) => [...new Set((Array.isArray(list) ? list : []).filter(isId))];

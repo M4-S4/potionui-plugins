@@ -1,8 +1,8 @@
 import { newAsset } from './starter.js';
 import { framesOf, normalizeSeamMedia, seamAsset, seamImage } from './seam.js';
 import { sourceSeconds } from './cadence.js';
+import { isObject } from './values.js';
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
 const number = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 const assetOf = (doc, id) => (id ? ((doc.assets ?? []).find((a) => a.id === id) ?? null) : null);

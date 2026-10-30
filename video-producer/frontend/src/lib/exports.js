@@ -1,5 +1,6 @@
 import { EXCHANGE } from './exchange.js';
 import { RESOLUTION_NAMES, SOCIAL_DEFAULT, SOCIAL_FORMATS } from './formats.js';
+import { isObject } from './values.js';
 
 export const VIDEO_FORMATS = ['master', 'web', 'social', 'archive'];
 export const LIBRARY_FORMATS = ['web', 'social'];
@@ -17,7 +18,6 @@ export const FALLBACK_NAME = 'video-producer';
 const LETTERS = { œ: 'oe', Œ: 'Oe', æ: 'ae', Æ: 'Ae', ß: 'ss', ẞ: 'SS', ø: 'o', Ø: 'O' };
 const RESERVED = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
 const number = (value) => (value === null || value === undefined || value === '' || !Number.isFinite(Number(value)) ? null : Number(value));
 const idText = (value) => (typeof value === 'number' && Number.isFinite(value) ? String(value) : text(value) || null);

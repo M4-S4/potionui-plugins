@@ -7,6 +7,7 @@ import { removedIds } from './removedtakes.js';
 import { migratePass } from './finalpass.js';
 import { migrateVrefs } from './vrefs.js';
 import { migrateFormats } from './formats.js';
+import { isObject } from './values.js';
 
 const SHOT_DURATION = 5;
 export const PROMPT_LANGUAGES = ['en', 'fr'];
@@ -126,7 +127,6 @@ export function starterDoc(t, promptT = t, promptLanguage = DEFAULT_PROMPT_LANGU
 
 const CAPTURE = 'Capture 3D';
 const RETIRED_SET_TYPES = ['Scène d’essai', "Scène d'essai", 'Gaussian Splat'];
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const retiredSet = (r) => isObject(r) && r.space === 'decors3d' && RETIRED_SET_TYPES.includes(r.type);
 const plainFrame = (f) => {
 	if (!isObject(f) || !('sceneId' in f)) return f;

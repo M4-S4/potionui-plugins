@@ -1,3 +1,5 @@
+import { isObject } from './values.js';
+
 export const NUMBER_TYPES = ['slider', 'number', 'stepper', 'integer'];
 export const FLAG_TYPES = ['checkbox', 'boolean', 'gate'];
 export const CHOICE_TYPES = ['select', 'sampler', 'schedule'];
@@ -12,7 +14,6 @@ const TEXT_LIMIT = 2000;
 const LORA_LIMIT = 32;
 const PASSES = 8;
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 const whole = (value) => isNumber(value) && Number.isInteger(value);
 const within = (value, low, high) => (!isNumber(low) || value >= low) && (!isNumber(high) || value <= high);

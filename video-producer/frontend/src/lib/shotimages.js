@@ -1,12 +1,12 @@
 import { chainOn, chainSource, ignoresFirstFrame, sameFrame } from './chain.js';
 import { presetProfiles } from './generation.js';
 import { previousShot, seamImage } from './seam.js';
+import { isObject } from './values.js';
 
 export const MAKE = ['first', 'last', 'both'];
 export const RETRIEVE = ['previous', 'next', 'neighbors'];
 export const CHOICES = [...MAKE, ...RETRIEVE];
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const assetOf = (doc, id) => (id ? ((doc.assets ?? []).find((a) => a.id === id) ?? null) : null);
 const flying = (take) => take?.kind !== 'keyframe' && (take?.status === 'queued' || take?.status === 'running');
 const round = (value) => Math.round(Math.max(0, value ?? 0) * 1000) / 1000;

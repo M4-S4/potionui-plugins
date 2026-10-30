@@ -1,5 +1,6 @@
 import { optionKey } from './generation.js';
 import { isShared, shotReferences } from './shots.js';
+import { isObject } from './values.js';
 
 export const KEYFRAME = 'keyframe';
 export const ROLES = ['first', 'last'];
@@ -16,7 +17,6 @@ export const PRESET_STATES = ['not_loaded', 'not_installed', 'not_assigned', 'no
 const SPACES = ['identite', 'decors3d'];
 const TYPE_ROLES = { Personnage: 'character', Décor: 'setting', Objet: 'object', Style: 'style' };
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
 const strings = (values) => (Array.isArray(values) ? values.filter((value) => typeof value === 'string' && value) : []);
 const count = (value) => (Number.isInteger(value) && value > 0 ? value : null);

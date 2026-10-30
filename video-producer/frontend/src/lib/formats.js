@@ -1,4 +1,5 @@
 import table from './formatstable.js';
+import { isObject } from './values.js';
 
 export const FORMATS = table.formats.map((item) => item.id);
 export const FORMAT_GROUPS = Object.fromEntries(table.formats.map((item) => [item.id, item.group]));
@@ -27,7 +28,6 @@ export const QUALITIES = [DRAFT, FINAL];
 const SCALE = 1e9;
 const FORMAT = new RegExp(`^([0-9]+(?:\\.[0-9]{1,${CUSTOM.decimals}})?):([0-9]+(?:\\.[0-9]{1,${CUSTOM.decimals}})?)$`);
 const SIZE = /^\s*([0-9]+)\s*[x×]\s*([0-9]+)\s*$/;
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const key = (value) => Math.floor(value * SCALE + 0.5);
 
 export const halfUp = (value) => Math.floor(value + 0.5);

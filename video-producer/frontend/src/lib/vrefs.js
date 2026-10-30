@@ -1,9 +1,10 @@
+import { isObject } from './values.js';
+
 export const VREF_TRACKS = 'vrefTracks';
 export const VREF_ITEMS = 'vrefItems';
 export const VREF_ROLES = ['motion', 'continuation'];
 export const MAX_VREF_TRACKS = 3;
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 
 export function vrefTracksOf(value) {
