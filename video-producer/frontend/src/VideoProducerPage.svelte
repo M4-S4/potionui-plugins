@@ -18,7 +18,7 @@
 	import { isPlayer } from './lib/workspaces.js';
 	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
 	import { viewport, watchViewport } from './lib/viewport.svelte.js';
-	import { closesOnOutsidePointer } from './lib/drawer.js';
+	import { closesOnOutsidePointer, keepsFocus } from './lib/drawer.js';
 	import { startAssistant } from './lib/assistant.svelte.js';
 	import MenuBar from './components/shell/MenuBar.svelte';
 	import ProjectBar from './components/shell/ProjectBar.svelte';
@@ -83,7 +83,11 @@
 
 	$effect(() => {
 		if (!leftOpen && !rightOpen) return;
-		const onpointerdown = (e) => closesOnOutsidePointer(root, e.target) && closeDrawer();
+		const onpointerdown = (e) => {
+			if (!closesOnOutsidePointer(root, e.target)) return;
+			if (keepsFocus(root, e.target)) e.preventDefault();
+			closeDrawer();
+		};
 		document.addEventListener('pointerdown', onpointerdown, true);
 		return () => document.removeEventListener('pointerdown', onpointerdown, true);
 	});
