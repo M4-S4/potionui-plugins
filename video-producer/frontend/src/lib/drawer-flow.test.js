@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { DRAWER_INSET, DRAWER_MAX_HEIGHT, DRAWER_WIDTH, drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from './deck-drawer.js';
-import { deckChip } from './deck.js';
+import { DECK_MENU, deckChip } from './deck.js';
 
 class FakeNode {
 	constructor(parent = null, selectors = []) {
@@ -26,14 +26,17 @@ globalThis.Node = FakeNode;
 globalThis.Element = FakeElement;
 globalThis.document = { body: {}, querySelector: () => null };
 
-const { closesOnOutsidePointer, keepsFocus } = await import('./drawer.js');
+const { closesOnOutsidePointer, keepsFocus, openDrawers, soleDrawer } = await import('./drawer.js');
 const { doc, ui, dispose } = await import('./state.svelte.js');
-const { handleKeydown } = await import('./commands.js');
+const { viewport } = await import('./viewport.svelte.js');
+const { commandById, handleKeydown, toggleSidebar } = await import('./commands.js');
+const { QUEUE_MENU, openQueue } = await import('./production.svelte.js');
 const { t } = await import('../i18n/index.svelte.js');
 
 const t2 = (key, params = {}) => `${key}${Object.keys(params).length ? JSON.stringify(params) : ''}`;
 const DECK = new URL('../components/production/ProductionDeck.svelte', import.meta.url).href;
 const DRAWER = new URL('../components/production/ProductionDrawer.svelte', import.meta.url).href;
+const SIDE_DRAWER = new URL('../components/shell/SideDrawer.svelte', import.meta.url).href;
 const WAN = '01KX47WANVIDEO0000000000TV';
 const H3 = '01KX47H3MINIMAX000000000VA';
 
@@ -217,4 +220,90 @@ test('drawer: its rows follow the engine of the project, it counts the shots wit
 test('drawer: the chip reads the same engine, profile, size and drafts the drawer writes', () => {
 	assert.deepEqual(deckChip({ engine: 'MiniMax H3', profile: 'Ref2VA', size: '1344×768', drafts: 3 }, t2), ['MiniMax H3', 'Ref2VA', '1344×768', 'production.deck.drafts{"count":3}']);
 	assert.deepEqual(deckChip({ engine: 'MiniMax H3', profile: '', size: '832×480', drafts: null }, t2), ['MiniMax H3', '832×480', 'production.deck.draftsMixed']);
+});
+
+test('drawer: under 1280 px a side drawer, the Settings drawer and a menu of the deck open one at a time, whatever opens them, so the plugin never shows two modal dialogs', async () => {
+	engines();
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo' }];
+	Object.assign(ui, { workspace: 'storyboard', storyView: 'grid', selection: null, picked: [], sidebarOpen: false, inspectorOpen: false, deckDrawer: false, menuOpen: null, modal: null, paletteOpen: false });
+	viewport.narrow = true;
+	const modals = async () => {
+		const open = openDrawers();
+		const html = [
+			await renderComponent(SIDE_DRAWER, { side: 'start', label: 'Context', drawers: true, open: open.start }),
+			await renderComponent(SIDE_DRAWER, { side: 'end', label: 'Detail', drawers: true, open: open.end }),
+			await renderComponent(DECK)
+		].join('');
+		return [...html.matchAll(/<div class="(?:vp-drawer|vp-deck-drawer)"(?: data-vp-drawer="(\w+)")?[^>]*aria-modal="true"/g)].map(([, side]) => side ?? 'settings');
+	};
+	const chip = () => {
+		ui.menuOpen = null;
+		ui.deckDrawer = true;
+	};
+	try {
+		let was = soleDrawer();
+		ui.inspectorOpen = true;
+		was = soleDrawer(was);
+		assert.deepEqual(await modals(), ['end']);
+		chip();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.inspectorOpen, ui.deckDrawer], [false, true]);
+		assert.deepEqual(await modals(), ['settings']);
+		toggleSidebar();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.deckDrawer], [true, false]);
+		assert.deepEqual(await modals(), ['start']);
+		ui.menuOpen = QUEUE_MENU;
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.menuOpen], [false, QUEUE_MENU]);
+		assert.deepEqual(await modals(), []);
+		ui.sidebarOpen = true;
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.menuOpen], [true, null]);
+		commandById('inspector').run();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.inspectorOpen], [false, true]);
+		assert.deepEqual(await modals(), ['end']);
+		toggleSidebar();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.inspectorOpen], [true, false]);
+		assert.deepEqual(await modals(), ['start']);
+		for (const menu of [DECK_MENU.more, DECK_MENU.estimate]) {
+			ui.menuOpen = menu;
+			was = soleDrawer(was);
+			assert.deepEqual([ui.sidebarOpen, ui.menuOpen], [false, menu], menu);
+			ui.inspectorOpen = true;
+			was = soleDrawer(was);
+			assert.deepEqual([ui.inspectorOpen, ui.menuOpen], [true, null], menu);
+			ui.inspectorOpen = false;
+			ui.sidebarOpen = true;
+			was = soleDrawer(was);
+		}
+		openQueue();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.menuOpen], [false, QUEUE_MENU]);
+		ui.menuOpen = null;
+		ui.inspectorOpen = true;
+		was = soleDrawer(was);
+		ui.menuOpen = 'picker:engine';
+		was = soleDrawer(was);
+		assert.deepEqual([ui.inspectorOpen, ui.menuOpen], [true, 'picker:engine']);
+		ui.menuOpen = null;
+		ui.inspectorOpen = false;
+		was = soleDrawer(was);
+		viewport.narrow = false;
+		Object.assign(ui, { sidebarOpen: true, inspectorOpen: true });
+		was = soleDrawer(was);
+		chip();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.inspectorOpen, ui.deckDrawer], [true, true, true]);
+		assert.deepEqual(was, { start: false, end: false, deck: true, menu: false });
+	} finally {
+		viewport.narrow = false;
+		Object.assign(ui, { sidebarOpen: false, inspectorOpen: false, deckDrawer: false, menuOpen: null });
+		doc.clips = [];
+	}
+	const page = readFileSync(new URL('../VideoProducerPage.svelte', import.meta.url), 'utf-8');
+	assert.match(page, /\$effect\(\(\) => \{\s*const now = openDrawers\(\);\s*untrack\(\(\) => \(drawersWere = soleDrawer\(drawersWere, now\)\)\);\s*\}\);/);
+	assert.ok(page.indexOf('soleDrawer(drawersWere') > page.indexOf('wideBefore = { sidebar'));
 });

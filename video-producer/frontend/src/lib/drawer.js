@@ -1,11 +1,33 @@
 import { tick } from 'svelte';
 import { restoreFocus } from './focus.js';
 import { hostOverlayOpen } from './keyboard.js';
+import { DECK_MENU } from './deck.js';
+import { drawerMode, sidebarShown, ui } from './state.svelte.js';
 
 const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 const KEEPS = '.vp-drawer, .vp-deck-drawer, [data-vp-drawer-toggle], .vp-modal-backdrop, .vp-palette-backdrop, .vp-menu, [data-vp-menu], .vp-toasts, .vp-uploads';
 const HOST_KEEPS = '[role="status"], [role="tooltip"]';
 const CONTROL = 'a[href], button, input, select, textarea, summary, label, [contenteditable="true"], [tabindex]';
+const DRAWERS = ['start', 'end', 'deck', 'menu'];
+const DECK_MENUS = Object.values(DECK_MENU);
+const SHUT = {
+	start: () => (ui.sidebarOpen = false),
+	end: () => (ui.inspectorOpen = false),
+	deck: () => (ui.deckDrawer = false),
+	menu: () => (ui.menuOpen = null)
+};
+
+export function openDrawers() {
+	const drawers = drawerMode();
+	return { start: drawers && sidebarShown(), end: drawers && ui.inspectorOpen, deck: ui.deckDrawer, menu: DECK_MENUS.includes(ui.menuOpen) };
+}
+
+export function soleDrawer(was = {}, now = openDrawers()) {
+	const open = DRAWERS.filter((key) => now[key]);
+	const kept = open.filter((key) => !was[key]).at(-1) ?? open.at(-1);
+	for (const key of open) if (key !== kept) SHUT[key]();
+	return openDrawers();
+}
 
 export function drawerFocus(node, open) {
 	let was = false;

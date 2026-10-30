@@ -35,7 +35,7 @@
 	import { overlayLayer } from '../../lib/host.js';
 	import { setReturnFocus } from '../../lib/focus.js';
 	import { clipThumb, takeThumb } from '../../lib/media.js';
-	import { deckActions, deckCell, deckChip, deckChipFolded, deckCompact, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, deckUnblock, deckUnblockLabel, latestDone, remainingSeconds, selectedEverywhere } from '../../lib/deck.js';
+	import { DECK_MENU, deckActions, deckCell, deckChip, deckChipFolded, deckCompact, deckDetail, deckEyebrow, deckLine, deckState, deckTitle, deckTone, deckUnblock, deckUnblockLabel, latestDone, remainingSeconds, selectedEverywhere } from '../../lib/deck.js';
 	import { anchoredPopover } from '../../lib/popover.js';
 	import { drawerFocus } from '../../lib/drawer.js';
 	import { fitChip, shortPresetName } from '../../lib/barfit.js';
@@ -206,8 +206,8 @@
 	const actions = $derived(deckActions(detail.actions, compact));
 	const CELL_PAD = 16;
 	const CELL_GAP = 6;
-	const MORE = 'deck-more';
-	const ESTIMATE = 'deck-estimate';
+	const MORE = DECK_MENU.more;
+	const ESTIMATE = DECK_MENU.estimate;
 	const moreOpen = $derived(ui.menuOpen === MORE);
 	const estimateOpen = $derived(ui.menuOpen === ESTIMATE);
 	const queueOpen = $derived(ui.menuOpen === QUEUE_MENU);

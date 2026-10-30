@@ -18,7 +18,7 @@
 	import { isPlayer } from './lib/workspaces.js';
 	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
 	import { viewport, watchViewport } from './lib/viewport.svelte.js';
-	import { closesOnOutsidePointer, keepsFocus } from './lib/drawer.js';
+	import { closesOnOutsidePointer, keepsFocus, openDrawers, soleDrawer } from './lib/drawer.js';
 	import { startAssistant } from './lib/assistant.svelte.js';
 	import MenuBar from './components/shell/MenuBar.svelte';
 	import ProjectBar from './components/shell/ProjectBar.svelte';
@@ -65,6 +65,7 @@
 	const columns = $derived(player || drawers ? 'minmax(0, 1fr)' : `${ui.sidebarOpen && !band ? '280px' : '0px'} minmax(0, 1fr) ${ui.inspectorOpen ? '320px' : '0px'}`);
 	let inspectorBefore = null;
 	let wideBefore = null;
+	let drawersWere = {};
 
 	$effect(() => {
 		const narrow = viewport.narrow;
@@ -79,6 +80,11 @@
 				wideBefore = null;
 			}
 		});
+	});
+
+	$effect(() => {
+		const now = openDrawers();
+		untrack(() => (drawersWere = soleDrawer(drawersWere, now)));
 	});
 
 	$effect(() => {
