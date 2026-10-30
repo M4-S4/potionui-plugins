@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { clean, renderComponent } from './svelte-harness.js';
 import { aggregate, activityStep } from './generation.js';
-import { canLabel, finalsToSync, labelGroups, labelOf, legacyLabel, marksOf, rejectedCount, relabel, releasedLabel, toggledLabel, visibleTakes } from './labels.js';
+import { canLabel, finalsToSync, labelGroups, takeLabelOf, legacyLabel, marksOf, rejectedCount, relabel, releasedLabel, toggledLabel, visibleTakes } from './labels.js';
 import {
 	MAX_DRAFTS,
 	SHOT_CAP,
@@ -44,9 +44,9 @@ after(() => {
 
 test('labels: the former marks give the label, a stored label wins over them', () => {
 	assert.deepEqual([legacyLabel(true, null), legacyLabel(1, 'reject'), legacyLabel(false, 'keep'), legacyLabel(0, 'reject'), legacyLabel(false, null)], ['final', 'final', 'candidate', 'rejected', 'draft']);
-	assert.equal(labelOf({ label: 'rejected', chosen: true }), 'rejected');
-	assert.equal(labelOf({ label: 'best', flag: 'keep' }), 'candidate');
-	assert.equal(labelOf(null), 'draft');
+	assert.equal(takeLabelOf({ label: 'rejected', chosen: true }), 'rejected');
+	assert.equal(takeLabelOf({ label: 'best', flag: 'keep' }), 'candidate');
+	assert.equal(takeLabelOf(null), 'draft');
 	assert.deepEqual(marksOf('candidate'), { label: 'candidate', chosen: false, flag: 'keep' });
 	assert.deepEqual(marksOf('final'), { label: 'final', chosen: true, flag: null });
 });
@@ -400,7 +400,7 @@ test('labels: after an undo or a redo the final follows the take the shot plays,
 	undo();
 	await settle();
 	assert.deepEqual(sent, [['p1', 'b', 'final']]);
-	assert.deepEqual(takeStore.list.map(labelOf), ['candidate', 'final']);
+	assert.deepEqual(takeStore.list.map(takeLabelOf), ['candidate', 'final']);
 	stop();
 	bindClient(null);
 });

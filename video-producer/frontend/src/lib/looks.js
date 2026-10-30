@@ -1,4 +1,5 @@
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+import { isObject } from './values.js';
+
 const text = (value) => (typeof value === 'string' ? value : '');
 const score = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 export const STATES = ['done', 'queued', 'failed', 'unavailable', 'missing', 'no_images'];

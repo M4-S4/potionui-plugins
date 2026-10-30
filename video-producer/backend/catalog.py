@@ -53,7 +53,7 @@ def engine_kind(backend: Dict[str, Any]) -> Optional[str]:
 
 
 def gpu_state(backend: Mapping[str, Any]) -> str:
-    """Where a native backend would run a take, from what its running instance reports: ready (this host's GPU, whose memory was read), remote (a worker, whose GPU this server cannot see), no_gpu (configured with none), unread (this host, but no GPU could be read: no CUDA, a broken driver or a device without an explicit ordinal) or unestablished (not running)."""
+    """Where a native backend would run a take: ready, remote, no_gpu, unread or unestablished."""
     device = backend.get("execution_device")
     if device in (REMOTE, NO_GPU):
         return device

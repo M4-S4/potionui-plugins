@@ -5,6 +5,7 @@ import { normalizeSeamMedia, requestBody } from './seam.js';
 import { normalizeChain, normalizeFrameSource } from './chain.js';
 import { normalizeLooks } from './looks.js';
 import { normalizeKeyframeEstimate, normalizeKeyframePreset } from './keyframes.js';
+import { isObject } from './values.js';
 
 const CODE_BY_STATUS = {
 	400: 'invalid_request',
@@ -33,10 +34,6 @@ const STATUS_BY_CODE = {
 };
 
 const AUTH_DETAIL = /not authenticated|could not validate credentials|invalid (?:or expired )?token|token (?:has )?expired/i;
-
-function isObject(value) {
-	return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 function text(value) {
 	return typeof value === 'string' ? value : '';

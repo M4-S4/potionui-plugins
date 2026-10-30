@@ -3,8 +3,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import chain, core_bridge, director, projects, takes
-from .chain import ChainError
+from . import core_bridge, director, frame_grab, projects, takes
+from .frame_grab import FrameError
 from .core_bridge import LimitExceeded, MediaRefError
 from .exports.common import asset_of
 
@@ -66,7 +66,7 @@ def first_kind(doc: Mapping[str, Any], shot_id: str) -> Optional[str]:
 
 
 def waits(project_id: str, doc: Mapping[str, Any], shot_ids: Sequence[str]) -> Dict[str, Wait]:
-    """The shots of an order that start from the last image of the previous shot and have to wait for it: the previous shot is in the order, or has no media and a take on its way, or its video or still is placed and the shot has no first image yet. A shot with an image of its own, or with a last image taken earlier while the previous shot is not in the order, keeps it."""
+    """The shots of an order that start from the last image of the previous shot and have to wait for it."""
     clips = doc.get("clips") or []
     batch = set(shot_ids)
     active: Optional[List[Dict[str, Any]]] = None
@@ -136,12 +136,12 @@ def _reason(after: Optional[Mapping[str, Any]]) -> Optional[Tuple[str, str]]:
 
 async def _frame(owner: Any, project: Mapping[str, Any], wait: Mapping[str, Any], after: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     if after is not None:
-        return await chain.take_end_frame(owner, project, wait["previous"], after)
-    return await chain.end_frame(owner, project, wait["previous"])
+        return await frame_grab.take_end_frame(owner, project, wait["previous"], after)
+    return await frame_grab.end_frame(owner, project, wait["previous"])
 
 
 async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
-    """Give a waiting take the last image of the previous shot once there is one: the end of the take it waits for when that take is done, else the end of the cut of the previous shot's placed video; the image is stored as the owner's upload, put in the take's request in place of the stand-in and recorded, the take joining the queue. The take fails with a reason when the take it waits for failed, was cancelled or deleted, or when the image cannot be taken. True when the take stops waiting."""
+    """Give a waiting take the last image of the previous shot once there is one, or fail it with a reason; True when it stops waiting."""
     wait = take.get("chain") or {}
     after = None
     if wait.get("after"):
@@ -157,11 +157,11 @@ async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
         return False
     try:
         frame = await _frame(owner, project, wait, after)
-    except ChainError as exc:
+    except FrameError as exc:
         return fail(take, "chain_frame_failed", exc.message)
     except (MediaRefError, LimitExceeded) as exc:
         return fail(take, "chain_frame_failed", str(exc) or "The last image of the previous shot could not be stored.")
-    media = chain.media_of(owner.id, frame)
+    media = frame_grab.media_of(owner.id, frame)
     if media is None:
         return fail(take, "chain_frame_failed", "The last image of the previous shot was stored but its library item cannot be found.")
     request = swap(copy.deepcopy(take.get("request") or {}), director.chain_value(wait["previous"]), frame["value"])

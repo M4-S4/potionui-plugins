@@ -7,7 +7,7 @@ import { resetTakes, takeStore } from './takes.svelte.js';
 import { compileRules, conflictIds, conflictRule } from './rules.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
 import { joinPlan, setReferenceLane } from './sound.js';
-import { isGlobal, touch } from './shots.js';
+import { isGlobal, shotNumberAt, touch } from './shots.js';
 import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
 import { promptShot, reviewPickOf, viewOf, viewShot, witnessOf } from './director.js';
@@ -541,26 +541,6 @@ export function promptEdited(prompt, before) {
 	touch(doc.clips.find((c) => c.id === prompt.shotId));
 }
 
-export function setPrompt(clip, text) {
-	if (!clip) return null;
-	const p = promptOf(clip);
-	act(() => {
-		if (p) {
-			const before = p.text;
-			p.text = text;
-			promptEdited(p, before);
-		} else doc.prompts.push(newPrompt(clip, text));
-	});
-	return promptOf(clip);
-}
-
-export function ensurePrompt(clip) {
-	const existing = promptOf(clip);
-	if (existing || !clip) return { prompt: existing, created: false };
-	act(() => doc.prompts.push(newPrompt(clip)));
-	return { prompt: promptOf(clip), created: true };
-}
-
 export function addPrompt(start = ui.playhead, dur = 4) {
 	const p = { id: ulid(), shotId: shotIdAt(start), start: round(start, 0.04), dur, strength: 75, text: '' };
 	act(() => doc.prompts.push(p));
@@ -644,7 +624,7 @@ export async function deleteVrefTrack(id) {
 	const cited = citingShots(doc, track.slot);
 	const named = track.name ? `${label} · ${track.name}` : label;
 	const parts = [count ? t('lib.vref.deleteItems', { count, track: named }) : t('lib.vref.deleteEmpty', { track: named })];
-	if (cited.length) parts.push(t('lib.vref.deleteCited', { count: cited.length, label, shots: cited.map((c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0')).join(', ') }));
+	if (cited.length) parts.push(t('lib.vref.deleteCited', { count: cited.length, label, shots: cited.map(shotNumber).join(', ') }));
 	parts.push(t('lib.vref.deleteSlot', { label }));
 	confirmingTrack = true;
 	let ok = false;
@@ -748,6 +728,7 @@ export function followIssue(issue) {
 
 export const sourceLength = (c) => asset(c?.assetId)?.srcDur ?? 60;
 export const clipLabel = (c) => c?.label || asset(c?.assetId)?.name || t('lib.default.clip');
+export const shotNumber = (c) => shotNumberAt(doc.clips.indexOf(c));
 
 export function fmtDuration(sec) {
 	if (sec < 60) return `${Math.max(1, Math.round(sec))} s`;

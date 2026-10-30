@@ -1,8 +1,9 @@
+import { isObject } from './values.js';
+
 export const LANGUAGES = ['English', 'French', 'Spanish', 'German', 'Italian', 'Portuguese', 'Russian', 'Arabic', 'Chinese', 'Japanese', 'Korean'];
 export const DEFAULT_LANGUAGE = 'English';
 export const WORDS_PER_SECOND = 3;
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isId = (value) => typeof value === 'string' && value.length > 0;
 
 export function migrateLine(line) {

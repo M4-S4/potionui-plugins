@@ -1,4 +1,5 @@
 import table from './formatstable.js';
+import { isObject } from './values.js';
 
 export const FORMATS = table.formats.map((item) => item.id);
 export const FORMAT_GROUPS = Object.fromEntries(table.formats.map((item) => [item.id, item.group]));
@@ -27,7 +28,6 @@ export const QUALITIES = [DRAFT, FINAL];
 const SCALE = 1e9;
 const FORMAT = new RegExp(`^([0-9]+(?:\\.[0-9]{1,${CUSTOM.decimals}})?):([0-9]+(?:\\.[0-9]{1,${CUSTOM.decimals}})?)$`);
 const SIZE = /^\s*([0-9]+)\s*[x×]\s*([0-9]+)\s*$/;
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const key = (value) => Math.floor(value * SCALE + 0.5);
 
 export const halfUp = (value) => Math.floor(value + 0.5);
@@ -224,16 +224,4 @@ export function timeScale(measured, wanted) {
 	const next = parseSize(wanted);
 	if (old === null || next === null) return null;
 	return (area(next) / area(old)) ** SIZES.timeExponent;
-}
-
-export function nearestMeasured(measured, wanted) {
-	const target = parseSize(wanted);
-	const sizes = (Array.isArray(measured) ? measured : []).map((text) => [String(text), parseSize(String(text))]).filter(([, size]) => size !== null);
-	if (target === null || !sizes.length) return null;
-	const distance = (item) => key(Math.abs(Math.log(area(item[1]) / area(target))));
-	return sizes.reduce((best, item) => {
-		const d = distance(item);
-		const b = distance(best);
-		return d < b || (d === b && area(item[1]) > area(best[1])) ? item : best;
-	})[0];
 }

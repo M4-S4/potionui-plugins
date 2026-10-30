@@ -7,7 +7,7 @@ from typing import Any, Callable, NamedTuple, Optional
 import pytest
 from fastapi.routing import APIRoute
 
-from backend import chain, core_bridge, presets, projects, renditions, settings, takes, tracker
+from backend import core_bridge, frame_grab, presets, projects, renditions, settings, takes, tracker
 from backend.api import router
 from backend.exports import jobs, video
 from src.plugin_api import get_current_active_user
@@ -82,7 +82,7 @@ class World:
         monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, folder: Path(folder) / "source.mp4")
         monkeypatch.setattr(core_bridge, "probe_video", lambda path: None)
         monkeypatch.setattr(core_bridge, "save_user_media", self._save_user_media)
-        monkeypatch.setattr(chain, "run", self._run)
+        monkeypatch.setattr(frame_grab, "run", self._run)
         monkeypatch.setattr(core_bridge, "resolve_media", self._resolve_as_owner(core.resolve_media))
         core.add_media({"kind": "library", "item_id": "item-1"}, "uploads/still.png", media_type="image")
         core.add_media({"kind": "library", "item_id": "item-user-1"}, "uploads/upload.png", media_type="image")

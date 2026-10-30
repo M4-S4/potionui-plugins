@@ -195,11 +195,6 @@ export function progressText(message, currentStep) {
 	return readable(raw) || fallback || null;
 }
 
-export function upscaleTargetFor(resolution, targets = UPSCALE_TARGETS) {
-	const wanted = { '720p': 'hd720', '1080p': 'fhd1080', '1440p': 'qhd1440', '4K': 'uhd2160' }[resolution] ?? 'fhd1080';
-	return targets.includes(wanted) ? wanted : (targets[targets.length - 1] ?? null);
-}
-
 export const upscalesItself = (presetId) => presetId === MINIMAX_H3_IDS[0];
 
 export function canUpscale(take, me) {

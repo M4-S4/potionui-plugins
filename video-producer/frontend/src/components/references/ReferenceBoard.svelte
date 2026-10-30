@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, asset, select, secs, clipLabel } from '../../lib/state.svelte.js';
+	import { ui, doc, asset, select, secs, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { families, addReference, refMediaKind, referenceTagText, engineOf, engineTitle, shotReceptionFor } from '../../lib/references.js';
 	import { typeIcon } from '../../lib/reftags.js';
 	import { mountHostSlot } from '../../lib/host.js';
@@ -31,7 +31,7 @@
 	const going = $derived(shot ? new Set(sentReferences(doc, shot).map((r) => r.id)) : null);
 	const left = $derived(shot ? new Set(excludedOf(shot)) : null);
 	const aside = $derived(shot ? new Set(shotReferences(doc, shot).inherited.filter((x) => x.notCast && !x.excluded).map((x) => x.reference.id)) : null);
-	const shotNum = $derived(shot ? String(doc.clips.indexOf(shot) + 1).padStart(2, '0') : '');
+	const shotNum = $derived(shot ? shotNumber(shot) : '');
 	const list = $derived(
 		doc.references.filter((r) => (ui.refSpace === 'all' || r.space === ui.refSpace) && (!q || norm(`${r.name} ${referenceTagText(r)}`).includes(norm(q))))
 	);

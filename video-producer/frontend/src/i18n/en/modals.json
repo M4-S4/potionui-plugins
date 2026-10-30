@@ -159,6 +159,7 @@
 	"engine.recommendedFile": "Recommended file ({file})",
 	"engine.modelsLoading": "Loading the models…",
 	"engine.modelsFailed": "The installed models could not be listed.",
+	"engine.modelsRetry": "Retry",
 	"engine.only.refs": "Ref2VA only",
 	"engine.only.img2video": "With a first frame",
 	"engine.only.txt2video": "Without a first frame",

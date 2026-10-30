@@ -13,7 +13,6 @@ import {
 	fit,
 	formatValue,
 	migrateFormats,
-	nearestMeasured,
 	pickSize,
 	ratioOf,
 	ratioText,
@@ -64,12 +63,11 @@ test('shared cases: a chosen size is taken or left out', () => {
 	}
 });
 
-test('shared cases: framing, closest format, ratio text, time scale, nearest size and chosen sizes', () => {
+test('shared cases: framing, closest format, ratio text, time scale and chosen sizes', () => {
 	for (const [take, frame, framing, shown] of cases.fits) assert.equal(fit(ratioOf(take), ratioOf(frame), framing), shown, `${take} in ${frame} ${framing}`);
 	for (const [values, name, closest] of cases.closest) assert.equal(closestFormat(values, ratioOf(name)), closest, `${values} ${name}`);
 	for (const [size, text] of cases.texts) assert.equal(ratioText(ratioOf(size)), text, size);
 	for (const [measured, wanted, scale] of cases.scales) assert.equal(round9(timeScale(measured, wanted)), scale, `${measured} ${wanted}`);
-	for (const [measured, wanted, nearest] of cases.nearest) assert.equal(nearestMeasured(measured, wanted), nearest, `${measured} ${wanted}`);
 	for (const [value, kept] of cases.sizes) assert.deepEqual(sizesValue(value), kept);
 });
 

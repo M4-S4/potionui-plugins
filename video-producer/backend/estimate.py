@@ -294,7 +294,7 @@ def _cost(caller: User, plans: Plans, counts: Mapping[str, int]) -> Optional[Dic
 
 
 async def evaluate(caller: User, owner: User, doc: Mapping[str, Any], order: Order, project_id: str = "") -> Evaluation:
-    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape, the time and the minutes following the steps the options of each shot ask for and the reference video tracks it sends; the reference tracks a guided shot would send silent are left out, and a shot that waits for the last image of the previous shot is planned from that image."""
+    """What the takes an order asks for would need and cost, and what blocks them, in the contract's shape."""
     found = chaining.waits(project_id, doc, order.shots)
     plans = await soundtrack.heard_plans(
         owner, project_id, doc, order.shots, order.preset_id, order.quality, order.model_id, overrides=True, chained=chaining.chain_map(found)

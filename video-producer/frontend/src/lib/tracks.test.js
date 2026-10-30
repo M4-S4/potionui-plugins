@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import './svelte-harness.js';
 import { isUlid } from './ulid.js';
-import { migrate } from './starter.js';
+import { emptyDoc, migrate } from './starter.js';
 import {
 	SOUND_FALLBACK,
 	anySolo,
@@ -21,8 +21,9 @@ import {
 	videoTrack
 } from './tracks.js';
 
-const { doc, ui, dispose } = await import('./state.svelte.js');
+const { doc, ui, dispose, replaceDoc } = await import('./state.svelte.js');
 const { addToTimeline, placeAsset } = await import('./importer.js');
+const playback = await import('./playback.svelte.js');
 
 after(() => dispose());
 
@@ -234,5 +235,68 @@ test('placing a sound: every path places the whole source once its length is kno
 		assert.ok(doc.audio.every((x) => x.dur !== SOUND_FALLBACK));
 	} finally {
 		delete globalThis.document;
+	}
+});
+
+test('playing past a slowed shot opens no sound for it, whose sound is never heard, while a shot at its own speed gets one', async () => {
+	const opened = [];
+	const param = () => ({ value: 0, setTargetAtTime() {} });
+	const node = () => ({ gain: param(), frequency: param(), Q: param(), pan: param(), delayTime: param(), knee: param(), threshold: param(), ratio: param(), attack: param(), release: param(), connect: (next) => next, disconnect() {}, getFloatTimeDomainData() {} });
+	class FakeContext {
+		sampleRate = 8000;
+		currentTime = 0;
+		state = 'running';
+		createBuffer = () => ({ copyToChannel() {} });
+		createGain = node;
+		createAnalyser = node;
+		createConvolver = node;
+		createDelay = node;
+		createBiquadFilter = node;
+		createDynamicsCompressor = node;
+		createStereoPanner = node;
+		createMediaElementSource = node;
+		close = async () => {};
+	}
+	class FakeAudio {
+		paused = true;
+		currentTime = 0;
+		src = '';
+		constructor() {
+			opened.push(this);
+		}
+		play() {
+			this.paused = false;
+			return Promise.resolve();
+		}
+		pause() {
+			this.paused = true;
+		}
+		removeAttribute() {}
+		load() {}
+	}
+	Object.assign(window, { AudioContext: FakeContext });
+	Object.assign(globalThis, { Audio: FakeAudio, requestAnimationFrame: () => 0, cancelAnimationFrame() {} });
+	try {
+		replaceDoc(emptyDoc((key) => key));
+		doc.assets = [
+			{ id: 'slow', kind: 'video', name: 'slow.mp4', src: '/slow.mp4' },
+			{ id: 'even', kind: 'video', name: 'even.mp4', src: '/even.mp4' }
+		];
+		doc.clips = [
+			{ id: 's1', assetId: 'slow', start: 0, dur: 4, srcIn: 0, speed: 0.5 },
+			{ id: 's2', assetId: 'even', start: 4, dur: 4, srcIn: 0 }
+		];
+		ui.playhead = 3;
+		playback.play();
+		assert.deepEqual(opened.map((el) => el.src), ['/even.mp4']);
+		doc.clips[0].speed = 1;
+		ui.playhead = 3.2;
+		playback.togglePlay();
+		playback.togglePlay();
+		assert.deepEqual(opened.map((el) => el.src).sort(), ['/even.mp4', '/slow.mp4']);
+	} finally {
+		await playback.dispose();
+		delete window.AudioContext;
+		for (const key of ['Audio', 'requestAnimationFrame', 'cancelAnimationFrame']) delete globalThis[key];
 	}
 });

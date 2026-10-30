@@ -1,16 +1,16 @@
 <script>
-	import { formatNumber, t } from '../../i18n/index.svelte.js';
+	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, asset, clamp, round, relayout, secs, clipLabel, promptOf, sourceLength, isPicked, pickClip } from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot, soundOf } from '../../lib/production.svelte.js';
 	import { activityStep } from '../../lib/generation.js';
-	import { labelOf } from '../../lib/labels.js';
-	import { overrunsTake, shotStale } from '../../lib/shots.js';
+	import { takeLabelOf } from '../../lib/labels.js';
+	import { shotStale, shotNumberAt } from '../../lib/shots.js';
 	import { castLabels } from '../../lib/bible.js';
 	import { seamImage } from '../../lib/seam.js';
 	import { seam } from '../../lib/continuity.svelte.js';
 	import { shotWaitText } from '../../lib/chain.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { drag, cancelDrag, snap, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
+	import { drag, cancelDrag, snap, rulerStep, rulerTicks, rulerLabel, zoomTo, dragText, trimText, waveform, peakWaveform } from '../../lib/timeline.js';
 	import { wheelZoomFactor } from '../../lib/timebase.js';
 	import { pickMode } from '../../lib/keyboard.js';
 	import { audioPeaks } from '../../lib/sources.svelte.js';
@@ -55,12 +55,11 @@
 	const contentW = $derived(Math.max(laneW, (total + 6) * pps));
 	const parts = $derived(sections(doc.markers, Math.max(song, cut)));
 	const step = $derived(rulerStep(pps));
-	const ticks = $derived(Array.from({ length: Math.ceil(contentW / pps / step) + 1 }, (_, i) => i * step));
+	const ticks = $derived(rulerTicks(contentW, pps, step));
 	const musicLanes = $derived(doc.lanes.filter((l) => l.role === MUSIC_ROLE));
 	const musicItems = $derived(doc.audio.filter((a) => musicLanes.some((l) => l.id === a.lane)));
 	const sel = $derived(selectedShot());
 	const overview = $derived(Math.max(total, 1));
-	const tickLabel = (v) => (step < 1 ? formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}`);
 	const tone = { [CONDITION]: 'border-success/60 bg-success/15 text-success', [MUX]: 'border-line-hover bg-fg-subtle/15 text-fg-muted' };
 	const hasTracks = $derived(videoTracksOf(doc).length > 0);
 	const vrefsOf = (c) => (hasTracks ? shotReceptionFor(c).videoTracks.filter((v) => v.status !== 'off' && v.status !== 'excluded') : []);
@@ -70,12 +69,6 @@
 		const r = scroller.getBoundingClientRect();
 		return Math.max(0, (clientX - r.left + scroller.scrollLeft) / pps);
 	};
-
-	function setDragText(text, limit = false) {
-		if (!ui.drag) return;
-		ui.drag.text = text;
-		ui.drag.limit = limit;
-	}
 
 	function rulerDown(e) {
 		seek(timeAt(e.clientX));
@@ -96,7 +89,7 @@
 				const index = others.filter((o) => starts[doc.clips.indexOf(o)] + o.dur / 2 < at).length;
 				const next = others[index];
 				reorder = { id: c.id, dx, index, at: next ? starts[doc.clips.indexOf(next)] : cut };
-				setDragText(t('timeline.drag.position', { n: index + 1 }));
+				dragText(t('timeline.drag.position', { n: index + 1 }));
 			},
 			onCancel: () => (reorder = null),
 			onClick: () => pickShot(c),
@@ -125,8 +118,7 @@
 				c.dur = round(nd, 0.04);
 				relayout();
 				if (ui.drag) ui.drag.at = end.at;
-				if (limit) setDragText(range.by === 'engine' ? t('timeline.drag.engineLimitAt', { dur: secs(range.max) }) : t('timeline.drag.sourceLimitAt', { dur: secs(range.by === 'source' ? max : range.max) }), true);
-				else setDragText(overrunsTake(range.take, d0, c.dur) ? t('timeline.drag.beyondTake', { dur: secs(c.dur) }) : t('timeline.drag.rippled', { dur: secs(c.dur) }));
+				trimText(range, max, d0, c.dur, limit);
 			},
 			onEnd: () => {
 				if (fitShot(c, d0)) relayout();
@@ -139,7 +131,7 @@
 			e.preventDefault();
 			const at = timeAt(e.clientX);
 			const before = e.clientX - scroller.getBoundingClientRect().left;
-			ui.pxPerSec = clamp(ui.pxPerSec * wheelZoomFactor(e), 8, 220);
+			ui.pxPerSec = zoomTo(ui.pxPerSec * wheelZoomFactor(e));
 			requestAnimationFrame(() => scroller && (scroller.scrollLeft = at * ui.pxPerSec - before));
 		} else if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey) {
 			e.preventDefault();
@@ -180,7 +172,7 @@
 	$effect(() => cancelDrag);
 
 	export function fit() {
-		ui.pxPerSec = clamp((laneW - 24) / total, 8, 220);
+		ui.pxPerSec = zoomTo((laneW - 24) / total);
 		if (scroller) scroller.scrollLeft = 0;
 	}
 
@@ -230,7 +222,7 @@
 				<div class="absolute inset-x-0 top-0 h-[22px] cursor-text vp-touch-none" onpointerdown={rulerDown}>
 					{#each ticks as tick (tick)}
 						<div class="absolute bottom-0 h-2 w-px bg-viz-axis" style:left="{x(tick)}px"></div>
-						<span class="vp-tc absolute top-1 pl-1 text-2xs text-fg-subtle" style:left="{x(tick)}px">{tickLabel(tick)}</span>
+						<span class="vp-tc absolute top-1 pl-1 text-2xs text-fg-subtle" style:left="{x(tick)}px">{rulerLabel(tick, step)}</span>
 					{/each}
 				</div>
 				<div class="absolute inset-x-0 top-[25px] h-[18px]">
@@ -335,7 +327,7 @@
 		role="button"
 		tabindex={isSel ? 0 : -1}
 		aria-label={t('storyboard.band.shotLabel', { n: i + 1, name: clipLabel(c), dur: secs(c.dur), stage: stages[c.stage].label })}
-		title={`${String(i + 1).padStart(2, '0')} · ${clipLabel(c)} · ${secs(c.dur)}`}
+		title={`${shotNumberAt(i)} · ${clipLabel(c)} · ${secs(c.dur)}`}
 		data-band-shot={c.id}
 		onpointerdown={(e) => shotDown(e, c)}
 		ondblclick={() => (ui.modal = { type: 'shot', id: c.id })}
@@ -354,7 +346,7 @@
 			{/if}
 		</div>
 		<div class="absolute left-1.5 top-1.5 flex items-center gap-1">
-			<span class="vp-tc flex items-center gap-0.5 rounded px-1 text-2xs font-medium leading-4 {picked ? 'bg-signal text-accent-contrast' : 'bg-black/60 text-white'}">{#if picked}<Icon name="check" class="h-2.5 w-2.5" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}{String(i + 1).padStart(2, '0')}</span>
+			<span class="vp-tc flex items-center gap-0.5 rounded px-1 text-2xs font-medium leading-4 {picked ? 'bg-signal text-accent-contrast' : 'bg-black/60 text-white'}">{#if picked}<Icon name="check" class="h-2.5 w-2.5" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}{shotNumberAt(i)}</span>
 			{#if i > 0 && w > 46}<ChainChip clip={c} small />{/if}
 		</div>
 		<div class="absolute right-1.5 top-1.5 flex gap-1">
@@ -416,7 +408,7 @@
 	{@const w = Math.max(6, x(c.dur) - 3)}
 	{@const isSel = sel?.id === c.id}
 	{#each order.slice(0, 4) as take, r (take.id)}
-		{@const label = labelOf(take)}
+		{@const label = takeLabelOf(take)}
 		{@const shown = ui.preview?.kind === 'result' && ui.preview.id === take.id}
 		<button
 			type="button"
@@ -429,7 +421,7 @@
 			onclick={() => (take.status === 'done' ? previewTake(take) : pickShot(c))}
 		>
 			{#if take.status === 'running'}<span class="absolute inset-y-0 left-0 bg-signal/50" style:width="{take.progress ?? 0}%"></span>{/if}
-			<span class="relative">{#if w > 26}{take.variant ?? ''}{#if isSel && w > 96 && take.status === 'done'} · {t(`generation.label.${label}`)}{/if}{/if}</span>
+			<span class="relative">{#if w > 26}{take.variant ?? ''}{#if isSel && w > 96 && take.status === 'done'}{' · '}{t(`generation.label.${label}`)}{/if}{/if}</span>
 		</button>
 	{/each}
 	{#if order.length > 4}<span class="vp-tc absolute text-[10px] text-fg-subtle" style:left="{x(starts[i]) + w - 22}px" style:top="48px">+{order.length - 4}</span>{/if}

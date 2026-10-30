@@ -465,7 +465,7 @@ class _Inputs:
 
 
 def sound_chain(item: Mapping[str, Any], lane: Mapping[str, Any], origin: float = 0.0, seek: float = 0.0, mono: bool = False) -> List[str]:
-    """The filters that play an audio item at its place in a mix starting at origin seconds on the timeline: its part of the source, its gain with the volume of the lane given and its fades, the part before origin cut off; a mono source on both channels at its full level when mono is set, as the page's console plays it. Seek is the time of the source its input was sought to: the filters then take the source from there, timed as the whole item."""
+    """The filters that play one audio item at its place in a mix that starts at origin seconds on the timeline."""
     dur = float(item["dur"])
     start = float(item.get("start") or 0)
     gain = float(item.get("gain") or 0) + float(lane.get("vol") or 0)
@@ -667,7 +667,7 @@ def master_level(doc: Mapping[str, Any]) -> Optional[str]:
 
 
 def _console(doc: Mapping[str, Any], sounds: Mapping[str, str], inputs: _Inputs, options: Mapping[str, Any]) -> List[str]:
-    """The chains that play the audio items through the console as the page does and mix them with the shots' sound at [bed] into [aout]: the items of each track summed over the whole sequence and run through its strip, the tracks of each role summed with what they send to the reverb (afir on the impulse response at options["impulse"]) and to the delay (its echoes unrolled), the roles and the shots' sound summed under the master's fader. With options["stems"], the shots' sound and each role also at [stem_<name>], under the master's fader and as long as the sequence, a role nothing plays in silent."""
+    """The chains that play the audio items through the console as the page does and mix them with the shots' sound into [aout]."""
     length = num(timeline(doc)[1])
     chains, labels = _lanes(doc, sounds, inputs, set(options.get("mono") or ()))
     tracks: Dict[str, List[str]] = {}
@@ -906,7 +906,7 @@ def build_command(
 def convert_command(
     ffmpeg: str, mezzanine: Path, final: Path, size: Tuple[int, int], fps: Any, audio_filter: Optional[str] = None, fmt: str = "web"
 ) -> List[str]:
-    """The ffmpeg run that writes the delivery file from the mezzanine: for the web and social formats the host converter's settings (H.264 at crf 26 with the slow preset, AAC at 96 kb/s, an MP4 that plays while it downloads), for the master ProRes 422 HQ in 10 bits with 24-bit PCM in a MOV, for the archive H.265 in 10 bits at crf 18 with AAC at 256 kb/s in an MP4; the sound through audio_filter when given."""
+    """The ffmpeg run that writes the delivery file of a format from the mezzanine."""
     rate = num(fps)
     return [
         ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats",
@@ -1030,7 +1030,7 @@ async def _premix(
     on_process: Optional[Callable[[Any], Any]],
     mono: Collection[str] = (),
 ) -> Tuple[Mapping[str, Any], Mapping[str, str]]:
-    """The document and sounds the last run mixes: as they are with at most MIX_INPUTS audio items, else the items of each track mixed first, in batches of at most that many, into files of their own, each heard as one item of its track, so that the strip of the track still plays them; a run of crossfading neighbours kept in one batch unless it alone is longer."""
+    """The document and sounds the last run mixes, the items of a track premixed in batches when there are too many."""
     playing = [item for item, _ in audible(doc) if item["id"] in sounds]
     if len(playing) <= MIX_INPUTS:
         return doc, sounds
@@ -1074,7 +1074,7 @@ async def assemble_sequence(
     report: Callable[[float, str], bool],
     on_process: Optional[Callable[[Any], Any]] = None,
 ) -> Dict[str, Path]:
-    """Write the mezzanine at paths["output"]: in one ffmpeg run when the sequence opens at most PART_INPUTS inputs, else in parts of consecutive shots that each open at most that many, joined by a last run that mixes the audio items in, so that neither the memory ffmpeg holds per open input nor the length of its command line grows with the sequence. With options["stems"], the last run also writes each stem in the folder; returns their files by name."""
+    """Write the mezzanine at paths["output"], in parts when the sequence opens too many inputs; returns the stem files by name."""
     segments, total = timeline(doc)
     fps = fps_of(doc)
     sounds: Mapping[str, str] = paths.get("audio") or {}
@@ -1266,7 +1266,7 @@ async def render(
     report: Callable[[float, str], bool],
     on_process: Optional[Callable[[Any], Any]] = None,
 ) -> Dict[str, Any]:
-    """Assemble, transcode and store one export, each shot reading the finished version of its take at the frame rate it needs (the film's divided by its speed) when there is one: the video of its format, packed in a ZIP with its stems when the job asks for them, the web and social videos also stored in the requester's library; returns its file and library item, raises ExportError."""
+    """Assemble, transcode and store one export; returns its file and library item, raises ExportError."""
     from .. import renditions
 
     doc = project["doc"]

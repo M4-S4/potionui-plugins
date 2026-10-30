@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, clipLabel, globalPrompt, witness, followedIssue, issueRule } from '../../lib/state.svelte.js';
+	import { ui, doc, clipLabel, globalPrompt, witness, followedIssue, issueRule, shotNumber } from '../../lib/state.svelte.js';
 	import { instructionPromptOf } from '../../lib/bible.js';
 	import { markedPhrases } from '../../lib/director.js';
 	import { commandById } from '../../lib/commands.js';
@@ -17,7 +17,6 @@
 	const phrases = $derived(rule ? { direction: markedPhrases(globalPrompt(), [rule.global])[0] ?? '', instruction: markedPhrases(issue.prompt.text, [rule.local])[0] ?? '' } : null);
 	const prompt = $derived(issue?.prompt ?? (shot ? instructionPromptOf(doc, shot) : null));
 	let composed = $state(null);
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 
 	const follow = $derived.by(() => {
 		if (chosen.source === 'pinned') return t('panels.director.aside.pinned');
@@ -42,7 +41,7 @@
 			<label class="block space-y-1">
 				<span class="vp-label">{t('panels.director.aside.witness')}</span>
 				<select class="vp-popup w-full" value={shot.id} onchange={(e) => (ui.witness = e.currentTarget.value)}>
-					{#each doc.clips as c (c.id)}<option value={c.id}>{num(c)} · {clipLabel(c)}</option>{/each}
+					{#each doc.clips as c (c.id)}<option value={c.id}>{shotNumber(c)} · {clipLabel(c)}</option>{/each}
 				</select>
 			</label>
 			<div class="flex items-start gap-1.5 text-xs {chosen.source === 'pinned' ? 'text-fg-muted' : 'text-signal'}" data-witness={chosen.source}>
@@ -61,13 +60,13 @@
 						<dl class="mt-1.5 space-y-1 text-xs" data-issue-phrases>
 							<dt class="text-fg-subtle">{t('panels.director.aside.fromDirection')}</dt>
 							<dd><mark class="rounded-sm text-fg" style:background-color="rgb(var(--warning) / 0.25)">{phrases.direction}</mark></dd>
-							<dt class="text-fg-subtle">{t('panels.director.aside.fromInstruction', { shot: num(shot) })}</dt>
+							<dt class="text-fg-subtle">{t('panels.director.aside.fromInstruction', { shot: shotNumber(shot) })}</dt>
 							<dd><mark class="rounded-sm text-fg" style:background-color="rgb(var(--warning) / 0.25)">{phrases.instruction}</mark></dd>
 						</dl>
 					{/if}
 				</HostUi>
 			{/if}
-			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('pencil'), class: 'w-full', onclick: edit }}>{t('panels.director.aside.edit', { shot: num(shot) })}</HostUi>
+			<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: hostIconName('pencil'), class: 'w-full', onclick: edit }}>{t('panels.director.aside.edit', { shot: shotNumber(shot) })}</HostUi>
 			<ComposedPrompt source={doc} shotId={shot.id} {marks} bind:current={composed} />
 		{:else}
 			<HostUi name="EmptyState" props={{ compact: true, icon: 'film', title: t('panels.director.aside.noneTitle'), description: t('panels.director.aside.none') }} />

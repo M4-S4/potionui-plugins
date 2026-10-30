@@ -1,7 +1,7 @@
 import { isInFlight } from './generation.js';
-import { labelOf } from './labels.js';
+import { takeLabelOf } from './labels.js';
 import { CHARACTERS, castOf, instructionOf, names, setCast, shotsCasting, usable } from './bible.js';
-import { touch } from './shots.js';
+import { shotNumberAt, touch } from './shots.js';
 
 export const VIEWS = ['review', 'direction', 'bible', 'references'];
 export const VIEW_ICONS = { review: 'layers', direction: 'palette', bible: 'book', references: 'bookmark' };
@@ -20,9 +20,9 @@ export function viewOf(chosen, takes) {
 export function reviewState(takes) {
 	const list = takes ?? [];
 	const latest = [...list].sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? ''))).at(-1);
-	const final = list.some((x) => finished(x) && labelOf(x) === 'final');
+	const final = list.some((x) => finished(x) && takeLabelOf(x) === 'final');
 	const failed = latest?.status === 'failed';
-	const open = !final && list.some((x) => finished(x) && labelOf(x) !== 'rejected');
+	const open = !final && list.some((x) => finished(x) && takeLabelOf(x) !== 'rejected');
 	return { running: list.some(isInFlight), final, failed, review: failed || open };
 }
 
@@ -138,7 +138,7 @@ export function marked(text, patterns) {
 export const markedPhrases = (text, patterns) => marked(text, patterns).filter((part) => part.mark).map((part) => part.text.trim());
 
 export function shotNumbers(doc, clips, max = 3) {
-	const list = (clips ?? []).map((c) => String((doc?.clips ?? []).indexOf(c) + 1).padStart(2, '0'));
+	const list = (clips ?? []).map((c) => shotNumberAt((doc?.clips ?? []).indexOf(c)));
 	return { list: list.slice(0, max).join(' · '), more: Math.max(0, list.length - max) };
 }
 
@@ -161,7 +161,7 @@ export function reviewPickOf(doc, takes, pick, selection) {
 
 export function nextToReview(clips, takes) {
 	for (const clip of reviewShots(clips, takes, 'review')) {
-		const open = (takes ?? []).filter((x) => x.shotId === clip.id && finished(x) && labelOf(x) !== 'rejected');
+		const open = (takes ?? []).filter((x) => x.shotId === clip.id && finished(x) && takeLabelOf(x) !== 'rejected');
 		const take = open.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0];
 		if (take) return { clip, take };
 	}

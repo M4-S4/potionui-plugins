@@ -30,16 +30,16 @@
 		sourceLength,
 		isPicked,
 		pickClip,
-		deleteVrefTrack
+		deleteVrefTrack,
+		shotNumber
 	} from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { shotWaitText } from '../../lib/chain.svelte.js';
 	import { speedOf } from '../../lib/cadence.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { drag, cancelDrag, snap, snapMove, rulerStep, waveform, peakWaveform } from '../../lib/timeline.js';
+	import { drag, cancelDrag, snap, snapMove, rulerStep, rulerTicks, rulerLabel, zoomTo, dragText, trimText, waveform, peakWaveform } from '../../lib/timeline.js';
 	import { pickMode } from '../../lib/keyboard.js';
-	import { overrunsTake } from '../../lib/shots.js';
 	import { audioPeaks } from '../../lib/sources.svelte.js';
 	import { roleColor, stages, frameRoleLabel } from '../../lib/catalog.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -62,6 +62,7 @@
 	import { TAG_CLASS } from '../../lib/reftags.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from '../shell/Dropdown.svelte';
+	import ZoomControls from './ZoomControls.svelte';
 
 	const HEAD = 156;
 	const BLOCK_ROW = 31;
@@ -82,7 +83,7 @@
 	const FADE_EDGE = 37;
 	const fadeX = (px, w) => (w - 2 < FADE_EDGE * 2 ? px : clamp(px, FADE_EDGE, w - 2 - FADE_EDGE));
 	const step = $derived(rulerStep(pps));
-	const ticks = $derived(Array.from({ length: Math.ceil(contentW / pps / step) + 1 }, (_, i) => i * step));
+	const ticks = $derived(rulerTicks(contentW, pps, step));
 	const key = (id) => commandById(id)?.key || undefined;
 
 	const rows = $derived([
@@ -114,7 +115,6 @@
 	const menuLane = $derived(laneMenu && ui.menuOpen === `lane:${laneMenu.id}` ? doc.lanes.find((l) => l.id === laneMenu.id) : null);
 	const menuTrack = $derived(trackMenu && ui.menuOpen === `vtrack:${trackMenu.id}` ? (tracks.find((track) => track.id === trackMenu.id) ?? null) : null);
 	const vsecs = (v) => `${formatNumber(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s`;
-	const shotNumber = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 
 	function toggleVideo(key) {
 		doc.video = { ...videoTrack(doc), [key]: !videoTrack(doc)[key] };
@@ -173,13 +173,6 @@
 		const r = scroller.getBoundingClientRect();
 		return Math.max(0, (clientX - r.left - HEAD + scroller.scrollLeft) / pps);
 	};
-	const tickLabel = (v) => (step < 1 ? formatNumber(v, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}`);
-
-	function setDragText(text, limit = false) {
-		if (!ui.drag) return;
-		ui.drag.text = text;
-		ui.drag.limit = limit;
-	}
 
 	function rulerDown(e) {
 		if (e.altKey || ui.tool === 'range') return rangeDown(e);
@@ -195,7 +188,7 @@
 				const t1 = snap(timeAt(ev.clientX)).t;
 				ui.range = { in: Math.min(t0, t1), out: Math.max(t0, t1) };
 				ui.production.target = 'range';
-				setDragText(t('timeline.drag.range', { start: secs(ui.range.in), end: secs(ui.range.out) }));
+				dragText(t('timeline.drag.range', { start: secs(ui.range.in), end: secs(ui.range.out) }));
 			},
 			onClick: () => (ui.range = null)
 		});
@@ -239,9 +232,9 @@
 				}
 				if (ui.drag) ui.drag.at = r.at;
 				const onto = kind === 'vref' && item.track !== track0 ? tracks.find((track) => track.id === item.track) : null;
-				if (kind === 'audio' && item.lane !== lane0) setDragText(t('timeline.drag.moveLane', { start: secs(item.start), lane: laneCode(doc.lanes, item.lane) }));
-				else if (onto) setDragText(t('timeline.drag.moveLane', { start: secs(item.start), lane: vrefLabel(onto.slot) }));
-				else setDragText(t('timeline.drag.move', { start: secs(item.start), dur: secs(item.dur) }));
+				if (kind === 'audio' && item.lane !== lane0) dragText(t('timeline.drag.moveLane', { start: secs(item.start), lane: laneCode(doc.lanes, item.lane) }));
+				else if (onto) dragText(t('timeline.drag.moveLane', { start: secs(item.start), lane: vrefLabel(onto.slot) }));
+				else dragText(t('timeline.drag.move', { start: secs(item.start), dur: secs(item.dur) }));
 			},
 			onEnd: () => relinkAfter(kind, item),
 			onClick: () => {}
@@ -270,7 +263,7 @@
 					if (ne >= s0 + src - in0 - 0.001) limit = true;
 					item.dur = ne - s0;
 				}
-				setDragText(limit ? t('timeline.drag.sourceLimit') : t('timeline.drag.duration', { dur: secs(item.dur) }), limit);
+				dragText(limit ? t('timeline.drag.sourceLimit') : t('timeline.drag.duration', { dur: secs(item.dur) }), limit);
 			},
 			onEnd: () => relinkAfter(kind, item)
 		});
@@ -284,7 +277,7 @@
 				const v = round(clamp(f0 + (edge === 'in' ? dx : -dx) / pps, 0, item.dur / 2), 0.04);
 				if (edge === 'in') item.fadeIn = v;
 				else item.fadeOut = v;
-				setDragText(edge === 'in' ? t('timeline.drag.fadeIn', { dur: secs(v) }) : t('timeline.drag.fadeOut', { dur: secs(v) }));
+				dragText(edge === 'in' ? t('timeline.drag.fadeIn', { dur: secs(v) }) : t('timeline.drag.fadeOut', { dur: secs(v) }));
 			}
 		});
 	}
@@ -307,7 +300,7 @@
 				const others = doc.clips.filter((o) => o.id !== c.id);
 				const index = others.filter((o) => o.start + o.dur / 2 < at).length;
 				reorder = { id: c.id, dx, index, at: index < others.length ? others[index].start : total };
-				setDragText(t('timeline.drag.position', { n: index + 1 }));
+				dragText(t('timeline.drag.position', { n: index + 1 }));
 			},
 			onCancel: () => (reorder = null),
 			onEnd: () => {
@@ -342,8 +335,7 @@
 					c.dur = round(nd, 0.04);
 				}
 				relayout();
-				if (limit) setDragText(range.by === 'engine' ? t('timeline.drag.engineLimitAt', { dur: secs(range.max) }) : t('timeline.drag.sourceLimitAt', { dur: secs(range.by === 'source' ? max : range.max) }), true);
-				else setDragText(overrunsTake(range.take, d0, c.dur) ? t('timeline.drag.beyondTake', { dur: secs(c.dur) }) : t('timeline.drag.rippled', { dur: secs(c.dur) }), false);
+				trimText(range, max, d0, c.dur, limit);
 			},
 			onEnd: () => {
 				if (edge === 'end' && fitShot(c, d0)) relayout();
@@ -359,7 +351,7 @@
 				const r = snap(Math.max(0, t0 + dx / pps), f.id);
 				f.time = r.t;
 				if (ui.drag) ui.drag.at = r.at;
-				setDragText(t('timeline.drag.frame', { time: secs(f.time) }));
+				dragText(t('timeline.drag.frame', { time: secs(f.time) }));
 			},
 			onEnd: () => relinkAfter('frame', f)
 		});
@@ -370,7 +362,7 @@
 		drag(e, {
 			onMove: (dx) => {
 				m.time = round(Math.max(0, t0 + dx / pps), 0.04);
-				setDragText(t('timeline.drag.marker', { label: m.label, time: secs(m.time) }));
+				dragText(t('timeline.drag.marker', { label: m.label, time: secs(m.time) }));
 			},
 			onClick: () => seek(m.time)
 		});
@@ -424,11 +416,11 @@
 		e.preventDefault();
 		const at = timeAt(e.clientX);
 		const before = e.clientX - scroller.getBoundingClientRect().left - HEAD;
-		ui.pxPerSec = clamp(ui.pxPerSec * wheelZoomFactor(e), 8, 220);
+		ui.pxPerSec = zoomTo(ui.pxPerSec * wheelZoomFactor(e));
 		requestAnimationFrame(() => scroller && (scroller.scrollLeft = at * ui.pxPerSec - before));
 	}
 	function fit() {
-		ui.pxPerSec = clamp((viewW - HEAD - 24) / total, 8, 220);
+		ui.pxPerSec = zoomTo((viewW - HEAD - 24) / total);
 		scroller.scrollLeft = 0;
 	}
 
@@ -467,16 +459,7 @@
 		<div class="vp-divider"></div>
 		<Dropdown label={t('timeline.add.label')} title={t('timeline.add.tip')} items={addItems} />
 		<div class="flex-1"></div>
-		<HostUi
-			name="IconButton"
-			props={{ icon: hostIconName('magnet'), label: t('timeline.snapping'), size: 'sm', class: 'vp-h7 vp-toggle', ariaPressed: ui.snapping, kbd: key('snap'), onclick: () => (ui.snapping = !ui.snapping) }}
-		/>
-		<HostUi name="IconButton" props={{ icon: 'minus', label: t('timeline.zoomOut'), size: 'sm', class: 'vp-h7', kbd: key('zoom-out'), onclick: () => (ui.pxPerSec = Math.max(8, ui.pxPerSec / 1.25)) }} />
-		<input class="vp-slider w-24" type="range" min="8" max="220" bind:value={ui.pxPerSec} aria-label={t('timeline.zoom')} />
-		<HostUi name="IconButton" props={{ icon: 'plus', label: t('timeline.zoomIn'), size: 'sm', class: 'vp-h7', kbd: key('zoom-in'), onclick: () => (ui.pxPerSec = Math.min(220, ui.pxPerSec * 1.25)) }} />
-		<HostUi name="Tooltip" props={{ text: t('timeline.fitTip') }}>
-			<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: fit }}>{t('timeline.fit')}</HostUi>
-		</HostUi>
+		<ZoomControls onfit={fit} />
 	</div>
 
 	<div class="relative min-h-0 flex-1 overflow-auto" bind:this={scroller} bind:clientWidth={viewW} onwheel={wheel} style:overscroll-behavior-x="contain" style:cursor={ui.tool === 'blade' ? 'crosshair' : ui.tool === 'range' ? 'col-resize' : 'default'}>
@@ -487,7 +470,7 @@
 				<div class="relative flex-1 cursor-text vp-touch-none" onpointerdown={rulerDown}>
 					{#each ticks as tick (tick)}
 						<div class="absolute bottom-0 h-2 w-px bg-viz-axis" style:left="{x(tick)}px"></div>
-						<span class="vp-tc absolute top-1 pl-1 text-2xs text-fg-subtle" style:left="{x(tick)}px">{tickLabel(tick)}</span>
+						<span class="vp-tc absolute top-1 pl-1 text-2xs text-fg-subtle" style:left="{x(tick)}px">{rulerLabel(tick, step)}</span>
 						{#each [1, 2, 3, 4] as k (k)}<div class="absolute bottom-0 h-1 w-px bg-viz-grid" style:left="{x(tick + (step * k) / 5)}px"></div>{/each}
 					{/each}
 					{#if ui.range}

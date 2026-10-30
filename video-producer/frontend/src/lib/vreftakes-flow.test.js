@@ -22,7 +22,7 @@ const { takeStore, takeById } = await import('./takes.svelte.js');
 const { sendTakeToTrack, dropTakeOnTrack, takeChoices, addVideoTrack } = await import('./vreftracks.svelte.js');
 const { takeTracks, vrefLabel } = await import('./vreftracks.js');
 const { emptyDoc, newClip } = await import('./starter.js');
-const { marksOf, labelOf } = await import('./labels.js');
+const { marksOf, takeLabelOf } = await import('./labels.js');
 const { t } = await import('../i18n/index.svelte.js');
 
 const copy = (value) => JSON.parse(JSON.stringify(value));
@@ -86,7 +86,7 @@ const labelsOf = (takeId) => labels.filter(([id]) => id === takeId).map(([, labe
 
 test('vref takes: a placed take moves to a new track under its shot, freeing the shot, and Undo puts it back as the final take', async () => {
 	await open('p-move', [take('t1', 's1')]);
-	assert.deepEqual([shot('s1').take, labelOf(takeById('t1'))], ['t1', 'final']);
+	assert.deepEqual([shot('s1').take, takeLabelOf(takeById('t1'))], ['t1', 'final']);
 	const choices = takeChoices(takeById('t1'));
 	assert.deepEqual({ placed: choices.placed, span: choices.span, shot: choices.shot, targets: choices.targets, slot: choices.slot }, { placed: true, span: [0, 3], shot: '01', targets: [], slot: 1 });
 
@@ -137,7 +137,7 @@ test('vref takes: Copy keeps the placed take on its shot, a take that is not pla
 	assert.equal(vrefLabel(second.track.slot), 'vref2');
 	assert.equal(second.released, null);
 	assert.equal(shot('s1').take, 't1');
-	assert.equal(labelOf(takeById('t2')), 'draft');
+	assert.equal(takeLabelOf(takeById('t2')), 'draft');
 
 	const dropped = dropTakeOnTrack('t3', track.id);
 	await settle();

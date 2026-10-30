@@ -49,7 +49,7 @@ def _features(user: User, engines: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 @router.get("/me")
 def get_me(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The signed-in user's locale, last project, role, quota, engines, video presets (with the options the project may set in each mode the Video Director runs them in, and the sizes each was measured at by backend) and features, the presets that edit a start image from several pictures, ffmpeg, and the plugin settings."""
+    """The signed-in user's locale, last project, role, quota, engines, video presets, features and the plugin settings."""
     video_presets = catalog.video_presets(user)
     engines = catalog.video_engines()
     return ok(

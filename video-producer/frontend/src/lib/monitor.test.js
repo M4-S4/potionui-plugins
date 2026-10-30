@@ -72,6 +72,7 @@ test('monitor: the seam of the band shows the shot and the one before it, over a
 
 const VIEWER = new URL('../components/viewer/Viewer.svelte', import.meta.url).href;
 const BAND_MONITOR = new URL('../components/storyboard/BandMonitor.svelte', import.meta.url).href;
+const BAND_LANES = new URL('../components/storyboard/BandLanes.svelte', import.meta.url).href;
 const MATCH_CANVAS = new URL('../components/viewer/MatchCanvas.svelte', import.meta.url).href;
 const COLOR_CONTROLS = new URL('../components/inspector/ColorControls.svelte', import.meta.url).href;
 const COLOR_SECTION = new URL('../components/inspector/ColorSection.svelte', import.meta.url).href;
@@ -124,7 +125,7 @@ test('monitor: the viewer grades the placed take of a preview and of each side o
 	assert.match(tag, /autoplay=""/);
 	assert.match(tag, /loop=""/);
 	assert.doesNotMatch(tag, /controls/);
-	assert.match(textOf(html), new RegExp(`${escaped(t('viewer.outOfCut'))}\\s*${escaped(t('viewer.graded'))}`));
+	assert.ok(html.includes(`${t('viewer.outOfCut')} ${t('viewer.graded')}</span>`));
 
 	ui.preview = { kind: 'result', id: 't3' };
 	html = clean(await renderComponent(VIEWER));
@@ -147,7 +148,7 @@ test('monitor: the viewer grades the placed take of a preview and of each side o
 	assert.equal(sides.length, 2);
 	assert.match(sides[0], new RegExp(gradedFilter));
 	assert.match(sides[1], /style="filter: none;"/);
-	assert.match(html, new RegExp(`One · Draft A<span class="text-white/60">${escaped(t('viewer.graded'))}</span></span>`));
+	assert.ok(html.includes(`One · Draft A <span class="text-white/60">${t('viewer.graded')}</span></span>`));
 	assert.match(html, /Two · Draft A<\/span>/);
 
 	ui.compare = null;
@@ -231,4 +232,18 @@ test('monitor: every color change of a shot brings that shot to the monitor', ()
 	host.toast = () => {};
 	assert.deepEqual({ ...raw }, before);
 	assert.deepEqual(notes, [['warning', t('lib.continuity.pending')]]);
+});
+
+test('monitor: a space separates the take from the shot grade in the viewer and the letter from the label in the band, as written in the markup', async () => {
+	seamScene();
+	ui.compare = ['t1', 't2'];
+	const viewer = textOf(clean(await renderComponent(VIEWER)));
+	assert.ok(viewer.includes(`One · Draft A ${t('viewer.graded')}`), viewer);
+	ui.compare = null;
+	ui.preview = { kind: 'result', id: 't1' };
+	assert.ok(textOf(clean(await renderComponent(VIEWER))).includes(`${t('viewer.outOfCut')} ${t('viewer.graded')}`));
+	ui.preview = null;
+	const lanes = clean(await renderComponent(BAND_LANES));
+	assert.ok(lanes.includes(`>A · ${t('generation.label.draft')}</span>`), 'band');
+	ui.seamCompare = null;
 });

@@ -46,7 +46,7 @@
 	import SeamAction from '../takes/SeamAction.svelte';
 	import ProductionDrawer from './ProductionDrawer.svelte';
 	import QueuePanel from '../panels/QueuePanel.svelte';
-	import { sharedDrafts, takeCount } from '../../lib/shots.js';
+	import { sharedDrafts, takeCount, shotNumberAt } from '../../lib/shots.js';
 	import { shotNumbers } from '../../lib/director.js';
 	import { flyingTakes, takeById, takeStore } from '../../lib/takes.svelte.js';
 
@@ -79,7 +79,7 @@
 	const runningTake = $derived(flying.find((x) => x.status === 'running') ?? null);
 	const shotNumber = (take) => {
 		const index = doc.clips.findIndex((c) => c.id === take.shotId);
-		return index < 0 ? '' : String(index + 1).padStart(2, '0');
+		return index < 0 ? '' : shotNumberAt(index);
 	};
 	const current = $derived(runningTake ? { variant: runningTake.variant, shot: shotNumber(runningTake) } : null);
 	const percent = $derived(Math.round(runningTake ? Math.min(100, Math.max(0, runningTake.progress ?? 0)) : p.progress));

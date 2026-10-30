@@ -1,6 +1,6 @@
 import { touch } from './shots.js';
 import { castLabels } from './bible.js';
-import { labelOf as takeLabel } from './labels.js';
+import { takeLabelOf as takeLabel } from './labels.js';
 
 export const PROMPT_LIMIT = 300;
 export const LABEL_LIMIT = 34;
@@ -26,13 +26,13 @@ export function promptFor(doc, shotId) {
 	return (doc?.prompts ?? []).find((p) => p.shotId === shotId) ?? null;
 }
 
-export function shotsContext(doc, labelOf, takesOf = () => []) {
+export function shotsContext(doc, takeLabelOf, takesOf = () => []) {
 	return (doc.clips ?? []).map((c) => {
 		const p = promptFor(doc, c.id);
 		const takes = takesOf(c.id);
 		return {
 			id: c.id,
-			label: labelOf(c),
+			label: takeLabelOf(c),
 			start: seconds(c.start),
 			dur: seconds(c.dur),
 			stage: c.stage,

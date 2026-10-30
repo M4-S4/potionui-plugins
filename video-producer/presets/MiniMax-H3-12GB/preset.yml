@@ -1,24 +1,3 @@
-########
-## MiniMax-H3 (12 GB): the base MiniMax-H3 video and references modes, set up
-## for a 12 GB card with 64 GB of system RAM. Shipped by the Video Producer plugin.
-##
-## Same pipelines and forms as content/presets/marketplace/MiniMax-H3 (video
-## and refs modes). The LoRA and Enhance tabs and the resolution lists are read
-## from that preset; the pipelines and the Generation, References and Advanced
-## tabs are copies that only change defaults and recommendations (the plugin's
-## tests compare them). The refs mode reads this preset's Advanced tab.
-##
-## Memory profile: int8 ConvRot DiT and video VAE, nvfp4 text encoder streamed
-## from system RAM (the native backend's text_encoder_placement option), 832x480,
-## 124 frames, 20 steps, res_multistep / simple, keyframe and reference budget
-## 1x. The refs mode recommends the int8 ConvRot Ref2VA DiT.
-##
-## WEIGHTS LICENSE: same MiniMax H3 Community License as the base preset (the
-## Applicable Territory excludes the EU, the UK, the US and the Republic of
-## Korea, outputs included). Read description.md before enabling this preset.
-##
-## Authoring reference: docs/presets.md
-########
 schema: 1
 id: "01M54HN72B0KY7H63BKQ16T253"
 name: "MiniMax-H3 (12 GB)"

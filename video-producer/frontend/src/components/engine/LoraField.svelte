@@ -3,8 +3,9 @@
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { loraName } from '../../lib/options.js';
+	import ModelsFailed from './ModelsFailed.svelte';
 
-	let { id, row, models = null, onchange } = $props();
+	let { id, row, models = null, onchange, onretry } = $props();
 
 	const limits = $derived(row.field.limits ?? {});
 	const rows = $derived(Array.isArray(row.value) ? row.value : []);
@@ -67,5 +68,5 @@
 		<span class="min-w-0 text-xs text-fg-muted">{rows.length ? t('modals.engine.lora.presetDefault', { names }) : t('modals.engine.lora.none')}</span>
 		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', disabled: models?.loading === true, onclick: customize }}>{t('modals.engine.lora.customize')}</HostUi>
 	</div>
-	{#if models?.failed}<p class="mt-0.5 text-xs text-warning">{t('modals.engine.modelsFailed')}</p>{/if}
+	{#if models?.failed}<ModelsFailed {onretry} />{/if}
 {/if}

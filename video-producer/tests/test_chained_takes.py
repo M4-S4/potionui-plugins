@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from backend import chain, chaining, core_bridge, estimate, generation, presets, projects, takes, tracker
-from backend.chain import ChainError
+from backend import chaining, core_bridge, estimate, frame_grab, generation, presets, projects, takes, tracker
+from backend.frame_grab import FrameError
 from backend.estimate import Order
 from backend.tables import create_tables
 
@@ -33,14 +33,14 @@ class Frames:
         self.store = store
         self.calls = []
         self.error = None
-        monkeypatch.setattr(chain, "cut_frame", self.cut)
+        monkeypatch.setattr(frame_grab, "cut_frame", self.cut)
 
     async def cut(self, owner, project_id, clip, asset):
         self.calls.append((owner.id, clip["id"], clip.get("srcIn"), clip.get("dur"), asset["id"]))
         if self.error is not None:
             raise self.error
-        end = chain.end_of(clip)
-        value = f"uploads/{asset['id']}-frame-{chain.num(end)}s.png"
+        end = frame_grab.end_of(clip)
+        value = f"uploads/{asset['id']}-frame-{frame_grab.num(end)}s.png"
         self.store.items[value] = f"item-{len(self.calls)}"
         return {"value": value, "filename": value.rsplit("/", 1)[-1], "source": {"shotId": clip["id"], "takeId": asset.get("resultId"), "assetId": asset["id"], "at": end}}
 
@@ -206,7 +206,7 @@ def test_a_last_image_that_cannot_be_taken_fails_the_waiting_take_with_its_reaso
     core.use_wan()
     project = make_project(clips=SHOTS[:2])
     s1, s2 = _start(core, project, ["s1", "s2"])
-    frames.error = ChainError("extract_failed", "Taking the frame took longer than 60 s.", 502)
+    frames.error = FrameError("extract_failed", "Taking the frame took longer than 60 s.", 502)
 
     core.complete(s1["generation_id"])
     _tick()
@@ -425,7 +425,7 @@ def test_the_end_of_a_take_not_placed_yet_is_cut_from_its_file_at_the_duration_o
     )
     library.files[("history", TAKE_FILE)] = video
 
-    frame = asyncio.run(chain.take_end_frame(core.users["user-1"], project, "s1", take))
+    frame = asyncio.run(frame_grab.take_end_frame(core.users["user-1"], project, "s1", take))
 
     assert frame["source"] == {"shotId": "s1", "takeId": take["id"], "assetId": f"gen-{take['id']}", "at": 2.0}
     assert abs(_luma(library.saved[0][2]) - _frame_luma(video, int(2.0 * FPS) - 1)) < 1.5

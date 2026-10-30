@@ -281,7 +281,7 @@ def _row(owner: User, project: Mapping[str, Any], take: Mapping[str, Any], fps: 
 def order(
     owner: User, project: Mapping[str, Any], take: Mapping[str, Any], choice: Optional[str] = None, clip: Optional[Mapping[str, Any]] = None
 ) -> Dict[str, Any]:
-    """Bring a take to the frame rate a shot needs, the film's divided by its speed (the film's without a shot): the version already finished or on its way, else a new one, queued for a finished take and waiting for one still being made; past the frame rates an interpolator takes, a multiple of the film's rate made from the version at the film's rate, ordered as well when the take does not run at it; Refused when the take cannot be."""
+    """Bring a take to the frame rate a shot needs, from a version already made or on its way, else a new one; Refused when it cannot be."""
     doc = project.get("doc") or {}
     film = cadence.target_of(doc)
     if film is None:

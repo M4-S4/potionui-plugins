@@ -1,5 +1,6 @@
 import { newAsset } from './starter.js';
 import { ulid } from './ulid.js';
+import { isObject } from './values.js';
 
 export const FIRST_ROLES = ['first', 'début', 'debut'];
 export const LAST_ROLES = ['last', 'fin'];
@@ -18,7 +19,6 @@ export function frameErrorText(error, t, { noMedia = t('lib.chain.error.noMedia'
 	return t('lib.seam.error.generic');
 }
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
 const integer = (value) => (Number.isInteger(value) ? value : null);
 const snap = (value) => +(Math.round(value / 0.04) * 0.04).toFixed(3);

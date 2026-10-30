@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, deleteSelection } from '../../lib/state.svelte.js';
+	import { ui, doc, deleteSelection, shotNumber } from '../../lib/state.svelte.js';
 	import { panelSelection } from '../../lib/director.js';
 	import { typeIcon } from '../../lib/reftags.js';
 	import { commandById } from '../../lib/commands.js';
@@ -21,7 +21,7 @@
 	const head = $derived.by(() => {
 		if (reference) return { icon: typeIcon(reference), title: t('panels.director.refs.reference'), sub: '' };
 		if (track) return { icon: 'film', title: t('inspector.kind.vtrack'), sub: vrefLabel(track.slot) };
-		if (clip) return { icon: 'bookmark', title: t('panels.director.refs.ofShot'), sub: String(doc.clips.indexOf(clip) + 1).padStart(2, '0') };
+		if (clip) return { icon: 'bookmark', title: t('panels.director.refs.ofShot'), sub: shotNumber(clip) };
 		return { icon: 'bookmark', title: commandById('view-references')?.label ?? '', sub: '' };
 	});
 </script>

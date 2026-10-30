@@ -1,5 +1,5 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, select, toast, productionRange, secs, clipAt, clipLabel, overlaps, openDirector } from './state.svelte.js';
+import { ui, doc, act, select, toast, clipLabel, openDirector } from './state.svelte.js';
 import { ulid } from './ulid.js';
 import { SOUND_SPACE, shotSound } from './sound.js';
 import { refMediaKind, typesOf } from './refmedia.js';
@@ -200,12 +200,3 @@ export function addCardImage(card, space, assetId) {
 	return r;
 }
 
-export function attachToRange() {
-	const s = ui.selection?.kind === 'reference' ? doc.references.find((r) => r.id === ui.selection.id) : null;
-	if (!s) return toast(t('lib.refs.selectOne'), 'warning');
-	const [a, b] = productionRange();
-	const shot = clipAt((a + b) / 2) ?? doc.clips.find((c) => overlaps(c.start, c.dur, [a, b]));
-	if (!shot) return toast(t('lib.block.noRange'), 'warning');
-	act(() => (s.scope = { type: 'shot', shotId: shot.id }));
-	toast(t('lib.refs.attached', { name: s.name, start: secs(shot.start), end: secs(shot.start + shot.dur) }));
-}

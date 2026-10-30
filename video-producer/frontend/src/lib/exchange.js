@@ -19,10 +19,6 @@ const fold = (text) =>
 		.join('\n');
 const assetOf = (doc, id) => (id ? doc.assets?.find((a) => a.id === id) : undefined);
 
-export function labelOf(doc, fallback) {
-	return (c) => c?.label || assetOf(doc, c?.assetId)?.name || fallback;
-}
-
 export function seqDuration(doc) {
 	const ends = [...doc.clips.map((c) => c.start + c.dur), ...doc.audio.map((c) => c.start + c.dur), ...doc.titles.map((c) => c.start + c.dur)];
 	return Math.max(1, ...ends);

@@ -1,5 +1,5 @@
 <script>
-	import { labelOf } from '../../lib/labels.js';
+	import { takeLabelOf } from '../../lib/labels.js';
 	import { onMount } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatBytes, formatNumber, formatRelative, t } from '../../i18n/index.svelte.js';
@@ -59,7 +59,7 @@
 	const history = $derived(historyOf(exportState.jobs, job));
 	const library = $derived(canShowLibrary());
 	const notFinal = $derived(doc.clips.filter((c) => c.stage === 'draft' || c.stage === 'todo'));
-	const pending = $derived(doc.clips.filter((c) => c.take && labelOf(findTake(c.take)) === 'rejected').length);
+	const pending = $derived(doc.clips.filter((c) => c.take && takeLabelOf(findTake(c.take)) === 'rejected').length);
 	const issues = $derived(allIssues().filter((i) => i.level === 'conflict').length);
 	const dur = $derived(seqDuration());
 	const social = $derived(format === 'social');

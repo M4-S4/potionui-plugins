@@ -159,6 +159,7 @@
 	"engine.recommendedFile": "Fichier recommandé ({file})",
 	"engine.modelsLoading": "Chargement des modèles…",
 	"engine.modelsFailed": "Les modèles installés n’ont pas pu être listés.",
+	"engine.modelsRetry": "Réessayer",
 	"engine.only.refs": "Ref2VA seulement",
 	"engine.only.img2video": "Avec une image de début",
 	"engine.only.txt2video": "Sans image de début",

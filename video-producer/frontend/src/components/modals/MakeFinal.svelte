@@ -7,10 +7,11 @@
 	import { AUTO_TARGET, rtxSourceShown, upscalerReady } from '../../lib/finalpass.js';
 	import { chosenSize } from '../../lib/formats.js';
 	import { takeThumb } from '../../lib/media.js';
-	import { guidedReady, guidedResolution, rememberRtxSource, savedChoice } from '../../lib/finalpass.svelte.js';
+	import { guidedReady, guidedResolution, rememberRtxSource, savedChoice, targetLabel } from '../../lib/finalpass.svelte.js';
 	import { finalCadence, interpolatorChoice, pickInterpolator } from '../../lib/cadence.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Modal from './Modal.svelte';
+	import UpscaleControls from './UpscaleControls.svelte';
 
 	let { takeId } = $props();
 
@@ -20,18 +21,8 @@
 	const h3 = $derived(upscalesItself(take?.presetId));
 	let upscaler = $state('auto');
 	let rtxSource = $state(savedChoice().rtxSource);
-	const rtxSources = $derived([
-		{ id: 'compressed', label: t('generation.finalPass.rtxSource.compressed') },
-		{ id: 'clean', label: t('generation.finalPass.rtxSource.clean') }
-	]);
 	const rtxShown = $derived(rtxSourceShown(upscaler, ui.me) && !(upscaler === 'auto' && h3));
 	const canUpscale = $derived(upscaler === 'auto' ? autoUpscale(take, ui.me) : upscalerReady(upscaler, ui.me, take ? [take.presetId] : []));
-	const upscalers = $derived([
-		{ id: 'auto', label: t('generation.finalPass.upscaler.auto') },
-		{ id: 'rtx', label: t('generation.finalPass.upscaler.rtx'), disabled: ui.me?.features?.upscalers?.rtx !== true },
-		{ id: 'seedvr2', label: t('generation.finalPass.upscaler.seedvr2'), disabled: ui.me?.features?.upscalers?.seedvr2 !== true },
-		...(h3 ? [{ id: 'engine', label: t('generation.finalPass.upscaler.engine') }] : [])
-	]);
 	const renderRes = $derived((finalResolution(presetById(take?.presetId), aspectOf(doc.aspect, doc.resolution), chosenSize(doc, take?.presetId, 'final')) ?? take?.resolution ?? '—').replace('x', '×'));
 	let target = $state(AUTO_TARGET);
 	const guided = $derived(guidedReady());
@@ -50,15 +41,6 @@
 		if (id === 'seedvr2') return t('generation.finalPass.hint.seedvr2');
 		if (id === 'engine' || h3) return t('generation.final.upscaleH3');
 		return t('generation.final.upscaleHint');
-	}
-
-	function targetLabel(id) {
-		if (id === 'auto') return t('generation.target.auto');
-		if (id === 'hd720') return t('generation.target.hd720');
-		if (id === 'fhd1080') return t('generation.target.fhd1080');
-		if (id === 'qhd1440') return t('generation.target.qhd1440');
-		if (id === 'uhd2160') return t('generation.target.uhd2160');
-		return id;
 	}
 
 	async function send(method) {
@@ -89,22 +71,7 @@
 					{/if}
 				</div>
 				<p class="text-xs text-fg-subtle">{canUpscale ? upscaleHint(upscaler) : hasNativeEngine(ui.me) ? t('generation.block.upscaleUnsupported') : t('generation.block.noNativeEngine')}</p>
-				<div class="flex items-center gap-3">
-					<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.upscaler.label')}</span>
-					<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.upscaler.label'), items: upscalers, selected: upscaler, onSelect: (id) => (upscaler = id) }} />
-				</div>
-				{#if rtxShown}
-					<div class="flex items-center gap-3">
-						<span class="shrink-0 text-xs text-fg-muted">{t('generation.finalPass.rtxSource.label')}</span>
-						<HostUi name="SegmentedControl" props={{ variant: 'toggle', ariaLabel: t('generation.finalPass.rtxSource.label'), items: rtxSources, selected: rtxSource, onSelect: (id) => (rtxSource = id) }} />
-					</div>
-					<p class="text-xs text-fg-subtle">{rtxSource === 'clean' ? t('generation.finalPass.rtxSource.cleanHint') : t('generation.finalPass.rtxSource.compressedHint')}</p>
-				{/if}
-				<HostUi
-					name="SegmentedControl"
-					props={{ variant: 'toggle', fullWidth: true, ariaLabel: t('generation.final.target'), items: targets.map((id) => ({ id, label: targetLabel(id), disabled: !canUpscale })), selected: target, onSelect: (id) => (target = id) }}
-				/>
-				{#if target === AUTO_TARGET}<p class="text-xs text-fg-subtle">{t('generation.finalPass.targetAuto')}</p>{/if}
+				<UpscaleControls bind:upscaler bind:rtxSource bind:target {targets} ready={canUpscale} engine={h3} {rtxShown} />
 			</section>
 			{#if guided}<p class="text-xs text-fg-subtle">{t('generation.final.guidedHint', { res: guidedRes })}</p>{/if}
 			<p class="text-xs text-fg-subtle">{t('generation.final.renderHint', { res: renderRes })}</p>

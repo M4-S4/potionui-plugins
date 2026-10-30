@@ -1,9 +1,9 @@
 import { PROFILES } from './generation.js';
+import { isObject } from './values.js';
 
 export const QUALITIES = ['draft', 'final'];
 export const SEED_MAX = 2 ** 31 - 1;
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const filled = (value) => typeof value === 'string' && value !== '';
 
 export const validSeed = (value) => Number.isInteger(value) && value >= 0 && value <= SEED_MAX;

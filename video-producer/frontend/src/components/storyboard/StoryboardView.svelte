@@ -15,7 +15,7 @@
 	import { shotWaitText } from '../../lib/chain.svelte.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { hostIconName } from '../../lib/icons.js';
-	import { shotStale } from '../../lib/shots.js';
+	import { shotStale, shotNumberAt } from '../../lib/shots.js';
 	import { pickMode } from '../../lib/keyboard.js';
 	import { activityStep } from '../../lib/generation.js';
 	import Icon from '../Icon.svelte';
@@ -264,7 +264,7 @@
 							</div>
 						{/if}
 						<div class="absolute left-2 top-2 z-10 flex items-center gap-1">
-							<span class="vp-tc flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium backdrop-blur-sm {picked ? 'bg-signal text-accent-contrast' : 'bg-black/60 text-white'}">{#if picked}<Icon name="check" class="h-3 w-3" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}{String(i + 1).padStart(2, '0')}</span>
+							<span class="vp-tc flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium backdrop-blur-sm {picked ? 'bg-signal text-accent-contrast' : 'bg-black/60 text-white'}">{#if picked}<Icon name="check" class="h-3 w-3" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}{shotNumberAt(i)}</span>
 							{#if i > 0}<ChainChip clip={c} />{/if}
 						</div>
 						{#if sm?.issues.length}

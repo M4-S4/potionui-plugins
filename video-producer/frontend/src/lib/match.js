@@ -2,7 +2,6 @@ export const LUT_SIZE = 33;
 export const MAX_SCALE = 1.5;
 export const DEFAULT_STRENGTH = 80;
 export const STATS = 6;
-export const ANCHORS = ['keyframe', 'reference', 'previous', 'vref'];
 
 const MIN_SPREAD = 1e-3;
 const IDENTITY = 1e-4;

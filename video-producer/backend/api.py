@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from . import PLUGIN_ID, PLUGIN_VERSION
 from .core_bridge import User, get_current_active_user
 from .responses import ok
-from .routes_chain import router as chain_router
+from .routes_frame_grab import router as frame_grab_router
 from .routes_exports import router as exports_router
 from .routes_final_pass import router as final_pass_router
 from .routes_generation import router as generation_router
@@ -34,7 +34,7 @@ router.include_router(takes_router)
 router.include_router(generation_router)
 router.include_router(prompts_router)
 router.include_router(exports_router)
-router.include_router(chain_router)
+router.include_router(frame_grab_router)
 router.include_router(keyframes_router)
 router.include_router(final_pass_router)
 router.include_router(looks_router)

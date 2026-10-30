@@ -22,6 +22,15 @@ export function openFinalPass() {
 	ui.modal = { type: 'final-pass' };
 }
 
+export function targetLabel(id) {
+	if (id === 'auto') return t('generation.target.auto');
+	if (id === 'hd720') return t('generation.target.hd720');
+	if (id === 'fhd1080') return t('generation.target.fhd1080');
+	if (id === 'qhd1440') return t('generation.target.qhd1440');
+	if (id === 'uhd2160') return t('generation.target.uhd2160');
+	return id;
+}
+
 export function passTargets() {
 	return [AUTO_TARGET, ...(ui.me?.upscaleTargets?.length ? ui.me.upscaleTargets : UPSCALE_TARGETS)];
 }

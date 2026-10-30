@@ -1,9 +1,9 @@
 <script>
 	import { t } from '../../i18n/index.svelte.js';
-	import { doc } from '../../lib/state.svelte.js';
+	import { doc, shotNumber } from '../../lib/state.svelte.js';
 	import { takesOf } from '../../lib/production.svelte.js';
 	import { isInFlight } from '../../lib/generation.js';
-	import { labelOf } from '../../lib/labels.js';
+	import { takeLabelOf } from '../../lib/labels.js';
 	import { waitText } from '../../lib/chain.svelte.js';
 	import { chooseTake } from '../../lib/band.svelte.js';
 	import { commandById } from '../../lib/commands.js';
@@ -12,7 +12,6 @@
 
 	let { clip } = $props();
 
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const takes = $derived([...takesOf(clip)].sort((a, b) => String(a.variant).localeCompare(String(b.variant))));
 	const choosable = (take) => (take.status === 'done' && Boolean(take.url)) || take.status === 'failed';
 	const percent = (take) => Math.round(Math.min(100, Math.max(0, take.progress ?? 0)));
@@ -22,7 +21,7 @@
 		if (take.status === 'queued') return waitText(take) || t('lib.status.queued');
 		if (take.status === 'failed') return t('lib.status.failed');
 		if (take.status === 'cancelled') return t('lib.status.cancelled');
-		return t(`generation.label.${labelOf(take)}`);
+		return t(`generation.label.${takeLabelOf(take)}`);
 	}
 </script>
 
@@ -44,7 +43,7 @@
 	{:else}
 		<p class="text-xs text-fg-subtle">{t('panels.director.review.noTakes', { key: commandById('generate')?.key ?? '' })}</p>
 	{/each}
-	{#if takes.length}<p class="text-xs text-fg-subtle">{t('panels.director.pick.takesHint', { shot: num(clip) })}</p>{/if}
+	{#if takes.length}<p class="text-xs text-fg-subtle">{t('panels.director.pick.takesHint', { shot: shotNumber(clip) })}</p>{/if}
 </section>
 
 <ComposedPrompt source={doc} shotId={clip.id} />

@@ -1,15 +1,15 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { doc, act, asset, clipLabel } from '../../lib/state.svelte.js';
+	import { doc, act, asset, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { families, refMediaKind, refRoleLabel, refTypeLabel, typesOf, reception, receptionVerdict, engineTitle, setReferenceShot, linkReferenceCard, startImage } from '../../lib/references.js';
 	import { engineOptionLabel } from '../../lib/production.svelte.js';
 	import { isGlobal } from '../../lib/shots.js';
-	import { SPACES, cardsOf, labelOf } from '../../lib/bible.js';
+	import { SPACES, cardsOf, cardLabel } from '../../lib/bible.js';
 	import { isPictureReference } from '../../lib/keyframes.js';
 	import { showInReview } from '../../lib/band.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
-	import { typeIcon } from '../../lib/reftags.js';
+	import { typeIcon, REFERENCE_ROLES } from '../../lib/reftags.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import MediaPicker from '../shots/MediaPicker.svelte';
 	import AudioPicker from '../shots/AudioPicker.svelte';
@@ -28,7 +28,7 @@
 	const kind = $derived(media?.kind ?? refMediaKind(reference.space, reference.type) ?? 'image');
 	const family = $derived(families.find((f) => f.id === reference.space) ?? null);
 	const cardKind = $derived(found.linked && !found.linked.voice ? found.linked.kind : (Object.keys(SPACES).find((k) => SPACES[k] === reference.space) ?? null));
-	const cards = $derived(cardKind ? cardsOf(doc, cardKind).filter((c) => labelOf(c)) : []);
+	const cards = $derived(cardKind ? cardsOf(doc, cardKind).filter((c) => cardLabel(c)) : []);
 	const cardId = $derived(cardKind ? (cardsOf(doc, cardKind).find((c) => (c.references ?? []).includes(reference.id))?.id ?? '') : '');
 	const open = $derived(editing ?? !reference.assetId);
 	const scope = $derived(!isGlobal(reference) || pending ? 'shot' : 'global');
@@ -51,9 +51,8 @@
 	const lostWords = $derived(worded.filter((shot) => shot.ignoredLayout).map((shot) => shot.clip));
 	const linked = $derived(found.linked);
 	const startable = $derived(isPictureReference(reference) && media?.kind === 'image');
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
-	const nums = (clips) => clips.map(num).join(', ');
-	const shotName = (c) => `${num(c)} · ${clipLabel(c)}`;
+	const nums = (clips) => clips.map(shotNumber).join(', ');
+	const shotName = (c) => `${shotNumber(c)} · ${clipLabel(c)}`;
 
 	function pickScope(id) {
 		if (id === 'global') {
@@ -126,7 +125,7 @@
 				<label class="flex items-center gap-2">
 					<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
 					<select class="input vp-dense min-w-0 flex-1" value={reference.role} onchange={(e) => act(() => (reference.role = e.currentTarget.value))}>
-						{#each ['Identité', 'Style', 'Décor', 'Objet', 'Mouvement', 'Caméra'] as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
+						{#each REFERENCE_ROLES as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
 					</select>
 				</label>
 			{/if}
@@ -151,12 +150,12 @@
 			<dd class="min-w-0">
 				<select class="vp-popup w-full" value={cardId} onchange={(e) => linkReferenceCard(reference, cardKind, e.currentTarget.value || null)} aria-label={t('panels.director.refs.card')}>
 					<option value="">{t('panels.director.refs.noCard')}</option>
-					{#each cards as c (c.id)}<option value={c.id}>{labelOf(c)}</option>{/each}
+					{#each cards as c (c.id)}<option value={c.id}>{cardLabel(c)}</option>{/each}
 				</select>
 			</dd>
 		{:else if linked?.voice}
 			<dt class="text-fg-subtle">{t('panels.director.refs.card')}</dt>
-			<dd class="min-w-0 truncate text-fg-muted">{t('panels.director.refs.voiceOf', { name: labelOf(linked.card) })}</dd>
+			<dd class="min-w-0 truncate text-fg-muted">{t('panels.director.refs.voiceOf', { name: cardLabel(linked.card) })}</dd>
 		{/if}
 	</dl>
 	{#if pending && isGlobal(reference)}<p class="text-xs text-fg-subtle">{t('panels.director.refs.pickShotHint')}</p>{/if}
@@ -169,7 +168,7 @@
 			<p class="text-xs text-fg-subtle">{t('panels.director.refs.noShots')}</p>
 		{/if}
 		{#if linked && !linked.voice}
-			<p class="text-xs text-fg-muted">{found.cast.length ? t('panels.director.refs.cardText', { name: labelOf(linked.card), count: found.cast.length }) : t('panels.director.refs.cardNone', { name: labelOf(linked.card) })}</p>
+			<p class="text-xs text-fg-muted">{found.cast.length ? t('panels.director.refs.cardText', { name: cardLabel(linked.card), count: found.cast.length }) : t('panels.director.refs.cardNone', { name: cardLabel(linked.card) })}</p>
 		{/if}
 		{#if blind.length}
 			<p class="text-xs text-fg-subtle">{startable ? t('panels.director.refs.blindStart', { count: blind.length, engines: blind.join(', ') }) : t('panels.director.refs.blind', { count: blind.length, engines: blind.join(', ') })}</p>
@@ -183,7 +182,7 @@
 		{#if found.going.length}
 			<div class="flex flex-wrap gap-1" data-reference-going>
 				{#each found.going as c (c.id)}
-					<button type="button" class="vp-tc rounded border border-line-strong px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:border-signal hover:text-fg" title={t('panels.director.refs.goingTip', { shot: shotName(c) })} onclick={() => showInReview(c)}>{num(c)}</button>
+					<button type="button" class="vp-tc rounded border border-line-strong px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:border-signal hover:text-fg" title={t('panels.director.refs.goingTip', { shot: shotName(c) })} onclick={() => showInReview(c)}>{shotNumber(c)}</button>
 				{/each}
 			</div>
 		{/if}

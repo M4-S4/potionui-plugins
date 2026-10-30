@@ -65,7 +65,7 @@ def sheet_frames(seconds: float) -> int:
 
 
 def sheet_layout(size: Tuple[int, int], counts: Sequence[int], place: bool) -> Tuple[List[Box], Optional[Box]]:
-    """The bands of a sheet on its black canvas, as x, y, width and height, as the measured sheet lays them out: the band of the characters across the top, given once for each of their pictures, which sit side by side at its height and centred in it, then the band of the place across the bottom; the bands share the height in the table's weights, at an even number of pixels, and a band takes the whole height when the other is empty."""
+    """The bands of a reference sheet on its black canvas, as x, y, width and height."""
     width, height = size
     gap = SHEET["gap"]
     cells = sum(count for count in counts if count > 0)

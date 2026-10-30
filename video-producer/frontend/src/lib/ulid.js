@@ -20,10 +20,3 @@ export function ulid(now = Date.now()) {
 export function isUlid(value) {
 	return typeof value === 'string' && PATTERN.test(value);
 }
-
-export function ulidTime(value) {
-	if (!isUlid(value)) return null;
-	let time = 0;
-	for (const char of value.slice(0, TIME_LENGTH)) time = time * 32 + ALPHABET.indexOf(char);
-	return time;
-}

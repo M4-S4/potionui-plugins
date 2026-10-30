@@ -522,7 +522,7 @@ def _scoped(reference: Mapping[str, Any]) -> bool:
 
 
 def shot_reference_groups(doc: Mapping[str, Any], shot_id: str) -> ShotReferences:
-    """The references a shot can send, by step of the table: its own; the ones of the cards it casts, whatever their scope, card by card in the order of the bible with its place last, each card's in the order it lists them; the global ones linked to no card. A reference the shot leaves out is not sent, nor a global one linked only to cards it does not cast."""
+    """The references a shot can send, by step of the table: its own, those of the cards it casts, then the global ones."""
     excluded = excluded_references(doc, shot_id)
     references = [reference for reference in doc.get("references") or [] if isinstance(reference, Mapping)]
     found: Dict[str, Dict[str, Any]] = {}
@@ -600,7 +600,7 @@ def _plays_in(item: Mapping[str, Any], begin: float, end: float) -> bool:
 
 
 def shot_video_tracks(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float) -> List[ShotTrack]:
-    """The reference video tracks that have an item in the region of a shot, in slot order, each with what keeps it from being sent whatever the engine (off, excluded, missing when none of its items there can be read, short when what can be read there is shorter than the table's minimum) or ready with its cut."""
+    """The reference video tracks with an item in the region of a shot, in slot order, each ready with its cut or with what keeps it out."""
     start = float(clip.get("start") or 0)
     excluded = excluded_vrefs(doc, clip["id"])
     found: List[ShotTrack] = []
@@ -881,7 +881,7 @@ def direction_lines(doc: Mapping[str, Any]) -> List[str]:
 
 
 def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> Tuple[str, bible.ReferencePart]:
-    """The shot's prompt and the part of it made from its cast: the instruction without the reference video tracks it cites, its lines when the engine speaks, then the filled direction fields, one per line; the characters and the place cast in the shot from the bible are repeated word for word in the engine's format: as subject_definitions ahead of the prompt for MiniMax-H3, with the first mention of each character's tag in the instruction followed by its subject unless the shot replaces that part for itself, re-announced after the action and the lines in one paragraph for LTX, ahead of the action for Wan, the cloud models and the other engines. A part the shot replaces for itself goes as it is in the same place."""
+    """The shot's prompt and the part of it made from its cast, in the format of its engine."""
     instruction = cite_tracks(shot_instruction(doc, clip), {})
     direction = direction_lines(doc)
     characters, place = bible.cast_of(doc, clip)
@@ -927,7 +927,7 @@ def _card_words(card: bible.Card) -> str:
 
 
 def sheet_lines(doc: Mapping[str, Any], panels: Sequence[SheetPanel]) -> str:
-    """The description of a sheet in the form the measured takes kept the sheet out of the video with: each picture by its place on the sheet and its kind in bold, as a view of its card, the first picture of a character its face in close-up with the card's words, the second the same character full body, the place by its words; one line."""
+    """The one-line description of a reference sheet, picture by picture, in the form the measured takes used."""
     found = {card.id: card for kind in (bible.CHARACTERS, bible.PLACES) for card in bible.cards(doc, kind)}
     characters = [panel for panel in panels if panel.kind == bible.CHARACTERS and panel.card_id in found]
     places = [panel for panel in panels if panel.kind == bible.PLACES and panel.card_id in found]
@@ -945,7 +945,7 @@ def sheet_lines(doc: Mapping[str, Any], panels: Sequence[SheetPanel]) -> str:
 
 
 def compose_sheet(doc: Mapping[str, Any], clip: Mapping[str, Any], panels: Sequence[SheetPanel]) -> Tuple[str, bible.ReferencePart]:
-    """The prompt of a shot made from its reference sheet, in the two parts of the IC-LoRA's examples and on one line, as in the measured takes: the sheet described picture by picture, then the shot in the LTX form, its cast re-announced after the action and the lines. Both parts made from the cast can be replaced by the shot."""
+    """The one-line prompt of a shot made from its reference sheet: the sheet described, then the shot in the LTX form."""
     instruction = cite_tracks(shot_instruction(doc, clip), {})
     characters, place = bible.cast_of(doc, clip)
     language = _language(doc)
@@ -1132,7 +1132,7 @@ def _subjects(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[Se
 
 
 def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> Tuple[str, bible.ReferencePart]:
-    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast: what each reference is, the task, how much of each is kept, the shot itself with its lines, its sound and its score. The pictures linked to one card of the bible make one subject, defined once with the card's words and the pictures that show it, kept and cited once, as MiniMax's guide cites every picture of a subject in its definition; a picture linked to no card is a subject of its own, and a sound that is the voice of a character is defined as that character's voice; the characters and the place cast in the shot that no sent reference shows are defined by their words alone and cited in the shot, without a retention line. The first mention of the tag of each character cast is followed by its subject in the instruction, unless the shot replaces that part for itself. The definitions, the retention lines and the citations a shot replaces for itself go as they are in the same places. A reference video track is defined, kept and cited by its role, as the source of the motion of the shot or as the footage it continues, a continuation adding its task to the summary, and each @vrefN of the instruction becomes the label its track goes as."""
+    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast."""
     language = _language(doc)
     text = REFS_TEXT[language]
     numbers = _subjects(doc, clip, sent)
@@ -1348,7 +1348,7 @@ def bind_frames(
     first_media: Optional[Dict[str, Any]] = None,
     keep: bool = False,
 ) -> Tuple[Dict[str, Any], str]:
-    """The request with the shot's first and last frames bound, on segment_id of a director document when given, and the composition mode that results; first_media, when given, is bound in place of the shot's first frame; with keep, a shot without a last frame of its own gets its first frame as its last one too, so that the engine keeps the framing."""
+    """The request with the shot's first and last frames bound, and the composition mode that results."""
     first, last = shot_frames(doc, shot_id)
     first_media = first_media or _frame_media(user, doc, first)
     if first_media is None:
@@ -1392,7 +1392,7 @@ def reference_media(
     tracks: Sequence[str] = (),
     videos: Sequence[VideoCut] = (),
 ) -> List[SentReference]:
-    """What a shot sends as references, within the per-kind limits and in the order of the table: its own references, the ones of the cards it casts, the cut of each of its reference tracks (a track: placeholder until the cut is stored) and of each of its reference video tracks (a vtrack: placeholder), then the global ones linked to no card that it does not exclude; each with its rank among the references of its kind."""
+    """What a shot sends as references, within the per-kind limits and in the order of the table, each with its rank in its kind."""
     groups = shot_reference_groups(doc, shot_id)
     sent: List[SentReference] = []
     counts = {kind: 0 for kind in REFERENCE_LIMITS}
@@ -1721,7 +1721,7 @@ def _picture_size(doc: Mapping[str, Any], asset_id: str) -> Optional[Tuple[int, 
 
 
 def sheet_panels(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], size: Tuple[int, int], warnings: List[Dict[str, Any]]) -> List[SheetPanel]:
-    """The pictures a shot's reference sheet shows, with their boxes: the first pictures of each character cast in it, in the order of the bible and up to the table's counts, then the first picture of its place; the pictures it leaves out are not used. A cast card without a picture, the characters over the count, boxes smaller than the table's least edge and props that are only words are each said by a warning."""
+    """The pictures a shot's reference sheet shows, with their boxes, and the warnings for what it leaves out."""
     shot_id = clip["id"]
     excluded = excluded_references(doc, shot_id)
     characters, place = bible.cast_of(doc, clip)
@@ -2085,7 +2085,7 @@ def build_plans(
     silent: Optional[Mapping[str, Collection[str]]] = None,
     chained: Optional[Mapping[str, Chain]] = None,
 ) -> Plans:
-    """The generation request of each shot, with what blocks the run and what the user should know. With overrides, each shot runs on the preset, model, profile, quality and seed its clip sets for itself, the shots sharing the same engine planned together, and the blocks of a shot's own engine name its shots, a shot's own seed before the fixed seed of the project's options. The options the project keeps for each preset go into the requests of its shots. Silent maps a shot to the reference tracks found silent under it, which a guided shot leaves out; track_cuts lists the tracks a guided shot would cut, before the limit on sounds. Chained maps a shot to the previous shot whose last image it starts from: when its engine starts from an image, a stand-in for that image (or the previous shot's still) is bound as its first frame and its plan names that shot in chain."""
+    """The generation request of each shot, with what blocks the run and what the user should know."""
     silent = silent or {}
     chained = chained or {}
     if not overrides:
@@ -2315,7 +2315,7 @@ def _upscaler_preset(user: User, source: Mapping[str, Any], upscaler: str) -> Tu
 def build_upscale(
     user: User, source: Mapping[str, Any], target: str, upscaler: str = upscalers.AUTO, rtx_source: str = upscalers.DEFAULT_RTX_SOURCE
 ) -> ShotPlan:
-    """The final take of a finished take upscaled to a named target: Auto uses a MiniMax-H3 preset's own Upscale mode for its takes and SeedVR2 otherwise, RTX when SeedVR2 is missing and RTX is ready; Engine only the own mode; SeedVR2 and RTX their preset's video mode, RTX tuned for a compressed source unless told the source is clean."""
+    """The final take of a finished take upscaled to a named target by the chosen upscaler."""
     preset, mode = _upscaler_preset(user, source, upscaler)
     preset_id = preset.id
     h3 = mode == H3_UPSCALE_MODE
@@ -2452,7 +2452,7 @@ def take_asset(doc: Mapping[str, Any], take_id: Any) -> Optional[Dict[str, Any]]
 
 
 def draft_sound(user: User, doc: Mapping[str, Any], source: Mapping[str, Any]) -> bool:
-    """True when the video of a finished take has a sound the project can mix again: its asset is in the project and ffprobe hears an audio stream in its file, read where the storage keeps it or streamed into a work folder of the user when the storage is not a local disk; DirectorError when that folder cannot be written."""
+    """True when the video of a finished take has a sound the project can mix again; DirectorError when its work folder cannot be written."""
     if take_asset(doc, source.get("id")) is None:
         return False
     try:
@@ -2514,7 +2514,7 @@ def bind_first(user: User, plan: ShotPlan, media: Mapping[str, Any]) -> None:
 
 
 def build_guided(user: User, doc: Mapping[str, Any], source: Mapping[str, Any], sound: bool = False) -> ShotPlan:
-    """The final take of a finished take rendered again by LTX-2.5 following its video through the Layout-To-Render IC-LoRA: the largest size of the preset, the frame rate of the take and its length cut to the frames LTX renders, the shot's prompt in the LTX form and the project's options for the preset; with sound, the sound of the take mixed onto the new one. It starts from the picture guided_first gives, else from the first frame of the take's video, bound later."""
+    """The final take of a finished take rendered again by LTX-2.5 following its video through the Layout-To-Render IC-LoRA."""
     native_engine_or_block("A guided final")
     preset = guided_preset(user)
     if preset is None:

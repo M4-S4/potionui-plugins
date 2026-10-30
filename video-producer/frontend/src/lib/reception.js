@@ -16,22 +16,14 @@ const LTX_IDS = formats.engines.ltx.presets;
 export const RECEIVED = ['sent', 'mixed'];
 export const NOT_CAST = 'not_cast';
 export const ASIDE = ['excluded', NOT_CAST];
-export const STATUSES = ['sent', 'trimmed', 'missing', 'mixed', 'ignored', 'excluded', NOT_CAST, 'blocked', 'unknown'];
-export const TRACK_STATUSES = ['sent', 'trimmed', 'short', 'missing', 'ignored', 'excluded', 'off', 'blocked', 'unknown'];
 export const MOTION = 'motion';
 export const CONTINUATION = 'continuation';
 export const UNDER = 'under';
 export const BEFORE = 'before';
-export const CANVAS = 'canvas';
-export const TAKE = 'take';
 
 const EPSILON = 1e-6;
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 const round6 = (value) => Math.round(value * 1e6) / 1e6;
-const halfEven = (value) => {
-	const near = Math.round(value);
-	return Math.abs(value % 1) === 0.5 && near % 2 !== 0 ? near - 1 : near;
-};
 
 export function videoFrames(seconds) {
 	if (!finite(seconds) || seconds <= 0) return 0;
@@ -74,20 +66,6 @@ export function videoPieces(items, role, start, seconds, cap) {
 	}
 	pieces.sort((a, b) => a.from - b.from);
 	return { frames, pieces };
-}
-
-export function cutSize(aspect, resolution = null, setting = null) {
-	const chosen = VIDEO_TRACKS.sizes.includes(setting) ? setting : VIDEO_TRACKS.size;
-	if (chosen === TAKE && resolution) return [resolution[0], resolution[1]];
-	const { shortEdge, maxPixels, multiple } = VIDEO_TRACKS.canvas;
-	const ratio = aspect > 0 ? aspect : 16 / 9;
-	let [width, height] = ratio >= 1 ? [shortEdge * ratio, shortEdge] : [shortEdge, shortEdge / ratio];
-	if (width * height > maxPixels) {
-		const scale = Math.sqrt(maxPixels / (width * height));
-		width *= scale;
-		height *= scale;
-	}
-	return [Math.max(multiple, halfEven(width / multiple) * multiple), Math.max(multiple, halfEven(height / multiple) * multiple)];
 }
 
 const readableVideo = (doc, item) => {

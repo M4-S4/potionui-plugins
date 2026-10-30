@@ -18,7 +18,6 @@ export function assetUses(doc, id) {
 	};
 }
 
-export const useCount = (uses) => USE_KINDS.reduce((n, kind) => n + uses[kind].length, 0);
 
 function drop(list, gone) {
 	const ids = new Set(gone.map((item) => item.id));

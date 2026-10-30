@@ -578,7 +578,7 @@ def test_a_failed_look_says_why_and_can_be_asked_again(core, make_project, frame
     project, first, _ = _placed(make_project, core)
 
     async def broken(owner, take, folder):
-        raise looks.chain.ChainError("no_media", "The video of the take is no longer available.")
+        raise looks.frame_grab.FrameError("no_media", "The video of the take is no longer available.")
 
     monkeypatch.setattr(looks, "_take_frames", broken)
     looks.queue_take(first)

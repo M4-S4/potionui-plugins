@@ -1,3 +1,5 @@
+import { isObject } from './values.js';
+
 export const NUMBER_TYPES = ['slider', 'number', 'stepper', 'integer'];
 export const FLAG_TYPES = ['checkbox', 'boolean', 'gate'];
 export const CHOICE_TYPES = ['select', 'sampler', 'schedule'];
@@ -12,7 +14,6 @@ const TEXT_LIMIT = 2000;
 const LORA_LIMIT = 32;
 const PASSES = 8;
 
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 const whole = (value) => isNumber(value) && Number.isInteger(value);
 const within = (value, low, high) => (!isNumber(low) || value >= low) && (!isNumber(high) || value <= high);
@@ -221,6 +222,14 @@ export function sameOptions(a, b) {
 }
 
 export const modelTypeOf = (field) => field?.limits?.model_type ?? (field?.type === LORA_TYPE ? 'lora' : null);
+
+export async function loadModels(models, presetId, type, client) {
+	const key = `${presetId}|${type}`;
+	if (!presetId || (models[key] && !models[key].failed)) return;
+	models[key] = { loading: true, list: [], failed: false };
+	const result = await client?.presetModels?.(presetId, type);
+	models[key] = result?.ok ? { loading: false, list: result.data, failed: false } : { loading: false, list: [], failed: true };
+}
 
 export function loraName(model, list) {
 	const file = String(model ?? '').replaceAll('\\', '/').split('/').pop();

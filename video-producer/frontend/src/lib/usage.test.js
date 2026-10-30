@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { hostUis, renderComponent } from './svelte-harness.js';
 import { migrate, newAsset } from './starter.js';
 import { releaseOverrun } from './shots.js';
-import { USE_KINDS, assetUses, removeAsset, useCount } from './usage.js';
+import { USE_KINDS, assetUses, removeAsset } from './usage.js';
 
 const { doc, ui, dispose } = await import('./state.svelte.js');
 const { deleteAsset } = await import('./assets.svelte.js');
@@ -13,6 +13,7 @@ const USE_KEYS = { shots: 'lib.media.use.shots', sounds: 'lib.media.use.sounds',
 
 after(() => dispose());
 const ids = (list) => list.map((item) => item.id);
+const unused = Object.fromEntries(USE_KINDS.map((kind) => [kind, []]));
 
 function makeDoc() {
 	const shared = newAsset({ id: 'pic', kind: 'image', name: 'Port' });
@@ -51,9 +52,8 @@ test('assetUses: every place that holds a media, first and last images apart fro
 	assert.deepEqual(ids(uses.references), ['r1', 'r2']);
 	assert.deepEqual(ids(uses.edges), ['f1', 'f2']);
 	assert.deepEqual(ids(uses.frames), ['f3', 'f4']);
-	assert.equal(useCount(uses), 8);
-	assert.equal(useCount(assetUses(makeDoc(), 'missing')), 0);
-	assert.equal(useCount(assetUses({ assets: [] }, 'pic')), 0);
+	assert.deepEqual(assetUses(makeDoc(), 'missing'), unused);
+	assert.deepEqual(assetUses({ assets: [] }, 'pic'), unused);
 });
 
 test('removeAsset: the shots and references that held the media stay, emptied; the sounds and frames that placed it go', () => {
@@ -75,7 +75,7 @@ test('removeAsset: the shots and references that held the media stay, emptied; t
 		]
 	);
 	assert.deepEqual(ids(doc.frames), ['f5']);
-	assert.equal(useCount(assetUses(doc, 'pic')), 0);
+	assert.deepEqual(assetUses(doc, 'pic'), unused);
 });
 
 test('removeAsset: an unused media leaves alone, an unknown one changes nothing', () => {
@@ -88,7 +88,7 @@ test('removeAsset: an unused media leaves alone, an unknown one changes nothing'
 	assert.equal(removeAsset(doc, 'missing'), null);
 	assert.equal(JSON.stringify(doc), before);
 	const result = removeAsset(doc, 'other');
-	assert.equal(useCount(result.uses), 0);
+	assert.deepEqual(result.uses, unused);
 	assert.deepEqual(result.released, []);
 	assert.deepEqual(ids(doc.assets), ['pic']);
 });

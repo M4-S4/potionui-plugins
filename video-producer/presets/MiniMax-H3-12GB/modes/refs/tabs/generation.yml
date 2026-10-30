@@ -26,9 +26,6 @@ fields:
   - type: "section"
     label: "Video"
     children:
-      # Krea-2 layout: seed+quantity row first, then resolution. Clip length
-      # has no Krea-2 counterpart -- grouped after, next to the resolution
-      # it shapes the output alongside.
       - type: "row"
         children:
           - name: "seed"
@@ -56,12 +53,6 @@ fields:
             - { path: "{{ paths._shared }}/resolutions/minimax_h3_fast.yml", group: "Faster (below native canvas)" }
         default: "832x480"
 
-      # Seconds, like every other duration surface in the app (Director
-      # limits, chat tools). The pipeline converts to frames at the model's
-      # fixed 24 fps and the generator snaps UP to the next 17n+5 on its
-      # lattice; the model's release notes suggest staying in a 5-15s range,
-      # but only the 15s ceiling is a real technical limit -- there is no
-      # enforced floor below it.
       - name: "duration"
         type: "slider"
         formula: "size"

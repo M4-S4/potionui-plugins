@@ -1,12 +1,11 @@
 <script>
 	import { t } from '../../i18n/index.svelte.js';
-	import { doc } from '../../lib/state.svelte.js';
+	import { doc, shotNumber } from '../../lib/state.svelte.js';
 	import Icon from '../Icon.svelte';
 
 	let { rows, label } = $props();
 
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
-	const shotsText = (clips) => (clips.length > 3 ? t('panels.director.refs.shots', { count: clips.length }) : t('panels.director.refs.listed', { count: clips.length, list: clips.map(num).join(', ') }));
+	const shotsText = (clips) => (clips.length > 3 ? t('panels.director.refs.shots', { count: clips.length }) : t('panels.director.refs.listed', { count: clips.length, list: clips.map(shotNumber).join(', ') }));
 </script>
 
 <ul class="space-y-2" aria-label={label} data-reception>

@@ -6,20 +6,20 @@
 	import ChainSwitch from '../shots/ChainSwitch.svelte';
 	import SeamFix from './SeamFix.svelte';
 	import Icon from '../Icon.svelte';
+	import { shotNumberAt } from '../../lib/shots.js';
 
 	let { clip, title = true, compare = true } = $props();
 
 	const index = $derived(doc.clips.findIndex((c) => c.id === clip?.id));
 	const sm = $derived(index > 0 ? seam(index) : null);
 	const firstFix = $derived(sm ? sm.issues.findIndex((x) => x.fix) : -1);
-	const num = (i) => String(i + 1).padStart(2, '0');
 </script>
 
 {#if sm}
 	<div class="flex w-full flex-col gap-2.5" data-seam-panel={clip.id}>
 		{#if title}
 			<div class="flex items-center gap-2 text-xs">
-				<span class="font-semibold text-fg">{t('storyboard.band.seamTitle', { n: num(index - 1), m: num(index) })}</span>
+				<span class="font-semibold text-fg">{t('storyboard.band.seamTitle', { n: shotNumberAt(index - 1), m: shotNumberAt(index) })}</span>
 				<span class="min-w-0 flex-1 truncate text-fg-subtle">{clipLabel(sm.from)} → {clipLabel(sm.to)}</span>
 			</div>
 		{/if}

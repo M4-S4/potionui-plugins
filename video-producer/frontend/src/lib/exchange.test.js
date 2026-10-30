@@ -4,14 +4,15 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOMAINS, mergeDomains, translate } from '../i18n/core.js';
-import { EXCHANGE, MAKERS, baseName, edl, fcpxml, fileOf, labelOf, otio, seqDuration, srt, srtCues } from './exchange.js';
+import { EXCHANGE, MAKERS, baseName, edl, fcpxml, fileOf, otio, seqDuration, srt, srtCues } from './exchange.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, '..', '..', '..', 'tests', 'fixtures', 'exports');
 const readDomain = (domain) => JSON.parse(readFileSync(join(here, '..', 'i18n', 'en', `${domain}.json`), 'utf-8'));
 const dictionaries = { en: mergeDomains(Object.fromEntries(DOMAINS.map((domain) => [domain, readDomain(domain)]))) };
 const en = (key, params) => translate(dictionaries, 'en', key, params);
-const optionsFor = (doc) => ({ label: labelOf(doc, en('lib.default.clip')) });
+const clipLabels = (doc, fallback) => (c) => c?.label || doc.assets?.find((a) => a.id === c?.assetId)?.name || fallback;
+const optionsFor = (doc) => ({ label: clipLabels(doc, en('lib.default.clip')) });
 
 function sampleDoc() {
 	return {
@@ -43,7 +44,7 @@ test('fileOf: the real base name of a file, the prototype name of an unknown tak
 			{ id: 'a4', src: '/api/media/generations/g1/take_0001.mp4', generated: true, quality: 'final', resultId: 't1', name: 'Take' }
 		]
 	};
-	const label = labelOf(doc, 'Shot');
+	const label = clipLabels(doc, 'Shot');
 	assert.equal(fileOf(doc, { assetId: 'a1' }, label), 'My Clip.mp4');
 	assert.equal(fileOf(doc, { assetId: 'a2', label: 'Dawn · wide' }, label), 'Dawn_wide_draft_r9.mov');
 	assert.equal(fileOf(doc, { assetId: 'a3' }, label), null);

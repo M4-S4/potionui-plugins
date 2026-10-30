@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { doc, secs, clipLabel, pickedClips, clearPicked } from '../../lib/state.svelte.js';
+	import { doc, secs, clipLabel, pickedClips, clearPicked, shotNumber } from '../../lib/state.svelte.js';
 	import { shotActivity } from '../../lib/production.svelte.js';
 	import { pickShot } from '../../lib/band.svelte.js';
 	import { stages } from '../../lib/catalog.js';
@@ -32,7 +32,7 @@
 			{@const busy = shotActivity(c.id).state === 'running'}
 			<li>
 				<button type="button" class="flex min-h-7 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-surface-2" title={t('storyboard.pick.only', { shot: clipLabel(c) })} onclick={() => pickShot(c)}>
-					<span class="vp-tc w-5 shrink-0 text-fg-subtle">{String(doc.clips.indexOf(c) + 1).padStart(2, '0')}</span>
+					<span class="vp-tc w-5 shrink-0 text-fg-subtle">{shotNumber(c)}</span>
 					<span class="h-1.5 w-1.5 shrink-0 rounded-full {stages[c.stage].dot}"></span>
 					<span class="min-w-0 flex-1 truncate text-fg">{clipLabel(c)}</span>
 					{#if busy}<Icon name="history" class="h-3 w-3 shrink-0 text-signal" />{/if}

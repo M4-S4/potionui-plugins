@@ -68,7 +68,7 @@ def work_base() -> Path:
 
 
 def seek_point(item: Mapping[str, Any], origin: float) -> float:
-    """The time of its source an item is read from when the peak of a cut that starts at origin is measured: a whole number of seconds into the item and at least SEEK_PREROLL before what the cut keeps, so that the decoder has settled and the resampling and the fades fall where a read from the start puts them; 0, a read from the start, when it would skip less than SEEK_FROM seconds."""
+    """The time of its source an item is read from when the peak of a cut that starts at origin is measured."""
     skipped = max(origin - float(item.get("start") or 0), 0.0)
     seek = float(item.get("srcIn") or 0) + math.floor(skipped - SEEK_PREROLL)
     return seek if seek >= SEEK_FROM else 0.0
@@ -83,7 +83,7 @@ def mix_graph(
     references: Sequence[str] = (),
     seek: bool = False,
 ) -> Tuple[List[str], str]:
-    """The inputs and the filter graph of one cut: the items of the tracks sent as a reference between start and end, each with its gain and fades at its place, read from the start of its source or, with seek, for a measure only, from its seek point, the references from their beginning, over silence that lasts the whole cut."""
+    """The inputs and the filter graph of one cut of the tracks sent as a reference."""
     length = num(end - start)
     inputs: List[str] = []
     graph = [f"anullsrc=r={SAMPLE_RATE}:cl=stereo,atrim=duration={length}[bed]"]
@@ -330,7 +330,7 @@ def _shared(key: Tuple[Any, ...], start: Callable[[], Awaitable[Optional[float]]
 
 
 async def silent_lanes(owner: User, project_id: str, doc: Mapping[str, Any], cuts: Sequence[TrackCut]) -> Dict[str, List[str]]:
-    """The reference tracks each guided shot would send silent, their cut peaking at SILENCE_DB or below. A cut is measured once per owner, media and graph: a measure already made is read from memory, one under way for another request is awaited rather than run again, and at most MEASURES run at a time, each in a work folder of its own, finishing even when the request that started it is gone. A track whose cut cannot be measured is kept, and fails at the cut as before."""
+    """The reference tracks each guided shot would send silent, each cut measured once."""
     ffmpeg = core_bridge.find_ffmpeg() if cuts else None
     if not ffmpeg:
         return {}
@@ -469,7 +469,7 @@ async def attach(owner: User, project: Mapping[str, Any], plan: ShotPlan) -> Non
 
 
 async def attach_all(owner: User, project: Mapping[str, Any], plans: Sequence[ShotPlan]) -> None:
-    """Cut the sound each plan sends, store each cut once as the owner's upload and put it in the plan's request: for a guided shot, each reference track in place of its placeholder and each sound reference in place of its file, both at the 32 kHz MiniMax-H3 encodes without resampling; for a mixed shot, one mix of the tracks and the audio references as the mux entry of its director document; for each reference video track a guided shot sends, its cut (vreftrack.cut) in place of its vtrack: placeholder; for a shot made from its reference sheet, the sheet (sheetvideo.make) in place of its sheet: placeholder. The cuts of all the plans run at most MEASURES at a time, each in a work folder of its own, while their files are stored and put in the requests in the order of the plans and of what each sends, so that the uploads and the requests are those of one cut after the other. Raises the SoundError of the first cut or store that fails in that order, with its shot, after stopping the cuts still running and removing every work folder: nothing from the failing step on is stored."""
+    """Cut the sound each plan sends, store each cut once and put it in the plan's request; raises the SoundError of the first failing cut."""
     sounding = [plan for plan in plans if plan.needs_cut]
     if not sounding:
         return

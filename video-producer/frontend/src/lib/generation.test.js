@@ -19,7 +19,6 @@ import {
 	progressText,
 	sortTakes,
 	takeAsset,
-	upscaleTargetFor,
 	withProfile
 } from './generation.js';
 
@@ -403,9 +402,6 @@ test('resolutions: only the sizes in the project aspect count, on the grid of th
 	assert.equal(aspectOf(undefined, '1080p'), 16 / 9);
 	assert.equal(draftResolution({ resolutions: [] }, '832x480', wide), null);
 	assert.equal(finalResolution(null, wide), null);
-	assert.equal(upscaleTargetFor('4K'), 'uhd2160');
-	assert.equal(upscaleTargetFor('1080p', ['hd720', 'qhd1440']), 'qhd1440');
-	assert.equal(upscaleTargetFor('720p'), 'hd720');
 });
 
 test('progress text: core markers become readable labels, a marker-only message gives way to current_step', () => {

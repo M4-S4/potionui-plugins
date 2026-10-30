@@ -1,7 +1,3 @@
-########
-## MiniMax-H3-Fast (12 GB): E2E test suite.
-## Authoring reference: docs/presets.md "Testing presets"
-########
 schema: 1
 
 cases:

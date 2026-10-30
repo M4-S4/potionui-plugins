@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, asset, toast, undo } from '../../lib/state.svelte.js';
+	import { ui, doc, act, asset, toast, undo, shotNumber } from '../../lib/state.svelte.js';
 	import { CHARACTERS, PLACES, SPACES, LABEL_MAX, cardsOf, linkable, removeCard, setVoice, shotsCasting, usable, voiceChoices } from '../../lib/bible.js';
 	import { LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
 	import { addCardImage, refTypeLabel, cardReceptionFor, engineTitle } from '../../lib/references.js';
@@ -20,7 +20,6 @@
 	const references = $derived(kind ? linkable(doc, kind) : []);
 	const cast = $derived(card ? shotsCasting(doc, kind, card.id).length : 0);
 	const received = $derived(card ? cardReceptionFor(kind, card) : null);
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const ownWords = $derived((received?.shots ?? []).filter((shot) => shot.overridden).map((shot) => shot.clip));
 	const lostWords = $derived((received?.shots ?? []).filter((shot) => shot.ignoredLayout).map((shot) => shot.clip));
 
@@ -130,8 +129,8 @@
 					{:else if cast}
 						<p class="text-xs text-fg-subtle">{t('panels.director.bible.noReferences')}</p>
 					{/if}
-					{#if ownWords.length}<p class="text-xs text-fg-subtle">{t('panels.director.refs.ownWords', { count: ownWords.length, shots: ownWords.map(num).join(', ') })}</p>{/if}
-					{#if lostWords.length}<p class="text-xs text-warning">{t('panels.director.refs.lostWords', { count: lostWords.length, shots: lostWords.map(num).join(', ') })}</p>{/if}
+					{#if ownWords.length}<p class="text-xs text-fg-subtle">{t('panels.director.refs.ownWords', { count: ownWords.length, shots: ownWords.map(shotNumber).join(', ') })}</p>{/if}
+					{#if lostWords.length}<p class="text-xs text-warning">{t('panels.director.refs.lostWords', { count: lostWords.length, shots: lostWords.map(shotNumber).join(', ') })}</p>{/if}
 				</section>
 			</div>
 			<div class="flex shrink-0 items-center border-t border-line px-3 py-2">

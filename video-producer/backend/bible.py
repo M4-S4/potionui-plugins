@@ -271,7 +271,7 @@ SUBJECT_AFTER = re.compile(r"\s*\(?\s*<Subject \d+>")
 
 
 def tag_subjects(instruction: str, characters: Sequence[Card], subjects: Mapping[str, int]) -> str:
-    """The instruction of a shot with the first mention of the tag of each character it casts followed by that character's subject, "The old fisherman (<Subject 1>) mends a net", as MiniMax-H3's guide reuses <Subject N> in the description; a tag the instruction already follows with a subject is left as it is, and of two mentions that overlap the first one wins."""
+    """The instruction with the first mention of each cast character's tag followed by its subject, as MiniMax-H3's guide asks."""
     found: List[Tuple[int, int, int]] = []
     for card in characters:
         if card.id not in subjects:

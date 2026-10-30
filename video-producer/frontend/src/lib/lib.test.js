@@ -5,7 +5,7 @@ import './svelte-harness.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
-import { isUlid, ulid, ulidTime } from './ulid.js';
+import { isUlid, ulid } from './ulid.js';
 import { emptyDoc, migrate, newAsset, promptLanguageOf, starterDoc } from './starter.js';
 import { laneCode } from './tracks.js';
 import {
@@ -30,13 +30,13 @@ test('ulid: 26 Crockford base32 characters, time first, random tail', () => {
 	const id = ulid(1_700_000_000_000);
 	assert.equal(id.length, 26);
 	assert.ok(isUlid(id));
-	assert.equal(ulidTime(id), 1_700_000_000_000);
+	assert.equal(id.slice(0, 10), '01HF7YAT00');
+	assert.equal(ulid(0).slice(0, 10), '0000000000');
 	assert.ok(!/[ILOU]/.test(id));
 	const many = new Set(Array.from({ length: 500 }, () => ulid()));
 	assert.equal(many.size, 500);
 	assert.ok(ulid(1000) < ulid(2000));
 	assert.ok(!isUlid('c1'));
-	assert.equal(ulidTime('nope'), null);
 });
 
 test('shortcuts: Mac glyphs in the source editor order, Ctrl/Alt/Shift elsewhere', () => {

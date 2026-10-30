@@ -41,7 +41,7 @@
 	import { SPEEDS, interpolatorChoice, pickInterpolator, shotCadence, speedOf } from '../../lib/cadence.js';
 	import { conformTakes, renditionStore } from '../../lib/renditions.svelte.js';
 	import { refMediaKind, refRoleLabel, refTypeLabel, typesOf } from '../../lib/references.js';
-	import { typeIcon } from '../../lib/reftags.js';
+	import { typeIcon, REFERENCE_ROLES } from '../../lib/reftags.js';
 	import RefTags from '../references/RefTags.svelte';
 	import { followLane, hasOwnReference, isReferenceItem, isReferenceLane, joinPlan, setReferenceItem, setReferenceLane } from '../../lib/sound.js';
 	import AudioPicker from '../shots/AudioPicker.svelte';
@@ -58,7 +58,7 @@
 	import TakesSection from './TakesSection.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
 	import CastField from '../shots/CastField.svelte';
-	import { CHARACTERS, cardsOf, instructionOf, labelOf, setCast } from '../../lib/bible.js';
+	import { CHARACTERS, cardsOf, instructionOf, cardLabel, setCast } from '../../lib/bible.js';
 	import { linesOf } from '../../lib/dialogue.js';
 	import { isGlobal, touch } from '../../lib/shots.js';
 	import ColorSection from './ColorSection.svelte';
@@ -213,7 +213,7 @@
 
 	function speakerName(id) {
 		const card = id ? cardsOf(doc, CHARACTERS).find((c) => c.id === id) : null;
-		return labelOf(card) || t('modals.shot.dialogue.unnamed');
+		return cardLabel(card) || t('modals.shot.dialogue.unnamed');
 	}
 
 	function openBible() {
@@ -588,7 +588,7 @@
 						<label class="flex items-center gap-2">
 							<span class="w-24 shrink-0 text-xs text-fg-muted">{t('inspector.field.role')}</span>
 							<select class="input vp-dense min-w-0 flex-1" value={item.role} onchange={(e) => act(() => (item.role = e.currentTarget.value))}>
-								{#each ['Identité', 'Style', 'Décor', 'Objet', 'Mouvement', 'Caméra'] as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
+								{#each REFERENCE_ROLES as r (r)}<option value={r}>{refRoleLabel(r)}</option>{/each}
 							</select>
 						</label>
 					{/if}

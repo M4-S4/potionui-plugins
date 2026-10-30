@@ -1,5 +1,5 @@
 import { CHARACTERS, PLACES, names } from './bible.js';
-import { GROUP_ORDER, labelOf } from './labels.js';
+import { GROUP_ORDER, takeLabelOf } from './labels.js';
 
 export const BAND_MIN_SHOT = 1;
 export const BAND_STEP = 0.5;
@@ -143,8 +143,8 @@ export function displayStart(clip, i, layout) {
 const flightRank = { running: 0, queued: 1, failed: 2 };
 
 export function stackOrder(takes, hideRejected = false) {
-	const done = (takes ?? []).filter((t) => t.status === 'done' && !(hideRejected && labelOf(t) === 'rejected'));
-	done.sort((a, b) => GROUP_ORDER.indexOf(labelOf(a)) - GROUP_ORDER.indexOf(labelOf(b)) || String(a.variant ?? '').localeCompare(String(b.variant ?? '')));
+	const done = (takes ?? []).filter((t) => t.status === 'done' && !(hideRejected && takeLabelOf(t) === 'rejected'));
+	done.sort((a, b) => GROUP_ORDER.indexOf(takeLabelOf(a)) - GROUP_ORDER.indexOf(takeLabelOf(b)) || String(a.variant ?? '').localeCompare(String(b.variant ?? '')));
 	const rest = (takes ?? []).filter((t) => t.status in flightRank).sort((a, b) => flightRank[a.status] - flightRank[b.status]);
 	return [...done, ...rest];
 }

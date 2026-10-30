@@ -195,7 +195,7 @@ def _cadence(owner: User, project: Mapping[str, Any], order: Order, planned: Lis
 
 
 async def evaluate(owner: User, project: Mapping[str, Any], order: Order, sources: List[Dict[str, Any]]) -> Evaluation:
-    """What making these takes final would need in memory, time and GPU minutes, and what blocks it, shot by shot: each final planned as a single final take would be, its minutes measured on the backend of its source; which finals would be slower than the film, what bringing them to its frame rate would take and with which interpolator; the blocks name their shots."""
+    """What making these takes final would need in memory, time and GPU minutes, and what blocks it, shot by shot."""
     planned, blocks = await _plan_all(owner, project, order, sources)
     vram, warnings = await _vram(owner, planned)
     work: Optional[float] = 0.0

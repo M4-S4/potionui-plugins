@@ -9,7 +9,7 @@ import struct
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from . import bible, chain, core_bridge, director, takes, workdir
+from . import bible, core_bridge, director, frame_grab, takes, workdir
 from .core_bridge import MediaRefError
 from .exports import media
 from .exports.common import asset_of
@@ -293,7 +293,7 @@ def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path, identify: bo
 def _ffmpeg() -> str:
     found = core_bridge.find_ffmpeg()
     if not found:
-        raise chain.ChainError("ffmpeg_missing", "ffmpeg is not available on this server: the images of the take cannot be taken.", 503)
+        raise frame_grab.FrameError("ffmpeg_missing", "ffmpeg is not available on this server: the images of the take cannot be taken.", 503)
     return os.path.abspath(found) if os.path.dirname(found) else found
 
 
@@ -302,13 +302,13 @@ def _still(ffmpeg: str, source: Path, at: float, output: Path) -> List[str]:
 
 
 async def _take_frames(owner: Any, take: Mapping[str, Any], folder: Path) -> List[Tuple[float, Path]]:
-    asset = chain.take_asset(take)
+    asset = frame_grab.take_asset(take)
     found = media.locate(asset, [take], media.Resolver(owner))
     if found is None or not found.kind:
-        raise chain.ChainError("no_media", "The video of the take is no longer available.")
+        raise frame_grab.FrameError("no_media", "The video of the take is no longer available.")
     source = await asyncio.to_thread(media.Resolver(owner).local, found.kind, found.value, folder)
     if source is None:
-        raise chain.ChainError("no_media", "The video of the take is no longer available.")
+        raise frame_grab.FrameError("no_media", "The video of the take is no longer available.")
     if take.get("kind") == takes.KEYFRAME:
         return [(0.0, source)]
     probe = await asyncio.to_thread(core_bridge.probe_video, source)
@@ -319,7 +319,7 @@ async def _take_frames(owner: Any, take: Mapping[str, Any], folder: Path) -> Lis
     for index, at in enumerate(times):
         output = folder / f"look-{index:02d}.png"
         last = index == len(times) - 1 and len(times) > 1
-        await chain.run(chain.frame_command(ffmpeg, str(source), at, output, length) if last else _still(ffmpeg, source, at, output))
+        await frame_grab.run(frame_grab.frame_command(ffmpeg, str(source), at, output, length) if last else _still(ffmpeg, source, at, output))
         picked.append((at, output))
     return picked
 
@@ -328,7 +328,7 @@ async def _image_frames(owner: Any, source: Mapping[str, Any], folder: Path) -> 
     ref = source.get("ref") or {}
     path = await asyncio.to_thread(media.Resolver(owner).local, ref.get("kind"), source.get("value"), folder)
     if path is None:
-        raise chain.ChainError("no_media", "The image is no longer available.")
+        raise frame_grab.FrameError("no_media", "The image is no longer available.")
     return [(None, path)]
 
 
@@ -358,7 +358,7 @@ def _card_images(owner: Any, doc: Mapping[str, Any], card: bible.Card) -> List[T
 
 
 async def compute(row: Mapping[str, Any], model: str, faces: bool = False, identity: bool = False) -> None:
-    """Compute one queued look: the images of a take at its sample times, or a stored image, embedded by the image embedder of the application, with faces the best face of each image cropped and embedded too, and with identity the followed face identified where it is seen from the front; the look of a take also asks for the images of the bible cards of its shot's cast."""
+    """Compute one queued look: the embedded images of a take or a stored image, with their faces and identity when asked."""
     owner = core_bridge.get_user(row.get("user_id")) if row.get("user_id") else None
     if owner is None:
         return _mark(row["key"], FAILED, error="The owner of this media no longer exists.")
@@ -376,7 +376,7 @@ async def compute(row: Mapping[str, Any], model: str, faces: bool = False, ident
             picked = await _image_frames(owner, row["source"], folder)
         vectors = await asyncio.to_thread(core_bridge.embed_images, [str(path) for _, path in picked])
         crops = await asyncio.to_thread(_face_vectors, picked, folder, identity) if faces else [(None, None, None)] * len(picked)
-    except (chain.ChainError, MediaRefError) as exc:
+    except (frame_grab.FrameError, MediaRefError) as exc:
         return _mark(row["key"], FAILED, error=getattr(exc, "message", None) or str(exc))
     except FileNotFoundError as exc:
         return _mark(row["key"], UNAVAILABLE, error=str(exc))
@@ -460,7 +460,7 @@ def _identities(row: Mapping[str, Any]) -> List[Tuple[Optional[float], Tuple[flo
 
 
 def identity_drift(row: Optional[Mapping[str, Any]], model: Optional[str]) -> Optional[Dict[str, Any]]:
-    """How much of the first face a take shows from the front is left at its end, by face recognition: the median cosine with the first of its frontal images of the last second, or of its last frontal image when that second shows none, and the time of the last one; None without two frontal images. A face turned away and back in between does not count, a face that ends as someone else does."""
+    """How much of the first frontal face of a take is left at its end, by face recognition; None without two frontal images."""
     if not _current(row, model):
         return None
     known = _identities(row)
@@ -495,7 +495,7 @@ def placed_take(doc: Mapping[str, Any], clip: Mapping[str, Any], project_takes: 
 
 def _cut(clip: Mapping[str, Any]) -> Tuple[float, float]:
     start = max(float(clip.get("srcIn") or 0), 0.0)
-    return start, chain.end_of(clip)
+    return start, frame_grab.end_of(clip)
 
 
 def _seams(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]], found: Mapping[str, Mapping[str, Any]], model: Optional[str]) -> List[Dict[str, Any]]:
@@ -631,7 +631,7 @@ def _drift(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]], f
 
 
 def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dict[str, Any]:
-    """The looks of a project's finished takes, from the stored ones: the score of each seam between two placed takes, at the end of the cut of the first and the start of the cut of the second, and for each take and each start or end image candidate the score of each bible card of its shot's cast, the best match of its images with the card's pictures. With enqueue, every look missing for the project is asked for first."""
+    """The looks of a project's finished takes, from the stored ones; with enqueue, the missing ones are asked for first."""
     doc = project["doc"]
     info = embedder()
     faces = face_detector()

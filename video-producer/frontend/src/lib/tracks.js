@@ -1,7 +1,6 @@
 import { ulid } from './ulid.js';
 import { speedOf } from './cadence.js';
-
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+import { isObject } from './values.js';
 
 export const newVideoTrack = () => ({ mute: false, solo: false });
 
