@@ -59,7 +59,7 @@ class Tracker:
             await asyncio.sleep(BUSY_INTERVAL if busy else IDLE_INTERVAL)
 
     async def tick(self) -> bool:
-        """One round: follow each generation in flight, give the takes that wait for the last image of the previous shot that image once there is one, hand queued takes to the core, follow the versions at a frame rate, then, while no generation runs, compute one queued look; True while takes or versions remain active or looks wait."""
+        """One round of the tracker; True while takes or versions remain active or looks wait."""
         users: Dict[Optional[str], Any] = {}
 
         def owner(user_id: Optional[str]) -> Any:

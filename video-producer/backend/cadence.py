@@ -108,7 +108,7 @@ def frame_generation_installed(engine: Optional[Mapping[str, Any]]) -> Optional[
 
 
 def ready(user: User, engines: Optional[List[Dict[str, Any]]] = None) -> Dict[str, bool]:
-    """The interpolators this user can run, both on the native engine, none without one: RIFE through Video Tools with a target frame rate; NVIDIA Frame Generation through RTX Upscale with a target frame rate and a model choice, nvidia-vfx 0.2 or later installed where it runs, which rtx_checked says was looked up here rather than left to a remote worker."""
+    """The interpolators this user can run on the native engine, RIFE and NVIDIA Frame Generation, each when it is ready."""
     engine = catalog.native_engine(engines)
     if engine is None:
         return {RIFE: False, RTX: False, RTX_CHECKED: True}

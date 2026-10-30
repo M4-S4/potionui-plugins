@@ -48,7 +48,7 @@ def _own(warnings: List[Dict[str, Any]], shot_id: str) -> List[Dict[str, Any]]:
 
 @router.post("/projects/{project_id}/prompts")
 def compose_prompts(project_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
-    """The prompt each shot would send to its engine, with the cast of the bible in the engine's format, the part made from its references and its cast (composed, sent, replaced or not, changed since replaced), the label each reference video track goes as and the composer's warnings, from the document in the body when given (unsaved edits) or else the stored one; nothing is started, stored or measured."""
+    """The prompt each shot would send to its engine, from the document in the body or else the stored one; nothing is started."""
     checked = _checked(body)
     project = access.project_for(user, project_id)
     doc = _document(checked, project["doc"])

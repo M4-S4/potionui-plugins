@@ -576,7 +576,7 @@ def keyframe_prompt(
     instruction: Optional[str] = None,
     working: Optional[float] = None,
 ) -> str:
-    """The edit prompt of a start or end image: the frame it is, in the ratio the shot's video engine makes its takes in (working) with the part the film keeps when it crops them, the instruction given (else the shot's) without the reference video tracks it cites, the project's direction, what to keep of each picture, a picture of a card with the card's words, then the cards the shot casts that no picture shows, word for word, and a still with no text."""
+    """The edit prompt of a start or end image of a shot."""
     language = _language(doc)
     text = TEXT[language]
     own = director.cite_tracks((instruction or "").strip() or director.shot_instruction(doc, clip), {})

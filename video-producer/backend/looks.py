@@ -358,7 +358,7 @@ def _card_images(owner: Any, doc: Mapping[str, Any], card: bible.Card) -> List[T
 
 
 async def compute(row: Mapping[str, Any], model: str, faces: bool = False, identity: bool = False) -> None:
-    """Compute one queued look: the images of a take at its sample times, or a stored image, embedded by the image embedder of the application, with faces the best face of each image cropped and embedded too, and with identity the followed face identified where it is seen from the front; the look of a take also asks for the images of the bible cards of its shot's cast."""
+    """Compute one queued look: the embedded images of a take or a stored image, with their faces and identity when asked."""
     owner = core_bridge.get_user(row.get("user_id")) if row.get("user_id") else None
     if owner is None:
         return _mark(row["key"], FAILED, error="The owner of this media no longer exists.")
@@ -460,7 +460,7 @@ def _identities(row: Mapping[str, Any]) -> List[Tuple[Optional[float], Tuple[flo
 
 
 def identity_drift(row: Optional[Mapping[str, Any]], model: Optional[str]) -> Optional[Dict[str, Any]]:
-    """How much of the first face a take shows from the front is left at its end, by face recognition: the median cosine with the first of its frontal images of the last second, or of its last frontal image when that second shows none, and the time of the last one; None without two frontal images. A face turned away and back in between does not count, a face that ends as someone else does."""
+    """How much of the first frontal face of a take is left at its end, by face recognition; None without two frontal images."""
     if not _current(row, model):
         return None
     known = _identities(row)
@@ -631,7 +631,7 @@ def _drift(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]], f
 
 
 def report(owner: Any, project: Mapping[str, Any], enqueue: bool = False) -> Dict[str, Any]:
-    """The looks of a project's finished takes, from the stored ones: the score of each seam between two placed takes, at the end of the cut of the first and the start of the cut of the second, and for each take and each start or end image candidate the score of each bible card of its shot's cast, the best match of its images with the card's pictures. With enqueue, every look missing for the project is asked for first."""
+    """The looks of a project's finished takes, from the stored ones; with enqueue, the missing ones are asked for first."""
     doc = project["doc"]
     info = embedder()
     faces = face_detector()

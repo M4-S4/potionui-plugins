@@ -769,7 +769,7 @@ def preset_driver(preset_id: str) -> Optional[str]:
 
 
 def preset_form_fields(preset_id: str, mode: str) -> Optional[Dict[str, Dict[str, Any]]]:
-    """Type, required flag, default, options and recommended files (SHA-256, file name) of each field of a preset mode, with its label, the labels of the tabs and sections around it, its audience, whether the form hides it, the gate it sits in, its limits, its reactions and the most items a multiple field takes; or None."""
+    """The fields of a preset mode with their type, default, options, recommended files, labels, limits and reactions; or None."""
     template = api_presets.preset_template(preset_id)
     if template is None or mode not in (template.modes or {}):
         return None

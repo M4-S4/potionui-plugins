@@ -229,7 +229,7 @@ def whole_batch(created: List[Dict[str, Any]]) -> Iterator[None]:
 
 
 async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation) -> List[Dict[str, Any]]:
-    """Create the takes each shot asks for on its own engine, one per variant, in the order of the shots in the edit: a fresh seed each, or the shot's fixed seed for the first and the seeds after it for the others; a take that starts from the last image of the previous shot records what it waits for. Hand what fits to the core."""
+    """Create the takes each shot asks for on its own engine, one per variant, and hand what fits to the core."""
     if evaluation.blocked:
         raise Blocked(evaluation.payload["blocks"])
     applies = bool(evaluation.payload["quota"]["applies"])
@@ -649,7 +649,7 @@ async def final_plan(
     upscaler: str = upscalers.AUTO,
     rtx_source: str = upscalers.DEFAULT_RTX_SOURCE,
 ) -> Tuple[ShotPlan, str, bool]:
-    """The plan of the final take of a finished take, its preset and whether a native backend runs it: upscaled by the chosen upscaler to the target (RTX tuned for the kind of source given), Auto giving the size the film's export needs (upscalers.resolve_target); rendered again by LTX-2.5 following its video; or rendered again at the largest size. TakeError for a take that cannot be final, Blocked when the plan cannot be made."""
+    """The plan of the final take of a finished take, its preset and whether a native backend runs it."""
     if source.get("kind") == takes.KEYFRAME:
         raise TakeError(409, "keyframe_take", "A start image candidate has no final take: use it as a frame of its shot.")
     if source["status"] != "done":
@@ -706,7 +706,7 @@ async def final(
     rtx_source: str = upscalers.DEFAULT_RTX_SOURCE,
     conform: bool = False,
 ) -> Dict[str, Any]:
-    """A final take of a finished take: upscaled by the chosen upscaler, rendered again by LTX-2.5 following its video, or rendered again at the largest size; when asked and the final take is slower than its shot needs (the film's frame rate divided by the shot's speed), its version at that frame rate made after it, Blocked when no interpolator can."""
+    """A final take of a finished take, with its version at the frame rate its shot needs after it when asked."""
     from . import renditions
 
     plan, preset_id, native = await final_plan(owner, project, source, method, target, upscaler, rtx_source)

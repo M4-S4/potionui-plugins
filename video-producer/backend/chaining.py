@@ -66,7 +66,7 @@ def first_kind(doc: Mapping[str, Any], shot_id: str) -> Optional[str]:
 
 
 def waits(project_id: str, doc: Mapping[str, Any], shot_ids: Sequence[str]) -> Dict[str, Wait]:
-    """The shots of an order that start from the last image of the previous shot and have to wait for it: the previous shot is in the order, or has no media and a take on its way, or its video or still is placed and the shot has no first image yet. A shot with an image of its own, or with a last image taken earlier while the previous shot is not in the order, keeps it."""
+    """The shots of an order that start from the last image of the previous shot and have to wait for it."""
     clips = doc.get("clips") or []
     batch = set(shot_ids)
     active: Optional[List[Dict[str, Any]]] = None
@@ -141,7 +141,7 @@ async def _frame(owner: Any, project: Mapping[str, Any], wait: Mapping[str, Any]
 
 
 async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
-    """Give a waiting take the last image of the previous shot once there is one: the end of the take it waits for when that take is done, else the end of the cut of the previous shot's placed video; the image is stored as the owner's upload, put in the take's request in place of the stand-in and recorded, the take joining the queue. The take fails with a reason when the take it waits for failed, was cancelled or deleted, or when the image cannot be taken. True when the take stops waiting."""
+    """Give a waiting take the last image of the previous shot once there is one, or fail it with a reason; True when it stops waiting."""
     wait = take.get("chain") or {}
     after = None
     if wait.get("after"):

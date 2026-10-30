@@ -111,7 +111,7 @@ async def delete_take(project_id: str, take_id: str, user: User = Depends(get_cu
 async def final_take(
     project_id: str, take_id: str, body: Any = Body(default=None), user: User = Depends(get_current_active_user)
 ) -> Dict[str, Any]:
-    """Start the final take of a finished take, by upscale with the chosen upscaler (auto unless the body names one, RTX tuned for a compressed source unless the body says clean) or by a new render at the largest size; with conform, its version at the film's frame rate after it when it is slower than the film."""
+    """Start the final take of a finished take, by upscale or by a new render, with its version at the film's frame rate when asked."""
     body = _object(body)
     method, target, upscaler = body.get("method"), body.get("target"), body.get("upscaler", upscalers.AUTO)
     if method not in generation.METHODS:
