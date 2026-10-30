@@ -337,10 +337,6 @@ export function spaceLabel(from) {
 	return commandById(WORKSPACES.find((w) => w.id === from)?.command)?.label;
 }
 
-export function runCommand(id) {
-	commandById(id)?.run();
-}
-
 export function toggleSidebar() {
 	if (bandView()) ui.storyOpen = !ui.storyOpen;
 	else ui.sidebarOpen = !ui.sidebarOpen;

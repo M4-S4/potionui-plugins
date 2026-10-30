@@ -541,26 +541,6 @@ export function promptEdited(prompt, before) {
 	touch(doc.clips.find((c) => c.id === prompt.shotId));
 }
 
-export function setPrompt(clip, text) {
-	if (!clip) return null;
-	const p = promptOf(clip);
-	act(() => {
-		if (p) {
-			const before = p.text;
-			p.text = text;
-			promptEdited(p, before);
-		} else doc.prompts.push(newPrompt(clip, text));
-	});
-	return promptOf(clip);
-}
-
-export function ensurePrompt(clip) {
-	const existing = promptOf(clip);
-	if (existing || !clip) return { prompt: existing, created: false };
-	act(() => doc.prompts.push(newPrompt(clip)));
-	return { prompt: promptOf(clip), created: true };
-}
-
 export function addPrompt(start = ui.playhead, dur = 4) {
 	const p = { id: ulid(), shotId: shotIdAt(start), start: round(start, 0.04), dur, strength: 75, text: '' };
 	act(() => doc.prompts.push(p));

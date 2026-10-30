@@ -11,7 +11,7 @@ export async function load(url, context, next) {
 }`;
 register(`data:text/javascript,${encodeURIComponent(hooks)}`, import.meta.url);
 
-const { FAMILIES, LIMITS, ORDER, SHEET, VIDEO_TRACKS, cardReception, cutSize, familyOf, layoutOf, mediaKey, projectReception, receptionOf, shotReception, takesReferences, takesSheet, videoCap, videoFrames, videoPieces, videoRegion } = await import('./reception.js');
+const { FAMILIES, LIMITS, ORDER, SHEET, VIDEO_TRACKS, cardReception, familyOf, layoutOf, mediaKey, projectReception, receptionOf, shotReception, takesReferences, takesSheet, videoCap, videoFrames, videoPieces, videoRegion } = await import('./reception.js');
 const { MAX_VREF_TRACKS, VREF_ROLES } = await import('./vrefs.js');
 const { PROFILES } = await import('./generation.js');
 const { CONDITION, audioBehavior } = await import('./sound.js');
@@ -110,10 +110,6 @@ test('shared lengths: the parts of the items a track sends', () => {
 		assert.equal(frames, c.frames, c.name);
 		assert.deepEqual(pieces.map((p) => [p.id, round(p.from, 6), round(p.to, 6)]), c.pieces.map((p) => [p.id, p.from, p.to]), c.name);
 	}
-});
-
-test('shared sizes: a cut is written at the canvas of MiniMax-H3 for the aspect, or at the size of the take', () => {
-	for (const c of lengths.sizes) assert.deepEqual(cutSize(c.aspect, c.resolution, c.setting), c.size, JSON.stringify(c));
 });
 
 test('shotReception: a track sends nothing to a shot whose engine is not known, and its slots come in slot order', () => {

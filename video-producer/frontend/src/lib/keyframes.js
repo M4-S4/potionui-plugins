@@ -15,7 +15,6 @@ export const PRESET_STATES = ['not_loaded', 'not_installed', 'not_assigned', 'no
 
 const SPACES = ['identite', 'decors3d'];
 const TYPE_ROLES = { Personnage: 'character', Décor: 'setting', Objet: 'object', Style: 'style' };
-const STATES = ['queued', 'running', 'done', 'failed', 'cancelled'];
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value : '');
@@ -198,5 +197,3 @@ export function keyframeAsset(take, name) {
 }
 
 export const usable = (take) => isKeyframe(take) && take.status === 'done' && Boolean(take.url) && Boolean(take.generationId && take.fileId);
-
-export const takeState = (take) => (STATES.includes(take?.status) ? take.status : 'queued');

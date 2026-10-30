@@ -161,8 +161,6 @@
 	"chain.error.ffmpeg": "ffmpeg is missing on the server: the last frame cannot be taken.",
 	"chain.error.workdir": "The server cannot write its work files: the last frame cannot be taken. Ask an administrator to check the file storage directory.",
 	"refs.added": "Reference added: choose its picture and scope in the right panel",
-	"refs.selectOne": "Select a reference.",
-	"refs.attached": "“{name}” attached to {start}–{end}",
 	"family.identite.label": "Images and identity",
 	"family.identite.short": "Identity",
 	"family.identite.hint": "Characters, sets, objects and styles.",

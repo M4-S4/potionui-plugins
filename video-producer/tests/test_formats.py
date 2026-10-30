@@ -135,7 +135,7 @@ def test_the_time_scale_is_the_page_s(measured, wanted, scale):
 
 
 @pytest.mark.parametrize("measured, wanted, nearest", CASES["nearest"])
-def test_the_nearest_measured_size_is_the_page_s(measured, wanted, nearest):
+def test_the_nearest_measured_size_follows_the_shared_cases(measured, wanted, nearest):
     assert formats.nearest_measured(measured, wanted) == nearest
 
 

@@ -118,13 +118,6 @@ export function removeVrefTrack(doc, id) {
 	return { track, items };
 }
 
-export function removeVrefItems(doc, gone) {
-	const ids = new Set(gone.map((item) => item.id));
-	const list = Array.isArray(doc[VREF_ITEMS]) ? doc[VREF_ITEMS] : [];
-	for (let i = list.length - 1; i >= 0; i--) if (ids.has(list[i]?.id)) list.splice(i, 1);
-	dropEmpty(doc, VREF_ITEMS);
-}
-
 export function lengthChoices() {
 	const { minFrames, chunk, fps } = VIDEO_TRACKS;
 	const most = videoFrames(LONGEST_SECONDS);

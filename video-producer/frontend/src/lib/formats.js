@@ -225,15 +225,3 @@ export function timeScale(measured, wanted) {
 	if (old === null || next === null) return null;
 	return (area(next) / area(old)) ** SIZES.timeExponent;
 }
-
-export function nearestMeasured(measured, wanted) {
-	const target = parseSize(wanted);
-	const sizes = (Array.isArray(measured) ? measured : []).map((text) => [String(text), parseSize(String(text))]).filter(([, size]) => size !== null);
-	if (target === null || !sizes.length) return null;
-	const distance = (item) => key(Math.abs(Math.log(area(item[1]) / area(target))));
-	return sizes.reduce((best, item) => {
-		const d = distance(item);
-		const b = distance(best);
-		return d < b || (d === b && area(item[1]) > area(best[1])) ? item : best;
-	})[0];
-}

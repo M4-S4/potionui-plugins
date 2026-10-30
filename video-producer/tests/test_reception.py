@@ -169,7 +169,7 @@ def test_the_parts_a_track_sends_are_those_the_page_reads(case):
 
 
 @pytest.mark.parametrize("case", LENGTHS["sizes"], ids=[json.dumps(case) for case in LENGTHS["sizes"]])
-def test_a_cut_is_written_at_the_size_the_page_reads(case):
+def test_a_cut_is_written_at_the_size_of_the_shared_cases(case):
     resolution = tuple(case["resolution"]) if case["resolution"] else None
 
     assert reception.cut_size(case["aspect"], resolution, case["setting"]) == tuple(case["size"])
