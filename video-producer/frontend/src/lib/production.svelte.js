@@ -23,6 +23,7 @@ const INFO_WARNINGS = ['time_unknown', 'vram_unknown', 'audio_condition'];
 
 export const estimateState = $state({ key: null, data: null, loading: false, error: null });
 export const queueState = $state({ slots: null, elsewhere: null, positions: {} });
+export const refusal = $state({ key: null, code: null, shotId: null, text: '' });
 const run = $state({ starting: 0 });
 const UNDO_TOAST = 8000;
 
@@ -41,6 +42,8 @@ const subscriptions = new Map();
 const session = new Set();
 
 const gone = (error) => error?.code === 'project_not_found';
+const blockedBy = (error) => error?.code === 'blocked' || (error?.status === 409 && Array.isArray(error?.data?.blocks));
+const requestKey = (projectId, body) => JSON.stringify([projectId, project.version, body]);
 
 export function engineChoices() {
 	return engineOptions(ui.me);
@@ -310,7 +313,16 @@ export function estimateRequest() {
 	if (!option || !clips.length) return null;
 	if (ui.dirty || project.status === 'saving') return { hold: true };
 	const body = requestBody(clips, ui.production.quality, generationCounts(clips, doc.engine), option);
-	return { key: JSON.stringify([project.id, project.version, body]), projectId: project.id, body };
+	return { key: requestKey(project.id, body), projectId: project.id, body };
+}
+
+function clearRefusal() {
+	Object.assign(refusal, { key: null, code: null, shotId: null, text: '' });
+}
+
+function refuse(key, error) {
+	const block = Array.isArray(error?.data?.blocks) ? (error.data.blocks[0] ?? null) : null;
+	Object.assign(refusal, { key, code: block?.code ?? null, shotId: block?.data?.shot_id ?? null, text: blockedText(error) });
 }
 
 function applyQuota(quota) {
@@ -345,7 +357,15 @@ function clearPending() {
 	pendingKey = null;
 }
 
+export function refreshEstimate() {
+	const request = estimateRequest();
+	if (!request || request.hold) return;
+	clearPending();
+	fireEstimate(request);
+}
+
 export function scheduleEstimate(request) {
+	if (refusal.key && !request?.hold && request?.key !== refusal.key) clearRefusal();
 	if (request?.hold) return clearPending();
 	if (!request) {
 		clearPending();
@@ -389,8 +409,8 @@ export function readiness(opts = {}) {
 	const noEngine = !currentEngine();
 	if (noEngine) block(doc.engine?.preset ? 'unavailable' : 'noEngine', doc.engine?.preset ? t('generation.block.unavailable') : t('generation.block.noEngine'));
 	const est = !opts.clips && !noEngine ? estimateState.data : null;
-	const request = est ? estimateRequest() : null;
-	const fresh = Boolean(request && (request.hold || request.key === estimateState.key));
+	const request = !opts.clips && !noEngine ? estimateRequest() : null;
+	const fresh = Boolean(est && request && (request.hold || request.key === estimateState.key));
 	if (est && fresh) {
 		for (const item of est.blocks) block(item.code, noteText(item), item.data?.shot_id ?? null);
 		for (const warning of est.warnings) {
@@ -398,7 +418,8 @@ export function readiness(opts = {}) {
 			if (warning.code === 'fl2va_no_frame' && warning.data?.shot_id) gaps.push(warning.data.shot_id);
 		}
 	}
-	return { range, items, missing, reasons, warnings, notes, gaps, est, noEngine };
+	const refused = refusal.key && request?.key === refusal.key ? { text: refusal.text, reason: { code: refusal.code, shotId: refusal.shotId } } : null;
+	return { range, items, missing, reasons, warnings, notes, gaps, est, noEngine, refused };
 }
 
 function blockedText(error) {
@@ -411,7 +432,7 @@ function failed(error, fallback) {
 		projectGone(project.id);
 		return;
 	}
-	if (error?.code === 'blocked' || (error?.status === 409 && Array.isArray(error?.data?.blocks))) toast(blockedText(error), 'warning');
+	if (blockedBy(error)) toast(blockedText(error), 'warning');
 	else toast(fallback, 'error');
 }
 
@@ -424,6 +445,7 @@ export function startGeneration(opts = {}) {
 	const quality = opts.quality ?? ui.production.quality;
 	const counts = generationCounts(clips, doc.engine, opts.variants);
 	const again = clips.filter((c) => shotActivity(c.id).state === 'running').length;
+	clearRefusal();
 	run.starting += 1;
 	updateProduction();
 	const job = launching.then(() => launch(requestBody(clips, quality, counts, option), warnings, again));
@@ -440,7 +462,10 @@ async function launch(body, warnings, again) {
 	const projectId = project.id;
 	const result = await getClient().generate(projectId, body);
 	if (projectId !== project.id) return;
-	if (!result.ok) return failed(result.error, t('generation.toast.startFailed'));
+	if (!result.ok) {
+		if (blockedBy(result.error)) refuse(requestKey(projectId, body), result.error);
+		return failed(result.error, t('generation.toast.startFailed'));
+	}
 	for (const take of result.data) upsertTake(take);
 	if (result.data.length) queued(result.data, again);
 	if (warnings.length) toast(warnings[0], 'warning');
@@ -451,6 +476,11 @@ function queued(created, again) {
 	const shots = new Set(created.map((take) => take.shotId)).size;
 	const text = again ? t('generation.toast.queuedAgain', { count: shots, again }) : t('generation.toast.queued', { count: shots });
 	toast(text, 'info', { label: t('shell.toast.undo'), run: () => cancelQueued(ids) }, UNDO_TOAST);
+}
+
+export function tryAgain() {
+	if (readiness().missing.length) return refreshEstimate();
+	return startGeneration();
 }
 
 export async function cancelQueued(ids) {
@@ -903,6 +933,7 @@ export function startProduction() {
 		estimateController?.abort();
 		estimateController = null;
 		flyingKey = null;
+		clearRefusal();
 		session.clear();
 	};
 }

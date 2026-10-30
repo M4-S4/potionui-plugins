@@ -112,7 +112,7 @@ test('deck: Failed carries the plain-language message of the take, Retry and Det
 });
 
 test('deck: Blocked names the action that unblocks, from the code of the first reason', () => {
-	assert.deepEqual(DECK_UNBLOCK, { noShot: 'review', noDirection: 'direction', emptyPrompts: 'shot', noEngine: 'engine', unavailable: 'engine', no_preset: 'engine', no_model: 'engine', missing_models: 'engine', profile_unsupported: 'engine' });
+	assert.deepEqual(DECK_UNBLOCK, { noShot: 'review', noDirection: 'direction', emptyPrompts: 'shot', noEngine: 'engine', unavailable: 'engine', no_preset: 'engine', no_model: 'engine', missing_models: 'engine', profile_unsupported: 'engine', quota_unrecorded: 'retry' });
 	assert.deepEqual(deckUnblock({ code: 'emptyPrompts', shotId: 's6' }), { action: 'shot', shotId: 's6' });
 	assert.deepEqual(deckUnblock({ code: 'emptyPrompts', shotId: null }), { action: 'shot', shotId: null });
 	assert.deepEqual(deckUnblock({ code: 'noDirection', shotId: null }), { action: 'direction', shotId: null });
@@ -121,6 +121,7 @@ test('deck: Blocked names the action that unblocks, from the code of the first r
 	assert.deepEqual(deckUnblock({ code: 'unavailable', shotId: null }), { action: 'engine', shotId: null });
 	assert.deepEqual(deckUnblock({ code: 'missing_models', shotId: null }), { action: 'engine', shotId: null });
 	assert.deepEqual(deckUnblock({ code: 'audio_source_missing', shotId: 's2' }), { action: 'shot', shotId: 's2' });
+	assert.deepEqual(deckUnblock({ code: 'quota_unrecorded', shotId: 's4' }), { action: 'retry', shotId: null });
 	assert.equal(deckUnblock({ code: 'noRange', shotId: null }), null);
 	assert.equal(deckUnblock({ code: 'quota_exceeded', shotId: null }), null);
 	assert.equal(deckUnblock(null), null);
@@ -129,6 +130,7 @@ test('deck: Blocked names the action that unblocks, from the code of the first r
 	assert.equal(deckUnblockLabel('direction', t), 'production.deck.unblock.direction');
 	assert.equal(deckUnblockLabel('review', t), 'production.deck.unblock.review');
 	assert.equal(deckUnblockLabel('engine', t), 'production.deck.unblock.engine');
+	assert.equal(deckUnblockLabel('retry', t), 'production.deck.unblock.retry');
 });
 
 test('deck: in the compact mode each state keeps its title and its first action, and a failure message stays alone on its line', () => {

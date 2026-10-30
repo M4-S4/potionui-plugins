@@ -50,7 +50,8 @@ export const DECK_UNBLOCK = {
 	no_preset: 'engine',
 	no_model: 'engine',
 	missing_models: 'engine',
-	profile_unsupported: 'engine'
+	profile_unsupported: 'engine',
+	quota_unrecorded: 'retry'
 };
 
 export function deckUnblock(reason) {
@@ -64,6 +65,7 @@ export function deckUnblockLabel(action, t) {
 	if (action === 'shot') return t('production.deck.unblock.shot');
 	if (action === 'direction') return t('production.deck.unblock.direction');
 	if (action === 'review') return t('production.deck.unblock.review');
+	if (action === 'retry') return t('production.deck.unblock.retry');
 	return t('production.deck.unblock.engine');
 }
 

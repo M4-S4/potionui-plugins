@@ -24,7 +24,8 @@
 		estimateState,
 		retryTake,
 		showDetails,
-		toggleCompare
+		toggleCompare,
+		tryAgain
 	} from '../../lib/production.svelte.js';
 	import { aspectOf, draftResolution, failureText, finalResolution, presetLabel } from '../../lib/generation.js';
 	import { chosenSize } from '../../lib/formats.js';
@@ -62,11 +63,12 @@
 	const draftRes = $derived(draftResolution(engine?.info, ui.me?.settings?.draftResolution, aspect, chosenSize(doc, engine?.preset, 'draft'))?.replace('x', '×') ?? '—');
 	const finalRes = $derived(finalResolution(engine?.info, aspect, chosenSize(doc, engine?.preset, 'final'))?.replace('x', '×') ?? '—');
 	const conflicts = $derived(allIssues().filter((i) => i.level !== 'missing' && it.prompts.includes(i.prompt)));
-	const state = $derived(deckState({ state: p.state, missing: ready.missing }));
+	const lines = $derived(ready.missing.length ? ready.missing : ready.refused ? [ready.refused.text] : []);
+	const state = $derived(deckState({ state: p.state, missing: lines }));
 	const tone = $derived(deckTone(state));
 	const busy = $derived(state === 'running');
 	const blocked = $derived(ready.missing.length > 0);
-	const notes = $derived(blocked ? [...ready.missing, ...ready.warnings] : ready.warnings);
+	const notes = $derived(lines.length ? [...lines, ...ready.warnings] : ready.warnings);
 	const noticeLabel = $derived(notes.length > 1 ? t('production.notices', { count: notes.length, text: notes[0] }) : (notes[0] ?? ''));
 	const gapClip = $derived(blocked ? null : (ready.gaps.map((id) => doc.clips.find((c) => c.id === id)).find((c) => c && doc.clips.indexOf(c) > 0) ?? null));
 	const picked = $derived(pickedClips().length);
@@ -100,13 +102,13 @@
 	const recent = $derived(latestDone(takeStore.list));
 	const lastTake = $derived(recent[0] ?? null);
 	const finalReady = $derived(selectedEverywhere(doc.clips, takeStore.list));
-	const unblock = $derived(state === 'blocked' ? deckUnblock(ready.reasons[0]) : null);
+	const unblock = $derived(state === 'blocked' ? deckUnblock(ready.reasons[0] ?? ready.refused?.reason) : null);
 	const detail = $derived(
 		deckDetail(
 			{
 				state,
 				counts,
-				missing: ready.missing,
+				missing: lines,
 				warnings: ready.warnings,
 				conflicts: conflicts.length,
 				step: p.step,
@@ -322,6 +324,7 @@
 		if (unblock.action === 'direction') return openDirector('direction');
 		if (unblock.action === 'review') return openDirector('review');
 		if (unblock.action === 'engine') return toggleDrawer();
+		if (unblock.action === 'retry') return tryAgain();
 		const id = unblock.shotId ?? clips[0]?.id ?? null;
 		if (id) ui.modal = { type: 'shot', id };
 	}
