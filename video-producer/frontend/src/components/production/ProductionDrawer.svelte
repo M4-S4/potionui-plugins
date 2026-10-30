@@ -17,7 +17,7 @@
 	import { closeLayer, closeTopLayer, focusWithRing, isTopLayer, openLayer } from '../../lib/focus.js';
 	import { setEngineSize } from '../../lib/framing.svelte.js';
 	import { withSendings } from '../../lib/vreftracks.svelte.js';
-	import { closesOnOutsidePointer, keepsFocus } from '../../lib/drawer.js';
+	import { closesOnOutsidePointer, holdFocus } from '../../lib/drawer.js';
 	import { viewport } from '../../lib/viewport.svelte.js';
 	import { drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from '../../lib/deck-drawer.js';
 	import Icon from '../Icon.svelte';
@@ -86,7 +86,7 @@
 	function outside(e) {
 		const root = anchor?.closest('.vp-root') ?? null;
 		if (!isTopLayer(layer) || !closesOnOutsidePointer(root, e.target)) return;
-		if (keepsFocus(root, e.target)) e.preventDefault();
+		holdFocus(root, e);
 		onclose();
 	}
 

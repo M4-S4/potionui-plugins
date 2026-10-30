@@ -26,7 +26,7 @@ globalThis.Node = FakeNode;
 globalThis.Element = FakeElement;
 globalThis.document = { body: {}, querySelector: () => null };
 
-const { closesOnOutsidePointer, keepsFocus, openDrawers, soleDrawer } = await import('./drawer.js');
+const { closesOnOutsidePointer, holdFocus, keepsFocus, openDrawers, soleDrawer } = await import('./drawer.js');
 const { doc, ui, dispose } = await import('./state.svelte.js');
 const { viewport } = await import('./viewport.svelte.js');
 const { commandById, handleKeydown, toggleSidebar } = await import('./commands.js');
@@ -141,10 +141,136 @@ test('drawer: a pointer that closes it on a part of the plugin that takes no foc
 	assert.equal(keepsFocus(root, new FakeElement(new FakeElement(null, ['nav']))), false);
 	assert.equal(keepsFocus(null, title), false);
 	assert.equal(keepsFocus(root, null), false);
+	const press = (target) => {
+		let prevented = false;
+		holdFocus(root, { target, preventDefault: () => (prevented = true) }, { addEventListener() {}, removeEventListener() {} });
+		return prevented;
+	};
+	assert.equal(press(title), true);
+	assert.equal(press(new FakeElement(new FakeElement(deck, ['button']))), false);
+	assert.equal(press(new FakeElement(new FakeElement(null, ['nav']))), false);
 	const drawer = readFileSync(new URL('../components/production/ProductionDrawer.svelte', import.meta.url), 'utf-8');
-	assert.match(drawer, /const root = anchor\?\.closest\('\.vp-root'\) \?\? null;\s*if \(!isTopLayer\(layer\) \|\| !closesOnOutsidePointer\(root, e\.target\)\) return;\s*if \(keepsFocus\(root, e\.target\)\) e\.preventDefault\(\);\s*onclose\(\);/);
+	assert.match(drawer, /const root = anchor\?\.closest\('\.vp-root'\) \?\? null;\s*if \(!isTopLayer\(layer\) \|\| !closesOnOutsidePointer\(root, e\.target\)\) return;\s*holdFocus\(root, e\);\s*onclose\(\);/);
 	const page = readFileSync(new URL('../VideoProducerPage.svelte', import.meta.url), 'utf-8');
-	assert.match(page, /if \(!closesOnOutsidePointer\(root, e\.target\)\) return;\s*if \(keepsFocus\(root, e\.target\)\) e\.preventDefault\(\);\s*closeDrawer\(\);/);
+	assert.match(page, /if \(!closesOnOutsidePointer\(root, e\.target\)\) return;\s*holdFocus\(root, e\);\s*closeDrawer\(\);/);
+});
+
+test('drawer: a pointer that closes it on a part of the host that takes no focus, like an empty spot of the rail, gives the focus back to the chip once the host has handled the click, without cancelling anything, and leaves it to the host when a control, a field or a window of the host takes it', async () => {
+	class FakeDoc {
+		constructor() {
+			this.body = new FakeElement();
+			this.activeElement = this.body;
+			this.listeners = [];
+			this.dialogs = [];
+		}
+		addEventListener(type, fn, capture) {
+			this.listeners.push({ type, fn, capture });
+		}
+		removeEventListener(type, fn, capture) {
+			this.listeners = this.listeners.filter((l) => !(l.type === type && l.fn === fn && l.capture === capture));
+		}
+		querySelectorAll() {
+			return this.dialogs;
+		}
+		fire(type, event = {}) {
+			for (const l of this.listeners.filter((l) => l.type === type)) l.fn({ type, ...event });
+		}
+	}
+	class Focusable extends FakeElement {
+		constructor(owner, parent, selectors) {
+			super(parent, selectors);
+			this.owner = owner;
+			this.isConnected = true;
+		}
+		focus() {
+			this.owner.activeElement = this;
+		}
+	}
+	globalThis.HTMLElement = FakeElement;
+	try {
+		const page = new FakeDoc();
+		const root = new FakeElement(null, ['.vp-root', '[tabindex]']);
+		const chip = new Focusable(page, new FakeElement(new FakeElement(root, ['.vp-deck']), ['[data-vp-menu]']), ['button']);
+		const nav = new FakeElement(null, ['nav']);
+		const rail = new FakeElement(new FakeElement(nav, ['.h-header']));
+		const field = new Focusable(page, nav, ['input']);
+		const press = (target) => {
+			let prevented = false;
+			holdFocus(root, { target, preventDefault: () => (prevented = true) }, page);
+			return prevented;
+		};
+		const mousedown = (to = null) => {
+			chip.focus();
+			page.fire('focusout', { target: chip, relatedTarget: to });
+			page.activeElement = to ?? page.body;
+		};
+		const click = async () => {
+			page.fire('click', { target: rail });
+			await new Promise((resolve) => setTimeout(resolve));
+		};
+
+		assert.equal(press(rail), false);
+		assert.ok(page.listeners.length > 0);
+		mousedown();
+		page.fire('click', { target: rail });
+		assert.equal(page.activeElement, page.body);
+		assert.equal(page.listeners.length, 0);
+		await new Promise((resolve) => setTimeout(resolve));
+		assert.equal(page.activeElement, chip);
+
+		for (const control of [['button'], ['a[href]'], ['[tabindex]'], ['[role="button"]'], ['[role="menuitem"]']]) {
+			assert.equal(press(new FakeElement(new FakeElement(nav, control))), false, control[0]);
+			assert.equal(page.listeners.length, 0, control[0]);
+		}
+		mousedown();
+		await click();
+		assert.equal(page.activeElement, page.body);
+
+		press(rail);
+		mousedown(field);
+		await click();
+		assert.equal(page.activeElement, field);
+
+		press(rail);
+		mousedown();
+		page.fire('click', { target: rail });
+		field.focus();
+		await new Promise((resolve) => setTimeout(resolve));
+		assert.equal(page.activeElement, field);
+
+		press(rail);
+		mousedown();
+		page.dialogs = [new FakeElement(null, ['[aria-modal="true"]'])];
+		await click();
+		assert.equal(page.activeElement, page.body);
+		page.dialogs = [];
+
+		for (const stop of ['contextmenu', 'pointercancel', 'auxclick', 'pointerdown']) {
+			press(rail);
+			mousedown();
+			page.fire(stop);
+			assert.equal(page.listeners.length, 0, stop);
+			await click();
+			assert.equal(page.activeElement, page.body, stop);
+		}
+
+		press(rail);
+		const armed = page.listeners.length;
+		press(rail);
+		assert.equal(page.listeners.length, armed);
+		mousedown();
+		await click();
+		assert.equal(page.activeElement, chip);
+
+		press(rail);
+		mousedown();
+		chip.isConnected = false;
+		await click();
+		assert.equal(page.activeElement, page.body);
+		assert.equal(page.listeners.length, 0);
+	} finally {
+		delete globalThis.HTMLElement;
+	}
 });
 
 test('drawer: Escape closes the menus first, then the deck drawer, then the preview and the compare', () => {
