@@ -15,7 +15,7 @@ fields:
         label: "I2V Models"
         visible: false
         configuration: {icon: "image", icon_display: "icon_only"}
-        children: "{{ paths._shared }}/../marketplace/Wan/modes/video/tabs/i2v_models.yml"
+        children: "{{ paths.preset }}/modes/video/tabs/i2v_models.yml"
       - type: "tab"
         label: "SVI Pro"
         visible: false
