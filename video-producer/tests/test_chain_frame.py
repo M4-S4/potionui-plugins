@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import chain, core_bridge, presets, projects, takes
+from backend import core_bridge, frame_grab, presets, projects, takes
 from backend.core_bridge import MediaRefError
 from backend.projects import DocError
 from src.plugin_api import AccountType, get_current_active_user
@@ -144,26 +144,26 @@ def _end_frame(client, project_id, shot_id="s1"):
 
 
 def test_the_cut_of_a_shot_ends_at_its_source_in_plus_its_duration():
-    assert chain.end_of({"srcIn": 0.5, "dur": 1.5}) == 2.0
-    assert chain.end_of({"srcIn": 1.2344, "dur": 2}) == 3.234
-    assert chain.end_of({"dur": 4}) == 4.0
+    assert frame_grab.end_of({"srcIn": 0.5, "dur": 1.5}) == 2.0
+    assert frame_grab.end_of({"srcIn": 1.2344, "dur": 2}) == 3.234
+    assert frame_grab.end_of({"dur": 4}) == 4.0
 
 
 def test_the_cut_of_a_slowed_shot_ends_where_its_take_stops_showing():
-    assert chain.end_of({"srcIn": 1, "dur": 4, "speed": 0.5}) == 3.0
-    assert chain.end_of({"srcIn": 0.5, "dur": 8, "speed": 0.25}) == 2.5
-    assert chain.end_of({"srcIn": 1, "dur": 4, "speed": 2}) == 5.0
+    assert frame_grab.end_of({"srcIn": 1, "dur": 4, "speed": 0.5}) == 3.0
+    assert frame_grab.end_of({"srcIn": 0.5, "dur": 8, "speed": 0.25}) == 2.5
+    assert frame_grab.end_of({"srcIn": 1, "dur": 4, "speed": 2}) == 5.0
 
 
 def test_the_command_decodes_from_one_second_before_the_end_and_drops_every_frame_from_the_end_on():
-    late = chain.frame_command("ffmpeg", "in.mp4", 2.0, Path("out.png"))
-    early = chain.frame_command("ffmpeg", "in.mp4", 0.6, Path("out.png"))
+    late = frame_grab.frame_command("ffmpeg", "in.mp4", 2.0, Path("out.png"))
+    early = frame_grab.frame_command("ffmpeg", "in.mp4", 0.6, Path("out.png"))
 
     assert late[late.index("-ss") + 1] == "1" and late.index("-ss") < late.index("-i")
     assert late[late.index("-vf") + 1] == "trim=end=1"
     assert "-ss" not in early and early[early.index("-vf") + 1] == "trim=end=0.6"
     assert late[-6:] == ["-fps_mode", "passthrough", "-update", "1", "-y", "out.png"]
-    past = chain.frame_command("ffmpeg", "in.mp4", 6.0, Path("out.png"), 3.0)
+    past = frame_grab.frame_command("ffmpeg", "in.mp4", 6.0, Path("out.png"), 3.0)
     assert past[past.index("-ss") + 1] == "2" and past[past.index("-vf") + 1] == "trim=end=4"
 
 

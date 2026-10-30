@@ -18,7 +18,7 @@ PREROLL = 1.0
 FRAME_SECONDS = 60.0
 
 
-class ChainError(Exception):
+class FrameError(Exception):
     """The last frame of a shot that could not be taken, with the HTTP status it answers."""
 
     def __init__(self, code: str, message: str, status: int = 409):
@@ -97,17 +97,17 @@ def first_frame_command(ffmpeg: str, source: str, start: float, output: Path) ->
 
 
 async def run(command: List[str]) -> None:
-    """Run one ffmpeg command; raises ChainError when it fails, writes nothing or runs longer than FRAME_SECONDS."""
+    """Run one ffmpeg command; raises FrameError when it fails, writes nothing or runs longer than FRAME_SECONDS."""
     try:
         process = await asyncio.create_subprocess_exec(
             *command, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE
         )
     except OSError as exc:
-        raise ChainError("extract_failed", last_line(str(exc)) or "ffmpeg could not start.", 502) from None
+        raise FrameError("extract_failed", last_line(str(exc)) or "ffmpeg could not start.", 502) from None
     try:
         _, errors = await asyncio.wait_for(process.communicate(), FRAME_SECONDS)
     except asyncio.TimeoutError:
-        raise ChainError("extract_failed", f"Taking the frame took longer than {FRAME_SECONDS:g} s.", 502) from None
+        raise FrameError("extract_failed", f"Taking the frame took longer than {FRAME_SECONDS:g} s.", 502) from None
     finally:
         if kill_tree(process):
             await process.wait()
@@ -115,19 +115,19 @@ async def run(command: List[str]) -> None:
     if process.returncode != 0 or not output.is_file() or output.stat().st_size == 0:
         message = last_line(errors.decode("utf-8", "replace"))
         logger.warning("[VIDEO-PRODUCER] Could not take the last frame of a shot: %s", message)
-        raise ChainError("extract_failed", message or "The frame could not be taken from the video.", 502)
+        raise FrameError("extract_failed", message or "The frame could not be taken from the video.", 502)
 
 
-def _no_media(first: bool = False) -> ChainError:
+def _no_media(first: bool = False) -> FrameError:
     which = "first" if first else "last"
-    return ChainError("no_media", f"The shot has no video to take its {which} frame from.")
+    return FrameError("no_media", f"The shot has no video to take its {which} frame from.")
 
 
 def _placed(project: Mapping[str, Any], shot_id: str, first: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     doc = project["doc"]
     clip = next((item for item in doc.get("clips") or [] if item.get("id") == shot_id), None)
     if clip is None:
-        raise ChainError("shot_not_found", "The shot does not exist.", 404)
+        raise FrameError("shot_not_found", "The shot does not exist.", 404)
     asset = asset_of(doc, clip.get("assetId"))
     if asset is None or asset.get("kind") != "video":
         raise _no_media(first)
@@ -135,7 +135,7 @@ def _placed(project: Mapping[str, Any], shot_id: str, first: bool) -> Tuple[Dict
 
 
 async def end_frame(owner: User, project: Mapping[str, Any], shot_id: str) -> Dict[str, Any]:
-    """Store, as the owner's upload, the last frame a shot shows at the end of its cut of its placed take or video, named <file>-frame-<end>s.png; the stored key, the file name and where it was taken: shot, take, asset and end. Raises ChainError, MediaRefError or LimitExceeded."""
+    """Store, as the owner's upload, the last frame a shot shows at the end of its cut of its placed take or video, named <file>-frame-<end>s.png; the stored key, the file name and where it was taken: shot, take, asset and end. Raises FrameError, MediaRefError or LimitExceeded."""
     clip, asset = _placed(project, shot_id, False)
     return await cut_frame(owner, project["id"], clip, asset)
 
@@ -184,7 +184,7 @@ async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset
         raise _no_media(first)
     ffmpeg = core_bridge.find_ffmpeg()
     if not ffmpeg:
-        raise ChainError("ffmpeg_missing", "ffmpeg is not available on this server: the last frame cannot be taken.", 503)
+        raise FrameError("ffmpeg_missing", "ffmpeg is not available on this server: the last frame cannot be taken.", 503)
     ffmpeg = os.path.abspath(ffmpeg) if os.path.dirname(ffmpeg) else ffmpeg
     end = end_of(clip)
     at = start_of(clip) if first else end
@@ -192,7 +192,7 @@ async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset
     try:
         folder = workdir.scratch(workdir.FRAMES, owner.id)
     except workdir.WorkdirError as exc:
-        raise ChainError(exc.code, exc.message, 503) from None
+        raise FrameError(exc.code, exc.message, 503) from None
     try:
         source = await asyncio.to_thread(resolver.local, found.kind, found.value, folder)
         if source is None:

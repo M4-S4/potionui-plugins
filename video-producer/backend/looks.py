@@ -9,7 +9,7 @@ import struct
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from . import bible, chain, core_bridge, director, takes, workdir
+from . import bible, core_bridge, director, frame_grab, takes, workdir
 from .core_bridge import MediaRefError
 from .exports import media
 from .exports.common import asset_of
@@ -293,7 +293,7 @@ def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path, identify: bo
 def _ffmpeg() -> str:
     found = core_bridge.find_ffmpeg()
     if not found:
-        raise chain.ChainError("ffmpeg_missing", "ffmpeg is not available on this server: the images of the take cannot be taken.", 503)
+        raise frame_grab.FrameError("ffmpeg_missing", "ffmpeg is not available on this server: the images of the take cannot be taken.", 503)
     return os.path.abspath(found) if os.path.dirname(found) else found
 
 
@@ -302,13 +302,13 @@ def _still(ffmpeg: str, source: Path, at: float, output: Path) -> List[str]:
 
 
 async def _take_frames(owner: Any, take: Mapping[str, Any], folder: Path) -> List[Tuple[float, Path]]:
-    asset = chain.take_asset(take)
+    asset = frame_grab.take_asset(take)
     found = media.locate(asset, [take], media.Resolver(owner))
     if found is None or not found.kind:
-        raise chain.ChainError("no_media", "The video of the take is no longer available.")
+        raise frame_grab.FrameError("no_media", "The video of the take is no longer available.")
     source = await asyncio.to_thread(media.Resolver(owner).local, found.kind, found.value, folder)
     if source is None:
-        raise chain.ChainError("no_media", "The video of the take is no longer available.")
+        raise frame_grab.FrameError("no_media", "The video of the take is no longer available.")
     if take.get("kind") == takes.KEYFRAME:
         return [(0.0, source)]
     probe = await asyncio.to_thread(core_bridge.probe_video, source)
@@ -319,7 +319,7 @@ async def _take_frames(owner: Any, take: Mapping[str, Any], folder: Path) -> Lis
     for index, at in enumerate(times):
         output = folder / f"look-{index:02d}.png"
         last = index == len(times) - 1 and len(times) > 1
-        await chain.run(chain.frame_command(ffmpeg, str(source), at, output, length) if last else _still(ffmpeg, source, at, output))
+        await frame_grab.run(frame_grab.frame_command(ffmpeg, str(source), at, output, length) if last else _still(ffmpeg, source, at, output))
         picked.append((at, output))
     return picked
 
@@ -328,7 +328,7 @@ async def _image_frames(owner: Any, source: Mapping[str, Any], folder: Path) -> 
     ref = source.get("ref") or {}
     path = await asyncio.to_thread(media.Resolver(owner).local, ref.get("kind"), source.get("value"), folder)
     if path is None:
-        raise chain.ChainError("no_media", "The image is no longer available.")
+        raise frame_grab.FrameError("no_media", "The image is no longer available.")
     return [(None, path)]
 
 
@@ -376,7 +376,7 @@ async def compute(row: Mapping[str, Any], model: str, faces: bool = False, ident
             picked = await _image_frames(owner, row["source"], folder)
         vectors = await asyncio.to_thread(core_bridge.embed_images, [str(path) for _, path in picked])
         crops = await asyncio.to_thread(_face_vectors, picked, folder, identity) if faces else [(None, None, None)] * len(picked)
-    except (chain.ChainError, MediaRefError) as exc:
+    except (frame_grab.FrameError, MediaRefError) as exc:
         return _mark(row["key"], FAILED, error=getattr(exc, "message", None) or str(exc))
     except FileNotFoundError as exc:
         return _mark(row["key"], UNAVAILABLE, error=str(exc))
@@ -495,7 +495,7 @@ def placed_take(doc: Mapping[str, Any], clip: Mapping[str, Any], project_takes: 
 
 def _cut(clip: Mapping[str, Any]) -> Tuple[float, float]:
     start = max(float(clip.get("srcIn") or 0), 0.0)
-    return start, chain.end_of(clip)
+    return start, frame_grab.end_of(clip)
 
 
 def _seams(doc: Mapping[str, Any], project_takes: Sequence[Mapping[str, Any]], found: Mapping[str, Mapping[str, Any]], model: Optional[str]) -> List[Dict[str, Any]]:

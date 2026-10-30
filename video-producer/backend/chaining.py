@@ -3,8 +3,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import chain, core_bridge, director, projects, takes
-from .chain import ChainError
+from . import core_bridge, director, frame_grab, projects, takes
+from .frame_grab import FrameError
 from .core_bridge import LimitExceeded, MediaRefError
 from .exports.common import asset_of
 
@@ -136,8 +136,8 @@ def _reason(after: Optional[Mapping[str, Any]]) -> Optional[Tuple[str, str]]:
 
 async def _frame(owner: Any, project: Mapping[str, Any], wait: Mapping[str, Any], after: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     if after is not None:
-        return await chain.take_end_frame(owner, project, wait["previous"], after)
-    return await chain.end_frame(owner, project, wait["previous"])
+        return await frame_grab.take_end_frame(owner, project, wait["previous"], after)
+    return await frame_grab.end_frame(owner, project, wait["previous"])
 
 
 async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
@@ -157,11 +157,11 @@ async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
         return False
     try:
         frame = await _frame(owner, project, wait, after)
-    except ChainError as exc:
+    except FrameError as exc:
         return fail(take, "chain_frame_failed", exc.message)
     except (MediaRefError, LimitExceeded) as exc:
         return fail(take, "chain_frame_failed", str(exc) or "The last image of the previous shot could not be stored.")
-    media = chain.media_of(owner.id, frame)
+    media = frame_grab.media_of(owner.id, frame)
     if media is None:
         return fail(take, "chain_frame_failed", "The last image of the previous shot was stored but its library item cannot be found.")
     request = swap(copy.deepcopy(take.get("request") or {}), director.chain_value(wait["previous"]), frame["value"])

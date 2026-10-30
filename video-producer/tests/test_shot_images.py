@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend import chain, core_bridge, projects
+from backend import core_bridge, frame_grab, projects
 
 from .test_chain_frame import BASE, FFMPEG, TAKE_FILE, _asset_shape, _frame_luma, _luma, _placed, _shot, library, video
 
@@ -13,14 +13,14 @@ def _start_frame(client, project_id, shot_id="s1"):
 
 
 def test_the_cut_of_a_shot_starts_at_its_source_in():
-    assert chain.start_of({"srcIn": 1.2344, "dur": 2}) == 1.234
-    assert chain.start_of({"srcIn": -1, "dur": 2}) == 0.0
-    assert chain.start_of({"dur": 4}) == 0.0
+    assert frame_grab.start_of({"srcIn": 1.2344, "dur": 2}) == 1.234
+    assert frame_grab.start_of({"srcIn": -1, "dur": 2}) == 0.0
+    assert frame_grab.start_of({"dur": 4}) == 0.0
 
 
 def test_the_first_frame_command_seeks_on_the_input_and_keeps_one_frame():
-    later = chain.first_frame_command("ffmpeg", "in.mp4", 1.25, Path("out.png"))
-    start = chain.first_frame_command("ffmpeg", "in.mp4", 0.0, Path("out.png"))
+    later = frame_grab.first_frame_command("ffmpeg", "in.mp4", 1.25, Path("out.png"))
+    start = frame_grab.first_frame_command("ffmpeg", "in.mp4", 0.0, Path("out.png"))
 
     assert later[later.index("-ss") + 1] == "1.25" and later.index("-ss") < later.index("-i")
     assert later[-4:] == ["-frames:v", "1", "-y", "out.png"]
