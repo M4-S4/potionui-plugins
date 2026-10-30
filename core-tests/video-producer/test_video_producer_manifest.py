@@ -19,7 +19,7 @@ from src.features.chat.modes.registry import ChatModeRegistry
 from src.features.chat.tool_dispatcher import ToolCallDispatcher
 from src.features.llm import context_budget
 from src.features.llm.harness.context import user_text
-from src.features.llm.harness.messages import Message, Role, TextPart
+from src.features.llm.harness.messages import LEGACY_ORIGIN, Message, Role, TextPart
 from src.features.llm.tools.base import serialize_approval_preview
 from src.features.llm.tools.executor import ToolExecutor
 from src.features.llm.tools.registry import ToolRegistry
@@ -537,7 +537,7 @@ def test_the_context_contributor_named_by_the_manifest_is_importable_and_is_the_
 
 
 def _turn(index, role, text):
-    return Message(id=f"m{index}", role=role, parts=(TextPart(text),))
+    return Message(id=f"m{index}", role=role, parts=(TextPart(text),), origin=LEGACY_ORIGIN if role is Role.ASSISTANT else None)
 
 
 async def test_the_core_folds_the_contributors_block_into_the_users_turn_and_nothing_else(chat):
