@@ -4,7 +4,7 @@
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot, soundOf } from '../../lib/production.svelte.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { labelOf } from '../../lib/labels.js';
-	import { overrunsTake, shotStale } from '../../lib/shots.js';
+	import { overrunsTake, shotStale, shotNumberAt } from '../../lib/shots.js';
 	import { castLabels } from '../../lib/bible.js';
 	import { seamImage } from '../../lib/seam.js';
 	import { seam } from '../../lib/continuity.svelte.js';
@@ -335,7 +335,7 @@
 		role="button"
 		tabindex={isSel ? 0 : -1}
 		aria-label={t('storyboard.band.shotLabel', { n: i + 1, name: clipLabel(c), dur: secs(c.dur), stage: stages[c.stage].label })}
-		title={`${String(i + 1).padStart(2, '0')} · ${clipLabel(c)} · ${secs(c.dur)}`}
+		title={`${shotNumberAt(i)} · ${clipLabel(c)} · ${secs(c.dur)}`}
 		data-band-shot={c.id}
 		onpointerdown={(e) => shotDown(e, c)}
 		ondblclick={() => (ui.modal = { type: 'shot', id: c.id })}
@@ -354,7 +354,7 @@
 			{/if}
 		</div>
 		<div class="absolute left-1.5 top-1.5 flex items-center gap-1">
-			<span class="vp-tc flex items-center gap-0.5 rounded px-1 text-2xs font-medium leading-4 {picked ? 'bg-signal text-accent-contrast' : 'bg-black/60 text-white'}">{#if picked}<Icon name="check" class="h-2.5 w-2.5" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}{String(i + 1).padStart(2, '0')}</span>
+			<span class="vp-tc flex items-center gap-0.5 rounded px-1 text-2xs font-medium leading-4 {picked ? 'bg-signal text-accent-contrast' : 'bg-black/60 text-white'}">{#if picked}<Icon name="check" class="h-2.5 w-2.5" /><span class="sr-only">{t('storyboard.pick.picked')}</span>{/if}{shotNumberAt(i)}</span>
 			{#if i > 0 && w > 46}<ChainChip clip={c} small />{/if}
 		</div>
 		<div class="absolute right-1.5 top-1.5 flex gap-1">

@@ -1,6 +1,6 @@
 import { formatNumber, getLocale, t } from '../i18n/index.svelte.js';
 import { LIMITS, VIDEO_TRACKS, engineKey, leastSeconds } from './reception.js';
-import { ui, doc, act, asset, round, select, toast, newReferenceLane, undo, openDirector } from './state.svelte.js';
+import { ui, doc, act, asset, round, select, toast, newReferenceLane, undo, openDirector, shotNumber } from './state.svelte.js';
 import { ulid } from './ulid.js';
 import { MAX_VREF_TRACKS, videoTracksOf } from './vrefs.js';
 import { addVrefItem, addVrefTrack, freeSlot, itemSpan, sendingChanges, sendings, setTrackFrames, setTrackOff, trackBusy, trackOf, vrefLabel } from './vreftracks.js';
@@ -40,11 +40,9 @@ export function trackVerdict(entry) {
 	return { text: t('lib.vref.verdict.ignored'), tone: 'text-fg-subtle', ok: false };
 }
 
-const shotNum = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
-
 export function shotList(clips) {
 	if (clips.length > 3) return t('lib.vref.change.shots', { count: clips.length });
-	return new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(clips.map(shotNum));
+	return new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(clips.map(shotNumber));
 }
 
 export function showTrack(trackId) {
@@ -175,8 +173,6 @@ export function openTrackSettings(track, field = null) {
 }
 
 const ready = (take) => take?.status === 'done' && Boolean(take.url);
-
-const shotNumber = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 
 export const takeClip = (take) => doc.clips.find((clip) => clip.id === take?.shotId) ?? null;
 

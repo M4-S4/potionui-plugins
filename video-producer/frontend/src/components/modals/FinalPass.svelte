@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, clipLabel, fmtDuration } from '../../lib/state.svelte.js';
+	import { ui, doc, clipLabel, fmtDuration, shotNumber } from '../../lib/state.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { aspectOf, finalResolution, hasNativeEngine, rtxUnchecked, upscalesItself } from '../../lib/generation.js';
 	import { chosenSize, formatValue } from '../../lib/formats.js';
@@ -39,7 +39,6 @@
 	const count = $derived(sources.length);
 	const renderSize = (take) => finalResolution(presetById(take?.presetId), aspectOf(doc.aspect, doc.resolution), chosenSize(doc, take?.presetId, 'final'));
 	const oldRatio = $derived(plan.included.filter((row) => changedRatio(row.source, renderSize(row.source))).length);
-	const num = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 	const one = (v) => formatNumber(v ?? 0, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 	const minutes = (v) => formatNumber(v ?? 0, { maximumFractionDigits: 1 });
 	const tone = { ready: 'text-fg', running: 'text-signal', done: 'text-success', missing: 'text-warning', source: 'text-fg-subtle' };
@@ -193,7 +192,7 @@
 			<ul class="overflow-auto rounded-lg border border-line" style:max-height="13rem">
 				{#each plan.rows as row (row.clip.id)}
 					<li class="flex min-h-8 items-center gap-2.5 border-b border-line px-2.5 py-1 text-xs last:border-b-0 {row.include ? '' : 'text-fg-muted'}">
-						<span class="vp-tc text-fg-subtle">{num(row.clip)}</span>
+						<span class="vp-tc text-fg-subtle">{shotNumber(row.clip)}</span>
 						<span class="min-w-0 flex-1 truncate {row.include ? 'text-fg' : ''}">{clipLabel(row.clip)}</span>
 						{#if row.stale}<span class="flex shrink-0 items-center gap-1 text-warning" title={t('generation.card.staleTip')}><Icon name="pencil" class="h-3 w-3" />{t('generation.card.stale')}</span>{/if}
 						{#if row.failed && row.state === 'ready'}<span class="flex shrink-0 items-center gap-1 {row.failed.status === 'failed' ? 'text-danger' : 'text-fg-subtle'}"><Icon name={row.failed.status === 'failed' ? 'alert' : 'x'} class="h-3 w-3" />{row.failed.status === 'failed' ? t('generation.finalPass.lastFailed') : t('generation.finalPass.lastCancelled')}</span>{/if}
@@ -203,7 +202,7 @@
 				{/each}
 			</ul>
 			{#if plan.missing.length}
-				<p class="flex items-start gap-1.5 text-xs text-warning" role="status"><Icon name="alert" class="mt-0.5 h-3 w-3 shrink-0" />{t('generation.finalPass.missing', { count: plan.missing.length, shots: plan.missing.map(num).join(', ') })}</p>
+				<p class="flex items-start gap-1.5 text-xs text-warning" role="status"><Icon name="alert" class="mt-0.5 h-3 w-3 shrink-0" />{t('generation.finalPass.missing', { count: plan.missing.length, shots: plan.missing.map(shotNumber).join(', ') })}</p>
 			{/if}
 		</section>
 

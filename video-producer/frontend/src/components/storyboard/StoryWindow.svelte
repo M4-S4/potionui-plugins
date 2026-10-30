@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, secs, clipLabel, proposeShots, acceptProposal } from '../../lib/state.svelte.js';
+	import { ui, doc, secs, clipLabel, proposeShots, acceptProposal, shotNumber } from '../../lib/state.svelte.js';
 	import { shotActivity, startGeneration, retryTake } from '../../lib/production.svelte.js';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import { castCards, CHARACTERS, PLACES, cardsOf, names } from '../../lib/bible.js';
@@ -214,7 +214,7 @@
 				{#each open as c (c.id)}
 					{@const activity = shotActivity(c.id)}
 					<div class="flex items-center gap-2.5 border-b border-line py-1.5 text-xs">
-						<span class="vp-tc text-fg-subtle">{String(doc.clips.indexOf(c) + 1).padStart(2, '0')}</span>
+						<span class="vp-tc text-fg-subtle">{shotNumber(c)}</span>
 						<span class="h-1.5 w-1.5 shrink-0 rounded-full {stages[c.stage].dot}"></span>
 						<span class="min-w-0 flex-1 truncate">{clipLabel(c)}</span>
 						<span class="vp-tc text-fg-subtle">{secs(c.dur)}</span>
@@ -231,7 +231,7 @@
 			{#each checks as check, n (n)}
 				<div class="flex items-center gap-2.5 border-b border-line py-1.5 text-xs">
 					<Icon name={check.kind === 'seam' ? 'link' : check.kind === 'failed' ? 'alert' : 'pencil'} class="h-3.5 w-3.5 shrink-0 text-warning" />
-					<span class="vp-tc text-fg-subtle">{String(doc.clips.indexOf(check.clip) + 1).padStart(2, '0')}</span>
+					<span class="vp-tc text-fg-subtle">{shotNumber(check.clip)}</span>
 					<span class="min-w-0 flex-1 text-fg-muted">{check.text}</span>
 					{#if check.kind === 'seam'}<SeamFix clip={check.clip} issue={check.issue} />{/if}
 					{#if check.kind === 'failed'}<button type="button" class="vp-link-hit shrink-0 text-fg underline decoration-signal underline-offset-2" onclick={() => retryTake(check.take)}>{t('storyboard.check.retry')}</button>{/if}

@@ -1,6 +1,6 @@
 <script>
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, asset, selected } from '../../lib/state.svelte.js';
+	import { ui, doc, asset, selected, shotNumber } from '../../lib/state.svelte.js';
 	import { spaceLabel } from '../../lib/commands.js';
 	import { promptShot } from '../../lib/director.js';
 	import { laneTitle } from '../../lib/tracks.js';
@@ -9,7 +9,6 @@
 	let { kind } = $props();
 
 	const item = $derived(selected());
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 
 	function nameOf(it) {
 		if (kind === 'audio' || kind === 'frame') return asset(it.assetId)?.name ?? '';
@@ -17,7 +16,7 @@
 		if (kind === 'prompt') {
 			const text = String(it.text ?? '').trim();
 			const shot = promptShot(doc, it);
-			return text.length > 40 ? `${text.slice(0, 39).trim()}…` : text || (shot ? num(shot) : '');
+			return text.length > 40 ? `${text.slice(0, 39).trim()}…` : text || (shot ? shotNumber(shot) : '');
 		}
 		return it.name ?? it.text ?? it.label ?? '';
 	}

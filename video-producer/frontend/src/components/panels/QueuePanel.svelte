@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, select, clipLabel } from '../../lib/state.svelte.js';
+	import { ui, doc, select, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { cancelTake, prioritizeTake, presetById, queueState } from '../../lib/production.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
@@ -23,7 +23,7 @@
 
 	function shotText(take) {
 		const clip = clipOf(take);
-		return clip ? `${String(doc.clips.indexOf(clip) + 1).padStart(2, '0')} · ${clipLabel(clip)}` : t('panels.queue.shotGone');
+		return clip ? `${shotNumber(clip)} · ${clipLabel(clip)}` : t('panels.queue.shotGone');
 	}
 
 	function stateText(take) {

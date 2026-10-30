@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, undo, toast, globalPrompt, allIssues, followIssue, followedIssue, witness } from '../../lib/state.svelte.js';
+	import { ui, doc, act, undo, toast, globalPrompt, allIssues, followIssue, followedIssue, witness, shotNumber } from '../../lib/state.svelte.js';
 	import { directionFields } from '../../lib/catalog.js';
 	import { convertDirection } from '../../lib/bible.js';
 	import { ulid } from '../../lib/ulid.js';
@@ -18,7 +18,6 @@
 	const conflicts = $derived(allIssues().filter((i) => i.level !== 'missing'));
 	const free = $derived(String(doc.direction.personnages ?? '').trim());
 	const followed = $derived(followedIssue(witness().clip));
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const isShown = (i) => followed?.id === i.id && followed.prompt === i.prompt;
 
 	function library(key) {
@@ -50,7 +49,7 @@
 							<li class="text-xs text-fg-muted">
 								{i.text}
 								{#if clip}
-									<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" aria-pressed={isShown(i)} onclick={() => followIssue(i)}>{isShown(i) ? t('panels.director.direction.issueShown', { shot: num(clip) }) : t('panels.director.direction.issueLink', { shot: num(clip) })}</button>
+									<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" aria-pressed={isShown(i)} onclick={() => followIssue(i)}>{isShown(i) ? t('panels.director.direction.issueShown', { shot: shotNumber(clip) }) : t('panels.director.direction.issueLink', { shot: shotNumber(clip) })}</button>
 								{/if}
 							</li>
 						{/each}

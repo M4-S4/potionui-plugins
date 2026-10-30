@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { doc, asset, select, clipLabel } from '../../lib/state.svelte.js';
+	import { doc, asset, select, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { refTypeLabel, shotReceptionFor, engineTitle, receptionVerdict, refMediaKind, setSent, addShotReference } from '../../lib/references.js';
 	import { LIMITS, SHEET, familyOf, takesReferences, takesSheet } from '../../lib/reception.js';
 	import { isGlobal, shotReferences } from '../../lib/shots.js';
@@ -16,7 +16,7 @@
 	const lists = $derived(shotReferences(doc, clip));
 	const borrowed = $derived(lists.cast.filter((x) => !isGlobal(x.reference)));
 	const engine = $derived(engineTitle(shot.engine));
-	const number = $derived(String(doc.clips.indexOf(clip) + 1).padStart(2, '0'));
+	const number = $derived(shotNumber(clip));
 	const thumb = $derived(clipThumb(clip));
 	const notice = $derived.by(() => {
 		if (shot.state === 'unknown') return { text: t('panels.director.refs.shotUnknown'), tone: 'text-fg-muted' };

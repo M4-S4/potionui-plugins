@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatRelative, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, secs, clipLabel, reviewPick } from '../../lib/state.svelte.js';
+	import { ui, doc, secs, clipLabel, reviewPick, shotNumber } from '../../lib/state.svelte.js';
 	import { panelSelection } from '../../lib/director.js';
 	import { showDetails } from '../../lib/production.svelte.js';
 	import { labelOf } from '../../lib/labels.js';
@@ -20,13 +20,12 @@
 	const pick = $derived(reviewPick());
 	const elsewhere = $derived(panelSelection('review', ui.selection).elsewhere);
 	const take = $derived(pick?.take ?? null);
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const labelTone = { final: 'border-signal text-signal', candidate: 'border-success/60 text-success', rejected: 'border-danger/60 text-danger', draft: 'border-line-strong text-fg-muted' };
 
 	const head = $derived.by(() => {
-		if (take) return { icon: 'layers', title: t('panels.director.pick.take'), sub: `${num(pick.clip)} · ${take.variant}` };
-		if (pick?.kind === 'seam') return { icon: 'link', title: t('panels.director.pick.seam'), sub: `${num(pick.previous)} → ${num(pick.clip)}` };
-		if (pick) return { icon: 'film', title: t('panels.director.pick.shot'), sub: num(pick.clip) };
+		if (take) return { icon: 'layers', title: t('panels.director.pick.take'), sub: `${shotNumber(pick.clip)} · ${take.variant}` };
+		if (pick?.kind === 'seam') return { icon: 'link', title: t('panels.director.pick.seam'), sub: `${shotNumber(pick.previous)} → ${shotNumber(pick.clip)}` };
+		if (pick) return { icon: 'film', title: t('panels.director.pick.shot'), sub: shotNumber(pick.clip) };
 		return { icon: 'layers', title: commandById('view-review')?.label ?? '', sub: '' };
 	});
 	const thumb = $derived(take ? takeThumb(take) : pick ? clipThumb(pick.clip) : null);
@@ -50,7 +49,7 @@
 				<span class="flex h-10 w-16 shrink-0 items-center justify-center rounded-md bg-surface-3 bg-[repeating-linear-gradient(135deg,rgb(var(--line-strong))_0_1px,transparent_1px_8px)] {pick.kind === 'failed' ? 'text-danger' : 'text-fg-muted'}"><Icon name={pick.kind === 'failed' ? 'alert' : 'sparkles'} class="h-4 w-4" /></span>
 			{/if}
 			<div class="min-w-0 flex-1">
-				<div class="truncate text-sm font-medium">{num(pick.clip)} · {clipLabel(pick.clip)}{take ? ` · ${take.variant}` : ''}</div>
+				<div class="truncate text-sm font-medium">{shotNumber(pick.clip)} · {clipLabel(pick.clip)}{take ? ` · ${take.variant}` : ''}</div>
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-subtle">
 					{#if pick.kind === 'take'}
 						<span class="shrink-0 rounded-sm border px-1 text-2xs font-medium {labelTone[labelOf(take)]}">{t(`generation.label.${labelOf(take)}`)}</span>

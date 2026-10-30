@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, secs, clipLabel, reviewPick } from '../../lib/state.svelte.js';
+	import { ui, doc, secs, clipLabel, reviewPick, shotNumber } from '../../lib/state.svelte.js';
 	import { takesOf, assembleChosen } from '../../lib/production.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
 	import { stages } from '../../lib/catalog.js';
@@ -37,7 +37,6 @@
 	const isSel = (c) => ui.selection?.kind === 'clip' && ui.selection.id === c.id;
 	const picked = $derived(reviewPick());
 	const seamOn = (c) => picked?.kind === 'seam' && picked.clip.id === c.id;
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const partOf = (c) => parts.find((p) => c.start >= p.start && c.start < p.end)?.label ?? '';
 	const pills = $derived(REVIEW_FILTERS.map((f) => ({ id: f, label: filterLabel(f), count: counts[f] })));
 
@@ -146,7 +145,7 @@
 					>
 						{#if seamOn(c)}<span class="absolute inset-y-0 left-0 w-0.5 bg-signal" aria-hidden="true"></span>{/if}
 						<Icon name="link" class="h-3.5 w-3.5 shrink-0" />
-						<button type="button" class="min-w-0 text-left hover:text-fg" title={t('panels.director.review.seamTip')} onclick={() => chooseSeam(c)}>{t('panels.director.review.seam', { from: num(doc.clips[i - 1]), to: num(c) })} · {join.issues.map((x) => x.text).join(' · ')}</button>
+						<button type="button" class="min-w-0 text-left hover:text-fg" title={t('panels.director.review.seamTip')} onclick={() => chooseSeam(c)}>{t('panels.director.review.seam', { from: shotNumber(doc.clips[i - 1]), to: shotNumber(c) })} · {join.issues.map((x) => x.text).join(' · ')}</button>
 						{#if join.issues.some((x) => x.fix)}<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => matchToPrevious(c)}>{t('panels.dock.match')}</button>{/if}
 						<SeamAction clip={c} />
 						<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => openSeam(c)}>{t('panels.director.review.seamCompare')}</button>
@@ -156,7 +155,7 @@
 					{#if isSel(c)}<span class="absolute inset-y-0 left-0 w-0.5 bg-signal" aria-hidden="true"></span>{/if}
 					<div role="presentation" class="px-4 py-3" onclick={(e) => choose(e, c)}>
 						<button type="button" class="mb-2 flex min-h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-left transition-colors hover:bg-surface-2" style:margin-inline="-0.375rem" style:width="calc(100% + 0.75rem)" onclick={() => chooseShot(c)}>
-							<span class="vp-tc text-xs text-fg-subtle">{num(c)}</span>
+							<span class="vp-tc text-xs text-fg-subtle">{shotNumber(c)}</span>
 							<span class="min-w-0 truncate text-sm font-medium">{clipLabel(c)}</span>
 							<span class="flex shrink-0 items-center gap-1 text-xs {stages[c.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[c.stage].dot}"></span>{stages[c.stage].label}</span>
 							<span class="vp-tc shrink-0 text-xs text-fg-subtle">{secs(c.start)} → {secs(c.start + c.dur)}</span>

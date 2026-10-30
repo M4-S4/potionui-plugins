@@ -1,7 +1,7 @@
 import { isInFlight } from './generation.js';
 import { labelOf } from './labels.js';
 import { CHARACTERS, castOf, instructionOf, names, setCast, shotsCasting, usable } from './bible.js';
-import { touch } from './shots.js';
+import { shotNumberAt, touch } from './shots.js';
 
 export const VIEWS = ['review', 'direction', 'bible', 'references'];
 export const VIEW_ICONS = { review: 'layers', direction: 'palette', bible: 'book', references: 'bookmark' };
@@ -138,7 +138,7 @@ export function marked(text, patterns) {
 export const markedPhrases = (text, patterns) => marked(text, patterns).filter((part) => part.mark).map((part) => part.text.trim());
 
 export function shotNumbers(doc, clips, max = 3) {
-	const list = (clips ?? []).map((c) => String((doc?.clips ?? []).indexOf(c) + 1).padStart(2, '0'));
+	const list = (clips ?? []).map((c) => shotNumberAt((doc?.clips ?? []).indexOf(c)));
 	return { list: list.slice(0, max).join(' · '), more: Math.max(0, list.length - max) };
 }
 

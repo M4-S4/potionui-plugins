@@ -7,7 +7,7 @@ import { resetTakes, takeStore } from './takes.svelte.js';
 import { compileRules, conflictIds, conflictRule } from './rules.js';
 import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
 import { joinPlan, setReferenceLane } from './sound.js';
-import { isGlobal, touch } from './shots.js';
+import { isGlobal, shotNumberAt, touch } from './shots.js';
 import { setCast } from './bible.js';
 import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
 import { promptShot, reviewPickOf, viewOf, viewShot, witnessOf } from './director.js';
@@ -624,7 +624,7 @@ export async function deleteVrefTrack(id) {
 	const cited = citingShots(doc, track.slot);
 	const named = track.name ? `${label} · ${track.name}` : label;
 	const parts = [count ? t('lib.vref.deleteItems', { count, track: named }) : t('lib.vref.deleteEmpty', { track: named })];
-	if (cited.length) parts.push(t('lib.vref.deleteCited', { count: cited.length, label, shots: cited.map((c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0')).join(', ') }));
+	if (cited.length) parts.push(t('lib.vref.deleteCited', { count: cited.length, label, shots: cited.map(shotNumber).join(', ') }));
 	parts.push(t('lib.vref.deleteSlot', { label }));
 	confirmingTrack = true;
 	let ok = false;
@@ -728,6 +728,7 @@ export function followIssue(issue) {
 
 export const sourceLength = (c) => asset(c?.assetId)?.srcDur ?? 60;
 export const clipLabel = (c) => c?.label || asset(c?.assetId)?.name || t('lib.default.clip');
+export const shotNumber = (c) => shotNumberAt(doc.clips.indexOf(c));
 
 export function fmtDuration(sec) {
 	if (sec < 60) return `${Math.max(1, Math.round(sec))} s`;

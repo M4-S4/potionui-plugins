@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, asset, toast, clipLabel } from '../../lib/state.svelte.js';
+	import { ui, doc, act, asset, toast, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { showInReview } from '../../lib/band.svelte.js';
 	import { CHARACTERS, PLACES, addCard, cardsOf, labelOf, newCard, shotsCasting, usable } from '../../lib/bible.js';
 	import { DEFAULT_LANGUAGE, LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
@@ -23,8 +23,7 @@
 	const cards = $derived(groups.flatMap((g) => cardsOf(doc, g.kind).map((card) => ({ ...g, card }))));
 	const characters = $derived(cardsOf(doc, CHARACTERS).length);
 	const places = $derived(cardsOf(doc, PLACES).length);
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
-	const numbers = (list) => list.map(num).join(', ');
+	const numbers = (list) => list.map(shotNumber).join(', ');
 
 	function setLanguage(name) {
 		act(() => {
@@ -54,9 +53,9 @@
 
 	function cellTip(clip, kind, card) {
 		const name = labelOf(card);
-		if (isCast(clip, kind, card.id)) return t('panels.director.bible.cellOn', { name, shot: num(clip) });
-		if (citedWithout(doc, kind, card).includes(clip)) return t('panels.director.bible.cellCited', { name, shot: num(clip) });
-		return t('panels.director.bible.cellOff', { name, shot: num(clip) });
+		if (isCast(clip, kind, card.id)) return t('panels.director.bible.cellOn', { name, shot: shotNumber(clip) });
+		if (citedWithout(doc, kind, card).includes(clip)) return t('panels.director.bible.cellCited', { name, shot: shotNumber(clip) });
+		return t('panels.director.bible.cellOff', { name, shot: shotNumber(clip) });
 	}
 
 	const empty = $derived({
@@ -116,7 +115,7 @@
 						<div class="flex flex-wrap items-center gap-1">
 							<span class="mr-1 text-xs text-fg-subtle">{t('panels.director.bible.cast', { count: cast.length })}</span>
 							{#each cast as clip (clip.id)}
-								<button type="button" class="vp-tc min-h-6 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted hover:text-fg" title={t('panels.director.bible.chipTip', { shot: num(clip), name: clipLabel(clip) })} onclick={(e) => goTo(e, clip)}>{num(clip)}</button>
+								<button type="button" class="vp-tc min-h-6 rounded-sm border border-line-strong px-1 text-2xs text-fg-muted hover:text-fg" title={t('panels.director.bible.chipTip', { shot: shotNumber(clip), name: clipLabel(clip) })} onclick={(e) => goTo(e, clip)}>{shotNumber(clip)}</button>
 							{/each}
 						</div>
 						{#if cited.length}
@@ -148,7 +147,7 @@
 							<tbody>
 								{#each doc.clips as clip (clip.id)}
 									<tr>
-										<td class="vp-tc px-1 py-0.5 text-fg-subtle">{num(clip)}</td>
+										<td class="vp-tc px-1 py-0.5 text-fg-subtle">{shotNumber(clip)}</td>
 										<td class="max-w-48 truncate px-1 py-0.5 text-fg-muted">{clipLabel(clip)}</td>
 										{#each cards as { kind, card } (card.id)}
 											{@const on = isCast(clip, kind, card.id)}

@@ -30,7 +30,8 @@
 		sourceLength,
 		isPicked,
 		pickClip,
-		deleteVrefTrack
+		deleteVrefTrack,
+		shotNumber
 	} from '../../lib/state.svelte.js';
 	import { takesOf, shotActivity, shotEngineText, shotDurationLimit, fitShot } from '../../lib/production.svelte.js';
 	import { shotWaitText } from '../../lib/chain.svelte.js';
@@ -114,7 +115,6 @@
 	const menuLane = $derived(laneMenu && ui.menuOpen === `lane:${laneMenu.id}` ? doc.lanes.find((l) => l.id === laneMenu.id) : null);
 	const menuTrack = $derived(trackMenu && ui.menuOpen === `vtrack:${trackMenu.id}` ? (tracks.find((track) => track.id === trackMenu.id) ?? null) : null);
 	const vsecs = (v) => `${formatNumber(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} s`;
-	const shotNumber = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 
 	function toggleVideo(key) {
 		doc.video = { ...videoTrack(doc), [key]: !videoTrack(doc)[key] };

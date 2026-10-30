@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { ui, doc, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, secs, shotNumber } from '../../lib/state.svelte.js';
 	import { retryTake, openEngineSettings, backendName, presetById } from '../../lib/production.svelte.js';
 	import { failureText, presetLabel } from '../../lib/generation.js';
 	import { instructionPromptOf } from '../../lib/bible.js';
@@ -13,7 +13,6 @@
 
 	let { clip, take } = $props();
 
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const previous = $derived(doc.clips[doc.clips.indexOf(clip) - 1] ?? null);
 	const failure = $derived(failureText(take, t));
 	const resolution = $derived(take.width && take.height ? `${take.width}×${take.height}` : (take.resolution ?? '').replace('x', '×'));
@@ -30,9 +29,9 @@
 			.map((id) => {
 				if (id === 'retry') return { id, icon: 'refresh', title: t('panels.director.pick.fix.retry', { variant: take.variant }), hint: t('panels.director.pick.fix.retryHint'), run: () => retryTake(take) };
 				if (id === 'engine') return { id, icon: 'sliders', title: t('panels.director.pick.fix.engine'), hint: t('panels.director.pick.fix.engineHint'), run: () => openEngineSettings() };
-				if (id === 'shorter') return { id, icon: 'range', title: t('panels.director.pick.fix.shorter', { shot: num(clip) }), hint: t('panels.director.pick.fix.shorterHint'), run: () => showInStoryboard(clip) };
-				if (id === 'instruction') return { id, icon: 'pencil', title: t('panels.director.aside.edit', { shot: num(clip) }), hint: t('panels.director.pick.fix.instructionHint'), run: editInstruction };
-				if (id === 'previous' && previous) return { id, icon: 'layers', title: t('panels.director.pick.fix.previous', { shot: num(previous) }), hint: t('panels.director.pick.fix.previousHint', { shot: num(previous) }), run: () => showInReview(previous) };
+				if (id === 'shorter') return { id, icon: 'range', title: t('panels.director.pick.fix.shorter', { shot: shotNumber(clip) }), hint: t('panels.director.pick.fix.shorterHint'), run: () => showInStoryboard(clip) };
+				if (id === 'instruction') return { id, icon: 'pencil', title: t('panels.director.aside.edit', { shot: shotNumber(clip) }), hint: t('panels.director.pick.fix.instructionHint'), run: editInstruction };
+				if (id === 'previous' && previous) return { id, icon: 'layers', title: t('panels.director.pick.fix.previous', { shot: shotNumber(previous) }), hint: t('panels.director.pick.fix.previousHint', { shot: shotNumber(previous) }), run: () => showInReview(previous) };
 				return null;
 			})
 			.filter(Boolean)

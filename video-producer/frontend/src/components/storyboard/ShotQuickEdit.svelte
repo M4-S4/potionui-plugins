@@ -16,6 +16,7 @@
 	import SoundNote from '../shots/SoundNote.svelte';
 	import ChainSwitch from '../shots/ChainSwitch.svelte';
 	import Icon from '../Icon.svelte';
+	import { shotNumberAt } from '../../lib/shots.js';
 
 	let { clip } = $props();
 
@@ -67,7 +68,7 @@
 
 <div class="flex flex-col gap-2.5" data-quick-edit={clip.id}>
 	<div class="flex min-w-0 items-center gap-2">
-		<span class="vp-tc text-xs text-fg-subtle">{String(index + 1).padStart(2, '0')}</span>
+		<span class="vp-tc text-xs text-fg-subtle">{shotNumberAt(index)}</span>
 		<input class="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-md font-semibold text-fg hover:border-line-strong focus:border-signal focus:bg-surface-2 focus:outline-none" value={clipLabel(clip)} onchange={rename} aria-label={t('storyboard.shotName', { n: index + 1 })} />
 		<span class="flex shrink-0 items-center gap-1.5 text-xs {stages[clip.stage].tone}"><span class="h-1.5 w-1.5 rounded-full {stages[clip.stage].dot}"></span>{stages[clip.stage].label}</span>
 		<span class="vp-tc shrink-0 text-2xs text-fg-subtle">{secs(clip.start)} → {secs(clip.start + clip.dur)}</span>

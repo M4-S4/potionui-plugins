@@ -11,6 +11,8 @@ import { isObject } from './values.js';
 export const MIN_DRAFTS = 1;
 export const MAX_DRAFTS = 8;
 
+export const shotNumberAt = (index) => String(index + 1).padStart(2, '0');
+
 const count = (value) => (Number.isInteger(value) ? Math.min(MAX_DRAFTS, Math.max(MIN_DRAFTS, value)) : null);
 
 export const projectDrafts = (engine) => count(engine?.variants) ?? MIN_DRAFTS;

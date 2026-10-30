@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { doc, act, asset, clipLabel } from '../../lib/state.svelte.js';
+	import { doc, act, asset, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { families, refMediaKind, refRoleLabel, refTypeLabel, typesOf, reception, receptionVerdict, engineTitle, setReferenceShot, linkReferenceCard, startImage } from '../../lib/references.js';
 	import { engineOptionLabel } from '../../lib/production.svelte.js';
 	import { isGlobal } from '../../lib/shots.js';
@@ -51,9 +51,8 @@
 	const lostWords = $derived(worded.filter((shot) => shot.ignoredLayout).map((shot) => shot.clip));
 	const linked = $derived(found.linked);
 	const startable = $derived(isPictureReference(reference) && media?.kind === 'image');
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
-	const nums = (clips) => clips.map(num).join(', ');
-	const shotName = (c) => `${num(c)} · ${clipLabel(c)}`;
+	const nums = (clips) => clips.map(shotNumber).join(', ');
+	const shotName = (c) => `${shotNumber(c)} · ${clipLabel(c)}`;
 
 	function pickScope(id) {
 		if (id === 'global') {
@@ -183,7 +182,7 @@
 		{#if found.going.length}
 			<div class="flex flex-wrap gap-1" data-reference-going>
 				{#each found.going as c (c.id)}
-					<button type="button" class="vp-tc rounded border border-line-strong px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:border-signal hover:text-fg" title={t('panels.director.refs.goingTip', { shot: shotName(c) })} onclick={() => showInReview(c)}>{num(c)}</button>
+					<button type="button" class="vp-tc rounded border border-line-strong px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:border-signal hover:text-fg" title={t('panels.director.refs.goingTip', { shot: shotName(c) })} onclick={() => showInReview(c)}>{shotNumber(c)}</button>
 				{/each}
 			</div>
 		{/if}

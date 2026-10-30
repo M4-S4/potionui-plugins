@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { doc, asset, secs, clipLabel } from '../../lib/state.svelte.js';
+	import { doc, asset, secs, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { engineTitle, shotReceptionFor } from '../../lib/references.js';
 	import { trackItemsOf } from '../../lib/vrefs.js';
 	import { trackFrames, trackGroups, vrefLabel } from '../../lib/vreftracks.js';
@@ -31,8 +31,7 @@
 	}
 
 	const rows = $derived(groups.map((g) => ({ key: g.key, status: g.status, title: title(g), shots: g.clips, ...trackVerdict(g.entry) })));
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
-	const shotName = (c) => `${num(c)} · ${clipLabel(c)}`;
+	const shotName = (c) => `${shotNumber(c)} · ${clipLabel(c)}`;
 </script>
 
 <div class="space-y-4 p-3" data-reference-track={track.id}>
@@ -68,7 +67,7 @@
 		{#if going.length}
 			<div class="flex flex-wrap gap-1" data-reference-going>
 				{#each going as c (c.id)}
-					<button type="button" class="vp-tc rounded border border-line-strong px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:border-signal hover:text-fg" title={t('panels.director.refs.goingTip', { shot: shotName(c) })} onclick={() => showInReview(c)}>{num(c)}</button>
+					<button type="button" class="vp-tc rounded border border-line-strong px-1.5 py-0.5 text-xs text-fg-muted transition-colors hover:border-signal hover:text-fg" title={t('panels.director.refs.goingTip', { shot: shotName(c) })} onclick={() => showInReview(c)}>{shotNumber(c)}</button>
 				{/each}
 			</div>
 		{/if}
@@ -80,7 +79,7 @@
 			<p class="text-xs text-fg-subtle">{t('panels.director.track.seamText', { label })}</p>
 			<div class="flex flex-wrap gap-1.5">
 				{#each suites as c (c.id)}
-					<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName('palette'), disabled: Boolean(matchState.busy), onclick: () => matchToSuite(c, track.id) }}>{t('panels.director.track.match', { shot: num(c) })}</HostUi>
+					<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', icon: hostIconName('palette'), disabled: Boolean(matchState.busy), onclick: () => matchToSuite(c, track.id) }}>{t('panels.director.track.match', { shot: shotNumber(c) })}</HostUi>
 				{/each}
 			</div>
 		</section>

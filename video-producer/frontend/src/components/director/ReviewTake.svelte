@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, secs } from '../../lib/state.svelte.js';
+	import { ui, doc, act, secs, shotNumber } from '../../lib/state.svelte.js';
 	import { takesOf, toggleCompare } from '../../lib/production.svelte.js';
 	import { instructionOf } from '../../lib/bible.js';
 	import { missingWords } from '../../lib/director.js';
@@ -24,7 +24,6 @@
 
 	let { clip, take } = $props();
 
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const index = $derived(doc.clips.indexOf(clip));
 	const previous = $derived(index > 0 ? doc.clips[index - 1] : null);
 	const next = $derived(doc.clips[index + 1] ?? null);
@@ -60,11 +59,11 @@
 		if (!sm?.measured) return [];
 		return sm.issues.length ? sm.issues.map((x) => ({ text: x.text, warn: true })) : [{ text: t('panels.story.continuityOk'), warn: false }];
 	};
-	const chainNote = $derived(chained ? { text: placed ? t('panels.director.pick.chainedPlaced', { next: num(next), shot: num(clip) }) : t('panels.director.pick.chained', { next: num(next), shot: num(clip) }), warn: !placed } : null);
+	const chainNote = $derived(chained ? { text: placed ? t('panels.director.pick.chainedPlaced', { next: shotNumber(next), shot: shotNumber(clip) }) : t('panels.director.pick.chained', { next: shotNumber(next), shot: shotNumber(clip) }), warn: !placed } : null);
 	const pairs = $derived(
 		[
-			previous ? { left: endOf(previous), right: thumb, title: `${num(previous)} → ${num(clip)}`, notes: verdict(index) } : null,
-			next ? { left: thumb, right: startOf(next), title: `${num(clip)} → ${num(next)}`, notes: [...verdict(index + 1), ...(chainNote ? [chainNote] : [])] } : null
+			previous ? { left: endOf(previous), right: thumb, title: `${shotNumber(previous)} → ${shotNumber(clip)}`, notes: verdict(index) } : null,
+			next ? { left: thumb, right: startOf(next), title: `${shotNumber(clip)} → ${shotNumber(next)}`, notes: [...verdict(index + 1), ...(chainNote ? [chainNote] : [])] } : null
 		].filter(Boolean)
 	);
 
@@ -95,13 +94,13 @@
 	<section class="space-y-2" data-take-since>
 		<div class="vp-section-title">{t('panels.director.pick.since')}</div>
 		<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: hostIconName('pencil'), live: 'off' }}>
-			<p class="text-xs">{t('panels.director.pick.changed', { shot: num(clip) })}</p>
+			<p class="text-xs">{t('panels.director.pick.changed', { shot: shotNumber(clip) })}</p>
 		</HostUi>
 		<div class="space-y-1 rounded-lg border border-line-strong p-2.5 text-xs">
 			<div class="text-2xs uppercase tracking-wide text-fg-subtle">{t('panels.director.pick.today')}</div>
 			<p class="whitespace-pre-wrap leading-5 text-fg-muted">{#each parts as part, i (i)}{#if part.mark}<mark class="rounded-sm text-fg" style:background-color="rgb(var(--success) / 0.22)" data-take-missing>{part.text}</mark>{:else}{part.text}{/if}{/each}</p>
 		</div>
-		<p class="text-xs text-fg-subtle">{missing ? `${t('panels.director.pick.missing')} ` : ''}{t('panels.director.pick.relaunch', { key: commandById('generate')?.key ?? '', shot: num(clip) })}</p>
+		<p class="text-xs text-fg-subtle">{missing ? `${t('panels.director.pick.missing')} ` : ''}{t('panels.director.pick.relaunch', { key: commandById('generate')?.key ?? '', shot: shotNumber(clip) })}</p>
 	</section>
 {/if}
 

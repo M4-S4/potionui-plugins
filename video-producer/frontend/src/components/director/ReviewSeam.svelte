@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
-	import { doc, clipLabel } from '../../lib/state.svelte.js';
+	import { doc, clipLabel, shotNumber } from '../../lib/state.svelte.js';
 	import { identityTakes } from '../../lib/continuity.svelte.js';
 	import { seamPick } from '../../lib/continuity.js';
 	import { seamImage } from '../../lib/seam.js';
@@ -17,15 +17,14 @@
 	let { clip, previous } = $props();
 
 	let grading = $state(false);
-	const num = (c) => String(doc.clips.indexOf(c) + 1).padStart(2, '0');
 	const index = $derived(doc.clips.indexOf(clip));
 	const pick = $derived(seamPick(doc, index, takeStore.list));
 	const lastSrc = $derived(pick?.last?.src ?? seamImage(doc, previous.id, 'last')?.src ?? clipThumb(previous));
 	const firstSrc = $derived(clipThumb(clip) ?? pick?.first?.src ?? seamImage(doc, clip.id, 'first')?.src ?? null);
 	const pair = $derived(identityTakes(clip));
 	const sides = $derived([
-		{ src: lastSrc, shot: previous, caption: `${t('storyboard.band.endOf', { n: num(previous) })} · ${clipLabel(previous)}` },
-		{ src: firstSrc, shot: clip, caption: `${t('storyboard.band.startOf', { n: num(clip) })} · ${clipLabel(clip)}` }
+		{ src: lastSrc, shot: previous, caption: `${t('storyboard.band.endOf', { n: shotNumber(previous) })} · ${clipLabel(previous)}` },
+		{ src: firstSrc, shot: clip, caption: `${t('storyboard.band.startOf', { n: shotNumber(clip) })} · ${clipLabel(clip)}` }
 	]);
 </script>
 
@@ -56,7 +55,7 @@
 <section class="space-y-2">
 	<button type="button" class="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg" aria-expanded={grading} onclick={() => (grading = !grading)}>
 		<Icon name={grading ? 'chevron-down' : 'chevron-right'} class="h-3.5 w-3.5 shrink-0" />
-		<span class="min-w-0 flex-1 truncate">{t('panels.director.pick.colorOf', { shot: num(clip) })}</span>
+		<span class="min-w-0 flex-1 truncate">{t('panels.director.pick.colorOf', { shot: shotNumber(clip) })}</span>
 	</button>
 	{#if grading}<ColorControls {clip} compact all={false} />{/if}
 </section>

@@ -1,7 +1,7 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { formatNumber, formatTime, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, globalPrompt, allIssues, directorView, followIssue } from '../../lib/state.svelte.js';
+	import { ui, doc, globalPrompt, allIssues, directorView, followIssue, shotNumber } from '../../lib/state.svelte.js';
 	import { showInReview } from '../../lib/band.svelte.js';
 	import { engineLabel, openEngineSettings, takesOf } from '../../lib/production.svelte.js';
 	import { takeStore } from '../../lib/takes.svelte.js';
@@ -60,7 +60,6 @@
 	const engineLine = $derived(own ? t('panels.director.sum.engineOwn', { engine: engineLabel(), profile: doc.direction.mode, count: own }) : t('panels.director.sum.engine', { engine: engineLabel(), profile: doc.direction.mode }));
 	const kindIcons = { identity: 'user', lum: 'palette', warm: 'palette', camera_change: 'camera', fl2va_no_frame: 'image', no_instruction: 'sparkles', conflict: 'sparkles', duration: 'range', cast_unnamed: 'user' };
 
-	const num = (clip) => String(doc.clips.indexOf(clip) + 1).padStart(2, '0');
 	const clipById = (id) => doc.clips.find((c) => c.id === id) ?? null;
 
 	function trackText(issue) {
@@ -141,7 +140,7 @@
 				{@const shot = promptShot(doc, i.prompt)}
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" onclick={() => followIssue(i)}>
-						<Icon name="sparkles" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" /><span class="min-w-0 flex-1">{shot ? `${num(shot)} · ${i.text}` : i.text}</span>
+						<Icon name="sparkles" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" /><span class="min-w-0 flex-1">{shot ? `${shotNumber(shot)} · ${i.text}` : i.text}</span>
 					</button>
 				</li>
 			{/each}
@@ -149,7 +148,7 @@
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" onclick={() => openCard(item)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
-						<span class="min-w-0 flex-1">{item.cited ? t('panels.director.check.cited', { shot: num(item.clip), name: labelOf(item.card) }) : t('panels.director.check.unnamed', { shot: num(item.clip), name: labelOf(item.card) })}</span>
+						<span class="min-w-0 flex-1">{item.cited ? t('panels.director.check.cited', { shot: shotNumber(item.clip), name: labelOf(item.card) }) : t('panels.director.check.unnamed', { shot: shotNumber(item.clip), name: labelOf(item.card) })}</span>
 					</button>
 				</li>
 			{/each}
@@ -159,7 +158,7 @@
 					<div class="min-w-0 flex-1">
 						<button type="button" class="block text-left hover:text-fg" onclick={() => showTrack(issue.track.id)}>{trackText(issue)}</button>
 						<div class="mt-0.5 flex flex-wrap items-center gap-x-3">
-							<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => (ui.modal = { type: 'shot', id: issue.clips[0].id })}>{t('panels.director.check.open', { shot: num(issue.clips[0]) })}</button>
+							<button type="button" class="vp-link-hit text-fg underline decoration-signal underline-offset-2 hover:decoration-2" onclick={() => (ui.modal = { type: 'shot', id: issue.clips[0].id })}>{t('panels.director.check.open', { shot: shotNumber(issue.clips[0]) })}</button>
 							<button type="button" class="vp-link-hit text-fg underline decoration-line-hover underline-offset-2 hover:decoration-2" onclick={() => leaveAside(issue.track.id, issue.clips)}>{t('panels.director.check.leave')}</button>
 						</div>
 					</div>
@@ -168,7 +167,7 @@
 			{#each failed as clip (clip.id)}
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" onclick={() => showInReview(clip)}>
-						<Icon name="alert" class="mt-px h-3.5 w-3.5 shrink-0 text-danger" /><span class="min-w-0 flex-1">{t('panels.director.check.failed', { shot: num(clip) })}</span>
+						<Icon name="alert" class="mt-px h-3.5 w-3.5 shrink-0 text-danger" /><span class="min-w-0 flex-1">{t('panels.director.check.failed', { shot: shotNumber(clip) })}</span>
 					</button>
 				</li>
 			{/each}
@@ -176,7 +175,7 @@
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" data-look-issue={item.clip.id} onclick={() => showInReview(item.clip)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
-						<span class="min-w-0 flex-1">{t('panels.director.check.castLook', { shot: num(item.clip), name: item.card.label, score: percent(item.card.score) })}</span>
+						<span class="min-w-0 flex-1">{t('panels.director.check.castLook', { shot: shotNumber(item.clip), name: item.card.label, score: percent(item.card.score) })}</span>
 					</button>
 				</li>
 			{/each}
@@ -184,7 +183,7 @@
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" data-look-push-in={item.clip.id} onclick={() => showInReview(item.clip)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
-						<span class="min-w-0 flex-1">{t('panels.director.check.pushIn', { shot: num(item.clip), ratio: formatNumber(item.pushIn, { maximumFractionDigits: 1 }) })}</span>
+						<span class="min-w-0 flex-1">{t('panels.director.check.pushIn', { shot: shotNumber(item.clip), ratio: formatNumber(item.pushIn, { maximumFractionDigits: 1 }) })}</span>
 					</button>
 				</li>
 			{/each}
@@ -192,7 +191,7 @@
 				<li>
 					<button type="button" class="flex w-full items-start gap-1.5 text-left text-fg-muted hover:text-fg" data-look-identity={item.clip.id} onclick={() => showInReview(item.clip)}>
 						<Icon name="user" class="mt-px h-3.5 w-3.5 shrink-0 text-warning" />
-						<span class="min-w-0 flex-1">{item.kind === 'seam' ? t('panels.director.check.identitySeam', { shot: num(item.clip), previous: num(item.previous), score: percent(item.score) }) : t('panels.director.check.identity', { shot: num(item.clip), score: percent(item.score) })}</span>
+						<span class="min-w-0 flex-1">{item.kind === 'seam' ? t('panels.director.check.identitySeam', { shot: shotNumber(item.clip), previous: shotNumber(item.previous), score: percent(item.score) }) : t('panels.director.check.identity', { shot: shotNumber(item.clip), score: percent(item.score) })}</span>
 					</button>
 				</li>
 			{/each}
