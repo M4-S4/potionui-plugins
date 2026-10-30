@@ -1,5 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { hostUis, renderComponent, textOf } from './svelte-harness.js';
 import { DRAWER_INSET, DRAWER_MAX_HEIGHT, DRAWER_WIDTH, drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from './deck-drawer.js';
 import { deckChip } from './deck.js';
@@ -25,7 +26,7 @@ globalThis.Node = FakeNode;
 globalThis.Element = FakeElement;
 globalThis.document = { body: {}, querySelector: () => null };
 
-const { closesOnOutsidePointer } = await import('./drawer.js');
+const { closesOnOutsidePointer, keepsFocus } = await import('./drawer.js');
 const { doc, ui, dispose } = await import('./state.svelte.js');
 const { handleKeydown } = await import('./commands.js');
 const { t } = await import('../i18n/index.svelte.js');
@@ -107,9 +108,40 @@ test('drawer: a pointer inside the plugin root closes it, unless it lands on a d
 		const inside = new FakeElement(new FakeElement(root, [keep]));
 		assert.equal(closesOnOutsidePointer(root, inside), false, keep);
 	}
-	assert.equal(closesOnOutsidePointer(root, new FakeElement(new FakeElement(null, ['.vp-root']))), false);
 	assert.equal(closesOnOutsidePointer(null, plain), false);
 	assert.equal(closesOnOutsidePointer(root, null), false);
+});
+
+test('drawer: a pointer outside the plugin, on the rail or the bar of the host, closes it too, unless it lands on a toast or a tooltip of the host or a window of the host is open', () => {
+	const root = new FakeElement(null, ['.vp-root']);
+	const rail = new FakeElement(new FakeElement(null, ['nav']));
+	assert.equal(closesOnOutsidePointer(root, rail), true);
+	assert.equal(closesOnOutsidePointer(root, new FakeElement(new FakeElement(null, ['.vp-root']))), true);
+	for (const keep of ['[role="status"]', '[role="tooltip"]']) assert.equal(closesOnOutsidePointer(root, new FakeElement(new FakeElement(null, [keep]))), false, keep);
+	try {
+		document.querySelectorAll = () => [new FakeElement(null, ['[aria-modal="true"]'])];
+		assert.equal(closesOnOutsidePointer(root, rail), false);
+		document.querySelectorAll = () => [new FakeElement(new FakeElement(root, ['.vp-deck-drawer']))];
+		assert.equal(closesOnOutsidePointer(root, rail), true);
+	} finally {
+		delete document.querySelectorAll;
+	}
+});
+
+test('drawer: a pointer that closes it on a part of the plugin that takes no focus keeps the focus where the drawer gave it back, a control takes it as usual', () => {
+	const root = new FakeElement(null, ['.vp-root', '[tabindex]']);
+	const deck = new FakeElement(root, ['.vp-deck']);
+	const title = new FakeElement(new FakeElement(deck, ['.vp-deck-copy']));
+	assert.equal(keepsFocus(root, title), true);
+	assert.equal(keepsFocus(root, new FakeElement(deck, ['.vp-deck-backdrop'])), true);
+	for (const control of ['button', 'a[href]', 'input', 'select', 'textarea', 'summary', 'label', '[contenteditable="true"]', '[tabindex]']) assert.equal(keepsFocus(root, new FakeElement(new FakeElement(deck, [control]))), false, control);
+	assert.equal(keepsFocus(root, new FakeElement(new FakeElement(null, ['nav']))), false);
+	assert.equal(keepsFocus(null, title), false);
+	assert.equal(keepsFocus(root, null), false);
+	const drawer = readFileSync(new URL('../components/production/ProductionDrawer.svelte', import.meta.url), 'utf-8');
+	assert.match(drawer, /const root = anchor\?\.closest\('\.vp-root'\) \?\? null;\s*if \(!isTopLayer\(layer\) \|\| !closesOnOutsidePointer\(root, e\.target\)\) return;\s*if \(keepsFocus\(root, e\.target\)\) e\.preventDefault\(\);\s*onclose\(\);/);
+	const page = readFileSync(new URL('../VideoProducerPage.svelte', import.meta.url), 'utf-8');
+	assert.match(page, /if \(!closesOnOutsidePointer\(root, e\.target\)\) return;\s*if \(keepsFocus\(root, e\.target\)\) e\.preventDefault\(\);\s*closeDrawer\(\);/);
 });
 
 test('drawer: Escape closes the menus first, then the deck drawer, then the preview and the compare', () => {
@@ -123,6 +155,25 @@ test('drawer: Escape closes the menus first, then the deck drawer, then the prev
 	assert.deepEqual([ui.menuOpen, ui.deckDrawer, ui.preview], [null, false, null]);
 	handleKeydown({ key: 'Escape', target: null, shiftKey: true, preventDefault() {} }, null);
 	assert.equal(ui.deckDrawer, false);
+});
+
+test('drawer: Escape closes it when the focus left the plugin for the page of the host, the drawer still in the plugin, and leaves it to a window of the host', () => {
+	const root = new FakeElement(null, ['.vp-root']);
+	const drawer = new FakeElement(new FakeElement(root, ['.vp-deck']), ['.vp-deck-drawer']);
+	Object.assign(ui, { paletteOpen: false, modal: null, menuOpen: null, deckDrawer: true, hostModal: false, preview: null, compare: null });
+	const escape = () => handleKeydown({ key: 'Escape', target: document.body, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, preventDefault() {} }, root);
+	try {
+		document.querySelectorAll = (selector) => (selector.includes('[aria-modal="true"]') ? [drawer] : []);
+		escape();
+		assert.equal(ui.deckDrawer, false);
+		ui.deckDrawer = true;
+		document.querySelectorAll = (selector) => (selector.includes('[aria-modal="true"]') ? [drawer, new FakeElement(null, ['[aria-modal="true"]'])] : []);
+		escape();
+		assert.equal(ui.deckDrawer, true);
+	} finally {
+		delete document.querySelectorAll;
+		ui.deckDrawer = false;
+	}
 });
 
 test('drawer: the chip of the deck opens it as a modal dialog over the deck, with its title and a Close button, and the chip says whether it is open', async () => {

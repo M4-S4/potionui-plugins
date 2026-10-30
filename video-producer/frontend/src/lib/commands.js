@@ -387,13 +387,14 @@ function escape() {
 	else if (ui.modal) closeTopLayer() || (ui.modal = null);
 	else if (ui.menuOpen) ui.menuOpen = null;
 	else if (ui.deckDrawer) ui.deckDrawer = false;
+	else if (closeDrawer()) return;
 	else if (ui.preview || ui.compare) {
 		ui.preview = null;
 		ui.compare = null;
 	} else if (ui.reviewMonitor) ui.reviewMonitor = false;
 	else if (ui.seamCompare) ui.seamCompare = null;
 	else if (ui.storyOpen && bandView()) ui.storyOpen = false;
-	else if (!closeDrawer()) select(null);
+	else select(null);
 }
 
 function goToShot(next) {
@@ -465,6 +466,7 @@ function hasModifier(e) {
 const claimed = keymap.filter((binding) => binding.claim);
 const OVER_CHAT = ['undo', 'redo'];
 const overChat = (e) => OVER_CHAT.includes(findShortcut(e, keymap, IS_MAC)?.id) && !hostModalOpen() && !isTypingTarget(e.target, e);
+const covered = () => Boolean(ui.modal || ui.paletteOpen || ui.deckDrawer);
 
 export function handleKeydown(e, root) {
 	const target = e.target;
@@ -480,8 +482,8 @@ export function handleKeydown(e, root) {
 	if (!hit) return;
 	if (hit.claim) e.preventDefault();
 	if (hit.when && !hit.when()) return;
-	const fromField = hit.typing && isTypingTarget(target, e) && !ui.modal && !ui.paletteOpen;
-	if (!fromField && !hit.global && (isTypingTarget(target, e) || ui.modal || ui.paletteOpen)) return;
+	const fromField = hit.typing && isTypingTarget(target, e) && !covered();
+	if (!fromField && !hit.global && (isTypingTarget(target, e) || covered())) return;
 	if (hit.single && !ui.singleKeyShortcuts) return;
 	if (hit.spec === 'space' && isActivationTarget(target)) return;
 	e.preventDefault();

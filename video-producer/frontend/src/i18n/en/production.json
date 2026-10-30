@@ -74,6 +74,7 @@
 	"deck.unblock.direction": "Open the Direction",
 	"deck.unblock.engine": "Choose an engine",
 	"deck.unblock.review": "Open the Review",
+	"deck.unblock.retry": "Try again",
 	"deck.compare": "Compare",
 	"deck.compareTip": "Compare the last two takes in the Review",
 	"deck.finalTip": "Every shot has a selected take: start the final render of the film",

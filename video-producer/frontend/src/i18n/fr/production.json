@@ -74,6 +74,7 @@
 	"deck.unblock.direction": "Ouvrir la Direction",
 	"deck.unblock.engine": "Choisir un moteur",
 	"deck.unblock.review": "Ouvrir la Revue",
+	"deck.unblock.retry": "Réessayer",
 	"deck.compare": "Comparer",
 	"deck.compareTip": "Comparer les deux dernières prises dans la Revue",
 	"deck.finalTip": "Chaque plan a une prise retenue : lancer le rendu final du film",

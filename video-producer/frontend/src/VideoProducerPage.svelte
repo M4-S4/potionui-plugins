@@ -18,7 +18,7 @@
 	import { isPlayer } from './lib/workspaces.js';
 	import { keyboard, mountHostSlot, registerIcons } from './lib/host.js';
 	import { viewport, watchViewport } from './lib/viewport.svelte.js';
-	import { closesOnOutsidePointer, drawerFocus } from './lib/drawer.js';
+	import { closesOnOutsidePointer, keepsFocus } from './lib/drawer.js';
 	import { startAssistant } from './lib/assistant.svelte.js';
 	import MenuBar from './components/shell/MenuBar.svelte';
 	import ProjectBar from './components/shell/ProjectBar.svelte';
@@ -26,6 +26,7 @@
 	import Splitter from './components/shell/Splitter.svelte';
 	import Toasts from './components/shell/Toasts.svelte';
 	import Uploads from './components/shell/Uploads.svelte';
+	import SideDrawer from './components/shell/SideDrawer.svelte';
 	import { hasFiles } from './lib/upload.js';
 	import CommandPalette from './components/shell/CommandPalette.svelte';
 	import Modals from './components/modals/Modals.svelte';
@@ -82,7 +83,11 @@
 
 	$effect(() => {
 		if (!leftOpen && !rightOpen) return;
-		const onpointerdown = (e) => closesOnOutsidePointer(root, e.target) && closeDrawer();
+		const onpointerdown = (e) => {
+			if (!closesOnOutsidePointer(root, e.target)) return;
+			if (keepsFocus(root, e.target)) e.preventDefault();
+			closeDrawer();
+		};
 		document.addEventListener('pointerdown', onpointerdown, true);
 		return () => document.removeEventListener('pointerdown', onpointerdown, true);
 	});
@@ -243,9 +248,9 @@
 
 			<main class="grid min-h-0 overflow-hidden border-t border-line" class:vp-drawers={drawers} style:grid-template-columns={columns}>
 				{#if !player}
-					<div class="vp-drawer" data-vp-drawer="start" role={drawers ? 'dialog' : undefined} aria-modal={drawers ? 'true' : undefined} aria-label={drawers ? t('panels.left.label') : undefined} tabindex="-1" hidden={drawers && !leftOpen} use:drawerFocus={leftOpen}>
+					<SideDrawer side="start" label={t('panels.left.label')} {drawers} open={leftOpen}>
 						<LeftPanel />
-					</div>
+					</SideDrawer>
 				{/if}
 				{#if leftOpen || rightOpen}<div class="vp-drawer-veil" aria-hidden="true"></div>{/if}
 				{#key center}
@@ -260,9 +265,9 @@
 					</div>
 				{/key}
 				{#if !player}
-					<div class="vp-drawer" data-vp-drawer="end" role={drawers ? 'dialog' : undefined} aria-modal={drawers ? 'true' : undefined} aria-label={drawers ? t('panels.right.label') : undefined} tabindex="-1" hidden={drawers && !rightOpen} use:drawerFocus={rightOpen}>
+					<SideDrawer side="end" label={t('panels.right.label')} {drawers} open={rightOpen}>
 						<RightPanel />
-					</div>
+					</SideDrawer>
 				{/if}
 			</main>
 
@@ -1221,6 +1226,7 @@
 		.vp-root .vp-deck-cell-label { color: rgb(var(--fg-subtle)); font: 12px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
 		.vp-root .vp-deck-cell-value { font: 600 15px/20px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 		.vp-root .vp-deck-cell-sub { font-weight: 400; color: rgb(var(--fg-muted)); }
+		.vp-root .vp-deck-cell-sub.text-warning { color: rgb(var(--warning)); }
 		.vp-root .vp-deck-popover { position: fixed; width: 22rem; max-width: calc(100vw - 1rem); overflow: auto; padding: 10px 12px 12px; font-size: 12px; line-height: 16px; color: rgb(var(--fg)); }
 		.vp-root .vp-deck-popover:focus { outline: none; }
 		.vp-root .vp-deck-popover-title { margin-bottom: 6px; color: rgb(var(--fg-subtle)); font: 11px/16px 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }

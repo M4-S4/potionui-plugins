@@ -39,8 +39,8 @@ def _names(states: Sequence[PresetState]) -> str:
     return ", ".join(state.name for state in states)
 
 
-def _join(words: Sequence[str]) -> str:
-    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
+def _join(words: Sequence[str], last: str = "and") -> str:
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} {last} {words[-1]}"
 
 
 def _unchecked(what: str, action_label: str, action_href: str) -> SetupCheckResult:
@@ -154,50 +154,74 @@ class VideoPresetsReady(SetupCheck):
         )
 
 
-def _rtx_state() -> Optional[PresetState]:
+def _loaded_state(preset_id: str, what: str) -> Optional[PresetState]:
     try:
-        state = core_bridge.preset_state(presets.RTX_UPSCALE)
+        state = core_bridge.preset_state(preset_id)
     except Exception as exc:
-        logger.warning("[VIDEO-PRODUCER] Setup check: could not read the RTX Upscale preset: %s", exc)
+        logger.warning("[VIDEO-PRODUCER] Setup check: could not read the %s preset: %s", what, exc)
         return None
     return state if state.loaded else None
+
+
+def _unassigned(state: Optional[PresetState]) -> bool:
+    return bool(state and state.loaded and state.installed and not state.assigned)
 
 
 def _rtx_ready(state: Optional[PresetState], engine: Optional[Mapping[str, Any]]) -> bool:
     return bool(state and state.installed and state.assigned and upscalers.nvvfx(engine) is not False)
 
 
+def _rtx_unassigned(state: Optional[PresetState], engine: Optional[Mapping[str, Any]]) -> bool:
+    return _unassigned(state) and upscalers.nvvfx(engine) is not False
+
+
 def _rtx_note(state: Optional[PresetState], engine: Optional[Mapping[str, Any]]) -> str:
-    if state is None:
+    if state is None or _rtx_unassigned(state, engine):
         return ""
     if _rtx_ready(state, engine):
         if upscalers.nvvfx(engine) is None:
             return f" {state.name} is assigned as well, for fast final takes, if the nvidia-vfx package is installed on {engine['name']}, which this server cannot check."
         return f" {state.name} is ready as well, for fast final takes."
-    if state.installed and state.assigned:
+    if state.installed:
         return f" {state.name} also needs the nvidia-vfx package on the server."
-    return ""
+    return f" {state.name}, for fast final takes, is not installed."
 
 
-def _cadence_note(rtx: Optional[PresetState], engine: Optional[Mapping[str, Any]]) -> str:
-    try:
-        tools = core_bridge.preset_state(presets.VIDEO_TOOLS)
-    except Exception as exc:
-        logger.warning("[VIDEO-PRODUCER] Setup check: could not read the Video Tools preset: %s", exc)
-        tools = None
-    frame_generation = cadence.frame_generation_installed(engine) if _rtx_ready(rtx, engine) else False
-    rife = bool(tools and tools.loaded and tools.installed and tools.assigned)
-    if frame_generation:
+def _unassigned_note(states: Sequence[PresetState]) -> str:
+    if not states:
+        return ""
+    one = len(states) == 1
+    return (
+        f" {_join([state.name for state in states])} {'is' if one else 'are'} installed but assigned to no one: "
+        f"an administrator sees every installed preset and can use {'it' if one else 'them'}, "
+        "other users only the presets assigned to them or to one of their groups."
+    )
+
+
+def _cadence_note(rtx: Optional[PresetState], tools: Optional[PresetState], engine: Optional[Mapping[str, Any]]) -> str:
+    rtx_ready = _rtx_ready(rtx, engine)
+    frame_generation = cadence.frame_generation_installed(engine) if rtx_ready or _rtx_unassigned(rtx, engine) else False
+    if rtx_ready and frame_generation:
         return " Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation."
-    if rife:
+    if tools and tools.installed and tools.assigned:
         return f" Takes slower than the film are brought to its frame rate with RIFE, through {tools.name}."
-    if frame_generation is None:
+    if rtx_ready and frame_generation is None:
         return f" Takes slower than the film are brought to its frame rate with NVIDIA Frame Generation if nvidia-vfx 0.2 or later is installed on {engine['name']}, which this server cannot check."
-    return " No interpolator is ready: takes slower than the film repeat frames in the export until Video Tools with RIFE 4.25 is installed."
+    waiting = []
+    if _rtx_unassigned(rtx, engine) and frame_generation is not False:
+        waiting.append(f"{rtx.name}, with NVIDIA Frame Generation,")
+    if _unassigned(tools):
+        waiting.append(f"{tools.name}, with RIFE 4.25,")
+    if waiting:
+        return (
+            " Only an administrator gets an interpolator: the takes of other users that are slower than the film "
+            f"repeat frames in the export until {_join(waiting, 'or')} is assigned to them."
+        )
+    return " No interpolator is ready: takes slower than the film repeat frames in the export until Video Tools with RIFE 4.25 is installed and assigned."
 
 
 class UpscalerReady(SetupCheck):
-    """SeedVR2 or RTX Upscale is installed, so draft takes can be upscaled into final takes; the note says which interpolator brings slower takes to the film's frame rate."""
+    """SeedVR2, or RTX Upscale with nvidia-vfx, is installed and assigned to someone, so draft takes can be upscaled into final takes; the text names both, what is assigned to no one, and which interpolator brings slower takes to the film's frame rate."""
 
     def evaluate(self, context: SetupCheckContext) -> SetupCheckResult:
         try:
@@ -206,20 +230,24 @@ class UpscalerReady(SetupCheck):
             logger.warning("[VIDEO-PRODUCER] Setup check: could not read the SeedVR2 preset: %s", exc)
             return _unchecked("the SeedVR2 preset", "Open presets", PRESETS_HREF)
         engine = catalog.native_engine()
-        rtx = _rtx_state()
-        frame_rate = _cadence_note(rtx, engine)
-        note = _rtx_note(rtx, engine) + frame_rate
+        rtx = _loaded_state(presets.RTX_UPSCALE, "RTX Upscale")
+        tools = _loaded_state(presets.VIDEO_TOOLS, "Video Tools")
+        idle_seedvr2, idle_rtx = _unassigned(state), _rtx_unassigned(rtx, engine)
+        idle = [preset for preset, waits in ((state, idle_seedvr2), (rtx, idle_rtx), (tools, _unassigned(tools))) if waits]
+        others = _unassigned_note(idle) + _cadence_note(rtx, tools, engine)
+        note = _rtx_note(rtx, engine) + others
         if state.installed and state.assigned:
             return SetupCheckResult(done=True, description=f"{state.name} is installed and assigned.{note}")
-        if state.installed:
-            return SetupCheckResult(
-                done=True,
-                description=f"{state.name} is installed. Assign it to the users or groups who make final takes.{note}",
-            )
+        missing = " SeedVR2, which restores and adds detail, is not installed." if not state.installed else ""
         if _rtx_ready(rtx, engine):
+            return SetupCheckResult(done=True, description=f"Final takes are upscaled with {rtx.name}.{missing}{others}")
+        if idle_seedvr2 or idle_rtx:
+            first = state if idle_seedvr2 else rtx
             return SetupCheckResult(
-                done=True,
-                description=f"Final takes are upscaled with {rtx.name}. SeedVR2, which restores and adds detail, is not installed.{frame_rate}",
+                done=False,
+                description=f"{missing}{note} Assign {first.name} to the users or groups who make final takes.".lstrip(),
+                action_label=f"Assign {first.name}",
+                action_href=admin_href(tab="presets", id=first.id),
             )
         if not state.loaded:
             return SetupCheckResult(

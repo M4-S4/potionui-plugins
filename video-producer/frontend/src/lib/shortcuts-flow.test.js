@@ -87,18 +87,18 @@ test('shortcuts flow: Ctrl+Z undoes the drag of a slider that keeps the focus, a
 });
 
 test('shortcuts flow: with the assistant panel open, Ctrl+Z still undoes on the page, other keys and a real dialog do not', () => {
-	const chatOpen = (selector) => (selector.includes('ai-chat-trigger') ? {} : null);
+	const chatOpen = (selector) => (selector.includes('ai-chat-trigger') ? [{}] : []);
 	try {
-		document.querySelector = chatOpen;
+		document.querySelectorAll = chatOpen;
 		renamed();
 		assert.ok(press('y'));
 		assert.equal(doc.name, 'After');
 		assert.equal(press('d'), false);
 		assert.equal(press('z', { target: { tagName: 'TEXTAREA' } }), false);
-		document.querySelector = () => ({});
+		document.querySelectorAll = () => [{}];
 		assert.equal(press('z'), false);
 		assert.equal(doc.name, 'After');
 	} finally {
-		document.querySelector = () => null;
+		delete document.querySelectorAll;
 	}
 });

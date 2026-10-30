@@ -17,7 +17,7 @@
 	import { closeLayer, closeTopLayer, focusWithRing, isTopLayer, openLayer } from '../../lib/focus.js';
 	import { setEngineSize } from '../../lib/framing.svelte.js';
 	import { withSendings } from '../../lib/vreftracks.svelte.js';
-	import { closesOnOutsidePointer } from '../../lib/drawer.js';
+	import { closesOnOutsidePointer, keepsFocus } from '../../lib/drawer.js';
 	import { viewport } from '../../lib/viewport.svelte.js';
 	import { drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from '../../lib/deck-drawer.js';
 	import Icon from '../Icon.svelte';
@@ -42,7 +42,6 @@
 	const rows = $derived(drawerRows({ engine: Boolean(engine), profile: profileItems.length > 1 || control === 'popup', sizes, guided, own }));
 
 	let dialog = $state();
-	let backdrop = $state();
 	let place = $state(null);
 	let layer = null;
 
@@ -85,8 +84,9 @@
 	}
 
 	function outside(e) {
-		if (!isTopLayer(layer) || !closesOnOutsidePointer(anchor?.closest('.vp-root') ?? null, e.target)) return;
-		if (e.target === backdrop) e.preventDefault();
+		const root = anchor?.closest('.vp-root') ?? null;
+		if (!isTopLayer(layer) || !closesOnOutsidePointer(root, e.target)) return;
+		if (keepsFocus(root, e.target)) e.preventDefault();
 		onclose();
 	}
 
@@ -112,7 +112,7 @@
 	});
 </script>
 
-<div bind:this={backdrop} class="vp-deck-backdrop" role="presentation" style:height="{place?.space ?? 0}px" use:overlayLayer in:fade|global={{ duration: ms(120) }}></div>
+<div class="vp-deck-backdrop" role="presentation" style:height="{place?.space ?? 0}px" use:overlayLayer in:fade|global={{ duration: ms(120) }}></div>
 <div
 	bind:this={dialog}
 	class="vp-deck-drawer"
