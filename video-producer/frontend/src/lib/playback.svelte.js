@@ -226,7 +226,7 @@ function clipVoice(c, src) {
 
 function clipSource(c) {
 	const a = asset(c.assetId);
-	return a?.kind === 'video' && a.src && !silent.has(a.src) ? a.src : null;
+	return a?.kind === 'video' && a.src && speedOf(c) === 1 && !silent.has(a.src) ? a.src : null;
 }
 
 function heardNothing(v) {
