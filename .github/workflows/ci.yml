@@ -1,0 +1,179 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  video-producer:
+    name: Video Producer on the pinned core
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v4
+        with:
+          path: plugins
+
+      - name: Read the pinned core
+        id: core
+        run: echo "ref=$(tr -d '[:space:]' < plugins/core.ref)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the core
+        uses: actions/checkout@v4
+        with:
+          repository: M4-S4/PotionUI
+          ref: ${{ steps.core.outputs.ref }}
+          path: core
+
+      - id: py
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the catalogue
+        working-directory: plugins
+        run: python scripts/catalogue.py --check
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: core/content/plugins/package-lock.json
+
+      - name: Resolve cache week
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt archives
+        id: apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-libglib-ffmpeg-${{ steps.week.outputs.week }}
+
+      - name: Install system dependencies
+        timeout-minutes: 16
+        run: |
+          sudo grep -rl "dl.google.com" /etc/apt/sources.list.d/ 2>/dev/null | xargs -r sudo rm -f
+          mkdir -p ~/apt-archives/partial
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Dir::Cache::Archives=$HOME/apt-archives"
+          for attempt in 1 2 3; do
+            if [ "$attempt" -gt 1 ]; then
+              sudo sed -i 's#http://azure.archive.ubuntu.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+              sudo dpkg --configure -a || true
+            fi
+            sudo timeout -k 10 90 apt-get update $APT_OPTS || true
+            sudo timeout -k 10 180 apt-get install -y --no-install-recommends $APT_OPTS libglib2.0-0 ffmpeg && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 10
+          done
+          sudo rm -rf ~/apt-archives/partial ~/apt-archives/lock
+          sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
+
+      - name: Save apt archives
+        if: steps.apt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-libglib-ffmpeg-${{ steps.week.outputs.week }}
+
+      - name: Restore Python environment
+        id: venv
+        uses: actions/cache@v4
+        with:
+          path: ~/venv-ci
+          key: py-venv-${{ runner.os }}-${{ steps.py.outputs.python-version }}-${{ hashFiles('core/requirements-ci.txt', 'core/requirements-dev.txt') }}-${{ steps.week.outputs.week }}
+
+      - name: Install backend dependencies (CPU-only torch)
+        if: steps.venv.outputs.cache-hit != 'true'
+        working-directory: core
+        run: |
+          python -m venv ~/venv-ci
+          ~/venv-ci/bin/python -m pip install --upgrade pip
+          ~/venv-ci/bin/python -m pip install -r requirements-ci.txt --extra-index-url https://download.pytorch.org/whl/cpu
+          ~/venv-ci/bin/python -m pip install -r requirements-dev.txt
+          ~/venv-ci/bin/python -m pip install pytest-timeout
+
+      - name: Use the Python environment
+        run: echo "$HOME/venv-ci/bin" >> "$GITHUB_PATH"
+
+      - name: npm ci (plugin toolchain)
+        working-directory: core/content/plugins
+        run: npm ci
+
+      - name: Copy the plugin into content/plugins/local of the core
+        run: pwsh plugins/scripts/sync-plugins.ps1 -PotionUISrc core -Plugin video-producer
+
+      - name: Put this repository's plugin and core-side tests in place of the core's own copies
+        run: |
+          rsync -a --delete --exclude /frontend/dist/ --exclude /docs/screenshots/ plugins/video-producer/ core/content/plugins/marketplace/video-producer/
+          rsync -a --delete --include 'test_video_producer_*.py' --exclude '*' plugins/core-tests/video-producer/ core/tests/plugins/marketplace/
+
+      - name: Build the plugin
+        id: build
+        working-directory: core
+        run: node scripts/build-plugins.mjs video-producer
+
+      - name: Upload the built dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-producer-dist
+          path: core/content/plugins/local/video-producer/frontend/dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: pytest (the plugin's own suite)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: core
+        env:
+          OMP_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
+          POTIONUI_TEST_THREADS: "1"
+        run: >
+          python -m pytest content/plugins/local/video-producer/tests -q --durations=25 --timeout=300 -n 4 --dist worksteal
+          -m "not requires_gpu and not requires_models and not gc_sensitive"
+          --junitxml=junit-video-producer.xml
+
+      - name: pytest (core-side tests)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: core
+        env:
+          OMP_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
+          POTIONUI_TEST_THREADS: "1"
+          POTIONUI_TEST_BUDGET_S: "15"
+        run: >
+          python -m pytest tests/plugins/marketplace/test_video_producer_*.py -q --durations=25 --timeout=300
+          -m "not requires_gpu and not requires_models and not gc_sensitive"
+          --junitxml=junit-video-producer-core.xml
+
+      - name: node --test (dictionaries)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: core/content/plugins/local/video-producer
+        run: node --test "frontend/src/i18n/*.test.js"
+
+      - name: node --test (page modules)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: core/content/plugins/local/video-producer
+        run: node --test "frontend/src/lib/*.test.js"
+
+      - name: Upload pytest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-producer-pytest
+          path: |
+            core/junit-video-producer.xml
+            core/junit-video-producer-core.xml
+          if-no-files-found: ignore
+          retention-days: 14

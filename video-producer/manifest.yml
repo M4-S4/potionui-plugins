@@ -1,0 +1,188 @@
+id: "video-producer"
+name: "Video Producer"
+version: "0.1.0"
+description: "Storyboard, draft and final takes, editing, sound and delivery for AI video, driven by Video Director documents."
+author: "M4-S4"
+license: "GPL-3.0"
+type: "full-stack"
+category: "tools"
+
+api:
+  module: "backend/api.py"
+
+presets:
+  - path: "presets"
+
+recipes:
+  - path: "recipes"
+
+hooks:
+  backend:
+    - hook: "plugin.lifecycle.boot"
+      handler: "hooks.lifecycle_hooks.on_boot"
+    - hook: "plugin.lifecycle.ready"
+      handler: "hooks.lifecycle_hooks.on_ready"
+    - hook: "plugin.lifecycle.disable"
+      handler: "hooks.lifecycle_hooks.on_disable"
+    - hook: "notification_type.register"
+      handler: "hooks.notification_hooks.register_types"
+    - hook: "generation.after_complete"
+      handler: "hooks.generation_hooks.on_after_complete"
+    - hook: "generation.failed"
+      handler: "hooks.generation_hooks.on_failed"
+
+pages:
+  - route: "video-producer"
+    component: "VideoProducerPage.js"
+    label: "Video Producer"
+sidebar:
+  - label: "Video Producer"
+    route: "video-producer"
+    icon: "M4 10h16v9a2 2 0 01-2 2H6a2 2 0 01-2-2v-9zM4 10l15.6-3.3-.7-3.4L3.3 6.6 4 10zM9.2 8.9l1.1-3.8M14.3 7.8l1.2-3.8"
+    order: 80
+
+tools:
+  - class: "backend.chat.tools:WriteShotPromptTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.tools:FixConflictsTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.tools:SplitSynopsisTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.tools:CheckContinuityTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:ReadProjectTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:AddShotsTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:UpdateShotsTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:DeleteShotsTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:GenerateTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:StatusTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:LabelTakeTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:AssembleTool"
+    modes: ["video-producer"]
+  - class: "backend.chat.control:ExportVideoTool"
+    modes: ["video-producer"]
+
+chat_modes:
+  - id: "video-producer"
+    name: "Video Producer assistant"
+    description: "Reads and edits the shots, writes their prompts, generates and labels takes, assembles and exports the video"
+    icon: "film"
+    default_route_prefixes:
+      - "/plugins/video-producer"
+    tools:
+      - "vp_write_shot_prompt"
+      - "vp_fix_conflicts"
+      - "vp_split_synopsis"
+      - "vp_check_continuity"
+      - "vp_get_project"
+      - "vp_add_shots"
+      - "vp_update_shots"
+      - "vp_delete_shots"
+    context_contributor: "backend.chat.context.build_context"
+    system_prompt: |
+      You are the assistant of Video Producer, the page where the user storyboards, generates, edits and
+      delivers an AI video, shot by shot. You can drive the whole page: read the project, add, change,
+      reorder and delete shots, write their prompts, cast them from the bible, give them frames and
+      references, generate takes, follow the queue, label takes, assemble the edit and export it.
+
+      Every turn, a context block describes the project open on the page: its name and saved version,
+      its prompt language, the synopsis, the global direction, the bible, the shots in timeline order
+      with their id, number, stage, takes, frames, prompt and cast, the conflicts the page flags, the
+      continuity it measured and the production state. Ground every answer in that block and name shots
+      by their label. When you need a full prompt, the takes of a shot, its references or the project's
+      media, read them with vp_get_project. When the block says the page is not open, ask the user to
+      open a project in Video Producer before you use a tool.
+
+      Prompt language: write every shot prompt and proposed shot in the project's prompt language named
+      in the context block, whatever language the user chats in, and answer the user in their own
+      language. Never translate what the user wrote: keep their words and write only what you add in the
+      prompt language.
+
+      A shot prompt says in one to three sentences what the camera sees: subject and action, framing,
+      camera movement, light. It does not repeat the global direction, which is added to every shot, and
+      never contradicts it. When the context block lists a bible, name each character a shot casts by its
+      label, written exactly as the bible gives it, and do not repeat the words of its card.
+
+      How changes land: adding, changing and labelling are saved at once, the page shows them and the
+      user can undo each with Ctrl+Z. Writing over a prompt, deleting shots and generating takes wait
+      until the user approves them; generating spends GPU minutes, so generate only the shots the user
+      asked for.
+      Always call the tool instead of writing the change in your reply, and never say a change is done
+      before its tool answered. Do one step at a time and check the answer: a tool error starts with its
+      code, such as shot_not_found, blocked or version_conflict; explain it plainly and do not call the
+      same tool again with the same arguments.
+
+      Available tools:
+      {{TOOL_HINTS}}
+
+limit_kinds:
+  - key: "video-producer.gpu_minutes"
+    label: "Video Producer GPU minutes per month"
+    short_label: "Video Producer GPU minutes"
+    description: "Estimated GPU minutes of the takes a user starts from Video Producer"
+    value_type: "count"
+    unit: "min per month"
+    window: "month"
+    enforce_at: ["submit"]
+    ledger: false
+    measure_handler: "backend.limit_handlers.ledger_total"
+    applies_handler: "backend.limit_handlers.never_applies"
+
+settings:
+  - name: "draft_resolution"
+    type: "select"
+    label: "Draft resolution"
+    default: "832x480"
+    options:
+      - { value: "832x480",  label: "832×480" }
+      - { value: "960x544",  label: "960×544" }
+      - { value: "1280x720", label: "1280×720" }
+  - name: "max_parallel_jobs"
+    type: "number"
+    label: "Max generations in flight per user"
+    default: 2
+  - name: "export_dir_quota_mb"
+    type: "number"
+    label: "Export cache per user (MB)"
+    default: 2048
+  - name: "versions_kept"
+    type: "number"
+    label: "Versions kept per project"
+    default: 50
+
+setup:
+  - kind: "check"
+    check: "backend.setup_checks:VideoEngineReady"
+    label: "Enable a native backend or a cloud video model"
+  - kind: "check"
+    check: "backend.setup_checks:VideoPresetsReady"
+    label: "Install and assign at least one Video Director preset (Wan, MiniMax-H3, LTX or a cloud video preset)"
+  - kind: "check"
+    check: "backend.setup_checks:UpscalerReady"
+    label: "Install SeedVR2 for final takes"
+  - kind: "check"
+    check: "backend.setup_checks:WorkFolderReady"
+    label: "Give Video Producer a writable work folder in the file storage directory"
+  - kind: "check"
+    check: "backend.setup_checks:FfmpegReady"
+    label: "Install ffmpeg for video delivery"
+  - kind: "check"
+    check: "backend.setup_checks:MiniMaxH3Ready"
+    label: "If a MiniMax-H3 preset is installed, install its five model files (DiT, text encoder, video VAE, audio VAE, and the latent upscaler of its Upscale mode)"
+
+docs:
+  - path: "README.md"
+    title: "Video Producer: administration"
+    audience: "admin"
+    order: 10
+  - path: "docs/user-guide.md"
+    title: "Video Producer: user guide"
+    audience: "user"
+    order: 20

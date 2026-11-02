@@ -1,0 +1,527 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import './svelte-harness.js';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
+import { isUlid, ulid } from './ulid.js';
+import { emptyDoc, migrate, newAsset, promptLanguageOf, starterDoc } from './starter.js';
+import { laneCode } from './tracks.js';
+import {
+	activateOnKey,
+	detectMac,
+	eventKey,
+	findShortcut,
+	formatShortcut,
+	isActivationKey,
+	isActivationTarget,
+	isSingleKey,
+	isStepKey,
+	isTypingTarget,
+	matchShortcut,
+	parseShortcut,
+	requiredMods
+} from './keyboard.js';
+import { HOST_ALIASES, HOST_MISSING, HOST_VARIANTS, hostIconName, hostIcons, paths } from './icons.js';
+import { closeLayer, closeTopLayer, isTopLayer, leaveLayer, openLayer } from './focus.js';
+
+test('ulid: 26 Crockford base32 characters, time first, random tail', () => {
+	const id = ulid(1_700_000_000_000);
+	assert.equal(id.length, 26);
+	assert.ok(isUlid(id));
+	assert.equal(id.slice(0, 10), '01HF7YAT00');
+	assert.equal(ulid(0).slice(0, 10), '0000000000');
+	assert.ok(!/[ILOU]/.test(id));
+	const many = new Set(Array.from({ length: 500 }, () => ulid()));
+	assert.equal(many.size, 500);
+	assert.ok(ulid(1000) < ulid(2000));
+	assert.ok(!isUlid('c1'));
+});
+
+test('shortcuts: Mac glyphs in the source editor order, Ctrl/Alt/Shift elsewhere', () => {
+	const names = { space: 'Espace', backspace: 'Retour arrière' };
+	assert.equal(formatShortcut('alt+mod+k', { mac: true, names }), '⌥ ⌘ K');
+	assert.equal(formatShortcut('shift+mod+z', { mac: true, names }), '⇧ ⌘ Z');
+	assert.equal(formatShortcut('ctrl+mod+r', { mac: true, names }), '⌃ ⌘ R');
+	assert.equal(formatShortcut('alt+backspace', { mac: true, names }), '⌥ ⌫');
+	assert.equal(formatShortcut('space', { mac: true, names }), 'Espace');
+	assert.equal(formatShortcut('mod+minus', { mac: true, names }), '⌘ −');
+	assert.equal(formatShortcut('mod+,', { mac: true, names }), '⌘ ,');
+	assert.equal(formatShortcut('alt+mod+k', { mac: false, names }), 'Ctrl+Alt+K');
+	assert.equal(formatShortcut('shift+mod+z', { mac: false, names }), 'Ctrl+Shift+Z');
+	assert.equal(formatShortcut('ctrl+mod+1', { mac: false, names }), 'Ctrl+Alt+1');
+	assert.equal(formatShortcut('alt+backspace', { mac: false, names }), 'Alt+Retour arrière');
+	assert.equal(formatShortcut('mod+plus', { mac: false, names }), 'Ctrl++');
+	assert.equal(formatShortcut('a', { mac: false, names }), 'A');
+	assert.equal(formatShortcut('', { mac: false }), '');
+	assert.deepEqual([...parseShortcut('shift+mod+e').mods].sort(), ['mod', 'shift']);
+	assert.equal(detectMac({ platform: 'MacIntel' }), true);
+	assert.equal(detectMac({ userAgentData: { platform: 'Windows' }, platform: 'Win32' }), false);
+});
+
+test('keys: Alt combinations read the physical key, focus rules recognise fields and buttons', () => {
+	assert.equal(eventKey({ key: '˚', code: 'KeyK', altKey: true }), 'k');
+	assert.equal(eventKey({ key: '¡', code: 'Digit1', altKey: true }), '1');
+	assert.equal(eventKey({ key: 'Dead', code: 'BracketLeft', altKey: true }), '[');
+	assert.equal(eventKey({ key: '}', code: 'BracketRight', altKey: true }), ']');
+	assert.equal(eventKey({ key: 'Z', code: 'KeyZ', altKey: false }), 'z');
+	assert.equal(eventKey({ key: ' ', code: 'Space' }), ' ');
+	assert.ok(isTypingTarget({ tagName: 'TEXTAREA' }));
+	assert.ok(isTypingTarget({ tagName: 'DIV', isContentEditable: true }));
+	assert.ok(!isTypingTarget({ tagName: 'BUTTON' }));
+	assert.ok(!isTypingTarget(null));
+	assert.ok(isTypingTarget({ tagName: 'INPUT', type: 'range' }, { key: 'ArrowLeft', ctrlKey: false, metaKey: false }));
+	assert.ok(!isTypingTarget({ tagName: 'INPUT', type: 'range' }, { key: 'z', ctrlKey: true, metaKey: false }));
+	assert.ok(!isTypingTarget({ tagName: 'INPUT', type: 'checkbox' }, { key: 'z', ctrlKey: false, metaKey: true }));
+	assert.ok(isTypingTarget({ tagName: 'INPUT', type: 'text' }, { key: 'z', ctrlKey: true, metaKey: false }));
+	assert.ok(isTypingTarget({ tagName: 'SELECT' }, { key: 'z', ctrlKey: true, metaKey: false }));
+	for (const key of ['ArrowLeft', 'ArrowUp', 'Home', 'End', 'PageDown']) assert.ok(isStepKey({ key }), key);
+	assert.ok(!isStepKey({ key: 'ArrowRight', repeat: true }));
+	assert.ok(!isStepKey({ key: 'z', ctrlKey: true }));
+	assert.ok(!isStepKey({ key: 'ArrowLeft', metaKey: true }));
+	assert.ok(!isStepKey({ key: 'Tab' }));
+	assert.ok(!isStepKey(null));
+	assert.ok(isActivationTarget({ closest: (selector) => (selector.includes('[role="tab"]') ? {} : null) }));
+	assert.ok(!isActivationTarget({ closest: () => null }));
+	assert.ok(!isActivationTarget(null));
+});
+
+test('icons: 76 source editor icons plus the More dots of the deck, 28 missing names plus 10 vp- variants for the host, 6 aliases', () => {
+	assert.equal(Object.keys(paths).length, 77);
+	assert.equal(HOST_MISSING.length, 28);
+	assert.equal(HOST_VARIANTS.length, 10);
+	assert.equal(Object.keys(HOST_ALIASES).length, 6);
+	for (const name of [...HOST_MISSING, ...HOST_VARIANTS, ...Object.keys(HOST_ALIASES)]) assert.ok(paths[name], `${name} has no paths`);
+	for (const unused of ['lock', 'mountain', 'dots', 'sun', 'moon']) assert.ok(!hostIcons().some(([name]) => name === unused));
+	assert.equal(hostIconName('x'), 'close');
+	assert.equal(hostIconName('alert'), 'warning');
+	assert.equal(hostIconName('play'), 'vp-play');
+	assert.equal(hostIconName('redo'), 'vp-redo');
+	assert.equal(hostIconName('route'), 'route');
+	assert.equal(hostIconName('film'), 'film');
+	const registered = hostIcons().map(([name]) => name);
+	assert.equal(registered.length, 38);
+	assert.equal(new Set(registered).size, 38);
+	assert.ok(hostIcons().every(([, d]) => Array.isArray(d) && d.length > 0));
+});
+
+const i18nDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'i18n');
+const dictionaries = Object.fromEntries(
+	LOCALES.map((locale) => [locale, mergeDomains(Object.fromEntries(DOMAINS.map((domain) => [domain, JSON.parse(readFileSync(join(i18nDir, locale, `${domain}.json`), 'utf-8'))])))])
+);
+function translator(locale, missing) {
+	return (key, params) => translate(dictionaries, locale, key, params, (k, l) => missing.push(`${l}:${k}`));
+}
+
+test('starterDoc: five linked shots to generate, a title, a marker, four empty lanes, no media, unique ULIDs', () => {
+	const missing = [];
+	const fr = starterDoc(translator('fr', missing));
+	const en = starterDoc(translator('en', missing));
+	assert.deepEqual(missing, []);
+	assert.equal(fr.name, 'Aube sur le port');
+	assert.equal(en.name, 'Dawn at the harbour');
+	assert.deepEqual([fr.fps, fr.aspect, fr.resolution, fr.direction.mode], [25, '16:9', '1080p', 'FL2VA']);
+	assert.match(fr.synopsis, /^Un petit port de pêche au lever du jour\./);
+	assert.match(en.synopsis, /^A small fishing harbour at daybreak\./);
+	for (const key of ['univers', 'personnages', 'photographie', 'palette', 'rythme']) assert.ok(fr.direction[key].length > 40 && en.direction[key].length > 40, key);
+	assert.equal(fr.clips.length, 5);
+	assert.deepEqual(
+		fr.clips.map((c) => [c.start, c.dur, c.stage, c.assetId, c.take]),
+		[0, 5, 10, 15, 20].map((start) => [start, 5, 'todo', null, null])
+	);
+	assert.deepEqual(
+		fr.clips.map((c) => c.label),
+		['Le port endormi', 'Les mains du pêcheur', 'Le départ', 'Les goélands', 'Vers le large']
+	);
+	assert.equal(fr.prompts.length, 5);
+	fr.prompts.forEach((p, i) => {
+		assert.equal(p.shotId, fr.clips[i].id);
+		assert.deepEqual([p.start, p.dur, p.strength], [fr.clips[i].start, 5, 75]);
+		assert.ok(p.text.length > 60);
+		assert.notEqual(p.text, en.prompts[i].text);
+	});
+	assert.match(fr.prompts[0].text, /^Plan large d’un petit port de pêche à l’aube/);
+	assert.match(en.prompts[0].text, /^Wide shot of a small fishing harbour at dawn/);
+	assert.deepEqual(
+		fr.titles.map(({ text, sub, start, dur }) => [text, sub, start, dur]),
+		[['Aube sur le port', 'un départ à l’aube', 0, 4]]
+	);
+	assert.equal(en.titles[0].sub, 'a departure at dawn');
+	assert.deepEqual(
+		fr.markers.map(({ time, label, kind }) => [time, label, kind]),
+		[[fr.clips[2].start, 'Départ', 'marker']]
+	);
+	assert.equal(en.markers[0].label, 'Cast off');
+	assert.deepEqual(
+		fr.lanes.map((l) => [laneCode(fr.lanes, l.id), l.name, l.role]),
+		[
+			['A1', 'Dialogue', 'Dialogue'],
+			['A2', 'Musique', 'Musique'],
+			['A3', 'Ambiance', 'Ambiance'],
+			['A4', 'Bruitages', 'SFX']
+		]
+	);
+	assert.ok(fr.lanes.every((l) => isUlid(l.id)));
+	assert.equal(new Set(fr.lanes.map((l) => l.id)).size, 4);
+	assert.deepEqual(fr.engine, { quality: 'draft', variants: 2, backend: '', preset: null, model: null });
+	assert.ok(!('hybrid' in fr) && !('profiles' in fr));
+	assert.deepEqual(fr.video, { mute: false, solo: false });
+	assert.ok(fr.clips.every((c) => c.mute === false));
+	assert.deepEqual(
+		fr.aux.map((a) => [a.id, a.name]),
+		[
+			['R1', 'Réverbération'],
+			['D1', 'Délai']
+		]
+	);
+	for (const key of ['audio', 'frames', 'references', 'assets']) assert.deepEqual(fr[key], [], key);
+	assert.ok(!('scenes' in fr), 'a new document has no 3D scene');
+	assert.ok(!('controls' in fr) && !('plans3d' in fr), 'a new document has no 3D shot and no Control video');
+	assert.ok(!('results' in fr), 'the document has no results field');
+	const ids = [...fr.clips, ...fr.prompts, ...fr.titles, ...fr.markers].map((x) => x.id);
+	assert.ok(ids.every(isUlid));
+	assert.equal(new Set(ids).size, ids.length);
+	const other = starterDoc(translator('fr', missing));
+	assert.ok(other.clips.every((c, i) => c.id !== fr.clips[i].id));
+});
+
+test('emptyDoc: an untitled project with no shot and the four empty lanes', () => {
+	const missing = [];
+	const fr = emptyDoc(translator('fr', missing));
+	const en = emptyDoc(translator('en', missing));
+	assert.deepEqual(missing, []);
+	assert.equal(fr.name, 'Projet sans titre');
+	assert.equal(en.name, 'Untitled project');
+	assert.equal(fr.synopsis, '');
+	for (const key of ['clips', 'prompts', 'titles', 'markers', 'audio', 'frames', 'assets']) assert.deepEqual(fr[key], [], key);
+	assert.ok(!('results' in fr));
+	assert.deepEqual(
+		en.lanes.map((l) => [laneCode(en.lanes, l.id), l.name, l.role]),
+		[
+			['A1', 'Dialogue', 'Dialogue'],
+			['A2', 'Music', 'Musique'],
+			['A3', 'Ambience', 'Ambiance'],
+			['A4', 'Sound effects', 'SFX']
+		]
+	);
+	assert.equal(fr.direction.mode, 'FL2VA');
+});
+
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { project } = await import('./project.svelte.js');
+const { estimateState, noteText, readiness } = await import('./production.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+const WAN = '01KX47WANVIDEO0000000000TV';
+
+after(() => dispose());
+
+function productionScene() {
+	project.id = 'p1';
+	ui.me = { engines: [{ id: 'native', kind: 'local', name: 'Local' }], presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }] };
+	ui.workspace = 'storyboard';
+	ui.selection = { kind: 'clip', id: 's1' };
+	ui.dirty = true;
+	ui.production.target = 'clip';
+	doc.engine = { backend: 'native', preset: WAN, model: null };
+	doc.direction.mode = 'FL2VA';
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'Opening', stage: 'todo', take: null }];
+	doc.prompts = [{ id: 'pr1', shotId: 's1', start: 0, dur: 4, strength: 75, text: 'A walk.' }];
+}
+
+test('readiness: an FL2VA shot without a frame warns instead of blocking, so the starter project generates as is', () => {
+	productionScene();
+	estimateState.data = { blocks: [], warnings: [{ code: 'fl2va_no_frame', data: { shot_id: 's1' } }, { code: 'time_unknown' }] };
+	const ready = readiness();
+	assert.deepEqual(ready.missing, []);
+	assert.deepEqual(ready.warnings, [noteText({ code: 'fl2va_no_frame', data: { shot_id: 's1' } })]);
+	assert.match(ready.warnings[0], /Opening/);
+	assert.deepEqual(ready.notes, [noteText({ code: 'time_unknown' })]);
+	assert.deepEqual(ready.gaps, ['s1']);
+	estimateState.data = { blocks: [{ code: 'no_preset' }], warnings: [] };
+	assert.deepEqual(readiness().missing, [noteText({ code: 'no_preset' })]);
+	estimateState.data = null;
+	assert.ok(!('lib.block.needFrame' in dictionaries.en) && !('lib.block.needFrame' in dictionaries.fr));
+	assert.equal(dictionaries.en['generation.warn.noFrame'], '“{shot}” has no linked frame: it will be generated from text only.');
+	assert.equal(dictionaries.fr['generation.warn.noFrame'], '« {shot} » n’a pas de frame liée : il sera généré à partir du texte seul.');
+	const missing = [];
+	const starter = starterDoc(translator('en', missing));
+	assert.equal(starter.direction.mode, 'FL2VA');
+	assert.equal(starter.frames.length, 0);
+	assert.ok(starter.prompts.every((p) => p.text.trim()));
+});
+
+test('readiness: a text-only engine that ignores a shot frame warns about that shot in both languages, as a warning rather than a note', () => {
+	productionScene();
+	estimateState.data = { blocks: [], warnings: [{ code: 'text_only_preset', data: { shot_id: 's1' } }, { code: 'time_unknown' }, { code: 'vram_unknown' }, { code: 'audio_condition' }] };
+	const ready = readiness();
+	assert.deepEqual(ready.warnings, [t('generation.warn.textOnly', { shot: 'Opening' })]);
+	assert.deepEqual(ready.notes, [noteText({ code: 'time_unknown' }), noteText({ code: 'vram_unknown' }), noteText({ code: 'audio_condition' })]);
+	estimateState.data = null;
+	assert.equal(dictionaries.en['generation.warn.textOnly'], 'This engine generates from text only: the frames linked to “{shot}” will not be used.');
+	assert.equal(dictionaries.fr['generation.warn.textOnly'], 'Ce moteur génère à partir du texte seul : les frames liées à « {shot} » ne seront pas utilisées.');
+	const missing = [];
+	assert.equal(translator('en', missing)('generation.warn.textOnly', { shot: 'Opening' }), 'This engine generates from text only: the frames linked to “Opening” will not be used.');
+	assert.equal(translator('fr', missing)('generation.warn.textOnly', { shot: 'Ouverture' }), 'Ce moteur génère à partir du texte seul : les frames liées à « Ouverture » ne seront pas utilisées.');
+	assert.deepEqual(missing, []);
+});
+
+test('migrate: the 3D scenes, the 3D shots and the Control videos go, empty 3D captures go, the other frames forget their scene, retired 3D set references become captures and the 3D set role becomes the set role', () => {
+	const old = {
+		name: 'Old',
+		scenes: [
+			{ id: 'sample', kind: 'sample', name: 'Sample scene' },
+			{ id: 'file', kind: 'file', name: 'room.splat', file: '/data/room.splat' },
+			{ id: 's1', kind: 'splatfile', name: 'Room', fileId: 'f1', format: 'ply', view: null },
+			{ id: 'hut', kind: 'glb', name: 'hut.glb', fileId: 'f2', cameras: [] }
+		],
+		plans3d: [
+			{ id: 'p1', shotId: 'c1', sceneId: 'sample', name: 'Orbit', start: 0, dur: 5, keyframes: [{ id: 'k1', t: 0, az: 90, el: 0, dist: 10, focal: 30, height: 1.5 }] },
+			{ id: 'p2', shotId: 'c2', sceneId: 's1', name: 'Kept', start: 5, dur: 3, keyframes: [] },
+			{ id: 'p3', shotId: null, sceneId: 'file', name: 'File', start: 8, dur: 2, source: 'trajectory', preset: 'orbit', amount: 12, camera: null, keyframes: [] }
+		],
+		frames: [
+			{ id: 'f1', shotId: 'c1', time: 1, assetId: null, role: 'Capture 3D', strength: 80 },
+			{ id: 'f2', shotId: 'c1', time: 2, assetId: 'a1', role: 'Capture 3D', strength: 80, sceneId: 's1' },
+			{ id: 'f3', shotId: 'c1', time: 3, assetId: null, role: 'first', strength: 100 }
+		],
+		controls: [
+			{ id: 'g1', source: 'scene3d', stale: false },
+			{ id: 'g2', source: 'scene3d', stale: false, planId: null, assetId: 'v1' },
+			{ id: 'g3', source: 'scene3d', stale: true, planId: 'p2', assetId: null },
+			{ id: 'g4', source: 'import', stale: false }
+		],
+		references: [
+			{ id: 'r1', name: 'Sample', space: 'decors3d', type: 'Scène d’essai', assetId: null, role: 'Décor 3D', scope: { type: 'global' } },
+			{ id: 'r2', name: 'Harbour', space: 'decors3d', type: 'Gaussian Splat', assetId: 'a1', role: 'Décor 3D', scope: { type: 'global' } },
+			{ id: 'r3', name: 'Hero', space: 'identite', type: 'Personnage', assetId: 'a2', role: 'Identité', scope: { type: 'global' } },
+			{ id: 'r4', name: 'Capture', space: 'decors3d', type: 'Capture 3D', assetId: 'a3', role: '', scope: { type: 'shot', shotId: 'c1' } }
+		]
+	};
+	const doc = migrate(old);
+	assert.ok(!('scenes' in doc) && !('plans3d' in doc) && !('controls' in doc), 'the 3D scenes, the 3D shots and the Control videos go');
+	assert.equal(old.plans3d.length, 3);
+	assert.deepEqual(doc.frames.map((f) => f.id), ['f2', 'f3']);
+	assert.ok(doc.frames.every((f) => !('sceneId' in f)), 'a frame forgets the scene it was captured in');
+	assert.equal(old.frames[1].sceneId, 's1');
+	assert.deepEqual(doc.references.map((r) => [r.id, r.type]), [['r2', 'Capture 3D'], ['r3', 'Personnage'], ['r4', 'Capture 3D']], 'the retired 3D set types become Capture 3D when they hold an image, and go otherwise');
+	assert.deepEqual(doc.references.map((r) => r.role), ['Décor', 'Identité', ''], 'the 3D set role becomes the set role');
+	assert.deepEqual({ ...doc.references[0], type: 'Gaussian Splat', role: 'Décor 3D' }, old.references[1]);
+	assert.equal(old.references[1].type, 'Gaussian Splat');
+	assert.equal(old.scenes.length, 4, 'the input is not changed');
+	assert.deepEqual(migrate(doc), doc);
+	assert.equal(migrate(null), null);
+	const bare = { name: 'Bare' };
+	assert.deepEqual(migrate(bare), { name: 'Bare', video: { mute: false, solo: false } });
+	assert.deepEqual(bare, { name: 'Bare' }, 'the input is not changed');
+	const fresh = emptyDoc(translator('en', []));
+	assert.deepEqual(migrate(fresh), fresh);
+});
+
+test('migrate: the video of each 3D guide becomes once a Mouvement reference of the shot it covers before the Control videos go, as on the server', () => {
+	const guide = (id, assetId, extra = {}) => ({ id, shotId: null, name: `Guide ${id}`, start: 0, dur: 5, guidance: 65, source: 'scene3d', stale: false, planId: null, assetId, ...extra });
+	const old = {
+		clips: [
+			{ id: 's1', start: 0, dur: 4 },
+			{ id: 's2', start: 4, dur: 4 }
+		],
+		assets: [
+			{ id: 'v', kind: 'video' },
+			{ id: 'still', kind: 'image' }
+		],
+		references: [{ id: 'already', name: 'Mine', space: 'identite', type: 'Personnage', assetId: 'v', role: 'Identité', scope: null }],
+		controls: [
+			guide('linked', 'v', { shotId: 's2' }),
+			guide('overlapping', 'v', { start: 4, dur: 4 }),
+			guide('imported', 'v', { source: 'import' }),
+			guide('picture', 'still'),
+			guide('gone', 'missing'),
+			guide('outside', 'v', { start: 90, dur: 4 }),
+			guide('unknown-shot', 'v', { shotId: 'nowhere' }),
+			guide('already', 'v')
+		],
+		plans3d: []
+	};
+	const doc = migrate(old);
+	const motion = (id, shotId) => ({ id, name: `Guide ${id}`, space: 'mouvement', type: 'Control video', assetId: 'v', role: 'Mouvement', scope: { type: 'shot', shotId } });
+	assert.deepEqual(doc.references, [old.references[0], motion('linked', 's2'), motion('overlapping', 's2')]);
+	assert.ok(!('controls' in doc) && !('plans3d' in doc));
+	assert.equal(old.controls.length, 8, 'the input is not changed');
+	assert.deepEqual(migrate(doc), doc);
+});
+
+test('newAsset: every field of the persisted asset contract, null when it does not apply', () => {
+	const a = newAsset({ kind: 'image', name: 'still.png', src: '/api/media/uploads/still.png', origin: { kind: 'library', itemId: 'i1' } });
+	assert.deepEqual(Object.keys(a), ['id', 'kind', 'name', 'src', 'origin', 'srcDur', 'width', 'height', 'fps', 'res', 'generated', 'quality', 'resultId', 'role']);
+	assert.ok(isUlid(a.id));
+	assert.deepEqual([a.srcDur, a.width, a.height, a.fps, a.res, a.quality, a.resultId, a.role], Array(8).fill(null));
+	assert.equal(a.generated, false);
+	assert.equal(newAsset().kind, 'video');
+	assert.notEqual(newAsset().id, newAsset().id);
+});
+
+test('prompt language: a project setting, English by default, that only decides the language of the starter direction and prompts', () => {
+	const missing = [];
+	const fr = translator('fr', missing);
+	const en = translator('en', missing);
+	const doc = starterDoc(fr, en, 'en');
+	assert.deepEqual(missing, []);
+	assert.equal(doc.promptLanguage, 'en');
+	assert.equal(doc.name, 'Aube sur le port');
+	assert.match(doc.synopsis, /^Un petit port de pêche au lever du jour\./);
+	assert.equal(doc.clips[0].label, 'Le port endormi');
+	assert.equal(doc.titles[0].text, 'Aube sur le port');
+	assert.match(doc.prompts[0].text, /^Wide shot of a small fishing harbour at dawn/);
+	assert.deepEqual(doc.direction, starterDoc(en, en, 'en').direction);
+	assert.match(starterDoc(fr, fr, 'fr').prompts[0].text, /^Plan large d’un petit port de pêche à l’aube/);
+	assert.equal(starterDoc(fr, fr, 'fr').promptLanguage, 'fr');
+	assert.equal(starterDoc(fr).promptLanguage, 'en');
+	assert.equal(emptyDoc(fr).promptLanguage, 'en');
+	assert.equal(emptyDoc(fr, 'fr').promptLanguage, 'fr');
+	assert.deepEqual(['en', 'fr', 'de', undefined, null].map(promptLanguageOf), ['en', 'fr', 'en', 'en', 'en']);
+});
+
+test('window layers: Escape closes only the foreground window, a replaced window hands its return focus on', () => {
+	const saved = globalThis.document;
+	const calls = [];
+	const box = (name) => ({ contains: (node) => node?.inside === name });
+	const timeline = { inside: null };
+	globalThis.document = { activeElement: timeline };
+	try {
+		const editor = openLayer(box('editor'), { refocus: () => calls.push('refocus editor'), close: () => calls.push('close editor') });
+		assert.equal(editor.previous, timeline);
+		document.activeElement = { inside: 'editor' };
+		const library = openLayer(box('library'), { refocus: () => calls.push('refocus library'), close: () => calls.push('close library') });
+		assert.ok(isTopLayer(library) && !isTopLayer(editor));
+		leaveLayer(editor);
+		assert.equal(closeTopLayer(), true);
+		assert.deepEqual(calls, ['close library']);
+		document.activeElement = null;
+		closeLayer(editor);
+		assert.equal(library.previous, timeline);
+		assert.deepEqual(calls, ['close library', 'refocus library']);
+		document.activeElement = { inside: 'library' };
+		leaveLayer(library);
+		assert.equal(closeTopLayer(), false);
+		closeLayer(library);
+		closeLayer(library);
+		assert.deepEqual(calls, ['close library', 'refocus library']);
+	} finally {
+		globalThis.document = saved;
+	}
+});
+
+const press = (key, { ctrl = false, meta = false, alt = false, shift = false, code, repeat = false } = {}) => ({ key, code, ctrlKey: ctrl, metaKey: meta, altKey: alt, shiftKey: shift, repeat });
+
+test('shortcut match: a combination fires only with exactly the modifiers it declares', () => {
+	assert.ok(matchShortcut(press('i', { ctrl: true }), 'mod+i', false));
+	assert.ok(!matchShortcut(press('I', { ctrl: true, shift: true }), 'mod+i', false));
+	assert.ok(!matchShortcut(press('J', { ctrl: true, shift: true }), 'mod+j', false));
+	assert.ok(!matchShortcut(press('i', { ctrl: true, alt: true, code: 'KeyI' }), 'mod+i', false));
+	assert.ok(!matchShortcut(press('i', { ctrl: true, meta: true }), 'mod+i', false));
+	assert.ok(matchShortcut(press('i', { meta: true }), 'mod+i', true));
+	assert.ok(!matchShortcut(press('ˆ', { meta: true, alt: true, code: 'KeyI' }), 'mod+i', true));
+	assert.ok(!matchShortcut(press('∆', { meta: true, alt: true, code: 'KeyJ' }), 'mod+j', true));
+	assert.ok(!matchShortcut(press('˚', { meta: true, alt: true, code: 'KeyK' }), 'mod+k', true));
+	assert.ok(!matchShortcut(press('i', { ctrl: true }), 'mod+i', true));
+	assert.ok(matchShortcut(press('k', { ctrl: true }), 'mod+k', false));
+	assert.ok(!matchShortcut(press('k', { ctrl: true }), 'mod+k', true));
+	assert.ok(matchShortcut(press('k', { meta: true }), 'mod+k', true));
+	assert.ok(!matchShortcut(press('k', { ctrl: true, alt: true, code: 'KeyK' }), 'mod+k', false));
+});
+
+test('shortcut match: Ctrl+Alt on Windows and Linux, Control+Command on a Mac, Alt alone, plain keys', () => {
+	assert.deepEqual(requiredMods(parseShortcut('ctrl+mod+1').mods, false), { ctrl: true, meta: false, alt: true, shift: false });
+	assert.deepEqual(requiredMods(parseShortcut('ctrl+mod+1').mods, true), { ctrl: true, meta: true, alt: false, shift: false });
+	assert.deepEqual(requiredMods(parseShortcut('alt+mod+g').mods, false), { ctrl: true, meta: false, alt: true, shift: false });
+	assert.ok(matchShortcut(press('¡', { ctrl: true, alt: true, code: 'Digit1' }), 'ctrl+mod+1', false));
+	assert.ok(!matchShortcut(press('1', { ctrl: true }), 'ctrl+mod+1', false));
+	assert.ok(matchShortcut(press('1', { ctrl: true, meta: true }), 'ctrl+mod+1', true));
+	assert.ok(!matchShortcut(press('1', { meta: true }), 'ctrl+mod+1', true));
+	assert.ok(matchShortcut(press('g', { ctrl: true, alt: true, code: 'KeyG' }), 'alt+mod+g', false));
+	assert.ok(!matchShortcut(press('g', { ctrl: true }), 'alt+mod+g', false));
+	assert.ok(matchShortcut(press('[', { alt: true, code: 'BracketLeft' }), 'alt+[', false));
+	assert.ok(matchShortcut(press('x', { alt: true, code: 'KeyX' }), 'alt+x', true));
+	assert.ok(!matchShortcut(press('x', { alt: true, ctrl: true, code: 'KeyX' }), 'alt+x', true));
+	assert.ok(matchShortcut(press('Backspace', { alt: true }), 'alt+backspace', true));
+	assert.ok(!matchShortcut(press('Backspace', { alt: true }), 'backspace', true));
+	assert.ok(matchShortcut(press('Backspace'), 'backspace', false));
+	assert.ok(matchShortcut(press('a'), 'a', false));
+	assert.ok(!matchShortcut(press('a', { shift: true }), 'a', false));
+	assert.ok(!matchShortcut(press('A', { shift: true }), 'a', false));
+	assert.ok(!matchShortcut(press('a', { ctrl: true }), 'a', false));
+	assert.ok(!matchShortcut(press('a', { meta: true }), 'a', false));
+	assert.ok(matchShortcut(press(' '), 'space', false));
+	assert.ok(!matchShortcut(press(' ', { shift: true }), 'space', false));
+	assert.ok(matchShortcut(press('Z', { ctrl: true, shift: true }), 'shift+mod+z', false));
+	assert.ok(!matchShortcut(press('z', { ctrl: true }), 'shift+mod+z', false));
+	assert.ok(!matchShortcut(press('z', { ctrl: true, shift: true }), 'mod+z', false));
+	assert.ok(!matchShortcut(press('x'), '', false));
+});
+
+test('shortcut match: the shift of a punctuation key depends on the layout, so Ctrl+/ works on a French keyboard too', () => {
+	assert.ok(matchShortcut(press('/', { ctrl: true }), 'mod+/', false));
+	assert.ok(matchShortcut(press('/', { ctrl: true, shift: true }), 'mod+/', false));
+	assert.ok(matchShortcut(press('/', { meta: true, shift: true }), 'mod+/', true));
+	assert.ok(!matchShortcut(press('/', { ctrl: true, alt: true, code: 'Slash' }), 'mod+/', false));
+	assert.ok(!matchShortcut(press('/'), 'mod+/', false));
+	assert.ok(matchShortcut(press(',', { ctrl: true }), 'mod+,', false));
+	assert.ok(!matchShortcut(press(',', { ctrl: true, alt: true }), 'mod+,', false));
+});
+
+test('findShortcut: the first binding that matches, nothing when no binding does', () => {
+	const bindings = [
+		{ spec: 'mod+z', id: 'undo' },
+		{ spec: 'shift+mod+z', id: 'redo' },
+		{ spec: 'a', id: 'tool' }
+	];
+	assert.equal(findShortcut(press('z', { ctrl: true }), bindings, false).id, 'undo');
+	assert.equal(findShortcut(press('Z', { ctrl: true, shift: true }), bindings, false).id, 'redo');
+	assert.equal(findShortcut(press('a'), bindings, false).id, 'tool');
+	assert.equal(findShortcut(press('a', { alt: true, code: 'KeyA' }), bindings, false), null);
+	assert.equal(findShortcut(press('z', { meta: true }), bindings, false), null);
+});
+
+test('single keys are the letters and digits alone; activation keys are Enter and Space on the element itself', () => {
+	assert.ok(isSingleKey('a'));
+	assert.ok(isSingleKey('1'));
+	assert.ok(!isSingleKey('mod+a'));
+	assert.ok(!isSingleKey('shift+a'));
+	assert.ok(!isSingleKey('space'));
+	assert.ok(!isSingleKey('backspace'));
+	const target = {};
+	const on = (key, extra = {}) => ({
+		key,
+		target,
+		currentTarget: target,
+		repeat: false,
+		ctrlKey: false,
+		metaKey: false,
+		altKey: false,
+		shiftKey: false,
+		preventDefault() {
+			this.prevented = true;
+		},
+		...extra
+	});
+	assert.ok(isActivationKey(on('Enter')));
+	assert.ok(isActivationKey(on(' ')));
+	assert.ok(!isActivationKey(on('a')));
+	assert.ok(!isActivationKey(on('Enter', { ctrlKey: true })));
+	assert.ok(!isActivationKey(on('Enter', { repeat: true })));
+	assert.ok(!isActivationKey(on('Enter', { target: {} })));
+	const calls = [];
+	const space = on(' ');
+	assert.equal(
+		activateOnKey(space, () => calls.push('run')),
+		true
+	);
+	assert.equal(space.prevented, true);
+	const other = on('x');
+	assert.equal(
+		activateOnKey(other, () => calls.push('never')),
+		false
+	);
+	assert.equal(other.prevented, undefined);
+	assert.deepEqual(calls, ['run']);
+});

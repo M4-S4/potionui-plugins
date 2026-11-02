@@ -1,0 +1,14 @@
+{
+	"silentAt": -59,
+	"eq": {
+		"low": { "type": "lowshelf", "frequency": 200 },
+		"mid": { "type": "peaking", "frequency": 1200, "q": 1 },
+		"high": { "type": "highshelf", "frequency": 5000 },
+		"slope": 1,
+		"gain": [-24, 24]
+	},
+	"filter": { "type": "lowpass", "qDb": 1, "cutoff": [20, 20000] },
+	"comp": { "knee": 0, "makeupPower": 0.6, "maxMakeup": 64, "detection": "peak", "link": "maximum", "threshold": [-60, 0], "ratio": [1, 20], "attack": [0.01, 1000], "release": [0.01, 1000] },
+	"reverb": { "id": "R1", "seconds": 2.4, "decay": 3, "seed": 2401, "calibration": 0.0012589254117941673, "calibrationRate": 44100 },
+	"delay": { "id": "D1", "seconds": 0.32, "feedback": 0.35, "floor": -60 }
+}

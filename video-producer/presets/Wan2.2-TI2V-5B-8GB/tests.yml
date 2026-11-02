@@ -1,0 +1,24 @@
+schema: 1
+
+cases:
+  - name: "wan22-ti2v-5b-8gb-t2v"
+    mode: "video"
+    kind: "video"
+    seed: 12345
+    tags: ["8gb"]
+    form:
+      prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+      resolution: "832x480"
+      steps: 30
+      cfg: 5.0
+    models:
+      t2v_high_noise_model:
+        sha256: "456f901338bd9eadbded3828b819109a9b68e8a525ca5cf8d0049a69fcfeca1e"
+      text_encoder:
+        sha256: "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68"
+      vae:
+        sha256: "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156"
+    checks:
+      min_outputs: 1
+      resolution: "832x480"
+      not_black: true

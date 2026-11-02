@@ -1,0 +1,54 @@
+{
+	"cases": [
+		{
+			"name": "a document of today keeps its format, resolution and engine as they are",
+			"doc": { "aspect": "16:9", "resolution": "1080p", "engine": { "quality": "draft", "variants": 2, "backend": "" } },
+			"expected": { "aspect": "16:9", "resolution": "1080p", "engine": { "quality": "draft", "variants": 2, "backend": "" } }
+		},
+		{
+			"name": "the new formats, a custom W:H within 1:4 and 4:1 and 1440p are kept",
+			"doc": { "aspect": "2.35:1", "resolution": "1440p", "framing": "bars", "engine": { "quality": "final", "variants": 1, "backend": "native" } },
+			"expected": { "aspect": "2.35:1", "resolution": "1440p", "framing": "bars", "engine": { "quality": "final", "variants": 1, "backend": "native" } }
+		},
+		{
+			"name": "a format past 4:1, an unknown resolution and an unknown framing fall back to 16:9, 1080p and no framing",
+			"doc": { "aspect": "5:1", "resolution": "8K", "framing": "stretch", "engine": { "quality": "draft", "variants": 2, "backend": "" } },
+			"expected": { "aspect": "16:9", "resolution": "1080p", "engine": { "quality": "draft", "variants": 2, "backend": "" } }
+		},
+		{
+			"name": "a format with spaces around it is trimmed",
+			"doc": { "aspect": " 4:5 ", "resolution": "720p", "engine": { "quality": "draft", "variants": 2, "backend": "" } },
+			"expected": { "aspect": "4:5", "resolution": "720p", "engine": { "quality": "draft", "variants": 2, "backend": "" } }
+		},
+		{
+			"name": "the chosen sizes keep a preset id and a WxH within 64 to 8192 for draft and final, written without spaces",
+			"doc": {
+				"aspect": "2.39:1",
+				"resolution": "4K",
+				"framing": "crop",
+				"engine": {
+					"quality": "draft",
+					"variants": 2,
+					"backend": "native",
+					"sizes": {
+						"01M57QPEMDPKHHW83YSEYBN0X1": { "draft": "960 x 544", "final": "1280x720", "best": "1920x1080" },
+						"01KX47H3MINIMAX000000000VA": { "draft": "32x32", "final": "huge" },
+						"": { "draft": "832x480" },
+						"01KX47LTX25VIDEO00000000TV": "1280x704"
+					}
+				}
+			},
+			"expected": {
+				"aspect": "2.39:1",
+				"resolution": "4K",
+				"framing": "crop",
+				"engine": { "quality": "draft", "variants": 2, "backend": "native", "sizes": { "01M57QPEMDPKHHW83YSEYBN0X1": { "draft": "960x544", "final": "1280x720" } } }
+			}
+		},
+		{
+			"name": "chosen sizes of which nothing is left drop their key",
+			"doc": { "aspect": "9:16", "resolution": "1080p", "engine": { "quality": "draft", "variants": 2, "backend": "", "sizes": { "p": { "draft": "nope" } } } },
+			"expected": { "aspect": "9:16", "resolution": "1080p", "engine": { "quality": "draft", "variants": 2, "backend": "" } }
+		}
+	]
+}

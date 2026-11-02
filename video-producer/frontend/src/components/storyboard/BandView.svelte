@@ -1,0 +1,108 @@
+<script>
+	import HostUi from '../../../../../../sdk/HostUi.svelte';
+	import { t } from '../../i18n/index.svelte.js';
+	import { ui, doc, secs, addShot, pickedClips } from '../../lib/state.svelte.js';
+	import { shotActivity, takesOf } from '../../lib/production.svelte.js';
+	import { stages } from '../../lib/catalog.js';
+	import { hostIconName } from '../../lib/icons.js';
+	import { commandById } from '../../lib/commands.js';
+	import { lastFailure } from '../../lib/band.js';
+	import { colorIssues, matchAll } from '../../lib/continuity.svelte.js';
+	import { bandChecks, selectedShot } from '../../lib/band.svelte.js';
+	import { emptyActions } from '../../lib/empty.js';
+	import BandLanes from './BandLanes.svelte';
+	import BandMonitor from './BandMonitor.svelte';
+	import ShotQuickEdit from './ShotQuickEdit.svelte';
+	import StoryWindow from './StoryWindow.svelte';
+	import ViewSwitch from './ViewSwitch.svelte';
+	import ZoneHeader from '../shell/ZoneHeader.svelte';
+	import FinalPassButton from '../production/FinalPassButton.svelte';
+	import PickedSummary from '../inspector/PickedSummary.svelte';
+	import PickedChip from './PickedChip.svelte';
+	import Icon from '../Icon.svelte';
+	import ZoomControls from '../timeline/ZoomControls.svelte';
+
+	let lanes = $state();
+	let countsEl = $state();
+	const sel = $derived(selectedShot());
+	const multi = $derived(pickedClips().length > 1);
+	const counts = $derived(Object.keys(stages).map((k) => [k, doc.clips.filter((c) => c.stage === k).length]));
+	const running = $derived(doc.clips.filter((c) => shotActivity(c.id).state === 'running').length);
+	const failed = $derived(doc.clips.filter((c) => lastFailure(takesOf(c))).length);
+	const checks = $derived(doc.clips.length ? bandChecks().length : 0);
+	const colorFixes = $derived(doc.clips.length > 1 ? colorIssues() : 0);
+	const key = (id) => commandById(id)?.key || undefined;
+	const total = $derived(doc.clips.reduce((sum, c) => sum + c.dur, 0));
+	const openCut = () => ((ui.storyOpen = true), (ui.storyTab = 'cut'));
+	const noShots = $derived({
+		icon: 'film',
+		title: t('storyboard.band.emptyTitle'),
+		description: t('storyboard.band.emptyText'),
+		actions: emptyActions(
+			[
+				{ variant: 'secondary', icon: hostIconName('wand'), onclick: openCut, children: t('storyboard.story.title') },
+				{ variant: 'ghost', icon: 'plus', onclick: () => addShot(), children: t('storyboard.addShot') }
+			],
+			key('story-window') ? t('storyboard.band.emptyKey', { key: key('story-window') }) : ''
+		)
+	});
+	const noPick = $derived({ compact: true, icon: hostIconName('pointer'), title: t('storyboard.quick.noneTitle'), description: t('storyboard.quick.none') });
+</script>
+
+<section class="isolate flex min-h-0 min-w-0 flex-col bg-canvas" aria-label={t('storyboard.title')}>
+	<ZoneHeader icon="grid" title={t('storyboard.title')} subtitle={t('storyboard.summary', { count: doc.clips.length, duration: secs(total) })}>
+		<div bind:this={countsEl} class="flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
+			{#if multi}
+				<PickedChip />
+			{:else}
+				{#each counts as [k, n] (k)}
+					<span class="flex shrink-0 items-center gap-1.5 text-xs {n ? 'text-fg-muted' : 'text-fg-subtle'}" title={t('storyboard.stageCount', { stage: stages[k].label, n })}>
+						<span class="h-1.5 w-1.5 rounded-full {stages[k].dot} {n ? '' : 'opacity-40'}"></span>{stages[k].label}<span class="vp-tc text-fg">{n}</span>
+					</span>
+				{/each}
+			{/if}
+			{#if running}<span class="flex shrink-0 items-center gap-1 text-xs text-signal"><Icon name="sparkles" class="h-3 w-3" />{t('storyboard.band.running', { count: running })}</span>{/if}
+			{#if failed}<span class="flex shrink-0 items-center gap-1 text-xs text-danger"><Icon name="alert" class="h-3 w-3" />{t('storyboard.band.failedCount', { count: failed })}</span>{/if}
+		</div>
+		<FinalPassButton room={countsEl} />
+		<HostUi name="Tooltip" props={{ text: t('storyboard.story.tip'), kbd: key('story-window'), wrapperClass: 'inline-flex shrink-0' }}>
+			<button type="button" class="vp-toggle flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg" aria-pressed={ui.storyOpen} onclick={() => (ui.storyOpen = !ui.storyOpen)}>
+				<Icon name="book" class="h-3.5 w-3.5" />{t('storyboard.story.title')}
+				{#if checks}<span class="vp-tc min-w-4 rounded-full bg-warning-solid px-1 text-center text-2xs font-semibold leading-4 text-black" title={t('storyboard.story.checksTip', { count: checks })}>{checks}</span>{/if}
+			</button>
+		</HostUi>
+		{#if colorFixes}
+			<HostUi name="Tooltip" props={{ text: t('storyboard.matchAllTip'), wrapperClass: 'inline-flex shrink-0' }}>
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: hostIconName('palette'), onclick: matchAll }}>{t('storyboard.matchAll', { count: colorFixes })}</HostUi>
+			</HostUi>
+		{/if}
+		<ViewSwitch />
+		<div class="flex shrink-0 items-center gap-1" role="group" aria-label={t('timeline.zoom')}>
+			<ZoomControls onfit={() => lanes?.fit()} />
+		</div>
+		<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'plus', class: 'shrink-0', onclick: () => addShot(t('lib.default.shot'), '', 4, sel?.id ?? null) }}>{t('storyboard.addShot')}</HostUi>
+	</ZoneHeader>
+
+	<BandLanes bind:this={lanes} />
+
+	<div class="grid min-h-0 flex-1 {ui.storyOpen ? '' : 'grid-cols-[minmax(0,1fr)_440px]'}">
+		{#if ui.storyOpen}
+			<StoryWindow />
+		{:else if !doc.clips.length}
+			<div class="col-span-2 flex items-center justify-center p-6">
+				<div class="w-full max-w-lg"><HostUi name="EmptyState" props={noShots} /></div>
+			</div>
+		{:else}
+			<BandMonitor />
+			<aside class="min-h-0 overflow-auto border-l border-line bg-surface-1 p-3" aria-label={t('storyboard.quick.title')}>
+				{#if multi}
+					<PickedSummary />
+				{:else if sel}
+					{#key sel.id}<ShotQuickEdit clip={sel} />{/key}
+				{:else}
+					<HostUi name="EmptyState" props={noPick} />
+				{/if}
+			</aside>
+		{/if}
+	</div>
+</section>

@@ -1,0 +1,2570 @@
+import copy
+import logging
+import math
+import re
+import shutil
+from dataclasses import dataclass, field
+from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+
+from . import bible, catalog, core_bridge, dialogue, engine_options, formats, keepframing, models, presets, reception, sequence, settings, upscalers, workdir
+from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
+from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
+
+logger = logging.getLogger("plugins.video-producer")
+
+DIRECTION_FIELDS = ("univers", "personnages", "photographie", "palette", "rythme")
+
+FIRST_ROLES = ("first", "début", "debut")
+LAST_ROLES = ("last", "fin")
+
+TXT2VIDEO = "txt2video"
+IMG2VIDEO = "img2video"
+
+AUDIO_VAE = "audio_vae"
+
+FIRST_FRAME = "first_frame"
+LAST_FRAME = "last_frame"
+
+SEGMENT_ID = "seg-1"
+
+DEFAULT_DURATION = 5.0
+DEFAULT_ASPECT = 16 / 9
+ASPECT_TOLERANCE = 0.03
+
+REFERENCE_LIMITS = reception.LIMITS
+
+SEEDVR2_MODE = "video_upscale"
+H3_UPSCALE_MODE = "upscale"
+
+UPSCALE_SHORT_SIDES = upscalers.UPSCALE_SHORT_SIDES
+H3_TARGET_SIZES = {"hd720": "hd", "fhd1080": "hd", "qhd1440": "2k", "uhd2160": "2k"}
+H3_TARGET_BACK = {"hd": "fhd1080", "2k": "qhd1440"}
+
+GUIDE_LORA = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"
+GUIDE_REPO = "Lightricks/LTX-2.5-22b-IC-LoRA-Layout-To-Render"
+GUIDE_ID = "ic-guide"
+GUIDED_MODES = ("i2v", "flf")
+MAX_FPS = 60
+LTX_FRAME_STEP = 8
+DISTILLED = "distilled"
+DISTILLED_RECIPE = {"steps": 8, "cfg": 1.0, "sampler": "euler_ancestral"}
+UPSCALE_FIELD = "upscale"
+
+SHEET = reception.SHEET
+SHEET_ID = reception.SHEET_ID
+SHEET_PREFIX = "sheet:"
+SHEET_HEADING = "### Reference Sheet Description"
+TARGET_HEADING = "### Target Description"
+SHEET_ROWS = ("Top Row", "Bottom Row")
+SHEET_KINDS = {bible.CHARACTERS: "Character", bible.PLACES: "Setting"}
+SHEET_PLACES = {1: ("",), 2: ("Left", "Right"), 3: ("Left", "Center", "Right")}
+SHEET_FACE = "A frontal close-up of the face of {words}"
+SHEET_BODY = "The same character shown full body, standing, front view."
+
+QUALITIES = ("draft", "final")
+REFERENCE_IMAGE_BUDGETS = {"draft": "1", "final": "0"}
+
+SEED_RANGE = 2**31
+
+REFERENCE = "reference"
+TRACK = "track"
+VTRACK = "vtrack"
+
+TRACK_PREFIX = "track:"
+VTRACK_PREFIX = "vtrack:"
+
+OFF = "off"
+EXCLUDED = "excluded"
+MISSING = "missing"
+SHORT = "short"
+READY = "ready"
+
+TAG = re.compile(r"(?P<space>[ \t]*)(?<![0-9A-Za-z_])@vref(?P<slot>[1-9])(?![0-9A-Za-z_])", re.IGNORECASE)
+
+CHAIN_PREFIX = "chain:"
+
+CONDITION = "condition"
+MUX = "mux"
+IGNORED = "ignored"
+
+MUX_ID = "a-1"
+
+MAX_MARGIN = 10.0
+
+EPSILON = 1e-6
+
+LABELS = {"image": "Picture", "video": "Video", "audio": "Audio"}
+
+REFS_TEXT: Dict[str, Dict[str, str]] = {
+    "en": {
+        "define_character": "<Subject {subject}> is the character shown in {label}.",
+        "define_setting": "<Subject {subject}> is the setting shown in {label}.",
+        "define_motion": "{label} is the source of the motion of [Shot 1].",
+        "define_audio": "{label} is a reference sound for [Shot 1].",
+        "summary": "[reference generation] A {seconds}-second shot made from the description below and its references.",
+        "keep_character": "<Subject {subject}> (appears in [Shot 1]): fully_preserved - keeps the identity and the appearance.",
+        "keep_setting": "<Subject {subject}> (appears in [Shot 1]): partially_preserved - keeps the place, the subjects, the light and the colours; the framing follows the camera move.",
+        "keep_motion": "{label} (motion of [Shot 1]): attribute_transfer - its motion is carried over to the subjects of the shot.",
+        "keep_audio": "{label} (sound of [Shot 1]): reference - its voice or sound serves as a reference.",
+        "define_voice": "{label} is the voice of {who}.",
+        "keep_voice": "{label} (sound of [Shot 1]): reference - the voice of {who}, kept for its lines.",
+        "cite_setting": "The shot takes place in <Subject {subject}>.",
+        "cite_character": "<Subject {subject}> appears in the shot.",
+        "soundscape": "The natural ambient sound of the place and the physical sounds of the action described above.",
+        "define_continuation": "{label} is the footage that [Shot 1] continues.",
+        "keep_continuation": "{label} (continued by [Shot 1]): fully_preserved - the shot picks up where it ends, with the same subjects, place, light and colours.",
+        "cite_motion": "The subjects move as in {label}.",
+        "cite_continuation": "The shot continues from the last frame of {label}.",
+        "summary_continuation": "[video continuation] + [reference generation] A {seconds}-second shot that continues {label}, made from the description below and its references.",
+    },
+    "fr": {
+        "define_character": "<Subject {subject}> est le personnage montré par {label}.",
+        "define_setting": "<Subject {subject}> est le décor montré par {label}.",
+        "define_motion": "{label} est la source du mouvement de [Shot 1].",
+        "define_audio": "{label} est un son de référence pour [Shot 1].",
+        "summary": "[reference generation] Un plan de {seconds} secondes fait d'après la description ci-dessous et ses références.",
+        "keep_character": "<Subject {subject}> (appears in [Shot 1]): fully_preserved - garde l'identité et l'apparence.",
+        "keep_setting": "<Subject {subject}> (appears in [Shot 1]): partially_preserved - garde le lieu, les sujets, la lumière et les couleurs ; le cadrage suit le mouvement de caméra.",
+        "keep_motion": "{label} (mouvement de [Shot 1]): attribute_transfer - son mouvement est repris par les sujets du plan.",
+        "keep_audio": "{label} (son de [Shot 1]): reference - sa voix ou son son sert de référence.",
+        "define_voice": "{label} est la voix de {who}.",
+        "keep_voice": "{label} (son de [Shot 1]): reference - la voix de {who}, gardée pour ses répliques.",
+        "cite_setting": "Le plan se déroule dans <Subject {subject}>.",
+        "cite_character": "<Subject {subject}> apparaît dans le plan.",
+        "soundscape": "Le son ambiant naturel du lieu et les sons physiques de l'action décrite plus haut.",
+        "define_continuation": "{label} est la séquence que [Shot 1] prolonge.",
+        "keep_continuation": "{label} (prolongée par [Shot 1]): fully_preserved - le plan reprend là où elle s'arrête, avec les mêmes sujets, le même lieu, la même lumière et les mêmes couleurs.",
+        "cite_motion": "Les sujets bougent comme dans {label}.",
+        "cite_continuation": "Le plan prolonge la dernière image de {label}.",
+        "summary_continuation": "[video continuation] + [reference generation] Un plan de {seconds} secondes qui prolonge {label}, fait d'après la description ci-dessous et ses références.",
+    },
+}
+
+ROLES_BY_SPACE = {"identite": "character", "decors3d": "setting", "mouvement": "motion"}
+
+CHARACTER_TYPE = "Personnage"
+
+
+class DirectorError(Exception):
+    """A shot the plugin cannot turn into a generation request."""
+
+    def __init__(self, code: str, message: str, **data: Any):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.data = data
+
+    def note(self) -> Dict[str, Any]:
+        """The error as a block of the estimate."""
+        return note(self.code, self.message, **self.data)
+
+
+def note(code: str, message: str, **data: Any) -> Dict[str, Any]:
+    """A block or warning: a stable code, an English message and, when given, its data."""
+    return {"code": code, "message": message, **({"data": data} if data else {})}
+
+
+@dataclass(frozen=True)
+class Preset:
+    id: str
+    name: str
+    engine: Optional[str]
+    variables: Dict[str, Any]
+    modes: Tuple[str, ...]
+
+    @property
+    def cloud(self) -> bool:
+        return self.engine == CLOUD_ENGINE
+
+    @property
+    def main_mode(self) -> Optional[str]:
+        return catalog.main_mode(self.variables, list(self.modes))
+
+    @property
+    def fps(self) -> float:
+        return catalog.preset_fps(self.variables)
+
+    @property
+    def limits(self) -> Dict[str, Any]:
+        return catalog.preset_limits(self.variables)
+
+    @property
+    def profiles(self) -> List[str]:
+        return catalog.profiles(self.id, self.variables, list(self.modes))
+
+
+@dataclass
+class ShotAudio:
+    behavior: str
+    start: float
+    end: float
+    lanes: List[str] = field(default_factory=list)
+    references: List[str] = field(default_factory=list)
+    sent: Dict[str, str] = field(default_factory=dict)
+
+    @property
+    def length(self) -> float:
+        return round(self.end - self.start, 6)
+
+    def summary(self) -> Dict[str, Any]:
+        """What the shot sends of its sound and how the engine takes it."""
+        return {"behavior": self.behavior, "lanes": list(self.lanes), "references": len(self.references)}
+
+
+@dataclass
+class ShotPlan:
+    shot_id: str
+    profile: Optional[str]
+    director_mode: Optional[str]
+    preset_mode: str
+    seconds: float
+    resolution: Optional[str]
+    fps: Optional[float]
+    prompt_text: str
+    request: Dict[str, Any]
+    model_id: Optional[str] = None
+    cloud_task: Optional[str] = None
+    cloud_params: Dict[str, Any] = field(default_factory=dict)
+    missing_models: List[str] = field(default_factory=list)
+    seeded: bool = True
+    preset_id: str = ""
+    quality: str = "draft"
+    cloud: bool = False
+    backend_id: Optional[str] = None
+    seed: Optional[int] = None
+    audio: Optional[ShotAudio] = None
+    work_scale: float = 1.0
+    reference: Optional[bible.ReferencePart] = None
+    chain: Optional[str] = None
+    video: List["VideoCut"] = field(default_factory=list)
+    video_labels: Dict[int, str] = field(default_factory=dict)
+    rows: Optional[sequence.Rows] = None
+    sheet: Optional["SheetPlan"] = None
+
+    @property
+    def track_scale(self) -> float:
+        """How much longer each step of a take runs with the reference video tracks it sends; 1 without any."""
+        return self.rows.scale if self.rows is not None else 1.0
+
+    @property
+    def time_scale(self) -> float:
+        """How much longer than at the mode's defaults and without reference video tracks a take of the plan runs."""
+        return self.work_scale * self.track_scale
+
+    def video_trace(self) -> Optional[List[Dict[str, Any]]]:
+        """What a take receives of the reference video tracks, each cut with the label it goes as in the prompt."""
+        return [{**cut.trace(), "label": self.video_labels.get(cut.slot)} for cut in self.video] or None
+
+    @property
+    def needs_audio(self) -> bool:
+        """True when a file of the shot's sound must be cut before its takes are created."""
+        return self.audio is not None and self.audio.behavior in (CONDITION, MUX) and bool(self.audio.lanes or self.audio.references)
+
+    @property
+    def needs_cut(self) -> bool:
+        """True when a file of the shot's sound, of one of its reference video tracks or of its reference sheet must be made before its takes are created."""
+        return self.needs_audio or bool(self.video) or self.sheet is not None
+
+    def summary(self) -> Dict[str, Any]:
+        """The shot as the estimate reports it."""
+        return {
+            "shot_id": self.shot_id,
+            "director_mode": self.director_mode,
+            "seconds": self.seconds,
+            "resolution": self.resolution,
+            "fps": self.fps,
+            "preset_id": self.preset_id,
+            "model_id": self.model_id,
+            "profile": self.profile,
+            "quality": self.quality,
+            "audio": self.audio.summary() if self.audio is not None else None,
+            "video": (
+                {"tracks": [cut.slot for cut in self.video], "rows": self.rows.total, "base_rows": self.rows.base, "scale": round(self.track_scale, 2)}
+                if self.video and self.rows is not None
+                else None
+            ),
+            "chain": self.chain,
+            "sheet": self.sheet.trace() if self.sheet is not None else None,
+        }
+
+    def request_for(self, take_id: Optional[str] = None, seed: Optional[int] = None) -> Dict[str, Any]:
+        """The generation request of one take: its idempotency key and, for a seeded plan, its seed."""
+        request = copy.deepcopy(self.request)
+        if take_id is not None:
+            request["idempotency_key"] = f"vp:{take_id}"
+        if self.seeded and seed is not None:
+            form = request["form_data"]
+            form["seed"] = seed
+            document = form.get("video_director")
+            if isinstance(document, dict):
+                document["settings"]["seed"] = seed
+        return request
+
+
+@dataclass(frozen=True)
+class Chain:
+    previous: str
+    asset_id: Optional[str] = None
+
+
+def chain_value(previous: str) -> str:
+    """The stand-in a request carries for the last image of the previous shot until it is taken."""
+    return f"{CHAIN_PREFIX}{previous}"
+
+
+@dataclass(frozen=True)
+class TrackCut:
+    shot_id: str
+    lane_id: str
+    start: float
+    end: float
+
+
+@dataclass(frozen=True)
+class VideoPiece:
+    item_id: str
+    asset_id: str
+    start: float
+    end: float
+    source: float
+
+
+@dataclass
+class VideoCut:
+    track_id: str
+    slot: int
+    role: str
+    frames: int
+    pieces: List[VideoPiece]
+    size: Tuple[int, int] = (0, 0)
+
+    @property
+    def start(self) -> float:
+        return self.pieces[0].start
+
+    @property
+    def end(self) -> float:
+        return self.pieces[-1].end
+
+    @property
+    def seconds(self) -> float:
+        return round(self.frames / reception.VIDEO_TRACKS["fps"], 6)
+
+    def trace(self) -> Dict[str, Any]:
+        """What a take receives of the track: its slot and role, the part of the timeline it is cut from, its frames and the size it is written at."""
+        return {
+            "slot": self.slot,
+            "track_id": self.track_id,
+            "role": self.role,
+            "start": self.start,
+            "end": self.end,
+            "frames": self.frames,
+            "seconds": self.seconds,
+            "size": list(self.size),
+            "items": [piece.item_id for piece in self.pieces],
+        }
+
+
+@dataclass(frozen=True)
+class SheetPanel:
+    reference_id: str
+    asset_id: str
+    card_id: str
+    kind: str
+    box: reception.Box
+
+
+@dataclass
+class SheetPlan:
+    size: Tuple[int, int]
+    frames: int
+    fps: float
+    panels: List[SheetPanel]
+
+    @property
+    def seconds(self) -> float:
+        return round(self.frames / self.fps, 6)
+
+    def trace(self) -> Dict[str, Any]:
+        """What a take receives of the sheet: its size and frames, then each picture with its card and its box."""
+        return {
+            "size": list(self.size),
+            "frames": self.frames,
+            "fps": self.fps,
+            "panels": [
+                {"reference_id": panel.reference_id, "asset_id": panel.asset_id, "card_id": panel.card_id, "kind": panel.kind, "box": list(panel.box)}
+                for panel in self.panels
+            ],
+        }
+
+
+@dataclass
+class ShotTrack:
+    track: Dict[str, Any]
+    status: str
+    cut: Optional[VideoCut] = None
+
+    @property
+    def slot(self) -> int:
+        return int(self.track["slot"])
+
+
+@dataclass(frozen=True)
+class SentReference:
+    value: str
+    kind: str
+    rank: int
+    origin: str
+    item: Optional[Dict[str, Any]] = None
+
+    @property
+    def label(self) -> str:
+        return f"<{LABELS[self.kind]} {self.rank}>"
+
+    @property
+    def role(self) -> str:
+        if self.kind == "audio":
+            return "audio"
+        if self.origin == VTRACK:
+            return reception.CONTINUATION if (self.item or {}).get("role") == reception.CONTINUATION else reception.MOTION
+        return ROLES_BY_SPACE.get(str((self.item or {}).get("space")), "setting")
+
+
+@dataclass
+class Plans:
+    preset: Optional[Preset]
+    model: Optional[Dict[str, Any]]
+    quality: str
+    profile: str
+    shots: List[ShotPlan] = field(default_factory=list)
+    blocks: List[Dict[str, Any]] = field(default_factory=list)
+    warnings: List[Dict[str, Any]] = field(default_factory=list)
+    track_cuts: List[TrackCut] = field(default_factory=list)
+
+
+def find_preset(user: User, preset_id: str, video: bool = True) -> Optional[Preset]:
+    """A preset the user may run, a Video Director one unless video is False; None otherwise."""
+    if not isinstance(preset_id, str) or not preset_id:
+        return None
+    try:
+        descriptions = core_bridge.list_presets(user)
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not list the presets of user %s", getattr(user, "id", None), exc_info=True)
+        return None
+    for description in descriptions:
+        if description.id == preset_id and (not video or catalog.is_video_preset(description)):
+            return Preset(
+                id=description.id,
+                name=description.name,
+                engine=description.engine,
+                variables=dict(description.vars or {}),
+                modes=tuple(description.modes or {}),
+            )
+    return None
+
+
+def profile_of(doc: Mapping[str, Any]) -> str:
+    """The profile the project's direction asks for; FL2VA when it names none the plugin knows."""
+    mode = (doc.get("direction") or {}).get("mode")
+    return mode if mode in PROFILES else FL2VA
+
+
+def clip_of(doc: Mapping[str, Any], shot_id: str) -> Optional[Dict[str, Any]]:
+    """The clip with this id, or None."""
+    return next((clip for clip in doc.get("clips") or [] if clip.get("id") == shot_id), None)
+
+
+def shot_revision(doc: Mapping[str, Any], shot_id: str) -> int:
+    """How many times the shot was edited in its shot editor; 0 for a shot never edited or unknown."""
+    revision = (clip_of(doc, shot_id) or {}).get("revision")
+    return revision if isinstance(revision, int) and not isinstance(revision, bool) and revision > 0 else 0
+
+
+def shot_engine(doc: Mapping[str, Any], shot_id: str) -> Dict[str, Any]:
+    """The engine settings a shot sets for itself instead of the project's: a preset with its model, a profile, a quality and a seed, each only when valid."""
+    engine = (clip_of(doc, shot_id) or {}).get("engine")
+    if not isinstance(engine, Mapping):
+        return {}
+    chosen: Dict[str, Any] = {}
+    preset = engine.get("preset")
+    if isinstance(preset, str) and preset:
+        model = engine.get("model")
+        chosen.update(preset=preset, model=model if isinstance(model, str) and model else None)
+    if engine.get("profile") in PROFILES:
+        chosen["profile"] = engine["profile"]
+    if engine.get("quality") in QUALITIES:
+        chosen["quality"] = engine["quality"]
+    seed = engine.get("seed")
+    if isinstance(seed, int) and not isinstance(seed, bool) and 0 <= seed < SEED_RANGE:
+        chosen["seed"] = seed
+    return chosen
+
+
+def excluded_references(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
+    """The ids of the references of the project or of the cards it casts that the shot leaves out."""
+    overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
+    exclude = overrides.get("exclude") if isinstance(overrides, Mapping) else None
+    return {str(item) for item in exclude if isinstance(item, str)} if isinstance(exclude, list) else set()
+
+
+@dataclass(frozen=True)
+class ShotReferences:
+    own: List[Dict[str, Any]]
+    cast: List[Dict[str, Any]]
+    shared: List[Dict[str, Any]]
+    excluded: List[Dict[str, Any]]
+    not_cast: List[Dict[str, Any]]
+
+
+def _scoped(reference: Mapping[str, Any]) -> bool:
+    scope = reference.get("scope")
+    return isinstance(scope, Mapping) and scope.get("type") == "shot"
+
+
+def shot_reference_groups(doc: Mapping[str, Any], shot_id: str) -> ShotReferences:
+    """The references a shot can send, by step of the table: its own, those of the cards it casts, then the global ones."""
+    excluded = excluded_references(doc, shot_id)
+    references = [reference for reference in doc.get("references") or [] if isinstance(reference, Mapping)]
+    found: Dict[str, Dict[str, Any]] = {}
+    for reference in references:
+        if isinstance(reference.get("id"), str):
+            found.setdefault(reference["id"], reference)
+    own = [reference for reference in references if _scoped(reference) and reference["scope"].get("shotId") == shot_id]
+    placed = {reference["id"] for reference in own if isinstance(reference.get("id"), str)}
+    cast: List[Dict[str, Any]] = []
+    left: List[Dict[str, Any]] = []
+    characters, place = bible.cast_of(doc, clip_of(doc, shot_id) or {})
+    for card in [*characters, *([place] if place is not None else [])]:
+        for reference_id in card.references:
+            reference = found.get(reference_id)
+            if reference is None or reference_id in placed:
+                continue
+            placed.add(reference_id)
+            (left if reference_id in excluded else cast).append(reference)
+    linked = {reference_id for kind in (bible.CHARACTERS, bible.PLACES) for card in bible.cards(doc, kind) for reference_id in card.references}
+    shared: List[Dict[str, Any]] = []
+    not_cast: List[Dict[str, Any]] = []
+    for reference in references:
+        if _scoped(reference) or reference.get("id") in placed:
+            continue
+        if reference.get("id") in excluded:
+            left.append(reference)
+        elif reference.get("id") in linked:
+            not_cast.append(reference)
+        else:
+            shared.append(reference)
+    return ShotReferences(own, cast, shared, left, not_cast)
+
+
+def excluded_lanes(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
+    """The ids of the reference tracks the shot leaves out."""
+    overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
+    lanes = overrides.get("excludeLanes") if isinstance(overrides, Mapping) else None
+    return {str(item) for item in lanes if isinstance(item, str)} if isinstance(lanes, list) else set()
+
+
+def excluded_vrefs(doc: Mapping[str, Any], shot_id: str) -> Set[str]:
+    """The ids of the reference video tracks the shot leaves out."""
+    overrides = (clip_of(doc, shot_id) or {}).get("referenceOverrides")
+    tracks = overrides.get("excludeVrefs") if isinstance(overrides, Mapping) else None
+    return {str(item) for item in tracks if isinstance(item, str)} if isinstance(tracks, list) else set()
+
+
+def video_tracks(doc: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """The reference video tracks of the document, in the order of their slots."""
+    tracks = [
+        track
+        for track in doc.get("vrefTracks") or []
+        if isinstance(track, Mapping) and track.get("id") and isinstance(track.get("slot"), int) and not isinstance(track.get("slot"), bool)
+    ]
+    return sorted(tracks, key=lambda track: track["slot"])
+
+
+def track_items(doc: Mapping[str, Any], track_id: Any) -> List[Dict[str, Any]]:
+    """The items of a reference video track, in time order."""
+    items = [item for item in doc.get("vrefItems") or [] if isinstance(item, Mapping) and item.get("track") == track_id]
+    return sorted(items, key=lambda item: float(item.get("start") or 0))
+
+
+def readable_video(doc: Mapping[str, Any], item: Mapping[str, Any]) -> bool:
+    """Whether an item of a reference video track plays a video the server can read."""
+    asset = _asset(doc, item.get("assetId"))
+    return asset is not None and asset.get("kind") == "video" and media_ref(asset.get("origin")) is not None
+
+
+def _plays_in(item: Mapping[str, Any], begin: float, end: float) -> bool:
+    start, dur = item.get("start"), item.get("dur")
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in (start, dur)) or dur <= EPSILON:
+        return False
+    return min(end, start + dur) - max(begin, start) > EPSILON
+
+
+def shot_video_tracks(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float) -> List[ShotTrack]:
+    """The reference video tracks with an item in the region of a shot, in slot order, each ready with its cut or with what keeps it out."""
+    start = float(clip.get("start") or 0)
+    excluded = excluded_vrefs(doc, clip["id"])
+    found: List[ShotTrack] = []
+    for track in video_tracks(doc):
+        role, cap = track.get("role"), track.get("seconds")
+        begin, end = reception.video_region(role, start, seconds, cap)
+        items = [item for item in track_items(doc, track["id"]) if _plays_in(item, begin, end)]
+        if not items:
+            continue
+        if track.get("off") is True:
+            found.append(ShotTrack(track, OFF))
+            continue
+        if track["id"] in excluded:
+            found.append(ShotTrack(track, EXCLUDED))
+            continue
+        readable = [item for item in items if readable_video(doc, item)]
+        if not readable:
+            found.append(ShotTrack(track, MISSING))
+            continue
+        frames, parts = reception.video_pieces(readable, role, start, seconds, cap)
+        if frames < reception.VIDEO_TRACKS["minFrames"]:
+            found.append(ShotTrack(track, SHORT))
+            continue
+        by_id = {item["id"]: item for item in readable}
+        pieces = [
+            VideoPiece(
+                item_id=str(part["id"]),
+                asset_id=str(by_id[part["id"]]["assetId"]),
+                start=part["from"],
+                end=part["to"],
+                source=round(float(by_id[part["id"]].get("srcIn") or 0) + part["from"] - float(by_id[part["id"]]["start"]), 6),
+            )
+            for part in parts
+        ]
+        cut = VideoCut(str(track["id"]), int(track["slot"]), reception.CONTINUATION if role == reception.CONTINUATION else reception.MOTION, frames, pieces)
+        found.append(ShotTrack(track, READY, cut))
+    return found
+
+
+def cited_slots(text: str) -> List[int]:
+    """The slots of the reference video tracks a text cites as @vref1, @vref2…, in order, once each."""
+    return list(dict.fromkeys(int(match.group("slot")) for match in TAG.finditer(text or "")))
+
+
+def cite_tracks(text: str, labels: Mapping[int, str]) -> str:
+    """The text with each @vrefN it cites replaced by the label its track goes as, or left out with the space before it when the track does not go."""
+    def replace(match: "re.Match[str]") -> str:
+        label = labels.get(int(match.group("slot")))
+        return f"{match.group('space')}{label}" if label else ""
+
+    return TAG.sub(replace, text or "").strip()
+
+
+def _track_note(code: str, message: str, shot_id: str, track: ShotTrack) -> Dict[str, Any]:
+    return note(code, message, shot_id=shot_id, track_id=str(track.track["id"]), slot=track.slot)
+
+
+def _ignored_tracks(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> None:
+    for track in shot_video_tracks(doc, clip, seconds):
+        if track.status not in (OFF, EXCLUDED):
+            warnings.append(
+                _track_note("video_track_ignored", f"This engine does not take a reference video: track vref{track.slot} is not sent.", clip["id"], track)
+            )
+    _tag_warnings(doc, clip, set(), warnings)
+
+
+def _tag_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Collection[int], warnings: List[Dict[str, Any]]) -> None:
+    for slot in cited_slots(shot_instruction(doc, clip)):
+        if slot not in sent:
+            warnings.append(
+                note(
+                    "video_tag_ignored",
+                    f"The shot cites @vref{slot}, which this engine does not receive: the mention is left out.",
+                    shot_id=clip["id"],
+                    slot=slot,
+                )
+            )
+
+
+def reference_margin(doc: Mapping[str, Any]) -> float:
+    """The seconds a reference track is cut before and after the shot, from 0 to MAX_MARGIN; 0 when the project sets none."""
+    margin = (doc.get("engine") or {}).get("referenceMargin")
+    if not isinstance(margin, (int, float)) or isinstance(margin, bool) or not math.isfinite(margin):
+        return 0.0
+    return float(min(max(margin, 0.0), MAX_MARGIN))
+
+
+def item_reference(item: Mapping[str, Any], lane: Mapping[str, Any]) -> bool:
+    """Whether an audio item is sent as a reference for the generation: its own flag when it sets one, else its track's."""
+    flag = item.get("reference")
+    return flag if isinstance(flag, bool) else lane.get("reference") is True
+
+
+def reference_lanes(doc: Mapping[str, Any], shot_id: str, start: float, end: float) -> List[Dict[str, Any]]:
+    """The audio tracks a shot takes a reference sound from between start and end that it does not leave out, in track order: each track with an item sent as a reference there, and each track checked as a reference with nothing at all there, which the shot says is empty."""
+    excluded = excluded_lanes(doc, shot_id)
+    lanes = []
+    for lane in doc.get("lanes") or []:
+        if lane.get("id") in excluded:
+            continue
+        heard = _items_under(doc, lane.get("id"), start, end)
+        if any(item_reference(item, lane) for item in heard) or (not heard and lane.get("reference") is True):
+            lanes.append(lane)
+    return lanes
+
+
+def _any_solo(doc: Mapping[str, Any]) -> bool:
+    video = doc.get("video") if isinstance(doc.get("video"), Mapping) else {}
+    return video.get("solo") is True or any(lane.get("solo") is True for lane in doc.get("lanes") or [])
+
+
+def lane_heard(doc: Mapping[str, Any], lane: Mapping[str, Any]) -> bool:
+    """Whether a track is in the mix: not muted, and soloed when any track is."""
+    return not lane.get("mute") and (not _any_solo(doc) or lane.get("solo") is True)
+
+
+def _items_under(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
+    items = [
+        item
+        for item in doc.get("audio") or []
+        if item.get("lane") == lane_id
+        and float(item.get("dur") or 0) > EPSILON
+        and _overlap(start, end, item) > EPSILON
+    ]
+    return sorted(items, key=lambda item: float(item.get("start") or 0))
+
+
+def lane_items(doc: Mapping[str, Any], lane_id: Any, start: float, end: float) -> List[Dict[str, Any]]:
+    """The audio items of a track that play between start and end on the timeline and are sent as a reference, in time order."""
+    lane = next((lane for lane in doc.get("lanes") or [] if lane.get("id") == lane_id), {})
+    return [item for item in _items_under(doc, lane_id, start, end) if item_reference(item, lane)]
+
+
+def _asset_kind(doc: Mapping[str, Any], asset_id: Any) -> Optional[str]:
+    return (_asset(doc, asset_id) or {}).get("kind")
+
+
+def audio_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
+    """The references of the shot whose media is a sound, as it sends them: its own, the ones of the cards it casts, then the global ones linked to no card that it does not exclude."""
+    groups = shot_reference_groups(doc, shot_id)
+    return [reference for reference in (*groups.own, *groups.cast, *groups.shared) if _asset_kind(doc, reference.get("assetId")) == "audio"]
+
+
+def mixed_references(doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
+    """The audio references of the shot that can be mixed onto a take: the voice of a character is a sample for the engine, never a sound of the shot."""
+    voices = dialogue.voice_references(doc)
+    return [reference for reference in audio_references(doc, shot_id) if reference.get("id") not in voices]
+
+
+def audio_behavior(preset: Preset, profile: Optional[str]) -> str:
+    """How an engine takes the sound of a shot: as a guide in MiniMax-H3's reference mode, mixed onto the take when its director mode declares audio, else not at all."""
+    if reception.takes_references(profile, bible.family(preset.id, preset.cloud)):
+        return CONDITION
+    if preset.cloud:
+        return IGNORED
+    return MUX if catalog.audio_mux(preset.variables) else IGNORED
+
+
+def _track_lanes(
+    doc: Mapping[str, Any],
+    shot_id: str,
+    start: float,
+    end: float,
+    warnings: List[Dict[str, Any]],
+    silent: Collection[str] = (),
+) -> List[str]:
+    lanes: List[str] = []
+    for lane in reference_lanes(doc, shot_id, start, end):
+        if not lane_heard(doc, lane):
+            warnings.append(
+                note("audio_track_muted", "The reference track is muted: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
+            )
+        elif not lane_items(doc, lane["id"], start, end):
+            warnings.append(
+                note("audio_track_empty", "The reference track has no sound under the shot: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
+            )
+        elif lane["id"] in silent:
+            warnings.append(
+                note("audio_track_silent", "The reference track is silent under the shot: nothing of it is sent.", shot_id=shot_id, lane_id=lane["id"])
+            )
+        else:
+            lanes.append(str(lane["id"]))
+    return lanes
+
+
+def condition_window(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float) -> Tuple[float, float]:
+    """The part of the timeline a reference track is cut from for a guided shot: the shot with the project's margin on both sides, never before 0."""
+    start = float(clip.get("start") or 0)
+    margin = reference_margin(doc)
+    return max(0.0, start - margin), start + seconds + margin
+
+
+def mux_window(clip: Mapping[str, Any], seconds: float) -> Tuple[float, float]:
+    """The part of the timeline mixed onto a take: exactly the shot, so that the sound stays in sync with the picture."""
+    start = float(clip.get("start") or 0)
+    return start, start + seconds
+
+
+def _audio_note(behavior: str, shot_id: str) -> Dict[str, Any]:
+    if behavior == CONDITION:
+        return note("audio_condition", "The sound of the shot guides the generation.", shot_id=shot_id)
+    if behavior == MUX:
+        return note("audio_mux", "The sound of the shot is mixed onto the take, not used as a guide.", shot_id=shot_id)
+    return note("audio_ignored", "This engine ignores the sound of the shot.", shot_id=shot_id)
+
+
+def _ignored_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
+    shot_id = clip["id"]
+    if not mixed_references(doc, shot_id) and not reference_lanes(doc, shot_id, *mux_window(clip, seconds)):
+        return None
+    warnings.append(_audio_note(IGNORED, shot_id))
+    return ShotAudio(behavior=IGNORED, start=0.0, end=0.0)
+
+
+def mux_audio(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
+    """What a shot mixes onto its take: the part of its reference tracks under it and its audio references other than the voices of the bible, or None when it has neither."""
+    shot_id = clip["id"]
+    references = [str(reference["assetId"]) for reference in mixed_references(doc, shot_id)]
+    start, end = mux_window(clip, seconds)
+    if not references and not reference_lanes(doc, shot_id, start, end):
+        return None
+    lanes = _track_lanes(doc, shot_id, start, end, warnings)
+    if not lanes and not references:
+        return None
+    warnings.append(_audio_note(MUX, shot_id))
+    return ShotAudio(behavior=MUX, start=start, end=end, lanes=lanes, references=list(dict.fromkeys(references)))
+
+
+def mux_entry(value: str, length: float) -> Dict[str, Any]:
+    """The audio entry of a director document that lays a stored sound onto the finished video."""
+    return {
+        "id": MUX_ID,
+        "role": MUX,
+        "start": 0.0,
+        "trim_start": 0.0,
+        "length": length,
+        "media": {"path": value, "relative_path": value, "type": "audio"},
+    }
+
+
+def audio_document(document: Dict[str, Any], seconds: float, fps: float, capabilities: Mapping[str, Any]) -> Dict[str, Any]:
+    """A one-segment document turned into a director document that can carry an audio entry: timed by start and end, or by a frame count when the preset chains its segments."""
+    document = copy.deepcopy(document)
+    document["mode"] = "director"
+    segment = document["segments"][0]
+    if capabilities.get("segment_routing"):
+        segment["frames"] = max(1, math.floor(seconds * fps + 0.5))
+    else:
+        segment.update(start=0.0, end=seconds)
+    return document
+
+
+def _overlap(start: float, end: float, item: Mapping[str, Any]) -> float:
+    begin = float(item.get("start") or 0)
+    return min(end, begin + float(item.get("dur") or 0)) - max(start, begin)
+
+
+def shot_instruction(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
+    """The shot's own instruction, else the global one covering most of its interval."""
+    prompts = doc.get("prompts") or []
+    local = next((prompt for prompt in prompts if prompt.get("shotId") == clip.get("id")), None)
+    if local is None:
+        start = float(clip.get("start") or 0)
+        end = start + float(clip.get("dur") or 0)
+        covering = [
+            (overlap, prompt)
+            for prompt in prompts
+            if not prompt.get("shotId") and (overlap := _overlap(start, end, prompt)) > 0
+        ]
+        local = max(covering, key=lambda pair: pair[0])[1] if covering else None
+    return str(local.get("text") or "").strip() if local is not None else ""
+
+
+def direction_lines(doc: Mapping[str, Any]) -> List[str]:
+    """The filled direction fields of the project, in order."""
+    direction = doc.get("direction") or {}
+    return [text for text in (str(direction.get(name) or "").strip() for name in DIRECTION_FIELDS) if text]
+
+
+def compose_shot(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> Tuple[str, bible.ReferencePart]:
+    """The shot's prompt and the part of it made from its cast, in the format of its engine."""
+    instruction = cite_tracks(shot_instruction(doc, clip), {})
+    direction = direction_lines(doc)
+    characters, place = bible.cast_of(doc, clip)
+    language = _language(doc)
+    lines = dialogue.lines_of(doc, clip)
+    layout = reception.layout(engine)
+    if layout == bible.SUBJECTS_LAYOUT:
+        cast = [*characters, *([place] if place is not None else [])]
+        numbers = {card.id: index for index, card in enumerate(cast, 1)}
+        subjects = " ".join(bible.definition(card, index, language) for index, card in enumerate(cast, 1))
+        spoken = dialogue.h3_lines(doc, lines, numbers) if lines else ""
+        reference = bible.reference_part(clip, layout, {bible.SUBJECT_DEFINITIONS: subjects})
+        if not reference.overridden:
+            instruction = bible.tag_subjects(instruction, characters, numbers)
+        plain = [line for line in [instruction, spoken, *direction] if line]
+        part = reference.sent[bible.SUBJECT_DEFINITIONS]
+        return "\n\n".join(text for text in (f"subject_definitions: {part}" if part else "", "\n".join(plain)) if text), reference
+    spoken = dialogue.ltx_lines(doc, lines, language) if engine == bible.LTX and lines else ""
+    plain = [line for line in [instruction, spoken, *direction] if line]
+    described = bible.prose(characters, place, language)
+    reference = bible.reference_part(clip, layout, {bible.CAST_PART: (" " if engine == bible.LTX else "\n").join(described)})
+    part = reference.sent[bible.CAST_PART]
+    if not part:
+        return "\n".join(plain), reference
+    if engine == bible.LTX:
+        return " ".join([*([_sentence(instruction)] if instruction else []), *([spoken] if spoken else []), part, *(_sentence(line) for line in direction)]), reference
+    return "\n".join([part, *plain]), reference
+
+
+def shot_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], engine: str = bible.OTHER) -> str:
+    """The prompt of a shot outside MiniMax-H3's reference mode, as compose_shot writes it."""
+    return compose_shot(doc, clip, engine)[0]
+
+
+def _sheet_place(index: int, count: int, row: str) -> str:
+    places = SHEET_PLACES.get(count)
+    where = places[index] if places else f"Panel {index + 1}"
+    return " ".join(part for part in (row, where) if part) or "Sheet"
+
+
+def _card_words(card: bible.Card) -> str:
+    return (card.text or card.label).strip().rstrip(".")
+
+
+def sheet_lines(doc: Mapping[str, Any], panels: Sequence[SheetPanel]) -> str:
+    """The one-line description of a reference sheet, picture by picture, in the form the measured takes used."""
+    found = {card.id: card for kind in (bible.CHARACTERS, bible.PLACES) for card in bible.cards(doc, kind)}
+    characters = [panel for panel in panels if panel.kind == bible.CHARACTERS and panel.card_id in found]
+    places = [panel for panel in panels if panel.kind == bible.PLACES and panel.card_id in found]
+    lines: List[str] = []
+    seen: Set[str] = set()
+    for index, panel in enumerate(characters):
+        card = found[panel.card_id]
+        words = SHEET_BODY if card.id in seen else _sentence(SHEET_FACE.format(words=_card_words(card)))
+        seen.add(card.id)
+        lines.append(f"**{_sheet_place(index, len(characters), SHEET_ROWS[0] if places else '')} ({SHEET_KINDS[panel.kind]}):** {words}")
+    for panel in places:
+        words = _card_words(found[panel.card_id])
+        lines.append(f"**{SHEET_ROWS[1] if characters else 'Sheet'} ({SHEET_KINDS[panel.kind]}):** {_sentence(words[:1].upper() + words[1:])}")
+    return " ".join(lines)
+
+
+def compose_sheet(doc: Mapping[str, Any], clip: Mapping[str, Any], panels: Sequence[SheetPanel]) -> Tuple[str, bible.ReferencePart]:
+    """The one-line prompt of a shot made from its reference sheet: the sheet described, then the shot in the LTX form."""
+    instruction = cite_tracks(shot_instruction(doc, clip), {})
+    characters, place = bible.cast_of(doc, clip)
+    language = _language(doc)
+    lines = dialogue.lines_of(doc, clip)
+    spoken = dialogue.ltx_lines(doc, lines, language) if lines else ""
+    reference = bible.reference_part(
+        clip,
+        bible.SHEET_LAYOUT,
+        {bible.SHEET_PART: sheet_lines(doc, panels), bible.CAST_PART: " ".join(bible.prose(characters, place, language))},
+    )
+    sheet, cast = reference.sent[bible.SHEET_PART], reference.sent[bible.CAST_PART]
+    target = " ".join(
+        [*([_sentence(instruction)] if instruction else []), *([spoken] if spoken else []), *([cast] if cast else []), *(_sentence(line) for line in direction_lines(doc))]
+    )
+    blocks = [*([SHEET_HEADING, sheet] if sheet else []), TARGET_HEADING, target]
+    return " ".join(block for block in blocks if block), reference
+
+
+def _bible_warnings(
+    doc: Mapping[str, Any],
+    clip: Mapping[str, Any],
+    prompt: str,
+    engine: str,
+    warnings: List[Dict[str, Any]],
+    reference: Optional[bible.ReferencePart] = None,
+) -> None:
+    characters, _ = bible.cast_of(doc, clip)
+    missing = bible.missing_labels(shot_instruction(doc, clip), characters)
+    if missing:
+        warnings.append(
+            note(
+                "bible_label_missing",
+                f"The instruction of the shot does not name {', '.join(missing)}, cast in it.",
+                shot_id=clip["id"],
+                labels=missing,
+            )
+        )
+    limit, tokens = bible.token_limit(engine), bible.estimated_tokens(prompt)
+    if limit is not None and tokens > limit:
+        warnings.append(
+            note(
+                "prompt_too_long",
+                f"The prompt of the shot takes about {tokens} tokens, more than the {limit} the engine reads.",
+                shot_id=clip["id"],
+                tokens=tokens,
+                limit=limit,
+            )
+        )
+    if reference is not None and reference.ignored:
+        warnings.append(
+            note(
+                "reference_prompt_ignored",
+                "The shot replaced the part of its prompt made from its references for another engine: the composed part is sent.",
+                shot_id=clip["id"],
+                layout=reference.layout,
+            )
+        )
+    elif reference is not None and reference.overridden and reference.changed:
+        warnings.append(
+            note(
+                "reference_prompt_changed",
+                "The references or the cast of the shot changed since it replaced the part of its prompt made from them: its own text is still sent.",
+                shot_id=clip["id"],
+            )
+        )
+
+
+def _unlinked_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], warnings: List[Dict[str, Any]]) -> None:
+    unlinked = [
+        entry.item
+        for entry in sent
+        if entry.origin == REFERENCE
+        and entry.role == "character"
+        and str((entry.item or {}).get("type") or CHARACTER_TYPE) == CHARACTER_TYPE
+        and bible.card_for_reference(doc, (entry.item or {}).get("id")) is None
+    ]
+    if unlinked:
+        names = [str(item.get("name") or item.get("id")) for item in unlinked]
+        warnings.append(
+            note(
+                "reference_unlinked",
+                f"{', '.join(names)}: a character picture the shot sends is linked to no card of the bible, so no words tie it to the instruction.",
+                shot_id=clip["id"],
+                references=[str(item.get("id")) for item in unlinked],
+                names=names,
+            )
+        )
+
+
+def _dialogue_warnings(
+    doc: Mapping[str, Any],
+    clip: Mapping[str, Any],
+    engine: str,
+    seconds: float,
+    warnings: List[Dict[str, Any]],
+    sent: Optional[Sequence[SentReference]] = None,
+) -> None:
+    lines = dialogue.lines_of(doc, clip)
+    if not lines:
+        return
+    shot_id = clip["id"]
+    if engine not in (bible.H3, bible.LTX):
+        warnings.append(note("dialogue_ignored", "This engine does not generate speech: the lines of the shot are not sent.", shot_id=shot_id))
+        return
+    if any(line.named and line.speaker is None for line in lines):
+        warnings.append(
+            note("dialogue_speaker_unknown", "A line names a character the bible no longer has, or one without a label: it is said by an unnamed voice.", shot_id=shot_id)
+        )
+    characters, _ = bible.cast_of(doc, clip)
+    cast = {card.id for card in characters}
+    absent = list(dict.fromkeys(line.speaker.label for line in lines if line.speaker is not None and not line.offscreen and line.speaker.id not in cast))
+    if absent:
+        warnings.append(
+            note(
+                "dialogue_speaker_not_cast",
+                f"{', '.join(absent)} speak{'s' if len(absent) == 1 else ''} on screen without being cast in the shot: the engine does not see their description.",
+                shot_id=shot_id,
+                labels=absent,
+            )
+        )
+    spoken, limit = dialogue.words(lines), dialogue.word_limit(seconds)
+    if spoken > limit:
+        warnings.append(
+            note(
+                "dialogue_too_long",
+                f"The lines of the shot take {spoken} words, more than the {limit} a {seconds:g}-second shot carries at a natural pace.",
+                shot_id=shot_id,
+                words=spoken,
+                limit=limit,
+            )
+        )
+    if sent is None:
+        return
+    given = {(entry.item or {}).get("id") for entry in sent if entry.origin == REFERENCE}
+    speakers = list(dict.fromkeys(line.speaker for line in lines if line.speaker is not None))
+    unsent = [card.label for card in speakers if card.voice_ref and card.voice_ref not in given]
+    if unsent:
+        warnings.append(
+            note(
+                "dialogue_voice_not_sent",
+                f"The voice of {', '.join(unsent)} is not among the references the shot sends: the engine invents it.",
+                shot_id=shot_id,
+                labels=unsent,
+            )
+        )
+
+
+def _language(doc: Mapping[str, Any]) -> str:
+    language = doc.get("promptLanguage")
+    return language if language in REFS_TEXT else "en"
+
+
+def _sentence(text: str) -> str:
+    return text if text[-1:] in ".!?…»\"'" else f"{text}."
+
+
+def _seconds_text(seconds: float, language: str) -> str:
+    text = f"{seconds:g}"
+    return text.replace(".", ",") if language == "fr" else text
+
+
+def refs_prompt(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> str:
+    """The six-section document of MiniMax-H3's reference mode, as compose_refs writes it."""
+    return compose_refs(doc, clip, sent, seconds)[0]
+
+
+def _subjects(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference]) -> Dict[str, int]:
+    numbers: Dict[str, int] = {}
+    subject = 0
+    for entry in sent:
+        if entry.role in ("character", "setting"):
+            card = bible.card_for_reference(doc, (entry.item or {}).get("id")) if entry.origin == REFERENCE else None
+            if card is not None and card.id in numbers:
+                continue
+            subject += 1
+            if card is not None:
+                numbers[card.id] = subject
+    characters, place = bible.cast_of(doc, clip)
+    for card in [*characters, *([place] if place is not None else [])]:
+        if card.id not in numbers:
+            subject += 1
+            numbers[card.id] = subject
+    return numbers
+
+
+def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence[SentReference], seconds: float) -> Tuple[str, bible.ReferencePart]:
+    """The six-section document of MiniMax-H3's reference mode and the part of it made from the references and the cast."""
+    language = _language(doc)
+    text = REFS_TEXT[language]
+    numbers = _subjects(doc, clip, sent)
+    definitions: List[str] = []
+    retention: List[str] = []
+    citations: List[str] = []
+    defined: Set[str] = set()
+    pictured: Dict[str, Dict[str, Any]] = {}
+    items: List[Dict[str, Any]] = []
+    for entry in sent:
+        role = entry.role
+        if role in ("character", "setting"):
+            card = bible.card_for_reference(doc, (entry.item or {}).get("id")) if entry.origin == REFERENCE else None
+            if card is not None and card.id in pictured:
+                pictured[card.id]["labels"].append(entry.label)
+                continue
+            item = {"card": card, "role": role, "labels": [entry.label]}
+            if card is not None:
+                pictured[card.id] = item
+            items.append(item)
+            continue
+        owner = dialogue.voice_owner(doc, (entry.item or {}).get("id")) if role == "audio" and entry.origin == REFERENCE else None
+        if owner is not None:
+            who = f"<Subject {numbers[owner.id]}>" if owner.id in numbers else owner.label
+            item = {"definition": text["define_voice"].format(label=entry.label, who=who), "retention": text["keep_voice"].format(label=entry.label, who=who)}
+        else:
+            item = {"definition": text[f"define_{role}"].format(label=entry.label), "retention": text[f"keep_{role}"].format(label=entry.label)}
+        if entry.origin == VTRACK:
+            item["citation"] = text[f"cite_{role}"].format(label=entry.label)
+        items.append(item)
+    subject = 0
+    for item in items:
+        if "labels" not in item:
+            definitions.append(item["definition"])
+            retention.append(item["retention"])
+            if "citation" in item:
+                citations.append(item["citation"])
+            continue
+        subject += 1
+        card = item["card"]
+        shown = bible.listed(item["labels"], language)
+        if card is not None:
+            defined.add(card.id)
+            definitions.append(bible.definition(card, subject, language, shown=shown))
+            kept = "character" if card.kind == bible.CHARACTERS else "setting"
+        else:
+            definitions.append(text[f"define_{item['role']}"].format(subject=subject, label=shown))
+            kept = "character" if item["role"] == "character" else "setting"
+        retention.append(text[f"keep_{kept}"].format(subject=subject))
+        citations.append(text[f"cite_{kept}"].format(subject=subject))
+    characters, place = bible.cast_of(doc, clip)
+    for card in [*characters, *([place] if place is not None else [])]:
+        if card.id not in defined:
+            subject += 1
+            definitions.append(bible.definition(card, subject, language))
+            citations.append(text["cite_character" if card.kind == bible.CHARACTERS else "cite_setting"].format(subject=subject))
+    continued = next((entry for entry in sent if entry.origin == VTRACK and entry.role == reception.CONTINUATION), None)
+    if continued is not None:
+        summary = text["summary_continuation"].format(seconds=_seconds_text(seconds, language), label=continued.label)
+    else:
+        summary = text["summary"].format(seconds=_seconds_text(seconds, language))
+    reference = bible.reference_part(
+        clip,
+        reception.layout(bible.H3, REF2VA),
+        {bible.SUBJECT_DEFINITIONS: " ".join(definitions), bible.RETENTION: "\n".join(retention), bible.CITATIONS: " ".join(citations)},
+    )
+    parts = reference.sent
+    labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
+    instruction = cite_tracks(shot_instruction(doc, clip), labels)
+    if not reference.overridden:
+        instruction = bible.tag_subjects(instruction, characters, numbers)
+    lines = dialogue.lines_of(doc, clip)
+    spoken = dialogue.h3_lines(doc, lines, numbers, refs=True) if lines else ""
+    shot = [*([_sentence(instruction)] if instruction else []), parts[bible.CITATIONS], spoken]
+    style = " ".join(_sentence(line) for line in direction_lines(doc))
+    body = " ".join(line for line in shot if line)
+    description = " ".join(part for part in (style, f"[Shot 1] {body}".rstrip()) if part)
+    sections = [
+        ("subject_definitions", parts[bible.SUBJECT_DEFINITIONS]),
+        ("summary", summary),
+        ("retention_analysis", parts[bible.RETENTION]),
+        ("detailed_description", description),
+        ("overall_soundscape", text["soundscape"]),
+        ("non_diegetic_music", "N/A"),
+    ]
+    return "\n\n".join(f"{name}: {content}" for name, content in sections), reference
+
+
+def aspect_of(doc: Mapping[str, Any]) -> float:
+    """The project's aspect ratio, width over height."""
+    ratio = formats.ratio_of(doc.get("aspect"))
+    if ratio is not None:
+        return ratio
+    size = models.parse_size(doc.get("resolution"))
+    return size[0] / size[1] if size else DEFAULT_ASPECT
+
+
+def draft_resolution(options: Sequence[Any], setting: str, aspect: float, preset_id: Optional[str] = None) -> Optional[str]:
+    """The draft size of the family of sizes the preset makes a film of this ratio in (formats.draft_size)."""
+    return formats.draft_size(options, setting, aspect, preset_id)
+
+
+def final_resolution(options: Sequence[Any], aspect: float, preset_id: Optional[str] = None) -> Optional[str]:
+    """The largest size of the family of sizes the preset makes a film of this ratio in (formats.final_size)."""
+    return formats.final_size(options, aspect, preset_id)
+
+
+def size_ratio(size: Any) -> Optional[float]:
+    """The width over height of a WxH size, or None."""
+    parsed = formats.parse_size(size)
+    return parsed[0] / parsed[1] if parsed else None
+
+
+def framing_note(doc: Mapping[str, Any], preset: "Preset", size: Optional[str], made: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """The warning that the film crops the takes of a preset, or shows them between bars, because they come in another ratio than the project's; None when the ratios agree."""
+    take = formats.ratio_of(made) if made is not None else size_ratio(size)
+    if take is None:
+        return None
+    frame = aspect_of(doc)
+    shown = formats.fit(take, frame, formats.framing_of(doc))
+    if shown == formats.EXACT:
+        return None
+    lost = round(formats.loss(take, frame) * 100)
+    made = made or formats.ratio_text(take)
+    data = {"preset_id": preset.id, "size": size, "made": made, "aspect": doc.get("aspect"), "loss": lost}
+    if shown == formats.CROP:
+        return note("aspect_cropped", f"{preset.name} makes the takes of this film in {made}: the film crops them ({lost} % of the picture).", **data)
+    return note("aspect_bars", f"{preset.name} makes the takes of this film in {made}: the film shows them between bars.", **data)
+
+
+def _add(warnings: List[Dict[str, Any]], warning: Optional[Dict[str, Any]]) -> None:
+    if warning is not None and warning not in warnings:
+        warnings.append(warning)
+
+
+def _clamped(wanted: float, maximum: Any, clip_id: str, warnings: List[Dict[str, Any]]) -> float:
+    if isinstance(maximum, (int, float)) and not isinstance(maximum, bool) and 0 < maximum < wanted:
+        warnings.append(
+            note("duration_clamped", f"The shot is longer than the {maximum:g} s the preset allows.", shot_id=clip_id, max=maximum)
+        )
+        return float(maximum)
+    return wanted
+
+
+def _wanted_seconds(clip: Mapping[str, Any], preset: Preset) -> float:
+    duration = clip.get("dur")
+    if isinstance(duration, (int, float)) and not isinstance(duration, bool) and duration > 0:
+        return float(duration)
+    default = preset.limits.get("default_duration")
+    return float(default) if isinstance(default, (int, float)) and default > 0 else DEFAULT_DURATION
+
+
+def media_ref(origin: Any) -> Optional[Dict[str, Any]]:
+    """The core media reference of an asset origin, or None."""
+    if not isinstance(origin, Mapping):
+        return None
+    if origin.get("kind") == "history" and origin.get("generationId") and origin.get("fileId") is not None:
+        return {"kind": "history", "generation_id": str(origin["generationId"]), "file_id": str(origin["fileId"])}
+    if origin.get("kind") == "library" and origin.get("itemId"):
+        return {"kind": "library", "item_id": str(origin["itemId"])}
+    return None
+
+
+def _asset(doc: Mapping[str, Any], asset_id: Any) -> Optional[Dict[str, Any]]:
+    return next((asset for asset in doc.get("assets") or [] if asset_id and asset.get("id") == asset_id), None)
+
+
+def _category(media_type: Any) -> str:
+    return str(media_type or "").split("/", 1)[0].strip().lower()
+
+
+def _resolve(user: User, asset: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+    ref = media_ref(asset.get("origin")) if asset else None
+    if ref is None:
+        return None
+    try:
+        resolved = core_bridge.resolve_media(user, ref)
+    except MediaRefError:
+        return None
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not resolve media %s", ref, exc_info=True)
+        return None
+    return {**resolved, "media_type": _category(resolved.get("media_type")) or asset.get("kind")}
+
+
+def shot_frames(doc: Mapping[str, Any], shot_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """The first and last frames linked to a shot."""
+    frames = [frame for frame in doc.get("frames") or [] if frame.get("shotId") == shot_id and frame.get("assetId")]
+    firsts = [frame for frame in frames if str(frame.get("role") or "").strip().lower() in FIRST_ROLES]
+    lasts = [frame for frame in frames if str(frame.get("role") or "").strip().lower() in LAST_ROLES]
+    first = min(firsts, key=lambda frame: float(frame.get("time") or 0)) if firsts else None
+    last = max(lasts, key=lambda frame: float(frame.get("time") or 0)) if lasts else None
+    return first, last
+
+
+def _frame_media(user: User, doc: Mapping[str, Any], frame: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
+    if frame is None:
+        return None
+    resolved = _resolve(user, _asset(doc, frame.get("assetId")))
+    if resolved is None or resolved["media_type"] != "image":
+        return None
+    return {"value": resolved["value"], "media_type": "image"}
+
+
+def bind_frames(
+    user: User,
+    doc: Mapping[str, Any],
+    shot_id: str,
+    request: Dict[str, Any],
+    last_allowed: bool = True,
+    segment_id: Optional[str] = None,
+    capabilities: Optional[Mapping[str, Any]] = None,
+    first_media: Optional[Dict[str, Any]] = None,
+    keep: bool = False,
+) -> Tuple[Dict[str, Any], str]:
+    """The request with the shot's first and last frames bound, and the composition mode that results."""
+    first, last = shot_frames(doc, shot_id)
+    first_media = first_media or _frame_media(user, doc, first)
+    if first_media is None:
+        return request, "t2v"
+    placed = {"segment_id": segment_id, "capabilities": capabilities} if segment_id is not None else {"promote": True}
+    try:
+        request = core_bridge.bind_director_media(request, "first", first_media, **placed)
+    except DirectorBindingError:
+        logger.warning("[VIDEO-PRODUCER] Could not bind the first frame of shot %s", shot_id, exc_info=True)
+        return request, "t2v"
+    last_media = _frame_media(user, doc, last) if last_allowed else None
+    if last_media is None and keep and last_allowed and last is None:
+        last_media = first_media
+    if last_media is None:
+        return request, "i2v"
+    try:
+        return core_bridge.bind_director_media(request, "last", last_media, **placed), "flf"
+    except DirectorBindingError:
+        logger.warning("[VIDEO-PRODUCER] Could not bind the last frame of shot %s", shot_id, exc_info=True)
+        return request, "i2v"
+
+
+def framing_warnings(doc: Mapping[str, Any], clip: Mapping[str, Any], director_mode: str, warnings: List[Dict[str, Any]]) -> None:
+    """The warnings about the framing a shot keeps: an engine that takes no last frame here, a last frame of its own that is sent instead, and an action that asks for a move its last frame, the same as its first, undoes."""
+    shot_id = clip.get("id")
+    first, last = shot_frames(doc, shot_id)
+    keep = keepframing.keeps_framing(clip)
+    if keep and director_mode != "flf":
+        warnings.append(note("keep_framing_unavailable", "The engine of the shot takes no last frame here: its framing is not kept.", shot_id=shot_id))
+    elif keep and last is not None:
+        warnings.append(note("keep_framing_last_frame", "The shot has a last frame of its own: it is sent instead of its first frame.", shot_id=shot_id))
+    same = (keep and last is None) or (first is not None and last is not None and first.get("assetId") == last.get("assetId"))
+    if director_mode == "flf" and same and keepframing.moves(shot_instruction(doc, clip)):
+        warnings.append(note("action_undone", "The action asks the subject to move, but the last frame brings it back where it starts: the engine may add a double. Describe an action in place, or give another last frame.", shot_id=shot_id))
+
+
+def reference_media(
+    user: User,
+    doc: Mapping[str, Any],
+    shot_id: str,
+    tracks: Sequence[str] = (),
+    videos: Sequence[VideoCut] = (),
+) -> List[SentReference]:
+    """What a shot sends as references, within the per-kind limits and in the order of the table, each with its rank in its kind."""
+    groups = shot_reference_groups(doc, shot_id)
+    sent: List[SentReference] = []
+    counts = {kind: 0 for kind in REFERENCE_LIMITS}
+
+    def add(
+        origin: str,
+        asset_id: Any,
+        item: Optional[Mapping[str, Any]] = None,
+        wanted: Optional[str] = None,
+        resolved: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        resolved = resolved if resolved is not None else _resolve(user, _asset(doc, asset_id))
+        if resolved is None or any(entry.value == resolved["value"] for entry in sent):
+            return
+        kind = resolved["media_type"]
+        if (wanted is not None and kind != wanted) or kind not in counts or counts[kind] >= REFERENCE_LIMITS[kind]:
+            return
+        counts[kind] += 1
+        sent.append(SentReference(resolved["value"], kind, counts[kind], origin, dict(item) if item is not None else None))
+
+    for step in reception.ORDER:
+        if step == "own":
+            for reference in groups.own:
+                add(REFERENCE, reference.get("assetId"), reference)
+        elif step == "cast":
+            for reference in groups.cast:
+                add(REFERENCE, reference.get("assetId"), reference)
+        elif step == "tracks":
+            for lane_id in tracks:
+                add(TRACK, None, {"laneId": lane_id}, "audio", {"value": f"{TRACK_PREFIX}{lane_id}", "media_type": "audio"})
+            for cut in videos:
+                item = {"trackId": cut.track_id, "slot": cut.slot, "role": cut.role}
+                add(VTRACK, None, item, "video", {"value": f"{VTRACK_PREFIX}{cut.track_id}", "media_type": "video"})
+        else:
+            for reference in groups.shared:
+                add(REFERENCE, reference.get("assetId"), reference)
+    return sent
+
+
+def shot_references(user: User, doc: Mapping[str, Any], shot_id: str) -> List[str]:
+    """The media values of the shot's own references, then the global ones, within the per-kind limits."""
+    return [entry.value for entry in reference_media(user, doc, shot_id)]
+
+
+def _document(prompt: str, fps: float, seconds: float, resolution: Optional[str]) -> Dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "mode": "t2v",
+        "settings": {"fps": fps, "duration": seconds, "resolution": resolution or "", "seed": -1},
+        "segments": [{"id": SEGMENT_ID, "prompt": prompt, "negative_prompt": ""}],
+        "media": [],
+    }
+
+
+def _request(preset_id: str, mode: str, prompt: str, form: Dict[str, Any]) -> Dict[str, Any]:
+    return {"preset_id": preset_id, "mode": mode, "prompts": [{"positive": prompt, "negative": ""}], "form_data": form}
+
+
+@dataclass
+class _Context:
+    user: User
+    doc: Mapping[str, Any]
+    preset: Preset
+    quality: str
+    profile: str
+    model: Optional[Dict[str, Any]]
+    draft_setting: str
+    silent: Mapping[str, Collection[str]] = field(default_factory=dict)
+    fields: Dict[str, models.Fields] = field(default_factory=dict)
+    cuts: List[TrackCut] = field(default_factory=list)
+    chained: Mapping[str, Chain] = field(default_factory=dict)
+
+    def mode_fields(self, mode: str) -> models.Fields:
+        if mode not in self.fields:
+            self.fields[mode] = models.form_fields(self.preset.id, mode)
+        return self.fields[mode]
+
+
+def _chain_media(context: _Context, shot_id: str) -> Optional[Dict[str, Any]]:
+    chained = context.chained.get(shot_id)
+    if chained is None:
+        return None
+    if chained.asset_id is not None:
+        return _frame_media(context.user, context.doc, {"assetId": chained.asset_id})
+    return {"value": chain_value(chained.previous), "media_type": "image"}
+
+
+def _chain_of(context: _Context, shot_id: str, media: Optional[Dict[str, Any]], director_mode: str) -> Optional[str]:
+    return context.chained[shot_id].previous if media is not None and director_mode != "t2v" else None
+
+
+def _text_only(preset: Preset) -> bool:
+    modes = catalog.director_modes(preset.variables)
+    return bool(modes) and "i2v" not in modes
+
+
+def _native_size(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> Optional[str]:
+    preset = context.preset
+    choice = formats.pick_size(
+        models.resolution_options(fields),
+        aspect_of(context.doc),
+        context.quality,
+        context.draft_setting,
+        formats.chosen_size(context.doc, preset.id, context.quality),
+        preset.id,
+    )
+    if choice.refused is not None:
+        _add(
+            warnings,
+            note(
+                "engine_size_invalid",
+                f"{preset.name} cannot make takes of {choice.refused}: the size the project chose for it is left out.",
+                preset_id=preset.id,
+                quality=context.quality,
+                size=choice.refused,
+                reason=choice.problem,
+            ),
+        )
+    size = choice.size or (fields.get("resolution") or {}).get("default") or context.draft_setting
+    if "resolution" in fields:
+        _add(warnings, framing_note(context.doc, preset, size))
+    return size
+
+
+def working_ratio(user: User, doc: Mapping[str, Any], shot_id: str) -> float:
+    """The ratio a shot's video engine makes its takes in for the project's format: the ratio of the family of sizes of its preset, the closest one its cloud model offers, else the project's."""
+    frame = aspect_of(doc)
+    chosen = shot_engine(doc, shot_id)
+    engine = doc.get("engine") if isinstance(doc.get("engine"), Mapping) else {}
+    preset_id = chosen["preset"] if "preset" in chosen else engine.get("preset")
+    model_id = chosen.get("model") if "preset" in chosen else engine.get("model")
+    preset = find_preset(user, preset_id) if isinstance(preset_id, str) and preset_id else None
+    if preset is None:
+        return frame
+    if preset.cloud:
+        model = _cloud_model(model_id) or {}
+        for task in (IMG2VIDEO, TXT2VIDEO):
+            values = [str(value) for value in (_param(model, "aspect_ratio", task) or {}).get("values") or []]
+            ratio = formats.ratio_of(formats.closest_format(values, frame))
+            if ratio is not None:
+                return ratio
+        return frame
+    mode = preset.main_mode
+    if mode is None or mode not in preset.modes:
+        return frame
+    return size_ratio(final_resolution(models.resolution_options(models.form_fields(preset.id, mode)), frame, preset.id)) or frame
+
+
+def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Optional[str], fps: float, quality: str) -> Dict[str, Any]:
+    form: Dict[str, Any] = {"seed": -1, "video_director": document}
+    if "resolution" in fields:
+        form["resolution"] = resolution
+    if "fps" in fields:
+        form["fps"] = fps
+    if "quantity" in fields:
+        form["quantity"] = 1
+    if engine_options.REFERENCE_IMAGE_BUDGET in fields:
+        form[engine_options.REFERENCE_IMAGE_BUDGET] = REFERENCE_IMAGE_BUDGETS[quality]
+    return form
+
+
+def project_options(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> engine_options.Chosen:
+    """The options the project sets for the preset of a plan, a warning naming those that no longer fit their field and are left out."""
+    chosen = engine_options.chosen(context.doc, context.preset.id, fields, context.preset.cloud)
+    if chosen.invalid:
+        warning = note(
+            "engine_option_invalid",
+            f"Some options of {context.preset.name} no longer fit their field and are left out: {', '.join(chosen.invalid)}.",
+            preset_id=context.preset.id,
+            fields=list(chosen.invalid),
+        )
+        if warning not in warnings:
+            warnings.append(warning)
+    return chosen
+
+
+def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
+    preset, doc, shot_id = context.preset, context.doc, clip["id"]
+    engine = bible.family(preset.id, preset.cloud)
+    if reception.takes_sheet(engine, context.profile):
+        return _sheet_plan(context, clip, warnings)
+    refs = reception.takes_references(context.profile, engine)
+    mode = REFS_MODE if refs else preset.main_mode
+    if mode is None or mode not in preset.modes:
+        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
+    fields = context.mode_fields(mode)
+    resolution = _native_size(context, fields, warnings)
+    seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
+    fps = preset.fps
+    sent: List[SentReference] = []
+    audio: Optional[ShotAudio] = None
+    video: List[VideoCut] = []
+    labels: Dict[int, str] = {}
+    rows: Optional[sequence.Rows] = None
+    if refs:
+        window = condition_window(doc, clip, seconds)
+        tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
+        context.cuts.extend(TrackCut(shot_id, lane_id, *window) for lane_id in tracks)
+        ready = _ready_tracks(doc, clip, seconds, warnings)
+        sent = reference_media(context.user, doc, shot_id, tracks, [track.cut for track in ready])
+        video = _sent_tracks(doc, shot_id, tracks, ready, sent, warnings)
+        for cut in video:
+            cut.size = reception.cut_size(size_ratio(resolution) or aspect_of(doc), models.parse_size(resolution))
+        _tag_warnings(doc, clip, {cut.slot for cut in video}, warnings)
+        if not sent:
+            raise DirectorError("no_references", "Ref2VA needs at least one reference for this shot.", shot_id=shot_id)
+        if all(entry.kind == "audio" for entry in sent):
+            raise DirectorError(
+                "audio_only_references", "Ref2VA needs a picture or a video next to the sound of this shot.", shot_id=shot_id
+            )
+        sounds = [entry for entry in sent if entry.kind == "audio"]
+        if sounds:
+            warnings.append(_audio_note(CONDITION, shot_id))
+            audio = ShotAudio(
+                behavior=CONDITION,
+                start=window[0],
+                end=window[1],
+                lanes=[str((entry.item or {}).get("laneId")) for entry in sounds if entry.origin == TRACK],
+                references=[str((entry.item or {}).get("assetId")) for entry in sounds if entry.origin == REFERENCE],
+                sent={str((entry.item or {}).get("assetId")): entry.value for entry in sounds if entry.origin == REFERENCE},
+            )
+        prompt, reference = compose_refs(doc, clip, sent, seconds)
+        _unlinked_warnings(doc, clip, sent, warnings)
+        labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
+        if video:
+            fitted = REFERENCE_IMAGE_BUDGETS[context.quality] == "1" and engine_options.REFERENCE_IMAGE_BUDGET in fields
+            images = sum(1 for entry in sent if entry.kind == "image")
+            rows = sequence.shot_rows(seconds, fps or reception.VIDEO_TRACKS["fps"], models.parse_size(resolution), images, fitted, [(cut.frames, cut.size) for cut in video])
+            _row_warnings(shot_id, rows, warnings)
+    else:
+        prompt, reference = compose_shot(doc, clip, engine)
+        audio = _shot_mux(context, clip, seconds, warnings)
+        _ignored_tracks(doc, clip, seconds, warnings)
+    _bible_warnings(doc, clip, prompt, engine, warnings, reference)
+    _dialogue_warnings(doc, clip, engine, seconds, warnings, sent if refs else None)
+    capabilities = catalog.director_of(preset.variables)
+    document = _document(prompt, fps, seconds, resolution)
+    mixed = audio is not None and audio.behavior == MUX
+    if mixed:
+        document = audio_document(document, seconds, fps, capabilities)
+    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, context.quality))
+    chained: Optional[Dict[str, Any]] = None
+    if refs:
+        request["form_data"]["references"] = [entry.value for entry in sent]
+        director_mode = REFS_MODE
+    elif _text_only(preset) and shot_frames(doc, shot_id)[0] is not None:
+        director_mode = "t2v"
+        warnings.append(note("text_only_preset", "The preset generates from text only: the frames of the shot are not used.", shot_id=shot_id))
+    else:
+        modes = catalog.director_modes(preset.variables)
+        chained = None if _text_only(preset) else _chain_media(context, shot_id)
+        request, director_mode = bind_frames(
+            context.user,
+            doc,
+            shot_id,
+            request,
+            last_allowed=not modes or "flf" in modes,
+            segment_id=SEGMENT_ID if mixed else None,
+            capabilities=capabilities if mixed else None,
+            first_media=chained,
+            keep=keepframing.keeps_framing(clip),
+        )
+        if director_mode == "t2v" and context.profile == FL2VA:
+            warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
+    framing_warnings(doc, clip, director_mode, warnings)
+    resolved = models.resolve_models(preset.id, mode, director_mode, fields, (AUDIO_VAE,) if mixed else ())
+    request["form_data"].update(resolved.values)
+    chosen = project_options(context, fields, warnings)
+    request["form_data"].update(chosen.values)
+    return ShotPlan(
+        shot_id=shot_id,
+        profile=context.profile,
+        director_mode=director_mode,
+        preset_mode=mode,
+        seconds=seconds,
+        resolution=resolution,
+        fps=fps,
+        prompt_text=prompt,
+        request=request,
+        missing_models=[name for name in resolved.missing if name not in chosen.values],
+        seed=chosen.seed,
+        audio=audio,
+        work_scale=engine_options.work_scale(fields, request["form_data"]),
+        reference=reference,
+        chain=_chain_of(context, shot_id, chained, director_mode),
+        video=video,
+        video_labels=labels,
+        rows=rows,
+    )
+
+
+def _row_warnings(shot_id: str, rows: sequence.Rows, warnings: List[Dict[str, Any]]) -> None:
+    """What the reference video tracks of a shot cost: a sequence past what a 12 GB card holds, else the longer step when it shows."""
+    data = {"shot_id": shot_id, "rows": rows.total, "base_rows": rows.base, "scale": round(rows.scale, 2), "limit": sequence.CEILING}
+    if rows.high:
+        warnings.append(
+            note(
+                "vref_rows_high",
+                f"With its reference video tracks the shot sends about {rows.total} rows to the model: past about {sequence.CEILING}, a 12 GB card runs short of memory and each step slows down a lot.",
+                **data,
+            )
+        )
+    elif rows.scale >= sequence.NOTICEABLE:
+        warnings.append(note("vref_step_time", f"Its reference video tracks make each step of the shot about {rows.scale:.1f} times longer.", **data))
+
+
+def _card_pictures(user: User, doc: Mapping[str, Any], card: bible.Card, excluded: Collection[str]) -> List[Tuple[str, str]]:
+    found = {reference["id"]: reference for reference in doc.get("references") or [] if isinstance(reference, Mapping) and isinstance(reference.get("id"), str)}
+    pictures: List[Tuple[str, str]] = []
+    for reference_id in card.references:
+        reference = found.get(reference_id)
+        asset = _asset(doc, reference.get("assetId")) if reference is not None and reference_id not in excluded else None
+        if asset is None or asset.get("kind") != "image":
+            continue
+        resolved = _resolve(user, asset)
+        if resolved is not None and resolved["media_type"] == "image":
+            pictures.append((reference_id, str(asset["id"])))
+    return pictures
+
+
+def _picture_size(doc: Mapping[str, Any], asset_id: str) -> Optional[Tuple[int, int]]:
+    asset = _asset(doc, asset_id) or {}
+    width, height = asset.get("width"), asset.get("height")
+    sized = all(isinstance(side, int) and not isinstance(side, bool) and side > 0 for side in (width, height))
+    return (int(width), int(height)) if sized else None
+
+
+def sheet_panels(user: User, doc: Mapping[str, Any], clip: Mapping[str, Any], size: Tuple[int, int], warnings: List[Dict[str, Any]]) -> List[SheetPanel]:
+    """The pictures a shot's reference sheet shows, with their boxes, and the warnings for what it leaves out."""
+    shot_id = clip["id"]
+    excluded = excluded_references(doc, shot_id)
+    characters, place = bible.cast_of(doc, clip)
+    pictured: List[Tuple[bible.Card, List[Tuple[str, str]]]] = []
+    for card in characters:
+        pictures = _card_pictures(user, doc, card, excluded)
+        if pictures:
+            pictured.append((card, pictures[: SHEET["images"]]))
+        else:
+            warnings.append(note("sheet_card_without_image", f"{card.label} has no picture: it is not on the sheet, only in the words of the prompt.", shot_id=shot_id, card_id=card.id, label=card.label))
+    setting = _card_pictures(user, doc, place, excluded)[:1] if place is not None else []
+    if place is not None and not setting:
+        warnings.append(note("sheet_card_without_image", f"{place.label} has no picture: it is not on the sheet, only in the words of the prompt.", shot_id=shot_id, card_id=place.id, label=place.label))
+    kept, left = pictured[: SHEET["characters"]], pictured[SHEET["characters"] :]
+    if not kept and not setting:
+        raise DirectorError("sheet_no_image", "No card cast in this shot has a picture: there is nothing to put on its sheet.", shot_id=shot_id)
+    boxes, setting_box = reception.sheet_layout(size, [len(pictures) for _, pictures in kept], bool(setting))
+    panels: List[SheetPanel] = []
+    for card, pictures in kept:
+        for reference_id, asset_id in pictures:
+            panels.append(SheetPanel(reference_id, asset_id, card.id, bible.CHARACTERS, boxes[len(panels)]))
+    if setting and place is not None and setting_box is not None:
+        panels.append(SheetPanel(setting[0][0], setting[0][1], place.id, bible.PLACES, setting_box))
+    edge = reception.sheet_edge(boxes[0], [_picture_size(doc, panel.asset_id) for panel in panels if panel.kind == bible.CHARACTERS]) if boxes else None
+    if left or (edge is not None and edge < SHEET["leastEdge"]):
+        names = [card.label for card, _ in left]
+        message = f"The sheet holds {SHEET['characters']} characters: {', '.join(names)} left out." if names else f"The pictures of the sheet are {edge} px on their short side, too small to hold a face."
+        warnings.append(note("sheet_crowded", message, shot_id=shot_id, left_out=names, edge=edge))
+    props = [card.label for card, _ in kept if card.props]
+    if props:
+        warnings.append(note("sheet_props_text_only", f"The props of {', '.join(props)} are words only: they are not on the sheet.", shot_id=shot_id, labels=props))
+    return panels
+
+
+def _sheet_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
+    preset, doc, shot_id = context.preset, context.doc, clip["id"]
+    if context.quality == "final":
+        raise DirectorError(
+            "sheet_final_size",
+            "A shot made from its reference sheet is not rendered again at the final size, where the sheet doubles a sequence 12 GB cannot hold: its final goes through an upscaler.",
+            shot_id=shot_id,
+        )
+    lora = sheet_lora()
+    if lora is None:
+        raise DirectorError(
+            "sheet_lora_missing",
+            f"Install the Ingredients IC-LoRA {SHEET['lora']} ({SHEET['repo']} on Hugging Face) to make this shot from its reference sheet.",
+            shot_id=shot_id,
+            file=SHEET["lora"],
+            repo=SHEET["repo"],
+        )
+    mode = preset.main_mode
+    if mode is None or mode not in preset.modes:
+        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
+    fields = context.mode_fields(mode)
+    size = reception.sheet_size(aspect_of(doc))
+    resolution = f"{size[0]}x{size[1]}"
+    if list(size) != list(SHEET["size"]):
+        warnings.append(
+            note("sheet_off_bucket", f"The sheet makes this shot at {resolution}, a size the IC-LoRA was not trained at.", shot_id=shot_id, size=resolution)
+        )
+    fps = float(SHEET["fps"]) if "fps" in fields else preset.fps
+    wanted = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
+    frames = guided_frames(wanted, fps)
+    seconds = round(frames / fps, 6)
+    panels = sheet_panels(context.user, doc, clip, size, warnings)
+    if shot_frames(doc, shot_id)[0] is not None or shot_id in context.chained:
+        warnings.append(note("sheet_first_frame", "The sheet makes the shot without a first frame: the picture it would start from is not used.", shot_id=shot_id))
+    prompt, reference = compose_sheet(doc, clip, panels)
+    _bible_warnings(doc, clip, prompt, bible.LTX, warnings, reference)
+    _dialogue_warnings(doc, clip, bible.LTX, seconds, warnings, None)
+    audio = _shot_mux(context, clip, seconds, warnings)
+    _ignored_tracks(doc, clip, seconds, warnings)
+    document = sheet_document(prompt, fps, seconds, resolution, lora, sheet_value(shot_id))
+    mixed = audio is not None and audio.behavior == MUX
+    if mixed:
+        document = audio_document(document, seconds, fps, catalog.director_of(preset.variables))
+    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, context.quality))
+    resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if mixed else ())
+    form = request["form_data"]
+    form.update(resolved.values)
+    chosen = project_options(context, fields, warnings)
+    form.update(chosen.values)
+    form.update(distilled_form(fields, resolved))
+    if UPSCALE_FIELD in fields:
+        form[UPSCALE_FIELD] = OFF
+    return ShotPlan(
+        shot_id=shot_id,
+        profile=context.profile,
+        director_mode="director",
+        preset_mode=mode,
+        seconds=seconds,
+        resolution=resolution,
+        fps=fps,
+        prompt_text=prompt,
+        request=request,
+        missing_models=[name for name in resolved.missing if name not in chosen.values],
+        seed=chosen.seed,
+        audio=audio,
+        work_scale=engine_options.work_scale(fields, form) * reception.sheet_work(form),
+        reference=reference,
+        sheet=SheetPlan(size, frames, fps, panels),
+    )
+
+
+def _ready_tracks(doc: Mapping[str, Any], clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> List[ShotTrack]:
+    ready: List[ShotTrack] = []
+    for track in shot_video_tracks(doc, clip, seconds):
+        if track.status == READY:
+            ready.append(track)
+        elif track.status == MISSING:
+            warnings.append(
+                _track_note("video_track_missing", f"The video of track vref{track.slot} can no longer be read: nothing of it is sent.", clip["id"], track)
+            )
+        elif track.status == SHORT:
+            least = reception.least_seconds()
+            warnings.append(
+                _track_note(
+                    "video_track_short", f"Track vref{track.slot} has less than {least:.2f} s of video for this shot: nothing of it is sent.", clip["id"], track
+                )
+            )
+    return ready
+
+
+def _sent_tracks(
+    doc: Mapping[str, Any],
+    shot_id: str,
+    lanes: Sequence[str],
+    ready: Sequence[ShotTrack],
+    sent: Sequence[SentReference],
+    warnings: List[Dict[str, Any]],
+) -> List[VideoCut]:
+    going = {str((entry.item or {}).get("laneId")) for entry in sent if entry.origin == TRACK}
+    for lane_id in lanes:
+        if lane_id not in going:
+            warnings.append(
+                note(
+                    "audio_track_trimmed",
+                    f"The shot already sends {REFERENCE_LIMITS['audio']} sounds: the reference track is not sent.",
+                    shot_id=shot_id,
+                    lane_id=lane_id,
+                )
+            )
+    slots = {int((entry.item or {})["slot"]) for entry in sent if entry.origin == VTRACK}
+    video: List[VideoCut] = []
+    for track in ready:
+        if track.slot in slots and track.cut is not None:
+            video.append(track.cut)
+        else:
+            warnings.append(
+                _track_note(
+                    "video_track_trimmed", f"The shot already sends {REFERENCE_LIMITS['video']} videos: track vref{track.slot} is not sent.", shot_id, track
+                )
+            )
+    return video
+
+
+def _shot_mux(context: _Context, clip: Mapping[str, Any], seconds: float, warnings: List[Dict[str, Any]]) -> Optional[ShotAudio]:
+    if audio_behavior(context.preset, context.profile) == MUX:
+        return mux_audio(context.doc, clip, seconds, warnings)
+    return _ignored_audio(context.doc, clip, seconds, warnings)
+
+
+def _applies(item: Mapping[str, Any], task: str) -> bool:
+    tasks = item.get("tasks") or []
+    return not tasks or task in tasks
+
+
+def _param(model: Mapping[str, Any], name: str, task: str) -> Optional[Dict[str, Any]]:
+    return next((param for param in model.get("params") or [] if param.get("name") == name and _applies(param, task)), None)
+
+
+def _has_input(model: Mapping[str, Any], role: str, task: str) -> bool:
+    return any(item.get("role") == role and _applies(item, task) for item in model.get("inputs") or [])
+
+
+def _tier(value: str) -> Optional[float]:
+    text = value.strip().lower()
+    size = models.parse_size(text)
+    if size:
+        return float(min(size))
+    for suffix, factor in (("p", 1.0), ("k", 1000.0)):
+        if text.endswith(suffix) and text[:-1].replace(".", "", 1).isdigit():
+            return float(text[:-1]) * factor
+    return float(text) if text.replace(".", "", 1).isdigit() else None
+
+
+def cloud_resolution(param: Optional[Mapping[str, Any]], quality: str) -> Optional[str]:
+    """The model's resolution for a draft (its default, else the smallest) or a final take (the largest)."""
+    if param is None:
+        return None
+    values = [str(value) for value in param.get("values") or []]
+    default = param.get("default")
+    if not values:
+        return None if default is None else str(default)
+    ranked = sorted((tier, index, value) for index, value in enumerate(values) if (tier := _tier(value)) is not None)
+    if quality == "final":
+        return ranked[-1][2] if ranked else values[-1]
+    if default is not None and str(default) in values:
+        return str(default)
+    return ranked[0][2] if ranked else values[0]
+
+
+def cloud_duration(param: Optional[Mapping[str, Any]], wanted: float) -> Tuple[float, Optional[float]]:
+    """The duration closest to the wanted one that the model accepts, and the longest it accepts."""
+    if param is None:
+        return wanted, None
+    if param.get("kind") == "enum":
+        allowed = []
+        for value in param.get("values") or []:
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if number > 0:
+                allowed.append(number)
+        if not allowed:
+            return wanted, None
+        return min(allowed, key=lambda number: (abs(number - wanted), -number)), max(allowed)
+    low, high = param.get("minimum"), param.get("maximum")
+    value = wanted
+    if isinstance(high, (int, float)):
+        value = min(value, float(high))
+    if isinstance(low, (int, float)):
+        value = max(value, float(low))
+        step = param.get("step")
+        if isinstance(step, (int, float)) and step > 0:
+            value = float(low) + round((value - float(low)) / float(step)) * float(step)
+            if isinstance(high, (int, float)):
+                value = min(value, float(high))
+    return round(value, 3), float(high) if isinstance(high, (int, float)) else None
+
+
+def _cloud_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> ShotPlan:
+    preset, doc, model, shot_id = context.preset, context.doc, context.model or {}, clip["id"]
+    tasks = model.get("tasks") or []
+    first, last = shot_frames(doc, shot_id)
+    image_task = IMG2VIDEO in tasks and IMG2VIDEO in preset.modes and _has_input(model, FIRST_FRAME, IMG2VIDEO)
+    chained = _chain_media(context, shot_id) if image_task else None
+    first_media = (chained or _frame_media(context.user, doc, first)) if image_task else None
+    task = IMG2VIDEO if first_media is not None else TXT2VIDEO
+    if task == TXT2VIDEO and (TXT2VIDEO not in tasks or TXT2VIDEO not in preset.modes):
+        raise DirectorError("no_model", "The model needs a first frame for this shot.", shot_id=shot_id)
+    fields = context.mode_fields(task)
+    resolution = cloud_resolution(_param(model, "resolution", task), context.quality)
+    aspect_param = _param(model, "aspect_ratio", task)
+    aspect_values = [str(value) for value in (aspect_param or {}).get("values") or []]
+    aspect = doc.get("aspect") if doc.get("aspect") in aspect_values else formats.closest_format(aspect_values, aspect_of(doc)) or (aspect_param or {}).get("default")
+    if aspect is not None and aspect != doc.get("aspect"):
+        _add(
+            warnings,
+            note(
+                "aspect_unsupported",
+                f"{model.get('name') or model.get('id')} offers no {doc.get('aspect')} frame: its takes come in {aspect}.",
+                preset_id=preset.id,
+                model_id=model.get("id"),
+                made=str(aspect),
+                aspect=doc.get("aspect"),
+            ),
+        )
+        _add(warnings, framing_note(doc, preset, None, str(aspect)))
+    duration_param = _param(model, "duration_s", task)
+    wanted = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
+    seconds, longest = cloud_duration(duration_param, wanted)
+    if longest is not None and wanted > longest and not any(
+        item["code"] == "duration_clamped" and (item.get("data") or {}).get("shot_id") == shot_id for item in warnings
+    ):
+        warnings.append(
+            note("duration_clamped", f"The shot is longer than the {longest:g} s the model allows.", shot_id=shot_id, max=longest)
+        )
+    fps = preset.fps
+    prompt, reference = compose_shot(doc, clip, bible.CLOUD)
+    _bible_warnings(doc, clip, prompt, bible.CLOUD, warnings, reference)
+    _dialogue_warnings(doc, clip, bible.CLOUD, seconds, warnings)
+    _ignored_tracks(doc, clip, seconds, warnings)
+    form: Dict[str, Any] = {
+        "seed": -1,
+        "model": f"{models.MODEL_REF}{model['id']}",
+        "video_director": _document(prompt, fps, seconds, resolution),
+    }
+    if "resolution" in fields and resolution is not None:
+        form["resolution"] = resolution
+    if "aspect_ratio" in fields and aspect is not None:
+        form["aspect_ratio"] = str(aspect)
+    chosen = project_options(context, fields, warnings)
+    form.update(chosen.values)
+    request = _request(preset.id, task, prompt, form)
+    director_mode = "t2v"
+    if first_media is not None:
+        request, director_mode = bind_frames(
+            context.user, doc, shot_id, request, last_allowed=_has_input(model, LAST_FRAME, IMG2VIDEO), first_media=first_media, keep=keepframing.keeps_framing(clip)
+        )
+    if director_mode == "t2v" and context.profile == FL2VA:
+        warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
+    framing_warnings(doc, clip, director_mode, warnings)
+    audio = _ignored_audio(doc, clip, seconds, warnings)
+    params = {"duration_s": seconds, "resolution": resolution, "aspect_ratio": aspect}
+    return ShotPlan(
+        shot_id=shot_id,
+        profile=context.profile,
+        director_mode=director_mode,
+        preset_mode=task,
+        seconds=seconds,
+        resolution=resolution,
+        fps=fps,
+        prompt_text=prompt,
+        request=request,
+        model_id=model["id"],
+        cloud_task=task,
+        cloud_params={key: value for key, value in params.items() if value is not None},
+        seed=chosen.seed,
+        audio=audio,
+        reference=reference,
+        chain=_chain_of(context, shot_id, chained, director_mode),
+    )
+
+
+def _cloud_model(model_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not model_id:
+        return None
+    try:
+        return core_bridge.cloud_model(model_id)
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not read cloud model %s", model_id, exc_info=True)
+        return None
+
+
+def _engine_of(
+    doc: Mapping[str, Any], shot_id: str, preset_id: str, quality: str, model_id: Optional[str], profile: Optional[str]
+) -> Tuple[str, str, Optional[str], Optional[str]]:
+    chosen = shot_engine(doc, shot_id)
+    if "preset" in chosen:
+        preset_id, model_id = chosen["preset"], chosen["model"]
+    if "profile" in chosen:
+        profile = chosen["profile"]
+    return preset_id, chosen.get("quality", quality), model_id, profile
+
+
+def _merge(plans: Plans, part: Plans, shot_ids: Sequence[str], own: bool) -> None:
+    plans.shots.extend(part.shots)
+    plans.track_cuts.extend(part.track_cuts)
+    for kind in ("blocks", "warnings"):
+        target = getattr(plans, kind)
+        for item in getattr(part, kind):
+            data = item.get("data") or {}
+            if own and kind == "blocks" and "shot_id" not in data:
+                item = {**item, "data": {**data, "shot_ids": list(shot_ids)}}
+            if item not in target:
+                target.append(item)
+
+
+def build_plans(
+    user: User,
+    doc: Mapping[str, Any],
+    shot_ids: Sequence[str],
+    preset_id: str,
+    quality: str,
+    model_id: Optional[str] = None,
+    profile: Optional[str] = None,
+    overrides: bool = False,
+    silent: Optional[Mapping[str, Collection[str]]] = None,
+    chained: Optional[Mapping[str, Chain]] = None,
+) -> Plans:
+    """The generation request of each shot, with what blocks the run and what the user should know."""
+    silent = silent or {}
+    chained = chained or {}
+    if not overrides:
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent, chained)
+    project = (preset_id, quality, model_id, profile)
+    groups: Dict[Tuple[str, str, Optional[str], Optional[str]], List[str]] = {}
+    for shot_id in dict.fromkeys(shot_ids):
+        if clip_of(doc, shot_id) is not None:
+            groups.setdefault(_engine_of(doc, shot_id, *project), []).append(shot_id)
+    if not groups:
+        return _build(user, doc, shot_ids, preset_id, quality, model_id, profile, silent, chained)
+    parts = [(key, ids, _build(user, doc, ids, *key, silent, chained)) for key, ids in groups.items()]
+    main = next((part for key, _, part in parts if key == project), parts[0][2])
+    plans = Plans(preset=main.preset, model=main.model, quality=quality, profile=main.profile)
+    for key, ids, part in parts:
+        _merge(plans, part, ids, own=key != project)
+    for plan in plans.shots:
+        plan.seed = shot_engine(doc, plan.shot_id).get("seed", plan.seed)
+    order = {shot_id: index for index, shot_id in enumerate(dict.fromkeys(shot_ids))}
+    plans.shots.sort(key=lambda plan: order[plan.shot_id])
+    return plans
+
+
+def _build(
+    user: User,
+    doc: Mapping[str, Any],
+    shot_ids: Sequence[str],
+    preset_id: str,
+    quality: str,
+    model_id: Optional[str],
+    profile: Optional[str],
+    silent: Mapping[str, Collection[str]],
+    chained: Optional[Mapping[str, Chain]] = None,
+) -> Plans:
+    profile = profile if profile in PROFILES else profile_of(doc)
+    preset = find_preset(user, preset_id)
+    plans = Plans(preset=preset, model=None, quality=quality, profile=profile)
+    if preset is None:
+        plans.blocks.append(note("no_preset", "The preset is not available to you.", preset_id=preset_id))
+        return plans
+    if profile not in preset.profiles:
+        plans.blocks.append(
+            note("profile_unsupported", f"{preset.name} cannot run the {profile} profile.", profile=profile, preset_id=preset.id)
+        )
+        return plans
+    if preset.cloud:
+        plans.model = _cloud_model(model_id)
+        if plans.model is None:
+            plans.blocks.append(note("no_model", "Choose a video model the cloud backend has turned on.", model_id=model_id))
+            return plans
+    clips = [clip for clip in (clip_of(doc, shot_id) for shot_id in dict.fromkeys(shot_ids)) if clip is not None]
+    if not clips:
+        plans.blocks.append(note("no_shots", "Select at least one shot of the project."))
+        return plans
+    context = _Context(
+        user=user,
+        doc=doc,
+        preset=preset,
+        quality=quality,
+        profile=profile,
+        model=plans.model,
+        draft_setting=str(settings.get_setting("draft_resolution")),
+        silent=silent,
+        chained=chained or {},
+    )
+    plans.track_cuts = context.cuts
+    missing: List[str] = []
+    for clip in clips:
+        try:
+            plan = (_cloud_plan if preset.cloud else _native_plan)(context, clip, plans.warnings)
+        except DirectorError as exc:
+            if exc.note() not in plans.blocks:
+                plans.blocks.append(exc.note())
+            continue
+        plan.preset_id, plan.quality, plan.cloud = preset.id, quality, preset.cloud
+        plan.backend_id = (plans.model or {}).get("backend_id") if preset.cloud else None
+        plans.shots.append(plan)
+        missing.extend(name for name in plan.missing_models if name not in missing)
+    if missing:
+        plans.blocks.append(
+            note("missing_models", f"Install a recommended file for: {', '.join(missing)}.", fields=missing)
+        )
+    cutting = [plan.shot_id for plan in plans.shots if plan.needs_audio]
+    filming = [plan.shot_id for plan in plans.shots if plan.video]
+    chaining = [plan.shot_id for plan in plans.shots if plan.chain]
+    if (cutting or filming or chaining) and not core_bridge.find_ffmpeg():
+        if cutting:
+            plans.blocks.append(
+                note("audio_ffmpeg_missing", "ffmpeg is not available on this server: the sound of the shots cannot be cut.", shot_ids=cutting)
+            )
+        if filming:
+            plans.blocks.append(
+                note(
+                    "video_ffmpeg_missing",
+                    "ffmpeg is not available on this server: the reference video tracks of the shots cannot be cut.",
+                    shot_ids=filming,
+                )
+            )
+        if chaining:
+            plans.blocks.append(
+                note(
+                    "chain_ffmpeg_missing",
+                    "ffmpeg is not available on this server: the last image of the previous shot cannot be taken for the shots that start from it.",
+                    shot_ids=chaining,
+                )
+            )
+    return plans
+
+
+def source_video(user: User, take: Mapping[str, Any]) -> Dict[str, Any]:
+    """The resolved video file of a finished take; DirectorError when it is gone."""
+    generation_id = take.get("generation_id")
+    try:
+        files = core_bridge.list_generation_files(user, generation_id) if generation_id else []
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not list the files of generation %s", generation_id, exc_info=True)
+        files = []
+    chosen = next((item for item in files if str(item.get("id")) == str(take.get("file_id"))), None)
+    if chosen is None:
+        chosen = next((item for item in files if _category(item.get("file_type")) == "video"), None)
+    if chosen is None:
+        raise DirectorError("source_unavailable", "The video of the source take is no longer available.")
+    try:
+        return core_bridge.resolve_media(
+            user, {"kind": "history", "generation_id": str(generation_id), "file_id": str(chosen["id"])}
+        )
+    except MediaRefError:
+        raise DirectorError("source_unavailable", "The video of the source take is no longer available.") from None
+
+
+def upscaled_size(width: Any, height: Any, target: str) -> Optional[str]:
+    """The size an upscale to a target gives a video of this size: its short side pinned to the target's."""
+    short = UPSCALE_SHORT_SIDES.get(target)
+    if not short or not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+        return None
+    scale = short / min(width, height)
+    return f"{2 * round(width * scale / 2)}x{2 * round(height * scale / 2)}"
+
+
+def h3_target_size(fields: models.Fields, target: str) -> str:
+    """The MiniMax-H3 target size closest to an upscale target that the mode offers."""
+    wanted = H3_TARGET_SIZES.get(target, "hd")
+    spec = fields.get("target_size") or {}
+    values = [option["value"] for option in spec.get("options") or []]
+    if not values or wanted in values:
+        return wanted
+    default = spec.get("default")
+    return str(default) if default in values else values[0]
+
+
+def upscale_rtx_source(take: Mapping[str, Any]) -> str:
+    """The kind of source an RTX upscale take was tuned for: compressed or clean."""
+    return upscalers.rtx_source_of(((take.get("request") or {}).get("form_data") or {}).get("intent"))
+
+
+def upscale_target(take: Mapping[str, Any]) -> str:
+    """The upscale target an upscale take was asked for: SeedVR2's named target, RTX's short side, or MiniMax-H3's size."""
+    form = (take.get("request") or {}).get("form_data") or {}
+    target = form.get("resolution_target")
+    if target in UPSCALE_SHORT_SIDES:
+        return str(target)
+    short = form.get(upscalers.RTX_TARGET_FIELD)
+    named = next((name for name, side in UPSCALE_SHORT_SIDES.items() if side == short), None)
+    if named is not None:
+        return named
+    return H3_TARGET_BACK.get(str(form.get("target_size")), "fhd1080")
+
+
+def _own_upscale(user: User, source: Mapping[str, Any]) -> Optional[Preset]:
+    preset_id = source.get("preset_id")
+    if preset_id not in presets.MINIMAX_H3_PRESETS:
+        return None
+    return find_preset(user, str(preset_id), video=False)
+
+
+def native_engine_or_block(what: str) -> Dict[str, Any]:
+    """The native backend the takes of native presets run on; DirectorError when only cloud backends are enabled, saying what cannot be made."""
+    engine = catalog.native_engine()
+    if engine is None:
+        raise DirectorError(
+            "no_native_engine",
+            f"{what} runs on a native backend of this instance, and none is enabled: enable the native backend of this machine or a native remote worker.",
+        )
+    return engine
+
+
+def _upscaler_preset(user: User, source: Mapping[str, Any], upscaler: str) -> Tuple[Preset, str]:
+    engine = native_engine_or_block("An upscaler")
+    own = _own_upscale(user, source) if upscaler in (upscalers.AUTO, upscalers.ENGINE) else None
+    if own is not None and H3_UPSCALE_MODE in own.modes:
+        return own, H3_UPSCALE_MODE
+    if upscaler == upscalers.ENGINE:
+        name = own.name if own is not None else "The engine of this take"
+        raise DirectorError(
+            "upscale_unsupported",
+            f"{name} has no Upscale mode: pick another upscaler, or render the take again at full resolution.",
+            preset_id=source.get("preset_id"),
+        )
+    preset_id = upscalers.PRESET_OF.get(upscaler, presets.SEEDVR2)
+    preset = find_preset(user, preset_id, video=False)
+    if upscaler == upscalers.AUTO and (preset is None or SEEDVR2_MODE not in preset.modes) and upscalers.ready(user, [engine])[upscalers.RTX]:
+        preset_id = presets.RTX_UPSCALE
+        preset = find_preset(user, preset_id, video=False)
+    if preset is None or SEEDVR2_MODE not in preset.modes:
+        if own is not None:
+            raise DirectorError(
+                "upscale_unsupported",
+                f"{own.name} has no Upscale mode: install SeedVR2 for final takes, or render the take again at full resolution.",
+                preset_id=own.id,
+            )
+        raise DirectorError("no_preset", "The upscaler preset is not available to you.", preset_id=preset_id)
+    if preset_id == presets.RTX_UPSCALE and not upscalers.rtx_target_field(preset_id):
+        raise DirectorError(
+            "upscaler_outdated",
+            f"This version of {preset.name} cannot be asked for a size: update the NVIDIA RTX Upscale plugin.",
+            preset_id=preset_id,
+        )
+    if preset_id == presets.RTX_UPSCALE and upscalers.nvvfx(engine) is False:
+        raise DirectorError(
+            "upscaler_missing",
+            f"{preset.name} needs the nvidia-vfx package on the server: ask an administrator to install it.",
+            preset_id=preset_id,
+        )
+    return preset, SEEDVR2_MODE
+
+
+def build_upscale(
+    user: User, source: Mapping[str, Any], target: str, upscaler: str = upscalers.AUTO, rtx_source: str = upscalers.DEFAULT_RTX_SOURCE
+) -> ShotPlan:
+    """The final take of a finished take upscaled to a named target by the chosen upscaler."""
+    preset, mode = _upscaler_preset(user, source, upscaler)
+    preset_id = preset.id
+    h3 = mode == H3_UPSCALE_MODE
+    rtx = preset_id == presets.RTX_UPSCALE
+    fields = models.form_fields(preset_id, mode)
+    media = source_video(user, source)
+    form: Dict[str, Any] = {"input_video": media["value"], "seed": -1}
+    if media.get("origin"):
+        form["input_video__origin"] = media["origin"]
+    if h3:
+        form["target_size"] = h3_target_size(fields, target)
+        if "quantity" in fields:
+            form["quantity"] = 1
+    elif rtx:
+        form.pop("seed")
+        form.update({"intent": upscalers.RTX_INTENTS.get(rtx_source, upscalers.RTX_INTENTS[upscalers.DEFAULT_RTX_SOURCE]), "quality": "ultra", upscalers.RTX_TARGET_FIELD: UPSCALE_SHORT_SIDES[target], "keep_audio": True})
+    else:
+        form["restoration_intent"] = "faithful"
+        form["resolution_target"] = target
+    resolved = models.resolve_models(preset_id, mode, None, fields)
+    form.update(resolved.values)
+    prompt = str(source.get("prompt_text") or "") if h3 else ""
+    return ShotPlan(
+        shot_id=str(source["shot_id"]),
+        profile=source.get("profile"),
+        director_mode=None,
+        preset_mode=mode,
+        seconds=float(source.get("duration_s") or 0),
+        resolution=upscaled_size(source.get("width"), source.get("height"), target),
+        fps=source.get("fps"),
+        prompt_text=prompt,
+        request=_request(preset_id, mode, prompt, form),
+        missing_models=list(resolved.missing),
+        seeded=False,
+    )
+
+
+def installed_lora(filename: str) -> Optional[str]:
+    """An installed LoRA file as model:<id>, or None."""
+    try:
+        model_id = core_bridge.installed_model_for_file(filename)
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not look up the model file %s", filename, exc_info=True)
+        return None
+    return f"{models.MODEL_REF}{model_id}" if model_id else None
+
+
+def guide_lora() -> Optional[str]:
+    """The installed Layout-To-Render IC-LoRA as model:<id>, or None."""
+    return installed_lora(GUIDE_LORA)
+
+
+def sheet_lora() -> Optional[str]:
+    """The installed Ingredients IC-LoRA as model:<id>, or None."""
+    return installed_lora(SHEET["lora"])
+
+
+def sheet_ready(user: User) -> bool:
+    """True when the user can make takes from a reference sheet: one of the sheet's presets is theirs and the IC-LoRA is installed."""
+    return any(find_preset(user, preset_id) is not None for preset_id in SHEET["presets"]) and sheet_lora() is not None
+
+
+def guided_preset(user: User) -> Optional[Preset]:
+    """The preset a guided final runs on, when the user may run it: LTX-2.5, whose director mode takes an IC-LoRA."""
+    for preset_id in presets.GUIDED_PRESETS:
+        preset = find_preset(user, preset_id)
+        composition = catalog.director_of(preset.variables).get("modes") if preset is not None else None
+        capabilities = composition.get("director") if isinstance(composition, Mapping) else None
+        if isinstance(capabilities, Mapping) and capabilities.get("ic_lora"):
+            return preset
+    return None
+
+
+def guided_ready(user: User) -> bool:
+    """True when the user can make guided finals: the preset is theirs and the IC-LoRA is installed."""
+    return guided_preset(user) is not None and guide_lora() is not None
+
+
+def guided_frames(seconds: float, fps: float) -> int:
+    """The 1 + 8k frame count LTX renders closest to a video of this length at this rate, the lower one on a tie, so that the final keeps the length of its draft within half a step."""
+    frames = max(1, round(seconds * fps))
+    return 1 + LTX_FRAME_STEP * max(0, math.ceil((frames - 1) / LTX_FRAME_STEP - 0.5))
+
+
+def distilled_form(fields: models.Fields, resolved: models.ResolvedModels) -> Dict[str, Any]:
+    """The Distilled speed profile Lightricks runs its IC-LoRAs with (8 steps, CFG 1, euler_ancestral), for the fields the mode has, when the DiT in use is a distilled file and the mode offers that profile; empty otherwise."""
+    options = [option.get("value") for option in (fields.get("speed_profile") or {}).get("options") or []]
+    if DISTILLED not in options or DISTILLED not in resolved.files.get(models.MODEL_FIELD, "").lower():
+        return {}
+    return {name: value for name, value in {"speed_profile": DISTILLED, **DISTILLED_RECIPE}.items() if name in fields}
+
+
+def ic_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], entry_id: str, lora: str, video: str) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes a video as its reference, the LoRA and the reference both at strength 1."""
+    document = _document(prompt, fps, seconds, resolution)
+    document["mode"] = "director"
+    document["segments"][0].update(start=0.0, end=seconds)
+    document["ic_lora"] = [
+        {
+            "id": entry_id,
+            "lora": {"model": lora, "strength": 1.0},
+            "reference": {"path": video, "relative_path": video, "type": "video"},
+            "strength": 1.0,
+        }
+    ]
+    return document
+
+
+def guided_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes a draft video as its reference, the LoRA and the reference both at strength 1: below 1 LTX-2.5 copies the reference instead of following it."""
+    return ic_document(prompt, fps, seconds, resolution, GUIDE_ID, lora, video)
+
+
+def sheet_document(prompt: str, fps: float, seconds: float, resolution: Optional[str], lora: str, video: str) -> Dict[str, Any]:
+    """A director document of one segment whose IC-LoRA entry takes the shot's reference sheet as its reference, at the full strength the Ingredients IC-LoRA ships for."""
+    return ic_document(prompt, fps, seconds, resolution, SHEET_ID, lora, video)
+
+
+def sheet_value(shot_id: str) -> str:
+    """The stand-in a request carries for the video of a shot's reference sheet until it is made."""
+    return f"{SHEET_PREFIX}{shot_id}"
+
+
+
+def is_guided(plan: ShotPlan) -> bool:
+    """True for the plan of a guided final."""
+    document = plan.request.get("form_data", {}).get("video_director")
+    return isinstance(document, Mapping) and any(entry.get("id") == GUIDE_ID for entry in document.get("ic_lora") or [])
+
+
+def take_asset(doc: Mapping[str, Any], take_id: Any) -> Optional[Dict[str, Any]]:
+    """The asset of the project that holds the video of a take, or None."""
+    return next((asset for asset in doc.get("assets") or [] if take_id and asset.get("resultId") == take_id), None)
+
+
+def draft_sound(user: User, doc: Mapping[str, Any], source: Mapping[str, Any]) -> bool:
+    """True when the video of a finished take has a sound the project can mix again; DirectorError when its work folder cannot be written."""
+    if take_asset(doc, source.get("id")) is None:
+        return False
+    try:
+        value = source_video(user, source)["value"]
+    except DirectorError:
+        return False
+    try:
+        folder = workdir.scratch(workdir.FRAMES, user.id)
+    except workdir.WorkdirError as exc:
+        raise DirectorError(exc.code, exc.message) from None
+    try:
+        path = core_bridge.local_media_file("history", value, folder)
+        probe = core_bridge.probe_video(path) if path else None
+    except Exception:
+        logger.warning("[VIDEO-PRODUCER] Could not read the sound of take %s", source.get("id"), exc_info=True)
+        return False
+    finally:
+        shutil.rmtree(folder, True)
+    return bool(probe is not None and probe.has_audio)
+
+
+def _guided_aspect(doc: Mapping[str, Any], source: Mapping[str, Any]) -> float:
+    width, height = source.get("width"), source.get("height")
+    if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+        return width / height
+    return aspect_of(doc)
+
+
+def _guided_fps(preset: Preset, fields: models.Fields, source: Mapping[str, Any]) -> float:
+    fps = source.get("fps")
+    if "fps" in fields and isinstance(fps, (int, float)) and not isinstance(fps, bool) and 0 < fps <= MAX_FPS:
+        return float(fps)
+    return preset.fps
+
+
+def guided_first(user: User, doc: Mapping[str, Any], source: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """The picture a guided final starts from when the project still has it: the shot's first frame, when the take started from it and the shot was not edited since; None otherwise, the first frame of the take's video being taken instead."""
+    revision = source.get("shot_revision") if isinstance(source.get("shot_revision"), int) else 0
+    if source.get("director_mode") not in GUIDED_MODES or revision < shot_revision(doc, str(source["shot_id"])):
+        return None
+    return _frame_media(user, doc, shot_frames(doc, str(source["shot_id"]))[0])
+
+
+def has_first(plan: ShotPlan) -> bool:
+    """True when the request of a plan starts from a picture."""
+    document = plan.request.get("form_data", {}).get("video_director") or {}
+    return any(isinstance(entry, Mapping) and str(entry.get("role") or "") == "first" for entry in document.get("media") or [])
+
+
+def bind_first(user: User, plan: ShotPlan, media: Mapping[str, Any]) -> None:
+    """Bind a picture as the first frame of a guided plan; DirectorError when the preset refuses it."""
+    preset = guided_preset(user)
+    try:
+        plan.request = core_bridge.bind_director_media(
+            plan.request, "first", media, segment_id=SEGMENT_ID, capabilities=catalog.director_of(preset.variables) if preset else None
+        )
+    except DirectorBindingError:
+        raise DirectorError("guided_frame_failed", "The first frame of the take could not be used.", shot_id=plan.shot_id) from None
+
+
+def build_guided(user: User, doc: Mapping[str, Any], source: Mapping[str, Any], sound: bool = False) -> ShotPlan:
+    """The final take of a finished take rendered again by LTX-2.5 following its video through the Layout-To-Render IC-LoRA."""
+    native_engine_or_block("A guided final")
+    preset = guided_preset(user)
+    if preset is None:
+        raise DirectorError("guided_unavailable", "LTX-2.5 is not available to you: a guided final needs it.", preset_id=presets.LTX_2_5)
+    lora = guide_lora()
+    if lora is None:
+        raise DirectorError(
+            "guide_lora_missing",
+            f"Install the Layout-To-Render IC-LoRA {GUIDE_LORA} ({GUIDE_REPO} on Hugging Face) for guided finals.",
+            file=GUIDE_LORA,
+            repo=GUIDE_REPO,
+        )
+    shot_id = str(source["shot_id"])
+    clip = clip_of(doc, shot_id)
+    if clip is None:
+        raise DirectorError("shot_not_found", "The shot of this take is no longer in the project.", shot_id=shot_id)
+    mode = preset.main_mode
+    if mode is None or mode not in preset.modes:
+        raise DirectorError("no_preset", "The preset has no mode the Video Director can run.", preset_id=preset.id)
+    fields = models.form_fields(preset.id, mode)
+    fps = _guided_fps(preset, fields, source)
+    length = float(source.get("duration_s") or 0) or _wanted_seconds(clip, preset)
+    seconds = round(guided_frames(length, fps) / fps, 6)
+    resolution = final_resolution(models.resolution_options(fields), _guided_aspect(doc, source), preset.id) or (fields.get("resolution") or {}).get("default")
+    prompt, reference = compose_shot(doc, clip, bible.family(preset.id, False))
+    document = guided_document(prompt, fps, seconds, resolution, lora, source_video(user, source)["value"])
+    asset = take_asset(doc, source.get("id")) if sound else None
+    audio = ShotAudio(behavior=MUX, start=0.0, end=seconds, references=[str(asset["id"])]) if asset is not None else None
+    plan = ShotPlan(
+        shot_id=shot_id,
+        profile=source.get("profile"),
+        director_mode="director",
+        preset_mode=mode,
+        seconds=seconds,
+        resolution=resolution,
+        fps=fps,
+        prompt_text=prompt,
+        request=_request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, "final")),
+        audio=audio,
+        reference=reference,
+    )
+    first = guided_first(user, doc, source)
+    if first is not None:
+        bind_first(user, plan, first)
+    resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if audio is not None else ())
+    form = plan.request["form_data"]
+    form.update(resolved.values)
+    form.update(distilled_form(fields, resolved))
+    chosen = engine_options.chosen(doc, preset.id, fields, preset.cloud)
+    form.update(chosen.values)
+    plan.missing_models = [name for name in resolved.missing if name not in chosen.values]
+    plan.work_scale = engine_options.work_scale(fields, form)
+    return plan

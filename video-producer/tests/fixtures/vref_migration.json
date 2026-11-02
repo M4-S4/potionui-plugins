@@ -1,0 +1,95 @@
+{
+	"cases": [
+		{
+			"name": "a document without tracks keeps no key for them",
+			"doc": { "assets": [] },
+			"expected": {}
+		},
+		{
+			"name": "a repeated id or slot, a slot out of range and a fourth track are dropped, an unknown role reads as motion and a missing name as empty",
+			"doc": {
+				"assets": [],
+				"vrefTracks": [
+					{ "id": "t1", "slot": 1, "name": "Walk", "role": "motion" },
+					{ "id": "t1", "slot": 2, "name": "Again", "role": "motion" },
+					{ "id": "t2", "slot": 1, "name": "Same slot", "role": "motion" },
+					{ "id": "t3", "slot": 4, "name": "Out of range", "role": "motion" },
+					{ "id": "t4", "slot": 2, "role": "aspect" },
+					{ "id": "t5", "slot": 3, "name": "Dock", "role": "continuation", "seconds": 3, "off": false },
+					"not a track",
+					{ "id": "t6", "slot": 2, "name": "Fourth", "role": "motion" }
+				]
+			},
+			"expected": {
+				"vrefTracks": [
+					{ "id": "t1", "slot": 1, "name": "Walk", "role": "motion" },
+					{ "id": "t4", "slot": 2, "name": "", "role": "motion" },
+					{ "id": "t5", "slot": 3, "name": "Dock", "role": "continuation", "seconds": 3, "off": false }
+				]
+			}
+		},
+		{
+			"name": "a malformed seconds or off is left out, a slot that is not a whole number is dropped",
+			"doc": {
+				"assets": [],
+				"vrefTracks": [
+					{ "id": "t1", "slot": 1, "name": "A", "role": "motion", "seconds": -2, "off": "yes" },
+					{ "id": "t2", "slot": 2.5, "name": "B", "role": "motion" },
+					{ "id": "", "slot": 3, "name": "C", "role": "motion" }
+				]
+			},
+			"expected": {
+				"vrefTracks": [{ "id": "t1", "slot": 1, "name": "A", "role": "motion" }]
+			}
+		},
+		{
+			"name": "an item of an unknown track, of no duration, on a picture or repeated is dropped, a missing srcIn reads as 0 and fromTake stays when it is null or a take id",
+			"doc": {
+				"assets": [
+					{ "id": "v1", "kind": "video" },
+					{ "id": "p1", "kind": "image" }
+				],
+				"vrefTracks": [{ "id": "t1", "slot": 1, "name": "Walk", "role": "motion" }],
+				"vrefItems": [
+					{ "id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 4, "srcIn": 1, "fromTake": "take-1" },
+					{ "id": "i1", "track": "t1", "assetId": "v1", "start": 5, "dur": 4, "srcIn": 0 },
+					{ "id": "i2", "track": "gone", "assetId": "v1", "start": 0, "dur": 4, "srcIn": 0 },
+					{ "id": "i3", "track": "t1", "assetId": "v1", "start": 0, "dur": 0, "srcIn": 0 },
+					{ "id": "i4", "track": "t1", "assetId": "p1", "start": 0, "dur": 4, "srcIn": 0 },
+					{ "id": "i5", "track": "t1", "assetId": "v1", "start": 6, "dur": 2 },
+					{ "id": "i6", "track": "t1", "assetId": null, "start": 9, "dur": 1, "srcIn": -1, "fromTake": null },
+					{ "id": "i7", "track": "t1", "assetId": "removed", "start": 11, "dur": 1, "srcIn": 0, "fromTake": 7 }
+				]
+			},
+			"expected": {
+				"vrefTracks": [{ "id": "t1", "slot": 1, "name": "Walk", "role": "motion" }],
+				"vrefItems": [
+					{ "id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 4, "srcIn": 1, "fromTake": "take-1" },
+					{ "id": "i5", "track": "t1", "assetId": "v1", "start": 6, "dur": 2, "srcIn": 0 },
+					{ "id": "i6", "track": "t1", "assetId": null, "start": 9, "dur": 1, "srcIn": 0, "fromTake": null },
+					{ "id": "i7", "track": "t1", "assetId": "removed", "start": 11, "dur": 1, "srcIn": 0 }
+				]
+			}
+		},
+		{
+			"name": "a list left empty is dropped with its key",
+			"doc": {
+				"assets": [],
+				"vrefTracks": [],
+				"vrefItems": [{ "id": "i1", "track": "t1", "assetId": null, "start": 0, "dur": 1, "srcIn": 0 }]
+			},
+			"expected": {}
+		},
+		{
+			"name": "items without tracks are dropped while valid tracks stay",
+			"doc": {
+				"assets": [],
+				"vrefTracks": [{ "id": "t1", "slot": 2, "name": "Sea", "role": "continuation" }],
+				"vrefItems": "nothing"
+			},
+			"expected": {
+				"vrefTracks": [{ "id": "t1", "slot": 2, "name": "Sea", "role": "continuation" }]
+			}
+		}
+	]
+}

@@ -1,0 +1,524 @@
+{
+	"engines": {
+		"wan": { "preset": "01KX47WANVIDEO0000000000TV", "model": null, "cloud": false, "audio_mux": false, "profiles": ["FL2VA"] },
+		"ltx": { "preset": "01KX47LTX25VIDEO00000000TV", "model": null, "cloud": false, "audio_mux": true, "profiles": ["FL2VA", "Ref2VA"] },
+		"h3": { "preset": "01KX47H3MINIMAX000000000VA", "model": null, "cloud": false, "audio_mux": true, "profiles": ["FL2VA", "Ref2VA", "Hybrid AV"] },
+		"cloud": { "preset": "01M3SV8HJTGT3JPPH2BA5MP6PR", "model": "cm-veo", "cloud": true, "audio_mux": false, "profiles": ["FL2VA"] }
+	},
+	"cases": [
+		{
+			"name": "an engine in FL2VA receives no reference itself and a shot leaves a global one out",
+			"doc": {
+				"engine": { "preset": "01KX47WANVIDEO0000000000TV", "model": null },
+				"direction": { "mode": "FL2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4 },
+					{ "id": "s2", "start": 4, "dur": 4, "referenceOverrides": { "exclude": ["g-b"] } },
+					{ "id": "s3", "start": 8, "dur": 4, "engine": { "preset": "01KX47LTX25VIDEO00000000TV", "model": null } }
+				],
+				"assets": [
+					{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } },
+					{ "id": "i2", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i2" } },
+					{ "id": "i3", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i3" } }
+				],
+				"references": [
+					{ "id": "g-a", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "g-b", "space": "identite", "type": "Style", "assetId": "i2", "role": "Style", "scope": { "type": "global" } },
+					{ "id": "o-s1", "space": "decors3d", "type": "Décor", "assetId": "i3", "role": "Décor", "scope": { "type": "shot", "shotId": "s1" } }
+				]
+			},
+			"expected": {
+				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s2": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": ["g-b"], "notCast": [] },
+				"s3": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] }
+			}
+		},
+		{
+			"name": "Ref2VA sends the references of its own shot first, then the global ones the shot keeps",
+			"doc": {
+				"engine": { "preset": "01KX47WANVIDEO0000000000TV", "model": null },
+				"direction": { "mode": "FL2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4 },
+					{ "id": "s2", "start": 4, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null, "profile": "Ref2VA" }, "referenceOverrides": { "exclude": ["g-b"] } }
+				],
+				"assets": [
+					{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } },
+					{ "id": "i2", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i2" } },
+					{ "id": "i3", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i3" } },
+					{ "id": "i4", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i4" } }
+				],
+				"references": [
+					{ "id": "g-a", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "g-b", "space": "identite", "type": "Style", "assetId": "i2", "role": "Style", "scope": { "type": "global" } },
+					{ "id": "o-s1", "space": "decors3d", "type": "Décor", "assetId": "i3", "role": "Décor", "scope": { "type": "shot", "shotId": "s1" } },
+					{ "id": "o-s2", "space": "decors3d", "type": "Décor", "assetId": "i4", "role": "Décor", "scope": { "type": "shot", "shotId": "s2" } }
+				]
+			},
+			"expected": {
+				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s2": { "layout": "refs", "ignoredLayout": false, "sent": ["g-a", "o-s2"], "trimmed": [], "mixed": [], "excluded": ["g-b"], "notCast": [] }
+			}
+		},
+		{
+			"name": "each kind of reference keeps within its limit, a picture sent twice goes once and a reference without a readable media is not sent",
+			"doc": {
+				"engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null },
+				"direction": { "mode": "Ref2VA" },
+				"clips": [{ "id": "s1", "start": 0, "dur": 4 }],
+				"assets": [
+					{ "id": "v1", "kind": "video", "origin": { "kind": "library", "itemId": "lib-v1" } },
+					{ "id": "v2", "kind": "video", "origin": { "kind": "library", "itemId": "lib-v2" } },
+					{ "id": "v3", "kind": "video", "origin": { "kind": "library", "itemId": "lib-v3" } },
+					{ "id": "v4", "kind": "video", "origin": { "kind": "library", "itemId": "lib-v4" } },
+					{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } },
+					{ "id": "raw", "kind": "image", "origin": null }
+				],
+				"references": [
+					{ "id": "g-v2", "space": "mouvement", "type": "Control video", "assetId": "v2", "role": "Mouvement", "scope": { "type": "global" } },
+					{ "id": "g-v3", "space": "mouvement", "type": "Control video", "assetId": "v3", "role": "Mouvement", "scope": { "type": "global" } },
+					{ "id": "g-v4", "space": "mouvement", "type": "Control video", "assetId": "v4", "role": "Mouvement", "scope": { "type": "global" } },
+					{ "id": "g-img", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "g-dup", "space": "identite", "type": "Style", "assetId": "i1", "role": "Style", "scope": { "type": "global" } },
+					{ "id": "g-none", "space": "identite", "type": "Personnage", "assetId": null, "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "g-raw", "space": "identite", "type": "Personnage", "assetId": "raw", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "o-v1", "space": "mouvement", "type": "Control video", "assetId": "v1", "role": "Mouvement", "scope": { "type": "shot", "shotId": "s1" } }
+				]
+			},
+			"expected": {
+				"s1": { "layout": "refs", "ignoredLayout": false, "sent": ["g-v2", "g-v3", "g-img", "g-dup", "o-v1"], "trimmed": ["g-v4"], "mixed": [], "excluded": [], "notCast": [] }
+			}
+		},
+		{
+			"name": "a sound is mixed onto the take by an engine that lays audio, guides MiniMax-H3 in Ref2VA, is ignored elsewhere, and the voice of a character is never mixed",
+			"doc": {
+				"engine": { "preset": "01KX47LTX25VIDEO00000000TV", "model": null },
+				"direction": { "mode": "FL2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4 },
+					{ "id": "s2", "start": 4, "dur": 4, "engine": { "preset": "01KX47WANVIDEO0000000000TV", "model": null } },
+					{ "id": "s3", "start": 8, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null, "profile": "Ref2VA" }, "cast": { "characters": ["lina"] } },
+					{ "id": "s4", "start": 12, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null } },
+					{ "id": "s5", "start": 16, "dur": 4, "engine": { "preset": "01M3SV8HJTGT3JPPH2BA5MP6PR", "model": "cm-veo" } }
+				],
+				"assets": [
+					{ "id": "a-rain", "kind": "audio", "origin": { "kind": "library", "itemId": "lib-rain" } },
+					{ "id": "a-voice", "kind": "audio", "origin": { "kind": "library", "itemId": "lib-voice" } },
+					{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } }
+				],
+				"references": [
+					{ "id": "g-rain", "space": "son", "type": "Ambiance", "assetId": "a-rain", "role": "Son", "scope": { "type": "global" } },
+					{ "id": "g-voice", "space": "son", "type": "Voix", "assetId": "a-voice", "role": "Son", "scope": { "type": "global" } },
+					{ "id": "g-img", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } }
+				],
+				"bible": {
+					"characters": [{ "id": "lina", "label": "Lina", "text": "a dock worker", "props": "", "references": ["g-img"], "voiceRef": "g-voice" }],
+					"places": []
+				}
+			},
+			"expected": {
+				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": ["g-rain"], "excluded": [], "notCast": ["g-img"] },
+				"s2": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["g-img"] },
+				"s3": { "layout": "refs", "ignoredLayout": false, "sent": ["g-rain", "g-voice", "g-img"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s4": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": ["g-rain"], "excluded": [], "notCast": ["g-img"] },
+				"s5": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["g-img"] }
+			}
+		},
+		{
+			"name": "a shot's own words for its references are sent in the layout of its engine and ignored in another one",
+			"doc": {
+				"engine": { "preset": "01KX47WANVIDEO0000000000TV", "model": null },
+				"direction": { "mode": "FL2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4, "referencePrompt": { "layout": "subjects", "parts": { "subject_definitions": "<Subject 1> is a woman." }, "base": { "subject_definitions": "" } } },
+					{ "id": "s2", "start": 4, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null }, "referencePrompt": { "layout": "subjects", "parts": { "subject_definitions": "<Subject 1> is a woman." }, "base": { "subject_definitions": "" } } },
+					{ "id": "s3", "start": 8, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null, "profile": "Ref2VA" }, "referencePrompt": { "layout": "subjects", "parts": { "subject_definitions": "<Subject 1> is a woman." }, "base": { "subject_definitions": "" } } },
+					{ "id": "s4", "start": 12, "dur": 4, "referencePrompt": { "layout": "cast", "parts": { "cast": "A woman in a raincoat." }, "base": { "cast": "" } } },
+					{ "id": "s5", "start": 16, "dur": 4, "engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null, "profile": "Hybrid AV" } }
+				],
+				"assets": [{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } }],
+				"references": [{ "id": "o-s3", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "shot", "shotId": "s3" } }]
+			},
+			"expected": {
+				"s1": { "layout": "cast", "ignoredLayout": true, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s2": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s3": { "layout": "refs", "ignoredLayout": true, "sent": ["o-s3"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s4": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s5": { "layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] }
+			}
+		},
+		{
+			"name": "a shot whose engine cannot run its profile sends nothing",
+			"doc": {
+				"engine": { "preset": "01KX47WANVIDEO0000000000TV", "model": null },
+				"direction": { "mode": "FL2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4 },
+					{ "id": "s2", "start": 4, "dur": 4, "engine": { "profile": "Ref2VA" } }
+				],
+				"assets": [{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } }],
+				"references": [{ "id": "g-a", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } }]
+			},
+			"expected": {
+				"s1": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [] },
+				"s2": { "blocked": true }
+			}
+		},
+		{
+			"name": "a motion track sends a Ref2VA shot the start of what lies under it, 56 frames by default",
+			"doc": {
+				"engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null},
+				"direction": {"mode": "Ref2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 4}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}}
+				],
+				"references": [],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion"}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 4, "srcIn": 0}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [0, 2.333]}}
+			}
+		},
+		{
+			"name": "a reference video track is ignored by every engine and profile other than Ref2VA",
+			"doc": {
+				"engine": {"preset": "01KX47WANVIDEO0000000000TV", "model": null},
+				"direction": {"mode": "FL2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 4},
+					{"id": "s2", "start": 4, "dur": 4, "engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null}},
+					{"id": "s3", "start": 8, "dur": 4, "engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null, "profile": "Hybrid AV"}},
+					{"id": "s4", "start": 12, "dur": 4, "engine": {"preset": "01M3SV8HJTGT3JPPH2BA5MP6PR", "model": "cm-veo"}}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}}
+				],
+				"references": [],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion"}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 16, "srcIn": 0}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
+				"s2": {"layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
+				"s3": {"layout": "subjects", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
+				"s4": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}}
+			}
+		},
+		{
+			"name": "three videos of the shot fill the budget, so the track is trimmed",
+			"doc": {
+				"engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null},
+				"direction": {"mode": "Ref2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 4}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}},
+					{"id": "v2", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v2"}},
+					{"id": "v3", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v3"}},
+					{"id": "v4", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v4"}}
+				],
+				"references": [
+					{"id": "o1", "space": "mouvement", "type": "Control video", "assetId": "v1", "role": "Mouvement", "scope": {"type": "shot", "shotId": "s1"}},
+					{"id": "o2", "space": "mouvement", "type": "Control video", "assetId": "v2", "role": "Mouvement", "scope": {"type": "shot", "shotId": "s1"}},
+					{"id": "o3", "space": "mouvement", "type": "Control video", "assetId": "v3", "role": "Mouvement", "scope": {"type": "shot", "shotId": "s1"}}
+				],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion"}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v4", "start": 0, "dur": 4, "srcIn": 0}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["o1", "o2", "o3"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [1], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}}
+			}
+		},
+		{
+			"name": "the videos of the shot go first, then the tracks in slot order, then the videos of the project",
+			"doc": {
+				"engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null},
+				"direction": {"mode": "Ref2VA"},
+				"clips": [
+					{"id": "s1", "start": 2, "dur": 5}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}},
+					{"id": "v2", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v2"}},
+					{"id": "v3", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v3"}},
+					{"id": "v4", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v4"}}
+				],
+				"references": [
+					{"id": "g1", "space": "mouvement", "type": "Control video", "assetId": "v1", "role": "Mouvement", "scope": {"type": "global"}},
+					{"id": "o1", "space": "mouvement", "type": "Control video", "assetId": "v2", "role": "Mouvement", "scope": {"type": "shot", "shotId": "s1"}}
+				],
+				"vrefTracks": [
+					{"id": "t2", "slot": 2, "name": "Track 2", "role": "motion"},
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion"}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v3", "start": 0, "dur": 10, "srcIn": 0},
+					{"id": "i2", "track": "t2", "assetId": "v4", "start": 2, "dur": 3, "srcIn": 1.5}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["o1"], "trimmed": ["g1"], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [1, 2], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [2, 4.333], "2": [2, 4.333]}}
+			}
+		},
+		{
+			"name": "a shot that leaves a track out does not send it and says nothing, whatever its engine",
+			"doc": {
+				"engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null},
+				"direction": {"mode": "Ref2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 4, "referenceOverrides": {"excludeVrefs": ["t1"]}},
+					{"id": "s2", "start": 4, "dur": 4, "engine": {"preset": "01KX47WANVIDEO0000000000TV", "model": null, "profile": "FL2VA"}, "referenceOverrides": {"excludeVrefs": ["t1"]}}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}},
+					{"id": "i1", "kind": "image", "origin": {"kind": "library", "itemId": "lib-i1"}}
+				],
+				"references": [
+					{"id": "f1", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": {"type": "shot", "shotId": "s1"}}
+				],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion"}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 8, "srcIn": 0}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [1], "off": []}, "windows": {}},
+				"s2": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [1], "off": []}, "windows": {}}
+			}
+		},
+		{
+			"name": "a continuation track sends what lies just before the shot, and a window under 56 frames is short",
+			"doc": {
+				"engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null},
+				"direction": {"mode": "Ref2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 4, "engine": {"preset": "01KX47WANVIDEO0000000000TV", "model": null, "profile": "FL2VA"}},
+					{"id": "s2", "start": 4, "dur": 4},
+					{"id": "s3", "start": 8, "dur": 4}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}},
+					{"id": "v2", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v2"}},
+					{"id": "i1", "kind": "image", "origin": {"kind": "library", "itemId": "lib-i1"}}
+				],
+				"references": [
+					{"id": "f3", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": {"type": "shot", "shotId": "s3"}}
+				],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "continuation"}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 4, "srcIn": 0},
+					{"id": "i2", "track": "t1", "assetId": "v2", "start": 7, "dur": 1, "srcIn": 0}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}},
+				"s2": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [1.667, 4]}},
+				"s3": {"layout": "refs", "ignoredLayout": false, "sent": ["f3"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [1], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {}}
+			}
+		},
+		{
+			"name": "a disabled track is sent nowhere and says nothing",
+			"doc": {
+				"engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null},
+				"direction": {"mode": "Ref2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 4},
+					{"id": "s2", "start": 4, "dur": 4, "engine": {"preset": "01KX47WANVIDEO0000000000TV", "model": null, "profile": "FL2VA"}}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}},
+					{"id": "i1", "kind": "image", "origin": {"kind": "library", "itemId": "lib-i1"}}
+				],
+				"references": [
+					{"id": "f1", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": {"type": "shot", "shotId": "s1"}}
+				],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion", "off": true}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 8, "srcIn": 0}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": [1]}, "windows": {}},
+				"s2": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": [1]}, "windows": {}}
+			}
+		},
+		{
+			"name": "the parts of a track are put end to end without the gaps, within the seconds the track sets",
+			"doc": {
+				"engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null},
+				"direction": {"mode": "Ref2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 6}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}},
+					{"id": "v2", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v2"}}
+				],
+				"references": [],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion", "seconds": 4}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 1.5, "srcIn": 0},
+					{"id": "i2", "track": "t1", "assetId": "v2", "start": 2, "dur": 2, "srcIn": 0.5}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [1], "trimmed": [], "short": [], "missing": [], "ignored": [], "excluded": [], "off": []}, "windows": {"1": [0, 3.542]}}
+			}
+		},
+		{
+			"name": "a track whose videos can no longer be read is not sent",
+			"doc": {
+				"engine": {"preset": "01KX47H3MINIMAX000000000VA", "model": null},
+				"direction": {"mode": "Ref2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 4}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": null},
+					{"id": "i1", "kind": "image", "origin": {"kind": "library", "itemId": "lib-i1"}}
+				],
+				"references": [
+					{"id": "f1", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": {"type": "shot", "shotId": "s1"}}
+				],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion"}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 4, "srcIn": 0}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "refs", "ignoredLayout": false, "sent": ["f1"], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [1], "ignored": [], "excluded": [], "off": []}, "windows": {}}
+			}
+		},
+		{
+			"name": "a shot whose engine cannot run its profile sends no track",
+			"doc": {
+				"engine": {"preset": "01KX47WANVIDEO0000000000TV", "model": null},
+				"direction": {"mode": "FL2VA"},
+				"clips": [
+					{"id": "s1", "start": 0, "dur": 4},
+					{"id": "s2", "start": 4, "dur": 4, "engine": {"profile": "Ref2VA"}}
+				],
+				"assets": [
+					{"id": "v1", "kind": "video", "origin": {"kind": "library", "itemId": "lib-v1"}}
+				],
+				"references": [],
+				"vrefTracks": [
+					{"id": "t1", "slot": 1, "name": "Track 1", "role": "motion"}
+				],
+				"vrefItems": [
+					{"id": "i1", "track": "t1", "assetId": "v1", "start": 0, "dur": 8, "srcIn": 0}
+				]
+			},
+			"expected": {
+				"s1": {"layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": [], "tracks": {"sent": [], "trimmed": [], "short": [], "missing": [], "ignored": [1], "excluded": [], "off": []}, "windows": {}},
+				"s2": {"blocked": true}
+			}
+		},
+		{
+			"name": "the cast chooses the pictures: a shot sends the pictures of the cards it casts whatever their scope, its own first, and not a global picture of a card it does not cast",
+			"doc": {
+				"engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null },
+				"direction": { "mode": "Ref2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4, "cast": { "characters": ["fisher"], "place": "quay" } },
+					{ "id": "s2", "start": 4, "dur": 4, "cast": { "characters": ["cyclist"] } },
+					{ "id": "s3", "start": 8, "dur": 4 },
+					{ "id": "s4", "start": 12, "dur": 4, "engine": { "preset": "01KX47WANVIDEO0000000000TV", "model": null, "profile": "FL2VA" }, "cast": { "characters": ["fisher"] } }
+				],
+				"assets": [
+					{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } },
+					{ "id": "i2", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i2" } },
+					{ "id": "i3", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i3" } },
+					{ "id": "i4", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i4" } },
+					{ "id": "i5", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i5" } }
+				],
+				"references": [
+					{ "id": "f-face", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "f-body", "space": "identite", "type": "Personnage", "assetId": "i2", "role": "Identité", "scope": { "type": "shot", "shotId": "s2" } },
+					{ "id": "c-face", "space": "identite", "type": "Personnage", "assetId": "i3", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "q-pic", "space": "decors3d", "type": "Décor", "assetId": "i4", "role": "Décor", "scope": { "type": "global" } },
+					{ "id": "g-style", "space": "identite", "type": "Style", "assetId": "i5", "role": "Style", "scope": { "type": "global" } }
+				],
+				"bible": {
+					"characters": [
+						{ "id": "fisher", "label": "Fisherman", "text": "an old fisherman", "props": "", "references": ["f-face", "f-body"] },
+						{ "id": "cyclist", "label": "Cyclist", "text": "a young cyclist", "props": "", "references": ["c-face"] }
+					],
+					"places": [{ "id": "quay", "label": "Quay", "text": "a stone quay", "references": ["q-pic"] }]
+				}
+			},
+			"expected": {
+				"s1": { "layout": "refs", "ignoredLayout": false, "sent": ["f-face", "f-body", "q-pic", "g-style"], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["c-face"] },
+				"s2": { "layout": "refs", "ignoredLayout": false, "sent": ["f-body", "c-face", "g-style"], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["f-face", "q-pic"] },
+				"s3": { "layout": "refs", "ignoredLayout": false, "sent": ["g-style"], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["f-face", "c-face", "q-pic"] },
+				"s4": { "layout": "cast", "ignoredLayout": false, "sent": [], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["c-face", "q-pic"] }
+			}
+		},
+		{
+			"name": "a shot leaves out a picture of a card it casts, even one attached to another shot, and a picture linked to two cards goes when one of them is cast",
+			"doc": {
+				"engine": { "preset": "01KX47H3MINIMAX000000000VA", "model": null },
+				"direction": { "mode": "Ref2VA" },
+				"clips": [
+					{ "id": "s1", "start": 0, "dur": 4, "cast": { "characters": ["fisher"] }, "referenceOverrides": { "exclude": ["f-body", "g-style"] } },
+					{ "id": "s2", "start": 4, "dur": 4, "cast": { "characters": ["cyclist"] }, "referenceOverrides": { "exclude": ["c-face"] } },
+					{ "id": "s3", "start": 8, "dur": 4 }
+				],
+				"assets": [
+					{ "id": "i1", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i1" } },
+					{ "id": "i2", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i2" } },
+					{ "id": "i3", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i3" } },
+					{ "id": "i4", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i4" } },
+					{ "id": "i5", "kind": "image", "origin": { "kind": "library", "itemId": "lib-i5" } }
+				],
+				"references": [
+					{ "id": "f-face", "space": "identite", "type": "Personnage", "assetId": "i1", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "f-body", "space": "identite", "type": "Personnage", "assetId": "i2", "role": "Identité", "scope": { "type": "shot", "shotId": "s3" } },
+					{ "id": "c-face", "space": "identite", "type": "Personnage", "assetId": "i3", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "duo", "space": "identite", "type": "Personnage", "assetId": "i4", "role": "Identité", "scope": { "type": "global" } },
+					{ "id": "g-style", "space": "identite", "type": "Style", "assetId": "i5", "role": "Style", "scope": { "type": "global" } }
+				],
+				"bible": {
+					"characters": [
+						{ "id": "fisher", "label": "Fisherman", "text": "an old fisherman", "props": "", "references": ["f-face", "f-body", "duo"] },
+						{ "id": "cyclist", "label": "Cyclist", "text": "a young cyclist", "props": "", "references": ["c-face", "duo"] },
+						{ "id": "nameless", "label": "", "text": "a card without a label", "props": "", "references": ["g-style"] }
+					],
+					"places": []
+				}
+			},
+			"expected": {
+				"s1": { "layout": "refs", "ignoredLayout": false, "sent": ["f-face", "duo"], "trimmed": [], "mixed": [], "excluded": ["f-body", "g-style"], "notCast": ["c-face"] },
+				"s2": { "layout": "refs", "ignoredLayout": false, "sent": ["duo", "g-style"], "trimmed": [], "mixed": [], "excluded": ["c-face"], "notCast": ["f-face"] },
+				"s3": { "layout": "refs", "ignoredLayout": false, "sent": ["f-body", "g-style"], "trimmed": [], "mixed": [], "excluded": [], "notCast": ["f-face", "c-face", "duo"] }
+			}
+		}
+	]
+}

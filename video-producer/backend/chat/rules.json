@@ -1,0 +1,59 @@
+{
+  "flags": "i",
+  "conflicts": {
+    "fr": [
+      {
+        "id": "noNeon",
+        "global": "aucun n[ée]on|pas de n[ée]on|sans n[ée]on",
+        "local": "n[ée]on"
+      },
+      {
+        "id": "noText",
+        "global": "aucun texte|sans texte",
+        "local": "\\btexte\\b|sous-titre|logo"
+      },
+      {
+        "id": "naturalColors",
+        "global": "couleurs naturelles",
+        "local": "monochrome|noir et blanc|fluo"
+      },
+      {
+        "id": "stableCamera",
+        "global": "cam[ée]ra stable|lente",
+        "local": "cam[ée]ra (à l’épaule|tremblée)|rapide|frénétique"
+      }
+    ],
+    "en": [
+      {
+        "id": "noNeon",
+        "global": "\\bno neons?\\b|without neons?",
+        "local": "\\bneons?\\b"
+      },
+      {
+        "id": "noText",
+        "global": "\\bno (on-screen )?text\\b|without text",
+        "local": "\\btext\\b|subtitles?|\\blogo"
+      },
+      {
+        "id": "naturalColors",
+        "global": "natural colou?rs",
+        "local": "monochrome|black and white|black-and-white|fluo|fluorescent"
+      },
+      {
+        "id": "stableCamera",
+        "global": "(steady|stable) camera|\\bslow\\b",
+        "local": "handheld|shaky camera|\\bfast\\b|\\brapid\\b|frantic"
+      }
+    ]
+  },
+  "cameraWords": {
+    "fr": "travelling|survol|panoramique|orbite|arc de cam|dolly|zoom|élévation|plan fixe|mouvement fluide|déplacement latéral",
+    "en": "tracking shot|travelling|flyover|fly-over|\\bpan\\b|panning|orbit|camera arc|dolly|zoom|crane|static shot|fluid movement|lateral move"
+  },
+  "messages": {
+    "noNeon": "The global direction excludes neon lights.",
+    "noText": "The global direction forbids text and logos in the picture.",
+    "naturalColors": "The global direction asks for natural colors.",
+    "stableCamera": "The global direction asks for a slow, steady camera."
+  }
+}

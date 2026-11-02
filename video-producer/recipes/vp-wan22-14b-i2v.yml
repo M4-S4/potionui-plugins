@@ -1,0 +1,189 @@
+schema_version: 1
+id: "vp-wan22-14b-i2v"
+version: 1
+name: "Wan 2.2 14B image to video"
+engine: "native"
+category: "video"
+summary: "Complete the Wan 2.1 / 2.2 preset with its image-to-video expert pair, so Video Producer can start a shot from its first frame."
+description: >
+  Installs the core Wan 2.1 / 2.2 preset on the native engine and makes sure the six files of its 14B
+  text-to-video and image-to-video models are available: both fp8 expert pairs, the fp8 UMT5-XXL text
+  encoder and the Wan 2.1 VAE, about 64 GB together, of which the image-to-video pair is 28.6 GB. The
+  first generation is a short text-to-video check; image to video runs when Video Producer binds a
+  shot's first frame. Weights: Apache-2.0.
+
+plugins:
+  - id: "huggingface-provider"
+    reason: >
+      Resolves every file from Hugging Face by its exact repository path; the sha256 of each artifact
+      verifies the download.
+  - id: "video-producer"
+    reason: "Ships this recipe and the hardware-tier presets it installs."
+
+backend:
+  engine: "native"
+
+artifacts:
+  - id: "wan22-t2v-high"
+    kind: "diffusion_model"
+    model_type: "diffusion_model"
+    filename: "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
+    display_name: "Wan 2.2 14B t2v DiT - high-noise expert (fp8-scaled)"
+    required: true
+    size_bytes: 14293923632
+    checksum:
+      algorithm: "sha256"
+      value: "cad711ae211c8b23455ec68cd6a190a33a3d874234a77eb57266d73f8f0e6c9f"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
+  - id: "wan22-t2v-low"
+    kind: "diffusion_model"
+    model_type: "diffusion_model"
+    filename: "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
+    display_name: "Wan 2.2 14B t2v DiT - low-noise expert (fp8-scaled)"
+    required: true
+    size_bytes: 14293923632
+    checksum:
+      algorithm: "sha256"
+      value: "e71b96d7c82e638694c5e7fb98fac4bfb0e4ddc5fbbb4b1df40da8f0f1278a97"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
+  - id: "wan22-i2v-high"
+    kind: "diffusion_model"
+    model_type: "diffusion_model"
+    filename: "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+    display_name: "Wan 2.2 14B i2v DiT - high-noise expert (fp8-scaled)"
+    required: true
+    size_bytes: 14294742832
+    checksum:
+      algorithm: "sha256"
+      value: "6122e79d55e0f235698d11d657f3b196c5273c830da00b2b013c5a048d5e6a42"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+  - id: "wan22-i2v-low"
+    kind: "diffusion_model"
+    model_type: "diffusion_model"
+    filename: "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
+    display_name: "Wan 2.2 14B i2v DiT - low-noise expert (fp8-scaled)"
+    required: true
+    size_bytes: 14294742832
+    checksum:
+      algorithm: "sha256"
+      value: "5471a457b6ac404202a5fbe6c11595a3d5641fc766b00f38763f72303fffc21e"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
+  - id: "umt5-text-encoder"
+    kind: "text_encoder"
+    model_type: "text_encoder"
+    filename: "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    display_name: "UMT5-XXL text encoder (fp8-scaled)"
+    required: true
+    size_bytes: 6735906897
+    checksum:
+      algorithm: "sha256"
+      value: "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - id: "wan21-vae"
+    kind: "vae"
+    model_type: "vae"
+    filename: "wan_2.1_vae.safetensors"
+    display_name: "Wan 2.1 VAE"
+    required: true
+    size_bytes: 253815318
+    checksum:
+      algorithm: "sha256"
+      value: "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/vae/wan_2.1_vae.safetensors"
+
+presets:
+  - preset_id: "01KX47WANVIDEO0000000000TV"
+    path_hint: "marketplace/Wan"
+    assign_to_owner: true
+
+smoke:
+  preset_id: "01KX47WANVIDEO0000000000TV"
+  mode: "video"
+  timeout_seconds: 600
+  seed: 12345
+  form:
+    resolution: "480x832"
+    steps: 6
+    cfg: 1
+    sampler: "euler"
+    expert_boundary: 0.875
+    video_director:
+      schema_version: 1
+      mode: "t2v"
+      settings:
+        fps: 16
+        duration: 1
+        resolution: "480x832"
+        seed: 12345
+      segments:
+        - id: "shot-1"
+          prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+          negative_prompt: ""
+      media: []
+
+steps:
+  - key: "plugins.ensure"
+    kind: "plugins.ensure"
+    title: "Enable required plugins"
+    params:
+      plugin_ids: ["huggingface-provider"]
+  - key: "backend.ensure"
+    kind: "backend.ensure"
+    title: "Prepare the native backend"
+    params:
+      engine: "native"
+  - key: "models.index"
+    kind: "models.index"
+    title: "Find models you already have"
+    params:
+      engine: "native"
+  - key: "artifacts.plan"
+    kind: "artifacts.plan"
+    title: "Plan required downloads"
+    params:
+      artifact_ids: ["wan22-t2v-high", "wan22-t2v-low", "wan22-i2v-high", "wan22-i2v-low", "umt5-text-encoder", "wan21-vae"]
+  - key: "artifacts.fetch"
+    kind: "artifacts.fetch"
+    title: "Download the Wan 2.2 14B text-to-video and image-to-video files"
+    params:
+      artifact_ids: ["wan22-t2v-high", "wan22-t2v-low", "wan22-i2v-high", "wan22-i2v-low", "umt5-text-encoder", "wan21-vae"]
+  - key: "models.index.downloads"
+    kind: "models.index"
+    title: "Register downloaded models"
+    params:
+      engine: "native"
+  - key: "preset.ensure"
+    kind: "preset.ensure"
+    title: "Install and assign the Wan 2.1 / 2.2 preset"
+    params:
+      preset_id: "01KX47WANVIDEO0000000000TV"
+  - key: "generation.smoke"
+    kind: "generation.smoke"
+    title: "Run a first real generation"
+    params:
+      preset_id: "01KX47WANVIDEO0000000000TV"
+      mode: "video"
