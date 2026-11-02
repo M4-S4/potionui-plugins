@@ -11,7 +11,7 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 
 `model-browser/` and `deepseek-provider/` are older copies. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. They are in neither the catalogue nor the CI.
 
-The repository also holds `variants/` (design variants of Model Browser), `upstream/` (notes and pull request texts written for PotionUI) and `PLAN-review.md` (an earlier review of the Model Browser plan).
+The repository also holds `variants/` (design variants of Model Browser).
 
 ## Layout
 
@@ -106,4 +106,4 @@ Preset Editor is not in the CI yet.
 
 ## License
 
-GPL-3.0, as each plugin's manifest declares.
+GPL-3.0, as each plugin's manifest declares; the text is in `LICENSE`.
