@@ -1,0 +1,808 @@
+import { formatNumber, t } from '../i18n/index.svelte.js';
+import { emptyDoc, migrate, newAsset, newClip, promptLanguageOf } from './starter.js';
+import { confirm, toast as hostToast } from './host.js';
+import { ulid } from './ulid.js';
+import { speedOf } from './cadence.js';
+import { resetTakes, takeStore } from './takes.svelte.js';
+import { compileRules, conflictIds, conflictRule } from './rules.js';
+import { MAX_SLICES, SLICE_SECONDS, joined, laneCode, laneFor, laneItemCount, newLaneId, newSound, removeLane, shotSlices, sliceItem, sliceLength } from './tracks.js';
+import { joinPlan, setReferenceLane } from './sound.js';
+import { isGlobal, shotNumberAt, touch } from './shots.js';
+import { setCast } from './bible.js';
+import { byPhrases, insertIndex, musicParts, onMusic } from './band.js';
+import { promptShot, reviewPickOf, viewOf, viewShot, witnessOf } from './director.js';
+import { picking, pruned } from './picking.js';
+import { same } from './merge.js';
+import { citingShots, removeVrefTrack, trackOf, vrefLabel } from './vreftracks.js';
+import { viewport } from './viewport.svelte.js';
+import { isPlayer } from './workspaces.js';
+import sharedRules from './rules.json';
+
+export { newAsset, newClip };
+
+export const doc = $state(emptyDoc(t));
+
+export const ui = $state({
+	workspace: 'storyboard',
+	directorView: null,
+	reviewFilter: null,
+	bibleCard: null,
+	witness: null,
+	issue: null,
+	reveal: null,
+	vrefField: null,
+	vrefSound: false,
+	dragTake: null,
+	reviewPick: null,
+	selectedIn: null,
+	refSpace: 'all',
+	sidebarOpen: !viewport.narrow,
+	inspectorOpen: !viewport.narrow && (typeof window === 'undefined' || window.innerWidth >= 1360),
+	bottomView: 'timeline',
+	selection: null,
+	picked: [],
+	playhead: 1.6,
+	playing: false,
+	loop: false,
+	pxPerSec: 34,
+	snapping: true,
+	sliceSeconds: SLICE_SECONDS,
+	tool: 'select',
+	range: null,
+	consoleH: typeof window === 'undefined' ? 420 : Math.min(window.innerHeight - 370, Math.max(330, Math.round(window.innerHeight * 0.56))),
+	storyH: typeof window === 'undefined' ? 260 : Math.max(200, Math.round(window.innerHeight * 0.29)),
+	timelineH: typeof window === 'undefined' ? 320 : Math.min(420, Math.max(200, Math.round(window.innerHeight * (window.innerHeight < 820 ? 0.34 : 0.4)))),
+	monitorVol: 0.8,
+	muted: false,
+	guides: false,
+	drag: null,
+	preview: null,
+	compare: null,
+	modal: null,
+	menuOpen: null,
+	deckDrawer: false,
+	paletteOpen: false,
+	toasts: [],
+	dirty: false,
+	hostModal: false,
+	singleKeyShortcuts: true,
+	previewQuality: 'balanced',
+	mediaQuery: '',
+	mediaCollection: 'all',
+	mixerFilter: 'Tous',
+	production: {
+		target: 'clip',
+		state: 'ready',
+		progress: 0,
+		running: 0,
+		step: '',
+		lastCount: 0,
+		startedAt: null,
+		lastSeconds: null,
+		failed: 0,
+		failedVariant: null,
+		failedTake: null,
+		quality: 'draft'
+	},
+	inspectorTab: 'video',
+	hideRejected: false,
+	quota: null,
+	storyProposal: null,
+	storyView: 'band',
+	storyOpen: false,
+	storyTab: 'cut',
+	storyMethod: 'phrases',
+	storyAvg: 4,
+	storyAt: 'end',
+	seamCompare: null,
+	reviewMonitor: false,
+	me: null,
+	isAdmin: false
+});
+
+export function applyMe(me) {
+	ui.me = {
+		locale: me?.locale ?? null,
+		isAdmin: me?.isAdmin === true,
+		quota: me?.quota ?? null,
+		version: me?.version ?? null,
+		lastProjectId: me?.lastProjectId ?? null,
+		engines: me?.engines ?? [],
+		presets: me?.presets ?? [],
+		keyframePresets: me?.keyframePresets ?? [],
+		features: me?.features ?? { upscaler: false },
+		upscaleTargets: me?.upscaleTargets ?? [],
+		ffmpeg: me?.ffmpeg ?? null,
+		settings: me?.settings ?? { draftResolution: null, maxParallelJobs: null }
+	};
+	ui.isAdmin = ui.me.isAdmin;
+	if (ui.me.quota?.limit > 0) ui.quota = { used: ui.me.quota.used, limit: ui.me.quota.limit };
+}
+
+export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+export const round = (v, s = 0.1) => +(Math.round(v / s) * s).toFixed(3);
+
+export const bandView = () => ui.workspace === 'storyboard' && ui.storyView === 'band';
+export const drawerMode = () => viewport.narrow && !isPlayer(ui.workspace);
+export const sidebarShown = () => ui.sidebarOpen && !bandView();
+
+export function closeDrawer() {
+	if (!drawerMode()) return false;
+	if (ui.inspectorOpen) ui.inspectorOpen = false;
+	else if (sidebarShown()) ui.sidebarOpen = false;
+	else return false;
+	return true;
+}
+
+export const directorView = () => viewOf(ui.directorView, takeStore.list);
+
+export function openDirector(view = null) {
+	ui.workspace = 'director';
+	if (view) ui.directorView = view;
+}
+
+export const witness = () => witnessOf(doc, ui.selection, ui.witness);
+
+export const directorShot = () => (ui.workspace === 'director' ? viewShot(directorView(), doc, ui.selection, ui.witness) : undefined);
+
+export const reviewPick = () => reviewPickOf(doc, takeStore.list, ui.reviewPick, ui.selection);
+
+export const generates = () => ui.workspace === 'director' || ui.workspace === 'storyboard';
+
+export const bottomKey = () => (ui.bottomView === 'console' ? 'consoleH' : ui.workspace === 'storyboard' ? 'storyH' : 'timelineH');
+
+export function asset(id) {
+	return id ? doc.assets?.find((a) => a.id === id) : undefined;
+}
+
+export function tc(sec, fps = 25) {
+	const s = Math.max(0, sec);
+	const f = Math.floor((s % 1) * fps + 1e-6);
+	const whole = Math.floor(s);
+	const p = (n) => String(n).padStart(2, '0');
+	return `${p(Math.floor(whole / 3600))}:${p(Math.floor((whole % 3600) / 60))}:${p(whole % 60)}:${p(f)}`;
+}
+export const secs = (v) => `${formatNumber(+v, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`;
+
+export function seqDuration() {
+	const ends = [...doc.clips.map((c) => c.start + c.dur), ...doc.audio.map((c) => c.start + c.dur), ...doc.titles.map((c) => c.start + c.dur)];
+	return Math.max(1, ...ends);
+}
+
+const past = $state([]);
+const future = $state([]);
+const restoreListeners = new Set();
+export function onRestore(listener) {
+	restoreListeners.add(listener);
+	return () => restoreListeners.delete(listener);
+}
+const addedListeners = new Set();
+export function onShotsAdded(listener) {
+	addedListeners.add(listener);
+	return () => addedListeners.delete(listener);
+}
+function shotsAdded(clips) {
+	for (const listener of addedListeners) listener(clips);
+}
+export const history = {
+	get canUndo() {
+		return past.length > 0;
+	},
+	get canRedo() {
+		return future.length > 0;
+	}
+};
+export function checkpoint() {
+	past.push(JSON.stringify($state.snapshot(doc)));
+	if (past.length > 100) past.shift();
+	future.length = 0;
+	ui.dirty = true;
+}
+function restore(json) {
+	const d = JSON.parse(json);
+	for (const k of Object.keys(doc)) if (!(k in d)) delete doc[k];
+	for (const k of Object.keys(d)) doc[k] = d[k];
+	if (ui.picked.length) ui.picked = pruned(doc.clips.map((c) => c.id), ui.picked);
+	for (const listener of restoreListeners) listener();
+}
+export function undo() {
+	if (!past.length) return;
+	future.push(JSON.stringify($state.snapshot(doc)));
+	restore(past.pop());
+	toast(t('lib.toast.undone'));
+}
+export function redo() {
+	if (!future.length) return;
+	past.push(JSON.stringify($state.snapshot(doc)));
+	restore(future.pop());
+	toast(t('lib.toast.redone'));
+}
+export function discardLast() {
+	if (past.length) restore(past.pop());
+}
+export function act(fn) {
+	checkpoint();
+	fn();
+}
+export function adopt(next) {
+	const known = new Set(doc.clips.map((c) => c.id));
+	act(() => {
+		for (const k of Object.keys(doc)) if (!(k in next)) delete doc[k];
+		for (const k of Object.keys(next)) if (!same($state.snapshot(doc[k]), next[k])) doc[k] = next[k];
+		shotsAdded(doc.clips.filter((c) => !known.has(c.id)));
+	});
+	if (ui.selection && !selected()) ui.selection = null;
+	for (const listener of restoreListeners) listener();
+}
+
+const HOST_LEVELS = { info: 'info', success: 'success', warning: 'warning', error: 'error' };
+const toastTimers = new Set();
+
+export function toast(message, level = 'info', action, hold = null) {
+	const duration = hold ?? 2800;
+	if (!action && hostToast(HOST_LEVELS[level] ?? 'info', message, duration)) return;
+	const id = ulid();
+	ui.toasts.push({ id, message, level, action });
+	const timer = setTimeout(() => {
+		toastTimers.delete(timer);
+		const i = ui.toasts.findIndex((x) => x.id === id);
+		if (i >= 0) ui.toasts.splice(i, 1);
+	}, duration);
+	toastTimers.add(timer);
+}
+
+const collections = { clip: 'clips', audio: 'audio', title: 'titles', prompt: 'prompts', frame: 'frames', marker: 'markers', reference: 'references', vref: 'vrefItems' };
+const LINKED = ['prompts', 'frames'];
+
+export function select(kind, id) {
+	ui.selectedIn = kind ? (ui.workspace === 'director' ? `director:${directorView()}` : ui.workspace) : null;
+	ui.reviewPick = null;
+	ui.selection = kind ? { kind, id } : null;
+	if (ui.picked.length) ui.picked = [];
+	if (kind && ui.workspace !== 'mixer' && !bandView() && !viewport.narrow) ui.inspectorOpen = true;
+}
+export function pickedClips() {
+	if (ui.picked.length < 2) return [];
+	const ids = new Set(ui.picked);
+	const clips = doc.clips.filter((c) => ids.has(c.id));
+	return clips.length < 2 ? [] : clips;
+}
+export const isPicked = (id) => ui.picked.length > 1 && ui.picked.includes(id);
+export function pickClip(id, mode) {
+	const order = doc.clips.map((c) => c.id);
+	const active = ui.selection?.kind === 'clip' ? ui.selection.id : null;
+	const next = picking(order, pruned(order, ui.picked), active, id, mode);
+	ui.selection = next.active ? { kind: 'clip', id: next.active } : null;
+	ui.picked = next.picked;
+	if (next.active && ui.workspace !== 'mixer' && !bandView() && !viewport.narrow) ui.inspectorOpen = true;
+}
+export function pickAll() {
+	if (!doc.clips.length) return;
+	const active = ui.selection?.kind === 'clip' && doc.clips.some((c) => c.id === ui.selection.id) ? ui.selection.id : doc.clips[0].id;
+	ui.selection = { kind: 'clip', id: active };
+	ui.picked = doc.clips.length > 1 ? doc.clips.map((c) => c.id) : [];
+}
+export function clearPicked() {
+	ui.picked = [];
+}
+export function selected() {
+	const s = ui.selection;
+	if (!s) return null;
+	if (s.kind === 'lane') return doc.lanes.find((l) => l.id === s.id) ?? null;
+	if (s.kind === 'vtrack') return trackOf(doc, s.id);
+	const list = doc[collections[s.kind]];
+	return list?.find((x) => x.id === s.id) ?? null;
+}
+export function listOf(kind) {
+	return doc[collections[kind]];
+}
+
+export const startOf = (item) => ('time' in item ? item.time : item.start);
+
+export function clipAt(time) {
+	return doc.clips.find((c) => time >= c.start && time < c.start + c.dur) ?? null;
+}
+export function shotIdAt(time) {
+	return clipAt(time)?.id ?? null;
+}
+export function relink(item) {
+	item.shotId = shotIdAt(startOf(item));
+}
+
+function linkedTo(shotId) {
+	return LINKED.flatMap((key) => doc[key].filter((x) => x.shotId === shotId));
+}
+function shiftLinked(shotId, delta) {
+	for (const item of linkedTo(shotId)) {
+		if ('time' in item) item.time = round(item.time + delta, 0.04);
+		else item.start = round(item.start + delta, 0.04);
+	}
+}
+function removeWhere(list, test) {
+	for (let i = list.length - 1; i >= 0; i--) if (test(list[i])) list.splice(i, 1);
+}
+function dropLinked(shotId) {
+	for (const key of LINKED) removeWhere(doc[key], (x) => x.shotId === shotId);
+	removeWhere(doc.references, (r) => r.scope?.type === 'shot' && r.scope.shotId === shotId);
+}
+
+export function relayout() {
+	const before = new Map(doc.clips.map((c) => [c.id, c.start]));
+	let at = 0;
+	for (const c of doc.clips) {
+		c.start = round(at, 0.04);
+		at += c.dur;
+	}
+	for (const c of doc.clips) {
+		const delta = c.start - (before.get(c.id) ?? c.start);
+		if (Math.abs(delta) > 1e-6) shiftLinked(c.id, delta);
+	}
+}
+
+export function deleteSelection() {
+	const s = ui.selection;
+	if (s?.kind === 'lane') return deleteLane(s.id);
+	if (s?.kind === 'vtrack') return deleteVrefTrack(s.id);
+	const picked = pickedClips();
+	if (picked.length) return deleteShots(picked);
+	if (!s) return;
+	const list = listOf(s.kind) ?? [];
+	const i = list.findIndex((x) => x.id === s.id);
+	if (i < 0) return;
+	act(() => {
+		const [removed] = list.splice(i, 1);
+		if (s.kind === 'vref' && !list.length) delete doc.vrefItems;
+		if (s.kind === 'clip') {
+			dropLinked(removed.id);
+			relayout();
+		}
+	});
+	ui.selection = null;
+	toast(t('lib.toast.deleted'), 'info', { label: t('shell.toast.undo'), run: undo });
+}
+
+function deleteShots(clips) {
+	act(() => {
+		for (const c of clips) {
+			doc.clips.splice(doc.clips.indexOf(c), 1);
+			dropLinked(c.id);
+		}
+		relayout();
+	});
+	ui.selection = null;
+	ui.picked = [];
+	toast(t('lib.toast.shotsDeleted', { count: clips.length }), 'info', { label: t('shell.toast.undo'), run: undo });
+}
+
+export function duplicateSelection() {
+	const s = ui.selection;
+	if (!s || s.kind === 'lane' || s.kind === 'vtrack' || s.kind === 'reference') return;
+	const list = listOf(s.kind);
+	const i = list.findIndex((x) => x.id === s.id);
+	if (i < 0) return;
+	const copy = JSON.parse(JSON.stringify($state.snapshot(list[i])));
+	copy.id = ulid();
+	act(() => {
+		if (s.kind === 'clip') {
+			list.splice(i + 1, 0, copy);
+			relayout();
+		} else if ('time' in copy) {
+			copy.time = round(copy.time + 1);
+			if ('shotId' in copy) relink(copy);
+			list.push(copy);
+		} else {
+			copy.start = round(copy.start + copy.dur);
+			if ('shotId' in copy) relink(copy);
+			list.push(copy);
+		}
+	});
+	select(s.kind, copy.id);
+	toast(t('lib.toast.duplicated'));
+}
+
+export function bladeAt(time = ui.playhead) {
+	const s = ui.selection;
+	if (s?.kind === 'audio') {
+		const a = doc.audio.find((x) => x.id === s.id);
+		if (a && time > a.start + 0.1 && time < a.start + a.dur - 0.1) {
+			act(() => {
+				const left = time - a.start;
+				const b = { ...$state.snapshot(a), id: ulid(), start: round(time, 0.04), dur: a.dur - left, srcIn: a.srcIn + left, fadeIn: 0 };
+				a.dur = left;
+				a.fadeOut = 0;
+				doc.audio.push(b);
+			});
+			return toast(t('lib.toast.audioSplit'));
+		}
+	}
+	const c = clipAt(time);
+	if (!c || time - c.start < 0.1 || c.start + c.dur - time < 0.1) return toast(t('lib.toast.splitOutside'), 'warning');
+	act(() => {
+		const left = time - c.start;
+		const i = doc.clips.indexOf(c);
+		const kept = round(left, 0.04);
+		const b = { ...$state.snapshot(c), id: ulid(), start: round(c.start + kept, 0.04), dur: round(c.dur - left, 0.04), srcIn: c.srcIn + left * speedOf(c), fadeIn: 0 };
+		c.dur = kept;
+		c.fadeOut = 0;
+		doc.clips.splice(i + 1, 0, b);
+		for (const item of linkedTo(c.id)) if (startOf(item) >= time) item.shotId = b.id;
+		relayout();
+	});
+	toast(t('lib.toast.shotSplit'));
+}
+
+function selectedAudio() {
+	const s = ui.selection;
+	return s?.kind === 'audio' ? (doc.audio.find((x) => x.id === s.id) ?? null) : null;
+}
+
+export function sliceAudio(seconds = ui.sliceSeconds) {
+	const a = selectedAudio();
+	if (!a) return toast(t('lib.toast.selectAudio'), 'warning');
+	const n = sliceLength(seconds);
+	const parts = sliceItem($state.snapshot(a), n);
+	if (parts === null) return toast(t('lib.toast.sliceTooMany', { dur: secs(n), max: MAX_SLICES }), 'warning');
+	if (!parts.length) return toast(t('lib.toast.sliceTooShort', { dur: secs(n) }), 'warning');
+	act(() => {
+		Object.assign(a, parts[0]);
+		doc.audio.splice(doc.audio.indexOf(a) + 1, 0, ...parts.slice(1));
+	});
+	toast(t('lib.toast.sliced', { count: parts.length, dur: secs(n) }));
+}
+
+export function sliceOnShots() {
+	const s = ui.selection;
+	const lane = s?.kind === 'lane' ? (doc.lanes.find((l) => l.id === s.id) ?? null) : null;
+	const items = lane ? doc.audio.filter((x) => x.lane === lane.id) : [selectedAudio()].filter(Boolean);
+	if (!lane && !items.length) return toast(t('lib.toast.selectAudioOrLane'), 'warning');
+	const planned = items.map((a) => ({ a, parts: shotSlices($state.snapshot(a), doc.clips) }));
+	const done = planned.filter((x) => x.parts?.length);
+	const skipped = planned.filter((x) => x.parts === null).length;
+	if (!done.length) return toast(skipped ? t('lib.toast.shotSliceTooMany', { max: MAX_SLICES }) : t('lib.toast.shotSliceNone'), 'warning');
+	act(() => {
+		for (const { a, parts } of done) {
+			Object.assign(a, parts[0]);
+			doc.audio.splice(doc.audio.indexOf(a) + 1, 0, ...parts.slice(1));
+		}
+	});
+	const slices = done.reduce((n, x) => n + x.parts.length, 0);
+	if (!lane) return toast(t('lib.toast.shotSliced', { count: slices }));
+	const params = { lane: laneCode(doc.lanes, lane.id), count: done.length, slices, max: MAX_SLICES };
+	toast(skipped ? t('lib.toast.shotSlicedLaneSkipped', params) : t('lib.toast.shotSlicedLane', params));
+}
+
+export function joinAudio() {
+	const a = selectedAudio();
+	if (!a) return toast(t('lib.toast.selectAudio'), 'warning');
+	const { chain, runs } = joinPlan(doc, a);
+	if (chain.length < 2) return toast(t('lib.toast.joinNone'), 'warning');
+	if (runs.length === chain.length) return toast(t('lib.toast.joinApart'), 'warning');
+	let kept = a;
+	act(() => {
+		for (const run of runs.filter((r) => r.length > 1)) {
+			const [first, ...rest] = run;
+			const merged = joined(run.map((x) => $state.snapshot(x)));
+			if (!('reference' in merged)) delete first.reference;
+			Object.assign(first, merged);
+			removeWhere(doc.audio, (x) => rest.includes(x));
+			if (rest.includes(a)) kept = first;
+		}
+	});
+	if (kept !== a) ui.selection = { kind: 'audio', id: kept.id };
+	toast(runs.length === 1 ? t('lib.toast.joined', { count: chain.length }) : t('lib.toast.joinedApart', { count: chain.length, items: runs.length }));
+}
+
+export function markerLabel(kind) {
+	if (kind === 'favori') return t('lib.default.favorite');
+	if (kind === 'marker') return t('lib.default.marker');
+	return t('lib.default.rejected');
+}
+
+export function addMarker(kind = 'marker') {
+	act(() => doc.markers.push({ id: ulid(), time: round(ui.playhead, 0.04), label: markerLabel(kind), kind }));
+	toast(t('lib.toast.markerAdded'));
+}
+
+export function addAssetToTimeline(assetId, at = null) {
+	const a = asset(assetId);
+	if (!a) return;
+	if (a.kind === 'audio') {
+		let laneId = null;
+		act(() => {
+			laneId = laneForRole(a.role ?? 'Musique').id;
+			doc.audio.push(newSound(assetId, laneId, round(at ?? ui.playhead, 0.04), a.srcDur));
+		});
+		toast(t('lib.toast.addedToLane', { name: a.name, lane: laneCode(doc.lanes, laneId) }));
+		return;
+	}
+	const c = newClip({ assetId, dur: Math.min(5, a.srcDur ?? 5), label: a.name, stage: a.generated ? a.quality : 'source' });
+	act(() => {
+		const at2 = at ?? ui.playhead;
+		let idx = doc.clips.findIndex((x) => at2 < x.start + x.dur / 2);
+		if (idx < 0) idx = doc.clips.length;
+		doc.clips.splice(idx, 0, c);
+		relayout();
+	});
+	select('clip', c.id);
+	toast(t('lib.toast.addedToCut', { name: a.name }));
+}
+
+function newPrompt(clip, text = '', strength = 75) {
+	return { id: ulid(), shotId: clip.id, start: clip.start, dur: clip.dur, strength, text };
+}
+
+export function promptOf(clip) {
+	if (!clip) return null;
+	return doc.prompts.find((p) => p.shotId === clip.id) ?? null;
+}
+
+export function promptEdited(prompt, before) {
+	if (!prompt?.shotId || String(prompt.text ?? '').trim() === String(before ?? '').trim()) return;
+	touch(doc.clips.find((c) => c.id === prompt.shotId));
+}
+
+export function addPrompt(start = ui.playhead, dur = 4) {
+	const p = { id: ulid(), shotId: shotIdAt(start), start: round(start, 0.04), dur, strength: 75, text: '' };
+	act(() => doc.prompts.push(p));
+	select('prompt', p.id);
+	ui.modal = { type: 'prompt', id: p.id, isNew: true };
+}
+
+export function addFrame(assetId = clipAt(ui.playhead)?.assetId ?? null, time = ui.playhead, role = 'Transition') {
+	const f = { id: ulid(), shotId: shotIdAt(time), time: round(time, 0.04), assetId, role, strength: 75 };
+	act(() => doc.frames.push(f));
+	select('frame', f.id);
+	toast(t('lib.toast.frameAdded'));
+}
+
+function newLane(role = 'Ambiance') {
+	const lane = {
+		id: newLaneId(),
+		name: t('lib.default.track', { n: doc.lanes.length + 1 }),
+		role,
+		vol: -6,
+		pan: 0,
+		mute: false,
+		solo: false,
+		sends: { R1: -60, D1: -60 },
+		inserts: [{ type: 'eq', on: false, low: 0, mid: 0, high: 0 }]
+	};
+	doc.lanes.push(lane);
+	return lane;
+}
+
+export function laneForRole(role) {
+	return laneFor(doc, role) ?? newLane(role);
+}
+
+export function newReferenceLane() {
+	newLane('Ambiance');
+	const lane = doc.lanes.at(-1);
+	setReferenceLane(lane, true);
+	return lane;
+}
+
+export function addAudioLane() {
+	act(() => newLane());
+	toast(t('lib.toast.laneAdded', { id: laneCode(doc.lanes, doc.lanes.at(-1).id) }));
+}
+
+let confirmingLane = false;
+
+export async function deleteLane(id) {
+	const lane = doc.lanes.find((l) => l.id === id);
+	if (!lane || confirmingLane) return false;
+	const code = laneCode(doc.lanes, id);
+	const count = laneItemCount(doc, id);
+	confirmingLane = true;
+	let ok = false;
+	try {
+		ok = await confirm({
+			title: t('lib.lane.deleteTitle', { lane: code }),
+			message: count ? t('lib.lane.deleteItems', { count, lane: code, name: lane.name }) : t('lib.lane.deleteEmpty', { lane: code, name: lane.name }),
+			variant: 'danger',
+			confirmLabel: t('lib.lane.deleteConfirm')
+		});
+	} finally {
+		confirmingLane = false;
+	}
+	if (!ok || !doc.lanes.some((l) => l.id === id)) return false;
+	let removed = 0;
+	act(() => (removed = removeLane(doc, id).items.length));
+	if (ui.selection && !selected()) ui.selection = null;
+	toast(removed ? t('lib.toast.laneDeleted', { count: removed, lane: code }) : t('lib.toast.laneDeletedEmpty', { lane: code }), 'info', { label: t('shell.toast.undo'), run: undo });
+	return true;
+}
+
+let confirmingTrack = false;
+
+export async function deleteVrefTrack(id) {
+	const track = trackOf(doc, id);
+	if (!track || confirmingTrack) return false;
+	const label = vrefLabel(track.slot);
+	const count = (doc.vrefItems ?? []).filter((item) => item.track === id).length;
+	const cited = citingShots(doc, track.slot);
+	const named = track.name ? `${label} · ${track.name}` : label;
+	const parts = [count ? t('lib.vref.deleteItems', { count, track: named }) : t('lib.vref.deleteEmpty', { track: named })];
+	if (cited.length) parts.push(t('lib.vref.deleteCited', { count: cited.length, label, shots: cited.map(shotNumber).join(', ') }));
+	parts.push(t('lib.vref.deleteSlot', { label }));
+	confirmingTrack = true;
+	let ok = false;
+	try {
+		ok = await confirm({ title: t('lib.vref.deleteTitle', { label }), message: parts.join(' '), variant: 'danger', confirmLabel: t('lib.vref.deleteConfirm') });
+	} finally {
+		confirmingTrack = false;
+	}
+	if (!ok || !trackOf(doc, id)) return false;
+	act(() => removeVrefTrack(doc, id));
+	if (ui.selection && !selected()) ui.selection = null;
+	toast(t('lib.toast.vrefDeleted', { label }), 'info', { label: t('shell.toast.undo'), run: undo });
+	return true;
+}
+
+export function productionRange() {
+	const p = ui.production;
+	if (p.target === 'range' && ui.range) return [ui.range.in, ui.range.out];
+	if (p.target === 'sequence') return [0, seqDuration()];
+	const shot = directorShot();
+	if (shot !== undefined) return shot ? [shot.start, shot.start + shot.dur] : [0, 0];
+	const sel = selected();
+	if (sel && 'start' in sel && 'dur' in sel && ui.selection.kind !== 'audio' && ui.selection.kind !== 'vref') return [sel.start, sel.start + sel.dur];
+	const c = clipAt(ui.playhead) ?? doc.clips[0];
+	return c ? [c.start, c.start + c.dur] : [0, 0];
+}
+export const overlaps = (s, d, [a, b]) => s < b && s + d > a;
+export function shotsIn(range) {
+	return doc.clips.filter((c) => overlaps(c.start, c.dur, range));
+}
+export function itemsOf(clips) {
+	const shots = new Set(clips.map((c) => c.id));
+	const near = (start, end) => clips.some((c) => start < c.start + c.dur && end > c.start);
+	return {
+		prompts: doc.prompts.filter((p) => (p.shotId ? shots.has(p.shotId) : near(p.start, p.start + p.dur))),
+		frames: doc.frames.filter((f) => (f.shotId ? shots.has(f.shotId) : clips.some((c) => f.time >= c.start && f.time <= c.start + c.dur))),
+		references: doc.references.filter((r) => isGlobal(r) || shots.has(r.scope.shotId))
+	};
+}
+export function itemsIn(range) {
+	const shots = new Set(shotsIn(range).map((c) => c.id));
+	const inRange = (item, byTime) => (item.shotId ? shots.has(item.shotId) : byTime);
+	return {
+		prompts: doc.prompts.filter((p) => inRange(p, overlaps(p.start, p.dur, range))),
+		frames: doc.frames.filter((f) => inRange(f, f.time >= range[0] && f.time <= range[1])),
+		references: doc.references.filter((r) => isGlobal(r) || shots.has(r.scope.shotId))
+	};
+}
+
+export function globalPrompt() {
+	const d = doc.direction;
+	return ['univers', 'personnages', 'photographie', 'palette', 'rythme']
+		.map((k) => d[k]?.trim())
+		.filter(Boolean)
+		.join(' ');
+}
+
+const rules = compileRules(sharedRules);
+const issueTexts = {
+	noNeon: () => t('lib.issue.noNeon'),
+	noText: () => t('lib.issue.noText'),
+	naturalColors: () => t('lib.issue.naturalColors'),
+	stableCamera: () => t('lib.issue.stableCamera')
+};
+export const ruleText = (id) => issueTexts[id]?.() ?? null;
+
+export function promptIssues(p) {
+	if (!p) return [];
+	const g = globalPrompt();
+	const language = promptLanguageOf(doc.promptLanguage);
+	const out = [];
+	for (const id of conflictIds(rules, language, g, p.text)) out.push({ level: 'conflict', id, text: ruleText(id) ?? id });
+	if (!p.text.trim()) out.push({ level: 'missing', text: t('lib.issue.emptyPrompt') });
+	return out;
+}
+export function allIssues() {
+	return doc.prompts.flatMap((p) => promptIssues(p).map((i) => ({ ...i, prompt: p })));
+}
+
+export function issueRule(id) {
+	const rule = conflictRule(rules, promptLanguageOf(doc.promptLanguage), id);
+	return rule ? { global: rule.global, local: rule.local } : null;
+}
+
+export function followedIssue(clip) {
+	const followed = ui.issue;
+	if (!followed || !clip) return null;
+	const issue = allIssues().find((i) => i.id === followed.rule && i.prompt.id === followed.prompt);
+	return issue && promptShot(doc, issue.prompt)?.id === clip.id ? issue : null;
+}
+
+export function followIssue(issue) {
+	openDirector('direction');
+	const clip = promptShot(doc, issue?.prompt);
+	if (!clip) return;
+	ui.issue = { prompt: issue.prompt.id, rule: issue.id };
+	ui.witness = null;
+	select('clip', clip.id);
+	ui.reveal = clip.id;
+}
+
+export const sourceLength = (c) => asset(c?.assetId)?.srcDur ?? 60;
+export const clipLabel = (c) => c?.label || asset(c?.assetId)?.name || t('lib.default.clip');
+export const shotNumber = (c) => shotNumberAt(doc.clips.indexOf(c));
+
+export function fmtDuration(sec) {
+	if (sec < 60) return `${Math.max(1, Math.round(sec))} s`;
+	const m = Math.floor(sec / 60);
+	const r = Math.round(sec % 60);
+	return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min${r ? ` ${String(r).padStart(2, '0')}` : ''}`;
+}
+
+export function addShot(label = t('lib.default.shot'), prompt = '', dur = 4, after = null) {
+	const c = newClip({ label, dur });
+	act(() => {
+		const i = after ? doc.clips.findIndex((x) => x.id === after) + 1 : doc.clips.length;
+		doc.clips.splice(i, 0, c);
+		relayout();
+		if (prompt) doc.prompts.push(newPrompt(c, prompt));
+		shotsAdded([c]);
+	});
+	select('clip', c.id);
+	return c;
+}
+
+export function moveClip(from, to) {
+	if (from === to) return;
+	act(() => {
+		const [m] = doc.clips.splice(from, 1);
+		doc.clips.splice(to, 0, m);
+		relayout();
+	});
+}
+
+export function proposeShots(method = ui.storyMethod) {
+	const how = typeof method === 'string' ? method : ui.storyMethod;
+	ui.storyProposal = how === 'music' ? onMusic(doc.synopsis, musicParts(doc), { avg: ui.storyAvg }, doc.bible, ulid) : byPhrases(doc.synopsis, doc.bible, ulid);
+}
+export function acceptProposal(at = 'end') {
+	const list = (ui.storyProposal ?? []).filter((x) => x.keep);
+	if (!list.length) return;
+	const index = insertIndex(doc.clips, typeof at === 'string' ? at : 'end', ui.selection?.kind === 'clip' ? ui.selection.id : null);
+	const added = [];
+	act(() => {
+		for (const [j, sp] of list.entries()) {
+			const c = newClip({ label: sp.label, dur: sp.dur });
+			if (sp.cast) setCast(c, sp.cast);
+			doc.clips.splice(index + j, 0, c);
+			relayout();
+			doc.prompts.push(newPrompt(c, sp.prompt));
+			added.push(c);
+		}
+		shotsAdded(added);
+	});
+	ui.storyProposal = null;
+	if (added.length && bandView()) select('clip', added[0].id);
+	toast(t('lib.toast.shotsAdded', { count: list.length }), 'success');
+}
+
+export function replaceDoc(next) {
+	const incoming = migrate({ ...next, assets: Array.isArray(next?.assets) ? next.assets : [] });
+	delete incoming.results;
+	for (const k of Object.keys(doc)) if (!(k in incoming)) delete doc[k];
+	Object.assign(doc, incoming);
+	past.length = 0;
+	future.length = 0;
+	Object.assign(ui, { selection: null, picked: [], preview: null, compare: null, range: null, drag: null, storyProposal: null, seamCompare: null, reviewMonitor: false, selectedIn: null, issue: null, reveal: null, reviewPick: null, dirty: false });
+	Object.assign(ui.production, { state: 'ready', progress: 0, running: 0, step: '', lastCount: 0, startedAt: null, lastSeconds: null, failed: 0, failedVariant: null, failedTake: null });
+	resetTakes();
+	if (ui.playhead > seqDuration()) ui.playhead = 0;
+}
+
+export function dispose() {
+	for (const id of toastTimers) clearTimeout(id);
+	toastTimers.clear();
+	ui.toasts.length = 0;
+	ui.menuOpen = null;
+	ui.deckDrawer = false;
+	ui.paletteOpen = false;
+	ui.modal = null;
+}

@@ -1,0 +1,472 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { hostUis, renderComponent, textOf } from './svelte-harness.js';
+import { DRAWER_INSET, DRAWER_MAX_HEIGHT, DRAWER_WIDTH, drawerPlace, drawerRows, profileControl, profileHint, profileOptions, tabTarget } from './deck-drawer.js';
+import { DECK_MENU, deckChip } from './deck.js';
+
+class FakeNode {
+	constructor(parent = null, selectors = []) {
+		this.parent = parent;
+		this.selectors = selectors;
+	}
+	contains(other) {
+		for (let node = other; node; node = node.parent) if (node === this) return true;
+		return false;
+	}
+}
+class FakeElement extends FakeNode {
+	closest(list) {
+		const wanted = list.split(',').map((s) => s.trim());
+		for (let node = this; node; node = node.parent) if (node.selectors?.some((s) => wanted.includes(s))) return node;
+		return null;
+	}
+}
+globalThis.Node = FakeNode;
+globalThis.Element = FakeElement;
+globalThis.document = { body: {}, querySelector: () => null };
+
+const { closesOnOutsidePointer, holdFocus, keepsFocus, openDrawers, soleDrawer } = await import('./drawer.js');
+const { closeLayer, openLayer, setReturnFocus } = await import('./focus.js');
+const { doc, ui, dispose } = await import('./state.svelte.js');
+const { viewport } = await import('./viewport.svelte.js');
+const { commandById, handleKeydown, toggleSidebar } = await import('./commands.js');
+const { QUEUE_MENU, openQueue } = await import('./production.svelte.js');
+const { t } = await import('../i18n/index.svelte.js');
+
+const t2 = (key, params = {}) => `${key}${Object.keys(params).length ? JSON.stringify(params) : ''}`;
+const DECK = new URL('../components/production/ProductionDeck.svelte', import.meta.url).href;
+const DRAWER = new URL('../components/production/ProductionDrawer.svelte', import.meta.url).href;
+const SIDE_DRAWER = new URL('../components/shell/SideDrawer.svelte', import.meta.url).href;
+const WAN = '01KX47WANVIDEO0000000000TV';
+const H3 = '01KX47H3MINIMAX000000000VA';
+
+after(() => {
+	dispose();
+	delete globalThis.Node;
+	delete globalThis.Element;
+	delete globalThis.document;
+});
+
+function engines() {
+	ui.me = {
+		engines: [{ id: 'native', kind: 'local', name: 'Local' }],
+		presets: [
+			{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'], resolutions: ['832x480', '1280x720'] },
+			{ id: H3, name: 'MiniMax-H3', video: true, cloud: false, profiles: ['FL2VA', 'Ref2VA'] }
+		]
+	};
+	doc.engine = { backend: 'native', preset: WAN, model: null };
+}
+
+test('drawer: the rows follow the engine, the profile, the sizes, the sound and the shots with their own engine', () => {
+	assert.deepEqual(drawerRows(), ['engine', 'drafts', 'edit']);
+	assert.deepEqual(drawerRows({ engine: true, profile: true, sizes: true, guided: true, own: 2 }), ['engine', 'profile', 'draftSize', 'finalSize', 'drafts', 'margin', 'own', 'edit']);
+	assert.deepEqual(drawerRows({ engine: false, sizes: true }), ['engine', 'drafts', 'edit']);
+	assert.deepEqual(drawerRows({ engine: true, sizes: false, guided: true }), ['engine', 'drafts', 'margin', 'edit']);
+});
+
+test('drawer: the profile is a segmented control when the current one is supported, a pop-up with the current one greyed when it is not', () => {
+	const items = [{ id: 'FL2VA', label: 'FL2VA' }, { id: 'Ref2VA', label: 'Ref2VA' }];
+	assert.equal(profileControl({ items, current: 'FL2VA' }), 'segmented');
+	assert.equal(profileControl({ items, current: 'Hybrid AV' }), 'popup');
+	assert.equal(profileControl({ items: [], current: 'FL2VA' }), 'none');
+	assert.deepEqual(profileOptions({ items, current: 'Ref2VA' }), items);
+	assert.deepEqual(profileOptions({ items, current: 'Hybrid AV' }), [{ id: 'Hybrid AV', label: 'Hybrid AV', unsupported: true }, ...items]);
+	assert.deepEqual(profileOptions({ items, current: '' }), items);
+	assert.equal(profileHint('FL2VA', t2), 'production.profile.fl2va');
+	assert.equal(profileHint('Ref2VA', t2), 'production.profile.ref2va');
+	assert.equal(profileHint('Hybrid AV', t2), 'production.profile.hybrid');
+});
+
+test('drawer: it is 440 px wide, never wider than the plugin root, never taller than the space above the deck, which the backdrop covers', () => {
+	const deck = { top: 768, right: 1384, left: 56, width: 1328 };
+	const root = { top: 0, left: 56, width: 1328 };
+	assert.deepEqual(drawerPlace({ deck, root }), { width: DRAWER_WIDTH, maxHeight: DRAWER_MAX_HEIGHT, space: 768 });
+	const low = drawerPlace({ deck: { ...deck, top: 400 }, root });
+	assert.equal(low.maxHeight, 400 - DRAWER_INSET);
+	assert.equal(low.space, 400);
+	const narrow = drawerPlace({ deck: { top: 500, right: 400, left: 0, width: 400 }, root: { top: 0, left: 0, width: 400 } });
+	assert.deepEqual(narrow, { width: 400 - DRAWER_INSET, maxHeight: 500 - DRAWER_INSET, space: 500 });
+	assert.deepEqual(drawerPlace({ deck: { top: 500, right: 400, left: 0, width: 400 }, root: null }), { width: 400 - DRAWER_INSET, maxHeight: 0, space: 0 });
+	assert.equal(DRAWER_WIDTH, 440);
+});
+
+test('drawer: Tab cycles inside the dialog, and comes back in when the focus escaped', () => {
+	const [a, b, c] = ['a', 'b', 'c'];
+	const list = [a, b, c];
+	assert.equal(tabTarget({ list, active: a }), null);
+	assert.equal(tabTarget({ list, active: c }), a);
+	assert.equal(tabTarget({ shift: true, list, active: a }), c);
+	assert.equal(tabTarget({ shift: true, list, active: b }), null);
+	assert.equal(tabTarget({ list, active: null, inside: false }), a);
+	assert.equal(tabTarget({ shift: true, list, active: null, inside: false }), c);
+	assert.equal(tabTarget({ list: [] }), null);
+});
+
+test('drawer: a pointer inside the plugin root closes it, unless it lands on a drawer, a menu, a modal, a toast or a drawer toggle', () => {
+	const root = new FakeElement(null, ['.vp-root']);
+	const plain = new FakeElement(root);
+	assert.equal(closesOnOutsidePointer(root, plain), true);
+	for (const keep of ['.vp-drawer', '.vp-deck-drawer', '[data-vp-drawer-toggle]', '.vp-modal-backdrop', '.vp-palette-backdrop', '.vp-menu', '[data-vp-menu]', '.vp-toasts', '.vp-uploads']) {
+		const inside = new FakeElement(new FakeElement(root, [keep]));
+		assert.equal(closesOnOutsidePointer(root, inside), false, keep);
+	}
+	assert.equal(closesOnOutsidePointer(null, plain), false);
+	assert.equal(closesOnOutsidePointer(root, null), false);
+});
+
+test('drawer: a pointer outside the plugin, on the rail or the bar of the host, closes it too, unless it lands on a toast or a tooltip of the host or a window of the host is open', () => {
+	const root = new FakeElement(null, ['.vp-root']);
+	const rail = new FakeElement(new FakeElement(null, ['nav']));
+	assert.equal(closesOnOutsidePointer(root, rail), true);
+	assert.equal(closesOnOutsidePointer(root, new FakeElement(new FakeElement(null, ['.vp-root']))), true);
+	for (const keep of ['[role="status"]', '[role="tooltip"]']) assert.equal(closesOnOutsidePointer(root, new FakeElement(new FakeElement(null, [keep]))), false, keep);
+	try {
+		document.querySelectorAll = () => [new FakeElement(null, ['[aria-modal="true"]'])];
+		assert.equal(closesOnOutsidePointer(root, rail), false);
+		document.querySelectorAll = () => [new FakeElement(new FakeElement(root, ['.vp-deck-drawer']))];
+		assert.equal(closesOnOutsidePointer(root, rail), true);
+	} finally {
+		delete document.querySelectorAll;
+	}
+});
+
+test('drawer: a pointer that closes it on a part of the plugin that takes no focus keeps the focus where the drawer gave it back, a control takes it as usual', () => {
+	const root = new FakeElement(null, ['.vp-root', '[tabindex]']);
+	const deck = new FakeElement(root, ['.vp-deck']);
+	const title = new FakeElement(new FakeElement(deck, ['.vp-deck-copy']));
+	assert.equal(keepsFocus(root, title), true);
+	assert.equal(keepsFocus(root, new FakeElement(deck, ['.vp-deck-backdrop'])), true);
+	for (const control of ['button', 'a[href]', 'input', 'select', 'textarea', 'summary', 'label', '[contenteditable="true"]', '[tabindex]']) assert.equal(keepsFocus(root, new FakeElement(new FakeElement(deck, [control]))), false, control);
+	assert.equal(keepsFocus(root, new FakeElement(new FakeElement(null, ['nav']))), false);
+	assert.equal(keepsFocus(null, title), false);
+	assert.equal(keepsFocus(root, null), false);
+	const press = (target) => {
+		let prevented = false;
+		holdFocus(root, { target, preventDefault: () => (prevented = true) }, { addEventListener() {}, removeEventListener() {} });
+		return prevented;
+	};
+	assert.equal(press(title), true);
+	assert.equal(press(new FakeElement(new FakeElement(deck, ['button']))), false);
+	assert.equal(press(new FakeElement(new FakeElement(null, ['nav']))), false);
+	const drawer = readFileSync(new URL('../components/production/ProductionDrawer.svelte', import.meta.url), 'utf-8');
+	assert.match(drawer, /const root = anchor\?\.closest\('\.vp-root'\) \?\? null;\s*if \(!isTopLayer\(layer\) \|\| !closesOnOutsidePointer\(root, e\.target\)\) return;\s*holdFocus\(root, e\);\s*onclose\(\);/);
+	const page = readFileSync(new URL('../VideoProducerPage.svelte', import.meta.url), 'utf-8');
+	assert.match(page, /if \(!closesOnOutsidePointer\(root, e\.target\)\) return;\s*holdFocus\(root, e\);\s*closeDrawer\(\);/);
+});
+
+test('drawer: a pointer that closes it on a part of the host that takes no focus, like an empty spot of the rail, gives the focus back to the chip once the host has handled the click, without cancelling anything, and leaves it to the host when a control, a field or a window of the host takes it', async () => {
+	class FakeDoc {
+		constructor() {
+			this.body = new FakeElement();
+			this.activeElement = this.body;
+			this.listeners = [];
+			this.dialogs = [];
+		}
+		addEventListener(type, fn, capture) {
+			this.listeners.push({ type, fn, capture });
+		}
+		removeEventListener(type, fn, capture) {
+			this.listeners = this.listeners.filter((l) => !(l.type === type && l.fn === fn && l.capture === capture));
+		}
+		querySelectorAll() {
+			return this.dialogs;
+		}
+		fire(type, event = {}) {
+			for (const l of this.listeners.filter((l) => l.type === type)) l.fn({ type, ...event });
+		}
+	}
+	class Focusable extends FakeElement {
+		constructor(owner, parent, selectors) {
+			super(parent, selectors);
+			this.owner = owner;
+			this.isConnected = true;
+		}
+		focus() {
+			this.owner.activeElement = this;
+		}
+	}
+	globalThis.HTMLElement = FakeElement;
+	try {
+		const page = new FakeDoc();
+		const root = new FakeElement(null, ['.vp-root', '[tabindex]']);
+		const chip = new Focusable(page, new FakeElement(new FakeElement(root, ['.vp-deck']), ['[data-vp-menu]']), ['button']);
+		const nav = new FakeElement(null, ['nav']);
+		const rail = new FakeElement(new FakeElement(nav, ['.h-header']));
+		const field = new Focusable(page, nav, ['input']);
+		const press = (target) => {
+			let prevented = false;
+			holdFocus(root, { target, preventDefault: () => (prevented = true) }, page);
+			return prevented;
+		};
+		const mousedown = (to = null) => {
+			chip.focus();
+			page.fire('focusout', { target: chip, relatedTarget: to });
+			page.activeElement = to ?? page.body;
+		};
+		const click = async () => {
+			page.fire('click', { target: rail });
+			await new Promise((resolve) => setTimeout(resolve));
+		};
+
+		assert.equal(press(rail), false);
+		assert.ok(page.listeners.length > 0);
+		mousedown();
+		page.fire('click', { target: rail });
+		assert.equal(page.activeElement, page.body);
+		assert.equal(page.listeners.length, 0);
+		await new Promise((resolve) => setTimeout(resolve));
+		assert.equal(page.activeElement, chip);
+
+		for (const control of [['button'], ['a[href]'], ['[tabindex]'], ['[role="button"]'], ['[role="menuitem"]']]) {
+			assert.equal(press(new FakeElement(new FakeElement(nav, control))), false, control[0]);
+			assert.equal(page.listeners.length, 0, control[0]);
+		}
+		mousedown();
+		await click();
+		assert.equal(page.activeElement, page.body);
+
+		press(rail);
+		mousedown(field);
+		await click();
+		assert.equal(page.activeElement, field);
+
+		press(rail);
+		mousedown();
+		page.fire('click', { target: rail });
+		field.focus();
+		await new Promise((resolve) => setTimeout(resolve));
+		assert.equal(page.activeElement, field);
+
+		press(rail);
+		mousedown();
+		page.dialogs = [new FakeElement(null, ['[aria-modal="true"]'])];
+		await click();
+		assert.equal(page.activeElement, page.body);
+		page.dialogs = [];
+
+		for (const stop of ['contextmenu', 'pointercancel', 'auxclick', 'pointerdown']) {
+			press(rail);
+			mousedown();
+			page.fire(stop);
+			assert.equal(page.listeners.length, 0, stop);
+			await click();
+			assert.equal(page.activeElement, page.body, stop);
+		}
+
+		press(rail);
+		const armed = page.listeners.length;
+		press(rail);
+		assert.equal(page.listeners.length, armed);
+		mousedown();
+		await click();
+		assert.equal(page.activeElement, chip);
+
+		press(rail);
+		mousedown();
+		chip.isConnected = false;
+		await click();
+		assert.equal(page.activeElement, page.body);
+		assert.equal(page.listeners.length, 0);
+	} finally {
+		delete globalThis.HTMLElement;
+	}
+});
+
+test('drawer: Escape closes the menus first, then the deck drawer, then the preview and the compare', () => {
+	Object.assign(ui, { paletteOpen: false, modal: null, menuOpen: 'deck-more', deckDrawer: true, preview: { kind: 'result', id: 't1' }, compare: null });
+	const escape = () => handleKeydown({ key: 'Escape', target: null, preventDefault() {} }, null);
+	escape();
+	assert.deepEqual([ui.menuOpen, ui.deckDrawer, ui.preview?.id], [null, true, 't1']);
+	escape();
+	assert.deepEqual([ui.menuOpen, ui.deckDrawer, ui.preview?.id], [null, false, 't1']);
+	escape();
+	assert.deepEqual([ui.menuOpen, ui.deckDrawer, ui.preview], [null, false, null]);
+	handleKeydown({ key: 'Escape', target: null, shiftKey: true, preventDefault() {} }, null);
+	assert.equal(ui.deckDrawer, false);
+});
+
+test('drawer: Escape closes it when the focus left the plugin for the page of the host, the drawer still in the plugin, and leaves it to a window of the host', () => {
+	const root = new FakeElement(null, ['.vp-root']);
+	const drawer = new FakeElement(new FakeElement(root, ['.vp-deck']), ['.vp-deck-drawer']);
+	Object.assign(ui, { paletteOpen: false, modal: null, menuOpen: null, deckDrawer: true, hostModal: false, preview: null, compare: null });
+	const escape = () => handleKeydown({ key: 'Escape', target: document.body, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, repeat: false, preventDefault() {} }, root);
+	try {
+		document.querySelectorAll = (selector) => (selector.includes('[aria-modal="true"]') ? [drawer] : []);
+		escape();
+		assert.equal(ui.deckDrawer, false);
+		ui.deckDrawer = true;
+		document.querySelectorAll = (selector) => (selector.includes('[aria-modal="true"]') ? [drawer, new FakeElement(null, ['[aria-modal="true"]'])] : []);
+		escape();
+		assert.equal(ui.deckDrawer, true);
+	} finally {
+		delete document.querySelectorAll;
+		ui.deckDrawer = false;
+	}
+});
+
+test('drawer: the chip of the deck opens it as a modal dialog over the deck, with its title and a Close button, and the chip says whether it is open', async () => {
+	engines();
+	ui.deckDrawer = false;
+	const closed = await renderComponent(DECK);
+	assert.match(closed, /<button[^>]*class="vp-deck-chip"[^>]*aria-expanded="false"[^>]*aria-haspopup="dialog"/);
+	assert.doesNotMatch(closed, /role="dialog"[^>]*aria-modal="true"/);
+	ui.deckDrawer = true;
+	const open = await renderComponent(DECK);
+	assert.match(open, /<button[^>]*class="vp-deck-chip"[^>]*aria-expanded="true"/);
+	assert.match(open, new RegExp(`class="vp-deck-drawer"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-label="${t('production.drawer.title')}"`));
+	assert.match(open, /<h2>[^<]*<span class="vp-deck-drawer-sub">/);
+	assert.match(open, new RegExp(`class="vp-deck-drawer-close" aria-label="${t('production.drawer.close')}"`));
+	assert.match(open, /class="vp-deck-backdrop" role="presentation"/);
+	ui.deckDrawer = false;
+});
+
+test('drawer: its rows follow the engine of the project, it counts the shots with their own engine, and the engine button carries the count of options set', async () => {
+	engines();
+	doc.clips = [
+		{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo', engine: { preset: H3, model: null } },
+		{ id: 's2', start: 4, dur: 4, label: 'Two', stage: 'todo', engine: { preset: H3, model: null } },
+		{ id: 's3', start: 8, dur: 4, label: 'Three', stage: 'todo' }
+	];
+	const html = await renderComponent(DRAWER, { anchor: null, clips: doc.clips, engineTip: 'Wan', onclose() {} });
+	assert.match(html, new RegExp(`<label class="vp-deck-drawer-label" for="[^"]+">${t('production.drawer.engine')}</label>`));
+	assert.match(html, new RegExp(`<option value="${WAN}\|" selected="">`));
+	assert.match(html, new RegExp(`<label class="vp-deck-drawer-label" for="[^"]+">${t('production.drawer.draftSize')}</label>`));
+	assert.match(html, new RegExp(`<p class="vp-deck-drawer-help">${t('production.drawer.own', { count: 2 })}</p>`));
+	assert.match(textOf(html), new RegExp(t('production.editEngine')));
+	assert.doesNotMatch(html, /vp-deck-drawer-label" id=/);
+	ui.me = { ...ui.me, presets: [{ id: WAN, name: 'Wan 2.2', video: true, cloud: false, profiles: ['FL2VA'] }] };
+	doc.clips = [];
+	const plain = await renderComponent(DRAWER, { anchor: null, clips: [], onclose() {} });
+	assert.doesNotMatch(plain, new RegExp(t('production.drawer.draftSize')));
+	assert.doesNotMatch(plain, /vp-deck-drawer-help/);
+	assert.ok(hostUis(plain, 'Button').length >= 1);
+});
+
+test('drawer: the chip reads the same engine, profile, size and drafts the drawer writes', () => {
+	assert.deepEqual(deckChip({ engine: 'MiniMax H3', profile: 'Ref2VA', size: '1344×768', drafts: 3 }, t2), ['MiniMax H3', 'Ref2VA', '1344×768', 'production.deck.drafts{"count":3}']);
+	assert.deepEqual(deckChip({ engine: 'MiniMax H3', profile: '', size: '832×480', drafts: null }, t2), ['MiniMax H3', '832×480', 'production.deck.draftsMixed']);
+});
+
+test('drawer: under 1280 px a side drawer, the Settings drawer and a menu of the deck open one at a time, whatever opens them, so the plugin never shows two modal dialogs', async () => {
+	engines();
+	doc.clips = [{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'todo' }];
+	Object.assign(ui, { workspace: 'storyboard', storyView: 'grid', selection: null, picked: [], sidebarOpen: false, inspectorOpen: false, deckDrawer: false, menuOpen: null, modal: null, paletteOpen: false });
+	viewport.narrow = true;
+	const modals = async () => {
+		const open = openDrawers();
+		const html = [
+			await renderComponent(SIDE_DRAWER, { side: 'start', label: 'Context', drawers: true, open: open.start }),
+			await renderComponent(SIDE_DRAWER, { side: 'end', label: 'Detail', drawers: true, open: open.end }),
+			await renderComponent(DECK)
+		].join('');
+		return [...html.matchAll(/<div class="(?:vp-drawer|vp-deck-drawer)"(?: data-vp-drawer="(\w+)")?[^>]*aria-modal="true"/g)].map(([, side]) => side ?? 'settings');
+	};
+	const chip = () => {
+		ui.menuOpen = null;
+		ui.deckDrawer = true;
+	};
+	try {
+		let was = soleDrawer();
+		ui.inspectorOpen = true;
+		was = soleDrawer(was);
+		assert.deepEqual(await modals(), ['end']);
+		chip();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.inspectorOpen, ui.deckDrawer], [false, true]);
+		assert.deepEqual(await modals(), ['settings']);
+		toggleSidebar();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.deckDrawer], [true, false]);
+		assert.deepEqual(await modals(), ['start']);
+		ui.menuOpen = QUEUE_MENU;
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.menuOpen], [false, QUEUE_MENU]);
+		assert.deepEqual(await modals(), []);
+		ui.sidebarOpen = true;
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.menuOpen], [true, null]);
+		commandById('inspector').run();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.inspectorOpen], [false, true]);
+		assert.deepEqual(await modals(), ['end']);
+		toggleSidebar();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.inspectorOpen], [true, false]);
+		assert.deepEqual(await modals(), ['start']);
+		for (const menu of [DECK_MENU.more, DECK_MENU.estimate]) {
+			ui.menuOpen = menu;
+			was = soleDrawer(was);
+			assert.deepEqual([ui.sidebarOpen, ui.menuOpen], [false, menu], menu);
+			ui.inspectorOpen = true;
+			was = soleDrawer(was);
+			assert.deepEqual([ui.inspectorOpen, ui.menuOpen], [true, null], menu);
+			ui.inspectorOpen = false;
+			ui.sidebarOpen = true;
+			was = soleDrawer(was);
+		}
+		openQueue();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.menuOpen], [false, QUEUE_MENU]);
+		ui.menuOpen = null;
+		ui.inspectorOpen = true;
+		was = soleDrawer(was);
+		ui.menuOpen = 'picker:engine';
+		was = soleDrawer(was);
+		assert.deepEqual([ui.inspectorOpen, ui.menuOpen], [true, 'picker:engine']);
+		ui.menuOpen = null;
+		ui.inspectorOpen = false;
+		was = soleDrawer(was);
+		viewport.narrow = false;
+		Object.assign(ui, { sidebarOpen: true, inspectorOpen: true });
+		was = soleDrawer(was);
+		chip();
+		was = soleDrawer(was);
+		assert.deepEqual([ui.sidebarOpen, ui.inspectorOpen, ui.deckDrawer], [true, true, true]);
+		assert.deepEqual(was, { start: false, end: false, deck: true, menu: false });
+	} finally {
+		viewport.narrow = false;
+		Object.assign(ui, { sidebarOpen: false, inspectorOpen: false, deckDrawer: false, menuOpen: null });
+		doc.clips = [];
+	}
+	const page = readFileSync(new URL('../VideoProducerPage.svelte', import.meta.url), 'utf-8');
+	assert.match(page, /\$effect\(\(\) => \{\s*const now = openDrawers\(\);\s*untrack\(\(\) => \(drawersWere = soleDrawer\(drawersWere, now\)\)\);\s*\}\);/);
+	assert.ok(page.indexOf('soleDrawer(drawersWere') > page.indexOf('wideBefore = { sidebar'));
+});
+
+test('drawer: when the Settings drawer opens and the rule closes a side drawer that still held the focus, closing it gives the focus to the chip, not to a control hidden with the side drawer', () => {
+	class Focusable extends FakeElement {
+		constructor(parent, selectors) {
+			super(parent, selectors);
+			this.isConnected = true;
+		}
+		focus() {
+			document.activeElement = this;
+		}
+	}
+	globalThis.HTMLElement = FakeElement;
+	try {
+		const root = new FakeElement(null, ['.vp-root']);
+		const side = new FakeElement(root, ['.vp-drawer']);
+		const inside = new Focusable(side, ['button']);
+		const chip = new Focusable(new FakeElement(root, ['.vp-deck']), ['button']);
+		const settings = new FakeElement(root, ['.vp-deck-drawer']);
+		document.activeElement = inside;
+		setReturnFocus(chip);
+		const layer = openLayer(settings, { refocus() {}, close() {} });
+		side.selectors.push('[hidden]');
+		closeLayer(layer);
+		assert.equal(document.activeElement, chip);
+		side.selectors.pop();
+		document.activeElement = inside;
+		setReturnFocus(chip);
+		const again = openLayer(settings, { refocus() {}, close() {} });
+		document.activeElement = null;
+		closeLayer(again);
+		assert.equal(document.activeElement, inside);
+	} finally {
+		delete globalThis.HTMLElement;
+		delete document.activeElement;
+	}
+});

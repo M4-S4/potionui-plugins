@@ -1,0 +1,141 @@
+schema_version: 1
+id: "vp-wan22-ti2v-5b-8gb"
+version: 1
+name: "Wan 2.2 TI2V 5B (8 GB)"
+engine: "native"
+category: "video"
+summary: "Set up Wan 2.2's 5B TI2V model for an 8 GB card and produce a first clip at 24 fps."
+description: >
+  Installs the Video Producer preset Wan 2.2 TI2V 5B (8 GB) on the native engine, makes sure its three
+  files are available (the 5B DiT, the fp8 UMT5-XXL text encoder and the Wan 2.2 VAE, about 18.1 GB
+  together) and runs a first real generation. Text to video only: PotionUI does not run this model's
+  image conditioning. The preset declares the system RAM it was measured with. Weights: Apache-2.0.
+
+plugins:
+  - id: "huggingface-provider"
+    reason: >
+      Resolves every file from Hugging Face by its exact repository path; the sha256 of each artifact
+      verifies the download.
+  - id: "video-producer"
+    reason: "Ships this recipe and the hardware-tier presets it installs."
+
+backend:
+  engine: "native"
+
+artifacts:
+  - id: "wan22-ti2v-5b-diffusion-model"
+    kind: "diffusion_model"
+    model_type: "diffusion_model"
+    filename: "wan2.2_ti2v_5B_fp16.safetensors"
+    display_name: "Wan 2.2 TI2V 5B DiT (fp16)"
+    required: true
+    size_bytes: 9999658848
+    checksum:
+      algorithm: "sha256"
+      value: "456f901338bd9eadbded3828b819109a9b68e8a525ca5cf8d0049a69fcfeca1e"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors"
+  - id: "umt5-text-encoder"
+    kind: "text_encoder"
+    model_type: "text_encoder"
+    filename: "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    display_name: "UMT5-XXL text encoder (fp8-scaled)"
+    required: true
+    size_bytes: 6735906897
+    checksum:
+      algorithm: "sha256"
+      value: "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - id: "wan22-vae"
+    kind: "vae"
+    model_type: "vae"
+    filename: "wan2.2_vae.safetensors"
+    display_name: "Wan 2.2 VAE (48 channels)"
+    required: true
+    size_bytes: 1409400960
+    checksum:
+      algorithm: "sha256"
+      value: "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/vae/wan2.2_vae.safetensors"
+
+presets:
+  - preset_id: "01M57QPEMDPKHHW83YSEYBN0X0"
+    path_hint: "video-producer/Wan2.2-TI2V-5B-8GB"
+    assign_to_owner: true
+
+smoke:
+  preset_id: "01M57QPEMDPKHHW83YSEYBN0X0"
+  mode: "video"
+  prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+  seed: 12345
+  form:
+    resolution: "832x480"
+    steps: 10
+    cfg: 5.0
+    video_director:
+      schema_version: 1
+      mode: "t2v"
+      settings:
+        fps: 24
+        duration: 1
+        resolution: "832x480"
+        seed: 12345
+      segments:
+        - id: "shot-1"
+          prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+          negative_prompt: ""
+      media: []
+
+steps:
+  - key: "plugins.ensure"
+    kind: "plugins.ensure"
+    title: "Enable required plugins"
+    params:
+      plugin_ids: ["huggingface-provider"]
+  - key: "backend.ensure"
+    kind: "backend.ensure"
+    title: "Prepare the native backend"
+    params:
+      engine: "native"
+  - key: "models.index"
+    kind: "models.index"
+    title: "Find models you already have"
+    params:
+      engine: "native"
+  - key: "artifacts.plan"
+    kind: "artifacts.plan"
+    title: "Plan required downloads"
+    params:
+      artifact_ids: ["wan22-ti2v-5b-diffusion-model", "umt5-text-encoder", "wan22-vae"]
+  - key: "artifacts.fetch"
+    kind: "artifacts.fetch"
+    title: "Download the Wan 2.2 5B model files"
+    params:
+      artifact_ids: ["wan22-ti2v-5b-diffusion-model", "umt5-text-encoder", "wan22-vae"]
+  - key: "models.index.downloads"
+    kind: "models.index"
+    title: "Register downloaded models"
+    params:
+      engine: "native"
+  - key: "preset.ensure"
+    kind: "preset.ensure"
+    title: "Install and assign the Wan 2.2 TI2V 5B (8 GB) preset"
+    params:
+      preset_id: "01M57QPEMDPKHHW83YSEYBN0X0"
+  - key: "generation.smoke"
+    kind: "generation.smoke"
+    title: "Run a first real generation"
+    params:
+      preset_id: "01M57QPEMDPKHHW83YSEYBN0X0"
+      mode: "video"

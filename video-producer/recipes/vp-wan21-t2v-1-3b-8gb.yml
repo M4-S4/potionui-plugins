@@ -1,0 +1,141 @@
+schema_version: 1
+id: "vp-wan21-t2v-1-3b-8gb"
+version: 1
+name: "Wan 2.1 T2V 1.3B (8 GB)"
+engine: "native"
+category: "video"
+summary: "Set up Wan 2.1's 1.3B text-to-video model for an 8 GB card and produce a first 480p clip."
+description: >
+  Installs the Video Producer preset Wan 2.1 T2V 1.3B (8 GB) on the native engine, makes sure its
+  three files are available (the 1.3B DiT, the fp8 UMT5-XXL text encoder and the Wan 2.1 VAE, about
+  9.8 GB together) and runs a first real generation. Text to video only. The preset declares the
+  system RAM it was measured with. Weights: Apache-2.0.
+
+plugins:
+  - id: "huggingface-provider"
+    reason: >
+      Resolves every file from Hugging Face by its exact repository path; the sha256 of each artifact
+      verifies the download.
+  - id: "video-producer"
+    reason: "Ships this recipe and the hardware-tier presets it installs."
+
+backend:
+  engine: "native"
+
+artifacts:
+  - id: "wan21-1-3b-diffusion-model"
+    kind: "diffusion_model"
+    model_type: "diffusion_model"
+    filename: "wan2.1_t2v_1.3B_fp16.safetensors"
+    display_name: "Wan 2.1 T2V 1.3B DiT (fp16)"
+    required: true
+    size_bytes: 2838303560
+    checksum:
+      algorithm: "sha256"
+      value: "be531024cd9018cb5b48c40cfbb6a6191645b1c792eb8bf4f8c1c6e10f924dc5"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.1_ComfyUI_repackaged"
+      version_id: "main@split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors"
+  - id: "umt5-text-encoder"
+    kind: "text_encoder"
+    model_type: "text_encoder"
+    filename: "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    display_name: "UMT5-XXL text encoder (fp8-scaled)"
+    required: true
+    size_bytes: 6735906897
+    checksum:
+      algorithm: "sha256"
+      value: "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+  - id: "wan21-vae"
+    kind: "vae"
+    model_type: "vae"
+    filename: "wan_2.1_vae.safetensors"
+    display_name: "Wan 2.1 VAE"
+    required: true
+    size_bytes: 253815318
+    checksum:
+      algorithm: "sha256"
+      value: "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+    capability: "model-lookup"
+    provider_hint:
+      source: "huggingface"
+      model_id: "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
+      version_id: "main@split_files/vae/wan_2.1_vae.safetensors"
+
+presets:
+  - preset_id: "01M57QPEMDPKHHW83YSEYBN0WZ"
+    path_hint: "video-producer/Wan2.1-T2V-1.3B-8GB"
+    assign_to_owner: true
+
+smoke:
+  preset_id: "01M57QPEMDPKHHW83YSEYBN0WZ"
+  mode: "video"
+  prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+  seed: 12345
+  form:
+    resolution: "832x480"
+    steps: 10
+    cfg: 6.0
+    video_director:
+      schema_version: 1
+      mode: "t2v"
+      settings:
+        fps: 16
+        duration: 1
+        resolution: "832x480"
+        seed: 12345
+      segments:
+        - id: "shot-1"
+          prompt: "a paper boat drifting down a rain-filled gutter, close-up, soft afternoon light"
+          negative_prompt: ""
+      media: []
+
+steps:
+  - key: "plugins.ensure"
+    kind: "plugins.ensure"
+    title: "Enable required plugins"
+    params:
+      plugin_ids: ["huggingface-provider"]
+  - key: "backend.ensure"
+    kind: "backend.ensure"
+    title: "Prepare the native backend"
+    params:
+      engine: "native"
+  - key: "models.index"
+    kind: "models.index"
+    title: "Find models you already have"
+    params:
+      engine: "native"
+  - key: "artifacts.plan"
+    kind: "artifacts.plan"
+    title: "Plan required downloads"
+    params:
+      artifact_ids: ["wan21-1-3b-diffusion-model", "umt5-text-encoder", "wan21-vae"]
+  - key: "artifacts.fetch"
+    kind: "artifacts.fetch"
+    title: "Download the Wan 2.1 1.3B model files"
+    params:
+      artifact_ids: ["wan21-1-3b-diffusion-model", "umt5-text-encoder", "wan21-vae"]
+  - key: "models.index.downloads"
+    kind: "models.index"
+    title: "Register downloaded models"
+    params:
+      engine: "native"
+  - key: "preset.ensure"
+    kind: "preset.ensure"
+    title: "Install and assign the Wan 2.1 T2V 1.3B (8 GB) preset"
+    params:
+      preset_id: "01M57QPEMDPKHHW83YSEYBN0WZ"
+  - key: "generation.smoke"
+    kind: "generation.smoke"
+    title: "Run a first real generation"
+    params:
+      preset_id: "01M57QPEMDPKHHW83YSEYBN0WZ"
+      mode: "video"

@@ -1,0 +1,10 @@
+[
+  {"value": ["t1", "t2"], "expected": ["t1", "t2"]},
+  {"value": ["t2", "t1", "t2", "", 7, null, {"id": "t3"}, true, "t3"], "expected": ["t2", "t1", "t3"]},
+  {"value": [], "expected": null},
+  {"value": [""], "expected": null},
+  {"value": [7, null, false], "expected": null},
+  {"value": null, "expected": null},
+  {"value": "t1", "expected": null},
+  {"value": {"t1": true}, "expected": null}
+]

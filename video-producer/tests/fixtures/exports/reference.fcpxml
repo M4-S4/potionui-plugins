@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+	<resources>
+		<format id="r1" name="FFVideoFormat1080p25" frameDuration="1/25s" width="1920" height="1080"/>
+		<asset id="r2" name="Le port endormi" start="0s" duration="127/25s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/1.mp4"/></asset>
+		<asset id="r3" name="Les mains du pêcheur" start="0s" duration="129/25s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/1.mp4"/></asset>
+		<asset id="r4" name="harbour-wide.mp4" start="0s" duration="100/25s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/03927418-58f2-440f-9a15-456093037531.mp4"/></asset>
+	</resources>
+	<library>
+		<event name="Video Producer">
+			<project name="Aube &amp; marée">
+				<sequence format="r1" duration="393/25s" tcStart="0s">
+					<spine>
+						<asset-clip ref="r2" name="Le port endormi" offset="0/25s" start="0/25s" duration="125/25s"/>
+						<asset-clip ref="r3" name="Les mains du pêcheur" offset="125/25s" start="10/25s" duration="105/25s"/>
+						<gap name="Le départ &lt;large&gt;" offset="230/25s" start="0s" duration="75/25s"/>
+						<asset-clip ref="r4" name="harbour-wide.mp4" offset="305/25s" start="6/25s" duration="88/25s"/>
+					</spine>
+				</sequence>
+			</project>
+		</event>
+	</library>
+</fcpxml>

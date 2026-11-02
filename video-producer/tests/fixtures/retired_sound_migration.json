@@ -1,0 +1,25 @@
+{
+  "doc": {
+    "assets": [
+      {"id": "workshop-voice", "kind": "audio", "name": "Lena — We camp here", "src": null, "origin": null, "srcDur": 5, "width": null, "height": null, "fps": null, "res": null, "generated": true, "quality": null, "resultId": null, "role": "Dialogue", "synth": "voice", "transcript": "We camp here tonight.", "character": "Lena", "lipSync": true},
+      {"id": "workshop-wind", "kind": "audio", "name": "Wind", "src": null, "origin": null, "srcDur": 12, "width": null, "height": null, "fps": null, "res": null, "generated": true, "quality": null, "resultId": null, "role": "Ambiance", "synth": "wind", "transcript": null, "character": null, "lipSync": null},
+      {"id": "imported-line", "kind": "audio", "name": "line.wav", "src": "/api/media/uploads/line.wav", "origin": {"kind": "library", "itemId": "item-1"}, "srcDur": 3, "width": null, "height": null, "fps": null, "res": null, "generated": false, "quality": null, "resultId": null, "role": "Dialogue", "synth": null, "transcript": "On part.", "character": "Marin", "lipSync": null},
+      {"id": "gen-take", "kind": "video", "name": "Take A", "src": "/api/media/generations/g1/1.mp4", "origin": {"kind": "history", "generationId": "g1", "fileId": "f1"}, "srcDur": 5, "width": 832, "height": 480, "fps": 24, "res": "832×480", "generated": true, "quality": "draft", "resultId": "take", "role": null, "synth": null, "transcript": null, "character": null, "lipSync": null}
+    ],
+    "audio": [
+      {"id": "voice-item", "assetId": "workshop-voice", "lane": "A1", "start": 0, "dur": 4, "srcIn": 0, "fadeIn": 0.5, "fadeOut": 0.8, "gain": -6},
+      {"id": "wind-item", "assetId": "workshop-wind", "lane": "A3", "start": 2, "dur": 6, "srcIn": 0, "fadeIn": 0.5, "fadeOut": 0.8, "gain": -6},
+      {"id": "line-item", "assetId": "imported-line", "lane": "A1", "start": 5, "dur": 3, "srcIn": 0, "fadeIn": 0, "fadeOut": 0, "gain": 0}
+    ],
+    "references": [
+      {"id": "r-voice", "name": "Voice", "space": "son", "type": "Voix", "assetId": "workshop-voice", "role": "Son", "scope": null},
+      {"id": "r-line", "name": "Line", "space": "son", "type": "Voix", "assetId": "imported-line", "role": "Son", "scope": null}
+    ],
+    "laneModes": ["write", "off"]
+  },
+  "expected": {
+    "assets": ["imported-line", "gen-take"],
+    "audio": ["line-item"],
+    "references": {"r-voice": null, "r-line": "imported-line"}
+  }
+}
