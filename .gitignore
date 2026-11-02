@@ -5,9 +5,10 @@ __pycache__/
 .venv/
 venv/
 
-# Node and plugin builds (release dist/ is committed, source maps never)
+# Node and plugin builds: frontend/dist/ is built by the CI and ships with the releases (older plugins still commit theirs), source maps never
 node_modules/
 *.map
+video-producer/frontend/dist/
 
 # Local environment: credentials and machine-specific paths
 .env.local
