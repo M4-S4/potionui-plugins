@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "plugins": [
+    {
+      "id": "video-producer",
+      "name": "Video Producer",
+      "version": "0.1.0",
+      "description": "Storyboard, draft and final takes, editing, sound and delivery for AI video, driven by Video Director documents.",
+      "license": "GPL-3.0",
+      "source": {
+        "repository": "M4-S4/potionui-plugins",
+        "path": "video-producer"
+      },
+      "requires": {
+        "core": "f70fc57a7c9650210abb0815dbb0019c4072c550",
+        "plugin_api": null
+      },
+      "release": {
+        "archive": null,
+        "sha256": null
+      }
+    },
+    {
+      "id": "preset-editor",
+      "name": "Preset Editor",
+      "version": "0.1.0",
+      "description": "Create, edit, validate and publish presets without leaving PotionUI",
+      "license": "GPL-3.0",
+      "source": {
+        "repository": "M4-S4/potionui-plugins",
+        "path": "preset-editor"
+      },
+      "requires": {
+        "core": "v0.0.15",
+        "plugin_api": null
+      },
+      "release": {
+        "archive": null,
+        "sha256": null
+      }
+    }
+  ]
+}
