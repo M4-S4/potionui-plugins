@@ -85,6 +85,8 @@ def plan(data: bytes) -> Dict[zipfile.ZipInfo, PurePosixPath]:
     relative: Dict[zipfile.ZipInfo, PurePosixPath] = {}
     seen = set()
     for info in members:
+        if "\\" in info.orig_filename:
+            raise FilesError("invalid_request", f"{info.orig_filename}: a file path is relative, with '/' between its folders")
         name = info.filename[len(prefix):]
         try:
             path = files.relative_path(name)
