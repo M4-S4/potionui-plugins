@@ -16,7 +16,8 @@ from src.plugin_api import AccountType, User
 
 PLUGIN_ID = "preset-editor"
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PLUGIN_ROOT = REPO_ROOT / "content" / "plugins" / "marketplace" / PLUGIN_ID
+PLUGIN_ROOTS = [REPO_ROOT / "content" / "plugins" / kind / PLUGIN_ID for kind in ("local", "marketplace")]
+PLUGIN_ROOT = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0])
 PACKAGE = "preset_editor"
 NATIVE = PLUGIN_ROOT / "tests" / "fixtures" / "presets" / "minimal-native"
 ADMIN = User(id="admin-1", username="admin", email="admin@test.com", password_hash="x", account_type=AccountType.ADMIN)

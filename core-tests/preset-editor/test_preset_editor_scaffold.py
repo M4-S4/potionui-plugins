@@ -10,7 +10,8 @@ from src.features.presets.schema import PRESET_MEDIA_EXTENSIONS
 
 PLUGIN_ID = "preset-editor"
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PLUGIN_ROOT = REPO_ROOT / "content" / "plugins" / "marketplace" / PLUGIN_ID
+PLUGIN_ROOTS = [REPO_ROOT / "content" / "plugins" / kind / PLUGIN_ID for kind in ("local", "marketplace")]
+PLUGIN_ROOT = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0])
 PACKAGE = "preset_editor"
 
 
