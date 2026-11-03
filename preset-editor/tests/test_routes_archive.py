@@ -58,11 +58,12 @@ def test_a_local_preset_is_exported_but_not_a_marketplace_one(client, core, tmp_
     assert client.get(f"{PREFIX}/presets/missing-preset/export").status_code == 404
 
 
-def test_exports_follow_the_media_viewer_rule(client, core):
+def test_exports_need_a_signed_in_admin(client, core):
     draft = client.post(f"{PREFIX}/drafts", json={"mode": "copy", "from_id": "fixture-minimal-native", "name": "Copy", "model_dir": "M"}).json()["data"]
-    core.viewer = USER
+    client.app.dependency_overrides[get_current_active_user] = lambda: USER
     assert client.get(f"{PREFIX}/drafts/{draft['draft_id']}/export").status_code == 403
-    core.viewer = None
+    assert client.get(f"{PREFIX}/presets/fixture-minimal-native/export").status_code == 403
+    client.app.dependency_overrides.clear()
     assert client.get(f"{PREFIX}/drafts/{draft['draft_id']}/export").status_code == 401
 
 

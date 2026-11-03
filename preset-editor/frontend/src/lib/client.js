@@ -101,6 +101,8 @@ function thrownError(err) {
 	return { status: 0, code: 'network_error', message: err instanceof Error && err.message ? err.message : 'Request failed' };
 }
 
+const NO_API = { status: 0, code: 'no_api', message: 'The page has no connection to the server' };
+
 export function unwrap(payload) {
 	if (isObject(payload) && payload.success === true) return { ok: true, data: payload.data };
 	if (!isObject(payload)) {
@@ -110,9 +112,7 @@ export function unwrap(payload) {
 }
 
 export async function callPlugin(api, method, path, body) {
-	if (!api || typeof api[method] !== 'function') {
-		return { ok: false, error: { status: 0, code: 'no_api', message: 'The page has no connection to the server' } };
-	}
+	if (!api || typeof api[method] !== 'function') return { ok: false, error: NO_API };
 	let payload;
 	try {
 		payload = body === undefined ? await api[method](path) : await api[method](path, body);
@@ -123,10 +123,9 @@ export async function callPlugin(api, method, path, body) {
 }
 
 export async function callCore(api, path, { method = 'GET', body, form, headers: extra = {} } = {}) {
-	const token = typeof api?.getToken === 'function' ? api.getToken() : null;
+	if (!api || typeof api.fetchRawFromApp !== 'function') return { ok: false, error: NO_API };
 	const headers = { Accept: 'application/json', ...extra };
-	if (token) headers.Authorization = `Bearer ${token}`;
-	const init = { method, headers, credentials: 'include', cache: 'no-store' };
+	const init = { method, headers };
 	if (form !== undefined) {
 		init.body = form;
 	} else if (body !== undefined) {
@@ -135,7 +134,7 @@ export async function callCore(api, path, { method = 'GET', body, form, headers:
 	}
 	let response;
 	try {
-		response = await fetch(path, init);
+		response = await api.fetchRawFromApp(path, init);
 	} catch (err) {
 		return { ok: false, error: thrownError(err) };
 	}
@@ -146,6 +145,32 @@ export async function callCore(api, path, { method = 'GET', body, form, headers:
 	}
 	if (!response.ok) return { ok: false, error: normalizeError(payload, response.status || 0) };
 	return unwrap(payload);
+}
+
+export async function fetchBlob(api, path) {
+	if (!api || typeof api.fetchRaw !== 'function') return { ok: false, error: NO_API };
+	let response;
+	try {
+		response = await api.fetchRaw(path);
+	} catch (err) {
+		return { ok: false, error: thrownError(err) };
+	}
+	if (!response.ok) {
+		const payload = await response.json().catch(() => null);
+		return { ok: false, error: normalizeError(payload, response.status || 0) };
+	}
+	return { ok: true, data: await response.blob() };
+}
+
+export async function downloadFile(api, path, filename) {
+	if (!api || typeof api.download !== 'function') return { ok: false, error: NO_API };
+	try {
+		await api.download(path, filename);
+		return { ok: true, data: null };
+	} catch (err) {
+		if (Number.isInteger(err?.status) && err.status > 0) return { ok: false, error: normalizeError(err.body ?? null, err.status) };
+		return { ok: false, error: thrownError(err) };
+	}
 }
 
 const PLUGIN_PREFIX = '/api/plugins/preset-editor';
@@ -206,8 +231,12 @@ export function removeMode(api, draftId, mode) {
 	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/modes/${segment(mode)}`);
 }
 
-export function mediaUrl(draftId, path) {
-	return `${PLUGIN_PREFIX}/drafts/${segment(draftId)}/public/${filePath(path)}`;
+export function mediaPath(draftId, path) {
+	return `/drafts/${segment(draftId)}/public/${filePath(path)}`;
+}
+
+export function fetchMedia(api, draftId, path) {
+	return fetchBlob(api, mediaPath(draftId, path));
 }
 
 export function listMedia(api, draftId) {
@@ -231,12 +260,12 @@ export function deleteMedia(api, draftId, path) {
 	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/media/${filePath(path)}`);
 }
 
-export function exportDraftUrl(draftId) {
-	return `${PLUGIN_PREFIX}/drafts/${segment(draftId)}/export`;
+export function downloadDraft(api, draftId) {
+	return downloadFile(api, `/drafts/${segment(draftId)}/export`);
 }
 
-export function exportPresetUrl(presetId) {
-	return `${PLUGIN_PREFIX}/presets/${segment(presetId)}/export`;
+export function downloadPreset(api, presetId) {
+	return downloadFile(api, `/presets/${segment(presetId)}/export`);
 }
 
 export function importDraft(api, form) {

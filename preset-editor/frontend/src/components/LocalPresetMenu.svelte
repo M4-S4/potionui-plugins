@@ -1,9 +1,9 @@
 <script>
 	import ActionButton from './ActionButton.svelte';
-	import { exportPresetUrl } from '../lib/client.js';
-	import { clickOutside, onEscape } from '../lib/dom.js';
+	import { downloadPreset } from '../lib/client.js';
+	import { clickOutside, onEscape, toast } from '../lib/dom.js';
 
-	let { entries = [], phase = 'ready', error = '', pageRoute = '/plugins/preset-editor' } = $props();
+	let { api, entries = [], phase = 'ready', error = '', pageRoute = '/plugins/preset-editor' } = $props();
 
 	let open = $state(false);
 
@@ -11,6 +11,12 @@
 		if (!open) return;
 		return onEscape(() => (open = false));
 	});
+
+	async function download(entry) {
+		open = false;
+		const result = await downloadPreset(api, entry.id);
+		if (!result.ok) toast('error', result.error.message);
+	}
 </script>
 
 <div class="relative" use:clickOutside={() => (open = false)}>
@@ -38,7 +44,7 @@
 								<span class="block truncate font-medium">{entry.name}</span>
 								<span class="block truncate font-mono text-2xs text-fg-subtle">{entry.path}</span>
 							</a>
-							<a href={exportPresetUrl(entry.id)} download class="flex items-center px-2 text-2xs text-fg-subtle hover:bg-surface-3 hover:text-fg" role="menuitem" title="Download {entry.name} as a zip archive" onclick={() => (open = false)}>zip</a>
+							<button type="button" class="flex items-center px-2 text-2xs text-fg-subtle hover:bg-surface-3 hover:text-fg" role="menuitem" title="Download {entry.name} as a zip archive" onclick={() => download(entry)}>zip</button>
 						</li>
 					{/each}
 				</ul>

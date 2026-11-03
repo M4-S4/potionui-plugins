@@ -12,11 +12,9 @@ from .drafts import DraftError
 from .files import FilesError
 from .routes_common import draft_payload, error, ok
 from .routes_files import STATUS_BY_CODE
-from .routes_media import admin_viewer
 from .routes_presets import local_template
 
 router = APIRouter(dependencies=[Depends(get_current_admin_user)])
-public_router = APIRouter()
 
 
 def _load(draft_id: str) -> drafts.Draft:
@@ -31,15 +29,15 @@ def _zip(data: bytes, filename: str) -> Response:
     return Response(content=data, media_type="application/zip", headers=headers)
 
 
-@public_router.get("/drafts/{draft_id}/export")
-async def export_draft(draft_id: str, viewer: User = Depends(admin_viewer)):
+@router.get("/drafts/{draft_id}/export")
+async def export_draft(draft_id: str):
     draft = _load(draft_id)
     data = await asyncio.to_thread(archive.export_dir, draft.dir)
     return _zip(data, f"{draft.preset_id}-draft.zip")
 
 
-@public_router.get("/presets/{preset_id}/export")
-async def export_preset(preset_id: str, viewer: User = Depends(admin_viewer)):
+@router.get("/presets/{preset_id}/export")
+async def export_preset(preset_id: str):
     template = local_template(preset_id)
     data = await asyncio.to_thread(archive.export_dir, Path(template.path))
     return _zip(data, f"{template.id}.zip")

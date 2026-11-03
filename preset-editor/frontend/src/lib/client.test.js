@@ -1,12 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { callPlugin, getMe, normalizeError, unwrap } from './client.js';
+import { callPlugin, downloadDraft, downloadPreset, fetchMedia, getMe, importDraft, listCatalog, normalizeError, unwrap, writeFile } from './client.js';
 
 function fakeHostApi(handler) {
 	const calls = [];
 	return {
 		calls,
-		getToken: () => 'secret-token',
 		get: async (path) => {
 			calls.push(['get', path]);
 			return handler('get', path);
@@ -93,4 +92,81 @@ test('callPlugin reports a missing host api, a network failure and a non-JSON bo
 		throw new SyntaxError('Unexpected token <');
 	});
 	assert.equal((await callPlugin(html, 'get', '/me')).error.code, 'invalid_response');
+});
+
+function rawApi(respond) {
+	const calls = [];
+	return {
+		calls,
+		fetchRawFromApp: async (path, init) => {
+			calls.push([path, init]);
+			return respond(path, init);
+		},
+		fetchRaw: async (path, init) => {
+			calls.push([path, init]);
+			return respond(path, init);
+		}
+	};
+}
+
+test('core calls go through the host client, with a JSON body, a form or extra headers', async () => {
+	const api = rawApi(() => new Response(JSON.stringify({ success: true, data: [1] }), { status: 200 }));
+	const form = new FormData();
+
+	assert.deepEqual(await listCatalog(api), { ok: true, data: [1] });
+	await writeFile(api, 'D', 'modes/txt2img/form.yml', 'fields: []\n', 'etag-1');
+	await importDraft(api, form);
+
+	assert.deepEqual(api.calls[0], ['/api/presets?include_uninstalled=true', { method: 'GET', headers: { Accept: 'application/json' } }]);
+	assert.deepEqual(api.calls[1], [
+		'/api/plugins/preset-editor/drafts/D/files/modes/txt2img/form.yml',
+		{ method: 'PUT', headers: { Accept: 'application/json', 'If-Match': 'etag-1', 'Content-Type': 'application/json' }, body: JSON.stringify({ content: 'fields: []\n' }) }
+	]);
+	assert.equal(api.calls[2][1].body, form);
+	assert.equal('Content-Type' in api.calls[2][1].headers, false);
+});
+
+test('a core refusal keeps its status, and a page without the host client says so', async () => {
+	const api = rawApi(() => new Response(JSON.stringify({ detail: { error: 'precondition_failed', message: 'changed', etag: 'e2' } }), { status: 412 }));
+
+	const result = await writeFile(api, 'D', 'preset.yml', 'x', 'e1');
+
+	assert.deepEqual(result, { ok: false, error: { status: 412, code: 'precondition_failed', message: 'changed', etag: 'e2' } });
+	assert.equal((await listCatalog({ get: async () => null })).error.code, 'no_api');
+});
+
+test('draft media is read as a blob through the plugin routes', async () => {
+	const api = rawApi((path) =>
+		path.endsWith('missing.webp')
+			? new Response(JSON.stringify({ detail: { error: 'not_found', message: 'no media file' } }), { status: 404 })
+			: new Response(new Blob(['RIFF']), { status: 200 })
+	);
+
+	const found = await fetchMedia(api, 'D', 'public/examples/a b.webp');
+	const missing = await fetchMedia(api, 'D', 'public/missing.webp');
+
+	assert.equal(api.calls[0][0], '/drafts/D/public/public/examples/a%20b.webp');
+	assert.equal(found.ok, true);
+	assert.equal(await found.data.text(), 'RIFF');
+	assert.deepEqual(missing, { ok: false, error: { status: 404, code: 'not_found', message: 'no media file' } });
+});
+
+test('zip downloads go through the host download and report its refusal', async () => {
+	const asked = [];
+	const api = {
+		download: async (path, filename) => {
+			asked.push([path, filename]);
+			if (path.startsWith('/presets/')) {
+				const error = new Error('Request failed with status 409');
+				error.status = 409;
+				error.body = { detail: { error: 'not_local', message: 'only a local preset' } };
+				throw error;
+			}
+		}
+	};
+
+	assert.deepEqual(await downloadDraft(api, 'D'), { ok: true, data: null });
+	assert.deepEqual(await downloadPreset(api, 'market one'), { ok: false, error: { status: 409, code: 'not_local', message: 'only a local preset' } });
+	assert.deepEqual(asked, [['/drafts/D/export', undefined], ['/presets/market%20one/export', undefined]]);
+	assert.equal((await downloadDraft({}, 'D')).error.code, 'no_api');
 });

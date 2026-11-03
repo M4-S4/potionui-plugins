@@ -111,36 +111,6 @@ def test_lint_reports_a_broken_preset_as_errors(tmp_path):
     assert errors and all(error.startswith("[ERROR] ") and str(preset / "preset.yml") in error for error in errors)
 
 
-def _request(*headers):
-    from fastapi import Request
-
-    return Request({"type": "http", "method": "GET", "path": "/", "query_string": b"", "headers": [(k.encode(), v.encode()) for k, v in headers]})
-
-
-def test_media_token_prefers_the_bearer_and_falls_back_to_the_media_cookie():
-    assert core_bridge.media_token(_request(("authorization", "Bearer abc"), ("cookie", "potionui_media_0123abcd4567=from-cookie"))) == "abc"
-    assert core_bridge.media_token(_request(("cookie", "other=1; potionui_media_0123abcd4567=from-cookie"))) == "from-cookie"
-    assert core_bridge.media_token(_request(("cookie", "potionui_media=plain"))) == "plain"
-    assert core_bridge.media_token(_request(("authorization", "Bearer "), ("cookie", "potionui_mediax=no; session=1"))) is None
-    assert core_bridge.media_token(_request()) is None
-
-
-def test_media_viewer_validates_the_token_off_the_event_loop(monkeypatch):
-    seen = []
-
-    def authenticate(token):
-        seen.append((token, threading.current_thread()))
-        return (ADMIN, None) if token == "good" else (None, "Invalid token")
-
-    monkeypatch.setattr(core_bridge, "authenticate_websocket_token", authenticate)
-
-    assert asyncio.run(core_bridge.media_viewer(_request(("cookie", "potionui_media_1=good")))) is ADMIN
-    assert asyncio.run(core_bridge.media_viewer(_request(("authorization", "Bearer bad")))) is None
-    assert asyncio.run(core_bridge.media_viewer(_request())) is None
-    assert [token for token, _ in seen] == ["good", "bad"]
-    assert all(thread is not threading.main_thread() for _, thread in seen)
-
-
 def test_lint_async_gives_the_same_report_from_a_thread(monkeypatch):
     threads = []
 
