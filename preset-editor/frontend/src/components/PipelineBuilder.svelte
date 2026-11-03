@@ -350,7 +350,7 @@
 							</select>
 						</label>
 						{#if enabledMode === 'expression'}
-							<label class="block col-span-full">
+							<label class="block" style="grid-column: 1 / -1">
 								<span class="mb-0.5 block text-fg-muted">Expression</span>
 								<input type="text" class="input w-full font-mono" value={selected.attrs.enabled} onchange={(event) => set('enabled', event.currentTarget.value)} />
 							</label>
