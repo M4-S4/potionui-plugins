@@ -1,10 +1,10 @@
 <script>
 	import Pill from './Pill.svelte';
-	import { FIELD_RAW_KEYS, externalChildrenPath, isContainerType } from '../lib/formModel.js';
-	import { AUDIENCES, BOOL_TYPES, INTEGER_TYPES, NUMERIC_TYPES, SAVE_INTO, STRING_TYPES } from '../lib/formSchema.js';
+	import { FIELD_RAW_KEYS, externalChildrenPath, isContainerType, withIncludeVars } from '../lib/formModel.js';
+	import { AUDIENCES, BOOL_TYPES, INTEGER_TYPES, NUMERIC_TYPES, SAVE_INTO, STRING_TYPES, isIncludeVar } from '../lib/formSchema.js';
 	import { dumpYaml, parseYaml } from '../lib/yaml.js';
 
-	let { node, types = [], problems = [], sharedFiles = [], onChange, onOpenFile } = $props();
+	let { node, types = [], formulaGroups = null, allowVars = false, problems = [], sharedFiles = [], onChange, onOpenFile } = $props();
 
 	const PLAIN_KEYS = ['name', 'label', 'description', 'ai_hint', 'formula'];
 	const FLAG_KEYS = ['required', 'visible', 'interactive', 'full_width'];
@@ -17,6 +17,8 @@
 	let defaultError = $state('');
 	let optionsText = $state('');
 	let optionsError = $state('');
+	let varsText = $state('');
+	let varsError = $state('');
 	let seenId = $state('');
 
 	const attrs = $derived(node?.attrs ?? {});
@@ -43,6 +45,8 @@
 		defaultError = '';
 		optionsText = Array.isArray(configuration.options) ? dumpYaml(configuration.options, { lineWidth: -1 }).trimEnd() : '';
 		optionsError = '';
+		varsText = external?.vars ? dumpYaml(external.vars, { lineWidth: -1 }).trimEnd() : '';
+		varsError = '';
 	});
 
 	function set(key, value) {
@@ -62,9 +66,25 @@
 	function setType(value) {
 		const next = { ...attrs, type: value };
 		const container = isContainerType(value);
-		if (container && !Array.isArray(node.children) && typeof node.children !== 'string') onChange?.(next, []);
+		if (container && !Array.isArray(node.children) && !external) onChange?.(next, []);
 		else if (!container && Array.isArray(node.children) && node.children.length === 0) onChange?.(next, null);
 		else onChange?.(next);
+	}
+
+	function commitVars() {
+		varsError = '';
+		const text = varsText.trim();
+		const parsed = text ? parseYaml(text) : { ok: true, data: null };
+		if (!parsed.ok) {
+			varsError = parsed.error.message;
+			return;
+		}
+		const vars = parsed.data;
+		if (vars !== null && (typeof vars !== 'object' || Array.isArray(vars) || Object.values(vars).some((value) => value === null || typeof value === 'object'))) {
+			varsError = 'a mapping of names to plain values';
+			return;
+		}
+		onChange?.({ ...attrs }, withIncludeVars(node.children, vars));
 	}
 
 	function flagValue(key) {
@@ -83,7 +103,8 @@
 			set('default', undefined);
 			return;
 		}
-		if (defaultKind === 'boolean') set('default', text === 'true');
+		if (allowVars && isIncludeVar(text)) set('default', text);
+		else if (defaultKind === 'boolean') set('default', text === 'true');
 		else if (defaultKind === 'number') {
 			const number = Number(text);
 			if (Number.isNaN(number)) {
@@ -210,7 +231,12 @@
 			</label>
 			<label class="block">
 				<span class="mb-0.5 block text-fg-muted">Formula group</span>
-				<input type="text" class="input w-full font-mono" value={attrs.formula === false ? 'false' : attrs.formula ?? ''} onchange={(event) => set('formula', event.currentTarget.value.trim() === 'false' ? false : event.currentTarget.value.trim())} />
+				<input type="text" class="input w-full font-mono" list="preset-editor-formula-groups" value={attrs.formula === false ? 'false' : attrs.formula ?? ''} onchange={(event) => set('formula', event.currentTarget.value.trim() === 'false' ? false : event.currentTarget.value.trim())} />
+				<datalist id="preset-editor-formula-groups">
+					{#each formulaGroups ?? [] as group (group)}
+						<option value={group}></option>
+					{/each}
+				</datalist>
 			</label>
 			<label class="block sm:col-span-2">
 				<span class="mb-0.5 block text-fg-muted">Description</span>
@@ -275,12 +301,17 @@
 		{#if external}
 			<div class="flex flex-wrap items-center gap-2 rounded border border-line bg-surface-2/40 px-2 py-1">
 				<span class="text-fg-muted">Children loaded from</span>
-				<span class="font-mono text-fg">{node.children}</span>
+				<span class="font-mono text-fg">{external.file}</span>
 				{#if external.scope === 'preset'}
 					<button type="button" class="text-accent hover:underline" onclick={() => onOpenFile?.(external.path)}>Open {external.path.split('/').pop()}</button>
 				{:else if external.scope === 'shared'}
 					<Pill tone="info">shared tree</Pill>
 				{/if}
+				<label class="block w-full">
+					<span class="mb-0.5 block text-fg-muted">vars <span class="text-fg-subtle">(YAML mapping of plain values, filled into the {'{{'} vars.name {'}}'} placeholders of the file; empty for a plain include)</span></span>
+					<textarea class="input w-full resize-y font-mono" rows={rows(varsText)} bind:value={varsText} onblur={commitVars} spellcheck="false"></textarea>
+					{#if varsError}<span class="text-danger">{varsError}</span>{/if}
+				</label>
 			</div>
 		{/if}
 

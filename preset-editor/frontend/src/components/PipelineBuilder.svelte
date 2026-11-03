@@ -24,8 +24,6 @@
 	let seenId = $state('');
 	let extraText = $state('');
 	let extraError = $state('');
-	let cacheText = $state('');
-	let cacheError = $state('');
 
 	const mode = $derived(modeOf(path));
 	const refs = $derived(referenceMap(reference));
@@ -33,7 +31,7 @@
 	const snapshot = $derived(doc ? serializePipelineDocument(doc) : '');
 	const dirty = $derived(phase === 'ready' && snapshot !== loaded);
 	const report = $derived(doc ? pipelineProblems(doc, reference) : { byPipe: new Map(), count: 0 });
-	const blocked = $derived(report.count + (extraError ? 1 : 0) + (cacheError ? 1 : 0));
+	const blocked = $derived(report.count + (extraError ? 1 : 0));
 	const selected = $derived(doc ? doc.pipes.find((pipe) => pipe.id === selectedId) ?? null : null);
 	const index = $derived(doc && selected ? doc.pipes.indexOf(selected) : -1);
 	const known = $derived(selected ? refs.get(String(selected.attrs.name ?? '')) ?? null : null);
@@ -61,8 +59,6 @@
 		seenId = selected.id;
 		extraText = extraKeys.length ? dumpYaml(Object.fromEntries(extraKeys.map((key) => [key, configuration[key]])), { lineWidth: -1 }).trimEnd() : '';
 		extraError = '';
-		cacheText = selected.attrs.cache === undefined || selected.attrs.cache === null ? '' : dumpYaml(selected.attrs.cache, { lineWidth: -1 }).trimEnd();
-		cacheError = '';
 	});
 
 	function adopt(text, nextEtag) {
@@ -177,20 +173,6 @@
 		for (const key of extraKeys) delete next[key];
 		Object.assign(next, parsed.data ?? {});
 		set('configuration', Object.keys(next).length ? next : undefined);
-	}
-
-	function commitCache() {
-		cacheError = '';
-		if (!cacheText.trim()) {
-			set('cache', undefined);
-			return;
-		}
-		const parsed = parseYaml(cacheText);
-		if (!parsed.ok) {
-			cacheError = parsed.error.message;
-			return;
-		}
-		set('cache', parsed.data);
 	}
 
 	function setEnabled(value) {
@@ -424,11 +406,6 @@
 							<span class="mb-0.5 block text-fg-muted">Other configuration keys <span class="text-fg-subtle">(YAML mapping)</span></span>
 							<textarea class="input w-full resize-y font-mono" rows={rows(extraText)} bind:value={extraText} onblur={commitExtra} spellcheck="false"></textarea>
 							{#if extraError}<span class="text-danger">{extraError}</span>{/if}
-						</label>
-						<label class="block">
-							<span class="mb-0.5 block text-fg-muted">cache <span class="text-fg-subtle">(YAML, optional)</span></span>
-							<textarea class="input w-full resize-y font-mono" rows={rows(cacheText)} bind:value={cacheText} onblur={commitCache} spellcheck="false"></textarea>
-							{#if cacheError}<span class="text-danger">{cacheError}</span>{/if}
 						</label>
 						{#if Object.keys(selected.attrs).some((key) => !PIPE_KEYS.includes(key))}
 							<p class="text-danger">Keys the core refuses: <span class="font-mono">{Object.keys(selected.attrs).filter((key) => !PIPE_KEYS.includes(key)).join(', ')}</span> (fix them in the YAML view).</p>

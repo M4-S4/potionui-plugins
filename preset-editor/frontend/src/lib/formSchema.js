@@ -9,6 +9,7 @@ export const INTEGER_TYPES = ['integer'];
 export const SCALAR_TYPES = ['select'];
 export const STRING_TYPES = ['string', 'textbox'];
 export const WIDTH_RE = /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/;
+export const INCLUDE_VAR_RE = /\{\{\s*vars\.\w+\s*\}\}/g;
 
 const maybe = (schema) => z.optional(z.nullable(schema));
 const optionalString = maybe(z.string());
@@ -43,11 +44,16 @@ export const fieldSchema = z.strictObject({
 	input: maybe(z.array(z.array(z.unknown()))),
 	container: optionalBoolean,
 	hidden_when_video_director: optionalBoolean,
-	children: maybe(z.union([z.array(z.unknown()), z.string()]))
+	children: maybe(z.union([z.array(z.unknown()), z.string(), z.strictObject({ file: z.string().check(z.minLength(1)), vars: z.optional(z.nullable(z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])))) })]))
 });
 
-export function defaultProblem(type, value) {
+export function isIncludeVar(value) {
+	return typeof value === 'string' && value.includes('{{') && !value.replace(INCLUDE_VAR_RE, '').includes('{{');
+}
+
+export function defaultProblem(type, value, { allowVars = false } = {}) {
 	if (value === null || value === undefined) return null;
+	if (allowVars && isIncludeVar(value)) return null;
 	if (typeof value === 'string' && value.includes('{{')) return 'default is never rendered: use a plain value, and reactions for dynamic behaviour';
 	if (BOOL_TYPES.includes(type) && typeof value !== 'boolean') return `default of a ${type} field is true or false`;
 	if (NUMERIC_TYPES.includes(type) && (typeof value !== 'number' || Number.isNaN(value))) return `default of a ${type} field is a number`;
@@ -57,21 +63,25 @@ export function defaultProblem(type, value) {
 	return null;
 }
 
-export function fieldProblems(attrs, { types = null } = {}) {
+export function fieldProblems(attrs, { types = null, allowVars = false, formulaGroups = null } = {}) {
 	const problems = [];
 	const checked = fieldSchema.safeParse(attrs);
 	if (!checked.success) {
 		for (const issue of checked.error.issues) {
 			const key = issue.path.length ? String(issue.path[0]) : '';
-			if (issue.code === 'unrecognized_keys') {
+			if (issue.code === 'unrecognized_keys' && !issue.path.length) {
 				for (const unknown of issue.keys) problems.push({ key: unknown, message: 'unknown attribute (the core refuses it)' });
-			} else problems.push({ key, message: issue.message });
+			} else if (issue.code === 'unrecognized_keys') problems.push({ key, message: `unknown key ${issue.keys.join(', ')} (the core refuses it)` });
+			else problems.push({ key, message: issue.message });
 		}
 	}
 	const type = typeof attrs.type === 'string' ? attrs.type : '';
 	if (type && Array.isArray(types) && types.length && !types.includes(type)) problems.push({ key: 'type', message: 'no field type of this name on this instance' });
-	const defaultIssue = defaultProblem(type, attrs.default);
+	const defaultIssue = defaultProblem(type, attrs.default, { allowVars });
 	if (defaultIssue) problems.push({ key: 'default', message: defaultIssue });
+	if (Array.isArray(formulaGroups) && typeof attrs.formula === 'string' && attrs.formula && !formulaGroups.includes(attrs.formula)) {
+		problems.push({ key: 'formula', message: `${attrs.formula} is not declared in preset.yml formulas.groups: the lint refuses it`, level: 'warning' });
+	}
 	if (Array.isArray(attrs.merge_from)) {
 		if (attrs.merge_from.includes(attrs.name)) problems.push({ key: 'merge_from', message: 'cannot list the field itself' });
 		if (new Set(attrs.merge_from).size !== attrs.merge_from.length) problems.push({ key: 'merge_from', message: 'lists a key twice' });
@@ -79,7 +89,7 @@ export function fieldProblems(attrs, { types = null } = {}) {
 	return problems;
 }
 
-export function treeProblems(fields, { types = null, kind = 'form', configKeys = null } = {}) {
+export function treeProblems(fields, { types = null, kind = 'form', configKeys = null, formulaGroups = null } = {}) {
 	const byNode = new Map();
 	const general = [];
 	const add = (id, problem) => {
@@ -87,7 +97,7 @@ export function treeProblems(fields, { types = null, kind = 'form', configKeys =
 		byNode.get(id).push(problem);
 	};
 	walk(fields, (node, parent, index) => {
-		for (const problem of fieldProblems(node.attrs, { types })) add(node.id, problem);
+		for (const problem of fieldProblems(node.attrs, { types, allowVars: kind !== 'form', formulaGroups })) add(node.id, problem);
 		const type = node.attrs.type;
 		if (kind === 'form' && !parent && !node.attrs.name && type !== 'tabs') {
 			add(node.id, { key: 'name', message: `fields[${index}] will not appear in the form: give it a name or put it inside a tab` });

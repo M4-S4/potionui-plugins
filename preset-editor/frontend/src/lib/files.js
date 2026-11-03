@@ -15,13 +15,14 @@ export function fileKind(path) {
 	if (path === 'tests.yml') return 'tests';
 	if (path === 'styles.yml') return 'styles';
 	if (parts[0] === 'public') return 'media';
+	const yaml = ['.yml', '.yaml'].includes(extensionOf(path));
 	if (parts[0] === 'modes') {
 		if (name === 'pipeline.yml') return 'pipeline';
 		if (name === 'form.yml') return 'form';
 		if (parts.includes('tabs')) return 'tab';
-		if (parts.includes('files')) return 'options';
+		if (parts.includes('files')) return yaml ? 'fragment' : 'options';
 	}
-	if (parts[0] === 'files') return 'options';
+	if (parts[0] === 'files') return yaml ? 'fragment' : 'options';
 	return TEXT_EXTENSIONS.includes(extensionOf(path)) ? 'text' : 'other';
 }
 
@@ -92,7 +93,7 @@ export const SNIPPETS = [
 	{
 		id: 'shared-options',
 		label: 'Options file from _shared',
-		kinds: ['tab', 'form'],
+		kinds: ['tab', 'fragment', 'form'],
 		build: (shared = 'resolutions/sdxl.yml') =>
 			`  - name: "resolution"\n    type: "resolution"\n    label: "Resolution"\n    configuration:\n      files:\n        - { path: "{{ paths._shared }}/${shared}", group: "Standard" }\n    default: "1024x1024"`
 	},
@@ -125,7 +126,7 @@ export const SNIPPETS = [
 	{
 		id: 'field',
 		label: 'Field',
-		kinds: ['tab', 'form'],
+		kinds: ['tab', 'fragment', 'form'],
 		build: () => `  - name: "steps"\n    type: "slider"\n    label: "Steps"\n    default: 30\n    configuration: {min: 1, max: 100, step: 1}`
 	}
 ];

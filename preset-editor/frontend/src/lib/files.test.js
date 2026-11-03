@@ -12,7 +12,8 @@ test('fileKind classifies the canonical layout', () => {
 	assert.equal(fileKind('modes/txt2img/variants/fast/form.yml'), 'form');
 	assert.equal(fileKind('modes/txt2img/tabs/main.yml'), 'tab');
 	assert.equal(fileKind('modes/txt2img/files/workflows/a.json'), 'options');
-	assert.equal(fileKind('files/form/samplers.yml'), 'options');
+	assert.equal(fileKind('files/form/samplers.yml'), 'fragment');
+	assert.equal(fileKind('modes/video/files/form/models.yml'), 'fragment');
 	assert.equal(fileKind('public/cover.png'), 'media');
 	assert.equal(fileKind('notes.txt'), 'text');
 	assert.equal(fileKind('weird.bin'), 'other');

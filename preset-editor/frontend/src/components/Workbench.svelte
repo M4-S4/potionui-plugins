@@ -42,7 +42,7 @@
 	const modes = $derived([...new Set(files.map((file) => modeOf(file.path)).filter(Boolean))]);
 	const mediaFiles = $derived(files.filter((file) => isMedia(file.path)));
 	const selectedKind = $derived(selected ? fileKind(selected) : '');
-	const buildable = $derived(selectedKind === 'form' || selectedKind === 'tab' || selectedKind === 'pipeline');
+	const buildable = $derived(['form', 'tab', 'fragment', 'pipeline'].includes(selectedKind));
 	const ready = $derived(canPublish(draft.last_lint) && !busy && !dirty);
 	const modeProblem = $derived(newMode && !MODE_RE.test(newMode.trim()) ? 'lowercase letters, digits and _' : modes.includes(newMode.trim()) ? 'already there' : '');
 

@@ -108,3 +108,11 @@ test('pipes are created from the reference, moved, removed and chains start from
 	assert.deepEqual(parsePipelineDocument('').pipes, []);
 	assert.deepEqual(parsePipelineDocument('future: 1\npipeline: []\n').unknown, { future: 1 });
 });
+
+test('a pipe cache key is refused, since the core dropped it from PipeSpec', () => {
+	const doc = parsePipelineDocument('pipeline:\n  - name: seed_generator\n    enabled: true\n    cache: [seed]\n');
+	const report = pipelineProblems(doc, null);
+
+	assert.deepEqual(report.byPipe.get(doc.pipes[0].id), [{ key: 'cache', message: 'unknown key (the core refuses it)' }]);
+	assert.equal(report.count, 1);
+});

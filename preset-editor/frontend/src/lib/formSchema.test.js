@@ -37,3 +37,33 @@ test('treeProblems adds the per-tree rules and counts errors apart from warnings
 	assert.equal(report.count, 2);
 	assert.equal(treeProblems(doc.fields, { kind: 'tab' }).count, 1);
 });
+
+test('a children include is a path or a file with scalar vars, as ChildrenIncludeSpec says', () => {
+	assert.deepEqual(fieldProblems({ type: 'tab', children: '{{ paths.preset }}/modes/video/tabs/lora.yml' }), []);
+	assert.deepEqual(fieldProblems({ type: 'section', children: { file: '{{ paths._shared }}/native/sampling_turbo_base.yml', vars: { steps: 8, turbo: true, sampler: 'euler' } } }), []);
+	assert.deepEqual(fieldProblems({ type: 'section', children: { file: 'x.yml' } }), []);
+	assert.deepEqual(keys(fieldProblems({ type: 'section', children: { file: 'x.yml', vars: { nested: { a: 1 } } } })), ['children']);
+	assert.deepEqual(keys(fieldProblems({ type: 'section', children: { file: 'x.yml', extra: 1 } })), ['children']);
+	assert.deepEqual(keys(fieldProblems({ type: 'section', children: { vars: {} } })), ['children']);
+});
+
+test('a fields fragment may carry vars placeholders in its defaults, a mode form may not', () => {
+	assert.deepEqual(fieldProblems({ name: 'steps', type: 'slider', default: '{{ vars.steps }}' }, { allowVars: true }), []);
+	assert.deepEqual(keys(fieldProblems({ name: 'steps', type: 'slider', default: '{{ vars.steps }}' })), ['default']);
+	assert.deepEqual(keys(fieldProblems({ name: 'steps', type: 'slider', default: '{{ form.steps }}' }, { allowVars: true })), ['default']);
+	const doc = parseFormDocument('fields:\n  - name: cfg\n    type: slider\n    default: "{{ vars.cfg }}"\n');
+	assert.equal(treeProblems(doc.fields, { kind: 'tab' }).count, 0);
+	assert.equal(treeProblems(doc.fields, { kind: 'form' }).count, 1);
+});
+
+test('a formula group that preset.yml does not declare is a warning, since the lint refuses it', () => {
+	const doc = parseFormDocument('fields:\n  - name: steps\n    type: slider\n    formula: speed\n  - name: cfg\n    type: slider\n    formula: guidance\n  - name: seed\n    type: seed\n    formula: false\n');
+	const report = treeProblems(doc.fields, { kind: 'tab', formulaGroups: ['speed'] });
+	const [steps, cfg, seed] = doc.fields;
+
+	assert.equal(report.byNode.has(steps.id), false);
+	assert.deepEqual(report.byNode.get(cfg.id).map((item) => [item.key, item.level]), [['formula', 'warning']]);
+	assert.equal(report.byNode.has(seed.id), false);
+	assert.equal(report.count, 0);
+	assert.equal(treeProblems(doc.fields, { kind: 'tab' }).byNode.size, 0);
+});
