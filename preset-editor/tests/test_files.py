@@ -47,6 +47,19 @@ def test_read_text_gives_the_content_and_an_etag(draft_dir):
     assert result["size"] > 0
 
 
+def test_the_files_citing_another_mode_are_found(draft_dir):
+    (draft_dir / "modes" / "video" / "tabs").mkdir(parents=True)
+    (draft_dir / "modes" / "video" / "tabs" / "lora.yml").write_text("fields: []\n", encoding="utf-8")
+    (draft_dir / "modes" / "video" / "form.yml").write_text('children: "{{ paths.preset }}/modes/video/tabs/lora.yml"\n', encoding="utf-8")
+    (draft_dir / "modes" / "extend").mkdir(parents=True)
+    (draft_dir / "modes" / "extend" / "form.yml").write_text('children: "{{paths.preset}}/modes/video/tabs/lora.yml"\n', encoding="utf-8")
+    (draft_dir / "files" / "form").mkdir(parents=True)
+    (draft_dir / "files" / "form" / "models.yml").write_text('file: "{{ paths.preset }}/modes/videos/x.yml"\n', encoding="utf-8")
+
+    assert files.citing_files(draft_dir, "video") == ["modes/extend/form.yml"]
+    assert files.citing_files(draft_dir, "extend") == []
+
+
 def test_only_text_files_outside_public_are_read(draft_dir):
     (draft_dir / "public").mkdir()
     (draft_dir / "public" / "cover.png").write_bytes(b"\x89PNG")

@@ -10,7 +10,8 @@ from src.plugin_api import HookContext
 
 PLUGIN_ID = "preset-editor"
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PLUGIN_ROOT = REPO_ROOT / "content" / "plugins" / "marketplace" / PLUGIN_ID
+PLUGIN_ROOTS = [REPO_ROOT / "content" / "plugins" / kind / PLUGIN_ID for kind in ("local", "marketplace")]
+PLUGIN_ROOT = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0])
 PACKAGE = "preset_editor"
 SLOT = "admin.presets.header-actions"
 PRESETS_TAB = REPO_ROOT / "frontend" / "src" / "routes" / "admin" / "components" / "PresetsTab.svelte"
@@ -43,7 +44,9 @@ def _load(name):
 @pytest.fixture
 def loader(monkeypatch, tmp_path):
     monkeypatch.delenv(EXTRA_PLUGIN_DIRS_ENV, raising=False)
-    return PluginLoader(marketplace_dir=str(PLUGIN_ROOT.parent), local_dir=str(tmp_path / "local"))
+    dirs = {"marketplace_dir": str(tmp_path / "marketplace"), "local_dir": str(tmp_path / "local")}
+    dirs[f"{PLUGIN_ROOT.parent.name}_dir"] = str(PLUGIN_ROOT.parent)
+    return PluginLoader(**dirs)
 
 
 @pytest.fixture

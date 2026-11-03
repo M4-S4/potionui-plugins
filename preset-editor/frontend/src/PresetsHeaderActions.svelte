@@ -8,13 +8,13 @@
 	import { initialCopyForm } from './lib/drafts.js';
 	import { familiesFrom } from './lib/families.js';
 	import { navigateTo, toast } from './lib/dom.js';
-	import { standaloneApi } from './lib/hostApi.js';
+	import { hostPluginApi } from './lib/hostApi.js';
 	import { openPluginModal } from './lib/modal.js';
 
 	let { context = {} } = $props();
 
 	const PAGE_ROUTE = '/plugins/preset-editor';
-	const api = standaloneApi();
+	const api = hostPluginApi();
 
 	let phase = $state('loading');
 	let error = $state('');
@@ -120,5 +120,5 @@
 
 <div class="flex items-center gap-2">
 	<ActionButton icon="plus" title="Create a preset with the Preset Editor" onclick={openDialog}>New Preset</ActionButton>
-	<LocalPresetMenu {entries} {phase} {error} pageRoute={PAGE_ROUTE} />
+	<LocalPresetMenu {api} {entries} {phase} {error} pageRoute={PAGE_ROUTE} />
 </div>

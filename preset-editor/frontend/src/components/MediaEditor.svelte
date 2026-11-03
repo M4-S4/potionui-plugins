@@ -2,9 +2,9 @@
 	import ActionButton from './ActionButton.svelte';
 	import Icon from './Icon.svelte';
 	import Pill from './Pill.svelte';
-	import { deleteMedia, listMedia, mediaUrl, updateMedia, uploadMedia } from '../lib/client.js';
+	import { deleteMedia, listMedia, updateMedia, uploadMedia } from '../lib/client.js';
 	import { MEDIA_ACCEPT, formatBytes, galleryBody, galleryRows, isVideo, moveItem, rowsChanged } from '../lib/media.js';
-	import { confirm, toast } from '../lib/dom.js';
+	import { authMedia, confirm, toast } from '../lib/dom.js';
 
 	let { api, draftId, modes = [], focus = '', onChange, onDirty } = $props();
 
@@ -17,6 +17,7 @@
 	let mode = $state('');
 	let coverInput = $state();
 	let galleryInput = $state();
+	let revision = $state(0);
 
 	const files = $derived(Array.isArray(listing.files) ? listing.files : []);
 	const byPath = $derived(new Map(files.map((file) => [file.path, file])));
@@ -35,6 +36,7 @@
 	});
 
 	function adopt(data) {
+		revision += 1;
 		listing = data;
 		rows = galleryRows(data.gallery);
 	}
@@ -116,9 +118,9 @@
 
 {#snippet thumb(path, size)}
 	{#if isVideo(path)}
-		<video class="{size} flex-shrink-0 rounded bg-surface-3 object-cover" src={mediaUrl(draftId, path)} muted playsinline preload="metadata"></video>
+		<video class="{size} flex-shrink-0 rounded bg-surface-3 object-cover" use:authMedia={{ api, draftId, path, stamp: revision }} muted playsinline preload="metadata"></video>
 	{:else}
-		<img class="{size} flex-shrink-0 rounded bg-surface-3 object-cover" src={mediaUrl(draftId, path)} alt={path} loading="lazy" />
+		<img class="{size} flex-shrink-0 rounded bg-surface-3 object-cover" use:authMedia={{ api, draftId, path, stamp: revision }} alt={path} />
 	{/if}
 {/snippet}
 

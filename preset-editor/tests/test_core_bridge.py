@@ -26,15 +26,17 @@ class _Loader:
 @pytest.fixture
 def container(monkeypatch):
     loader = _Loader()
-    repository = SimpleNamespace(
-        find_preset_by_id=lambda preset_id: {"id": preset_id}, list_all_presets=lambda: [{"id": "a"}, {"id": "b"}]
-    )
+    repository = SimpleNamespace(list_all_presets=lambda: [{"id": "a"}, {"id": "b"}])
     installed = set()
-    collaborators = SimpleNamespace(db_repo=SimpleNamespace(is_preset_installed=lambda preset_id: preset_id in installed))
+    collaborators = SimpleNamespace(db_repo=SimpleNamespace())
     container = SimpleNamespace(
         preset_template_loader=loader, file_preset_repository=repository, preset_collaborators=collaborators
     )
     monkeypatch.setattr(core_bridge, "get_container", lambda: container)
+    monkeypatch.setattr(core_bridge, "preset_template", lambda preset_id: {"id": preset_id})
+    monkeypatch.setattr(
+        core_bridge, "preset_install_state", lambda preset_id: SimpleNamespace(installed=preset_id in installed, assigned=False)
+    )
     container.installed = installed
     return container
 
@@ -49,12 +51,12 @@ def test_preset_roots_are_paths(container):
     assert core_bridge.preset_roots() == [Path("content/presets/marketplace"), Path("content/presets/local")]
 
 
-def test_find_preset_and_catalog_ask_the_file_repository(container):
+def test_find_preset_asks_the_exported_preset_template_and_the_catalog_the_file_repository(container):
     assert core_bridge.find_preset("abc") == {"id": "abc"}
     assert [item["id"] for item in core_bridge.catalog()] == ["a", "b"]
 
 
-def test_is_installed_asks_the_database_repository(container):
+def test_is_installed_reads_the_exported_install_state(container):
     assert core_bridge.is_installed("x") is False
     container.installed.add("x")
     assert core_bridge.is_installed("x") is True
@@ -107,36 +109,6 @@ def test_lint_reports_a_broken_preset_as_errors(tmp_path):
     errors, warnings = core_bridge.lint(preset)
 
     assert errors and all(error.startswith("[ERROR] ") and str(preset / "preset.yml") in error for error in errors)
-
-
-def _request(*headers):
-    from fastapi import Request
-
-    return Request({"type": "http", "method": "GET", "path": "/", "query_string": b"", "headers": [(k.encode(), v.encode()) for k, v in headers]})
-
-
-def test_media_token_prefers_the_bearer_and_falls_back_to_the_media_cookie():
-    assert core_bridge.media_token(_request(("authorization", "Bearer abc"), ("cookie", "potionui_media_0123abcd4567=from-cookie"))) == "abc"
-    assert core_bridge.media_token(_request(("cookie", "other=1; potionui_media_0123abcd4567=from-cookie"))) == "from-cookie"
-    assert core_bridge.media_token(_request(("cookie", "potionui_media=plain"))) == "plain"
-    assert core_bridge.media_token(_request(("authorization", "Bearer "), ("cookie", "potionui_mediax=no; session=1"))) is None
-    assert core_bridge.media_token(_request()) is None
-
-
-def test_media_viewer_validates_the_token_off_the_event_loop(monkeypatch):
-    seen = []
-
-    def authenticate(token):
-        seen.append((token, threading.current_thread()))
-        return (ADMIN, None) if token == "good" else (None, "Invalid token")
-
-    monkeypatch.setattr(core_bridge, "authenticate_websocket_token", authenticate)
-
-    assert asyncio.run(core_bridge.media_viewer(_request(("cookie", "potionui_media_1=good")))) is ADMIN
-    assert asyncio.run(core_bridge.media_viewer(_request(("authorization", "Bearer bad")))) is None
-    assert asyncio.run(core_bridge.media_viewer(_request())) is None
-    assert [token for token, _ in seen] == ["good", "bad"]
-    assert all(thread is not threading.main_thread() for _, thread in seen)
 
 
 def test_lint_async_gives_the_same_report_from_a_thread(monkeypatch):

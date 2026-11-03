@@ -106,6 +106,13 @@ async def remove_mode(draft_id: str, mode: str):
         raise error(404, "not_found", f"no mode {mode}")
     if modes == [mode]:
         raise error(409, "conflict", "a preset keeps at least one mode")
+    citing = await asyncio.to_thread(files.citing_files, draft.dir, mode)
+    if citing:
+        raise error(
+            409, "conflict",
+            f"{', '.join(citing)} load files of the mode {mode}: point them elsewhere before removing it",
+            citing=citing,
+        )
     folder = draft.dir / "modes" / mode
     if folder.is_dir():
         await asyncio.to_thread(shutil.rmtree, folder)

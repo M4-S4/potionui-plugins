@@ -1,9 +1,9 @@
 <script>
 	import ActionButton from './ActionButton.svelte';
 	import Pill from './Pill.svelte';
-	import { deleteFile, mediaUrl, readFile, writeFile } from '../lib/client.js';
+	import { deleteFile, readFile, writeFile } from '../lib/client.js';
 	import { fileKind, insertAt, lineCount, snippetsFor } from '../lib/files.js';
-	import { confirm, toast } from '../lib/dom.js';
+	import { authImages, confirm, toast } from '../lib/dom.js';
 	import { renderMarkdown, safeHref } from '../lib/markdown.js';
 	import { parseYaml } from '../lib/yaml.js';
 
@@ -28,7 +28,7 @@
 	const snippets = $derived(snippetsFor(kind));
 	const yamlCheck = $derived(path.endsWith('.yml') || path.endsWith('.yaml') ? parseYaml(content) : { ok: true });
 	const isMarkdown = $derived(path.endsWith('.md'));
-	const rendered = $derived(isMarkdown && preview ? renderMarkdown(content, { resolveImage: (src) => (src.startsWith('public/') ? mediaUrl(draftId, src) : safeHref(src)) }) : '');
+	const rendered = $derived(isMarkdown && preview ? renderMarkdown(content, { resolveImage: (src) => (src.startsWith('public/') ? { media: src } : safeHref(src)) }) : '');
 
 	$effect(() => {
 		onDirty?.(dirty);
@@ -175,7 +175,7 @@
 	{:else if phase === 'error'}
 		<p class="px-3 py-6 text-center text-xs text-danger">{error}</p>
 	{:else if isMarkdown && preview}
-		<div class="markdown editor-body flex-1 overflow-auto px-4 py-3 text-sm text-fg">{@html rendered}</div>
+		<div class="markdown editor-body flex-1 overflow-auto px-4 py-3 text-sm text-fg" use:authImages={{ api, draftId, html: rendered }}>{@html rendered}</div>
 	{:else}
 		<div class="flex min-h-0 flex-1 font-mono text-xs leading-5">
 			<div bind:this={gutter} class="w-10 flex-shrink-0 select-none overflow-hidden border-r border-line bg-surface-2 py-2 text-right text-fg-subtle" aria-hidden="true">

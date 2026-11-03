@@ -1,7 +1,7 @@
 import { SNIPPETS } from './files.js';
 import { dumpYaml, parseYaml } from './yaml.js';
 
-export const PIPE_KEYS = ['name', 'id', 'enabled', 'input', 'cache', 'configuration'];
+export const PIPE_KEYS = ['name', 'id', 'enabled', 'input', 'configuration'];
 export const CHAINS = { native: 'native-chain', cloud: 'cloud-chain' };
 
 let counter = 0;

@@ -6,8 +6,8 @@
 	import Pill from './Pill.svelte';
 	import { readFile, writeFile } from '../lib/client.js';
 	import { confirm, toast } from '../lib/dom.js';
-	import { modeOf } from '../lib/files.js';
-	import { FORM_META_KEYS, cloneNode, externalChildrenPath, fieldNames, findNode, insertNode, isContainerType, metaProblems, moveNode, newField, newTabReference, nodeTitle, parseFormDocument, removeNode, serializeFormDocument } from '../lib/formModel.js';
+	import { fileKind, lineCount, modeOf } from '../lib/files.js';
+	import { PROMPT_REQUIREMENTS, cloneNode, externalChildrenPath, fieldNames, findNode, insertNode, isContainerType, metaProblems, moveNode, newField, newTabReference, nodeTitle, parseFormDocument, removeNode, serializeFormDocument } from '../lib/formModel.js';
 	import { treeProblems } from '../lib/formSchema.js';
 	import { commentLines, parseYaml } from '../lib/yaml.js';
 
@@ -18,7 +18,16 @@
 		['mode_label', 'Mode label', 'text'],
 		['mode_icon', 'Mode icon', 'text'],
 		['short_description', 'Short description', 'text'],
-		['description', 'Description (markdown)', 'textarea']
+		['description', 'Description (markdown)', 'textarea'],
+		['prompt_label', 'Prompt label', 'text'],
+		['prompt_placeholder', 'Prompt placeholder', 'text'],
+		['llm_guide', 'Guide for the assistant (markdown)', 'textarea']
+	];
+
+	const RAW_FIELDS = [
+		['negative_prompt', 'YAML, e.g. applies_when: true'],
+		['requirements', 'YAML list of the requirements of this mode alone'],
+		['segment_templates', 'YAML list of prompt segment templates']
 	];
 
 	let phase = $state('loading');
@@ -33,19 +42,21 @@
 	let paletteType = $state('string');
 	let tabSlug = $state('');
 	let variantName = $state('');
-	let negativeError = $state('');
+	let rawErrors = $state({});
+	let formulaGroups = $state.raw(null);
 	let view = $state('field');
 
 	const kind = $derived(path.endsWith('form.yml') ? 'form' : 'tab');
+	const fragment = $derived(fileKind(path) === 'fragment');
 	const mode = $derived(modeOf(path));
 	const variant = $derived(/\/variants\/([^/]+)\/form\.yml$/.exec(path)?.[1] ?? null);
 	const typeNames = $derived(types.map((item) => item.type));
 	const configKeys = $derived(Object.fromEntries(types.filter((item) => Array.isArray(item.configuration_schema) && item.configuration_schema.length).map((item) => [item.type, item.configuration_schema.map((spec) => spec.name)])));
 	const snapshot = $derived(doc ? serializeFormDocument(doc) : '');
 	const dirty = $derived(phase === 'ready' && snapshot !== loaded);
-	const report = $derived(doc ? treeProblems(doc.fields, { types: typeNames, kind, configKeys }) : { byNode: new Map(), general: [], count: 0 });
+	const report = $derived(doc ? treeProblems(doc.fields, { types: typeNames, kind, configKeys, formulaGroups }) : { byNode: new Map(), general: [], count: 0 });
 	const metaIssues = $derived(doc ? metaProblems(doc.meta) : {});
-	const blocked = $derived(report.count + Object.keys(metaIssues).length + (negativeError ? 1 : 0));
+	const blocked = $derived(report.count + Object.keys(metaIssues).length + Object.keys(rawErrors).length);
 	const found = $derived(doc ? findNode(doc.fields, selectedId) : null);
 	const selected = $derived(found?.node ?? null);
 	const comments = $derived(commentLines(source).length);
@@ -75,14 +86,22 @@
 		loaded = serializeFormDocument(parsed);
 		if (!findNode(parsed.fields, selectedId)) selectedId = parsed.fields[0]?.id ?? '';
 		view = selectedId ? 'field' : 'form';
-		negativeError = '';
+		rawErrors = {};
 		phase = 'ready';
+	}
+
+	async function loadFormulaGroups() {
+		const result = await readFile(api, draftId, 'preset.yml');
+		const parsed = result.ok ? parseYaml(result.data.content) : null;
+		const groups = parsed?.ok ? parsed.data?.formulas?.groups : null;
+		formulaGroups = groups && typeof groups === 'object' && !Array.isArray(groups) ? Object.keys(groups) : null;
 	}
 
 	async function load() {
 		phase = 'loading';
 		conflict = null;
 		error = '';
+		loadFormulaGroups();
 		const result = await readFile(api, draftId, path);
 		if (!result.ok) {
 			error = result.error.message;
@@ -247,11 +266,15 @@
 		if (!doc.meta.examples.length) doc.meta.examples = undefined;
 	}
 
-	function commitNegative(text) {
-		negativeError = '';
+	function commitRaw(key, text) {
 		const parsed = parseYaml(text);
-		if (!parsed.ok) negativeError = parsed.error.message;
-		doc.raw.negative_prompt = text;
+		const others = Object.fromEntries(Object.entries(rawErrors).filter(([name]) => name !== key));
+		rawErrors = parsed.ok ? others : { ...others, [key]: parsed.error.message };
+		doc.raw[key] = text;
+	}
+
+	function rawRows(key) {
+		return Math.min(12, Math.max(2, lineCount(doc.raw[key] ?? '')));
 	}
 
 	function onKeydown(event) {
@@ -271,10 +294,10 @@
 		{#each nodes as node (node.id)}
 			<li>
 				<button type="button" class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs transition-colors {node.id === selectedId ? 'bg-accent/10 text-accent' : 'text-fg hover:bg-surface-3/60'}" style="padding-left: {depth * 12 + 4}px" onclick={() => { selectedId = node.id; view = 'field'; }}>
-					<Icon name={Array.isArray(node.children) ? 'folder' : typeof node.children === 'string' ? 'external-link' : 'document'} class="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
+					<Icon name={Array.isArray(node.children) ? 'folder' : externalChildrenPath(node) ? 'external-link' : 'document'} class="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
 					<span class="truncate">{nodeTitle(node)}</span>
 					{#if problemCount(node)}<Pill tone="danger">{problemCount(node)}</Pill>{/if}
-					{#if typeof node.children === 'string'}<Pill tone="info">{externalChildrenPath(node)?.path.split('/').pop()}</Pill>{/if}
+					{#if externalChildrenPath(node)}<Pill tone="info">{externalChildrenPath(node).path.split('/').pop()}{externalChildrenPath(node).vars ? ' + vars' : ''}</Pill>{/if}
 				</button>
 				{#if Array.isArray(node.children)}
 					{@render tree(node.children, node.id, depth + 1)}
@@ -288,7 +311,7 @@
 <div class="editor-frame flex flex-col rounded-lg border border-line bg-surface-1" onkeydown={onKeydown}>
 	<div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
 		<span class="truncate font-mono text-xs text-fg" title={path}>{path}</span>
-		<Pill tone="info">{kind === 'form' ? (variant ? `variant ${variant}` : 'default form') : 'tab'}</Pill>
+		<Pill tone="info">{kind === 'form' ? (variant ? `variant ${variant}` : 'default form') : fragment ? 'fields fragment' : 'tab'}</Pill>
 		{#if dirty}<Pill tone="warning">unsaved</Pill>{/if}
 		{#if blocked}<Pill tone="danger">{blocked} problem{blocked > 1 ? 's' : ''}</Pill>{/if}
 		<span class="flex-1"></span>
@@ -325,7 +348,7 @@
 			<aside class="space-y-3">
 				<div class="rounded border border-line bg-surface-2/40 px-2 py-2">
 					<button type="button" class="mb-1 flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs font-semibold {view === 'form' ? 'bg-accent/10 text-accent' : 'text-fg hover:bg-surface-3/60'}" onclick={() => (view = 'form')}>
-						<Icon name="document" class="h-3.5 w-3.5" />{kind === 'form' ? 'Form settings' : 'Tab file'}
+						<Icon name="document" class="h-3.5 w-3.5" />{kind === 'form' ? 'Form settings' : fragment ? 'Fragment file' : 'Tab file'}
 					</button>
 					{@render tree(doc.fields, null, 0)}
 					{#if !doc.fields.length}<p class="px-1 py-1 text-xs text-fg-subtle">No field yet.</p>{/if}
@@ -365,7 +388,7 @@
 			</aside>
 			<div class="min-w-0">
 				{#if view === 'field' && selected}
-					<FieldInspector node={selected} {types} problems={report.byNode.get(selected.id) ?? []} {sharedFiles} onChange={updateSelected} {onOpenFile} />
+					<FieldInspector node={selected} {types} {formulaGroups} allowVars={kind !== 'form'} problems={report.byNode.get(selected.id) ?? []} {sharedFiles} onChange={updateSelected} {onOpenFile} />
 				{:else}
 					<div class="space-y-3 text-xs">
 						{#if kind === 'form'}
@@ -390,6 +413,16 @@
 										{/if}
 									</label>
 								{/each}
+								<label class="block">
+									<span class="mb-0.5 block text-fg-muted">Prompt <span class="text-fg-subtle">(whether the mode asks for one)</span></span>
+									<select class="input w-full" value={doc.meta.prompt ?? ''} onchange={(event) => setMeta('prompt', event.currentTarget.value)}>
+										<option value="">unset (required)</option>
+										{#each PROMPT_REQUIREMENTS as requirement (requirement)}
+											<option value={requirement}>{requirement}</option>
+										{/each}
+									</select>
+									{#if metaIssues.prompt}<span class="text-danger">{metaIssues.prompt}</span>{/if}
+								</label>
 								<label class="flex items-center gap-1.5 text-fg-muted">
 									<input type="checkbox" checked={doc.meta.default === true} onchange={(event) => setMeta('default', event.currentTarget.checked ? true : '')} />
 									Default variant of the mode
@@ -411,11 +444,13 @@
 								{/if}
 								{#if metaIssues.examples}<span class="text-danger">{metaIssues.examples}</span>{/if}
 							</div>
-							<label class="block">
-								<span class="mb-0.5 block text-fg-muted">negative_prompt <span class="text-fg-subtle">(YAML, e.g. <span class="font-mono">applies_when: true</span>)</span></span>
-								<textarea class="input w-full resize-y font-mono" rows="2" value={doc.raw.negative_prompt ?? ''} onblur={(event) => commitNegative(event.currentTarget.value)} spellcheck="false"></textarea>
-								{#if negativeError}<span class="text-danger">{negativeError}</span>{/if}
-							</label>
+							{#each RAW_FIELDS as [key, hint] (key)}
+								<label class="block">
+									<span class="mb-0.5 block text-fg-muted"><span class="font-mono">{key}</span> <span class="text-fg-subtle">({hint})</span></span>
+									<textarea class="input w-full resize-y font-mono" rows={rawRows(key)} value={doc.raw[key] ?? ''} onblur={(event) => commitRaw(key, event.currentTarget.value)} spellcheck="false"></textarea>
+									{#if rawErrors[key]}<span class="text-danger">{rawErrors[key]}</span>{/if}
+								</label>
+							{/each}
 							{#if Object.keys(doc.unknown).length}
 								<p class="text-fg-subtle">Kept as they are (unknown to this builder): <span class="font-mono">{Object.keys(doc.unknown).join(', ')}</span></p>
 							{/if}
@@ -429,7 +464,7 @@
 								</div>
 							{/if}
 						{:else}
-							<p class="text-fg-muted">A tab file holds a <span class="font-mono">fields:</span> list that a <span class="font-mono">tab</span> of form.yml loads through <span class="font-mono">children: "{'{{'} paths.preset {'}}'}/{path}"</span>. Pick a field on the left, or add one.</p>
+							<p class="text-fg-muted">{fragment ? 'A fields fragment' : 'A tab file'} holds a <span class="font-mono">fields:</span> list that a container of a form loads through <span class="font-mono">children: "{'{{'} paths.preset {'}}'}/{path}"</span>, or through <span class="font-mono">children: {'{'} file, vars {'}'}</span> when it carries <span class="font-mono">{'{{'} vars.name {'}}'}</span> placeholders. Pick a field on the left, or add one.</p>
 							{#if Object.keys(doc.unknown).length}
 								<p class="text-fg-subtle">Kept as they are: <span class="font-mono">{Object.keys(doc.unknown).join(', ')}</span></p>
 							{/if}

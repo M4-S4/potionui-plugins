@@ -12,10 +12,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  video-producer:
-    name: Video Producer on the pinned core
+  plugin:
+    name: ${{ matrix.name }} on the pinned core
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: video-producer
+            name: Video Producer
+            core-tests: test_video_producer_*.py
+            node-tests: "'frontend/src/i18n/*.test.js' 'frontend/src/lib/*.test.js'"
+          - id: preset-editor
+            name: Preset Editor
+            core-tests: test_preset_editor_*.py
+            node-tests: "'frontend/src/lib/*.test.js'"
+    env:
+      PLUGIN_ID: ${{ matrix.id }}
+      CORE_TESTS: ${{ matrix.core-tests }}
     steps:
       - name: Check out this repository
         uses: actions/checkout@v4
@@ -110,23 +125,27 @@ jobs:
         run: npm ci
 
       - name: Copy the plugin into content/plugins/local of the core
-        run: pwsh plugins/scripts/sync-plugins.ps1 -PotionUISrc core -Plugin video-producer
+        run: pwsh plugins/scripts/sync-plugins.ps1 -PotionUISrc core -Plugin "$PLUGIN_ID"
 
       - name: Put this repository's plugin and core-side tests in place of the core's own copies
         run: |
-          rsync -a --delete --exclude /frontend/dist/ --exclude /docs/screenshots/ plugins/video-producer/ core/content/plugins/marketplace/video-producer/
-          rsync -a --delete --include 'test_video_producer_*.py' --exclude '*' plugins/core-tests/video-producer/ core/tests/plugins/marketplace/
+          if [ -d "core/content/plugins/marketplace/$PLUGIN_ID" ]; then
+            rsync -a --delete --exclude /frontend/dist/ --exclude /docs/screenshots/ "plugins/$PLUGIN_ID/" "core/content/plugins/marketplace/$PLUGIN_ID/"
+          fi
+          if [ -d "plugins/core-tests/$PLUGIN_ID" ]; then
+            rsync -a --delete --include "$CORE_TESTS" --exclude '*' "plugins/core-tests/$PLUGIN_ID/" core/tests/plugins/marketplace/
+          fi
 
       - name: Build the plugin
         id: build
         working-directory: core
-        run: node scripts/build-plugins.mjs video-producer
+        run: node scripts/build-plugins.mjs "$PLUGIN_ID"
 
       - name: Upload the built dist
         uses: actions/upload-artifact@v4
         with:
-          name: video-producer-dist
-          path: core/content/plugins/local/video-producer/frontend/dist/
+          name: ${{ matrix.id }}-dist
+          path: core/content/plugins/local/${{ matrix.id }}/frontend/dist/
           if-no-files-found: error
           retention-days: 14
 
@@ -139,12 +158,12 @@ jobs:
           OPENBLAS_NUM_THREADS: "1"
           POTIONUI_TEST_THREADS: "1"
         run: >
-          python -m pytest content/plugins/local/video-producer/tests -q --durations=25 --timeout=300 -n 4 --dist worksteal
+          python -m pytest "content/plugins/local/$PLUGIN_ID/tests" -q --durations=25 --timeout=300 -n 4 --dist worksteal
           -m "not requires_gpu and not requires_models and not gc_sensitive"
-          --junitxml=junit-video-producer.xml
+          --junitxml="junit-$PLUGIN_ID.xml"
 
       - name: pytest (core-side tests)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.core-tests != '' }}
         working-directory: core
         env:
           OMP_NUM_THREADS: "1"
@@ -153,27 +172,22 @@ jobs:
           POTIONUI_TEST_THREADS: "1"
           POTIONUI_TEST_BUDGET_S: "15"
         run: >
-          python -m pytest tests/plugins/marketplace/test_video_producer_*.py -q --durations=25 --timeout=300
+          python -m pytest tests/plugins/marketplace/$CORE_TESTS -q --durations=25 --timeout=300
           -m "not requires_gpu and not requires_models and not gc_sensitive"
-          --junitxml=junit-video-producer-core.xml
+          --junitxml="junit-$PLUGIN_ID-core.xml"
 
-      - name: node --test (dictionaries)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        working-directory: core/content/plugins/local/video-producer
-        run: node --test "frontend/src/i18n/*.test.js"
-
-      - name: node --test (page modules)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        working-directory: core/content/plugins/local/video-producer
-        run: node --test "frontend/src/lib/*.test.js"
+      - name: node --test (frontend modules)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && matrix.node-tests != '' }}
+        working-directory: core/content/plugins/local/${{ matrix.id }}
+        run: node --test ${{ matrix.node-tests }}
 
       - name: Upload pytest results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: video-producer-pytest
+          name: ${{ matrix.id }}-pytest
           path: |
-            core/junit-video-producer.xml
-            core/junit-video-producer-core.xml
+            core/junit-${{ matrix.id }}.xml
+            core/junit-${{ matrix.id }}-core.xml
           if-no-files-found: ignore
           retention-days: 14

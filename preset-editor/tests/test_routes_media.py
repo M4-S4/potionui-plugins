@@ -135,7 +135,7 @@ def test_media_routes_need_an_admin(core):
     with TestClient(app) as client:
         assert client.get(f"{DRAFTS_URL}/01M4NGDDGASNZ1SFY7236C95QW/media").status_code == 403
         assert client.put(f"{DRAFTS_URL}/01M4NGDDGASNZ1SFY7236C95QW/media", json={}).status_code == 403
-        core.viewer = User(id="u", username="u", email="u@test.com", password_hash="x", account_type=AccountType.USER)
         assert client.get(f"{DRAFTS_URL}/01M4NGDDGASNZ1SFY7236C95QW/public/public/cover.webp").status_code == 403
-        core.viewer = None
+    app.dependency_overrides.clear()
+    with TestClient(app) as client:
         assert client.get(f"{DRAFTS_URL}/01M4NGDDGASNZ1SFY7236C95QW/public/public/cover.webp").status_code == 401

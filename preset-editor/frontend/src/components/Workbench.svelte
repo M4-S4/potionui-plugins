@@ -12,7 +12,7 @@
 	import PreviewPanel from './PreviewPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import { adminPresetUrl } from '../lib/catalog.js';
-	import { addMode, deleteDraft, exportDraftUrl, fieldTypes, getDraft, lintDraft, pipesReference, publishDraft, removeMode, sharedReference } from '../lib/client.js';
+	import { addMode, deleteDraft, downloadDraft, fieldTypes, knownModes, getDraft, lintDraft, pipesReference, publishDraft, removeMode, sharedReference } from '../lib/client.js';
 	import { MODE_RE, canPublish, describeSource, formatTimestamp } from '../lib/drafts.js';
 	import { fileKind, isEditable, isMedia, modeOf } from '../lib/files.js';
 	import { confirm, toast } from '../lib/dom.js';
@@ -36,17 +36,19 @@
 	let failure = $state.raw(null);
 	let sharedFiles = $state.raw([]);
 	let newMode = $state('');
+	let modeChoices = $state.raw([]);
 	let dirty = $state(false);
 
 	const files = $derived(Array.isArray(draft.files) ? draft.files : []);
 	const modes = $derived([...new Set(files.map((file) => modeOf(file.path)).filter(Boolean))]);
 	const mediaFiles = $derived(files.filter((file) => isMedia(file.path)));
 	const selectedKind = $derived(selected ? fileKind(selected) : '');
-	const buildable = $derived(selectedKind === 'form' || selectedKind === 'tab' || selectedKind === 'pipeline');
+	const buildable = $derived(['form', 'tab', 'fragment', 'pipeline'].includes(selectedKind));
 	const ready = $derived(canPublish(draft.last_lint) && !busy && !dirty);
 	const modeProblem = $derived(newMode && !MODE_RE.test(newMode.trim()) ? 'lowercase letters, digits and _' : modes.includes(newMode.trim()) ? 'already there' : '');
 
 	onMount(async () => {
+		knownModes(api).then((choices) => (modeChoices = choices));
 		const [shared, fields, reference] = await Promise.all([sharedReference(api), fieldTypes(api), pipesReference(api)]);
 		if (shared.ok) sharedFiles = shared.data.files ?? [];
 		if (fields.ok && Array.isArray(fields.data)) types = fields.data;
@@ -123,6 +125,13 @@
 			toast('success', `${result.data.preset.name} is published${result.data.installed ? ' and installed' : ''}`);
 		}
 		busy = '';
+	}
+
+	async function download() {
+		busy = 'download';
+		const result = await downloadDraft(api, draft.draft_id);
+		busy = '';
+		if (!result.ok) toast('error', result.error.message);
 	}
 
 	async function discard() {
@@ -203,7 +212,12 @@
 					{/each}
 				</ul>
 				<form class="mt-2 flex items-center gap-1" onsubmit={(event) => { event.preventDefault(); createMode(); }}>
-					<input type="text" class="input min-w-0 flex-1 font-mono text-xs" placeholder="new mode" bind:value={newMode} aria-label="New mode name" />
+					<input type="text" class="input min-w-0 flex-1 font-mono text-xs" placeholder="new mode" list="preset-editor-known-modes" bind:value={newMode} aria-label="New mode name" />
+					<datalist id="preset-editor-known-modes">
+						{#each modeChoices.filter((choice) => !modes.includes(choice.mode)) as choice (choice.mode)}
+							<option value={choice.mode}>{choice.label}</option>
+						{/each}
+					</datalist>
 					<ActionButton type="submit" icon="plus" loading={busy === 'mode'} disabled={!newMode.trim() || !!modeProblem || !!busy} title={modeProblem || 'Add a mode from the skeleton'}>Add</ActionButton>
 				</form>
 			</div>
@@ -289,7 +303,7 @@
 			Install on this instance
 		</label>
 		<ActionButton variant="primary" icon="publish" loading={busy === 'publish'} disabled={!ready} title={dirty ? 'Save the open editor first' : canPublish(draft.last_lint) ? 'Write the preset into content/presets/local' : 'Fix the lint errors first'} onclick={publish}>Publish</ActionButton>
-		<a class="inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-3/50 hover:text-fg" href={exportDraftUrl(draft.draft_id)} download title="Download the draft folder as a zip archive"><Icon name="folder" class="h-3.5 w-3.5" />Download zip</a>
+		<ActionButton variant="ghost" icon="folder" loading={busy === 'download'} disabled={!!busy} title="Download the draft folder as a zip archive" onclick={download}>Download zip</ActionButton>
 		<span class="flex-1"></span>
 		<ActionButton variant="ghost" icon="trash" loading={busy === 'discard'} disabled={!!busy} onclick={discard}>Discard draft</ActionButton>
 	</div>

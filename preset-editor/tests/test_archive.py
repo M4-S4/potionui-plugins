@@ -16,6 +16,7 @@ def _zip(entries, **kwargs):
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as out:
         for name, data in entries:
             info = zipfile.ZipInfo(name)
+            info.filename = name
             info.compress_type = zipfile.ZIP_DEFLATED
             if name in kwargs.get("links", ()):
                 info.external_attr = (stat.S_IFLNK | 0o777) << 16

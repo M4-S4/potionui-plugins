@@ -23,7 +23,10 @@ export function renderInline(raw, { resolveImage } = {}) {
 	html = html.replace(/!\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, alt, src) => {
 		const target = unescapeHtml(src);
 		const resolved = typeof resolveImage === 'function' ? resolveImage(target) : safeHref(target);
-		return resolved ? `<img src="${escapeHtml(resolved)}" alt="${alt}" loading="lazy">` : alt;
+		if (resolved && typeof resolved === 'object' && typeof resolved.media === 'string') {
+			return `<img data-preset-editor-media="${escapeHtml(resolved.media)}" alt="${alt}">`;
+		}
+		return typeof resolved === 'string' && resolved ? `<img src="${escapeHtml(resolved)}" alt="${alt}" loading="lazy">` : alt;
 	});
 	html = html.replace(/\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, label, href) => {
 		const safe = safeHref(unescapeHtml(href));

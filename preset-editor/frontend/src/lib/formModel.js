@@ -1,7 +1,8 @@
 import { dumpYaml, parseYaml } from './yaml.js';
 
-export const FORM_META_KEYS = ['name', 'label', 'description', 'short_description', 'mode_label', 'mode_icon', 'examples', 'default', 'order'];
-export const FORM_RAW_KEYS = ['negative_prompt'];
+export const FORM_META_KEYS = ['name', 'label', 'description', 'short_description', 'mode_label', 'mode_icon', 'prompt', 'prompt_label', 'prompt_placeholder', 'llm_guide', 'examples', 'default', 'order'];
+export const FORM_RAW_KEYS = ['negative_prompt', 'requirements', 'segment_templates'];
+export const PROMPT_REQUIREMENTS = ['required', 'optional', 'none'];
 export const FIELD_FORM_KEYS = ['type', 'name', 'label', 'description', 'ai_hint', 'formula', 'default', 'required', 'audience', 'width', 'full_width', 'visible', 'interactive', 'save_into', 'configuration'];
 export const FIELD_RAW_KEYS = ['when', 'reactions', 'listeners', 'capability', 'merge_from', 'input', 'container', 'hidden_when_video_director'];
 export const FIELD_KEYS = [...FIELD_FORM_KEYS, ...FIELD_RAW_KEYS, 'children'];
@@ -28,7 +29,7 @@ export function toNode(data) {
 	const attrs = {};
 	let children = null;
 	for (const [key, value] of Object.entries(data)) {
-		if (key === 'children') children = Array.isArray(value) ? value.map((child) => toNode(isObject(child) ? child : { type: 'invalid', value: child })) : value;
+		if (key === 'children') children = Array.isArray(value) ? value.map((child) => toNode(isObject(child) ? child : { type: 'invalid', value: child })) : clone(value);
 		else attrs[key] = clone(value);
 	}
 	return { id: nextId(), attrs, children };
@@ -40,7 +41,7 @@ export function fromNode(node) {
 		if (key !== 'children' && value !== undefined) out[key] = clone(value);
 	}
 	if (node.children !== null && node.children !== undefined) {
-		out.children = Array.isArray(node.children) ? node.children.map(fromNode) : node.children;
+		out.children = Array.isArray(node.children) ? node.children.map(fromNode) : clone(node.children);
 	}
 	return out;
 }
@@ -49,7 +50,8 @@ export function parseFormDocument(text, { kind = 'form' } = {}) {
 	const parsed = parseYaml(text);
 	if (!parsed.ok) return { ok: false, error: parsed.error };
 	const data = parsed.data === null ? {} : parsed.data;
-	if (!isObject(data)) return { ok: false, error: { message: `${kind === 'tab' ? 'a tab file' : 'form.yml'} is a mapping with a fields: list`, line: null, column: null } };
+	if (Array.isArray(data)) return { ok: false, error: { message: 'this file is an option list, not a fields: tree: edit it in the YAML view', line: null, column: null } };
+	if (!isObject(data)) return { ok: false, error: { message: `${kind === 'tab' ? 'a fields fragment' : 'form.yml'} is a mapping with a fields: list`, line: null, column: null } };
 	const rawFields = data.fields === undefined || data.fields === null ? [] : data.fields;
 	if (!Array.isArray(rawFields)) return { ok: false, error: { message: 'fields: is a list', line: null, column: null } };
 	if (rawFields.some((item) => !isObject(item))) return { ok: false, error: { message: 'every entry of fields: is a mapping', line: null, column: null } };
@@ -96,6 +98,10 @@ export function metaProblems(meta) {
 	const problems = {};
 	if (meta.name !== undefined && meta.name !== null && meta.name !== '' && !/^[A-Za-z0-9_-]+$/.test(String(meta.name))) problems.name = 'letters, digits, _ and -';
 	if (meta.order !== undefined && meta.order !== null && meta.order !== '' && !Number.isInteger(Number(meta.order))) problems.order = 'an integer';
+	if (meta.prompt !== undefined && meta.prompt !== null && meta.prompt !== '' && !PROMPT_REQUIREMENTS.includes(meta.prompt)) problems.prompt = 'required, optional or none';
+	for (const key of ['prompt_label', 'prompt_placeholder']) {
+		if (meta[key] !== undefined && meta[key] !== null && (typeof meta[key] !== 'string' || !meta[key].trim())) problems[key] = 'a text, or nothing';
+	}
 	if (meta.examples !== undefined && meta.examples !== null) {
 		const examples = Array.isArray(meta.examples) ? meta.examples : [meta.examples];
 		if (examples.some((item) => typeof item !== 'string' || !item.startsWith('public/'))) problems.examples = 'paths under public/';
@@ -185,12 +191,23 @@ export function isContainerType(type) {
 	return CONTAINER_TYPES.includes(type);
 }
 
+export function isChildrenInclude(children) {
+	return typeof children === 'string' || (isObject(children) && typeof children.file === 'string');
+}
+
 export function externalChildrenPath(node) {
-	if (typeof node.children !== 'string') return null;
-	const value = node.children.trim();
-	if (value.startsWith(PRESET_PATH_PREFIX)) return { scope: 'preset', path: value.slice(PRESET_PATH_PREFIX.length) };
-	if (value.startsWith(SHARED_PATH_PREFIX)) return { scope: 'shared', path: value.slice(SHARED_PATH_PREFIX.length) };
-	return { scope: 'other', path: value };
+	if (!isChildrenInclude(node.children)) return null;
+	const file = typeof node.children === 'string' ? node.children : node.children.file;
+	const vars = isObject(node.children) && isObject(node.children.vars) ? node.children.vars : null;
+	const value = file.trim();
+	if (value.startsWith(PRESET_PATH_PREFIX)) return { scope: 'preset', path: value.slice(PRESET_PATH_PREFIX.length), file, vars };
+	if (value.startsWith(SHARED_PATH_PREFIX)) return { scope: 'shared', path: value.slice(SHARED_PATH_PREFIX.length), file, vars };
+	return { scope: 'other', path: value, file, vars };
+}
+
+export function withIncludeVars(children, vars) {
+	const file = typeof children === 'string' ? children : children.file;
+	return vars && Object.keys(vars).length ? { file, vars } : file;
 }
 
 export function newField(type, { name = '', label = '' } = {}) {

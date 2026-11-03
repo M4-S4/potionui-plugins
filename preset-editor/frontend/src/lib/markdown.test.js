@@ -27,8 +27,10 @@ test('renderInline escapes HTML and keeps only safe links', () => {
 test('images resolve through the caller or keep their alt text', () => {
 	assert.equal(renderInline('![Cover](public/cover.webp)'), 'Cover');
 	assert.equal(renderInline('![Cover](https://example.com/c.webp)'), '<img src="https://example.com/c.webp" alt="Cover" loading="lazy">');
-	const resolve = (src) => (src.startsWith('public/') ? `/api/plugins/preset-editor/drafts/D/public/${src}` : null);
-	assert.equal(renderInline('![Cover](public/cover.webp)', { resolveImage: resolve }), '<img src="/api/plugins/preset-editor/drafts/D/public/public/cover.webp" alt="Cover" loading="lazy">');
+	const resolve = (src) => (src.startsWith('public/') ? { media: src } : null);
+	assert.equal(renderInline('![Cover "x"](public/cover.webp)', { resolveImage: resolve }), '<img data-preset-editor-media="public/cover.webp" alt="Cover &quot;x&quot;">');
+	assert.equal(renderInline('![Cover](public/cover.webp)', { resolveImage: resolve }), '<img data-preset-editor-media="public/cover.webp" alt="Cover">');
+	assert.equal(renderInline('![Cover](https://example.com/c.webp)', { resolveImage: (src) => src }), '<img src="https://example.com/c.webp" alt="Cover" loading="lazy">');
 	assert.equal(renderInline('![x](ftp://a)', { resolveImage: resolve }), 'x');
 	assert.equal(renderMarkdown(''), '');
 	assert.equal(renderMarkdown('plain\r\ntext'), '<p>plain text</p>');

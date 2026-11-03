@@ -1,13 +1,9 @@
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
-from fastapi import Request
-
-from src.plugin_api import User, authenticate_websocket_token, get_container
-from src.plugin_api.presets import lint_preset_dir, preset_operations
-
-MEDIA_COOKIE = "potionui_media"
+from src.plugin_api import User, get_container
+from src.plugin_api.presets import lint_preset_dir, preset_install_state, preset_operations, preset_template
 
 
 def preset_loader():
@@ -27,7 +23,7 @@ def preset_roots() -> List[Path]:
 
 
 def find_preset(preset_id: str):
-    return file_repository().find_preset_by_id(preset_id)
+    return preset_template(preset_id)
 
 
 def catalog() -> List[Dict[str, Any]]:
@@ -35,7 +31,7 @@ def catalog() -> List[Dict[str, Any]]:
 
 
 def is_installed(preset_id: str) -> bool:
-    return bool(collaborators().db_repo.is_preset_installed(preset_id))
+    return preset_install_state(preset_id).installed
 
 
 def install_preset(preset_id: str, user: User) -> Dict[str, Any]:
@@ -66,20 +62,3 @@ async def reload_presets_async() -> None:
 async def lint_async(path: Path) -> Tuple[List[str], List[str]]:
     return await asyncio.to_thread(lint, path)
 
-
-def media_token(request: Request) -> Optional[str]:
-    header = request.headers.get("authorization", "")
-    if header.lower().startswith("bearer ") and header[7:].strip():
-        return header[7:].strip()
-    for name, value in request.cookies.items():
-        if value and (name == MEDIA_COOKIE or name.startswith(f"{MEDIA_COOKIE}_")):
-            return value
-    return None
-
-
-async def media_viewer(request: Request) -> Optional[User]:
-    token = media_token(request)
-    if not token:
-        return None
-    user, _error = await asyncio.to_thread(authenticate_websocket_token, token)
-    return user
