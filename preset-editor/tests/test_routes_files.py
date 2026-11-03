@@ -104,6 +104,20 @@ def test_a_mode_is_added_from_the_skeleton_and_removed_with_its_folder(client, d
     assert client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/nope").status_code == 404
 
 
+def test_a_mode_whose_files_another_mode_loads_is_kept(client, draft, roots):
+    client.post(f"{DRAFTS_URL}/{draft['draft_id']}/modes", json={"mode": "img2img"})
+    form = drafts.load(roots, draft["draft_id"]).dir / "modes" / "img2img" / "form.yml"
+    form.write_text(form.read_text(encoding="utf-8").replace("modes/img2img/tabs/main.yml", "modes/txt2img/tabs/main.yml"), encoding="utf-8")
+
+    refused = client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/txt2img")
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["citing"] == ["modes/img2img/form.yml"]
+    assert "modes/img2img/form.yml" in refused.json()["detail"]["message"]
+    assert (form.parent.parent / "txt2img" / "tabs" / "main.yml").is_file()
+    assert client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/img2img").status_code == 200
+
+
 def test_a_family_mode_is_added_with_the_family_tabs(client, draft):
     body = {"mode": "img2img", "family": {**FAMILY.__dict__, "model_slots": list(FAMILY.model_slots), "sampler_choices": list(FAMILY.sampler_choices)}}
 

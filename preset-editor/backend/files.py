@@ -10,6 +10,8 @@ MAX_TEXT_BYTES = 1024 * 1024
 PUBLIC_DIR = "public"
 MANIFEST = "preset.yml"
 MODE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+PRESET_PATH_RE = r"\{\{\s*paths\.preset\s*\}\}/"
+YAML_EXTENSIONS = frozenset({".yml", ".yaml"})
 
 
 class FilesError(Exception):
@@ -154,6 +156,18 @@ def check_mode_name(value: str) -> str:
     if not isinstance(value, str) or not MODE_NAME_RE.match(value):
         raise FilesError("invalid_request", "a mode name is lowercase letters, digits and '_', starting with a letter")
     return value
+
+
+def citing_files(draft_dir: Path, mode: str) -> List[str]:
+    pattern = re.compile(rf"{PRESET_PATH_RE}modes/{re.escape(mode)}/")
+    own = draft_dir / "modes" / mode
+    found = []
+    for path in sorted(draft_dir.rglob("*")):
+        if path.suffix.lower() not in YAML_EXTENSIONS or not path.is_file() or own in path.parents:
+            continue
+        if pattern.search(path.read_text(encoding="utf-8", errors="replace")):
+            found.append(path.relative_to(draft_dir).as_posix())
+    return found
 
 
 def manifest_modes(text: str) -> List[str]:
