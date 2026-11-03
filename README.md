@@ -35,7 +35,7 @@ Every text file is stored with LF line endings (`.gitattributes`), whatever `cor
 Copy `.env.example` to `.env.local` (ignored by git, never committed) and set `POTIONUI_SRC` to a PotionUI checkout. The scripts read it, or take `-PotionUISrc`:
 
 - `scripts/sync-plugins.ps1 [-Plugin <id>]` mirrors each plugin into `content/plugins/local/<id>` of the checkout, as a real folder (robocopy on Windows, rsync elsewhere).
-- `scripts/build-plugins.ps1 [-Plugin <id>] [-Local]` builds the frontend of a plugin with the core's toolchain (`scripts/build-plugins.mjs`) and copies `frontend/dist` back here. The dist of Video Producer is ignored by git: the CI builds it and the releases carry it. Model Browser and Preset Editor still commit theirs.
+- `scripts/build-plugins.ps1 [-Plugin <id>] [-Local]` builds the frontend of a plugin with the core's toolchain (`scripts/build-plugins.mjs`) and copies `frontend/dist` back here. `frontend/dist` is ignored by git for every plugin: the CI builds it and the releases carry it.
 - `scripts/test-plugins.ps1 [-Plugin <id>]` runs the pytest suite of each plugin in its own process, from the checkout or in the container named by `POTIONUI_CONTAINER`.
 - `scripts/import-from-fork.ps1` brings Video Producer here from the fork (next section).
 
