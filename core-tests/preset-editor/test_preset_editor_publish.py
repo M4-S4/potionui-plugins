@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from src.features.presets.file_repository import FilePresetRepository
 from src.features.presets.loader import PresetTemplateLoader
@@ -22,6 +23,7 @@ PLUGIN_ROOTS = [REPO_ROOT / "content" / "plugins" / kind / PLUGIN_ID for kind in
 PLUGIN_ROOT = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0])
 PACKAGE = "preset_editor"
 NATIVE = PLUGIN_ROOT / "tests" / "fixtures" / "presets" / "minimal-native"
+CORE_MARKETPLACE = REPO_ROOT / "content" / "presets" / "marketplace"
 ADMIN = User(id="admin-1", username="admin", email="admin@test.com", password_hash="x", account_type=AccountType.ADMIN)
 
 
@@ -190,3 +192,62 @@ def test_deleting_a_local_preset_uninstalls_it_and_archives_it(core, roots):
     assert not (roots.local_presets / "MyModel").exists()
     assert [(e["stamp"], e["reason"]) for e in history.list_entries(roots, "copy-one")] == [(stamp, "delete")]
     assert [item["id"] for item in core.bridge.catalog()] == ["fixture-minimal-native"]
+
+
+def _tree(root, skipped):
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*")) if path.is_file() and path.name not in skipped
+    }
+
+
+def test_every_core_marketplace_preset_copied_by_the_editor_is_loaded_under_its_new_id(roots, tmp_path):
+    drafts, publish = _load("backend.drafts"), _load("backend.publish")
+    sources = sorted(manifest.parent for manifest in CORE_MARKETPLACE.rglob("preset.yml"))
+    assert len(sources) >= 20
+
+    copies = {}
+    for index, source in enumerate(sources):
+        target = source.relative_to(CORE_MARKETPLACE).as_posix().replace("/", "-")
+        draft = drafts.create_copy(
+            roots, source_dir=source, preset_id=f"copy-{index:03d}", name=f"Copy {index}", target_dir=target,
+            created_by="admin-1", source="copy_of:core",
+        )
+        original = yaml.safe_load((source / "preset.yml").read_text(encoding="utf-8"))
+        copied = yaml.safe_load((draft.dir / "preset.yml").read_text(encoding="utf-8"))
+        assert copied == {**original, "id": draft.preset_id, "name": draft.name}, source
+        skipped = {"preset.yml", drafts.META_FILE}
+        assert _tree(draft.dir, skipped) == _tree(source, skipped), source
+        publish.publish_draft(roots, draft)
+        copies[draft.preset_id] = target
+
+    loader = PresetTemplateLoader([str(CORE_MARKETPLACE), str(roots.local_presets)])
+    loader.reload()
+
+    local_errors = {key: value for key, value in loader.load_errors.items() if Path(key).resolve().is_relative_to(roots.local_presets.resolve())}
+    assert local_errors == {}
+    for preset_id, target in copies.items():
+        template = loader.get(preset_id)
+        assert template is not None, preset_id
+        assert template.origin == {"kind": "local", "plugin_id": None, "path": target}
+
+
+def test_a_field_in_a_formula_group_preset_yml_does_not_declare_keeps_a_draft_from_publishing(core, roots):
+    drafts, files = _load("backend.drafts"), _load("backend.files")
+    source = core.bridge.find_preset("fixture-minimal-native")
+    draft = drafts.create_copy(
+        roots, source_dir=Path(source.path), preset_id="copy-one", name="Copy one", target_dir="MyModel/v1",
+        created_by="admin-1", source="copy_of:fixture-minimal-native",
+    )
+    tab = draft.dir / "modes" / "txt2img" / "tabs" / "main.yml"
+    tab.write_text(tab.read_text(encoding="utf-8").replace('    label: "Steps"\n', '    label: "Steps"\n    formula: "speed"\n'), encoding="utf-8")
+
+    errors, _warnings = core.bridge.lint(draft.dir)
+    assert any("formula 'speed'" in error and "formulas.groups" in error for error in errors), errors
+
+    manifest = draft.dir / "preset.yml"
+    manifest.write_text(
+        files.replace_top_level_block(manifest.read_text(encoding="utf-8"), "formulas", 'formulas:\n  groups:\n    speed: { label: "Speed" }'),
+        encoding="utf-8",
+    )
+    assert core.bridge.lint(draft.dir)[0] == []
