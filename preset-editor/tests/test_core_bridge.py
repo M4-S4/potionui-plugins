@@ -26,15 +26,17 @@ class _Loader:
 @pytest.fixture
 def container(monkeypatch):
     loader = _Loader()
-    repository = SimpleNamespace(
-        find_preset_by_id=lambda preset_id: {"id": preset_id}, list_all_presets=lambda: [{"id": "a"}, {"id": "b"}]
-    )
+    repository = SimpleNamespace(list_all_presets=lambda: [{"id": "a"}, {"id": "b"}])
     installed = set()
-    collaborators = SimpleNamespace(db_repo=SimpleNamespace(is_preset_installed=lambda preset_id: preset_id in installed))
+    collaborators = SimpleNamespace(db_repo=SimpleNamespace())
     container = SimpleNamespace(
         preset_template_loader=loader, file_preset_repository=repository, preset_collaborators=collaborators
     )
     monkeypatch.setattr(core_bridge, "get_container", lambda: container)
+    monkeypatch.setattr(core_bridge, "preset_template", lambda preset_id: {"id": preset_id})
+    monkeypatch.setattr(
+        core_bridge, "preset_install_state", lambda preset_id: SimpleNamespace(installed=preset_id in installed, assigned=False)
+    )
     container.installed = installed
     return container
 
@@ -49,12 +51,12 @@ def test_preset_roots_are_paths(container):
     assert core_bridge.preset_roots() == [Path("content/presets/marketplace"), Path("content/presets/local")]
 
 
-def test_find_preset_and_catalog_ask_the_file_repository(container):
+def test_find_preset_asks_the_exported_preset_template_and_the_catalog_the_file_repository(container):
     assert core_bridge.find_preset("abc") == {"id": "abc"}
     assert [item["id"] for item in core_bridge.catalog()] == ["a", "b"]
 
 
-def test_is_installed_asks_the_database_repository(container):
+def test_is_installed_reads_the_exported_install_state(container):
     assert core_bridge.is_installed("x") is False
     container.installed.add("x")
     assert core_bridge.is_installed("x") is True

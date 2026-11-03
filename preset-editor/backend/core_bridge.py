@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import Request
 
 from src.plugin_api import User, authenticate_websocket_token, get_container
-from src.plugin_api.presets import lint_preset_dir, preset_operations
+from src.plugin_api.presets import lint_preset_dir, preset_install_state, preset_operations, preset_template
 
 MEDIA_COOKIE = "potionui_media"
 
@@ -27,7 +27,7 @@ def preset_roots() -> List[Path]:
 
 
 def find_preset(preset_id: str):
-    return file_repository().find_preset_by_id(preset_id)
+    return preset_template(preset_id)
 
 
 def catalog() -> List[Dict[str, Any]]:
@@ -35,7 +35,7 @@ def catalog() -> List[Dict[str, Any]]:
 
 
 def is_installed(preset_id: str) -> bool:
-    return bool(collaborators().db_repo.is_preset_installed(preset_id))
+    return preset_install_state(preset_id).installed
 
 
 def install_preset(preset_id: str, user: User) -> Dict[str, Any]:

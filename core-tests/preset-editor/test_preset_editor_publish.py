@@ -11,8 +11,10 @@ from src.features.presets.file_repository import FilePresetRepository
 from src.features.presets.loader import PresetTemplateLoader
 from src.features.presets.repository import DatabasePresetRepository
 from src.features.presets.schema import PRESET_ID_RE
+from src.features.user_groups.repository import UserGroupRepository
 from src.features.users.repository import UserRepository
 from src.plugin_api import AccountType, User
+from src.plugin_api import presets as plugin_api_presets
 
 PLUGIN_ID = "preset-editor"
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -73,12 +75,16 @@ def core(roots, tmp_path, monkeypatch, mock_db):
     loader.reload()
     file_repo = FilePresetRepository(loader)
     db_repo = DatabasePresetRepository()
-    collaborators = SimpleNamespace(preset_loader=loader, file_repo=file_repo, db_repo=db_repo, plugins=_Plugins())
+    collaborators = SimpleNamespace(
+        preset_loader=loader, file_repo=file_repo, db_repo=db_repo, group_repo=UserGroupRepository(), plugins=_Plugins()
+    )
     container = SimpleNamespace(
-        preset_template_loader=loader, file_preset_repository=file_repo, preset_collaborators=collaborators
+        preset_template_loader=loader, file_preset_repository=file_repo, preset_collaborators=collaborators,
+        requirement_checker_registry=None,
     )
     core_bridge = _load("backend.core_bridge")
     monkeypatch.setattr(core_bridge, "get_container", lambda: container)
+    monkeypatch.setattr(plugin_api_presets, "get_container", lambda: container)
     return SimpleNamespace(bridge=core_bridge, loader=loader, db_repo=db_repo, marketplace=marketplace)
 
 
