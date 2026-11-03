@@ -51,10 +51,10 @@ tests run in the CI against that core. Version 0.1.0 was written for PotionUI `m
   menu stays in the tab header; the linter does not check field types, so a preset that lints
   clean can still be refused by the loader at publish time and is then rolled back;
   `src.plugin_api.presets` has no `reload_presets()`, so the plugin reloads through
-  `get_container().preset_template_loader.reload()`, which the module's documentation now names
-  as the way to do it; `content/presets/local` is still not a volume of the official Docker
-  setup; Generate has no `?preset=<id>` parameter; the pipeline preview still needs every value
-  the pipeline reads.
+  `get_container().preset_template_loader.reload()`, the way the module's docstring names, while
+  the core's own reload route still clears the catalogue before it loads it again;
+  `content/presets/local` is still not a volume of the official Docker setup; Generate has no
+  `?preset=<id>` parameter; the pipeline preview still needs every value the pipeline reads.
 - **Host tooltips.** The plugin's own buttons still show their hints with a native `title`,
   where the host now uses its `Tooltip` and `IconButton` tooltips.
 - **Page bundle.** The page is one bundle; the core's build can now split it on dynamic
