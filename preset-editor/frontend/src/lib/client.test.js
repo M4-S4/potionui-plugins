@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { callPlugin, downloadDraft, downloadPreset, fetchMedia, getMe, importDraft, listCatalog, normalizeError, unwrap, writeFile } from './client.js';
+import { callPlugin, downloadDraft, downloadPreset, fetchMedia, getMe, importDraft, knownModes, listCatalog, normalizeError, unwrap, writeFile } from './client.js';
 
 function fakeHostApi(handler) {
 	const calls = [];
@@ -169,4 +169,12 @@ test('zip downloads go through the host download and report its refusal', async 
 	assert.deepEqual(await downloadPreset(api, 'market one'), { ok: false, error: { status: 409, code: 'not_local', message: 'only a local preset' } });
 	assert.deepEqual(asked, [['/drafts/D/export', undefined], ['/presets/market%20one/export', undefined]]);
 	assert.equal((await downloadDraft({}, 'D')).error.code, 'no_api');
+});
+
+test('the known modes come from the core mode labels, sorted, and are empty when the core refuses', async () => {
+	const api = rawApi(() => new Response(JSON.stringify({ success: true, data: { labels: { txt2img: 'Text to Image', extend: 'Extend', bad: 3 } } }), { status: 200 }));
+
+	assert.deepEqual(await knownModes(api), [{ mode: 'extend', label: 'Extend' }, { mode: 'txt2img', label: 'Text to Image' }]);
+	assert.equal(api.calls[0][0], '/api/presets/mode-labels');
+	assert.deepEqual(await knownModes(rawApi(() => new Response('{}', { status: 500 }))), []);
 });

@@ -284,6 +284,15 @@ export function fieldTypes(api) {
 	return callCore(api, '/api/fields/types');
 }
 
+export async function knownModes(api) {
+	const result = await callCore(api, '/api/presets/mode-labels');
+	const labels = result.ok && result.data && typeof result.data.labels === 'object' ? result.data.labels : {};
+	return Object.entries(labels)
+		.filter(([mode, label]) => typeof mode === 'string' && typeof label === 'string')
+		.map(([mode, label]) => ({ mode, label }))
+		.sort((a, b) => a.mode.localeCompare(b.mode));
+}
+
 export function renderPipes(api, presetId, mode, formData) {
 	return callCore(api, `/api/presets/${segment(presetId)}/pipes?mode=${segment(mode)}`, { method: 'POST', body: { form_data: formData ?? {} } });
 }
