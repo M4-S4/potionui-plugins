@@ -7,7 +7,7 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 | Plugin | Folder | Version | State |
 |---|---|---|---|
 | Video Producer | `video-producer/` | 0.1.0 | Maintained and tested by the CI against the pinned core. Its working copy is still the M4-S4/PotionUI fork: see [Following the fork](#following-the-fork). |
-| Preset Editor | `preset-editor/` | 0.1.0 | Written for PotionUI 0.0.15 and not reviewed since. It is in the catalogue with `"core": "v0.0.15"`, but not in the CI yet. |
+| Preset Editor | `preset-editor/` | 0.2.0 | Brought up to the pinned core in November 2026 (its catalogue entry requires `core.ref`) and tested by the CI like Video Producer. Not released yet, and not yet checked on a running instance: see [its README](preset-editor/README.md#what-is-left-to-do). |
 
 `archive/` holds the older copies of `model-browser` and `deepseek-provider`, with their core-side tests and the design variants of Model Browser. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. Nothing in `archive/` is in the catalogue, the CI or the scripts' scope.
 
@@ -93,15 +93,15 @@ and commit `plugins.json`. The command checks the zip (name, manifest version, d
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`:
+`.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`, one job per plugin of its matrix (`video-producer`, `preset-editor`; each entry names the plugin's core-side test files and Node test globs). Each job:
 
 1. checks the catalogue;
 2. checks out M4-S4/PotionUI at `core.ref`, installs Python 3.12 with the core's `requirements-ci.txt` (CPU-only torch) as the core's own `backend-tests.yml` does, and Node 24 with `npm ci` in `content/plugins/`;
-3. copies Video Producer into `content/plugins/local/` of the core with `sync-plugins.ps1`, and puts this repository's copy and core-side tests in place of the core's own copies (`content/plugins/marketplace/video-producer/` and `tests/plugins/marketplace/test_video_producer_*.py`), since the core-side tests look for the plugin there;
-4. builds the dist and publishes it as the `video-producer-dist` artifact of the run;
-5. runs the plugin's pytest suite and the core-side tests with the markers of the core's CI (`not requires_gpu and not requires_models and not gc_sensitive`), and the Node tests of the dictionaries (`frontend/src/i18n/*.test.js`) and of the page modules (`frontend/src/lib/*.test.js`).
+3. copies its plugin into `content/plugins/local/` of the core with `sync-plugins.ps1`, puts this repository's copy in place of the core's own `content/plugins/marketplace/<id>/` when the core has one (Video Producer does, Preset Editor does not), and puts the plugin's core-side tests from `core-tests/<id>/` in place of the core's copies in `tests/plugins/marketplace/`;
+4. builds the dist and publishes it as the `<id>-dist` artifact of the run;
+5. runs the plugin's pytest suite and its core-side tests with the markers of the core's CI (`not requires_gpu and not requires_models and not gc_sensitive`), and its Node tests (`frontend/src/i18n/*.test.js` and `frontend/src/lib/*.test.js` for Video Producer, `frontend/src/lib/*.test.js` for Preset Editor).
 
-Preset Editor is not in the CI yet.
+To add a plugin to the CI, add an entry to the matrix.
 
 ## License
 
