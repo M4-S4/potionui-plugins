@@ -9,9 +9,7 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 | Video Producer | `video-producer/` | 0.1.0 | Maintained and tested by the CI against the pinned core. Its working copy is still the M4-S4/PotionUI fork: see [Following the fork](#following-the-fork). |
 | Preset Editor | `preset-editor/` | 0.1.0 | Written for PotionUI 0.0.15 and not reviewed since. It is in the catalogue with `"core": "v0.0.15"`, but not in the CI yet. |
 
-`model-browser/` and `deepseek-provider/` are older copies. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. They are in neither the catalogue nor the CI.
-
-The repository also holds `variants/` (design variants of Model Browser).
+`archive/` holds the older copies of `model-browser` and `deepseek-provider`, with their core-side tests and the design variants of Model Browser. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. Nothing in `archive/` is in the catalogue, the CI or the scripts' scope.
 
 ## Layout
 
@@ -23,6 +21,7 @@ The repository also holds `variants/` (design variants of Model Browser).
 | `plugins.json` | The catalogue. |
 | `core.ref` | The core commit the CI and the releases build and test against. |
 | `.github/workflows/` | `ci.yml` and `release.yml`. |
+| `archive/` | Plugins that moved upstream, kept for reference. |
 
 Every text file is stored with LF line endings (`.gitattributes`), whatever `core.autocrlf` says.
 
