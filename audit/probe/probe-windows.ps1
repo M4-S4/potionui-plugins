@@ -24,6 +24,13 @@ function Try-Read([string] $label, [scriptblock] $block) {
     }
 }
 
+function Drive-Letter($letter) {
+    if ($null -eq $letter) { return $null }
+    $text = ([string]$letter).Trim([char]0).Trim()
+    if ($text -eq '') { return $null }
+    return $text
+}
+
 function File-Facts([string] $path) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
     $item = Get-Item -LiteralPath $path -Force
@@ -35,7 +42,7 @@ function File-Facts([string] $path) {
         sparse      = $attributes -match 'SparseFile'
         compressed  = $attributes -match 'Compressed'
         encrypted   = $attributes -match 'Encrypted'
-        drive       = if ($volume) { [string]$volume.DriveLetter } else { $item.PSDrive.Name }
+        drive       = if ($volume) { Drive-Letter $volume.DriveLetter } else { $item.PSDrive.Name }
         modified    = $item.LastWriteTimeUtc.ToString('o')
     }
 }
@@ -88,7 +95,7 @@ $partitions = Try-Read 'Get-Partition' {
         [ordered]@{
             disk      = $_.DiskNumber
             partition = $_.PartitionNumber
-            drive     = [string]$_.DriveLetter
+            drive     = Drive-Letter $_.DriveLetter
             size_bytes = $_.Size
             type      = [string]$_.Type
         }
@@ -99,7 +106,7 @@ $volumes = Try-Read 'Get-Volume' {
     Get-Volume | Where-Object { $_.DriveLetter } | Sort-Object DriveLetter | ForEach-Object {
         $free = if ($_.Size) { [math]::Round(100.0 * $_.SizeRemaining / $_.Size, 1) } else { $null }
         [ordered]@{
-            drive        = [string]$_.DriveLetter
+            drive        = Drive-Letter $_.DriveLetter
             label        = $_.FileSystemLabel
             file_system  = $_.FileSystem
             drive_type   = [string]$_.DriveType
