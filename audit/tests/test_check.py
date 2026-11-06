@@ -1,8 +1,9 @@
 import json
 
+from potion_audit.cases import build_case_set, write_case_set
 from potion_audit.cli import main
 
-from conftest import MISSING_SHA, PASSWORD, TOKEN
+from conftest import MISSING_SHA, PASSWORD, SDXL_ID, SDXL_SHA, TOKEN
 
 
 def run_check(config_file, tmp_path):
@@ -97,3 +98,15 @@ def test_missing_credentials_stop_before_any_request(fake_api, config_file, monk
     assert code == 2
     assert fake_api.requests == []
     assert "POTION_AUDIT_USER" in capsys.readouterr().err
+
+
+def test_two_presets_with_the_same_folder_name_keep_their_own_state(fake_api, config_file, case_file, credentials_env, tmp_path):
+    case = {"name": "sdxl-fast", "mode": "txt2img", "tags": ["fast"], "models": {"model": {"sha256": SDXL_SHA}}}
+    presets = [
+        {"key": "SDXL", "path": "content/presets/marketplace/SDXL", "origin": "core", "preset": {"id": SDXL_ID, "name": "SDXL", "version": "1.0.1"}, "modes": ["txt2img"], "tests": {"cases": [case]}},
+        {"key": "SDXL", "path": "content/plugins/marketplace/other/presets/SDXL", "origin": "plugin:other", "preset": {"id": "01FAKEOTHERSDXL", "name": "SDXL", "version": "1.0.1"}, "modes": ["txt2img"], "tests": None},
+    ]
+    write_case_set(build_case_set("f" * 40, "fake core", presets, []), case_file)
+    _, preflight, _ = run_check(config_file, tmp_path)
+    assert [case["verdict"] for case in preflight["cases"]] == ["ready"]
+    assert [preset["installed"] for preset in preflight["presets"]] == [True, False]

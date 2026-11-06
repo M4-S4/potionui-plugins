@@ -221,12 +221,12 @@ def collect(client: ApiClient, config: Config, case_set: CaseSet, username: str,
         key=lambda item: ({False: 0, None: 1, True: 2}[item["present"]], item["filename"] or item["sha256"] or ""),
     )
 
-    by_key = {preset["key"]: preset for preset in presets}
+    by_id = {preset["id"]: preset for preset in presets}
     cases = []
     for case in case_set.cases:
         refs = [models[keys[(case.preset_key, case.name, ref.field)]] for ref in case.models]
         missing = [ref for ref in refs if ref["present"] is False]
-        preset = by_key.get(case.preset_key, {})
+        preset = by_id.get(case.preset_id, {})
         unresolved = [ref.field for ref in case.models if not ref.resolved]
         if preset.get("engine") == "cloud":
             verdict = "cloud_excluded"
