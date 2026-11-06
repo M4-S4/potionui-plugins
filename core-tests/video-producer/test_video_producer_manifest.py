@@ -1583,13 +1583,33 @@ def test_the_shipped_wan_presets_keep_the_prompt_help_of_the_core_preset_and_gen
         assert preset.negative_prompt == source.negative_prompt, preset_id
 
 
+REFS_OWN_CONFIG = {"reference_short_edge": "{{ form.reference_short_edge }}"}
+
+
+def _core_pipes(pipes, preset_id, mode):
+    if (preset_id, mode) != (H3_12GB, "refs"):
+        return pipes
+    shared = []
+    for pipe in pipes:
+        if pipe.name == "generator/video_minimax_h3":
+            own = {key: pipe.configuration[key] for key in REFS_OWN_CONFIG}
+            assert own == REFS_OWN_CONFIG
+            pipe = dataclasses.replace(pipe, configuration={key: value for key, value in pipe.configuration.items() if key not in own})
+        shared.append(pipe)
+    return shared
+
+
 def test_the_shipped_presets_run_the_core_pipelines_unchanged(shipped_presets, core_presets):
     for preset_id, shipped in SHIPPED_PRESETS.items():
         preset, source = shipped_presets[preset_id], core_presets[shipped.source_id]
         for mode in shipped.modes:
-            assert preset.modes[mode].pipes == source.modes[mode].pipes, (preset_id, mode)
+            assert _core_pipes(preset.modes[mode].pipes, preset_id, mode) == source.modes[mode].pipes, (preset_id, mode)
             copy = yaml.safe_load((PLUGIN_ROOT / "presets" / shipped.folder / "modes" / mode / "pipeline.yml").read_text(encoding="utf-8"))
             original = yaml.safe_load((Path(source.path) / "modes" / mode / "pipeline.yml").read_text(encoding="utf-8"))
+            for pipe, theirs in zip(copy["pipeline"], original["pipeline"]):
+                if (preset_id, mode) == (H3_12GB, "refs") and pipe["name"] == "generator/video_minimax_h3":
+                    assert {key: pipe["configuration"].pop(key) for key in REFS_OWN_CONFIG} == REFS_OWN_CONFIG
+                    assert not set(REFS_OWN_CONFIG) & set(theirs["configuration"])
             assert copy == original, (preset_id, mode)
 
 
@@ -1645,8 +1665,10 @@ def test_the_12_gb_refs_form_changes_only_the_tier_defaults_models_and_files_of_
     preset, source = shipped_presets[H3_12GB], core_presets[MINIMAX_H3]
     named, skeleton = _video_form(preset, "refs")
     source_named, source_skeleton = _video_form(source, "refs")
+    own = named.pop("reference_short_edge")
 
-    assert skeleton == source_skeleton
+    assert [entry for entry in skeleton if entry[1] != own.name] == source_skeleton
+    assert own.name not in source_named
     for name, field in named.items():
         changed = REFS_CHANGED_FIELDS.get(name, set())
         assert field == dataclasses.replace(source_named[name], **{attr: getattr(field, attr) for attr in changed}), name
@@ -1690,18 +1712,93 @@ def test_the_plugin_runs_ref2va_on_the_12_gb_preset_with_its_refs_models(shipped
     assert fields["references"]["type"] == "media"
 
 
-def test_the_reference_image_budgets_the_plugin_sends_are_choices_of_the_12_gb_refs_form(shipped_presets):
+def test_the_12_gb_refs_form_takes_the_reference_short_edge_the_plugin_sends_and_hands_it_to_the_generator(shipped_presets):
+    from src.pipelines.pipes.generator.video_minimax_h3.main import (
+        GeneratorMinimaxH3Pipe,
+    )
+
     bridge = _load("backend.core_bridge")
-    director = _load("backend.director")
     engine_options = _load("backend.engine_options")
+    sequence = _load("backend.sequence")
     preset = shipped_presets[H3_12GB]
     [form] = preset.modes["refs"].forms
     fields = {}
     bridge._describe_fields(form.fields, _resolver(preset), fields)
+    [generator] = [pipe for pipe in preset.modes["refs"].pipes if pipe.name == "generator/video_minimax_h3"]
+    [spec] = [spec for spec in GeneratorMinimaxH3Pipe.configuration() if spec.name == engine_options.REFERENCE_SHORT_EDGE]
 
-    field = fields[engine_options.REFERENCE_IMAGE_BUDGET]
-    assert set(director.REFERENCE_IMAGE_BUDGETS.values()) <= {option["value"] for option in field["options"]}
-    assert not engine_options.editable(engine_options.REFERENCE_IMAGE_BUDGET, field)
+    field = fields[engine_options.REFERENCE_SHORT_EDGE]
+    assert field["type"] == "slider" and field["default"] == 1088
+    assert not engine_options.editable(engine_options.REFERENCE_SHORT_EDGE, field)
+    assert generator.configuration[engine_options.REFERENCE_SHORT_EDGE] == "{{ form.reference_short_edge }}"
+    assert (spec.param_type, spec.default, spec.min_value) == (int, sequence.SHORT_EDGE, sequence.PATCH)
+
+
+class _Picture:
+    def __init__(self, size):
+        self.size = size
+
+    def resize(self, size, _resampling):
+        return _Picture(size)
+
+
+def test_the_size_the_plugin_reckons_for_a_reference_photo_is_the_one_the_core_encodes_it_at():
+    from PIL import Image
+
+    from src.pipelines.pipes.generator.video_minimax_h3.conditioning import (
+        normalize_reference_image,
+    )
+
+    sequence = _load("backend.sequence")
+    sides = [16, 31, 100, 255, 480, 545, 1000, 1079, 1080, 1088, 2047, 2250, 3000, 4000, 6001]
+    edges = (32, 315, 473, 480, 547, 1077, 1091, 1436, 2048)
+    for width in sides:
+        for height in sides:
+            if max(width, height) > 4 * min(width, height):
+                continue
+            for edge in edges:
+                expected = normalize_reference_image(_Picture((width, height)), canvas_multiple=32, short_edge=edge).size
+                assert sequence.image_size(edge, (width, height)) == expected, (width, height, edge)
+    for width, height in [(2250, 100), (100, 2250), (480, 16), (31, 2250), (601, 100), (100, 501), (8000, 1000)]:
+        picture = Image.new("RGB", (width, height))
+        for edge in edges:
+            expected = normalize_reference_image(picture, canvas_multiple=32, short_edge=edge).size
+            assert sequence.image_size(edge, (width, height)) == expected, (width, height, edge)
+
+
+@pytest.mark.parametrize(
+    ("size", "final", "photo", "encoded"),
+    [
+        ((832, 480), False, (4000, 2250), (832, 480)),
+        ((832, 480), False, (4000, 3000), (736, 544)),
+        ((832, 480), False, (4000, 4000), (640, 640)),
+        ((832, 480), False, (2250, 4000), (480, 832)),
+        ((960, 544), False, (4000, 2250), (960, 544)),
+        ((960, 544), False, (4000, 3000), (832, 640)),
+        ((960, 544), False, (4000, 4000), (736, 736)),
+        ((960, 544), False, (2250, 4000), (544, 960)),
+        ((1344, 768), False, (4000, 2250), (1344, 768)),
+        ((1344, 768), False, (4000, 3000), (1184, 864)),
+        ((1344, 768), False, (4000, 4000), (1024, 1024)),
+        ((1344, 768), False, (2250, 4000), (768, 1344)),
+        ((832, 480), True, (4000, 2250), (1920, 1088)),
+        ((832, 480), True, (4000, 3000), (1664, 1248)),
+        ((832, 480), True, (4000, 4000), (1440, 1440)),
+        ((832, 480), True, (2250, 4000), (1088, 1920)),
+    ],
+)
+def test_the_short_edge_the_plugin_sends_encodes_a_large_photo_at_the_size_its_area_budget_gave_before(size, final, photo, encoded):
+    from PIL import Image
+
+    from src.pipelines.pipes.generator.video_minimax_h3.conditioning import (
+        normalize_reference_image,
+    )
+
+    sequence = _load("backend.sequence")
+    edge = sequence.reference_short_edge(size, final, [photo])
+
+    assert normalize_reference_image(Image.new("RGB", photo), canvas_multiple=32, short_edge=edge).size == encoded
+    assert sequence.image_rows(edge, photo, size) == (encoded[0] // 32) * (encoded[1] // 32)
 
 
 def test_the_shipped_recommendations_the_core_forms_already_make_are_copied_unchanged(shipped_presets, core_presets):
