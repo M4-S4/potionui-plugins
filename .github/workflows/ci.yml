@@ -12,6 +12,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  hygiene:
+    name: Public hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: No private path, internal note or relay address in the tracked files
+        run: python -B scripts/check-public-hygiene.py
+
+      - name: Self-tests of the check
+        run: python -B -m unittest discover -s scripts -p "test_check_public_hygiene.py" -v
+
   plugin:
     name: ${{ matrix.name }} on the pinned core
     runs-on: ubuntu-latest

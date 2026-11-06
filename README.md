@@ -21,6 +21,7 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 | `plugins.json` | The catalogue. |
 | `core.ref` | The core commit the CI and the releases build and test against. |
 | `.github/workflows/` | `ci.yml` and `release.yml`. |
+| `.githooks/` | The `pre-commit` hook that runs the public hygiene check (see [Day-to-day work](#day-to-day-work)). |
 | `archive/` | Plugins that moved upstream, kept for reference. |
 
 Every text file is stored with LF line endings (`.gitattributes`), whatever `core.autocrlf` says.
@@ -38,6 +39,14 @@ Copy `.env.example` to `.env.local` (ignored by git, never committed) and set `P
 - `scripts/test-plugins.ps1 [-Plugin <id>]` runs the pytest suite of each plugin in its own process, from the checkout or in the container named by `POTIONUI_CONTAINER`.
 - `scripts/import-from-fork.ps1` brings Video Producer here from the fork (next section).
 
+This repository is public, and no file in it names a folder of one machine. `scripts/check-public-hygiene.py` reads every tracked file, or with `--staged` the staged files as the index holds them, or the files and folders it is given (a folder: its tracked files and its new files that git does not ignore). It lists the file, the line and the pattern of each finding and exits with 1 on: an account path under a `Users` or `home` folder, a WSL or Docker Desktop path to the host, the PotionUI folder of drive `E:`, a path into a OneDrive folder (the name alone is fine), the folder of internal notes, a `.secrets` folder, or an Apple private relay address. The same patterns are in `video-producer/tests/test_public_hygiene.py`, for the plugin's own suite. A fake value that a test needs goes in `scripts/public-hygiene-allow.txt`, one `<path><TAB><exact text>` line each; an entry whose text is no longer in its file fails the check too. `scripts/test_check_public_hygiene.py` holds its self-tests (`python -B -m unittest discover -s scripts -p "test_check_public_hygiene.py"`).
+
+Activate the versioned hooks once in each clone, so that a commit whose staged files fail the check is refused:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ### Following the fork
 
 Until the core loads a CSS file shipped with a plugin installed outside its tree (see [Tailwind classes](#tailwind-classes)), Video Producer is developed in the M4-S4/PotionUI fork, under `content/plugins/marketplace/video-producer/`, which is what the fork's instance and CI run. `scripts/import-from-fork.ps1` copies its current state from a checkout of the fork (`POTIONUI_SRC` or `-PotionUISrc`):
@@ -45,7 +54,7 @@ Until the core loads a CSS file shipped with a plugin installed outside its tree
 - `content/plugins/marketplace/video-producer/` to `video-producer/`, and `tests/plugins/marketplace/test_video_producer_*.py` to `core-tests/video-producer/`, as a robocopy mirror: a file removed in the fork is removed here;
 - never `node_modules`, `frontend/dist`, `__pycache__`, `.pytest_cache` nor `docs/screenshots`: the screenshots are kept here as WebP, and the references of `README.md` and `docs/user-guide.md` are pointed at the `.webp` files. A screenshot added in the fork is listed in a warning: convert it to WebP and add it by hand.
 
-The script then shows `git status`. Review the changes with `git diff` and commit them.
+The script then runs `scripts/check-public-hygiene.py` on `video-producer/` and `core-tests/video-producer/` and stops with an error when a file fails (fix it in the fork, then import again), and shows `git status`. Review the changes with `git diff` and commit them.
 
 ## Installing a plugin on an instance
 
@@ -93,7 +102,7 @@ and commit `plugins.json`. The command checks the zip (name, manifest version, d
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`, one job per plugin of its matrix (`video-producer`, `preset-editor`; each entry names the plugin's core-side test files and Node test globs). Each job:
+`.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`. Its `hygiene` job needs no core: it runs `scripts/check-public-hygiene.py` on every tracked file, then the check's self-tests. Next to it runs one job per plugin of its matrix (`video-producer`, `preset-editor`; each entry names the plugin's core-side test files and Node test globs). Each of these jobs:
 
 1. checks the catalogue;
 2. checks out M4-S4/PotionUI at `core.ref`, installs Python 3.12 with the core's `requirements-ci.txt` (CPU-only torch) as the core's own `backend-tests.yml` does, and Node 24 with `npm ci` in `content/plugins/`;

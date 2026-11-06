@@ -74,5 +74,10 @@ if ($eolOnly.Count) {
     Write-Host "restored the LF line endings of $($eolOnly.Count) unchanged files"
 }
 
+$python = Get-Command python, python3 -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $python) { throw 'Python is needed to run scripts/check-public-hygiene.py' }
+& $python.Source -B (Join-Path $PSScriptRoot 'check-public-hygiene.py') $pluginDest $testsDest
+if ($LASTEXITCODE -ne 0) { throw "check-public-hygiene.py refused the import (exit $LASTEXITCODE): fix those files in the fork, then import again" }
+
 git -C $repo status -- @scope
 exit 0

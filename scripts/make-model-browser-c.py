@@ -20,7 +20,7 @@ branch of this repo (main + one commit that brings CivArchive back); this script
     screenshots/.
 
 Usage (from the repo root):
-  python -I scripts/make-model-browser-c.py [--ref civarchive] [--out <home>/Dev/model-browser-c]
+  python -I scripts/make-model-browser-c.py [--ref civarchive] --out <folder>
 The output folder keeps its .git and .gitignore; everything else in it is replaced, then the frontend dist
 is rebuilt (the plugin id changes the Permissions tab's default) from
 content/plugins/local/model-browser-c of the marketplace worktree (git-ignored there).
@@ -28,6 +28,7 @@ content/plugins/local/model-browser-c of the marketplace worktree (git-ignored t
 
 import argparse
 import io
+import os
 import re
 import shutil
 import subprocess
@@ -157,19 +158,46 @@ def build_dist(out: Path, plugins_root: Path) -> None:
     print(f"rebuilt {out / 'frontend' / 'dist'}")
 
 
+def dotenv_value(key: str) -> str:
+    value = os.environ.get(key)
+    if value:
+        return value
+    for name in (".env.local", ".env"):
+        path = REPO / name
+        if not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.lstrip().startswith("#") or "=" not in line:
+                continue
+            found, value = line.split("=", 1)
+            if found.strip() == key:
+                return value.strip().strip('"')
+    return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ref", default="civarchive")
-    parser.add_argument("--out", default="<home>/Dev/model-browser-c")
-    parser.add_argument("--license", default="<home>/Dev/PotionUI/LICENSE")
-    parser.add_argument("--plugins-root", default="<home>/Dev/PotionUI/.wt/marketplace/content/plugins")
+    parser.add_argument("--out", required=True)
+    parser.add_argument("--license", default=str(REPO / "LICENSE"))
+    parser.add_argument("--plugins-root")
     args = parser.parse_args()
+    plugins_root = args.plugins_root
+    if not plugins_root:
+        source = dotenv_value("POTIONUI_SRC")
+        if not source:
+            sys.exit("give --plugins-root, or set POTIONUI_SRC to a PotionUI checkout in the environment or in .env.local")
+        plugins_root = str(Path(source) / "content" / "plugins")
+    if not (Path(plugins_root) / "package.json").is_file():
+        sys.exit(f"{plugins_root} is not the content/plugins folder of a PotionUI checkout (no package.json)")
+    if not Path(args.license).is_file():
+        sys.exit(f"no license file at {args.license}")
     files = export_tree(args.ref)
     if "backend/sources/civarchive.py" not in files:
         sys.exit(f"{args.ref} has no CivArchive source")
     apply_rules(files)
     write_out(files, Path(args.out), Path(args.license))
-    build_dist(Path(args.out), Path(args.plugins_root))
+    build_dist(Path(args.out), Path(plugins_root))
     return 0
 
 
