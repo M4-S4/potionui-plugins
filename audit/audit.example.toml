@@ -1,0 +1,14 @@
+[target]
+url = "http://127.0.0.1:8000"
+mode = "shared"
+user_env = "POTION_AUDIT_USER"
+password_env = "POTION_AUDIT_PASSWORD"
+timeout_seconds = 60
+
+[run]
+output_dir = "out"
+machine = "workstation"
+cases = "cases/d7ff033de.json"
+
+[probe]
+source = "none"
