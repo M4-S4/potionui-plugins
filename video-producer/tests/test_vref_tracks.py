@@ -459,25 +459,85 @@ def test_the_latent_frames_follow_the_chunks_of_the_video_vae():
 
 
 @pytest.mark.parametrize(
-    "seconds, size, images, fitted, cuts, measured",
+    "seconds, size, pictures, final, cuts, measured",
     [
-        (3, (832, 480), 0, True, [(56, (832, 480))], 16618),
-        (3, (832, 480), 0, True, [(56, (1344, 768))], 27046),
-        (3, (832, 480), 1, True, [], 9588),
-        (3, (832, 480), 1, False, [], 11212),
+        (3, (832, 480), [], False, [(56, (832, 480))], 16618),
+        (3, (832, 480), [], False, [(56, (1344, 768))], 27046),
+        (3, (832, 480), [(1920, 1072)], False, [], 9588),
+        (3, (832, 480), [(1920, 1072)], True, [], 11212),
     ],
     ids=["E2-take-cut", "E1-canvas-cut", "E4a-fitted-photo", "E4c-photo-at-the-cap"],
 )
-def test_the_rows_of_a_shot_are_those_the_takes_of_the_27_october_logged(seconds, size, images, fitted, cuts, measured):
-    rows = sequence.shot_rows(seconds, 24, size, images, fitted, cuts)
+def test_the_rows_of_a_shot_are_those_the_takes_of_the_27_october_logged(seconds, size, pictures, final, cuts, measured):
+    edge = sequence.reference_short_edge(size, final, pictures)
+    rows = sequence.shot_rows(seconds, 24, size, [sequence.image_rows(edge, picture, size) for picture in pictures], cuts)
 
     assert rows.total == pytest.approx(measured, rel=0.01)
 
 
+@pytest.mark.parametrize(
+    "size, final, picture, edge, encoded",
+    [
+        ((832, 480), False, (4000, 2250), 473, (832, 480)),
+        ((832, 480), False, (4000, 3000), 547, (736, 544)),
+        ((832, 480), False, (4000, 4000), 631, (640, 640)),
+        ((832, 480), False, (2250, 4000), 473, (480, 832)),
+        ((960, 544), False, (4000, 2250), 541, (960, 544)),
+        ((960, 544), False, (4000, 3000), 625, (832, 640)),
+        ((960, 544), False, (4000, 4000), 722, (736, 736)),
+        ((960, 544), False, (2250, 4000), 541, (544, 960)),
+        ((1344, 768), False, (4000, 2250), 761, (1344, 768)),
+        ((1344, 768), False, (4000, 3000), 879, (1184, 864)),
+        ((1344, 768), False, (4000, 4000), 1015, (1024, 1024)),
+        ((1344, 768), False, (2250, 4000), 761, (768, 1344)),
+        ((832, 480), True, (4000, 2250), 1077, (1920, 1088)),
+        ((832, 480), True, (4000, 3000), 1244, (1664, 1248)),
+        ((832, 480), True, (4000, 4000), 1436, (1440, 1440)),
+        ((1344, 768), True, (2250, 4000), 1077, (1088, 1920)),
+        ((832, 480), False, (8000, 1000), 315, (1248, 320)),
+        ((832, 480), False, (1920, 1080), 473, (832, 480)),
+        ((832, 480), True, (1920, 1080), 1077, (1920, 1056)),
+    ],
+)
+def test_a_photo_is_encoded_at_the_area_of_the_take_in_a_draft_and_at_twice_1344_by_768_in_a_final(size, final, picture, edge, encoded):
+    assert sequence.reference_short_edge(size, final, [picture]) == edge
+    assert sequence.image_size(edge, picture) == encoded
+    assert sequence.image_rows(edge, picture, size) == sequence.frame_rows(encoded)
+
+
+def test_the_photos_of_a_take_share_the_smallest_short_edge_and_a_photo_of_unknown_size_counts_at_the_ratio_of_the_take():
+    assert sequence.reference_short_edge((832, 480), False, [(4000, 4000), (4000, 2250), None]) == 473
+    assert sequence.reference_short_edge((832, 480), False, [None]) == 480
+    assert sequence.reference_short_edge((832, 480), False, [(4000, 4000), None]) == 480
+    assert sequence.reference_short_edge((832, 480), True, []) == 1091
+    assert sequence.reference_short_edge(None, False, []) == sequence.reference_short_edge(None, True, []) == 1077
+    assert sequence.reference_short_edge((32, 32), False, [(4000, 1000)]) == sequence.PATCH
+    assert sequence.reference_short_edge((1920, 1088), False, [(4000, 2250)]) == sequence.reference_short_edge(None, True, [(4000, 2250)]) == 1077
+    assert sequence.image_rows(480, None, (832, 480)) == 390
+    assert sequence.image_rows(1091, None, (832, 480)) == 34 * 59
+    assert sequence.image_rows(sequence.SHORT_EDGE, None, (832, 480)) == 111 * 64
+    assert sequence.image_rows(sequence.SHORT_EDGE, None) == 114 * 64
+
+
+def test_a_refs_mode_without_the_reference_short_edge_counts_its_photos_at_the_short_edge_of_the_core(core, make_doc):
+    core.use_h3()
+    _media(core)
+    doc = _doc(make_doc, tracks=[_walk()], items=[_item("i1", "t1", "walk", 0, 12)], references=[{"id": "r", "space": "identite", "type": "Character", "assetId": "face", "role": "Identité", "scope": {"type": "shot", "shotId": "s1"}}])
+    next(asset for asset in doc["assets"] if asset["id"] == "face").update(width=4000, height=2250)
+    fitted = _plans(core, doc).shots[0]
+    core.fields[(presets.MINIMAX_H3, "refs")].pop("reference_short_edge")
+    plain = _plans(core, doc).shots[0]
+
+    assert _size(fitted) == _size(plain) == (832, 480)
+    assert fitted.rows.base - sequence.frame_rows((832, 480)) == plain.rows.base - sequence.frame_rows((3648, 2048))
+    assert fitted.rows.tracks == plain.rows.tracks
+
+
 def test_the_step_grows_with_the_rows_as_measured_and_a_shot_without_tracks_keeps_its_time():
     step = lambda rows: 10.6 * (rows / 11200) ** sequence.EXPONENT
-    with_track = sequence.shot_rows(3, 24, (832, 480), 1, False, [(56, (832, 480))])
-    without = sequence.shot_rows(3, 24, (832, 480), 1, False, [])
+    photo = sequence.image_rows(sequence.reference_short_edge((832, 480), True, [(4000, 2250)]), (4000, 2250))
+    with_track = sequence.shot_rows(3, 24, (832, 480), [photo], [(56, (832, 480))])
+    without = sequence.shot_rows(3, 24, (832, 480), [photo], [])
 
     assert step(with_track.base) * with_track.scale == pytest.approx(step(with_track.total))
     assert step(with_track.total) == pytest.approx(19.6, abs=0.6)
@@ -500,7 +560,7 @@ def test_a_track_lengthens_the_estimate_of_its_shot_and_says_by_how_much(core, m
     plan = tracked.plans.shots[0]
 
     assert alone.plans.shots[0].track_scale == 1.0 and alone.payload["time"]["seconds"] == 400.0
-    assert plan.rows.total == sequence.shot_rows(4, 24, _size(plan), 1, True, [(56, _size(plan))]).total
+    assert plan.rows.total == sequence.shot_rows(4, 24, _size(plan), [sequence.frame_rows(_size(plan))], [(56, _size(plan))]).total
     assert tracked.payload["time"]["seconds"] == pytest.approx(400.0 * plan.track_scale, abs=0.1)
     assert tracked.minutes["s1"] == pytest.approx(400.0 * plan.track_scale / 60, abs=0.001)
     assert tracked.payload["shots"][0]["video"] == {"tracks": [1], "rows": plan.rows.total, "base_rows": plan.rows.base, "scale": round(plan.track_scale, 2)}

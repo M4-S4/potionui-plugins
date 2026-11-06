@@ -6,11 +6,11 @@ own preset linter, then is published into `content/presets/local/` where Admin â
 it up without a restart. Admins only.
 
 **Status: version 0.2.0, works on the pinned core, not yet on the marketplace.** The plugin
-targets the core of `core.ref` at the root of this repository, `f70fc57a7` (the `dev` branch
-of the M4-S4/PotionUI fork: upstream 0.0.18 plus the fork's changes), and its catalogue entry
-requires it. Its pytest suite, its core-side tests (`core-tests/preset-editor/`) and its Node
-tests run in the CI against that core. Version 0.1.0 was written for PotionUI `master` at
-`6903cc19` (0.0.15).
+targets the core of `core.ref` at the root of this repository, `d7ff033de` (the `dev` branch
+of the M4-S4/PotionUI fork: upstream `master` at `22441ce6d`, past 0.0.18, plus the fork's
+changes), and its catalogue entry requires it. Its pytest suite, its core-side tests
+(`core-tests/preset-editor/`) and its Node tests run in the CI against that core. Version
+0.1.0 was written for PotionUI `master` at `6903cc19` (0.0.15).
 
 ## What changed in 0.2.0
 

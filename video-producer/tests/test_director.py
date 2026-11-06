@@ -487,40 +487,65 @@ def test_ref2va_sends_its_own_references_then_the_pictures_of_its_cast_whatever_
     assert "the cyclist" not in plan.prompt_text
 
 
-def _ref2va_doc(make_doc, core):
+def _ref2va_doc(make_doc, core, *sizes):
     core.use_h3()
-    core.add_media({"kind": "library", "item_id": "lib-1"}, "uploads/hero.png", "image")
-    assets = [{"id": "hero", "kind": "image", "origin": {"kind": "library", "itemId": "lib-1"}}]
-    references = [{"id": "r1", "assetId": "hero", "scope": {"type": "global"}}]
+    assets, references = [], []
+    for index, size in enumerate(sizes or (None,)):
+        core.add_media({"kind": "library", "item_id": f"lib-{index}"}, f"uploads/hero{index}.png", "image")
+        known = {"width": size[0], "height": size[1]} if size else {}
+        assets.append({"id": f"hero{index}", "kind": "image", "origin": {"kind": "library", "itemId": f"lib-{index}"}, **known})
+        references.append({"id": f"r{index}", "assetId": f"hero{index}", "scope": {"type": "global"}})
     return make_doc(clips=[SHOT], references=references, assets=assets, direction={"mode": "Ref2VA"})
 
 
-@pytest.mark.parametrize(("quality", "budget"), [("draft", "1"), ("final", "0")])
-def test_a_ref2va_take_encodes_its_reference_images_at_its_own_size_in_draft_and_up_to_the_cap_in_final(core, make_doc, quality, budget):
-    doc = _ref2va_doc(make_doc, core)
+@pytest.mark.parametrize(
+    ("quality", "photos", "resolution", "edge"),
+    [
+        ("draft", [(4000, 2250)], "832x480", 473),
+        ("final", [(4000, 2250)], "1344x768", 1077),
+        ("draft", [(4000, 3000)], "832x480", 547),
+        ("final", [(4000, 3000)], "1344x768", 1244),
+        ("draft", [(4000, 4000), (2250, 4000)], "832x480", 473),
+        ("draft", [None], "832x480", 480),
+        ("final", [None], "1344x768", 1086),
+    ],
+)
+def test_a_ref2va_take_sends_the_short_edge_that_gives_its_photos_the_area_of_the_take_in_draft_and_twice_1344_by_768_in_final(core, make_doc, quality, photos, resolution, edge):
+    doc = _ref2va_doc(make_doc, core, *photos)
 
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3, quality=quality).shots
 
-    assert plan.request["form_data"]["reference_image_budget"] == budget
+    assert plan.resolution == resolution
+    assert plan.request["form_data"]["reference_short_edge"] == edge
 
 
-def test_the_project_options_cannot_change_the_reference_image_budget_the_quality_sets(core, make_doc):
+def test_the_project_options_cannot_change_the_reference_short_edge_the_quality_sets(core, make_doc):
     doc = _ref2va_doc(make_doc, core)
-    doc["engine"]["options"] = {presets.MINIMAX_H3: {"reference_image_budget": "0"}}
+    doc["engine"]["options"] = {presets.MINIMAX_H3: {"reference_short_edge": 2048}}
 
     plans = _plans(core, doc, preset_id=presets.MINIMAX_H3)
 
-    assert plans.shots[0].request_for()["form_data"]["reference_image_budget"] == "1"
+    assert plans.shots[0].request_for()["form_data"]["reference_short_edge"] == 480
     assert plans.warnings == []
 
 
-def test_a_mode_without_the_reference_image_budget_is_sent_none(core, make_doc):
+def test_a_mode_without_the_reference_short_edge_is_sent_none(core, make_doc):
     core.use_h3()
 
     (plan,) = _plans(core, make_doc(clips=[SHOT]), preset_id=presets.MINIMAX_H3).shots
 
     assert plan.preset_mode == "video"
-    assert "reference_image_budget" not in plan.request_for()["form_data"]
+    assert "reference_short_edge" not in plan.request_for()["form_data"]
+
+
+def test_a_refs_mode_without_the_reference_short_edge_leaves_the_size_of_its_photos_to_the_core(core, make_doc):
+    doc = _ref2va_doc(make_doc, core, (4000, 2250))
+    core.fields[(presets.MINIMAX_H3, "refs")].pop("reference_short_edge")
+
+    (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
+
+    assert plan.preset_mode == "refs"
+    assert "reference_short_edge" not in plan.request_for()["form_data"]
 
 
 def test_ref2va_without_any_reference_is_blocked(core, make_doc):

@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from typing import Iterable, Optional, Tuple
 
@@ -7,7 +8,9 @@ CHUNK_HEAD = 5
 CHUNK_LATENTS = 5
 TEXT_ROWS = 600
 VIDEO_ROWS = 780
-IMAGE_ROWS = 2040
+SHORT_EDGE = 2048
+CAP_PIXELS = 2 * 1344 * 768
+MAX_RATIO = 4
 EXPONENT = 1.22
 CEILING = 28000
 NOTICEABLE = 1.05
@@ -25,6 +28,36 @@ def frame_rows(size: Optional[Tuple[int, int]]) -> int:
     if not size:
         return 0
     return (int(size[0]) // PATCH) * (int(size[1]) // PATCH)
+
+
+def _ratio(size: Tuple[int, int]) -> float:
+    return max(int(size[0]), int(size[1])) / min(int(size[0]), int(size[1]))
+
+
+def reference_short_edge(size: Optional[Tuple[int, int]], final: bool, pictures: Iterable[Optional[Tuple[int, int]]] = ()) -> int:
+    area = CAP_PIXELS if final or not size else min(CAP_PIXELS, int(size[0]) * int(size[1]))
+    shape = _ratio(size) if size else 16 / 9
+    ratios = [_ratio(picture) if picture else shape for picture in pictures] or [shape]
+    return max(PATCH, min(math.floor(math.sqrt(area / min(MAX_RATIO, ratio))) for ratio in ratios))
+
+
+def _snap(length: float, source: int) -> int:
+    return max(PATCH, min(round(length / PATCH), source // PATCH) * PATCH)
+
+
+def image_size(edge: int, picture: Tuple[int, int]) -> Tuple[int, int]:
+    width, height = int(picture[0]), int(picture[1])
+    if width > height * MAX_RATIO:
+        height = math.ceil(width / MAX_RATIO)
+    elif width * MAX_RATIO < height:
+        width = math.ceil(height / MAX_RATIO)
+    scale = edge / min(width, height)
+    return _snap(width * scale, width), _snap(height * scale, height)
+
+
+def image_rows(edge: int, picture: Optional[Tuple[int, int]], size: Optional[Tuple[int, int]] = None) -> int:
+    shape = size or (16, 9)
+    return frame_rows(image_size(edge, picture or (int(shape[0]) * SHORT_EDGE, int(shape[1]) * SHORT_EDGE)))
 
 
 @dataclass(frozen=True)
@@ -49,10 +82,8 @@ class Rows:
         return self.tracks > 0 and self.total > CEILING
 
 
-def shot_rows(seconds: float, fps: float, size: Optional[Tuple[int, int]], images: int, fitted: bool, cuts: Iterable[Tuple[int, Tuple[int, int]]]) -> Rows:
-    """The rows of a shot of some seconds at a size, with its images (fitted to the size of the take, else at the cap of the core) and the frames and size of each track it sends; the text and the videos are counted at what the takes measured."""
-    target = frame_rows(size)
-    image = min(IMAGE_ROWS, target) if fitted else IMAGE_ROWS
-    base = latent_frames(round(seconds * fps)) * target + max(0, images) * image + TEXT_ROWS
+def shot_rows(seconds: float, fps: float, size: Optional[Tuple[int, int]], images: Iterable[int], cuts: Iterable[Tuple[int, Tuple[int, int]]]) -> Rows:
+    """The rows of a shot of some seconds at a size, with its images and the frames and size of each track it sends; the text and the videos are counted at what the takes measured."""
+    base = latent_frames(round(seconds * fps)) * frame_rows(size) + sum(images) + TEXT_ROWS
     tracks = sum(latent_frames(frames) * frame_rows(cut) + VIDEO_ROWS for frames, cut in cuts)
     return Rows(base=base, tracks=tracks)

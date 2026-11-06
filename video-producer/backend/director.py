@@ -62,7 +62,6 @@ SHEET_FACE = "A frontal close-up of the face of {words}"
 SHEET_BODY = "The same character shown full body, standing, front view."
 
 QUALITIES = ("draft", "final")
-REFERENCE_IMAGE_BUDGETS = {"draft": "1", "final": "0"}
 
 SEED_RANGE = 2**31
 
@@ -1541,7 +1540,7 @@ def working_ratio(user: User, doc: Mapping[str, Any], shot_id: str) -> float:
     return size_ratio(final_resolution(models.resolution_options(models.form_fields(preset.id, mode)), frame, preset.id)) or frame
 
 
-def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Optional[str], fps: float, quality: str) -> Dict[str, Any]:
+def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Optional[str], fps: float, edge: Optional[int] = None) -> Dict[str, Any]:
     form: Dict[str, Any] = {"seed": -1, "video_director": document}
     if "resolution" in fields:
         form["resolution"] = resolution
@@ -1549,8 +1548,8 @@ def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Op
         form["fps"] = fps
     if "quantity" in fields:
         form["quantity"] = 1
-    if engine_options.REFERENCE_IMAGE_BUDGET in fields:
-        form[engine_options.REFERENCE_IMAGE_BUDGET] = REFERENCE_IMAGE_BUDGETS[quality]
+    if edge is not None:
+        form[engine_options.REFERENCE_SHORT_EDGE] = edge
     return form
 
 
@@ -1587,6 +1586,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     video: List[VideoCut] = []
     labels: Dict[int, str] = {}
     rows: Optional[sequence.Rows] = None
+    edge: Optional[int] = None
     if refs:
         window = condition_window(doc, clip, seconds)
         tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
@@ -1617,10 +1617,13 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         prompt, reference = compose_refs(doc, clip, sent, seconds)
         _unlinked_warnings(doc, clip, sent, warnings)
         labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
+        size = models.parse_size(resolution)
+        pictures = [_picture_size(doc, str((entry.item or {}).get("assetId"))) for entry in sent if entry.kind == "image"]
+        if engine_options.REFERENCE_SHORT_EDGE in fields:
+            edge = sequence.reference_short_edge(size, context.quality == "final", pictures)
         if video:
-            fitted = REFERENCE_IMAGE_BUDGETS[context.quality] == "1" and engine_options.REFERENCE_IMAGE_BUDGET in fields
-            images = sum(1 for entry in sent if entry.kind == "image")
-            rows = sequence.shot_rows(seconds, fps or reception.VIDEO_TRACKS["fps"], models.parse_size(resolution), images, fitted, [(cut.frames, cut.size) for cut in video])
+            images = [sequence.image_rows(edge or sequence.SHORT_EDGE, picture, size) for picture in pictures]
+            rows = sequence.shot_rows(seconds, fps or reception.VIDEO_TRACKS["fps"], size, images, [(cut.frames, cut.size) for cut in video])
             _row_warnings(shot_id, rows, warnings)
     else:
         prompt, reference = compose_shot(doc, clip, engine)
@@ -1633,7 +1636,7 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     mixed = audio is not None and audio.behavior == MUX
     if mixed:
         document = audio_document(document, seconds, fps, capabilities)
-    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, context.quality))
+    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, edge))
     chained: Optional[Dict[str, Any]] = None
     if refs:
         request["form_data"]["references"] = [entry.value for entry in sent]
@@ -1799,7 +1802,7 @@ def _sheet_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[
     mixed = audio is not None and audio.behavior == MUX
     if mixed:
         document = audio_document(document, seconds, fps, catalog.director_of(preset.variables))
-    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, context.quality))
+    request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps))
     resolved = models.resolve_models(preset.id, mode, "director", fields, (AUDIO_VAE,) if mixed else ())
     form = request["form_data"]
     form.update(resolved.values)
@@ -2552,7 +2555,7 @@ def build_guided(user: User, doc: Mapping[str, Any], source: Mapping[str, Any], 
         resolution=resolution,
         fps=fps,
         prompt_text=prompt,
-        request=_request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, "final")),
+        request=_request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps)),
         audio=audio,
         reference=reference,
     )
