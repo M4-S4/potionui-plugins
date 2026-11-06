@@ -1,5 +1,26 @@
+const fs = require('fs');
 const path = require('path');
-const { chromium } = require(path.join('<home>/Dev/PotionUI/frontend/node_modules', 'playwright'));
+
+function dotenvValue(key) {
+  if (process.env[key]) return process.env[key];
+  for (const name of ['.env.local', '.env']) {
+    const file = path.join(__dirname, '..', name);
+    if (!fs.existsSync(file)) continue;
+    for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+      if (/^\s*#/.test(line) || !line.includes('=')) continue;
+      const at = line.indexOf('=');
+      if (line.slice(0, at).trim() === key) return line.slice(at + 1).trim().replace(/^"+|"+$/g, '');
+    }
+  }
+  return '';
+}
+
+const potionuiSrc = dotenvValue('POTIONUI_SRC');
+if (!potionuiSrc) {
+  console.error('set POTIONUI_SRC to a PotionUI checkout, in the environment or in .env.local');
+  process.exit(1);
+}
+const { chromium } = require(path.join(potionuiSrc, 'frontend', 'node_modules', 'playwright'));
 
 const base = process.env.SHOT_BASE;
 const out = process.env.SHOT_OUT;

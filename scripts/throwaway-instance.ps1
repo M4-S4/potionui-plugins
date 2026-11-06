@@ -16,7 +16,7 @@
   for a UI check; API checks do not need it).
   -Teardown removes the container, its volumes and the POTIONUI_THROWAWAY_* lines.
 .EXAMPLE
-  .\scripts\throwaway-instance.ps1 -Worktree <home>\Dev\PotionUI\.wt\pr-mb-1
+  .\scripts\throwaway-instance.ps1 -Worktree <checkout>\.wt\pr-mb-1
   .\scripts\throwaway-instance.ps1 -Teardown
 #>
 [CmdletBinding()]
