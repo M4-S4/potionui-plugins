@@ -23,6 +23,7 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 | `.github/workflows/` | `ci.yml` and `release.yml`. |
 | `.githooks/` | The `pre-commit` hook that runs the public hygiene check (see [Day-to-day work](#day-to-day-work)). |
 | `archive/` | Plugins that moved upstream, kept for reference. |
+| `audit/` | `potion-audit`, an external API client that audits the default presets of an instance (see [its README](audit/README.md)). Not a plugin: outside the catalogue and the plugin jobs of the CI. |
 
 Every text file is stored with LF line endings (`.gitattributes`), whatever `core.autocrlf` says.
 
