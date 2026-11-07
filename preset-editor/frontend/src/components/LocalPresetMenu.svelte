@@ -1,5 +1,5 @@
 <script>
-	import ActionButton from './ActionButton.svelte';
+	import HostUi from '../../../../../sdk/HostUi.svelte';
 	import { downloadPreset } from '../lib/client.js';
 	import { clickOutside, onEscape, toast } from '../lib/dom.js';
 
@@ -20,9 +20,7 @@
 </script>
 
 <div class="relative" use:clickOutside={() => (open = false)}>
-	<ActionButton icon="edit" ariaHaspopup="menu" ariaExpanded={open} title="Edit a local preset in the Preset Editor" onclick={() => (open = !open)}>
-		Edit…
-	</ActionButton>
+	<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'edit', ariaHaspopup: 'menu', ariaExpanded: open, onclick: () => (open = !open), attrs: { title: 'Edit a local preset in the Preset Editor' } }}>Edit…</HostUi>
 	{#if open}
 		<div class="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-md border border-line bg-surface-2 shadow-lg" role="menu">
 			{#if phase === 'loading'}

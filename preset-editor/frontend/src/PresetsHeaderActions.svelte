@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import ActionButton from './components/ActionButton.svelte';
+	import HostUi from '../../../../sdk/HostUi.svelte';
 	import LocalPresetMenu from './components/LocalPresetMenu.svelte';
 	import NewPresetForm from './components/NewPresetForm.svelte';
 	import { localPresets, normalizeCatalog, sortPresets } from './lib/catalog.js';
@@ -119,6 +119,6 @@
 </script>
 
 <div class="flex items-center gap-2">
-	<ActionButton icon="plus" title="Create a preset with the Preset Editor" onclick={openDialog}>New Preset</ActionButton>
+	<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'plus', onclick: openDialog, attrs: { title: 'Create a preset with the Preset Editor' } }}>New Preset</HostUi>
 	<LocalPresetMenu {api} {entries} {phase} {error} pageRoute={PAGE_ROUTE} />
 </div>
