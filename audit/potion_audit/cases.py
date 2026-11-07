@@ -11,6 +11,9 @@ CORE_PRESETS = "content/presets/marketplace/"
 PLUGINS = "content/plugins/marketplace/"
 CORE_RECIPES = "content/recipes/marketplace/"
 IGNORED_FIELD_TOKENS = {"model"}
+SIZE_LABEL = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*([KMGT]B)", re.IGNORECASE)
+PRESET_INCLUDE = re.compile(r"\{\{\s*paths\.preset\s*\}\}/(.+\.yml)")
+SIZE_UNITS = {"KB": 1000, "MB": 1000 ** 2, "GB": 1000 ** 3, "TB": 1000 ** 4}
 
 
 class CaseFileError(ValueError):
@@ -24,6 +27,7 @@ class ModelRef:
     size_bytes: int | None
     filename: str | None
     source: str
+    alternatives: tuple[str, ...] = ()
 
     @property
     def resolved(self) -> bool:
@@ -78,7 +82,7 @@ def load_cases(path: Path) -> CaseSet:
             seed=item.get("seed"),
             tags=tuple(item.get("tags") or ()),
             form=dict(item.get("form") or {}),
-            models=tuple(ModelRef(**model) for model in item.get("models") or ()),
+            models=tuple(ModelRef(**{**model, "alternatives": tuple(model.get("alternatives") or ())}) for model in item.get("models") or ()),
             checks=dict(item.get("checks") or {}),
         )
         for item in data["cases"]
@@ -154,7 +158,24 @@ def _resolve_zero(field: str, preset_id: str, recipes: list[dict], model_fields:
         if found:
             return found
     if declared.get("model_type"):
-        return _unique([(artifact, source) for artifact, source in candidates if artifact["model_type"] == declared["model_type"]])
+        found = _unique([(artifact, source) for artifact, source in candidates if artifact["model_type"] == declared["model_type"]])
+        if found:
+            return found
+    recommendations = declared.get("recommendations") or ()
+    with_sha = [item for item in recommendations if item.get("sha256")]
+    if with_sha:
+        first = with_sha[0]
+        return {"sha256": first["sha256"], "filename": first.get("name"), "size_bytes": first.get("size_bytes"), "alternatives": [item["sha256"] for item in with_sha[1:]]}, f"form:{field}/first recommendation with a sha256"
+    named = [item for item in recommendations if item.get("name")]
+    if named:
+        return {"sha256": None, "filename": named[0]["name"], "size_bytes": named[0].get("size_bytes")}, f"form:{field}/first recommendation"
+    return None
+
+
+def _recommendation(model_fields: dict, field: str, sha: str) -> dict | None:
+    for item in (model_fields.get(field) or {}).get("recommendations") or ():
+        if item["sha256"] == sha:
+            return {"sha256": sha, "filename": item.get("name"), "size_bytes": item.get("size_bytes")}
     return None
 
 
@@ -165,10 +186,16 @@ def model_fields_of(documents: list) -> dict:
         if isinstance(node, dict):
             if node.get("type") == "model" and isinstance(node.get("name"), str):
                 configuration = node.get("configuration") or {}
-                entry = fields.setdefault(node["name"], {"model_type": configuration.get("model_type"), "recommended": set()})
+                entry = fields.setdefault(node["name"], {"model_type": configuration.get("model_type"), "recommended": set(), "recommendations": []})
                 for item in configuration.get("recommendations") or ():
-                    if isinstance(item, dict) and item.get("sha256"):
-                        entry["recommended"].add(str(item["sha256"]).lower())
+                    if not isinstance(item, dict):
+                        continue
+                    sha = str(item["sha256"]).lower() if item.get("sha256") else None
+                    known = {(entry_item["sha256"], entry_item["name"]) for entry_item in entry["recommendations"]}
+                    if (sha, item.get("name")) not in known:
+                        entry["recommendations"].append({"sha256": sha, "name": item.get("name"), "size_bytes": size_from_label(item.get("size"))})
+                    if sha:
+                        entry["recommended"].add(sha)
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):
@@ -177,7 +204,19 @@ def model_fields_of(documents: list) -> dict:
 
     for document in documents:
         walk(document)
-    return {name: {"model_type": entry["model_type"], "recommended": sorted(entry["recommended"])} for name, entry in fields.items()}
+    return {
+        name: {"model_type": entry["model_type"], "recommended": sorted(entry["recommended"]), "recommendations": entry["recommendations"]}
+        for name, entry in fields.items()
+    }
+
+
+def size_from_label(label) -> int | None:
+    if isinstance(label, int):
+        return label
+    match = SIZE_LABEL.fullmatch(str(label or "").strip())
+    if not match:
+        return None
+    return int(float(match.group(1)) * SIZE_UNITS[match.group(2).upper()])
 
 
 def build_case_set(ref: str, label: str, presets: list[dict], recipes: list[dict]) -> dict:
@@ -194,14 +233,15 @@ def build_case_set(ref: str, label: str, presets: list[dict], recipes: list[dict
         preset_id = str(preset.get("id"))
         requires = preset.get("requires") or {}
         tests = item.get("tests") or {}
-        model_fields = item.get("model_fields") or {}
+        preset_model_fields = item.get("model_fields") or {}
         preset_cases = []
         for case in tests.get("cases") or ():
+            model_fields = (item.get("mode_model_fields") or {}).get(case.get("mode", "txt2img")) or preset_model_fields
             models = []
             for field, ref_data in (case.get("models") or {}).items():
                 sha = str((ref_data or {}).get("sha256") or ZERO_SHA).lower()
                 source = "tests.yml"
-                artifact = by_sha.get(sha)
+                artifact = by_sha.get(sha) or _recommendation(model_fields, field, sha)
                 if sha == ZERO_SHA:
                     resolved = _resolve_zero(field, preset_id, recipe_entries, model_fields)
                     if resolved and resolved[0]["sha256"]:
@@ -218,6 +258,7 @@ def build_case_set(ref: str, label: str, presets: list[dict], recipes: list[dict
                         "size_bytes": artifact["size_bytes"] if artifact else None,
                         "filename": artifact["filename"] if artifact else None,
                         "source": source,
+                        **({"alternatives": artifact["alternatives"]} if artifact and artifact.get("alternatives") else {}),
                     }
                 )
             preset_cases.append(
@@ -261,6 +302,35 @@ def build_case_set(ref: str, label: str, presets: list[dict], recipes: list[dict
         "recipes": sorted(recipe_entries, key=lambda entry: entry["path"]),
         "cases": cases,
     }
+
+
+def _includes(node) -> list[str]:
+    found = []
+    if isinstance(node, dict):
+        for value in node.values():
+            found.extend(_includes(value))
+    elif isinstance(node, list):
+        for value in node:
+            found.extend(_includes(value))
+    elif isinstance(node, str):
+        match = PRESET_INCLUDE.fullmatch(node.strip())
+        if match:
+            found.append(match.group(1))
+    return found
+
+
+def mode_documents(folder: str, mode: str, documents: dict) -> list:
+    pending = sorted(path for path in documents if path.startswith(f"{folder}/modes/{mode}/"))
+    seen = set()
+    selected = []
+    while pending:
+        path = pending.pop(0)
+        if path in seen or path not in documents:
+            continue
+        seen.add(path)
+        selected.append(documents[path])
+        pending.extend(f"{folder}/{relative}" for relative in _includes(documents[path]))
+    return selected
 
 
 def _git(core: Path, *args: str) -> str:
@@ -319,11 +389,12 @@ def import_from_core(core: Path, ref: str, label: str) -> dict:
         if tests_path in paths:
             tests = yaml.safe_load(_git(core, "show", f"{sha}:{tests_path}"))
             tests_blob = _git(core, "rev-parse", f"{sha}:{tests_path}").strip()
-        form_documents = [
-            yaml.safe_load(_git(core, "show", f"{sha}:{path}"))
+        form_documents = {
+            path: yaml.safe_load(_git(core, "show", f"{sha}:{path}"))
             for path in paths
             if path.startswith(folder + "/") and path.endswith(".yml") and path != tests_path
-        ]
+        }
+        mode_model_fields = {mode: model_fields_of(mode_documents(folder, mode, form_documents)) for mode in sorted(modes)}
         presets.append(
             {
                 "key": key,
@@ -333,7 +404,8 @@ def import_from_core(core: Path, ref: str, label: str) -> dict:
                 "modes": sorted(modes),
                 "tests": tests,
                 "tests_blob": tests_blob,
-                "model_fields": model_fields_of(form_documents),
+                "model_fields": model_fields_of(list(form_documents.values())),
+                "mode_model_fields": mode_model_fields,
             }
         )
     recipes = [

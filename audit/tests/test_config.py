@@ -20,7 +20,7 @@ def test_relative_paths_resolve_against_the_config_folder(tmp_path):
 
 
 def test_the_packaged_case_file_is_the_default():
-    assert DEFAULT_CASES.name == "d7ff033de.json"
+    assert DEFAULT_CASES.name == "02cce6fdd.json"
     assert DEFAULT_CASES.exists()
 
 

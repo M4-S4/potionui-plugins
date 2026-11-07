@@ -206,6 +206,7 @@ def collect(client: ApiClient, config: Config, case_set: CaseSet, username: str,
                     "source": ref.source,
                     "fields": set(),
                     "used_by": [],
+                    "alternatives": list(ref.alternatives),
                 },
             )
             entry["fields"].add(ref.field)
@@ -215,6 +216,11 @@ def collect(client: ApiClient, config: Config, case_set: CaseSet, username: str,
     for entry in models.values():
         entry["fields"] = sorted(entry["fields"])
         entry["found"] = lookup_model(client, entry["sha256"]) if entry["sha256"] else None
+        for sha in entry["alternatives"] if entry["found"] is None else ():
+            found = lookup_model(client, sha)
+            if found:
+                entry["found"] = {**found, "alternative_sha256": sha}
+                break
         entry["present"] = None if entry["sha256"] is None else entry["found"] is not None
     preflight["models"] = sorted(
         models.values(),

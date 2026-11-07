@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from potion_audit.cases import ZERO_SHA, CaseFileError, build_case_set, load_cases, model_fields_of
+from potion_audit.cases import ZERO_SHA, CaseFileError, build_case_set, load_cases, mode_documents, model_fields_of, size_from_label
 from potion_audit.config import DEFAULT_CASES
 
 from conftest import MISSING_SHA, SDXL_SHA, WAN_DIT_SHA, WAN_ID, WAN_VAE_SHA, sample_case_set_data
@@ -86,7 +86,7 @@ def test_case_model_fields_missing_from_the_preset_form_are_listed():
 
 def test_model_fields_are_collected_from_nested_form_documents():
     documents = [{"fields": [{"type": "section", "children": [{"name": "vae", "type": "model", "configuration": {"model_type": "vae", "recommendations": [{"sha256": "ABC"}]}}]}]}, None]
-    assert model_fields_of(documents) == {"vae": {"model_type": "vae", "recommended": ["abc"]}}
+    assert model_fields_of(documents) == {"vae": {"model_type": "vae", "recommended": ["abc"], "recommendations": [{"sha256": "abc", "name": None, "size_bytes": None}]}}
 
 
 def test_a_preset_without_tests_is_kept_with_no_case():
@@ -113,8 +113,8 @@ def test_a_case_file_of_another_schema_is_refused(tmp_path):
         load_cases(path)
 
 
-def test_the_committed_case_file_holds_the_core_and_plugin_presets():
-    case_set = load_cases(DEFAULT_CASES)
+def test_the_lot_0_case_file_holds_the_core_and_plugin_presets():
+    case_set = load_cases(DEFAULT_CASES.parent / "d7ff033de.json")
     origins = {preset["origin"] for preset in case_set.presets}
     assert case_set.source["ref"].startswith("d7ff033de")
     assert {"core", "plugin:video-producer"} <= origins
@@ -122,3 +122,59 @@ def test_the_committed_case_file_holds_the_core_and_plugin_presets():
     assert sum(1 for preset in case_set.presets if preset["origin"] == "plugin:video-producer") == 5
     wan = next(case for case in case_set.cases if case.preset_key == "Wan2.1-T2V-1.3B-8GB")
     assert all(ref.resolved for ref in wan.models)
+
+
+def test_a_zero_sha_without_a_recipe_takes_the_form_recommendation_and_keeps_the_others():
+    fields = {"model": {"model_type": "diffusion_model", "recommended": [], "recommendations": [
+        {"sha256": "3" * 64, "name": "dit_fp8.safetensors", "size_bytes": 19_520_000_000},
+        {"sha256": "4" * 64, "name": "dit_int8.safetensors", "size_bytes": 19_530_000_000},
+    ]}}
+    model = build_case_set("r", "x", [preset("P", WAN_ID, {"model": {"sha256": ZERO_SHA}}, fields)], [])["cases"][0]["models"][0]
+    assert model["sha256"] == "3" * 64
+    assert model["filename"] == "dit_fp8.safetensors"
+    assert model["alternatives"] == ["4" * 64]
+    assert model["source"] == "form:model/first recommendation with a sha256"
+
+
+def test_a_recommendation_without_sha_keeps_its_file_name_unresolved():
+    fields = {"model": {"model_type": "diffusion_model", "recommended": [], "recommendations": [{"sha256": None, "name": "gated.safetensors", "size_bytes": 20_030_000_000}]}}
+    model = build_case_set("r", "x", [preset("P", WAN_ID, {"model": {"sha256": ZERO_SHA}}, fields)], [])["cases"][0]["models"][0]
+    assert model["sha256"] == ZERO_SHA
+    assert model["filename"] == "gated.safetensors"
+    assert model["source"] == "unresolved, form:model/first recommendation has no sha256"
+    assert "alternatives" not in model
+
+
+def test_each_case_reads_the_model_fields_of_its_own_mode():
+    item = preset("P", WAN_ID, {"model": {"sha256": ZERO_SHA}}, {})
+    item["tests"]["cases"][0]["mode"] = "refs"
+    item["mode_model_fields"] = {
+        "video": {"model": {"model_type": "diffusion_model", "recommended": [], "recommendations": [{"sha256": "5" * 64, "name": "fl2va.safetensors", "size_bytes": None}]}},
+        "refs": {"model": {"model_type": "diffusion_model", "recommended": [], "recommendations": [{"sha256": "6" * 64, "name": "ref2va.safetensors", "size_bytes": None}]}},
+    }
+    assert build_case_set("r", "x", [item], [])["cases"][0]["models"][0]["sha256"] == "6" * 64
+
+
+def test_a_mode_reads_the_preset_files_its_form_includes():
+    folder = "content/presets/marketplace/H3"
+    documents = {
+        f"{folder}/modes/refs/form.yml": {"fields": [{"type": "tab", "children": "{{ paths.preset }}/modes/refs/tabs/generation.yml"}]},
+        f"{folder}/modes/refs/tabs/generation.yml": [{"type": "section", "children": "{{ paths.preset }}/files/form/models_ref2va.yml"}],
+        f"{folder}/files/form/models_ref2va.yml": [{"name": "model", "type": "model", "configuration": {"recommendations": [{"sha256": "6" * 64}]}}],
+        f"{folder}/files/form/models_fl2va.yml": [{"name": "model", "type": "model", "configuration": {"recommendations": [{"sha256": "5" * 64}]}}],
+    }
+    assert model_fields_of(mode_documents(folder, "refs", documents))["model"]["recommended"] == ["6" * 64]
+
+
+@pytest.mark.parametrize("label, expected", [("13.31 GB", 13_310_000_000), ("444 MB", 444_000_000), ("595 kB", 595_000), ("big", None), (None, None), (1234, 1234)])
+def test_a_size_label_reads_as_decimal_bytes(label, expected):
+    assert size_from_label(label) == expected
+
+
+def test_the_case_file_of_the_pack_gives_each_mode_its_own_model():
+    case_set = load_cases(DEFAULT_CASES)
+    assert case_set.source["ref"].startswith("02cce6fdd")
+    refs = {case.name: {ref.field: ref for ref in case.models} for case in case_set.cases if case.preset_key == "MiniMax-H3"}
+    assert refs["minimax-h3-ref2va-fast"]["model"].filename == "minimax_h3_ref2va_pruned_fp8_scaled.safetensors"
+    assert refs["minimax-h3-t2va-fast"]["model"].filename == "minimax_h3_fl2va_pruned_fp8_scaled.safetensors"
+    assert len(refs["minimax-h3-ref2va-fast"]["model"].alternatives) == 2
