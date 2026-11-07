@@ -52,7 +52,8 @@ def image_size(edge: int, picture: Tuple[int, int]) -> Tuple[int, int]:
     elif width * MAX_RATIO < height:
         width = math.ceil(height / MAX_RATIO)
     scale = edge / min(width, height)
-    return _snap(width * scale, width), _snap(height * scale, height)
+    snapped_width, snapped_height = _snap(width * scale, width), _snap(height * scale, height)
+    return min(snapped_width, snapped_height * MAX_RATIO), min(snapped_height, snapped_width * MAX_RATIO)
 
 
 def image_rows(edge: int, picture: Optional[Tuple[int, int]], size: Optional[Tuple[int, int]] = None) -> int:

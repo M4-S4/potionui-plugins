@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
@@ -10,6 +11,14 @@ from src.plugin_api.presets import lint_preset_dir
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 PRESETS_ROOT = PLUGIN_ROOT / "presets"
+CORE_PRESETS = PLUGIN_ROOT.parents[2] / "presets" / "marketplace"
+CORE_SOURCES = {
+    "MiniMax-H3-12GB": "MiniMax-H3",
+    "MiniMax-H3-Fast-12GB": "MiniMax-H3-Fast",
+    "Wan2.1-T2V-1.3B-8GB": "Wan",
+    "Wan2.2-14B-Lightning-12GB": "Wan",
+    "Wan2.2-TI2V-5B-8GB": "Wan",
+}
 
 H3_MODES = ("t2v", "i2v", "flf", "director")
 WAN_MODES = ("t2v",)
@@ -196,12 +205,22 @@ def test_a_wan_tier_preset_generates_from_text_only_for_at_most_5_seconds(folder
     assert catalog.preset_limits(variables)["max_duration"] == 5
 
 
+def _findings(lines):
+    return {re.sub(r"^\[\w+\] .*?\.yml: ", "", line) for line in lines}
+
+
 @pytest.mark.parametrize("folder", sorted(TIERS))
-def test_a_shipped_preset_lints_without_error(folder):
+def test_a_shipped_preset_lints_without_error_and_warns_only_where_the_core_preset_it_copies_does(folder):
     errors, warnings = lint_preset_dir(str(PRESETS_ROOT / folder))
+    _, core_warnings = lint_preset_dir(str(CORE_PRESETS / CORE_SOURCES[folder]))
 
     assert errors == []
-    assert warnings == []
+    assert _findings(warnings) <= _findings(core_warnings)
+
+
+def test_every_shipped_preset_names_the_core_preset_it_copies():
+    assert sorted(CORE_SOURCES) == sorted(TIERS)
+    assert all((CORE_PRESETS / source / "preset.yml").is_file() for source in CORE_SOURCES.values())
 
 
 def test_the_12_gb_h3_preset_runs_ref2va_through_its_refs_mode():

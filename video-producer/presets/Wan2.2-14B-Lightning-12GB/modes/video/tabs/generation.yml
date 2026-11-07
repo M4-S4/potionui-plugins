@@ -139,3 +139,23 @@ fields:
               size: "242.1 MB"
               sha256: "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
               description: "VAE for the Wan 2.1 and Wan 2.2 14B checkpoints."
+
+      - name: "preview_decoder"
+        type: "model"
+        label: "Preview decoder"
+        required: false
+        ai_hint: "Optional tiny decoder that turns the live preview into a true-colour frame from the middle of the clip. Leave empty to keep the fast latent colour projection."
+        configuration:
+          model_type: "preview_decoder"
+          placeholder: "Select taew2_1.safetensors..."
+          recommendations:
+            - name: "taew2_1.safetensors"
+              link: "https://raw.githubusercontent.com/madebyollin/taehv/62f7591f59dfbb4c3c02b7a621d180a9eeaba26c/safetensors/taew2_1.safetensors"
+              size: "21.59 MB"
+              sha256: "04766eac0221b5390b985ae3fdcca652cbb4b1e8b82b28ea7ff89dfad1b1a93f"
+              description: "Wan 2.1, Wan 2.2 14B and Qwen-Image true-colour live preview decoder (MIT)."
+            - name: "taew2_2.safetensors"
+              link: "https://raw.githubusercontent.com/madebyollin/taehv/62f7591f59dfbb4c3c02b7a621d180a9eeaba26c/safetensors/taew2_2.safetensors"
+              size: "21.79 MB"
+              sha256: "b84609b2a133d48434bd9636bfcb44bf05168dc436e2d3cecf26256faa1f5325"
+              description: "Wan 2.2 5B true-colour live preview decoder (MIT)."

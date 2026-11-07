@@ -450,7 +450,7 @@ def test_the_tools_are_offered_only_in_the_assistant_mode(chat):
     mode = chat.modes.require(CHAT_MODE)
 
     assert [tool.name for tool in chat.tools.get_for_mode(mode)] == list(CHAT_TOOLS)
-    assert chat.tools.get_for_mode(SimpleNamespace(id="generation", tool_names=[])) == []
+    assert chat.tools.get_for_mode(SimpleNamespace(id="generation", tool_names=[], offers_tools=True)) == []
 
 
 def test_the_mode_loaded_by_the_core_resolves_its_prompt_and_its_context(chat):

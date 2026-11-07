@@ -20,7 +20,7 @@ pipeline:
         name: "{{ form.upscale_model | default('') }}"
       loras:
         "@loop":
-          items: "{{ form.loras if (form.latent_upscale) == 'off' else [] }}"
+          items: "{{ form.loras if (form.latent_upscale) == 'off' and form.speed_profile != 'flex' else [] }}"
           template:
             file_path: "{{ item.model }}"
             weight: "{{ item.strength }}"
@@ -117,9 +117,12 @@ pipeline:
         - ["model", "{{ form.audio_vae }}"]
         - ["model", "{{ form.upscale_model | default('') }}"]
         - "@loop":
-            items: "{{ form.loras | active_loras }}"
+            items: "{{ (form.loras | active_loras) if form.speed_profile != 'flex' else [] }}"
             template: ["model", "{{ item.model }}"]
         - ["positive_prompt", "{{ generation.prompts.positives }}"]
+        - "@loop":
+            items: "{{ [form.flex_adapter] if form.speed_profile == 'flex' else [] }}"
+            template: ["model", "{{ item }}"]
         - ["steps", "{{ form.steps | default(generation.profile.steps) }}"]
         - ["speed_profile", "{{ form.speed_profile }}"]
         - ["resolution", "{{ form.resolution }}"]
@@ -140,6 +143,7 @@ pipeline:
       - ["director_image", "director_media", "image"]
     enabled: true
     configuration:
+      preview_decoder: "{{ form.preview_decoder | default('') }}"
       mode: "video"
       document: "{{ form.video_director if form.video_director is defined else none }}"
       steps: "{{ form.steps | default(generation.profile.steps) }}"
@@ -150,7 +154,7 @@ pipeline:
       keyframe_anchors: "{{ (form.video_director.media | selectattr('role', 'in', ['first', 'last']) | sort(attribute='role') | map(attribute='role') | list) if (form.video_director is defined and form.video_director.mode != 'director') else [] }}"
       audio_source: "generate"
       decode: "{{ (form.latent_upscale) == 'off' }}"
-      step_cache_threshold: "{{ form.step_cache_threshold }}"
+      step_cache_threshold: "{{ (generation.profile.extra | default({})).step_cache_threshold | default(form.step_cache_threshold) }}"
       step_cache_warmup_steps: "{{ form.step_cache_warmup_steps }}"
       step_cache_max_skips: "{{ form.step_cache_max_skips }}"
       sparse_attn: "{{ form.sparse_attn }}"
@@ -158,13 +162,15 @@ pipeline:
       sla_sparsity: "{{ form.sla_sparsity }}"
       sla_block_size: "{{ form.sla_block_size | int }}"
       sparse_attn_dense_last_steps: "{{ form.sparse_attn_dense_last_steps }}"
-      sampler: "{{ form.sampler }}"
-      scheduler: "{{ form.scheduler }}"
-      manual_sigmas: "{{ form.manual_sigmas }}"
-      manual_audio_sigmas: "{{ form.manual_audio_sigmas }}"
+      sampler: "{{ generation.profile.sampler | default(form.sampler) }}"
+      scheduler: "{{ generation.profile.schedule | default(form.scheduler) }}"
+      video_sigma_shift: "{{ generation.profile.shift | default(form.video_sigma_shift) }}"
+      audio_sigma_shift: "{{ form.audio_sigma_shift }}"
+      manual_sigmas: "{{ (generation.profile.extra | default({})).manual_sigmas | default(form.manual_sigmas) }}"
+      manual_audio_sigmas: "{{ (generation.profile.extra | default({})).manual_audio_sigmas | default(form.manual_audio_sigmas) }}"
       runtime_loras:
         "@loop":
-          items: "{{ form.loras if (form.latent_upscale) != 'off' else [] }}"
+          items: "{{ [{'model': form.flex_adapter, 'strength': 1.0, 'audio': true}] if form.speed_profile == 'flex' else (form.loras if (form.latent_upscale) != 'off' else []) }}"
           template:
             file_path: "{{ item.model }}"
             weight: "{{ item.strength }}"
@@ -192,6 +198,7 @@ pipeline:
       - ["audio", "generator_stage1", "audio"]
     enabled: "{{ (form.latent_upscale) != 'off' }}"
     configuration:
+      preview_decoder: "{{ form.preview_decoder | default('') }}"
       mode: "video"
       quantity: "{{ form.quantity }}"
       preview: "{{ form.preview }}"

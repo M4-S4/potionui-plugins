@@ -32,6 +32,10 @@ configuration:
     type: "model_tags"
     label: "Latent upscaler tags"
     description: "Only models with any of these tags appear in the Latent Upscaler picker."
+  control_tags:
+    type: "model_tags"
+    label: "Control model tags"
+    description: "Only models with any of these tags appear in the Control model picker."
   matting_tags:
     type: "model_tags"
     label: "Matting model tags"
@@ -42,6 +46,14 @@ speed_profiles:
     steps: 24
   turbo:
     steps: 4
+  flex:
+    steps: 6
+    sampler: "lcm"
+    schedule: "simple"
+    extra:
+      manual_sigmas: "1.0, 0.972973, 0.923077, 0.8, 0.571429, 0.333333, 0.0"
+      manual_audio_sigmas: "1.0, 0.9, 0.75, 0.5, 0.25, 0.111111, 0.0"
+      step_cache_threshold: 0.0
   custom:
     steps: 20
 
