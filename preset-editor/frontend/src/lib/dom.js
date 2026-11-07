@@ -54,10 +54,6 @@ export function replaceQuery(params) {
 	window.history.replaceState(window.history.state, '', url);
 }
 
-function revokeAll(urls) {
-	for (const url of urls) URL.revokeObjectURL(url);
-}
-
 export function authMedia(node, params) {
 	let current = '';
 	let url = null;
@@ -83,42 +79,6 @@ export function authMedia(node, params) {
 		destroy() {
 			token += 1;
 			if (url) URL.revokeObjectURL(url);
-		}
-	};
-}
-
-export function authImages(node, params) {
-	let urls = [];
-	let token = 0;
-
-	async function load(next) {
-		const mine = ++token;
-		const fresh = [];
-		const images = [...node.querySelectorAll('img[data-preset-editor-media]')];
-		await Promise.all(
-			images.map(async (image) => {
-				const result = await fetchMedia(next?.api, next?.draftId, image.dataset.presetEditorMedia);
-				if (!result.ok) return;
-				const url = URL.createObjectURL(result.data);
-				fresh.push(url);
-				if (mine === token) image.src = url;
-			})
-		);
-		if (mine !== token) {
-			revokeAll(fresh);
-			return;
-		}
-		revokeAll(urls);
-		urls = fresh;
-	}
-
-	load(params);
-	return {
-		update: load,
-		destroy() {
-			token += 1;
-			revokeAll(urls);
-			urls = [];
 		}
 	};
 }

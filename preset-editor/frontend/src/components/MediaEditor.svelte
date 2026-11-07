@@ -250,7 +250,7 @@
 			</details>
 		{/if}
 
-		<p class="text-fg-subtle">Accepted: {MEDIA_ACCEPT.replaceAll(',', ' ')}. Uploads are capped at 20 MB; the core linter has its own budget per file. Paths under public/ can also be referenced from description.md and as examples in a form.yml.</p>
+		<p class="text-fg-subtle">Accepted: {MEDIA_ACCEPT.replaceAll(',', ' ')}. Uploads are capped at 20 MB; the core linter has its own budget per file. Paths under public/ can also be listed as examples in a form.yml; description.md shows no image in PotionUI.</p>
 	{/if}
 </div>
 

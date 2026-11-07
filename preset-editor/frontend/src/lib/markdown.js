@@ -14,19 +14,11 @@ export function safeHref(url) {
 	return SAFE_URL.test(trimmed) ? trimmed : null;
 }
 
-export function renderInline(raw, { resolveImage } = {}) {
+export function renderInline(raw) {
 	const codes = [];
 	let html = escapeHtml(raw).replace(/`([^`\n]+)`/g, (_, code) => {
 		codes.push(`<code>${code}</code>`);
 		return `\u0000${codes.length - 1}\u0000`;
-	});
-	html = html.replace(/!\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, alt, src) => {
-		const target = unescapeHtml(src);
-		const resolved = typeof resolveImage === 'function' ? resolveImage(target) : safeHref(target);
-		if (resolved && typeof resolved === 'object' && typeof resolved.media === 'string') {
-			return `<img data-preset-editor-media="${escapeHtml(resolved.media)}" alt="${alt}">`;
-		}
-		return typeof resolved === 'string' && resolved ? `<img src="${escapeHtml(resolved)}" alt="${alt}" loading="lazy">` : alt;
 	});
 	html = html.replace(/\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, label, href) => {
 		const safe = safeHref(unescapeHtml(href));
@@ -38,18 +30,18 @@ export function renderInline(raw, { resolveImage } = {}) {
 	return html.replace(/\u0000(\d+)\u0000/g, (_, index) => codes[Number(index)]);
 }
 
-export function renderMarkdown(source, options = {}) {
+export function renderMarkdown(source) {
 	const lines = String(source ?? '').replace(/\r\n?/g, '\n').split('\n');
 	const out = [];
 	let paragraph = [];
 	let list = null;
 	let code = null;
 	const flushParagraph = () => {
-		if (paragraph.length) out.push(`<p>${renderInline(paragraph.join(' '), options)}</p>`);
+		if (paragraph.length) out.push(`<p>${renderInline(paragraph.join(' '))}</p>`);
 		paragraph = [];
 	};
 	const flushList = () => {
-		if (list) out.push(`<${list.tag}>${list.items.map((item) => `<li>${renderInline(item, options)}</li>`).join('')}</${list.tag}>`);
+		if (list) out.push(`<${list.tag}>${list.items.map((item) => `<li>${renderInline(item)}</li>`).join('')}</${list.tag}>`);
 		list = null;
 	};
 	const flush = () => {
@@ -72,7 +64,7 @@ export function renderMarkdown(source, options = {}) {
 		const heading = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
 		if (heading) {
 			flush();
-			out.push(`<h${heading[1].length}>${renderInline(heading[2], options)}</h${heading[1].length}>`);
+			out.push(`<h${heading[1].length}>${renderInline(heading[2])}</h${heading[1].length}>`);
 			continue;
 		}
 		if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
@@ -95,7 +87,7 @@ export function renderMarkdown(source, options = {}) {
 		const quote = /^\s*>\s?(.*)$/.exec(line);
 		if (quote) {
 			flush();
-			out.push(`<blockquote>${renderInline(quote[1], options)}</blockquote>`);
+			out.push(`<blockquote>${renderInline(quote[1])}</blockquote>`);
 			continue;
 		}
 		if (!line.trim()) {

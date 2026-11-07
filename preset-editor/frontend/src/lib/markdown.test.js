@@ -24,14 +24,12 @@ test('renderInline escapes HTML and keeps only safe links', () => {
 	assert.equal(safeHref('data:text/html,x'), null);
 });
 
-test('images resolve through the caller or keep their alt text', () => {
-	assert.equal(renderInline('![Cover](public/cover.webp)'), 'Cover');
-	assert.equal(renderInline('![Cover](https://example.com/c.webp)'), '<img src="https://example.com/c.webp" alt="Cover" loading="lazy">');
-	const resolve = (src) => (src.startsWith('public/') ? { media: src } : null);
-	assert.equal(renderInline('![Cover "x"](public/cover.webp)', { resolveImage: resolve }), '<img data-preset-editor-media="public/cover.webp" alt="Cover &quot;x&quot;">');
-	assert.equal(renderInline('![Cover](public/cover.webp)', { resolveImage: resolve }), '<img data-preset-editor-media="public/cover.webp" alt="Cover">');
-	assert.equal(renderInline('![Cover](https://example.com/c.webp)', { resolveImage: (src) => src }), '<img src="https://example.com/c.webp" alt="Cover" loading="lazy">');
-	assert.equal(renderInline('![x](ftp://a)', { resolveImage: resolve }), 'x');
+test('an image renders as the core shows it: no picture, the exclamation mark and the link', () => {
+	assert.equal(renderInline('![Cover](public/cover.webp)'), '!Cover');
+	assert.equal(renderInline('![Cover](https://example.com/c.webp)'), '!<a href="https://example.com/c.webp" target="_blank" rel="noopener noreferrer">Cover</a>');
+	assert.equal(renderInline('![Cover "x"](public/cover.webp)'), '!Cover &quot;x&quot;');
+	assert.equal(renderInline('![x](ftp://a)'), '!x');
+	assert.doesNotMatch(renderMarkdown('# Title\n\n![Cover](public/cover.webp)\n\n- ![a](https://example.com/a.png)\n\n> ![b](/b.png)'), /<img/);
 	assert.equal(renderMarkdown(''), '');
 	assert.equal(renderMarkdown('plain\r\ntext'), '<p>plain text</p>');
 });
