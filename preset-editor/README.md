@@ -5,12 +5,30 @@ copy of an existing one or from a blank skeleton, lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: version 0.2.0, works on the pinned core, not yet on the marketplace.** The plugin
-targets the core of `core.ref` at the root of this repository, `02cce6fdd` (the `dev` branch
-of the M4-S4/PotionUI fork: upstream release 0.1.0, `master` at `d76303eca`, plus the fork's
-changes), and its catalogue entry requires it. Its pytest suite, its core-side tests
-(`core-tests/preset-editor/`) and its Node tests run in the CI against that core. Version
-0.1.0 was written for PotionUI `master` at `6903cc19` (0.0.15).
+**Status: version 0.2.1, works on the pinned core and has been seen on screen with it, not
+yet on the marketplace.** The plugin targets the core of `core.ref` at the root of this
+repository, `02cce6fdd` (the `dev` branch of the M4-S4/PotionUI fork: upstream release 0.1.0,
+`master` at `d76303eca`, plus the fork's changes), and its catalogue entry requires it. Its
+pytest suite, its core-side tests (`core-tests/preset-editor/`) and its Node tests run in the
+CI against that core. Version 0.1.0 was written for PotionUI `master` at `6903cc19` (0.0.15).
+
+## What changed in 0.2.1
+
+- **Seen on screen.** The plugin was checked on a running instance of the pinned core, with
+  its dark theme at 1440 and 1024 px: the buttons and the Edit… menu in the Presets tab
+  header, with the zip of a local preset downloaded through the host client; the form builder
+  on a copy of a preset with `files/form/` fragments and an include with vars; the form
+  settings of a mode; adding and removing modes; the media thumbnails loaded as blobs;
+  publishing without a restart, the history it keeps, and publishing from the Admin header;
+  the `anchor` field on the tabs and sections of a form.
+- **Description preview.** The Markdown preview of `description.md` renders an image line the
+  way Admin → Presets does, as its `!` and its link text with no picture: PotionUI shows no
+  image in a description.
+- **List header.** The installation filter of the preset list keeps its own width, so the
+  search, the filter and Refresh stay on one line.
+- **Header buttons.** New Preset and Edit… in Admin → Presets are the host's `Button` in size
+  `sm`, mounted through `HostUi` like the buttons of the Preset Editor page, so they take the
+  size of Refresh catalog beside them.
 
 ## What changed in 0.2.0
 
@@ -62,9 +80,9 @@ changes), and its catalogue entry requires it. Its pytest suite, its core-side t
   where the host now uses its `Tooltip` and `IconButton` tooltips.
 - **Page bundle.** The page is one bundle; the core's build can now split it on dynamic
   imports, which the workbench could use.
-- **Checks on a running instance.** Nothing here has been seen on screen yet with the pinned
-  core: the buttons in the new Presets tab header, the builders on a copy of a preset with
-  `files/form/` fragments, the media thumbnails and the zip downloads through the host client.
+- **Not seen on screen yet.** The light theme and widths under 1024 px; drag and drop in the
+  form builder, a zip import, Restore, the pipeline builder and the form preview of a
+  published preset; the rollback of a preset whose field `type:` the loader refuses.
 
 ## Getting started
 

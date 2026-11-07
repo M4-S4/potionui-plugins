@@ -35,7 +35,7 @@ def test_me_answers_an_admin(app):
     assert response.status_code == 200
     assert response.json() == {
         "success": True,
-        "data": {"is_admin": True, "user_id": "admin-1", "plugin": "preset-editor", "version": "0.2.0"},
+        "data": {"is_admin": True, "user_id": "admin-1", "plugin": "preset-editor", "version": "0.2.1"},
     }
 
 
