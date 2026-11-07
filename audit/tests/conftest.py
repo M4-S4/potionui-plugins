@@ -41,6 +41,13 @@ def bundle_bytes(files: dict[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
+def multipart_filename(body: bytes) -> str:
+    head = body.split(b"\r\n\r\n", 1)[0].decode("utf-8", "replace")
+    marker = 'filename="'
+    start = head.index(marker) + len(marker)
+    return head[start:head.index('"', start)]
+
+
 class FakeApi:
     def __init__(self):
         self.requests = []
@@ -57,6 +64,10 @@ class FakeApi:
                             "resources": {"total_runs": 4, "peak_vram_mb": 7400.0, "avg_vram_mb": 6350.0, "peak_ram_mb": 20000.0, "avg_ram_mb": 15500.0, "avg_cpu_percent": 110.0}}
         self.disk_free = 50
         self.finished = False
+        self.uploads = []
+        self.named_models = {}
+        self.vram_gb = 12.0
+        self.plugins = [{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -80,11 +91,16 @@ class FakeApi:
         if path == "/api/auth/me":
             return 200, envelope({"username": USER, "account_type": "ADMIN"}), "application/json"
         if path == "/api/plugins":
-            return 200, envelope([{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]), "application/json"
+            return 200, envelope(self.plugins), "application/json"
+        if path == "/api/media/upload" and method == "POST":
+            filename = multipart_filename(body)
+            self.uploads.append(filename)
+            stored = f"{len(self.uploads)}-{filename}"
+            return 200, envelope({"path": f"storage/uploads/{stored}", "relative_path": f"uploads/{stored}", "url": f"/api/media/uploads/{stored}", "filename": stored, "size": len(body), "width": 64, "height": 64, "duration_seconds": None, "fps": None, "id": None}), "application/json"
         if path == "/api/settings":
             return 200, envelope({"profiling_enabled": False, "model_cache_scope": "preset", "s3_secret_key": "should-not-be-copied"}), "application/json"
         if path == "/api/system/gpu-profile":
-            return 200, {"name": "Fake GPU", "vram_gb": 12.0, "generation_label": "fake", "compute_capability": "8.9"}, "application/json"
+            return 200, {"name": "Fake GPU", "vram_gb": self.vram_gb, "generation_label": "fake", "compute_capability": "8.9"}, "application/json"
         if path == "/api/system/stats":
             return 200, envelope({"gpu": {"available": True, "vram_used": 2000 + 100 * len(self.started)}, "ram": {"used": 9000, "total": 64000}, "cpu": {"core_count": 8}}), "application/json"
         if path == "/api/system/backends":
@@ -97,14 +113,18 @@ class FakeApi:
             return 200, envelope(self.queue), "application/json"
         if path == "/api/presets":
             listed = [
-                {"id": SDXL_ID, "name": "SDXL", "version": "1.0.1", "installed": True, "assignment_count": 1, "group_count": 0, "requires": {"min_vram_gb": 8}},
-                {"id": WAN_ID, "name": "Wan", "version": "2.0.0", "installed": True, "assignment_count": 0, "group_count": 0, "requires": {"min_vram_gb": 16}},
+                {"id": SDXL_ID, "name": "SDXL", "version": "1.0.1", "installed": True, "assignment_count": 1, "group_count": 0, "requires": {"min_vram_gb": 8}, "modes": ["txt2img"], "vars": {}, "engine": "native"},
+                {"id": WAN_ID, "name": "Wan", "version": "2.0.0", "installed": True, "assignment_count": 0, "group_count": 0, "requires": {"min_vram_gb": 16}, "modes": ["video"], "vars": {"video_director": {"preset_modes": ["video"], "limits": {"default_duration": 5, "default_fps": 16}}}, "engine": "native"},
             ]
             return 200, envelope(listed if query.get("include_uninstalled") == ["true"] else listed[:1]), "application/json"
         if path == f"/api/presets/{SDXL_ID}":
             return 200, envelope({"id": SDXL_ID, "vars": {}}), "application/json"
         if path == f"/api/presets/{WAN_ID}":
             return 200, envelope({"id": WAN_ID, "vars": {"video_director": {"preset_modes": ["video"], "limits": {"default_duration": 5, "default_fps": 16}}}}), "application/json"
+        if path.startswith("/api/presets/") and path.endswith("/models"):
+            search = (query.get("search") or [""])[0]
+            found = [{"id": model_id, "filename": name, "model_type": "lora", "file_size": 10, "sha256": "e" * 64, "is_available": True} for name, model_id in self.named_models.items() if search in name]
+            return 200, envelope({"models": found, "total": len(found)}), "application/json"
         if path.startswith("/api/models/hash/"):
             sha = path.rsplit("/", 1)[1]
             if sha in self.models:

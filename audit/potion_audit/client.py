@@ -3,6 +3,7 @@ import shutil
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -64,6 +65,17 @@ class ApiClient:
 
     def post_json(self, path: str, payload: dict):
         return self._json("POST", path, json.dumps(payload).encode(), "application/json")
+
+    def upload(self, path: str, file: Path, content_type: str, filename: str | None = None, fields: dict | None = None):
+        boundary = f"potion-audit-{uuid.uuid4().hex}"
+        name = filename or file.name
+        parts = []
+        for key, value in (fields or {}).items():
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode())
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: {content_type}\r\n\r\n'.encode())
+        parts.append(file.read_bytes())
+        parts.append(f"\r\n--{boundary}--\r\n".encode())
+        return self._json("POST", path, b"".join(parts), f"multipart/form-data; boundary={boundary}")
 
     def download(self, path: str, dest: Path, params: dict | None = None) -> Download:
         dest.parent.mkdir(parents=True, exist_ok=True)

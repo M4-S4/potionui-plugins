@@ -21,6 +21,17 @@ VERDICT_CLASS = {
     "cloud_excluded": "muted",
 }
 
+PACK_CLASS = {
+    "ready": "ok",
+    "input_pending": "warn",
+    "beyond_tier": "warn",
+    "model_missing": "warn",
+    "model_unresolved": "bad",
+    "preset_not_installed": "bad",
+    "plugin_inactive": "muted",
+    "excluded": "muted",
+}
+
 
 def _gib(value) -> str:
     if value is None:
@@ -160,6 +171,26 @@ def render(preflight: dict) -> str:
                     ] for model in selected],
                 )
             )
+    pack = preflight.get("pack")
+    if pack:
+        counts = ", ".join(f"{escape(name)} {count}" for name, count in sorted(pack["summary"].items()))
+        parts.append(f"<h2>Pack {escape(pack['id'])} {escape(pack['version'])}</h2>")
+        parts.append(f"<p>Cells: {counts}. Pack <code>{escape(pack['sha256'])}</code>, cases {escape(pack['cases']['file'])} <code>{escape(pack['cases']['sha256'])}</code>.</p>")
+        rows = []
+        for cell in pack["cells"]:
+            css = PACK_CLASS.get(cell["status"], "")
+            rows.append([
+                escape(cell["id"]),
+                escape(cell["source"]),
+                escape(str(cell["case"] or "")),
+                escape(", ".join(cell["profiles"])) + (" + warm" if cell["repeat_warm"] else ""),
+                escape(", ".join(cell["inputs"])),
+                f'<span class="{css}">{escape(cell["status"])}</span>',
+                escape(cell["reason"] or ""),
+            ])
+        for cell in pack["uncovered"]:
+            rows.append([escape(f"{cell['name']}:{cell['mode']}"), "", "", "", "", '<span class="bad">no_case</span>', escape(cell["reason"])])
+        parts.append(_table(["Cell", "Source", "Case", "Profiles", "Inputs", "Status", "Reason"], rows))
     runner = preflight.get("runner") or {}
     parts.append(
         f"<h2>Runner</h2><p class=\"muted\">potion-audit {escape(str(runner.get('potion_audit')))}, Python {escape(str(runner.get('python')))}, "

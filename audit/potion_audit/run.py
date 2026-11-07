@@ -227,15 +227,19 @@ def phases(run_report: dict) -> dict:
     return {"pipe_seconds": pipes, "load_events": [{"at": entry.get("at"), "step": entry.get("step")} for entry in loads]}
 
 
-def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, run_id: str, *, dry_run: bool = False, prompt: str | None = None, timeout: float | None = None, interval: float = 2.0, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
+def ensure_idle(client: ApiClient) -> None:
     queue = unwrap(client.get_json("/api/admin/generations/queue")) or {}
     if queue.get("pending") or queue.get("running"):
         raise RunRefused(f"the global queue is busy: {len(queue.get('running') or ())} running, {len(queue.get('pending') or ())} pending")
+
+
+def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, run_id: str, *, dry_run: bool = False, prompt: str | None = None, timeout: float | None = None, interval: float = 2.0, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
+    ensure_idle(client)
     model_ids = {}
     for ref in case.models:
         if not ref.resolved:
             raise RunRefused(f"model field {ref.field} has no sha256 to look up")
-        found = lookup_model(client, ref.sha256)
+        found = next((hit for hit in (lookup_model(client, sha) for sha in (ref.sha256, *ref.alternatives)) if hit), None)
         if not found:
             raise RunRefused(f"model {ref.filename or ref.sha256} ({ref.field}) is not on the instance")
         model_ids[ref.field] = found["model_id"]
@@ -247,24 +251,28 @@ def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, ru
     if dry_run:
         log(f"{case.preset_key}:{case.mode} {case.name}: dry run, request written to {case_dir / 'request.json'}")
         return {"verdict": "DRY_RUN", "request": request, "case_dir": str(case_dir)}
-    stats_before = preset_stats(client, case.preset_id)
-    log(f"{case.preset_key}:{case.mode} {case.name}: submitting")
-    submitted_at = datetime.now(UTC).isoformat(timespec="seconds")
-    started = unwrap(client.post_json("/api/generations/start", request)) or {}
-    generation_id = started.get("generation_id") or (started.get("status") or {}).get("id")
-    if not generation_id:
-        raise ApiError("POST", "/api/generations/start", 200, "the answer holds no generation_id")
-    result = {
+    head = {
         "schema": 1,
         "run_id": run_id,
         "case": {"preset_key": case.preset_key, "preset_id": case.preset_id, "name": case.name, "mode": case.mode, "tags": list(case.tags)},
         "cases_source": {**case_set.source, "file": case_set.path.name, "sha256": case_set.sha256},
         "runner": runner_info(),
-        "generation_id": generation_id,
-        "submitted_at": submitted_at,
     }
+    limit = timeout or float(case.checks.get("max_seconds") or DEFAULT_TIMEOUT)
+    return submit_and_collect(client, request, case.preset_id, case.checks, case_dir, head, f"{case.preset_key}:{case.mode} {case.name}", limit, interval, clock, sleep, log)
+
+
+def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks: dict, case_dir: Path, head: dict, label: str, timeout: float, interval: float, clock: Callable[[], float], sleep: Callable[[float], None], log: Callable[[str], None]) -> dict:
+    stats_before = preset_stats(client, preset_id)
+    log(f"{label}: submitting")
+    submitted_at = datetime.now(UTC).isoformat(timespec="seconds")
+    started = unwrap(client.post_json("/api/generations/start", request)) or {}
+    generation_id = started.get("generation_id") or (started.get("status") or {}).get("id")
+    if not generation_id:
+        raise ApiError("POST", "/api/generations/start", 200, "the answer holds no generation_id")
+    result = {**head, "generation_id": generation_id, "submitted_at": submitted_at}
     try:
-        status, samples, timed_out = follow(client, generation_id, timeout or float(case.checks.get("max_seconds") or DEFAULT_TIMEOUT), interval, clock, sleep, log)
+        status, samples, timed_out = follow(client, generation_id, timeout, interval, clock, sleep, log)
     except KeyboardInterrupt:
         client.post_json(f"/api/generations/{generation_id}/cancel", {})
         result["verdict"] = "STOPPED"
@@ -274,7 +282,7 @@ def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, ru
         client.post_json(f"/api/generations/{generation_id}/cancel", {})
     result["samples"] = samples
     result["final_status"] = status
-    admin, stats_after = wait_for_stats(client, generation_id, case.preset_id, stats_before, 10, interval, sleep)
+    admin, stats_after = wait_for_stats(client, generation_id, preset_id, stats_before, 10, interval, sleep)
     record = unwrap(client.get_json(f"/api/generations/history/{generation_id}")) or {}
     run_report = admin.get("run_report") or {}
     result["generation_stats"] = derive_run_stats(stats_before, stats_after) if status.get("status") == "completed" else {"derived": False, "reason": "the run did not complete"}
@@ -299,7 +307,7 @@ def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, ru
         result["bundle"] = {"file": bundle.path.name, "size": bundle.size}
         outputs = read_outputs(bundle.path, case_dir)
         result["outputs"] = outputs
-        result["checks"] = evaluate(case.checks, outputs)
+        result["checks"] = evaluate(checks, outputs)
         result["verdict"] = "PASS" if all(check["ok"] for check in result["checks"]) else "FAIL"
     else:
         failure = client.get_json(f"/api/generations/{generation_id}/failure", missing_ok=True)
@@ -312,7 +320,7 @@ def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, ru
         else:
             result["verdict"] = "FAIL"
     _write(case_dir, result)
-    log(f"{case.preset_key}:{case.mode} {case.name}: {result['verdict']} in {result['timing']['run_seconds']} s")
+    log(f"{label}: {result['verdict']} in {result['timing']['run_seconds']} s")
     return result
 
 
