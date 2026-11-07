@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseFormDocument } from './formModel.js';
-import { defaultProblem, fieldProblems, treeProblems } from './formSchema.js';
+import { defaultProblem, duplicateAnchors, fieldProblems, treeProblems } from './formSchema.js';
 
 const keys = (problems) => problems.map((item) => item.key).sort();
 
@@ -66,4 +66,24 @@ test('a formula group that preset.yml does not declare is a warning, since the l
 	assert.equal(report.byNode.has(seed.id), false);
 	assert.equal(report.count, 0);
 	assert.equal(treeProblems(doc.fields, { kind: 'tab' }).byNode.size, 0);
+});
+
+test('an anchor names a tab or a section for plugin extensions, as FieldSpec and the loader check it', () => {
+	assert.deepEqual(fieldProblems({ type: 'tab', anchor: 'generation', label: 'Generation', children: '{{ paths.preset }}/modes/video/tabs/generation.yml' }), []);
+	assert.deepEqual(fieldProblems({ type: 'section', anchor: 'face_hand-2' }), []);
+	assert.deepEqual(fieldProblems({ type: 'tab', anchor: null }), []);
+	assert.deepEqual(keys(fieldProblems({ type: 'row', anchor: 'main' })), ['anchor']);
+	assert.deepEqual(keys(fieldProblems({ name: 'steps', type: 'slider', anchor: 'steps' })), ['anchor']);
+	assert.deepEqual(keys(fieldProblems({ type: 'tab', anchor: 'Generation' })), ['anchor']);
+	assert.deepEqual(keys(fieldProblems({ type: 'tab', anchor: '_lora' })), ['anchor']);
+	assert.deepEqual(keys(fieldProblems({ type: 'tab', anchor: '' })), ['anchor']);
+	assert.deepEqual(keys(fieldProblems({ type: 'tab', anchor: 3 })), ['anchor']);
+	assert.deepEqual(fieldProblems({ type: 'section', anchor: '{{ vars.anchor }}' }, { allowVars: true }), []);
+	assert.deepEqual(keys(fieldProblems({ type: 'section', anchor: '{{ vars.anchor }}' })), ['anchor']);
+
+	const doc = parseFormDocument('fields:\n  - type: tabs\n    children:\n      - type: tab\n        anchor: generation\n        children:\n          - type: section\n            anchor: generation\n            children: []\n      - type: tab\n        anchor: advanced\n        children: []\n      - type: tab\n        anchor: generation\n        children: "{{ paths._shared }}/tabs/lora.yml"\n');
+	assert.deepEqual(duplicateAnchors(doc.fields), [{ type: 'tab', anchor: 'generation' }]);
+	const report = treeProblems(doc.fields, { kind: 'form' });
+	assert.deepEqual(report.general.map((item) => [item.key, item.message]), [['anchor', 'the tab anchor generation is used more than once (the core refuses the form)']]);
+	assert.equal(report.count, 1);
 });

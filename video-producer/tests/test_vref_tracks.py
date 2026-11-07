@@ -497,6 +497,8 @@ def test_the_rows_of_a_shot_are_those_the_takes_of_the_27_october_logged(seconds
         ((832, 480), False, (8000, 1000), 315, (1248, 320)),
         ((832, 480), False, (1920, 1080), 473, (832, 480)),
         ((832, 480), True, (1920, 1080), 1077, (1920, 1056)),
+        ((832, 480), False, (255, 1000), 319, (224, 896)),
+        ((832, 480), False, (1000, 255), 319, (896, 224)),
     ],
 )
 def test_a_photo_is_encoded_at_the_area_of_the_take_in_a_draft_and_at_twice_1344_by_768_in_a_final(size, final, picture, edge, encoded):

@@ -82,7 +82,8 @@ def test_the_shipped_image_presets_with_the_weights_of_the_test_machine_offer_th
     unusable = {preset.name: (preset.mode, preset.reason) for preset in listed if not preset.usable}
     assert unusable["FLUX 3 Klein (experimental)"] == ("edit", "missing_models")
     assert unusable["Flux1"] == ("img2img", "missing_models")
-    for name in ("Anima", "Krea-2", "MOSS-Image", "SDXL", "Z-Image"):
+    assert unusable["Krea-2"] == ("edit", "missing_models")
+    for name in ("Anima", "MOSS-Image", "SDXL", "Z-Image"):
         assert unusable[name] == (None, "no_image_mode"), name
     assert len(listed) == len(IMAGE_PRESETS)
 

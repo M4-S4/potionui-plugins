@@ -140,6 +140,7 @@ pipeline:
       - ["director_image", "director_media", "image"]
     enabled: true
     configuration:
+      preview_decoder: "{{ form.preview_decoder | default('') }}"
       mode: "video"
       document: "{{ form.video_director if form.video_director is defined else none }}"
       steps: "{{ form.steps | default(generation.profile.steps) }}"
@@ -194,6 +195,7 @@ pipeline:
       - ["audio", "generator_stage1", "audio"]
     enabled: "{{ (form.latent_upscale) != 'off' }}"
     configuration:
+      preview_decoder: "{{ form.preview_decoder | default('') }}"
       mode: "video"
       quantity: "{{ form.quantity }}"
       preview: "{{ form.preview }}"

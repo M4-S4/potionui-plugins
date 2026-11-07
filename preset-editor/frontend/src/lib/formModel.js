@@ -3,7 +3,7 @@ import { dumpYaml, parseYaml } from './yaml.js';
 export const FORM_META_KEYS = ['name', 'label', 'description', 'short_description', 'mode_label', 'mode_icon', 'prompt', 'prompt_label', 'prompt_placeholder', 'llm_guide', 'examples', 'default', 'order'];
 export const FORM_RAW_KEYS = ['negative_prompt', 'requirements', 'segment_templates'];
 export const PROMPT_REQUIREMENTS = ['required', 'optional', 'none'];
-export const FIELD_FORM_KEYS = ['type', 'name', 'label', 'description', 'ai_hint', 'formula', 'default', 'required', 'audience', 'width', 'full_width', 'visible', 'interactive', 'save_into', 'configuration'];
+export const FIELD_FORM_KEYS = ['type', 'anchor', 'name', 'label', 'description', 'ai_hint', 'formula', 'default', 'required', 'audience', 'width', 'full_width', 'visible', 'interactive', 'save_into', 'configuration'];
 export const FIELD_RAW_KEYS = ['when', 'reactions', 'listeners', 'capability', 'merge_from', 'input', 'container', 'hidden_when_video_director'];
 export const FIELD_KEYS = [...FIELD_FORM_KEYS, ...FIELD_RAW_KEYS, 'children'];
 export const CONTAINER_TYPES = ['tabs', 'tab', 'row', 'group', 'accordion', 'section'];
