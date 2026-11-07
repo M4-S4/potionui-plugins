@@ -10,6 +10,8 @@ export const SCALAR_TYPES = ['select'];
 export const STRING_TYPES = ['string', 'textbox'];
 export const WIDTH_RE = /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/;
 export const INCLUDE_VAR_RE = /\{\{\s*vars\.\w+\s*\}\}/g;
+export const ANCHORABLE_TYPES = ['tab', 'section'];
+export const ANCHOR_RE = /^[a-z0-9][a-z0-9_-]*$/;
 
 const maybe = (schema) => z.optional(z.nullable(schema));
 const optionalString = maybe(z.string());
@@ -41,6 +43,7 @@ export const fieldSchema = z.strictObject({
 	listeners: z.optional(z.unknown()),
 	capability: maybe(z.record(z.string(), z.unknown())),
 	merge_from: maybe(z.array(z.string().check(z.minLength(1)))),
+	anchor: optionalString,
 	input: maybe(z.array(z.array(z.unknown()))),
 	container: optionalBoolean,
 	hidden_when_video_director: optionalBoolean,
@@ -86,7 +89,22 @@ export function fieldProblems(attrs, { types = null, allowVars = false, formulaG
 		if (attrs.merge_from.includes(attrs.name)) problems.push({ key: 'merge_from', message: 'cannot list the field itself' });
 		if (new Set(attrs.merge_from).size !== attrs.merge_from.length) problems.push({ key: 'merge_from', message: 'lists a key twice' });
 	}
+	if (typeof attrs.anchor === 'string') {
+		if (type && !ANCHORABLE_TYPES.includes(type)) problems.push({ key: 'anchor', message: `only a ${ANCHORABLE_TYPES.join(' or a ')} takes an anchor (the core refuses it)` });
+		if (!(allowVars && isIncludeVar(attrs.anchor)) && !ANCHOR_RE.test(attrs.anchor)) problems.push({ key: 'anchor', message: "lowercase letters, digits, '_' or '-', starting with a letter or a digit" });
+	}
 	return problems;
+}
+
+export function duplicateAnchors(fields) {
+	const seen = new Map();
+	walk(fields, (node) => {
+		const { type, anchor } = node.attrs;
+		if (typeof type !== 'string' || typeof anchor !== 'string' || !anchor) return;
+		const key = JSON.stringify([type, anchor]);
+		seen.set(key, (seen.get(key) ?? 0) + 1);
+	});
+	return [...seen].filter(([, count]) => count > 1).map(([key]) => JSON.parse(key)).map(([type, anchor]) => ({ type, anchor }));
 }
 
 export function treeProblems(fields, { types = null, kind = 'form', configKeys = null, formulaGroups = null } = {}) {
@@ -112,6 +130,7 @@ export function treeProblems(fields, { types = null, kind = 'form', configKeys =
 		}
 	});
 	for (const name of duplicateNames(fields)) general.push({ key: 'name', message: `the name ${name} is used more than once` });
+	for (const { type, anchor } of duplicateAnchors(fields)) general.push({ key: 'anchor', message: `the ${type} anchor ${anchor} is used more than once (the core refuses the form)` });
 	return { byNode, general, count: [...byNode.values()].reduce((sum, list) => sum + list.filter((item) => item.level !== 'warning').length, 0) + general.length };
 }
 

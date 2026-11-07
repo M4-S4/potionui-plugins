@@ -24,7 +24,10 @@ changes), and its catalogue entry requires it. Its pytest suite, its core-side t
   whose `formula:` names a group that `preset.yml` does not declare in `formulas.groups` is
   flagged, since the core's lint refuses it and the draft cannot be published until it is
   declared. The pipeline builder no longer offers `cache:` on a pipe: the core dropped it and
-  refuses it.
+  refuses it. A tab or a section may carry `anchor:` (core 0.1.0), the name plugin preset
+  extensions use to add fields into it: the inspector edits it, and the builder flags an anchor
+  on another type, one that is not lowercase letters, digits, `_` or `-`, and two tabs (or two
+  sections) of a form with the same anchor, which the core refuses.
 - **Modes.** Adding a mode suggests the mode names the core knows (`GET
   /api/presets/mode-labels`), the new ones included. Removing a mode is refused while another
   mode or a fragment loads one of its files through `{{ paths.preset }}/modes/<mode>/`, the

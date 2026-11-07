@@ -1,7 +1,7 @@
 <script>
 	import Pill from './Pill.svelte';
 	import { FIELD_RAW_KEYS, externalChildrenPath, isContainerType, withIncludeVars } from '../lib/formModel.js';
-	import { AUDIENCES, BOOL_TYPES, INTEGER_TYPES, NUMERIC_TYPES, SAVE_INTO, STRING_TYPES, isIncludeVar } from '../lib/formSchema.js';
+	import { ANCHORABLE_TYPES, AUDIENCES, BOOL_TYPES, INTEGER_TYPES, NUMERIC_TYPES, SAVE_INTO, STRING_TYPES, isIncludeVar } from '../lib/formSchema.js';
 	import { dumpYaml, parseYaml } from '../lib/yaml.js';
 
 	let { node, types = [], formulaGroups = null, allowVars = false, problems = [], sharedFiles = [], onChange, onOpenFile } = $props();
@@ -28,7 +28,8 @@
 	const specNames = $derived(specs.map((spec) => spec.name));
 	const configuration = $derived(attrs.configuration && typeof attrs.configuration === 'object' && !Array.isArray(attrs.configuration) ? attrs.configuration : {});
 	const extraConfigKeys = $derived(Object.keys(configuration).filter((key) => !specNames.includes(key) && key !== 'options'));
-	const rawKeys = $derived(Object.keys(attrs).filter((key) => FIELD_RAW_KEYS.includes(key) || !['type', ...PLAIN_KEYS, ...FLAG_KEYS, 'default', 'audience', 'width', 'save_into', 'configuration', 'children'].includes(key)));
+	const rawKeys = $derived(Object.keys(attrs).filter((key) => FIELD_RAW_KEYS.includes(key) || !['type', 'anchor', ...PLAIN_KEYS, ...FLAG_KEYS, 'default', 'audience', 'width', 'save_into', 'configuration', 'children'].includes(key)));
+	const showAnchor = $derived(ANCHORABLE_TYPES.includes(type) || (attrs.anchor !== undefined && attrs.anchor !== null));
 	const defaultKind = $derived(BOOL_TYPES.includes(type) ? 'boolean' : NUMERIC_TYPES.includes(type) || INTEGER_TYPES.includes(type) ? 'number' : STRING_TYPES.includes(type) || type === 'select' ? 'text' : 'yaml');
 	const hasOptionsSpec = $derived(specNames.includes('options'));
 	const external = $derived(node ? externalChildrenPath(node) : null);
@@ -238,6 +239,12 @@
 					{/each}
 				</datalist>
 			</label>
+			{#if showAnchor}
+				<label class="block">
+					<span class="mb-0.5 block text-fg-muted">Anchor <span class="text-fg-subtle">(where plugin extensions add fields)</span></span>
+					<input type="text" class="input w-full font-mono" placeholder="generation" value={attrs.anchor ?? ''} onchange={(event) => set('anchor', event.currentTarget.value.trim())} />
+				</label>
+			{/if}
 			<label class="block sm:col-span-2">
 				<span class="mb-0.5 block text-fg-muted">Description</span>
 				<input type="text" class="input w-full" value={attrs.description ?? ''} onchange={(event) => set('description', event.currentTarget.value)} />
