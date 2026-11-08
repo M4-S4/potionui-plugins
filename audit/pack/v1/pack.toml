@@ -483,6 +483,8 @@ repeat_warm = true
 preset = "core/LTX-2.5"
 mode = "upscale"
 case = "ltx25-upscale-refine-fast"
+fix = "the case names its upscale_model only by the file name ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors; downloaded from Lightricks/LTX-2.5 on 2026-11-08, that file has the sha256 of the installed ltx-2.5-spatial-upscaler-x2-1.0_bf16.safetensors, so the cell looks the model up by that sha256"
+models = {upscale_model = "eb5a71fe4068ee87ccdb1c3aa635e547ca76bd2d30ae20ae889f2c325c0677e8"}
 prompt = "t2v"
 profiles = ["full"]
 bind = {input_video = "clip"}
@@ -491,6 +493,8 @@ bind = {input_video = "clip"}
 preset = "core/LTX-2.5"
 mode = "motion_transfer"
 case = "ltx25-motion-transfer-fast"
+fix = "the case names its upscale_model only by the file name ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors; downloaded from Lightricks/LTX-2.5 on 2026-11-08, that file has the sha256 of the installed ltx-2.5-spatial-upscaler-x2-1.0_bf16.safetensors, so the cell looks the model up by that sha256"
+models = {upscale_model = "eb5a71fe4068ee87ccdb1c3aa635e547ca76bd2d30ae20ae889f2c325c0677e8"}
 prompt = "control"
 profiles = ["full"]
 bind = {input_image = "lumi", input_video = "lumi-clip"}
@@ -515,6 +519,8 @@ bind = {input_video = "clip"}
 preset = "core/LTX-2.5"
 mode = "follow_motion"
 case = "ltx25-follow-motion-fast"
+fix = "the case names its upscale_model only by the file name ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors; downloaded from Lightricks/LTX-2.5 on 2026-11-08, that file has the sha256 of the installed ltx-2.5-spatial-upscaler-x2-1.0_bf16.safetensors, so the cell looks the model up by that sha256"
+models = {upscale_model = "eb5a71fe4068ee87ccdb1c3aa635e547ca76bd2d30ae20ae889f2c325c0677e8"}
 prompt = "i2v"
 profiles = ["full"]
 bind = {input_video = "clip", input_image = "bottle"}
@@ -585,10 +591,10 @@ prompt = "layout"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
-models = {upscale_model = {filename = "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"}, effect_lora = {filename = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"}}
+models = {upscale_model = "eb5a71fe4068ee87ccdb1c3aa635e547ca76bd2d30ae20ae889f2c325c0677e8", effect_lora = {filename = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"}}
 form = {speed_profile = "distilled", steps = 8, cfg = 1.0}
 bind = {input_video = "clip", style_image = "workshop"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=layout_to_render on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; upscale_model: the form's first recommendation, matched by file name (no sha256 in the core); effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=layout_to_render on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; upscale_model: the form's first recommendation, ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors, by its sha256 read on 2026-11-08 (the core gives none; the file equals the installed ltx-2.5-spatial-upscaler-x2-1.0_bf16.safetensors); effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
 
 [[cells]]
 preset = "core/LTX-2.5"
