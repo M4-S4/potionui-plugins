@@ -16,6 +16,7 @@ from .media import probe_image, probe_video, video_encoders, write_preview
 from .pack import DEFAULT_PACK, PROFILES, PackError, load_pack, used_by, verify
 from .plan import dry_run
 from .run import RunRefused, execute, select_case
+from .vp_scenario import add_vp_parser, vp_command
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -76,6 +77,7 @@ def _parser() -> argparse.ArgumentParser:
     probe.add_argument("--preview", type=Path, help="also write a reduced H.264 copy here")
     probe.add_argument("--max-height", type=int, default=360)
     media_commands.add_parser("encoders", help="video encoders of the bundled FFmpeg")
+    add_vp_parser(commands)
     return parser
 
 
@@ -211,7 +213,7 @@ def _media(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media}
+    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media, "vp": vp_command}
     try:
         return handlers[args.command](args)
     except (ConfigError, CaseFileError, RunRefused, PackError) as error:

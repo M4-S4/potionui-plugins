@@ -133,3 +133,46 @@ Probes
 ```bash
 docker exec -i <container> sh -s -- --read-test <models>/<file> --confirm-idle <models> <storage> < probe/probe-linux.sh
 ```
+
+Video Producer scenario
+-----------------------
+
+The matrix measures each preset on its own. The scenario measures what only the Video Producer plugin does, through its routes (`/api/plugins/video-producer/…`): the project document, the chaining of a shot on the last image of the previous one (`firstFromPrevious`), Ref2VA with references, the final pass and the export.
+
+| Command | What it does | GPU |
+|---|---|---|
+| `uv run --locked potion-audit vp run --matrix <run> --dry-run` | Picks the engines, builds each project document and the list of its generations in memory, with their estimated durations, and writes `plan.json` and `projects/<engine>.json`. Only reads on the instance (health, global queue, plugin, preset timings). | no |
+| `uv run --locked potion-audit vp run --matrix <run> --confirm-gpu` | Runs the scenario (see below) and writes `scenario.json`. Refused without `--confirm-gpu`. Exits with 0 when every step that ran passed, 1 otherwise or when the run stopped, 2 when refused, 3 when stopped with Ctrl+C (the running take is cancelled). | yes |
+| `uv run --locked potion-audit vp cleanup <run folder> [--confirm]` | Lists the projects and the generations of a scenario run: the projects recorded in `scenario.json` and those whose name starts with `potion-audit <run id> `, and the generations of their takes. With `--confirm`, deletes the projects (with their takes, versions and exports), then the generations, and writes `cleanup.json`. | no |
+
+Options of `vp run`: `--matrix` (repeatable) takes a `run.json` or `results.json` of a matrix, a run folder, or the folder of a night with `night.json`, whose segments are read from the sibling folders; `--engines a,b` names presets of the plugin; `--quality draft|final` (draft by default), `--upscaler seedvr2|rtx` (SeedVR2 by default), `--target` of the final pass (`fhd1080` by default), `--timeout` per take, `--interval`, `--run-id` (default `<date>-<machine>-vp`).
+
+Engines: the five presets of the plugin, Wan2.1-T2V-1.3B-8GB, Wan2.2-TI2V-5B-8GB, Wan2.2-14B-Lightning-12GB, MiniMax-H3-12GB and MiniMax-H3-Fast-12GB. With `--matrix`, an engine plays only when every run of its `video` cell passed; with `--engines` too, only the named ones among those. An engine offers Ref2VA when its preset has a `refs` mode and, with a matrix, its `refs` cell passed: only MiniMax-H3-12GB today. The final pass runs only when the upscaler's cell passed the matrix (`core/SeedVR2:video_upscale` or `plugin:nvidia-rtx-upscale/RTX-Upscale:video_upscale`); otherwise it is `not_run` with the reason, and the export goes on without it.
+
+One project per engine, named `potion-audit <run id> <engine>`, its synopsis and a marker holding the run id. Three shots of 5 s at 24 fps, written from the bible of the pack:
+
+1. `s1-workshop`: a wide shot of the workshop, text-to-video;
+2. `s2-bottle`: a close-up of the bottle, chained on shot 1 (`firstFromPrevious`);
+3. `s3-lumi`: Lumi lifting the bottle, in Ref2VA, cast with the Lumi card, whose reference is the frozen input `lumi`, and with `bottle` as a global reference. It has no spoken line: `talk` is excluded for want of a voice under a permissive licence. An engine without Ref2VA skips it (`skipped`).
+
+Steps, one generation at a time, each after a check that the global queue is empty:
+
+- the two references are uploaded (`POST /api/media/upload`, then `POST …/media/uploaded` for their library origin) and the project is created (`POST …/projects`);
+- each shot is ordered alone (`POST …/projects/{id}/generate`, one variant), followed by `GET …/projects/{id}/takes` and the status of its generation, and placed on its clip once done (`PUT …/projects/{id}`). Shot 2 is ordered once shot 1's take is placed, so the plugin takes the last image of that take;
+- the final pass of shot 1's take (`POST …/projects/{id}/final-pass`, method `upscale`), placed on clip 1 once done;
+- the export (`POST …/projects/{id}/exports/video`, format `web`), followed by `GET …/exports/{job}` and downloaded from `…/exports/{job}/file`;
+- the looks the plugin measures (`POST …/projects/{id}/looks`, then `GET` until nothing is queued): its seam scores and the identity and card scores of shot 3's take against the Lumi card.
+
+A take refused by the plugin is `BLOCKED` with its answer; a failed one is `FAIL`, `TIMEOUT` or `OOM`. An OOM stops the scenario, as in the matrix: the steps and engines left are `not_run`.
+
+Checks of a take: an output that is not black, the profile it ran with, `media_loaded` and `generation_step` from the run report (a take whose director mode starts from an image, `i2v` or `flf`, forbids `TXT2VID`); for shot 2 also `chain_frame` (the take started from shot 1's last image) and `chain_start` (its director mode starts from an image). Checks of the export: a duration of 15 s within 0.1 s, 24 fps, 360 frames within one, not black. The seam of shots 1 and 2 is also measured by code: the mean absolute difference and the PSNR between the last frame of shot 1's take and the first frame of shot 2's.
+
+Output, in `<output_dir>/<run id>/`:
+
+- `plan.json` for a dry run, `scenario.json` for a run: `kind = "vp-scenario"`, the run id, the application, plugin, pack and case file versions, the matrix files read, the settings, the state of the final pass, the reason the run stopped if it did, the totals (`summary`), and one entry per engine with whether it was selected and why, Ref2VA and why not, its project, its steps (status, verdict, take and generation ids, director mode, run seconds, seconds per step, peak VRAM, the path of its `result.json` and of its video) and its measures (`seam`, `looks`);
+- `projects/<engine>.json`: the document the project was created from, and `looks.json` there for a run;
+- `takes/<engine>--<shot>/` and `final/<engine>/`: `result.json` in the format of a matrix cell (`cell` is `vp:<engine>:<shot>` or `vp:<engine>:final-pass`; the plugin's take, samples, final status, derived statistics, timing, memory, outputs, checks, verdict), plus `run_report.json`, `bundle.zip` and the extracted outputs;
+- `exports/<engine>/`: `result.json` (the export job, the probe of the file, its checks and verdict) and `export.mp4`;
+- `uploads.json`, and `cleanup.json` after `vp cleanup --confirm`.
+
+The uploads of the two references stay in the library of the audit account after a cleanup.
