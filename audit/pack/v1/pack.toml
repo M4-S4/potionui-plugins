@@ -48,7 +48,7 @@ form = {current_text = "PotionUI", new_text = "Lumi's Brew"}
 positive = "{bottle}, centered in the frame, seen from the front at eye level, the label facing the camera, {workshop} softly blurred behind, {look}"
 
 [prompts.still_bottle_gold]
-positive = "{bottle_gold}, centered in the frame, seen from the front at eye level, the label facing the camera, {look}"
+positive = "{bottle_gold}, centered in the frame, seen from the front at eye level, the label facing the camera, {workshop} softly blurred behind, {look}"
 
 [prompts.still_lumi]
 positive = "portrait of {lumi}, head and shoulders, facing the camera, gentle smile, soft firelight on her face, {workshop} softly blurred behind, {look}"
@@ -160,14 +160,12 @@ license = "Apache-2.0, read in content/recipes/marketplace/flux2-klein-starter.y
 [inputs.bottle-gold.make]
 method = "generate"
 preset = "core/Flux2"
-mode = "img2img"
-models_from = "flux-klein-baseline-fast"
+mode = "txt2img"
+case = "flux-klein-baseline-fast"
 prompt = "still_bottle_gold"
-seed = 12345
-bind = {source_image = "bottle"}
-form = {denoise = 0.4, steps = 30, guidance = 3.5}
+form = {resolution = "1024x1024"}
 output = {format = "jpeg", quality = 92}
-sources = {form = "img2img form defaults of Flux2 (30 steps, guidance 3.5), with denoise 0.4 instead of the default 0.55: at 0.55 the bottle lost the workshop around it"}
+notes = "txt2img at the seed of bottle, with the same framing and workshop: the img2img of Flux2 on core 0.1.0 gave the same picture at denoise 0.4 as at 0.55, without the workshop"
 
 [inputs.lumi]
 file = "inputs/lumi.jpg"
