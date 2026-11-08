@@ -284,6 +284,14 @@
 		}
 	}
 
+	function pressNode(event, id) {
+		if (event.button !== 0) return;
+		const active = document.activeElement;
+		if (active instanceof HTMLElement && active.closest('.editor-frame')) active.blur();
+		selectedId = id;
+		view = 'field';
+	}
+
 	function problemCount(node) {
 		return (report.byNode.get(node.id) ?? []).filter((item) => item.level !== 'warning').length;
 	}
@@ -293,7 +301,7 @@
 	<ul class="drop-zone space-y-0.5" use:dndzone={{ items: nodes, flipDurationMs: 120, type: 'fields', dropTargetStyle: {}, dropTargetClasses: ['bg-accent/10'] }} onconsider={(event) => replaceChildren(parentId, event.detail.items)} onfinalize={(event) => replaceChildren(parentId, event.detail.items)}>
 		{#each nodes as node (node.id)}
 			<li>
-				<button type="button" class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs transition-colors {node.id === selectedId ? 'bg-accent/10 text-accent' : 'text-fg hover:bg-surface-3/60'}" style="padding-left: {depth * 12 + 4}px" onclick={() => { selectedId = node.id; view = 'field'; }}>
+				<button type="button" class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-xs transition-colors {node.id === selectedId ? 'bg-accent/10 text-accent' : 'text-fg hover:bg-surface-3/60'}" style="padding-left: {depth * 12 + 4}px" onpointerdown={(event) => pressNode(event, node.id)} onclick={() => { selectedId = node.id; view = 'field'; }}>
 					<Icon name={Array.isArray(node.children) ? 'folder' : externalChildrenPath(node) ? 'external-link' : 'document'} class="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
 					<span class="truncate">{nodeTitle(node)}</span>
 					{#if problemCount(node)}<Pill tone="danger">{problemCount(node)}</Pill>{/if}
@@ -388,7 +396,9 @@
 			</aside>
 			<div class="min-w-0">
 				{#if view === 'field' && selected}
-					<FieldInspector node={selected} {types} {formulaGroups} allowVars={kind !== 'form'} problems={report.byNode.get(selected.id) ?? []} {sharedFiles} onChange={updateSelected} {onOpenFile} />
+					{#key selected.id}
+						<FieldInspector node={selected} {types} {formulaGroups} allowVars={kind !== 'form'} problems={report.byNode.get(selected.id) ?? []} {sharedFiles} onChange={updateSelected} {onOpenFile} />
+					{/key}
 				{:else}
 					<div class="space-y-3 text-xs">
 						{#if kind === 'form'}

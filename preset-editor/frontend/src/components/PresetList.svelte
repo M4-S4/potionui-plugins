@@ -68,7 +68,7 @@
 				<Icon name="search" class="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
 				<input type="search" class="input w-48 pl-7 text-xs" placeholder="Search by name, id or folder" bind:value={query} />
 			</label>
-			<select class="input text-xs" bind:value={installed} aria-label="Installation state">
+			<select class="input w-auto text-xs" bind:value={installed} aria-label="Installation state">
 				<option value="all">Installed or not</option>
 				<option value="installed">Installed</option>
 				<option value="available">Not installed</option>
