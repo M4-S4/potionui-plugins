@@ -18,6 +18,7 @@ from .plan import dry_run
 from .reevaluate import ReevaluateError, reevaluate_run
 from .report import ReportError, add_pack_cells, compare_sets, group_by_machine, load_set, write_merge, write_report
 from .run import RunRefused, execute, select_case
+from .vp_scenario import add_vp_parser, vp_command
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -97,6 +98,7 @@ def _parser() -> argparse.ArgumentParser:
     probe.add_argument("--preview", type=Path, help="also write a reduced H.264 copy here")
     probe.add_argument("--max-height", type=int, default=360)
     media_commands.add_parser("encoders", help="video encoders of the bundled FFmpeg")
+    add_vp_parser(commands)
     return parser
 
 
@@ -258,7 +260,7 @@ def _merge(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media, "report": _report, "reevaluate": _reevaluate, "merge": _merge}
+    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media, "report": _report, "reevaluate": _reevaluate, "merge": _merge, "vp": vp_command}
     try:
         return handlers[args.command](args)
     except (ConfigError, CaseFileError, RunRefused, PackError, ReportError, ReevaluateError) as error:

@@ -66,6 +66,17 @@ class ApiClient:
     def post_json(self, path: str, payload: dict):
         return self._json("POST", path, json.dumps(payload).encode(), "application/json")
 
+    def put_json(self, path: str, payload: dict):
+        return self._json("PUT", path, json.dumps(payload).encode(), "application/json")
+
+    def delete_json(self, path: str, missing_ok: bool = False):
+        try:
+            return self._json("DELETE", path)
+        except ApiError as error:
+            if missing_ok and error.status == 404:
+                return None
+            raise
+
     def upload(self, path: str, file: Path, content_type: str, filename: str | None = None, fields: dict | None = None):
         boundary = f"potion-audit-{uuid.uuid4().hex}"
         name = filename or file.name
