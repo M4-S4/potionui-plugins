@@ -5,12 +5,21 @@ copy of an existing one or from a blank skeleton, lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: version 0.2.1, works on the pinned core and has been seen on screen with it, not
+**Status: version 0.2.2, works on the pinned core and has been seen on screen with it, not
 yet on the marketplace.** The plugin targets the core of `core.ref` at the root of this
 repository, `02cce6fdd` (the `dev` branch of the M4-S4/PotionUI fork: upstream release 0.1.0,
 `master` at `d76303eca`, plus the fork's changes), and its catalogue entry requires it. Its
 pytest suite, its core-side tests (`core-tests/preset-editor/`) and its Node tests run in the
 CI against that core. Version 0.1.0 was written for PotionUI `master` at `6903cc19` (0.0.15).
+
+## What changed in 0.2.2
+
+- **Description preview like Admin → Presets.** The Markdown preview of `description.md` is
+  now rendered by a copy of the core's `processMarkdown`, with its HTML and its classes. A
+  single line break stays a line break instead of joining the lines, `####` and deeper
+  headings stay plain text, GFM tables are rendered, and a relative link (`docs/guide.md`,
+  `public/cover.webp`) is a link instead of its text. The Node tests compare the two
+  renderers on the same inputs when the plugin sits in a core checkout, as in the CI.
 
 ## What changed in 0.2.1
 
@@ -92,7 +101,8 @@ CI against that core. Version 0.1.0 was written for PotionUI `master` at `6903cc
   imports, which the workbench could use.
 - **Not seen on screen yet.** The light theme and widths under 1024 px; drag and drop in the
   form builder, a zip import, Restore, the pipeline builder and the form preview of a
-  published preset; the rollback of a preset whose field `type:` the loader refuses.
+  published preset; the rollback of a preset whose field `type:` the loader refuses; the
+  0.2.2 description preview.
 
 ## Getting started
 
@@ -128,8 +138,10 @@ work and keeps no database table: drafts and the history are folders under
   1024 px WebP as PotionUI does for style previews, videos are stored as they are), declares
   them in `media:` with a caption, a mode, a seed and a prompt, reorders the gallery, picks a
   cover among the files already there and deletes files. `description.md` has a Markdown
-  preview that renders it the way Admin → Presets does: PotionUI shows no image in a
-  description, so an image line appears as its `!` and its link text, as it will there.
+  preview built by a copy of the core's `processMarkdown`, the renderer of Admin → Presets,
+  with the same HTML and classes: a single line break stays a line break, headings stop at
+  `###`, GFM tables are tables, a relative link is a link, and an image line appears as its `!`
+  and its link, since PotionUI shows no image in a description.
 - `form.yml`, `tabs/*.yml` and the fragments under `files/` open in a builder: the field tree
   (drag and drop, containers, tabs and includes backed by files), a palette of every field
   type this instance knows, an inspector for the attributes PotionUI's schema defines (typed
