@@ -336,9 +336,9 @@ def test_a_dry_run_plans_beyond_tier_cells_when_asked(fake_api, config_file, cre
     assert wan["form_data"]["video_director"]["mode"] == "t2v"
 
 
-def test_a_pack_profile_is_refused_without_dry_run(fake_api, config_file, credentials_env, tmp_path, case_file, capsys):
+def test_a_pack_profile_run_is_refused_without_confirm_gpu(fake_api, config_file, credentials_env, tmp_path, case_file, capsys):
     path = write_pack(tmp_path, case_file)
-    code = main(["run", "--config", str(config_file), "--pack", str(path), "--profile", "smoke", "--confirm-gpu"])
+    code = main(["run", "--config", str(config_file), "--pack", str(path), "--profile", "smoke"])
     assert code == 2
     assert fake_api.requests == []
-    assert "--dry-run" in capsys.readouterr().err
+    assert "--confirm-gpu" in capsys.readouterr().err

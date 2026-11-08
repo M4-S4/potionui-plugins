@@ -11,6 +11,7 @@ from .client import ApiClient, ApiError, ApiUnreachable
 from .config import ConfigError, credentials, load_config
 from .coverage import ModelResolver, coverage, live_state
 from .inputs import make_inputs
+from .matrix import run_passed, run_profile
 from .media import probe_image, probe_video, video_encoders, write_preview
 from .pack import DEFAULT_PACK, PROFILES, PackError, load_pack, used_by, verify
 from .plan import dry_run
@@ -34,7 +35,7 @@ def _parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run", help="run cases on the instance's GPU")
     run.add_argument("--config", type=Path, default=Path("audit.toml"))
     run.add_argument("--only", help="<preset>:<mode> of the case file, or with --pack a cell id or a preset of the pack")
-    run.add_argument("--pack", type=Path, nargs="?", const=DEFAULT_PACK, help="plan the cells of a pack profile (only with --dry-run in this version)")
+    run.add_argument("--pack", type=Path, nargs="?", const=DEFAULT_PACK, help="the cells of a pack profile: planned with --dry-run, run with --confirm-gpu")
     run.add_argument("--profile", choices=PROFILES, default="smoke")
     run.add_argument("--beyond-tier", action="store_true", help="plan the presets whose min_vram_gb is above the GPU")
     run.add_argument("--prompt", help="positive prompt in place of the case's own")
@@ -110,9 +111,6 @@ def _run(args) -> int:
     if not args.confirm_gpu and not args.dry_run:
         print("run uses the GPU of the instance: pass --confirm-gpu once the operator has agreed", file=sys.stderr)
         return EXIT_BLOCKED
-    if args.pack and not args.dry_run:
-        print("running the cells of a pack profile comes in a later version: pass --dry-run to plan them", file=sys.stderr)
-        return EXIT_BLOCKED
     if not args.pack and not args.only:
         print("run needs --only <preset>:<mode>, or --pack to plan a profile", file=sys.stderr)
         return EXIT_BLOCKED
@@ -123,8 +121,15 @@ def _run(args) -> int:
     if args.pack:
         pack = load_pack(args.pack)
         client.login(username, password)
-        plan = dry_run(client, pack, args.profile, config.output_dir, run_id, beyond_tier=args.beyond_tier, only=args.only)
-        return EXIT_FAIL if plan["summary"]["statuses"].get("request_error") else EXIT_OK
+        if args.dry_run:
+            plan = dry_run(client, pack, args.profile, config.output_dir, run_id, beyond_tier=args.beyond_tier, only=args.only)
+            return EXIT_FAIL if plan["summary"]["statuses"].get("request_error") else EXIT_OK
+        try:
+            run = run_profile(client, pack, args.profile, config.output_dir, run_id, beyond_tier=args.beyond_tier, only=args.only, machine=config.machine, timeout=args.timeout, interval=args.interval)
+        except KeyboardInterrupt:
+            print("stopped: the running generation was cancelled, see run.json", file=sys.stderr)
+            return EXIT_STOPPED
+        return EXIT_OK if run_passed(run) else EXIT_FAIL
     case_set = load_cases(config.cases_file)
     case = select_case(case_set, args.only)
     client.login(username, password)

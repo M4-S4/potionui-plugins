@@ -66,6 +66,8 @@ class FakeApi:
         self.finished = False
         self.uploads = []
         self.keys = {}
+        self.outcomes = []
+        self.health = "healthy"
         self.named_models = {}
         self.vram_gb = 12.0
         self.plugins = [{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]
@@ -85,6 +87,8 @@ class FakeApi:
             if form.get("username") == [USER] and form.get("password") == [PASSWORD]:
                 return 200, {"access_token": TOKEN, "token_type": "bearer"}, "application/json"
             return 401, {"detail": "Incorrect username or password"}, "application/json"
+        if path == "/health":
+            return 200, {"status": self.health, "service": "potionui-api"}, "application/json"
         if path == "/openapi.json":
             return 200, {"info": {"version": "9.9.9"}}, "application/json"
         if headers.get("Authorization") != f"Bearer {TOKEN}":
@@ -141,6 +145,8 @@ class FakeApi:
                 return 409, {"success": False, "error": "idempotency_key_conflict", "message": "This idempotency key was already used for a different request", "code": None}, "application/json"
             if key:
                 self.keys[key] = request
+            if self.outcomes:
+                self.final, self.failure = self.outcomes.pop(0)
             self.started.append(request)
             return 200, envelope({"generation_id": "G1", "status": {"id": "G1", "status": "pending"}}), "application/json"
         if path == "/api/generations/G1/status":

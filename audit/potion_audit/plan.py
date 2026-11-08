@@ -23,14 +23,19 @@ def cell_folder(cell_id: str, warm: bool) -> str:
     return name + ("--warm" if warm else "")
 
 
+def select_cells(pack: Pack, profile: str, only: str | None):
+    cells = included(pack.cells, profile)
+    if only:
+        cells = [cell for cell in cells if cell.id == only or cell.id.startswith(only + ":") or cell.preset_ref == only]
+    return cells
+
+
 def dry_run(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id: str, *, beyond_tier: bool = False, only: str | None = None, log: Callable[[str], None] = print) -> dict:
     ensure_idle(client)
     live = live_state(client)
     resolver = ModelResolver(client)
     timing = timing_by_preset(client)
-    cells = included(pack.cells, profile)
-    if only:
-        cells = [cell for cell in cells if cell.id == only or cell.id.startswith(only + ":") or cell.preset_ref == only]
+    cells = select_cells(pack, profile, only)
     run_dir = out_root / run_id
     entries = []
     seen_presets = set()
