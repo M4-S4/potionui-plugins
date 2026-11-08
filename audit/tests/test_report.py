@@ -200,6 +200,17 @@ def test_compare_flags_a_changed_verdict_a_slower_cell_and_scores_same_seed_outp
     assert row["duration_change"] == 0.5 and row["duration_flag"] is True
     assert row["ssim"] == {"value": 1.0, "reason": None}
     assert comparison["storage_probed"] is False
+    assert comparison["only_in_this_run"] == [] and comparison["only_in_previous"] == []
+
+
+def test_compare_lists_cells_missing_on_one_side_apart_from_the_changed_verdicts(fake_api, tmp_path, case_file):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    play(fake_api, pack, tmp_path / "out", "old", machine="box", only="core/SDXL:txt2img")
+    play(fake_api, pack, tmp_path / "out", "new", machine="box", beyond_tier=True)
+    comparison = compare_sets(load_set([tmp_path / "out" / "new"]), load_set([tmp_path / "out" / "old"]))
+    assert [row["cell"] for row in comparison["rows"]] == ["core/SDXL:txt2img"]
+    assert comparison["rows"][0]["verdict_changed"] is False
+    assert comparison["only_in_this_run"] == ["core/Wan:video"]
 
 
 def test_compare_refuses_two_runs_of_different_packs(fake_api, tmp_path, case_file, capsys):

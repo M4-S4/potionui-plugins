@@ -388,10 +388,11 @@ def compare_sets(current: RunSet, previous: RunSet) -> dict:
         )
     before = {entry.key: entry for entry in previous.entries}
     rows = []
+    only_here = []
     for entry in current.entries:
         old = before.get(entry.key)
         if old is None:
-            rows.append({"cell": entry.key, "slug": entry.slug, "verdict": entry.shown_verdict or entry.status, "previous_verdict": None, "verdict_changed": True, "note": "not in the other run"})
+            only_here.append(entry.key)
             continue
         now_verdict = entry.shown_verdict or entry.status
         then_verdict = old.shown_verdict or old.status
@@ -431,6 +432,7 @@ def compare_sets(current: RunSet, previous: RunSet) -> dict:
         "previous": {"runs": [run.get("run_id") for run in previous.runs], "started_at": previous.started_at, "app_version": previous.first.get("app_version")},
         "rows": rows,
         "only_in_previous": missing,
+        "only_in_this_run": only_here,
         "storage_changes": storage,
         "storage_probed": bool(mine_storage) and bool(theirs_storage),
         "hardware_changes": hardware,
@@ -728,6 +730,8 @@ def _compare_html(comparison: dict) -> str:
             escape(f"{ssim['value']:.3f}" if ssim.get("value") is not None else str(ssim.get("reason") or "")),
         ])
     parts.append(_table(["Cell", "Verdict", "Run time", "Peak VRAM", "SSIM"], rows) if rows else '<p class="muted">No verdict changed, no duration beyond the tolerance, no VRAM change beyond the tolerance, no SSIM under 0.9.</p>')
+    if comparison["only_in_this_run"]:
+        parts.append(f"<p>Only in this run: {escape(', '.join(comparison['only_in_this_run']))}</p>")
     if comparison["only_in_previous"]:
         parts.append(f"<p>Only in the other run: {escape(', '.join(comparison['only_in_previous']))}</p>")
     if not comparison["storage_probed"]:
