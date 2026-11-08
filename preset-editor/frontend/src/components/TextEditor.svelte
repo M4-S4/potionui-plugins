@@ -175,7 +175,7 @@
 	{:else if phase === 'error'}
 		<p class="px-3 py-6 text-center text-xs text-danger">{error}</p>
 	{:else if isMarkdown && preview}
-		<div class="markdown editor-body flex-1 overflow-auto px-4 py-3 text-sm text-fg">{@html rendered}</div>
+		<div class="editor-body flex-1 overflow-auto px-4 py-3 text-sm leading-relaxed text-fg-muted">{@html rendered}</div>
 	{:else}
 		<div class="flex min-h-0 flex-1 font-mono text-xs leading-5">
 			<div bind:this={gutter} class="w-10 flex-shrink-0 select-none overflow-hidden border-r border-line bg-surface-2 py-2 text-right text-fg-subtle" aria-hidden="true">
@@ -198,18 +198,6 @@
 </div>
 
 <style>
-	.markdown :global(h1) { font-size: 1.25rem; font-weight: 600; margin: 0.75rem 0 0.5rem; }
-	.markdown :global(h2) { font-size: 1.1rem; font-weight: 600; margin: 0.75rem 0 0.4rem; }
-	.markdown :global(h3), .markdown :global(h4), .markdown :global(h5), .markdown :global(h6) { font-size: 1rem; font-weight: 600; margin: 0.6rem 0 0.3rem; }
-	.markdown :global(p), .markdown :global(ul), .markdown :global(ol), .markdown :global(blockquote), .markdown :global(pre) { margin: 0 0 0.6rem; }
-	.markdown :global(ul) { list-style: disc; padding-left: 1.25rem; }
-	.markdown :global(ol) { list-style: decimal; padding-left: 1.25rem; }
-	.markdown :global(code) { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; background: rgb(127 127 127 / 0.15); border-radius: 0.25rem; padding: 0 0.25rem; }
-	.markdown :global(pre) { background: rgb(127 127 127 / 0.15); border-radius: 0.375rem; padding: 0.5rem 0.75rem; overflow: auto; }
-	.markdown :global(pre code) { background: none; padding: 0; }
-	.markdown :global(blockquote) { border-left: 3px solid currentColor; opacity: 0.8; padding-left: 0.75rem; }
-	.markdown :global(a) { text-decoration: underline; }
-	.markdown :global(hr) { border: 0; border-top: 1px solid currentColor; opacity: 0.3; margin: 0.75rem 0; }
 	.editor-frame { min-height: 24rem; }
 	.editor-body { min-height: 22rem; }
 </style>

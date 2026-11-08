@@ -128,8 +128,10 @@ work and keeps no database table: drafts and the history are folders under
   1024 px WebP as PotionUI does for style previews, videos are stored as they are), declares
   them in `media:` with a caption, a mode, a seed and a prompt, reorders the gallery, picks a
   cover among the files already there and deletes files. `description.md` has a Markdown
-  preview that renders it the way Admin → Presets does: PotionUI shows no image in a
-  description, so an image line appears as its `!` and its link text, as it will there.
+  preview built by a copy of the core's `processMarkdown`, the renderer of Admin → Presets,
+  with the same HTML and classes: a single line break stays a line break, headings stop at
+  `###`, GFM tables are tables, a relative link is a link, and an image line appears as its `!`
+  and its link, since PotionUI shows no image in a description.
 - `form.yml`, `tabs/*.yml` and the fragments under `files/` open in a builder: the field tree
   (drag and drop, containers, tabs and includes backed by files), a palette of every field
   type this instance knows, an inspector for the attributes PotionUI's schema defines (typed
