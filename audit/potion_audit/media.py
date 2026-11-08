@@ -105,3 +105,95 @@ def probe_image(path: Path) -> dict:
             "mean": float(pixels.mean()),
             "not_black": float(pixels.mean()) > BLACK_MEAN,
         }
+
+
+THUMB_SIDE = 320
+DISPLAY_SIDE = 1280
+SSIM_WINDOW = 7
+SSIM_C1 = (0.01 * 255) ** 2
+SSIM_C2 = (0.03 * 255) ** 2
+
+
+def video_frame(path: Path, index: int | None = None) -> Image.Image:
+    with av.open(str(path)) as container:
+        stream = container.streams.video[0]
+        wanted = index if index is not None else max(0, (stream.frames or 0) // 2)
+        chosen = None
+        for position, frame in enumerate(container.decode(stream)):
+            chosen = frame
+            if position >= wanted:
+                break
+        if chosen is None:
+            raise ValueError(f"{path.name} has no video frame")
+        return chosen.to_image()
+
+
+def _fit(image: Image.Image, side: int) -> Image.Image:
+    copy = image.copy()
+    copy.thumbnail((side, side), Image.Resampling.LANCZOS)
+    return copy
+
+
+def write_thumbnail(src: Path, dst: Path, kind: str, side: int = THUMB_SIDE) -> dict:
+    if kind == "video":
+        image = video_frame(src)
+    else:
+        with Image.open(src) as opened:
+            image = opened.convert("RGBA") if opened.mode in {"RGBA", "LA", "P"} else opened.convert("RGB")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    small = _fit(image, side)
+    if small.mode == "RGBA":
+        flat = Image.new("RGB", small.size, (128, 128, 128))
+        flat.paste(small, mask=small.getchannel("A"))
+        small = flat
+    small.save(dst, "JPEG", quality=82)
+    return {"width": small.width, "height": small.height, "size": dst.stat().st_size}
+
+
+def write_display_image(src: Path, dst: Path, side: int = DISPLAY_SIDE) -> dict:
+    with Image.open(src) as opened:
+        image = opened.convert("RGBA") if opened.mode in {"RGBA", "LA", "P"} else opened.convert("RGB")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    small = _fit(image, side)
+    small.save(dst, "WEBP", quality=86)
+    return {"width": small.width, "height": small.height, "size": dst.stat().st_size}
+
+
+def gray_frames(path: Path, kind: str, count: int = 5) -> list[np.ndarray]:
+    if kind == "image":
+        with Image.open(path) as image:
+            return [np.asarray(image.convert("L"), dtype=np.float64)]
+    with av.open(str(path)) as container:
+        frames = [np.asarray(frame.to_image().convert("L"), dtype=np.float64) for frame in container.decode(container.streams.video[0])]
+    if len(frames) <= count:
+        return frames
+    picks = np.linspace(0, len(frames) - 1, count).round().astype(int)
+    return [frames[index] for index in picks]
+
+
+def _box_mean(values: np.ndarray, window: int) -> np.ndarray:
+    total = np.pad(values, ((1, 0), (1, 0))).cumsum(axis=0).cumsum(axis=1)
+    sums = total[window:, window:] - total[:-window, window:] - total[window:, :-window] + total[:-window, :-window]
+    return sums / (window * window)
+
+
+def ssim(first: np.ndarray, second: np.ndarray, window: int = SSIM_WINDOW) -> float:
+    if first.shape != second.shape:
+        raise ValueError(f"SSIM needs pictures of the same size, got {first.shape} and {second.shape}")
+    a = first.astype(np.float64)
+    b = second.astype(np.float64)
+    mean_a = _box_mean(a, window)
+    mean_b = _box_mean(b, window)
+    var_a = _box_mean(a * a, window) - mean_a ** 2
+    var_b = _box_mean(b * b, window) - mean_b ** 2
+    cov = _box_mean(a * b, window) - mean_a * mean_b
+    score = ((2 * mean_a * mean_b + SSIM_C1) * (2 * cov + SSIM_C2)) / ((mean_a ** 2 + mean_b ** 2 + SSIM_C1) * (var_a + var_b + SSIM_C2))
+    return float(score.mean())
+
+
+def media_ssim(first: Path, second: Path, kind: str) -> float:
+    a = gray_frames(first, kind)
+    b = gray_frames(second, kind)
+    if len(a) != len(b):
+        raise ValueError(f"{first.name} and {second.name} have different frame counts")
+    return round(float(np.mean([ssim(x, y) for x, y in zip(a, b)])), 4)

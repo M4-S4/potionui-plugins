@@ -103,9 +103,18 @@ def test_a_full_run_submits_follows_downloads_and_checks(fake_api, case_set, tmp
     assert result["memory"]["peak_vram_used_mb_sampled"] == 2100
     case_dir = tmp_path / "run-1" / "cases" / "SDXL--txt2img--sdxl-fast"
     assert json.loads((case_dir / "result.json").read_text(encoding="utf-8"))["verdict"] == "PASS"
-    assert (case_dir / "bundle.zip").exists()
+    assert not (case_dir / "bundle.zip").exists()
+    assert result["bundle"]["kept"] is False
     assert (case_dir / "0.png").exists()
     assert lines[-1].endswith("PASS in 12 s")
+
+
+def test_the_export_bundle_is_kept_only_on_request(fake_api, case_set, tmp_path):
+    result, _ = run_case(fake_api, case_set, tmp_path, keep_bundle=True)
+    case_dir = tmp_path / "run-1" / "cases" / "SDXL--txt2img--sdxl-fast"
+    assert (case_dir / "bundle.zip").exists()
+    assert result["bundle"] == {"file": "bundle.zip", "size": (case_dir / "bundle.zip").stat().st_size, "kept": True}
+    assert (case_dir / "0.png").exists()
 
 
 def test_a_black_output_fails_the_not_black_check(fake_api, case_set, tmp_path):

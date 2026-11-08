@@ -15,6 +15,8 @@ from .matrix import run_passed, run_profile
 from .media import probe_image, probe_video, video_encoders, write_preview
 from .pack import DEFAULT_PACK, PROFILES, PackError, load_pack, used_by, verify
 from .plan import dry_run
+from .reevaluate import ReevaluateError, reevaluate_run
+from .report import ReportError, add_pack_cells, compare_sets, group_by_machine, load_set, write_merge, write_report
 from .run import RunRefused, execute, select_case
 
 EXIT_OK = 0
@@ -44,6 +46,25 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--run-id", help="name of the run folder (default: <date>-<machine>)")
     run.add_argument("--dry-run", action="store_true", help="check the queue, look the models up and write the requests, without submitting them")
     run.add_argument("--confirm-gpu", action="store_true", help="required unless --dry-run: the operator agreed to use the GPU")
+    run.add_argument("--keep-bundle", action="store_true", help="keep each export bundle next to the outputs taken from it")
+
+    report = commands.add_parser("report", help="write index.html for one run, made of one or more segment folders")
+    report.add_argument("runs", type=Path, nargs="+", help="run folders, the segments of one run in order")
+    report.add_argument("--out", type=Path, help="report folder (default: <first run folder>/report)")
+    report.add_argument("--compare", type=Path, nargs="+", help="run folders of an earlier run of the same pack")
+    report.add_argument("--pack", type=Path, default=DEFAULT_PACK, help="pack whose excluded and left out cells are listed when its sha256 is the run's")
+    report.add_argument("--preflight", type=Path, help="preflight.json to read the hardware from when the run has no instance.json")
+    report.add_argument("--probe", type=Path, action="append", default=[], help="a probe JSON of the host or the container (repeatable)")
+    report.add_argument("--note", action="append", default=[], help="a bias factor to print on the machine card (repeatable)")
+    report.add_argument("--no-media", action="store_true", help="no thumbnails and no reduced copies")
+
+    reevaluate = commands.add_parser("reevaluate", help="check the outputs and run reports of a run again with the current checks, without GPU or network")
+    reevaluate.add_argument("runs", type=Path, nargs="+")
+    reevaluate.add_argument("--pack", type=Path, default=DEFAULT_PACK)
+
+    merge = commands.add_parser("merge", help="one page with a column per machine")
+    merge.add_argument("runs", type=Path, nargs="+", help="run folders of several machines; the segments of one machine are put together")
+    merge.add_argument("--out", type=Path, required=True)
 
     cases = commands.add_parser("cases", help="case files")
     cases_commands = cases.add_subparsers(dest="cases_command", required=True)
@@ -125,7 +146,7 @@ def _run(args) -> int:
             plan = dry_run(client, pack, args.profile, config.output_dir, run_id, beyond_tier=args.beyond_tier, only=args.only)
             return EXIT_FAIL if plan["summary"]["statuses"].get("request_error") else EXIT_OK
         try:
-            run = run_profile(client, pack, args.profile, config.output_dir, run_id, beyond_tier=args.beyond_tier, only=args.only, machine=config.machine, timeout=args.timeout, interval=args.interval)
+            run = run_profile(client, pack, args.profile, config.output_dir, run_id, beyond_tier=args.beyond_tier, only=args.only, machine=config.machine, mode=config.target.mode, host_probe=config.probe_file if config.probe_source == "file" else None, keep_bundle=args.keep_bundle, timeout=args.timeout, interval=args.interval)
         except KeyboardInterrupt:
             print("stopped: the running generation was cancelled, see run.json", file=sys.stderr)
             return EXIT_STOPPED
@@ -134,7 +155,7 @@ def _run(args) -> int:
     case = select_case(case_set, args.only)
     client.login(username, password)
     try:
-        result = execute(client, case_set, case, config.output_dir, run_id, dry_run=args.dry_run, prompt=args.prompt, timeout=args.timeout, interval=args.interval)
+        result = execute(client, case_set, case, config.output_dir, run_id, dry_run=args.dry_run, prompt=args.prompt, timeout=args.timeout, interval=args.interval, keep_bundle=args.keep_bundle)
     except KeyboardInterrupt:
         print("stopped: the generation was cancelled", file=sys.stderr)
         return EXIT_STOPPED
@@ -209,12 +230,38 @@ def _media(args) -> int:
     return EXIT_OK
 
 
+def _report(args) -> int:
+    run_set = load_set(args.runs, args.preflight, args.probe, args.note)
+    if args.pack and args.pack.is_file():
+        add_pack_cells(run_set, load_pack(args.pack))
+    comparison = compare_sets(run_set, load_set(args.compare)) if args.compare else None
+    index = write_report(run_set, args.out or args.runs[0] / "report", comparison, media=not args.no_media)
+    print(f"report: {index}")
+    if comparison is not None:
+        changed = [row["cell"] for row in comparison["rows"] if row.get("verdict_changed")]
+        print(f"compare: {len(changed)} verdicts changed, {sum(1 for row in comparison['rows'] if row.get('duration_flag'))} durations beyond 20 %")
+    return EXIT_OK
+
+
+def _reevaluate(args) -> int:
+    pack = load_pack(args.pack)
+    for run_dir in args.runs:
+        reevaluate_run(run_dir, pack)
+    return EXIT_OK
+
+
+def _merge(args) -> int:
+    sets = [load_set(dirs) for dirs in group_by_machine(args.runs).values()]
+    print(f"merge: {write_merge(sets, args.out)}")
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media}
+    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media, "report": _report, "reevaluate": _reevaluate, "merge": _merge}
     try:
         return handlers[args.command](args)
-    except (ConfigError, CaseFileError, RunRefused, PackError) as error:
+    except (ConfigError, CaseFileError, RunRefused, PackError, ReportError, ReevaluateError) as error:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_BLOCKED
     except ApiUnreachable as error:
