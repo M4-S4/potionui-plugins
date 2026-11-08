@@ -246,6 +246,8 @@ def test_the_shipped_pack_keeps_the_choices_made_for_its_inputs():
         else:
             assert spec.seconds == 2.0
     assert (pack.inputs["mask"].file, pack.inputs["bottle-edges"].file) == ("inputs/mask.png", "inputs/bottle-edges.png")
+    assert pack.inputs["mask"].make["params"] == {"left": 0.37, "top": 0.58, "right": 0.63, "bottom": 0.84}
+    assert pack.inputs["bottle-gold"].make["form"]["denoise"] == 0.4
 
 
 def test_the_check_adds_the_pack_coverage(fake_api, config_file, credentials_env, tmp_path, case_file):

@@ -165,9 +165,9 @@ models_from = "flux-klein-baseline-fast"
 prompt = "still_bottle_gold"
 seed = 12345
 bind = {source_image = "bottle"}
-form = {denoise = 0.55, steps = 30, guidance = 3.5}
+form = {denoise = 0.4, steps = 30, guidance = 3.5}
 output = {format = "jpeg", quality = 92}
-sources = {form = "img2img form defaults of Flux2 (denoise 0.55, 30 steps, guidance 3.5)"}
+sources = {form = "img2img form defaults of Flux2 (30 steps, guidance 3.5), with denoise 0.4 instead of the default 0.55: at 0.55 the bottle lost the workshop around it"}
 
 [inputs.lumi]
 file = "inputs/lumi.jpg"
@@ -295,7 +295,7 @@ license = "derived from bottle by code"
 method = "transform"
 op = "rect_mask"
 from = "bottle"
-params = {left = 0.38, top = 0.5, right = 0.62, bottom = 0.72}
+params = {left = 0.37, top = 0.58, right = 0.63, bottom = 0.84}
 
 [inputs.bottle-edges]
 file = "inputs/bottle-edges.png"
