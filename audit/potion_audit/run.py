@@ -16,6 +16,7 @@ VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_TIMEOUT = 1800.0
 DEFAULT_DURATION = 5.0
+OOM_CODES = {"cuda_oom", "gpu_restart_required"}
 MEDIA_PROCESSING = re.compile(r"Processing <<NUMBER:(\d+) media files")
 MEDIA_LOADED = re.compile(r"Loaded <<NUMBER:(\d+) files")
 
@@ -332,7 +333,7 @@ def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks:
         result["failure"] = {key: detail.get(key) for key in ("error_code", "message", "failed_pipe_name", "failed_at_step")} if detail else None
         if timed_out:
             result["verdict"] = "TIMEOUT"
-        elif detail and detail.get("error_code") == "cuda_oom":
+        elif detail and detail.get("error_code") in OOM_CODES:
             result["verdict"] = "OOM"
         else:
             result["verdict"] = "FAIL"

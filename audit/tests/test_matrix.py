@@ -66,6 +66,15 @@ def test_an_oom_stops_the_run_and_leaves_the_next_cells_not_run(fake_api, tmp_pa
     assert not run_passed(run)
 
 
+def test_a_generation_that_left_the_gpu_unusable_counts_as_an_oom_and_stops_the_run(fake_api, tmp_path, case_file):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    fake_api.outcomes = [("failed", {"error_code": "gpu_restart_required", "message": "This process can no longer use the GPU"})]
+    clock = FakeClock()
+    run = run_profile(logged_in(fake_api), pack, "smoke", tmp_path / "out", "matrix-8", beyond_tier=True, clock=clock, sleep=clock.sleep, log=quiet)
+    assert [(entry["cell"], entry["status"], entry["verdict"]) for entry in run["cells"]] == [("core/SDXL:txt2img", "ready", "OOM"), ("core/Wan:video", "not_run", None)]
+    assert "OOM" in run["stopped"]
+
+
 def test_a_run_uploads_each_input_once_and_gives_every_submission_its_own_key(fake_api, tmp_path, case_file):
     path = write_pack(tmp_path, case_file)
     assert main(["pack", "make-inputs", "--pack", str(path), "--transforms-only", "--config", str(tmp_path / "none.toml")]) == 0
