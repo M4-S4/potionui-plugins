@@ -1,0 +1,34 @@
+[project]
+name = "potion-audit"
+version = "0.0.1"
+description = "External API client that audits the default presets of a PotionUI instance"
+readme = "README.md"
+license = "GPL-3.0-only"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "av>=14",
+    "numpy>=2.1",
+    "pillow>=11",
+]
+
+[project.scripts]
+potion-audit = "potion_audit.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+cases = ["pyyaml>=6"]
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv]
+python-preference = "only-managed"
+default-groups = ["dev"]
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"

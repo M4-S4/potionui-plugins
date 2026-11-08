@@ -19,3 +19,7 @@ node_modules/
 Thumbs.db
 .idea/
 .vscode/
+
+audit/.venv/
+audit/audit.toml
+audit/out/
