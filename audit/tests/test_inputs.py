@@ -275,6 +275,19 @@ def test_make_inputs_skips_a_generated_input_already_made_and_redoes_the_transfo
     assert len(fake_api.started) == 2
 
 
+def test_an_input_is_checked_against_its_own_size_not_the_size_of_its_case(fake_api, tmp_path, case_file):
+    wide = LUMI_INPUT.replace("lumi", "wide").replace("height = 64", "height = 32").replace("output = {format = \"png\"}", "form = {resolution = \"64x32\"}\noutput = {format = \"png\"}")
+    path = write_pack(tmp_path, case_file, replace={SDXL_CELL: wide + SDXL_CELL})
+    fake_api.outputs = {"0.png": png_bytes(size=(64, 32))}
+    clock = FakeClock()
+    made = make_inputs(load_pack(path), logged_in(fake_api), tmp_path / "out", "inputs-9", only="wide", clock=clock, sleep=clock.sleep, log=lambda line: None)
+    assert [item["id"] for item in made] == ["wide"]
+    assert fake_api.started[0]["form_data"]["resolution"] == "64x32"
+    result = json.loads((tmp_path / "out" / "inputs-9" / "inputs" / "wide" / "result.json").read_text(encoding="utf-8"))
+    resolution = next(check for check in result["checks"] if check["check"] == "resolution")
+    assert (resolution["expected"], resolution["ok"]) == ("64x32", True)
+
+
 def test_a_failed_generation_leaves_the_pack_unchanged(fake_api, tmp_path, case_file):
     path = write_pack(tmp_path, case_file, bottle=False)
     before = path.read_text(encoding="utf-8")

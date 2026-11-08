@@ -167,6 +167,13 @@ def _produced(result: dict, case_dir: Path, kind: str) -> Path:
     raise PackError(f"the generation gave no {kind} output")
 
 
+def input_checks(pack: Pack, cell, spec: InputSpec) -> dict:
+    checks = dict(cell_checks(pack, cell))
+    if "resolution" in checks and spec.width and spec.height:
+        checks["resolution"] = f"{spec.width}x{spec.height}"
+    return checks
+
+
 def already_made(pack: Pack, spec: InputSpec) -> bool:
     path = pack.root / spec.file
     return not spec.pending and path.is_file() and file_sha(path) == spec.sha256
@@ -218,7 +225,7 @@ def make_inputs(pack: Pack, client: ApiClient | None, out_root: Path, run_id: st
             case_dir.mkdir(parents=True, exist_ok=True)
             (case_dir / "request.json").write_text(json.dumps(request, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
             head = {"schema": 1, "run_id": run_id, "input": spec.id, "pack": {"id": pack.id, "sha256": pack.sha256}, "runner": runner_info()}
-            result = submit_and_collect(client, request, cell.preset_id, cell_checks(pack, cell), case_dir, head, f"input {spec.id}", timeout or MAKE_TIMEOUT, interval, clock, sleep, log)
+            result = submit_and_collect(client, request, cell.preset_id, input_checks(pack, cell, spec), case_dir, head, f"input {spec.id}", timeout or MAKE_TIMEOUT, interval, clock, sleep, log)
             if result["verdict"] != "PASS":
                 raise RunRefused(f"input {spec.id}: the generation ended with {result['verdict']}, see {case_dir / 'result.json'}")
             finish_output(spec, _produced(result, case_dir, spec.kind), target)
