@@ -16,6 +16,8 @@ uv sync --locked
 uv run --locked pytest
 ```
 
+The `audit` job of the repository's CI does the same on Ubuntu and Windows with a pinned uv, then checks that the FFmpeg bundled with the PyAV wheel has `libx264`, or at least `mpeg4`, for the reduced copies of the report. It needs neither the core nor an instance: the tests use a fake API and generate their own outputs.
+
 Copy `audit.example.toml` to `audit.toml` (ignored by git) and set the URL of the instance, its mode (`dedicated` for a test instance, `shared` for one in service), the output folder and a machine name. Relative paths are read from the folder of `audit.toml`. The file holds no credential: the account is read from the environment variables it names, `POTION_AUDIT_USER` and `POTION_AUDIT_PASSWORD` by default. `scripts/Invoke-WithEnvFile.ps1 -EnvFile <file> -UserKey <key> -PasswordKey <key> -- <command>` reads them from an env file, sets them for the command only and prints nothing.
 
 The audit account must be an admin of the instance: the global queue, failure details, run reports and profiles are admin routes.
