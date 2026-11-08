@@ -3,7 +3,9 @@ Potion audit
 
 An external API client that audits the presets PotionUI ships by default. It runs on a workstation, connects to the instance to test by its URL and never starts an instance itself. Results are written to an output folder outside this repository and are never committed.
 
-Lot 0 brought the skeleton, a read-only `check`, a minimal `run --only` for single cases, the disk probes and the PyAV helpers. Lot 1 adds the potion pack: the prompts, the frozen inputs and one cell per preset and mode, with `pack verify`, `pack make-inputs`, `check --pack` and `run --pack --profile <profile> --dry-run`. Lot 2 runs the cells of a profile on the instance with `run --pack --profile <profile> --confirm-gpu`. The report and the Video Producer scenario come later.
+Lot 0 brought the skeleton, a read-only `check`, a minimal `run --only` for single cases, the disk probes and the PyAV helpers. Lot 1 adds the potion pack: the prompts, the frozen inputs and one cell per preset and mode, with `pack verify`, `pack make-inputs`, `check --pack` and `run --pack --profile <profile> --dry-run`. Lot 2 runs the cells of a profile on the instance with `run --pack --profile <profile> --confirm-gpu`. Lot 3 adds `report`, `reevaluate` and `merge`, which read run folders only: no GPU, no network. The Video Producer scenario comes later.
+
+To run an audit on another machine, give [PROMPT.md](PROMPT.md) to a coding agent there, or follow it by hand: it holds the parameters, the steps, the three stops for the operator and the traps.
 
 Setup
 -----
@@ -15,6 +17,8 @@ cd audit
 uv sync --locked
 uv run --locked pytest
 ```
+
+The `audit` job of the repository's CI does the same on Ubuntu and Windows with a pinned uv, then checks that the FFmpeg bundled with the PyAV wheel has `libx264`, or at least `mpeg4`, for the reduced copies of the report. It needs neither the core nor an instance: the tests use a fake API and generate their own outputs.
 
 Copy `audit.example.toml` to `audit.toml` (ignored by git) and set the URL of the instance, its mode (`dedicated` for a test instance, `shared` for one in service), the output folder and a machine name. Relative paths are read from the folder of `audit.toml`. The file holds no credential: the account is read from the environment variables it names, `POTION_AUDIT_USER` and `POTION_AUDIT_PASSWORD` by default. `scripts/Invoke-WithEnvFile.ps1 -EnvFile <file> -UserKey <key> -PasswordKey <key> -- <command>` reads them from an env file, sets them for the command only and prints nothing.
 
@@ -30,6 +34,9 @@ Commands
 | `uv run --locked potion-audit run --only <preset>:<mode> --confirm-gpu` | Submits one case of the case file (the `fast` one of that mode when there is one), follows it, downloads the export bundle, reads the outputs and the statistics, and writes `result.json`. Refused without `--confirm-gpu`. Exits with 0 on PASS, 1 on FAIL, OOM or TIMEOUT, 2 when refused, 3 when stopped with Ctrl+C (the generation is cancelled). | yes |
 | `uv run --locked potion-audit run --pack [<pack.toml>] --profile smoke\|full --dry-run [--beyond-tier] [--only <cell or preset>]` | Builds the request of every cell of the profile, in the order they would run, without submitting or uploading anything. A frozen input appears as `input:<id>`. Writes `plan.json` and one `request.json` per cell, and prints each cell with its status and estimated duration, then the total. | no |
 | `uv run --locked potion-audit run --pack [<pack.toml>] --profile smoke\|full --confirm-gpu [--beyond-tier] [--only <cell or preset>]` | Runs the cells of the profile on the instance, in the order of the plan (see Runs), and writes `run.json` with one `request.json` and one `result.json` per cell. Refused without `--confirm-gpu`. Exits with 0 when every cell that ran passed, 1 on a FAIL, OOM, TIMEOUT or REJECTED cell or when the run stopped, 2 when refused, 3 when stopped with Ctrl+C (the running generation is cancelled). | yes |
+| `uv run --locked potion-audit reevaluate <run>… [--pack <pack.toml>]` | Checks the outputs and the run report of every cell again with the current checks (see Re-evaluation). Writes `result.reevaluated.json` beside each `result.json`, which it never rewrites. | no |
+| `uv run --locked potion-audit report <run>… [--out <dir>] [--compare <run>…] [--probe <file>] [--preflight <file>] [--note <text>]` | Writes `index.html` and `report.json` for one run, made of one or more segment folders (see Reports). `--compare` adds the comparison with an earlier run of the same pack. | no |
+| `uv run --locked potion-audit merge <run>… --out <dir>` | One page with a column per machine, for runs of the same pack. The segments of one machine are put together. | no |
 | `uv run --locked potion-audit pack verify [--pack <pack.toml>] [--allow-pending]` | Checks the pack against its case file and its input files (see Verification). Exits with 1 when it finds an error. | no |
 | `uv run --locked potion-audit pack make-inputs --confirm-gpu [--only <input>]` | Makes the frozen inputs: the generations on the instance first, in the pack's order, then the transforms by code, and writes each input's sha256, size and origin into `pack.toml`. Refused without `--confirm-gpu`. `--transforms-only` redoes the transforms from inputs already made, without the instance and without `--confirm-gpu`. | yes |
 | `uv run --locked --group cases potion-audit cases import --core <checkout> --ref <commit> --out cases/<file>.json` | Builds a case file from the `tests.yml` files, forms and recipes of a core checkout, read with `git show` at that commit. Needs PyYAML, in the `cases` group. | no |
@@ -121,7 +128,28 @@ Runs
 - the run report is checked too: a generation that processed media files and loaded fewer of them fails `media_loaded`, and a generation that took a forbidden step fails `generation_step`; the server would otherwise fall back to text-to-image or text-to-video without a word. A `TXT2VID` step that comes after `Encoding source video` is allowed: the latent upscalers encode the source, upscale its latent, then refine it with the text-to-video generator, which reports `TXT2VID`;
 - a FAIL, a TIMEOUT or a request the server refuses (REJECTED) is recorded and the run goes on; an OOM stops the run, since the instance then needs a restart, which is the operator's call.
 
-`run.json` holds the sha256 of the pack and of its case file, the application version and the machine, every cell with its status, verdict, generation id, measured and estimated seconds and peak VRAM, the reason the run stopped if it did, and the totals.
+Each output is kept once, as the file taken out of the export bundle; the bundle itself is deleted unless `run` gets `--keep-bundle`. `instance.json` holds what the API says about the hardware and the plugins when the run starts. When `audit.toml` sets `[probe] source = "file"`, that probe file is copied into the run folder as `host-probe.json`.
+
+`run.json` holds the sha256 of the pack and of its case file, the application version, the machine, the mode (`dedicated` or `shared`), every cell with its status, verdict, generation id, measured and estimated seconds and peak VRAM, the reason the run stopped if it did, and the totals.
+
+Re-evaluation
+-------------
+
+Checks change between versions of potion-audit; `CHECKS_VERSION` in `run.py` counts them, and every `result.json` records the version it was checked with (a result without one was checked with version 1). `reevaluate` takes each cell of a run that completed, reads its output files again with PyAV and Pillow, reads its `run_report.json`, and applies the checks of the pack's cell with the current code. It writes `result.reevaluated.json` with the new verdict and checks, the previous verdict and checks version, and whether the pack is the one the run used. A cell that did not complete (OOM, TIMEOUT, a failed generation) keeps its verdict. Nothing is sent to the instance.
+
+Reports
+-------
+
+`report <run>…` reads the run folders given, the segments of one run in their order: they must come from one machine and one pack. A cell that appears in several segments takes its last entry that ran. The page, `index.html`, is in English, holds its CSS inline, loads nothing from the network, follows the light or dark theme of the browser and reads at phone width. It shows:
+
+- the machine card: GPU, driver, RAM, host OS, application, plugins, pack and case file, runner, mode and profile, then the bias factors (a shared instance, a segment that stopped, a Windows session that was locked or remote at probe time, compute processes on the GPU, notes given with `--note`). The hardware comes from `instance.json`, or from `--preflight` for older runs; the driver and the OS come from a probe;
+- Storage: the container mounts, the host disks, volumes and virtual disks, from the probe files of the run folder (`*probe*.json`) or `--probe`; otherwise "not probed". The space the API reports is always shown;
+- the matrix: presets in rows, modes in columns. A cell gives its verdict, the run time, the peak VRAM of the preset statistics and a thumbnail; a cell that did not run gives its status and its reason (`model_unresolved`, `model_missing`, `beyond_tier`, `not_run`, and, when `--pack` is the pack of the run, `excluded` and `not_in_run` for cells of the profile the run left out);
+- one section per cell: the media (a reduced H.264 copy of a video, a reduced WebP copy of a picture, the original for sound and meshes), the run time, the model load and the compute time apart, the time per step, the peak VRAM and RAM, the checks, the failure, the pipe times, the prompt, the settings and seed, and the start of the run report. A re-evaluated cell shows its new verdict, with the old one struck through.
+
+Thumbnails and reduced copies go to `<out>/media/`; the originals stay in the run folders and the page links them. Paths under a user profile are written `<home>`.
+
+`--compare <run>…` reads an earlier run of the same pack (the same id and sha256, or the command refuses) and lists, cell by cell, a changed verdict, a run time more than 20 % away, a peak VRAM more than 512 MiB away, and the SSIM of the first output when both cells used the same seed and gave a picture or video of the same size (five frames spread over a video), then the changes of disks and mounts when both runs have probe files.
 
 Probes
 ------

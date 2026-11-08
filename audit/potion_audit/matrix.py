@@ -1,10 +1,11 @@
 import json
+import shutil
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .client import ApiClient, ApiError
+from .client import ApiClient, ApiError, unwrap
 from .coverage import ModelResolver, assess, live_state
 from .inputs import Uploads
 from .pack import Pack, PackError, build_cell_request, cell_checks, estimate, run_order
@@ -22,6 +23,23 @@ def instance_health(client: ApiClient) -> str:
     except ApiError as error:
         return f"HTTP {error.status}"
     return str((payload or {}).get("status") or "unknown") if isinstance(payload, dict) else "unknown"
+
+
+def instance_snapshot(client: ApiClient) -> dict:
+    plugins = unwrap(client.get_json("/api/plugins")) or []
+    backends = unwrap(client.get_json("/api/system/backends")) or []
+    local = []
+    for backend in backends:
+        if backend.get("kind") != "local":
+            continue
+        local.append({**{key: backend.get(key) for key in ("id", "name", "engine", "status", "hardware")}, "system_info": unwrap(client.get_json(f"/api/backends/{backend['id']}/system-info"))})
+    return {
+        "taken_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "gpu_profile": client.get_json("/api/system/gpu-profile") or {},
+        "stats": unwrap(client.get_json("/api/system/stats")) or {},
+        "plugins": [{key: plugin.get(key) for key in ("id", "version", "enabled", "state")} for plugin in sorted(plugins, key=lambda item: item.get("id") or "")],
+        "local_backends": local,
+    }
 
 
 def _summary(entries: list[dict]) -> dict:
@@ -44,7 +62,7 @@ def _summary(entries: list[dict]) -> dict:
     }
 
 
-def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id: str, *, beyond_tier: bool = False, only: str | None = None, machine: str | None = None, timeout: float | None = None, interval: float = 2.0, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
+def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run_id: str, *, beyond_tier: bool = False, only: str | None = None, machine: str | None = None, mode: str | None = None, host_probe: Path | None = None, keep_bundle: bool = False, timeout: float | None = None, interval: float = 2.0, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
     health = instance_health(client)
     if health not in HEALTHY:
         raise RunRefused(f"the instance is not healthy: {health}")
@@ -56,6 +74,9 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
     run_dir = out_root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     uploads = Uploads(client, run_dir / "uploads.json")
+    (run_dir / "instance.json").write_text(json.dumps(instance_snapshot(client), indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    if host_probe is not None:
+        shutil.copyfile(host_probe, run_dir / "host-probe.json")
     run = {
         "schema": 1,
         "run_id": run_id,
@@ -64,6 +85,7 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
         "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "ended_at": None,
         "machine": machine,
+        "mode": mode,
         "app_version": app_version,
         "pack": {"id": pack.id, "version": pack.version, "file": pack.path.name, "sha256": pack.sha256},
         "cases": {"file": pack.case_set.path.name, "sha256": pack.case_set.sha256},
@@ -138,7 +160,7 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
             }
             current = entry
             try:
-                result = submit_and_collect(client, request, cell.preset_id, checks, folder, head, f"{index:3d}  {cell.id}{' warm' if warm else ''}", timeout or float(checks.get("max_seconds") or DEFAULT_TIMEOUT), interval, clock, sleep, log)
+                result = submit_and_collect(client, request, cell.preset_id, checks, folder, head, f"{index:3d}  {cell.id}{' warm' if warm else ''}", timeout or float(checks.get("max_seconds") or DEFAULT_TIMEOUT), interval, clock, sleep, log, keep_bundle=keep_bundle)
             except ApiError as error:
                 current = None
                 entry.update(verdict="REJECTED", reason=str(error))

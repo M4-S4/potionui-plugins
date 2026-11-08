@@ -20,6 +20,7 @@ OOM_CODES = {"cuda_oom", "gpu_restart_required"}
 MEDIA_PROCESSING = re.compile(r"Processing <<NUMBER:(\d+) media files")
 MEDIA_LOADED = re.compile(r"Loaded <<NUMBER:(\d+) files")
 SOURCE_REFINED_STEPS = {"TXT2VID": "ENCODING SOURCE VIDEO"}
+CHECKS_VERSION = 2
 
 
 class RunRefused(RuntimeError):
@@ -257,7 +258,7 @@ def ensure_idle(client: ApiClient) -> None:
         raise RunRefused(f"the global queue is busy: {len(queue.get('running') or ())} running, {len(queue.get('pending') or ())} pending")
 
 
-def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, run_id: str, *, dry_run: bool = False, prompt: str | None = None, timeout: float | None = None, interval: float = 2.0, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
+def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, run_id: str, *, dry_run: bool = False, prompt: str | None = None, timeout: float | None = None, interval: float = 2.0, keep_bundle: bool = False, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
     ensure_idle(client)
     model_ids = {}
     for ref in case.models:
@@ -283,10 +284,10 @@ def execute(client: ApiClient, case_set: CaseSet, case: Case, out_root: Path, ru
         "runner": runner_info(),
     }
     limit = timeout or float(case.checks.get("max_seconds") or DEFAULT_TIMEOUT)
-    return submit_and_collect(client, request, case.preset_id, case.checks, case_dir, head, f"{case.preset_key}:{case.mode} {case.name}", limit, interval, clock, sleep, log)
+    return submit_and_collect(client, request, case.preset_id, case.checks, case_dir, head, f"{case.preset_key}:{case.mode} {case.name}", limit, interval, clock, sleep, log, keep_bundle=keep_bundle)
 
 
-def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks: dict, case_dir: Path, head: dict, label: str, timeout: float, interval: float, clock: Callable[[], float], sleep: Callable[[float], None], log: Callable[[str], None]) -> dict:
+def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks: dict, case_dir: Path, head: dict, label: str, timeout: float, interval: float, clock: Callable[[], float], sleep: Callable[[float], None], log: Callable[[str], None], *, keep_bundle: bool = False) -> dict:
     stats_before = preset_stats(client, preset_id)
     log(f"{label}: submitting")
     submitted_at = datetime.now(UTC).isoformat(timespec="seconds")
@@ -294,7 +295,7 @@ def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks:
     generation_id = started.get("generation_id") or (started.get("status") or {}).get("id")
     if not generation_id:
         raise ApiError("POST", "/api/generations/start", 200, "the answer holds no generation_id")
-    result = {**head, "generation_id": generation_id, "submitted_at": submitted_at}
+    result = {**head, "checks_version": CHECKS_VERSION, "generation_id": generation_id, "submitted_at": submitted_at}
     try:
         status, samples, timed_out = follow(client, generation_id, timeout, interval, clock, sleep, log)
     except KeyboardInterrupt:
@@ -328,8 +329,10 @@ def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks:
     (case_dir / "run_report.json").write_text(json.dumps(run_report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     if status.get("status") == "completed":
         bundle = client.download(f"/api/generations/history/{generation_id}/export-bundle", case_dir / "bundle.zip")
-        result["bundle"] = {"file": bundle.path.name, "size": bundle.size}
         outputs = read_outputs(bundle.path, case_dir)
+        if not keep_bundle:
+            bundle.path.unlink()
+        result["bundle"] = {"file": bundle.path.name if keep_bundle else None, "size": bundle.size, "kept": keep_bundle}
         result["outputs"] = outputs
         result["checks"] = evaluate(checks, outputs) + evaluate_run_report(checks, run_report)
         result["verdict"] = "PASS" if all(check["ok"] for check in result["checks"]) else "FAIL"

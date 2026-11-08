@@ -30,6 +30,44 @@ jobs:
       - name: Self-tests of the check
         run: python -B -m unittest discover -s scripts -p "test_check_public_hygiene.py" -v
 
+  audit:
+    name: Potion audit on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: audit
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+
+      - name: uv sync (locked, uv-managed Python 3.13)
+        run: uv sync --locked
+
+      - name: pytest (fake API, generated outputs)
+        run: uv run --locked pytest -q
+
+      - name: H.264 or its mpeg4 fallback in the FFmpeg bundled with PyAV
+        run: |
+          uv run --locked potion-audit media encoders | tee encoders.txt
+          if grep -qx libx264 encoders.txt; then
+            echo "preview encoder: libx264"
+          elif grep -qx mpeg4 encoders.txt; then
+            echo "::warning::no libx264 in the PyAV wheel of ${{ matrix.os }}, previews fall back to mpeg4"
+          else
+            echo "::error::neither libx264 nor mpeg4 in the PyAV wheel of ${{ matrix.os }}"
+            exit 1
+          fi
+
   plugin:
     name: ${{ matrix.name }} on the pinned core
     runs-on: ubuntu-latest
