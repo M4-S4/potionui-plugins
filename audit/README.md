@@ -56,7 +56,7 @@ The pack
 `pack/v1/pack.toml`, read with `tomllib`, is the potion pack `potion-v1`. Its runs compare only with runs of the same pack: the pack's sha256 and the case file's sha256 go into every plan and result. It holds:
 
 - `[cases]`: the case file it builds on and its sha256;
-- `[bible]`: the texts of the potion world, reused by the prompts: the bottle (a small round glass potion bottle, long neck, cork, glowing violet liquid, a cream label hand-lettered "PotionUI", on an old oak workbench), Lumi the witch, her workshop, the realistic cinema look, Lumi's line and the lyrics of an original short song;
+- `[bible]`: the texts of the potion world, reused by the prompts: the bottle (a small round glass potion bottle, long neck, cork, glowing violet liquid, a cream label hand-lettered "PotionUI", on an old oak workbench), Lumi the witch, her workshop, the realistic cinema look and the lyrics of an original short song;
 - `[prompts.<key>]`: one English prompt per kind of output, written with `{bible key}` fields; a prompt may also set form fields (`description` and `style` for the songs, `current_text` and `new_text` for the text edit);
 - `[negatives]`: a negative prompt per model family, used where the case of origin has one;
 - `[inputs.<id>]`: the frozen inputs (see below);
@@ -86,10 +86,10 @@ Frozen inputs
 
 The inputs live in `pack/v1/inputs/` and are versioned with the pack, a few MB in all. Each `[inputs.<id>]` gives its file, kind (`image`, `video`, `audio`), size in pixels or seconds, sha256, size in bytes, origin, licence and how it is made (`[inputs.<id>.make]`):
 
-- `method = "generate"`: a request built like a cell (preset, mode, case, prompt, seed, settings, bindings to earlier inputs), submitted to the instance, then its output finished by code: a picture is checked against the expected size and saved as JPEG; a video is cut to the expected seconds and encoded again with `libx264`, without sound;
-- `method = "transform"`: code only, from an earlier input: `rect_mask` (a white rectangle on black, in fractions of the source picture), `edges` (a black and white edge map), `desaturate_video`, and `synth_voice`, a vowel-like signal made from nothing, which stands in for a voice: no recorded voice is used.
+- `method = "generate"`: a request built like a cell (preset, mode, case, prompt, seed, settings, bindings to earlier inputs), submitted to the instance, then its output finished by code: a picture is checked against the expected size and saved as JPEG, at quality 92 unless `output.quality` says otherwise and without chroma subsampling; a video is cut to the expected seconds and encoded again with `libx264`, without sound;
+- `method = "transform"`: code only, from an earlier input: `rect_mask` (a white rectangle on black, in fractions of the source picture), `edges` (a black and white edge map), both saved as PNG, and `desaturate_video`.
 
-Only models under a permissive licence make the inputs; each input names the licence and where it was read. `pack make-inputs` writes the sha256, the size in bytes and the origin (preset, mode, generation id, application version, date, or the transform and the sha256 of its source) back into `pack.toml`. Uploads go through `POST /api/media/upload`, once per sha256 and per run (`uploads.json` in the run folder).
+Only models under a permissive licence make the inputs; each input names the licence and where it was read. A mode whose input no such model can make is excluded: the `talk` mode of MiniMax-H3 needs a voice recording, and no local preset under a permissive licence produces speech. `pack make-inputs` writes the sha256, the size in bytes and the origin (preset, mode, generation id, application version, date, or the transform and the sha256 of its source) back into `pack.toml`. Uploads go through `POST /api/media/upload`, once per sha256 and per run (`uploads.json` in the run folder).
 
 Verification
 ------------

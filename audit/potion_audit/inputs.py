@@ -1,7 +1,5 @@
 import json
-import math
 import time
-import wave
 from collections.abc import Callable
 from datetime import UTC, datetime
 from fractions import Fraction
@@ -18,8 +16,6 @@ from .pack import InputSpec, Pack, PackError, build_cell_request, cell_checks, c
 from .run import RunRefused, ensure_idle, runner_info, submit_and_collect
 
 CONTENT_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4", ".wav": "audio/wav"}
-VOICE_RATE = 16000
-VOWELS = ((800, 1150, 2900), (400, 1600, 2700), (300, 2300, 3000), (450, 800, 2830))
 MAKE_TIMEOUT = 1800.0
 
 
@@ -124,68 +120,24 @@ def desaturate_video(source: Path, target: Path, params: dict) -> None:
     _encode(gray, target, rate, width, height, int(params.get("crf", 20)))
 
 
-def _resonate(signal: np.ndarray, frequency: float, bandwidth: float) -> np.ndarray:
-    radius = math.exp(-math.pi * bandwidth / VOICE_RATE)
-    theta = 2 * math.pi * frequency / VOICE_RATE
-    a1 = -2 * radius * math.cos(theta)
-    a2 = radius * radius
-    gain = 1 - radius
-    out = np.zeros_like(signal)
-    y1 = y2 = 0.0
-    for index, value in enumerate(signal):
-        y = gain * value - a1 * y1 - a2 * y2
-        out[index] = y
-        y2, y1 = y1, y
-    return out
-
-
-def synth_voice(target: Path, params: dict) -> None:
-    seconds = float(params.get("seconds", 2.0))
-    count = int(seconds * VOICE_RATE)
-    t = np.arange(count) / VOICE_RATE
-    pitch = float(params.get("pitch", 200.0)) * (1 + 0.08 * np.sin(2 * math.pi * 1.5 * t))
-    phase = np.cumsum(pitch / VOICE_RATE)
-    source = (np.diff(np.floor(phase), prepend=0.0) > 0).astype(np.float64)
-    syllables = int(params.get("syllables", 6))
-    voiced = np.zeros(count)
-    length = count // syllables
-    for index in range(syllables):
-        first, second, third = VOWELS[index % len(VOWELS)]
-        piece = source[index * length:(index + 1) * length]
-        sound = _resonate(piece, first, 90) + 0.6 * _resonate(piece, second, 110) + 0.3 * _resonate(piece, third, 150)
-        envelope = np.sin(np.linspace(0, math.pi, len(piece))) ** 0.8
-        voiced[index * length:index * length + len(piece)] = sound * envelope
-    peak = float(np.max(np.abs(voiced))) or 1.0
-    pcm = (voiced / peak * 0.8 * 32767).astype("<i2")
-    with wave.open(str(target), "wb") as handle:
-        handle.setnchannels(1)
-        handle.setsampwidth(2)
-        handle.setframerate(VOICE_RATE)
-        handle.writeframes(pcm.tobytes())
-
-
 def transform(pack: Pack, spec: InputSpec, target: Path) -> dict:
     op = spec.make.get("op")
     params = dict(spec.make.get("params") or {})
-    source = pack.input_path(spec.make["from"]) if spec.make.get("from") else None
-    if source is not None:
-        parent = pack.inputs[spec.make["from"]]
-        if parent.pending or file_sha(source) != parent.sha256:
-            raise PackError(f"input {spec.id} needs {parent.id} made and verified first")
+    parent = pack.inputs.get(spec.make.get("from"))
+    if parent is None:
+        raise PackError(f"input {spec.id}: make.from names no input")
+    source = pack.input_path(parent.id)
+    if parent.pending or file_sha(source) != parent.sha256:
+        raise PackError(f"input {spec.id} needs {parent.id} made and verified first")
     if op == "rect_mask":
         rect_mask(source, target, params)
     elif op == "edges":
         edges(source, target, params)
     elif op == "desaturate_video":
         desaturate_video(source, target, params)
-    elif op == "synth_voice":
-        synth_voice(target, params)
     else:
         raise PackError(f"input {spec.id}: unknown transform {op!r}")
-    origin = {"method": "transform", "op": op, "made_at": datetime.now(UTC).isoformat(timespec="seconds"), "potion_audit": __version__}
-    if source is not None:
-        origin["from_sha256"] = pack.inputs[spec.make["from"]].sha256
-    return origin
+    return {"method": "transform", "op": op, "made_at": datetime.now(UTC).isoformat(timespec="seconds"), "potion_audit": __version__, "from_sha256": parent.sha256}
 
 
 def finish_output(spec: InputSpec, produced: Path, target: Path) -> None:

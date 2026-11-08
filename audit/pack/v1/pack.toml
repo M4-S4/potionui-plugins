@@ -14,7 +14,6 @@ lumi = "Lumi, a witch in her thirties with fair freckled skin, amber eyes and lo
 workshop = "an old witch's cottage workshop with rough timber beams, a stone hearth with a crackling fire, a dented copper cauldron, dusty glass jars, bundles of dried herbs and melted candles"
 look = "realistic cinematic photograph, warm firelight and candlelight, shallow depth of field, the violet of the potion as the constant colour, gold for the magic"
 motion = "realistic cinematic shot, warm firelight and candlelight, shallow depth of field, smooth slow camera motion, the violet of the potion as the constant colour, gold for the magic"
-line = "Just one drop, and the whole workshop will glow."
 lyrics = "[Verse]\nviolet light in a bottle of glass\ncork in the neck while the long nights pass\n\n[Chorus]\none drop of gold and the embers rise\nmagic is waking in Lumi's eyes"
 
 [prompts.image]
@@ -83,9 +82,6 @@ positive = "the glowing violet liquid inside the bottle slowly turns to molten g
 
 [prompts.refs]
 positive = "Lumi, the witch from the reference, lifts a small glowing violet potion bottle from her oak workbench and smiles at it, firelight flickering on her face, {motion}, the crackle of the hearth and a soft magical chime"
-
-[prompts.talk]
-positive = "{lumi} looks at the camera and says: \"{line}\", firelight flickering on her face, {motion}"
 
 [prompts.remix]
 positive = "the same shot, but the liquid in the bottle now glows emerald green, {motion}"
@@ -316,20 +312,6 @@ method = "transform"
 op = "edges"
 from = "bottle"
 params = {blur = 1.5, threshold = 32}
-
-[inputs.voice]
-file = "inputs/voice-synth.wav"
-kind = "audio"
-seconds = 3.0
-sha256 = ""
-size_bytes = 0
-origin = {}
-license = "made by code: no model, no recorded voice"
-
-[inputs.voice.make]
-method = "transform"
-op = "synth_voice"
-params = {seconds = 3.0, pitch = 210.0, syllables = 8}
 
 [[cells]]
 preset = "core/Anima"
@@ -746,14 +728,7 @@ sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=remix o
 [[cells]]
 preset = "core/MiniMax-H3"
 mode = "talk"
-prompt = "talk"
-seed = 12345
-profiles = ["full"]
-models_from = "minimax-h3-ref2va-fast"
-form = {speed_profile = "quality", steps = 4}
-bind = {portrait = "lumi", voice = "voice"}
-sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=talk on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-ref2va-fast", prompt = "pack"}
-notes = "the voice is a synthetic vowel signal made by code: no local preset under a permissive licence produces speech"
+exclude = "needs a voice recording: no local preset under a permissive licence produces speech, and the pack puts no synthetic voice in its place"
 
 [[cells]]
 preset = "core/MiniMax-H3-Fast"

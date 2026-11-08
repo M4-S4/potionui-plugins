@@ -1,15 +1,14 @@
 import json
 import tomllib
-import wave
 from fractions import Fraction
 
 import numpy as np
 import pytest
-from PIL import Image
+from PIL import Image, JpegImagePlugin
 
 from potion_audit.cli import main
 from potion_audit.client import ApiClient
-from potion_audit.inputs import Uploads, _encode, desaturate_video, edges, finish_output, make_inputs, rect_mask, synth_voice
+from potion_audit.inputs import Uploads, _encode, desaturate_video, edges, finish_output, make_inputs, rect_mask
 from potion_audit.media import probe_video
 from potion_audit.pack import PackError, file_sha, load_pack, verify
 from potion_audit.run import RunRefused
@@ -73,18 +72,6 @@ def test_an_edge_map_is_black_and_white_with_edges_on_shapes(tmp_path):
     assert values[32, 32] == 0
 
 
-def test_the_synthetic_voice_is_a_deterministic_mono_wav(tmp_path):
-    first = tmp_path / "a.wav"
-    second = tmp_path / "b.wav"
-    synth_voice(first, {"seconds": 1.0, "pitch": 200.0, "syllables": 4})
-    synth_voice(second, {"seconds": 1.0, "pitch": 200.0, "syllables": 4})
-    assert file_sha(first) == file_sha(second)
-    with wave.open(str(first)) as handle:
-        assert (handle.getnchannels(), handle.getframerate(), handle.getnframes()) == (1, 16000, 16000)
-        samples = np.frombuffer(handle.readframes(handle.getnframes()), dtype="<i2")
-    assert np.abs(samples).max() > 10000
-
-
 def test_a_desaturated_video_keeps_size_rate_and_frames(tmp_path):
     source = colour_video(tmp_path / "clip.mp4")
     target = tmp_path / "gray.mp4"
@@ -117,6 +104,21 @@ def test_a_generated_image_of_the_wrong_size_is_refused(tmp_path, case_file):
     produced.write_bytes(png_bytes(size=(32, 32)))
     with pytest.raises(PackError, match="the pack expects 64x64"):
         finish_output(pack.inputs["bottle"], produced, tmp_path / "bottle.jpg")
+
+
+def test_a_generated_image_is_saved_as_jpeg_at_quality_92_without_chroma_subsampling(tmp_path, case_file):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    spec = pack.inputs["bottle"].__class__(**{**pack.inputs["bottle"].__dict__, "make": {"method": "generate", "output": {"format": "jpeg", "quality": 92}}})
+    produced = tmp_path / "out.png"
+    produced.write_bytes(png_bytes(size=(64, 64)))
+    target = tmp_path / "bottle.jpg"
+    finish_output(spec, produced, target)
+    reference = tmp_path / "reference.jpg"
+    Image.open(produced).convert("RGB").save(reference, format="JPEG", quality=92, subsampling=0, optimize=True)
+    with Image.open(target) as image:
+        assert (image.format, image.size) == ("JPEG", (64, 64))
+        assert JpegImagePlugin.get_sampling(image) == 0
+    assert target.read_bytes() == reference.read_bytes()
 
 
 def test_an_input_is_uploaded_once_per_sha_and_run(fake_api, tmp_path, case_file):

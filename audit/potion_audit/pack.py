@@ -13,7 +13,7 @@ PACK_SCHEMA = 1
 PROFILES = ("smoke", "full")
 INPUT_KINDS = ("image", "video", "audio")
 MAKE_METHODS = ("generate", "transform")
-TRANSFORM_OPS = ("rect_mask", "edges", "desaturate_video", "synth_voice")
+TRANSFORM_OPS = ("rect_mask", "edges", "desaturate_video")
 PLACEHOLDER = "PLACEHOLDER/"
 SHA_PATTERN = re.compile(r"[0-9a-f]{64}")
 TEMPLATE_FIELD = re.compile(r"\{([a-z0-9_]+)\}")
@@ -492,11 +492,10 @@ def _verify_inputs(pack: Pack, allow_pending: bool, problems: list[Problem]) -> 
             if spec.make.get("op") not in TRANSFORM_OPS:
                 problems.append(Problem("error", where, f"make.op must be one of {', '.join(TRANSFORM_OPS)}"))
             source = spec.make.get("from")
-            if spec.make.get("op") != "synth_voice":
-                if source not in pack.inputs:
-                    problems.append(Problem("error", where, f"make.from names no input {source!r}"))
-                elif pack.inputs[source].position >= spec.position:
-                    problems.append(Problem("error", where, f"make.from {source} must come before {spec.id}"))
+            if source not in pack.inputs:
+                problems.append(Problem("error", where, f"make.from names no input {source!r}"))
+            elif pack.inputs[source].position >= spec.position:
+                problems.append(Problem("error", where, f"make.from {source} must come before {spec.id}"))
         if method == "generate":
             try:
                 cell = make_cell(spec, pack.case_set)

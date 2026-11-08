@@ -230,6 +230,24 @@ def test_the_shipped_pack_verifies_with_its_inputs_pending():
     assert all(cell.profiles or cell.exclude for cell in pack.cells)
 
 
+def test_the_shipped_pack_keeps_the_choices_made_for_its_inputs():
+    from potion_audit.pack import DEFAULT_PACK
+
+    pack = load_pack(DEFAULT_PACK)
+    assert pack.seed == 12345
+    talk = next(cell for cell in pack.cells if cell.preset_ref == "core/MiniMax-H3" and cell.mode == "talk")
+    assert "no local preset under a permissive licence produces speech" in talk.exclude
+    assert {spec.kind for spec in pack.inputs.values()} == {"image", "video"}
+    generated = [spec for spec in pack.inputs.values() if spec.make["method"] == "generate"]
+    assert {spec.make["preset"] for spec in generated} == {"core/Flux2", "plugin:video-producer/Wan2.1-T2V-1.3B-8GB"}
+    for spec in generated:
+        if spec.kind == "image":
+            assert spec.file.endswith(".jpg") and spec.make["output"] == {"format": "jpeg", "quality": 92}
+        else:
+            assert spec.seconds == 2.0
+    assert (pack.inputs["mask"].file, pack.inputs["bottle-edges"].file) == ("inputs/mask.png", "inputs/bottle-edges.png")
+
+
 def test_the_check_adds_the_pack_coverage(fake_api, config_file, credentials_env, tmp_path, case_file):
     path = write_pack(tmp_path, case_file)
     fake_api.models[WAN_DIT_SHA] = "M-WAN-DIT"
