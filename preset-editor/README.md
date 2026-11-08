@@ -30,10 +30,12 @@ CI against that core. Version 0.1.0 was written for PotionUI `master` at `6903cc
   `sm`, mounted through `HostUi` like the buttons of the Preset Editor page, so they take the
   size of Refresh catalog beside them.
 - **Field tree of the form builder.** Pressing a node of the tree first saves the inspector
-  field being typed in to the node it belongs to. The tree's drag and drop kept the focus in
-  that field, so a value still being typed (an anchor, a label, a name) was lost, or written
-  into the node just clicked: a `tabs` container could take the anchor of a tab, and a
-  duplicate anchor then went unflagged.
+  field being typed in to the node it belongs to, then selects the node at once. The tree's
+  drag and drop kept the focus in that field, so a value still being typed (an anchor, a
+  label, a name) was lost, or written into the node just clicked: a `tabs` container could
+  take the anchor of a tab, and a duplicate anchor then went unflagged. Selecting on the
+  press also keeps the click when that save adds or removes a problem line above the tree,
+  and each node gets an inspector of its own, so no field shows the value of the node before.
 - **Zip of a local preset.** In the Edit… menu of Admin → Presets, the zip button of a preset
   shows a spinner and "Downloading…" while the archive is fetched; the other zip buttons and
   Edit… wait meanwhile, and the menu closes once the download is done.
