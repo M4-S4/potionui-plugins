@@ -34,6 +34,9 @@ CI against that core. Version 0.1.0 was written for PotionUI `master` at `6903cc
   that field, so a value still being typed (an anchor, a label, a name) was lost, or written
   into the node just clicked: a `tabs` container could take the anchor of a tab, and a
   duplicate anchor then went unflagged.
+- **Zip of a local preset.** In the Edit… menu of Admin → Presets, the zip button of a preset
+  shows a spinner and "Downloading…" while the archive is fetched; the other zip buttons and
+  Edit… wait meanwhile, and the menu closes once the download is done.
 
 ## What changed in 0.2.0
 
