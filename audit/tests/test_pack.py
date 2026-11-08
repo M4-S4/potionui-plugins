@@ -158,13 +158,37 @@ def test_a_new_cell_copies_models_and_binds_inputs(pack):
     assert form["references"] == ["input:bottle"]
 
 
-def test_a_real_binding_places_the_media_item_or_its_path(pack):
+def test_a_real_binding_sends_a_top_level_media_as_its_path_and_keeps_items_in_lists(pack):
     item = {"path": "storage/uploads/1-bottle.png", "relative_path": "uploads/1-bottle.png", "url": "/u", "name": "bottle.png", "type": "image", "metadata": {}}
     request = build_cell_request(pack, cell(pack, "core/SDXL:txt2img/edit"), {}, {}, "r1", lambda input_id, as_path: item)
     form = request["form_data"]
-    assert form["source_image"] == item
+    assert form["source_image"] == "storage/uploads/1-bottle.png"
     assert form["source_image_inpaint_mask"] == "storage/uploads/1-bottle.png"
     assert form["references"] == [item]
+
+
+def test_flatten_media_does_what_the_browser_form_does():
+    from potion_audit.pack import flatten_media
+
+    item = {"path": "/work/storage/uploads/a.jpg", "relative_path": "uploads/a.jpg", "type": "image"}
+    document = {"mode": "flf", "media": [{"media": item}]}
+    form = {"source_image": item, "references": [item], "video_director": document, "model": {"modelPath": "m", "path": "x"}, "steps": 4}
+    flat = flatten_media(form)
+    assert flat == {"source_image": "/work/storage/uploads/a.jpg", "references": [item], "video_director": document, "model": {"modelPath": "m", "path": "x"}, "steps": 4}
+
+
+def test_cells_that_transform_a_source_forbid_the_text_only_steps(pack):
+    import dataclasses
+
+    from potion_audit.pack import cell_checks, forbidden_steps
+
+    edit = cell(pack, "core/SDXL:txt2img/edit")
+    assert forbidden_steps(edit) == []
+    assert forbidden_steps(dataclasses.replace(edit, mode="img2img")) == ["TXT2IMG"]
+    video = dataclasses.replace(edit, mode="extend", bind={**edit.bind, "input_video": edit.bind["source_image"]})
+    assert forbidden_steps(video) == ["TXT2VID"]
+    assert cell_checks(pack, dataclasses.replace(edit, mode="inpaint"))["forbidden_steps"] == ["TXT2IMG"]
+    assert "forbidden_steps" not in cell_checks(pack, cell(pack, "core/SDXL:txt2img"))
 
 
 def test_a_binding_into_a_director_document_keeps_its_media_shape(tmp_path, case_file):

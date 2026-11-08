@@ -82,9 +82,36 @@ def test_a_run_uploads_each_input_once_and_gives_every_submission_its_own_key(fa
     keys = [request["idempotency_key"] for request in fake_api.started]
     assert len(set(keys)) == 4
     edit = fake_api.started[1]["form_data"]
-    assert edit["source_image"]["path"] == "storage/uploads/1-bottle.png"
+    assert edit["source_image"] == "storage/uploads/1-bottle.png"
     assert edit["source_image_inpaint_mask"] == "storage/uploads/2-mask.png"
     assert edit["references"][0]["path"] == "storage/uploads/1-bottle.png"
+
+
+def test_a_cell_whose_media_did_not_load_fails_even_with_a_good_output(fake_api, tmp_path, case_file):
+    path = write_pack(tmp_path, case_file)
+    assert main(["pack", "make-inputs", "--pack", str(path), "--transforms-only", "--config", str(tmp_path / "none.toml")]) == 0
+    fake_api.history = [
+        {"at": "2026-01-01T00:00:00+00:00", "step": "Processing <<NUMBER:2 media files:folder>>"},
+        {"at": "2026-01-01T00:00:01+00:00", "step": "Loaded <<NUMBER:0 files:check-circle>> (<<NUMBER:0 images:image>>)"},
+        {"at": "2026-01-01T00:00:02+00:00", "step": "TXT2IMG"},
+    ]
+    clock = FakeClock()
+    run = run_profile(logged_in(fake_api), load_pack(path), "full", tmp_path / "out", "matrix-7", only="core/SDXL:txt2img/edit", clock=clock, sleep=clock.sleep, log=quiet)
+    assert [(entry["cell"], entry["verdict"]) for entry in run["cells"]] == [("core/SDXL:txt2img/edit", "FAIL")]
+    result = json.loads((tmp_path / "out" / "matrix-7" / "cells" / "core-SDXL--txt2img-edit" / "result.json").read_text(encoding="utf-8"))
+    media = next(check for check in result["checks"] if check["check"] == "media_loaded")
+    assert (media["ok"], media["actual"]) == (False, [0])
+
+
+def test_a_run_report_check_catches_a_text_only_step_on_a_source_cell():
+    from potion_audit.run import evaluate_run_report
+
+    report = {"status_history": [{"step": "Processing <<NUMBER:1 media files:folder>>"}, {"step": "Loaded <<NUMBER:1 files:check-circle>>"}, {"step": "TXT2IMG"}]}
+    checks = evaluate_run_report({"forbidden_steps": ["TXT2IMG"]}, report)
+    assert [(check["check"], check["ok"]) for check in checks] == [("media_loaded", True), ("generation_step", False)]
+    good = {"status_history": [{"step": "Processing <<NUMBER:1 media files:folder>>"}, {"step": "Loaded <<NUMBER:1 files:check-circle>>"}, {"step": "IMG2IMG"}]}
+    assert all(check["ok"] for check in evaluate_run_report({"forbidden_steps": ["TXT2IMG"]}, good))
+    assert evaluate_run_report({}, {"status_history": [{"step": "TXT2IMG"}]}) == []
 
 
 def test_a_cell_waiting_for_an_input_is_listed_and_not_run(fake_api, tmp_path, case_file):

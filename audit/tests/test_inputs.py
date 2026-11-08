@@ -213,8 +213,7 @@ sources = {form = "test"}
     made = make_inputs(load_pack(path), logged_in(fake_api), tmp_path / "out", "inputs-2", only="bottle-gold", clock=clock, sleep=clock.sleep, log=lambda line: None)
     assert [item["id"] for item in made] == ["bottle-gold"]
     assert fake_api.uploads == ["bottle.png"]
-    source = fake_api.started[0]["form_data"]["source_image"]
-    assert source["path"] == "storage/uploads/1-bottle.png"
+    assert fake_api.started[0]["form_data"]["source_image"] == "storage/uploads/1-bottle.png"
     assert fake_api.started[0]["form_data"]["seed"] == 3
 
 

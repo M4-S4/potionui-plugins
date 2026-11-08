@@ -390,6 +390,23 @@ def merged_form(pack: Pack, cell: Cell) -> tuple[dict, str, str]:
     return form, prompt, negative
 
 
+IMAGE_SOURCE_MODES = {"img2img", "edit", "inpaint"}
+VIDEO_SOURCE_FIELDS = {"input_video", "source_video"}
+
+
+def flatten_media(form: dict) -> dict:
+    return {key: value["path"] if isinstance(value, dict) and "path" in value and "modelPath" not in value else value for key, value in form.items()}
+
+
+def forbidden_steps(cell: Cell) -> list[str]:
+    steps = []
+    if cell.mode in IMAGE_SOURCE_MODES:
+        steps.append("TXT2IMG")
+    if any(path.split(".")[0].split("[")[0] in VIDEO_SOURCE_FIELDS for path in cell.bind):
+        steps.append("TXT2VID")
+    return steps
+
+
 def build_cell_request(pack: Pack, cell: Cell, model_ids: dict[str, str], preset_detail: dict, run_id: str, media: Callable[[str, bool], object]) -> dict:
     form, prompt, negative = merged_form(pack, cell)
     for field, value in model_ids.items():
@@ -412,6 +429,7 @@ def build_cell_request(pack: Pack, cell: Cell, model_ids: dict[str, str], preset
     left = placeholders(form)
     if left:
         raise PackError(f"{cell.id}: {', '.join(left)} still hold a PLACEHOLDER value: bind them to an input")
+    form = flatten_media(form)
     return {
         "preset_id": cell.preset_id,
         "mode": cell.mode,
@@ -423,9 +441,14 @@ def build_cell_request(pack: Pack, cell: Cell, model_ids: dict[str, str], preset
 
 def cell_checks(pack: Pack, cell: Cell) -> dict:
     if cell.checks is not None:
-        return cell.checks
-    case = pack.case(cell)
-    return dict(case.checks) if case else {"min_outputs": 1}
+        checks = dict(cell.checks)
+    else:
+        case = pack.case(cell)
+        checks = dict(case.checks) if case else {"min_outputs": 1}
+    steps = forbidden_steps(cell)
+    if steps:
+        checks["forbidden_steps"] = steps
+    return checks
 
 
 def included(cells, profile: str) -> list[Cell]:

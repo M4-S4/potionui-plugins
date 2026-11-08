@@ -71,10 +71,10 @@ A cell may set:
 | `seed` | Replaces the pack's `seed` (12345), which replaces the case's seed |
 | `form`, `drop` | Settings that replace those of the case, and case settings to remove |
 | `models`, `drop_models`, `models_from` | Model fields by sha256 (`"<sha256>"` or `{sha256 = …, alternatives = […]}`) or by file name (`{filename = …}`), fields to remove, and a case of the same preset whose models the cell copies |
-| `bind` | Form fields bound to frozen inputs: `field = "<input>"` places the media item the upload gives, as the browser's media loader does; `"<input>:path"` places the upload's path alone (inpaint masks); a path may reach into lists and documents (`"references[0]"`, `"video_director.media[1].media"`) |
+| `bind` | Form fields bound to frozen inputs: `field = "<input>"` places the upload: a top-level field gets the upload's path, as the browser form sends it, and an item of a list or of a Video Director document gets the media item the upload gives; `"<input>:path"` places the upload's path alone (inpaint masks); a path may reach into lists and documents (`"references[0]"`, `"video_director.media[1].media"`) |
 | `profiles`, `repeat_warm` | `smoke`, `full` or both; `repeat_warm` runs the cell a second time, warm, in `full` |
 | `requires_plugin` | The cell counts only when that plugin is enabled |
-| `checks`, `sources`, `notes` | Output checks (the case's own by default), where the settings come from, free notes |
+| `checks`, `sources`, `notes` | Output checks (the case's own by default), where the settings come from, free notes. A cell in an `img2img`, `edit` or `inpaint` mode also forbids the `TXT2IMG` step, and a cell bound to an `input_video` or `source_video` forbids `TXT2VID` |
 
 Nothing that depends on the server goes into the pack: model ids are looked up by sha256 or file name at run time, and an input becomes a server path only once it is uploaded.
 
@@ -118,6 +118,7 @@ Runs
 - `/health` and the queue are checked again; when the instance is not healthy or the queue is busy, the run stops and the cells left are `not_run`;
 - the frozen inputs the cell binds are uploaded, once per sha256 and per run;
 - the request is submitted and followed, its export bundle is read and checked as with `run --only`, and the result goes to `cells/<cell>/result.json`; a warm repeat has its own folder and its own idempotency key;
+- the run report is checked too: a generation that processed media files and loaded fewer of them fails `media_loaded`, and a generation that took a forbidden step fails `generation_step`; the server would otherwise fall back to text-to-image or text-to-video without a word;
 - a FAIL, a TIMEOUT or a request the server refuses (REJECTED) is recorded and the run goes on; an OOM stops the run, since the instance then needs a restart, which is the operator's call.
 
 `run.json` holds the sha256 of the pack and of its case file, the application version and the machine, every cell with its status, verdict, generation id, measured and estimated seconds and peak VRAM, the reason the run stopped if it did, and the totals.

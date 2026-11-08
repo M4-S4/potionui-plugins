@@ -68,6 +68,7 @@ class FakeApi:
         self.keys = {}
         self.outcomes = []
         self.health = "healthy"
+        self.history = [{"at": "2026-01-01T00:00:00+00:00", "step": "Loading model x", "message": "<<PIPE:Loading model>>"}]
         self.named_models = {}
         self.vram_gb = 12.0
         self.plugins = [{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]
@@ -157,7 +158,7 @@ class FakeApi:
         if path == "/api/generations/G1/cancel" and method == "POST":
             return 200, envelope({}), "application/json"
         if path == "/api/admin/generations/G1":
-            return 200, envelope({"generation": {}, "run_report": {"pipe_timers": {"0": {"started_at": "2026-01-01T00:00:00+00:00", "ended_at": "2026-01-01T00:00:02.500000+00:00"}}, "status_history": [{"at": "2026-01-01T00:00:00+00:00", "step": "Loading model x", "message": "<<PIPE:Loading model>>"}]}}), "application/json"
+            return 200, envelope({"generation": {}, "run_report": {"pipe_timers": {"0": {"started_at": "2026-01-01T00:00:00+00:00", "ended_at": "2026-01-01T00:00:02.500000+00:00"}}, "status_history": self.history}}), "application/json"
         if path == "/api/generations/history/G1":
             return 200, envelope({"id": "G1", "run_seconds": 12, "queued_seconds": 0, "duration_ms": 12000, "has_profile": False}), "application/json"
         if path == "/api/generations/history/G1/export-bundle":

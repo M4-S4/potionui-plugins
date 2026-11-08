@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import zipfile
 from collections.abc import Callable
@@ -15,6 +16,8 @@ VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_TIMEOUT = 1800.0
 DEFAULT_DURATION = 5.0
+MEDIA_PROCESSING = re.compile(r"Processing <<NUMBER:(\d+) media files")
+MEDIA_LOADED = re.compile(r"Loaded <<NUMBER:(\d+) files")
 
 
 class RunRefused(RuntimeError):
@@ -86,6 +89,20 @@ def evaluate(checks: dict, outputs: list[dict]) -> list[dict]:
     if checks.get("not_black"):
         values = [item.get("not_black") for item in outputs]
         results.append({"check": "not_black", "expected": True, "actual": values, "ok": bool(values) and all(values)})
+    return results
+
+
+def evaluate_run_report(checks: dict, run_report: dict) -> list[dict]:
+    steps = [str(entry.get("step") or "") for entry in run_report.get("status_history") or ()]
+    asked = [int(found.group(1)) for found in (MEDIA_PROCESSING.search(step) for step in steps) if found]
+    loaded = [int(found.group(1)) for found in (MEDIA_LOADED.search(step) for step in steps) if found]
+    results = []
+    if sum(asked):
+        results.append({"check": "media_loaded", "expected": f"{sum(asked)} media files loaded", "actual": loaded, "ok": sum(loaded) >= sum(asked)})
+    forbidden = {step.upper() for step in checks.get("forbidden_steps") or ()}
+    if forbidden:
+        seen = sorted({step.strip() for step in steps if step.strip().upper() in forbidden})
+        results.append({"check": "generation_step", "expected": f"none of {', '.join(sorted(forbidden))}", "actual": seen, "ok": not seen})
     return results
 
 
@@ -307,7 +324,7 @@ def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks:
         result["bundle"] = {"file": bundle.path.name, "size": bundle.size}
         outputs = read_outputs(bundle.path, case_dir)
         result["outputs"] = outputs
-        result["checks"] = evaluate(checks, outputs)
+        result["checks"] = evaluate(checks, outputs) + evaluate_run_report(checks, run_report)
         result["verdict"] = "PASS" if all(check["ok"] for check in result["checks"]) else "FAIL"
     else:
         failure = client.get_json(f"/api/generations/{generation_id}/failure", missing_ok=True)
