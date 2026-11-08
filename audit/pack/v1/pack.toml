@@ -152,9 +152,9 @@ file = "inputs/bottle-gold.jpg"
 kind = "image"
 width = 1024
 height = 1024
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "8e8d636dcb7d6b2a26b08f28dd3711201243c69dbe2e18378bf44686bc7f901f"
+size_bytes = 377610
+origin = {method = "generate", preset = "core/Flux2", mode = "txt2img", generation_id = "01M6XARXW4HQQ57QYF7DNC24TM", app_version = "0.1.0", made_at = "2026-11-08T10:21:08+00:00"}
 license = "Apache-2.0, read in content/recipes/marketplace/flux2-klein-starter.yml at 02cce6fdd for the FLUX.2 Klein-4B DiT; the core gives no licence line for its Qwen3-4B text encoder or the Flux2 VAE"
 
 [inputs.bottle-gold.make]
@@ -172,9 +172,9 @@ file = "inputs/lumi.jpg"
 kind = "image"
 width = 1024
 height = 1024
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "8daffb77595dcef57ccf419d927d71286f6991b28abbc08544722db6c16b59e8"
+size_bytes = 407855
+origin = {method = "generate", preset = "core/Flux2", mode = "txt2img", generation_id = "01M6XAT687K10G0DSAQZKS7FCK", app_version = "0.1.0", made_at = "2026-11-08T10:21:36+00:00"}
 license = "Apache-2.0, read in content/recipes/marketplace/flux2-klein-starter.yml at 02cce6fdd for the FLUX.2 Klein-4B DiT; the core gives no licence line for its Qwen3-4B text encoder or the Flux2 VAE"
 
 [inputs.lumi.make]
@@ -191,9 +191,9 @@ file = "inputs/workshop.jpg"
 kind = "image"
 width = 1024
 height = 576
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "0452030479afef39966d3994a59df76b7c09eec3eb22e216c7a175d97f4cc7c3"
+size_bytes = 241485
+origin = {method = "generate", preset = "core/Flux2", mode = "txt2img", generation_id = "01M6XAV1WBMFDWCWWPG1CS15F1", app_version = "0.1.0", made_at = "2026-11-08T10:21:56+00:00"}
 license = "Apache-2.0, read in content/recipes/marketplace/flux2-klein-starter.yml at 02cce6fdd for the FLUX.2 Klein-4B DiT; the core gives no licence line for its Qwen3-4B text encoder or the Flux2 VAE"
 
 [inputs.workshop.make]
@@ -210,9 +210,9 @@ file = "inputs/object.jpg"
 kind = "image"
 width = 1024
 height = 1024
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "7b1631d7cd35127f5a84deec95cc9fdd5dd14738c7d9fe3930a4b956536a6492"
+size_bytes = 167985
+origin = {method = "generate", preset = "core/Flux2", mode = "txt2img", generation_id = "01M6XAVN90YQ1EMCAEGNV9Z203", app_version = "0.1.0", made_at = "2026-11-08T10:22:23+00:00"}
 license = "Apache-2.0, read in content/recipes/marketplace/flux2-klein-starter.yml at 02cce6fdd for the FLUX.2 Klein-4B DiT; the core gives no licence line for its Qwen3-4B text encoder or the Flux2 VAE"
 
 [inputs.object.make]
@@ -230,9 +230,9 @@ kind = "video"
 width = 832
 height = 480
 seconds = 2.0
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "e62e42ea6fbe4e820b6c60568c4573a783d2c8a11a90b2599c309d52448e44e2"
+size_bytes = 247222
+origin = {method = "generate", preset = "plugin:video-producer/Wan2.1-T2V-1.3B-8GB", mode = "video", generation_id = "01M6XAWF1Q4Y2CQXJ5W2AKSAK7", app_version = "0.1.0", made_at = "2026-11-08T10:27:09+00:00"}
 license = "Apache-2.0, read in content/plugins/marketplace/video-producer/recipes/vp-wan21-t2v-1-3b-8gb.yml at 02cce6fdd ('Weights: Apache-2.0')"
 
 [inputs.clip.make]
@@ -249,9 +249,9 @@ kind = "video"
 width = 832
 height = 480
 seconds = 2.0
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "a1086e985ceb43c598c52e387899505db2ef6a186480a74b7cb1147d55849053"
+size_bytes = 273854
+origin = {method = "generate", preset = "plugin:video-producer/Wan2.1-T2V-1.3B-8GB", mode = "video", generation_id = "01M6XB56HDPVNF4C9P17KX5HPS", app_version = "0.1.0", made_at = "2026-11-08T10:31:49+00:00"}
 license = "Apache-2.0, read in content/plugins/marketplace/video-producer/recipes/vp-wan21-t2v-1-3b-8gb.yml at 02cce6fdd ('Weights: Apache-2.0')"
 
 [inputs.lumi-clip.make]
@@ -268,9 +268,9 @@ kind = "video"
 width = 832
 height = 480
 seconds = 2.0
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "0dca495d59a377c2dd5a7cff3539b3cca50a7678016007f60be464af5d09f42a"
+size_bytes = 207868
+origin = {method = "transform", op = "desaturate_video", made_at = "2026-11-08T10:31:49+00:00", potion_audit = "0.0.1", from_sha256 = "e62e42ea6fbe4e820b6c60568c4573a783d2c8a11a90b2599c309d52448e44e2"}
 license = "derived from clip by code (same licence as clip)"
 
 [inputs.clip-gray.make]
@@ -284,9 +284,9 @@ file = "inputs/mask.png"
 kind = "image"
 width = 1024
 height = 1024
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "e2781f6003b0cc2cd18fefdca5aad868d8f9af568a6d22bd88770a044224f4f8"
+size_bytes = 1442
+origin = {method = "transform", op = "rect_mask", made_at = "2026-11-08T10:31:49+00:00", potion_audit = "0.0.1", from_sha256 = "4a02471d56c21bec069182260c83e2dbeb977d7842b446a6a18e8a9e70b29d27"}
 license = "derived from bottle by code"
 
 [inputs.mask.make]
@@ -300,9 +300,9 @@ file = "inputs/bottle-edges.png"
 kind = "image"
 width = 1024
 height = 1024
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "44051c3b2b5275c09b406b1f2a580aff4d89304d5faf3e2e2aff7abfc026b79f"
+size_bytes = 18046
+origin = {method = "transform", op = "edges", made_at = "2026-11-08T10:31:49+00:00", potion_audit = "0.0.1", from_sha256 = "4a02471d56c21bec069182260c83e2dbeb977d7842b446a6a18e8a9e70b29d27"}
 license = "derived from bottle by code"
 
 [inputs.bottle-edges.make]
