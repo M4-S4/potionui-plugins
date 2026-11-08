@@ -10,7 +10,7 @@ sha256 = "e6fe2971ed93eb46e4b77bf3eb539459ab211ff61f7703ce6a7fd8ecc574db32"
 [bible]
 bottle = "a small round glass potion bottle with a long neck, sealed with a cork stopper, filled with a glowing violet liquid, a cream paper label hand-lettered with the word \"PotionUI\", standing on an old oak workbench"
 bottle_gold = "the same small round glass potion bottle with a long neck and a cork stopper, its liquid turned to a glowing molten gold, the cream paper label hand-lettered with the word \"PotionUI\", standing on the same old oak workbench"
-lumi = "Lumi, a witch in her thirties with fair freckled skin, amber eyes and long wavy lilac-grey hair, wearing a worn midnight-blue felt hat with a golden star pin, a midnight-blue velvet dress with an embroidered cream collar, and silver rings"
+lumi = "Lumi, a young witch in her early thirties, with a youthful face, smooth fair skin with light freckles, amber eyes and long wavy lilac-grey hair, wearing a worn midnight-blue felt hat with a golden star pin, a midnight-blue velvet dress with an embroidered cream collar, and silver rings"
 workshop = "an old witch's cottage workshop with rough timber beams, a stone hearth with a crackling fire, a dented copper cauldron, dusty glass jars, bundles of dried herbs and melted candles"
 look = "realistic cinematic photograph, warm firelight and candlelight, shallow depth of field, the violet of the potion as the constant colour, gold for the magic"
 motion = "realistic cinematic shot, warm firelight and candlelight, shallow depth of field, smooth slow camera motion, the violet of the potion as the constant colour, gold for the magic"
@@ -51,7 +51,7 @@ positive = "{bottle}, centered in the frame, seen from the front at eye level, t
 positive = "{bottle_gold}, centered in the frame, seen from the front at eye level, the label facing the camera, {workshop} softly blurred behind, {look}"
 
 [prompts.still_lumi]
-positive = "portrait of {lumi}, head and shoulders, facing the camera, gentle smile, soft firelight on her face, {workshop} softly blurred behind, {look}"
+positive = "portrait of {lumi}, a young woman of about thirty, head and shoulders, facing the camera, gentle smile, soft firelight on her face, {workshop} softly blurred behind, {look}"
 
 [prompts.still_workshop]
 positive = "wide shot of {workshop}, a small glowing violet potion bottle on the oak workbench in the middle, {look}"

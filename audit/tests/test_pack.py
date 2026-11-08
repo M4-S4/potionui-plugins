@@ -247,6 +247,7 @@ def test_the_shipped_pack_keeps_the_choices_made_for_its_inputs():
             assert spec.seconds == 2.0
     assert (pack.inputs["mask"].file, pack.inputs["bottle-edges"].file) == ("inputs/mask.png", "inputs/bottle-edges.png")
     assert pack.inputs["mask"].make["params"] == {"left": 0.37, "top": 0.58, "right": 0.63, "bottom": 0.84}
+    assert "early thirties" in pack.bible["lumi"] and "about thirty" in pack.prompts["still_lumi"]["positive"]
     gold = pack.inputs["bottle-gold"].make
     assert (gold["mode"], gold["case"], gold.get("bind"), gold.get("seed")) == ("txt2img", pack.inputs["bottle"].make["case"], None, pack.inputs["bottle"].make.get("seed"))
 
