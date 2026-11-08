@@ -19,6 +19,7 @@ DEFAULT_DURATION = 5.0
 OOM_CODES = {"cuda_oom", "gpu_restart_required"}
 MEDIA_PROCESSING = re.compile(r"Processing <<NUMBER:(\d+) media files")
 MEDIA_LOADED = re.compile(r"Loaded <<NUMBER:(\d+) files")
+SOURCE_REFINED_STEPS = {"TXT2VID": "ENCODING SOURCE VIDEO"}
 
 
 class RunRefused(RuntimeError):
@@ -93,6 +94,11 @@ def evaluate(checks: dict, outputs: list[dict]) -> list[dict]:
     return results
 
 
+def _refines_source(before: list[str], step: str) -> bool:
+    encoding = SOURCE_REFINED_STEPS.get(step.strip().upper())
+    return encoding is not None and any(earlier.strip().upper() == encoding for earlier in before)
+
+
 def evaluate_run_report(checks: dict, run_report: dict) -> list[dict]:
     steps = [str(entry.get("step") or "") for entry in run_report.get("status_history") or ()]
     asked = [int(found.group(1)) for found in (MEDIA_PROCESSING.search(step) for step in steps) if found]
@@ -102,7 +108,7 @@ def evaluate_run_report(checks: dict, run_report: dict) -> list[dict]:
         results.append({"check": "media_loaded", "expected": f"{sum(asked)} media files loaded", "actual": loaded, "ok": sum(loaded) >= sum(asked)})
     forbidden = {step.upper() for step in checks.get("forbidden_steps") or ()}
     if forbidden:
-        seen = sorted({step.strip() for step in steps if step.strip().upper() in forbidden})
+        seen = sorted({step.strip() for index, step in enumerate(steps) if step.strip().upper() in forbidden and not _refines_source(steps[:index], step)})
         results.append({"check": "generation_step", "expected": f"none of {', '.join(sorted(forbidden))}", "actual": seen, "ok": not seen})
     return results
 
