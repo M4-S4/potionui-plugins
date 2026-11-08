@@ -123,6 +123,54 @@ def test_a_run_report_check_catches_a_text_only_step_on_a_source_cell():
     assert evaluate_run_report({}, {"status_history": [{"step": "TXT2IMG"}]}) == []
 
 
+
+LTX_UPSCALE_HISTORY = [
+    "Processing <<NUMBER:1 media files:folder>>",
+    "Loading <<EFFECT:source.mp4:video>> (<<NUMBER:1/1>>)",
+    "Loading video: <<EFFECT:source.mp4:video>>",
+    "Loaded <<NUMBER:1 files:check-circle>> (<<NUMBER:0 images:image>>, <<NUMBER:1 videos:video>>, <<NUMBER:0 audio:audio>>)",
+    "Loading LTX model <<MODEL:ltx-2.3-22b-distilled-fp8>> spatial upsampler (3 of 5).",
+    "Encoding prompts",
+    "Loading LTX model <<MODEL:ltx-2.3-22b-distilled-fp8>> text encoder (5 of 5).",
+    "Resolving prompts",
+    "Encoding source video",
+    "Upsampling latent (spatial)",
+    "TXT2VID",
+    "Generation completed in <<TIME:79.79s>>",
+    "completed",
+]
+
+
+def _history(steps):
+    return {"status_history": [{"step": step} for step in steps]}
+
+
+def test_the_ltx_upscale_refine_pass_after_the_source_encoding_is_not_a_text_generation():
+    from potion_audit.run import evaluate_run_report
+
+    checks = evaluate_run_report({"forbidden_steps": ["TXT2VID"]}, _history(LTX_UPSCALE_HISTORY))
+    assert [(check["check"], check["ok"], check["actual"]) for check in checks] == [("media_loaded", True, [1]), ("generation_step", True, [])]
+
+
+def test_a_text_to_video_step_without_the_source_encoding_still_fails():
+    from potion_audit.run import evaluate_run_report
+
+    without = [step for step in LTX_UPSCALE_HISTORY if step != "Encoding source video"]
+    step = next(check for check in evaluate_run_report({"forbidden_steps": ["TXT2VID"]}, _history(without)) if check["check"] == "generation_step")
+    assert (step["ok"], step["actual"]) == (False, ["TXT2VID"])
+    late = without[:-2] + ["Encoding source video"] + without[-2:]
+    step = next(check for check in evaluate_run_report({"forbidden_steps": ["TXT2VID"]}, _history(late)) if check["check"] == "generation_step")
+    assert (step["ok"], step["actual"]) == (False, ["TXT2VID"])
+
+
+def test_the_source_encoding_excuses_only_the_text_to_video_step():
+    from potion_audit.run import evaluate_run_report
+
+    history = _history(["Encoding source video", "TXT2IMG", "TXT2VID"])
+    step = next(check for check in evaluate_run_report({"forbidden_steps": ["TXT2IMG", "TXT2VID"]}, history) if check["check"] == "generation_step")
+    assert (step["ok"], step["actual"]) == (False, ["TXT2IMG"])
+
+
 def test_a_cell_waiting_for_an_input_is_listed_and_not_run(fake_api, tmp_path, case_file):
     pack = load_pack(write_pack(tmp_path, case_file))
     clock = FakeClock()

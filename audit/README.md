@@ -118,7 +118,7 @@ Runs
 - `/health` and the queue are checked again; when the instance is not healthy or the queue is busy, the run stops and the cells left are `not_run`;
 - the frozen inputs the cell binds are uploaded, once per sha256 and per run;
 - the request is submitted and followed, its export bundle is read and checked as with `run --only`, and the result goes to `cells/<cell>/result.json`; a warm repeat has its own folder and its own idempotency key;
-- the run report is checked too: a generation that processed media files and loaded fewer of them fails `media_loaded`, and a generation that took a forbidden step fails `generation_step`; the server would otherwise fall back to text-to-image or text-to-video without a word;
+- the run report is checked too: a generation that processed media files and loaded fewer of them fails `media_loaded`, and a generation that took a forbidden step fails `generation_step`; the server would otherwise fall back to text-to-image or text-to-video without a word. A `TXT2VID` step that comes after `Encoding source video` is allowed: the latent upscalers encode the source, upscale its latent, then refine it with the text-to-video generator, which reports `TXT2VID`;
 - a FAIL, a TIMEOUT or a request the server refuses (REJECTED) is recorded and the run goes on; an OOM stops the run, since the instance then needs a restart, which is the operator's call.
 
 `run.json` holds the sha256 of the pack and of its case file, the application version and the machine, every cell with its status, verdict, generation id, measured and estimated seconds and peak VRAM, the reason the run stopped if it did, and the totals.
