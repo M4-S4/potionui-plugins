@@ -5,6 +5,8 @@ An external API client that audits the presets PotionUI ships by default. It run
 
 Lot 0 brought the skeleton, a read-only `check`, a minimal `run --only` for single cases, the disk probes and the PyAV helpers. Lot 1 adds the potion pack: the prompts, the frozen inputs and one cell per preset and mode, with `pack verify`, `pack make-inputs`, `check --pack` and `run --pack --profile <profile> --dry-run`. Lot 2 runs the cells of a profile on the instance with `run --pack --profile <profile> --confirm-gpu`. Lot 3 adds `report`, `reevaluate` and `merge`, which read run folders only: no GPU, no network. The Video Producer scenario comes later.
 
+To run an audit on another machine, give [PROMPT.md](PROMPT.md) to a coding agent there, or follow it by hand: it holds the parameters, the steps, the three stops for the operator and the traps.
+
 Setup
 -----
 
