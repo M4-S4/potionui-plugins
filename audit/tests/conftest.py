@@ -65,6 +65,7 @@ class FakeApi:
         self.disk_free = 50
         self.finished = False
         self.uploads = []
+        self.keys = {}
         self.named_models = {}
         self.vram_gb = 12.0
         self.plugins = [{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]
@@ -134,7 +135,13 @@ class FakeApi:
             kind = path.rsplit("/", 1)[1]
             return 200, envelope({"items": [{"preset_id": SDXL_ID, **self._stats()[kind]}]}), "application/json"
         if path == "/api/generations/start" and method == "POST":
-            self.started.append(json.loads(body))
+            request = json.loads(body)
+            key = request.get("idempotency_key")
+            if key in self.keys and self.keys[key] != request:
+                return 409, {"success": False, "error": "idempotency_key_conflict", "message": "This idempotency key was already used for a different request", "code": None}, "application/json"
+            if key:
+                self.keys[key] = request
+            self.started.append(request)
             return 200, envelope({"generation_id": "G1", "status": {"id": "G1", "status": "pending"}}), "application/json"
         if path == "/api/generations/G1/status":
             if self.statuses:

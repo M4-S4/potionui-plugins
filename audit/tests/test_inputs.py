@@ -7,7 +7,7 @@ import pytest
 from PIL import Image, JpegImagePlugin
 
 from potion_audit.cli import main
-from potion_audit.client import ApiClient
+from potion_audit.client import ApiClient, ApiError
 from potion_audit.inputs import Uploads, _encode, desaturate_video, edges, finish_output, make_inputs, rect_mask
 from potion_audit.media import probe_video
 from potion_audit.pack import PackError, file_sha, load_pack, verify
@@ -216,6 +216,63 @@ sources = {form = "test"}
     source = fake_api.started[0]["form_data"]["source_image"]
     assert source["path"] == "storage/uploads/1-bottle.png"
     assert fake_api.started[0]["form_data"]["seed"] == 3
+
+
+SDXL_CELL = "[[cells]]\npreset = \"core/SDXL\"\nmode = \"txt2img\"\ncase = \"sdxl-fast\""
+LUMI_INPUT = '''[inputs.lumi]
+file = "inputs/lumi.png"
+kind = "image"
+width = 64
+height = 64
+sha256 = ""
+size_bytes = 0
+origin = {}
+license = "test"
+
+[inputs.lumi.make]
+method = "generate"
+preset = "core/SDXL"
+mode = "txt2img"
+case = "sdxl-fast"
+prompt = "image"
+seed = 7
+output = {format = "png"}
+
+'''
+
+
+def test_the_fake_api_refuses_an_idempotency_key_reused_for_another_request(fake_api):
+    client = logged_in(fake_api)
+    client.post_json("/api/generations/start", {"idempotency_key": "k", "prompts": [1]})
+    client.post_json("/api/generations/start", {"idempotency_key": "k", "prompts": [1]})
+    with pytest.raises(ApiError, match="HTTP 409"):
+        client.post_json("/api/generations/start", {"idempotency_key": "k", "prompts": [2]})
+
+
+def test_two_inputs_of_one_preset_and_mode_get_their_own_idempotency_keys(fake_api, tmp_path, case_file):
+    path = write_pack(tmp_path, case_file, bottle=False, replace={SDXL_CELL: LUMI_INPUT + SDXL_CELL})
+    clock = FakeClock()
+    made = make_inputs(load_pack(path), logged_in(fake_api), tmp_path / "out", "inputs-5", clock=clock, sleep=clock.sleep, log=lambda line: None)
+    assert [item["id"] for item in made] == ["bottle", "lumi", "mask"]
+    keys = [request["idempotency_key"] for request in fake_api.started]
+    assert keys == ["potion-audit-inputs-5-bottle-core_SDXL_txt2img", "potion-audit-inputs-5-lumi-core_SDXL_txt2img"]
+
+
+def test_make_inputs_skips_a_generated_input_already_made_and_redoes_the_transforms(fake_api, tmp_path, case_file):
+    path = write_pack(tmp_path, case_file)
+    lines = []
+    made = make_inputs(load_pack(path), logged_in(fake_api), tmp_path / "out", "inputs-6", log=lines.append)
+    assert [item["id"] for item in made] == ["mask"]
+    assert fake_api.started == [] and fake_api.uploads == []
+    assert lines[0].startswith("input bottle: already made")
+    clock = FakeClock()
+    made = make_inputs(load_pack(path), logged_in(fake_api), tmp_path / "out", "inputs-7", only="bottle", clock=clock, sleep=clock.sleep, log=lambda line: None)
+    assert [item["id"] for item in made] == ["bottle"]
+    assert len(fake_api.started) == 1
+    (tmp_path / "pack" / "inputs" / "bottle.png").write_bytes(png_bytes(color=(1, 2, 3), size=(64, 64)))
+    made = make_inputs(load_pack(path), logged_in(fake_api), tmp_path / "out", "inputs-8", clock=clock, sleep=clock.sleep, log=lambda line: None)
+    assert [item["id"] for item in made] == ["bottle", "mask"]
+    assert len(fake_api.started) == 2
 
 
 def test_a_failed_generation_leaves_the_pack_unchanged(fake_api, tmp_path, case_file):

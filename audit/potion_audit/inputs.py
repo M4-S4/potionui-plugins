@@ -167,6 +167,11 @@ def _produced(result: dict, case_dir: Path, kind: str) -> Path:
     raise PackError(f"the generation gave no {kind} output")
 
 
+def already_made(pack: Pack, spec: InputSpec) -> bool:
+    path = pack.root / spec.file
+    return not spec.pending and path.is_file() and file_sha(path) == spec.sha256
+
+
 def make_order(pack: Pack, only: str | None, transforms_only: bool) -> list[InputSpec]:
     specs = sorted(pack.inputs.values(), key=lambda spec: spec.position)
     generated = [spec for spec in specs if spec.make.get("method") == "generate"]
@@ -181,6 +186,11 @@ def make_order(pack: Pack, only: str | None, transforms_only: bool) -> list[Inpu
 
 def make_inputs(pack: Pack, client: ApiClient | None, out_root: Path, run_id: str, *, only: str | None = None, transforms_only: bool = False, timeout: float | None = None, interval: float = 2.0, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> list[dict]:
     order = make_order(pack, only, transforms_only)
+    if not only:
+        skipped = [spec for spec in order if spec.make.get("method") == "generate" and already_made(pack, spec)]
+        for spec in skipped:
+            log(f"input {spec.id}: already made, sha256 {spec.sha256}, skipped")
+        order = [spec for spec in order if spec not in skipped]
     needs_gpu = any(spec.make.get("method") == "generate" for spec in order)
     if needs_gpu and client is None:
         raise RunRefused("generated inputs need the instance")
@@ -203,7 +213,7 @@ def make_inputs(pack: Pack, client: ApiClient | None, out_root: Path, run_id: st
                     raise RunRefused(f"input {spec.id}: model {ref.field} ({ref.filename or ref.sha256}) is not on the instance")
                 model_ids[ref.field] = found["found"]["model_id"]
             current = load_current(pack)
-            request = build_cell_request(current, cell, model_ids, live.presets.get(cell.preset_id) or {}, run_id, lambda input_id, as_path: uploads.media(current, input_id, as_path))
+            request = build_cell_request(current, cell, model_ids, live.presets.get(cell.preset_id) or {}, f"{run_id}-{spec.id}", lambda input_id, as_path: uploads.media(current, input_id, as_path))
             case_dir = run_dir / "inputs" / spec.id
             case_dir.mkdir(parents=True, exist_ok=True)
             (case_dir / "request.json").write_text(json.dumps(request, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
