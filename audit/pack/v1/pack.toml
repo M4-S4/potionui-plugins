@@ -133,9 +133,9 @@ file = "inputs/bottle.jpg"
 kind = "image"
 width = 1024
 height = 1024
-sha256 = ""
-size_bytes = 0
-origin = {}
+sha256 = "4a02471d56c21bec069182260c83e2dbeb977d7842b446a6a18e8a9e70b29d27"
+size_bytes = 386059
+origin = {method = "generate", preset = "core/Flux2", mode = "txt2img", generation_id = "01M6X7A56DGPQC8KBMX01DYAXG", app_version = "0.1.0", made_at = "2026-11-08T09:20:31+00:00"}
 license = "Apache-2.0, read in content/recipes/marketplace/flux2-klein-starter.yml at 02cce6fdd for the FLUX.2 Klein-4B DiT; the core gives no licence line for its Qwen3-4B text encoder or the Flux2 VAE"
 
 [inputs.bottle.make]
