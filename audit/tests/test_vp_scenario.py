@@ -185,8 +185,10 @@ class VpFakeApi(FakeApi):
         if rest == "/health":
             return 200, envelope({"status": "ok", "plugin": "video-producer", "version": "0.1.0"}), "application/json"
         if rest == "/media/uploaded" and method == "POST":
+            if not payload.get("id"):
+                return 422, {"success": False, "error": "invalid_request", "message": "The request body needs the id the upload answered."}, "application/json"
             self.media_uploaded.append(payload["filename"])
-            return 200, envelope({"media": {"kind": "library", "media_type": "image", "url": f"/api/media/uploads/{payload['filename']}", "filename": payload["filename"], "origin": {"kind": "library", "itemId": f"I{len(self.media_uploaded)}"}}}), "application/json"
+            return 200, envelope({"media": {"kind": "library", "media_type": "image", "url": f"/api/media/uploads/{payload['filename']}", "filename": payload["filename"], "origin": {"kind": "library", "itemId": payload["id"]}}}), "application/json"
         if rest == "/projects" and method == "POST":
             project_id = f"P{len(self.projects) + 1}"
             self.projects[project_id] = {"id": project_id, "name": payload["name"], "version": 1, "doc": payload["doc"]}
@@ -400,7 +402,7 @@ def test_a_run_creates_the_project_chains_the_second_shot_and_sends_the_referenc
     assert len(vp_api.uploads) == 3 and vp_api.media_uploaded == ["1-lumi.jpg", "2-bottle.jpg", "3-bottle-gold.jpg"]
     project = vp_api.projects["P1"]
     assert project["name"] == "potion-audit vp-1 MiniMax-H3-12GB"
-    assert [asset["origin"] for asset in project["doc"]["assets"][:2]] == [{"kind": "library", "itemId": "I1"}, {"kind": "library", "itemId": "I2"}]
+    assert [asset["origin"] for asset in project["doc"]["assets"][:2]] == [{"kind": "library", "itemId": "U1"}, {"kind": "library", "itemId": "U2"}]
     assert [(kind, body.get("shots") or body.get("takes") or body.get("format")) for kind, body in vp_api.orders] == [("generate", ["s1-workshop"]), ("generate", ["s2-bottle"]), ("generate", ["s3-lumi"]), ("generate", ["s4-gold"]), ("final-pass", ["T1"]), ("export", "web")]
     assert [body["shots"] for body in vp_api.estimates] == [["s1-workshop"], ["s2-bottle"], ["s3-lumi"], ["s4-gold"]]
     assert vp_api.orders[4][1] == {"takes": ["T1"], "method": "upscale", "target": "fhd1080", "upscaler": "rtx"}
@@ -408,7 +410,7 @@ def test_a_run_creates_the_project_chains_the_second_shot_and_sends_the_referenc
     second = next(take for take in vp_api.vp_takes if take["shot_id"] == "s2-bottle")
     assert second["chain"]["state"] == "taken" and second["chain"]["source"]["takeId"] == "T1"
     assert vp_api.puts[-1]["doc"]["clips"][0]["take"] == "T5"
-    assert [asset["origin"] for asset in project["doc"]["assets"] if asset["id"].startswith("frame-")] == [{"kind": "library", "itemId": "I2"}, {"kind": "library", "itemId": "I3"}]
+    assert [asset["origin"] for asset in project["doc"]["assets"] if asset["id"].startswith("frame-")] == [{"kind": "library", "itemId": "U2"}, {"kind": "library", "itemId": "U3"}]
     entry = scenario["engines"][3]
     assert [(step["step"], step.get("verdict")) for step in entry["steps"]] == [("take", "PASS"), ("take", "PASS"), ("take", "PASS"), ("take", "PASS"), ("final_pass", "PASS"), ("export", "PASS")]
     run_dir = tmp_path / "out" / "vp-1"

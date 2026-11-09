@@ -991,7 +991,9 @@ def run_scenario(client: ApiClient, pack: Pack, out_root: Path, run_id: str, eng
             for input_id in UPLOADED:
                 uploads.media(pack, input_id, False)
                 stored = uploads.done[pack.inputs[input_id].sha256]
-                found = (unwrap(client.post_json(f"{VP}/media/uploaded", {"filename": stored["filename"]})) or {}).get("media") or {}
+                if not stored.get("id"):
+                    raise RunRefused(f"the upload of {pack.inputs[input_id].file} gave no id: start the scenario under a new run id")
+                found = (unwrap(client.post_json(f"{VP}/media/uploaded", {"id": stored["id"], "filename": stored["filename"]})) or {}).get("media") or {}
                 if not found.get("origin"):
                     raise RunRefused(f"the plugin gave no library origin for {pack.inputs[input_id].file}")
                 media[input_id] = (found.get("url"), found["origin"])
