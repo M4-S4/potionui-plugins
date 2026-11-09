@@ -241,7 +241,7 @@ def _presets(monkeypatch, name="Wan", installed=True, assigned=False):
         core_bridge,
         "api_presets",
         SimpleNamespace(
-            describe_preset=lambda preset_id: None if name is None else SimpleNamespace(name=name),
+            describe_preset=lambda preset_id: None if name is None else SimpleNamespace(name=name, vars=None),
             preset_install_state=lambda preset_id: PresetInstallState(installed=installed, assigned=installed and assigned),
         ),
     )

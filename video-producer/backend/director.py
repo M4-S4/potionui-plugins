@@ -1509,10 +1509,17 @@ def _wanted_mode(context: _Context, clip: Mapping[str, Any]) -> str:
     return "flf" if last is not None or keepframing.keeps_framing(clip) else "i2v"
 
 
-def _fallback(context: _Context, shot_id: str, fields: Sequence[str], companion: Optional[str] = None) -> Dict[str, Any]:
+def _fallback(context: _Context, shot_id: str, fields: Sequence[str], companion: Optional[str] = None, reason: Optional[str] = None) -> Dict[str, Any]:
     name = context.preset.name
-    cause = f"The image-to-video preset of {name} is not available to you" if companion and not fields else f"The image-to-video models of {name} are not installed"
+    if reason is not None:
+        cause = f"The image-to-video preset of {name} cannot make this shot"
+    elif companion and not fields:
+        cause = f"The image-to-video preset of {name} is not available to you"
+    else:
+        cause = f"The image-to-video models of {name} are not installed"
     extra: Dict[str, Any] = {"preset_id": companion} if companion else {}
+    if reason is not None:
+        extra["reason"] = reason
     if _chained_start(context, shot_id):
         return note("chain_models_missing", f"{cause}: the shot starts from its text, not from the last image of the previous shot.", shot_id=shot_id, fields=list(fields), **extra)
     return note("frame_models_missing", f"{cause}: the shot starts from its text, without its frames.", shot_id=shot_id, fields=list(fields), **extra)
@@ -1531,9 +1538,14 @@ def _companion_plan(context: _Context, clip: Mapping[str, Any], warnings: List[D
         return None, _fallback(context, shot_id, [], target) if image else None
     own: List[Dict[str, Any]] = []
     handed = replace(context, preset=companion, fields={}, cuts=[], handed_from=preset.id)
-    plan = _native_plan(handed, clip, own)
+    try:
+        plan = _native_plan(handed, clip, own)
+    except DirectorError as exc:
+        if not image:
+            raise
+        return None, _fallback(context, shot_id, [], target, exc.code)
     if plan.director_mode not in catalog.director_modes(companion.variables):
-        return None, None
+        return None, _fallback(context, shot_id, [], target, "mode_unsupported") if image else None
     if plan.missing_models and image:
         return None, _fallback(context, shot_id, plan.missing_models, target)
     plan.preset_id = companion.id
@@ -1542,6 +1554,17 @@ def _companion_plan(context: _Context, clip: Mapping[str, Any], warnings: List[D
         if item not in warnings:
             warnings.append(item)
     return plan, None
+
+
+def handing_preset(user: User, preset_id: str) -> str:
+    preset = find_preset(user, preset_id)
+    if preset is None or catalog.listed(preset.variables):
+        return preset_id
+    for candidate in dict.fromkeys(catalog.companions(preset.variables).values()):
+        handing = find_preset(user, candidate)
+        if handing is not None and catalog.listed(handing.variables) and preset_id in catalog.companions(handing.variables).values():
+            return handing.id
+    return preset_id
 
 
 def _native_size(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> Optional[str]:

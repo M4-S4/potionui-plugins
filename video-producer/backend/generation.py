@@ -610,7 +610,7 @@ async def _render_plan(
         project["id"],
         project["doc"],
         [source["shot_id"]],
-        source["preset_id"],
+        director.handing_preset(owner, source["preset_id"]),
         quality,
         source.get("model_id"),
         source.get("profile"),

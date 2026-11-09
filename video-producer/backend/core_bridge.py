@@ -155,6 +155,7 @@ class PresetState:
     loaded: bool
     installed: bool
     assigned: bool
+    variables: Optional[Mapping[str, Any]] = None
 
 
 def get_plugin_setting(key: str, user_id: Optional[str] = None) -> Optional[str]:
@@ -369,7 +370,7 @@ def preset_state(preset_id: str) -> PresetState:
         return PresetState(id=preset_id, name=preset_id, loaded=False, installed=False, assigned=False)
     install = api_presets.preset_install_state(preset_id)
     return PresetState(
-        id=preset_id, name=description.name, loaded=True, installed=install.installed, assigned=install.assigned
+        id=preset_id, name=description.name, loaded=True, installed=install.installed, assigned=install.assigned, variables=description.vars
     )
 
 

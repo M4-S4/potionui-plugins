@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from backend import chaining, core_bridge, estimate, frame_grab, generation, presets, projects, takes, tracker
+from backend import catalog, chaining, core_bridge, director, estimate, frame_grab, generation, presets, projects, takes, tracker
+from backend.director import DirectorError
 from backend.frame_grab import FrameError
 from backend.estimate import Order
 from backend.tables import create_tables
@@ -374,7 +375,7 @@ def _lightning(core, companion=True, loras=False):
                 preset_id=LIGHTNING_I2V,
                 fps=16,
                 name="Wan 2.2 14B Lightning I2V (12 GB)",
-                producer={"companions": {"t2v": LIGHTNING}},
+                producer={"companions": {"t2v": LIGHTNING}, "listed": False},
             )
         )
     for preset_id in ids if loras else ():
@@ -643,6 +644,150 @@ def test_an_image_only_preset_without_its_text_companion_blocks_a_shot_without_a
             "code": "image_only_preset",
             "message": "Wan 2.2 14B Lightning I2V (12 GB) starts a shot from an image only: give the shot a first frame.",
             "data": {"shot_id": "s1"},
+        }
+    ]
+
+
+def _companion_take(core, make_project, finish):
+    _lightning(core)
+    _tunable(core, LIGHTNING, LIGHTNING_I2V)
+    project = make_project(clips=SHOTS[:2], frames=_own_frame(core, "first"), assets=[STILL])
+    project["doc"]["engine"]["sizes"] = {LIGHTNING: {"draft": "960x544", "final": "720x720"}}
+    project["doc"]["engine"]["options"] = {LIGHTNING: {"steps": 8, "cfg": 2.0}}
+    (take,) = _start(core, project, ["s2"], preset_id=LIGHTNING)
+    finish(take["generation_id"])
+    _tick()
+    return project, takes.get_take(take["id"])
+
+
+def _made(take):
+    form = take["request"]["form_data"]
+    return take["preset_id"], take["director_mode"], take["resolution"], form["steps"], form["cfg"]
+
+
+def test_a_retry_of_a_companion_take_keeps_the_size_and_the_options_the_project_set_for_the_lightning_engine(core, make_project, frames, slots):
+    project, failed = _companion_take(core, make_project, core.fail)
+
+    retried = asyncio.run(generation.retry(core.users["user-1"], project, failed))
+
+    assert _made(failed) == (LIGHTNING_I2V, "i2v", "960x544", 8, 2.0)
+    assert _made(retried) == _made(failed)
+    assert retried["seed"] == failed["seed"]
+
+
+def test_a_final_render_of_a_companion_take_keeps_the_final_size_and_the_options_the_project_set_for_the_lightning_engine(core, make_project, frames, slots):
+    project, done = _companion_take(core, make_project, core.complete)
+
+    final = asyncio.run(generation.final(core.users["user-1"], project, done, "render", "auto"))
+
+    assert _made(final) == (LIGHTNING_I2V, "i2v", "720x720", 8, 2.0)
+    assert final["quality"] == "final" and final["parent_take_id"] == done["id"]
+
+
+def test_a_take_of_the_lightning_engine_or_of_another_preset_is_planned_again_on_its_own_preset(core, frames, slots):
+    _lightning(core)
+    user = core.users["user-1"]
+
+    assert director.handing_preset(user, LIGHTNING_I2V) == LIGHTNING
+    assert director.handing_preset(user, LIGHTNING) == LIGHTNING
+    assert director.handing_preset(user, presets.WAN) == presets.WAN
+    assert director.handing_preset(user, "01UNKNOWNPRESET000000000000") == "01UNKNOWNPRESET000000000000"
+
+
+def _shot_s2(core, make_project, *roles, **clip):
+    return make_project(clips=[SHOTS[0], {**SHOTS[1], **clip}], frames=_own_frame(core, *roles), assets=[STILL])
+
+
+def test_a_director_error_of_the_companion_plan_starts_the_shot_from_its_text_on_the_lightning_engine(core, make_project, frames, slots, monkeypatch):
+    preset_id = _lightning(core)
+    project = _shot_s2(core, make_project, "first")
+
+    def refuse(user, doc, shot_id, request, **kwargs):
+        raise DirectorError("frame_unusable", "The frame cannot be used.", shot_id=shot_id)
+
+    monkeypatch.setattr(director, "bind_frames", refuse)
+    evaluation = _evaluate(core, project, ["s2"], preset_id=preset_id)
+
+    assert evaluation.payload["blocks"] == []
+    assert _shots(evaluation.payload) == [("s2", LIGHTNING, "t2v", None)]
+    assert _chain_warnings(evaluation.payload) == [
+        {
+            "code": "frame_models_missing",
+            "message": "The image-to-video preset of Wan 2.2 14B Lightning (12 GB) cannot make this shot: the shot starts from its text, without its frames.",
+            "data": {"shot_id": "s2", "fields": [], "preset_id": LIGHTNING_I2V, "reason": "frame_unusable"},
+        }
+    ]
+
+
+def test_a_companion_plan_in_a_composition_the_companion_does_not_declare_starts_the_chained_shot_from_its_text(core, make_project, frames, slots, monkeypatch):
+    preset_id = _lightning(core)
+    project = make_project(clips=SHOTS[:2])
+    monkeypatch.setattr(director, "bind_frames", lambda user, doc, shot_id, request, **kwargs: (request, "t2v"))
+
+    evaluation = _evaluate(core, project, ["s1", "s2"], preset_id=preset_id)
+
+    assert evaluation.payload["blocks"] == []
+    assert _shots(evaluation.payload) == [("s1", LIGHTNING, "t2v", None), ("s2", LIGHTNING, "t2v", None)]
+    assert [(warning["code"], warning["data"]) for warning in _chain_warnings(evaluation.payload)] == [
+        ("chain_models_missing", {"shot_id": "s2", "fields": [], "preset_id": LIGHTNING_I2V, "reason": "mode_unsupported"})
+    ]
+    assert [warning for warning in evaluation.payload["warnings"] if warning["code"] in ("text_only_preset", "chain_text_only")] == []
+
+
+def test_the_companion_is_not_used_for_a_profile_it_cannot_run(core, make_project, frames, slots):
+    _lightning(core)
+    user = core.users["user-1"]
+    doc = _shot_s2(core, make_project, "first")["doc"]
+    context = director._Context(
+        user=user, doc=doc, preset=director.find_preset(user, LIGHTNING), quality="draft", profile=catalog.HYBRID_AV, model=None, draft_setting="832x480"
+    )
+    warnings = []
+
+    plan, fallback = director._companion_plan(context, director.clip_of(doc, "s2"), warnings)
+
+    assert plan is None and warnings == [] and context.cuts == []
+    assert (fallback["code"], fallback["data"]) == ("frame_models_missing", {"shot_id": "s2", "fields": [], "preset_id": LIGHTNING_I2V})
+
+
+def test_a_shot_that_keeps_its_framing_goes_to_the_companion_in_first_and_last_frame_without_a_last_frame(core, make_project, frames, slots):
+    preset_id = _lightning(core)
+    project = _shot_s2(core, make_project, "first", keepFraming=True)
+
+    evaluation = _evaluate(core, project, ["s2"], preset_id=preset_id)
+
+    assert evaluation.payload["blocks"] == []
+    assert _shots(evaluation.payload) == [("s2", LIGHTNING_I2V, "flf", None)]
+
+
+def test_a_first_frame_taken_from_the_previous_shot_gives_the_chained_warning_when_the_companion_is_missing(core, make_project, frames, slots):
+    preset_id = _lightning(core, companion=False)
+    core.add_media({"kind": "library", "item_id": "it-1"}, "uploads/harbour.png", "image")
+    taken = {**STILL, "frameOf": {"shotId": "s1", "takeId": "t0", "assetId": "gen-t0", "at": 4.0}}
+    frame = {"id": "f-first", "shotId": "s2", "time": 4, "assetId": "img", "role": "first"}
+    project = make_project(clips=SHOTS[:2], frames=[frame], assets=[taken])
+
+    evaluation = _evaluate(core, project, ["s2"], preset_id=preset_id)
+
+    assert evaluation.waits == {}
+    assert [(warning["code"], warning["data"]) for warning in _chain_warnings(evaluation.payload)] == [
+        ("chain_models_missing", {"shot_id": "s2", "fields": [], "preset_id": LIGHTNING_I2V})
+    ]
+
+
+def test_a_warning_of_the_companion_shared_by_several_shots_is_given_once(core, make_project, frames, slots):
+    preset_id = _lightning(core)
+    _tunable(core, LIGHTNING, LIGHTNING_I2V)
+    project = make_project(clips=SHOTS)
+    project["doc"]["engine"]["options"] = {LIGHTNING_I2V: {"steps": 1000}}
+
+    evaluation = _evaluate(core, project, ["s1", "s2", "s3"], preset_id=preset_id)
+
+    assert _shots(evaluation.payload) == [("s1", LIGHTNING, "t2v", None), ("s2", LIGHTNING_I2V, "i2v", "s1"), ("s3", LIGHTNING_I2V, "i2v", "s2")]
+    assert [warning for warning in evaluation.payload["warnings"] if warning["code"] == "engine_option_invalid"] == [
+        {
+            "code": "engine_option_invalid",
+            "message": "Some options of Wan 2.2 14B Lightning I2V (12 GB) no longer fit their field and are left out: steps.",
+            "data": {"preset_id": LIGHTNING_I2V, "fields": ["steps"]},
         }
     ]
 
