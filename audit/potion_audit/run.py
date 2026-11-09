@@ -21,6 +21,8 @@ MEDIA_PROCESSING = re.compile(r"Processing <<NUMBER:(\d+) media files")
 MEDIA_LOADED = re.compile(r"Loaded <<NUMBER:(\d+) files")
 SOURCE_REFINED_STEPS = {"TXT2VID": "ENCODING SOURCE VIDEO"}
 CHECKS_VERSION = 2
+MAXIMUM_TOLERANCE_MB = 1.0
+PRESET_STAT_KEYS = ("preset_id", "preset_name", "total_runs", "cold_runs", "warm_runs", "avg_cold_duration_ms", "avg_warm_duration_ms", "avg_model_load_ms", "peak_vram_mb", "avg_vram_mb", "peak_ram_mb", "avg_ram_mb", "avg_cpu_percent")
 
 
 class RunRefused(RuntimeError):
@@ -193,20 +195,65 @@ def _added(before: dict, after: dict, average: str, count: str) -> float | None:
     return round(after[average] * new_n - (before.get(average) or 0) * old_n, 1)
 
 
+def _mib(value: float | None) -> str:
+    return "nothing" if value is None else f"{value:.1f} MiB"
+
+
+def _bounded(before: dict, after: dict, average: str, maximum: str, label: str) -> tuple[float | None, str]:
+    old_max = before.get(maximum)
+    new_max = after.get(maximum)
+    if after.get(average) is None or new_max is None:
+        return None, f"the core recorded no {label} for this preset"
+    if old_max is None:
+        return round(new_max, 1), "the preset's maximum, which this run is the first to record"
+    added = _added(before, after, average, "total_runs")
+    if new_max > old_max + MAXIMUM_TOLERANCE_MB:
+        if added is not None and abs(added - new_max) <= MAXIMUM_TOLERANCE_MB:
+            return round(new_max, 1), "the preset's new maximum, which the averages confirm"
+        return None, f"the preset's maximum rose to {new_max:.1f} MiB but the averages give {_mib(added)}: the preset holds runs with no {label} recorded"
+    if added is None or added < 0 or added > new_max + MAXIMUM_TOLERANCE_MB:
+        return None, f"the averages give {_mib(added)}, outside the preset's maximum of {new_max:.1f} MiB: the preset holds runs with no {label} recorded"
+    return added, "the difference of the preset's averages, within its maximum"
+
+
+def _resources_unrecorded(before: dict, after: dict) -> bool:
+    if not before.get("total_runs"):
+        return False
+    keys = ("avg_vram_mb", "avg_ram_mb", "avg_cpu_percent")
+    return any(before.get(key) is not None for key in keys) and all(before.get(key) == after.get(key) for key in keys)
+
+
+def _kept(stats: dict) -> dict:
+    return {key: stats[key] for key in PRESET_STAT_KEYS if key in stats}
+
+
 def derive_run_stats(before: dict, after: dict) -> dict:
+    preset_stats = {"before": _kept(before), "after": _kept(after)}
     if (after.get("total_runs") or 0) != (before.get("total_runs") or 0) + 1:
-        return {"derived": False, "reason": "the preset's run count did not grow by exactly one"}
+        return {"derived": False, "reason": "the preset's run count did not grow by exactly one", "preset_stats": preset_stats}
     cold = (after.get("cold_runs") or 0) == (before.get("cold_runs") or 0) + 1
     warm = (after.get("warm_runs") or 0) == (before.get("warm_runs") or 0) + 1
+    if _resources_unrecorded(before, after):
+        reason = "no resource average of the preset moved: the core recorded no resources for this run"
+        peak_vram, vram_source = None, reason
+        end_ram, ram_source = None, reason
+        cpu = None
+    else:
+        peak_vram, vram_source = _bounded(before, after, "avg_vram_mb", "peak_vram_mb", "peak VRAM")
+        end_ram, ram_source = _bounded(before, after, "avg_ram_mb", "peak_ram_mb", "RAM")
+        cpu = _added(before, after, "avg_cpu_percent", "total_runs")
     return {
         "derived": True,
         "cold_start": True if cold else False if warm else None,
         "duration_ms": _added(before, after, "avg_cold_duration_ms", "cold_runs") if cold else _added(before, after, "avg_warm_duration_ms", "warm_runs") if warm else None,
         "model_load_ms": _added(before, after, "avg_model_load_ms", "cold_runs") if cold else 0.0 if warm else None,
-        "peak_vram_mb": _added(before, after, "avg_vram_mb", "total_runs"),
-        "end_ram_mb": _added(before, after, "avg_ram_mb", "total_runs"),
-        "cpu_percent": _added(before, after, "avg_cpu_percent", "total_runs"),
-        "source": "difference of the per-preset averages of /api/stats/presets/timing and /resources before and after the run",
+        "peak_vram_mb": peak_vram,
+        "peak_vram_source": vram_source,
+        "end_ram_mb": end_ram,
+        "end_ram_source": ram_source,
+        "cpu_percent": cpu,
+        "source": "difference of the per-preset averages of /api/stats/presets/timing and /resources before and after the run, checked against the preset's maximum",
+        "preset_stats": preset_stats,
     }
 
 
