@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Collection, Dict, List, Mapping, Optional
 
 from . import core_bridge, engine_options, models, presets, reception
 from .core_bridge import CLOUD_ENGINE, User
@@ -9,6 +9,10 @@ logger = logging.getLogger("plugins.video-producer")
 VIDEO_DIRECTOR = "video_director"
 
 VIDEO_PRODUCER = "video_producer"
+
+COMPANIONS = "companions"
+
+LISTED = "listed"
 
 NATIVE_KINDS = {"native.local": "local", "native.remote": "remote"}
 
@@ -121,6 +125,24 @@ def memory_profile(variables: Optional[Mapping[str, Any]]) -> Optional[str]:
     return profile.strip() if isinstance(profile, str) and profile.strip() else None
 
 
+def companions(variables: Optional[Mapping[str, Any]]) -> Dict[str, str]:
+    own = (variables or {}).get(VIDEO_PRODUCER)
+    found = own.get(COMPANIONS) if isinstance(own, Mapping) else None
+    if not isinstance(found, Mapping):
+        return {}
+    return {str(mode): preset_id for mode, preset_id in found.items() if isinstance(preset_id, str) and preset_id}
+
+
+def listed(variables: Optional[Mapping[str, Any]]) -> bool:
+    own = (variables or {}).get(VIDEO_PRODUCER)
+    return not (isinstance(own, Mapping) and own.get(LISTED) is False)
+
+
+def reachable_modes(variables: Optional[Mapping[str, Any]], available: Collection[str]) -> List[str]:
+    own = director_modes(variables)
+    return own + [mode for mode, preset_id in companions(variables).items() if preset_id in available and mode not in own]
+
+
 def preset_limits(variables: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     """The Video Director limits of a preset: default and maximum duration, default fps."""
     limits = director_of(variables).get("limits")
@@ -226,7 +248,7 @@ def preset_backend_id(description: Any, driver: Optional[str], cloud_backends: L
     return next((backend.get("id") for backend in cloud_backends if backend.get("driver") == driver), None)
 
 
-def _preset(description: Any, upscaler: bool, cloud_backends: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _preset(description: Any, upscaler: bool, cloud_backends: List[Dict[str, Any]], available: Collection[str] = ()) -> Dict[str, Any]:
     variables = description.vars or {}
     modes = list(description.modes or {})
     director = director_of(variables)
@@ -238,6 +260,7 @@ def _preset(description: Any, upscaler: bool, cloud_backends: List[Dict[str, Any
     return {
         "id": description.id,
         "name": description.name,
+        "listed": listed(variables),
         "engine": description.engine,
         "category": description.category,
         "requires": description.requires,
@@ -263,7 +286,7 @@ def _preset(description: Any, upscaler: bool, cloud_backends: List[Dict[str, Any
         "fps": preset_fps(variables) if director else None,
         "fps_locked": fps_locked(variables, fields) if director else False,
         "limits": preset_limits(variables),
-        "director_modes": director_modes(variables),
+        "director_modes": reachable_modes(variables, available),
         "audio_mux": audio_mux(variables),
         "profiles": profiles(description.id, variables, modes),
         "driver": driver,
@@ -284,4 +307,5 @@ def video_presets(user: User) -> List[Dict[str, Any]]:
         if description.id in presets.UPSCALER_PRESETS or is_video_preset(description)
     ]
     cloud_backends = _cloud_backends() if any(description.engine == CLOUD_ENGINE for description, _ in wanted) else []
-    return [_preset(description, upscaler, cloud_backends) for description, upscaler in wanted]
+    available = {description.id for description, _ in wanted}
+    return [_preset(description, upscaler, cloud_backends, available) for description, upscaler in wanted]

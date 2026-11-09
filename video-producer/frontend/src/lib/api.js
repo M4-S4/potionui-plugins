@@ -268,6 +268,7 @@ export function normalizePreset(value) {
 	return {
 		id: value.id,
 		name: text(value.name) || value.id,
+		listed: value.listed !== false,
 		cloud: value.engine === 'cloud',
 		driver: text(value.driver) || null,
 		backendId: text(value.backend_id) || null,

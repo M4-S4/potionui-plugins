@@ -115,7 +115,7 @@ class VideoPresetsReady(SetupCheck):
         except Exception as exc:
             logger.warning("[VIDEO-PRODUCER] Setup check: could not read the presets: %s", exc)
             return _unchecked("the presets", "Open presets", PRESETS_HREF)
-        loaded = [state for state in states if state.loaded]
+        loaded = [state for state in states if state.loaded and catalog.listed(state.variables)]
         installed = [state for state in loaded if state.installed]
         assigned = [state for state in installed if state.assigned]
         if assigned:

@@ -4,7 +4,7 @@ name: "Wan 2.2 TI2V 5B (8 GB)"
 category: "video"
 version: "1.0.0"
 engine: "native"
-tags: ["8gb", "low-vram", "ram-32gb", "wan", "wan2.2", "ti2v", "video", "t2v", "flow-matching", "local"]
+tags: ["8gb", "low-vram", "ram-32gb", "wan", "wan2.2", "ti2v", "video", "t2v", "i2v", "flow-matching", "local"]
 
 requires:
   min_vram_gb: 8
@@ -47,10 +47,14 @@ vars:
     timing:
       motion_latent_count_field: "svi_motion_latent_count"
       motion_latent_count_default: 1
+      one_frame_tail:
+        model_field: "i2v_high_noise_model"
+        sha256: ["456f901338bd9eadbded3828b819109a9b68e8a525ca5cf8d0049a69fcfeca1e"]
     preset_modes: ["video"]
     segment_routing: true
     modes:
       t2v: {}
+      i2v: {}
     limits:
       default_duration: 5
       default_fps: 24

@@ -104,6 +104,8 @@ export function engineOptions(me) {
 	return options;
 }
 
+export const listedOptions = (options) => options.filter((option) => option.info?.listed !== false);
+
 export function optionFor(options, engine) {
 	if (!engine?.preset) return null;
 	return options.find((o) => o.key === optionKey(engine.preset, engine.model ?? null)) ?? null;
@@ -126,7 +128,8 @@ export function migrateEngine(engine, me) {
 		const current = optionFor(options, { preset, model });
 		return { backend: current ? current.backend : backend, preset, model };
 	}
-	const fallback = options.find((o) => o.backend === backend) ?? options[0];
+	const offered = listedOptions(options);
+	const fallback = offered.find((o) => o.backend === backend) ?? offered[0];
 	return fallback ? { backend: fallback.backend, preset: fallback.preset, model: fallback.model } : { backend, preset: null, model: null };
 }
 

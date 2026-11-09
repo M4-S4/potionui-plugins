@@ -1,0 +1,37 @@
+schema: 1
+
+cases:
+  - name: "wan22-14b-lightning-i2v-12gb-i2v"
+    mode: "video"
+    kind: "video"
+    seed: 12345
+    tags: ["12gb", "needs-model"]
+    form:
+      resolution: "832x480"
+      speed_profile: "fast"
+      video_director:
+        schema_version: 1
+        mode: "i2v"
+        settings: {fps: 16, duration: 5, resolution: "832x480", seed: 12345}
+        segments:
+          - {id: "shot-1", prompt: "the paper boat drifts down the gutter as the rain grows heavier, close-up", negative_prompt: ""}
+        media:
+          - id: "m-1"
+            role: "first"
+            segment_id: "shot-1"
+            at: 0
+            strength: 1
+            media: {path: "PLACEHOLDER/wan22-14b-lightning-i2v-first-frame.png", type: "image"}
+    models:
+      i2v_high_noise_model:
+        sha256: "6122e79d55e0f235698d11d657f3b196c5273c830da00b2b013c5a048d5e6a42"
+      i2v_low_noise_model:
+        sha256: "5471a457b6ac404202a5fbe6c11595a3d5641fc766b00f38763f72303fffc21e"
+      text_encoder:
+        sha256: "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68"
+      vae:
+        sha256: "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+    checks:
+      min_outputs: 1
+      resolution: "832x480"
+      not_black: true

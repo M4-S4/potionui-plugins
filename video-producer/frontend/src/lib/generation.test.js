@@ -7,6 +7,7 @@ import {
 	canUpscale,
 	draftResolution,
 	engineOptions,
+	listedOptions,
 	hasNativeEngine,
 	nativeEngine,
 	rtxUnchecked,
@@ -96,6 +97,23 @@ test('normalizeMe: engines, presets, features, upscale targets and settings come
 	assert.deepEqual(me.upscaleTargets, ['hd720', 'fhd1080', 'qhd1440', 'uhd2160']);
 	assert.deepEqual(me.settings, { draftResolution: '832x480', maxParallelJobs: 2 });
 	assert.deepEqual([normalizeMe({}).engines, normalizeMe({}).presets, normalizeMe({}).features], [[], [], { upscaler: false, guided: false }]);
+});
+
+test('engine popup: a preset the plugin marks as not listed stays known by its options but is left out of the lists to pick from', () => {
+	const COMPANION = '01M57QPEMDPKHHW83YSEYBN0X2';
+	const raw = { ...rawMe, presets: [...rawMe.presets, { id: COMPANION, name: 'Wan 2.2 14B Lightning I2V (12 GB)', engine: 'native', modes: ['video'], director_modes: ['i2v', 'flf'], listed: false }] };
+	const paired = normalizeMe(raw);
+	const options = engineOptions(paired);
+
+	assert.deepEqual([paired.presets.find((p) => p.id === WAN).listed, paired.presets.find((p) => p.id === COMPANION).listed], [true, false]);
+	assert.equal(optionFor(options, { preset: COMPANION }).label, 'Wan 2.2 14B Lightning I2V (12 GB)');
+	assert.deepEqual(
+		listedOptions(options).map((o) => o.preset),
+		options.filter((o) => o.preset !== COMPANION).map((o) => o.preset)
+	);
+	const first = normalizeMe({ ...raw, presets: [raw.presets.at(-1), ...rawMe.presets] });
+	assert.equal(migrateEngine({ backend: 'native' }, first).preset, WAN);
+	assert.equal(migrateEngine({ backend: 'native', preset: COMPANION }, first).preset, COMPANION);
 });
 
 test('engine popup: one entry per native video preset on the first native backend, one per enabled cloud model under its backend', () => {

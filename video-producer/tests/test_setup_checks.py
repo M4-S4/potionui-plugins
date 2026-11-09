@@ -60,8 +60,8 @@ def _cloud(backend_id, name):
     return _backend(backend_id, name, engine=CLOUD_ENGINE, driver="cloud.provider")
 
 
-def _state(preset_id, name=None, loaded=True, installed=False, assigned=False):
-    return PresetState(id=preset_id, name=name or preset_id, loaded=loaded, installed=installed, assigned=assigned)
+def _state(preset_id, name=None, loaded=True, installed=False, assigned=False, variables=None):
+    return PresetState(id=preset_id, name=name or preset_id, loaded=loaded, installed=installed, assigned=assigned, variables=variables)
 
 
 def _raise(message):
@@ -470,6 +470,30 @@ def test_a_preset_that_is_not_loaded_does_not_count_even_when_flagged_installed(
     preset_states.set(presets.WAN, name="Wan", loaded=False, installed=True, assigned=True)
 
     assert VideoPresetsReady().evaluate(CONTEXT).done is False
+
+
+UNLISTED = {"video_producer": {"companions": {"t2v": presets.WAN22_14B_LIGHTNING_12GB}, "listed": False}}
+
+
+def test_an_unlisted_companion_installed_and_assigned_alone_does_not_pass_the_check(preset_states):
+    preset_states.set(presets.WAN22_14B_LIGHTNING_I2V_12GB, name="Wan 2.2 14B Lightning I2V (12 GB)", installed=True, assigned=True, variables=UNLISTED)
+
+    assert VideoPresetsReady().evaluate(CONTEXT) == SetupCheckResult(
+        done=False,
+        description="No Video Director preset is available. Enable a plugin that ships one, such as a cloud provider.",
+        action_label="Open presets",
+        action_href=PRESETS_HREF,
+    )
+
+
+def test_an_unlisted_companion_is_left_out_of_the_presets_the_check_asks_to_install(preset_states):
+    preset_states.set(presets.WAN22_14B_LIGHTNING_I2V_12GB, name="Wan 2.2 14B Lightning I2V (12 GB)", variables=UNLISTED)
+    preset_states.set(presets.WAN22_14B_LIGHTNING_12GB, name="Wan 2.2 14B Lightning (12 GB)")
+
+    result = VideoPresetsReady().evaluate(CONTEXT)
+
+    assert result.description.startswith("Install a Video Director preset (Wan 2.2 14B Lightning (12 GB)), then assign it. ")
+    assert result.action_href == f"/admin?tab=presets&id={presets.WAN22_14B_LIGHTNING_12GB}"
 
 
 def test_without_any_loaded_preset_the_check_says_none_is_available(preset_states):

@@ -19,7 +19,7 @@ export default {
 	"sizes": { "tolerance": 0.05, "draftMax": 600000, "finalShare": 0.5, "min": 64, "max": 8192, "grid": 8, "timeExponent": 1.2 },
 	"cadence": { "values": [24, 25, 30, 48, 50, 60], "default": 25, "slower": 0.1, "speeds": [1, 0.5, 0.25] },
 	"engines": {
-		"wan": { "grid": 16, "presets": ["01KX47WANVIDEO0000000000TV", "01M57QPEMDPKHHW83YSEYBN0WZ", "01M57QPEMDPKHHW83YSEYBN0X1"] },
+		"wan": { "grid": 16, "presets": ["01KX47WANVIDEO0000000000TV", "01M57QPEMDPKHHW83YSEYBN0WZ", "01M57QPEMDPKHHW83YSEYBN0X1", "01M57QPEMDPKHHW83YSEYBN0X2"] },
 		"wan5b": { "grid": 32, "presets": ["01M57QPEMDPKHHW83YSEYBN0X0"] },
 		"ltx": { "grid": 32, "presets": ["01KX47LTXVIDEO0000000000TV", "01KX47LTX25VIDEO00000000TV"] },
 		"h3": {

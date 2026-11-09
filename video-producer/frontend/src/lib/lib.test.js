@@ -266,6 +266,63 @@ test('readiness: a text-only engine that ignores a shot frame warns about that s
 	assert.deepEqual(missing, []);
 });
 
+test('readiness: a chained shot that an engine starts from its text warns about that shot in both languages, with the files it misses', () => {
+	productionScene();
+	estimateState.data = { blocks: [], warnings: [{ code: 'chain_text_only', data: { shot_id: 's1' } }, { code: 'chain_models_missing', data: { shot_id: 's1', fields: ['i2v_high_noise_model', 'i2v_loras_low'] } }] };
+	const ready = readiness();
+	assert.deepEqual(ready.warnings, [
+		t('generation.warn.chainTextOnly', { shot: 'Opening' }),
+		t('generation.warn.chainModelsMissing', { shot: 'Opening', fields: 'i2v_high_noise_model, i2v_loras_low' })
+	]);
+	estimateState.data = null;
+	const missing = [];
+	assert.equal(translator('en', missing)('generation.warn.chainTextOnly', { shot: 'Opening' }), 'This engine generates from text only: “Opening” will not start from the last image of the previous shot.');
+	assert.equal(translator('fr', missing)('generation.warn.chainTextOnly', { shot: 'Ouverture' }), 'Ce moteur génère à partir du texte seul : « Ouverture » ne partira pas de la dernière image du plan précédent.');
+	assert.equal(
+		translator('en', missing)('generation.warn.chainModelsMissing', { shot: 'Opening', fields: 'i2v_high_noise_model' }),
+		'The image-to-video files of this engine are not installed (i2v_high_noise_model): “Opening” will be generated from its text, not from the last image of the previous shot.'
+	);
+	assert.equal(
+		translator('fr', missing)('generation.warn.chainModelsMissing', { shot: 'Ouverture', fields: 'i2v_high_noise_model' }),
+		'Les fichiers image vers vidéo de ce moteur ne sont pas installés (i2v_high_noise_model) : « Ouverture » sera généré à partir de son texte, pas de la dernière image du plan précédent.'
+	);
+	assert.deepEqual(missing, []);
+});
+
+test('readiness: a shot that starts from its text because the image-to-video files or preset of its engine are missing says which, chained or with its own frame, and an image-only engine blocks a shot without an image', () => {
+	productionScene();
+	const companion = '01M57QPEMDPKHHW83YSEYBN0X2';
+	estimateState.data = {
+		blocks: [{ code: 'image_only_preset', data: { shot_id: 's1' } }],
+		warnings: [
+			{ code: 'frame_models_missing', data: { shot_id: 's1', fields: ['i2v_high_noise_model'], preset_id: companion } },
+			{ code: 'frame_models_missing', data: { shot_id: 's1', fields: [], preset_id: companion } },
+			{ code: 'chain_models_missing', data: { shot_id: 's1', fields: [], preset_id: companion } },
+			{ code: 'chain_models_missing', data: { shot_id: 's1', fields: [] } }
+		]
+	};
+	const ready = readiness();
+	assert.deepEqual(ready.missing, [t('generation.block.imageOnly', { shot: 'Opening' })]);
+	assert.deepEqual(ready.warnings, [
+		t('generation.warn.frameModelsMissing', { shot: 'Opening', fields: 'i2v_high_noise_model' }),
+		t('generation.warn.frameCompanionMissing', { shot: 'Opening' }),
+		t('generation.warn.chainCompanionMissing', { shot: 'Opening' }),
+		t('generation.warn.chainModelsMissing', { shot: 'Opening', fields: '—' })
+	]);
+	assert.match(ready.warnings[3], /\(—\)/);
+	estimateState.data = null;
+	const missing = [];
+	const en = translator('en', missing);
+	const fr = translator('fr', missing);
+	assert.equal(en('generation.warn.frameModelsMissing', { shot: 'Opening', fields: 'vae' }), 'The image-to-video files of this engine are not installed (vae): “Opening” will be generated from its text, without its start image.');
+	assert.equal(fr('generation.warn.frameModelsMissing', { shot: 'Ouverture', fields: 'vae' }), 'Les fichiers image vers vidéo de ce moteur ne sont pas installés (vae) : « Ouverture » sera généré à partir de son texte, sans son image de début.');
+	assert.equal(en('generation.warn.chainCompanionMissing', { shot: 'Opening' }), 'The image-to-video preset of this engine is not available to you: “Opening” will be generated from its text, not from the last image of the previous shot.');
+	assert.equal(fr('generation.warn.frameCompanionMissing', { shot: 'Ouverture' }), 'Le preset image vers vidéo de ce moteur ne vous est pas accessible : « Ouverture » sera généré à partir de son texte, sans son image de début.');
+	assert.equal(fr('generation.block.imageOnly', { shot: 'Ouverture' }), 'Ce moteur ne part que d’une image : donnez une image de début à « Ouverture », ou choisissez-lui un moteur texte vers vidéo.');
+	assert.deepEqual(missing, []);
+	assert.doesNotThrow(() => new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'production.svelte.js'))));
+});
+
 test('migrate: the 3D scenes, the 3D shots and the Control videos go, empty 3D captures go, the other frames forget their scene, retired 3D set references become captures and the 3D set role becomes the set role', () => {
 	const old = {
 		name: 'Old',

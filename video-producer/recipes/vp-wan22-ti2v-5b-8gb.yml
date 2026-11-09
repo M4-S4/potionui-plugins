@@ -8,8 +8,8 @@ summary: "Set up Wan 2.2's 5B TI2V model for an 8 GB card and produce a first cl
 description: >
   Installs the Video Producer preset Wan 2.2 TI2V 5B (8 GB) on the native engine, makes sure its three
   files are available (the 5B DiT, the fp8 UMT5-XXL text encoder and the Wan 2.2 VAE, about 18.1 GB
-  together) and runs a first real generation. Text to video only: PotionUI does not run this model's
-  image conditioning. The preset declares the system RAM it was measured with. Weights: Apache-2.0.
+  together) and runs a first real generation. The preset makes text to video, and image to video
+  from a first frame with the same 5B file. It declares the system RAM it was measured with. Weights: Apache-2.0.
 
 plugins:
   - id: "huggingface-provider"

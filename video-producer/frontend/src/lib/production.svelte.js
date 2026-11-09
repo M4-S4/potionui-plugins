@@ -2,7 +2,7 @@ import { formatNumber, t } from '../i18n/index.svelte.js';
 import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, itemsOf, pickedClips, globalPrompt, clipAt, secs, onRestore, openDirector, generates, directorShot, relayout } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
-import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
+import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, listedOptions, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
 import { confirm, openHostModal } from './host.js';
 import { finalsToSync, takeLabelOf, marksOf, relabel, releasedLabel } from './labels.js';
 import { durationLimit, generationCounts, releaseOverrun, setSpeed } from './shots.js';
@@ -52,7 +52,7 @@ export function engineChoices() {
 
 export function engineGroups() {
 	const groups = [];
-	for (const option of engineChoices()) {
+	for (const option of listedOptions(engineChoices())) {
 		let group = groups.find((g) => g.label === option.group);
 		if (!group) {
 			group = { label: option.group, options: [] };
@@ -200,6 +200,14 @@ export function noteText(note) {
 	return shots.length ? t('generation.block.forShots', { shots: shots.join(', '), text }) : text;
 }
 
+function missingText(chained, data) {
+	const fields = fieldNames(data.fields);
+	const shot = shotName(data.shot_id);
+	if (!fields.length && data.preset_id) return chained ? t('generation.warn.chainCompanionMissing', { shot }) : t('generation.warn.frameCompanionMissing', { shot });
+	const params = { shot, fields: fields.join(', ') || '—' };
+	return chained ? t('generation.warn.chainModelsMissing', params) : t('generation.warn.frameModelsMissing', params);
+}
+
 function baseNoteText(note) {
 	const data = note?.data ?? {};
 	const code = note?.code;
@@ -214,6 +222,7 @@ function baseNoteText(note) {
 	if (code === 'quota_unrecorded') return t('generation.block.quotaUnrecorded');
 	if (code === 'no_model') return t('generation.block.noModel');
 	if (code === 'no_references') return t('generation.block.noReferences', { shot: shotName(data.shot_id) });
+	if (code === 'image_only_preset') return t('generation.block.imageOnly', { shot: shotName(data.shot_id) });
 	if (code === 'source_unavailable') return t('generation.block.sourceUnavailable');
 	if (code === 'upscale_unsupported') return t('generation.block.upscaleUnsupported');
 	if (code === 'no_native_engine') return t('generation.block.noNativeEngine');
@@ -228,6 +237,8 @@ function baseNoteText(note) {
 	if (code === 'time_unknown') return t('generation.warn.timeUnknown');
 	if (code === 'fl2va_no_frame') return t('generation.warn.noFrame', { shot: shotName(data.shot_id) });
 	if (code === 'text_only_preset') return t('generation.warn.textOnly', { shot: shotName(data.shot_id) });
+	if (code === 'chain_text_only') return t('generation.warn.chainTextOnly', { shot: shotName(data.shot_id) });
+	if (code === 'chain_models_missing' || code === 'frame_models_missing') return missingText(code === 'chain_models_missing', data);
 	if (code === 'keep_framing_unavailable') return t('generation.warn.keepFramingUnavailable', { shot: shotName(data.shot_id) });
 	if (code === 'keep_framing_last_frame') return t('generation.warn.keepFramingLast', { shot: shotName(data.shot_id) });
 	if (code === 'action_undone') return t('generation.warn.actionUndone', { shot: shotName(data.shot_id) });

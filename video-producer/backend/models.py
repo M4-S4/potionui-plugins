@@ -12,6 +12,10 @@ MODEL_FIELD = "model"
 
 LORA_FIELD = "lora_picker"
 
+TEXT_SET = "t2v"
+IMAGE_SET = "i2v"
+IMAGE_MODES = ("i2v", "flf")
+
 Fields = Dict[str, Dict[str, Any]]
 
 
@@ -51,12 +55,20 @@ def resolution_options(fields: Fields) -> List[Dict[str, str]]:
 def model_fields(fields: Fields, director_mode: Optional[str] = None) -> Tuple[List[str], List[str]]:
     """The model fields a run needs, and the optional ones it takes when installed."""
     required = [name for name, spec in fields.items() if spec.get("type") == MODEL_FIELD and spec.get("required")]
-    prefix = "i2v" if director_mode in ("i2v", "flf") else "t2v"
+    prefix = IMAGE_SET if director_mode in IMAGE_MODES else TEXT_SET
     high, low = f"{prefix}_high_noise_model", f"{prefix}_low_noise_model"
     if high in fields and high not in required:
         required.append(high)
     optional = [low] if low in fields and low not in required else []
     return required, optional
+
+
+def _other_set(director_mode: Optional[str]) -> Optional[str]:
+    if director_mode in IMAGE_MODES:
+        return f"{TEXT_SET}_"
+    if director_mode == TEXT_SET:
+        return f"{IMAGE_SET}_"
+    return None
 
 
 def _lookup(kind: str, value: str, cache: Dict[Tuple[str, str], Optional[str]]) -> Optional[str]:
@@ -123,7 +135,7 @@ def resolve_models(
                 files[name] = str(chosen[0]["filename"])
         elif name in required:
             missing.append(name)
-    for name, rows in _default_loras(fields):
+    for name, rows in _default_loras(fields, _other_set(director_mode)):
         resolved = _resolve_loras(rows, cache)
         if resolved is None:
             missing.append(name)
@@ -132,9 +144,11 @@ def resolve_models(
     return ResolvedModels(values=values, missing=missing, files=files)
 
 
-def _default_loras(fields: Fields) -> List[Tuple[str, List[Dict[str, Any]]]]:
+def _default_loras(fields: Fields, skipped: Optional[str] = None) -> List[Tuple[str, List[Dict[str, Any]]]]:
     found = []
     for name, spec in fields.items():
+        if skipped is not None and name.startswith(skipped):
+            continue
         rows = spec.get("default") if spec.get("type") == LORA_FIELD else None
         if isinstance(rows, list) and any(isinstance(row, dict) and row.get("model") for row in rows):
             found.append((name, [row for row in rows if isinstance(row, dict) and row.get("model")]))
