@@ -102,7 +102,7 @@ class FakeApi:
             filename = multipart_filename(body)
             self.uploads.append(filename)
             stored = f"{len(self.uploads)}-{filename}"
-            return 200, envelope({"path": f"storage/uploads/{stored}", "relative_path": f"uploads/{stored}", "url": f"/api/media/uploads/{stored}", "filename": stored, "size": len(body), "width": 64, "height": 64, "duration_seconds": None, "fps": None, "id": None}), "application/json"
+            return 200, envelope({"path": f"storage/uploads/{stored}", "relative_path": f"uploads/{stored}", "url": f"/api/media/uploads/{stored}", "filename": stored, "size": len(body), "width": 64, "height": 64, "duration_seconds": None, "fps": None, "id": f"U{len(self.uploads)}"}), "application/json"
         if path == "/api/settings":
             return 200, envelope({"profiling_enabled": False, "model_cache_scope": "preset", "s3_secret_key": "should-not-be-copied"}), "application/json"
         if path == "/api/system/gpu-profile":

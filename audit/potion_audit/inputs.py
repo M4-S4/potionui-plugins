@@ -37,7 +37,7 @@ class Uploads:
             data = unwrap(self.client.upload("/api/media/upload", path, CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))) or {}
             if not data.get("path"):
                 raise RunRefused(f"uploading {spec.file} gave no path")
-            self.done[sha] = {key: data.get(key) for key in ("path", "relative_path", "url", "filename", "width", "height", "duration_seconds", "fps", "size")}
+            self.done[sha] = {key: data.get(key) for key in ("path", "relative_path", "url", "filename", "id", "width", "height", "duration_seconds", "fps", "size")}
             self.record.parent.mkdir(parents=True, exist_ok=True)
             self.record.write_text(json.dumps(self.done, indent=1) + "\n", encoding="utf-8", newline="\n")
         return media_item(self.done[sha], spec)
