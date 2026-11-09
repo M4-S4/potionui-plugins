@@ -260,7 +260,7 @@ def _report(args) -> int:
         print(f"compare: {len(changed)} verdicts changed, {sum(1 for row in comparison['rows'] if row.get('duration_flag'))} durations beyond 20 %")
     if scenario_comparison is not None:
         changed = [row["step"] for row in scenario_comparison["rows"] if row.get("verdict_changed")]
-        print(f"compare scenario: {len(changed)} verdicts changed, {sum(1 for row in scenario_comparison['rows'] if row.get('duration_flag'))} durations beyond 20 %")
+        print(f"compare scenario: {len(changed)} verdicts changed, {sum(1 for row in scenario_comparison['rows'] if row.get('duration_flag'))} durations beyond 20 %, {sum(1 for row in scenario_comparison['rows'] if row.get('preset_changed'))} takes on another preset")
     return EXIT_OK
 
 

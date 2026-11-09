@@ -20,7 +20,7 @@ from .matrix import HEALTHY, instance_health
 from .media import probe_video
 from .pack import DEFAULT_PACK, Pack, estimate, expand, load_pack
 from .plan import timing_by_preset
-from .run import DEFAULT_TIMEOUT, OOM_CODES, RunRefused, derive_run_stats, ensure_idle, evaluate, evaluate_run_report, phases, preset_stats, read_outputs, step_seconds, wait_for_stats
+from .run import DEFAULT_TIMEOUT, OOM_CODES, RunRefused, all_preset_stats, derive_run_stats, ensure_idle, evaluate, evaluate_run_report, phases, read_outputs, step_seconds, wait_for_stats
 
 VP = "/api/plugins/video-producer"
 PLUGIN_ID = "video-producer"
@@ -54,11 +54,26 @@ EXIT_STOPPED = 3
 LUMI_CARD = "card-lumi"
 WORKSHOP_CARD = "place-workshop"
 REFERENCES = (("ref-lumi", "lumi", "Lumi", "Personnage", LUMI_CARD), ("ref-bottle", "bottle", "PotionUI bottle", "Objet", None))
+FRAME_ROLES = ("first", "last")
+FRAME_STRENGTH = 100
+FRAME_STEP = 0.04
+LIGHTNING_I2V_ID = "01M57QPEMDPKHHW83YSEYBN0X2"
+CHAIN_IMAGE = "image"
+CHAIN_TEXT = "text"
+CHAIN_TEXT_WARNING = "chain_text_only"
+EXPECTATIONS = {
+    "Wan2.1-T2V-1.3B-8GB": {"chain": CHAIN_TEXT, "flf_reason": "Wan 2.1 T2V 1.3B is a text-to-video model: it takes neither a first nor a last image", "image_preset": None},
+    "Wan2.2-TI2V-5B-8GB": {"chain": CHAIN_IMAGE, "flf_reason": "Wan 2.2 TI2V 5B starts from a first image only: the model knows no last image", "image_preset": None},
+    "Wan2.2-14B-Lightning-12GB": {"chain": CHAIN_IMAGE, "flf_reason": None, "image_preset": {"id": LIGHTNING_I2V_ID, "key": "Wan2.2-14B-Lightning-I2V-12GB"}},
+    "MiniMax-H3-12GB": {"chain": CHAIN_IMAGE, "flf_reason": None, "image_preset": None},
+    "MiniMax-H3-Fast-12GB": {"chain": CHAIN_IMAGE, "flf_reason": None, "image_preset": None},
+}
 SHOTS = (
     {
         "id": "s1-workshop",
         "label": "1 Workshop",
         "chain": False,
+        "frames": None,
         "profile": FL2VA,
         "characters": [],
         "place": WORKSHOP_CARD,
@@ -68,6 +83,7 @@ SHOTS = (
         "id": "s2-bottle",
         "label": "2 Bottle",
         "chain": True,
+        "frames": None,
         "profile": FL2VA,
         "characters": [],
         "place": WORKSHOP_CARD,
@@ -77,12 +93,24 @@ SHOTS = (
         "id": "s3-lumi",
         "label": "3 Lumi",
         "chain": False,
+        "frames": None,
         "profile": REF2VA,
         "characters": [LUMI_CARD],
         "place": WORKSHOP_CARD,
         "prompt": "{lumi}, standing at the oak workbench of {workshop}, lifts the potion bottle, looks at it and smiles without a word, medium close-up, {motion}",
     },
+    {
+        "id": "s4-gold",
+        "label": "4 Gold",
+        "chain": False,
+        "frames": ("bottle", "bottle-gold"),
+        "profile": FL2VA,
+        "characters": [],
+        "place": WORKSHOP_CARD,
+        "prompt": "close-up of {bottle}, the glowing violet liquid slowly turns to molten gold, golden sparks swirl around the neck, {motion}",
+    },
 )
+UPLOADED = tuple(dict.fromkeys([reference[1] for reference in REFERENCES] + [input_id for shot in SHOTS for input_id in shot["frames"] or ()]))
 LANES = (("A1", "Dialogue", "Dialogue", 0, 0), ("A2", "Music", "Musique", -2, 0), ("A3", "Ambience", "Ambiance", -6, -0.2), ("A4", "Foley", "SFX", -4, 0.3))
 
 
@@ -174,7 +202,20 @@ def select_engines(pack: Pack, matrix: dict | None, names: list[str] | None) -> 
         preset = pack.preset(ref)
         if preset is None:
             raise RunRefused(f"the case file of the pack has no preset {ref}")
-        entry = {"engine": ref, "key": engine_key(ref), "preset_id": preset["id"], "selected": True, "reason": None, "ref2va": False, "ref2va_reason": None}
+        expected = EXPECTATIONS[engine_key(ref)]
+        entry = {
+            "engine": ref,
+            "key": engine_key(ref),
+            "preset_id": preset["id"],
+            "selected": True,
+            "reason": None,
+            "ref2va": False,
+            "ref2va_reason": None,
+            "chain": expected["chain"],
+            "flf": expected["flf_reason"] is None,
+            "flf_reason": expected["flf_reason"],
+            "image_preset": expected["image_preset"],
+        }
         if ref not in wanted:
             entry.update(selected=False, reason="left out by --engines")
         elif not passed(matrix, f"{ref}:video"):
@@ -237,10 +278,21 @@ def _lane(lane_id: str, name: str, role: str, vol: float, pan: float) -> dict:
     }
 
 
-def build_doc(pack: Pack, engine: dict, run_id: str, media: dict) -> dict:
+def _frame_time(start: float, role: str) -> float:
+    return round(start + SHOT_SECONDS - FRAME_STEP, 3) if role == "last" else start
+
+
+def companion_options(engine: dict, companion_steps: int | None) -> dict:
+    if not companion_steps or not engine.get("image_preset"):
+        return {}
+    return {engine["image_preset"]["id"]: {"speed_profile": "custom", "steps": companion_steps, "cfg": 1.0}}
+
+
+def build_doc(pack: Pack, engine: dict, run_id: str, media: dict, companion_steps: int | None = None) -> dict:
     preset_id = engine["preset_id"]
     clips = []
     prompts = []
+    frames = []
     start = 0.0
     for index, shot in enumerate(SHOTS):
         clip = {
@@ -266,6 +318,8 @@ def build_doc(pack: Pack, engine: dict, run_id: str, media: dict) -> dict:
         }
         clips.append(clip)
         prompts.append({"id": f"p-{shot['id']}", "shotId": shot["id"], "start": start, "dur": SHOT_SECONDS, "strength": 75, "text": shot_prompt(pack, shot)})
+        for role, input_id in zip(FRAME_ROLES, shot["frames"] or ()):
+            frames.append({"id": f"f-{shot['id']}-{role}", "shotId": shot["id"], "time": _frame_time(start, role), "assetId": f"frame-{input_id}", "role": role, "strength": FRAME_STRENGTH})
         start += SHOT_SECONDS
     assets = []
     references = []
@@ -274,6 +328,14 @@ def build_doc(pack: Pack, engine: dict, run_id: str, media: dict) -> dict:
         src, origin = media.get(input_id, (f"input:{input_id}", None))
         assets.append(_asset(f"asset-{input_id}", Path(spec.file).name, "image", src, origin, spec.width, spec.height))
         references.append({"id": reference_id, "name": name, "space": "identite", "type": kind, "assetId": f"asset-{input_id}", "role": "Identité", "scope": {"type": "global"}})
+    for input_id in dict.fromkeys(input_id for shot in SHOTS for input_id in shot["frames"] or ()):
+        spec = pack.inputs[input_id]
+        src, origin = media.get(input_id, (f"input:{input_id}", None))
+        assets.append(_asset(f"frame-{input_id}", Path(spec.file).name, "image", src, origin, spec.width, spec.height))
+    engine_settings = {"quality": "Standard", "variants": 1, "backend": "native", "preset": preset_id, "model": None, "seed": pack.seed, "loras": []}
+    options = companion_options(engine, companion_steps)
+    if options:
+        engine_settings["options"] = options
     return {
         "name": project_name(run_id, engine["engine"]),
         "fps": FPS,
@@ -288,18 +350,18 @@ def build_doc(pack: Pack, engine: dict, run_id: str, media: dict) -> dict:
             "rythme": "Calm and slow.",
             "mode": FL2VA,
         },
-        "synopsis": f"{MARK} {run_id}: a wide shot of the workshop, a close-up of the potion bottle chained on it, then Lumi lifting the bottle.",
+        "synopsis": f"{MARK} {run_id}: a wide shot of the workshop, a close-up of the potion bottle chained on it, Lumi lifting the bottle, then the potion turning to gold between a first and a last image.",
         "clips": clips,
         "audio": [],
         "titles": [],
         "prompts": prompts,
-        "frames": [],
+        "frames": frames,
         "markers": [{"id": "m-run", "time": 0, "label": f"{MARK} {run_id}", "kind": "marker"}],
         "references": references,
         "lanes": [_lane(*lane) for lane in LANES],
         "aux": [{"id": "R1", "name": "Reverb", "vol": -6, "mute": False}, {"id": "D1", "name": "Delay", "vol": -10, "mute": False}],
         "master": {"vol": 0},
-        "engine": {"quality": "Standard", "variants": 1, "backend": "native", "preset": preset_id, "model": None, "seed": pack.seed, "loras": []},
+        "engine": engine_settings,
         "assets": assets,
         "firstFromPrevious": False,
         "bible": {
@@ -339,12 +401,45 @@ def _estimate(matrix: dict | None, timing: dict, cell: str, preset_id: str | Non
     return None, None
 
 
+def not_offered(engine: dict, shot: dict) -> str | None:
+    if shot["profile"] == REF2VA and not engine["ref2va"]:
+        return engine["ref2va_reason"]
+    if shot["frames"] and not engine["flf"]:
+        return engine["flf_reason"]
+    return None
+
+
+def text_chain(engine: dict | None, shot: dict) -> bool:
+    return bool(shot["chain"] and engine and engine.get("chain") == CHAIN_TEXT)
+
+
+def image_shot(engine: dict | None, shot: dict) -> bool:
+    return bool(shot["frames"] or (shot["chain"] and not text_chain(engine, shot)))
+
+
+def expected_checks(engine: dict, shot: dict) -> tuple[list[str], list[str]]:
+    checks = ["profile"]
+    skipped = []
+    if text_chain(engine, shot):
+        checks += ["chain_mode", "chain_warning"]
+        skipped += ["chain_frame", "chain_start"]
+    elif shot["chain"]:
+        checks += ["chain_frame", "chain_start"]
+    if shot["frames"]:
+        checks.append("flf_start")
+    if image_shot(engine, shot) and engine.get("image_preset"):
+        checks.append("image_preset")
+    return checks, skipped
+
+
 def plan_engine(pack: Pack, engine: dict, matrix: dict | None, timing: dict, final: dict, quality: str, target: str, run_id: str) -> list[dict]:
     steps = []
     for index, shot in enumerate(SHOTS):
-        step = {"step": "take", "shot": shot["id"], "profile": shot["profile"], "chained_on": SHOTS[index - 1]["id"] if shot["chain"] else None, "status": "planned", "reason": None, "order": take_order(engine, shot, quality, run_id)}
-        if shot["profile"] == REF2VA and not engine["ref2va"]:
-            step.update(status="skipped", reason=engine["ref2va_reason"], order=None)
+        step = {"step": "take", "shot": shot["id"], "profile": shot["profile"], "chained_on": SHOTS[index - 1]["id"] if shot["chain"] else None, "frames": list(shot["frames"] or ()), "status": "planned", "reason": None, "order": take_order(engine, shot, quality, run_id)}
+        step["checks"], step["not_offered"] = expected_checks(engine, shot)
+        reason = not_offered(engine, shot)
+        if reason:
+            step.update(status="skipped", reason=reason, order=None, checks=[], not_offered=[])
         cell = f"{engine['engine']}:{REFS_MODE if shot['profile'] == REF2VA else 'video'}"
         if step["status"] == "planned":
             step["estimate_seconds"], step["estimate_basis"] = _estimate(matrix, timing, cell, engine["preset_id"], index > 0)
@@ -368,7 +463,7 @@ def _check_plugin(client: ApiClient) -> str | None:
     return found.get("version")
 
 
-def _head(client: ApiClient, pack: Pack, run_id: str, dry_run: bool, machine: str | None, matrix: dict | None, quality: str, final: dict, target: str) -> dict:
+def _head(client: ApiClient, pack: Pack, run_id: str, dry_run: bool, machine: str | None, matrix: dict | None, quality: str, final: dict, target: str, companion_steps: int | None = None) -> dict:
     health = instance_health(client)
     if health not in HEALTHY:
         raise RunRefused(f"the instance is not healthy: {health}")
@@ -387,7 +482,7 @@ def _head(client: ApiClient, pack: Pack, run_id: str, dry_run: bool, machine: st
         "pack": {"id": pack.id, "version": pack.version, "file": pack.path.name, "sha256": pack.sha256},
         "cases": {"file": pack.case_set.path.name, "sha256": pack.case_set.sha256},
         "matrix": matrix["files"] if matrix else None,
-        "settings": {"quality": quality, "upscaler": final["upscaler"], "target": target, "shot_seconds": SHOT_SECONDS, "fps": FPS},
+        "settings": {"quality": quality, "upscaler": final["upscaler"], "target": target, "shot_seconds": SHOT_SECONDS, "fps": FPS, "companion_steps": companion_steps},
         "final_pass": final,
         "runner": runner_info(),
         "stopped": None,
@@ -396,17 +491,17 @@ def _head(client: ApiClient, pack: Pack, run_id: str, dry_run: bool, machine: st
     }
 
 
-def dry_run(client: ApiClient, pack: Pack, out_root: Path, run_id: str, engines: list[dict], matrix: dict | None, *, quality: str = "draft", upscaler: str = "seedvr2", target: str = "fhd1080", machine: str | None = None, log: Callable[[str], None] = print) -> dict:
+def dry_run(client: ApiClient, pack: Pack, out_root: Path, run_id: str, engines: list[dict], matrix: dict | None, *, quality: str = "draft", upscaler: str = "seedvr2", target: str = "fhd1080", companion_steps: int | None = None, machine: str | None = None, log: Callable[[str], None] = print) -> dict:
     final = upscaler_state(pack, matrix, upscaler)
-    plan = _head(client, pack, run_id, True, machine, matrix, quality, final, target)
+    plan = _head(client, pack, run_id, True, machine, matrix, quality, final, target, companion_steps)
     timing = timing_by_preset(client)
     run_dir = out_root / run_id
     for engine in engines:
         entry = {**engine, "project": None, "steps": [], "estimate_seconds": None}
         if engine["selected"]:
-            doc = build_doc(pack, engine, run_id, {})
+            doc = build_doc(pack, engine, run_id, {}, companion_steps)
             _write_json(run_dir / "projects" / f"{engine['key']}.json", doc)
-            entry["project"] = {"name": doc["name"], "doc": f"projects/{engine['key']}.json", "shots": [clip["id"] for clip in doc["clips"]]}
+            entry["project"] = {"name": doc["name"], "doc": f"projects/{engine['key']}.json", "shots": [clip["id"] for clip in doc["clips"]], "options": doc["engine"].get("options")}
             entry["steps"] = plan_engine(pack, engine, matrix, timing, final, quality, target, run_id)
             known = [step["estimate_seconds"] for step in entry["steps"] if step.get("estimate_seconds") is not None]
             entry["estimate_seconds"] = round(sum(known), 1)
@@ -498,36 +593,81 @@ def _failure(client: ApiClient, take: dict) -> dict | None:
     }
 
 
-def take_checks(shot: dict | None, take: dict, previous: dict | None) -> tuple[dict, list[dict]]:
+def estimate_warnings(estimate: dict | None, shot_id: str) -> list[str] | None:
+    if not isinstance(estimate, dict) or "warnings" not in estimate:
+        return None
+    codes = []
+    for warning in estimate.get("warnings") or ():
+        about = (warning.get("data") or {}).get("shot_id")
+        if warning.get("code") and about in (None, shot_id) and warning["code"] not in codes:
+            codes.append(warning["code"])
+    return codes
+
+
+def take_checks(shot: dict | None, take: dict, previous: dict | None, engine: dict | None = None, estimate: dict | None = None) -> tuple[dict, list[dict], list[dict]]:
     checks = {"min_outputs": 1, "not_black": True}
     extra = []
+    skipped = []
     mode = take.get("director_mode")
     if mode in IMAGE_START:
         checks["forbidden_steps"] = ["TXT2VID"]
     if shot is None:
-        return checks, extra
+        return checks, extra, skipped
     extra.append({"check": "profile", "expected": shot["profile"], "actual": take.get("profile"), "ok": take.get("profile") == shot["profile"]})
-    if shot["chain"]:
+    if text_chain(engine, shot):
+        reason = f"{engine['key']} generates from text only: the plugin starts the chained shot from its text and warns with {CHAIN_TEXT_WARNING}"
+        skipped += [{"check": "chain_frame", "reason": reason}, {"check": "chain_start", "reason": reason}]
+        codes = estimate_warnings(estimate, shot["id"])
+        extra.append({"check": "chain_mode", "expected": "t2v", "actual": mode, "ok": mode == "t2v"})
+        extra.append({"check": "chain_warning", "expected": f"{CHAIN_TEXT_WARNING} among the warnings of the estimate", "actual": codes, "ok": bool(codes) and CHAIN_TEXT_WARNING in codes})
+    elif shot["chain"]:
         chain = take.get("chain") or {}
         source = chain.get("source") or {}
         expected = previous.get("id") if previous else None
         extra.append({"check": "chain_frame", "expected": f"the last image of {SHOTS[0]['id']} ({expected})", "actual": {"state": chain.get("state"), "source": source}, "ok": chain.get("state") == "taken" and source.get("shotId") == SHOTS[0]["id"]})
         extra.append({"check": "chain_start", "expected": f"a director mode that starts from an image ({', '.join(sorted(IMAGE_START))})", "actual": mode, "ok": mode in IMAGE_START})
-    return checks, extra
+    if shot["frames"]:
+        extra.append({"check": "flf_start", "expected": f"flf, from the first and the last image of the shot ({' and '.join(shot['frames'])})", "actual": mode, "ok": mode == "flf"})
+    if image_shot(engine, shot) and engine and engine.get("image_preset"):
+        wanted = engine["image_preset"]
+        extra.append({"check": "image_preset", "expected": f"{wanted['key']} ({wanted['id']})", "actual": take.get("preset_id"), "ok": take.get("preset_id") == wanted["id"]})
+    return checks, extra, skipped
 
 
-def collect_take(client: ApiClient, take: dict, samples: list[dict], timed_out: bool, preset_id: str, stats_before: dict, shot: dict | None, previous: dict | None, folder: Path, head: dict, interval: float, sleep: Callable[[float], None]) -> dict:
+def stats_preset_of(record: dict, take: dict, ordered: str) -> dict:
+    found = {"preset_id": ordered, "source": "the preset the audit ordered"}
+    for source, value in (("the generation record", record.get("preset_id")), ("the take", take.get("preset_id"))):
+        if value:
+            found = {"preset_id": str(value), "source": source}
+            break
+    return {
+        **found,
+        "name": None,
+        "ordered_preset_id": ordered,
+        "record_preset_id": record.get("preset_id"),
+        "take_preset_id": take.get("preset_id"),
+        "differs": found["preset_id"] != ordered,
+    }
+
+
+def collect_take(client: ApiClient, take: dict, samples: list[dict], timed_out: bool, preset_id: str, stats_before: dict[str, dict], shot: dict | None, previous: dict | None, folder: Path, head: dict, interval: float, sleep: Callable[[float], None], engine: dict | None = None) -> dict:
     generation_id = take.get("generation_id")
     result = {**head, "generation_id": generation_id, "take": take, "samples": samples, "final_status": {"take": take.get("status")}}
-    checks, extra = take_checks(shot, take, previous)
+    checks, extra, skipped = take_checks(shot, take, previous, engine, head.get("estimate"))
+    if skipped:
+        result["not_offered"] = skipped
     run_report = {}
     record = {}
     if generation_id:
         result["final_status"]["generation"] = unwrap(client.get_json(f"/api/generations/{generation_id}/status")) or {}
-        admin, stats_after = wait_for_stats(client, generation_id, preset_id, stats_before, 10, interval, sleep)
-        run_report = admin.get("run_report") or {}
         record = unwrap(client.get_json(f"/api/generations/history/{generation_id}")) or {}
-        result["generation_stats"] = derive_run_stats(stats_before, stats_after) if take.get("status") == "done" else {"derived": False, "reason": "the take did not finish"}
+        chosen = stats_preset_of(record, take, preset_id)
+        before = stats_before.get(chosen["preset_id"], {})
+        admin, stats_after = wait_for_stats(client, generation_id, chosen["preset_id"], before, 10, interval, sleep)
+        chosen["name"] = stats_after.get("preset_name") or before.get("preset_name")
+        result["stats_preset"] = chosen
+        run_report = admin.get("run_report") or {}
+        result["generation_stats"] = derive_run_stats(before, stats_after) if take.get("status") == "done" else {"derived": False, "reason": "the take did not finish"}
     else:
         result["generation_stats"] = {"derived": False, "reason": "the take has no generation"}
     result["timing"] = {
@@ -535,6 +675,7 @@ def collect_take(client: ApiClient, take: dict, samples: list[dict], timed_out: 
         "queued_seconds": record.get("queued_seconds"),
         "duration_ms": record.get("duration_ms"),
         "seconds_per_step_polled": step_seconds(samples),
+        "total_steps_polled": max((sample["total_steps"] for sample in samples if isinstance(sample.get("total_steps"), int)), default=None),
         "take_started_at": take.get("started_at"),
         "take_finished_at": take.get("finished_at"),
         **phases(run_report),
@@ -622,11 +763,22 @@ def _folder(run_dir: Path, *parts: str) -> Path:
     return folder
 
 
+def read_estimate(client: ApiClient, project_id: str, order: dict) -> dict:
+    try:
+        payload = unwrap(client.post_json(f"{VP}/projects/{project_id}/estimate", order)) or {}
+    except ApiError as error:
+        return {"error": str(error)}
+    return {"shots": payload.get("shots") or [], "blocks": payload.get("blocks") or [], "warnings": payload.get("warnings") or []}
+
+
 def run_take(client: ApiClient, project_id: str, engine: dict, shot: dict | None, order: dict, path: str, previous: dict | None, folder: Path, head: dict, timeout: float, interval: float, clock, sleep, log, stats_preset: str) -> dict:
     ensure_idle(client)
-    stats_before = preset_stats(client, stats_preset)
+    estimate = read_estimate(client, project_id, order) if shot is not None else None
+    stats_before = all_preset_stats(client)
     log(f"{engine['key']} {head['step']}: ordering")
     head = {**head, "submitted_at": datetime.now(UTC).isoformat(timespec="seconds"), "order": order}
+    if estimate is not None:
+        head["estimate"] = estimate
     try:
         created = (unwrap(client.post_json(path, order)) or {}).get("takes") or []
     except ApiError as error:
@@ -648,7 +800,7 @@ def run_take(client: ApiClient, project_id: str, engine: dict, shot: dict | None
         raise
     if timed_out:
         client.post_json(f"{VP}/takes/{take_id}/cancel", {})
-    result = collect_take(client, take, samples, timed_out, stats_preset, stats_before, shot, previous, folder, {**head, "folder": str(folder)}, interval, sleep)
+    result = collect_take(client, take, samples, timed_out, stats_preset, stats_before, shot, previous, folder, {**head, "folder": str(folder)}, interval, sleep, engine)
     log(f"{engine['key']} {head['step']}: {result['verdict']} in {result['timing']['run_seconds']} s")
     return result
 
@@ -724,8 +876,8 @@ def summarize(scenario: dict) -> dict:
     return {"engines": len([entry for entry in scenario["engines"] if entry["selected"]]), "verdicts": verdicts, "measured_seconds": round(sum(measured), 1)}
 
 
-def run_engine(client: ApiClient, pack: Pack, engine: dict, run_id: str, run_dir: Path, media: dict, final: dict, quality: str, target: str, timeout: float, interval: float, clock, sleep, log, base: dict, entry: dict, scenario: dict) -> None:
-    doc = build_doc(pack, engine, run_id, media)
+def run_engine(client: ApiClient, pack: Pack, engine: dict, run_id: str, run_dir: Path, media: dict, final: dict, quality: str, target: str, timeout: float, interval: float, clock, sleep, log, base: dict, entry: dict, scenario: dict, companion_steps: int | None = None) -> None:
+    doc = build_doc(pack, engine, run_id, media, companion_steps)
     _write_json(run_dir / "projects" / f"{engine['key']}.json", doc)
     project = (unwrap(client.post_json(f"{VP}/projects", {"name": doc["name"], "doc": doc})) or {})["project"]
     project_id = project["id"]
@@ -742,8 +894,9 @@ def run_engine(client: ApiClient, pack: Pack, engine: dict, run_id: str, run_dir
         if scenario["stopped"]:
             step.update(status="not_run", reason=scenario["stopped"])
             continue
-        if shot["profile"] == REF2VA and not engine["ref2va"]:
-            step.update(status="skipped", reason=engine["ref2va_reason"])
+        reason = not_offered(engine, shot)
+        if reason:
+            step.update(status="skipped", reason=reason)
             continue
         previous = done.get(SHOTS[index - 1]["id"]) if shot["chain"] else None
         if shot["chain"] and previous is None:
@@ -805,6 +958,7 @@ def run_engine(client: ApiClient, pack: Pack, engine: dict, run_id: str, run_dir
 def _step_of(result: dict, folder: Path, run_dir: Path) -> dict:
     take = result.get("take") or {}
     stats = result.get("generation_stats") or {}
+    chosen = result.get("stats_preset") or {}
     video = _video(result)
     return {
         "status": "ran",
@@ -813,6 +967,8 @@ def _step_of(result: dict, folder: Path, run_dir: Path) -> dict:
         "take_id": take.get("id"),
         "generation_id": take.get("generation_id"),
         "director_mode": take.get("director_mode"),
+        "preset_id": take.get("preset_id"),
+        "stats_preset": {key: chosen.get(key) for key in ("preset_id", "name", "source", "differs")} if chosen else None,
         "run_seconds": (result.get("timing") or {}).get("run_seconds"),
         "seconds_per_step": (result.get("timing") or {}).get("seconds_per_step_polled"),
         "peak_vram_mb": stats.get("peak_vram_mb"),
@@ -821,9 +977,9 @@ def _step_of(result: dict, folder: Path, run_dir: Path) -> dict:
     }
 
 
-def run_scenario(client: ApiClient, pack: Pack, out_root: Path, run_id: str, engines: list[dict], matrix: dict | None, *, quality: str = "draft", upscaler: str = "seedvr2", target: str = "fhd1080", timeout: float | None = None, interval: float = 2.0, machine: str | None = None, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
+def run_scenario(client: ApiClient, pack: Pack, out_root: Path, run_id: str, engines: list[dict], matrix: dict | None, *, quality: str = "draft", upscaler: str = "seedvr2", target: str = "fhd1080", companion_steps: int | None = None, timeout: float | None = None, interval: float = 2.0, machine: str | None = None, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep, log: Callable[[str], None] = print) -> dict:
     final = upscaler_state(pack, matrix, upscaler)
-    scenario = _head(client, pack, run_id, False, machine, matrix, quality, final, target)
+    scenario = _head(client, pack, run_id, False, machine, matrix, quality, final, target, companion_steps)
     run_dir = out_root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     base = {"schema": 1, "run_id": run_id, "kind": "vp-scenario", "pack": scenario["pack"], "cases": scenario["cases"], "app_version": scenario["app_version"], "plugin": scenario["plugin"], "runner": scenario["runner"]}
@@ -832,7 +988,7 @@ def run_scenario(client: ApiClient, pack: Pack, out_root: Path, run_id: str, eng
         media = {}
         if any(engine["selected"] for engine in engines):
             uploads = Uploads(client, run_dir / "uploads.json")
-            for _, input_id, _, _, _ in REFERENCES:
+            for input_id in UPLOADED:
                 uploads.media(pack, input_id, False)
                 stored = uploads.done[pack.inputs[input_id].sha256]
                 found = (unwrap(client.post_json(f"{VP}/media/uploaded", {"filename": stored["filename"]})) or {}).get("media") or {}
@@ -851,7 +1007,7 @@ def run_scenario(client: ApiClient, pack: Pack, out_root: Path, run_id: str, eng
             if health not in HEALTHY:
                 scenario["stopped"] = f"stopped: the instance is {health}"
                 continue
-            run_engine(client, pack, engine, run_id, run_dir, media, final, quality, target, limit, interval, clock, sleep, log, base, entry, scenario)
+            run_engine(client, pack, engine, run_id, run_dir, media, final, quality, target, limit, interval, clock, sleep, log, base, entry, scenario, companion_steps)
     except KeyboardInterrupt:
         scenario["stopped"] = "stopped with Ctrl+C: the running take was cancelled"
         raise
@@ -944,7 +1100,7 @@ def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str]
 
 
 def add_vp_parser(commands) -> None:
-    vp = commands.add_parser("vp", help="the Video Producer scenario: a project of three shots, a final pass and an export")
+    vp = commands.add_parser("vp", help="the Video Producer scenario: a project of four shots, a final pass and an export")
     vp_commands = vp.add_subparsers(dest="vp_command", required=True)
     run = vp_commands.add_parser("run", help="plan the scenario with --dry-run, run it with --confirm-gpu")
     run.add_argument("--config", type=Path, default=Path("audit.toml"))
@@ -954,6 +1110,7 @@ def add_vp_parser(commands) -> None:
     run.add_argument("--quality", choices=QUALITIES, default="draft")
     run.add_argument("--upscaler", choices=sorted(UPSCALERS), default="seedvr2")
     run.add_argument("--target", choices=TARGETS, default="fhd1080")
+    run.add_argument("--companion-steps", type=int, help="steps of the image-to-video companion an engine hands its image shots to (Wan2.2-14B-Lightning-12GB), set in the engine options of the project")
     run.add_argument("--timeout", type=float, help="seconds before a take is cancelled")
     run.add_argument("--interval", type=float, default=2.0)
     run.add_argument("--run-id", help="name of the run folder (default: <date>-<machine>-vp)")
@@ -966,6 +1123,9 @@ def add_vp_parser(commands) -> None:
 
 
 def vp_command(args) -> int:
+    if args.vp_command == "run" and args.companion_steps is not None and args.companion_steps < 1:
+        print("--companion-steps takes a whole number of steps from 1", file=sys.stderr)
+        return EXIT_BLOCKED
     if args.vp_command == "run" and not args.confirm_gpu and not args.dry_run:
         print("vp run uses the GPU of the instance: pass --confirm-gpu once the operator has agreed", file=sys.stderr)
         return EXIT_BLOCKED
@@ -988,10 +1148,10 @@ def vp_command(args) -> int:
     run_id = args.run_id or f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{config.machine}-vp"
     client.login(username, password)
     if args.dry_run:
-        dry_run(client, pack, config.output_dir, run_id, engines, matrix, quality=args.quality, upscaler=args.upscaler, target=args.target, machine=config.machine)
+        dry_run(client, pack, config.output_dir, run_id, engines, matrix, quality=args.quality, upscaler=args.upscaler, target=args.target, companion_steps=args.companion_steps, machine=config.machine)
         return EXIT_OK
     try:
-        scenario = run_scenario(client, pack, config.output_dir, run_id, engines, matrix, quality=args.quality, upscaler=args.upscaler, target=args.target, timeout=args.timeout, interval=args.interval, machine=config.machine)
+        scenario = run_scenario(client, pack, config.output_dir, run_id, engines, matrix, quality=args.quality, upscaler=args.upscaler, target=args.target, companion_steps=args.companion_steps, timeout=args.timeout, interval=args.interval, machine=config.machine)
     except KeyboardInterrupt:
         print("stopped: the running take was cancelled, see scenario.json", file=sys.stderr)
         return EXIT_STOPPED

@@ -171,14 +171,18 @@ def step_seconds(samples: list[dict]) -> float | None:
     return round((last[0] - first[0]) / (last[1] - first[1]), 3)
 
 
-def preset_stats(client: ApiClient, preset_id: str) -> dict:
-    merged = {}
+def all_preset_stats(client: ApiClient) -> dict[str, dict]:
+    merged: dict[str, dict] = {}
     for path in ("/api/stats/presets/timing", "/api/stats/presets/resources"):
         items = (unwrap(client.get_json(path, {"limit": 200})) or {}).get("items") or []
         for item in items:
-            if item.get("preset_id") == preset_id:
-                merged.update(item)
+            if item.get("preset_id"):
+                merged.setdefault(str(item["preset_id"]), {}).update(item)
     return merged
+
+
+def preset_stats(client: ApiClient, preset_id: str) -> dict:
+    return all_preset_stats(client).get(preset_id, {})
 
 
 def _added(before: dict, after: dict, average: str, count: str) -> float | None:
