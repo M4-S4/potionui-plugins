@@ -953,75 +953,108 @@ def test_the_driver_of_a_preset_is_read_from_its_template(monkeypatch):
     assert core_bridge.preset_driver("01NONE") is None
 
 
-def _media(monkeypatch, local=None, stored=None, uploads=None, broken=False):
-    copies = []
+HISTORY = {"kind": "history", "generation_id": "gen-1", "file_id": "file-1"}
+LIBRARY = {"kind": "library", "item_id": "item-1"}
 
-    def media_local_path(kind, key):
-        root = (local or {}).get(kind)
-        return None if root is None else (root / key).resolve()
 
-    def copy_media_file(kind, key, target):
-        copies.append((kind, key, Path(target)))
-        if key not in (stored or {}):
-            return False
+def _key(ref):
+    return tuple(sorted(ref.items()))
+
+
+def _media(monkeypatch, values, local=None, stored=None, broken=False):
+    calls = []
+    values = {_key(ref): value for ref, value in values}
+
+    def value_of(user, ref):
+        calls.append(("resolve", user.id, dict(ref)))
+        if _key(ref) not in values:
+            raise core_bridge.MediaRefError("not_found", "The referenced media is not available")
+        return values[_key(ref)]
+
+    def media_local_path(user, ref):
+        value = value_of(user, ref)
+        root = (local or {}).get(ref["kind"])
+        return None if root is None else root / value
+
+    def copy_media_file(user, ref, target):
+        value = value_of(user, ref)
+        if value not in (stored or {}):
+            raise core_bridge.MediaRefError("not_found", "The referenced media is not available")
+        calls.append(("copy", dict(ref), Path(target)))
         if broken:
             raise ConnectionError("the object store dropped the connection")
-        Path(target).write_bytes(stored[key])
-        return True
+        Path(target).write_bytes(stored[value])
+
+    def resolve_media_ref(user, ref):
+        return {"value": value_of(user, ref), "media_type": "video", "original_filename": "x", "origin": None}
 
     monkeypatch.setattr(core_bridge.api_media, "media_local_path", media_local_path)
     monkeypatch.setattr(core_bridge.api_media, "copy_media_file", copy_media_file)
-    monkeypatch.setattr(core_bridge.api_media, "find_upload", lambda user_id, key: (uploads or {}).get((user_id, key)))
-    return copies
+    monkeypatch.setattr(core_bridge.api_generation, "resolve_media_ref", resolve_media_ref)
+    return calls
 
 
-def test_media_file_path_is_the_absolute_local_path_of_a_key_or_none_on_object_storage(monkeypatch, tmp_path):
-    _media(monkeypatch, local={"history": tmp_path / "history"})
+def test_media_file_path_is_the_absolute_local_path_of_a_media_the_user_may_read_or_none(monkeypatch, tmp_path):
+    user = SimpleNamespace(id="user-1")
+    _media(monkeypatch, [(HISTORY, "generations/d/g/1.mp4"), (LIBRARY, "uploads/a.mp4")], local={"history": tmp_path / "history"})
 
-    assert core_bridge.media_file_path("history", "generations/d/g/1.mp4") == str((tmp_path / "history" / "generations/d/g/1.mp4").resolve())
-    assert core_bridge.media_file_path("library", "uploads/a.mp4") is None
+    assert core_bridge.media_file_path(user, HISTORY) == str((tmp_path / "history" / "generations/d/g/1.mp4").resolve())
+    assert core_bridge.media_file_path(user, LIBRARY) is None
+    assert core_bridge.media_file_path(user, {**HISTORY, "file_id": "file-2"}) is None
 
 
 def test_local_media_file_uses_the_local_file_or_copies_the_bytes_into_the_folder(monkeypatch, tmp_path):
+    user = SimpleNamespace(id="user-1")
     root = tmp_path / "storage"
     (root / "generations").mkdir(parents=True)
     (root / "generations" / "1.mp4").write_bytes(b"video")
-    copies = _media(monkeypatch, local={"history": root}, stored={"uploads/a.wav": b"sound"})
+    missing = {**HISTORY, "file_id": "file-2"}
+    gone = {**LIBRARY, "item_id": "item-2"}
+    calls = _media(
+        monkeypatch,
+        [(HISTORY, "generations/1.mp4"), (missing, "generations/missing.mp4"), (LIBRARY, "uploads/a.wav"), (gone, "uploads/gone.wav")],
+        local={"history": root},
+        stored={"uploads/a.wav": b"sound"},
+    )
     folder = tmp_path / "job"
     folder.mkdir()
 
-    assert core_bridge.local_media_file("history", "generations/1.mp4", folder) == (root / "generations" / "1.mp4").resolve()
-    assert core_bridge.local_media_file("history", "generations/missing.mp4", folder) is None
-    copied = core_bridge.local_media_file("library", "uploads/a.wav", folder)
+    assert core_bridge.local_media_file(user, HISTORY, folder) == (root / "generations" / "1.mp4").resolve()
+    assert core_bridge.local_media_file(user, missing, folder) is None
+    copied = core_bridge.local_media_file(user, LIBRARY, folder)
     assert copied.parent == folder and copied.read_bytes() == b"sound"
-    assert core_bridge.local_media_file("library", "uploads/gone.wav", folder) is None
-    assert [kind for kind, _, _ in copies] == ["library", "library"]
+    assert core_bridge.local_media_file(user, gone, folder) is None
+    assert [call[1] for call in calls if call[0] == "copy"] == [LIBRARY]
+
+
+def test_a_media_the_user_may_not_read_gives_no_file(monkeypatch, tmp_path):
+    user = SimpleNamespace(id="user-2")
+    calls = _media(monkeypatch, [], stored={"uploads/a.wav": b"sound"})
+
+    assert core_bridge.local_media_file(user, LIBRARY, tmp_path) is None
+    assert core_bridge.media_file_path(user, LIBRARY) is None
+    assert [call[0] for call in calls] == ["resolve", "resolve"]
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_an_object_storage_source_is_copied_into_the_folder_under_its_source_name(monkeypatch, tmp_path):
-    copies = _media(monkeypatch, stored={"uploads/big.mp4": b"\0" * 4096})
+    user = SimpleNamespace(id="user-1")
+    calls = _media(monkeypatch, [(LIBRARY, "uploads/big.mp4")], stored={"uploads/big.mp4": b"\0" * 4096})
     folder = tmp_path / "job"
     folder.mkdir()
 
-    copied = core_bridge.local_media_file("library", "uploads/big.mp4", folder)
+    copied = core_bridge.local_media_file(user, LIBRARY, folder)
 
     assert copied == folder / f"{core_bridge.SOURCE_PREFIX}uploads_big.mp4"
-    assert copies == [("library", "uploads/big.mp4", copied)]
+    assert [call for call in calls if call[0] == "copy"] == [("copy", LIBRARY, copied)]
 
 
 def test_a_copy_that_breaks_lets_its_error_through(monkeypatch, tmp_path):
-    _media(monkeypatch, stored={"uploads/big.mp4": b"x" * 5000}, broken=True)
+    user = SimpleNamespace(id="user-1")
+    _media(monkeypatch, [(LIBRARY, "uploads/big.mp4")], stored={"uploads/big.mp4": b"x" * 5000}, broken=True)
 
     with pytest.raises(ConnectionError):
-        core_bridge.local_media_file("library", "uploads/big.mp4", tmp_path)
-
-
-def test_upload_item_reads_the_library_item_of_an_uploads_key_of_the_user(monkeypatch):
-    upload = {"id": "item-1", "filename": "cut.mp4", "width": 1920, "height": 1080}
-    _media(monkeypatch, uploads={("user-1", "uploads/0f0e.mp4"): upload})
-
-    assert core_bridge.upload_item("user-1", "uploads/0f0e.mp4") == {"item_id": "item-1", "filename": "cut.mp4", "width": 1920, "height": 1080}
-    assert core_bridge.upload_item("user-2", "uploads/0f0e.mp4") is None
+        core_bridge.local_media_file(user, LIBRARY, tmp_path)
 
 
 def test_the_bridge_reads_the_core_only_through_the_plugin_api():

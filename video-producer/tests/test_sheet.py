@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.exports import media as export_media
 from backend import bible, catalog, core_bridge, director, engine_options, presets, reception, sheetvideo, soundtrack
 from backend.catalog import FL2VA, REF2VA
 
@@ -306,7 +307,7 @@ def test_ffmpeg_writes_the_sheet_as_a_still_video_of_the_take_size_and_frames_an
         "f2": _still(folder / "f2.png", "white", "300x600"),
         "q1": _still(folder / "q1.png", "white", "800x400"),
     }
-    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, target: files.get(Path(value).stem))
+    monkeypatch.setattr(export_media.Resolver, "local", lambda resolver, found, target: files.get(Path(found.value).stem))
     saved = []
 
     async def save(user, path):

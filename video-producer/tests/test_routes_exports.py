@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.exports import media as export_media
 from backend import core_bridge, takes
 from backend.exports import jobs, video
 from src.plugin_api import AccountType, get_current_active_user
@@ -31,7 +32,7 @@ def reference():
 @pytest.fixture
 def host(core, export_storage, monkeypatch):
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
-    monkeypatch.setattr(core_bridge, "media_file_path", lambda kind, value: f"{STORAGE}/{value}")
+    monkeypatch.setattr(export_media.Resolver, "path", lambda resolver, found: f"{STORAGE}/{found.value}")
     return core
 
 

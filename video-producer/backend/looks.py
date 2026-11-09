@@ -306,7 +306,7 @@ async def _take_frames(owner: Any, take: Mapping[str, Any], folder: Path) -> Lis
     found = media.locate(asset, [take], media.Resolver(owner))
     if found is None or not found.kind:
         raise frame_grab.FrameError("no_media", "The video of the take is no longer available.")
-    source = await asyncio.to_thread(media.Resolver(owner).local, found.kind, found.value, folder)
+    source = await asyncio.to_thread(media.Resolver(owner).local, found, folder)
     if source is None:
         raise frame_grab.FrameError("no_media", "The video of the take is no longer available.")
     if take.get("kind") == takes.KEYFRAME:
@@ -326,7 +326,8 @@ async def _take_frames(owner: Any, take: Mapping[str, Any], folder: Path) -> Lis
 
 async def _image_frames(owner: Any, source: Mapping[str, Any], folder: Path) -> List[Tuple[Optional[float], Path]]:
     ref = source.get("ref") or {}
-    path = await asyncio.to_thread(media.Resolver(owner).local, ref.get("kind"), source.get("value"), folder)
+    found = media.Found(media.basename(str(source.get("value") or "")), ref.get("kind"), source.get("value"), dict(ref) or None)
+    path = await asyncio.to_thread(media.Resolver(owner).local, found, folder)
     if path is None:
         raise frame_grab.FrameError("no_media", "The image is no longer available.")
     return [(None, path)]

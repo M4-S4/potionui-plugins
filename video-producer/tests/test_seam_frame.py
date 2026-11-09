@@ -16,27 +16,36 @@ def _as(app, user):
     app.dependency_overrides[get_current_active_user] = lambda: user
 
 
+UNSET = object()
+
+
 class Frames:
     def __init__(self):
         self.asked = []
         self.error = None
+        self.ref = UNSET
 
     async def extract_frame(self, user, ref, at="last"):
         self.asked.append((user.id, dict(ref), at))
         if self.error is not None:
             raise self.error
         label = "last" if at == "last" else f"{at:g}s"
-        return {"value": "uploads/7d1e.png", "media_type": "image", "original_filename": f"1-frame-{label}.png", "origin": None}
-
-    def upload_item(self, user_id, value):
-        return {"item_id": f"item-{user_id}", "filename": "1-frame-last.png", "width": 832, "height": 480}
+        ref = {"kind": "library", "item_id": f"item-{user.id}"} if self.ref is UNSET else self.ref
+        return {
+            "value": "uploads/7d1e.png",
+            "media_type": "image",
+            "original_filename": f"1-frame-{label}.png",
+            "origin": None,
+            "ref": ref,
+            "width": 832,
+            "height": 480,
+        }
 
 
 @pytest.fixture
 def frames(core, monkeypatch):
     found = Frames()
     monkeypatch.setattr(core_bridge, "extract_frame", found.extract_frame)
-    monkeypatch.setattr(core_bridge, "upload_item", found.upload_item)
     return found
 
 
@@ -192,10 +201,10 @@ def test_a_frame_the_core_cannot_extract_answers_502_with_the_core_code(client, 
     assert (detail["error"], detail["data"]) == ("extract_failed", {"code": "not_found"})
 
 
-@pytest.mark.parametrize("item", [None, {}, {"item_id": None, "filename": "x.png"}])
-def test_a_frame_whose_library_item_cannot_be_found_answers_502_store_failed(client, project, frames, monkeypatch, item):
+@pytest.mark.parametrize("ref", [None, {}, {"kind": "library", "item_id": None}])
+def test_a_frame_whose_library_item_cannot_be_found_answers_502_store_failed(client, project, frames, ref):
     _take(project["id"], "s1", "g-1")
-    monkeypatch.setattr(core_bridge, "upload_item", lambda user_id, value: item)
+    frames.ref = ref
 
     response = _seam(client, project["id"])
 

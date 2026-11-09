@@ -960,11 +960,15 @@ class MediaStore:
         self.saved.append({"user_id": user.id, "name": source.name, "data": source.read_bytes()})
         value = f"uploads/{len(self.saved):04d}-{source.name}"
         self.items[value] = f"item-{len(self.saved)}"
-        return {"value": value, "media_type": "image", "original_filename": source.name, "origin": None}
-
-    def upload_item(self, user_id, value):
-        item = self.items.get(value)
-        return None if item is None else {"item_id": item, "filename": value.rsplit("/", 1)[-1], "width": 832, "height": 468}
+        return {
+            "value": value,
+            "media_type": "image",
+            "original_filename": source.name,
+            "origin": None,
+            "ref": {"kind": "library", "item_id": self.items[value]},
+            "width": 832,
+            "height": 468,
+        }
 
 
 @pytest.fixture
@@ -973,5 +977,4 @@ def media_store(monkeypatch):
 
     store = MediaStore()
     monkeypatch.setattr(core_bridge, "save_user_media", store.save_user_media)
-    monkeypatch.setattr(core_bridge, "upload_item", store.upload_item)
     return store

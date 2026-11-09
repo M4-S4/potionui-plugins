@@ -158,9 +158,9 @@ async def take_end_frame(owner: User, project: Mapping[str, Any], shot_id: str, 
     return await cut_frame(owner, project["id"], {"id": shot_id, "srcIn": 0, "dur": length}, take_asset(take))
 
 
-def media_of(owner_id: str, frame: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+def media_of(frame: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     """The library media of a stored frame, as the page reads it, or None when its library item cannot be found."""
-    item = core_bridge.upload_item(owner_id, frame["value"]) or {}
+    item = {"item_id": (frame.get("ref") or {}).get("item_id"), "width": frame.get("width"), "height": frame.get("height")}
     if not item.get("item_id"):
         return None
     return {
@@ -194,7 +194,7 @@ async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset
     except workdir.WorkdirError as exc:
         raise FrameError(exc.code, exc.message, 503) from None
     try:
-        source = await asyncio.to_thread(resolver.local, found.kind, found.value, folder)
+        source = await asyncio.to_thread(resolver.local, found, folder)
         if source is None:
             raise _no_media(first)
         output = folder / f"{Path(found.name).stem or 'shot'}-frame-{num(at)}s.png"
@@ -209,5 +209,8 @@ async def cut_frame(owner: User, project_id: str, clip: Mapping[str, Any], asset
     return {
         "value": str(stored["value"]),
         "filename": output.name,
+        "ref": stored.get("ref"),
+        "width": stored.get("width"),
+        "height": stored.get("height"),
         "source": {"shotId": clip["id"], "takeId": take["id"] if take else None, "assetId": asset["id"], "at": at},
     }

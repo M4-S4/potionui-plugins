@@ -73,13 +73,10 @@ def resolve_media(body: Any = Body(default=None), user: User = Depends(get_curre
 @router.post("/media/uploaded")
 def uploaded_media(body: Any = Body(default=None), user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
     """Resolve a file the user has just uploaded with POST /api/media/upload into its library origin and the media the editor plays."""
-    filename = body.get("filename") if isinstance(body, dict) else None
-    if not isinstance(filename, str) or not filename.strip() or _basename(filename) != filename or filename.startswith("."):
-        fail(422, "invalid_request", "The request body needs the file name the upload answered.")
-    item = core_bridge.upload_item(user.id, filename)
-    if not item or not item.get("item_id"):
-        fail(404, "media_not_found", "The media is not available.")
-    media = _media(user, {"kind": "library", "itemId": str(item["item_id"])})
+    item_id = body.get("id") if isinstance(body, dict) else None
+    if not isinstance(item_id, str) or not item_id.strip():
+        fail(422, "invalid_request", "The request body needs the id the upload answered.")
+    media = _media(user, {"kind": "library", "itemId": item_id})
     if media["media_type"] not in MEDIA_TYPES:
         fail(415, "unsupported_media", "Only images, videos and audio files can be imported.")
     return ok({"media": media})

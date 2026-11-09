@@ -1293,7 +1293,7 @@ async def render(
         for shot_id, version in renditions.shot_versions(project["id"], doc, found).items():
             if shots.get(shot_id) is None:
                 continue
-            path = await asyncio.to_thread(resolver.local, "history", version["file_path"], folder)
+            path = await asyncio.to_thread(resolver.local, media.history_file(version), folder)
             if path is not None:
                 shots[shot_id] = {**shots[shot_id], "name": path.name, "path": str(path)}
         if not any(shots.values()):
@@ -1340,7 +1340,7 @@ async def render(
     if fmt in LIBRARY_FORMATS:
         try:
             stored = await core_bridge.save_user_media(requester, final)
-            item = core_bridge.upload_item(requester.id, stored["value"]) or {}
+            item = {"item_id": (stored.get("ref") or {}).get("item_id"), "width": stored.get("width"), "height": stored.get("height")}
         except Exception as exc:
             logger.warning("[VIDEO-PRODUCER] Could not store export %s in the library", job["id"], exc_info=True)
             raise ExportError("store_failed", last_line(str(exc)) or "The video could not be stored in the library.") from exc

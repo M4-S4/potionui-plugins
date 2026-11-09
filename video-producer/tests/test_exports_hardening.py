@@ -14,6 +14,7 @@ from urllib.parse import unquote, urlparse
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.exports import media as export_media
 from backend import core_bridge, takes
 from backend.core_bridge import LimitExceeded, MediaRefError
 from backend.exports import EXCHANGE, content_disposition, jobs, render, slug, unicode_name, video
@@ -37,8 +38,8 @@ class Absent:
     def resolve(self, ref):
         raise MediaRefError("not_found", "The referenced media is not available")
 
-    def path(self, kind, value):
-        return f"{STORAGE}/{value}"
+    def path(self, found):
+        return f"{STORAGE}/{found.value}"
 
 
 def _doc(make_doc, clips=(), **fields):
@@ -1163,7 +1164,7 @@ def test_a_shot_that_starts_after_the_end_of_its_source_does_not_swallow_the_mem
 @pytest.fixture
 def host(core, export_storage, monkeypatch):
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
-    monkeypatch.setattr(core_bridge, "media_file_path", lambda kind, value: f"{STORAGE}/{value}")
+    monkeypatch.setattr(export_media.Resolver, "path", lambda resolver, found: f"{STORAGE}/{found.value}")
     return core
 
 
@@ -1544,16 +1545,13 @@ class Frames:
     def __init__(self):
         self.asked = []
         self.error = None
-        self.item = {"item_id": "item-1", "filename": "f.png", "width": 832, "height": 480}
+        self.ref = {"kind": "library", "item_id": "item-1"}
 
     async def extract_frame(self, user, ref, at="last"):
         self.asked.append((user.id, dict(ref), at))
         if self.error is not None:
             raise self.error
-        return {"value": "uploads/7d1e.png", "media_type": "image", "original_filename": "f.png", "origin": None}
-
-    def upload_item(self, user_id, value):
-        return self.item
+        return {"value": "uploads/7d1e.png", "media_type": "image", "original_filename": "f.png", "origin": None, "ref": self.ref, "width": 832, "height": 480}
 
 
 SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4}, {"id": "s3", "start": 8, "dur": 4}]
@@ -1563,7 +1561,6 @@ SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4},
 def frames(core, monkeypatch):
     found = Frames()
     monkeypatch.setattr(core_bridge, "extract_frame", found.extract_frame)
-    monkeypatch.setattr(core_bridge, "upload_item", found.upload_item)
     return found
 
 
@@ -1664,7 +1661,7 @@ def test_a_full_storage_plan_comes_back_as_a_502_extract_failed(client, storyboa
 
 def test_a_frame_stored_without_a_library_item_is_not_announced_as_a_success(client, storyboard, frames):
     _take(storyboard["id"], "s1")
-    frames.item = None
+    frames.ref = None
 
     response = _seam(client, storyboard["id"])
 

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.exports import media as export_media
 from backend import core_bridge, frame_grab, presets, projects, takes
 from backend.core_bridge import MediaRefError
 from backend.projects import DocError
@@ -49,26 +50,31 @@ class Library:
         self.error = None
         self.files = {}
 
-    def local_media_file(self, kind, value, folder):
-        return self.files.get((kind, value))
+    def local_media_file(self, found, folder):
+        return self.files.get((found.kind, found.value))
 
     async def save_user_media(self, user, path):
         if self.error is not None:
             raise self.error
         path = Path(path)
         self.saved.append((user.id, path.name, path.read_bytes()))
-        return {"value": f"uploads/stored-{len(self.saved)}.png", "media_type": "image", "original_filename": path.name, "origin": None}
-
-    def upload_item(self, user_id, value):
-        return {"item_id": f"item-{value.rsplit('/', 1)[-1]}", "filename": value, "width": 64, "height": 36}
+        name = f"stored-{len(self.saved)}.png"
+        return {
+            "value": f"uploads/{name}",
+            "media_type": "image",
+            "original_filename": path.name,
+            "origin": None,
+            "ref": {"kind": "library", "item_id": f"item-{name}"},
+            "width": 64,
+            "height": 36,
+        }
 
 
 @pytest.fixture
 def library(core, export_storage, monkeypatch):
     found = Library()
-    monkeypatch.setattr(core_bridge, "local_media_file", found.local_media_file)
+    monkeypatch.setattr(export_media.Resolver, "local", lambda resolver, media_found, folder: found.local_media_file(media_found, folder))
     monkeypatch.setattr(core_bridge, "save_user_media", found.save_user_media)
-    monkeypatch.setattr(core_bridge, "upload_item", found.upload_item)
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: shutil.which("ffmpeg"))
     return found
 

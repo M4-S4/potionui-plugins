@@ -123,7 +123,6 @@ __all__ = [
     "storage_directory",
     "submit_generation",
     "transcode_video",
-    "upload_item",
 ]
 
 logger = logging.getLogger("plugins.video-producer")
@@ -326,32 +325,26 @@ def storage_directory() -> Path:
     return Path(Settings(SettingRepository()).get_file_storage_directory()).resolve()
 
 
-def media_file_path(kind: str, value: str) -> Optional[str]:
-    """The absolute path on this server of a history or library media key, or None on object storage."""
-    path = api_media.media_local_path(kind, value)
-    return None if path is None else str(path)
-
-
-def local_media_file(kind: str, value: str, folder: Path) -> Optional[Path]:
-    """A local file holding a history or library media key, streamed into the folder as source-<key> on object storage; None when missing."""
-    path = api_media.media_local_path(kind, value)
-    if path is not None:
-        return path if path.is_file() else None
-    target = Path(folder) / f"{SOURCE_PREFIX}{value.replace('/', '_')}"
-    return target if api_media.copy_media_file(kind, value, target) else None
-
-
-def upload_item(user_id: str, value: str) -> Optional[Dict[str, Any]]:
-    """The library item an uploads/ key of the user is: its id, file name and size, or None."""
-    upload = api_media.find_upload(user_id, value)
-    if upload is None:
+def media_file_path(user: User, ref: Mapping[str, Any]) -> Optional[str]:
+    try:
+        path = api_media.media_local_path(user, dict(ref))
+    except MediaRefError:
         return None
-    return {
-        "item_id": upload["id"],
-        "filename": upload["filename"],
-        "width": upload["width"],
-        "height": upload["height"],
-    }
+    return None if path is None else str(Path(path).resolve())
+
+
+def local_media_file(user: User, ref: Mapping[str, Any], folder: Path) -> Optional[Path]:
+    try:
+        path = api_media.media_local_path(user, dict(ref))
+        if path is not None:
+            path = Path(path).resolve()
+            return path if path.is_file() else None
+        value = resolve_media(user, ref)["value"]
+        target = Path(folder) / f"{SOURCE_PREFIX}{value.replace('/', '_')}"
+        api_media.copy_media_file(user, dict(ref), target)
+    except MediaRefError:
+        return None
+    return target
 
 
 def enabled_backends() -> List[Dict[str, Any]]:

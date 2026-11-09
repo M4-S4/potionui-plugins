@@ -2198,8 +2198,7 @@ def _build(
     return plans
 
 
-def source_video(user: User, take: Mapping[str, Any]) -> Dict[str, Any]:
-    """The resolved video file of a finished take; DirectorError when it is gone."""
+def source_ref(user: User, take: Mapping[str, Any]) -> Dict[str, str]:
     generation_id = take.get("generation_id")
     try:
         files = core_bridge.list_generation_files(user, generation_id) if generation_id else []
@@ -2211,10 +2210,14 @@ def source_video(user: User, take: Mapping[str, Any]) -> Dict[str, Any]:
         chosen = next((item for item in files if _category(item.get("file_type")) == "video"), None)
     if chosen is None:
         raise DirectorError("source_unavailable", "The video of the source take is no longer available.")
+    return {"kind": "history", "generation_id": str(generation_id), "file_id": str(chosen["id"])}
+
+
+def source_video(user: User, take: Mapping[str, Any]) -> Dict[str, Any]:
+    """The resolved video file of a finished take; DirectorError when it is gone."""
+    ref = source_ref(user, take)
     try:
-        return core_bridge.resolve_media(
-            user, {"kind": "history", "generation_id": str(generation_id), "file_id": str(chosen["id"])}
-        )
+        return core_bridge.resolve_media(user, ref)
     except MediaRefError:
         raise DirectorError("source_unavailable", "The video of the source take is no longer available.") from None
 
@@ -2459,7 +2462,7 @@ def draft_sound(user: User, doc: Mapping[str, Any], source: Mapping[str, Any]) -
     if take_asset(doc, source.get("id")) is None:
         return False
     try:
-        value = source_video(user, source)["value"]
+        ref = source_ref(user, source)
     except DirectorError:
         return False
     try:
@@ -2467,7 +2470,7 @@ def draft_sound(user: User, doc: Mapping[str, Any], source: Mapping[str, Any]) -
     except workdir.WorkdirError as exc:
         raise DirectorError(exc.code, exc.message) from None
     try:
-        path = core_bridge.local_media_file("history", value, folder)
+        path = core_bridge.local_media_file(user, ref, folder)
         probe = core_bridge.probe_video(path) if path else None
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not read the sound of take %s", source.get("id"), exc_info=True)

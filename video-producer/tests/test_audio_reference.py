@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.exports import media as export_media
 from backend import core_bridge, director, estimate, generation, presets, soundtrack, takes, tracker
 from backend.director import TrackCut
 from backend.projects import DocError, validate_doc
@@ -118,10 +119,10 @@ def sounds(tmp_path, monkeypatch):
     folder.mkdir()
     files = {name: _tone(folder / f"{name}.wav", 8.0, frequency) for name, frequency in (("voice", 440.0), ("music", 660.0), ("rain", 330.0), ("wind", 220.0))}
 
-    def local(kind, value, target):
-        return files.get(Path(value).stem)
+    def local(resolver, found, target):
+        return files.get(Path(found.value).stem)
 
-    monkeypatch.setattr(core_bridge, "local_media_file", local)
+    monkeypatch.setattr(export_media.Resolver, "local", local)
     return files
 
 
@@ -136,10 +137,10 @@ def levels(tmp_path, monkeypatch):
         "step": _ffmpeg_wav(folder / "step.wav", 8.0, "if(between(t\\,1.5\\,1.51)\\,0.01*sin(2*PI*1000*t)\\,0)"),
     }
 
-    def local(kind, value, target):
-        return files.get(Path(value).stem)
+    def local(resolver, found, target):
+        return files.get(Path(found.value).stem)
 
-    monkeypatch.setattr(core_bridge, "local_media_file", local)
+    monkeypatch.setattr(export_media.Resolver, "local", local)
     return files
 
 
@@ -723,7 +724,7 @@ def test_a_sound_whose_file_is_gone_fails_the_attach(core, make_doc, monkeypatch
     core.use_ltx25()
     _media(core)
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "ffmpeg")
-    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, folder: None)
+    monkeypatch.setattr(export_media.Resolver, "local", lambda resolver, found, folder: None)
     doc = _doc(make_doc, [_item("v", "A1", 2, 1)])
     (plan,) = _plans(core, doc, presets.LTX_2_5).shots
 
@@ -843,7 +844,7 @@ def test_the_peak_measured_from_the_seek_point_is_the_peak_of_the_cut_sent_which
          "-i", f"aevalsrc=exprs={chirp}|{chirp}:s=44100:d=70", *codec, str(source)],
         check=True,
     )
-    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, target: source)
+    monkeypatch.setattr(export_media.Resolver, "local", lambda resolver, found, target: source)
     doc = _doc(make_doc, [_item("late", "A1", 1.01, 66, srcIn=2.25, gain=-3, fadeIn=2, fadeOut=20)], A1={"vol": -2})
     sources = soundtrack._Sources(core.users["user-1"], doc, "p-1", tmp_path)
     ffmpeg = shutil.which("ffmpeg")
@@ -952,14 +953,14 @@ def test_a_track_whose_cut_cannot_be_measured_is_kept_and_a_mixed_shot_measures_
     user = core.users["user-1"]
     doc = _doc(make_doc, [_item("s", "A1", 0, 12, asset="stem")], references=[HERO], assets=("stem", "hero"), mode="Ref2VA")
     cut = TrackCut("s1", "A1", 2.0, 5.0)
-    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, target: None)
+    monkeypatch.setattr(export_media.Resolver, "local", lambda resolver, found, target: None)
 
     assert asyncio.run(soundtrack.silent_lanes(user, "p-1", doc, [cut])) == {}
     assert measured == []
     assert asyncio.run(soundtrack.peak([shutil.which("ffmpeg"), "-hide_banner", "-i", str(export_storage / "gone.wav"), "-f", "null", "-"])) is None
     measured.clear()
 
-    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, target: levels.get(Path(value).stem))
+    monkeypatch.setattr(export_media.Resolver, "local", lambda resolver, found, target: levels.get(Path(found.value).stem))
     monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: None)
     assert asyncio.run(soundtrack.silent_lanes(user, "p-1", doc, [cut])) == {}
 

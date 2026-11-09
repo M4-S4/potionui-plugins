@@ -189,7 +189,7 @@ async function uploadAll(entries, kinds, target) {
 	const projectId = project.id;
 	const results = await importQueue(entries, {
 		upload: (entry, onProgress) => (client ? client.uploadMedia(uploadForm(entry.file), { onProgress, signal: entry.controller.signal }) : { ok: false, error: { code: 'no_api' } }),
-		resolve: (filename) => client.uploadedMedia(filename),
+		resolve: (itemId) => client.uploadedMedia(itemId),
 		update: updateUpload,
 		allowed: kinds
 	});

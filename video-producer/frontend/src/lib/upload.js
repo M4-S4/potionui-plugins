@@ -95,10 +95,10 @@ export async function importQueue(entries, { upload, resolve, update, allowed })
 		}
 		update(entry, { status: 'uploading', progress: 0 });
 		const sent = await upload(entry, (progress) => update(entry, { progress }));
-		const filename = sent.ok ? sent.data?.filename : null;
-		const found = filename ? await resolve(filename) : sent;
+		const itemId = sent.ok && sent.data?.id != null ? String(sent.data.id) : null;
+		const found = itemId ? await resolve(itemId) : sent;
 		const media = found?.ok ? found.data : null;
-		const error = !sent.ok ? sent.error : !filename ? { code: 'invalid_response' } : !found?.ok ? found?.error : !media || !allowed.includes(media.mediaType) ? { code: 'unsupported_media' } : null;
+		const error = !sent.ok ? sent.error : !itemId ? { code: 'invalid_response' } : !found?.ok ? found?.error : !media || !allowed.includes(media.mediaType) ? { code: 'unsupported_media' } : null;
 		update(entry, error ? { status: error.code === 'aborted' ? 'cancelled' : 'failed', error } : { status: 'done', progress: 100 });
 		results.push(error ? { entry, error } : { entry, media });
 	}

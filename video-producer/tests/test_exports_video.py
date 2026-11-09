@@ -719,10 +719,9 @@ async def test_render_assembles_transcodes_and_stores_a_social_export(make_doc, 
 
     async def save_user_media(user, path):
         stored.append((user.id, Path(path).name, Path(path).stat().st_size))
-        return {"value": "uploads/0f0e.mp4", "media_type": "video", "original_filename": Path(path).name, "origin": None}
+        return {"value": "uploads/0f0e.mp4", "media_type": "video", "original_filename": Path(path).name, "origin": None, "ref": {"kind": "library", "item_id": "item-1"}, "width": 720, "height": 1280}
 
     monkeypatch.setattr(core_bridge, "save_user_media", save_user_media)
-    monkeypatch.setattr(core_bridge, "upload_item", lambda user_id, value: {"item_id": "item-1", "filename": "x", "width": 720, "height": 1280})
     steps = []
     job = {"id": "job-1", "user_id": "user-1", "format": "social", "resolution": "720p"}
     project = {"id": "p-1", "name": "Aube sur le port", "doc": doc}
@@ -820,9 +819,9 @@ class ObjectStorage:
                 raise ConnectionError("the object store dropped the connection")
             yield data[offset : offset + 4096]
 
-    def copy(self, kind, key, target):
+    def copy(self, key, target):
         if not self.exists(key):
-            return False
+            raise core_bridge.MediaRefError("not_found", "The referenced media is not available")
         try:
             with Path(target).open("wb") as handle:
                 for chunk in self.get_stream(key, 1 << 20):
@@ -830,7 +829,6 @@ class ObjectStorage:
         except BaseException:
             Path(target).unlink(missing_ok=True)
             raise
-        return True
 
 
 STORED_TAKE = {"id": "r1", "status": "done", "file_path": "generations/2026-10-18/g/1.mp4", "generation_id": "g", "file_id": "f"}
@@ -839,8 +837,16 @@ STORED_TAKE = {"id": "r1", "status": "done", "file_path": "generations/2026-10-1
 @pytest.fixture
 def object_storage(monkeypatch, export_storage):
     storage = ObjectStorage({})
-    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda kind, key: storage.local_path(key))
-    monkeypatch.setattr(core_bridge.api_media, "copy_media_file", storage.copy)
+
+    def value(user, ref):
+        for take in takes.list_takes(None):
+            if (take.get("generation_id"), take.get("file_id")) == (ref.get("generation_id"), ref.get("file_id")):
+                return take["file_path"]
+        raise core_bridge.MediaRefError("not_found", "The referenced media is not available")
+
+    monkeypatch.setattr(core_bridge, "resolve_media", lambda user, ref: {"value": value(user, ref), "media_type": "video", "original_filename": "x", "origin": None})
+    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda user, ref: storage.local_path(value(user, ref)))
+    monkeypatch.setattr(core_bridge.api_media, "copy_media_file", lambda user, ref, target: storage.copy(value(user, ref), target))
     monkeypatch.setattr(takes, "list_takes", lambda project_id: [STORED_TAKE])
     return storage
 
@@ -859,10 +865,9 @@ def _folder_of(export_storage, job_id="job-1"):
 
 def _library(monkeypatch):
     async def save_user_media(user, path):
-        return {"value": "uploads/0f0e.mp4", "media_type": "video", "original_filename": Path(path).name, "origin": None}
+        return {"value": "uploads/0f0e.mp4", "media_type": "video", "original_filename": Path(path).name, "origin": None, "ref": {"kind": "library", "item_id": "item-1"}, "width": 1280, "height": 720}
 
     monkeypatch.setattr(core_bridge, "save_user_media", save_user_media)
-    monkeypatch.setattr(core_bridge, "upload_item", lambda user_id, value: {"item_id": "item-1", "filename": "x", "width": 1280, "height": 720})
 
 
 JOB = {"id": "job-1", "user_id": "user-1", "format": "web", "resolution": "720p"}
@@ -925,7 +930,7 @@ async def test_the_source_copies_are_deleted_when_the_job_is_cancelled_before_ff
 
 
 async def test_the_copies_already_made_are_deleted_when_a_later_source_cannot_be_streamed(make_doc, object_storage, monkeypatch, export_storage, make_user):
-    second = {**STORED_TAKE, "id": "r2", "file_path": "generations/2026-10-18/g/2.mp4"}
+    second = {**STORED_TAKE, "id": "r2", "file_path": "generations/2026-10-18/g/2.mp4", "file_id": "f2"}
     monkeypatch.setattr(takes, "list_takes", lambda project_id: [STORED_TAKE, second])
     object_storage.blobs.update({STORED_TAKE["file_path"]: b"\0" * 9000, second["file_path"]: b"\0" * 9000})
     object_storage.broken.add(second["file_path"])

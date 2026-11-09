@@ -334,10 +334,9 @@ async def test_render_bakes_the_lut_of_a_matched_shot_brings_the_sound_to_its_ta
     monkeypatch.setattr(takes, "list_takes", lambda project_id: [])
 
     async def save_user_media(user, path):
-        return {"value": "uploads/0f0e.mp4", "media_type": "video", "original_filename": Path(path).name, "origin": None}
+        return {"value": "uploads/0f0e.mp4", "media_type": "video", "original_filename": Path(path).name, "origin": None, "ref": {"kind": "library", "item_id": "item-1"}}
 
     monkeypatch.setattr(core_bridge, "save_user_media", save_user_media)
-    monkeypatch.setattr(core_bridge, "upload_item", lambda user_id, value: {"item_id": "item-1"})
     graphs = []
     real = video.assemble
 

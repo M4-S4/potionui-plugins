@@ -170,7 +170,7 @@ class _Sources:
         key = str(asset_id)
         if key not in self.cache:
             found = self.located(asset_id)
-            self.cache[key] = self.resolver.local(found.kind, found.value, self.folder) if found else None
+            self.cache[key] = self.resolver.local(found, self.folder) if found else None
         path = self.cache[key]
         return None if path is None else str(path)
 

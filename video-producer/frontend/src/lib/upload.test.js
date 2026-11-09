@@ -98,11 +98,11 @@ function queue({ uploads = {}, resolves = {} } = {}) {
 				onProgress(50);
 				await Promise.resolve();
 				log.push(`uploaded ${entry.id}`);
-				return uploads[entry.id] ?? { ok: true, data: { filename: `${entry.id}.bin` } };
+				return uploads[entry.id] ?? { ok: true, data: { filename: `${entry.id}.bin`, id: `item-${entry.id}` } };
 			},
-			resolve: async (filename) => {
-				log.push(`resolve ${filename}`);
-				return resolves[filename] ?? { ok: true, data: { mediaType: 'image', url: `/api/media/uploads/${filename}`, filename, origin: { kind: 'library', itemId: `item-${filename}` } } };
+			resolve: async (itemId) => {
+				log.push(`resolve ${itemId}`);
+				return resolves[itemId] ?? { ok: true, data: { mediaType: 'image', url: `/api/media/uploads/${itemId}.bin`, filename: itemId, origin: { kind: 'library', itemId } } };
 			}
 		}
 	};
@@ -111,17 +111,17 @@ function queue({ uploads = {}, resolves = {} } = {}) {
 test('upload: the queue sends one file at a time, reports its progress, then resolves it', async () => {
 	const q = queue();
 	const results = await importQueue([{ id: 'a' }, { id: 'b' }], q.options);
-	assert.deepEqual(q.log, ['upload a', 'progress a 50', 'uploaded a', 'resolve a.bin', 'upload b', 'progress b 50', 'uploaded b', 'resolve b.bin']);
-	assert.deepEqual(results.map((r) => r.media.origin.itemId), ['item-a.bin', 'item-b.bin']);
+	assert.deepEqual(q.log, ['upload a', 'progress a 50', 'uploaded a', 'resolve item-a', 'upload b', 'progress b 50', 'uploaded b', 'resolve item-b']);
+	assert.deepEqual(results.map((r) => r.media.origin.itemId), ['item-a', 'item-b']);
 	assert.deepEqual(q.states.get('a'), { status: 'done', progress: 100 });
 });
 
 test('upload: a refused upload, a lost item and a kind the target does not take each fail on their own', async () => {
 	const q = queue({
-		uploads: { a: { ok: false, error: { status: 403, code: 'storage_limit', message: 'Storage plan full' } }, d: { ok: true, data: {} } },
+		uploads: { a: { ok: false, error: { status: 403, code: 'storage_limit', message: 'Storage plan full' } }, d: { ok: true, data: { filename: 'd.bin', id: null } } },
 		resolves: {
-			'b.bin': { ok: false, error: { status: 404, code: 'media_not_found' } },
-			'c.bin': { ok: true, data: { mediaType: 'audio', url: '/x', filename: 'c', origin: { kind: 'library', itemId: 'i' } } }
+			'item-b': { ok: false, error: { status: 404, code: 'media_not_found' } },
+			'item-c': { ok: true, data: { mediaType: 'audio', url: '/x', filename: 'c', origin: { kind: 'library', itemId: 'i' } } }
 		}
 	});
 	const results = await importQueue([{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }], { ...q.options, allowed: ['image'] });
@@ -129,7 +129,8 @@ test('upload: a refused upload, a lost item and a kind the target does not take 
 		results.map((r) => r.error?.code ?? 'ok'),
 		['storage_limit', 'media_not_found', 'unsupported_media', 'invalid_response', 'ok']
 	);
-	assert.ok(!q.log.includes('resolve a.bin'));
+	assert.ok(!q.log.includes('resolve item-a'));
+	assert.deepEqual(q.log.filter((line) => line.startsWith('resolve')), ['resolve item-b', 'resolve item-c', 'resolve item-e']);
 	assert.equal(q.states.get('a').status, 'failed');
 	assert.equal(q.states.get('e').status, 'done');
 });
@@ -191,7 +192,7 @@ test('coreUpload: an error answer, a lost connection and an abort become failure
 	assert.equal((await coreUpload({ getToken: () => 'tok' }, '/u', null)).error.code, 'no_api');
 });
 
-test('client: an uploaded file is resolved by its stored name', async () => {
+test('client: an uploaded file is resolved by the library item id the upload answered', async () => {
 	const calls = [];
 	const media = { kind: 'library', media_type: 'audio', url: '/api/media/uploads/a.wav', filename: 'Rain.wav', origin: { kind: 'library', itemId: 'i1' } };
 	const client = createClient({
@@ -200,7 +201,7 @@ test('client: an uploaded file is resolved by its stored name', async () => {
 			return { success: true, data: { media } };
 		}
 	});
-	const result = await client.uploadedMedia('a.wav');
-	assert.deepEqual(calls, [['POST', '/media/uploaded', { filename: 'a.wav' }]]);
+	const result = await client.uploadedMedia('i1');
+	assert.deepEqual(calls, [['POST', '/media/uploaded', { id: 'i1' }]]);
 	assert.deepEqual(result.data, { kind: 'library', mediaType: 'audio', url: '/api/media/uploads/a.wav', filename: 'Rain.wav', origin: { kind: 'library', itemId: 'i1' } });
 });
