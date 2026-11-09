@@ -1,3 +1,4 @@
+import itertools
 import json
 
 import pytest
@@ -28,7 +29,7 @@ def write(path, data):
 def scenario_run(api, out, run_id, names, machine="box"):
     pack = load_pack(DEFAULT_PACK)
     engines = select_engines(pack, None, names)
-    run_scenario(logged_in(api), pack, out, run_id, engines, None, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet, machine=machine)
+    run_scenario(logged_in(api), pack, out, run_id, engines, None, upscaler="rtx", interval=0.01, clock=itertools.count().__next__, sleep=no_sleep, log=quiet, machine=machine)
     return out / run_id
 
 
