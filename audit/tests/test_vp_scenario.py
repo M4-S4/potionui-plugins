@@ -10,13 +10,18 @@ from potion_audit.client import ApiClient
 from potion_audit.inputs import _encode
 from potion_audit.pack import DEFAULT_PACK, load_pack
 from potion_audit.run import RunRefused
-from potion_audit.vp_scenario import SHOTS, VP, cleanup, load_matrix, run_scenario, select_engines
+from potion_audit.vp_scenario import LIGHTNING_I2V_ID, SHOT_SECONDS, SHOTS, VP, cleanup, load_matrix, run_scenario, select_engines
 
 from conftest import PASSWORD, USER, FakeApi, bundle_bytes, envelope
 
 H3 = "plugin:video-producer/MiniMax-H3-12GB"
 H3_ID = "01M54HN72B0KY7H63BKQ16T253"
 WAN13 = "plugin:video-producer/Wan2.1-T2V-1.3B-8GB"
+WAN13_ID = "01M57QPEMDPKHHW83YSEYBN0WZ"
+FIVE = "plugin:video-producer/Wan2.2-TI2V-5B-8GB"
+LIGHTNING = "plugin:video-producer/Wan2.2-14B-Lightning-12GB"
+LIGHTNING_ID = "01M57QPEMDPKHHW83YSEYBN0X1"
+I2V_ID = LIGHTNING_I2V_ID
 FAST = "plugin:video-producer/MiniMax-H3-Fast-12GB"
 ALL = ["plugin:video-producer/Wan2.1-T2V-1.3B-8GB", "plugin:video-producer/Wan2.2-TI2V-5B-8GB", "plugin:video-producer/Wan2.2-14B-Lightning-12GB", H3, FAST]
 
@@ -32,15 +37,34 @@ class VpFakeApi(FakeApi):
     def __init__(self, tmp_path: Path):
         super().__init__()
         self.outputs = {"0.mp4": clip_bytes(tmp_path, "take.mp4", 1.0)}
-        self.export_bytes = clip_bytes(tmp_path, "export.mp4", 15.0)
+        self.export_bytes = clip_bytes(tmp_path, "export.mp4", SHOT_SECONDS * len(SHOTS))
         self.projects = {}
         self.vp_takes = []
         self.orders = []
+        self.estimates = []
         self.puts = []
         self.deleted = []
         self.media_uploaded = []
         self.take_outcomes = []
         self.blocked_shots = set()
+        self.text_only = {WAN13_ID}
+        self.companions = {LIGHTNING_ID: I2V_ID}
+        self.names = {I2V_ID: "Wan 2.2 14B Lightning I2V (12 GB)", LIGHTNING_ID: "Wan 2.2 14B Lightning (12 GB)"}
+        self.vram = {I2V_ID: 9000.0}
+        self.runs = {}
+        self.record_preset = True
+
+    def _frames(self, doc: dict, shot_id: str) -> set[str]:
+        return {frame.get("role") for frame in doc.get("frames") or () if frame.get("shotId") == shot_id and frame.get("assetId")}
+
+    def _plan(self, doc: dict, clip: dict, preset_id: str) -> tuple[str, str, list[dict]]:
+        roles = self._frames(doc, clip["id"])
+        chained = bool(clip.get("firstFromPrevious"))
+        if preset_id in self.text_only:
+            warnings = [{"code": "chain_text_only", "message": "The preset generates from text only.", "data": {"shot_id": clip["id"]}}] if chained else []
+            return "t2v", preset_id, warnings
+        mode = "flf" if "last" in roles and ("first" in roles or chained) else "i2v" if chained or "first" in roles else "t2v"
+        return mode, self.companions.get(preset_id, preset_id) if mode != "t2v" else preset_id, []
 
     def _handler(self):
         base = super()._handler()
@@ -77,8 +101,8 @@ class VpFakeApi(FakeApi):
         clip = next((item for item in doc["clips"] if item["id"] == shot_id), {})
         take["profile"] = (clip.get("engine") or {}).get("profile")
         if kind == "render":
-            take["director_mode"] = "i2v" if clip.get("firstFromPrevious") else "t2v"
-        if kind == "render" and clip.get("firstFromPrevious"):
+            take["director_mode"], take["preset_id"], _ = self._plan(doc, clip, body.get("preset_id"))
+        if kind == "render" and clip.get("firstFromPrevious") and take["director_mode"] != "t2v":
             previous = doc["clips"][doc["clips"].index(clip) - 1]
             placed = previous.get("take")
             take["chain"] = {"previous": previous["id"], "state": "taken" if placed else "waiting", "source": {"shotId": previous["id"], "takeId": placed, "assetId": previous.get("assetId"), "at": None}}
@@ -98,6 +122,8 @@ class VpFakeApi(FakeApi):
         self.final = "completed" if status == "done" else "failed"
         self.failure = {"error_code": code, "message": "CUDA driver error: device not ready"} if code else None
         if status == "done":
+            self.runs[take["preset_id"]] = self.runs.get(take["preset_id"], 0) + 1
+            self.last_preset = take["preset_id"]
             take.update(file_path=f"storage/generations/G1/{take['id']}.mp4", url=f"/api/media/generations/G1/{take['id']}.mp4", file_id=7, width=64, height=64, duration_s=1.0, fps=24.0)
         else:
             take["error_code"] = code
@@ -108,7 +134,27 @@ class VpFakeApi(FakeApi):
     def _stored_uploads(self) -> set[str]:
         return {f"{index + 1}-{name}" for index, name in enumerate(self.uploads)} - {path.rsplit("/", 1)[1] for path in self.deleted if path.startswith("/api/media/uploads/")}
 
+    def _preset_items(self, kind: str) -> list[dict]:
+        items = []
+        for preset_id, runs in self.runs.items():
+            vram = self.vram.get(preset_id, 6000.0)
+            if kind == "timing":
+                items.append({"preset_id": preset_id, "preset_name": self.names.get(preset_id, preset_id), "total_runs": runs, "cold_runs": runs, "warm_runs": 0, "avg_cold_duration_ms": 20000.0, "avg_warm_duration_ms": None, "avg_model_load_ms": 4000.0})
+            else:
+                items.append({"preset_id": preset_id, "preset_name": self.names.get(preset_id, preset_id), "total_runs": runs, "peak_vram_mb": vram, "avg_vram_mb": vram, "avg_ram_mb": 15000.0, "avg_cpu_percent": 90.0})
+        return items
+
     def route(self, method, path, query, body, headers):
+        if path.startswith("/api/stats/presets/"):
+            status, payload, kind = super().route(method, path, query, body, headers)
+            if status == 200:
+                payload["data"]["items"] += self._preset_items(path.rsplit("/", 1)[1])
+            return status, payload, kind
+        if path == "/api/generations/history/G1" and method == "GET" and not any(item.endswith("/G1") for item in self.deleted):
+            status, payload, kind = super().route(method, path, query, body, headers)
+            if status == 200 and self.record_preset and getattr(self, "last_preset", None):
+                payload["data"]["preset_id"] = self.last_preset
+            return status, payload, kind
         if path.startswith("/api/media/uploads/") and method in ("GET", "DELETE"):
             if headers.get("Authorization") != "Bearer fake-token-123":
                 return 401, {"detail": "Not authenticated"}, "application/json"
@@ -165,6 +211,18 @@ class VpFakeApi(FakeApi):
                 del self.projects[parts[1]]
                 self.deleted.append(path)
                 return 200, envelope({"deleted": parts[1]}), "application/json"
+            if tail == ["estimate"]:
+                self.estimates.append(payload)
+                doc = project["doc"]
+                shots = []
+                warnings = []
+                for shot_id in payload["shots"]:
+                    clip = next(item for item in doc["clips"] if item["id"] == shot_id)
+                    mode, preset_id, found = self._plan(doc, clip, payload.get("preset_id"))
+                    shots.append({"shot_id": shot_id, "director_mode": mode, "preset_id": preset_id})
+                    warnings += found
+                warnings.append({"code": "time_unknown", "message": "No take of this preset was measured at this resolution yet."})
+                return 200, envelope({"shots": shots, "blocks": [], "warnings": warnings, "vram": {}, "time": {"seconds": None}}), "application/json"
             if tail == ["generate"]:
                 self.orders.append(("generate", payload))
                 if set(payload["shots"]) & self.blocked_shots:
@@ -296,26 +354,40 @@ def test_dry_run_builds_the_documents_and_the_generations_without_writing_on_the
         ("take", "s1-workshop", "planned"),
         ("take", "s2-bottle", "planned"),
         ("take", "s3-lumi", "planned"),
+        ("take", "s4-gold", "planned"),
         ("final_pass", "s1-workshop", "not_run"),
         ("export", None, "planned"),
     ]
-    assert "--upscaler rtx" in h3["steps"][3]["reason"]
+    assert "--upscaler rtx" in h3["steps"][4]["reason"]
+    assert h3["steps"][3]["frames"] == ["bottle", "bottle-gold"] and h3["steps"][3]["checks"] == ["profile", "flf_start"]
     assert h3["steps"][1]["chained_on"] == "s1-workshop"
     assert h3["steps"][0]["estimate_basis"].startswith("run seconds of plugin:video-producer/MiniMax-H3-12GB:video")
     assert h3["steps"][2]["estimate_basis"].startswith("run seconds of plugin:video-producer/MiniMax-H3-12GB:refs")
-    assert h3["estimate_seconds"] == sum(step["estimate_seconds"] for step in h3["steps"][:3])
+    assert h3["estimate_seconds"] == sum(step["estimate_seconds"] for step in h3["steps"][:4])
     fast = engines["MiniMax-H3-Fast-12GB"]
     assert fast["steps"][2]["status"] == "skipped"
+    wan = engines["Wan2.1-T2V-1.3B-8GB"]
+    assert (wan["steps"][1]["checks"], wan["steps"][1]["not_offered"]) == (["profile", "chain_mode", "chain_warning"], ["chain_frame", "chain_start"])
+    assert wan["steps"][3]["status"] == "skipped" and "text-to-video model" in wan["steps"][3]["reason"]
+    five = engines["Wan2.2-TI2V-5B-8GB"]
+    assert five["steps"][1]["checks"] == ["profile", "chain_frame", "chain_start"]
+    assert five["steps"][3]["status"] == "skipped" and "first image only" in five["steps"][3]["reason"]
+    lightning = engines["Wan2.2-14B-Lightning-12GB"]
+    assert lightning["steps"][1]["checks"] == ["profile", "chain_frame", "chain_start", "image_preset"]
+    assert lightning["steps"][3]["checks"] == ["profile", "flf_start", "image_preset"]
+    assert lightning["project"]["options"] is None
     assert plan["summary"]["engines"] == 5
-    assert plan["summary"]["generations"] == 11
+    assert plan["summary"]["generations"] == 14
     doc = json.loads((tmp_path / "out" / "vp-dry" / "projects" / "MiniMax-H3-12GB.json").read_text(encoding="utf-8"))
     assert doc["name"] == "potion-audit vp-dry MiniMax-H3-12GB"
-    assert [clip["firstFromPrevious"] for clip in doc["clips"]] == [False, True, False]
-    assert [clip["engine"]["profile"] for clip in doc["clips"]] == ["FL2VA", "FL2VA", "Ref2VA"]
+    assert [clip["firstFromPrevious"] for clip in doc["clips"]] == [False, True, False, False]
+    assert [clip["engine"]["profile"] for clip in doc["clips"]] == ["FL2VA", "FL2VA", "Ref2VA", "FL2VA"]
     assert doc["clips"][2]["cast"]["characters"] == ["card-lumi"]
     assert doc["bible"]["characters"][0]["references"] == ["ref-lumi"]
     assert [(reference["id"], reference["assetId"]) for reference in doc["references"]] == [("ref-lumi", "asset-lumi"), ("ref-bottle", "asset-bottle")]
-    assert [asset["src"] for asset in doc["assets"]] == ["input:lumi", "input:bottle"]
+    assert [(asset["id"], asset["src"]) for asset in doc["assets"]] == [("asset-lumi", "input:lumi"), ("asset-bottle", "input:bottle"), ("frame-bottle", "input:bottle"), ("frame-bottle-gold", "input:bottle-gold")]
+    assert [(frame["shotId"], frame["role"], frame["assetId"], frame["time"]) for frame in doc["frames"]] == [("s4-gold", "first", "frame-bottle", 15.0), ("s4-gold", "last", "frame-bottle-gold", 19.96)]
+    assert "options" not in doc["engine"]
     assert "Lumi" in doc["prompts"][2]["text"] and "{" not in doc["prompts"][2]["text"]
 
 
@@ -325,30 +397,37 @@ def test_a_run_creates_the_project_chains_the_second_shot_and_sends_the_referenc
     engines = select_engines(pack, matrix, ["MiniMax-H3-12GB"])
     scenario = run_scenario(logged_in(vp_api), pack, tmp_path / "out", "vp-1", engines, matrix, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet)
     assert scenario["stopped"] is None
-    assert len(vp_api.uploads) == 2 and vp_api.media_uploaded == ["1-lumi.jpg", "2-bottle.jpg"]
+    assert len(vp_api.uploads) == 3 and vp_api.media_uploaded == ["1-lumi.jpg", "2-bottle.jpg", "3-bottle-gold.jpg"]
     project = vp_api.projects["P1"]
     assert project["name"] == "potion-audit vp-1 MiniMax-H3-12GB"
     assert [asset["origin"] for asset in project["doc"]["assets"][:2]] == [{"kind": "library", "itemId": "I1"}, {"kind": "library", "itemId": "I2"}]
-    assert [(kind, body.get("shots") or body.get("takes") or body.get("format")) for kind, body in vp_api.orders] == [("generate", ["s1-workshop"]), ("generate", ["s2-bottle"]), ("generate", ["s3-lumi"]), ("final-pass", ["T1"]), ("export", "web")]
-    assert vp_api.orders[3][1] == {"takes": ["T1"], "method": "upscale", "target": "fhd1080", "upscaler": "rtx"}
+    assert [(kind, body.get("shots") or body.get("takes") or body.get("format")) for kind, body in vp_api.orders] == [("generate", ["s1-workshop"]), ("generate", ["s2-bottle"]), ("generate", ["s3-lumi"]), ("generate", ["s4-gold"]), ("final-pass", ["T1"]), ("export", "web")]
+    assert [body["shots"] for body in vp_api.estimates] == [["s1-workshop"], ["s2-bottle"], ["s3-lumi"], ["s4-gold"]]
+    assert vp_api.orders[4][1] == {"takes": ["T1"], "method": "upscale", "target": "fhd1080", "upscaler": "rtx"}
     assert vp_api.puts[0]["doc"]["clips"][0]["take"] == "T1"
     second = next(take for take in vp_api.vp_takes if take["shot_id"] == "s2-bottle")
     assert second["chain"]["state"] == "taken" and second["chain"]["source"]["takeId"] == "T1"
-    assert vp_api.puts[-1]["doc"]["clips"][0]["take"] == "T4"
+    assert vp_api.puts[-1]["doc"]["clips"][0]["take"] == "T5"
+    assert [asset["origin"] for asset in project["doc"]["assets"] if asset["id"].startswith("frame-")] == [{"kind": "library", "itemId": "I2"}, {"kind": "library", "itemId": "I3"}]
     entry = scenario["engines"][3]
-    assert [(step["step"], step.get("verdict")) for step in entry["steps"]] == [("take", "PASS"), ("take", "PASS"), ("take", "PASS"), ("final_pass", "PASS"), ("export", "PASS")]
+    assert [(step["step"], step.get("verdict")) for step in entry["steps"]] == [("take", "PASS"), ("take", "PASS"), ("take", "PASS"), ("take", "PASS"), ("final_pass", "PASS"), ("export", "PASS")]
     run_dir = tmp_path / "out" / "vp-1"
     result = json.loads((run_dir / entry["steps"][1]["result"]).read_text(encoding="utf-8"))
     assert result["cell"] == "vp:plugin:video-producer/MiniMax-H3-12GB:s2-bottle"
     assert {check["check"]: check["ok"] for check in result["checks"]} == {"min_outputs": True, "not_black": True, "generation_step": True, "profile": True, "chain_frame": True, "chain_start": True}
     third = json.loads((run_dir / entry["steps"][2]["result"]).read_text(encoding="utf-8"))
     assert {check["check"]: check["actual"] for check in third["checks"]}["profile"] == "Ref2VA"
-    exported = json.loads((run_dir / entry["steps"][4]["result"]).read_text(encoding="utf-8"))
+    fourth = json.loads((run_dir / entry["steps"][3]["result"]).read_text(encoding="utf-8"))
+    assert {check["check"]: check["ok"] for check in fourth["checks"]} == {"min_outputs": True, "not_black": True, "generation_step": True, "profile": True, "flf_start": True}
+    assert fourth["take"]["director_mode"] == "flf"
+    assert fourth["stats_preset"]["preset_id"] == H3_ID and fourth["stats_preset"]["differs"] is False
+    assert [warning["code"] for warning in fourth["estimate"]["warnings"]] == ["time_unknown"]
+    exported = json.loads((run_dir / entry["steps"][5]["result"]).read_text(encoding="utf-8"))
     assert {check["check"]: check["ok"] for check in exported["checks"]} == {"duration": True, "fps": True, "frames": True, "not_black": True}
     assert entry["measures"]["seam"]["measured"] is True
     assert entry["measures"]["looks"]["lumi"][0]["identity"] == {"score": 0.81}
     saved = json.loads((run_dir / "scenario.json").read_text(encoding="utf-8"))
-    assert saved["summary"]["verdicts"] == {"PASS": 5}
+    assert saved["summary"]["verdicts"] == {"PASS": 6}
     assert [engine["key"] for engine in saved["engines"] if engine["selected"]] == ["MiniMax-H3-12GB"]
 
 
@@ -358,7 +437,7 @@ def test_an_engine_without_ref2va_skips_the_third_shot_and_a_blocked_chain_is_re
     engines = select_engines(pack, None, ["MiniMax-H3-Fast-12GB"])
     scenario = run_scenario(logged_in(vp_api), pack, tmp_path / "out", "vp-2", engines, None, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet)
     steps = scenario["engines"][4]["steps"]
-    assert [(step["step"], step["status"], step.get("verdict")) for step in steps] == [("take", "ran", "PASS"), ("take", "ran", "BLOCKED"), ("take", "skipped", None), ("final_pass", "ran", "PASS"), ("export", "ran", "PASS")]
+    assert [(step["step"], step["status"], step.get("verdict")) for step in steps] == [("take", "ran", "PASS"), ("take", "ran", "BLOCKED"), ("take", "skipped", None), ("take", "ran", "PASS"), ("final_pass", "ran", "PASS"), ("export", "ran", "PASS")]
     assert "cannot start a shot from an image" in steps[1]["reason"]
     assert scenario["engines"][4]["measures"]["seam"] is None
 
@@ -372,7 +451,7 @@ def test_the_first_oom_stops_the_scenario(vp_api, tmp_path):
     assert scenario["stopped"].startswith("stopped after an OOM")
     assert [kind for kind, _ in vp_api.orders] == ["generate"]
     first = scenario["engines"][0]
-    assert [(step["step"], step["status"], step.get("verdict")) for step in first["steps"]] == [("take", "ran", "OOM"), ("take", "not_run", None), ("take", "not_run", None), ("final_pass", "not_run", None), ("export", "not_run", None)]
+    assert [(step["step"], step["status"], step.get("verdict")) for step in first["steps"]] == [("take", "ran", "OOM"), ("take", "not_run", None), ("take", "not_run", None), ("take", "not_run", None), ("final_pass", "not_run", None), ("export", "not_run", None)]
     assert all(entry["project"] is None for entry in scenario["engines"][1:])
     assert len(vp_api.projects) == 1
     result = json.loads((tmp_path / "out" / "vp-3" / first["steps"][0]["result"]).read_text(encoding="utf-8"))
@@ -391,11 +470,11 @@ def test_cleanup_lists_then_deletes_the_marked_projects_and_generations(vp_api, 
     assert vp_api.deleted == []
     code = main(["vp", "cleanup", str(run_dir), "--config", str(vp_config), "--confirm"])
     assert code == 0
-    assert vp_api.deleted == [f"{VP}/projects/P1", "/api/generations/history/G1", "/api/media/uploads/1-lumi.jpg", "/api/media/uploads/2-bottle.jpg"]
+    assert vp_api.deleted == [f"{VP}/projects/P1", "/api/generations/history/G1", "/api/media/uploads/1-lumi.jpg", "/api/media/uploads/2-bottle.jpg", "/api/media/uploads/3-bottle-gold.jpg"]
     assert set(vp_api.projects) == {"P9"}
     done = json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))
     assert done["generations"][0]["exists_after"] is False
-    assert [(item["filename"], item["existed"], item["deleted"], item["exists_after"]) for item in done["uploads"]] == [("1-lumi.jpg", True, True, False), ("2-bottle.jpg", True, True, False)]
+    assert [(item["filename"], item["existed"], item["deleted"], item["exists_after"]) for item in done["uploads"]] == [("1-lumi.jpg", True, True, False), ("2-bottle.jpg", True, True, False), ("3-bottle-gold.jpg", True, True, False)]
 
 
 def test_cleanup_without_confirm_lists_the_uploads_of_the_run_and_skips_those_already_gone(vp_api, tmp_path):
@@ -405,10 +484,97 @@ def test_cleanup_without_confirm_lists_the_uploads_of_the_run_and_skips_those_al
     run_dir = tmp_path / "out" / "vp-5"
     lines = []
     plan = cleanup(logged_in(vp_api), run_dir, False, lines.append)
-    assert [item["filename"] for item in plan["uploads"]] == ["1-lumi.jpg", "2-bottle.jpg"]
-    assert "upload 1-lumi.jpg" in lines and lines[-1].endswith("2 uploads of vp-5: pass --confirm to delete them")
+    assert [item["filename"] for item in plan["uploads"]] == ["1-lumi.jpg", "2-bottle.jpg", "3-bottle-gold.jpg"]
+    assert "upload 1-lumi.jpg" in lines and lines[-1].endswith("3 uploads of vp-5: pass --confirm to delete them")
     assert not [method for method, _ in vp_api.methods() if method == "DELETE"]
     vp_api.deleted.append("/api/media/uploads/1-lumi.jpg")
     plan = cleanup(logged_in(vp_api), run_dir, True, quiet)
-    assert [(item["filename"], item["existed"], item["deleted"]) for item in plan["uploads"]] == [("1-lumi.jpg", False, False), ("2-bottle.jpg", True, True)]
+    assert [(item["filename"], item["existed"], item["deleted"]) for item in plan["uploads"]] == [("1-lumi.jpg", False, False), ("2-bottle.jpg", True, True), ("3-bottle-gold.jpg", True, True)]
     assert vp_api.deleted.count("/api/media/uploads/1-lumi.jpg") == 1
+
+
+def steps_of(scenario: dict, ref: str) -> dict:
+    entry = next(item for item in scenario["engines"] if item["engine"] == ref)
+    return {step["shot"] if step["step"] == "take" else step["step"]: step for step in entry["steps"]}
+
+
+def result_of(run_dir: Path, step: dict) -> dict:
+    return json.loads((run_dir / step["result"]).read_text(encoding="utf-8"))
+
+
+def test_the_wan_engines_meet_the_expectations_of_their_chaining_and_the_flf_shot(vp_api, tmp_path):
+    pack = load_pack(DEFAULT_PACK)
+    engines = select_engines(pack, None, ["Wan2.1-T2V-1.3B-8GB", "Wan2.2-TI2V-5B-8GB", "Wan2.2-14B-Lightning-12GB"])
+    scenario = run_scenario(logged_in(vp_api), pack, tmp_path / "out", "vp-wan", engines, None, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet)
+    run_dir = tmp_path / "out" / "vp-wan"
+    small = steps_of(scenario, WAN13)
+    assert small["s2-bottle"]["verdict"] == "PASS" and small["s2-bottle"]["director_mode"] == "t2v"
+    chained = result_of(run_dir, small["s2-bottle"])
+    assert {check["check"]: check["ok"] for check in chained["checks"]} == {"min_outputs": True, "not_black": True, "profile": True, "chain_mode": True, "chain_warning": True}
+    assert [item["check"] for item in chained["not_offered"]] == ["chain_frame", "chain_start"]
+    assert "generates from text only" in chained["not_offered"][0]["reason"]
+    assert next(check for check in chained["checks"] if check["check"] == "chain_warning")["actual"] == ["chain_text_only", "time_unknown"]
+    assert small["s4-gold"]["status"] == "skipped" and "text-to-video model" in small["s4-gold"]["reason"]
+    five = steps_of(scenario, FIVE)
+    assert five["s2-bottle"]["verdict"] == "PASS" and five["s2-bottle"]["director_mode"] == "i2v"
+    assert {check["check"] for check in result_of(run_dir, five["s2-bottle"])["checks"]} >= {"chain_frame", "chain_start"}
+    assert five["s4-gold"]["status"] == "skipped" and "first image only" in five["s4-gold"]["reason"]
+    lightning = steps_of(scenario, LIGHTNING)
+    assert [lightning[shot]["preset_id"] for shot in ("s1-workshop", "s2-bottle", "s4-gold")] == [LIGHTNING_ID, I2V_ID, I2V_ID]
+    second = result_of(run_dir, lightning["s2-bottle"])
+    assert {check["check"]: check["ok"] for check in second["checks"]}["image_preset"] is True
+    assert second["stats_preset"] == {"preset_id": I2V_ID, "source": "the generation record", "name": "Wan 2.2 14B Lightning I2V (12 GB)", "ordered_preset_id": LIGHTNING_ID, "record_preset_id": I2V_ID, "take_preset_id": I2V_ID, "differs": True}
+    assert second["generation_stats"]["derived"] is True and second["generation_stats"]["peak_vram_mb"] == 9000.0
+    assert lightning["s2-bottle"]["stats_preset"] == {"preset_id": I2V_ID, "name": "Wan 2.2 14B Lightning I2V (12 GB)", "source": "the generation record", "differs": True}
+    assert lightning["s2-bottle"]["peak_vram_mb"] == 9000.0
+    first = result_of(run_dir, lightning["s1-workshop"])
+    assert first["stats_preset"]["differs"] is False and first["generation_stats"]["peak_vram_mb"] == 6000.0
+    gold = result_of(run_dir, lightning["s4-gold"])
+    assert {check["check"]: check["ok"] for check in gold["checks"]} == {"min_outputs": True, "not_black": True, "generation_step": True, "profile": True, "flf_start": True, "image_preset": True}
+    assert gold["generation_stats"]["derived"] is True and gold["stats_preset"]["preset_id"] == I2V_ID
+    assert scenario["summary"]["verdicts"] == {"PASS": 13}
+
+
+def test_a_5b_chained_shot_started_from_its_text_fails_its_chaining_checks(vp_api, tmp_path):
+    pack = load_pack(DEFAULT_PACK)
+    vp_api.text_only.add("01M57QPEMDPKHHW83YSEYBN0X0")
+    scenario = run_scenario(logged_in(vp_api), pack, tmp_path / "out", "vp-5b", select_engines(pack, None, ["Wan2.2-TI2V-5B-8GB"]), None, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet)
+    step = steps_of(scenario, FIVE)["s2-bottle"]
+    assert step["verdict"] == "FAIL"
+    result = result_of(tmp_path / "out" / "vp-5b", step)
+    assert {check["check"]: check["ok"] for check in result["checks"]} == {"min_outputs": True, "not_black": True, "profile": True, "chain_frame": False, "chain_start": False}
+    assert "not_offered" not in result
+
+
+def test_lightning_without_its_companion_fails_the_image_preset_and_the_stats_fall_back_to_the_take(vp_api, tmp_path):
+    pack = load_pack(DEFAULT_PACK)
+    vp_api.companions = {}
+    vp_api.record_preset = False
+    scenario = run_scenario(logged_in(vp_api), pack, tmp_path / "out", "vp-alone", select_engines(pack, None, ["Wan2.2-14B-Lightning-12GB"]), None, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet)
+    run_dir = tmp_path / "out" / "vp-alone"
+    steps = steps_of(scenario, LIGHTNING)
+    second = result_of(run_dir, steps["s2-bottle"])
+    assert {check["check"]: check["ok"] for check in second["checks"]}["image_preset"] is False
+    assert second["stats_preset"]["source"] == "the take" and second["stats_preset"]["preset_id"] == LIGHTNING_ID and second["stats_preset"]["differs"] is False
+    assert steps["s4-gold"]["verdict"] == "FAIL"
+
+
+def test_companion_steps_go_to_the_engine_options_of_the_companion_only(vp_api, vp_config, credentials_env, tmp_path):
+    code = main(["vp", "run", "--config", str(vp_config), "--engines", "Wan2.2-14B-Lightning-12GB,MiniMax-H3-Fast-12GB", "--companion-steps", "4", "--dry-run", "--run-id", "vp-steps"])
+    assert code == 0
+    run_dir = tmp_path / "out" / "vp-steps"
+    plan = json.loads((run_dir / "plan.json").read_text(encoding="utf-8"))
+    assert plan["settings"]["companion_steps"] == 4
+    lightning = json.loads((run_dir / "projects" / "Wan2.2-14B-Lightning-12GB.json").read_text(encoding="utf-8"))
+    assert lightning["engine"]["options"] == {I2V_ID: {"speed_profile": "custom", "steps": 4}}
+    fast = json.loads((run_dir / "projects" / "MiniMax-H3-Fast-12GB.json").read_text(encoding="utf-8"))
+    assert "options" not in fast["engine"]
+    assert main(["vp", "run", "--config", str(vp_config), "--engines", "Wan2.2-14B-Lightning-12GB", "--companion-steps", "0", "--dry-run"]) == 2
+
+
+def test_the_frames_of_the_flf_shot_are_frozen_inputs_of_the_pack():
+    pack = load_pack(DEFAULT_PACK)
+    shot = next(item for item in SHOTS if item["frames"])
+    for input_id in shot["frames"]:
+        spec = pack.inputs[input_id]
+        assert spec.kind == "image" and len(spec.sha256) == 64 and pack.input_path(input_id).is_file()

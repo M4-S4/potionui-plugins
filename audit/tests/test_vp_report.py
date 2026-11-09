@@ -14,6 +14,7 @@ from test_vp_scenario import logged_in, no_sleep, quiet, vp_api
 
 H3 = "MiniMax-H3-12GB"
 WAN = "Wan2.1-T2V-1.3B-8GB"
+LIGHTNING = "Wan2.2-14B-Lightning-12GB"
 
 
 def read(path):
@@ -44,8 +45,10 @@ def test_a_scenario_alone_gives_a_row_per_engine_a_column_per_step_and_a_player_
     assert code == 0
     page = (tmp_path / "report" / "index.html").read_text(encoding="utf-8")
     assert '<h2 id="vp">Video Producer scenario</h2>' in page and "<h2>Matrix</h2>" not in page
-    assert "<th>Shot 1</th><th>Shot 2 chained</th><th>Shot 3 Ref2VA</th><th>Final pass</th><th>Export</th>" in page
+    assert "<th>Shot 1</th><th>Shot 2 chained</th><th>Shot 3 Ref2VA</th><th>Shot 4 first and last</th><th>Final pass</th><th>Export</th>" in page
     assert page.count('<a class="cell off" href="#vp-Wan2.1-T2V-1.3B-8GB--Shot_3_Ref2VA"') == 1
+    assert page.count('<a class="cell off" href="#vp-Wan2.1-T2V-1.3B-8GB--Shot_4_first_and_last"') == 1
+    assert '<span class="tag ok">flf_start</span> &quot;flf&quot;' in page
     assert ">not offered<" in page and "has no refs mode" in page
     assert ">BLOCKED<" in page and "cannot start a shot from an image" in page
     assert "a test note" in page
@@ -58,6 +61,8 @@ def test_a_scenario_alone_gives_a_row_per_engine_a_column_per_step_and_a_player_
     assert report["runs"] == [] and report["machine"] == "box"
     steps = {(step["engine"], step["step"]): step for step in report["scenario"]["steps"]}
     assert steps[(WAN, "Shot 3 Ref2VA")]["status"] == "skipped"
+    assert steps[(WAN, "Shot 4 first and last")]["status"] == "skipped"
+    assert steps[(H3, "Shot 4 first and last")]["shot_checks"] == [{"check": "flf_start", "expected": "flf, from the first and the last image of the shot (bottle and bottle-gold)", "actual": "flf", "ok": True}]
     assert steps[(WAN, "Shot 2 chained")]["verdict"] == "BLOCKED"
     assert steps[(H3, "Export")]["verdict"] == "PASS" and steps[(H3, "Export")]["seconds"] is not None
 
@@ -79,11 +84,49 @@ def test_the_chaining_checks_are_shown_as_recorded_and_a_failed_one_is_a_failure
     loaded = load_scenario(run_dir)
     step = next(item for item in loaded.steps if item.column == "Shot 2 chained" and item.engine == H3)
     assert step.result is not None
-    assert [(check["check"], check["ok"]) for check in step.chain_checks] == [("chain_frame", False), ("chain_start", True)]
+    assert [(check["check"], check["ok"]) for check in step.shot_checks] == [("chain_frame", False), ("chain_start", True)]
     page = write_report(None, tmp_path / "report", media=False, scenario=loaded).read_text(encoding="utf-8")
     assert '<span class="tag bad">chain_frame</span> {&quot;state&quot;: null, &quot;source&quot;: {}}' in page
     assert '<span class="tag ok">chain_start</span> &quot;i2v&quot;' in page
     assert '<a class="cell bad" href="#vp-MiniMax-H3-12GB--Shot_2_chained"' in page
+
+
+def test_a_take_on_the_companion_shows_its_preset_and_a_text_only_chain_shows_its_checks_not_offered(vp_api, tmp_path):
+    run_dir = scenario_run(vp_api, tmp_path / "out", "vp-pair", [WAN, LIGHTNING])
+    loaded = load_scenario(run_dir)
+    steps = {(step.engine, step.column): step for step in loaded.steps}
+    assert steps[(LIGHTNING, "Shot 2 chained")].other_preset == "Wan 2.2 14B Lightning I2V (12 GB)"
+    assert steps[(LIGHTNING, "Shot 1")].other_preset is None
+    assert [check["check"] for check in steps[(WAN, "Shot 2 chained")].not_offered_checks] == ["chain_frame", "chain_start"]
+    page = write_report(None, tmp_path / "report", media=False, scenario=loaded).read_text(encoding="utf-8")
+    cell = page[page.index('href="#vp-Wan2.2-14B-Lightning-12GB--Shot_2_chained"'):]
+    cell = cell[: cell.index("</a>")]
+    assert '<div class="small">on Wan 2.2 14B Lightning I2V (12 GB)</div>' in cell and '<span class="tag ok">image_preset</span>' in cell
+    first = page[page.index('href="#vp-Wan2.2-14B-Lightning-12GB--Shot_1"'):]
+    assert "<div class=\"small\">on " not in first[: first.index("</a>")]
+    text_only = page[page.index('href="#vp-Wan2.1-T2V-1.3B-8GB--Shot_2_chained"'):]
+    text_only = text_only[: text_only.index("</a>")]
+    assert '<span class="tag off">chain_frame</span> not offered' in text_only and '<span class="tag ok">chain_warning</span>' in text_only
+    assert "Wan 2.2 14B Lightning I2V (12 GB) (01M57QPEMDPKHHW83YSEYBN0X2), from the generation record, not the preset the audit ordered" in page
+    assert "generates from text only" in page
+    report = json.loads((tmp_path / "report" / "report.json").read_text(encoding="utf-8"))
+    by_step = {(step["engine"], step["step"]): step for step in report["scenario"]["steps"]}
+    assert by_step[(LIGHTNING, "Shot 2 chained")]["stats_preset"]["differs"] is True
+    assert [item["check"] for item in by_step[(WAN, "Shot 2 chained")]["not_offered"]] == ["chain_frame", "chain_start"]
+
+
+def test_compare_flags_a_step_whose_statistics_moved_to_another_preset(vp_api, tmp_path):
+    vp_api.companions = {}
+    old = scenario_run(vp_api, tmp_path / "out", "vp-t2v", [LIGHTNING])
+    vp_api.companions = {"01M57QPEMDPKHHW83YSEYBN0X1": "01M57QPEMDPKHHW83YSEYBN0X2"}
+    new = scenario_run(vp_api, tmp_path / "out", "vp-i2v", [LIGHTNING])
+    comparison = compare_scenarios(load_scenario(new), load_scenario(old))
+    rows = {row["step"]: row for row in comparison["rows"]}
+    second = rows[f"{LIGHTNING} · Shot 2 chained"]
+    assert second["preset_changed"] is True and second["stats_preset"] == "Wan 2.2 14B Lightning I2V (12 GB)" and second["previous_stats_preset"] == "Wan 2.2 14B Lightning (12 GB)"
+    assert rows[f"{LIGHTNING} · Shot 1"]["preset_changed"] is False
+    page = write_report(None, tmp_path / "report", media=False, scenario=load_scenario(new), scenario_comparison=comparison).read_text(encoding="utf-8")
+    assert "Wan 2.2 14B Lightning (12 GB) → Wan 2.2 14B Lightning I2V (12 GB)" in page
 
 
 def test_a_matrix_and_a_scenario_of_one_machine_and_version_share_a_page(vp_api, tmp_path, case_file, capsys):
@@ -132,7 +175,7 @@ def test_compare_flags_a_changed_step_of_two_scenarios_and_refuses_another_pack(
     assert code == 0
     page = (tmp_path / "report" / "index.html").read_text(encoding="utf-8")
     assert "Compared with the previous scenario" in page and "PASS → FAIL" in page
-    assert "compare scenario: 1 verdicts changed, 1 durations beyond 20 %" in capsys.readouterr().out
+    assert "compare scenario: 1 verdicts changed, 1 durations beyond 20 %, 0 takes on another preset" in capsys.readouterr().out
     other = read(old / "scenario.json")
     other["pack"]["sha256"] = "0" * 64
     write(old / "scenario.json", other)
@@ -153,6 +196,9 @@ def test_merge_puts_each_scenario_in_the_column_of_its_machine(vp_api, tmp_path,
     row = page[page.index(f"<td>{WAN} · Shot 3 Ref2VA</td>"):]
     row = row[: row.index("</tr>")]
     assert ">left out<" in row and '<div class="cell off"' in row
+    gold = page[page.index(f"<td>{H3} · Shot 4 first and last</td>"):]
+    gold = gold[: gold.index("</tr>")]
+    assert '<span class="tag ok">flf_start</span>' in gold
     second = scenario_run(vp_api, tmp_path / "out", "a-vp-2", [H3], machine="alpha")
     assert main(["merge", str(alpha_vp), str(second), "--out", str(tmp_path / "refused")]) == 2
 

@@ -816,8 +816,10 @@ def _actual(value, limit: int = 60) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def _chain_lines(step: VpStep) -> str:
-    return "".join(f'<span class="check"><span class="tag {"ok" if check.get("ok") else "bad"}">{escape(str(check.get("check")))}</span> {escape(_actual(check.get("actual")))}</span>' for check in step.chain_checks)
+def _check_lines(step: VpStep) -> str:
+    lines = [f'<span class="check"><span class="tag {"ok" if check.get("ok") else "bad"}">{escape(str(check.get("check")))}</span> {escape(_actual(check.get("actual")))}</span>' for check in step.shot_checks]
+    lines += [f'<span class="check" title="{escape(str(check.get("reason") or ""), quote=True)}"><span class="tag off">{escape(str(check.get("check")))}</span> not offered</span>' for check in step.not_offered_checks]
+    return "".join(lines)
 
 
 def _step_numbers(step: VpStep) -> str:
@@ -831,7 +833,9 @@ def _step_cell(step: VpStep, link: bool = True) -> str:
         lines.append(f'<div class="small">{escape(numbers)}</div>')
     elif step.reason and not step.verdict:
         lines.append(f'<div class="small muted">{escape(step.reason[:70])}{"…" if len(step.reason) > 70 else ""}</div>')
-    lines.append(_chain_lines(step))
+    if step.other_preset:
+        lines.append(f'<div class="small">on {escape(step.other_preset)}</div>')
+    lines.append(_check_lines(step))
     if link and step.media.get("thumb"):
         lines.append(f'<img src="{step.media["thumb"]}" alt="" loading="lazy" width="116" height="72">')
     title = escape(step.reason or step.key, quote=True)
@@ -922,7 +926,7 @@ def _scenario_section(scenario: Scenario, comparison: dict | None) -> str:
     parts = [
         _scenario_counts(scenario),
         _scenario_facts(scenario),
-        '<p class="small muted">Engines in rows, the steps of the scenario in columns. A cell gives its verdict, the run time (the polled time for the export), the peak VRAM when the preset statistics derived it, the chaining checks of shot 2 as recorded, and a thumbnail. A dashed cell is a step the engine does not offer: it has no refs mode, so the plugin offers no Ref2VA profile.</p>',
+        '<p class="small muted">Engines in rows, the steps of the scenario in columns. A cell gives its verdict, the run time (the polled time for the export), the peak VRAM when the preset statistics derived it, the preset the take ran on when it is not the engine (its statistics are read on that preset), the checks of the chained shot and of the shot with a first and a last image as recorded, and a thumbnail. A check marked not offered is one the engine cannot pass by design, such as the chaining checks of a text-to-video engine. A dashed cell is a step the engine does not offer: no refs mode, so no Ref2VA profile, or no last image, so no first and last frame shot.</p>',
         _scenario_table(scenario),
         _scenario_measures(scenario),
     ]
@@ -938,7 +942,7 @@ def _scenario_compare_html(comparison: dict) -> str:
         parts.append(f'<p class="tag warn">Changed: {escape(line)}</p>')
     rows = []
     for row in comparison["rows"]:
-        if not (row.get("verdict_changed") or row.get("duration_flag") or row.get("vram_flag")):
+        if not (row.get("verdict_changed") or row.get("duration_flag") or row.get("vram_flag") or row.get("preset_changed")):
             continue
         duration = row.get("duration_change")
         rows.append([
@@ -946,8 +950,9 @@ def _scenario_compare_html(comparison: dict) -> str:
             escape(f"{row.get('previous_verdict')} → {row.get('verdict')}") if row.get("verdict_changed") else escape(str(row.get("verdict"))),
             escape(f"{_seconds(row.get('previous_seconds'))} → {_seconds(row.get('seconds'))}" + (f" ({duration:+.0%})" if duration is not None else "")),
             escape(f"{row['vram_change_mb']:+.0f} MiB" if row.get("vram_change_mb") is not None else ""),
+            escape(f"{row.get('previous_stats_preset')} → {row.get('stats_preset')}") if row.get("preset_changed") else "",
         ])
-    parts.append(_table(["Step", "Verdict", "Time", "Peak VRAM"], rows) if rows else '<p class="muted">No verdict changed, no duration beyond the tolerance, no VRAM change beyond the tolerance.</p>')
+    parts.append(_table(["Step", "Verdict", "Time", "Peak VRAM", "Preset of the statistics"], rows) if rows else '<p class="muted">No verdict changed, no duration beyond the tolerance, no VRAM change beyond the tolerance, no take on another preset.</p>')
     if comparison["only_in_this_run"]:
         parts.append(f"<p>Only in this scenario: {escape(', '.join(comparison['only_in_this_run']))}</p>")
     if comparison["only_in_previous"]:
@@ -969,6 +974,14 @@ def _step_media(step: VpStep) -> str:
     elif item.get("original"):
         parts.append(f'<video controls preload="none" playsinline{poster} src="{item["original"]}"></video><p class="small">{original}</p>')
     return f'<div class="media">{"".join(parts)}</div>'
+
+
+def _preset_text(found: dict) -> str:
+    if not found:
+        return "not recorded"
+    name = found.get("name") or found.get("preset_id")
+    text = f"{name} ({found.get('preset_id')}), from {found.get('source')}" if name != found.get("preset_id") else f"{name}, from {found.get('source')}"
+    return text + (", not the preset the audit ordered" if found.get("differs") else "")
 
 
 def _step_detail(step: VpStep) -> str:
@@ -998,8 +1011,10 @@ def _step_detail(step: VpStep) -> str:
                 ("Generation", escape(str(result.get("generation_id")))),
                 ("Profile", escape(str(take.get("profile")))),
                 ("Director mode", escape(str(take.get("director_mode") or record.get("director_mode")))),
+                ("Statistics read on", escape(_preset_text(step.stats_preset))),
                 ("Run time", escape(_seconds(timing.get("run_seconds")) or "?")),
                 ("Per step (polled)", escape(_seconds(timing.get("seconds_per_step_polled")) or "?")),
+                ("Steps (polled)", escape(str(timing.get("total_steps_polled") or "?"))),
                 ("Peak VRAM (preset stats)", escape(_vram(step.peak_vram_mb) or "not derived")),
                 ("Peak VRAM (whole device, sampled)", escape(_vram(memory.get("peak_vram_used_mb_sampled")) or "?")),
             ]
@@ -1011,6 +1026,8 @@ def _step_detail(step: VpStep) -> str:
         for name in ("failure", "blocked"):
             if result.get(name):
                 parts.append(f"<h3>{name.capitalize()}</h3><pre>{escape(json.dumps(result[name], indent=1, ensure_ascii=False))}</pre>")
+        for check in step.not_offered_checks:
+            parts.append(f'<p class="small"><span class="tag off">{escape(str(check.get("check")))}</span> not offered: {escape(str(check.get("reason")))}</p>')
         if step.checks:
             rows = [[f'<span class="tag {"ok" if check.get("ok") else "bad"}">{"ok" if check.get("ok") else "failed"}</span>', escape(str(check.get("check"))), escape(json.dumps(check.get("expected"), ensure_ascii=False)), escape(json.dumps(check.get("actual"), ensure_ascii=False))] for check in step.checks]
             parts.append("<h3>Checks</h3>" + _table(["", "Check", "Expected", "Actual"], rows))

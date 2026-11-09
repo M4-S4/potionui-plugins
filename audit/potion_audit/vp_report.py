@@ -8,11 +8,12 @@ from .vp_scenario import SHOTS
 SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 DURATION_TOLERANCE = 0.20
 VRAM_TOLERANCE_MB = 512.0
-CHAIN_CHECKS = ("chain_frame", "chain_start")
+SHOT_CHECKS = ("chain_frame", "chain_start", "chain_mode", "chain_warning", "flf_start", "image_preset")
 COLUMNS = (
     ("take", SHOTS[0]["id"], "Shot 1"),
     ("take", SHOTS[1]["id"], "Shot 2 chained"),
     ("take", SHOTS[2]["id"], "Shot 3 Ref2VA"),
+    ("take", SHOTS[3]["id"], "Shot 4 first and last"),
     ("final_pass", None, "Final pass"),
     ("export", None, "Export"),
 )
@@ -81,8 +82,27 @@ class VpStep:
         return list((self.result or {}).get("checks") or ())
 
     @property
-    def chain_checks(self) -> list[dict]:
-        return [check for check in self.checks if check.get("check") in CHAIN_CHECKS]
+    def shot_checks(self) -> list[dict]:
+        return [check for check in self.checks if check.get("check") in SHOT_CHECKS]
+
+    @property
+    def not_offered_checks(self) -> list[dict]:
+        return list((self.result or {}).get("not_offered") or ())
+
+    @property
+    def stats_preset(self) -> dict:
+        return dict((self.result or {}).get("stats_preset") or self.record.get("stats_preset") or {})
+
+    @property
+    def stats_preset_id(self) -> str | None:
+        return self.stats_preset.get("preset_id")
+
+    @property
+    def other_preset(self) -> str | None:
+        found = self.stats_preset
+        if not found.get("differs"):
+            return None
+        return str(found.get("name") or found.get("preset_id"))
 
     @property
     def video(self) -> Path | None:
@@ -223,6 +243,7 @@ def compare_scenarios(current: Scenario, previous: Scenario) -> dict:
             continue
         duration = _change(step.seconds, old.seconds)
         vram = None if step.peak_vram_mb is None or old.peak_vram_mb is None else round(step.peak_vram_mb - old.peak_vram_mb, 1)
+        preset_changed = step.stats_preset_id is not None and old.stats_preset_id is not None and step.stats_preset_id != old.stats_preset_id
         rows.append(
             {
                 "step": step.key,
@@ -238,6 +259,9 @@ def compare_scenarios(current: Scenario, previous: Scenario) -> dict:
                 "previous_peak_vram_mb": old.peak_vram_mb,
                 "vram_change_mb": vram,
                 "vram_flag": vram is not None and abs(vram) > VRAM_TOLERANCE_MB,
+                "stats_preset": step.stats_preset.get("name") or step.stats_preset_id,
+                "previous_stats_preset": old.stats_preset.get("name") or old.stats_preset_id,
+                "preset_changed": preset_changed,
             }
         )
     keys = {step.key for step in current.steps}
@@ -277,7 +301,9 @@ def scenario_json(scenario: Scenario) -> dict:
                 "reason": step.reason,
                 "seconds": step.seconds,
                 "peak_vram_mb": step.peak_vram_mb,
-                "chain_checks": step.chain_checks,
+                "shot_checks": step.shot_checks,
+                "not_offered": step.not_offered_checks,
+                "stats_preset": step.stats_preset or None,
             }
             for step in scenario.steps
         ],
