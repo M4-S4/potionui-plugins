@@ -19,6 +19,7 @@ class Found:
     name: str
     kind: Optional[str] = None
     value: Optional[str] = None
+    ref: Optional[Dict[str, Any]] = None
 
 
 def basename(value: str) -> str:
@@ -45,12 +46,25 @@ def core_ref(origin: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     return {"kind": origin["kind"], **{core: origin[key] for key, core in keys.items()}}
 
 
+def history_ref(record: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    generation_id, file_id = record.get("generation_id"), record.get("file_id")
+    if not generation_id:
+        return None
+    ref = {"kind": "history", "generation_id": str(generation_id)}
+    return {**ref, "file_id": str(file_id)} if file_id else ref
+
+
+def history_file(record: Mapping[str, Any]) -> Found:
+    return Found(basename(record["file_path"]), "history", record["file_path"], history_ref(record))
+
+
 class Resolver:
     """Resolves the media of a project as one user and finds their files on this server."""
 
     def __init__(self, user: User):
         self.user = user
         self._resolved: Dict[Tuple[Any, ...], Any] = {}
+        self._history: Dict[Tuple[str, str], Optional[Dict[str, Any]]] = {}
 
     def resolve(self, ref: Mapping[str, Any]) -> Dict[str, Any]:
         key = tuple(sorted(ref.items()))
@@ -64,11 +78,27 @@ class Resolver:
             raise found
         return found
 
-    def path(self, kind: str, value: str) -> Optional[str]:
-        return core_bridge.media_file_path(kind, value)
+    def ref(self, found: Found) -> Optional[Dict[str, Any]]:
+        ref = found.ref
+        if ref is None or ref.get("kind") != "history" or ref.get("file_id"):
+            return ref
+        key = (ref["generation_id"], str(found.value))
+        if key not in self._history:
+            try:
+                files = core_bridge.list_generation_files(self.user, ref["generation_id"])
+            except Exception:
+                files = []
+            entry = next((item for item in files if item.get("id") and item.get("file_path") == found.value), None)
+            self._history[key] = None if entry is None else {**ref, "file_id": str(entry["id"])}
+        return self._history[key]
 
-    def local(self, kind: str, value: str, folder: Path) -> Optional[Path]:
-        return core_bridge.local_media_file(kind, value, folder)
+    def path(self, found: Found) -> Optional[str]:
+        ref = self.ref(found)
+        return core_bridge.media_file_path(self.user, ref) if ref else None
+
+    def local(self, found: Found, folder: Path) -> Optional[Path]:
+        ref = self.ref(found)
+        return core_bridge.local_media_file(self.user, ref, folder) if ref else None
 
 
 def take_of(asset: Mapping[str, Any], takes: Iterable[Mapping[str, Any]]) -> Optional[Mapping[str, Any]]:
@@ -93,7 +123,7 @@ def locate(asset: Mapping[str, Any], takes: Iterable[Mapping[str, Any]], resolve
     """Where an asset's file is: its take, the media its origin resolves to, or only the name in its URL."""
     take = take_of(asset, takes)
     if take is not None:
-        return Found(basename(take["file_path"]), "history", take["file_path"])
+        return history_file(take)
     ref = core_ref(asset.get("origin") or {})
     if ref is not None:
         try:
@@ -101,7 +131,7 @@ def locate(asset: Mapping[str, Any], takes: Iterable[Mapping[str, Any]], resolve
         except MediaRefError:
             resolved = None
         if resolved and resolved.get("value"):
-            return Found(basename(resolved["value"]), ref["kind"], resolved["value"])
+            return Found(basename(resolved["value"]), ref["kind"], resolved["value"], ref)
     if asset.get("src") and url_basename(asset["src"]):
         return Found(url_basename(asset["src"]))
     return None
@@ -121,7 +151,7 @@ def file_of(
         return None
     found = locate(asset, takes, resolver)
     if found is not None:
-        path = resolver.path(found.kind, found.value) if found.kind else None
+        path = resolver.path(found) if found.kind else None
         return {"name": found.name, "path": path or found.name}
     if asset.get("generated"):
         name = synthetic_name(doc, clip, asset, locale)
@@ -166,7 +196,7 @@ def local_inputs(
             return None
         key = (found.kind, found.value)
         if key not in cache:
-            cache[key] = resolver.local(found.kind, found.value, folder)
+            cache[key] = resolver.local(found, folder)
         return cache[key]
 
     shots: Dict[str, Optional[Dict[str, Any]]] = {}

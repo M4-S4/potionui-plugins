@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.exports import media as export_media
 from backend import core_bridge, director, estimate, generation, presets, projects, reception, sequence, soundtrack, takes, vreftrack
 from backend.projects import DocError, validate_doc
 
@@ -356,10 +357,10 @@ def films(tmp_path, monkeypatch):
         "take": _source(folder / "take.mp4", 4.0, sound=True),
     }
 
-    def local(kind, value, target):
-        return files.get(Path(value).stem)
+    def local(resolver, found, target):
+        return files.get(Path(found.value).stem)
 
-    monkeypatch.setattr(core_bridge, "local_media_file", local)
+    monkeypatch.setattr(export_media.Resolver, "local", local)
     return files
 
 

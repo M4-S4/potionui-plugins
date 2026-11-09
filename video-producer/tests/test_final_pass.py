@@ -52,7 +52,7 @@ def guided(core, monkeypatch, export_storage):
         return {"value": f"uploads/first-{len(framed)}.png", "media_type": "image"}
 
     monkeypatch.setattr(core_bridge, "extract_frame", extract_frame)
-    monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, folder: Path(f"/storage/{value}"))
+    monkeypatch.setattr(core_bridge, "local_media_file", lambda user, ref, folder: Path(f"/storage/{ref['generation_id']}.mp4"))
     monkeypatch.setattr(core_bridge, "probe_video", lambda path: SimpleNamespace(has_audio=False))
     return framed
 
@@ -305,12 +305,11 @@ def test_the_sound_of_a_draft_kept_in_object_storage_is_heard_from_a_streamed_co
     key = f"generations/x/{drafts[0]['generation_id']}.mp4"
     copies = []
 
-    def copy_media_file(kind, value, target):
-        copies.append((kind, value, Path(target)))
+    def copy_media_file(user, ref, target):
+        copies.append((ref["kind"], core_bridge.resolve_media(user, ref)["value"], Path(target)))
         Path(target).write_bytes(b"\0" * 64)
-        return True
 
-    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda kind, value: None)
+    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda user, ref: None)
     monkeypatch.setattr(core_bridge.api_media, "copy_media_file", copy_media_file)
     monkeypatch.setattr(core_bridge, "probe_video", lambda path: SimpleNamespace(has_audio=Path(path).is_file()))
 
@@ -325,8 +324,11 @@ def test_a_draft_whose_file_is_gone_from_the_storage_has_no_sound(core, make_pro
     core.use_wan()
     project, drafts = _drafts(core, make_project, clips=SHOTS[:1])
     project["doc"]["assets"].append({"id": f"gen-{drafts[0]['id']}", "kind": "video", "resultId": drafts[0]["id"]})
-    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda kind, value: None)
-    monkeypatch.setattr(core_bridge.api_media, "copy_media_file", lambda kind, value, target: False)
+    def gone(user, ref, target):
+        raise core_bridge.MediaRefError("not_found", "The referenced media is not available")
+
+    monkeypatch.setattr(core_bridge.api_media, "media_local_path", lambda user, ref: None)
+    monkeypatch.setattr(core_bridge.api_media, "copy_media_file", gone)
     probed = []
     monkeypatch.setattr(core_bridge, "probe_video", lambda path: probed.append(path) or SimpleNamespace(has_audio=True))
 

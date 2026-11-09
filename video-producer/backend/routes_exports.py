@@ -8,7 +8,7 @@ from . import access, core_bridge, projects, renditions, settings, takes
 from .core_bridge import AccountType, LimitExceeded, MediaRefError, User, get_current_active_user
 from .exports import EXCHANGE, content_disposition, jobs, render, video
 from .exports.common import timing_error
-from .exports.media import MEDIA_MODES, Resolver, basename, exportable, files_of
+from .exports.media import MEDIA_MODES, Resolver, basename, exportable, files_of, history_file
 from .responses import fail, ok
 
 router = APIRouter()
@@ -87,7 +87,7 @@ def exchange_export(
     for index, clip in enumerate(project["doc"].get("clips") or []):
         version = versions.get(clip.get("id"))
         if version is not None and files.get(("clips", index)):
-            path = resolver.path("history", version["file_path"]) or version["file_path"]
+            path = resolver.path(history_file(version)) or version["file_path"]
             name = basename(version["file_path"])
             files[("clips", index)] = {"name": name, "path": name if media == "name" else path}
     target = EXCHANGE[fmt]
@@ -224,7 +224,7 @@ async def seam_frame(
         fail(502, "extract_failed", str(exc) or "The frame could not be extracted.", code=exc.code)
     except LimitExceeded as exc:
         fail(502, "extract_failed", str(exc) or "The storage plan of the project owner is full.", code="limit_exceeded")
-    item = core_bridge.upload_item(owner.id, frame["value"]) or {}
+    item = {"item_id": (frame.get("ref") or {}).get("item_id"), "width": frame.get("width"), "height": frame.get("height")}
     if not item.get("item_id"):
         fail(502, "extract_failed", "The frame was stored but its library item cannot be found.", code="store_failed")
     filename = basename(frame["value"])

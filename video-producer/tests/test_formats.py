@@ -420,10 +420,9 @@ async def test_a_real_export_delivers_the_frame_of_its_format(make_doc, make_use
     monkeypatch.setattr(takes, "list_takes", lambda project_id: [])
 
     async def stored(user, path):
-        return {"value": f"uploads/{path.name}"}
+        return {"value": f"uploads/{path.name}", "ref": {"kind": "library", "item_id": "item-1"}}
 
     monkeypatch.setattr(video.core_bridge, "save_user_media", stored)
-    monkeypatch.setattr(video.core_bridge, "upload_item", lambda user_id, value: {"item_id": "item-1"})
     user = make_user()
     job = {"id": "job-1", "user_id": "user-1", "format": fmt, "resolution": resolution, "stems": False, "ratio": ratio}
 

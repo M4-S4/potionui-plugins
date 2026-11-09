@@ -36,8 +36,8 @@ class FixtureResolver:
             "origin": None,
         }
 
-    def path(self, kind, value):
-        return f"{STORAGE}/{value}"
+    def path(self, found):
+        return f"{STORAGE}/{found.value}"
 
 
 @pytest.fixture(scope="module")

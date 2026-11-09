@@ -42,7 +42,8 @@ class Frames:
         end = frame_grab.end_of(clip)
         value = f"uploads/{asset['id']}-frame-{frame_grab.num(end)}s.png"
         self.store.items[value] = f"item-{len(self.calls)}"
-        return {"value": value, "filename": value.rsplit("/", 1)[-1], "source": {"shotId": clip["id"], "takeId": asset.get("resultId"), "assetId": asset["id"], "at": end}}
+        ref = {"kind": "library", "item_id": self.store.items[value]}
+        return {"value": value, "filename": value.rsplit("/", 1)[-1], "ref": ref, "width": 832, "height": 468, "source": {"shotId": clip["id"], "takeId": asset.get("resultId"), "assetId": asset["id"], "at": end}}
 
 
 @pytest.fixture

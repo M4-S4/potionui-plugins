@@ -7,6 +7,7 @@ from typing import Any, Callable, NamedTuple, Optional
 import pytest
 from fastapi.routing import APIRoute
 
+from backend.exports import media as export_media
 from backend import core_bridge, frame_grab, presets, projects, renditions, settings, takes, tracker
 from backend.api import router
 from backend.exports import jobs, video
@@ -75,11 +76,10 @@ class World:
         monkeypatch.setattr(video, "assemble", self._assemble)
         monkeypatch.setattr(core_bridge, "find_ffmpeg", lambda: "/usr/bin/ffmpeg")
         monkeypatch.setattr(core_bridge, "find_ffprobe", lambda: "/usr/bin/ffprobe")
-        monkeypatch.setattr(core_bridge, "media_file_path", lambda kind, value: f"/srv/storage/{value}")
+        monkeypatch.setattr(export_media.Resolver, "path", lambda resolver, found: f"/srv/storage/{found.value}")
         monkeypatch.setattr(core_bridge, "preset_driver", lambda preset_id: None)
         monkeypatch.setattr(core_bridge, "extract_frame", self._extract_frame)
-        monkeypatch.setattr(core_bridge, "upload_item", self._upload_item)
-        monkeypatch.setattr(core_bridge, "local_media_file", lambda kind, value, folder: Path(folder) / "source.mp4")
+        monkeypatch.setattr(export_media.Resolver, "local", lambda resolver, found, folder: Path(folder) / "source.mp4")
         monkeypatch.setattr(core_bridge, "probe_video", lambda path: None)
         monkeypatch.setattr(core_bridge, "save_user_media", self._save_user_media)
         monkeypatch.setattr(frame_grab, "run", self._run)
@@ -101,7 +101,8 @@ class World:
 
     @staticmethod
     async def _extract_frame(user, ref, at="last"):
-        return {"value": "uploads/frame.png", "media_type": "image", "original_filename": "frame.png", "origin": None}
+        stored = {"kind": "library", "item_id": f"item-{user.id}"}
+        return {"value": "uploads/frame.png", "media_type": "image", "original_filename": "frame.png", "origin": None, "ref": stored, "width": 832, "height": 480}
 
     @staticmethod
     async def _run(command):
@@ -109,15 +110,12 @@ class World:
 
     @staticmethod
     async def _save_user_media(user, path):
-        return {"value": "uploads/frame.png", "media_type": "image", "original_filename": Path(path).name, "origin": None}
+        stored = {"kind": "library", "item_id": f"item-{user.id}"}
+        return {"value": "uploads/frame.png", "media_type": "image", "original_filename": Path(path).name, "origin": None, "ref": stored, "width": 832, "height": 480}
 
     @staticmethod
     async def _assemble(command, total, on_progress=None, on_process=None, cwd=None, code="ffmpeg_failed"):
         (Path(cwd) / command[-1]).write_bytes(b"mp4")
-
-    @staticmethod
-    def _upload_item(user_id, value):
-        return {"item_id": f"item-{user_id}", "filename": "frame.png", "width": 832, "height": 480}
 
     def _reference(self, make_project):
         reference = json.loads(REFERENCE.read_text(encoding="utf-8"))
@@ -268,9 +266,9 @@ ROUTES = {
         invalid=lambda w: Call("/media/resolve", {"origin": "library"}, 422, "invalid_request"),
     ),
     "POST /media/uploaded": Route(
-        success=lambda w: Call("/media/uploaded", {"filename": "upload.png"}, check=lambda r: _data(r)["media"]["origin"] == {"kind": "library", "itemId": "item-user-1"}),
-        denied=lambda w: Call("/media/uploaded", {"filename": "upload.png"}, 404, "media_not_found", "user-2"),
-        invalid=lambda w: Call("/media/uploaded", {"filename": "uploads/upload.png"}, 422, "invalid_request"),
+        success=lambda w: Call("/media/uploaded", {"id": "item-user-1"}, check=lambda r: _data(r)["media"]["origin"] == {"kind": "library", "itemId": "item-user-1"}),
+        denied=lambda w: Call("/media/uploaded", {"id": "item-user-1"}, 404, "media_not_found", "user-2"),
+        invalid=lambda w: Call("/media/uploaded", {"filename": "upload.png"}, 422, "invalid_request"),
     ),
     "GET /projects/{id}/takes": Route(
         success=lambda w: Call(f"/projects/{w.pid}/takes", check=lambda r: w.done["id"] in [t["id"] for t in _data(r)["takes"]]),

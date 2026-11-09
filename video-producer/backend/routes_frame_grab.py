@@ -21,7 +21,7 @@ async def _frame(user: User, project_id: str, shot_id: str, first: bool) -> Dict
         fail(502, "extract_failed", str(exc) or "The frame could not be stored.", code="store_failed")
     except LimitExceeded as exc:
         fail(502, "extract_failed", str(exc) or "The storage plan of the project owner is full.", code="limit_exceeded")
-    stored = frame_grab.media_of(owner.id, frame)
+    stored = frame_grab.media_of(frame)
     if stored is None:
         fail(502, "extract_failed", "The frame was stored but its library item cannot be found.", code="store_failed")
     return ok({"media": stored, "source": frame["source"]})

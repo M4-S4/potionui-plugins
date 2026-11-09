@@ -881,8 +881,8 @@ export function createClient(api, save) {
 		uploadMedia(form, options) {
 			return coreUpload(api, '/api/media/upload', form, options);
 		},
-		async uploadedMedia(filename) {
-			return mapped(await call(api, 'post', '/media/uploaded', { filename }), (data) => normalizeMedia(data.media));
+		async uploadedMedia(itemId) {
+			return mapped(await call(api, 'post', '/media/uploaded', { id: itemId }), (data) => normalizeMedia(data.media));
 		},
 		presetModels(presetId, modelType, signal) {
 			return coreModels(api, presetId, modelType, signal);

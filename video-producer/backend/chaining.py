@@ -161,7 +161,7 @@ async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
         return fail(take, "chain_frame_failed", exc.message)
     except (MediaRefError, LimitExceeded) as exc:
         return fail(take, "chain_frame_failed", str(exc) or "The last image of the previous shot could not be stored.")
-    media = frame_grab.media_of(owner.id, frame)
+    media = frame_grab.media_of(frame)
     if media is None:
         return fail(take, "chain_frame_failed", "The last image of the previous shot was stored but its library item cannot be found.")
     request = swap(copy.deepcopy(take.get("request") or {}), director.chain_value(wait["previous"]), frame["value"])

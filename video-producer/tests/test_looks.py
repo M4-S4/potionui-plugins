@@ -627,7 +627,7 @@ def test_a_start_image_candidate_is_looked_at_once_as_the_image_it_is(core, make
     candidate = _done(project["id"], "s1", kind=takes.KEYFRAME, file_path="generations/x/k.png")
     image = tmp_path / "k.png"
     Image.new("RGB", (16, 9), RED).save(image)
-    monkeypatch.setattr(looks.media.Resolver, "local", lambda self, kind, value, folder: image)
+    monkeypatch.setattr(looks.media.Resolver, "local", lambda self, found, folder: image)
 
     picked = asyncio.run(looks._take_frames(core.users["user-1"], candidate, tmp_path))
 
