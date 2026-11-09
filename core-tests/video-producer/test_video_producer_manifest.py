@@ -1190,6 +1190,7 @@ H3_FAST_12GB = "01M54HN72PABVRE54YNQA2Q7ZT"
 WAN_1_3B_8GB = "01M57QPEMDPKHHW83YSEYBN0WZ"
 WAN_5B_8GB = "01M57QPEMDPKHHW83YSEYBN0X0"
 WAN_LIGHTNING_12GB = "01M57QPEMDPKHHW83YSEYBN0X1"
+WAN_LIGHTNING_I2V_12GB = "01M57QPEMDPKHHW83YSEYBN0X2"
 MINIMAX_H3_FAST = "01KX47H3FASTH30000000000VA"
 COMFY_DIT = "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
 WAN2GP_DIT = "MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors"
@@ -1207,8 +1208,14 @@ WAN_14B_HIGH_DIT = "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors"
 WAN_14B_LOW_DIT = "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors"
 LIGHTNING_HIGH_LORA = "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors"
 LIGHTNING_LOW_LORA = "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors"
+LIGHTNING_I2V_HIGH_LORA = "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors"
+LIGHTNING_I2V_LOW_LORA = "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors"
+WAN_14B_I2V_HIGH_DIT = "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+WAN_14B_I2V_LOW_DIT = "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
 WAN_HIDDEN = ("i2v DiT (high-noise / single)", "i2v DiT (low-noise expert)", "Image to video", "SVI Pro")
 WAN_HIDDEN_FIELDS = {"i2v_high_noise_model": {"visible"}, "i2v_low_noise_model": {"visible"}}
+WAN_I2V_HIDDEN = ("t2v DiT (high-noise / single)", "t2v DiT (low-noise expert)", "Text to video", "SVI Pro")
+LIGHTNING_RESOLUTIONS = ("832x480", "480x832", "960x544", "544x960", "640x480", "480x640", "832x624", "624x832", "640x640", "720x720", "576x720", "640x800")
 H3_DEFAULTS = {"resolution": "832x480", "quantity": 1, "sampler": "res_multistep", "scheduler": "simple", "keyframe_pixel_budget": "1"}
 WAN_DEFAULTS = {"seed": -1, "sampler": "unipc", "schedule": "shift", "steps": 30}
 
@@ -1237,6 +1244,9 @@ class Shipped:
     draft: Tuple[str, ...] = ()
     final: Tuple[str, ...] = ()
     modes: Tuple[str, ...] = ("video",)
+    wan_modes: Tuple[str, ...] = ("t2v",)
+    companions: Dict[str, str] = dataclasses.field(default_factory=dict)
+    listed: bool = True
 
     @property
     def is_wan(self):
@@ -1265,7 +1275,7 @@ class Shipped:
 
     @property
     def director_modes(self):
-        return ["t2v"] if self.is_wan else ["t2v", "i2v", "flf", "director"]
+        return list(self.wan_modes) if self.is_wan else ["t2v", "i2v", "flf", "director"]
 
     @property
     def max_duration(self):
@@ -1325,15 +1335,24 @@ SHIPPED_PRESETS = {
             "vae": {"configuration"},
             "t2v_high_noise_model": {"configuration"},
             "t2v_low_noise_model": {"configuration"},
-            **WAN_HIDDEN_FIELDS,
+            "i2v_high_noise_model": {"configuration", "visible"},
+            "i2v_low_noise_model": {"configuration", "visible"},
         },
         defaults={**WAN_DEFAULTS, "speed_profile": "balanced", "resolution": "832x480", "fps": 24, "cfg": 5.0, "t2v_loras_high": [], "t2v_loras_low": []},
-        recommended={"text_encoder": [UMT5], "vae": [WAN22_VAE], "t2v_high_noise_model": [WAN_5B_DIT], "t2v_low_noise_model": []},
+        recommended={
+            "text_encoder": [UMT5],
+            "vae": [WAN22_VAE],
+            "t2v_high_noise_model": [WAN_5B_DIT],
+            "t2v_low_noise_model": [],
+            "i2v_high_noise_model": [WAN_5B_DIT],
+            "i2v_low_noise_model": [],
+        },
         hidden=WAN_HIDDEN,
         own_resolutions=("832x480", "480x832", "640x640", "576x704"),
         speed_options=("balanced", "custom"),
         draft=("832x480", "480x832", "640x640", "576x704"),
         final=("832x480", "480x832", "640x640", "576x704"),
+        wan_modes=("t2v", "i2v"),
     ),
     WAN_LIGHTNING_12GB: Shipped(
         name="Wan 2.2 14B Lightning (12 GB)",
@@ -1375,11 +1394,65 @@ SHIPPED_PRESETS = {
             "t2v_low_noise_model": [WAN_14B_LOW_DIT],
         },
         hidden=WAN_HIDDEN,
-        own_resolutions=("832x480", "480x832", "960x544", "544x960", "640x480", "480x640", "832x624", "624x832", "640x640", "720x720", "576x720", "640x800"),
+        own_resolutions=LIGHTNING_RESOLUTIONS,
         speed_options=("fast", "custom"),
         reacted={"steps": 6, "cfg": 1.0},
         draft=("832x480", "480x832", "640x640", "576x720"),
         final=("960x544", "544x960", "720x720", "640x800"),
+        companions={"i2v": WAN_LIGHTNING_I2V_12GB, "flf": WAN_LIGHTNING_I2V_12GB},
+    ),
+    WAN_LIGHTNING_I2V_12GB: Shipped(
+        name="Wan 2.2 14B Lightning I2V (12 GB)",
+        folder="Wan2.2-14B-Lightning-I2V-12GB",
+        source_id=WAN,
+        source_folder="Wan",
+        min_vram_gb=12,
+        recommended_vram_gb=16,
+        ram_gb=64,
+        family_tag="wan",
+        fps_var="default_fps",
+        fps=16,
+        frames=81,
+        description_mentions=("12 GB of VRAM", "Wan 2.2 14B Lightning (12 GB)"),
+        changed_fields={
+            "speed_profile": {"configuration", "default"},
+            "resolution": {"configuration"},
+            "text_encoder": {"configuration"},
+            "vae": {"configuration"},
+            "t2v_high_noise_model": {"configuration", "visible"},
+            "t2v_low_noise_model": {"configuration", "visible"},
+            "i2v_high_noise_model": {"configuration"},
+            "i2v_low_noise_model": {"configuration"},
+            "i2v_loras_high": {"default"},
+            "i2v_loras_low": {"default"},
+            "steps": {"reactions"},
+        },
+        defaults={
+            **WAN_DEFAULTS,
+            "speed_profile": "fast",
+            "resolution": "832x480",
+            "fps": 16,
+            "cfg": 5.0,
+            "t2v_loras_high": [],
+            "t2v_loras_low": [],
+            "i2v_loras_high": [{"model": f"models/loras/{LIGHTNING_I2V_HIGH_LORA}", "strength": 1.0}],
+            "i2v_loras_low": [{"model": f"models/loras/{LIGHTNING_I2V_LOW_LORA}", "strength": 1.0}],
+        },
+        recommended={
+            "text_encoder": [UMT5],
+            "vae": [WAN21_VAE],
+            "i2v_high_noise_model": [WAN_14B_I2V_HIGH_DIT],
+            "i2v_low_noise_model": [WAN_14B_I2V_LOW_DIT],
+        },
+        hidden=WAN_I2V_HIDDEN,
+        own_resolutions=LIGHTNING_RESOLUTIONS,
+        speed_options=("fast", "custom"),
+        reacted={"steps": 4, "cfg": 1.0},
+        draft=("832x480", "480x832", "640x640", "576x720"),
+        final=("960x544", "544x960", "720x720", "640x800"),
+        wan_modes=("i2v", "flf"),
+        companions={"t2v": WAN_LIGHTNING_12GB},
+        listed=False,
     ),
     H3_12GB: Shipped(
         name="MiniMax-H3 (12 GB)",
@@ -1522,7 +1595,11 @@ def test_the_shipped_presets_load_through_the_cores_loader(shipped_presets):
         assert preset.requires == shipped.requires, preset_id
         assert preset.tags[:3] == shipped.leading_tags, preset_id
         assert [tag for tag in preset.tags if tag.startswith("ram-")] == shipped.ram_tags, preset_id
-        assert preset.vars["video_producer"] == {"profile": shipped.profile}, preset_id
+        assert preset.vars["video_producer"] == {
+            "profile": shipped.profile,
+            **({"companions": shipped.companions} if shipped.companions else {}),
+            **({} if shipped.listed else {"listed": False}),
+        }, preset_id
         assert (preset.vars[shipped.fps_var], preset.vars["default_frames"]) == (shipped.fps, shipped.frames), preset_id
         for text in shipped.description_mentions:
             assert text in preset.description, (preset_id, text)
@@ -1532,10 +1609,11 @@ def test_the_backend_knows_the_shipped_presets_and_reads_their_profile(shipped_p
     presets = _load("backend.presets")
     catalog = _load("backend.catalog")
 
-    assert (presets.WAN21_T2V_1_3B_8GB, presets.WAN22_TI2V_5B_8GB, presets.WAN22_14B_LIGHTNING_12GB) == (
+    assert (presets.WAN21_T2V_1_3B_8GB, presets.WAN22_TI2V_5B_8GB, presets.WAN22_14B_LIGHTNING_12GB, presets.WAN22_14B_LIGHTNING_I2V_12GB) == (
         WAN_1_3B_8GB,
         WAN_5B_8GB,
         WAN_LIGHTNING_12GB,
+        WAN_LIGHTNING_I2V_12GB,
     )
     assert set(presets.WAN_TIER_PRESETS) == set(WAN_PRESETS)
     for preset_id, shipped in SHIPPED_PRESETS.items():
@@ -1546,6 +1624,9 @@ def test_the_backend_knows_the_shipped_presets_and_reads_their_profile(shipped_p
         assert catalog.main_mode(preset.vars, list(preset.modes)) == "video"
         assert catalog.profiles(preset_id, preset.vars, list(preset.modes)) == shipped.profiles
         assert catalog.director_modes(preset.vars) == shipped.director_modes
+        assert catalog.companions(preset.vars) == shipped.companions, preset_id
+        assert catalog.listed(preset.vars) is shipped.listed, preset_id
+        assert all(companion in SHIPPED_PRESETS and mode in SHIPPED_PRESETS[companion].director_modes for mode, companion in shipped.companions.items()), preset_id
         assert catalog.preset_limits(preset.vars)["max_duration"] == shipped.max_duration
         assert catalog.preset_fps(preset.vars) == shipped.fps
 
@@ -1563,13 +1644,13 @@ def test_the_shipped_h3_presets_keep_the_director_and_prompt_help_of_the_core_pr
         assert preset.formulas["groups"] == {name: group for name, group in source.formulas["groups"].items() if name != "memory"}
 
 
-def test_the_shipped_wan_presets_keep_the_prompt_help_of_the_core_preset_and_generate_from_text_only(shipped_presets, core_presets):
+def test_the_shipped_wan_presets_keep_the_prompt_help_of_the_core_preset_and_offer_only_the_modes_their_models_run(shipped_presets, core_presets):
     own_vars = ("video_director", "video_producer", "default_fps", "default_frames")
     for preset_id, shipped in WAN_PRESETS.items():
         preset, source = shipped_presets[preset_id], core_presets[shipped.source_id]
         director = preset.vars["video_director"]
         limits = {"default_duration": 5, "default_fps": shipped.fps, "max_duration": 5}
-        assert director == {**source.vars["video_director"], "modes": {"t2v": {}}, "limits": limits}, preset_id
+        assert director == {**source.vars["video_director"], "modes": {mode: {} for mode in shipped.wan_modes}, "limits": limits}, preset_id
         assert {key for key, value in director.items() if value != source.vars["video_director"].get(key)} == {"modes", "limits"}, preset_id
         assert set(preset.vars) == set(own_vars), preset_id
         assert {key: value for key, value in preset.vars.items() if key not in own_vars} == {
@@ -1825,6 +1906,41 @@ def test_the_wan_forms_bind_to_the_defaults_and_the_speed_profile_they_declare(s
         assert [option["value"] for option in named["speed_profile"].configuration["options"]] == list(shipped.speed_options), preset_id
         assert list(preset.speed_profiles) == list(shipped.speed_options), preset_id
         assert preset.speed_profiles[values["speed_profile"]] == {"steps": values["steps"], "guidance": values["cfg"], "sampler": values["sampler"]}, preset_id
+
+
+def test_the_5b_preset_carries_one_motion_latent_when_its_image_to_video_picker_holds_the_5b(shipped_presets, tmp_path):
+    from unittest.mock import Mock
+
+    from src.features.forms.binding import bind_form
+    from src.features.generation.orchestrator import _prepare_director_form_data
+
+    preset = shipped_presets[WAN_5B_8GB]
+    [five_b] = _recommendations(_video_form(preset)[0]["i2v_high_noise_model"])
+    segment = {"id": "seg-0", "prompt": "a lantern", "negative_prompt": "", "start": None, "end": None, "frames": None, "seed": None, "steps": None, "cfg": None, "loras": None}
+    document = {"schema_version": 1, "mode": "t2v", "settings": {"fps": 24, "duration": 5, "resolution": "", "seed": 7, "continuation": None}, "segments": [segment], "media": [], "audio": [], "ic_lora": []}
+    form = {"video_director": document, "t2v_high_noise_model": "model:dit", "i2v_high_noise_model": "model:dit", "text_encoder": "model:te", "vae": "model:vae"}
+    settings = Mock()
+    settings.get_file_storage_directory = Mock(return_value=str(tmp_path))
+    bound = bind_form(preset, "video", None, form, "user_1", storage_dir=str(tmp_path))
+
+    prepared = _prepare_director_form_data(preset, "video", bound.values, "user_1", settings, model_sha256={"model:dit": five_b["sha256"]}.get)
+
+    assert bound.values["svi_motion_latent_count"] == 2
+    assert prepared["svi_motion_latent_count"] == 1
+    assert prepared["video_director"]["settings"]["timing_profile"] == {"motion_latent_count": 1}
+
+
+def test_the_lightning_companion_changes_only_the_step_count_the_fast_profile_sets_in_the_core_steps_reactions(shipped_presets, core_presets):
+    def fast(reaction):
+        return (reaction["when"]["field"], reaction["when"]["equals"]) == ("speed_profile", "fast")
+
+    mine = _video_form(shipped_presets[WAN_LIGHTNING_I2V_12GB])[0]["steps"].reactions
+    theirs = _video_form(core_presets[WAN])[0]["steps"].reactions
+    text = _video_form(shipped_presets[WAN_LIGHTNING_12GB])[0]["steps"].reactions
+
+    assert [reaction["then"]["set_value"] for reaction in theirs if fast(reaction)] == [6]
+    assert mine == [{**reaction, "then": {**reaction["then"], "set_value": 4}} if fast(reaction) else reaction for reaction in theirs]
+    assert text == theirs
 
 
 @pytest.mark.parametrize("aspect, draft, final", [(16 / 9, "832x480", "1344x768"), (9 / 16, "480x832", "768x1344")])

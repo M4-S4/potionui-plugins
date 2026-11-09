@@ -273,16 +273,16 @@ def test_a_12_gb_h3_preset_runs_the_wan2gp_dit_found_by_its_file_name(core, make
     assert plans.shots[0].request["form_data"]["model"] == f"model:id-{WAN2GP_DIT}"
 
 
-def _wan_tier(core, modes=None, preset_id=presets.WAN22_TI2V_5B_8GB, fps=24):
+def _wan_tier(core, modes=None, preset_id=presets.WAN22_TI2V_5B_8GB, fps=24, name="Wan 2.2 TI2V 5B (8 GB)", producer=None):
     wan = core.use_wan()
     director_vars = {
         **wan.vars["video_director"],
         "modes": {"t2v": {}} if modes is None else modes,
         "limits": {"default_duration": 5, "default_fps": fps, "max_duration": 5},
     }
-    variables = {**wan.vars, "default_fps": fps, "video_director": director_vars}
+    variables = {**wan.vars, "default_fps": fps, "video_director": director_vars, **({"video_producer": producer} if producer else {})}
     fields = copy.deepcopy(core.fields[(presets.WAN, "video")])
-    core.add_preset(preset_id, "Wan 2.2 TI2V 5B (8 GB)", {"video": fields}, variables=variables)
+    core.add_preset(preset_id, name, {"video": fields}, variables=variables)
     return preset_id
 
 

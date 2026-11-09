@@ -44,8 +44,9 @@ RECIPE_PRESETS = {
     "vp-minimax-h3-12gb": presets.MINIMAX_H3_12GB,
     "vp-minimax-h3-fast-12gb": presets.MINIMAX_H3_FAST_12GB,
     "vp-wan22-14b-i2v": presets.WAN,
+    "vp-wan22-14b-lightning-i2v-12gb": presets.WAN22_14B_LIGHTNING_I2V_12GB,
 }
-WITHOUT_SMOKE = {"vp-minimax-h3-12gb", "vp-minimax-h3-fast-12gb"}
+WITHOUT_SMOKE = {"vp-minimax-h3-12gb", "vp-minimax-h3-fast-12gb", "vp-wan22-14b-lightning-i2v-12gb"}
 WITH_SMOKE = sorted(set(RECIPE_PRESETS) - WITHOUT_SMOKE)
 SMOKE_TIMEOUTS = {"vp-wan22-14b-lightning-12gb": 600, "vp-wan22-14b-i2v": 600}
 COLD_SMOKE_SECONDS_ON_8_GB = {"vp-wan21-t2v-1-3b-8gb": 64, "vp-wan22-ti2v-5b-8gb": 111}
@@ -56,6 +57,7 @@ PATH_HINTS = {
     presets.MINIMAX_H3_12GB: "video-producer/MiniMax-H3-12GB",
     presets.MINIMAX_H3_FAST_12GB: "video-producer/MiniMax-H3-Fast-12GB",
     presets.WAN: "marketplace/Wan",
+    presets.WAN22_14B_LIGHTNING_I2V_12GB: "video-producer/Wan2.2-14B-Lightning-I2V-12GB",
 }
 WEIGHT_KINDS = ("diffusion_model", "text_encoder", "vae")
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -252,6 +254,36 @@ def test_the_lightning_recipe_downloads_the_lora_of_each_expert_the_preset_selec
     assert "high_noise" in high[0] and "low_noise" in low[0]
     assert sorted(loras) == sorted(high + low)
     assert all(artifact.required for artifact in recipe.artifacts if artifact.kind == "lora")
+
+
+def _sizes(recipe_id):
+    return {file.filename: (file.checksum.value, file.size_bytes) for artifact in _recipe(recipe_id).artifacts for file in _files(artifact)}
+
+
+def test_the_lightning_image_to_video_recipe_shares_its_experts_text_encoder_and_vae_with_the_other_14b_recipes_by_sha256():
+    own = _sizes("vp-wan22-14b-lightning-i2v-12gb")
+    others = {**_sizes("vp-wan22-14b-lightning-12gb"), **_sizes("vp-wan22-14b-i2v")}
+    shared = sorted(set(own) & set(others))
+
+    assert shared == sorted(
+        [
+            "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+            "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors",
+        ]
+    )
+    assert all(own[name] == others[name] for name in shared)
+    assert sorted(set(own) - set(others)) == [
+        "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+        "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+    ]
+    assert sum(size for name, (_, size) in own.items() if name not in others) == 2453954848
+    assert sum(size for _, size in own.values()) == 38033162727
+
+
+def test_the_image_to_video_recipe_of_the_core_preset_downloads_no_lora():
+    assert [artifact.filename for artifact in _recipe("vp-wan22-14b-i2v").artifacts if artifact.kind == "lora"] == []
 
 
 @pytest.mark.parametrize("recipe_id", WITH_SMOKE)

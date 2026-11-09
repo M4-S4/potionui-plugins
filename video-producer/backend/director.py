@@ -3,7 +3,7 @@ import logging
 import math
 import re
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from . import bible, catalog, core_bridge, dialogue, engine_options, formats, keepframing, models, presets, reception, sequence, settings, upscalers, workdir
@@ -1463,6 +1463,7 @@ class _Context:
     fields: Dict[str, models.Fields] = field(default_factory=dict)
     cuts: List[TrackCut] = field(default_factory=list)
     chained: Mapping[str, Chain] = field(default_factory=dict)
+    handed_from: Optional[str] = None
 
     def mode_fields(self, mode: str) -> models.Fields:
         if mode not in self.fields:
@@ -1483,9 +1484,64 @@ def _chain_of(context: _Context, shot_id: str, media: Optional[Dict[str, Any]], 
     return context.chained[shot_id].previous if media is not None and director_mode != "t2v" else None
 
 
+def _chained_start(context: _Context, shot_id: str) -> bool:
+    if shot_id in context.chained:
+        return True
+    first = shot_frames(context.doc, shot_id)[0]
+    asset = _asset(context.doc, first.get("assetId")) if first is not None else None
+    return asset is not None and isinstance(asset.get("frameOf"), Mapping)
+
+
 def _text_only(preset: Preset) -> bool:
     modes = catalog.director_modes(preset.variables)
     return bool(modes) and "i2v" not in modes
+
+
+def _runs_text(preset: Preset) -> bool:
+    modes = catalog.director_modes(preset.variables)
+    return not modes or "t2v" in modes
+
+
+def _wanted_mode(context: _Context, clip: Mapping[str, Any]) -> str:
+    first, last = shot_frames(context.doc, clip["id"])
+    if first is None and clip["id"] not in context.chained:
+        return "t2v"
+    return "flf" if last is not None or keepframing.keeps_framing(clip) else "i2v"
+
+
+def _fallback(context: _Context, shot_id: str, fields: Sequence[str], companion: Optional[str] = None) -> Dict[str, Any]:
+    name = context.preset.name
+    cause = f"The image-to-video preset of {name} is not available to you" if companion and not fields else f"The image-to-video models of {name} are not installed"
+    extra: Dict[str, Any] = {"preset_id": companion} if companion else {}
+    if _chained_start(context, shot_id):
+        return note("chain_models_missing", f"{cause}: the shot starts from its text, not from the last image of the previous shot.", shot_id=shot_id, fields=list(fields), **extra)
+    return note("frame_models_missing", f"{cause}: the shot starts from its text, without its frames.", shot_id=shot_id, fields=list(fields), **extra)
+
+
+def _companion_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> Tuple[Optional["ShotPlan"], Optional[Dict[str, Any]]]:
+    shot_id, preset = clip["id"], context.preset
+    wanted = _wanted_mode(context, clip)
+    modes = catalog.director_modes(preset.variables)
+    target = catalog.companions(preset.variables).get(wanted) if context.handed_from is None and modes and wanted not in modes else None
+    if target is None:
+        return None, None
+    image = wanted in models.IMAGE_MODES
+    companion = find_preset(context.user, target)
+    if companion is None or companion.cloud or context.profile not in companion.profiles:
+        return None, _fallback(context, shot_id, [], target) if image else None
+    own: List[Dict[str, Any]] = []
+    handed = replace(context, preset=companion, fields={}, cuts=[], handed_from=preset.id)
+    plan = _native_plan(handed, clip, own)
+    if plan.director_mode not in catalog.director_modes(companion.variables):
+        return None, None
+    if plan.missing_models and image:
+        return None, _fallback(context, shot_id, plan.missing_models, target)
+    plan.preset_id = companion.id
+    context.cuts.extend(handed.cuts)
+    for item in own:
+        if item not in warnings:
+            warnings.append(item)
+    return plan, None
 
 
 def _native_size(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> Optional[str]:
@@ -1495,7 +1551,7 @@ def _native_size(context: _Context, fields: models.Fields, warnings: List[Dict[s
         aspect_of(context.doc),
         context.quality,
         context.draft_setting,
-        formats.chosen_size(context.doc, preset.id, context.quality),
+        formats.chosen_size(context.doc, context.handed_from or preset.id, context.quality),
         preset.id,
     )
     if choice.refused is not None:
@@ -1556,6 +1612,10 @@ def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Op
 def project_options(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> engine_options.Chosen:
     """The options the project sets for the preset of a plan, a warning naming those that no longer fit their field and are left out."""
     chosen = engine_options.chosen(context.doc, context.preset.id, fields, context.preset.cloud)
+    if context.handed_from is not None:
+        handed = engine_options.chosen(context.doc, context.handed_from, fields, context.preset.cloud)
+        chosen.values = {**handed.values, **chosen.values}
+        chosen.seed = chosen.seed if chosen.seed is not None else handed.seed
     if chosen.invalid:
         warning = note(
             "engine_option_invalid",
@@ -1574,6 +1634,13 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     if reception.takes_sheet(engine, context.profile):
         return _sheet_plan(context, clip, warnings)
     refs = reception.takes_references(context.profile, engine)
+    fallback: Optional[Dict[str, Any]] = None
+    if not refs:
+        handed, fallback = _companion_plan(context, clip, warnings)
+        if handed is not None:
+            return handed
+        if not _runs_text(preset) and _wanted_mode(context, clip) == "t2v":
+            raise DirectorError("image_only_preset", f"{preset.name} starts a shot from an image only: give the shot a first frame.", shot_id=shot_id)
     mode = REFS_MODE if refs else preset.main_mode
     if mode is None or mode not in preset.modes:
         raise DirectorError("no_preset", "The preset has no mode the Video Director can run.")
@@ -1638,12 +1705,19 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         document = audio_document(document, seconds, fps, capabilities)
     request = _request(preset.id, mode, prompt, _native_form(fields, document, resolution, fps, edge))
     chained: Optional[Dict[str, Any]] = None
+    unbound = copy.deepcopy(request)
     if refs:
         request["form_data"]["references"] = [entry.value for entry in sent]
         director_mode = REFS_MODE
     elif _text_only(preset) and shot_frames(doc, shot_id)[0] is not None:
         director_mode = "t2v"
-        warnings.append(note("text_only_preset", "The preset generates from text only: the frames of the shot are not used.", shot_id=shot_id))
+        warnings.append(fallback or note("text_only_preset", "The preset generates from text only: the frames of the shot are not used.", shot_id=shot_id))
+    elif _text_only(preset) and shot_id in context.chained:
+        director_mode = "t2v"
+        warnings.append(
+            fallback
+            or note("chain_text_only", "The preset generates from text only: the shot does not start from the last image of the previous shot.", shot_id=shot_id)
+        )
     else:
         modes = catalog.director_modes(preset.variables)
         chained = None if _text_only(preset) else _chain_media(context, shot_id)
@@ -1660,8 +1734,16 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         )
         if director_mode == "t2v" and context.profile == FL2VA:
             warnings.append(note("fl2va_no_frame", "The shot has no first frame: it is generated from its text alone.", shot_id=shot_id))
+    needed = (AUDIO_VAE,) if mixed else ()
+    resolved = models.resolve_models(preset.id, mode, director_mode, fields, needed)
+    if director_mode in models.IMAGE_MODES and _runs_text(preset):
+        picked = engine_options.chosen(doc, preset.id, fields, preset.cloud).values
+        absent = [name for name in resolved.missing if name not in picked]
+        text = models.resolve_models(preset.id, mode, "t2v", fields, needed) if absent else None
+        if text is not None and all(name in picked for name in text.missing):
+            warnings.append(_fallback(context, shot_id, absent))
+            request, director_mode, chained, resolved = unbound, "t2v", None, text
     framing_warnings(doc, clip, director_mode, warnings)
-    resolved = models.resolve_models(preset.id, mode, director_mode, fields, (AUDIO_VAE,) if mixed else ())
     request["form_data"].update(resolved.values)
     chosen = project_options(context, fields, warnings)
     request["form_data"].update(chosen.values)
@@ -2163,7 +2245,7 @@ def _build(
             if exc.note() not in plans.blocks:
                 plans.blocks.append(exc.note())
             continue
-        plan.preset_id, plan.quality, plan.cloud = preset.id, quality, preset.cloud
+        plan.preset_id, plan.quality, plan.cloud = plan.preset_id or preset.id, quality, preset.cloud
         plan.backend_id = (plans.model or {}).get("backend_id") if preset.cloud else None
         plans.shots.append(plan)
         missing.extend(name for name in plan.missing_models if name not in missing)

@@ -20,9 +20,9 @@
 
 	const projectPreset = doc.engine?.preset ?? null;
 	const own = doc.clips.filter(hasOwnEngine).length;
-	const videoPresets = $derived((ui.me?.presets ?? []).filter((p) => p.video && !p.upscaler));
+	const videoPresets = $derived((ui.me?.presets ?? []).filter((p) => p.video && !p.upscaler && p.listed !== false));
 	function initialPreset() {
-		return asked ?? projectPreset ?? (ui.me?.presets ?? []).find((p) => p.video && !p.upscaler)?.id ?? null;
+		return asked ?? projectPreset ?? (ui.me?.presets ?? []).find((p) => p.video && !p.upscaler && p.listed !== false)?.id ?? null;
 	}
 
 	let chosen = $state(initialPreset());
