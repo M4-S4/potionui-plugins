@@ -140,6 +140,49 @@ def test_the_segments_of_one_run_become_one_matrix_with_the_reasons_of_the_cells
     assert report["runs"] == ["seg-1", "seg-2"]
 
 
+def test_reevaluate_derives_the_peak_again_from_the_recorded_preset_statistics(fake_api, tmp_path, case_file):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    play(fake_api, pack, tmp_path / "out", "r1", machine="box")
+    folder = tmp_path / "out" / "r1" / "cells" / "core-SDXL--txt2img"
+    result = read(folder / "result.json")
+    assert result["generation_stats"]["preset_stats"]["after"]["peak_vram_mb"] == 7400.0
+    result["generation_stats"]["peak_vram_mb"] = 9999.0
+    write(folder / "result.json", result)
+    lines = []
+    reevaluate_run(tmp_path / "out" / "r1", pack, lines.append)
+    stats = read(folder / "result.reevaluated.json")["generation_stats"]
+    assert (stats["previous_peak_vram_mb"], stats["peak_vram_mb"]) == (9999.0, 7400.0)
+    assert any("peak VRAM 9999.0 -> 7400.0 MiB" in line for line in lines)
+    run_set = load_set([tmp_path / "out" / "r1"])
+    assert run_set.entries[0].peak_vram_mb == 7400.0
+
+
+def test_reevaluate_says_why_a_run_without_recorded_statistics_keeps_its_peak(fake_api, tmp_path, case_file):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    play(fake_api, pack, tmp_path / "out", "r1", machine="box")
+    folder = tmp_path / "out" / "r1" / "cells" / "core-SDXL--txt2img"
+    result = read(folder / "result.json")
+    del result["generation_stats"]["preset_stats"]
+    result["generation_stats"]["peak_vram_mb"] = 9999.0
+    write(folder / "result.json", result)
+    reevaluate_run(tmp_path / "out" / "r1", pack, quiet)
+    stats = read(folder / "result.reevaluated.json")["generation_stats"]
+    assert stats["peak_vram_mb"] == 9999.0
+    assert "did not record the preset statistics" in stats["kept"]
+    assert load_set([tmp_path / "out" / "r1"]).entries[0].peak_vram_mb == 9999.0
+
+
+def test_the_report_says_why_a_peak_is_not_derivable(fake_api, tmp_path, case_file):
+    pack = load_pack(write_pack(tmp_path, case_file))
+    fake_api.stats_after["resources"].update(avg_vram_mb=9000.0)
+    play(fake_api, pack, tmp_path / "out", "r1", machine="box")
+    run_set = load_set([tmp_path / "out" / "r1"])
+    assert run_set.entries[0].peak_vram_mb is None
+    page = write_report(run_set, tmp_path / "report", log=quiet).read_text(encoding="utf-8")
+    assert "Peak VRAM (core record of the generation)" in page
+    assert "not derivable: the preset&#x27;s maximum rose to 7400.0 MiB" in page
+
+
 def test_the_report_shows_the_reevaluated_verdict_and_the_old_one_beside_it(fake_api, tmp_path, case_file):
     pack = load_pack(write_pack(tmp_path, case_file))
     play(fake_api, pack, tmp_path / "out", "r1", machine="box")

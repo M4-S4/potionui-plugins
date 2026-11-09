@@ -7,7 +7,7 @@ from . import __version__
 from .media import probe_image, probe_video
 from .pack import Pack, cell_checks
 from .plan import cell_folder
-from .run import CHECKS_VERSION, IMAGE_SUFFIXES, VIDEO_SUFFIXES, evaluate, evaluate_run_report
+from .run import CHECKS_VERSION, IMAGE_SUFFIXES, VIDEO_SUFFIXES, derive_run_stats, evaluate, evaluate_run_report
 
 REEVALUATED = "result.reevaluated.json"
 CHECKED_VERDICTS = {"PASS", "FAIL"}
@@ -42,6 +42,16 @@ def _reprobe(folder: Path, stored: list[dict]) -> tuple[list[dict], list[str]]:
     return outputs, missing
 
 
+def rederive_stats(result: dict) -> dict:
+    stored = result.get("generation_stats") or {}
+    if (result.get("final_status") or {}).get("status") != "completed":
+        return {**stored, "kept": "the generation did not complete: there is nothing to derive"}
+    preset_stats = stored.get("preset_stats") or {}
+    if "before" not in preset_stats or "after" not in preset_stats:
+        return {**stored, "kept": "the run did not record the preset statistics read before and after it, so its derived values cannot be checked again"}
+    return {**derive_run_stats(preset_stats["before"], preset_stats["after"]), "previous_peak_vram_mb": stored.get("peak_vram_mb")}
+
+
 def reevaluate_cell(pack: Pack, entry: dict, folder: Path, result: dict) -> dict:
     previous = result.get("verdict")
     record = {
@@ -54,6 +64,7 @@ def reevaluate_cell(pack: Pack, entry: dict, folder: Path, result: dict) -> dict
         "checks_version": CHECKS_VERSION,
         "previous": {"verdict": previous, "checks_version": result.get("checks_version", 1), "checks": result.get("checks")},
         "pack": {"id": pack.id, "sha256": pack.sha256, "same_as_run": pack.sha256 == (result.get("pack") or {}).get("sha256")},
+        "generation_stats": rederive_stats(result),
     }
     completed = (result.get("final_status") or {}).get("status") == "completed"
     cell = next((item for item in pack.cells if item.id == entry["cell"]), None)
@@ -98,6 +109,9 @@ def reevaluate_run(run_dir: Path, pack: Pack, log: Callable[[str], None] = print
         records.append(record)
         if record["changed"]:
             log(f"{entry['cell']}{' warm' if record['warm_repeat'] else ''}: {record['previous']['verdict']} -> {record['verdict']}")
+        stats = record["generation_stats"]
+        if not stats.get("kept") and stats.get("peak_vram_mb") != stats.get("previous_peak_vram_mb"):
+            log(f"{entry['cell']}{' warm' if record['warm_repeat'] else ''}: peak VRAM {stats.get('previous_peak_vram_mb')} -> {stats.get('peak_vram_mb')} MiB ({stats.get('peak_vram_source')})")
     changed = sum(1 for record in records if record["changed"])
     log(f"{run_dir.name}: {len(records)} cells checked again with checks version {CHECKS_VERSION}, {changed} changed")
     return records

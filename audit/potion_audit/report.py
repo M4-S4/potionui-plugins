@@ -150,7 +150,14 @@ class Entry:
 
     @property
     def peak_vram_mb(self):
-        return ((self.result or {}).get("generation_stats") or {}).get("peak_vram_mb")
+        return self.generation_stats.get("peak_vram_mb")
+
+    @property
+    def generation_stats(self) -> dict:
+        rederived = (self.reevaluated or {}).get("generation_stats") or {}
+        if rederived and not rederived.get("kept"):
+            return rederived
+        return (self.result or {}).get("generation_stats") or {}
 
     @property
     def seed(self):
@@ -452,6 +459,14 @@ def _vram(value) -> str:
     return f"{value:.0f} MiB" if value < 1024 else f"{value / 1024:.1f} GiB"
 
 
+def _peak_text(value, stats: dict) -> str:
+    if value is not None:
+        return _vram(value)
+    if stats.get("derived") and stats.get("peak_vram_source"):
+        return f"not derivable: {stats['peak_vram_source']}"
+    return "not derived"
+
+
 def _klass(entry: Entry) -> str:
     verdict = entry.shown_verdict
     if verdict:
@@ -662,7 +677,7 @@ def _detail(entry: Entry) -> str:
             parts.append(f'<p class="small muted">{escape(record["kept"])}</p>')
     parts.append(_media_html(entry))
     if result:
-        stats = result.get("generation_stats") or {}
+        stats = entry.generation_stats
         timing = result.get("timing") or {}
         memory = result.get("memory") or {}
         load_ms = stats.get("model_load_ms")
@@ -676,7 +691,7 @@ def _detail(entry: Entry) -> str:
             ("Model load", escape(_seconds(load_ms / 1000) if load_ms is not None else "not derived") + (" · cold start" if stats.get("cold_start") else " · warm" if stats.get("cold_start") is False else "")),
             ("Compute", escape(_seconds(compute) or "not derived")),
             ("Per step (polled)", escape(_seconds(timing.get("seconds_per_step_polled")) or "?")),
-            ("Peak VRAM (preset stats)", escape(_vram(stats.get("peak_vram_mb")) or "not derived")),
+            ("Peak VRAM (core record of the generation)", escape(_peak_text(stats.get("peak_vram_mb"), stats))),
             ("Peak VRAM (whole device, sampled)", escape(_vram(memory.get("peak_vram_used_mb_sampled")) or "?")),
             ("Peak RAM (whole host, sampled)", escape(_vram(memory.get("peak_ram_used_mb_sampled")) or "?")),
         ]
@@ -1015,7 +1030,7 @@ def _step_detail(step: VpStep) -> str:
                 ("Run time", escape(_seconds(timing.get("run_seconds")) or "?")),
                 ("Per step (polled)", escape(_seconds(timing.get("seconds_per_step_polled")) or "?")),
                 ("Steps (polled)", escape(str(timing.get("total_steps_polled") or "?"))),
-                ("Peak VRAM (preset stats)", escape(_vram(step.peak_vram_mb) or "not derived")),
+                ("Peak VRAM (core record of the generation)", escape(_peak_text(step.peak_vram_mb, stats))),
                 ("Peak VRAM (whole device, sampled)", escape(_vram(memory.get("peak_vram_used_mb_sampled")) or "?")),
             ]
             if step.kind == "final_pass":

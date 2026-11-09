@@ -155,8 +155,8 @@ def test_a_missing_model_refuses_the_run_before_submitting(fake_api, case_set, t
 
 
 def test_run_stats_are_recovered_from_the_preset_averages():
-    before = {"total_runs": 2, "cold_runs": 1, "warm_runs": 1, "avg_warm_duration_ms": 10000.0, "avg_vram_mb": 5000.0, "avg_ram_mb": 100.0, "avg_cpu_percent": 50.0}
-    after = {"total_runs": 3, "cold_runs": 1, "warm_runs": 2, "avg_warm_duration_ms": 11000.0, "avg_vram_mb": 6000.0, "avg_ram_mb": 100.0, "avg_cpu_percent": 50.0}
+    before = {"total_runs": 2, "cold_runs": 1, "warm_runs": 1, "avg_warm_duration_ms": 10000.0, "peak_vram_mb": 7000.0, "avg_vram_mb": 5000.0, "peak_ram_mb": 100.0, "avg_ram_mb": 100.0, "avg_cpu_percent": 50.0}
+    after = {"total_runs": 3, "cold_runs": 1, "warm_runs": 2, "avg_warm_duration_ms": 11000.0, "peak_vram_mb": 8000.0, "avg_vram_mb": 6000.0, "peak_ram_mb": 100.0, "avg_ram_mb": 100.0, "avg_cpu_percent": 50.0}
     stats = derive_run_stats(before, after)
     assert stats["cold_start"] is False
     assert stats["duration_ms"] == 12000.0
@@ -167,6 +167,59 @@ def test_run_stats_are_recovered_from_the_preset_averages():
 def test_run_stats_are_not_derived_when_another_run_slipped_in():
     stats = derive_run_stats({"total_runs": 2}, {"total_runs": 4})
     assert stats["derived"] is False
+
+
+def resources(runs, peak, average, ram=20000.0, cpu=100.0):
+    return {"total_runs": runs, "cold_runs": runs, "warm_runs": 0, "avg_cold_duration_ms": 1000.0, "avg_model_load_ms": 100.0, "peak_vram_mb": peak, "avg_vram_mb": average, "peak_ram_mb": ram, "avg_ram_mb": ram, "avg_cpu_percent": cpu}
+
+
+def test_a_run_after_earlier_runs_with_no_recorded_peak_gets_its_own_peak():
+    before = resources(1, None, None)
+    after = resources(2, 7000.0, 7000.0, cpu=110.0)
+    stats = derive_run_stats(before, after)
+    assert stats["peak_vram_mb"] == 7000.0
+    assert "first to record" in stats["peak_vram_source"]
+
+
+def test_a_run_whose_resources_the_core_did_not_record_is_not_given_the_average():
+    before = resources(2, 7000.0, 6000.0)
+    after = resources(3, 7000.0, 6000.0)
+    stats = derive_run_stats(before, after)
+    assert stats["derived"] is True
+    assert stats["peak_vram_mb"] is None
+    assert stats["end_ram_mb"] is None
+    assert stats["cpu_percent"] is None
+    assert "recorded no resources" in stats["peak_vram_source"]
+
+
+def test_a_new_maximum_that_the_averages_contradict_is_not_derivable():
+    before = resources(3, 6000.0, 6000.0)
+    after = resources(4, 9000.0, 7500.0, cpu=120.0)
+    stats = derive_run_stats(before, after)
+    assert stats["peak_vram_mb"] is None
+    assert "rose to 9000.0 MiB" in stats["peak_vram_source"]
+
+
+def test_a_difference_above_the_maximum_is_not_derivable():
+    before = resources(3, 9000.0, 3000.0)
+    after = resources(4, 9000.0, 5000.0, cpu=120.0)
+    stats = derive_run_stats(before, after)
+    assert stats["peak_vram_mb"] is None
+    assert "outside the preset's maximum" in stats["peak_vram_source"]
+
+
+def test_each_take_gets_the_peak_of_its_own_preset_and_the_statistics_are_kept():
+    t2v_before = resources(4, 9000.0, 8000.0)
+    t2v_after = resources(5, 9284.9, 8256.98, cpu=120.0)
+    i2v_before = resources(1, 9301.1, 9301.1)
+    i2v_after = resources(2, 9301.1, 7932.45, cpu=130.0)
+    first = derive_run_stats(t2v_before, t2v_after)
+    second = derive_run_stats(i2v_before, i2v_after)
+    assert first["peak_vram_mb"] == 9284.9
+    assert first["peak_vram_source"] == "the preset's new maximum, which the averages confirm"
+    assert second["peak_vram_mb"] == 6563.8
+    assert second["peak_vram_source"] == "the difference of the preset's averages, within its maximum"
+    assert second["preset_stats"] == {"before": i2v_before, "after": i2v_after}
 
 
 def test_seconds_per_step_come_from_running_samples_only():
