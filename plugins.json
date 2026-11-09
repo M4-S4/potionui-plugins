@@ -12,7 +12,7 @@
         "path": "video-producer"
       },
       "requires": {
-        "core": "d0f46d14f65d825973066796a3c41172ad8fe6cb",
+        "core": "4af433123acc0e7b90e872d459da41f9874a5d8d",
         "plugin_api": null
       },
       "release": {
@@ -31,7 +31,7 @@
         "path": "preset-editor"
       },
       "requires": {
-        "core": "d0f46d14f65d825973066796a3c41172ad8fe6cb",
+        "core": "4af433123acc0e7b90e872d459da41f9874a5d8d",
         "plugin_api": null
       },
       "release": {

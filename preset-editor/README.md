@@ -7,7 +7,7 @@ it up without a restart. Admins only.
 
 **Status: version 0.2.2, works on the pinned core and has been seen on screen with an
 earlier one, `02cce6fdd`, not yet on the marketplace.** The plugin targets the core of
-`core.ref` at the root of this repository, `d0f46d14f` (the `dev` branch of the M4-S4/PotionUI
+`core.ref` at the root of this repository, `4af433123` (the `dev` branch of the M4-S4/PotionUI
 fork: upstream `master` at `e0b4ade7b`, after release 0.1.0, plus the fork's changes), and its
 catalogue entry requires it. Its
 pytest suite, its core-side tests (`core-tests/preset-editor/`) and its Node tests run in the
