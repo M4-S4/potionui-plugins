@@ -105,7 +105,23 @@ class VpFakeApi(FakeApi):
     def _public(self, take: dict) -> dict:
         return {key: value for key, value in take.items() if key not in ("polls", "outcome")}
 
+    def _stored_uploads(self) -> set[str]:
+        return {f"{index + 1}-{name}" for index, name in enumerate(self.uploads)} - {path.rsplit("/", 1)[1] for path in self.deleted if path.startswith("/api/media/uploads/")}
+
     def route(self, method, path, query, body, headers):
+        if path.startswith("/api/media/uploads/") and method in ("GET", "DELETE"):
+            if headers.get("Authorization") != "Bearer fake-token-123":
+                return 401, {"detail": "Not authenticated"}, "application/json"
+            name = path[len("/api/media/uploads/"):]
+            if method == "GET" and name.endswith("/info"):
+                if name[: -len("/info")] in self._stored_uploads():
+                    return 200, envelope({"filename": name[: -len("/info")], "size": 10}), "application/json"
+                return 400, {"success": False, "error": "not_found", "message": "Uploaded file not found"}, "application/json"
+            if method == "DELETE":
+                if name not in self._stored_uploads():
+                    return 404, {"success": False, "error": "not_found"}, "application/json"
+                self.deleted.append(path)
+                return 200, envelope({"filename": name, "deleted": True}), "application/json"
         if not path.startswith(VP) and not (path.startswith("/api/generations/history/") and method in ("DELETE", "GET") and path.count("/") == 4):
             return super().route(method, path, query, body, headers)
         if headers.get("Authorization") != "Bearer fake-token-123":
@@ -375,7 +391,24 @@ def test_cleanup_lists_then_deletes_the_marked_projects_and_generations(vp_api, 
     assert vp_api.deleted == []
     code = main(["vp", "cleanup", str(run_dir), "--config", str(vp_config), "--confirm"])
     assert code == 0
-    assert vp_api.deleted == [f"{VP}/projects/P1", "/api/generations/history/G1"]
+    assert vp_api.deleted == [f"{VP}/projects/P1", "/api/generations/history/G1", "/api/media/uploads/1-lumi.jpg", "/api/media/uploads/2-bottle.jpg"]
     assert set(vp_api.projects) == {"P9"}
     done = json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))
     assert done["generations"][0]["exists_after"] is False
+    assert [(item["filename"], item["existed"], item["deleted"], item["exists_after"]) for item in done["uploads"]] == [("1-lumi.jpg", True, True, False), ("2-bottle.jpg", True, True, False)]
+
+
+def test_cleanup_without_confirm_lists_the_uploads_of_the_run_and_skips_those_already_gone(vp_api, tmp_path):
+    pack = load_pack(DEFAULT_PACK)
+    engines = select_engines(pack, None, ["Wan2.2-TI2V-5B-8GB"])
+    run_scenario(logged_in(vp_api), pack, tmp_path / "out", "vp-5", engines, None, upscaler="rtx", interval=0.01, sleep=no_sleep, log=quiet)
+    run_dir = tmp_path / "out" / "vp-5"
+    lines = []
+    plan = cleanup(logged_in(vp_api), run_dir, False, lines.append)
+    assert [item["filename"] for item in plan["uploads"]] == ["1-lumi.jpg", "2-bottle.jpg"]
+    assert "upload 1-lumi.jpg" in lines and lines[-1].endswith("2 uploads of vp-5: pass --confirm to delete them")
+    assert not [method for method, _ in vp_api.methods() if method == "DELETE"]
+    vp_api.deleted.append("/api/media/uploads/1-lumi.jpg")
+    plan = cleanup(logged_in(vp_api), run_dir, True, quiet)
+    assert [(item["filename"], item["existed"], item["deleted"]) for item in plan["uploads"]] == [("1-lumi.jpg", False, False), ("2-bottle.jpg", True, True)]
+    assert vp_api.deleted.count("/api/media/uploads/1-lumi.jpg") == 1

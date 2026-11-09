@@ -14,6 +14,7 @@ from .media import THUMB_SIDE, media_ssim, write_display_image, write_preview, w
 from .pack import Pack, included
 from .plan import cell_folder
 from .reevaluate import REEVALUATED, load_run_json, ReevaluateError
+from .vp_report import COLUMNS, ReportError, Scenario, VpStep, scenario_json
 
 REPORT_SCHEMA = 1
 DURATION_TOLERANCE = 0.20
@@ -58,7 +59,9 @@ table.matrix .cell { width: 132px; }
 .bad { background: var(--bad-bg); } .bad .tag, .tag.bad { color: var(--bad); }
 .warn { background: var(--warn-bg); } .warn .tag, .tag.warn { color: var(--warn); }
 .idle { background: var(--idle-bg); } .idle .tag, .tag.idle { color: var(--idle); }
-.tag.ok, .tag.bad, .tag.warn, .tag.idle { background: none; }
+.off { background: none; border: 1px dashed var(--line); } .off .tag, .tag.off { color: var(--muted); font-weight: 600; }
+.tag.ok, .tag.bad, .tag.warn, .tag.idle, .tag.off { background: none; }
+.check { display: block; margin-top: 2px; font-size: 12px; overflow-wrap: anywhere; }
 .was { color: var(--muted); font-weight: 400; text-decoration: line-through; margin-left: 4px; }
 details { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
 details > summary { cursor: pointer; padding: 10px 14px; overflow-wrap: anywhere; }
@@ -76,10 +79,6 @@ SCRIPT = """
 function openTarget() { var id = decodeURIComponent(location.hash.slice(1)); if (!id) return; var node = document.getElementById(id); if (node && node.tagName === 'DETAILS') { node.open = true; node.scrollIntoView(); } }
 window.addEventListener('hashchange', openTarget); window.addEventListener('DOMContentLoaded', openTarget);
 """
-
-
-class ReportError(ValueError):
-    pass
 
 
 def reduce_home(text):
@@ -768,26 +767,293 @@ def _page(title: str, subtitle: str, body: str) -> str:
     )
 
 
-def render_report(run_set: RunSet, comparison: dict | None = None) -> str:
-    pack = run_set.pack
-    subtitle = escape(f"{run_set.machine} · {pack.get('id')} {pack.get('version')} · {run_set.first.get('profile')} profile · {run_set.started_at} to {run_set.ended_at} · runs {', '.join(str(run.get('run_id')) for run in run_set.runs)}")
-    body = [
-        _counts(run_set),
-        "<h2>Machine</h2>",
-        _machine_card(run_set),
-        "<h2>Storage</h2>",
-        _storage(run_set),
+def same_machine(run_set: RunSet, scenario: Scenario) -> None:
+    if run_set.machine != scenario.machine:
+        raise ReportError(f"the matrix ran on {run_set.machine} and the scenario on {scenario.machine}: use merge")
+    version = run_set.first.get("app_version")
+    if version != scenario.app_version:
+        raise ReportError(f"the matrix ran application {version} and the scenario application {scenario.app_version}: give a matrix and a scenario of the same version")
+
+
+def prepare_scenario_media(scenario: Scenario, out_dir: Path, log=print) -> None:
+    media_root = out_dir / "media" / "vp"
+    for step in scenario.steps:
+        source = step.video
+        if source is None:
+            continue
+        item = {"file": source.name, "original": None, "display": None, "thumb": None, "error": None}
+        step.media = item
+        if not source.is_file():
+            item["error"] = "the video is not in the run folder"
+            continue
+        item["original"] = _href(source, out_dir)
+        stem = media_root / step.slug / source.stem
+        try:
+            thumb = stem.with_name(stem.name + ".thumb.jpg")
+            if not _fresh(source, thumb):
+                write_thumbnail(source, thumb, "video", THUMB_SIDE)
+            item["thumb"] = _href(thumb, out_dir)
+            if step.kind == "export":
+                display = stem.with_suffix(".mp4")
+                if not _fresh(source, display):
+                    write_preview(source, display, PREVIEW_HEIGHT)
+                item["display"] = _href(display, out_dir)
+        except (av.error.FFmpegError, OSError, ValueError, RuntimeError) as error:
+            item["error"] = f"{type(error).__name__}: {error}"
+            log(f"{step.key}: media {source.name}: {item['error']}")
+
+
+def _step_klass(step: VpStep) -> str:
+    if step.status == "skipped":
+        return "off"
+    if step.verdict:
+        return VERDICT_CLASS.get(step.verdict, "warn")
+    return STATUS_CLASS.get(step.status or "", "idle")
+
+
+def _actual(value, limit: int = 60) -> str:
+    text = json.dumps(value, ensure_ascii=False)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _chain_lines(step: VpStep) -> str:
+    return "".join(f'<span class="check"><span class="tag {"ok" if check.get("ok") else "bad"}">{escape(str(check.get("check")))}</span> {escape(_actual(check.get("actual")))}</span>' for check in step.chain_checks)
+
+
+def _step_numbers(step: VpStep) -> str:
+    return " · ".join(value for value in (_seconds(step.seconds), _vram(step.peak_vram_mb)) if value)
+
+
+def _step_cell(step: VpStep, link: bool = True) -> str:
+    lines = [f'<span class="tag">{escape(step.label)}</span>']
+    numbers = _step_numbers(step)
+    if numbers:
+        lines.append(f'<div class="small">{escape(numbers)}</div>')
+    elif step.reason and not step.verdict:
+        lines.append(f'<div class="small muted">{escape(step.reason[:70])}{"…" if len(step.reason) > 70 else ""}</div>')
+    lines.append(_chain_lines(step))
+    if link and step.media.get("thumb"):
+        lines.append(f'<img src="{step.media["thumb"]}" alt="" loading="lazy" width="116" height="72">')
+    title = escape(step.reason or step.key, quote=True)
+    if not link:
+        return f'<div class="cell {_step_klass(step)}" title="{title}">{"".join(lines)}</div>'
+    return f'<a class="cell {_step_klass(step)}" href="#{step.slug}" title="{title}">{"".join(lines)}</a>'
+
+
+def _scenario_table(scenario: Scenario) -> str:
+    head = "<th>Engine</th>" + "".join(f"<th>{escape(label)}</th>" for _, _, label in COLUMNS)
+    rows = []
+    for engine, steps in scenario.rows():
+        by_column = {step.column: step for step in steps}
+        cells = "".join(f"<td>{_step_cell(by_column[label]) if label in by_column else ''}</td>" for _, _, label in COLUMNS)
+        rows.append(f"<tr><td>{escape(engine)}</td>{cells}</tr>")
+    return f'<div class="scroll"><table class="matrix"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+
+
+def _scenario_counts(scenario: Scenario) -> str:
+    counts = scenario.counts()
+    order = sorted(counts, key=lambda name: (name not in VERDICT_CLASS, name))
+    parts = []
+    for name in order:
+        klass = VERDICT_CLASS.get(name, "off" if name == "not offered" else "idle")
+        parts.append(f'<span class="tag {klass}">{escape(name)} {counts[name]}</span>')
+    return f'<p class="legend">{" · ".join(parts)}</p>'
+
+
+def _scenario_facts(scenario: Scenario) -> str:
+    data = scenario.data
+    plugin = data.get("plugin") or {}
+    pack = scenario.pack
+    cases = data.get("cases") or {}
+    settings = data.get("settings") or {}
+    final = data.get("final_pass") or {}
+    runner = data.get("runner") or {}
+    pairs = [
+        ("Run", escape(f"{scenario.run_id} · {data.get('started_at')} to {data.get('ended_at')}")),
+        ("Machine", escape(scenario.machine)),
+        ("Application", escape(str(scenario.app_version or "unknown"))),
+        ("Plugin", escape(f"{plugin.get('id')} {plugin.get('version')}")),
+        ("Pack", escape(f"{pack.get('id')} {pack.get('version')} · sha256 {str(pack.get('sha256'))[:12]}") + "<br>" + escape(f"cases {cases.get('file')} · sha256 {str(cases.get('sha256'))[:12]}")),
+        ("Settings", escape(", ".join(f"{name} {value}" for name, value in settings.items()) or "not recorded")),
+        ("Final pass", escape(f"{final.get('upscaler')} · {final.get('cell')}" + ("" if final.get("allowed", True) else f" · not run: {final.get('reason')}"))),
+        ("Matrix read", escape(", ".join(str(item) for item in data.get("matrix") or ()) or "none, engines named with --engines")),
+        ("Runner", escape(f"potion-audit {runner.get('potion_audit')} · Python {runner.get('python')} · {runner.get('platform')}")),
+    ]
+    notes = []
+    if data.get("stopped"):
+        notes.append(str(data["stopped"]))
+    if data.get("dry_run"):
+        notes.append("this record is a dry run")
+    notes.extend(scenario.notes)
+    note_html = "<h3>Bias factors</h3><ul>" + "".join(f"<li>{escape(item)}</li>" for item in notes) + "</ul>" if notes else ""
+    return f'<div class="card">{_facts(pairs)}{note_html}</div>'
+
+
+def _looks_text(looks: dict | None) -> tuple[str, str]:
+    if not looks:
+        return "not read", "not read"
+    if looks.get("error"):
+        return escape(str(looks["error"])), ""
+    seams = " · ".join(f"{item.get('previous_id')} → {item.get('shot_id')} {item.get('score')}" for item in looks.get("seams") or ()) or "none"
+    lumi = []
+    for item in looks.get("lumi") or ():
+        identity = (item.get("identity") or {}).get("score")
+        cards = ", ".join(f"{card.get('label') or card.get('card_id')} {card.get('score') if card.get('score') is not None else card.get('status')}" for card in item.get("cards") or ())
+        lumi.append(f"identity {identity} · {cards}")
+    return escape(seams), escape(" | ".join(lumi) or "no take of shot 3")
+
+
+def _scenario_measures(scenario: Scenario) -> str:
+    rows = []
+    for entry in scenario.engines:
+        if not entry.get("selected"):
+            continue
+        measures = entry.get("measures") or {}
+        seam = measures.get("seam") or {}
+        code = f"mean abs diff {seam.get('mean_abs_diff')} · PSNR {seam.get('psnr_db')} dB · {seam.get('size')}" if seam.get("measured") else (seam.get("reason") or "not measured")
+        seams, lumi = _looks_text(measures.get("looks"))
+        rows.append([escape(str(entry.get("key"))), escape(code), seams, lumi])
+    if not rows:
+        return ""
+    return "<h3>Measures</h3>" + _table(["Engine", "Seam 1 → 2, by code", "Seam scores of the plugin", "Shot 3 against the Lumi card"], rows)
+
+
+def _scenario_section(scenario: Scenario, comparison: dict | None) -> str:
+    parts = [
+        _scenario_counts(scenario),
+        _scenario_facts(scenario),
+        '<p class="small muted">Engines in rows, the steps of the scenario in columns. A cell gives its verdict, the run time (the polled time for the export), the peak VRAM when the preset statistics derived it, the chaining checks of shot 2 as recorded, and a thumbnail. A dashed cell is a step the engine does not offer: it has no refs mode, so the plugin offers no Ref2VA profile.</p>',
+        _scenario_table(scenario),
+        _scenario_measures(scenario),
     ]
     if comparison is not None:
-        body += ["<h2>Compared with the previous run</h2>", _compare_html(comparison)]
-    body += [
-        "<h2>Matrix</h2>",
-        '<p class="small muted">Presets in rows, modes in columns. A cell gives its verdict (or why it did not run), the run time and the peak VRAM of the preset statistics; click it for the details.</p>',
-        _matrix(run_set),
-        "<h2>Cells</h2>",
-        "".join(_detail(entry) for entry in run_set.entries),
-    ]
-    return _page("Potion audit report", subtitle, "".join(body))
+        parts += ["<h3>Compared with the previous scenario</h3>", _scenario_compare_html(comparison)]
+    return "".join(parts)
+
+
+def _scenario_compare_html(comparison: dict) -> str:
+    previous = comparison["previous"]
+    parts = [f"<p>Against the scenario {escape(str(previous['run_id']))} (application {escape(str(previous['app_version']))}, started {escape(str(previous['started_at']))}). Durations are flagged beyond ±{DURATION_TOLERANCE:.0%}, peak VRAM beyond ±{VRAM_TOLERANCE_MB:.0f} MiB.</p>"]
+    for line in comparison["changes"]:
+        parts.append(f'<p class="tag warn">Changed: {escape(line)}</p>')
+    rows = []
+    for row in comparison["rows"]:
+        if not (row.get("verdict_changed") or row.get("duration_flag") or row.get("vram_flag")):
+            continue
+        duration = row.get("duration_change")
+        rows.append([
+            f'<a href="#{row["slug"]}">{escape(row["step"])}</a>',
+            escape(f"{row.get('previous_verdict')} → {row.get('verdict')}") if row.get("verdict_changed") else escape(str(row.get("verdict"))),
+            escape(f"{_seconds(row.get('previous_seconds'))} → {_seconds(row.get('seconds'))}" + (f" ({duration:+.0%})" if duration is not None else "")),
+            escape(f"{row['vram_change_mb']:+.0f} MiB" if row.get("vram_change_mb") is not None else ""),
+        ])
+    parts.append(_table(["Step", "Verdict", "Time", "Peak VRAM"], rows) if rows else '<p class="muted">No verdict changed, no duration beyond the tolerance, no VRAM change beyond the tolerance.</p>')
+    if comparison["only_in_this_run"]:
+        parts.append(f"<p>Only in this scenario: {escape(', '.join(comparison['only_in_this_run']))}</p>")
+    if comparison["only_in_previous"]:
+        parts.append(f"<p>Only in the other scenario: {escape(', '.join(comparison['only_in_previous']))}</p>")
+    return "".join(parts)
+
+
+def _step_media(step: VpStep) -> str:
+    item = step.media
+    if not item:
+        return ""
+    parts = []
+    original = f'<a href="{item["original"]}">original {escape(item["file"])}</a>' if item.get("original") else ""
+    poster = f' poster="{item["thumb"]}"' if item.get("thumb") else ""
+    if item.get("error"):
+        parts.append(f'<p class="tag bad">{escape(item["file"])}: {escape(item["error"])}</p>')
+    if item.get("display"):
+        parts.append(f'<video controls preload="none" playsinline{poster} src="{item["display"]}"></video><p class="small">reduced H.264 copy · {original}</p>')
+    elif item.get("original"):
+        parts.append(f'<video controls preload="none" playsinline{poster} src="{item["original"]}"></video><p class="small">{original}</p>')
+    return f'<div class="media">{"".join(parts)}</div>'
+
+
+def _step_detail(step: VpStep) -> str:
+    result = step.result or {}
+    record = step.record
+    parts = []
+    if step.reason:
+        parts.append(f"<p><strong>{escape(step.label)}</strong>: {escape(step.reason)}</p>")
+    parts.append(_step_media(step))
+    if result:
+        take = result.get("take") or {}
+        stats = result.get("generation_stats") or {}
+        timing = result.get("timing") or {}
+        memory = result.get("memory") or {}
+        if step.kind == "export":
+            job = result.get("job") or {}
+            output = next(iter(result.get("outputs") or ()), {})
+            facts = [
+                ("Export job", escape(str(job.get("id")))),
+                ("Format", escape(f"{job.get('format')} · {job.get('resolution')}")),
+                ("Polled time", escape(_seconds(timing.get("polled_seconds")) or "?")),
+                ("File", escape(f"{output.get('width')}x{output.get('height')} · {output.get('fps')} fps · {output.get('decoded_frames')} frames · {output.get('duration_seconds')} s" if output else "none")),
+            ]
+        else:
+            facts = [
+                ("Take", escape(str(take.get("id") or record.get("take_id")))),
+                ("Generation", escape(str(result.get("generation_id")))),
+                ("Profile", escape(str(take.get("profile")))),
+                ("Director mode", escape(str(take.get("director_mode") or record.get("director_mode")))),
+                ("Run time", escape(_seconds(timing.get("run_seconds")) or "?")),
+                ("Per step (polled)", escape(_seconds(timing.get("seconds_per_step_polled")) or "?")),
+                ("Peak VRAM (preset stats)", escape(_vram(step.peak_vram_mb) or "not derived")),
+                ("Peak VRAM (whole device, sampled)", escape(_vram(memory.get("peak_vram_used_mb_sampled")) or "?")),
+            ]
+            if step.kind == "final_pass":
+                facts.append(("Upscaler", escape(str(record.get("upscaler")))))
+        parts.append(_facts(facts))
+        if step.kind != "export" and not stats.get("derived") and stats.get("reason"):
+            parts.append(f'<p class="small muted">Statistics not derived: {escape(stats["reason"])}</p>')
+        for name in ("failure", "blocked"):
+            if result.get(name):
+                parts.append(f"<h3>{name.capitalize()}</h3><pre>{escape(json.dumps(result[name], indent=1, ensure_ascii=False))}</pre>")
+        if step.checks:
+            rows = [[f'<span class="tag {"ok" if check.get("ok") else "bad"}">{"ok" if check.get("ok") else "failed"}</span>', escape(str(check.get("check"))), escape(json.dumps(check.get("expected"), ensure_ascii=False)), escape(json.dumps(check.get("actual"), ensure_ascii=False))] for check in step.checks]
+            parts.append("<h3>Checks</h3>" + _table(["", "Check", "Expected", "Actual"], rows))
+    elif record.get("result"):
+        parts.append('<p class="small muted">The result.json of this step is not in the run folder.</p>')
+    summary = f'<span class="tag {_step_klass(step)}">{escape(step.label)}</span> {escape(step.key)}'
+    return f'<details id="{step.slug}"><summary>{summary}</summary><div class="body">{"".join(parts)}</div></details>'
+
+
+def render_report(run_set: RunSet | None, comparison: dict | None = None, scenario: Scenario | None = None, scenario_comparison: dict | None = None) -> str:
+    if run_set is None and scenario is None:
+        raise ReportError("give a matrix run or a scenario")
+    if run_set is not None and scenario is not None:
+        same_machine(run_set, scenario)
+    subtitles = []
+    body = []
+    if run_set is not None:
+        pack = run_set.pack
+        subtitles.append(f"{run_set.machine} · {pack.get('id')} {pack.get('version')} · {run_set.first.get('profile')} profile · {run_set.started_at} to {run_set.ended_at} · runs {', '.join(str(run.get('run_id')) for run in run_set.runs)}")
+        body += [
+            _counts(run_set),
+            "<h2>Machine</h2>",
+            _machine_card(run_set),
+            "<h2>Storage</h2>",
+            _storage(run_set),
+        ]
+        if comparison is not None:
+            body += ["<h2>Compared with the previous run</h2>", _compare_html(comparison)]
+        body += [
+            "<h2>Matrix</h2>",
+            '<p class="small muted">Presets in rows, modes in columns. A cell gives its verdict (or why it did not run), the run time and the peak VRAM of the preset statistics; click it for the details.</p>',
+            _matrix(run_set),
+        ]
+    if scenario is not None:
+        if run_set is None:
+            subtitles.append(f"{scenario.machine} · {scenario.pack.get('id')} {scenario.pack.get('version')}")
+        subtitles.append(f"scenario {scenario.run_id}")
+        body += ['<h2 id="vp">Video Producer scenario</h2>', _scenario_section(scenario, scenario_comparison)]
+    if run_set is not None:
+        body += ["<h2>Cells</h2>", "".join(_detail(entry) for entry in run_set.entries)]
+    if scenario is not None:
+        body += ['<h2 id="vp-steps">Scenario steps</h2>', "".join(_step_detail(step) for step in scenario.steps)]
+    return _page("Potion audit report", escape(" · ".join(subtitles)), "".join(body))
 
 
 def _entry_json(entry: Entry) -> dict:
@@ -804,21 +1070,30 @@ def _entry_json(entry: Entry) -> dict:
     }
 
 
-def write_report(run_set: RunSet, out_dir: Path, comparison: dict | None = None, media: bool = True, log=print) -> Path:
+def write_report(run_set: RunSet | None, out_dir: Path, comparison: dict | None = None, media: bool = True, log=print, scenario: Scenario | None = None, scenario_comparison: dict | None = None) -> Path:
+    if run_set is None and scenario is None:
+        raise ReportError("give a matrix run or a scenario")
+    if run_set is not None and scenario is not None:
+        same_machine(run_set, scenario)
     out_dir.mkdir(parents=True, exist_ok=True)
-    if media:
+    if media and run_set is not None:
         prepare_media(run_set, out_dir, log)
+    if media and scenario is not None:
+        prepare_scenario_media(scenario, out_dir, log)
+    page = render_report(run_set, comparison, scenario, scenario_comparison)
     index = out_dir / "index.html"
-    index.write_text(render_report(run_set, comparison), encoding="utf-8", newline="\n")
+    index.write_text(page, encoding="utf-8", newline="\n")
     data = {
         "schema": REPORT_SCHEMA,
-        "runs": [run.get("run_id") for run in run_set.runs],
-        "machine": run_set.machine,
-        "pack": run_set.pack,
-        "mode": run_set.mode,
-        "bias_factors": bias_factors(run_set),
-        "cells": [_entry_json(entry) for entry in run_set.entries],
+        "runs": [run.get("run_id") for run in run_set.runs] if run_set else [],
+        "machine": run_set.machine if run_set else scenario.machine,
+        "pack": run_set.pack if run_set else scenario.pack,
+        "mode": run_set.mode if run_set else None,
+        "bias_factors": bias_factors(run_set) if run_set else [],
+        "cells": [_entry_json(entry) for entry in run_set.entries] if run_set else [],
         "compare": comparison,
+        "scenario": scenario_json(scenario) if scenario else None,
+        "scenario_compare": scenario_comparison,
     }
     (out_dir / "report.json").write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     return index
@@ -835,20 +1110,32 @@ def group_by_machine(dirs: list[Path]) -> dict[str, list[Path]]:
     return groups
 
 
-def render_merge(sets: list[RunSet]) -> str:
+def render_merge(sets: list[RunSet], scenarios: dict[str, Scenario] | None = None) -> str:
+    scenarios = scenarios or {}
     packs = {(run_set.pack.get("id"), run_set.pack.get("sha256")) for run_set in sets}
     if len(packs) > 1:
         raise ReportError("merge needs runs of the same pack: " + ", ".join(f"{run_set.machine} ran {run_set.pack.get('id')} {str(run_set.pack.get('sha256'))[:12]}" for run_set in sets))
+    scenario_packs = {(scenario.pack.get("id"), scenario.pack.get("sha256")) for scenario in scenarios.values()}
+    if len(scenario_packs) > 1:
+        raise ReportError("merge needs scenarios of the same pack: " + ", ".join(f"{scenario.machine} ran {scenario.pack.get('id')} {str(scenario.pack.get('sha256'))[:12]}" for scenario in scenarios.values()))
+    by_name = {run_set.machine: run_set for run_set in sets}
+    tables = {run_set.machine: {entry.key: entry for entry in run_set.entries} for run_set in sets}
+    machines = [run_set.machine for run_set in sets] + [name for name in scenarios if name not in by_name]
     keys = []
-    by_machine = []
     for run_set in sets:
-        table = {entry.key: entry for entry in run_set.entries}
-        by_machine.append(table)
         for entry in run_set.entries:
             if entry.key not in keys:
                 keys.append(entry.key)
     head_rows = []
-    for run_set in sets:
+    for name in machines:
+        run_set = by_name.get(name)
+        scenario = scenarios.get(name)
+        runs = [str(run.get("run_id")) for run in run_set.runs] if run_set else []
+        if scenario is not None:
+            runs.append(f"scenario {scenario.run_id}")
+        if run_set is None:
+            head_rows.append([escape(name), "not recorded", escape(str(scenario.app_version)), "not recorded", "not probed", escape(", ".join(runs))])
+            continue
         gpu = run_set.gpu()
         linux = run_set.probe("linux")
         models = next((path for path in (linux or {}).get("paths") or () if "model" in str(path.get("path"))), None)
@@ -856,12 +1143,15 @@ def render_merge(sets: list[RunSet]) -> str:
         if models:
             systems = ((models.get("findmnt") or {}).get("filesystems") or [{}])[0]
             disk = f"{systems.get('fstype') or models.get('fs_type')}" + (f", {linux['read_test']['mib_per_second']} MiB/s" if (linux.get("read_test") or {}).get("mib_per_second") else "")
-        head_rows.append([escape(run_set.machine), escape(f"{gpu.get('name') or 'unknown'} {gpu.get('vram_gb') or '?'} GB"), escape(str(run_set.first.get("app_version"))), escape(run_set.mode or "not recorded"), escape(disk), escape(", ".join(str(run.get("run_id")) for run in run_set.runs))])
+        version = run_set.first.get("app_version")
+        if scenario is not None and scenario.app_version != version:
+            version = f"{version} (scenario {scenario.app_version})"
+        head_rows.append([escape(name), escape(f"{gpu.get('name') or 'unknown'} {gpu.get('vram_gb') or '?'} GB"), escape(str(version)), escape(run_set.mode or "not recorded"), escape(disk), escape(", ".join(runs))])
     rows = []
     for key in keys:
         cells = []
-        for table in by_machine:
-            entry = table.get(key)
+        for name in machines:
+            entry = tables.get(name, {}).get(key)
             if entry is None:
                 cells.append('<span class="muted">absent</span>')
                 continue
@@ -869,18 +1159,33 @@ def render_merge(sets: list[RunSet]) -> str:
             was = f'<span class="was">{escape(entry.previous_verdict)}</span>' if entry.previous_verdict else ""
             cells.append(f'<div class="cell {_klass(entry)}" title="{escape(entry.reason or "", quote=True)}"><span class="tag">{escape(_label(entry))}</span>{was}<div class="small">{escape(numbers)}</div></div>')
         rows.append([escape(key)] + cells)
-    pack = sets[0].pack
     body = [
         "<h2>Machines</h2>",
         _table(["Machine", "GPU", "Application", "Mode", "Models disk", "Runs"], head_rows),
-        "<h2>Matrix</h2>",
-        _table(["Cell"] + [run_set.machine for run_set in sets], rows, "matrix"),
     ]
-    return _page("Potion audit, several machines", escape(f"{pack.get('id')} {pack.get('version')} · sha256 {str(pack.get('sha256'))[:12]} · {len(sets)} machines"), "".join(body))
+    if sets:
+        body += ["<h2>Matrix</h2>", _table(["Cell"] + machines, rows, "matrix")]
+    if scenarios:
+        step_tables = {name: {step.key: step for step in scenario.steps} for name, scenario in scenarios.items()}
+        step_keys = []
+        for scenario in scenarios.values():
+            for step in scenario.steps:
+                if step.key not in step_keys:
+                    step_keys.append(step.key)
+        scenario_rows = []
+        for key in step_keys:
+            cells = []
+            for name in machines:
+                step = step_tables.get(name, {}).get(key)
+                cells.append(_step_cell(step, link=False) if step else '<span class="muted">absent</span>')
+            scenario_rows.append([escape(key)] + cells)
+        body += ["<h2>Video Producer scenario</h2>", '<p class="small muted">One row per engine and step, one column per machine. A dashed cell is a step the engine does not offer.</p>', _table(["Step"] + machines, scenario_rows, "matrix")]
+    pack = sets[0].pack if sets else next(iter(scenarios.values())).pack
+    return _page("Potion audit, several machines", escape(f"{pack.get('id')} {pack.get('version')} · sha256 {str(pack.get('sha256'))[:12]} · {len(machines)} machines"), "".join(body))
 
 
-def write_merge(sets: list[RunSet], out_dir: Path) -> Path:
-    page = render_merge(sets)
+def write_merge(sets: list[RunSet], out_dir: Path, scenarios: dict[str, Scenario] | None = None) -> Path:
+    page = render_merge(sets, scenarios)
     out_dir.mkdir(parents=True, exist_ok=True)
     index = out_dir / "index.html"
     index.write_text(page, encoding="utf-8", newline="\n")
