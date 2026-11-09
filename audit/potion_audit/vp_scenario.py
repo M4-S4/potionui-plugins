@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import time
+import urllib.parse
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -870,6 +871,31 @@ def scenario_passed(scenario: dict) -> bool:
     return not scenario["stopped"] and all(verdict == "PASS" for entry in scenario["engines"] for verdict in _engine_summary(entry))
 
 
+UPLOAD_GONE = {400, 404}
+
+
+def recorded_uploads(run_dir: Path) -> list[str]:
+    record = run_dir / "uploads.json"
+    if not record.is_file():
+        return []
+    found = []
+    for item in (json.loads(record.read_text(encoding="utf-8")) or {}).values():
+        filename = str((item or {}).get("filename") or "")
+        if filename and filename not in found and "/" not in filename and "\\" not in filename and not filename.startswith("."):
+            found.append(filename)
+    return found
+
+
+def upload_exists(client: ApiClient, filename: str) -> bool:
+    try:
+        client.get_json(f"/api/media/uploads/{urllib.parse.quote(filename, safe='')}/info")
+    except ApiError as error:
+        if error.status in UPLOAD_GONE:
+            return False
+        raise
+    return True
+
+
 def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str], None] = print) -> dict:
     record = run_dir / "scenario.json"
     if not record.is_file():
@@ -889,13 +915,15 @@ def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str]
         for take in (unwrap(found) or {}).get("takes") or () if found else ():
             if take.get("generation_id") and take["generation_id"] not in generations:
                 generations.append(take["generation_id"])
-    plan = {"run_id": run_id, "confirmed": confirm, "projects": [{"id": project_id} for project_id in sorted(projects)], "generations": [{"id": generation_id} for generation_id in generations]}
+    plan = {"run_id": run_id, "confirmed": confirm, "projects": [{"id": project_id} for project_id in sorted(projects)], "generations": [{"id": generation_id} for generation_id in generations], "uploads": [{"filename": filename} for filename in recorded_uploads(run_dir)]}
     for item in plan["projects"]:
         log(f"project {item['id']}")
     for item in plan["generations"]:
         log(f"generation {item['id']}")
+    for item in plan["uploads"]:
+        log(f"upload {item['filename']}")
     if not confirm:
-        log(f"{len(plan['projects'])} projects and {len(plan['generations'])} generations marked with {run_id}: pass --confirm to delete them")
+        log(f"{len(plan['projects'])} projects, {len(plan['generations'])} generations and {len(plan['uploads'])} uploads of {run_id}: pass --confirm to delete them")
         return plan
     for item in plan["projects"]:
         answer = client.delete_json(f"{VP}/projects/{item['id']}", missing_ok=True)
@@ -904,9 +932,14 @@ def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str]
         existed = client.get_json(f"/api/generations/history/{item['id']}", missing_ok=True) is not None
         answer = client.delete_json(f"/api/generations/history/{item['id']}", missing_ok=True) if existed else None
         item.update(existed=existed, message=(answer or {}).get("message") if isinstance(answer, dict) else None, exists_after=client.get_json(f"/api/generations/history/{item['id']}", missing_ok=True) is not None)
+    for item in plan["uploads"]:
+        existed = upload_exists(client, item["filename"])
+        answer = client.delete_json(f"/api/media/uploads/{urllib.parse.quote(item['filename'], safe='')}", missing_ok=True) if existed else None
+        item.update(existed=existed, deleted=answer is not None, exists_after=upload_exists(client, item["filename"]))
     _write_json(run_dir / "cleanup.json", plan)
     left = [item["id"] for item in plan["generations"] if item["exists_after"]]
-    log(f"{len(plan['projects'])} projects and {len(plan['generations'])} generations deleted, {len(left)} still there")
+    uploads_left = [item["filename"] for item in plan["uploads"] if item["exists_after"]]
+    log(f"{len(plan['projects'])} projects, {len(plan['generations'])} generations and {len(plan['uploads'])} uploads deleted, {len(left)} generations and {len(uploads_left)} uploads still there")
     return plan
 
 
@@ -926,7 +959,7 @@ def add_vp_parser(commands) -> None:
     run.add_argument("--run-id", help="name of the run folder (default: <date>-<machine>-vp)")
     run.add_argument("--dry-run", action="store_true", help="build the documents and the list of generations in memory, write nothing on the instance")
     run.add_argument("--confirm-gpu", action="store_true", help="required unless --dry-run: the operator agreed to use the GPU")
-    clean = vp_commands.add_parser("cleanup", help="list the projects and generations of a scenario run, delete them with --confirm")
+    clean = vp_commands.add_parser("cleanup", help="list the projects, generations and uploads of a scenario run, delete them with --confirm")
     clean.add_argument("run_dir", type=Path)
     clean.add_argument("--config", type=Path, default=Path("audit.toml"))
     clean.add_argument("--confirm", action="store_true")

@@ -171,7 +171,7 @@ The matrix measures each preset on its own. The scenario measures what only the 
 |---|---|---|
 | `uv run --locked potion-audit vp run --matrix <run> --dry-run` | Picks the engines, builds each project document and the list of its generations in memory, with their estimated durations, and writes `plan.json` and `projects/<engine>.json`. Only reads on the instance (health, global queue, plugin, preset timings). | no |
 | `uv run --locked potion-audit vp run --matrix <run> --confirm-gpu` | Runs the scenario (see below) and writes `scenario.json`. Refused without `--confirm-gpu`. Exits with 0 when every step that ran passed, 1 otherwise or when the run stopped, 2 when refused, 3 when stopped with Ctrl+C (the running take is cancelled). | yes |
-| `uv run --locked potion-audit vp cleanup <run folder> [--confirm]` | Lists the projects and the generations of a scenario run: the projects recorded in `scenario.json` and those whose name starts with `potion-audit <run id> `, and the generations of their takes. With `--confirm`, deletes the projects (with their takes, versions and exports), then the generations, and writes `cleanup.json`. | no |
+| `uv run --locked potion-audit vp cleanup <run folder> [--confirm]` | Lists the projects, the generations and the uploads of a scenario run: the projects recorded in `scenario.json` and those whose name starts with `potion-audit <run id> `, the generations of their takes, and the files the run uploaded, recorded in `uploads.json`. With `--confirm`, deletes the projects (with their takes, versions and exports), then the generations, then the uploads (`DELETE /api/media/uploads/{filename}`, after `GET …/{filename}/info` says the file is still there), and writes `cleanup.json`. | no |
 
 Options of `vp run`: `--matrix` (repeatable) takes a `run.json` or `results.json` of a matrix, a run folder, or the folder of a night with `night.json`, whose segments are read from the sibling folders; `--engines a,b` names presets of the plugin; `--quality draft|final` (draft by default), `--upscaler seedvr2|rtx` (SeedVR2 by default), `--target` of the final pass (`fhd1080` by default), `--timeout` per take, `--interval`, `--run-id` (default `<date>-<machine>-vp`).
 
@@ -203,4 +203,4 @@ Output, in `<output_dir>/<run id>/`:
 - `exports/<engine>/`: `result.json` (the export job, the probe of the file, its checks and verdict) and `export.mp4`;
 - `uploads.json`, and `cleanup.json` after `vp cleanup --confirm`.
 
-The uploads of the two references stay in the library of the audit account after a cleanup.
+An upload is the library item the project's references point to: once the projects are gone, `vp cleanup --confirm` deletes the two references the run uploaded, and only those. `cleanup.json` records for each one whether it existed, was deleted, and still exists after.
