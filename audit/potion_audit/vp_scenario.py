@@ -285,7 +285,7 @@ def _frame_time(start: float, role: str) -> float:
 def companion_options(engine: dict, companion_steps: int | None) -> dict:
     if not companion_steps or not engine.get("image_preset"):
         return {}
-    return {engine["image_preset"]["id"]: {"speed_profile": "custom", "steps": companion_steps}}
+    return {engine["image_preset"]["id"]: {"speed_profile": "custom", "steps": companion_steps, "cfg": 1.0}}
 
 
 def build_doc(pack: Pack, engine: dict, run_id: str, media: dict, companion_steps: int | None = None) -> dict:

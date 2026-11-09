@@ -566,7 +566,7 @@ def test_companion_steps_go_to_the_engine_options_of_the_companion_only(vp_api, 
     plan = json.loads((run_dir / "plan.json").read_text(encoding="utf-8"))
     assert plan["settings"]["companion_steps"] == 4
     lightning = json.loads((run_dir / "projects" / "Wan2.2-14B-Lightning-12GB.json").read_text(encoding="utf-8"))
-    assert lightning["engine"]["options"] == {I2V_ID: {"speed_profile": "custom", "steps": 4}}
+    assert lightning["engine"]["options"] == {I2V_ID: {"speed_profile": "custom", "steps": 4, "cfg": 1.0}}
     fast = json.loads((run_dir / "projects" / "MiniMax-H3-Fast-12GB.json").read_text(encoding="utf-8"))
     assert "options" not in fast["engine"]
     assert main(["vp", "run", "--config", str(vp_config), "--engines", "Wan2.2-14B-Lightning-12GB", "--companion-steps", "0", "--dry-run"]) == 2
