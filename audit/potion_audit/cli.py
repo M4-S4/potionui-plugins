@@ -18,6 +18,7 @@ from .plan import dry_run
 from .reevaluate import ReevaluateError, reevaluate_run
 from .report import ReportError, add_pack_cells, compare_sets, group_by_machine, load_set, write_merge, write_report
 from .run import RunRefused, execute, select_case
+from .vp_report import compare_scenarios, load_one_scenario, load_scenario, split_dirs
 from .vp_scenario import add_vp_parser, vp_command
 
 EXIT_OK = 0
@@ -49,10 +50,10 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--confirm-gpu", action="store_true", help="required unless --dry-run: the operator agreed to use the GPU")
     run.add_argument("--keep-bundle", action="store_true", help="keep each export bundle next to the outputs taken from it")
 
-    report = commands.add_parser("report", help="write index.html for one run, made of one or more segment folders")
-    report.add_argument("runs", type=Path, nargs="+", help="run folders, the segments of one run in order")
+    report = commands.add_parser("report", help="write index.html for one run, made of one or more segment folders, and a Video Producer scenario")
+    report.add_argument("runs", type=Path, nargs="+", help="run folders, the segments of one run in order, a night folder with night.json, and a scenario folder with scenario.json")
     report.add_argument("--out", type=Path, help="report folder (default: <first run folder>/report)")
-    report.add_argument("--compare", type=Path, nargs="+", help="run folders of an earlier run of the same pack")
+    report.add_argument("--compare", type=Path, nargs="+", help="run folders of an earlier run of the same pack, or the folder of an earlier scenario of the same pack")
     report.add_argument("--pack", type=Path, default=DEFAULT_PACK, help="pack whose excluded and left out cells are listed when its sha256 is the run's")
     report.add_argument("--preflight", type=Path, help="preflight.json to read the hardware from when the run has no instance.json")
     report.add_argument("--probe", type=Path, action="append", default=[], help="a probe JSON of the host or the container (repeatable)")
@@ -64,7 +65,7 @@ def _parser() -> argparse.ArgumentParser:
     reevaluate.add_argument("--pack", type=Path, default=DEFAULT_PACK)
 
     merge = commands.add_parser("merge", help="one page with a column per machine")
-    merge.add_argument("runs", type=Path, nargs="+", help="run folders of several machines; the segments of one machine are put together")
+    merge.add_argument("runs", type=Path, nargs="+", help="run folders, night folders and scenario folders of several machines; the segments of one machine are put together, its scenario goes in its column")
     merge.add_argument("--out", type=Path, required=True)
 
     cases = commands.add_parser("cases", help="case files")
@@ -233,15 +234,33 @@ def _media(args) -> int:
 
 
 def _report(args) -> int:
-    run_set = load_set(args.runs, args.preflight, args.probe, args.note)
-    if args.pack and args.pack.is_file():
+    matrix_dirs, scenario_dirs = split_dirs(args.runs)
+    run_set = load_set(matrix_dirs, args.preflight, args.probe, args.note) if matrix_dirs else None
+    scenario = load_one_scenario(scenario_dirs)
+    if scenario is not None and run_set is None:
+        scenario.notes = list(args.note)
+    if run_set is not None and args.pack and args.pack.is_file():
         add_pack_cells(run_set, load_pack(args.pack))
-    comparison = compare_sets(run_set, load_set(args.compare)) if args.compare else None
-    index = write_report(run_set, args.out or args.runs[0] / "report", comparison, media=not args.no_media)
+    comparison = None
+    scenario_comparison = None
+    if args.compare:
+        old_matrix, old_scenarios = split_dirs(args.compare)
+        if old_matrix:
+            if run_set is None:
+                raise ReportError("--compare gives matrix runs, but the report has no matrix run")
+            comparison = compare_sets(run_set, load_set(old_matrix))
+        if old_scenarios:
+            if scenario is None:
+                raise ReportError("--compare gives a scenario, but the report has no scenario")
+            scenario_comparison = compare_scenarios(scenario, load_one_scenario(old_scenarios))
+    index = write_report(run_set, args.out or args.runs[0] / "report", comparison, media=not args.no_media, scenario=scenario, scenario_comparison=scenario_comparison)
     print(f"report: {index}")
     if comparison is not None:
         changed = [row["cell"] for row in comparison["rows"] if row.get("verdict_changed")]
         print(f"compare: {len(changed)} verdicts changed, {sum(1 for row in comparison['rows'] if row.get('duration_flag'))} durations beyond 20 %")
+    if scenario_comparison is not None:
+        changed = [row["step"] for row in scenario_comparison["rows"] if row.get("verdict_changed")]
+        print(f"compare scenario: {len(changed)} verdicts changed, {sum(1 for row in scenario_comparison['rows'] if row.get('duration_flag'))} durations beyond 20 %")
     return EXIT_OK
 
 
@@ -253,8 +272,15 @@ def _reevaluate(args) -> int:
 
 
 def _merge(args) -> int:
-    sets = [load_set(dirs) for dirs in group_by_machine(args.runs).values()]
-    print(f"merge: {write_merge(sets, args.out)}")
+    matrix_dirs, scenario_dirs = split_dirs(args.runs)
+    sets = [load_set(dirs) for dirs in group_by_machine(matrix_dirs).values()]
+    scenarios = {}
+    for run_dir in scenario_dirs:
+        scenario = load_scenario(run_dir)
+        if scenario.machine in scenarios:
+            raise ReportError(f"two scenarios of {scenario.machine} ({scenarios[scenario.machine].run_id} and {scenario.run_id}): merge takes one per machine")
+        scenarios[scenario.machine] = scenario
+    print(f"merge: {write_merge(sets, args.out, scenarios)}")
     return EXIT_OK
 
 
