@@ -15,6 +15,7 @@ Fill these in before you start. Ask the operator for any that is empty; do not g
 | `URL` | | Base URL of the instance to audit, for example `http://127.0.0.1:8000` |
 | `MODE` | `dedicated` or `shared` | `dedicated`: a test instance nobody else uses. `shared`: an instance in service, with other users or other work on the same GPU |
 | `PROFILE` | `smoke` or `full` | `smoke`: one cell per preset, a few hours at most. `full`: every cell, plus a warm repeat of each video preset; much longer |
+| `SCENARIO` | `yes` or `no` | `yes`: after the matrix, also run the Video Producer scenario with the engines that passed it. It needs the `video-producer` plugin enabled on the instance and adds about an hour for five engines on a 12 GB card |
 | `MODELS_DIR` | | Where the instance keeps its models, as seen from the host and from inside its container if it runs in one |
 | `OUTPUT_DIR` | | Folder for the runs and reports, outside the repository, with tens of GB free for `full` |
 | `DOWNLOADS_ALLOWED` | `yes` or `no` | `yes`: uv may download Python 3.13 and the locked wheels. `no`: work offline (`uv sync --locked --offline`) and stop when something is missing. Models are never downloaded by you: see the first stop |
@@ -34,7 +35,7 @@ Rules
 Steps
 -----
 
-All commands run from the `audit/` folder of a checkout of M4-S4/potionui-plugins.
+All commands run from the `audit/` folder of a checkout of M4-S4/potionui-plugins. When the machine has none, clone `https://github.com/M4-S4/potionui-plugins`; when it has one, update it (`git pull --ff-only`). Tell the operator which commit you run: two audits compare only when they use the same pack.
 
 ### 1. Environment
 
@@ -94,9 +95,9 @@ It submits nothing. It writes `plan.json` and one `request.json` per cell and pr
 - the state of the Windows session, if the host is Windows: unlocked (`probe-windows.ps1` reports whether it is interactive and locked), and not a Remote Desktop session (`qwinsta` shows the session type);
 - the CPU of the other containers and processes of the host (`docker stats --no-stream`, or `top`): a test suite running next to the audit shows neither in the queue nor in `nvidia-smi`, and it slows the loads;
 - the global queue is empty (`check` reports it);
-- the estimated duration of the plan.
+- the estimated duration of the plan, and that the scenario follows it when `SCENARIO` is `yes`.
 
-Then ask `GPU_OWNER` for the GPU, with the profile, the number of cells and the estimated duration. Wait for an explicit yes.
+Then ask `GPU_OWNER` for the GPU, with the profile, the number of cells and the estimated duration, and say whether the request covers the scenario too. Wait for an explicit yes.
 
 ### 6. Run, in the background
 
@@ -104,7 +105,7 @@ Then ask `GPU_OWNER` for the GPU, with the profile, the number of cells and the 
 uv run --locked potion-audit run --pack --profile PROFILE --confirm-gpu --run-id <run-id> > <OUTPUT_DIR>/<run-id>.log 2>&1
 ```
 
-Start it in the background and read its log now and then, not in a tight loop. It prints one line per state change, writes `run.json` and one folder per cell, and exits with 0 when every cell that ran passed, 1 on a FAIL, OOM, TIMEOUT or REJECTED cell or when it stopped, 2 when refused, 3 on Ctrl+C (the running generation is cancelled).
+Add `--keep-bundle` to keep each export bundle next to the outputs taken from it, when someone will want to look at what the server recorded for a generation. Start it in the background and read its log now and then, not in a tight loop. It prints one line per state change, writes `run.json` and one folder per cell, and exits with 0 when every cell that ran passed, 1 on a FAIL, OOM, TIMEOUT or REJECTED cell or when it stopped, 2 when refused, 3 on Ctrl+C (the running generation is cancelled).
 
 The run stops by itself after an OOM, or when the instance is not healthy or the queue is busy before a cell. Then:
 
@@ -112,14 +113,25 @@ The run stops by itself after an OOM, or when the instance is not healthy or the
 2. the instance usually needs a restart after an OOM: ask for it, and wait;
 3. once the instance answers `/health` with `healthy` and the queue is empty, ask whether to go on. There is no resume command yet: run the presets left with `--only <preset>`, each with a new `--run-id` (`<run-id>-2`, `<run-id>-3`, …). These folders are the segments of one run.
 
-### 7. Re-evaluation and report
+### 7. Video Producer scenario, if `SCENARIO` is `yes`
+
+```bash
+uv run --locked potion-audit vp run --matrix <segment folder> --dry-run
+uv run --locked potion-audit vp run --matrix <segment folder> --confirm-gpu --run-id <run-id>-vp > <OUTPUT_DIR>/<run-id>-vp.log 2>&1
+```
+
+Repeat `--matrix` for each segment of the run. The dry run only reads: it picks the engines whose `video` cell passed the matrix and prints each generation with its estimated duration. Pass `--confirm-gpu` only if the consent of the second stop covered the scenario and the GPU is still yours; otherwise ask again, with the duration the dry run gives. The final pass runs only when the cell of its upscaler passed the matrix (`--upscaler seedvr2` by default, or `rtx`).
+
+The scenario follows the rules of the run: one generation at a time, each after a check of the queue, and it stops by itself on an OOM. It leaves one project per engine on the instance, with their takes and three uploads.
+
+### 8. Re-evaluation and report
 
 ```bash
 uv run --locked potion-audit reevaluate <segment folders>
-uv run --locked potion-audit report <segment folders> --compare PREVIOUS_RUN --probe <container probe> --note "<bias factor>"
+uv run --locked potion-audit report <segment folders> <scenario folder> --compare PREVIOUS_RUN --probe <container probe> --note "<bias factor>"
 ```
 
-`reevaluate` checks every completed cell again with the current checks and never rewrites `result.json`. `report` writes `<first segment>/report/index.html` (or `--out`). Leave out `--compare` for a first audit; it refuses a previous run of another pack. Add a `--note` for each bias factor the report cannot see by itself: a restart between segments, a cell left out, a session that changed during the run. Write the notes in English and name no one ("the machine was in use during the second segment"): the page is meant to be shared. The report folder holds every file its page points to; to send it, send the whole folder.
+`reevaluate` checks every completed cell again with the current checks and never rewrites `result.json`. `report` writes `<first segment>/report/index.html` (or `--out`). Leave out the scenario folder when `SCENARIO` is `no`, and `--compare` for a first audit; it refuses a previous run of another pack, and takes the folder of a previous scenario beside the previous run. Add a `--note` for each bias factor the report cannot see by itself: a restart between segments, a cell left out, a session that changed during the run. Write the notes in English and name no one ("the machine was in use during the second segment"): the page is meant to be shared. The report folder holds every file its page points to; to send it, send the whole folder.
 
 **Third stop.** Give the operator:
 
@@ -128,7 +140,7 @@ uv run --locked potion-audit report <segment folders> --compare PREVIOUS_RUN --p
 - what the comparison flags: verdicts changed, run times beyond 20 %, peak VRAM beyond 512 MiB, low SSIM, disk or mount changes;
 - the path of `index.html`.
 
-Then ask about the cleanup: the run left one generation per cell in the history of the audit account (`run.json` lists their ids). potion-audit has no `cleanup` command yet; the owner decides whether to delete them and does it. Ask also whether the report may be shared, and with whom.
+Then ask about the cleanup. The run left one generation per cell in the history of the audit account (`run.json` lists their ids): potion-audit has no command to delete those, so the owner decides and does it. The scenario left its projects, takes and uploads: `uv run --locked potion-audit vp cleanup <scenario folder>` lists them without touching anything, and deletes them with `--confirm`, which you pass only on the owner's decision. Ask also whether the report may be shared, and with whom.
 
 Traps
 -----
