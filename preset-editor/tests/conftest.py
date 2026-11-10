@@ -42,7 +42,7 @@ def marketplace(tmp_path):
     return root
 
 
-def template(preset_id, path, *, kind="marketplace", origin_path="Fixture/native", name="Minimal native"):
+def template(preset_id, path, *, kind="marketplace", origin_path="Fixture/native", name="Minimal native", **extra):
     return SimpleNamespace(
         id=preset_id,
         name=name,
@@ -52,6 +52,7 @@ def template(preset_id, path, *, kind="marketplace", origin_path="Fixture/native
         category="image",
         modes={"txt2img": None},
         origin={"kind": kind, "plugin_id": None, "path": origin_path},
+        **extra,
     )
 
 
@@ -121,7 +122,7 @@ def core(monkeypatch, roots, marketplace):
     def uninstall_preset(preset_id, user):
         state.uninstalls.append((preset_id, user.id))
         state.installed.discard(preset_id)
-        return "ok"
+        return {"message": f"Preset '{preset_id}' uninstalled successfully. Removed 0 user assignments.", "tombstone": None}
 
     monkeypatch.setattr(core_bridge, "find_preset", lambda preset_id: state.templates.get(preset_id))
     monkeypatch.setattr(core_bridge, "catalog", catalog)

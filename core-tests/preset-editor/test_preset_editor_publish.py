@@ -78,7 +78,8 @@ def core(roots, tmp_path, monkeypatch, mock_db):
     file_repo = FilePresetRepository(loader)
     db_repo = DatabasePresetRepository()
     collaborators = SimpleNamespace(
-        preset_loader=loader, file_repo=file_repo, db_repo=db_repo, group_repo=UserGroupRepository(), plugins=_Plugins()
+        preset_loader=loader, file_repo=file_repo, db_repo=db_repo, group_repo=UserGroupRepository(), plugins=_Plugins(),
+        cover_store=None,
     )
     container = SimpleNamespace(
         preset_template_loader=loader, file_preset_repository=file_repo, preset_collaborators=collaborators,

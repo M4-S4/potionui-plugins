@@ -1,7 +1,7 @@
 import os
 import shutil
 import threading
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional
 
 from src.plugin_api.storage import generate_ulid
@@ -123,8 +123,43 @@ def _prune_empty_parents(path: Path, stop: Path) -> None:
         current = current.parent
 
 
+def _is_link(path: Path) -> bool:
+    return path.is_symlink() or getattr(os.path, "isjunction", lambda _path: False)(path)
+
+
+def check_deletable(roots: Roots, *, preset_dir: Path, preset_id: str, target_dir: str) -> None:
+    relative = PurePosixPath(target_dir or "")
+    parts = relative.parts
+    if not parts or relative.is_absolute() or any(part in (".", "..") for part in parts):
+        raise PublishError("not_its_folder", f"preset '{preset_id}' does not say which local folder it lives in, so nothing is removed")
+    expected = roots.local_presets.joinpath(*parts)
+    linked = [
+        "/".join(parts[:index]) for index in range(1, len(parts) + 1)
+        if _is_link(roots.local_presets.joinpath(*parts[:index]))
+    ]
+    if linked:
+        raise PublishError(
+            "linked_folder",
+            f"{linked[0]} in the local presets is a link to another folder, so Preset Editor leaves it alone: "
+            "remove the preset by hand",
+        )
+    if Path(preset_dir).resolve() != expected.resolve():
+        raise PublishError(
+            "not_its_folder", f"preset '{preset_id}' is not loaded from {target_dir} in the local presets, so its folder is left alone"
+        )
+    try:
+        found = read_header(expected).get("id")
+    except DraftError:
+        found = None
+    if found != preset_id:
+        raise PublishError(
+            "not_its_folder", f"the folder {target_dir} holds the preset '{found}', not '{preset_id}', so it is left alone"
+        )
+
+
 def delete_local_preset(roots: Roots, *, preset_dir: Path, preset_id: str, target_dir: str, history_depth: int) -> str:
     with _lock:
+        check_deletable(roots, preset_dir=preset_dir, preset_id=preset_id, target_dir=target_dir)
         stamp = history.archive(roots, preset_dir, preset_id=preset_id, target_dir=target_dir, reason="delete")
         shutil.rmtree(preset_dir)
         _prune_empty_parents(preset_dir, roots.local_presets)

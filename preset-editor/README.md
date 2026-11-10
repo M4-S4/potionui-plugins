@@ -5,13 +5,35 @@ copy of an existing one or from a blank skeleton, lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/` where Admin → Presets picks
 it up without a restart. Admins only.
 
-**Status: version 0.2.2, works on the pinned core and has been seen on screen with an
+**Status: version 0.2.3, works on the pinned core and has been seen on screen with an
 earlier one, `02cce6fdd`, not yet on the marketplace.** The plugin targets the core of
 `core.ref` at the root of this repository, `9b079f504` (the `dev` branch of the M4-S4/PotionUI
 fork: upstream `master` at `8d54ffc43`, after release 0.1.0, plus the fork's changes), and its
 catalogue entry requires it. Its
 pytest suite, its core-side tests (`core-tests/preset-editor/`) and its Node tests run in the
 CI against that core. Version 0.1.0 was written for PotionUI `master` at `6903cc19` (0.0.15).
+
+## What changed in 0.2.3
+
+- **Preset mirrors.** On a core where an admin can mirror a preset in Admin → Presets (a
+  preset with its own id, name, cover, defaults and modes that reads the files of another
+  one), Preset Editor refuses to delete, edit or export a mirror, and to publish a draft under
+  the id of a mirror, with an error that names the source preset and points to Admin →
+  Presets. In 0.2.2, deleting a mirror of a local preset removed the folder of its source,
+  which went to the history. Duplicating a mirror copies the files of its source under the
+  new id. On a core without mirrors nothing changes.
+- **Deleting checks the folder first.** Before it uninstalls or removes anything, deleting a
+  local preset checks that its folder is the one its origin names under
+  `content/presets/local`, that no folder on the way there is a link, and that its
+  `preset.yml` declares the id being deleted.
+- **Restoring a version.** A version from the history is restored under the id its
+  `preset.yml` declares. A source folder that 0.2.2 removed with a mirror is in the history
+  under the mirror's id, which the preset list no longer shows: `GET
+  /api/plugins/preset-editor/presets/<mirror id>/history` lists it, `POST
+  .../history/<stamp>/restore` opens it as a draft of the source preset, and publishing that
+  draft puts the folder back.
+- **Name of an edit draft.** An edit draft takes the name written in `preset.yml`, not the
+  display name an admin gave the preset.
 
 ## What changed in 0.2.2
 
@@ -103,7 +125,8 @@ CI against that core. Version 0.1.0 was written for PotionUI `master` at `6903cc
 - **Not seen on screen yet.** The light theme and widths under 1024 px; drag and drop in the
   form builder, a zip import, Restore, the pipeline builder and the form preview of a
   published preset; the rollback of a preset whose field `type:` the loader refuses; the
-  0.2.2 description preview.
+  0.2.2 description preview; the 0.2.3 refusals for a mirror, whose Edit, Delete and zip
+  buttons the preset list still shows.
 
 ## Getting started
 

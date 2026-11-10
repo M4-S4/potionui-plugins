@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from backend import drafts, history, paths
 from backend.api import router
 from src.plugin_api import AccountType, User, get_current_active_user
-from tests.conftest import read_id
+from tests.conftest import read_id, template
 
 DRAFTS_URL = "/api/plugins/preset-editor/drafts"
 ADMIN = User(id="admin-1", username="admin", email="admin@test.com", password_hash="x", account_type=AccountType.ADMIN)
@@ -149,6 +149,26 @@ def test_an_id_collision_blocks_publication(client, core, roots):
 
     assert response.status_code == 409 and response.json()["detail"]["error"] == "id_in_use"
     assert core.reloads == 0
+
+
+def test_a_draft_left_by_an_earlier_edit_of_a_mirror_is_not_published(client, core, roots):
+    first = _copy(client, preset_id="local-one").json()["data"]
+    assert client.post(f"{DRAFTS_URL}/{first['draft_id']}/publish", json={}).status_code == 200
+    origin = core.templates["local-one"]
+    core.templates["local-one-mirror"] = template(
+        "local-one-mirror", origin.path, kind="local", origin_path="MyModel/v1", source_preset_id="local-one"
+    )
+    stale = drafts.create_edit(
+        roots, source_dir=drafts.load(roots, first["draft_id"]).dir, preset_id="local-one-mirror", name="My copy",
+        target_dir="MyModel/v1", created_by="admin-1",
+    )
+    before, reloads = (roots.local_presets / "MyModel" / "v1" / "preset.yml").read_bytes(), core.reloads
+
+    response = client.post(f"{DRAFTS_URL}/{stale.draft_id}/publish", json={})
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "mirror"
+    assert (roots.local_presets / "MyModel" / "v1" / "preset.yml").read_bytes() == before
+    assert core.reloads == reloads and drafts.load(roots, stale.draft_id).published_at is None
 
 
 def test_a_folder_collision_blocks_publication(client, core):

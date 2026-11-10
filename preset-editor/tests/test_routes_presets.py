@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from backend import drafts, history
 from backend.api import router
 from src.plugin_api import AccountType, User, get_current_active_user
-from tests.conftest import FIXTURES, read_id, template
+from tests.conftest import FIXTURES, read_header, read_id, template
 
 PRESETS_URL = "/api/plugins/preset-editor/presets"
 ADMIN = User(id="admin-1", username="admin", email="admin@test.com", password_hash="x", account_type=AccountType.ADMIN)
@@ -43,6 +43,22 @@ def test_editing_a_local_preset_opens_a_draft_on_its_folder(client, local_preset
     assert read_id(drafts.load(roots, data["draft_id"]).dir) == "local-one"
 
 
+def test_an_edit_draft_takes_the_name_in_the_preset_file_rather_than_the_one_an_admin_shows(client, core, local_preset, roots):
+    core.templates["local-one"].name = "Shown name"
+    core.templates["local-one"].file_name = "Local one"
+
+    data = client.post(f"{PRESETS_URL}/local-one/edit").json()["data"]
+
+    assert data["name"] == "Local one"
+    assert read_header(drafts.load(roots, data["draft_id"]).dir)["name"] == "Local one"
+
+
+def test_an_edit_draft_takes_the_shown_name_when_the_core_gives_no_file_name(client, core, local_preset):
+    core.templates["local-one"].name = "Only name"
+
+    assert client.post(f"{PRESETS_URL}/local-one/edit").json()["data"]["name"] == "Only name"
+
+
 def test_only_a_local_preset_can_be_edited_in_place(client):
     response = client.post(f"{PRESETS_URL}/fixture-minimal-native/edit")
 
@@ -75,6 +91,72 @@ def test_only_a_local_preset_can_be_deleted(client, core, roots):
     assert client.delete(f"{PRESETS_URL}/never-seen").status_code == 404
 
 
+@pytest.fixture
+def local_mirror(core, local_preset):
+    core.templates["local-one-mirror"] = template(
+        "local-one-mirror", local_preset, kind="local", origin_path="Local/v1", name="Local one, mirrored",
+        source_preset_id="local-one",
+    )
+    core.installed.update({"local-one", "local-one-mirror"})
+    return core.templates["local-one-mirror"]
+
+
+def test_deleting_a_mirror_is_refused_before_the_uninstall_and_keeps_the_folder_of_its_source(client, core, local_mirror, local_preset, roots):
+    response = client.delete(f"{PRESETS_URL}/local-one-mirror")
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert (detail["error"], detail["source_preset_id"]) == ("mirror", "local-one")
+    assert "Admin → Presets" in detail["message"] and "'local-one'" in detail["message"]
+    assert core.uninstalls == [] and core.reloads == 0
+    assert read_id(local_preset) == "local-one"
+    assert history.list_entries(roots, "local-one-mirror") == [] and history.list_entries(roots, "local-one") == []
+
+
+def test_editing_a_mirror_is_refused_without_writing_a_draft(client, core, local_mirror, roots):
+    response = client.post(f"{PRESETS_URL}/local-one-mirror/edit")
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["error"] == "mirror"
+    assert drafts.list_drafts(roots) == [] and core.lint_calls == []
+
+
+def test_a_mirror_of_a_marketplace_preset_is_named_a_mirror_rather_than_not_local(client, core):
+    core.templates["market-mirror"] = template(
+        "market-mirror", core.templates["fixture-minimal-native"].path, source_preset_id="fixture-minimal-native"
+    )
+
+    for response in (client.post(f"{PRESETS_URL}/market-mirror/edit"), client.delete(f"{PRESETS_URL}/market-mirror")):
+        assert response.status_code == 409 and response.json()["detail"]["source_preset_id"] == "fixture-minimal-native"
+
+
+def test_a_source_preset_reporting_itself_as_its_source_is_not_a_mirror(client, core, local_preset):
+    core.templates["local-one"].source_preset_id = "local-one"
+
+    assert client.post(f"{PRESETS_URL}/local-one/edit").status_code == 201
+
+
+def test_a_preset_whose_folder_holds_another_preset_is_not_deleted(client, core, local_preset, roots):
+    core.templates["stray-one"] = template("stray-one", local_preset, kind="local", origin_path="Local/v1")
+    core.installed.add("stray-one")
+
+    response = client.delete(f"{PRESETS_URL}/stray-one")
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "not_its_folder"
+    assert "'local-one'" in response.json()["detail"]["message"]
+    assert core.uninstalls == [] and read_id(local_preset) == "local-one"
+    assert history.list_entries(roots, "stray-one") == []
+
+
+def test_a_preset_loaded_from_another_folder_than_its_origin_says_is_not_deleted(client, core, local_preset, roots):
+    core.templates["local-one"] = template("local-one", local_preset, kind="local", origin_path="Other/v1")
+
+    response = client.delete(f"{PRESETS_URL}/local-one")
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "not_its_folder"
+    assert read_id(local_preset) == "local-one"
+
+
 def test_history_lists_versions_and_restores_one_as_a_draft(client, core, local_preset, roots, monkeypatch):
     monkeypatch.setattr(history, "stamp_now", lambda: "20261015T100000.000007")
     client.delete(f"{PRESETS_URL}/local-one")
@@ -100,6 +182,37 @@ def test_restoring_targets_the_folder_the_preset_lives_in_now(client, core, loca
     data = client.post(f"{PRESETS_URL}/local-one/history/20261015T100000.000008/restore").json()["data"]
 
     assert data["target_dir"] == "Local/v1"
+
+
+def test_a_version_archived_under_a_mirror_id_is_restored_under_the_id_its_files_declare(client, core, local_preset, roots, monkeypatch):
+    monkeypatch.setattr(history, "stamp_now", lambda: "20261110T100000.000001")
+    history.archive(roots, local_preset, preset_id="local-one-mirror", target_dir="Local/v1", reason="delete")
+    shutil.rmtree(roots.local_presets / "Local")
+    core.rescan_local()
+
+    response = client.post(f"{PRESETS_URL}/local-one-mirror/history/20261110T100000.000001/restore")
+
+    assert response.status_code == 201, response.text
+    data = response.json()["data"]
+    assert (data["preset_id"], data["name"], data["target_dir"]) == ("local-one", "Local one", "Local/v1")
+    assert data["source"] == "restore_of:local-one-mirror@20261110T100000.000001"
+    published = client.post(f"/api/plugins/preset-editor/drafts/{data['draft_id']}/publish", json={})
+    assert published.status_code == 200, published.text
+    assert read_id(roots.local_presets / "Local" / "v1") == "local-one"
+
+
+def test_a_version_whose_files_declare_a_mirror_id_is_not_restored(client, core, local_mirror, roots, monkeypatch, tmp_path):
+    monkeypatch.setattr(history, "stamp_now", lambda: "20261110T100000.000002")
+    odd = tmp_path / "odd"
+    shutil.copytree(FIXTURES / "minimal-native", odd)
+    manifest = odd / "preset.yml"
+    manifest.write_text(drafts.rewrite_top_level(manifest.read_text(encoding="utf-8"), {"id": "local-one-mirror"}), encoding="utf-8")
+    history.archive(roots, odd, preset_id="local-one-mirror", target_dir="Local/v1", reason="publish")
+
+    response = client.post(f"{PRESETS_URL}/local-one-mirror/history/20261110T100000.000002/restore")
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "mirror"
+    assert drafts.list_drafts(roots) == []
 
 
 def test_an_unknown_version_cannot_be_restored(client):

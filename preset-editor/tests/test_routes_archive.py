@@ -58,6 +58,19 @@ def test_a_local_preset_is_exported_but_not_a_marketplace_one(client, core, tmp_
     assert client.get(f"{PREFIX}/presets/missing-preset/export").status_code == 404
 
 
+def test_a_mirror_is_not_exported_under_its_own_id(client, core, tmp_path):
+    local = tmp_path / "local" / "Mine"
+    shutil.copytree(NATIVE, local)
+    core.templates["mine-preset"] = template("mine-preset", local, kind="local", origin_path="Mine", name="Mine")
+    core.templates["mine-mirror"] = template(
+        "mine-mirror", local, kind="local", origin_path="Mine", name="Mine, mirrored", source_preset_id="mine-preset"
+    )
+
+    response = client.get(f"{PREFIX}/presets/mine-mirror/export")
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "mirror"
+
+
 def test_exports_need_a_signed_in_admin(client, core):
     draft = client.post(f"{PREFIX}/drafts", json={"mode": "copy", "from_id": "fixture-minimal-native", "name": "Copy", "model_dir": "M"}).json()["data"]
     client.app.dependency_overrides[get_current_active_user] = lambda: USER

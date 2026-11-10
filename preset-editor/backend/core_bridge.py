@@ -38,7 +38,7 @@ def install_preset(preset_id: str, user: User) -> Dict[str, Any]:
     return preset_operations.install_preset(collaborators(), preset_id, user)
 
 
-def uninstall_preset(preset_id: str, user: User) -> str:
+def uninstall_preset(preset_id: str, user: User) -> Any:
     return preset_operations.uninstall_preset(collaborators(), preset_id, user)
 
 

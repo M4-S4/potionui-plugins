@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def origin(template: Any) -> Dict[str, Any]:
@@ -7,6 +7,18 @@ def origin(template: Any) -> Dict[str, Any]:
 
 def is_local(template: Any) -> bool:
     return origin(template).get("kind") == "local"
+
+
+def mirror_source(template: Any) -> Optional[str]:
+    source = getattr(template, "source_preset_id", None)
+    if isinstance(source, str) and source and source != getattr(template, "id", None):
+        return source
+    return None
+
+
+def file_name(template: Any) -> str:
+    name = getattr(template, "file_name", None)
+    return name if isinstance(name, str) and name else template.name
 
 
 def target_dir(template: Any) -> str:
