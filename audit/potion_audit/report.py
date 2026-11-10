@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import urllib.parse
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -21,6 +22,14 @@ DURATION_TOLERANCE = 0.20
 VRAM_TOLERANCE_MB = 512.0
 PREVIEW_HEIGHT = 540
 HISTORY_LINES = 80
+SSIM_FLAG = 0.9
+PAUSE_SECONDS = 600
+ORIGINAL_COPY_LIMIT = 64 * 2 ** 20
+WINDOWS_DRIVE = re.compile(r"^([A-Za-z]):[\\/]")
+DRVFS_OPTION = re.compile(r"(?:^|[;,])path=([A-Za-z]):[\\/]")
+HOST_MOUNT = re.compile(r"/mnt/host/([A-Za-z])(?:/|$)")
+GIT_BASH_PATH = re.compile(r"\b[A-Za-z]:/Program Files/Git/")
+AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 HOME_PATTERNS = (re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/]+"), re.compile(r"/home/[^/]+"), re.compile(r"/Users/[^/]+"))
 MARKUP = re.compile(r"<<[A-Z_]+:([^>]*)>>")
 SAFE = re.compile(r"[^A-Za-z0-9._-]+")
@@ -33,52 +42,170 @@ STATUS_CLASS = {
     "preset_not_installed": "warn",
 }
 
-STYLE = """
-:root { color-scheme: light; --bg: #fbfaf8; --card: #ffffff; --fg: #1f1d1a; --muted: #6b665e; --line: #e2ddd5; --ok: #1a7f37; --ok-bg: #e3f4e6; --bad: #c2261c; --bad-bg: #fbe5e3; --warn: #8a5a00; --warn-bg: #fbf0d9; --idle: #6b665e; --idle-bg: #efece7; --accent: #6b3fa0; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; --bg: #141317; --card: #1c1b20; --fg: #ebe8e3; --muted: #a29d95; --line: #34323a; --ok: #4ac26b; --ok-bg: #16301f; --bad: #ff7b72; --bad-bg: #3a1b1a; --warn: #e3b341; --warn-bg: #352a12; --idle: #a29d95; --idle-bg: #26242b; --accent: #b58cf0; } }
-:root[data-theme="dark"] { color-scheme: dark; --bg: #141317; --card: #1c1b20; --fg: #ebe8e3; --muted: #a29d95; --line: #34323a; --ok: #4ac26b; --ok-bg: #16301f; --bad: #ff7b72; --bad-bg: #3a1b1a; --warn: #e3b341; --warn-bg: #352a12; --idle: #a29d95; --idle-bg: #26242b; --accent: #b58cf0; }
-* { box-sizing: border-box; }
-body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0 auto; max-width: 1280px; padding: 16px; }
-h1 { font-size: 24px; margin: 8px 0 4px; } h2 { font-size: 18px; margin: 32px 0 10px; } h3 { font-size: 15px; margin: 18px 0 6px; }
-a { color: var(--accent); }
-.muted { color: var(--muted); } .small { font-size: 12px; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px 20px; margin: 0; }
-.facts div { min-width: 0; } .facts dt { color: var(--muted); font-size: 12px; } .facts dd { margin: 0; overflow-wrap: anywhere; }
-.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
-table { border-collapse: collapse; width: 100%; }
-th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 12px; white-space: nowrap; }
-table.matrix { width: max-content; min-width: 100%; }
-table.matrix th:first-child, table.matrix td:first-child { position: sticky; left: 0; background: var(--card); z-index: 1; font-weight: 600; max-width: 170px; overflow-wrap: anywhere; box-shadow: 1px 0 0 var(--line); }
-table.matrix .cell { width: 132px; }
-.cell { display: block; text-decoration: none; color: inherit; border-radius: 8px; padding: 6px; margin-bottom: 4px; overflow-wrap: anywhere; }
-.cell img { display: block; width: 116px; height: 72px; object-fit: cover; border-radius: 5px; margin-top: 4px; background: var(--idle-bg); }
-.tag { display: inline-block; font-weight: 700; font-size: 12px; letter-spacing: .02em; }
-.ok { background: var(--ok-bg); } .ok .tag, .tag.ok { color: var(--ok); }
-.bad { background: var(--bad-bg); } .bad .tag, .tag.bad { color: var(--bad); }
-.warn { background: var(--warn-bg); } .warn .tag, .tag.warn { color: var(--warn); }
-.idle { background: var(--idle-bg); } .idle .tag, .tag.idle { color: var(--idle); }
-.off { background: none; border: 1px dashed var(--line); } .off .tag, .tag.off { color: var(--muted); font-weight: 600; }
-.tag.ok, .tag.bad, .tag.warn, .tag.idle, .tag.off { background: none; }
-.check { display: block; margin-top: 2px; font-size: 12px; overflow-wrap: anywhere; }
-.was { color: var(--muted); font-weight: 400; text-decoration: line-through; margin-left: 4px; }
-details { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
-details > summary { cursor: pointer; padding: 10px 14px; overflow-wrap: anywhere; }
-details > .body { padding: 0 14px 14px; }
-details:target, details[open] { border-color: var(--accent); }
-pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; overflow-x: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-video, .media img { max-width: 100%; height: auto; border-radius: 6px; background: #000; }
-audio { width: 100%; }
-ul { padding-left: 20px; }
-.legend span { margin-right: 12px; white-space: nowrap; }
-@media (max-width: 640px) { body { padding: 12px 16px; font-size: 14px; } h1 { font-size: 20px; } table.matrix th:first-child, table.matrix td:first-child { max-width: 96px; font-size: 12px; } table.matrix .cell { width: 116px; } .cell img { width: 100px; height: 62px; } }
-"""
+DARK = (
+    "color-scheme: dark; --bg: 12 13 15; --card: 22 24 28; --soft: 31 33 38; --raised: 39 42 49; --line: 36 38 44; --line-strong: 43 46 53; --line-hover: 58 62 71; "
+    "--fg: 232 234 237; --muted: 169 174 184; --subtle: 122 128 144; --signal: 91 157 255; --ok: 61 214 140; --bad: 255 138 138; --warn: 255 197 61; --idle: 169 174 184; "
+    "--tint: .12; --selection: .35; --shadow-raised: inset 0 1px 0 rgb(255 255 255 / .04); --shadow-floating: inset 0 1px 0 rgb(255 255 255 / .06), 0 4px 16px rgb(0 0 0 / .5);"
+)
+LIGHT = (
+    "color-scheme: light; --bg: 247 247 247; --card: 255 255 255; --soft: 241 241 241; --raised: 255 255 255; --line: 232 232 232; --line-strong: 214 214 214; --line-hover: 173 173 173; "
+    "--fg: 23 23 23; --muted: 85 85 85; --subtle: 112 112 112; --signal: 13 116 206; --ok: 26 127 78; --bad: 198 47 52; --warn: 154 103 0; --idle: 85 85 85; "
+    "--tint: .06; --selection: .22; --shadow-raised: 0 1px 2px rgb(0 0 0 / .04); --shadow-floating: 0 4px 12px rgb(0 0 0 / .08), 0 1px 3px rgb(0 0 0 / .06);"
+)
+SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif'
+MONO = '"IBM Plex Mono", ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace'
 
-SCRIPT = """
-function openTarget() { var id = decodeURIComponent(location.hash.slice(1)); if (!id) return; var node = document.getElementById(id); if (node && node.tagName === 'DETAILS') { node.open = true; node.scrollIntoView(); } }
-window.addEventListener('hashchange', openTarget); window.addEventListener('DOMContentLoaded', openTarget);
+STYLE = (
+    f":root {{ {DARK} --sans: {SANS}; --mono: {MONO}; }}\n"
+    f"@media (prefers-color-scheme: light) {{ :root:not([data-theme=\"dark\"]) {{ {LIGHT} }} }}\n"
+    f":root[data-theme=\"light\"] {{ {LIGHT} }}\n"
+    f":root[data-theme=\"dark\"] {{ {DARK} }}\n"
+    + """
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; background: rgb(var(--bg)); }
+body { background: rgb(var(--bg)); color: rgb(var(--fg)); font: 13px/20px var(--sans); margin: 0; -webkit-font-smoothing: antialiased; }
+::selection { background: rgb(var(--signal) / var(--selection)); }
+.page { max-width: 1280px; margin: 0 auto; padding: 0 16px 64px; }
+header.top { padding: 28px 0 16px; }
+.eyebrow { font: 500 12px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); margin: 0 0 6px; }
+h1 { font-size: 24px; line-height: 32px; font-weight: 600; margin: 0 0 4px; letter-spacing: -.01em; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 8px 0 0; }
+.meta div { min-width: 0; }
+.meta dt { font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); }
+.meta dd { margin: 0; color: rgb(var(--muted)); overflow-wrap: anywhere; }
+nav.toc { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 8px 16px; background: rgb(var(--card)); border-top: 1px solid rgb(var(--line)); border-bottom: 1px solid rgb(var(--line)); }
+nav.toc::-webkit-scrollbar { display: none; }
+nav.toc a { white-space: nowrap; text-decoration: none; color: rgb(var(--muted)); font-size: 13px; font-weight: 500; padding: 6px 10px; border-radius: 4px; }
+nav.toc a:hover { color: rgb(var(--fg)); background: rgb(var(--soft)); text-decoration: none; }
+nav.toc a.current { color: rgb(var(--signal)); background: rgb(var(--signal) / .12); }
+nav.toc button.theme { margin-left: auto; flex: none; font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--muted)); background: rgb(var(--soft)); border: 1px solid rgb(var(--line-strong)); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+nav.toc button.theme:hover { color: rgb(var(--fg)); border-color: rgb(var(--line-hover)); }
+a { color: rgb(var(--signal)); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, summary:focus-visible, button:focus-visible { outline: 2px solid rgb(var(--signal)); outline-offset: 2px; }
+section.block { margin-top: 40px; }
+h2 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid rgb(var(--line)); }
+h3 { font: 500 12px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); margin: 22px 0 8px; }
+.muted { color: rgb(var(--muted)); } .small { font-size: 12px; line-height: 16px; }
+code { font: 12px var(--mono); }
+.card { background: rgb(var(--card)); border: 1px solid rgb(var(--line)); border-radius: 6px; padding: 16px; box-shadow: var(--shadow-raised); }
+.card > h3:first-child { margin-top: 0; }
+.card > ul { margin: 0; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px 24px; margin: 0; }
+.facts div { min-width: 0; }
+.facts dt { font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); }
+.facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.headline { font-size: 16px; line-height: 24px; font-weight: 600; margin: 0 0 14px; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.tile { background: rgb(var(--card)); border: 1px solid rgb(var(--line)); border-radius: 6px; padding: 14px 16px; min-width: 0; box-shadow: var(--shadow-raised); }
+.tile.t-ok { box-shadow: inset 0 2px 0 rgb(var(--ok)), var(--shadow-raised); }
+.tile.t-bad { box-shadow: inset 0 2px 0 rgb(var(--bad)), var(--shadow-raised); }
+.tile.t-warn { box-shadow: inset 0 2px 0 rgb(var(--warn)), var(--shadow-raised); }
+.tile.wide { grid-column: 1 / -1; }
+.tile.wide ul { columns: 2 22em; column-gap: 28px; }
+.tile.wide li { break-inside: avoid; }
+.tile .label { font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); }
+.tile .big { font-size: 30px; line-height: 36px; font-weight: 600; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
+.tile .big small { font-size: 13px; font-weight: 500; color: rgb(var(--muted)); }
+.tile p { margin: 4px 0 0; color: rgb(var(--muted)); }
+.tile p strong { color: rgb(var(--fg)); }
+.tile ul { margin: 6px 0 0; padding-left: 18px; }
+.tile li { overflow-wrap: anywhere; }
+.tile .tag, .group h3 .tag { margin: 2px 2px 0 0; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid rgb(var(--line)); border-radius: 6px; background: rgb(var(--card)); box-shadow: var(--shadow-raised); }
+table { border-collapse: collapse; width: 100%; }
+th, td { border-bottom: 1px solid rgb(var(--line)); padding: 8px 10px; text-align: left; vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+th { font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--muted)); white-space: nowrap; background: rgb(var(--soft)); }
+.num { text-align: right; font: 12px/20px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+th.num { font: 500 11px/16px var(--mono); }
+.num .reason { font: 12px/16px var(--sans); color: rgb(var(--muted)); white-space: normal; }
+table.matrix { width: max-content; min-width: 100%; }
+table.matrix th:first-child, table.matrix td:first-child { position: sticky; left: 0; z-index: 1; background: rgb(var(--card)); font-weight: 600; max-width: 180px; overflow-wrap: anywhere; box-shadow: 1px 0 0 rgb(var(--line)); }
+table.matrix th:first-child { background: rgb(var(--soft)); }
+table.matrix td { padding: 6px; }
+table.matrix .cell { width: 136px; }
+table.matrix.by-preset { width: 100%; }
+table.matrix.by-preset td:first-child { width: 180px; }
+.modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.modes .cell { margin: 0; }
+.cell { display: block; text-decoration: none; color: inherit; border: 1px solid rgb(var(--line)); border-radius: 4px; padding: 7px; margin-bottom: 4px; overflow-wrap: anywhere; }
+a.cell:hover { text-decoration: none; border-color: rgb(var(--line-hover)); }
+.cell .mode { font-size: 12px; line-height: 16px; font-weight: 600; margin-bottom: 4px; }
+.cell .nums { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cell img { display: block; width: 120px; height: 74px; object-fit: cover; border-radius: 4px; margin-top: 6px; background: rgb(var(--soft)); }
+.tag { display: inline-block; font: 500 11px/16px var(--mono); letter-spacing: .02em; padding: 0 6px; border: 1px solid rgb(var(--line-strong)); border-radius: 4px; white-space: nowrap; color: rgb(var(--muted)); background: rgb(var(--soft)); }
+.cell.ok { background: rgb(var(--ok) / var(--tint)); border-color: rgb(var(--ok) / .28); }
+.cell.bad { background: rgb(var(--bad) / var(--tint)); border-color: rgb(var(--bad) / .32); }
+.cell.warn { background: rgb(var(--warn) / var(--tint)); border-color: rgb(var(--warn) / .32); }
+.cell.idle { background: rgb(var(--soft)); }
+.cell.off { background: none; border: 1px dashed rgb(var(--line-hover)); }
+.ok .tag, .tag.ok { color: rgb(var(--ok)); border-color: rgb(var(--ok) / .4); background: rgb(var(--ok) / var(--tint)); }
+.bad .tag, .tag.bad { color: rgb(var(--bad)); border-color: rgb(var(--bad) / .45); background: rgb(var(--bad) / var(--tint)); }
+.warn .tag, .tag.warn { color: rgb(var(--warn)); border-color: rgb(var(--warn) / .45); background: rgb(var(--warn) / var(--tint)); }
+.idle .tag, .tag.idle { color: rgb(var(--idle)); }
+.off .tag, .tag.off { color: rgb(var(--subtle)); border-style: dashed; background: none; }
+.cell .tag { background: rgb(var(--card)); }
+.check { display: block; margin-top: 3px; font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+.was { color: rgb(var(--muted)); font-weight: 400; text-decoration: line-through; margin-left: 4px; font: 11px/16px var(--mono); }
+.note { margin: 8px 0; padding: 6px 10px; border-left: 2px solid currentColor; border-radius: 0 4px 4px 0; overflow-wrap: anywhere; background: rgb(var(--soft)); }
+.note.ok { color: rgb(var(--ok)); background: rgb(var(--ok) / var(--tint)); } .note.bad { color: rgb(var(--bad)); background: rgb(var(--bad) / var(--tint)); }
+.note.warn { color: rgb(var(--warn)); background: rgb(var(--warn) / var(--tint)); } .note.idle { color: rgb(var(--muted)); }
+.omitted { font-size: 12px; line-height: 18px; color: rgb(var(--muted)); margin: 10px 0 0; }
+.group { margin-top: 26px; }
+.group h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font: 600 16px/24px var(--sans); text-transform: none; letter-spacing: 0; color: rgb(var(--fg)); margin: 0 0 8px; }
+details { background: rgb(var(--card)); border: 1px solid rgb(var(--line)); border-radius: 6px; margin: 4px 0; box-shadow: var(--shadow-raised); }
+details > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 12px; }
+details > summary:hover { background: rgb(var(--soft) / .6); }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "\\25B8"; color: rgb(var(--subtle)); width: 1em; }
+details[open] > summary::before { content: "\\25BE"; }
+summary .name { font-weight: 500; flex: 1 1 14em; min-width: 0; overflow-wrap: anywhere; }
+summary .nums { font: 12px/16px var(--mono); color: rgb(var(--muted)); font-variant-numeric: tabular-nums; white-space: nowrap; }
+summary .nums span { display: inline-block; min-width: 8ch; text-align: right; }
+summary .why { font-size: 12px; line-height: 16px; color: rgb(var(--muted)); flex-basis: 100%; padding-left: 1.6em; }
+details > .body { padding: 2px 16px 16px; border-top: 1px solid rgb(var(--line)); }
+details[open] { border-color: rgb(var(--line-hover)); }
+details:target { border-color: rgb(var(--signal)); }
+pre { background: rgb(var(--bg)); border: 1px solid rgb(var(--line)); border-radius: 4px; padding: 8px 10px; overflow-x: auto; font: 12px/18px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+video, .media img, figure img { display: block; max-width: 100%; height: auto; border-radius: 4px; background: #000; }
+.media { margin-top: 12px; } .media p { margin: 4px 0 12px; }
+audio { width: 100%; }
+.pairs { display: grid; gap: 14px; }
+.pair-card { max-width: 1000px; background: rgb(var(--card)); border: 1px solid rgb(var(--line)); border-radius: 6px; padding: 12px 14px; box-shadow: var(--shadow-raised); }
+.pair-card > p { margin: 0 0 8px; font-weight: 600; overflow-wrap: anywhere; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+figure { margin: 0; min-width: 0; } figure video { width: 100%; }
+figcaption { font: 11px/16px var(--mono); color: rgb(var(--subtle)); margin-top: 4px; }
+ul { padding-left: 20px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+a.totop { position: fixed; right: 16px; bottom: 16px; z-index: 6; text-decoration: none; font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--fg)); background: rgb(var(--card)); border: 1px solid rgb(var(--line-strong)); border-radius: 4px; padding: 7px 12px; box-shadow: var(--shadow-floating); }
+footer { margin-top: 40px; }
+@media (max-width: 720px) { .pair { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { h1 { font-size: 20px; line-height: 28px; } h2 { font-size: 16px; line-height: 24px; } .tile .big { font-size: 24px; line-height: 32px; } table.matrix th:first-child, table.matrix td:first-child { max-width: 100px; font-size: 12px; } table.matrix .cell { width: 118px; } table.matrix.by-preset td:first-child { width: 92px; } .cell img { width: 102px; height: 64px; } summary .nums span { min-width: 0; } details > .body { padding: 2px 12px 12px; } }
 """
+)
+
+THEME_KEY = "potion-audit-theme"
+SCRIPT = """
+var THEMES = ['system', 'dark', 'light'];
+function storedTheme() { try { var value = localStorage.getItem('%(key)s'); return THEMES.indexOf(value) >= 0 ? value : 'system'; } catch (error) { return 'system'; } }
+function applyTheme(pref) { var root = document.documentElement; if (pref === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', pref); var button = document.getElementById('theme'); if (button) button.textContent = 'Theme: ' + pref; }
+var currentTheme = storedTheme();
+function nextTheme() { currentTheme = THEMES[(THEMES.indexOf(currentTheme) + 1) %% THEMES.length]; try { localStorage.setItem('%(key)s', currentTheme); } catch (error) {} applyTheme(currentTheme); }
+applyTheme(currentTheme);
+function openTarget() { var id = decodeURIComponent(location.hash.slice(1)); if (!id) return; var node = document.getElementById(id); if (!node) return; for (var parent = node; parent; parent = parent.parentElement) { if (parent.tagName === 'DETAILS') parent.open = true; } node.scrollIntoView(); }
+function watchSections() {
+  var links = [].slice.call(document.querySelectorAll('nav.toc a'));
+  if (!links.length || !('IntersectionObserver' in window)) return;
+  var headings = links.map(function (link) { return document.getElementById(link.getAttribute('href').slice(1)); });
+  function mark() { var line = window.innerHeight * 0.3; var current = -1; headings.forEach(function (heading, index) { if (heading && heading.getBoundingClientRect().top < line) current = index; }); links.forEach(function (link, index) { link.classList.toggle('current', index === current); }); }
+  var observer = new IntersectionObserver(mark, { rootMargin: '0px 0px -70%% 0px' });
+  headings.forEach(function (heading) { if (heading) observer.observe(heading); });
+}
+window.addEventListener('hashchange', openTarget);
+window.addEventListener('DOMContentLoaded', function () { applyTheme(currentTheme); var button = document.getElementById('theme'); if (button) button.addEventListener('click', nextTheme); openTarget(); watchSections(); });
+""" % {"key": THEME_KEY}
 
 
 def reduce_home(text):
@@ -173,6 +300,7 @@ class RunSet:
     instance: dict | None
     probes: list[dict]
     notes: list[str]
+    nights: list[dict] = field(default_factory=list)
 
     @property
     def first(self) -> dict:
@@ -211,6 +339,16 @@ class RunSet:
 
 def _probe_files(run_dir: Path) -> list[Path]:
     return sorted(path for path in run_dir.glob("*.json") if "probe" in path.name)
+
+
+def _night_records(dirs: list[Path]) -> list[dict]:
+    found = {}
+    for run_dir in dirs:
+        for path in sorted(run_dir.parent.glob("*/night.json")):
+            data = _json(path)
+            if isinstance(data, dict) and run_dir.name in {str(segment.get("run_id")) for segment in data.get("segments") or ()}:
+                found[str(path)] = data
+    return list(found.values())
 
 
 def _load_entries(dirs: list[Path], runs: list[dict]) -> list[Entry]:
@@ -270,7 +408,7 @@ def load_set(dirs: list[Path], preflight: Path | None = None, probes: list[Path]
         data = _json(path)
         if isinstance(data, dict) and data.get("probe"):
             probe_data.append(data)
-    return RunSet(dirs=list(dirs), runs=runs, entries=_load_entries(list(dirs), runs), preflight=preflight_data, instance=instance, probes=probe_data, notes=list(notes or ()))
+    return RunSet(dirs=list(dirs), runs=runs, entries=_load_entries(list(dirs), runs), preflight=preflight_data, instance=instance, probes=probe_data, notes=list(notes or ()), nights=_night_records(list(dirs)))
 
 
 def add_pack_cells(run_set: RunSet, pack: Pack) -> int:
@@ -304,38 +442,179 @@ def _href(target: Path, out_dir: Path) -> str:
     return urllib.parse.quote(Path(os.path.relpath(target, out_dir)).as_posix())
 
 
+def _origin(folder: Path, root: Path | None) -> str:
+    if root is None:
+        return folder.name
+    try:
+        return Path(os.path.relpath(folder, root)).as_posix()
+    except ValueError:
+        return folder.name
+
+
+def _copy(source: Path, target: Path) -> None:
+    if not _fresh(source, target):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+
+def _prepare_output(source: Path, kind: str | None, stem: Path, out_dir: Path, log, key: str) -> dict:
+    item = {"file": source.name, "kind": kind, "origin": None, "display": None, "thumb": None, "copy": None, "error": None}
+    if not source.is_file():
+        item["error"] = "the output file is not in the run folder"
+        return item
+    try:
+        if kind == "video":
+            display = stem.with_suffix(".mp4")
+            if not _fresh(source, display):
+                write_preview(source, display, PREVIEW_HEIGHT)
+            item["display"] = _href(display, out_dir)
+        elif kind == "image":
+            display = stem.with_suffix(".webp")
+            if not _fresh(source, display):
+                write_display_image(source, display)
+            item["display"] = _href(display, out_dir)
+        if kind in {"video", "image"}:
+            thumb = stem.with_name(stem.name + ".thumb.jpg")
+            if not _fresh(source, thumb):
+                write_thumbnail(source, thumb, kind, THUMB_SIDE)
+            item["thumb"] = _href(thumb, out_dir)
+    except (av.error.FFmpegError, OSError, ValueError, RuntimeError) as error:
+        item["error"] = f"{type(error).__name__}: {error}"
+        log(f"{key}: media {source.name}: {item['error']}")
+    if item["display"] is None:
+        size = source.stat().st_size
+        if size <= ORIGINAL_COPY_LIMIT:
+            target = stem.parent / source.name
+            _copy(source, target)
+            item["copy"] = _href(target, out_dir)
+        else:
+            item["error"] = item["error"] or f"the original ({_gb(size)}) is larger than the {ORIGINAL_COPY_LIMIT // 2 ** 20} MiB a report copies"
+    return item
+
+
+def _prepare_entry(entry: Entry, out_dir: Path, media_root: Path, log) -> None:
+    entry.media = []
+    for output in (entry.result or {}).get("outputs") or ():
+        source = entry.folder / output["file"]
+        item = _prepare_output(source, output.get("kind"), media_root / entry.slug / Path(output["file"]).stem, out_dir, log, entry.key)
+        item["origin"] = _origin(source.parent, entry.run_dir.parent if entry.run_dir else None)
+        entry.media.append(item)
+
+
 def prepare_media(run_set: RunSet, out_dir: Path, log=print) -> None:
-    media_root = out_dir / "media"
     for entry in run_set.entries:
-        outputs = (entry.result or {}).get("outputs") or []
-        for output in outputs:
-            source = entry.folder / output["file"]
-            item = {"file": output["file"], "kind": output.get("kind"), "original": None, "display": None, "thumb": None, "error": None}
-            entry.media.append(item)
-            if not source.is_file():
-                item["error"] = "the output file is not in the run folder"
-                continue
-            item["original"] = _href(source, out_dir)
-            stem = media_root / entry.slug / Path(output["file"]).stem
-            try:
-                if output.get("kind") == "video":
-                    display = stem.with_suffix(".mp4")
-                    if not _fresh(source, display):
-                        write_preview(source, display, PREVIEW_HEIGHT)
-                    item["display"] = _href(display, out_dir)
-                elif output.get("kind") == "image":
-                    display = stem.with_suffix(".webp")
-                    if not _fresh(source, display):
-                        write_display_image(source, display)
-                    item["display"] = _href(display, out_dir)
-                if output.get("kind") in {"video", "image"}:
-                    thumb = stem.with_name(stem.name + ".thumb.jpg")
-                    if not _fresh(source, thumb):
-                        write_thumbnail(source, thumb, output["kind"], THUMB_SIDE)
-                    item["thumb"] = _href(thumb, out_dir)
-            except (av.error.FFmpegError, OSError, ValueError, RuntimeError) as error:
-                item["error"] = f"{type(error).__name__}: {error}"
-                log(f"{entry.key}: media {output['file']}: {item['error']}")
+        _prepare_entry(entry, out_dir, out_dir / "media", log)
+
+
+def _int(value) -> int | None:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def windows_name(windows: dict | None) -> str:
+    info = (windows or {}).get("os") or {}
+    build = _int(info.get("build")) or _int(str(info.get("version") or "").rsplit(".", 1)[-1])
+    name = info.get("name") or ("Windows" if build is None else "Windows 11" if build >= 22000 else "Windows 10")
+    text = " ".join(str(part) for part in (name, info.get("display_version")) if part)
+    return f"{text} · build {build}" if build is not None else text
+
+
+def _drive(text) -> str | None:
+    if not isinstance(text, str):
+        return None
+    found = WINDOWS_DRIVE.match(text) or DRVFS_OPTION.search(text) or HOST_MOUNT.search(text)
+    return found.group(1).upper() if found else None
+
+
+def _short_path(path) -> str:
+    parts = [part for part in re.split(r"[\\/]+", str(path or "")) if part]
+    return "\\".join(parts[-2:]) if parts else ""
+
+
+def virtual_disks(windows: dict | None) -> list[dict]:
+    found: dict[str, dict] = {}
+    windows = windows or {}
+    sources = [(disk, "Docker Desktop") for disk in (windows.get("docker_desktop") or {}).get("disks") or ()]
+    sources += [(distro.get("vhdx"), f"WSL distribution {distro.get('name')}") for distro in (windows.get("wsl") or {}).get("distros") or () if distro.get("vhdx")]
+    for disk, role in sources:
+        key = str(disk.get("path")).lower()
+        known = found.get(key)
+        if known is None:
+            found[key] = {"path": disk.get("path"), "size_bytes": disk.get("size_bytes"), "drive": _drive(str(disk.get("drive") or "") + ":\\") or _drive(disk.get("path")), "roles": [role]}
+        elif role not in known["roles"]:
+            known["roles"].append(role)
+    return list(found.values())
+
+
+def _api_paths(run_set: RunSet) -> list[str]:
+    found = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+        elif isinstance(value, str) and WINDOWS_DRIVE.match(value):
+            found.append(value)
+
+    for backend in (run_set.instance or {}).get("local_backends") or (((run_set.preflight or {}).get("hardware") or {}).get("local_backends") or []):
+        walk(backend.get("system_info") or {})
+    return found
+
+
+def storage_use(run_set: RunSet) -> dict:
+    windows = run_set.probe("windows") or {}
+    linux = run_set.probe("linux")
+    uses: dict[str, list[str]] = {}
+
+    def add(drive, why):
+        if drive and why not in uses.setdefault(drive, []):
+            uses[drive].append(why)
+
+    for path in (linux or {}).get("paths") or ():
+        for system in (path.get("findmnt") or {}).get("filesystems") or ():
+            add(_drive(system.get("source")) or _drive(system.get("options")), f"container mount {path.get('path')}")
+    disks = virtual_disks(windows)
+    for disk in disks:
+        for role in disk["roles"]:
+            add(disk["drive"], f"virtual disk of {role}")
+    for path in _api_paths(run_set):
+        add(_drive(path), "storage path the API declares")
+    volumes = list(windows.get("volumes") or ())
+    kept = [volume for volume in volumes if str(volume.get("drive") or "").upper() in uses]
+    by_drive = {}
+    for partition in windows.get("partitions") or ():
+        if partition.get("drive"):
+            by_drive.setdefault(str(partition["drive"]).upper(), set()).add(str(partition.get("disk")))
+    numbers: dict[str, set[str]] = {}
+    unlinked = []
+    for volume in kept:
+        drive = str(volume.get("drive")).upper()
+        linked = {str(number) for number in volume["disk_numbers"]} if volume.get("disk_numbers") is not None else by_drive.get(drive)
+        if linked:
+            numbers[drive] = linked
+        else:
+            unlinked.append(drive)
+    physical = list(windows.get("physical_disks") or ())
+    used_numbers = set().union(*numbers.values()) if numbers else set()
+    kept_disks = [disk for disk in physical if str(disk.get("device_id")) in used_numbers]
+    return {
+        "uses": uses,
+        "volumes": kept,
+        "disk_numbers": numbers,
+        "disks": kept_disks,
+        "virtual_disks": disks,
+        "omitted_volumes": len(volumes) - len(kept),
+        "total_volumes": len(volumes),
+        "omitted_disks": len(physical) - len(kept_disks),
+        "total_disks": len(physical),
+        "unlinked": unlinked,
+        "mounts_probed": bool((linux or {}).get("paths")),
+    }
 
 
 def _storage_key(run_set: RunSet) -> dict:
@@ -344,11 +623,12 @@ def _storage_key(run_set: RunSet) -> dict:
     for path in (linux or {}).get("paths") or ():
         systems = ((path.get("findmnt") or {}).get("filesystems") or [{}])[0]
         found[f"container {path.get('path')}"] = f"{systems.get('fstype') or path.get('fs_type')} on {reduce_home(systems.get('source'))}"
-    windows = run_set.probe("windows")
-    for volume in (windows or {}).get("volumes") or ():
-        found[f"volume {volume.get('drive')}:"] = f"{volume.get('file_system')} {_gb(volume.get('size_bytes'))}"
-    for disk in (windows or {}).get("physical_disks") or ():
-        found[f"disk {disk.get('device_id')}"] = f"{disk.get('model')} {disk.get('bus_type')} {disk.get('media_type')}"
+    if run_set.probe("windows"):
+        use = storage_use(run_set)
+        for volume in use["volumes"]:
+            found[f"volume {volume.get('drive')}:"] = f"{volume.get('file_system')} {_gb(volume.get('size_bytes'))}"
+        for disk in use["disks"]:
+            found[f"disk {disk.get('device_id')}"] = f"{disk.get('model')} {disk.get('bus_type')} {disk.get('media_type')}"
     return found
 
 
@@ -432,7 +712,7 @@ def compare_sets(current: RunSet, previous: RunSet) -> dict:
     ]
     hardware = []
     for label, now, then in (("GPU", current.gpu().get("name"), previous.gpu().get("name")), ("VRAM GB", current.gpu().get("vram_gb"), previous.gpu().get("vram_gb")), ("machine", current.machine, previous.machine)):
-        if now != then:
+        if now != then and now is not None and then is not None:
             hardware.append(f"{label}: {then} then, {now} now")
     return {
         "previous": {"runs": [run.get("run_id") for run in previous.runs], "started_at": previous.started_at, "app_version": previous.first.get("app_version")},
@@ -456,12 +736,39 @@ def _seconds(value) -> str:
 def _vram(value) -> str:
     if value is None:
         return ""
-    return f"{value:.0f} MiB" if value < 1024 else f"{value / 1024:.1f} GiB"
+    return "< 0.1 GiB" if value < 102.4 else f"{value / 1024:.1f} GiB"
+
+
+def _mib(value) -> str:
+    return "" if value is None else f"{value:,.0f} MiB".replace(",", " ")
+
+
+def _clock(seconds) -> str:
+    if seconds is None:
+        return "?"
+    seconds = int(round(seconds))
+    hours, rest = divmod(seconds, 3600)
+    minutes, seconds = divmod(rest, 60)
+    if hours:
+        return f"{hours} h {minutes:02d} min"
+    return f"{minutes} min {seconds:02d} s" if minutes else f"{seconds} s"
+
+
+def _moment(text):
+    try:
+        return datetime.fromisoformat(str(text))
+    except ValueError:
+        return None
+
+
+def _when(text) -> str:
+    moment = _moment(text)
+    return moment.astimezone(UTC).strftime("%Y-%m-%d %H:%MZ") if moment and moment.tzinfo else str(text)
 
 
 def _peak_text(value, stats: dict) -> str:
     if value is not None:
-        return _vram(value)
+        return _mib(value)
     if stats.get("derived") and stats.get("peak_vram_source"):
         return f"not derivable: {stats['peak_vram_source']}"
     return "not derived"
@@ -478,9 +785,12 @@ def _label(entry: Entry) -> str:
     return entry.shown_verdict or (entry.status or "unknown")
 
 
-def _table(headers: list[str], rows: list[list[str]], css: str = "") -> str:
-    head = "".join(f"<th>{escape(header)}</th>" for header in headers)
-    body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
+def _table(headers: list[str], rows: list[list[str]], css: str = "", numeric: tuple[int, ...] = ()) -> str:
+    def attr(index: int) -> str:
+        return ' class="num"' if index in numeric else ""
+
+    head = "".join(f"<th{attr(index)}>{escape(header)}</th>" for index, header in enumerate(headers))
+    body = "".join("<tr>" + "".join(f"<td{attr(index)}>{cell}</td>" for index, cell in enumerate(row)) + "</tr>" for row in rows)
     return f'<div class="scroll"><table class="{css}"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
@@ -524,7 +834,7 @@ def _machine_card(run_set: RunSet) -> str:
     ram = (stats.get("ram") or {}).get("total")
     cpu = (stats.get("cpu") or {}).get("core_count")
     if windows:
-        os_text = f"{(windows.get('os') or {}).get('caption')} {(windows.get('os') or {}).get('version')}"
+        os_text = windows_name(windows)
         if linux:
             os_text += f" · container kernel {linux.get('kernel')}"
     elif linux:
@@ -544,13 +854,74 @@ def _machine_card(run_set: RunSet) -> str:
         ("Application", escape(str(run_set.first.get("app_version") or "unknown"))),
         ("Plugins enabled", escape(", ".join(enabled) or "none recorded")),
         ("Pack", escape(f"{pack.get('id')} {pack.get('version')} · sha256 {str(pack.get('sha256'))[:12]}") + "<br>" + escape(f"cases {cases.get('file')} · sha256 {str(cases.get('sha256'))[:12]}")),
-        ("Runner", escape(f"potion-audit {runner.get('potion_audit')} · Python {runner.get('python')} · {runner.get('platform')}") + "<br>" + escape(f"uv.lock {str(runner.get('uv_lock_sha256'))[:12]} · {reduce_home(runner.get('executable'))}")),
+        ("Runner", escape(f"potion-audit {runner.get('potion_audit')} · Python {runner.get('python')} · {runner.get('platform')}") + "<br>" + escape(f"uv.lock {str(runner.get('uv_lock_sha256'))[:12]}")),
         ("Mode", escape(run_set.mode or "not recorded")),
         ("Profile", escape(str(run_set.first.get("profile") or "unknown"))),
     ]
     biases = bias_factors(run_set)
     bias_html = "<ul>" + "".join(f"<li>{escape(item)}</li>" for item in biases) + "</ul>" if biases else '<p class="muted">None noted.</p>'
-    return f'<div class="card">{_facts(pairs)}<h3>Bias factors</h3>{bias_html}</div>'
+    return f'<div class="card">{_facts(pairs)}</div><h3>Bias factors</h3><div class="card">{bias_html}</div>'
+
+
+def _free(free, total) -> str:
+    return _gb(free) + (f" ({100 * free / total:.0f} %)" if total and free is not None else "")
+
+
+def _mounts_html(linux: dict) -> str:
+    parts = [f"<h3>Container mounts <span class=\"muted small\">probed {escape(_when(linux.get('generated_at')))}</span></h3>"]
+    rows = []
+    for path in linux.get("paths") or ():
+        systems = ((path.get("findmnt") or {}).get("filesystems") or [{}])[0]
+        rows.append([escape(str(path.get("path"))), escape(str(systems.get("fstype") or path.get("fs_type"))), escape(reduce_home(str(systems.get("source") or ""))), escape(_gb(path.get("total_bytes"))), escape(_free(path.get("free_bytes"), path.get("total_bytes")))])
+    if rows:
+        parts.append(_table(["Path", "File system", "Source", "Total", "Free"], rows, numeric=(3, 4)))
+    else:
+        notes = [str(note) for note in linux.get("notes") or ()]
+        parts.append('<p class="note warn">The container probe recorded no mount: none of the paths it was given exists in the container.</p>')
+        if notes:
+            parts.append('<ul class="small">' + "".join(f"<li>{escape(reduce_home(note))}</li>" for note in notes) + "</ul>")
+        if any(GIT_BASH_PATH.search(note) for note in notes):
+            parts.append('<p class="small muted">A path written <code>C:/Program Files/Git/…</code> is a container path that Git Bash rewrote before <code>docker exec</code> passed it on: run the probe again with <code>MSYS_NO_PATHCONV=1</code>.</p>')
+    read = linux.get("read_test")
+    if read:
+        parts.append(f"<p>Direct read of a model file: {escape(str(read.get('mib_per_second')))} MiB/s over {escape(_gb(read.get('read_bytes'), 2 ** 30).replace('GB', 'GiB'))} ({'direct I/O' if read.get('direct_io') else 'cached'}).</p>")
+    return "".join(parts)
+
+
+def _host_storage_html(run_set: RunSet, windows: dict) -> str:
+    use = storage_use(run_set)
+    physical = {str(disk.get("device_id")): disk for disk in use["disks"]}
+    parts = [f"<h3>Host storage the instance uses <span class=\"muted small\">probed {escape(_when(windows.get('generated_at')))}</span></h3>"]
+    volume_rows = []
+    for volume in use["volumes"]:
+        drive = str(volume.get("drive")).upper()
+        disks = ", ".join(str(physical[number].get("model")) for number in sorted(use["disk_numbers"].get(drive, ())) if number in physical) or "not linked"
+        volume_rows.append([escape(f"{drive}:"), escape(str(volume.get("label") or "")), escape(str(volume.get("file_system"))), escape("; ".join(use["uses"].get(drive, ()))), escape(disks), escape(_gb(volume.get("size_bytes"))), escape(_free(volume.get("free_bytes"), volume.get("size_bytes")))])
+    if volume_rows:
+        parts.append(_table(["Volume", "Label", "File system", "Used for", "Disk", "Size", "Free"], volume_rows, numeric=(5, 6)))
+    else:
+        parts.append('<p class="muted">No volume of the host is known to hold anything the instance uses.</p>')
+    if use["disks"]:
+        rows = [[escape(str(disk.get("model"))), escape(str(disk.get("bus_type"))), escape(str(disk.get("media_type"))), escape(str(disk.get("health"))), escape(_gb(disk.get("size_bytes")))] for disk in use["disks"]]
+        parts.append(_table(["Physical disk", "Bus", "Media", "Health", "Size"], rows, numeric=(4,)))
+    if use["virtual_disks"]:
+        rows = [[escape(_short_path(reduce_home(str(disk.get("path"))))), escape(" · ".join(disk["roles"])), escape(f"{disk['drive']}:" if disk.get("drive") else "?"), escape(_gb(disk.get("size_bytes")))] for disk in use["virtual_disks"]]
+        parts.append(_table(["Virtual disk", "Used by", "Volume", "Size"], rows, numeric=(3,)))
+    omitted = []
+    if use["omitted_disks"]:
+        omitted.append(f"{use['omitted_disks']} of {use['total_disks']} physical disks")
+    if use["omitted_volumes"]:
+        omitted.append(f"{use['omitted_volumes']} of {use['total_volumes']} volumes")
+    lines = []
+    if omitted:
+        lines.append(f"Not listed: {' and '.join(omitted)} of the host, which hold nothing the instance uses (no container mount, no virtual disk of Docker Desktop or WSL, no storage path the API declares).")
+    if not use["mounts_probed"]:
+        lines.append("The container probe recorded no mount, so a volume that only holds a folder mounted into the container is not recognised.")
+    if use["unlinked"]:
+        lines.append(f"The host probe does not link {', '.join(drive + ':' for drive in use['unlinked'])} to a physical disk, so its disk is not listed.")
+    if lines:
+        parts.append('<p class="omitted">' + escape(" ".join(lines)) + "</p>")
+    return "".join(parts)
 
 
 def _storage(run_set: RunSet) -> str:
@@ -558,34 +929,17 @@ def _storage(run_set: RunSet) -> str:
     linux = run_set.probe("linux")
     windows = run_set.probe("windows")
     if linux:
-        rows = []
-        for path in linux.get("paths") or ():
-            systems = ((path.get("findmnt") or {}).get("filesystems") or [{}])[0]
-            total = path.get("total_bytes")
-            free = path.get("free_bytes")
-            rows.append([escape(str(path.get("path"))), escape(str(systems.get("fstype") or path.get("fs_type"))), escape(reduce_home(str(systems.get("source") or ""))), escape(_gb(total)), escape(_gb(free) + (f" ({100 * free / total:.0f} %)" if total and free is not None else ""))])
-        parts.append(f"<h3>Container mounts <span class=\"muted small\">probed {escape(str(linux.get('generated_at')))}</span></h3>")
-        parts.append(_table(["Path", "File system", "Source", "Total", "Free"], rows))
-        read = linux.get("read_test")
-        if read:
-            parts.append(f"<p>Direct read of a model file: {escape(str(read.get('mib_per_second')))} MiB/s over {escape(_gb(read.get('read_bytes'), 2 ** 30).replace('GB', 'GiB'))} ({'direct I/O' if read.get('direct_io') else 'cached'}).</p>")
+        parts.append(_mounts_html(linux))
     if windows:
-        disks = [[escape(str(disk.get("model"))), escape(str(disk.get("bus_type"))), escape(str(disk.get("media_type"))), escape(_gb(disk.get("size_bytes"))), escape(str(disk.get("firmware"))), escape(str(disk.get("health")))] for disk in windows.get("physical_disks") or ()]
-        parts.append(f"<h3>Host disks <span class=\"muted small\">probed {escape(str(windows.get('generated_at')))}</span></h3>")
-        parts.append(_table(["Model", "Bus", "Media", "Size", "Firmware", "Health"], disks))
-        volumes = [[escape(f"{volume.get('drive')}:"), escape(str(volume.get("label") or "")), escape(str(volume.get("file_system"))), escape(_gb(volume.get("size_bytes"))), escape(_gb(volume.get("free_bytes")) + f" ({volume.get('free_percent')} %)")] for volume in windows.get("volumes") or ()]
-        parts.append(_table(["Volume", "Label", "File system", "Size", "Free"], volumes))
-        vhdx = [[escape(reduce_home(str(disk.get("path")))), escape(_gb(disk.get("size_bytes"))), escape(str(disk.get("drive")))] for disk in ((windows.get("docker_desktop") or {}).get("disks") or [])] + [[escape(reduce_home(str((distro.get("vhdx") or {}).get("path")))), escape(_gb((distro.get("vhdx") or {}).get("size_bytes"))), escape(str((distro.get("vhdx") or {}).get("drive")))] for distro in ((windows.get("wsl") or {}).get("distros") or []) if distro.get("vhdx")]
-        if vhdx:
-            parts.append(_table(["Virtual disk", "Size", "Drive"], vhdx))
+        parts.append(_host_storage_html(run_set, windows))
     api_disk = {}
     for backend in (run_set.instance or {}).get("local_backends") or (((run_set.preflight or {}).get("hardware") or {}).get("local_backends") or []):
         for name, usage in ((backend.get("system_info") or {}).get("disk_usage") or {}).items():
             api_disk[f"{backend.get('id')}:{name}"] = usage
     if api_disk:
-        rows = [[escape(name), escape(_gb(usage.get("total"))), escape(_gb(usage.get("free")) + (f" ({100 * usage['free'] / usage['total']:.0f} %)" if usage.get("total") and usage.get("free") is not None else ""))] for name, usage in api_disk.items()]
+        rows = [[escape(name), escape(_gb(usage.get("total"))), escape(_free(usage.get("free"), usage.get("total")))] for name, usage in api_disk.items()]
         parts.append("<h3>Space the API reports</h3>")
-        parts.append(_table(["Location", "Total", "Free"], rows))
+        parts.append(_table(["Location", "Total", "Free"], rows, numeric=(1, 2)))
     if not linux and not windows:
         parts.insert(0, '<p class="muted">Not probed: this run has no probe file. Run the probes of <code>probe/</code> and pass their JSON with <code>--probe</code>.</p>')
     return "".join(parts)
@@ -594,10 +948,10 @@ def _storage(run_set: RunSet) -> str:
 def _cell_html(entry: Entry) -> str:
     klass = _klass(entry)
     was = f'<span class="was">{escape(entry.previous_verdict)}</span>' if entry.previous_verdict else ""
-    lines = [f'<span class="tag">{"warm " if entry.warm else ""}{escape(_label(entry))}</span>{was}']
+    lines = [f'<div class="mode">{escape(entry.column)}{" · warm" if entry.warm else ""}</div><span class="tag">{escape(_label(entry))}</span>{was}']
     numbers = " · ".join(value for value in (_seconds(entry.run_seconds), _vram(entry.peak_vram_mb)) if value)
     if numbers:
-        lines.append(f'<div class="small">{escape(numbers)}</div>')
+        lines.append(f'<div class="small nums">{escape(numbers)}</div>')
     elif entry.reason and not entry.verdict:
         lines.append(f'<div class="small muted">{escape(entry.reason[:70])}{"…" if len(entry.reason) > 70 else ""}</div>')
     thumb = next((item["thumb"] for item in entry.media if item.get("thumb")), None)
@@ -608,39 +962,79 @@ def _cell_html(entry: Entry) -> str:
 
 
 def _matrix(run_set: RunSet) -> str:
-    presets = []
-    columns = []
-    grid: dict[tuple[str, str], list[Entry]] = {}
+    presets: dict[str, list[Entry]] = {}
     for entry in run_set.entries:
-        if entry.preset not in presets:
-            presets.append(entry.preset)
-        if entry.column not in columns:
-            columns.append(entry.column)
-        grid.setdefault((entry.preset, entry.column), []).append(entry)
-    head = "<th>Preset</th>" + "".join(f"<th>{escape(column)}</th>" for column in columns)
-    rows = []
-    for preset in presets:
-        cells = "".join(f"<td>{''.join(_cell_html(entry) for entry in grid.get((preset, column), []))}</td>" for column in columns)
-        rows.append(f"<tr><td>{escape(preset)}</td>{cells}</tr>")
-    return f'<div class="scroll"><table class="matrix"><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+        presets.setdefault(entry.preset, []).append(entry)
+    rows = "".join(f'<tr><td>{escape(preset)}</td><td><div class="modes">{"".join(_cell_html(entry) for entry in entries)}</div></td></tr>' for preset, entries in presets.items())
+    return f'<div class="scroll"><table class="matrix by-preset"><thead><tr><th>Preset</th><th>Modes</th></tr></thead><tbody>{rows}</tbody></table></div>'
+
+
+def _where(item: dict) -> str:
+    return f"original {item['file']}" + (f", kept in the run folder {item['origin']}" if item.get("origin") else "")
+
+
+def _item_html(item: dict) -> str:
+    parts = []
+    if item.get("error"):
+        parts.append(f'<p class="note bad">{escape(item["file"])}: {escape(item["error"])}</p>')
+    poster = f' poster="{item["thumb"]}"' if item.get("thumb") else ""
+    if item.get("display") and item.get("kind") == "video":
+        parts.append(f'<video controls preload="none" playsinline{poster} src="{item["display"]}"></video><p class="small muted">{escape("Reduced H.264 copy of the " + _where(item))}.</p>')
+    elif item.get("display"):
+        parts.append(f'<img src="{item["display"]}" alt="{escape(item["file"], quote=True)}" loading="lazy"><p class="small muted">{escape("Reduced copy of the " + _where(item))}.</p>')
+    elif item.get("copy") and item["file"].lower().endswith(AUDIO):
+        parts.append(f'<audio controls preload="none" src="{item["copy"]}"></audio><p class="small muted">Copy of the original <a href="{item["copy"]}">{escape(item["file"])}</a>.</p>')
+    elif item.get("copy") and item.get("kind") == "video":
+        parts.append(f'<video controls preload="none" playsinline{poster} src="{item["copy"]}"></video><p class="small muted">Copy of the original <a href="{item["copy"]}">{escape(item["file"])}</a>.</p>')
+    elif item.get("copy"):
+        parts.append(f'<p class="small">Copy of the original: <a href="{item["copy"]}">{escape(item["file"])}</a></p>')
+    else:
+        parts.append(f'<p class="small muted">{escape(_where(item)[0].upper() + _where(item)[1:])}.</p>')
+    return "".join(parts)
 
 
 def _media_html(entry: Entry) -> str:
-    parts = []
-    for item in entry.media:
-        original = f' · <a href="{item["original"]}">original {escape(item["file"])}</a>' if item.get("original") else ""
-        if item.get("error"):
-            parts.append(f'<p class="tag bad">{escape(item["file"])}: {escape(item["error"])}</p>')
-        if item["kind"] == "video" and item.get("display"):
-            poster = f' poster="{item["thumb"]}"' if item.get("thumb") else ""
-            parts.append(f'<video controls preload="none" playsinline{poster} src="{item["display"]}"></video><p class="small">reduced H.264 copy{original}</p>')
-        elif item["kind"] == "image" and item.get("display"):
-            parts.append(f'<img src="{item["display"]}" alt="{escape(item["file"], quote=True)}" loading="lazy"><p class="small">reduced copy{original}</p>')
-        elif item.get("original") and item["file"].lower().endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a")):
-            parts.append(f'<audio controls preload="none" src="{item["original"]}"></audio><p class="small">{original[3:]}</p>')
-        elif item.get("original"):
-            parts.append(f'<p class="small">{original[3:]}</p>')
+    parts = [_item_html(item) for item in entry.media]
     return f'<div class="media">{"".join(parts)}</div>' if parts else ""
+
+
+def _figure(entry: Entry | None, caption: str) -> str:
+    item = next((item for item in (entry.media if entry else ()) if item.get("display") or item.get("copy")), None)
+    if item is None:
+        body = '<p class="small muted">No copy of the output in this report.</p>'
+    elif item.get("kind") == "video":
+        poster = f' poster="{item["thumb"]}"' if item.get("thumb") else ""
+        body = f'<video controls preload="none" playsinline{poster} src="{item.get("display") or item.get("copy")}"></video>'
+    else:
+        body = f'<img src="{item.get("display") or item.get("copy")}" alt="{escape(item["file"], quote=True)}" loading="lazy">'
+    return f"<figure>{body}<figcaption>{escape(caption)}</figcaption></figure>"
+
+
+def ssim_rows(comparison: dict) -> list[dict]:
+    return [row for row in comparison["rows"] if (row.get("ssim") or {}).get("value") is not None and row["ssim"]["value"] < SSIM_FLAG]
+
+
+def prepare_pair_media(comparison: dict, previous: RunSet, out_dir: Path, log=print) -> None:
+    flagged = {row["cell"] for row in ssim_rows(comparison)}
+    for entry in previous.entries:
+        if entry.key in flagged:
+            _prepare_entry(entry, out_dir, out_dir / "media" / "previous", log)
+
+
+def _pairs_html(comparison: dict, run_set: RunSet, previous: RunSet | None) -> str:
+    rows = ssim_rows(comparison)
+    if not rows:
+        return ""
+    now = {entry.key: entry for entry in run_set.entries}
+    then = {entry.key: entry for entry in previous.entries} if previous else {}
+    before = ", ".join(str(run) for run in comparison["previous"]["runs"])
+    cards = []
+    for row in rows:
+        cards.append(
+            f'<div class="pair-card"><p><a href="#{row["slug"]}">{escape(row["cell"])}</a> <span class="muted">· SSIM <span class="num">{row["ssim"]["value"]:.3f}</span></span></p>'
+            f'<div class="pair">{_figure(then.get(row["cell"]), "Before: " + before)}{_figure(now.get(row["cell"]), "This run")}</div></div>'
+        )
+    return f'<h3>Outputs that changed <span class="muted small">SSIM under {SSIM_FLAG}</span></h3><div class="pairs">{"".join(cards)}</div>'
 
 
 def _history(run_report: dict) -> str:
@@ -672,7 +1066,7 @@ def _detail(entry: Entry) -> str:
         record = entry.reevaluated
         previous = record.get("previous") or {}
         text = f"Re-evaluated on {record.get('reevaluated_at')} with checks version {record.get('checks_version')}: {previous.get('verdict')} (checks version {previous.get('checks_version')}) → {record.get('verdict')}"
-        parts.append(f'<p class="tag {"warn" if record.get("changed") else "idle"}">{escape(text)}</p>')
+        parts.append(f'<p class="note {"warn" if record.get("changed") else "idle"}">{escape(text)}</p>')
         if record.get("kept"):
             parts.append(f'<p class="small muted">{escape(record["kept"])}</p>')
     parts.append(_media_html(entry))
@@ -692,8 +1086,8 @@ def _detail(entry: Entry) -> str:
             ("Compute", escape(_seconds(compute) or "not derived")),
             ("Per step (polled)", escape(_seconds(timing.get("seconds_per_step_polled")) or "?")),
             ("Peak VRAM (core record of the generation)", escape(_peak_text(stats.get("peak_vram_mb"), stats))),
-            ("Peak VRAM (whole device, sampled)", escape(_vram(memory.get("peak_vram_used_mb_sampled")) or "?")),
-            ("Peak RAM (whole host, sampled)", escape(_vram(memory.get("peak_ram_used_mb_sampled")) or "?")),
+            ("Peak VRAM (whole device, sampled)", escape(_mib(memory.get("peak_vram_used_mb_sampled")) or "?")),
+            ("Peak RAM (whole host, sampled)", escape(_mib(memory.get("peak_ram_used_mb_sampled")) or "?")),
         ]
         parts.append(_facts(facts))
         if not stats.get("derived") and stats.get("reason"):
@@ -717,33 +1111,61 @@ def _detail(entry: Entry) -> str:
         parts.append("<h3>Settings</h3><pre>" + escape(json.dumps(form, indent=1, ensure_ascii=False)) + "</pre>")
     if entry.run_report:
         parts.append(_history(entry.run_report))
-    summary = f'<span class="tag {_klass(entry)}">{escape(_label(entry))}</span>'
-    if entry.previous_verdict:
-        summary += f'<span class="was">{escape(entry.previous_verdict)}</span>'
-    summary += f" {escape(entry.key)}"
+    was = f'<span class="was">{escape(entry.previous_verdict)}</span>' if entry.previous_verdict else ""
+    summary = _summary_line(f'<span class="tag {_klass(entry)}">{escape(_label(entry))}</span>{was}', entry.key, entry.run_seconds, entry.peak_vram_mb, None if entry.verdict else entry.reason)
     return f'<details id="{entry.slug}"><summary>{summary}</summary><div class="body">{"".join(parts)}</div></details>'
 
 
-def _compare_html(comparison: dict) -> str:
-    previous = comparison["previous"]
-    parts = [f"<p>Against {escape(', '.join(str(run) for run in previous['runs']))} (application {escape(str(previous['app_version']))}, started {escape(str(previous['started_at']))}). Durations are flagged beyond ±{DURATION_TOLERANCE:.0%}, peak VRAM beyond ±{VRAM_TOLERANCE_MB:.0f} MiB. SSIM compares outputs of the same seed and size (1.0 is identical).</p>"]
+def _summary_line(tag: str, name: str, seconds, vram, why: str | None) -> str:
+    line = f'{tag}<span class="name">{escape(name)}</span>'
+    if seconds is not None or vram is not None:
+        line += f'<span class="nums"><span>{escape(_seconds(seconds))}</span> <span>{escape(_vram(vram))}</span></span>'
+    if why:
+        line += f'<span class="why">{escape(why[:140])}{"…" if len(why) > 140 else ""}</span>'
+    return line
+
+
+def _grouped(items: list, key, tag, detail) -> str:
+    groups: dict[str, list] = {}
+    for item in items:
+        groups.setdefault(key(item), []).append(item)
+    parts = []
+    for name, members in groups.items():
+        counts: dict[tuple[str, str], int] = {}
+        for member in members:
+            found = tag(member)
+            counts[found] = counts.get(found, 0) + 1
+        tags = "".join(f'<span class="tag {klass}">{escape(label)} {count}</span>' for (label, klass), count in counts.items())
+        parts.append(f'<section class="group"><h3>{escape(name)} {tags}</h3>{"".join(detail(member) for member in members)}</section>')
+    return "".join(parts)
+
+
+def _compare_html(comparison: dict, run_set: RunSet | None = None, previous: RunSet | None = None) -> str:
+    previous_run = comparison["previous"]
+    parts = [f"<p>Against {escape(', '.join(str(run) for run in previous_run['runs']))} (application {escape(str(previous_run['app_version']))}, started {escape(_when(previous_run['started_at']))}). Durations are flagged beyond ±{DURATION_TOLERANCE:.0%}, peak VRAM beyond ±{VRAM_TOLERANCE_MB:.0f} MiB. SSIM compares outputs of the same seed and size (1.0 is identical).</p>"]
     for line in comparison["hardware_changes"]:
-        parts.append(f'<p class="tag warn">Hardware changed: {escape(line)}</p>')
+        parts.append(f'<p class="note warn">Hardware changed: {escape(line)}</p>')
     rows = []
     for row in comparison["rows"]:
-        interesting = row.get("verdict_changed") or row.get("duration_flag") or row.get("vram_flag") or ((row.get("ssim") or {}).get("value") is not None and row["ssim"]["value"] < 0.9)
+        interesting = row.get("verdict_changed") or row.get("duration_flag") or row.get("vram_flag") or ((row.get("ssim") or {}).get("value") is not None and row["ssim"]["value"] < SSIM_FLAG)
         if not interesting:
             continue
         ssim = row.get("ssim") or {}
         duration = row.get("duration_change")
+        verdict = f'<span class="tag {VERDICT_CLASS.get(str(row.get("verdict")), "idle")}">{escape(str(row.get("verdict")))}</span>'
+        if row.get("verdict_changed"):
+            verdict = f'<span class="was">{escape(str(row.get("previous_verdict")))}</span> → {verdict}'
         rows.append([
             f'<a href="#{row["slug"]}">{escape(row["cell"])}</a>',
-            escape(f"{row.get('previous_verdict')} → {row.get('verdict')}") if row.get("verdict_changed") else escape(str(row.get("verdict"))),
-            escape(f"{_seconds(row.get('previous_run_seconds'))} → {_seconds(row.get('run_seconds'))}" + (f" ({duration:+.0%})" if duration is not None else "")),
-            escape(f"{row['vram_change_mb']:+.0f} MiB" if row.get("vram_change_mb") is not None else ""),
-            escape(f"{ssim['value']:.3f}" if ssim.get("value") is not None else str(ssim.get("reason") or "")),
+            verdict,
+            escape(f"{_seconds(row.get('previous_run_seconds'))} → {_seconds(row.get('run_seconds'))}"),
+            escape(f"{duration:+.0%}" if duration is not None else ""),
+            escape(f"{row['vram_change_mb']:+,.0f} MiB".replace(",", " ") if row.get("vram_change_mb") is not None else ""),
+            escape(f"{ssim['value']:.3f}") if ssim.get("value") is not None else f'<span class="reason">{escape(str(ssim.get("reason") or ""))}</span>',
         ])
-    parts.append(_table(["Cell", "Verdict", "Run time", "Peak VRAM", "SSIM"], rows) if rows else '<p class="muted">No verdict changed, no duration beyond the tolerance, no VRAM change beyond the tolerance, no SSIM under 0.9.</p>')
+    parts.append(_table(["Cell", "Verdict", "Run time", "Change", "Peak VRAM", "SSIM"], rows, numeric=(2, 3, 4, 5)) if rows else '<p class="muted">No verdict changed, no duration beyond the tolerance, no VRAM change beyond the tolerance, no SSIM under 0.9.</p>')
+    if run_set is not None:
+        parts.append(_pairs_html(comparison, run_set, previous))
     if comparison["only_in_this_run"]:
         parts.append(f"<p>Only in this run: {escape(', '.join(comparison['only_in_this_run']))}</p>")
     if comparison["only_in_previous"]:
@@ -758,28 +1180,165 @@ def _compare_html(comparison: dict) -> str:
     return "".join(parts)
 
 
-def _counts(run_set: RunSet) -> str:
-    verdicts = {}
-    statuses = {}
-    for entry in run_set.entries:
-        if entry.shown_verdict:
-            verdicts[entry.shown_verdict] = verdicts.get(entry.shown_verdict, 0) + 1
+def _verdict_tags(counts: dict[str, int], classes: dict[str, str]) -> str:
+    return "".join(f'<span class="tag {classes.get(name, "warn")}">{escape(name)} {count}</span>' for name, count in counts.items())
+
+
+def _is_verdict(value) -> bool:
+    return isinstance(value, str) and value.isupper()
+
+
+def changes(rows: list[dict]) -> dict[str, list[dict]]:
+    found = {"fixed": [], "regressed": [], "newly run": [], "no longer run": []}
+    for row in rows:
+        if not row.get("verdict_changed"):
+            continue
+        now, then = row.get("verdict"), row.get("previous_verdict")
+        if then == "PASS":
+            found["regressed" if _is_verdict(now) else "no longer run"].append(row)
+        elif now == "PASS":
+            found["fixed" if _is_verdict(then) else "newly run"].append(row)
+    return found
+
+
+def _links(rows: list[dict], key: str) -> str:
+    return "<ul>" + "".join(f'<li><a href="#{row["slug"]}">{escape(str(row[key]))}</a> <span class="muted">{escape(str(row.get("previous_verdict")))} → {escape(str(row.get("verdict")))}</span></li>' for row in rows) + "</ul>" if rows else ""
+
+
+def series_time(intervals: list[tuple]) -> dict | None:
+    spans = sorted((start, end) for start, end in ((_moment(first), _moment(last)) for first, last in intervals if first and last) if start and end)
+    if not spans:
+        return None
+    begin = spans[0][0]
+    reach = spans[0][1]
+    pause = 0.0
+    for start, end in spans[1:]:
+        if start > reach:
+            pause += (start - reach).total_seconds()
+        reach = max(reach, end)
+    span = (reach - begin).total_seconds()
+    return {"begin": begin, "end": reach, "span": span, "pause": pause, "active": span - pause, "parts": len(spans)}
+
+
+def _duration_tile(intervals: list[tuple], measured: float) -> str:
+    found = series_time(intervals)
+    if found and found["parts"] > 1 and found["pause"] >= PAUSE_SECONDS:
+        body = f'<div class="big">{escape(_clock(measured))}<small> measured</small></div>'
+        body += f"<p>Run time measured cell by cell and step by step. The series was active {escape(_clock(found['active']))}, but spread over {escape(_clock(found['span']))} end to end, with {escape(_clock(found['pause']))} of pause between segments.</p>"
+        body += f"<p>From {escape(_when(found['begin'].isoformat()))} to {escape(_when(found['end'].isoformat()))}</p>"
+        return f'<div class="tile"><div class="label">Duration</div>{body}</div>'
+    body = f'<div class="big">{escape(_clock(found["span"] if found else None))}</div>'
+    if found:
+        body += f"<p>From {escape(_when(found['begin'].isoformat()))} to {escape(_when(found['end'].isoformat()))}</p>"
+    body += f"<p>{escape(_clock(measured))} of measured run time</p>"
+    return f'<div class="tile"><div class="label">Duration</div>{body}</div>'
+
+
+def _summary(run_set: RunSet | None, comparison: dict | None, scenario: Scenario | None, scenario_comparison: dict | None) -> str:
+    tiles = []
+    sentences = []
+    intervals = []
+    measured = 0.0
+    if run_set is not None:
+        verdicts: dict[str, int] = {}
+        statuses: dict[str, int] = {}
+        for entry in run_set.entries:
+            if entry.shown_verdict:
+                verdicts[entry.shown_verdict] = verdicts.get(entry.shown_verdict, 0) + 1
+            else:
+                statuses[entry.status or "unknown"] = statuses.get(entry.status or "unknown", 0) + 1
+            measured += entry.run_seconds or 0
+        ran = sum(verdicts.values())
+        passed = verdicts.get("PASS", 0)
+        others = {name: count for name, count in sorted(verdicts.items()) if name != "PASS"}
+        not_run = sum(statuses.values())
+        reevaluated = sum(1 for entry in run_set.entries if entry.previous_verdict)
+        body = f'<div class="big">{passed}<small> of {ran} cells passed</small></div>'
+        if others:
+            body += f'<div class="legend">{_verdict_tags(others, VERDICT_CLASS)}</div>'
+        body += f"<p>Not run: {not_run}" + (f" ({escape(' · '.join(f'{name} {count}' for name, count in sorted(statuses.items())))})" if statuses else "") + "</p>"
+        if reevaluated:
+            body += f"<p>{reevaluated} verdicts changed by a re-evaluation.</p>"
+        tiles.append(f'<div class="tile {"t-bad" if others else "t-ok"}"><div class="label">Matrix</div>{body}</div>')
+        sentences.append(f"{passed} of {ran} cells passed" + (" · " + " · ".join(f"{count} {name}" for name, count in others.items()) if others else ""))
+        intervals += [(run.get("started_at"), run.get("ended_at")) for run in run_set.runs]
+    if scenario is not None:
+        counts = scenario.counts()
+        offered = sum(count for name, count in counts.items() if name in VERDICT_CLASS)
+        passed = counts.get("PASS", 0)
+        others = {name: count for name, count in sorted(counts.items()) if name != "PASS"}
+        bad = {name: count for name, count in others.items() if name in VERDICT_CLASS}
+        classes = {name: VERDICT_CLASS.get(name, "off" if name == "not offered" else "idle") for name in counts}
+        body = f'<div class="big">{passed}<small> of {offered} steps passed</small></div>'
+        if others:
+            body += f'<div class="legend">{_verdict_tags(others, classes)}</div>'
+        body += f"<p>{escape(scenario.run_id)} · {len(scenario.rows())} engines</p>"
+        tiles.append(f'<div class="tile {"t-bad" if bad else "t-ok"}"><div class="label">Video Producer scenario</div>{body}</div>')
+        sentences.append(f"{passed} of {offered} scenario steps passed")
+        intervals.append((scenario.data.get("started_at"), scenario.data.get("ended_at")))
+        measured += sum(step.seconds or 0 for step in scenario.steps)
+    tiles.append(_duration_tile(intervals, measured))
+    if run_set is not None:
+        restarts = [item for night in run_set.nights for item in night.get("restarts") or ()]
+        stopped = [run for run in run_set.runs if run.get("stopped")]
+        if run_set.nights:
+            body = f'<div class="big">{len(restarts)}</div>'
+            body += "<ul>" + "".join(f"<li>{escape(_when(item.get('at')))} after the {escape(str(item.get('cell')))} cell</li>" for item in restarts) + "</ul>" if restarts else "<p>None.</p>"
         else:
-            statuses[entry.status or "unknown"] = statuses.get(entry.status or "unknown", 0) + 1
-    changed = sum(1 for entry in run_set.entries if entry.previous_verdict)
-    text = " · ".join(f'<span class="tag {VERDICT_CLASS.get(name, "warn")}">{escape(name)} {count}</span>' for name, count in sorted(verdicts.items()))
-    rest = " · ".join(f"{escape(name)} {count}" for name, count in sorted(statuses.items()))
-    extra = f" · {changed} verdicts changed by a re-evaluation" if changed else ""
-    return f'<p class="legend">{text}{extra}</p><p class="small muted">Not run: {rest or "none"}</p>'
+            body = '<div class="big"><small>not recorded</small></div><p>No night record lists these segments.</p>'
+        body += f"<p>{len(run_set.runs)} segments" + (f", {len(stopped)} stopped early" if stopped else "") + "</p>"
+        tiles.append(f'<div class="tile {"t-warn" if restarts else ""}"><div class="label">Restarts</div>{body}</div>')
+    if comparison is not None or scenario_comparison is not None:
+        found = {"fixed": [], "regressed": [], "newly run": [], "no longer run": []}
+        against = []
+        body = ""
+        for compared, key in ((comparison, "cell"), (scenario_comparison, "step")):
+            if compared is None:
+                continue
+            for name, rows in changes(compared["rows"]).items():
+                found[name] += [dict(row, name=row[key]) for row in rows]
+        if comparison is not None:
+            against.append(", ".join(str(run) for run in comparison["previous"]["runs"]))
+        if scenario_comparison is not None:
+            against.append(f"scenario {scenario_comparison['previous']['run_id']}")
+        body += f'<div class="big">{len(found["fixed"])}<small> fixed</small> · {len(found["regressed"])}<small> regressed</small></div>'
+        for name in ("regressed", "fixed", "no longer run", "newly run"):
+            if found[name]:
+                body += f"<p><strong>{escape(name.capitalize())}</strong></p>" + _links(found[name], "name")
+        if comparison is not None:
+            rows = comparison["rows"]
+            flags = [
+                (len(ssim_rows(comparison)), f"SSIM under {SSIM_FLAG}"),
+                (sum(1 for row in rows if row.get("duration_flag")), f"run time beyond ±{DURATION_TOLERANCE:.0%}"),
+                (sum(1 for row in rows if row.get("vram_flag")), f"peak VRAM beyond ±{VRAM_TOLERANCE_MB:.0f} MiB"),
+            ]
+            body += "<p>Cells with " + escape(" · ".join(f"{label}: {count}" for count, label in flags)) + '. <a href="#compare">See the comparison</a>.</p>'
+        regressed = len(found["regressed"])
+        tiles.append(f'<div class="tile wide {"t-bad" if regressed else "t-ok"}"><div class="label">Against {escape(" and ".join(against))}</div>{body}</div>')
+        sentences.append(f"{regressed} regressed and {len(found['fixed'])} fixed against the previous run" if regressed else f"no regression against the previous run, {len(found['fixed'])} fixed")
+    headline = f'<p class="headline">{escape("; ".join(sentences))}.</p>' if sentences else ""
+    return headline + f'<div class="summary">{"".join(tiles)}</div>'
 
 
-def _page(title: str, subtitle: str, body: str) -> str:
+def _meta(pairs: list[tuple[str, str]]) -> str:
+    return '<dl class="meta">' + "".join(f"<div><dt>{escape(name)}</dt><dd>{escape(value)}</dd></div>" for name, value in pairs) + "</dl>"
+
+
+def _page(title: str, meta: list[tuple[str, str]], body: str, nav: list[tuple[str, str]] = ()) -> str:
+    links = "".join(f'<a href="#{anchor}">{escape(label)}</a>' for anchor, label in nav)
+    toc = f'<nav class="toc" aria-label="Sections">{links}<button type="button" class="theme" id="theme">Theme: system</button></nav>'
+    top = '<a class="totop" href="#top">↑ Top</a>' if links else ""
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>{escape(title)}</title><style>{STYLE}</style><script>{SCRIPT}</script></head><body>"
-        f"<h1>{escape(title)}</h1><p class=\"muted\">{subtitle}</p>{body}"
-        f'<p class="small muted">Written by potion-audit {escape(__version__)} on {escape(datetime.now(UTC).isoformat(timespec="seconds"))}.</p></body></html>\n'
+        f"<title>{escape(title)}</title><style>{STYLE}</style><script>{SCRIPT}</script></head><body><div class=\"page\">"
+        f'<header class="top" id="top"><p class="eyebrow">PotionUI · preset audit</p><h1>{escape(title)}</h1>{_meta(meta)}</header>{toc}<main>{body}</main>'
+        f'<footer><p class="small muted">Written by potion-audit {escape(__version__)} on {escape(datetime.now(UTC).isoformat(timespec="seconds"))}.</p></footer>'
+        f"{top}</div></body></html>\n"
     )
+
+
+def _block(anchor: str, title: str, content: str) -> str:
+    return f'<section class="block"><h2 id="{anchor}">{escape(title)}</h2>{content}</section>'
 
 
 def same_machine(run_set: RunSet, scenario: Scenario) -> None:
@@ -796,26 +1355,11 @@ def prepare_scenario_media(scenario: Scenario, out_dir: Path, log=print) -> None
         source = step.video
         if source is None:
             continue
-        item = {"file": source.name, "original": None, "display": None, "thumb": None, "error": None}
-        step.media = item
-        if not source.is_file():
+        item = _prepare_output(source, "video", media_root / step.slug / source.stem, out_dir, log, step.key)
+        if item["error"] == "the output file is not in the run folder":
             item["error"] = "the video is not in the run folder"
-            continue
-        item["original"] = _href(source, out_dir)
-        stem = media_root / step.slug / source.stem
-        try:
-            thumb = stem.with_name(stem.name + ".thumb.jpg")
-            if not _fresh(source, thumb):
-                write_thumbnail(source, thumb, "video", THUMB_SIDE)
-            item["thumb"] = _href(thumb, out_dir)
-            if step.kind == "export":
-                display = stem.with_suffix(".mp4")
-                if not _fresh(source, display):
-                    write_preview(source, display, PREVIEW_HEIGHT)
-                item["display"] = _href(display, out_dir)
-        except (av.error.FFmpegError, OSError, ValueError, RuntimeError) as error:
-            item["error"] = f"{type(error).__name__}: {error}"
-            log(f"{step.key}: media {source.name}: {item['error']}")
+        item["origin"] = _origin(source.parent, scenario.dir.parent)
+        step.media = item
 
 
 def _step_klass(step: VpStep) -> str:
@@ -876,7 +1420,7 @@ def _scenario_counts(scenario: Scenario) -> str:
     for name in order:
         klass = VERDICT_CLASS.get(name, "off" if name == "not offered" else "idle")
         parts.append(f'<span class="tag {klass}">{escape(name)} {counts[name]}</span>')
-    return f'<p class="legend">{" · ".join(parts)}</p>'
+    return f'<div class="legend">{"".join(parts)}</div>'
 
 
 def _scenario_facts(scenario: Scenario) -> str:
@@ -888,7 +1432,7 @@ def _scenario_facts(scenario: Scenario) -> str:
     final = data.get("final_pass") or {}
     runner = data.get("runner") or {}
     pairs = [
-        ("Run", escape(f"{scenario.run_id} · {data.get('started_at')} to {data.get('ended_at')}")),
+        ("Run", escape(f"{scenario.run_id} · {_when(data.get('started_at'))} to {_when(data.get('ended_at'))}")),
         ("Machine", escape(scenario.machine)),
         ("Application", escape(str(scenario.app_version or "unknown"))),
         ("Plugin", escape(f"{plugin.get('id')} {plugin.get('version')}")),
@@ -952,9 +1496,9 @@ def _scenario_section(scenario: Scenario, comparison: dict | None) -> str:
 
 def _scenario_compare_html(comparison: dict) -> str:
     previous = comparison["previous"]
-    parts = [f"<p>Against the scenario {escape(str(previous['run_id']))} (application {escape(str(previous['app_version']))}, started {escape(str(previous['started_at']))}). Durations are flagged beyond ±{DURATION_TOLERANCE:.0%}, peak VRAM beyond ±{VRAM_TOLERANCE_MB:.0f} MiB.</p>"]
+    parts = [f"<p>Against the scenario {escape(str(previous['run_id']))} (application {escape(str(previous['app_version']))}, started {escape(_when(previous['started_at']))}). Durations are flagged beyond ±{DURATION_TOLERANCE:.0%}, peak VRAM beyond ±{VRAM_TOLERANCE_MB:.0f} MiB.</p>"]
     for line in comparison["changes"]:
-        parts.append(f'<p class="tag warn">Changed: {escape(line)}</p>')
+        parts.append(f'<p class="note warn">Changed: {escape(line)}</p>')
     rows = []
     for row in comparison["rows"]:
         if not (row.get("verdict_changed") or row.get("duration_flag") or row.get("vram_flag") or row.get("preset_changed")):
@@ -967,7 +1511,7 @@ def _scenario_compare_html(comparison: dict) -> str:
             escape(f"{row['vram_change_mb']:+.0f} MiB" if row.get("vram_change_mb") is not None else ""),
             escape(f"{row.get('previous_stats_preset')} → {row.get('stats_preset')}") if row.get("preset_changed") else "",
         ])
-    parts.append(_table(["Step", "Verdict", "Time", "Peak VRAM", "Preset of the statistics"], rows) if rows else '<p class="muted">No verdict changed, no duration beyond the tolerance, no VRAM change beyond the tolerance, no take on another preset.</p>')
+    parts.append(_table(["Step", "Verdict", "Time", "Peak VRAM", "Preset of the statistics"], rows, numeric=(2, 3)) if rows else '<p class="muted">No verdict changed, no duration beyond the tolerance, no VRAM change beyond the tolerance, no take on another preset.</p>')
     if comparison["only_in_this_run"]:
         parts.append(f"<p>Only in this scenario: {escape(', '.join(comparison['only_in_this_run']))}</p>")
     if comparison["only_in_previous"]:
@@ -976,19 +1520,7 @@ def _scenario_compare_html(comparison: dict) -> str:
 
 
 def _step_media(step: VpStep) -> str:
-    item = step.media
-    if not item:
-        return ""
-    parts = []
-    original = f'<a href="{item["original"]}">original {escape(item["file"])}</a>' if item.get("original") else ""
-    poster = f' poster="{item["thumb"]}"' if item.get("thumb") else ""
-    if item.get("error"):
-        parts.append(f'<p class="tag bad">{escape(item["file"])}: {escape(item["error"])}</p>')
-    if item.get("display"):
-        parts.append(f'<video controls preload="none" playsinline{poster} src="{item["display"]}"></video><p class="small">reduced H.264 copy · {original}</p>')
-    elif item.get("original"):
-        parts.append(f'<video controls preload="none" playsinline{poster} src="{item["original"]}"></video><p class="small">{original}</p>')
-    return f'<div class="media">{"".join(parts)}</div>'
+    return f'<div class="media">{_item_html(step.media)}</div>' if step.media else ""
 
 
 def _preset_text(found: dict) -> str:
@@ -1031,7 +1563,7 @@ def _step_detail(step: VpStep) -> str:
                 ("Per step (polled)", escape(_seconds(timing.get("seconds_per_step_polled")) or "?")),
                 ("Steps (polled)", escape(str(timing.get("total_steps_polled") or "?"))),
                 ("Peak VRAM (core record of the generation)", escape(_peak_text(step.peak_vram_mb, stats))),
-                ("Peak VRAM (whole device, sampled)", escape(_vram(memory.get("peak_vram_used_mb_sampled")) or "?")),
+                ("Peak VRAM (whole device, sampled)", escape(_mib(memory.get("peak_vram_used_mb_sampled")) or "?")),
             ]
             if step.kind == "final_pass":
                 facts.append(("Upscaler", escape(str(record.get("upscaler")))))
@@ -1048,44 +1580,44 @@ def _step_detail(step: VpStep) -> str:
             parts.append("<h3>Checks</h3>" + _table(["", "Check", "Expected", "Actual"], rows))
     elif record.get("result"):
         parts.append('<p class="small muted">The result.json of this step is not in the run folder.</p>')
-    summary = f'<span class="tag {_step_klass(step)}">{escape(step.label)}</span> {escape(step.key)}'
+    summary = _summary_line(f'<span class="tag {_step_klass(step)}">{escape(step.label)}</span>', step.column, step.seconds, step.peak_vram_mb, None if step.verdict else step.reason)
     return f'<details id="{step.slug}"><summary>{summary}</summary><div class="body">{"".join(parts)}</div></details>'
 
 
-def render_report(run_set: RunSet | None, comparison: dict | None = None, scenario: Scenario | None = None, scenario_comparison: dict | None = None) -> str:
+def render_report(run_set: RunSet | None, comparison: dict | None = None, scenario: Scenario | None = None, scenario_comparison: dict | None = None, previous: RunSet | None = None) -> str:
     if run_set is None and scenario is None:
         raise ReportError("give a matrix run or a scenario")
     if run_set is not None and scenario is not None:
         same_machine(run_set, scenario)
-    subtitles = []
-    body = []
+    meta = []
+    nav = [("summary", "Summary")]
+    summary = _summary(run_set, comparison, scenario, scenario_comparison)
+    body = [_block("summary", "Summary", summary)]
     if run_set is not None:
         pack = run_set.pack
-        subtitles.append(f"{run_set.machine} · {pack.get('id')} {pack.get('version')} · {run_set.first.get('profile')} profile · {run_set.started_at} to {run_set.ended_at} · runs {', '.join(str(run.get('run_id')) for run in run_set.runs)}")
-        body += [
-            _counts(run_set),
-            "<h2>Machine</h2>",
-            _machine_card(run_set),
-            "<h2>Storage</h2>",
-            _storage(run_set),
-        ]
+        meta += [("Machine", run_set.machine), ("Pack", f"{pack.get('id')} {pack.get('version')}"), ("Profile", str(run_set.first.get("profile"))), ("Period", f"{_when(run_set.started_at)} to {_when(run_set.ended_at)}"), ("Runs", ", ".join(str(run.get("run_id")) for run in run_set.runs))]
+        body += [_block("machine", "Machine", _machine_card(run_set)), _block("storage", "Storage", _storage(run_set))]
+        nav += [("machine", "Machine"), ("storage", "Storage")]
         if comparison is not None:
-            body += ["<h2>Compared with the previous run</h2>", _compare_html(comparison)]
-        body += [
-            "<h2>Matrix</h2>",
-            '<p class="small muted">Presets in rows, modes in columns. A cell gives its verdict (or why it did not run), the run time and the peak VRAM of the preset statistics; click it for the details.</p>',
-            _matrix(run_set),
-        ]
+            body.append(_block("compare", "Compared with the previous run", _compare_html(comparison, run_set, previous)))
+            nav.append(("compare", "Comparison"))
+        body.append(_block("matrix", "Matrix", '<p class="small muted">One row per preset, one card per mode. A card gives its verdict (or why it did not run), the run time and the peak VRAM of the preset statistics; click it for the details.</p>' + _matrix(run_set)))
+        nav.append(("matrix", "Matrix"))
     if scenario is not None:
         if run_set is None:
-            subtitles.append(f"{scenario.machine} · {scenario.pack.get('id')} {scenario.pack.get('version')}")
-        subtitles.append(f"scenario {scenario.run_id}")
-        body += ['<h2 id="vp">Video Producer scenario</h2>', _scenario_section(scenario, scenario_comparison)]
+            meta += [("Machine", scenario.machine), ("Pack", f"{scenario.pack.get('id')} {scenario.pack.get('version')}")]
+        meta.append(("Scenario", scenario.run_id))
+        body.append(_block("vp", "Video Producer scenario", _scenario_section(scenario, scenario_comparison)))
+        nav.append(("vp", "Scenario"))
     if run_set is not None:
-        body += ["<h2>Cells</h2>", "".join(_detail(entry) for entry in run_set.entries)]
+        cells = _grouped(run_set.entries, lambda entry: entry.preset, lambda entry: (_label(entry), _klass(entry)), _detail)
+        body.append(_block("cells", "Cells", f'<p class="small muted">{len(run_set.entries)} cells, grouped by preset. Each line gives the verdict, the run time and the peak VRAM; open it for the details.</p>' + cells))
+        nav.append(("cells", "Cells"))
     if scenario is not None:
-        body += ['<h2 id="vp-steps">Scenario steps</h2>', "".join(_step_detail(step) for step in scenario.steps)]
-    return _page("Potion audit report", escape(" · ".join(subtitles)), "".join(body))
+        steps = _grouped(scenario.steps, lambda step: step.engine, lambda step: (step.label, _step_klass(step)), _step_detail)
+        body.append(_block("vp-steps", "Scenario steps", f'<p class="small muted">{len(scenario.steps)} steps, grouped by engine.</p>' + steps))
+        nav.append(("vp-steps", "Steps"))
+    return _page("Potion audit report", meta, "".join(body), nav)
 
 
 def _entry_json(entry: Entry) -> dict:
@@ -1102,7 +1634,7 @@ def _entry_json(entry: Entry) -> dict:
     }
 
 
-def write_report(run_set: RunSet | None, out_dir: Path, comparison: dict | None = None, media: bool = True, log=print, scenario: Scenario | None = None, scenario_comparison: dict | None = None) -> Path:
+def write_report(run_set: RunSet | None, out_dir: Path, comparison: dict | None = None, media: bool = True, log=print, scenario: Scenario | None = None, scenario_comparison: dict | None = None, previous: RunSet | None = None) -> Path:
     if run_set is None and scenario is None:
         raise ReportError("give a matrix run or a scenario")
     if run_set is not None and scenario is not None:
@@ -1110,9 +1642,11 @@ def write_report(run_set: RunSet | None, out_dir: Path, comparison: dict | None 
     out_dir.mkdir(parents=True, exist_ok=True)
     if media and run_set is not None:
         prepare_media(run_set, out_dir, log)
+        if comparison is not None and previous is not None:
+            prepare_pair_media(comparison, previous, out_dir, log)
     if media and scenario is not None:
         prepare_scenario_media(scenario, out_dir, log)
-    page = render_report(run_set, comparison, scenario, scenario_comparison)
+    page = render_report(run_set, comparison, scenario, scenario_comparison, previous)
     index = out_dir / "index.html"
     index.write_text(page, encoding="utf-8", newline="\n")
     data = {
@@ -1213,7 +1747,7 @@ def render_merge(sets: list[RunSet], scenarios: dict[str, Scenario] | None = Non
             scenario_rows.append([escape(key)] + cells)
         body += ["<h2>Video Producer scenario</h2>", '<p class="small muted">One row per engine and step, one column per machine. A dashed cell is a step the engine does not offer.</p>', _table(["Step"] + machines, scenario_rows, "matrix")]
     pack = sets[0].pack if sets else next(iter(scenarios.values())).pack
-    return _page("Potion audit, several machines", escape(f"{pack.get('id')} {pack.get('version')} · sha256 {str(pack.get('sha256'))[:12]} · {len(machines)} machines"), "".join(body))
+    return _page("Potion audit, several machines", [("Pack", f"{pack.get('id')} {pack.get('version')}"), ("sha256", str(pack.get("sha256"))[:12]), ("Machines", str(len(machines)))], "".join(body))
 
 
 def write_merge(sets: list[RunSet], out_dir: Path, scenarios: dict[str, Scenario] | None = None) -> Path:

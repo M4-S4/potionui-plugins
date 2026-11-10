@@ -243,17 +243,19 @@ def _report(args) -> int:
         add_pack_cells(run_set, load_pack(args.pack))
     comparison = None
     scenario_comparison = None
+    previous = None
     if args.compare:
         old_matrix, old_scenarios = split_dirs(args.compare)
         if old_matrix:
             if run_set is None:
                 raise ReportError("--compare gives matrix runs, but the report has no matrix run")
-            comparison = compare_sets(run_set, load_set(old_matrix))
+            previous = load_set(old_matrix)
+            comparison = compare_sets(run_set, previous)
         if old_scenarios:
             if scenario is None:
                 raise ReportError("--compare gives a scenario, but the report has no scenario")
             scenario_comparison = compare_scenarios(scenario, load_one_scenario(old_scenarios))
-    index = write_report(run_set, args.out or args.runs[0] / "report", comparison, media=not args.no_media, scenario=scenario, scenario_comparison=scenario_comparison)
+    index = write_report(run_set, args.out or args.runs[0] / "report", comparison, media=not args.no_media, scenario=scenario, scenario_comparison=scenario_comparison, previous=previous)
     print(f"report: {index}")
     if comparison is not None:
         changed = [row["cell"] for row in comparison["rows"] if row.get("verdict_changed")]

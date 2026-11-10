@@ -1,4 +1,7 @@
 import json
+import re
+import shutil
+import urllib.parse
 
 import numpy as np
 import pytest
@@ -134,7 +137,7 @@ def test_the_segments_of_one_run_become_one_matrix_with_the_reasons_of_the_cells
     assert "the min_vram_gb" in page or "beyond_tier" in page
     assert any("segment seg-1" in item for item in bias_factors(run_set))
     assert any(item.startswith("shared instance") for item in bias_factors(run_set))
-    assert 'name="viewport"' in page and "prefers-color-scheme: dark" in page
+    assert 'name="viewport"' in page and "prefers-color-scheme: light" in page
     assert "http://" not in page and "https://" not in page
     report = read(tmp_path / "report" / "report.json")
     assert report["runs"] == ["seg-1", "seg-2"]
@@ -199,7 +202,19 @@ def test_the_report_shows_the_reevaluated_verdict_and_the_old_one_beside_it(fake
     assert "checks version 2" in page
 
 
-def test_the_report_makes_a_thumbnail_and_a_reduced_copy_and_links_the_single_original(fake_api, tmp_path, case_file):
+def links(page: str) -> list[str]:
+    return re.findall(r'(?:href|src|poster)="([^"]*)"', page)
+
+
+def assert_self_contained(page: str, out) -> None:
+    for link in links(page):
+        if link.startswith("#"):
+            continue
+        assert ":" not in link and not link.startswith(("/", "..")) and "/../" not in link, link
+        assert (out / urllib.parse.unquote(link)).is_file(), link
+
+
+def test_the_report_makes_a_thumbnail_and_a_reduced_copy_and_names_the_original_without_linking_out_of_its_folder(fake_api, tmp_path, case_file):
     clip = make_video(tmp_path / "clip.mp4", size=(192, 128))
     fake_api.outputs = {"1.mp4": clip.read_bytes()}
     pack = load_pack(write_pack(tmp_path, case_file))
@@ -211,7 +226,27 @@ def test_the_report_makes_a_thumbnail_and_a_reduced_copy_and_links_the_single_or
     media = tmp_path / "report" / "media" / "c-core_SDXL_txt2img"
     assert (media / "1.mp4").is_file() and (media / "1.thumb.jpg").is_file()
     assert 'src="media/c-core_SDXL_txt2img/1.mp4"' in page
-    assert "../out/r1/cells/core-SDXL--txt2img/1.mp4" in page
+    assert "original 1.mp4, kept in the run folder r1/cells/core-SDXL--txt2img" in page
+    assert "../out/r1" not in page
+    assert_self_contained(page, tmp_path / "report")
+
+
+def test_a_shared_report_folder_holds_every_file_its_page_points_to(fake_api, tmp_path, case_file):
+    fake_api.outputs = {"1.wav": b"RIFF" + bytes(64), "2.glb": b"glTF" + bytes(64)}
+    pack = load_pack(write_pack(tmp_path, case_file))
+    play(fake_api, pack, tmp_path / "out", "r1", machine="box")
+    run = read(tmp_path / "out" / "r1" / "run.json")
+    run["runner"] = {"potion_audit": "0.0.1", "python": "3.13", "executable": "\\".join(["C:", "Users", "someone", "audit", ".venv", "python.exe"])}
+    write(tmp_path / "out" / "r1" / "run.json", run)
+    page = write_report(load_set([tmp_path / "out" / "r1"]), tmp_path / "shared", log=quiet).read_text(encoding="utf-8")
+    assert '<audio controls preload="none" src="media/c-core_SDXL_txt2img/1.wav">' in page
+    assert 'href="media/c-core_SDXL_txt2img/2.glb"' in page
+    assert "python.exe" not in page and "&lt;home&gt;" not in page
+    assert_self_contained(page, tmp_path / "shared")
+    moved = tmp_path / "elsewhere" / "shared"
+    shutil.copytree(tmp_path / "shared", moved)
+    shutil.rmtree(tmp_path / "out")
+    assert_self_contained((moved / "index.html").read_text(encoding="utf-8"), moved)
 
 
 def test_storage_says_not_probed_without_a_probe_and_lists_the_mounts_with_one(fake_api, tmp_path, case_file):

@@ -19,7 +19,7 @@ function Try-Read([string] $label, [scriptblock] $block) {
         return & $block
     }
     catch {
-        $notes.Add("${label}: $($_.Exception.Message)")
+        $notes.Add("${label}: $($_.CategoryInfo.Category) ($($_.FullyQualifiedErrorId))")
         return $null
     }
 }
@@ -105,8 +105,11 @@ $partitions = Try-Read 'Get-Partition' {
 $volumes = Try-Read 'Get-Volume' {
     Get-Volume | Where-Object { $_.DriveLetter } | Sort-Object DriveLetter | ForEach-Object {
         $free = if ($_.Size) { [math]::Round(100.0 * $_.SizeRemaining / $_.Size, 1) } else { $null }
+        $letter = Drive-Letter $_.DriveLetter
+        $numbers = @(Get-Partition -DriveLetter $letter -ErrorAction SilentlyContinue | ForEach-Object { $_.DiskNumber } | Sort-Object -Unique)
         [ordered]@{
-            drive        = Drive-Letter $_.DriveLetter
+            drive        = $letter
+            disk_numbers = $numbers
             label        = $_.FileSystemLabel
             file_system  = $_.FileSystem
             drive_type   = [string]$_.DriveType
@@ -196,9 +199,15 @@ $session = Try-Read 'session' {
     }
 }
 
-$os = Try-Read 'Win32_OperatingSystem' {
+$os = Try-Read 'operating system' {
     $info = Get-CimInstance Win32_OperatingSystem
-    [ordered]@{ caption = $info.Caption; version = $info.Version; build = $info.BuildNumber }
+    $current = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+    $build = [int]$info.BuildNumber
+    $editionId = [string]$current.EditionID
+    $editions = @{ Core = 'Home'; CoreN = 'Home N'; CoreSingleLanguage = 'Home Single Language'; Professional = 'Pro'; ProfessionalN = 'Pro N'; ProfessionalWorkstation = 'Pro for Workstations'; ProfessionalEducation = 'Pro Education'; Education = 'Education'; Enterprise = 'Enterprise'; EnterpriseS = 'Enterprise LTSC'; IoTEnterprise = 'IoT Enterprise' }
+    $edition = if ($editions.ContainsKey($editionId)) { $editions[$editionId] } else { $editionId }
+    $name = if ($info.ProductType -ne 1) { [string]$current.ProductName } elseif ($build -ge 22000) { "Windows 11 $edition" } else { "Windows 10 $edition" }
+    [ordered]@{ name = $name.Trim(); edition_id = $editionId; display_version = [string]$current.DisplayVersion; version = $info.Version; build = $info.BuildNumber }
 }
 
 $result = [ordered]@{
