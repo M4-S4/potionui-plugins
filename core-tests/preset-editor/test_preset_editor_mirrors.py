@@ -204,3 +204,24 @@ def test_a_duplicate_of_a_mirror_copies_the_files_of_its_source_under_a_new_id(c
     assert published.status_code == 200, published.text
     assert Path(core.bridge.find_preset("from-mirror").path).resolve() == (roots.local_presets / "Copy").resolve()
     assert core.bridge.find_preset(MIRROR).source_preset_id == ORIGIN
+
+
+def test_the_folder_an_earlier_version_removed_with_a_mirror_comes_back_from_the_history(core, roots):
+    history = _load("backend.history")
+    core.bridge.uninstall_preset(MIRROR, ADMIN)
+    stamp = history.archive(roots, core.origin_dir, preset_id=MIRROR, target_dir="Local/v1", reason="delete")
+    before = _tree(core.origin_dir)
+    shutil.rmtree(core.origin_dir.parent)
+    core.bridge.reload_presets()
+    assert core.bridge.find_preset(ORIGIN) is None and core.bridge.is_installed(ORIGIN)
+
+    response = core.client.post(f"{PRESETS_URL}/{MIRROR}/history/{stamp}/restore")
+
+    assert response.status_code == 201, response.text
+    data = response.json()["data"]
+    assert (data["preset_id"], data["target_dir"]) == (ORIGIN, "Local/v1")
+    published = core.client.post(f"{DRAFTS_URL}/{data['draft_id']}/publish", json={})
+    assert published.status_code == 200, published.text
+    assert _tree(core.origin_dir) == before
+    assert Path(core.bridge.find_preset(ORIGIN).path).resolve() == core.origin_dir.resolve()
+    assert core.bridge.is_installed(ORIGIN)

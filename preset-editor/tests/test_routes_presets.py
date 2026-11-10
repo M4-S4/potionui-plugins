@@ -168,6 +168,37 @@ def test_restoring_targets_the_folder_the_preset_lives_in_now(client, core, loca
     assert data["target_dir"] == "Local/v1"
 
 
+def test_a_version_archived_under_a_mirror_id_is_restored_under_the_id_its_files_declare(client, core, local_preset, roots, monkeypatch):
+    monkeypatch.setattr(history, "stamp_now", lambda: "20261110T100000.000001")
+    history.archive(roots, local_preset, preset_id="local-one-mirror", target_dir="Local/v1", reason="delete")
+    shutil.rmtree(roots.local_presets / "Local")
+    core.rescan_local()
+
+    response = client.post(f"{PRESETS_URL}/local-one-mirror/history/20261110T100000.000001/restore")
+
+    assert response.status_code == 201, response.text
+    data = response.json()["data"]
+    assert (data["preset_id"], data["name"], data["target_dir"]) == ("local-one", "Local one", "Local/v1")
+    assert data["source"] == "restore_of:local-one-mirror@20261110T100000.000001"
+    published = client.post(f"/api/plugins/preset-editor/drafts/{data['draft_id']}/publish", json={})
+    assert published.status_code == 200, published.text
+    assert read_id(roots.local_presets / "Local" / "v1") == "local-one"
+
+
+def test_a_version_whose_files_declare_a_mirror_id_is_not_restored(client, core, local_mirror, roots, monkeypatch, tmp_path):
+    monkeypatch.setattr(history, "stamp_now", lambda: "20261110T100000.000002")
+    odd = tmp_path / "odd"
+    shutil.copytree(FIXTURES / "minimal-native", odd)
+    manifest = odd / "preset.yml"
+    manifest.write_text(drafts.rewrite_top_level(manifest.read_text(encoding="utf-8"), {"id": "local-one-mirror"}), encoding="utf-8")
+    history.archive(roots, odd, preset_id="local-one-mirror", target_dir="Local/v1", reason="publish")
+
+    response = client.post(f"{PRESETS_URL}/local-one-mirror/history/20261110T100000.000002/restore")
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "mirror"
+    assert drafts.list_drafts(roots) == []
+
+
 def test_an_unknown_version_cannot_be_restored(client):
     response = client.post(f"{PRESETS_URL}/local-one/history/20261015T100000.000001/restore")
 

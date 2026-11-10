@@ -42,21 +42,25 @@ async def restore_version(preset_id: str, stamp: str, current_user: User = Depen
         entry = history.entry_dir(roots, _preset_id(preset_id), stamp)
     except DraftError as failure:
         raise error(404, failure.code, failure.message)
+    header = drafts.read_header(entry)
+    declared = header.get("id")
+    restored_id = declared if isinstance(declared, str) and paths.PRESET_ID_RE.match(declared) else preset_id
     meta = next((item for item in history.list_entries(roots, preset_id) if item["stamp"] == stamp), {})
     target_dir = meta.get("target_dir")
-    template = core_bridge.find_preset(preset_id)
-    if template is not None and catalog.is_local(template):
-        target_dir = catalog.target_dir(template)
+    template = core_bridge.find_preset(restored_id)
+    if template is not None:
+        refuse_mirror(template)
+        if catalog.is_local(template):
+            target_dir = catalog.target_dir(template)
     if not target_dir:
         raise error(409, "no_target", "this version does not say where the preset lived")
-    header = drafts.read_header(entry)
     try:
         draft = await asyncio.to_thread(
             drafts.create_edit,
             roots,
             source_dir=entry,
-            preset_id=preset_id,
-            name=str(header.get("name") or preset_id),
+            preset_id=restored_id,
+            name=str(header.get("name") or restored_id),
             target_dir=target_dir,
             created_by=current_user.id,
         )
