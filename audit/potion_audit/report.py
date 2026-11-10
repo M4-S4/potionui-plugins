@@ -50,7 +50,7 @@ DARK = (
 LIGHT = (
     "color-scheme: light; --bg: 247 247 247; --card: 255 255 255; --soft: 241 241 241; --raised: 255 255 255; --line: 232 232 232; --line-strong: 214 214 214; --line-hover: 173 173 173; "
     "--fg: 23 23 23; --muted: 85 85 85; --subtle: 112 112 112; --signal: 13 116 206; --ok: 26 127 78; --bad: 198 47 52; --warn: 154 103 0; --idle: 85 85 85; "
-    "--tint: .10; --selection: .22; --shadow-raised: 0 1px 2px rgb(0 0 0 / .04); --shadow-floating: 0 4px 12px rgb(0 0 0 / .08), 0 1px 3px rgb(0 0 0 / .06);"
+    "--tint: .06; --selection: .22; --shadow-raised: 0 1px 2px rgb(0 0 0 / .04); --shadow-floating: 0 4px 12px rgb(0 0 0 / .08), 0 1px 3px rgb(0 0 0 / .06);"
 )
 SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif'
 MONO = '"IBM Plex Mono", ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace'
@@ -69,7 +69,10 @@ body { background: rgb(var(--bg)); color: rgb(var(--fg)); font: 13px/20px var(--
 header.top { padding: 28px 0 16px; }
 .eyebrow { font: 500 12px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); margin: 0 0 6px; }
 h1 { font-size: 24px; line-height: 32px; font-weight: 600; margin: 0 0 4px; letter-spacing: -.01em; }
-.subtitle { color: rgb(var(--muted)); margin: 0; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 8px 0 0; }
+.meta div { min-width: 0; }
+.meta dt { font: 500 11px/16px var(--mono); text-transform: uppercase; letter-spacing: .07em; color: rgb(var(--subtle)); }
+.meta dd { margin: 0; color: rgb(var(--muted)); overflow-wrap: anywhere; }
 nav.toc { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 8px 16px; background: rgb(var(--card)); border-top: 1px solid rgb(var(--line)); border-bottom: 1px solid rgb(var(--line)); }
 nav.toc::-webkit-scrollbar { display: none; }
 nav.toc a { white-space: nowrap; text-decoration: none; color: rgb(var(--muted)); font-size: 13px; font-weight: 500; padding: 6px 10px; border-radius: 4px; }
@@ -142,8 +145,9 @@ a.cell:hover { text-decoration: none; border-color: rgb(var(--line-hover)); }
 .warn .tag, .tag.warn { color: rgb(var(--warn)); border-color: rgb(var(--warn) / .45); background: rgb(var(--warn) / var(--tint)); }
 .idle .tag, .tag.idle { color: rgb(var(--idle)); }
 .off .tag, .tag.off { color: rgb(var(--subtle)); border-style: dashed; background: none; }
+.cell .tag { background: rgb(var(--card)); }
 .check { display: block; margin-top: 3px; font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
-.was { color: rgb(var(--subtle)); font-weight: 400; text-decoration: line-through; margin-left: 4px; font: 11px/16px var(--mono); }
+.was { color: rgb(var(--muted)); font-weight: 400; text-decoration: line-through; margin-left: 4px; font: 11px/16px var(--mono); }
 .note { margin: 8px 0; padding: 6px 10px; border-left: 2px solid currentColor; border-radius: 0 4px 4px 0; overflow-wrap: anywhere; background: rgb(var(--soft)); }
 .note.ok { color: rgb(var(--ok)); background: rgb(var(--ok) / var(--tint)); } .note.bad { color: rgb(var(--bad)); background: rgb(var(--bad) / var(--tint)); }
 .note.warn { color: rgb(var(--warn)); background: rgb(var(--warn) / var(--tint)); } .note.idle { color: rgb(var(--muted)); }
@@ -187,13 +191,20 @@ SCRIPT = """
 var THEMES = ['system', 'dark', 'light'];
 function storedTheme() { try { var value = localStorage.getItem('%(key)s'); return THEMES.indexOf(value) >= 0 ? value : 'system'; } catch (error) { return 'system'; } }
 function applyTheme(pref) { var root = document.documentElement; if (pref === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', pref); var button = document.getElementById('theme'); if (button) button.textContent = 'Theme: ' + pref; }
-function nextTheme() { var pref = THEMES[(THEMES.indexOf(storedTheme()) + 1) %% THEMES.length]; try { localStorage.setItem('%(key)s', pref); } catch (error) {} applyTheme(pref); }
-applyTheme(storedTheme());
+var currentTheme = storedTheme();
+function nextTheme() { currentTheme = THEMES[(THEMES.indexOf(currentTheme) + 1) %% THEMES.length]; try { localStorage.setItem('%(key)s', currentTheme); } catch (error) {} applyTheme(currentTheme); }
+applyTheme(currentTheme);
 function openTarget() { var id = decodeURIComponent(location.hash.slice(1)); if (!id) return; var node = document.getElementById(id); if (!node) return; for (var parent = node; parent; parent = parent.parentElement) { if (parent.tagName === 'DETAILS') parent.open = true; } node.scrollIntoView(); }
-function markSection() { var links = document.querySelectorAll('nav.toc a'); var current = null; for (var index = 0; index < links.length; index++) { var heading = document.getElementById(links[index].getAttribute('href').slice(1)); if (heading && heading.getBoundingClientRect().top < 96) current = links[index]; } for (var other = 0; other < links.length; other++) { links[other].classList.toggle('current', links[other] === current); } }
+function watchSections() {
+  var links = [].slice.call(document.querySelectorAll('nav.toc a'));
+  if (!links.length || !('IntersectionObserver' in window)) return;
+  var headings = links.map(function (link) { return document.getElementById(link.getAttribute('href').slice(1)); });
+  function mark() { var line = window.innerHeight * 0.3; var current = -1; headings.forEach(function (heading, index) { if (heading && heading.getBoundingClientRect().top < line) current = index; }); links.forEach(function (link, index) { link.classList.toggle('current', index === current); }); }
+  var observer = new IntersectionObserver(mark, { rootMargin: '0px 0px -70%% 0px' });
+  headings.forEach(function (heading) { if (heading) observer.observe(heading); });
+}
 window.addEventListener('hashchange', openTarget);
-window.addEventListener('scroll', markSection, { passive: true });
-window.addEventListener('DOMContentLoaded', function () { applyTheme(storedTheme()); var button = document.getElementById('theme'); if (button) button.addEventListener('click', nextTheme); openTarget(); markSection(); });
+window.addEventListener('DOMContentLoaded', function () { applyTheme(currentTheme); var button = document.getElementById('theme'); if (button) button.addEventListener('click', nextTheme); openTarget(); watchSections(); });
 """ % {"key": THEME_KEY}
 
 
@@ -1309,14 +1320,18 @@ def _summary(run_set: RunSet | None, comparison: dict | None, scenario: Scenario
     return headline + f'<div class="summary">{"".join(tiles)}</div>'
 
 
-def _page(title: str, subtitle: str, body: str, nav: list[tuple[str, str]] = ()) -> str:
+def _meta(pairs: list[tuple[str, str]]) -> str:
+    return '<dl class="meta">' + "".join(f"<div><dt>{escape(name)}</dt><dd>{escape(value)}</dd></div>" for name, value in pairs) + "</dl>"
+
+
+def _page(title: str, meta: list[tuple[str, str]], body: str, nav: list[tuple[str, str]] = ()) -> str:
     links = "".join(f'<a href="#{anchor}">{escape(label)}</a>' for anchor, label in nav)
     toc = f'<nav class="toc" aria-label="Sections">{links}<button type="button" class="theme" id="theme">Theme: system</button></nav>'
     top = '<a class="totop" href="#top">↑ Top</a>' if links else ""
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{escape(title)}</title><style>{STYLE}</style><script>{SCRIPT}</script></head><body><div class=\"page\">"
-        f'<header class="top" id="top"><p class="eyebrow">PotionUI · preset audit</p><h1>{escape(title)}</h1><p class="subtitle">{subtitle}</p></header>{toc}<main>{body}</main>'
+        f'<header class="top" id="top"><p class="eyebrow">PotionUI · preset audit</p><h1>{escape(title)}</h1>{_meta(meta)}</header>{toc}<main>{body}</main>'
         f'<footer><p class="small muted">Written by potion-audit {escape(__version__)} on {escape(datetime.now(UTC).isoformat(timespec="seconds"))}.</p></footer>'
         f"{top}</div></body></html>\n"
     )
@@ -1574,13 +1589,13 @@ def render_report(run_set: RunSet | None, comparison: dict | None = None, scenar
         raise ReportError("give a matrix run or a scenario")
     if run_set is not None and scenario is not None:
         same_machine(run_set, scenario)
-    subtitles = []
+    meta = []
     nav = [("summary", "Summary")]
     summary = _summary(run_set, comparison, scenario, scenario_comparison)
     body = [_block("summary", "Summary", summary)]
     if run_set is not None:
         pack = run_set.pack
-        subtitles.append(f"{run_set.machine} · {pack.get('id')} {pack.get('version')} · {run_set.first.get('profile')} profile · {_when(run_set.started_at)} to {_when(run_set.ended_at)} · runs {', '.join(str(run.get('run_id')) for run in run_set.runs)}")
+        meta += [("Machine", run_set.machine), ("Pack", f"{pack.get('id')} {pack.get('version')}"), ("Profile", str(run_set.first.get("profile"))), ("Period", f"{_when(run_set.started_at)} to {_when(run_set.ended_at)}"), ("Runs", ", ".join(str(run.get("run_id")) for run in run_set.runs))]
         body += [_block("machine", "Machine", _machine_card(run_set)), _block("storage", "Storage", _storage(run_set))]
         nav += [("machine", "Machine"), ("storage", "Storage")]
         if comparison is not None:
@@ -1590,8 +1605,8 @@ def render_report(run_set: RunSet | None, comparison: dict | None = None, scenar
         nav.append(("matrix", "Matrix"))
     if scenario is not None:
         if run_set is None:
-            subtitles.append(f"{scenario.machine} · {scenario.pack.get('id')} {scenario.pack.get('version')}")
-        subtitles.append(f"scenario {scenario.run_id}")
+            meta += [("Machine", scenario.machine), ("Pack", f"{scenario.pack.get('id')} {scenario.pack.get('version')}")]
+        meta.append(("Scenario", scenario.run_id))
         body.append(_block("vp", "Video Producer scenario", _scenario_section(scenario, scenario_comparison)))
         nav.append(("vp", "Scenario"))
     if run_set is not None:
@@ -1602,7 +1617,7 @@ def render_report(run_set: RunSet | None, comparison: dict | None = None, scenar
         steps = _grouped(scenario.steps, lambda step: step.engine, lambda step: (step.label, _step_klass(step)), _step_detail)
         body.append(_block("vp-steps", "Scenario steps", f'<p class="small muted">{len(scenario.steps)} steps, grouped by engine.</p>' + steps))
         nav.append(("vp-steps", "Steps"))
-    return _page("Potion audit report", escape(" · ".join(subtitles)), "".join(body), nav)
+    return _page("Potion audit report", meta, "".join(body), nav)
 
 
 def _entry_json(entry: Entry) -> dict:
@@ -1732,7 +1747,7 @@ def render_merge(sets: list[RunSet], scenarios: dict[str, Scenario] | None = Non
             scenario_rows.append([escape(key)] + cells)
         body += ["<h2>Video Producer scenario</h2>", '<p class="small muted">One row per engine and step, one column per machine. A dashed cell is a step the engine does not offer.</p>', _table(["Step"] + machines, scenario_rows, "matrix")]
     pack = sets[0].pack if sets else next(iter(scenarios.values())).pack
-    return _page("Potion audit, several machines", escape(f"{pack.get('id')} {pack.get('version')} · sha256 {str(pack.get('sha256'))[:12]} · {len(machines)} machines"), "".join(body))
+    return _page("Potion audit, several machines", [("Pack", f"{pack.get('id')} {pack.get('version')}"), ("sha256", str(pack.get("sha256"))[:12]), ("Machines", str(len(machines)))], "".join(body))
 
 
 def write_merge(sets: list[RunSet], out_dir: Path, scenarios: dict[str, Scenario] | None = None) -> Path:

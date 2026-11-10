@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from potion_audit import report
 from potion_audit.pack import load_pack
 from potion_audit.report import changes, compare_sets, load_set, series_time, storage_use, write_report
 
@@ -161,6 +162,49 @@ def test_the_page_loads_nothing_from_outside_and_defines_the_dark_and_the_light_
     assert '@media (prefers-color-scheme: light) { :root:not([data-theme="dark"])' in style
     assert style.index('--mono: "IBM Plex Mono"') < style.index("monospace")
     assert '<button type="button" class="theme" id="theme">' in page
+
+
+def rgb(value: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in value.split())
+
+
+def luminance(color) -> float:
+    channels = [value / 255 for value in color]
+    linear = [value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast(first, second) -> float:
+    high, low = sorted((luminance(first), luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def over(color, background, alpha: float) -> tuple[float, ...]:
+    return tuple(value * alpha + base * (1 - alpha) for value, base in zip(color, background))
+
+
+def test_verdict_badges_and_text_keep_aa_contrast_in_both_themes(fake_api, tmp_path, case_file):
+    for block in (report.DARK, report.LIGHT):
+        found = tokens(block)
+        card, soft, tint = rgb(found["--card"]), rgb(found["--soft"]), float(found["--tint"])
+        for status in ("--ok", "--bad", "--warn"):
+            color = rgb(found[status])
+            assert contrast(color, card) >= 4.5, (block[:20], status, "badge in a tinted card")
+            assert contrast(color, over(color, card, tint)) >= 4.5, (block[:20], status, "badge on its own tint")
+            assert contrast(rgb(found["--muted"]), over(color, card, tint)) >= 4.5, (block[:20], status, "muted text in a tinted card")
+        for text in ("--fg", "--muted", "--subtle", "--signal"):
+            assert contrast(rgb(found[text]), card) >= 4.5, (block[:20], text)
+        assert contrast(rgb(found["--muted"]), soft) >= 4.5
+    assert ".cell .tag { background: rgb(var(--card)); }" in report.STYLE
+    _, page = probed_report(fake_api, tmp_path, case_file, "spy", [host_probe()])
+    assert "IntersectionObserver" in page and "addEventListener('scroll'" not in page
+
+
+def test_the_header_gives_the_run_as_labelled_pairs_without_a_dotted_strip(fake_api, tmp_path, case_file):
+    _, page = probed_report(fake_api, tmp_path, case_file, "meta", [host_probe()])
+    header = page[page.index('<header class="top"'):page.index("</header>")]
+    assert re.findall(r"<dt>([^<]+)</dt>", header) == ["Machine", "Pack", "Profile", "Period", "Runs"]
+    assert "<dd>box</dd>" in header and "·" not in header.replace("PotionUI · preset audit", "")
 
 
 def test_the_duration_puts_the_measured_time_first_when_the_segments_are_hours_apart(fake_api, tmp_path, case_file):
