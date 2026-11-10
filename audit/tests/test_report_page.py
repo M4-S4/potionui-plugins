@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image
 
 from potion_audit.pack import load_pack
-from potion_audit.report import changes, compare_sets, load_set, storage_use, write_report
+from potion_audit.report import changes, compare_sets, load_set, series_time, storage_use, write_report
 
 from packs import write_pack
 from test_report import assert_self_contained, play, quiet, read, write
@@ -138,6 +138,45 @@ def test_the_page_opens_on_a_summary_with_a_navigation_and_groups_the_cells_by_p
     assert '<span class="nums">' in page
     assert '<div class="pair">' in page and 'src="media/previous/c-core_SDXL_txt2img/0.webp"' in page
     assert_self_contained(page, tmp_path / "report")
+
+
+def tokens(block: str) -> dict[str, str]:
+    return dict(re.findall(r"(--[\w-]+):\s*([^;]+);", block))
+
+
+def test_the_page_loads_nothing_from_outside_and_defines_the_dark_and_the_light_theme(fake_api, tmp_path, case_file):
+    _, page = probed_report(fake_api, tmp_path, case_file, "theme", [host_probe()])
+    assert "<link" not in page.lower() and "@import" not in page and "@font-face" not in page
+    assert not re.search(r"<script[^>]*\bsrc=", page)
+    assert not re.search(r"url\(\s*['\"]?(?!data:)", page)
+    for link in re.findall(r'(?:href|src|poster|action)="([^"]*)"', page):
+        assert not re.match(r"[a-z][a-z0-9+.-]*:|//", link, re.I), link
+    style = page[page.index("<style>") + len("<style>"):page.index("</style>")]
+    dark = re.search(r':root\[data-theme="dark"\] \{([^}]*)\}', style).group(1)
+    light = re.search(r':root\[data-theme="light"\] \{([^}]*)\}', style).group(1)
+    assert set(tokens(dark)) == set(tokens(light))
+    assert {"--bg", "--card", "--soft", "--fg", "--muted", "--line", "--signal", "--ok", "--bad", "--warn", "--idle"} <= set(tokens(dark))
+    assert tokens(dark)["--bg"] != tokens(light)["--bg"] and tokens(dark)["--fg"] != tokens(light)["--fg"]
+    assert "color-scheme: dark" in dark and "color-scheme: light" in light
+    assert '@media (prefers-color-scheme: light) { :root:not([data-theme="dark"])' in style
+    assert style.index('--mono: "IBM Plex Mono"') < style.index("monospace")
+    assert '<button type="button" class="theme" id="theme">' in page
+
+
+def test_the_duration_puts_the_measured_time_first_when_the_segments_are_hours_apart(fake_api, tmp_path, case_file):
+    found = series_time([("2026-01-01T22:00:00+00:00", "2026-01-02T00:00:00+00:00"), ("2026-01-02T07:30:00+00:00", "2026-01-02T09:30:00+00:00")])
+    assert (found["span"], found["pause"], found["active"]) == (41400.0, 27000.0, 14400.0)
+    pack = load_pack(write_pack(tmp_path, case_file))
+    for run_id, start, end in (("seg-1", "2026-01-01T22:00:00+00:00", "2026-01-02T00:00:00+00:00"), ("seg-2", "2026-01-02T07:30:00+00:00", "2026-01-02T09:30:00+00:00")):
+        play(fake_api, pack, tmp_path / "out", run_id, machine="box")
+        run = read(tmp_path / "out" / run_id / "run.json")
+        run.update(started_at=start, ended_at=end)
+        write(tmp_path / "out" / run_id / "run.json", run)
+    page = write_report(load_set([tmp_path / "out" / "seg-1", tmp_path / "out" / "seg-2"]), tmp_path / "report", media=False, log=quiet).read_text(encoding="utf-8")
+    tile = page[page.index('<div class="label">Duration</div>'):]
+    tile = tile[:tile.index("</div></div>")]
+    assert "<small> measured</small>" in tile
+    assert "active 4 h 00 min, but spread over 11 h 30 min end to end, with 7 h 30 min of pause between segments" in tile
 
 
 def test_a_fix_a_regression_and_a_step_run_for_the_first_time_are_told_apart():

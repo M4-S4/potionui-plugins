@@ -137,7 +137,7 @@ def test_the_segments_of_one_run_become_one_matrix_with_the_reasons_of_the_cells
     assert "the min_vram_gb" in page or "beyond_tier" in page
     assert any("segment seg-1" in item for item in bias_factors(run_set))
     assert any(item.startswith("shared instance") for item in bias_factors(run_set))
-    assert 'name="viewport"' in page and "prefers-color-scheme: dark" in page
+    assert 'name="viewport"' in page and "prefers-color-scheme: light" in page
     assert "http://" not in page and "https://" not in page
     report = read(tmp_path / "report" / "report.json")
     assert report["runs"] == ["seg-1", "seg-2"]
