@@ -5,7 +5,49 @@ An external API client that audits the presets PotionUI ships by default. It run
 
 Lot 0 brought the skeleton, a read-only `check`, a minimal `run --only` for single cases, the disk probes and the PyAV helpers. Lot 1 adds the potion pack: the prompts, the frozen inputs and one cell per preset and mode, with `pack verify`, `pack make-inputs`, `check --pack` and `run --pack --profile <profile> --dry-run`. Lot 2 runs the cells of a profile on the instance with `run --pack --profile <profile> --confirm-gpu`. Lot 3 adds `report`, `reevaluate` and `merge`, which read run folders only: no GPU, no network. Lot 4 adds the Video Producer scenario (`vp run`, `vp cleanup`), which `report` and `merge` read too.
 
-To run an audit on another machine, give [PROMPT.md](PROMPT.md) to a coding agent there, or follow it by hand: it holds the parameters, the steps, the three stops for the operator and the traps.
+Replaying the audit on another machine
+--------------------------------------
+
+The audit is made to be replayed as it is: the pack, its frozen inputs and its case file are in this folder, so two machines that run the same pack can be compared cell by cell with `merge`.
+
+What the machine needs:
+
+- a PotionUI instance its owner agrees to have audited, reachable by its URL, and an admin account on it;
+- the models of the presets to audit, installed on the instance by its operator: the audit downloads none and lists the ones that are missing;
+- `git` and [uv](https://docs.astral.sh/uv/);
+- a folder outside the checkout for the runs and the reports, with tens of GB free for the `full` profile;
+- the two environment variables of the account, set by the operator (see Setup).
+
+Then give the prompt below to a coding agent on that machine, with the values filled in. It sends the agent to [PROMPT.md](PROMPT.md), which holds the steps, the three stops where the agent waits for the operator, and the traps. An operator can follow PROMPT.md by hand instead.
+
+```text
+Run the Potion audit on this machine.
+
+1. Get the tool: clone https://github.com/M4-S4/potionui-plugins, or update the
+   checkout that is already here, and work from its audit/ folder.
+2. Read audit/PROMPT.md in full, then follow it step by step. audit/README.md is
+   the reference for every command.
+3. Use these parameters:
+   URL = <base URL of the instance, for example http://127.0.0.1:8000>
+   MODE = <dedicated | shared>
+   PROFILE = <smoke | full>
+   SCENARIO = <yes | no>
+   MODELS_DIR = <where the instance keeps its models>
+   OUTPUT_DIR = <folder for the runs and the reports, outside the checkout>
+   DOWNLOADS_ALLOWED = <yes | no>
+   PREVIOUS_RUN = <run folders of the previous audit of this machine, or empty>
+   GPU_OWNER = <who decides when the GPU may be used>
+4. Stop at each of the three stops of PROMPT.md and wait for my answer. Ask me
+   for any parameter that is empty; do not guess.
+5. Never show, write or log a credential. Never use the GPU, restart the
+   instance or delete anything without my explicit consent. Never publish the
+   report.
+6. At the end, give me the verdict counts, what failed and why, what the
+   comparison flags, the path of the report folder, and the list of what the
+   audit left on the instance.
+```
+
+The report folder holds every file its page points to, so it can be sent as it is. To put several machines side by side, bring their run folders together and use `merge` (see Commands): the runs must be of the same pack.
 
 Setup
 -----
