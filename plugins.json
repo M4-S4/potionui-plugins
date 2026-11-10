@@ -23,7 +23,7 @@
     {
       "id": "preset-editor",
       "name": "Preset Editor",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "description": "Create, edit, validate and publish presets without leaving PotionUI",
       "license": "GPL-3.0",
       "source": {
