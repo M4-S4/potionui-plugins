@@ -7,6 +7,7 @@ from src.plugin_api import User, get_current_admin_user
 
 from . import catalog, core_bridge, drafts, history, paths, publish, settings
 from .drafts import DraftError
+from .publish import PublishError
 from .routes_common import draft_payload, error, ok
 
 router = APIRouter(dependencies=[Depends(get_current_admin_user)])
@@ -26,6 +27,17 @@ def local_template(preset_id: str):
     if not catalog.is_local(template):
         raise error(409, "not_local", f"preset '{preset_id}' is not a local preset: duplicate it instead")
     return template
+
+
+def refuse_mirror(template) -> None:
+    source = catalog.mirror_source(template)
+    if source is not None:
+        raise error(
+            409, "mirror",
+            f"preset '{template.id}' is a mirror of '{source}': it has no files of its own, it uses the folder of '{source}'. "
+            f"Manage the mirror in Admin → Presets, or open '{source}' to change its files",
+            source_preset_id=source,
+        )
 
 
 @router.get("/presets/{preset_id}/history")
@@ -90,17 +102,27 @@ async def edit_preset(preset_id: str, current_user: User = Depends(get_current_a
 @router.delete("/presets/{preset_id}")
 async def delete_preset(preset_id: str, current_user: User = Depends(get_current_admin_user)):
     template = local_template(preset_id)
+    refuse_mirror(template)
+    roots = paths.roots()
+    preset_dir, target_dir = Path(template.path), catalog.target_dir(template)
+    try:
+        publish.check_deletable(roots, preset_dir=preset_dir, preset_id=template.id, target_dir=target_dir)
+    except PublishError as failure:
+        raise error(409, failure.code, failure.message)
     uninstalled = False
     if await asyncio.to_thread(core_bridge.is_installed, template.id):
         await asyncio.to_thread(core_bridge.uninstall_preset, template.id, current_user)
         uninstalled = True
-    stamp = await asyncio.to_thread(
-        publish.delete_local_preset,
-        paths.roots(),
-        preset_dir=Path(template.path),
-        preset_id=template.id,
-        target_dir=catalog.target_dir(template),
-        history_depth=settings.get_setting("history_depth"),
-    )
+    try:
+        stamp = await asyncio.to_thread(
+            publish.delete_local_preset,
+            roots,
+            preset_dir=preset_dir,
+            preset_id=template.id,
+            target_dir=target_dir,
+            history_depth=settings.get_setting("history_depth"),
+        )
+    except PublishError as failure:
+        raise error(409, failure.code, failure.message)
     await core_bridge.reload_presets_async()
     return ok({"preset_id": template.id, "archived": stamp, "uninstalled": uninstalled})

@@ -42,7 +42,7 @@ def marketplace(tmp_path):
     return root
 
 
-def template(preset_id, path, *, kind="marketplace", origin_path="Fixture/native", name="Minimal native"):
+def template(preset_id, path, *, kind="marketplace", origin_path="Fixture/native", name="Minimal native", **extra):
     return SimpleNamespace(
         id=preset_id,
         name=name,
@@ -52,6 +52,7 @@ def template(preset_id, path, *, kind="marketplace", origin_path="Fixture/native
         category="image",
         modes={"txt2img": None},
         origin={"kind": kind, "plugin_id": None, "path": origin_path},
+        **extra,
     )
 
 

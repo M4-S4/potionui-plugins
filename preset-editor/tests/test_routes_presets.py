@@ -75,6 +75,49 @@ def test_only_a_local_preset_can_be_deleted(client, core, roots):
     assert client.delete(f"{PRESETS_URL}/never-seen").status_code == 404
 
 
+@pytest.fixture
+def local_mirror(core, local_preset):
+    core.templates["local-one-mirror"] = template(
+        "local-one-mirror", local_preset, kind="local", origin_path="Local/v1", name="Local one, mirrored",
+        source_preset_id="local-one",
+    )
+    core.installed.update({"local-one", "local-one-mirror"})
+    return core.templates["local-one-mirror"]
+
+
+def test_deleting_a_mirror_is_refused_before_the_uninstall_and_keeps_the_folder_of_its_source(client, core, local_mirror, local_preset, roots):
+    response = client.delete(f"{PRESETS_URL}/local-one-mirror")
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert (detail["error"], detail["source_preset_id"]) == ("mirror", "local-one")
+    assert "Admin → Presets" in detail["message"] and "'local-one'" in detail["message"]
+    assert core.uninstalls == [] and core.reloads == 0
+    assert read_id(local_preset) == "local-one"
+    assert history.list_entries(roots, "local-one-mirror") == [] and history.list_entries(roots, "local-one") == []
+
+
+def test_a_preset_whose_folder_holds_another_preset_is_not_deleted(client, core, local_preset, roots):
+    core.templates["stray-one"] = template("stray-one", local_preset, kind="local", origin_path="Local/v1")
+    core.installed.add("stray-one")
+
+    response = client.delete(f"{PRESETS_URL}/stray-one")
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "not_its_folder"
+    assert "'local-one'" in response.json()["detail"]["message"]
+    assert core.uninstalls == [] and read_id(local_preset) == "local-one"
+    assert history.list_entries(roots, "stray-one") == []
+
+
+def test_a_preset_loaded_from_another_folder_than_its_origin_says_is_not_deleted(client, core, local_preset, roots):
+    core.templates["local-one"] = template("local-one", local_preset, kind="local", origin_path="Other/v1")
+
+    response = client.delete(f"{PRESETS_URL}/local-one")
+
+    assert response.status_code == 409 and response.json()["detail"]["error"] == "not_its_folder"
+    assert read_id(local_preset) == "local-one"
+
+
 def test_history_lists_versions_and_restores_one_as_a_draft(client, core, local_preset, roots, monkeypatch):
     monkeypatch.setattr(history, "stamp_now", lambda: "20261015T100000.000007")
     client.delete(f"{PRESETS_URL}/local-one")

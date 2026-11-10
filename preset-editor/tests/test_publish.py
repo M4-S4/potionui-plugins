@@ -233,3 +233,59 @@ def test_delete_keeps_a_model_folder_that_still_holds_another_variant(roots):
     publish.delete_local_preset(roots, preset_dir=roots.local_presets / "MyModel" / "v1", preset_id="fixture-minimal-native", target_dir="MyModel/v1", history_depth=5)
 
     assert (roots.local_presets / "MyModel" / "v2" / "preset.yml").is_file()
+
+
+def test_delete_refuses_a_folder_that_holds_another_preset_before_archiving_anything(roots):
+    roots.ensure()
+    target = roots.local_presets / "MyModel" / "v1"
+    shutil.copytree(NATIVE, target)
+
+    with pytest.raises(publish.PublishError) as failure:
+        publish.delete_local_preset(roots, preset_dir=target, preset_id="a-mirror-id", target_dir="MyModel/v1", history_depth=5)
+
+    assert failure.value.code == "not_its_folder"
+    assert read_id(target) == "fixture-minimal-native"
+    assert history.list_entries(roots, "a-mirror-id") == []
+
+
+@pytest.mark.parametrize("target_dir", ["", "/abs/v1", "MyModel/../MyModel/v1"])
+def test_delete_refuses_a_folder_it_cannot_place_under_the_local_presets(roots, target_dir):
+    roots.ensure()
+    target = roots.local_presets / "MyModel" / "v1"
+    shutil.copytree(NATIVE, target)
+
+    with pytest.raises(publish.PublishError) as failure:
+        publish.delete_local_preset(roots, preset_dir=target, preset_id="fixture-minimal-native", target_dir=target_dir, history_depth=5)
+
+    assert failure.value.code == "not_its_folder"
+    assert (target / "preset.yml").is_file()
+
+
+def test_delete_refuses_a_preset_reached_through_a_link_and_leaves_the_linked_folder(roots, tmp_path):
+    roots.ensure()
+    elsewhere = tmp_path / "elsewhere" / "MyModel"
+    shutil.copytree(NATIVE, elsewhere / "v1")
+    try:
+        os.symlink(elsewhere, roots.local_presets / "MyModel", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("this system cannot create a directory link")
+
+    with pytest.raises(publish.PublishError) as failure:
+        publish.delete_local_preset(
+            roots, preset_dir=roots.local_presets / "MyModel" / "v1", preset_id="fixture-minimal-native", target_dir="MyModel/v1",
+            history_depth=5,
+        )
+
+    assert failure.value.code == "linked_folder"
+    assert (elsewhere / "v1" / "preset.yml").is_file()
+    assert history.list_entries(roots, "fixture-minimal-native") == []
+
+
+def test_delete_accepts_a_preset_three_folders_deep(roots):
+    roots.ensure()
+    target = roots.local_presets / "MyModel" / "v1" / "fast"
+    shutil.copytree(NATIVE, target)
+
+    publish.delete_local_preset(roots, preset_dir=target, preset_id="fixture-minimal-native", target_dir="MyModel/v1/fast", history_depth=5)
+
+    assert not (roots.local_presets / "MyModel").exists()
