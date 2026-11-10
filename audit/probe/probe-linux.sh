@@ -49,7 +49,10 @@ IFS='
 for path in $paths; do
     [ -n "$path" ] || continue
     if [ ! -e "$path" ]; then
-        add_note "path not found: $path"
+        case "$path" in
+            [A-Za-z]:/*) add_note "path not found: $path (a Windows path: Git Bash rewrote it before docker exec, run the probe with MSYS_NO_PATHCONV=1)" ;;
+            *) add_note "path not found: $path" ;;
+        esac
         continue
     fi
     df_line=$(df -P -B1 "$path" 2>/dev/null | awk 'NR == 2 { print $2 " " $3 " " $4 " " $6 }')

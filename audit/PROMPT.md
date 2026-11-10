@@ -60,7 +60,7 @@ If `audit.toml` exists, read it and check these values against the parameters; a
 There is no `probe` command yet: run the scripts of `probe/` and keep their JSON in `OUTPUT_DIR`.
 
 - Windows host: `powershell -ExecutionPolicy Bypass -File probe/probe-windows.ps1 -Out <OUTPUT_DIR>/host-probe.json`. It needs no admin rights and writes no serial number.
-- Linux host or the instance's container: `probe/probe-linux.sh <MODELS_DIR> <storage>` (in a container, `docker exec -i <container> sh -s -- … < probe/probe-linux.sh`). Add `--read-test <a model file> --confirm-idle` only when the global queue is empty and `nvidia-smi` shows no compute process: it reads up to 4 GiB.
+- Linux host or the instance's container: `probe/probe-linux.sh <MODELS_DIR> <storage>` (in a container, `docker exec -i <container> sh -s -- … < probe/probe-linux.sh`, with `MSYS_NO_PATHCONV=1` in front when the shell is Git Bash, or the container paths arrive rewritten and the probe records no mount). Add `--read-test <a model file> --confirm-idle` only when the global queue is empty and `nvidia-smi` shows no compute process: it reads up to 4 GiB.
 
 Then set `[probe] source = "file"` and `file = <the host probe>` in `audit.toml`: each run copies it into its folder. Pass the container probe to `report` with `--probe`.
 
@@ -119,7 +119,7 @@ uv run --locked potion-audit reevaluate <segment folders>
 uv run --locked potion-audit report <segment folders> --compare PREVIOUS_RUN --probe <container probe> --note "<bias factor>"
 ```
 
-`reevaluate` checks every completed cell again with the current checks and never rewrites `result.json`. `report` writes `<first segment>/report/index.html` (or `--out`). Leave out `--compare` for a first audit; it refuses a previous run of another pack. Add a `--note` for each bias factor the report cannot see by itself: a restart between segments, a cell left out, a session that changed during the run.
+`reevaluate` checks every completed cell again with the current checks and never rewrites `result.json`. `report` writes `<first segment>/report/index.html` (or `--out`). Leave out `--compare` for a first audit; it refuses a previous run of another pack. Add a `--note` for each bias factor the report cannot see by itself: a restart between segments, a cell left out, a session that changed during the run. Write the notes in English and name no one ("the machine was in use during the second segment"): the page is meant to be shared. The report folder holds every file its page points to; to send it, send the whole folder.
 
 **Third stop.** Give the operator:
 

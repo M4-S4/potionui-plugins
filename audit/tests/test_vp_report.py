@@ -45,7 +45,7 @@ def test_a_scenario_alone_gives_a_row_per_engine_a_column_per_step_and_a_player_
     code = main(["report", str(run_dir), "--out", str(tmp_path / "report"), "--note", "a test note"])
     assert code == 0
     page = (tmp_path / "report" / "index.html").read_text(encoding="utf-8")
-    assert '<h2 id="vp">Video Producer scenario</h2>' in page and "<h2>Matrix</h2>" not in page
+    assert '<h2 id="vp">Video Producer scenario</h2>' in page and '<h2 id="matrix">' not in page
     assert "<th>Shot 1</th><th>Shot 2 chained</th><th>Shot 3 Ref2VA</th><th>Shot 4 first and last</th><th>Final pass</th><th>Export</th>" in page
     assert page.count('<a class="cell off" href="#vp-Wan2.1-T2V-1.3B-8GB--Shot_3_Ref2VA"') == 1
     assert page.count('<a class="cell off" href="#vp-Wan2.1-T2V-1.3B-8GB--Shot_4_first_and_last"') == 1
@@ -140,7 +140,10 @@ def test_a_matrix_and_a_scenario_of_one_machine_and_version_share_a_page(vp_api,
     code = main(["report", str(night), str(run_dir), "--out", str(tmp_path / "both"), "--no-media", "--pack", str(tmp_path / "pack" / "pack.toml")])
     assert code == 0
     page = (tmp_path / "both" / "index.html").read_text(encoding="utf-8")
-    assert page.index("<h2>Matrix</h2>") < page.index('<h2 id="vp">') < page.index("<h2>Cells</h2>") < page.index('<h2 id="vp-steps">')
+    assert page.index('<h2 id="matrix">') < page.index('<h2 id="vp">') < page.index('<h2 id="cells">') < page.index('<h2 id="vp-steps">')
+    assert '<a href="#vp">Scenario</a>' in page and '<a href="#vp-steps">Steps</a>' in page
+    assert '<section class="group"><h3>MiniMax-H3-12GB ' in page
+    assert "Restarts</div><div class=\"big\">0</div>" in page
     report = read(tmp_path / "both" / "report.json")
     assert report["runs"] == ["night-1"] and report["scenario"]["run_id"] == "vp-c"
     other = scenario_run(vp_api, tmp_path / "out", "vp-d", [H3], machine="elsewhere")
