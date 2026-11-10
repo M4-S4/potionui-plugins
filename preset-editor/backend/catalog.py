@@ -16,6 +16,11 @@ def mirror_source(template: Any) -> Optional[str]:
     return None
 
 
+def file_name(template: Any) -> str:
+    name = getattr(template, "file_name", None)
+    return name if isinstance(name, str) and name else template.name
+
+
 def target_dir(template: Any) -> str:
     return str(origin(template).get("path") or "")
 

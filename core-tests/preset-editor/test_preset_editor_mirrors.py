@@ -225,3 +225,16 @@ def test_the_folder_an_earlier_version_removed_with_a_mirror_comes_back_from_the
     assert _tree(core.origin_dir) == before
     assert Path(core.bridge.find_preset(ORIGIN).path).resolve() == core.origin_dir.resolve()
     assert core.bridge.is_installed(ORIGIN)
+
+
+def test_an_edit_draft_of_a_renamed_preset_takes_the_name_in_its_file(core, roots):
+    core.db_repo.set_display(ORIGIN, "Shown name", None, None)
+    core.loader.refresh_overlays()
+    assert core.bridge.find_preset(ORIGIN).name == "Shown name"
+
+    response = core.client.post(f"{PRESETS_URL}/{ORIGIN}/edit")
+
+    assert response.status_code == 201, response.text
+    data = response.json()["data"]
+    assert (data["preset_id"], data["name"], data["target_dir"]) == (ORIGIN, "Local one", "Local/v1")
+    assert _load("backend.drafts").read_header(core.origin_dir)["name"] == "Local one"

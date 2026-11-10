@@ -82,7 +82,7 @@ async def edit_preset(preset_id: str, current_user: User = Depends(get_current_a
             paths.roots(),
             source_dir=Path(template.path),
             preset_id=template.id,
-            name=template.name,
+            name=catalog.file_name(template),
             target_dir=catalog.target_dir(template),
             created_by=current_user.id,
         )

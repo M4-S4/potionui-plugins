@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from backend import drafts, history
 from backend.api import router
 from src.plugin_api import AccountType, User, get_current_active_user
-from tests.conftest import FIXTURES, read_id, template
+from tests.conftest import FIXTURES, read_header, read_id, template
 
 PRESETS_URL = "/api/plugins/preset-editor/presets"
 ADMIN = User(id="admin-1", username="admin", email="admin@test.com", password_hash="x", account_type=AccountType.ADMIN)
@@ -41,6 +41,22 @@ def test_editing_a_local_preset_opens_a_draft_on_its_folder(client, local_preset
     assert (data["preset_id"], data["name"], data["source"], data["target_dir"]) == ("local-one", "Local one", "edit_of:local-one", "Local/v1")
     assert data["last_lint"] is not None
     assert read_id(drafts.load(roots, data["draft_id"]).dir) == "local-one"
+
+
+def test_an_edit_draft_takes_the_name_in_the_preset_file_rather_than_the_one_an_admin_shows(client, core, local_preset, roots):
+    core.templates["local-one"].name = "Shown name"
+    core.templates["local-one"].file_name = "Local one"
+
+    data = client.post(f"{PRESETS_URL}/local-one/edit").json()["data"]
+
+    assert data["name"] == "Local one"
+    assert read_header(drafts.load(roots, data["draft_id"]).dir)["name"] == "Local one"
+
+
+def test_an_edit_draft_takes_the_shown_name_when_the_core_gives_no_file_name(client, core, local_preset):
+    core.templates["local-one"].name = "Only name"
+
+    assert client.post(f"{PRESETS_URL}/local-one/edit").json()["data"]["name"] == "Only name"
 
 
 def test_only_a_local_preset_can_be_edited_in_place(client):
