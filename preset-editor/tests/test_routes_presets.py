@@ -97,6 +97,29 @@ def test_deleting_a_mirror_is_refused_before_the_uninstall_and_keeps_the_folder_
     assert history.list_entries(roots, "local-one-mirror") == [] and history.list_entries(roots, "local-one") == []
 
 
+def test_editing_a_mirror_is_refused_without_writing_a_draft(client, core, local_mirror, roots):
+    response = client.post(f"{PRESETS_URL}/local-one-mirror/edit")
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["error"] == "mirror"
+    assert drafts.list_drafts(roots) == [] and core.lint_calls == []
+
+
+def test_a_mirror_of_a_marketplace_preset_is_named_a_mirror_rather_than_not_local(client, core):
+    core.templates["market-mirror"] = template(
+        "market-mirror", core.templates["fixture-minimal-native"].path, source_preset_id="fixture-minimal-native"
+    )
+
+    for response in (client.post(f"{PRESETS_URL}/market-mirror/edit"), client.delete(f"{PRESETS_URL}/market-mirror")):
+        assert response.status_code == 409 and response.json()["detail"]["source_preset_id"] == "fixture-minimal-native"
+
+
+def test_a_source_preset_reporting_itself_as_its_source_is_not_a_mirror(client, core, local_preset):
+    core.templates["local-one"].source_preset_id = "local-one"
+
+    assert client.post(f"{PRESETS_URL}/local-one/edit").status_code == 201
+
+
 def test_a_preset_whose_folder_holds_another_preset_is_not_deleted(client, core, local_preset, roots):
     core.templates["stray-one"] = template("stray-one", local_preset, kind="local", origin_path="Local/v1")
     core.installed.add("stray-one")

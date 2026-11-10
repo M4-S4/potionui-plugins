@@ -8,7 +8,7 @@ from src.plugin_api import User, get_current_admin_user
 from . import catalog, core_bridge, drafts, history, paths, publish, settings
 from .drafts import DraftError
 from .publish import PublishError
-from .routes_common import draft_payload, error, ok
+from .routes_common import draft_payload, error, ok, refuse_mirror
 
 router = APIRouter(dependencies=[Depends(get_current_admin_user)])
 
@@ -24,20 +24,10 @@ def local_template(preset_id: str):
     template = core_bridge.find_preset(_preset_id(preset_id))
     if template is None:
         raise error(404, "not_found", f"no preset '{preset_id}' in the catalogue")
+    refuse_mirror(template)
     if not catalog.is_local(template):
         raise error(409, "not_local", f"preset '{preset_id}' is not a local preset: duplicate it instead")
     return template
-
-
-def refuse_mirror(template) -> None:
-    source = catalog.mirror_source(template)
-    if source is not None:
-        raise error(
-            409, "mirror",
-            f"preset '{template.id}' is a mirror of '{source}': it has no files of its own, it uses the folder of '{source}'. "
-            f"Manage the mirror in Admin → Presets, or open '{source}' to change its files",
-            source_preset_id=source,
-        )
 
 
 @router.get("/presets/{preset_id}/history")
@@ -102,7 +92,6 @@ async def edit_preset(preset_id: str, current_user: User = Depends(get_current_a
 @router.delete("/presets/{preset_id}")
 async def delete_preset(preset_id: str, current_user: User = Depends(get_current_admin_user)):
     template = local_template(preset_id)
-    refuse_mirror(template)
     roots = paths.roots()
     preset_dir, target_dir = Path(template.path), catalog.target_dir(template)
     try:

@@ -10,7 +10,7 @@ from src.plugin_api.storage import generate_ulid
 from . import catalog, core_bridge, drafts, paths, publish, scaffold, settings
 from .drafts import DraftError
 from .publish import PublishError
-from .routes_common import draft_payload, error, ok
+from .routes_common import draft_payload, error, ok, refuse_mirror
 from .schema import DraftCreate, PublishRequest
 
 logger = logging.getLogger("plugins.preset-editor")
@@ -111,6 +111,9 @@ async def publish_draft(draft_id: str, body: PublishRequest, current_user: User 
     if errors:
         raise error(409, "lint_errors", "the preset has lint errors", lint={"errors": errors, "warnings": warnings})
     async with _publishing:
+        existing = core_bridge.find_preset(draft.preset_id)
+        if existing is not None:
+            refuse_mirror(existing)
         try:
             await asyncio.to_thread(
                 publish.check_collisions,

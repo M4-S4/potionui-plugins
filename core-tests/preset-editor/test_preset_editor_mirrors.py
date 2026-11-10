@@ -162,3 +162,45 @@ def test_deleting_the_source_of_a_mirror_is_refused_by_the_core_before_its_folde
     assert _tree(core.origin_dir) == before
     assert core.bridge.is_installed(ORIGIN) and core.bridge.is_installed(MIRROR)
     assert history.list_entries(roots, ORIGIN) == []
+
+
+def test_editing_or_exporting_a_mirror_is_refused_and_writes_no_draft(core, roots):
+    for response in (
+        core.client.post(f"{PRESETS_URL}/{MIRROR}/edit"),
+        core.client.get(f"{PRESETS_URL}/{MIRROR}/export"),
+    ):
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["error"] == "mirror"
+    assert list(roots.drafts.iterdir()) == []
+
+
+def test_a_draft_an_earlier_version_opened_on_a_mirror_is_refused_as_a_mirror_and_changes_nothing(core, roots):
+    drafts = _load("backend.drafts")
+    stale = drafts.create_edit(
+        roots, source_dir=core.origin_dir, preset_id=MIRROR, name="Local one, mirrored", target_dir="Local/v1",
+        created_by="admin-1",
+    )
+    before = _tree(core.origin_dir)
+
+    response = core.client.post(f"{DRAFTS_URL}/{stale.draft_id}/publish", json={})
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["error"] == "mirror"
+    assert _tree(core.origin_dir) == before
+    assert core.bridge.find_preset(MIRROR).source_preset_id == ORIGIN
+
+
+def test_a_duplicate_of_a_mirror_copies_the_files_of_its_source_under_a_new_id(core, roots):
+    response = core.client.post(
+        DRAFTS_URL, json={"mode": "copy", "from_id": MIRROR, "name": "From the mirror", "preset_id": "from-mirror", "model_dir": "Copy"}
+    )
+
+    assert response.status_code == 201, response.text
+    drafts = _load("backend.drafts")
+    draft = drafts.load(roots, response.json()["data"]["draft_id"])
+    header = drafts.read_header(draft.dir)
+    assert (header["id"], header["name"], draft.target_dir) == ("from-mirror", "From the mirror", "Copy")
+    published = core.client.post(f"{DRAFTS_URL}/{draft.draft_id}/publish", json={"install": False})
+    assert published.status_code == 200, published.text
+    assert Path(core.bridge.find_preset("from-mirror").path).resolve() == (roots.local_presets / "Copy").resolve()
+    assert core.bridge.find_preset(MIRROR).source_preset_id == ORIGIN
