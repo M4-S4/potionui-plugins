@@ -35,7 +35,8 @@ from src.plugin_api import HookContext, SetupCheck, get_current_active_user
 from src.plugin_api.chat import ToolContext
 
 PLUGIN_ID = "video-producer"
-PLUGIN_ROOT = Path(__file__).resolve().parents[3] / "content" / "plugins" / "marketplace" / PLUGIN_ID
+PLUGIN_ROOTS = [Path(__file__).resolve().parents[3] / "content" / "plugins" / kind / PLUGIN_ID for kind in ("local", "marketplace")]
+PLUGIN_ROOT = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0])
 PACKAGE = "video_producer"
 KIND = "video-producer.gpu_minutes"
 

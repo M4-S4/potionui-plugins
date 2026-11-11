@@ -10,7 +10,8 @@ from src.features.video_director.normalize import normalize_video_director
 from src.plugin_api import PresetDescription
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PLUGIN_ROOT = REPO_ROOT / "content" / "plugins" / "marketplace" / "video-producer"
+PLUGIN_ROOTS = [REPO_ROOT / "content" / "plugins" / kind / "video-producer" for kind in ("local", "marketplace")]
+PLUGIN_ROOT = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0])
 PACKAGE = "video_producer_guided_under_test"
 LTX25_PRESET = REPO_ROOT / "content" / "presets" / "marketplace" / "LTX-2.5"
 SHARED_PRESETS = REPO_ROOT / "content" / "presets" / "_shared"

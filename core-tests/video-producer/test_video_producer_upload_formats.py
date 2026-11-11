@@ -6,7 +6,8 @@ import pytest
 from src.platform.filesystem.audio_formats import AUDIO_EXTENSIONS
 from src.platform.filesystem.visual_formats import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 
-UPLOAD_JS = Path(__file__).resolve().parents[3] / "content" / "plugins" / "marketplace" / "video-producer" / "frontend" / "src" / "lib" / "upload.js"
+PLUGIN_ROOTS = [Path(__file__).resolve().parents[3] / "content" / "plugins" / kind / "video-producer" for kind in ("local", "marketplace")]
+UPLOAD_JS = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0]) / "frontend" / "src" / "lib" / "upload.js"
 LEFT_OUT = {"image": {".svg"}, "video": set(), "audio": set()}
 HOST = {"image": IMAGE_EXTENSIONS, "video": VIDEO_EXTENSIONS, "audio": AUDIO_EXTENSIONS}
 
