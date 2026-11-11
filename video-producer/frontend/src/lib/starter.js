@@ -13,7 +13,7 @@ const SHOT_DURATION = 5;
 export const PROMPT_LANGUAGES = ['en', 'fr'];
 export const DEFAULT_PROMPT_LANGUAGE = 'en';
 
-export const promptLanguageOf = (value) => (PROMPT_LANGUAGES.includes(value) ? value : DEFAULT_PROMPT_LANGUAGE);
+export const promptLanguageOf = () => DEFAULT_PROMPT_LANGUAGE;
 
 export function newClip(extra = {}) {
 	return { id: ulid(), assetId: null, start: 0, dur: 4, srcIn: 0, label: '', stage: 'todo', take: null, fadeIn: 0, fadeOut: 0, exposure: 0, contrast: 100, saturation: 100, temperature: 0, preset: 'Original', flag: null, mute: false, ...extra };
@@ -106,22 +106,69 @@ function starterDirection(t) {
 }
 
 function starterPrompts(t) {
-	return [t('starter.shot.1.prompt'), t('starter.shot.2.prompt'), t('starter.shot.3.prompt'), t('starter.shot.4.prompt'), t('starter.shot.5.prompt')];
+	return [t('starter.shot.1.prompt'), t('starter.shot.2.prompt'), t('starter.shot.3.prompt'), t('starter.shot.4.prompt')];
 }
 
-export function starterDoc(t, promptT = t, promptLanguage = DEFAULT_PROMPT_LANGUAGE) {
+function starterShots(t, promptT) {
+	const texts = starterPrompts(promptT);
+	return [
+		{ label: t('starter.shot.1.label'), text: texts[0] },
+		{ label: t('starter.shot.2.label'), text: texts[1], firstFromPrevious: true },
+		{ label: t('starter.shot.3.label'), text: texts[2], firstFromPrevious: false, lumi: true },
+		{ label: t('starter.shot.4.label'), text: texts[3], firstFromPrevious: false, frames: ['bottle', 'bottle-gold'] }
+	];
+}
+
+function starterCards(t) {
+	return {
+		lumi: { id: ulid(), label: t('starter.card.lumi.label'), text: t('starter.card.lumi.text'), props: t('starter.card.lumi.props'), references: [] },
+		workshop: { id: ulid(), label: t('starter.card.workshop.label'), text: t('starter.card.workshop.text'), references: [] }
+	};
+}
+
+function starterReferences(t, assets) {
+	const identity = (name, type, assetId) => ({ id: ulid(), name, space: 'identite', type, assetId, role: 'Identité', scope: { type: 'global' } });
+	return [identity(t('starter.reference.lumi'), 'Personnage', assets.lumi.id), identity(t('starter.reference.bottle'), 'Objet', assets.bottle.id)];
+}
+
+export const STARTER_IMAGES = ['lumi', 'bottle', 'bottle-gold'];
+const FRAME_ROLES = ['first', 'last'];
+const LAST_FRAME_GAP = 0.04;
+const round = (value) => Math.round(value * 1000) / 1000;
+
+function imageAsset(media) {
+	const res = media.width && media.height ? `${media.width}×${media.height}` : null;
+	return newAsset({ kind: 'image', name: media.filename, src: media.url, origin: { kind: 'library', itemId: media.itemId }, width: media.width, height: media.height, res });
+}
+
+const complete = (images) => isObject(images) && STARTER_IMAGES.every((name) => isObject(images[name]) && images[name].url && images[name].itemId);
+
+export function starterDoc(t, promptT = t, promptLanguage = DEFAULT_PROMPT_LANGUAGE, images = null) {
 	const doc = baseDoc(t, t('starter.name'), promptLanguage);
 	doc.synopsis = t('starter.synopsis');
 	doc.direction = starterDirection(promptT);
-	const texts = starterPrompts(promptT);
-	const shots = [t('starter.shot.1.label'), t('starter.shot.2.label'), t('starter.shot.3.label'), t('starter.shot.4.label'), t('starter.shot.5.label')].map((label, i) => [label, texts[i]]);
-	shots.forEach(([label, text], i) => {
-		const clip = newClip({ label, start: i * SHOT_DURATION, dur: SHOT_DURATION });
+	const { lumi, workshop } = starterCards(promptT);
+	doc.bible = { characters: [lumi], places: [workshop] };
+	const assets = complete(images) ? Object.fromEntries(STARTER_IMAGES.map((name) => [name, imageAsset(images[name])])) : null;
+	if (assets) {
+		doc.assets = STARTER_IMAGES.map((name) => assets[name]);
+		doc.references = starterReferences(promptT, assets);
+		lumi.references = [doc.references[0].id];
+	}
+	starterShots(t, promptT).forEach((shot, i) => {
+		const clip = newClip({ label: shot.label, start: i * SHOT_DURATION, dur: SHOT_DURATION, cast: { ...(shot.lumi ? { characters: [lumi.id] } : {}), place: workshop.id } });
+		if ('firstFromPrevious' in shot) clip.firstFromPrevious = shot.firstFromPrevious;
 		doc.clips.push(clip);
-		doc.prompts.push({ id: ulid(), shotId: clip.id, start: clip.start, dur: clip.dur, strength: 75, text });
+		doc.prompts.push({ id: ulid(), shotId: clip.id, start: clip.start, dur: clip.dur, strength: 75, text: shot.text });
+		if (!assets || !shot.frames) return;
+		shot.frames.forEach((name, j) => {
+			const role = FRAME_ROLES[j];
+			const time = role === 'last' ? round(clip.start + clip.dur - LAST_FRAME_GAP) : clip.start;
+			doc.frames.push({ id: ulid(), shotId: clip.id, time, assetId: assets[name].id, role, strength: 100 });
+		});
 	});
 	doc.titles.push({ id: ulid(), text: t('starter.title.text'), sub: t('starter.title.sub'), start: 0, dur: 4 });
-	doc.markers.push({ id: ulid(), time: doc.clips[2].start, label: t('starter.marker.castOff'), kind: 'marker' });
+	doc.markers.push({ id: ulid(), time: doc.clips[3].start, label: t('starter.marker.magic'), kind: 'marker' });
 	return doc;
 }
 

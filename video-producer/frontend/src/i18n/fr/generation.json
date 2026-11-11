@@ -20,6 +20,7 @@
 	"warn.timeUnknown": "Aucun temps mesuré pour ce moteur et cette résolution.",
 	"warn.noFrame": "« {shot} » n’a pas de frame liée : il sera généré à partir du texte seul.",
 	"warn.textOnly": "Ce moteur génère à partir du texte seul : les frames liées à « {shot} » ne seront pas utilisées.",
+	"warn.lastFrameUnsupported": "Ce moteur fait partir « {shot} » de sa première frame seulement : sa dernière frame ne sera pas utilisée.",
 	"warn.chainTextOnly": "Ce moteur génère à partir du texte seul : « {shot} » ne partira pas de la dernière image du plan précédent.",
 	"warn.chainModelsMissing": "Les fichiers image vers vidéo de ce moteur ne sont pas installés ({fields}) : « {shot} » sera généré à partir de son texte, pas de la dernière image du plan précédent.",
 	"warn.chainCompanionMissing": "Le preset image vers vidéo de ce moteur ne vous est pas accessible : « {shot} » sera généré à partir de son texte, pas de la dernière image du plan précédent.",

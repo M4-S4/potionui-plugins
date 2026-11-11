@@ -510,8 +510,7 @@ def chosen_pictures(
 
 
 def _language(doc: Mapping[str, Any]) -> str:
-    language = doc.get("promptLanguage")
-    return language if language in TEXT else "en"
+    return "en"
 
 
 def _aspect_text(doc: Mapping[str, Any], working: Optional[float] = None) -> str:

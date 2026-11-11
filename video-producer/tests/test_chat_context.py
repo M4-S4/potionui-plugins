@@ -74,7 +74,7 @@ def test_the_block_describes_the_project_the_page_sent():
 
     lines = block.splitlines()
     assert lines[0] == f'VIDEO PRODUCER: project "Night ride" [{PROJECT_ID}], saved version 7.'
-    assert lines[1] == "Prompt language: fr. Write every shot instruction in French; never translate what the user wrote."
+    assert lines[1] == "Prompt language: en. Write every shot instruction in English; never translate what the user wrote."
     assert lines[2] == (
         'Workspace: storyboard. Playhead: 5.2 s (shot "Le pont" [shot-2]). Selection: shot "Le pont" [shot-2]. Range: 2–10 s.'
     )

@@ -233,7 +233,7 @@ def test_with_the_face_detector_a_take_and_a_card_are_compared_on_their_cropped_
     report = _report(core, project)
 
     row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
-    assert row["model"] == "local-google-siglip-base-patch16-224+faces"
+    assert row["model"] == "local-google-siglip-base-patch16-224+faces+upright"
     assert [frame[2] is not None for frame in row["frames"]] == [True, True, True, False]
     marin = next(card for card in next(item for item in report["takes"] if item["take_id"] == second["id"])["cards"] if card["card_id"] == "c-marin")
     assert (marin["kind"], marin["method"], marin["seen"], marin["status"]) == ("character", "face", 0.75, "done")
@@ -333,7 +333,7 @@ def test_a_take_says_no_push_in_under_two_images_with_a_face_or_without_its_look
 def test_a_take_measured_with_faces_before_the_heights_were_kept_is_measured_again(core, make_project, frames):
     project, first, second = _placed(make_project, core)
     core.faces["available"] = True
-    model = "local-google-siglip-base-patch16-224+faces"
+    model = "local-google-siglip-base-patch16-224+faces+upright"
     for take in (first, second):
         looks.queue_take(take)
     looks._mark(looks.take_key(first["id"]), "done", model=model, frames=[[0.0, looks.pack([1.0, 0.0]), None]])
@@ -344,6 +344,55 @@ def test_a_take_measured_with_faces_before_the_heights_were_kept_is_measured_aga
 
     assert before == {first["id"]: "done", second["id"]: "done"}
     assert after == {first["id"]: "queued", second["id"]: "done"}
+
+
+@pytest.mark.parametrize("old", ["local-google-siglip-base-patch16-224+faces", "local-google-siglip-base-patch16-224+faces+identity"])
+def test_a_look_measured_before_the_faces_were_read_upright_counts_as_missing_and_is_measured_again(core, make_project, frames, old):
+    project, first, second = _placed(make_project, core)
+    core.faces["available"] = True
+    frames.takes.update({first["id"]: [(0.0, RED)], second["id"]: [(0.0, BLUE)]})
+    for take in (first, second):
+        looks.queue_take(take)
+        looks._mark(looks.take_key(take["id"]), "done", model=old, frames=[[0.0, looks.pack([1.0, 0.0]), None, None]])
+
+    before = _report(core, project)
+    asked = _report(core, project, enqueue=True)
+    while _run():
+        pass
+    after = looks.rows([looks.take_key(take["id"]) for take in (first, second)])
+
+    assert [item["status"] for item in before["takes"]] == ["missing", "missing"]
+    assert [item["status"] for item in asked["takes"]] == ["queued", "queued"]
+    assert {row["status"] for row in after.values()} == {"done"}
+    assert {row["model"] for row in after.values()} == {"local-google-siglip-base-patch16-224+faces+upright"}
+
+
+def test_a_face_is_cropped_from_the_picture_turned_upright_by_its_exif_orientation(tmp_path):
+    stored = Image.new("RGB", (60, 40), BLUE)
+    stored.paste(RED, (0, 0, 20, 20))
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    stored.save(tmp_path / "phone.png", exif=exif)
+
+    looks._face_crop(tmp_path / "phone.png", {"x": 20.0, "y": 0.0, "width": 20.0, "height": 20.0}, tmp_path / "face.png")
+
+    with Image.open(tmp_path / "face.png") as crop:
+        assert crop.size == (36, 36)
+        assert crop.convert("RGB").getpixel((30, 5)) == RED
+        assert crop.convert("RGB").getpixel((5, 30)) == BLUE
+
+
+def test_a_face_is_cropped_from_a_transparent_picture_put_on_white(tmp_path):
+    picture = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
+    picture.paste((*RED, 255), (14, 14, 26, 26))
+    picture.save(tmp_path / "cut-out.png")
+
+    looks._face_crop(tmp_path / "cut-out.png", {"x": 14.0, "y": 14.0, "width": 12.0, "height": 12.0}, tmp_path / "face.png")
+
+    with Image.open(tmp_path / "face.png") as crop:
+        assert crop.mode == "RGB"
+        assert crop.getpixel((0, 0)) == (255, 255, 255)
+        assert crop.getpixel((crop.width // 2, crop.height // 2)) == RED
 
 
 GRAY = (128, 128, 128)
@@ -364,9 +413,9 @@ def test_a_look_is_measured_under_the_faces_and_the_face_recognition_it_had():
     info = {"slug": "local-siglip"}
 
     assert looks.measure_key(info, {"available": False}, {"available": True}) == "local-siglip"
-    assert looks.measure_key(info, {"available": True}) == "local-siglip+faces"
-    assert looks.measure_key(info, {"available": True}, {"available": False}) == "local-siglip+faces"
-    assert looks.measure_key(info, {"available": True}, {"available": True}) == "local-siglip+faces+identity"
+    assert looks.measure_key(info, {"available": True}) == "local-siglip+faces+upright"
+    assert looks.measure_key(info, {"available": True}, {"available": False}) == "local-siglip+faces+upright"
+    assert looks.measure_key(info, {"available": True}, {"available": True}) == "local-siglip+faces+upright+identity"
 
 
 def test_a_face_counts_as_seen_from_the_front_with_a_sure_detection_its_nose_between_its_eyes_and_its_eyes_apart():
@@ -388,7 +437,7 @@ def test_with_the_face_recognition_a_take_says_how_much_of_its_first_frontal_fac
     report = _report(core, project)
 
     row = looks.rows([looks.take_key(second["id"])])[looks.take_key(second["id"])]
-    assert row["model"] == "local-google-siglip-base-patch16-224+faces+identity"
+    assert row["model"] == "local-google-siglip-base-patch16-224+faces+upright+identity"
     assert [frame[4] is not None for frame in row["frames"]] == [True, True, False, True]
     assert next(item for item in report["takes"] if item["take_id"] == second["id"])["identity"] == {"score": 0.0, "at": 3.0}
     assert report["identity"] == {"model": "glintr100.onnx", "available": True}

@@ -8,6 +8,8 @@ import { DOMAINS, LOCALES, mergeDomains, translate } from '../i18n/core.js';
 import { isUlid, ulid } from './ulid.js';
 import { emptyDoc, migrate, newAsset, promptLanguageOf, starterDoc } from './starter.js';
 import { laneCode } from './tracks.js';
+import { frameTime, seamAsset } from './seam.js';
+import { makeStarterDoc } from '../../../tests/fixtures/make_starter_lumi.mjs';
 import {
 	activateOnKey,
 	detectMac,
@@ -114,45 +116,56 @@ function translator(locale, missing) {
 	return (key, params) => translate(dictionaries, locale, key, params, (k, l) => missing.push(`${l}:${k}`));
 }
 
-test('starterDoc: five linked shots to generate, a title, a marker, four empty lanes, no media, unique ULIDs', () => {
+const starterImage = (name, itemId, height) => ({ itemId, url: `/api/media/uploads/${itemId}.jpg`, filename: `${name}.jpg`, width: 1024, height });
+const starterImages = () => ({ lumi: starterImage('lumi', 'i-lumi', 1024), bottle: starterImage('bottle', 'i-bottle', 576), 'bottle-gold': starterImage('bottle-gold', 'i-gold', 576) });
+
+test('starterDoc: Lumi in four shots of 5 seconds, one function each, with a title, a marker and four empty lanes', () => {
 	const missing = [];
-	const fr = starterDoc(translator('fr', missing));
-	const en = starterDoc(translator('en', missing));
+	const fr = starterDoc(translator('fr', missing), translator('fr', missing), 'fr', starterImages());
+	const en = starterDoc(translator('en', missing), translator('en', missing), 'en', starterImages());
 	assert.deepEqual(missing, []);
-	assert.equal(fr.name, 'Aube sur le port');
-	assert.equal(en.name, 'Dawn at the harbour');
+	assert.equal(fr.name, 'La potion de Lumi');
+	assert.equal(en.name, 'Lumi’s potion');
 	assert.deepEqual([fr.fps, fr.aspect, fr.resolution, fr.direction.mode], [25, '16:9', '1080p', 'FL2VA']);
-	assert.match(fr.synopsis, /^Un petit port de pêche au lever du jour\./);
-	assert.match(en.synopsis, /^A small fishing harbour at daybreak\./);
+	assert.match(fr.synopsis, /^La nuit, dans l’atelier de sa chaumière, la sorcière Lumi/);
+	assert.match(en.synopsis, /^At night, in her cottage workshop, the witch Lumi/);
+	assert.match(en.direction.personnages, /^Lumi, a witch in her thirties,/);
+	assert.match(fr.direction.personnages, /^Lumi, une sorcière d’une trentaine d’années,/);
+	for (const doc of [fr, en]) assert.doesNotMatch([doc.synopsis, doc.direction.personnages, doc.bible.characters[0].text].join(' '), /young|youthful|jeune|juvénile/i);
+	assert.deepEqual([0, 1, 2, 3].map((i) => /at night/.test(en.prompts[i].text)), [true, false, true, false]);
+	assert.deepEqual([0, 1, 2, 3].map((i) => /la nuit/.test(fr.prompts[i].text)), [true, false, true, false]);
 	for (const key of ['univers', 'personnages', 'photographie', 'palette', 'rythme']) assert.ok(fr.direction[key].length > 40 && en.direction[key].length > 40, key);
-	assert.equal(fr.clips.length, 5);
 	assert.deepEqual(
 		fr.clips.map((c) => [c.start, c.dur, c.stage, c.assetId, c.take]),
-		[0, 5, 10, 15, 20].map((start) => [start, 5, 'todo', null, null])
+		[0, 5, 10, 15].map((start) => [start, 5, 'todo', null, null])
 	);
 	assert.deepEqual(
 		fr.clips.map((c) => c.label),
-		['Le port endormi', 'Les mains du pêcheur', 'Le départ', 'Les goélands', 'Vers le large']
+		['L’atelier', 'La potion', 'Lumi', 'Du violet à l’or']
 	);
-	assert.equal(fr.prompts.length, 5);
+	assert.deepEqual(
+		en.clips.map((c) => c.label),
+		['The workshop', 'The potion', 'Lumi', 'From violet to gold']
+	);
+	assert.equal(fr.prompts.length, 4);
 	fr.prompts.forEach((p, i) => {
 		assert.equal(p.shotId, fr.clips[i].id);
 		assert.deepEqual([p.start, p.dur, p.strength], [fr.clips[i].start, 5, 75]);
 		assert.ok(p.text.length > 60);
 		assert.notEqual(p.text, en.prompts[i].text);
 	});
-	assert.match(fr.prompts[0].text, /^Plan large d’un petit port de pêche à l’aube/);
-	assert.match(en.prompts[0].text, /^Wide shot of a small fishing harbour at dawn/);
+	assert.match(en.prompts[0].text, /^Wide establishing shot of the empty workshop/);
+	assert.match(fr.prompts[0].text, /^Plan d’ensemble de l’atelier vide/);
 	assert.deepEqual(
 		fr.titles.map(({ text, sub, start, dur }) => [text, sub, start, dur]),
-		[['Aube sur le port', 'un départ à l’aube', 0, 4]]
+		[['La potion de Lumi', 'un conte en quatre plans', 0, 4]]
 	);
-	assert.equal(en.titles[0].sub, 'a departure at dawn');
+	assert.equal(en.titles[0].sub, 'a tale in four shots');
 	assert.deepEqual(
 		fr.markers.map(({ time, label, kind }) => [time, label, kind]),
-		[[fr.clips[2].start, 'Départ', 'marker']]
+		[[fr.clips[3].start, 'La magie', 'marker']]
 	);
-	assert.equal(en.markers[0].label, 'Cast off');
+	assert.equal(en.markers[0].label, 'The magic');
 	assert.deepEqual(
 		fr.lanes.map((l) => [laneCode(fr.lanes, l.id), l.name, l.role]),
 		[
@@ -165,9 +178,9 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 	assert.ok(fr.lanes.every((l) => isUlid(l.id)));
 	assert.equal(new Set(fr.lanes.map((l) => l.id)).size, 4);
 	assert.deepEqual(fr.engine, { quality: 'draft', variants: 2, backend: '', preset: null, model: null });
-	assert.ok(!('hybrid' in fr) && !('profiles' in fr));
+	assert.ok(!('hybrid' in fr) && !('profiles' in fr) && !('firstFromPrevious' in fr));
 	assert.deepEqual(fr.video, { mute: false, solo: false });
-	assert.ok(fr.clips.every((c) => c.mute === false));
+	assert.ok(fr.clips.every((c) => c.mute === false && !('engine' in c)));
 	assert.deepEqual(
 		fr.aux.map((a) => [a.id, a.name]),
 		[
@@ -175,15 +188,117 @@ test('starterDoc: five linked shots to generate, a title, a marker, four empty l
 			['D1', 'Délai']
 		]
 	);
-	for (const key of ['audio', 'frames', 'references', 'assets']) assert.deepEqual(fr[key], [], key);
+	assert.deepEqual(fr.audio, []);
 	assert.ok(!('scenes' in fr), 'a new document has no 3D scene');
 	assert.ok(!('controls' in fr) && !('plans3d' in fr), 'a new document has no 3D shot and no Control video');
 	assert.ok(!('results' in fr), 'the document has no results field');
-	const ids = [...fr.clips, ...fr.prompts, ...fr.titles, ...fr.markers].map((x) => x.id);
+	const ids = [...fr.clips, ...fr.prompts, ...fr.titles, ...fr.markers, ...fr.assets, ...fr.references, ...fr.frames, ...fr.bible.characters, ...fr.bible.places].map((x) => x.id);
 	assert.ok(ids.every(isUlid));
 	assert.equal(new Set(ids).size, ids.length);
-	const other = starterDoc(translator('fr', missing));
+	const other = starterDoc(translator('fr', missing), translator('fr', missing), 'fr', starterImages());
 	assert.ok(other.clips.every((c, i) => c.id !== fr.clips[i].id));
+	assert.notEqual(other.bible.characters[0].id, fr.bible.characters[0].id);
+});
+
+test('starterDoc: shot 1 from its text, shot 2 chained, shot 3 casts the card of Lumi, shot 4 between a first and a last image, all in FL2VA', () => {
+	const missing = [];
+	const en = translator('en', missing);
+	const doc = starterDoc(en, en, 'en', starterImages());
+	assert.deepEqual(missing, []);
+	const [lumi] = doc.bible.characters;
+	const [workshop] = doc.bible.places;
+	assert.deepEqual([doc.bible.characters.length, doc.bible.places.length], [1, 1]);
+	assert.deepEqual([lumi.label, lumi.props], ['Lumi', 'a straight glass potion bottle with a cork stopper, a blank cream paper label and a glowing violet liquid']);
+	assert.ok(doc.prompts[0].text.includes(lumi.props), doc.prompts[0].text);
+	assert.match(lumi.text, /^a woman in her thirties, with fair skin and light freckles, amber eyes/);
+	assert.match(lumi.text, /a worn midnight-blue pointed witch's hat of felt with a golden star pin/);
+	assert.equal(workshop.label, 'Workshop');
+	assert.match(workshop.text, /^an old witch's cottage workshop with rough timber beams/);
+	assert.deepEqual(workshop.references, []);
+	assert.deepEqual(
+		doc.clips.map((c) => c.cast),
+		[{ place: workshop.id }, { place: workshop.id }, { characters: [lumi.id], place: workshop.id }, { place: workshop.id }]
+	);
+	assert.deepEqual(
+		doc.clips.map((c) => c.firstFromPrevious),
+		[undefined, true, false, false]
+	);
+	assert.ok(doc.prompts[2].text.startsWith('Lumi '), 'the shot that casts Lumi names her, so her card goes in by its label');
+	assert.ok(doc.prompts.every((p, i) => i === 2 || !p.text.includes('Lumi')), 'only shot 3 names Lumi');
+	assert.ok(doc.prompts.every((p) => !p.text.includes('PotionUI')), 'no shot asks the engine to write the label');
+	assert.ok(doc.clips.every((c) => !('engine' in c)), 'no shot sets a profile of its own: every engine runs FL2VA');
+	assert.deepEqual(
+		doc.frames.map(({ shotId, time, role, strength }) => [shotId, time, role, strength]),
+		[
+			[doc.clips[3].id, frameTime(doc.clips[3], 'first'), 'first', 100],
+			[doc.clips[3].id, frameTime(doc.clips[3], 'last'), 'last', 100]
+		]
+	);
+	assert.deepEqual([doc.frames[0].time, doc.frames[1].time], [15, 19.96]);
+});
+
+test('starterDoc: the three images become the media of the project, the reference of Lumi on her card, the potion bottle, and the frames of shot 4', () => {
+	const missing = [];
+	const en = translator('en', missing);
+	const images = starterImages();
+	const doc = starterDoc(en, en, 'en', images);
+	assert.deepEqual(missing, []);
+	assert.deepEqual(
+		doc.assets.map((a) => [a.kind, a.name, a.src, a.origin, a.width, a.height, a.res, a.generated, a.role]),
+		[
+			['image', 'lumi.jpg', '/api/media/uploads/i-lumi.jpg', { kind: 'library', itemId: 'i-lumi' }, 1024, 1024, '1024×1024', false, null],
+			['image', 'bottle.jpg', '/api/media/uploads/i-bottle.jpg', { kind: 'library', itemId: 'i-bottle' }, 1024, 576, '1024×576', false, null],
+			['image', 'bottle-gold.jpg', '/api/media/uploads/i-gold.jpg', { kind: 'library', itemId: 'i-gold' }, 1024, 576, '1024×576', false, null]
+		]
+	);
+	const seam = seamAsset(images.lumi, 'x');
+	assert.deepEqual({ ...doc.assets[0], id: seam.id }, seam);
+	const [portrait, bottle, gold] = doc.assets;
+	assert.deepEqual(
+		doc.references.map(({ name, space, type, assetId, role, scope }) => [name, space, type, assetId, role, scope]),
+		[
+			['Lumi', 'identite', 'Personnage', portrait.id, 'Identité', { type: 'global' }],
+			['Potion bottle', 'identite', 'Objet', bottle.id, 'Identité', { type: 'global' }]
+		]
+	);
+	assert.deepEqual(doc.bible.characters[0].references, [doc.references[0].id]);
+	assert.deepEqual(
+		doc.frames.map((f) => f.assetId),
+		[bottle.id, gold.id]
+	);
+	const fr = translator('fr', missing);
+	assert.deepEqual(
+		starterDoc(fr, fr, 'fr', images).references.map((r) => r.name),
+		['Lumi', 'Flacon de potion']
+	);
+	assert.deepEqual(missing, []);
+});
+
+test('starterDoc: tests/fixtures/starter_lumi.json, which the server tests validate, is the starter the page builds, as make_starter_lumi.mjs writes it', () => {
+	const fixture = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tests', 'fixtures', 'starter_lumi.json'), 'utf-8'));
+	assert.deepEqual(fixture, makeStarterDoc());
+});
+
+test('starterDoc: without its three images the project still holds every shot, card and prompt, and nothing points to a missing media', () => {
+	const missing = [];
+	const en = translator('en', missing);
+	const full = starterDoc(en, en, 'en', starterImages());
+	const partial = starterImages();
+	delete partial['bottle-gold'];
+	for (const images of [null, undefined, {}, partial, { ...starterImages(), lumi: { ...starterImage('lumi', 'i'), itemId: '' } }]) {
+		const doc = starterDoc(en, en, 'en', images);
+		for (const key of ['assets', 'references', 'frames']) assert.deepEqual(doc[key], [], key);
+		assert.deepEqual(doc.bible.characters[0].references, []);
+		assert.deepEqual(
+			doc.clips.map((c) => [c.label, c.cast?.characters?.length ?? 0, c.firstFromPrevious]),
+			full.clips.map((c) => [c.label, c.cast?.characters?.length ?? 0, c.firstFromPrevious])
+		);
+		assert.deepEqual(
+			doc.prompts.map((p) => p.text),
+			full.prompts.map((p) => p.text)
+		);
+	}
+	assert.deepEqual(missing, []);
 });
 
 test('emptyDoc: an untitled project with no shot and the four empty lanes', () => {
@@ -249,6 +364,7 @@ test('readiness: an FL2VA shot without a frame warns instead of blocking, so the
 	assert.equal(starter.direction.mode, 'FL2VA');
 	assert.equal(starter.frames.length, 0);
 	assert.ok(starter.prompts.every((p) => p.text.trim()));
+	assert.deepEqual(missing, []);
 });
 
 test('readiness: a text-only engine that ignores a shot frame warns about that shot in both languages, as a warning rather than a note', () => {
@@ -263,6 +379,20 @@ test('readiness: a text-only engine that ignores a shot frame warns about that s
 	const missing = [];
 	assert.equal(translator('en', missing)('generation.warn.textOnly', { shot: 'Opening' }), 'This engine generates from text only: the frames linked to “Opening” will not be used.');
 	assert.equal(translator('fr', missing)('generation.warn.textOnly', { shot: 'Ouverture' }), 'Ce moteur génère à partir du texte seul : les frames liées à « Ouverture » ne seront pas utilisées.');
+	assert.deepEqual(missing, []);
+});
+
+test('readiness: an engine that starts from the first frame only warns that the last frame of the shot is left out, in both languages, as a warning', () => {
+	productionScene();
+	estimateState.data = { blocks: [], warnings: [{ code: 'last_frame_unsupported', data: { shot_id: 's1' } }, { code: 'time_unknown' }] };
+	const ready = readiness();
+	assert.deepEqual(ready.missing, []);
+	assert.deepEqual(ready.warnings, [t('generation.warn.lastFrameUnsupported', { shot: 'Opening' })]);
+	assert.deepEqual(ready.notes, [noteText({ code: 'time_unknown' })]);
+	estimateState.data = null;
+	const missing = [];
+	assert.equal(translator('en', missing)('generation.warn.lastFrameUnsupported', { shot: 'Opening' }), 'This engine starts “Opening” from its first frame only: its last frame will not be used.');
+	assert.equal(translator('fr', missing)('generation.warn.lastFrameUnsupported', { shot: 'Ouverture' }), 'Ce moteur fait partir « Ouverture » de sa première frame seulement : sa dernière frame ne sera pas utilisée.');
 	assert.deepEqual(missing, []);
 });
 
@@ -417,25 +547,26 @@ test('newAsset: every field of the persisted asset contract, null when it does n
 	assert.notEqual(newAsset().id, newAsset().id);
 });
 
-test('prompt language: a project setting, English by default, that only decides the language of the starter direction and prompts', () => {
+test('prompt language: always English, the interface language only names the starter project, its shots, title and marker', () => {
 	const missing = [];
 	const fr = translator('fr', missing);
 	const en = translator('en', missing);
-	const doc = starterDoc(fr, en, 'en');
+	const doc = starterDoc(fr, en, 'en', starterImages());
 	assert.deepEqual(missing, []);
 	assert.equal(doc.promptLanguage, 'en');
-	assert.equal(doc.name, 'Aube sur le port');
-	assert.match(doc.synopsis, /^Un petit port de pêche au lever du jour\./);
-	assert.equal(doc.clips[0].label, 'Le port endormi');
-	assert.equal(doc.titles[0].text, 'Aube sur le port');
-	assert.match(doc.prompts[0].text, /^Wide shot of a small fishing harbour at dawn/);
+	assert.equal(doc.name, 'La potion de Lumi');
+	assert.match(doc.synopsis, /^La nuit, dans l’atelier de sa chaumière/);
+	assert.equal(doc.clips[0].label, 'L’atelier');
+	assert.equal(doc.titles[0].text, 'La potion de Lumi');
+	assert.equal(doc.markers[0].label, 'La magie');
+	assert.match(doc.prompts[0].text, /^Wide establishing shot of the empty workshop/);
 	assert.deepEqual(doc.direction, starterDoc(en, en, 'en').direction);
-	assert.match(starterDoc(fr, fr, 'fr').prompts[0].text, /^Plan large d’un petit port de pêche à l’aube/);
-	assert.equal(starterDoc(fr, fr, 'fr').promptLanguage, 'fr');
+	assert.deepEqual([doc.bible.characters[0].text, doc.bible.places[0].label, doc.references[1].name], [en('starter.card.lumi.text'), 'Workshop', 'Potion bottle']);
+	assert.equal(starterDoc(fr, en, 'fr').promptLanguage, 'en');
 	assert.equal(starterDoc(fr).promptLanguage, 'en');
 	assert.equal(emptyDoc(fr).promptLanguage, 'en');
-	assert.equal(emptyDoc(fr, 'fr').promptLanguage, 'fr');
-	assert.deepEqual(['en', 'fr', 'de', undefined, null].map(promptLanguageOf), ['en', 'fr', 'en', 'en', 'en']);
+	assert.equal(emptyDoc(fr, 'fr').promptLanguage, 'en');
+	assert.deepEqual(['en', 'fr', 'de', undefined, null].map(promptLanguageOf), ['en', 'en', 'en', 'en', 'en']);
 });
 
 test('window layers: Escape closes only the foreground window, a replaced window hands its return focus on', () => {

@@ -188,6 +188,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/projects/{{project_id}}/versions/{{version}}/restore"),
         ("POST", f"{base}/media/resolve"),
         ("POST", f"{base}/media/uploaded"),
+        ("POST", f"{base}/starter/images"),
         ("GET", f"{base}/projects/{{project_id}}/takes"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/label"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/prioritize"),
@@ -476,7 +477,7 @@ def test_the_mode_loaded_by_the_core_resolves_its_prompt_and_its_context(chat):
     )
     assert block.splitlines()[:2] == [
         'VIDEO PRODUCER: project "Night ride" [p-1], saved version 3.',
-        "Prompt language: fr. Write every shot instruction in French; never translate what the user wrote.",
+        "Prompt language: en. Write every shot instruction in English; never translate what the user wrote.",
     ]
 
 

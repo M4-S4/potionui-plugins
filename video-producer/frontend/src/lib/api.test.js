@@ -224,6 +224,29 @@ test('client: the end frame of a shot, with where it was taken', async () => {
 	]);
 });
 
+test('client: the three images of the starter project, all three or a failure', async () => {
+	const image = (name, item) => ({ kind: 'library', item_id: item, media_type: 'image', url: `/api/media/uploads/${item}.jpg`, filename: `${name}.jpg`, width: 1024, height: 1024, origin: { kind: 'library', itemId: item } });
+	const images = { lumi: image('lumi', 'i1'), bottle: image('bottle', 'i2'), 'bottle-gold': image('bottle-gold', 'i3') };
+	const api = hostApi([
+		{ success: true, data: { images } },
+		{ success: true, data: { images: { lumi: images.lumi, bottle: images.bottle } } },
+		{ success: true, data: { images: { ...images, bottle: { ...images.bottle, url: '' } } } },
+		httpError(502, { detail: { success: false, error: 'starter_images_failed', message: 'full', data: { image: 'bottle', code: 'limit_exceeded' } } })
+	]);
+	const client = createClient(api);
+	assert.deepEqual((await client.starterImages()).data, {
+		lumi: { itemId: 'i1', url: '/api/media/uploads/i1.jpg', filename: 'lumi.jpg', width: 1024, height: 1024 },
+		bottle: { itemId: 'i2', url: '/api/media/uploads/i2.jpg', filename: 'bottle.jpg', width: 1024, height: 1024 },
+		'bottle-gold': { itemId: 'i3', url: '/api/media/uploads/i3.jpg', filename: 'bottle-gold.jpg', width: 1024, height: 1024 }
+	});
+	assert.equal((await client.starterImages()).error.code, 'invalid_response');
+	assert.equal((await client.starterImages()).error.code, 'invalid_response');
+	const failed = await client.starterImages();
+	assert.equal(failed.error.code, 'starter_images_failed');
+	assert.deepEqual(failed.error.data, { image: 'bottle', code: 'limit_exceeded' });
+	assert.deepEqual(api.calls.map(([method, path]) => [method, path]), Array(4).fill(['POST', '/starter/images']));
+});
+
 test('downloadFrom: the host download first, its HTTP errors normalized', async () => {
 	const asked = [];
 	const ok = await downloadFrom({ download: async (path, name) => asked.push([path, name]) }, '/projects/p1/exports/edl', 'Aube.edl', () => assert.fail('no fallback'));

@@ -226,7 +226,7 @@ def build_context(context_metadata: Optional[Dict[str, Any]], session: Any, user
         return NOT_OPEN
     shots = [dict(shot, id=_ident(shot.get("id"))) for shot in _dicts(page.get("shots"))]
     labels = {shot.get("id"): _label(shot, index) for index, shot in enumerate(shots, 1)}
-    language = rules.language_of(page.get("promptLanguage"))
+    language = rules.DEFAULT_LANGUAGE
     version = page.get("projectVersion")
     head = [
         f'VIDEO PRODUCER: project "{_cap(page.get("name") or "Untitled", 80)}" '

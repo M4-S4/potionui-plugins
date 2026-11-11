@@ -22,7 +22,16 @@ Before you start:
 
 You pick the language of the interface in the Preferences, and it is saved for you (chapter 15).
 
-The first time you open the page, it creates a starter project, "Dawn at the harbour", and opens it. It holds a synopsis, the global direction in five fields, five shots of 5 seconds still to generate, each with its shot prompt (the sleeping harbour, the fisherman's hands, the departure, the gulls, out to sea), a title, a marker named "Cast off" and four empty audio tracks. It has no media, no take and no reference. Its name, synopsis, shot names, title and marker are written in the language of the interface; its global direction and shot prompts are written in the prompt language of the project, English by default (chapter 15). Try the whole path on it, or start an empty project with **File › New project**. On your next visits the page opens the project you used last (chapter 5).
+The first time you open the page, it creates a starter project, "Lumi’s potion", and opens it: a short tale where the witch Lumi brews a violet potion in her workshop and turns it to gold. It is a tutorial in four shots of 5 seconds, still to generate, each showing one thing the plugin does, from the simplest to the richest:
+
+1. **The workshop** is made from its text alone.
+2. **The potion** starts from the last image of shot 1: its link chip is on (chapter 12).
+3. **Lumi** casts the character card of Lumi, whose picture is in the References, and the place card of the workshop (chapter 4, The bible).
+4. **From violet to gold** goes from a first image, the violet bottle, to a last image, the same bottle turned to gold (Key frames in the shot panel).
+
+The project also holds a synopsis, the global direction in five fields, a title, a marker named "The magic" and four empty audio tracks. Its three images, Lumi’s portrait, the violet bottle and the golden bottle, come with the plugin and are added to your media when the project is created: they are in the Media panel and in your PotionUI library. If they cannot be added (your storage plan is full, for example), the project opens without them and the page says so; every shot can still be generated from its text. Its name, synopsis, shot names, title and marker are written in the language of the interface; its global direction, cards and shot prompts are in English, like every prompt (chapter 15).
+
+Every shot of it can be generated with each of the five engines of the plugin; what each engine makes of it differs. Wan 2.1 T2V 1.3B generates every shot from its text: shot 2 does not start from shot 1 and shot 4 does not use its images, and the estimate says so. Wan 2.2 TI2V 5B starts shot 2 from the last image of shot 1 and shot 4 from the violet bottle, but takes no last image, so the potion may not turn to gold; the estimate warns about it. Wan 2.2 14B Lightning hands shots 2 and 4 to its image-to-video preset when your admin has installed it, and otherwise generates them from their text with a warning; it also renders the workshop brighter than the other engines, close to daylight, although the prompts ask for night. MiniMax H3 and MiniMax H3 Fast use the chain and both images. All four shots use the FL2VA profile, which every engine runs; with MiniMax H3 (not Fast) you can set shot 3 to Ref2VA in its shot editor (chapter 4, The shot editor, and chapter 8, Profiles per preset), and Lumi’s picture is then sent to the engine. Try the whole path on it, or start an empty project with **File › New project**. On your next visits the page opens the project you used last (chapter 5).
 
 ## 2. The path in eight steps
 
@@ -193,7 +202,7 @@ The left panel is **Sounds**, with a music note and, once the project has some, 
 
 ### Play
 
-The cut of V1 played in a large viewer, with the timeline under it. Play has no side panel, no Inspector and no production deck: the viewer takes the whole width with its transport bar (monitor volume, go to the start, previous and next frame, play, loop, the timecode, framing guides, aspect ratio, resolution and full screen), and shows next to the volume the shot under the playhead ("Shot 2/6 · Harbour"). You hear the same mix as in the other workspaces: the sound of the V1 shots and the audio tracks, with their mute, solo, faders and effects.
+The cut of V1 played in a large viewer, with the timeline under it. Play has no side panel, no Inspector and no production deck: the viewer takes the whole width with its transport bar (monitor volume, go to the start, previous and next frame, play, loop, the timecode, framing guides, aspect ratio, resolution and full screen), and shows next to the volume the shot under the playhead ("Shot 2/4 · The potion"). You hear the same mix as in the other workspaces: the sound of the V1 shots and the audio tracks, with their mute, solo, faders and effects.
 
 - **Timeline.** The one of the other workspaces, with its toolbar, its rows (**Titles**, **Prompts**, **Frames**, **V1 · Video** and the audio tracks) and its ruler. Click or drag on the ruler to move the playhead; select and edit as elsewhere. **Fit** shows the whole cut. Drag the thin line above the timeline to give it more or less height: Play shares that height with Media, and with Mix when it shows the timeline.
 - **Loop.** With **Loop** on, playback starts again from the beginning at the end of the cut, or from the In point at the end of the range when there is one. This is the same in every workspace.
@@ -206,7 +215,7 @@ Your projects are saved on the PotionUI server, in your account, as you work. Th
 
 ### Opening the page
 
-The page opens the project you used last. If it no longer exists, it opens your most recently modified project. If you have none (your first visit, or you deleted them all), it creates the starter project (chapter 1) and opens it.
+The page opens the project you used last. If it no longer exists, it opens your most recently modified project. If you have none (your first visit, or you deleted them all), it creates the starter project (chapter 1) and opens it. A new starter project reuses the three images already in your library when you still have them there, so they are not added twice.
 
 **Projects made with an earlier version** lose their 3D scenes, their 3D shots and their Control videos when they open. The reference video of each 3D shot first becomes a **Motion guides** reference of the shot it guided, of type Control video: with the Ref2VA profile, MiniMax-H3 carries its motion over to the shot (chapter 8). A frame captured in a 3D scene stays in its shot as an ordinary image.
 
@@ -429,6 +438,7 @@ What only warns, without blocking, in amber in the detail line and in the estima
 - a memory estimate above what the GPU has: "Will stream through host RAM, slower." The weights pass through the server's memory. The generation goes on, more slowly, and fails if the server lacks the memory for it (chapter 17);
 - the FL2VA profile with no frame linked to a shot: "“Shot 2” has no linked frame: it will be generated from text only." The generation goes on from the text, and the card of the take says "text only". When the shot has a previous shot with a finished take, an icon next to the warning in the deck, **Use the previous shot’s last frame**, gives it a first frame (chapter 12);
 - an engine that generates from text only, such as the (8 GB) Wan presets, for a shot with linked frames: "This engine generates from text only: the frames linked to “Shot 2” will not be used." The generation goes on from the text;
+- an engine that starts a shot from its first frame and takes no last frame, such as Wan 2.2 TI2V 5B (8 GB), for a shot with a last frame: "This engine starts “Shot 2” from its first frame only: its last frame will not be used." The generation goes on from the first frame;
 - a shot longer than the engine allows: "“Shot 2” is longer than this engine allows: it will be cut to 15 s.";
 - a shot whose sound is mixed onto the take: "“Shot 2”: its sound will be mixed onto the take, not used as a guide." (chapter 13);
 - a shot whose sound the engine ignores: "“Shot 2”: its sound is ignored by this engine.";
@@ -604,7 +614,7 @@ Click **Assistant** in the project bar, choose **Window › PotionUI assistant**
 
 With each message, the page sends the assistant a summary of your project:
 
-- the project: its name, its saved version and its prompt language;
+- the project: its name, its saved version and the prompt language, English;
 - where you are: the workspace, the playhead (and the shot under it), your selection and the range;
 - the synopsis and the global direction: the five fields and the H3 profile;
 - the bible: the visual tag and the words of each card;
@@ -695,7 +705,7 @@ If you had already typed something in the box of the chat, your text stays and t
 - Each change of the assistant is a new version of your project: **File › Version history…** shows it with the word "Assistant". On the page, **Edit › Undo** (Ctrl+Z) takes it back like your own changes, one tool call at a time.
 - If you edit the project while the assistant works, both changes are kept. When you and the assistant changed the same thing (the same name, the same length), your version wins, and the message says so: "Project updated by the assistant; 1 of your edits was kept over its change".
 - A generation, a label in the takes and an export are not in the project: Ctrl+Z does not cancel them. Cancel a take in the queue, and delete an export in the export window.
-- The assistant writes shot prompts in the prompt language of the project (chapter 15) and answers you in your language. It never translates what you wrote. The contradiction checks only read texts in the prompt language.
+- The assistant writes shot prompts in English (chapter 15) and answers you in your language. It never translates what you wrote. The contradiction checks only read texts in English.
 - The list **To check** and the proposal appear once, when the answer arrives. They disappear when you leave the page or open another project, and reopening an old conversation does not bring them back: ask again.
 
 ### If it does not work
@@ -713,7 +723,7 @@ The chat itself is a PotionUI window: its buttons (**Tools**, **New chat**, **Ap
 - **You approved and the chat says "The assistant changed another project, not the one open here."** The answer was for another project than the one you have open now. Open that one, or ask again here.
 - **"The project could not be reloaded. Reopen it to see the assistant’s changes."** The assistant's change is saved, but the page could not reload it: open the project again (**File › Open…**).
 - **The suggestion did not appear in the box.** You had already typed a draft, or your PotionUI cannot fill the box (it then opens it empty). Type or paste the request.
-- **A prompt came out in the wrong language.** The assistant follows the **Prompt language** of the project, in **Project properties…** (chapter 15). Change it, then ask again.
+- **A prompt came out in the wrong language.** Prompts are written in English (chapter 15). Ask again, saying that the prompt must be in English.
 - **The assistant ends with an out-of-memory error, answers in text only or never shows a card.** If your admin connected the model built into PotionUI on a 12 GB graphics card, it can run out of memory or be too small to call the tools. Ask your admin to connect llama.cpp `llama-server`, Ollama or an online provider (chapter 1).
 - **The chat shows "Ollama returned status 400: request (… tokens) exceeds the available context size".** The model is connected through Ollama with its default context, which is too small for the assistant. Ask your admin to set the **Context Size** of the Ollama configuration to 16384.
 - **The assistant waits about ten seconds before every answer, or sometimes ends without a card.** The model thinks before each call, or is loaded again at every turn. Ask your admin to turn its thinking off (**Reasoning Effort** None for an OpenAI configuration, **Thinking Mode** Automatic or Disabled for Ollama) and, for Ollama, to set **Keep Alive**.
@@ -746,7 +756,7 @@ An alert appears only when two neighbor shots do not match: "“Shot” is brigh
 
 **What the viewer shows.** Adjusting the color of a shot (a preset, a fine setting, **Reset**, **To all shots**, **Match**, **Auto match**, its **Strength** or **Remove**) brings that shot to the viewer, in every workspace: it becomes the selected shot, the playhead moves to its start when it was elsewhere, and a preview, a comparison or a seam that does not show it closes. The seam of the band shows both its shots: adjusting either keeps it open, without changing the chosen shot or the playhead. In the **Review**, the viewer opens if it was closed. Opening the preview of a take (Review, **Takes** tab, stack of the band) chooses its shot: that is the shot the Inspector shows and the one you adjust. The viewer shows the grade of a shot on the images of that shot: the cut under the playhead, the preview of the take placed on the shot (the one it plays), each placed take of a comparison, and both sides of a seam in the band, each with the grade of its own shot. A take that is not placed and a source media stay raw; a graded take says so next to its name ("shot grade"). With an **Auto match**, the preview of a placed take plays in a loop, without the browser's controls. The Storyboard grid and the Direction, Bible and References views of Director AI have no viewer: the playhead is already on the shot when you go to the band or to **Play**.
 
-The measure is made on real images, for each shot that has one. The starter project has none yet, and the Storyboard then says "No match to check yet: the shots have no image." A resemblance percentage between two generated shots can also appear in the alerts ("Look to check between … and … (resemblance 56 %)"): it is measured by SigLIP on the images at the seam (see The look of the takes below).
+The measure is made on real images, for each shot that has one. The starter project has none until its shots are generated, and the Storyboard then says "No match to check yet: the shots have no image." A resemblance percentage between two generated shots can also appear in the alerts ("Look to check between … and … (resemblance 56 %)"): it is measured by SigLIP on the images at the seam (see The look of the takes below).
 
 ### The look of the takes
 
@@ -898,10 +908,10 @@ Pick a format and a resolution, then click **Export**.
 - **Format.** **Web · H.264 MP4** has the aspect ratio of your project. **Social media · H.264** is 9:16, 4:5 or 1:1, as chosen with the three pills that show under the format: the shots fill the frame and are cropped around their center. **Master file · ProRes 422 HQ** is a MOV for editing and grading software: ProRes 422 HQ in 10 bits with 24-bit PCM sound. **Archive · H.265 10-bit** is a compact MP4 of high quality to keep: H.265 in 10 bits with AAC sound. The master and the archive have the aspect ratio of your project; they stay in the export folder and are not copied to your library (the window says "The master file and the archive stay in the export folder: download them from here.").
 - **Resolution.** 720p, 1080p, 1440p or 4K; the window starts on the resolution of your project. The picture fits in the 16:9 frame of the resolution, lying for a landscape format and standing for a portrait one. For a 16:9 project a web video is 1280×720, 1920×1080, 2560×1440 or 3840×2160; a 2.39:1 one at 1080p is 1920×804, a 4:3 one 1440×1080; a social video in 9:16 is 1080×1920 at 1080p, in 4:5 1080×1350.
 - **Whole sequence.** Every export renders the whole sequence; when you have drawn a range the window says "Exports render the whole sequence."
-- **Audio stems by role (Dialogue, Music, Ambience, SFX) and the shots’ sound.** With this switch on, the export also writes five WAV files, 24-bit stereo at 48 kHz and as long as the video: one per role (the tracks of that role with their reverb and their delay) and one for the sound of the shots. Each is under the master fader and at the level the **Level** gave the mix, so that played together they make the sound of the video. You download a ZIP that holds the video and its five stems, named after the video (`Dawn_at_the_harbour_1080p_dialogue.wav`, and so on). A role you did not use gives a silent stem.
+- **Audio stems by role (Dialogue, Music, Ambience, SFX) and the shots’ sound.** With this switch on, the export also writes five WAV files, 24-bit stereo at 48 kHz and as long as the video: one per role (the tracks of that role with their reverb and their delay) and one for the sound of the shots. Each is under the master fader and at the level the **Level** gave the mix, so that played together they make the sound of the video. You download a ZIP that holds the video and its five stems, named after the video (`Lumis_potion_1080p_dialogue.wav`, and so on). A role you did not use gives a silent stem.
 - **Sound.** **Level**: **As mixed** (the default), **Web and social · −14 LUFS** or **Broadcast EBU R128 · −23 LUFS**. The server first measures the mix (`loudnorm`, first pass), then applies one gain to the whole mix (second pass, linear mode): the dynamics do not change, and the gain stops before true peaks pass −1 dBTP, even if that leaves the mix a little under the target. **Crossfade between neighbouring clips**: **None**, 0.25 s, 0.5 s or 1 s. Two clips of one track that touch (within half a frame) fade into each other (`acrossfade`, equal power), centered on the cut and taken from the media past each side, without moving the second. Both settings are saved with the project. The window also says how many shots have a color match baked into a LUT, and which ones changed take since.
 
-Under the choices the window shows the name of the file (the project name with spaces turned into underscores, then the resolution, for example `Dawn_at_the_harbour_1080p.mp4`, `Dawn_at_the_harbour_1080p.mov` for the master, `Dawn_at_the_harbour_1080p_archive.mp4` for the archive, and `Dawn_at_the_harbour_1080p_master_stems.zip` for a master with its stems, the format in the name), its size, format and frame rate ("1920×804 · 2.39:1 · 25 fps"), "5 WAV stems in a ZIP with the video" when the stems are on, and the note "Rendered on the server with ffmpeg". A social video in 4:5 or 1:1 carries its ratio in the name (`Dawn_at_the_harbour_1080p_4x5.mp4`). When the largest placed take is smaller than the picture, a grey note says so ("The takes are 1280×720 at most: the export in 1920×804 enlarges them."); it blocks nothing. When placed takes are slower than the film, a line says so ("3 shots at 16 fps will stutter in this 25 fps film.") with **Conform**; a conformed take is read at the frame rate of the film (chapter 9, The frame rate of the takes).
+Under the choices the window shows the name of the file (the project name in plain letters with spaces turned into underscores, then the resolution, for example `Lumis_potion_1080p.mp4`, `Lumis_potion_1080p.mov` for the master, `Lumis_potion_1080p_archive.mp4` for the archive, and `Lumis_potion_1080p_master_stems.zip` for a master with its stems, the format in the name), its size, format and frame rate ("1920×804 · 2.39:1 · 25 fps"), "5 WAV stems in a ZIP with the video" when the stems are on, and the note "Rendered on the server with ffmpeg". A social video in 4:5 or 1:1 carries its ratio in the name (`Lumis_potion_1080p_4x5.mp4`). When the largest placed take is smaller than the picture, a grey note says so ("The takes are 1280×720 at most: the export in 1920×804 enlarges them."); it blocks nothing. When placed takes are slower than the film, a line says so ("3 shots at 16 fps will stutter in this 25 fps film.") with **Conform**; a conformed take is read at the frame rate of the film (chapter 9, The frame rate of the takes).
 
 What the video holds:
 
@@ -926,7 +936,7 @@ The export runs on the server, in the background. The window shows a card with t
 - **Cancel** stops a queued or running export ("The export was cancelled."), at any step.
 - You can close the window or leave the page: the export goes on. With the window closed the page keeps following it and shows a toast with **Download** when it is ready. PotionUI sends the notification "Video Producer: export ready" (or "Video Producer: export failed"), and when you open **Export and share** again the card is back.
 - A project has one export at a time ("An export of this project is already running.").
-- When it is ready the card says "Dawn_at_the_harbour_1080p.mp4 is ready" with its size, and offers **Download** and, when your PotionUI can show it, **Show in the library**, which opens your library on the videos. A web or social MP4 is also in your library like any video, so you can import it into a project (chapter 6); **Show in the library** is not offered for a master or an archive, which you download.
+- When it is ready the card says "Lumis_potion_1080p.mp4 is ready" with its size, and offers **Download** and, when your PotionUI can show it, **Show in the library**, which opens your library on the videos. A web or social MP4 is also in your library like any video, so you can import it into a project (chapter 6); **Show in the library** is not offered for a master or an archive, which you download.
 - A failed export says what failed ("ffmpeg could not assemble the video.", "The video could not be converted." or "The export could not be saved.") and, under it, the technical message of the server (chapter 17).
 
 ### Previous exports
@@ -937,7 +947,7 @@ The exported files are kept in your PotionUI storage, in a `video_producer/expor
 
 ### To other software
 
-Three files, built by the server from your saved project: **FCPXML** (`.fcpxml`), **OpenTimelineIO** (`.otio`) and **EDL CMX 3600** (`.edl`). Click a card, read its note and the beginning of the file, then click **Download** followed by the file name, which comes from the project name (for example "Download Dawn_at_the_harbour.fcpxml"). The page says "<file> downloaded".
+Three files, built by the server from your saved project: **FCPXML** (`.fcpxml`), **OpenTimelineIO** (`.otio`) and **EDL CMX 3600** (`.edl`). Click a card, read its note and the beginning of the file, then click **Download** followed by the file name, which comes from the project name (for example "Download Lumis_potion.fcpxml"). The page says "<file> downloaded".
 
 - **FCPXML.** "V1 sequence with the chosen takes, shot names and in points." One video row, with a shot without media as a gap. No audio.
 - **OpenTimelineIO.** "Video and audio tracks by role; opens in Resolve, Premiere (plugin) and Nuke Studio." The same video row, and one audio track per track of the console, named **A1**, **A2**… as on the timeline, with the position, role and gain of each clip. The audio clips carry no file.
@@ -957,25 +967,21 @@ An SRT file built from the titles of the timeline (the title, then its subtitle 
 
 The language of the interface is a setting of each user. Choose it in **Video Producer › Preferences…**, setting **Language** (a two-way switch), or click the language reminder at the left of the status bar, which opens the same window. The change is immediate and is saved for you alone, on the server; if the saving fails, a message says that the language changed for this session only. Until you choose, the page follows the language of your browser, and uses English when your browser's language is not one the page offers.
 
-The **Preferences** window has five other settings: **Prompt language** (see below), **Preview quality** (**Best performance**, **Balanced** or **Best quality**, without effect), **Snapping by default**, **Framing guides** and **Single-key shortcuts** (chapter 16). Except **Prompt language**, which is saved with the project, they apply to the current session and are not saved.
+The **Preferences** window has four other settings: **Preview quality** (**Best performance**, **Balanced** or **Best quality**, without effect), **Snapping by default**, **Framing guides** and **Single-key shortcuts** (chapter 16). They apply to the current session and are not saved.
 
 What is translated: the menus, the windows, the buttons, the tooltips, the messages, the names given to new items (for example a new shot or a new track), the prompt library with its templates, categories and composer choices, and the way numbers and durations are written. What is never translated is the content of your project: your own texts (the synopsis, the global direction, the shot prompts, the names and titles you typed, the project name) and the starter project, which is created once and is not translated afterwards. Product terms such as Director AI, Storyboard, Edit Engine, Control video or FL2VA are the same whatever the language.
 
 ### Prompt language
 
-Each project has its own **Prompt language**, chosen with a two-way switch. It is the language of the texts that are sent to the models, the global direction and the shot prompts, and it does not depend on the language of the interface. It is English by default.
+Every prompt is in English. The texts sent to the models (the global direction, the cards, the shot prompts) and everything the page or the assistant writes for you are in English, whatever the language of the interface. There is no setting for it.
 
-Change it in **Project properties…** (the setting says "Language of the direction and prompts sent to the models. Changing it does not rewrite existing text.") or in **Preferences…** (the setting says "Applies to the current project"). It is saved with the project. A new project always starts in English, whatever the language of the interface or of the project that is open.
+- **The starter project.** Its global direction, its cards, the names of its references and its shot prompts are in English. Its name, synopsis, shot names, title and marker follow the language of the interface.
+- **The prompt library.** The text that the built-in templates insert, their placeholders (the subject, the place and so on) and the default values of those placeholders are in English. The names, descriptions and categories of the templates follow the language of the interface.
+- **The composer.** The **Final prompt** is composed in English. The choices you click keep the language of the interface.
+- **The direction checks.** The checks that read your texts use English rules: the contradictions between the global direction and a shot prompt (for example a direction that excludes neon and a prompt that asks for it). A text written in another language is not checked.
+- **The assistant.** It writes every shot prompt, rewrite and proposed shot in English, and answers you in your own language.
 
-What it changes:
-
-- **The starter project.** Its global direction and its shot prompts are written in the prompt language, English by default, even when the interface is in another language. Its name, synopsis, shot names, title and marker follow the language of the interface.
-- **The prompt library.** The text that the built-in templates insert, their placeholders (the subject, the place and so on) and the default values of those placeholders are written in the prompt language. The names, descriptions and categories of the templates follow the language of the interface.
-- **The composer.** The **Final prompt** is composed in the prompt language. The choices you click keep the language of the interface.
-- **The direction checks.** The checks that read your texts use the rules of the prompt language: the contradictions between the global direction and a shot prompt (for example a direction that excludes neon and a prompt that asks for it). A text written in another language is not checked.
-- **The assistant.** It writes every shot prompt, rewrite and proposed shot in the prompt language of the project, and answers you in your own language. The contradiction checks it runs use the rules of that language.
-
-What it never changes: nothing you typed is translated, and changing the setting rewrites no existing text. Set the language before you write, or rewrite the texts yourself.
+Nothing you typed is translated: a prompt you write in another language is sent as you wrote it. A project made with an earlier version, whose prompt language was set to French, opens as it is, with its texts; what the page writes for it from then on is in English.
 
 
 ## 16. Keyboard shortcuts
@@ -1113,7 +1119,7 @@ Every button has an accessible name, and an icon button shows its tooltip when i
 | playhead | The current position on the timeline. |
 | range | A part of the timeline between an in point and an out point. |
 | global direction | The text that guides every generation. |
-| prompt language | The language of the global direction and of the shot prompts of a project (chapter 15). |
+| prompt language | The language of the texts sent to the models: always English (chapter 15). |
 | version | A saved state of the project; **Version history…** lists them and restores one. |
 | shot prompt | The text for one shot; it completes the global direction. |
 | motion guide | A video of the **Motion guides** family of references: with the Ref2VA profile, MiniMax-H3 carries its motion over to the shot (chapter 8). |

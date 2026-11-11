@@ -187,7 +187,7 @@ def test_ref2va_makes_one_subject_of_the_pictures_of_one_card_defined_kept_and_c
     assert [item["data"] for item in warnings if item["code"] == "reference_unlinked"] == [{"shot_id": "s1", "references": ["r-loose"], "names": ["Stranger"]}]
 
 
-def test_ref2va_lists_three_pictures_of_a_card_in_the_prompt_language(core, make_doc):
+def test_ref2va_lists_three_pictures_of_a_card_in_english_in_a_project_once_set_to_french(core, make_doc):
     core.use_h3()
     woman = {**WOMAN, "label": "la femme rousse", "references": ["r1", "r2", "r3"]}
     references = [{"id": f"r{n}", "assetId": f"p{n}", "space": "identite", "type": "Personnage", "scope": {"type": "global"}} for n in (1, 2, 3)]
@@ -205,7 +205,7 @@ def test_ref2va_lists_three_pictures_of_a_card_in_the_prompt_language(core, make
     plan, _ = _plan(core, doc, presets.MINIMAX_H3)
     sections = _sections(plan.prompt_text)
 
-    assert sections["subject_definitions"].startswith("<Subject 1> est le personnage montré par <Picture 1>, <Picture 2> et <Picture 3>, la femme rousse : ")
+    assert sections["subject_definitions"].startswith("<Subject 1> is the character shown in <Picture 1>, <Picture 2> and <Picture 3>, la femme rousse: ")
     assert sections["detailed_description"].startswith("[Shot 1] La femme rousse (<Subject 1>) longe le quai, puis la femme rousse s'arrête.")
 
 
@@ -263,7 +263,7 @@ def test_a_cloud_model_reads_the_same_simple_format_as_wan(core, make_doc):
     assert plan.request["form_data"]["video_director"]["segments"][0]["prompt"] == plan.prompt_text
 
 
-def test_the_cast_reads_in_french_with_french_typography(core, make_doc):
+def test_the_cast_of_a_project_once_set_to_french_keeps_its_french_words_in_english_lines(core, make_doc):
     core.use_wan()
     woman = {**WOMAN, "label": "la femme rousse", "text": "Une trentaine d'années, cheveux cuivrés courts, ciré marine.", "props": "une lanterne en laiton"}
     harbour = {**HARBOUR, "label": "le port à l'aube", "text": "Pavés mouillés, bateaux amarrés, brume basse."}
@@ -272,20 +272,20 @@ def test_the_cast_reads_in_french_with_french_typography(core, make_doc):
     plan, warnings = _plan(core, doc, presets.WAN)
 
     assert plan.prompt_text == (
-        "La femme rousse : Une trentaine d'années, cheveux cuivrés courts, ciré marine. Accessoires : une lanterne en laiton.\n"
-        "Lieu — le port à l'aube : Pavés mouillés, bateaux amarrés, brume basse.\n"
+        "La femme rousse: Une trentaine d'années, cheveux cuivrés courts, ciré marine. Props: une lanterne en laiton.\n"
+        "Setting — le port à l'aube: Pavés mouillés, bateaux amarrés, brume basse.\n"
         "La femme rousse longe le quai."
     )
     assert _composer(warnings) == []
 
 
-def test_the_h3_definitions_follow_the_prompt_language(core, make_doc):
+def test_the_h3_definitions_are_english_in_a_project_once_set_to_french(core, make_doc):
     core.use_h3()
     doc = _doc(make_doc, cast={"place": "p-harbour"}, places=({**HARBOUR, "label": "le port", "text": "Brume basse."},), prompt="Le quai.", language="fr")
 
     plan, _ = _plan(core, doc, presets.MINIMAX_H3)
 
-    assert plan.prompt_text == "subject_definitions: <Subject 1> est le décor, le port : Brume basse.\n\nLe quai."
+    assert plan.prompt_text == "subject_definitions: <Subject 1> is the setting, le port: Brume basse.\n\nLe quai."
 
 
 def test_the_cast_is_repeated_word_for_word_in_every_shot(core, make_doc):

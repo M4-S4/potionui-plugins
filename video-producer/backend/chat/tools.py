@@ -251,7 +251,7 @@ def _issue(kind: str, text: str, fix: str, **extra: Any) -> Dict[str, Any]:
 
 def _shot_issues(doc: Mapping[str, Any], clip: Mapping[str, Any], label: str, text: str, fl2va: bool) -> List[Dict[str, Any]]:
     shot_id = clip.get("id")
-    language = rules.language_of(doc.get("promptLanguage"))
+    language = rules.DEFAULT_LANGUAGE
     issues: List[Dict[str, Any]] = []
     if not text.strip():
         issues.append(_issue("no_instruction", f"“{label}” has no instruction.", "Write an instruction for the shot.", shot_id=shot_id))
@@ -302,7 +302,7 @@ def _shot_issues(doc: Mapping[str, Any], clip: Mapping[str, Any], label: str, te
 def check_continuity(doc: Mapping[str, Any], page: Mapping[str, Any]) -> List[Dict[str, Any]]:
     """The seams to check, in timeline order: the server's checks merged with the seams the page measured."""
     clips = _dicts(doc.get("clips"))
-    language = rules.language_of(doc.get("promptLanguage"))
+    language = rules.DEFAULT_LANGUAGE
     fl2va = profile_of(doc) == FL2VA
     labels = {clip.get("id"): shot_label(doc, clip) for clip in clips}
     for index, shot in enumerate(_dicts(page.get("shots")), 1):

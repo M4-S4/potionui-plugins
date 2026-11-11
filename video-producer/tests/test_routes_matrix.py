@@ -265,6 +265,10 @@ ROUTES = {
         denied=lambda w: Call("/media/resolve", {"origin": {"kind": "library", "itemId": "item-1"}}, 404, "media_not_found", "user-2"),
         invalid=lambda w: Call("/media/resolve", {"origin": "library"}, 422, "invalid_request"),
     ),
+    "POST /starter/images": Route(
+        success=lambda w: Call("/starter/images", check=lambda r: list(_data(r)["images"]) == ["lumi", "bottle", "bottle-gold"]),
+        denied=lambda w: Call("/starter/images", status=401, who=ANONYMOUS),
+    ),
     "POST /media/uploaded": Route(
         success=lambda w: Call("/media/uploaded", {"id": "item-user-1"}, check=lambda r: _data(r)["media"]["origin"] == {"kind": "library", "itemId": "item-user-1"}),
         denied=lambda w: Call("/media/uploaded", {"id": "item-user-1"}, 404, "media_not_found", "user-2"),

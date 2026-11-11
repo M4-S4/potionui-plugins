@@ -5,6 +5,7 @@ import { normalizeSeamMedia, requestBody } from './seam.js';
 import { normalizeChain, normalizeFrameSource } from './chain.js';
 import { normalizeLooks } from './looks.js';
 import { normalizeKeyframeEstimate, normalizeKeyframePreset } from './keyframes.js';
+import { STARTER_IMAGES } from './starter.js';
 import { isObject } from './values.js';
 
 const CODE_BY_STATUS = {
@@ -663,6 +664,12 @@ export function normalizeOrigin(value) {
 
 const MEDIA_TYPES = ['image', 'video', 'audio'];
 
+export function normalizeStarterImages(value) {
+	if (!isObject(value)) return null;
+	const images = STARTER_IMAGES.map((name) => normalizeSeamMedia(value[name]));
+	return images.every(Boolean) ? Object.fromEntries(STARTER_IMAGES.map((name, i) => [name, images[i]])) : null;
+}
+
 export function normalizeMedia(value) {
 	if (!isObject(value) || !MEDIA_TYPES.includes(value.media_type) || !text(value.url)) return null;
 	return {
@@ -881,6 +888,9 @@ export function createClient(api, save) {
 		},
 		uploadMedia(form, options) {
 			return coreUpload(api, '/api/media/upload', form, options);
+		},
+		async starterImages() {
+			return mapped(await call(api, 'post', '/starter/images'), (data) => normalizeStarterImages(data.images));
 		},
 		async uploadedMedia(itemId) {
 			return mapped(await call(api, 'post', '/media/uploaded', { id: itemId }), (data) => normalizeMedia(data.media));
