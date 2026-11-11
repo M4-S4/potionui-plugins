@@ -9,7 +9,7 @@ it up without a restart. Admins only.
 earlier one, `02cce6fdd`, not yet on the marketplace.** The plugin targets the core of
 `core.ref` at the root of this repository, `e7d9fd094` (upstream PotionUI `master`, after
 release 0.1.0), and its
-catalogue entry requires it. Its
+catalogue entry requires PotionUI 0.1.0 or later. Its
 pytest suite, its core-side tests (`core-tests/preset-editor/`) and its Node tests run in the
 CI against that core. Version 0.1.0 was written for PotionUI `master` at `6903cc19` (0.0.15).
 

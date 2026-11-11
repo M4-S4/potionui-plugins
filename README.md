@@ -7,7 +7,7 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 | Plugin | Folder | Version | State |
 |---|---|---|---|
 | Video Producer | `video-producer/` | 0.2.0 | Maintained and tested by the CI against the pinned core. Its working copy is still the M4-S4/PotionUI fork: see [Following the fork](#following-the-fork). |
-| Preset Editor | `preset-editor/` | 0.2.3 | Brought up to the pinned core in November 2026 (its catalogue entry requires `core.ref`), tested by the CI like Video Producer and checked on screen on a running instance of that core. Not released yet: see [its README](preset-editor/README.md#what-is-left-to-do). |
+| Preset Editor | `preset-editor/` | 0.2.3 | Brought up to the pinned core in November 2026 (its catalogue entry requires PotionUI 0.1.0 or later), tested by the CI like Video Producer and checked on screen on a running instance of that core. Not released yet: see [its README](preset-editor/README.md#what-is-left-to-do). |
 
 `archive/` holds the older copies of `model-browser` and `deepseek-provider`, with their core-side tests and the design variants of Model Browser. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. Nothing in `archive/` is in the catalogue, the CI or the scripts' scope.
 
@@ -29,7 +29,7 @@ Every text file is stored with LF line endings (`.gitattributes`), whatever `cor
 
 ## The pinned core
 
-`core.ref` holds the PotionUI commit that the CI and the releases check out. Every core change that Video Producer needs is now merged upstream, so it is a commit of the `master` branch of PotionUI/PotionUI, after release 0.1.0. The CI checks it out from the M4-S4/PotionUI fork, whose `main` branch is that same commit; it becomes a tag of PotionUI/PotionUI once a release of the core holds it. Each catalogue entry states the core it needs in `requires.core`.
+`core.ref` holds the PotionUI commit that the CI and the releases check out. Every core change that Video Producer needs is now merged upstream, so it is a commit of the `master` branch of PotionUI/PotionUI, after release 0.1.0. The CI checks it out from the M4-S4/PotionUI fork, whose `main` branch is that same commit; it becomes a tag of PotionUI/PotionUI once a release of the core holds it. Each catalogue entry states the PotionUI version it needs in `requires.core` (see [Catalogue](#catalogue)).
 
 ## Day-to-day work
 
@@ -79,7 +79,7 @@ The dist of a plugin carries no Tailwind CSS. The classes a plugin uses are comp
 | `id`, `name`, `description`, `license` | As in the plugin's `manifest.yml`. |
 | `version` | The `version` of `manifest.yml`. |
 | `source` | `{"repository": "M4-S4/potionui-plugins", "path": "<id>"}`. |
-| `requires` | `{"core": "<core ref>", "plugin_api": null}`. |
+| `requires` | `{"core": "<version or range>", "plugin_api": null}`. `core` is a PotionUI version or a PEP 440 version range, which the core compares with its own version when it reads the catalogue: a bare version means that version or later (`0.1.0` reads as `>=0.1.0`), and a core that does not match, or a value that is not a version, lists the plugin as incompatible. Every core that installs from a catalogue reports 0.1.0 until the next release of PotionUI. |
 | `release` | `{"archive": "<URL of the zip>", "sha256": "<hex>"}`, or both `null` while the version has no release. |
 
 `python scripts/catalogue.py --check` checks the schema, that each plugin folder exists, and that each version, id and license equals its manifest's; the CI runs it. When the version of a manifest changes, change the entry's `version` too and set its `release` back to `null` until the new release exists.
