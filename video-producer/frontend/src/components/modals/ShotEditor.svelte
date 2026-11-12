@@ -1,5 +1,5 @@
 <script>
-	import { tick } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, asset, clipLabel, promptIssues, relayout, secs, toast } from '../../lib/state.svelte.js';
@@ -20,6 +20,9 @@
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
 	import { laneTitle } from '../../lib/tracks.js';
 	import { ulid } from '../../lib/ulid.js';
+	import { project } from '../../lib/project.svelte.js';
+	import { parkWriter, writerFor } from '../../lib/promptwriter.svelte.js';
+	import { CARD_WORDS, cardWordsOf, shotCardWordsView } from '../../lib/cardwords.js';
 	import Modal from './Modal.svelte';
 	import Icon from '../Icon.svelte';
 	import DraftsField from '../shots/DraftsField.svelte';
@@ -31,6 +34,8 @@
 	import ComposedPrompt from '../shots/ComposedPrompt.svelte';
 	import ReferencePrompt from '../shots/ReferencePrompt.svelte';
 	import KeyframeCandidates from '../shots/KeyframeCandidates.svelte';
+	import WritePromptButton from '../shots/WritePromptButton.svelte';
+	import WritePromptPanel from '../shots/WritePromptPanel.svelte';
 	import RefTags from '../references/RefTags.svelte';
 
 	let { id, draft: kept = null, baseline: keptBaseline = null, focus = null } = $props();
@@ -205,8 +210,53 @@
 		ui.modal = null;
 	}
 
+	let parking = false;
+
 	function openLibrary() {
+		parking = true;
+		parkWriter(id, writer);
 		ui.modal = { type: 'library', target: { kind: 'shot', id, returnTo: { type: 'shot', id, draft: $state.snapshot(draft), baseline } } };
+	}
+
+	const writer = writerFor(id, Boolean(kept));
+	const writingEngine = $derived(currentEngine());
+	const keyFrames = $derived([draft.first, draft.last].filter(Boolean).length);
+	writer.check();
+	onDestroy(() => {
+		if (!parking) writer.cancel();
+	});
+
+	function writePrompt() {
+		writer.write({ projectId: project.id, shotId: id, option: writingEngine, doc: source });
+	}
+
+	function acceptWritten() {
+		const text = writer.accept(draft.text);
+		if (text !== null) draft.text = text;
+		tick().then(() => textEl?.focus());
+	}
+
+	function undoWritten() {
+		const before = writer.undo(draft.text);
+		if (before !== null) draft.text = before;
+		tick().then(() => textEl?.focus());
+	}
+
+	const cardWordLabel = (value) => (value === 'picture' ? t('project.cardWords.picture') : value === 'label' ? t('project.cardWords.label') : t('project.cardWords.card'));
+	const shotCardWords = $derived(draft.cardWords ?? null);
+	const cardWordsView = $derived(shotCardWordsView(composed, shotCardWords));
+	const cardWordsUsed = $derived(cardWordsView.used);
+	const showCardWords = $derived(cardWordsView.show);
+	const cardWordsHelp = $derived.by(() => {
+		if (cardWordsView.replaced) return t('modals.shot.cardWords.replaced');
+		if (!cardWordsUsed) return t('modals.shot.cardWords.unused');
+		if (cardWordsUsed === 'picture') return t('project.cardWords.pictureHelp');
+		if (cardWordsUsed === 'label') return t('project.cardWords.labelHelp');
+		return t('project.cardWords.cardHelp');
+	});
+
+	function setShotCardWords(value) {
+		draft.cardWords = CARD_WORDS.includes(value) ? value : null;
 	}
 </script>
 
@@ -222,10 +272,14 @@
 				<section class="space-y-1.5">
 					<div class="flex items-center justify-between">
 						<label for={textId} class="vp-label">{t('modals.prompt.instruction')}</label>
-						<button type="button" class="flex min-h-6 items-center gap-1 text-xs text-fg-muted hover:text-fg" onclick={openLibrary}><Icon name="wand" class="h-3.5 w-3.5" />{t('modals.prompt.library')}</button>
+						<span class="flex items-center gap-3">
+							<WritePromptButton {writer} engine={Boolean(writingEngine)} saved={Boolean(project.id)} />
+							<button type="button" class="flex min-h-6 items-center gap-1 text-xs text-fg-muted hover:text-fg" onclick={openLibrary}><Icon name="wand" class="h-3.5 w-3.5" />{t('modals.prompt.library')}</button>
+						</span>
 					</div>
 					<!-- svelte-ignore a11y_autofocus -->
 					<textarea id={textId} class="input w-full text-md" rows="5" bind:this={textEl} bind:value={draft.text} onblur={(e) => (caret = e.currentTarget.selectionStart)} autofocus={focus !== 'keyframes' && focus !== 'reanchor'} placeholder={t('modals.prompt.placeholder')}></textarea>
+					<WritePromptPanel {writer} text={draft.text} frames={keyFrames} onwrite={writePrompt} onaccept={acceptWritten} onundo={undoWritten} />
 					{#each issues as issue, i (i)}
 						{#if issue.level === 'conflict'}
 							<HostUi name="Alert" props={{ variant: 'warning', class: '[&>div]:text-fg', density: 'compact', icon: true }}>{issue.text}</HostUi>
@@ -246,6 +300,18 @@
 				<section class="space-y-1.5" aria-labelledby="{textId}-reference">
 					<span id="{textId}-reference" class="vp-section-title">{t('modals.shot.reference.title')}</span>
 					<ReferencePrompt reference={composed?.reference ?? null} value={draft.referencePrompt ?? null} onchange={(value) => (draft.referencePrompt = value)} />
+					{#if showCardWords}
+						<div class="space-y-1" data-shot-card-words={shotCardWords ?? 'project'}>
+							<label class="flex items-center justify-between gap-3">
+								<span class="vp-label">{t('project.cardWords.title')}</span>
+								<select class="vp-popup shrink-0" value={shotCardWords ?? ''} disabled={cardWordsView.disabled} data-card-words-replaced={cardWordsView.replaced ? '' : undefined} onchange={(e) => setShotCardWords(e.currentTarget.value)}>
+									<option value="">{t('modals.shot.asProject', { value: cardWordLabel(cardWordsOf(doc)) })}</option>
+									{#each CARD_WORDS as value (value)}<option {value}>{cardWordLabel(value)}</option>{/each}
+								</select>
+							</label>
+							<p class="text-xs text-fg-subtle">{cardWordsHelp}</p>
+						</div>
+					{/if}
 					<ComposedPrompt {source} shotId={id} bind:current={composed} />
 				</section>
 

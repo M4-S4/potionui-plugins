@@ -185,10 +185,11 @@ test('bible: the prompts route answer is normalized', () => {
 				engine: 'ltx',
 				prompt: 'Hello.',
 				reference: null,
+				cardWords: null,
 				videoTracks: [{ slot: 2, trackId: 't2', label: '<Video 1>' }],
 				warnings: [{ code: 'prompt_too_long', message: 'm', data: { tokens: 600 } }]
 			},
-			{ shotId: 's2', presetId: null, profile: null, engine: 'other', prompt: '', reference: null, videoTracks: [], warnings: [] }
+			{ shotId: 's2', presetId: null, profile: null, engine: 'other', prompt: '', reference: null, cardWords: null, videoTracks: [], warnings: [] }
 		],
 		blocks: [{ code: 'no_preset', message: 'm', data: null }]
 	});

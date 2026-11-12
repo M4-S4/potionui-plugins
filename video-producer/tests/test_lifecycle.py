@@ -67,6 +67,101 @@ def test_on_boot_logs_and_swallows_a_table_error(monkeypatch, caplog):
     assert "Tables ready" not in caplog.text
 
 
+def _aged(folder, seconds):
+    import os
+    import time
+
+    moment = time.time() - seconds
+    for path in [folder, *folder.rglob("*")]:
+        os.utime(path, (moment, moment))
+
+
+def test_on_boot_clears_the_work_folders_left_by_the_prompt_writer_and_nothing_else(plugin_db, export_storage, caplog):
+    from backend import prompt_writer
+
+    left = export_storage / "video_producer" / "writer" / "user-1" / "0123abcd"
+    left.mkdir(parents=True)
+    (left / "frame-1.jpg").write_bytes(b"jpeg")
+    _aged(left, prompt_writer.STALE_S + 60)
+    gone_user = export_storage / "video_producer" / "writer" / "user-2" / "4567cdef"
+    gone_user.mkdir(parents=True)
+    _aged(gone_user, prompt_writer.STALE_S + 60)
+    kept = export_storage / "video_producer" / "exports" / "user-1" / "cut.mp4"
+    kept.parent.mkdir(parents=True)
+    kept.write_bytes(b"mp4")
+
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        context = _context("plugin.lifecycle.boot")
+        assert lifecycle_hooks.on_boot(context) is context
+
+    assert not left.exists()
+    assert not gone_user.parent.exists()
+    assert kept.read_bytes() == b"mp4"
+    assert _table_names(plugin_db) == set(tables.TABLE_NAMES)
+    assert "2 work folder(s) of the prompt writer cleared" in caplog.text
+
+
+def test_on_boot_keeps_the_work_folder_of_a_writing_that_may_still_run_in_another_process(plugin_db, export_storage, caplog):
+    from backend import prompt_writer
+
+    running = export_storage / "video_producer" / "writer" / "user-1" / "89abef01"
+    running.mkdir(parents=True)
+    (running / "frame-1.jpg").write_bytes(b"jpeg")
+    _aged(running, prompt_writer.STALE_S - 60)
+
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        lifecycle_hooks.on_boot(_context("plugin.lifecycle.boot"))
+
+    assert (running / "frame-1.jpg").read_bytes() == b"jpeg"
+    assert "of the prompt writer cleared" not in caplog.text
+
+
+@pytest.mark.parametrize("level", ["owner", "folder"])
+def test_on_boot_never_follows_a_link_in_the_work_area_of_the_prompt_writer(plugin_db, export_storage, tmp_path, caplog, level):
+    from backend import prompt_writer
+
+    elsewhere = tmp_path / "elsewhere"
+    old = elsewhere / "0123abcd"
+    old.mkdir(parents=True)
+    (old / "keep.txt").write_bytes(b"keep")
+    _aged(old, prompt_writer.STALE_S + 60)
+    _aged(elsewhere, prompt_writer.STALE_S + 60)
+    area = export_storage / "video_producer" / "writer"
+    link = area / "user-1" if level == "owner" else area / "user-1" / "0123abcd"
+    link.parent.mkdir(parents=True)
+    try:
+        link.symlink_to(elsewhere if level == "owner" else old, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symbolic links cannot be made here: {exc}")
+
+    lifecycle_hooks.on_boot(_context("plugin.lifecycle.boot"))
+
+    assert (old / "keep.txt").read_bytes() == b"keep"
+    assert link.is_symlink()
+    assert "Could not clear the work folder of the prompt writer" not in caplog.text
+
+
+def test_on_boot_logs_and_swallows_a_work_folder_it_cannot_clear(plugin_db, export_storage, monkeypatch, caplog):
+    import shutil
+
+    from backend import prompt_writer
+
+    left = export_storage / "video_producer" / "writer" / "user-1" / "0123abcd"
+    left.mkdir(parents=True)
+    _aged(left, prompt_writer.STALE_S + 60)
+
+    def rmtree(path, *args, **kwargs):
+        raise PermissionError(13, "Access is denied", str(path))
+
+    monkeypatch.setattr(shutil, "rmtree", rmtree)
+    context = _context("plugin.lifecycle.boot")
+
+    assert lifecycle_hooks.on_boot(context) is context
+    assert _table_names(plugin_db) == set(tables.TABLE_NAMES)
+    assert "Could not clear the work folder of the prompt writer" in caplog.text
+    assert "Access is denied" in caplog.text
+
+
 def test_on_ready_starts_the_take_tracker_on_the_application_loop(scheduled, caplog):
     context = _context("plugin.lifecycle.ready", data={"started": True})
 

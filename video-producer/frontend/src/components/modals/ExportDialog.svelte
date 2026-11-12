@@ -30,6 +30,8 @@
 	import { conformEstimate, conformTakes, estimateConform, renditionStore } from '../../lib/renditions.svelte.js';
 	import { announcer } from '../../lib/announce.js';
 	import { hostIconName } from '../../lib/icons.js';
+	import { FINISH_EFFECTS, availability, choicesOf, fieldBounds, finishFormat, finishSteps, finishedName, finishingOf, settingOf } from '../../lib/finishing.js';
+	import { cancelFinish, downloadFinished, finishFailureText, finishShown, finishState, finishTools, loadFinishing, setFinish } from '../../lib/finishing.svelte.js';
 	import Modal from './Modal.svelte';
 	import Tabs from '../shell/Tabs.svelte';
 	import Icon from '../Icon.svelte';
@@ -86,6 +88,46 @@
 	const matchedShots = $derived(doc.clips.filter((c) => activeTransfer(c)).length);
 	const staleShots = $derived(doc.clips.filter((c) => matchStale(c)).length);
 	const CROSSFADES = [0, 0.25, 0.5, 1];
+	const tools = $derived(finishTools());
+	const finishing = $derived(finishingOf(doc));
+	const finishRows = $derived(
+		FINISH_EFFECTS.map((effect) => {
+			const tool = tools.get(effect.tool);
+			return { effect, state: availability(effect, tools), choices: choicesOf(effect, tool), setting: settingOf(finishing, effect, tool), bounds: Object.fromEntries(effect.fields.map((field) => [field.name, fieldBounds(field, tool)])) };
+		})
+	);
+	const finishOn = $derived(finishFormat(format));
+	const steps = $derived(finishOn ? finishSteps(finishing, tools) : []);
+	const finishRun = $derived(finishShown());
+	const finishBusy = $derived(finishRun?.status === 'running');
+	const finishLocked = $derived(running || finishBusy || !finishOn);
+
+	function finishLabel(key) {
+		if (key === 'fixColors') return t('exports.finish.fixColors');
+		if (key === 'lut') return t('exports.finish.lut');
+		if (key === 'look') return t('exports.finish.look');
+		if (key === 'vignette') return t('exports.finish.vignette');
+		return t('exports.finish.grain');
+	}
+
+	function fieldLabel(name) {
+		if (name === 'strength') return t('exports.finish.strength');
+		if (name === 'amount') return t('exports.finish.amount');
+		if (name === 'radius') return t('exports.finish.radius');
+		return t('exports.finish.size');
+	}
+
+	function fieldValue(bounds, value) {
+		if (bounds.max === 1) return t('exports.percent', { value: Math.round(value * 100) });
+		if (bounds.max === 100) return t('exports.percent', { value: Math.round(value) });
+		return formatNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+	}
+
+	const emptyText = (key) => (key === 'lut' ? t('exports.finish.noLut') : t('exports.finish.noLook'));
+	const finishLost = (run) => run.status === 'failed' && run.failure === 'lost';
+	const finishStatus = (run) => (run.status === 'running' ? t('exports.finish.running') : run.status === 'done' ? t('exports.status.done') : finishLost(run) ? t('exports.finish.notFollowed') : run.status === 'failed' ? t('lib.status.failed') : t('lib.status.cancelled'));
+	const finishTone = (run) => (finishLost(run) ? 'text-warning' : tone(run.status));
+	const finishDot = (run) => (finishLost(run) ? 'bg-warning' : dot(run.status));
 
 	function setSound(key, value) {
 		act(() => {
@@ -138,7 +180,10 @@
 		if (said) spoken = `${said.label} · ${t('exports.percent', { value: said.value })}`;
 	});
 
-	onMount(() => watchExports());
+	onMount(() => {
+		loadFinishing();
+		return watchExports();
+	});
 </script>
 
 <Modal title={t('modals.export.title')} subtitle="{t('modals.count.shots', { count: doc.clips.length })} · {secs(dur)}" icon="export" width={600}>
@@ -217,6 +262,56 @@
 				{#if matchedShots}<p class="flex gap-1.5 text-xs text-fg-muted"><Icon name="link" class="h-3.5 w-3.5 shrink-0" />{t('modals.export.matched', { count: matchedShots })}</p>{/if}
 				{#if staleShots}<p class="flex gap-1.5 text-xs text-fg"><Icon name="alert" class="h-3.5 w-3.5 shrink-0 text-warning" />{t('modals.export.matchStale', { count: staleShots })}</p>{/if}
 			</section>
+			<section class="space-y-2" aria-labelledby="vp-export-finish" data-finishing>
+				<div id="vp-export-finish" class="vp-section-title">{t('exports.finish.title')}</div>
+				{#if !finishOn}
+					<p class="text-xs text-fg-subtle">{t('exports.finish.excluded')}</p>
+				{:else if finishState.tools === null && finishState.toolsFailed && !finishState.loading}
+					<p class="flex items-center gap-2 text-xs text-fg-subtle" data-finish-tools="failed">
+						<span class="min-w-0 flex-1">{t('exports.finish.toolsFailed')}</span>
+						<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', onclick: loadFinishing }}>{t('exports.finish.retry')}</HostUi>
+					</p>
+				{:else if finishState.tools === null}
+					<p class="text-xs text-fg-subtle">{t('exports.finish.loading')}</p>
+				{:else if finishRows.every((row) => row.state === 'missing')}
+					<p class="text-xs text-fg-subtle">{t('exports.finish.unavailable')}</p>
+				{/if}
+				{#each finishRows as row (row.effect.key)}
+					{#if row.state !== 'missing'}
+						<div class="space-y-1.5" data-finish={row.effect.key}>
+							<div class="flex min-h-7 items-center gap-2 text-sm">
+								<HostUi name="Switch" props={{ id: `vp-finish-${row.effect.key}`, checked: row.setting.on && row.state === 'ready', size: 'lg', disabled: finishLocked || row.state !== 'ready', label: finishLabel(row.effect.key), onchange: (v) => setFinish(row.effect.key, { on: Boolean(v) }) }} />
+								<label for="vp-finish-{row.effect.key}" class={row.state === 'ready' && finishOn ? '' : 'text-fg-muted'}>{finishLabel(row.effect.key)}</label>
+								{#if row.state === 'empty'}<span class="text-xs text-fg-subtle">{emptyText(row.effect.key)}</span>{/if}
+							</div>
+							{#if row.setting.on && row.state === 'ready' && finishOn}
+								<div class="grid grid-cols-2 gap-3 pl-11">
+									{#if row.effect.choice}
+										<label class="col-span-2 space-y-1">
+											<span class="vp-label">{finishLabel(row.effect.key)}</span>
+											<select class="input vp-dense w-full" value={row.setting.ref} disabled={finishLocked} onchange={(e) => setFinish(row.effect.key, { ref: e.currentTarget.value })}>
+												{#if row.setting.missing}<option value={row.setting.ref} disabled>{row.effect.key === 'lut' ? row.setting.ref : t('exports.finish.missingLookOption')}</option>{/if}
+												{#each row.choices as option (option.value)}<option value={option.value}>{option.label}</option>{/each}
+											</select>
+										</label>
+										{#if row.setting.missing}<p class="col-span-2 text-xs text-warning" role="alert" data-finish-missing={row.effect.key}>{row.effect.key === 'lut' ? t('exports.finish.missingLut', { name: row.setting.ref }) : t('exports.finish.missingLook')}</p>{/if}
+									{/if}
+									{#each row.effect.fields as field (field.name)}
+										<label class="space-y-1">
+											<span class="vp-label">{fieldLabel(field.name)}</span>
+											<span class="flex items-center gap-2">
+												<input class="vp-slider min-w-0 flex-1" type="range" min={row.bounds[field.name].min} max={row.bounds[field.name].max} step={row.bounds[field.name].step} value={row.setting[field.name]} disabled={finishLocked} aria-label="{finishLabel(row.effect.key)} · {fieldLabel(field.name)}" onchange={(e) => setFinish(row.effect.key, { [field.name]: +e.currentTarget.value })} />
+												<span class="vp-tc w-10 shrink-0 text-right text-xs text-fg-muted">{fieldValue(row.bounds[field.name], row.setting[field.name])}</span>
+											</span>
+										</label>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
+				{/each}
+				{#if steps.length}<p class="text-xs text-fg-subtle">{t('exports.finish.encodeNote')}</p>{/if}
+			</section>
 			<div class="rounded-lg border border-line-strong p-3 text-xs text-fg-muted">
 				<div class="mb-1 text-sm text-fg">{fileName}</div>
 				{t('modals.export.fileInfo', { size: `${frame[0]}×${frame[1]}`, fps: doc.fps, aspect: social ? ratio : formatValue(doc.aspect) })}{stems ? ` · ${t('modals.export.fileStems')}` : ''} · {t('exports.real')}
@@ -283,6 +378,44 @@
 						<p class="mt-1.5 text-xs text-danger" role="alert">{jobErrorText(job)}</p>
 					{:else}
 						<p class="mt-1.5 text-xs text-fg-muted">{t('exports.error.cancelled')}</p>
+					{/if}
+				</section>
+			{/if}
+
+			{#if finishRun}
+				<section class="rounded-lg border border-line-strong p-3" aria-label={t('exports.finish.progress')} data-finish-run={finishRun.status}>
+					<div class="flex items-center gap-2 text-sm">
+						<span class="min-w-0 flex-1 truncate text-fg">{finishedName(finishRun.fileName)}</span>
+						<span class="flex shrink-0 items-center gap-1 text-xs {finishTone(finishRun)}"><span class="h-1.5 w-1.5 rounded-full {finishDot(finishRun)}"></span>{finishStatus(finishRun)}</span>
+					</div>
+					{#if finishRun.status === 'running'}
+						<div class="mt-2 flex justify-between gap-2 text-xs">
+							<span class="truncate text-fg-muted">{t('exports.finish.step')}</span>
+							<span class="vp-tc text-fg-subtle">{t('exports.percent', { value: Math.round(finishRun.progress * 100) })}</span>
+						</div>
+						<div class="mt-1 h-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-label={t('exports.finish.progress')} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(finishRun.progress * 100)}>
+							<div class="h-full rounded-full bg-signal transition-[width] duration-150" style:width="{finishRun.progress * 100}%"></div>
+						</div>
+						<div class="mt-2 flex justify-end">
+							<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', disabled: finishRun.cancelling, onclick: cancelFinish }}>{finishRun.cancelling ? t('exports.finish.cancelling') : t('exports.finish.cancel')}</HostUi>
+						</div>
+					{:else if finishRun.status === 'done'}
+						<div class="mt-2 flex items-center gap-2" role="status">
+							<Icon name="check" class="h-4 w-4 shrink-0 text-success" />
+							<span class="min-w-0 flex-1 truncate text-xs text-fg-muted">{t('exports.finish.ready')}</span>
+							{#if library}
+								<HostUi name="Button" props={{ variant: 'secondary', size: 'xs', onclick: showInLibrary }}>{t('exports.showLibrary')}</HostUi>
+							{/if}
+							<HostUi name="Button" props={{ variant: 'primary', size: 'xs', icon: hostIconName('export'), onclick: downloadFinished }}>{t('exports.finish.download')}</HostUi>
+						</div>
+					{:else if finishRun.status === 'failed'}
+						{#if finishLost(finishRun)}
+							<p class="mt-1.5 text-xs text-fg-muted" role="status">{finishFailureText(finishRun)} {t('exports.finish.rawKept')}</p>
+						{:else}
+							<p class="mt-1.5 text-xs text-danger" role="alert">{finishFailureText(finishRun)} {t('exports.finish.rawKept')}</p>
+						{/if}
+					{:else}
+						<p class="mt-1.5 text-xs text-fg-muted">{t('exports.finish.cancelled')} {t('exports.finish.rawKept')}</p>
 					{/if}
 				</section>
 			{/if}
@@ -355,7 +488,7 @@
 	{#snippet footer()}
 		<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', onclick: () => (ui.modal = null) }}>{t('modals.export.close')}</HostUi>
 		{#if tab === 'video'}
-			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('export'), disabled: ffmpegMissing || running || exportState.starting, onclick: () => startVideoExport({ format, resolution: res, stems, ratio: social ? ratio : null }) }}>{t('modals.export.export')}</HostUi>
+			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('export'), disabled: ffmpegMissing || running || finishBusy || exportState.starting, onclick: () => startVideoExport({ format, resolution: res, stems, ratio: social ? ratio : null, finish: steps }) }}>{steps.length ? t('exports.finish.exportAndFinish') : t('modals.export.export')}</HostUi>
 		{:else if tab === 'exchange'}
 			<HostUi name="Button" props={{ variant: 'primary', size: 'sm', icon: hostIconName('export'), disabled: Boolean(exportState.busy), onclick: () => exportExchange(exchange) }}>{t('modals.export.download', { file: exchangeFile(doc.name, exchange) })}</HostUi>
 		{:else}

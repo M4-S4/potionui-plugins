@@ -5,6 +5,8 @@ import { MAKERS, srtCues } from './exchange.js';
 import { EXPORT_ERROR_CODES, currentJob, exchangeFile, exchangePath, finishedNow, isJobActive, jobFilePath, mergeJob, pollDelay, sortJobs, videoFile } from './exports.js';
 import { confirm } from './host.js';
 import { libraryAvailable, openLibrary } from './importer.js';
+import { disposeFinishing, dropFinish, finishJob, keepFinish, planFinish } from './finishing.svelte.js';
+import { finishFormat } from './finishing.js';
 
 export const exportState = $state({ projectId: null, job: null, jobs: [], loaded: false, starting: false, busy: null });
 
@@ -78,7 +80,15 @@ function settle(job) {
 	if (finishedNow(before, job) && (!shown() || !canShowLibrary())) {
 		toast(t('exports.toast.done', { file: fileOf(job) }), 'success', { label: t('exports.download'), run: () => downloadJob(job) });
 	}
+	finishSeen([job]);
 	schedule();
+}
+
+function finishSeen(jobs) {
+	for (const job of jobs) {
+		if (job.status === 'done') finishJob(job);
+		else if (!isJobActive(job)) dropFinish(job.id);
+	}
 }
 
 export async function listJobs() {
@@ -93,13 +103,14 @@ export async function listJobs() {
 		return;
 	}
 	exportState.jobs = sortJobs(result.data);
+	finishSeen(exportState.jobs);
 	const active = currentJob(exportState.jobs);
 	const mine = exportState.job ? exportState.jobs.find((j) => j.id === exportState.job.id) : null;
 	exportState.job = active ?? mine ?? null;
 	schedule();
 }
 
-export async function startVideoExport({ format, resolution, stems = false, ratio = null }) {
+export async function startVideoExport({ format, resolution, stems = false, ratio = null, finish = [] }) {
 	if (exportState.starting || isJobActive(exportState.job)) return;
 	exportState.starting = true;
 	try {
@@ -113,6 +124,7 @@ export async function startVideoExport({ format, resolution, stems = false, rati
 		}
 		exportState.job = result.data;
 		exportState.jobs = mergeJob(exportState.jobs, result.data);
+		if (finishFormat(format)) planFinish(result.data.id, finish, videoFile(doc.name, resolution, format, false, ratio));
 		schedule();
 	} finally {
 		exportState.starting = false;
@@ -169,8 +181,13 @@ export function resumeExports() {
 }
 
 export async function cancelJob(job) {
+	const plan = dropFinish(job.id);
 	const result = await getClient().cancelExport(job.id);
-	if (!result.ok && result.error.status !== 404 && result.error.status !== 409) return failed(result.error);
+	if (!result.ok && result.error.status !== 404 && result.error.status !== 409) {
+		keepFinish(job.id, plan);
+		finishSeen(exportState.jobs);
+		return failed(result.error);
+	}
 	if (result.ok && result.data) settle(result.data);
 	else await listJobs();
 }
@@ -206,4 +223,5 @@ export function disposeExports() {
 	watching = false;
 	live = false;
 	stopPolling();
+	disposeFinishing();
 }

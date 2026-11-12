@@ -93,11 +93,12 @@ test('the estimate says why a shot asked to continue starts from the last image'
 });
 
 const H3_12GB = '01M54HN72B0KY7H63BKQ16T253';
+const FAST_12GB = '01M54HN72PABVRE54YNQA2Q7ZT';
 const FACE = { id: 'face', kind: 'image', name: 'face', src: '/api/media/uploads/face.png', width: 1024, height: 1024 };
 const QUAY = { id: 'quay', kind: 'image', name: 'quay', src: '/api/media/uploads/quay.png', width: 1344, height: 768 };
 const BOOTS = { id: 'boots', kind: 'image', name: 'boots', src: '/api/media/uploads/boots.png', width: 1024, height: 1024 };
 
-function chained({ mode, by = 'video', preset = H3_12GB, modes = ['video', 'refs', 'extend'], size = '832x480', pictures = [], first = {}, second = {} }) {
+function chained({ mode, by = 'video', preset = H3_12GB, modes = ['video', 'refs', 'extend'], profiles = ['FL2VA', 'Ref2VA'], size = '832x480', pictures = [], first = {}, second = {}, takes = [] }) {
 	ui.me = {
 		engines: [{ id: 'native', kind: 'local', name: 'Local' }],
 		presets: [
@@ -107,7 +108,7 @@ function chained({ mode, by = 'video', preset = H3_12GB, modes = ['video', 'refs
 				video: true,
 				cloud: false,
 				listed: true,
-				profiles: ['FL2VA', 'Ref2VA'],
+				profiles,
 				modes,
 				directorModes: ['t2v', 'i2v'],
 				resolutions: [{ value: '960x544' }, { value: '832x480' }],
@@ -129,7 +130,7 @@ function chained({ mode, by = 'video', preset = H3_12GB, modes = ['video', 'refs
 		{ id: 's1', assetId: null, take: null, start: 0, dur: 4, srcIn: 0, stage: 'todo', label: 'One', ...first },
 		{ id: 's2', assetId: null, take: null, start: 4, dur: 3, srcIn: 0, stage: 'todo', label: 'Two', ...second }
 	];
-	setTakes('p1', []);
+	setTakes('p1', takes);
 	const state = seamChainOf(doc.clips[1]);
 	return { state: state.state, extends: state.extends, tokens: state.tokens ?? null, text: chainStatusText(state) };
 }
@@ -151,6 +152,23 @@ test('a core MiniMax-H3 preset keeps the last frame in FL2VA although its own ex
 	assert.deepEqual(chained({ mode: 'FL2VA', preset: '01KX47H3MINIMAX000000000VA', modes: ['video', 'refs', 'upscale', 'refine_faces', 'extend', 'remix', 'talk', 'long'] }), last);
 	assert.deepEqual(chained({ mode: 'FL2VA', preset: '01KX47H3FASTH30000000000VA', modes: ['video', 'refine_faces', 'extend'] }), last);
 	assert.equal(chained({ mode: 'FL2VA' }).state, 'continueLater');
+});
+
+test('a Hybrid AV shot keeps the last frame on the 12 GB presets, whose continuation runs in FL2VA only', () => {
+	const previous = 'One';
+	const last = { state: 'later', extends: false, tokens: null, text: t('storyboard.chain.later', { previous }) };
+	assert.deepEqual(chained({ mode: 'Hybrid AV', profiles: ['FL2VA', 'Ref2VA', 'Hybrid AV'] }), last);
+	assert.deepEqual(chained({ mode: 'Hybrid AV', preset: FAST_12GB, modes: ['video', 'extend'], profiles: ['FL2VA', 'Hybrid AV'] }), last);
+	assert.equal(chained({ mode: 'FL2VA', preset: FAST_12GB, modes: ['video', 'extend'], profiles: ['FL2VA', 'Hybrid AV'] }).state, 'continueLater');
+});
+
+test('a chained shot in a profile its engine cannot run says the shot will be blocked, as the server does', () => {
+	const blocked = chained({ mode: 'Ref2VA', preset: FAST_12GB, modes: ['video', 'extend'], profiles: ['FL2VA', 'Hybrid AV'] });
+	assert.deepEqual(blocked, { state: 'profileUnsupported', extends: false, tokens: null, text: t('modals.shot.profileUnsupported', { profile: 'Ref2VA' }) });
+	assert.equal(chained({ mode: 'Ref2VA', preset: FAST_12GB, by: 'frame', modes: ['video', 'extend'], profiles: ['FL2VA', 'Hybrid AV'] }).state, 'profileUnsupported');
+	assert.equal(chained({ mode: 'Ref2VA' }).state, 'continueLater');
+	const waiting = { id: 'w2', shotId: 's2', status: 'queued', variant: 'A', chain: { previous: 's1', state: 'waiting', after: null, video: { frames: 56 } } };
+	assert.equal(chained({ mode: 'Ref2VA', preset: FAST_12GB, modes: ['video', 'extend'], profiles: ['FL2VA', 'Hybrid AV'], takes: [waiting] }).state, 'waiting');
 });
 
 test('a shot chained by continuation in FL2VA keeps the last frame for the reasons the server falls back on, and says which', () => {

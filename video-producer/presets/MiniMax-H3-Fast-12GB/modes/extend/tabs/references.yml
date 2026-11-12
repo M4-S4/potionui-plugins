@@ -1,0 +1,7 @@
+fields:
+  - name: "source_video"
+    type: "video"
+    label: "Video"
+    required: true
+    description: "The video to continue."
+    ai_hint: "The end of the clip to continue. Its last 17 frames and the sound leading up to them carry the motion and the audio into the new footage, which the run returns alone, without the clip."

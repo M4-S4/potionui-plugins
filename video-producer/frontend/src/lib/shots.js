@@ -4,6 +4,7 @@ import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
 import { KINDS, castCards, castOf, cardsOf, migrateCast, sameCast, setCast, usable } from './bible.js';
 import { linesOf, migrateDialogue, sameDialogue, setDialogue } from './dialogue.js';
 import { migrateReferencePrompt, referencePromptOf, sameReferencePrompt, setReferencePrompt } from './refprompt.js';
+import { CARD_WORDS, setShotCardWords, shotCardWordsOf } from './cardwords.js';
 import { merge3 } from './merge.js';
 import { SLOW_SPEEDS, speedOf } from './cadence.js';
 import { isObject } from './values.js';
@@ -159,7 +160,8 @@ export function inputsChanged(before, after) {
 		!sameList(before.own.map((r) => `${r.id}:${r.assetId}:${r.type}`), after.own.map((r) => `${r.id}:${r.assetId}:${r.type}`)) ||
 		!sameCast(before.cast, after.cast) ||
 		!sameDialogue(before.dialogue, after.dialogue) ||
-		!sameReferencePrompt(before.referencePrompt, after.referencePrompt)
+		!sameReferencePrompt(before.referencePrompt, after.referencePrompt) ||
+		(before.cardWords ?? null) !== (after.cardWords ?? null)
 	);
 }
 
@@ -172,6 +174,7 @@ function migrateClip(clip) {
 	if ('revision' in next && !(Number.isInteger(next.revision) && next.revision >= 0)) delete next.revision;
 	if ('firstFromPrevious' in next && typeof next.firstFromPrevious !== 'boolean') delete next.firstFromPrevious;
 	if ('keepFraming' in next && next.keepFraming !== true) delete next.keepFraming;
+	if ('cardWords' in next && !CARD_WORDS.includes(next.cardWords)) delete next.cardWords;
 	if ('speed' in next && !SLOW_SPEEDS.includes(next.speed)) delete next.speed;
 	if ('referenceOverrides' in next) {
 		const kept = Object.entries({ exclude: idList(excludedOf(next)), excludeLanes: excludedLanesOf(next), excludeVrefs: excludedVrefsOf(next) }).filter(([, list]) => list.length);
@@ -262,7 +265,8 @@ export function shotDraft(doc, clip, engine) {
 		referencePrompt: referencePromptOf(clip),
 		firstFromPrevious: typeof clip.firstFromPrevious === 'boolean' ? clip.firstFromPrevious : null,
 		keepFraming: keepsFraming(clip),
-		speed: speedOf(clip)
+		speed: speedOf(clip),
+		cardWords: shotCardWordsOf(clip)
 	};
 }
 
@@ -332,6 +336,7 @@ export function applyShotDraft(doc, clip, before, draft, { makeId, maxDur = Infi
 		else delete clip.speed;
 	}
 	if ('keepFraming' in draft && Boolean(draft.keepFraming) !== Boolean(before.keepFraming)) setKeepFraming(clip, draft.keepFraming);
+	if ('cardWords' in draft && (draft.cardWords ?? null) !== (before.cardWords ?? null)) setShotCardWords(clip, draft.cardWords);
 	const released = resized ? releaseOverrun(doc, clip, was) : null;
 	if (changed) touch(clip);
 	return { changed, resized, released };

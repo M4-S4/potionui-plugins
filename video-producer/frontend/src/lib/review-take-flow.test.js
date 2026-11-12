@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { hostUis, renderComponent, textOf } from './svelte-harness.js';
 
-const { doc, dispose } = await import('./state.svelte.js');
+const { doc, ui, dispose } = await import('./state.svelte.js');
 const { project } = await import('./project.svelte.js');
 const { setTakes } = await import('./takes.svelte.js');
 const { lookState } = await import('./looks.svelte.js');
@@ -24,6 +24,33 @@ function scene(looks) {
 }
 
 after(() => dispose());
+
+function blockedNext(profile) {
+	const fast = '01M54HN72PABVRE54YNQA2Q7ZT';
+	ui.me = {
+		engines: [{ id: 'native', kind: 'local', name: 'Local' }],
+		presets: [{ id: fast, name: 'MiniMax-H3-Fast (12 GB)', video: true, cloud: false, listed: true, profiles: ['FL2VA', 'Hybrid AV'], modes: ['video', 'extend'], directorModes: ['t2v', 'i2v'], resolutions: [{ value: '832x480' }], limits: { defaultDuration: 5, maxDuration: null } }]
+	};
+	project.id = 'p1';
+	doc.engine = { backend: 'native', preset: fast, model: null };
+	doc.direction = { ...(doc.direction ?? {}), mode: profile };
+	doc.chainBy = 'video';
+	doc.clips = [
+		{ id: 's1', start: 0, dur: 4, label: 'One', stage: 'draft', take: 'td' },
+		{ id: 's2', start: 4, dur: 4, label: 'Two', stage: 'todo', take: null }
+	];
+	setTakes('p1', [draft]);
+}
+
+test('review: the pair with a next shot that its engine cannot run does not say the next shot starts from this take', async () => {
+	blockedNext('Ref2VA');
+	const blocked = textOf(await renderComponent(REVIEW_TAKE, { clip: doc.clips[0], take: draft }));
+	blockedNext('FL2VA');
+	const chained = textOf(await renderComponent(REVIEW_TAKE, { clip: doc.clips[0], take: draft }));
+
+	assert.doesNotMatch(blocked, /starts from the end of/);
+	assert.match(chained, /starts from the end of/);
+});
 
 test('review: a final take not measured yet, whose draft is, shows the score of its draft without breaking the panel', async () => {
 	scene({ takes: [{ take_id: 'td', status: 'done', cards: [{ card_id: 'c1', label: 'Ana', status: 'done', score: 0.9 }] }], finals: [{ take_id: 'tf', parent_id: 'td', status: 'done', score: 0.95 }] });

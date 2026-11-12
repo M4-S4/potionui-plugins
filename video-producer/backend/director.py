@@ -1230,6 +1230,8 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
         reception.layout(bible.H3, REF2VA),
         {bible.SUBJECT_DEFINITIONS: " ".join(definitions), bible.RETENTION: "\n".join(retention), bible.CITATIONS: " ".join(citations)},
     )
+    if pictured:
+        reference = replace(reference, card_words=words)
     parts = reference.sent
     labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
     instruction = cite_tracks(shot_instruction(doc, clip), labels)
@@ -1366,6 +1368,12 @@ def _frame_media(user: User, doc: Mapping[str, Any], frame: Optional[Mapping[str
     if resolved is None or resolved["media_type"] != "image":
         return None
     return {"value": resolved["value"], "media_type": "image"}
+
+
+def key_frame_media(user: User, doc: Mapping[str, Any], shot_id: str) -> List[Dict[str, Any]]:
+    first, last = shot_frames(doc, shot_id)
+    found = [(role, _frame_media(user, doc, frame)) for role, frame in (("first", first), ("last", last))]
+    return [{**media, "role": role} for role, media in found if media is not None]
 
 
 def bind_frames(
