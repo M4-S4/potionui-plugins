@@ -2,7 +2,7 @@ from typing import Any, Dict, NoReturn, Optional
 
 from fastapi import APIRouter, Body, Depends
 
-from . import core_bridge
+from . import core_bridge, starter
 from .core_bridge import MediaRefError, User, get_current_active_user
 from .responses import fail, ok
 
@@ -80,3 +80,12 @@ def uploaded_media(body: Any = Body(default=None), user: User = Depends(get_curr
     if media["media_type"] not in MEDIA_TYPES:
         fail(415, "unsupported_media", "Only images, videos and audio files can be imported.")
     return ok({"media": media})
+
+
+@router.post("/starter/images")
+async def starter_images(user: User = Depends(get_current_active_user)) -> Dict[str, Any]:
+    try:
+        images = await starter.store_images(user)
+    except starter.StarterError as exc:
+        fail(502, "starter_images_failed", exc.message, image=exc.image, code=exc.code)
+    return ok({"images": images})

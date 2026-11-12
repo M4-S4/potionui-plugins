@@ -122,13 +122,13 @@ def test_ltx_puts_the_lines_in_quotation_marks_after_the_action_and_before_the_c
     assert _codes(warnings) == []
 
 
-def test_ltx_reads_the_lines_in_french_when_the_prompts_are_french(core, make_doc):
+def test_ltx_reads_the_lines_in_english_in_a_project_once_set_to_french(core, make_doc):
     core.use_ltx25()
     doc = _doc(make_doc, [_line("Bonjour.")], cast={"characters": []}, characters=({**WOMAN, "voice": ""},), language="fr")
 
     plan, _ = _plan(core, doc, presets.LTX_2_5)
 
-    assert plan.prompt_text == "\n".join([WALK, 'The red-haired woman dit en français : "Bonjour."'])
+    assert plan.prompt_text == "\n".join([WALK, 'The red-haired woman says in French: "Bonjour."'])
 
 
 def test_ref2va_defines_the_voice_of_a_character_and_says_its_lines_in_the_shot(core, make_doc):

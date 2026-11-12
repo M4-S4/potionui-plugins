@@ -281,7 +281,13 @@ export async function openLatestOrStarter() {
 	const listed = await client.listProjects();
 	if (!listed.ok) return listed;
 	if (listed.data.length) return openProject(listed.data[0].id);
-	return openCreated(starterDoc(t, tFor(DEFAULT_PROMPT_LANGUAGE), DEFAULT_PROMPT_LANGUAGE));
+	return openCreated(await starterSource());
+}
+
+async function starterSource() {
+	const images = await client.starterImages().catch(() => null);
+	if (!images?.ok) toast(t('project.toast.starterImages'), 'warning');
+	return starterDoc(t, tFor(DEFAULT_PROMPT_LANGUAGE), DEFAULT_PROMPT_LANGUAGE, images?.ok ? images.data : null);
 }
 
 export async function createProject(source = emptyDoc(t)) {

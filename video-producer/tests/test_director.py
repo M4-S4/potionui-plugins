@@ -343,15 +343,15 @@ def test_a_text_only_preset_keeps_the_no_first_frame_warning_when_the_shot_has_n
 
 
 @pytest.mark.parametrize(
-    "modes, director_mode, roles",
+    "modes, director_mode, roles, warned",
     [
-        ({"t2v": {}, "i2v": {}}, "i2v", ["first"]),
-        ({"t2v": {}, "i2v": {}, "flf": {}}, "flf", ["first", "last"]),
-        ({"t2v": {}, "i2v": {}, "flf": {}, "director": {"max_segments": 8}}, "flf", ["first", "last"]),
-        ({}, "flf", ["first", "last"]),
+        ({"t2v": {}, "i2v": {}}, "i2v", ["first"], ["last_frame_unsupported"]),
+        ({"t2v": {}, "i2v": {}, "flf": {}}, "flf", ["first", "last"], []),
+        ({"t2v": {}, "i2v": {}, "flf": {}, "director": {"max_segments": 8}}, "flf", ["first", "last"], []),
+        ({}, "flf", ["first", "last"], []),
     ],
 )
-def test_a_preset_that_declares_image_to_video_keeps_binding_the_frames_its_modes_allow(core, make_doc, modes, director_mode, roles):
+def test_a_preset_that_declares_image_to_video_keeps_binding_the_frames_its_modes_allow(core, make_doc, modes, director_mode, roles, warned):
     preset_id = _wan_tier(core, modes=modes)
     frames = [_frame("f1", "a", "first", time=0.1), _frame("f2", "b", "last", time=3.9)]
     doc = make_doc(clips=[SHOT], frames=frames, assets=_images(core))
@@ -363,7 +363,7 @@ def test_a_preset_that_declares_image_to_video_keeps_binding_the_frames_its_mode
     assert plan.director_mode == director_mode and plan.request["form_data"]["video_director"]["mode"] == director_mode
     assert [entry["role"] for entry in media] == roles
     assert plan.request["form_data"]["i2v_high_noise_model"] == "model:id-i2v_high_noise_model-sha"
-    assert plans.warnings == []
+    assert [(warning["code"], warning["data"]["shot_id"]) for warning in plans.warnings] == [(code, "s1") for code in warned]
 
 
 @pytest.mark.parametrize("preset_id, fps", [(presets.WAN21_T2V_1_3B_8GB, 16), (presets.WAN22_TI2V_5B_8GB, 24)])
@@ -891,7 +891,7 @@ def test_an_older_ref2va_shot_whose_only_reference_was_its_3d_guide_gets_its_vid
     assert _sections(plan.prompt_text)["subject_definitions"] == "<Video 1> is the source of the motion of [Shot 1]."
 
 
-def test_the_six_sections_keep_their_english_labels_and_markers_and_follow_the_prompt_language(core, make_doc):
+def test_the_six_sections_are_english_in_a_project_once_set_to_french_and_keep_its_words(core, make_doc):
     core.use_h3()
     references = [{"id": "r1", "assetId": "walk", "space": "mouvement", "scope": None}]
     doc = _guided(core, make_doc, references=references, language="fr", prompt="La cabane à l'aube")
@@ -900,11 +900,11 @@ def test_the_six_sections_keep_their_english_labels_and_markers_and_follow_the_p
     (plan,) = _plans(core, doc, preset_id=presets.MINIMAX_H3).shots
 
     assert _sections(plan.prompt_text) == {
-        "subject_definitions": "<Video 1> est la source du mouvement de [Shot 1].",
-        "summary": "[reference generation] Un plan de 4,5 secondes fait d'après la description ci-dessous et ses références.",
-        "retention_analysis": "<Video 1> (mouvement de [Shot 1]): attribute_transfer - son mouvement est repris par les sujets du plan.",
+        "subject_definitions": "<Video 1> is the source of the motion of [Shot 1].",
+        "summary": "[reference generation] A 4.5-second shot made from the description below and its references.",
+        "retention_analysis": "<Video 1> (motion of [Shot 1]): attribute_transfer - its motion is carried over to the subjects of the shot.",
         "detailed_description": "[Shot 1] La cabane à l'aube.",
-        "overall_soundscape": "Le son ambiant naturel du lieu et les sons physiques de l'action décrite plus haut.",
+        "overall_soundscape": "The natural ambient sound of the place and the physical sounds of the action described above.",
         "non_diegetic_music": "N/A",
     }
 

@@ -1,0 +1,436 @@
+{
+  "name": "[starter.name]",
+  "promptLanguage": "en",
+  "fps": 25,
+  "aspect": "16:9",
+  "resolution": "1080p",
+  "direction": {
+    "univers": "[starter.direction.univers]",
+    "personnages": "[starter.direction.personnages]",
+    "photographie": "[starter.direction.photographie]",
+    "palette": "[starter.direction.palette]",
+    "rythme": "[starter.direction.rythme]",
+    "mode": "FL2VA"
+  },
+  "synopsis": "[starter.synopsis]",
+  "clips": [
+    {
+      "id": "01M5R0START000000000000001",
+      "assetId": null,
+      "start": 0,
+      "dur": 5,
+      "srcIn": 0,
+      "label": "[starter.shot.1.label]",
+      "stage": "todo",
+      "take": null,
+      "fadeIn": 0,
+      "fadeOut": 0,
+      "exposure": 0,
+      "contrast": 100,
+      "saturation": 100,
+      "temperature": 0,
+      "preset": "Original",
+      "flag": null,
+      "mute": false,
+      "cast": {
+        "place": "01M5R0START000000000000002"
+      }
+    },
+    {
+      "id": "01M5R0START000000000000003",
+      "assetId": null,
+      "start": 5,
+      "dur": 5,
+      "srcIn": 0,
+      "label": "[starter.shot.2.label]",
+      "stage": "todo",
+      "take": null,
+      "fadeIn": 0,
+      "fadeOut": 0,
+      "exposure": 0,
+      "contrast": 100,
+      "saturation": 100,
+      "temperature": 0,
+      "preset": "Original",
+      "flag": null,
+      "mute": false,
+      "cast": {
+        "place": "01M5R0START000000000000002"
+      },
+      "firstFromPrevious": true
+    },
+    {
+      "id": "01M5R0START000000000000004",
+      "assetId": null,
+      "start": 10,
+      "dur": 5,
+      "srcIn": 0,
+      "label": "[starter.shot.3.label]",
+      "stage": "todo",
+      "take": null,
+      "fadeIn": 0,
+      "fadeOut": 0,
+      "exposure": 0,
+      "contrast": 100,
+      "saturation": 100,
+      "temperature": 0,
+      "preset": "Original",
+      "flag": null,
+      "mute": false,
+      "cast": {
+        "characters": [
+          "01M5R0START000000000000005"
+        ],
+        "place": "01M5R0START000000000000002"
+      },
+      "firstFromPrevious": false
+    },
+    {
+      "id": "01M5R0START000000000000006",
+      "assetId": null,
+      "start": 15,
+      "dur": 5,
+      "srcIn": 0,
+      "label": "[starter.shot.4.label]",
+      "stage": "todo",
+      "take": null,
+      "fadeIn": 0,
+      "fadeOut": 0,
+      "exposure": 0,
+      "contrast": 100,
+      "saturation": 100,
+      "temperature": 0,
+      "preset": "Original",
+      "flag": null,
+      "mute": false,
+      "cast": {
+        "place": "01M5R0START000000000000002"
+      },
+      "firstFromPrevious": false
+    }
+  ],
+  "audio": [],
+  "titles": [
+    {
+      "id": "01M5R0START000000000000007",
+      "text": "[starter.title.text]",
+      "sub": "[starter.title.sub]",
+      "start": 0,
+      "dur": 4
+    }
+  ],
+  "prompts": [
+    {
+      "id": "01M5R0START000000000000008",
+      "shotId": "01M5R0START000000000000001",
+      "start": 0,
+      "dur": 5,
+      "strength": 75,
+      "text": "[starter.shot.1.prompt]"
+    },
+    {
+      "id": "01M5R0START000000000000009",
+      "shotId": "01M5R0START000000000000003",
+      "start": 5,
+      "dur": 5,
+      "strength": 75,
+      "text": "[starter.shot.2.prompt]"
+    },
+    {
+      "id": "01M5R0START000000000000010",
+      "shotId": "01M5R0START000000000000004",
+      "start": 10,
+      "dur": 5,
+      "strength": 75,
+      "text": "[starter.shot.3.prompt]"
+    },
+    {
+      "id": "01M5R0START000000000000011",
+      "shotId": "01M5R0START000000000000006",
+      "start": 15,
+      "dur": 5,
+      "strength": 75,
+      "text": "[starter.shot.4.prompt]"
+    }
+  ],
+  "frames": [
+    {
+      "id": "01M5R0START000000000000012",
+      "shotId": "01M5R0START000000000000006",
+      "time": 15,
+      "assetId": "01M5R0START000000000000013",
+      "role": "first",
+      "strength": 100
+    },
+    {
+      "id": "01M5R0START000000000000014",
+      "shotId": "01M5R0START000000000000006",
+      "time": 19.96,
+      "assetId": "01M5R0START000000000000015",
+      "role": "last",
+      "strength": 100
+    }
+  ],
+  "markers": [
+    {
+      "id": "01M5R0START000000000000016",
+      "time": 15,
+      "label": "[starter.marker.magic]",
+      "kind": "marker"
+    }
+  ],
+  "references": [
+    {
+      "id": "01M5R0START000000000000017",
+      "name": "[starter.reference.lumi]",
+      "space": "identite",
+      "type": "Personnage",
+      "assetId": "01M5R0START000000000000018",
+      "role": "Identité",
+      "scope": {
+        "type": "global"
+      }
+    },
+    {
+      "id": "01M5R0START000000000000019",
+      "name": "[starter.reference.bottle]",
+      "space": "identite",
+      "type": "Objet",
+      "assetId": "01M5R0START000000000000013",
+      "role": "Identité",
+      "scope": {
+        "type": "global"
+      }
+    }
+  ],
+  "assets": [
+    {
+      "id": "01M5R0START000000000000018",
+      "kind": "image",
+      "name": "lumi.jpg",
+      "src": "/api/media/uploads/starter-lumi.jpg",
+      "origin": {
+        "kind": "library",
+        "itemId": "starter-lumi"
+      },
+      "srcDur": null,
+      "width": 1024,
+      "height": 1024,
+      "fps": null,
+      "res": "1024×1024",
+      "generated": false,
+      "quality": null,
+      "resultId": null,
+      "role": null
+    },
+    {
+      "id": "01M5R0START000000000000013",
+      "kind": "image",
+      "name": "bottle.jpg",
+      "src": "/api/media/uploads/starter-bottle.jpg",
+      "origin": {
+        "kind": "library",
+        "itemId": "starter-bottle"
+      },
+      "srcDur": null,
+      "width": 1024,
+      "height": 576,
+      "fps": null,
+      "res": "1024×576",
+      "generated": false,
+      "quality": null,
+      "resultId": null,
+      "role": null
+    },
+    {
+      "id": "01M5R0START000000000000015",
+      "kind": "image",
+      "name": "bottle-gold.jpg",
+      "src": "/api/media/uploads/starter-bottle-gold.jpg",
+      "origin": {
+        "kind": "library",
+        "itemId": "starter-bottle-gold"
+      },
+      "srcDur": null,
+      "width": 1024,
+      "height": 576,
+      "fps": null,
+      "res": "1024×576",
+      "generated": false,
+      "quality": null,
+      "resultId": null,
+      "role": null
+    }
+  ],
+  "lanes": [
+    {
+      "id": "01M5R0START000000000000020",
+      "name": "[starter.lane.dialogue]",
+      "role": "Dialogue",
+      "vol": 0,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "sends": {
+        "R1": -18,
+        "D1": -60
+      },
+      "inserts": [
+        {
+          "type": "eq",
+          "on": true,
+          "low": 0,
+          "mid": 0,
+          "high": 2
+        },
+        {
+          "type": "comp",
+          "on": true,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 120
+        }
+      ]
+    },
+    {
+      "id": "01M5R0START000000000000021",
+      "name": "[starter.lane.music]",
+      "role": "Musique",
+      "vol": -2,
+      "pan": 0,
+      "mute": false,
+      "solo": false,
+      "sends": {
+        "R1": -12,
+        "D1": -60
+      },
+      "inserts": [
+        {
+          "type": "eq",
+          "on": true,
+          "low": 0,
+          "mid": 0,
+          "high": 0
+        },
+        {
+          "type": "comp",
+          "on": false,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 120
+        }
+      ]
+    },
+    {
+      "id": "01M5R0START000000000000022",
+      "name": "[starter.lane.ambience]",
+      "role": "Ambiance",
+      "vol": -6,
+      "pan": -0.2,
+      "mute": false,
+      "solo": false,
+      "sends": {
+        "R1": -12,
+        "D1": -60
+      },
+      "inserts": [
+        {
+          "type": "eq",
+          "on": true,
+          "low": 0,
+          "mid": 0,
+          "high": 0
+        },
+        {
+          "type": "comp",
+          "on": false,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 120
+        }
+      ]
+    },
+    {
+      "id": "01M5R0START000000000000023",
+      "name": "[starter.lane.foley]",
+      "role": "SFX",
+      "vol": -4,
+      "pan": 0.3,
+      "mute": false,
+      "solo": false,
+      "sends": {
+        "R1": -12,
+        "D1": -60
+      },
+      "inserts": [
+        {
+          "type": "eq",
+          "on": true,
+          "low": 0,
+          "mid": 0,
+          "high": 0
+        },
+        {
+          "type": "comp",
+          "on": false,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 120
+        }
+      ]
+    }
+  ],
+  "video": {
+    "mute": false,
+    "solo": false
+  },
+  "aux": [
+    {
+      "id": "R1",
+      "name": "[starter.lane.reverb]",
+      "vol": -6,
+      "mute": false
+    },
+    {
+      "id": "D1",
+      "name": "[starter.lane.delay]",
+      "vol": -10,
+      "mute": false
+    }
+  ],
+  "master": {
+    "vol": 0
+  },
+  "engine": {
+    "quality": "draft",
+    "variants": 2,
+    "backend": "",
+    "preset": null,
+    "model": null
+  },
+  "bible": {
+    "characters": [
+      {
+        "id": "01M5R0START000000000000005",
+        "label": "[starter.card.lumi.label]",
+        "text": "[starter.card.lumi.text]",
+        "props": "[starter.card.lumi.props]",
+        "references": [
+          "01M5R0START000000000000017"
+        ]
+      }
+    ],
+    "places": [
+      {
+        "id": "01M5R0START000000000000002",
+        "label": "[starter.card.workshop.label]",
+        "text": "[starter.card.workshop.text]",
+        "references": []
+      }
+    ]
+  }
+}

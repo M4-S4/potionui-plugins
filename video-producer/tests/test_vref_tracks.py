@@ -162,16 +162,16 @@ def test_a_continuation_track_cuts_what_precedes_the_shot_and_adds_its_task_to_t
     assert "@vref" not in plan.prompt_text
 
 
-def test_the_texts_of_a_track_follow_the_language_of_the_prompts(core, make_doc):
+def test_the_texts_of_a_track_are_english_in_a_project_once_set_to_french(core, make_doc):
     core.use_h3()
     _media(core)
     doc = _doc(make_doc, tracks=[_walk(1, "continuation")], items=[_item("i1", "t1", "walk", 0, 4)], language="fr")
 
     prompt = _plans(core, doc).shots[0].prompt_text
 
-    assert "summary: [video continuation] + [reference generation] Un plan de 4 secondes qui prolonge <Video 1>" in prompt
-    assert "<Video 1> est la séquence que [Shot 1] prolonge." in prompt
-    assert "Le plan prolonge la dernière image de <Video 1>." in prompt
+    assert "summary: [video continuation] + [reference generation] A 4-second shot that continues <Video 1>" in prompt
+    assert "<Video 1> is the footage that [Shot 1] continues." in prompt
+    assert "The shot continues from the last frame of <Video 1>." in prompt
 
 
 def test_a_track_cited_but_not_sent_is_left_out_of_the_text_and_said(core, make_doc):

@@ -489,8 +489,8 @@ BRIDGED = (
     "embed_images",
     "face_detector",
     "detect_faces",
-    "face_identifier",
-    "identify_faces",
+    "face_embedder",
+    "embed_faces",
     "generation_active",
     "module_available",
     "package_version",
@@ -563,7 +563,7 @@ class FakeCore:
         self.embedder = {"model": "google/siglip-base-patch16-224", "slug": "local-google-siglip-base-patch16-224", "device": "cpu", "available": True, "loaded": False}
         self.faces = {"model": "face_detection_yunet_2023mar.onnx", "available": False}
         self.face_boxes = {}
-        self.identity = {"model": "glintr100.onnx", "path": "/models/face_recognition/auraface/glintr100.onnx", "available": False}
+        self.identity = {"model": "glintr100.onnx", "available": False}
         self.identities = {}
         self.embedded = []
         self.modules = set()
@@ -850,14 +850,14 @@ class FakeCore:
             found.append([dict(box) for box in self.face_boxes.get(color, [])])
         return found
 
-    def face_identifier(self):
+    def face_embedder(self):
         return dict(self.identity)
 
-    def identify_faces(self, faces):
+    def embed_faces(self, faces):
         from PIL import Image
 
         if not self.identity["available"]:
-            raise FileNotFoundError("glintr100.onnx is not at /models/face_recognition/auraface/glintr100.onnx")
+            raise FileNotFoundError("glintr100.onnx is not in face_recognition/auraface of the home model root")
         vectors = []
         for path, landmarks in faces:
             with Image.open(path) as image:

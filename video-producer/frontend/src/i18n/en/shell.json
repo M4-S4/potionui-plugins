@@ -90,7 +90,7 @@
 	"tour.title": "Getting started",
 	"tour.subtitle": "The main path through Video Producer",
 	"tour.project.title": "Create a project",
-	"tour.project.text": "File › New project, or start from this starter project.",
+	"tour.project.text": "File › New project, or follow the starter project: each of its four shots shows one thing the plugin does, from a shot made from its text to a shot between a first and a last image.",
 	"tour.direction.title": "Set the global direction",
 	"tour.direction.text": "Director AI › Direction: world, photography, palette, pacing; Director AI › Bible: characters and places.",
 	"tour.references.title": "Add the references",

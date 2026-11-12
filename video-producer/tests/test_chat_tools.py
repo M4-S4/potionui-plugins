@@ -464,7 +464,7 @@ async def test_continuity_merges_the_seams_the_page_measured(continuity_project)
     assert (by_pair[("c", "new")]["to_label"], by_pair[("c", "new")]["issues"][0]["fix"]) == ("Unsaved shot", "Match the shot's color temperature to the previous shot.")
 
 
-async def test_continuity_of_a_ref2va_project_in_french(db, make_project):
+async def test_continuity_of_a_project_once_set_to_french_reads_it_with_the_english_rules(db, make_project):
     project = make_project(
         clips=[_clip("a", 0, 4, label="Arrivée"), _clip("b", 4, 4, label="Pont")],
         prompts=[_prompt("pa", "Survol de la ville", "a"), _prompt("pb", "Plan fixe sur le pont, caméra à l’épaule", "b", 4, 4)],
@@ -475,10 +475,8 @@ async def test_continuity_of_a_ref2va_project_in_french(db, make_project):
 
     data = _data(await CheckContinuityTool().execute(_context(project["id"])))
 
-    [seam] = data["seams"]
-    assert _issues(seam) == [("conflict", "b"), ("camera_change", None)]
-    assert seam["issues"][0]["rule"] == "stableCamera"
-    assert seam["issues"][1]["text"] == "The camera move changes from “survol” in “Arrivée” to “plan fixe” in “Pont”."
+    assert data["seams"] == []
+    assert projects.get_project(project["id"])["doc"]["promptLanguage"] == "fr"
 
 
 async def test_continuity_of_a_single_shot_and_of_a_clean_project(db, make_project):

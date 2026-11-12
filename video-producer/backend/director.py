@@ -1093,8 +1093,7 @@ def _dialogue_warnings(
 
 
 def _language(doc: Mapping[str, Any]) -> str:
-    language = doc.get("promptLanguage")
-    return language if language in REFS_TEXT else "en"
+    return "en"
 
 
 def _sentence(text: str) -> str:
@@ -1497,6 +1496,11 @@ def _text_only(preset: Preset) -> bool:
     return bool(modes) and "i2v" not in modes
 
 
+def _drops_last_frame(preset: Preset, doc: Mapping[str, Any], shot_id: str) -> bool:
+    modes = catalog.director_modes(preset.variables)
+    return bool(modes) and "flf" not in modes and shot_frames(doc, shot_id)[1] is not None
+
+
 def _runs_text(preset: Preset) -> bool:
     modes = catalog.director_modes(preset.variables)
     return not modes or "t2v" in modes
@@ -1766,6 +1770,8 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         if text is not None and all(name in picked for name in text.missing):
             warnings.append(_fallback(context, shot_id, absent))
             request, director_mode, chained, resolved = unbound, "t2v", None, text
+    if director_mode == "i2v" and _drops_last_frame(preset, doc, shot_id):
+        warnings.append(note("last_frame_unsupported", "The preset starts the shot from its first frame only: the last frame of the shot is not used.", shot_id=shot_id))
     framing_warnings(doc, clip, director_mode, warnings)
     request["form_data"].update(resolved.values)
     chosen = project_options(context, fields, warnings)

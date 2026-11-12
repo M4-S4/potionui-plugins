@@ -96,6 +96,17 @@ def test_an_unknown_memory_estimate_warns_and_never_blocks(core, make_doc, memor
     assert payload["blocks"] == []
 
 
+def test_a_memory_preview_refused_for_a_preset_no_longer_assigned_warns_without_the_core_message(core, make_doc):
+    core.use_wan()
+    core.memory = PermissionError("Preset 'wan' is not available to this user")
+
+    payload = _evaluate(core, make_doc(clips=SHOTS)).payload
+
+    assert payload["vram"]["unknown"] is True and payload["blocks"] == []
+    assert "vram_unknown" in _codes(payload["warnings"])
+    assert not any("not available to this user" in str(item.get("message")) for item in payload["warnings"])
+
+
 def test_the_memory_is_not_previewed_when_models_are_missing(core, make_doc):
     core.use_wan()
     core.missing.add("vae-sha")

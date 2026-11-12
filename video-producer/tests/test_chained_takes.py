@@ -389,6 +389,10 @@ def _chain_warnings(payload):
     return [warning for warning in payload["warnings"] if warning["code"].startswith("chain_") or warning["code"] == "frame_models_missing"]
 
 
+def _last_frame_warnings(payload):
+    return [warning["data"]["shot_id"] for warning in payload["warnings"] if warning["code"] == "last_frame_unsupported"]
+
+
 def _shots(payload):
     return [(shot["shot_id"], shot["preset_id"], shot["director_mode"], shot["chain"]) for shot in payload["shots"]]
 
@@ -443,6 +447,25 @@ def test_the_5b_engine_starts_a_shot_from_its_own_first_frame_and_leaves_its_las
 
     assert _shots(evaluation.payload) == [("s2", preset_id, "i2v", None)]
     assert evaluation.payload["blocks"] == []
+    assert _last_frame_warnings(evaluation.payload) == ["s2"]
+
+
+def test_the_5b_engine_says_it_leaves_out_the_last_frame_of_a_chained_shot_and_an_engine_with_a_last_frame_does_not(core, make_project, frames, slots):
+    preset_id = _wan_tier(core, modes={"t2v": {}, "i2v": {}}, preset_id=presets.WAN22_TI2V_5B_8GB)
+    project = make_project(clips=SHOTS[:2], frames=_own_frame(core, "last"), assets=[STILL])
+    first_only = make_project(clips=SHOTS[:2], frames=_own_frame(core, "first"), assets=[STILL])
+
+    evaluation = _evaluate(core, project, ["s1", "s2"], preset_id=preset_id)
+
+    assert _shots(evaluation.payload) == [("s1", preset_id, "t2v", None), ("s2", preset_id, "i2v", "s1")]
+    assert evaluation.payload["blocks"] == []
+    assert _last_frame_warnings(evaluation.payload) == ["s2"]
+    assert next(w for w in evaluation.payload["warnings"] if w["code"] == "last_frame_unsupported")["message"] == "The preset starts the shot from its first frame only: the last frame of the shot is not used."
+    assert _last_frame_warnings(_evaluate(core, first_only, ["s2"], preset_id=preset_id).payload) == []
+    flf = _wan_tier(core, modes={"t2v": {}, "i2v": {}, "flf": {}}, preset_id=presets.WAN22_TI2V_5B_8GB)
+    with_flf = _evaluate(core, project, ["s1", "s2"], preset_id=flf).payload
+    assert _shots(with_flf)[1] == ("s2", flf, "flf", "s1")
+    assert _last_frame_warnings(with_flf) == []
 
 
 def test_the_lightning_engine_hands_a_chained_shot_to_its_image_to_video_companion_which_waits_for_the_last_image_of_the_previous_shot(core, make_project, frames, slots):

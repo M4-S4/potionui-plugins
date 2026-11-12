@@ -8,7 +8,8 @@ import pytest
 from src.platform.util.video_transcode import TranscodeSpec, build_transcode_command
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PLUGIN_ROOT = REPO_ROOT / "content" / "plugins" / "marketplace" / "video-producer"
+PLUGIN_ROOTS = [REPO_ROOT / "content" / "plugins" / kind / "video-producer" for kind in ("local", "marketplace")]
+PLUGIN_ROOT = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0])
 PACKAGE = "video_producer_delivery_under_test"
 
 SETTINGS = ("-vf", "-c:v", "-crf", "-preset", "-pix_fmt", "-movflags", "-c:a", "-b:a", "-f")

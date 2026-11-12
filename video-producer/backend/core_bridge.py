@@ -79,13 +79,14 @@ __all__ = [
     "cloud_video_models",
     "describe_preset",
     "detect_faces",
+    "embed_faces",
     "embed_images",
     "enabled_backends",
     "enabled_cloud_video_models",
     "estimate_cloud_cost",
     "extract_frame",
     "face_detector",
-    "face_identifier",
+    "face_embedder",
     "find_ffmpeg",
     "find_ffprobe",
     "generate_ulid",
@@ -94,7 +95,6 @@ __all__ = [
     "get_current_active_user",
     "get_plugin_setting",
     "get_user",
-    "identify_faces",
     "image_embedder",
     "installed_model_for_file",
     "installed_model_id",
@@ -286,14 +286,12 @@ def detect_faces(paths: Sequence[str]) -> List[List[Dict[str, Any]]]:
     return [list(found) for found in api_media.detect_faces(list(paths))]
 
 
-def face_identifier() -> Dict[str, Any]:
-    """The face recognition model of the application: the file of its model, where it is looked for and whether it is there."""
-    return dict(api_media.face_identifier())
+def face_embedder() -> Dict[str, Any]:
+    return dict(api_media.face_embedder())
 
 
-def identify_faces(faces: Sequence[Tuple[str, Sequence[Sequence[float]]]]) -> List[List[float]]:
-    """The identity vectors of faces, each an image file and the five landmarks of the face in it; FileNotFoundError without the model file."""
-    return [list(vector) for vector in api_media.identify_faces([(path, landmarks) for path, landmarks in faces])]
+def embed_faces(faces: Sequence[Tuple[str, Sequence[Sequence[float]]]]) -> List[List[float]]:
+    return [list(vector) for vector in api_media.embed_faces([(path, landmarks) for path, landmarks in faces])]
 
 
 def generation_active() -> bool:

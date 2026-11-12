@@ -1100,6 +1100,34 @@ async def test_extract_frame_and_save_user_media_go_to_the_core_as_the_user(monk
     assert calls == [("frame", "user-1", ref, 2.5), ("save", "user-1", tmp_path / "v.mp4")]
 
 
+
+def test_the_faces_go_to_the_face_embedder_of_the_core(monkeypatch):
+    calls = []
+    landmarks = [[22.0, 12.0], [34.0, 12.0], [28.0, 16.0], [24.0, 20.0], [32.0, 20.0]]
+
+    def embed_faces(faces):
+        calls.append(faces)
+        return [(0.6, 0.8)]
+
+    monkeypatch.setattr(core_bridge, "api_media", SimpleNamespace(face_embedder=lambda: {"model": "glintr100.onnx", "available": True}, embed_faces=embed_faces))
+
+    assert core_bridge.face_embedder() == {"model": "glintr100.onnx", "available": True}
+    assert core_bridge.embed_faces([("a.png", landmarks)]) == [[0.6, 0.8]]
+    assert calls == [[("a.png", landmarks)]]
+
+
+def test_every_name_the_bridge_reads_from_a_module_of_the_plugin_api_is_there():
+    import ast
+    import importlib
+
+    tree = ast.parse(Path(core_bridge.__file__).read_text(encoding="utf-8"))
+    modules = {alias.asname: importlib.import_module(f"src.plugin_api.{alias.name}") for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "src.plugin_api" for alias in node.names if alias.asname}
+    read = {(node.value.id, node.attr) for node in ast.walk(tree) if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in modules}
+
+    assert ("api_media", "embed_faces") in read
+    assert sorted(f"{alias}.{name}" for alias, name in read if not hasattr(modules[alias], name)) == []
+
+
 def test_the_transcode_types_are_the_ones_the_core_exports():
     from src.plugin_api import media
 

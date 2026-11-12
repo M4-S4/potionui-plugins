@@ -265,7 +265,7 @@ def test_a_start_image_is_asked_in_the_ratio_of_the_takes_with_the_part_the_film
     assert plain.splitlines()[0] == "The opening frame of a film shot, in a 16:9 frame."
     assert "central" not in plain
     assert keyframes.keyframe_prompt(french, doc["clips"][0], [], keyframes.FIRST, "x", 16 / 9).splitlines()[1] == (
-        "Le film n'en garde que la partie centrale au format 2.39:1 : y garder l'action."
+        "The film keeps only its central 2.39:1 part: keep the action there."
     )
 
 

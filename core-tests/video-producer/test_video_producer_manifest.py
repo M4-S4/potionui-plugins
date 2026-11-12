@@ -35,7 +35,8 @@ from src.plugin_api import HookContext, SetupCheck, get_current_active_user
 from src.plugin_api.chat import ToolContext
 
 PLUGIN_ID = "video-producer"
-PLUGIN_ROOT = Path(__file__).resolve().parents[3] / "content" / "plugins" / "marketplace" / PLUGIN_ID
+PLUGIN_ROOTS = [Path(__file__).resolve().parents[3] / "content" / "plugins" / kind / PLUGIN_ID for kind in ("local", "marketplace")]
+PLUGIN_ROOT = next((root for root in PLUGIN_ROOTS if (root / "manifest.yml").is_file()), PLUGIN_ROOTS[0])
 PACKAGE = "video_producer"
 KIND = "video-producer.gpu_minutes"
 
@@ -188,6 +189,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/projects/{{project_id}}/versions/{{version}}/restore"),
         ("POST", f"{base}/media/resolve"),
         ("POST", f"{base}/media/uploaded"),
+        ("POST", f"{base}/starter/images"),
         ("GET", f"{base}/projects/{{project_id}}/takes"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/label"),
         ("POST", f"{base}/projects/{{project_id}}/takes/{{take_id}}/prioritize"),
@@ -339,6 +341,7 @@ def test_the_page_is_the_built_component(manifest):
     assert (page["route"], page["component"], page["label"]) == ("video-producer", "VideoProducerPage.js", "Video Producer")
     assert page.get("require_role") is None
     assert (PLUGIN_ROOT / "frontend" / "dist" / page["component"]).is_file()
+    assert (PLUGIN_ROOT / "frontend" / "dist" / Path(page["component"]).with_suffix(".css")).is_file()
     [item] = manifest.sidebar_items
     assert item["label"] == "Video Producer" and item["icon"]
 
@@ -476,7 +479,7 @@ def test_the_mode_loaded_by_the_core_resolves_its_prompt_and_its_context(chat):
     )
     assert block.splitlines()[:2] == [
         'VIDEO PRODUCER: project "Night ride" [p-1], saved version 3.',
-        "Prompt language: fr. Write every shot instruction in French; never translate what the user wrote.",
+        "Prompt language: en. Write every shot instruction in English; never translate what the user wrote.",
     ]
 
 

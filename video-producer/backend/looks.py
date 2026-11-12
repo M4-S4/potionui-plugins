@@ -40,6 +40,7 @@ FRONTAL_TURN = 0.35
 FRONTAL_EYES = 0.35
 FACES = "faces"
 IDENTITY = "identity"
+UPRIGHT = "upright"
 FACE = "face"
 WHOLE = "whole"
 CHARACTER = "character"
@@ -201,7 +202,7 @@ def face_detector() -> Dict[str, Any]:
 def identifier() -> Dict[str, Any]:
     """The face recognition model of the application, as far as the looks need it: its model file and whether it is there."""
     try:
-        info = core_bridge.face_identifier()
+        info = core_bridge.face_embedder()
     except Exception:
         logger.warning("[VIDEO-PRODUCER] Could not read the face recognition model", exc_info=True)
         return {"model": None, "available": False}
@@ -213,7 +214,7 @@ def measure_key(info: Mapping[str, Any], faces: Mapping[str, Any], identity: Opt
     slug = info.get("slug")
     if not slug or not faces.get("available"):
         return slug
-    return f"{slug}+{FACES}+{IDENTITY}" if identity and identity.get("available") else f"{slug}+{FACES}"
+    return f"{slug}+{FACES}+{UPRIGHT}+{IDENTITY}" if identity and identity.get("available") else f"{slug}+{FACES}+{UPRIGHT}"
 
 
 def frontal(face: Mapping[str, Any]) -> bool:
@@ -226,11 +227,22 @@ def frontal(face: Mapping[str, Any]) -> bool:
     return span > 0 and abs(nose_x - (right_x + left_x) / 2) / span <= FRONTAL_TURN and span / float(face["width"]) >= FRONTAL_EYES
 
 
-def _face_crop(path: Path, box: Mapping[str, float], output: Path) -> Path:
+def _on_white(image: Any) -> Any:
     from PIL import Image
 
+    if image.mode not in ("RGBA", "LA", "PA") and not (image.mode == "P" and "transparency" in image.info):
+        return image.convert("RGB")
+    canvas = Image.new("RGBA", image.size, (255, 255, 255, 255))
+    canvas.alpha_composite(image.convert("RGBA"))
+    return canvas.convert("RGB")
+
+
+def _face_crop(path: Path, box: Mapping[str, float], output: Path) -> Path:
+    from PIL import Image, ImageOps
+
     with Image.open(path) as image:
-        picture = image.convert("RGB")
+        ImageOps.exif_transpose(image, in_place=True)
+        picture = _on_white(image)
     side = min(max(float(box["width"]), float(box["height"])) * FACE_SCALE, float(max(picture.width, picture.height)))
     left = min(max(float(box["x"]) + float(box["width"]) / 2 - side / 2, 0.0), max(picture.width - side, 0.0))
     top = min(max(float(box["y"]) + float(box["height"]) / 2 - side / 2, 0.0), max(picture.height - side, 0.0))
@@ -282,7 +294,7 @@ def _face_vectors(picked: Sequence[Tuple[Any, Path]], folder: Path, identify: bo
         found[index] = vector
     if readable:
         try:
-            read = core_bridge.identify_faces([(path, landmarks) for _, path, landmarks in readable])
+            read = core_bridge.embed_faces([(path, landmarks) for _, path, landmarks in readable])
         except FileNotFoundError:
             read = []
         for (index, _, _), vector in zip(readable, read):
