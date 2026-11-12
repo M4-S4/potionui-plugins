@@ -243,6 +243,25 @@ jobs:
         working-directory: core/content/plugins/local/${{ matrix.id }}
         run: node --test ${{ matrix.node-tests }}
 
+      - name: pytest (the core's tests over its shipped presets and plugins, with the plugin also in content/plugins/marketplace)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: core
+        env:
+          OMP_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
+          POTIONUI_TEST_THREADS: "1"
+        run: |
+          rsync -a --delete --exclude /tests/ "content/plugins/local/$PLUGIN_ID/" "content/plugins/marketplace/$PLUGIN_ID/"
+          python -m pytest -q --durations=10 --timeout=300 \
+            tests/features/presets/test_mode_labels.py \
+            tests/features/recipes/test_shipped_recipes_lint.py \
+            tests/features/recipes/executors/test_fixture_form_reactions.py \
+            tests/features/plugins/test_default_enabled.py \
+            tests/platform/plugins/test_manifest_categories.py \
+            -m "not requires_gpu and not requires_models and not gc_sensitive" \
+            --junitxml="junit-$PLUGIN_ID-shipped.xml"
+
       - name: Upload pytest results
         if: always()
         uses: actions/upload-artifact@v4
@@ -251,5 +270,6 @@ jobs:
           path: |
             core/junit-${{ matrix.id }}.xml
             core/junit-${{ matrix.id }}-core.xml
+            core/junit-${{ matrix.id }}-shipped.xml
           if-no-files-found: ignore
           retention-days: 14
