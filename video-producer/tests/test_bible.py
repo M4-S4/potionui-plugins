@@ -738,3 +738,117 @@ def test_the_prompts_route_reports_the_composed_and_the_sent_part_of_an_unsaved_
         "ignored": False,
     }
     assert item["prompt"] == f"My own words.\n{WALK}"
+
+
+def _pictured_doc(core, make_doc, card_words=None, shot_words=None, **parts):
+    woman = {**WOMAN, "references": ["r-face"]}
+    harbour = {**HARBOUR, "references": ["r-set"]}
+    references = [
+        {"id": "r-face", "assetId": "face", "space": "identite", "type": "Personnage", "scope": {"type": "global"}},
+        {"id": "r-set", "assetId": "set", "space": "decors3d", "type": "Décor", "scope": {"type": "global"}},
+    ]
+    doc = _doc(
+        make_doc,
+        cast={"characters": ["c-woman", "c-fisher"], "place": "p-harbour"},
+        characters=(woman, FISHER),
+        places=(harbour,),
+        assets=_pictures(core, "face", "set"),
+        references=references,
+        direction={"mode": "Ref2VA"},
+        **parts,
+    )
+    if card_words is not None:
+        doc["cardWords"] = card_words
+    if shot_words is not None:
+        doc["clips"][0]["cardWords"] = shot_words
+    return doc
+
+
+FISHER_SUBJECT = "<Subject 3> is the old fisherman: A man in his seventies, white beard, yellow oilskin."
+
+
+def test_ref2va_with_label_words_defines_a_pictured_card_by_its_label_and_props_and_keeps_the_words_of_a_card_without_picture(core, make_doc):
+    core.use_h3()
+
+    plan, _ = _plan(core, _pictured_doc(core, make_doc, card_words="label"), presets.MINIMAX_H3)
+    sections = _sections(plan.prompt_text)
+
+    assert sections["subject_definitions"] == (
+        "<Subject 1> is the character shown in <Picture 1>, the red-haired woman. Props: a brass lantern. "
+        "<Subject 2> is the setting shown in <Picture 2>, the harbour at dawn. "
+        f"{FISHER_SUBJECT}"
+    )
+    assert sections["detailed_description"].startswith(f"[Shot 1] {WALK_TAGGED}")
+
+
+def test_ref2va_with_picture_words_ties_a_pictured_card_to_its_picture_alone_and_still_tags_the_instruction(core, make_doc):
+    core.use_h3()
+
+    plan, _ = _plan(core, _pictured_doc(core, make_doc, card_words="picture"), presets.MINIMAX_H3)
+    sections = _sections(plan.prompt_text)
+
+    assert sections["subject_definitions"] == (
+        "<Subject 1> is the character shown in <Picture 1>. <Subject 2> is the setting shown in <Picture 2>. "
+        f"{FISHER_SUBJECT}"
+    )
+    assert sections["detailed_description"].startswith(f"[Shot 1] {WALK_TAGGED}")
+    assert plan.request["form_data"]["references"] == ["uploads/face.png", "uploads/set.png"]
+
+
+def test_the_card_words_of_a_shot_win_over_the_project_in_english_whatever_language_the_project_names(core, make_doc):
+    core.use_h3()
+    doc = _pictured_doc(core, make_doc, card_words="label", shot_words="picture", language="fr")
+
+    plan, _ = _plan(core, doc, presets.MINIMAX_H3)
+
+    assert _sections(plan.prompt_text)["subject_definitions"].startswith(
+        "<Subject 1> is the character shown in <Picture 1>. <Subject 2> is the setting shown in <Picture 2>. "
+    )
+
+
+def test_label_words_keep_the_props_after_the_label_in_english_whatever_language_the_project_names(core, make_doc):
+    core.use_h3()
+
+    plan, _ = _plan(core, _pictured_doc(core, make_doc, card_words="label", language="fr"), presets.MINIMAX_H3)
+
+    assert _sections(plan.prompt_text)["subject_definitions"].startswith(
+        "<Subject 1> is the character shown in <Picture 1>, the red-haired woman. Props: a brass lantern. "
+    )
+
+
+def test_card_words_change_nothing_in_fl2va_where_the_words_are_the_only_description(core, make_doc):
+    core.use_h3()
+    doc = _pictured_doc(core, make_doc, card_words="picture")
+    refs, _ = _plan(core, copy.deepcopy(doc), presets.MINIMAX_H3)
+    doc["direction"] = {"mode": "FL2VA"}
+
+    plan, _ = _plan(core, doc, presets.MINIMAX_H3)
+
+    assert _sections(refs.prompt_text)["subject_definitions"].startswith("<Subject 1> is the character shown in <Picture 1>. ")
+    assert plan.prompt_text.startswith(f"subject_definitions: {WOMAN_SUBJECT} ")
+
+def test_a_shot_that_replaced_its_reference_words_is_told_when_the_card_words_change_them(core, make_doc):
+    core.use_h3()
+    doc = _pictured_doc(core, make_doc)
+    composed, _ = _plan(core, copy.deepcopy(doc), presets.MINIMAX_H3)
+    parts = {"subject_definitions": "<Subject 1> is the woman in <Picture 1>.", "retention_analysis": "", "citations": ""}
+    replaced = _replace(doc, "refs", parts, composed.reference.composed)
+    replaced["cardWords"] = "picture"
+
+    plan, warnings = _plan(core, replaced, presets.MINIMAX_H3)
+
+    assert _sections(plan.prompt_text)["subject_definitions"] == "<Subject 1> is the woman in <Picture 1>."
+    assert "reference_prompt_changed" in _codes(warnings)
+
+
+@pytest.mark.parametrize("where", ["project", "shot"])
+def test_a_document_may_set_its_card_words_for_the_project_and_for_a_shot_and_nothing_else(make_doc, where):
+    doc = _doc(make_doc)
+    holder = doc if where == "project" else doc["clips"][0]
+    for words in ("card", "label", "picture"):
+        holder["cardWords"] = words
+        validate_doc(doc)
+    holder["cardWords"] = "none"
+
+    with pytest.raises(DocError):
+        validate_doc(doc)

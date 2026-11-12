@@ -213,7 +213,7 @@ export const menus = [
 			command('save', () => save(), { keys: 'mod+s' }),
 			command('versions', modal('versions'))
 		],
-		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-local', () => openLocalImport(), { keys: 'ctrl+mod+i' }), command('import-gallery', gallery), command('project-props', modal('project'))],
+		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-local', () => openLocalImport(), { keys: 'ctrl+mod+i' }), command('import-gallery', gallery), command('import-cuts', modal('cuts')), command('project-props', modal('project'))],
 		[
 			command('export', modal('export', { tab: 'video' }), { keys: 'mod+e' }),
 			command('export-xml', modal('export', { tab: 'exchange' }), { keys: 'shift+mod+e' }),

@@ -36,7 +36,8 @@ export const FAILURE_CODES = [
 	'previous_take_failed',
 	'previous_take_cancelled',
 	'previous_take_gone',
-	'chain_frame_failed'
+	'chain_frame_failed',
+	'chain_video_failed'
 ];
 const CLOUD_DRIVERS = { '01M3SV8HJTGT3JPPH2BA5MP6PR': 'cloud.openrouter', '01M48T0Q8Q0V2WNW3WTX3FY1MW': 'cloud.google' };
 const LEGACY_BACKENDS = { local: 'local', studio: 'remote', cloud: 'cloud' };

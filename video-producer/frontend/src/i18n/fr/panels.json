@@ -392,5 +392,6 @@
 	"director.pick.vrefUnsent.other": "{labels} sont sous le plan, mais {engine} ne les reçoit pas : relancer cette prise ne les enverra pas.",
 	"director.pick.suite": "Raccord de la Suite",
 	"director.pick.suiteText": "Ce plan prolonge {label} : la lumière peut sauter au raccord. Le raccord de couleur ramène la prise vers la dernière image de la coupe ; rien n’est fait tout seul.",
-	"director.pick.suiteMatch": "Raccorder la couleur"
+	"director.pick.suiteMatch": "Raccorder la couleur",
+	"media.splitShots": "Couper en plans…"
 }

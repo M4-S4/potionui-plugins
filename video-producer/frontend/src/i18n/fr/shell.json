@@ -125,6 +125,10 @@
 	"properties.chain": "Ouvrir chaque nouveau plan sur le précédent",
 	"properties.chainHelp": "Un nouveau plan prend comme première image l’image de fin de la portion montée du plan précédent. Vous pouvez la changer dans l’éditeur de plan ; quand le plan précédent change, le raccord le signale au lieu de la remplacer.",
 	"properties.chainTextOnly": "{engine} génère à partir du texte seul : il n’utilise pas ces premières images.",
+	"properties.chainBy": "Enchaîner par",
+	"properties.chainByFrame": "Dernière image",
+	"properties.chainByVideo": "Continuation",
+	"properties.chainByHelp": "Dernière image garde ce que faisait toujours un plan enchaîné : en FL2VA, il part de la dernière image du plan précédent ; en Ref2VA, de son texte et de ses références. Continuation prolonge la fin de la prise précédente : avec MiniMax-H3 en FL2VA, la prise la continue avec son mouvement et son son ; en Ref2VA, elle part avec le plan comme vidéo de référence de rôle Continuation. Un plan qui a sa propre dernière image, et les moteurs qui ne savent pas prolonger, gardent la dernière image.",
 	"toast.undo": "Annuler",
 	"toast.view": "Voir",
 	"toast.localeNotSaved": "Langue changée pour cette session seulement : l’enregistrement a échoué.",
@@ -150,5 +154,6 @@
 	"properties.interpolator.auto": "Auto",
 	"properties.interpolator.rife": "RIFE 4.25",
 	"properties.interpolator.rtx": "NVIDIA Frame Generation",
-	"properties.interpolator.help": "Pour conformer les prises plus lentes que le film. Auto prend NVIDIA Frame Generation (Medium) quand il est installé, RIFE 4.25 sinon."
+	"properties.interpolator.help": "Pour conformer les prises plus lentes que le film. Auto prend NVIDIA Frame Generation (Medium) quand il est installé, RIFE 4.25 sinon.",
+	"project.importCuts": "Un montage, coupé en plans…"
 }

@@ -125,6 +125,10 @@
 	"properties.chain": "Start each new shot from the previous one",
 	"properties.chainHelp": "A new shot takes as its first frame the image at the end of the previous shot’s cut. You can change it in the shot editor; when the previous shot changes, the seam says so instead of replacing it.",
 	"properties.chainTextOnly": "{engine} generates from text only: it does not use these first frames.",
+	"properties.chainBy": "Chain by",
+	"properties.chainByFrame": "Last frame",
+	"properties.chainByVideo": "Continuation",
+	"properties.chainByHelp": "Last frame keeps what a chained shot always did: in FL2VA it starts from the last frame of the previous shot, in Ref2VA from its text and its references. Continuation carries on the end of the previous take: with MiniMax-H3 in FL2VA the take continues it with its motion and its sound, and in Ref2VA it goes with the shot as a reference video of role Continuation. A shot with a last frame of its own, and the engines that cannot continue, keep the last frame.",
 	"toast.undo": "Undo",
 	"toast.view": "View",
 	"toast.localeNotSaved": "Language changed for this session only: it could not be saved.",
@@ -150,5 +154,6 @@
 	"properties.interpolator.auto": "Auto",
 	"properties.interpolator.rife": "RIFE 4.25",
 	"properties.interpolator.rtx": "NVIDIA Frame Generation",
-	"properties.interpolator.help": "Brings takes slower than the film to its frame rate. Auto takes NVIDIA Frame Generation (Medium) when it is installed, RIFE 4.25 otherwise."
+	"properties.interpolator.help": "Brings takes slower than the film to its frame rate. Auto takes NVIDIA Frame Generation (Medium) when it is installed, RIFE 4.25 otherwise.",
+	"project.importCuts": "A cut, split into shots…"
 }

@@ -352,7 +352,10 @@ def test_docs_files_exist_and_the_admin_readme_comes_first(manifest):
 
     assert [(doc["path"], doc["audience"]) for doc in manifest.docs] == [
         ("README.md", "admin"),
+        ("docs/admin-reference.md", "admin"),
         ("docs/user-guide.md", "user"),
+        ("docs/user-reference.md", "user"),
+        ("docs/technical-reference.md", "developer"),
     ]
     assert all(doc["title"] for doc in manifest.docs)
 
@@ -1247,6 +1250,7 @@ class Shipped:
     draft: Tuple[str, ...] = ()
     final: Tuple[str, ...] = ()
     modes: Tuple[str, ...] = ("video",)
+    own_modes: Tuple[str, ...] = ()
     wan_modes: Tuple[str, ...] = ("t2v",)
     companions: Dict[str, str] = dataclasses.field(default_factory=dict)
     listed: bool = True
@@ -1483,6 +1487,7 @@ SHIPPED_PRESETS = {
         defaults={**H3_DEFAULTS, "speed_profile": "custom", "steps": 20},
         recommended={"model": [COMFY_DIT, WAN2GP_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
         modes=("video", "refs"),
+        own_modes=("extend",),
     ),
     H3_FAST_12GB: Shipped(
         name="MiniMax-H3-Fast (12 GB)",
@@ -1594,7 +1599,7 @@ def test_the_shipped_presets_load_through_the_cores_loader(shipped_presets):
     for preset_id, shipped in SHIPPED_PRESETS.items():
         preset = shipped_presets[preset_id]
         assert preset.origin == {"kind": "plugin", "plugin_id": PLUGIN_ID, "path": shipped.folder}
-        assert (preset.engine, preset.category, list(preset.modes)) == ("native", "video", list(shipped.modes))
+        assert (preset.engine, preset.category, list(preset.modes)) == ("native", "video", [*shipped.modes, *shipped.own_modes])
         assert preset.requires == shipped.requires, preset_id
         assert preset.tags[:3] == shipped.leading_tags, preset_id
         assert [tag for tag in preset.tags if tag.startswith("ram-")] == shipped.ram_tags, preset_id
@@ -1681,6 +1686,34 @@ def _core_pipes(pipes, preset_id, mode):
             pipe = dataclasses.replace(pipe, configuration={key: value for key, value in pipe.configuration.items() if key not in own})
         shared.append(pipe)
     return shared
+
+
+CONTINUE_OWN_CONFIG = {
+    "source_video_role": "continue",
+    "source_overlap_latents": 5,
+    "resolution": "{{ form.resolution }}",
+    "frames": "{{ form.frames }}",
+}
+
+
+def test_the_12_gb_extend_mode_runs_the_core_extend_pipeline_after_the_source_and_hands_back_the_new_footage_alone(shipped_presets):
+    preset = shipped_presets[H3_12GB]
+    copy = yaml.safe_load((PLUGIN_ROOT / "presets" / "MiniMax-H3-12GB" / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
+    original = yaml.safe_load((CORE_PRESETS / "MiniMax-H3" / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
+    kept = [pipe for pipe in original if pipe["name"] != "video_concat"]
+
+    assert [pipe["name"] for pipe in copy] == [pipe["name"] for pipe in kept]
+    for mine, theirs in zip(copy, kept):
+        if mine["name"] == "generator/video_minimax_h3":
+            assert {key: mine["configuration"].pop(key) for key in CONTINUE_OWN_CONFIG} == CONTINUE_OWN_CONFIG
+            theirs = {**theirs, "configuration": {key: value for key, value in theirs["configuration"].items() if key not in CONTINUE_OWN_CONFIG}}
+        if mine["name"] == "param_emitter":
+            continue
+        if mine["name"] == "gallery":
+            assert mine["input"] == [["video", "generator", "video"], ["seed", "seed_generator", "seed"]]
+            continue
+        assert mine == theirs, mine["name"]
+    assert "extend" in preset.modes and "extend" not in preset.vars["video_director"]["preset_modes"]
 
 
 def test_the_shipped_presets_run_the_core_pipelines_unchanged(shipped_presets, core_presets):

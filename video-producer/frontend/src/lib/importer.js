@@ -47,19 +47,28 @@ export function openLibrary(title) {
 	open('UploadLibraryModal', { title, mediaType: 'video' }, ['video']);
 }
 
-export function pickMedia(kind, title, onPicked) {
+export function pickMedia(kind, title, onPicked, onDismissed = null) {
 	if (ui.hostModal) return;
+	let picked = false;
 	const close = openHostModal('UploadLibraryModal', {
 		title,
 		mediaType: kind,
 		onSelect: async (item) => {
+			picked = true;
 			close?.();
 			const id = await importPicked(item?.id ? { origin: { kind: 'library', itemId: item.id }, filename: item.original_filename || item.filename } : null, kind);
 			if (id) onPicked(id);
+			else onDismissed?.();
 		},
-		onClosed: () => (ui.hostModal = false)
+		onClosed: () => {
+			ui.hostModal = false;
+			if (!picked) onDismissed?.();
+		}
 	});
-	if (!close) return toast(t('project.toast.pickerMissing'), 'warning');
+	if (!close) {
+		onDismissed?.();
+		return toast(t('project.toast.pickerMissing'), 'warning');
+	}
 	ui.hostModal = true;
 }
 
@@ -151,12 +160,13 @@ export function openLocalImport(kind = 'media') {
 	input.click();
 }
 
-export function pickLocalMedia(kind, onPicked) {
+export function pickLocalMedia(kind, onPicked, onDismissed = null) {
 	if (typeof document === 'undefined') return;
 	const input = document.createElement('input');
 	input.type = 'file';
 	input.accept = acceptFor([kind]);
-	input.onchange = () => importFiles(input.files, [kind], { pick: onPicked, kind });
+	input.onchange = () => importFiles(input.files, [kind], { pick: onPicked, kind, dismissed: onDismissed });
+	if (onDismissed) input.oncancel = () => onDismissed();
 	input.click();
 }
 
@@ -170,7 +180,10 @@ function refusal(rejected, target) {
 export function importFiles(files, kinds = LOCAL_KINDS.media, target = null) {
 	const { accepted, rejected } = sortFiles(files, kinds);
 	if (rejected.length) toast(refusal(rejected, target), 'warning');
-	if (!accepted.length) return Promise.resolve();
+	if (!accepted.length) {
+		target?.dismissed?.();
+		return Promise.resolve();
+	}
 	const entries = trackUploads(accepted);
 	const run = chain.then(() => uploadAll(entries, kinds, target));
 	chain = run.catch(() => {});
@@ -217,6 +230,7 @@ async function uploadAll(entries, kinds, target) {
 	if (target?.pick) {
 		report(made.length, present, 0);
 		if (placed.length) target.pick(placed[0]);
+		else target.dismissed?.();
 	} else if (target) await placeAll(placed, target);
 	else report(made.length, present, 0);
 }

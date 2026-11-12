@@ -784,6 +784,16 @@ export function acceptProposal(at = 'end') {
 	toast(t('lib.toast.shotsAdded', { count: list.length }), 'success');
 }
 
+export function insertShots(index, clips, alongside = () => {}) {
+	if (!clips.length) return;
+	act(() => {
+		alongside();
+		doc.clips.splice(Math.min(Math.max(0, index), doc.clips.length), 0, ...clips);
+		relayout();
+		shotsAdded(doc.clips.filter((c) => clips.some((x) => x.id === c.id)));
+	});
+}
+
 export function replaceDoc(next) {
 	const incoming = migrate({ ...next, assets: Array.isArray(next?.assets) ? next.assets : [] });
 	delete incoming.results;

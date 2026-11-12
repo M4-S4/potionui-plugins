@@ -21,7 +21,8 @@
 
 	const importItems = $derived([
 		{ label: t('shell.project.importLibrary'), icon: 'folder', key: commandById('import')?.key, run: () => openImport() },
-		{ label: t('shell.project.importLocal'), icon: 'upload', key: commandById('import-local')?.key, run: () => openLocalImport() }
+		{ label: t('shell.project.importLocal'), icon: 'upload', key: commandById('import-local')?.key, run: () => openLocalImport() },
+		{ label: t('shell.project.importCuts'), icon: 'scissors', run: () => (ui.modal = { type: 'cuts' }) }
 	]);
 	const tip = (id) => ({ text: commandById(id)?.label ?? '', kbd: commandById(id)?.key || undefined });
 	const savedTime = $derived(project.savedAt ? formatTime(project.savedAt) : null);

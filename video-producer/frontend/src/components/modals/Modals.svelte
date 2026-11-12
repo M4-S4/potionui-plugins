@@ -2,7 +2,8 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ui, doc, act, globalPrompt, itemsIn, productionRange, secs, select, openDirector } from '../../lib/state.svelte.js';
-	import { chainOn, ignoresFirstFrame, setChain } from '../../lib/chain.js';
+	import { cardWordsOf, setCardWords } from '../../lib/cardwords.js';
+	import { chainByOf, chainOn, ignoresFirstFrame, setChain, setChainBy } from '../../lib/chain.js';
 	import { engineOptions, optionFor } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { allCommands, pointerShortcuts } from '../../lib/commands.js';
@@ -18,6 +19,7 @@
 	import ExportDialog from './ExportDialog.svelte';
 	import MakeFinal from './MakeFinal.svelte';
 	import FinalPass from './FinalPass.svelte';
+	import CutImport from './CutImport.svelte';
 	import { flyingTakes } from '../../lib/takes.svelte.js';
 	import { CROP_LOSS, RESOLUTION_NAMES, deliverySize, framingOf } from '../../lib/formats.js';
 	import { filmRatio, percent } from '../../lib/framing.js';
@@ -77,8 +79,23 @@
 		if (mode === 'bars') return t('project.framing.barsHelp');
 		return t('project.framing.autoHelp', { loss: percent(CROP_LOSS) });
 	});
+	const cardWordChoices = $derived([
+		{ id: 'card', label: t('project.cardWords.card') },
+		{ id: 'label', label: t('project.cardWords.label') },
+		{ id: 'picture', label: t('project.cardWords.picture') }
+	]);
+	const cardWords = $derived(cardWordsOf(doc));
+	const chainBy = $derived(chainByOf(doc));
+	const chainByChoices = $derived([
+		{ id: 'frame', label: t('shell.properties.chainByFrame') },
+		{ id: 'video', label: t('shell.properties.chainByVideo') }
+	]);
+	const cardWordsHelp = $derived(cardWords === 'picture' ? t('project.cardWords.pictureHelp') : cardWords === 'label' ? t('project.cardWords.labelHelp') : t('project.cardWords.cardHelp'));
 	const deliveryText = (resolution) => deliverySize(filmRatio(doc), resolution).join('×');
 
+	function chooseCardWords(id) {
+		if (id !== cardWords) act(() => setCardWords(doc, id));
+	}
 </script>
 
 {#key m}
@@ -96,6 +113,8 @@
 		<MakeFinal takeId={m.take} />
 	{:else if m?.type === 'final-pass'}
 		<FinalPass />
+	{:else if m?.type === 'cuts'}
+		<CutImport assetId={m.assetId ?? null} settings={m.settings ?? null} />
 	{:else if m?.type === 'recap' && recap}
 		<Modal title={t('shell.recap.title')} subtitle="{secs(recap.range[0])} → {secs(recap.range[1])}" icon="list" width={640}>
 			<div class="space-y-3 p-4 text-sm">
@@ -211,6 +230,13 @@
 					</div>
 					<p class="text-xs text-fg-subtle">{framingHelp}</p>
 				</div>
+				<div class="space-y-1" data-card-words={cardWords}>
+					<div class="flex items-center justify-between gap-3">
+						<span class="vp-label">{t('project.cardWords.title')}</span>
+						<HostUi name="SegmentedControl" props={{ items: cardWordChoices, selected: cardWords, onSelect: chooseCardWords, ariaLabel: t('project.cardWords.title'), variant: 'toggle' }} />
+					</div>
+					<p class="text-xs text-fg-subtle">{cardWordsHelp}</p>
+				</div>
 				<div class="space-y-1">
 					<div class="flex items-center justify-between gap-3">
 						<label for="vp-project-chain" class="vp-label">{t('shell.properties.chain')}</label>
@@ -218,6 +244,13 @@
 					</div>
 					<p class="text-xs text-fg-subtle">{t('shell.properties.chainHelp')}</p>
 					{#if chainOn(doc) && ignoresFirstFrame(projectEngine)}<p class="text-xs text-warning">{t('shell.properties.chainTextOnly', { engine: projectEngine.label })}</p>{/if}
+					{#if chainOn(doc)}
+						<div class="flex items-center justify-between gap-3" data-chain-by={chainBy}>
+							<span class="vp-label">{t('shell.properties.chainBy')}</span>
+							<HostUi name="SegmentedControl" props={{ items: chainByChoices, selected: chainBy, onSelect: (v) => act(() => setChainBy(doc, v)), ariaLabel: t('shell.properties.chainBy'), variant: 'toggle' }} />
+						</div>
+						<p class="text-xs text-fg-subtle">{t('shell.properties.chainByHelp')}</p>
+					{/if}
 				</div>
 			</div>
 		</Modal>

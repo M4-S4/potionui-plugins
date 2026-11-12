@@ -1,6 +1,7 @@
 import { newAsset } from './starter.js';
 import { framesOf, normalizeSeamMedia, seamAsset, seamImage } from './seam.js';
 import { sourceSeconds } from './cadence.js';
+import { FPS, LIMIT_12GB } from './encoder.js';
 import { isObject } from './values.js';
 
 const text = (value) => (typeof value === 'string' ? value : '');
@@ -12,6 +13,24 @@ export const chainOn = (doc) => doc?.firstFromPrevious !== false;
 export function setChain(doc, on) {
 	if (on) delete doc.firstFromPrevious;
 	else doc.firstFromPrevious = false;
+}
+
+export const CHAIN_BY = ['frame', 'video'];
+
+const projectChainBy = (doc) => (CHAIN_BY.includes(doc?.chainBy) ? doc.chainBy : 'frame');
+
+export const chainByOf = (doc, clip = null) => (CHAIN_BY.includes(clip?.chainBy) ? clip.chainBy : projectChainBy(doc));
+
+export function setChainBy(doc, value) {
+	if (!CHAIN_BY.includes(value)) return;
+	if (value === 'frame') delete doc.chainBy;
+	else doc.chainBy = value;
+}
+
+export function setShotChainBy(doc, clip, value) {
+	if (!CHAIN_BY.includes(value)) return;
+	if (value === projectChainBy(doc)) delete clip.chainBy;
+	else clip.chainBy = value;
 }
 
 export const ownChain = (clip) => (typeof clip?.firstFromPrevious === 'boolean' ? clip.firstFromPrevious : null);
@@ -80,15 +99,37 @@ export function chainState(doc, index) {
 	return null;
 }
 
-export function seamChain(doc, index, takes = [], textOnly = false) {
+export const MAX_CONTINUE_FRAMES = 328;
+
+export function continueFallback(doc, index, { references = false, tokens = null, maxDuration = null, least = 0 } = {}) {
 	const from = doc.clips?.[index - 1];
 	const to = doc.clips?.[index];
 	if (!from || !to) return null;
-	const base = { from, to, own: ownChain(to) !== null, after: null };
+	if (sourceSeconds(from) < least) return { state: 'continueShort' };
+	if (references) return tokens !== null && tokens > LIMIT_12GB ? { state: 'continueEncoder', tokens, limit: LIMIT_12GB } : null;
+	if (seamImage(doc, to.id, 'last') || to.keepFraming === true) return { state: 'continueOwnLast' };
+	const dur = number(to.dur) !== null && to.dur > 0 ? to.dur : null;
+	const wanted = dur !== null && number(maxDuration) !== null && maxDuration > 0 ? Math.min(dur, maxDuration) : dur;
+	if (wanted !== null && Math.floor(wanted * FPS + 0.5) > MAX_CONTINUE_FRAMES) return { state: 'continueLong' };
+	return null;
+}
+
+export function seamChain(doc, index, takes = [], textOnly = false, continues = false, references = false, fallback = null) {
+	const from = doc.clips?.[index - 1];
+	const to = doc.clips?.[index];
+	if (!from || !to) return null;
+	const base = { from, to, own: ownChain(to) !== null, after: null, extends: continues && !references };
 	if (!shotChained(doc, to)) return { ...base, state: 'off' };
-	if (textOnly) return { ...base, state: 'textOnly' };
+	if (references && !continues) return { ...base, state: 'references' };
+	if (textOnly && !continues) return { ...base, state: 'textOnly' };
 	const waiting = takes.find((take) => take.shotId === to.id && chainWaiting(take));
 	if (waiting) return { ...base, state: 'waiting', take: waiting, after: takes.find((take) => take.id === waiting.chain.after) ?? null };
+	if (continues) {
+		const source = chainSource(doc, from);
+		if (source && source.at === null) return { ...base, state: 'continueStill' };
+		if (fallback) return { ...base, ...fallback };
+		return { ...base, state: source ? 'continues' : 'continueLater' };
+	}
 	const image = seamImage(doc, to.id, 'first');
 	if (image && !isObject(image.frameOf)) return { ...base, state: 'own' };
 	if (image) return { ...base, state: chainState(doc, index)?.state === 'stale' ? 'stale' : 'fresh' };
@@ -108,7 +149,7 @@ export function takeFrameAsset(doc, take, name) {
 const PLACEABLE = ['queued', 'running', 'done'];
 
 export function placesTakeFrame(doc, take, takes = [], removed = () => false) {
-	if (take?.chain?.state !== 'taken' || !take.chain.source || !PLACEABLE.includes(take.status)) return false;
+	if (take?.chain?.state !== 'taken' || !take.chain.source || take.chain.video || !PLACEABLE.includes(take.status)) return false;
 	if (assetOf(doc, chainAssetId(take)) || removed(take.id) || (take.status === 'done' && assetOf(doc, `gen-${take.id}`))) return false;
 	const i = (doc.clips ?? []).findIndex((c) => c.id === take.shotId);
 	if (i <= 0 || doc.clips[i - 1].id !== take.chain.previous) return false;
@@ -136,7 +177,8 @@ const CHAIN_STATES = ['waiting', 'taken'];
 
 export function normalizeChain(value) {
 	if (!isObject(value) || !text(value.previous) || !CHAIN_STATES.includes(value.state)) return null;
-	return { previous: value.previous, after: text(value.after) || null, state: value.state, batch: text(value.batch) || null, source: normalizeFrameSource(value.source), frame: normalizeSeamMedia(value.frame) };
+	const video = isObject(value.video) ? { frames: number(value.video.frames), seconds: number(value.video.seconds), value: text(value.video.value) || null } : null;
+	return { previous: value.previous, after: text(value.after) || null, state: value.state, batch: text(value.batch) || null, source: normalizeFrameSource(value.source), frame: normalizeSeamMedia(value.frame), ...(video ? { video } : {}) };
 }
 
 export function frameAsset(media, source, fallbackName) {

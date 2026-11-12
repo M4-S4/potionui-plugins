@@ -3,7 +3,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from . import core_bridge, director, frame_grab, projects, takes
+from . import chainvideo, core_bridge, director, frame_grab, projects, takes
+from .catalog import REF2VA
 from .frame_grab import FrameError
 from .core_bridge import LimitExceeded, MediaRefError
 from .exports.common import asset_of
@@ -65,6 +66,14 @@ def first_kind(doc: Mapping[str, Any], shot_id: str) -> Optional[str]:
     return CHAINED if isinstance(frame_of, Mapping) else OWN
 
 
+def _references(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> bool:
+    return (director.shot_engine(doc, clip["id"]).get("profile") or director.profile_of(doc)) == REF2VA
+
+
+def continues(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> bool:
+    return director.chain_by(doc, clip) == director.VIDEO_CHAIN
+
+
 def waits(project_id: str, doc: Mapping[str, Any], shot_ids: Sequence[str]) -> Dict[str, Wait]:
     """The shots of an order that start from the last image of the previous shot and have to wait for it."""
     clips = doc.get("clips") or []
@@ -76,7 +85,9 @@ def waits(project_id: str, doc: Mapping[str, Any], shot_ids: Sequence[str]) -> D
             continue
         previous = clips[index - 1]
         opening = first_kind(doc, clip["id"])
-        if opening == OWN or (opening == CHAINED and previous["id"] not in batch):
+        if opening == OWN and not (_references(doc, clip) and continues(doc, clip)):
+            continue
+        if opening == CHAINED and previous["id"] not in batch and not continues(doc, clip):
             continue
         if previous["id"] in batch:
             found[clip["id"]] = Wait(clip["id"], previous["id"], BATCH)
@@ -99,12 +110,14 @@ def chain_map(found: Mapping[str, Wait]) -> Dict[str, director.Chain]:
     return {shot_id: wait.chain for shot_id, wait in found.items()}
 
 
-def record(wait: Optional[Wait], letter: str, created: Sequence[Mapping[str, Any]], batch: str) -> Optional[Dict[str, Any]]:
+def record(wait: Optional[Wait], letter: str, created: Sequence[Mapping[str, Any]], batch: str, video: Optional[Mapping[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """What a new take of a waiting shot stores: the previous shot, the take it waits for (the one of the same letter among the previous shot's new takes, or its takes on their way, else the first of them), and its state; a still is taken at once and a placed video when the tracker comes by."""
     if wait is None:
         return None
     base = {"previous": wait.previous, "batch": batch, "after": None, "source": None, "frame": None}
-    if wait.source == STILL:
+    if video is not None:
+        base["video"] = dict(video)
+    if wait.source == STILL and video is None:
         return {**base, "state": TAKEN, "source": {"shotId": wait.previous, "takeId": None, "assetId": wait.asset_id, "at": None}}
     pool = [take for take in created if take["shot_id"] == wait.previous] if wait.source == BATCH else wait.takes
     if wait.source == MEDIA or not pool:
@@ -140,6 +153,19 @@ async def _frame(owner: Any, project: Mapping[str, Any], wait: Mapping[str, Any]
     return await frame_grab.end_frame(owner, project, wait["previous"])
 
 
+async def _continued(owner: Any, project: Mapping[str, Any], take: Mapping[str, Any], wait: Mapping[str, Any], after: Optional[Mapping[str, Any]], fail: Fail) -> bool:
+    video = wait["video"]
+    try:
+        cut = await chainvideo.end_video(owner, project, wait["previous"], after, int(video["frames"]), tuple(video["size"]), bool(video.get("sound")))
+    except FrameError as exc:
+        return fail(take, "chain_video_failed", exc.message)
+    except (MediaRefError, LimitExceeded) as exc:
+        return fail(take, "chain_video_failed", str(exc) or "The end of the previous shot could not be stored.")
+    request = swap(copy.deepcopy(take.get("request") or {}), director.chain_video_value(wait["previous"]), cut["value"])
+    taken = {**wait, "state": TAKEN, "source": cut["source"], "frame": None, "video": {**video, "value": cut["value"], "filename": cut["filename"]}}
+    return takes.take_frame(take["id"], taken, request)
+
+
 async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
     """Give a waiting take the last image of the previous shot once there is one, or fail it with a reason; True when it stops waiting."""
     wait = take.get("chain") or {}
@@ -155,6 +181,8 @@ async def take_frame(take: Mapping[str, Any], fail: Fail) -> bool:
     project = projects.get_project(take["project_id"])
     if owner is None or project is None:
         return False
+    if wait.get("video"):
+        return await _continued(owner, project, take, wait, after, fail)
     try:
         frame = await _frame(owner, project, wait, after)
     except FrameError as exc:
