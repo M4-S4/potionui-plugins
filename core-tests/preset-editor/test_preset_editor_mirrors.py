@@ -1,7 +1,9 @@
 import functools
 import importlib
 import importlib.util
+import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,6 +34,16 @@ PRESETS_URL = "/api/plugins/preset-editor/presets"
 DRAFTS_URL = "/api/plugins/preset-editor/drafts"
 ORIGIN = "local-one"
 MIRROR = "local-one-mirror"
+NORMALIZE = (
+    "import { readFileSync } from 'node:fs';"
+    "const { localPresets, normalizeCatalog } = await import(process.argv[1]);"
+    "const entries = normalizeCatalog(JSON.parse(readFileSync(process.argv[2], 'utf8')));"
+    "console.log(JSON.stringify({"
+    " editable: Object.fromEntries(entries.map((entry) => [entry.id, entry.editable])),"
+    " mirror_of: Object.fromEntries(entries.map((entry) => [entry.id, entry.mirrorOf])),"
+    " menu: localPresets(entries).map((entry) => entry.id)"
+    " }));"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -97,7 +109,7 @@ def core(roots, tmp_path, monkeypatch, mock_db):
     file_repo = FilePresetRepository(loader)
     collaborators = SimpleNamespace(
         preset_loader=loader, file_repo=file_repo, db_repo=db_repo, group_repo=UserGroupRepository(), plugins=_Plugins(),
-        cover_store=None,
+        cover_store=None, requirements_cache=None,
     )
     container = SimpleNamespace(
         preset_template_loader=loader, file_preset_repository=file_repo, preset_collaborators=collaborators,
@@ -133,6 +145,30 @@ def test_the_core_shows_the_mirror_as_a_local_preset_living_in_the_folder_of_its
     assert Path(mirror.path).resolve() == core.origin_dir.resolve()
     assert mirror.origin == core.bridge.find_preset(ORIGIN).origin == {"kind": "local", "plugin_id": None, "path": "Local/v1"}
     assert core.bridge.is_installed(MIRROR) and core.bridge.is_installed(ORIGIN)
+
+
+def test_the_admin_list_of_the_core_gives_the_page_no_edit_delete_or_zip_for_a_mirror(core, tmp_path):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not on the PATH")
+    listed = plugin_api_presets.preset_operations.list_presets(core.collaborators, ADMIN, include_uninstalled=True)
+    by_id = {entry["id"]: entry for entry in listed}
+    assert (by_id[MIRROR]["origin"]["kind"], by_id[MIRROR]["source_preset_id"]) == ("local", ORIGIN)
+    assert by_id[ORIGIN]["source_preset_id"] is None
+    catalog_file = tmp_path / "catalog.json"
+    catalog_file.write_text(json.dumps(listed, default=str), encoding="utf-8")
+    catalog_module = (PLUGIN_ROOT / "frontend" / "src" / "lib" / "catalog.js").resolve().as_uri()
+
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", NORMALIZE, catalog_module, str(catalog_file)],
+        capture_output=True, text=True, timeout=60, check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    shown = json.loads(result.stdout)
+    assert (shown["editable"][MIRROR], shown["mirror_of"][MIRROR]) == (False, ORIGIN)
+    assert (shown["editable"][ORIGIN], shown["mirror_of"][ORIGIN]) == (True, None)
+    assert shown["menu"] == [ORIGIN]
 
 
 def test_deleting_a_mirror_is_refused_before_anything_is_uninstalled_or_removed(core, roots):

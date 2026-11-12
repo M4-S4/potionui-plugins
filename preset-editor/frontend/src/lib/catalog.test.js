@@ -15,7 +15,7 @@ test('normalizePreset reads the origin, the installation state and the cover', (
 	const krea = normalizePreset(raw[0]);
 	assert.deepEqual(krea, {
 		id: 'krea', name: 'Krea 2', version: '1.0.0', kind: 'marketplace', pluginId: null, path: 'Krea2', installed: false,
-		engine: 'native', category: 'image', modes: ['txt2img', 'enhance'], tags: ['image'], cover: 'public/examples/potion.webp', editable: false
+		engine: 'native', category: 'image', modes: ['txt2img', 'enhance'], tags: ['image'], cover: 'public/examples/potion.webp', mirrorOf: null, editable: false
 	});
 	const rtx = normalizePreset(raw[2]);
 	assert.equal(rtx.kind, 'plugin');
@@ -38,6 +38,32 @@ test('only local presets are editable and localPresets lists them by name', () =
 	const entries = normalizeCatalog(raw);
 	assert.deepEqual(entries.map((entry) => entry.editable), [false, true, false, true]);
 	assert.deepEqual(localPresets(entries).map((entry) => entry.id), ['mine', 'old']);
+});
+
+const mirrored = [
+	{ id: 'mine', name: 'My preset', origin: { kind: 'local', plugin_id: null, path: 'Mine/v1' }, installed: true, is_mirror: false, source_preset_id: null },
+	{ id: 'mine-anime', name: 'My preset, anime', origin: { kind: 'local', plugin_id: null, path: 'Mine/v1' }, installed: true, is_mirror: true, source_preset_id: 'mine' },
+	{ id: 'krea-dark', name: 'Krea dark', origin: { kind: 'marketplace', plugin_id: null, path: 'Krea2' }, installed: true, is_mirror: true, source_preset_id: 'krea' },
+	{ id: 'gone', name: 'Gone', version: '', installed: true, is_mirror: true, source_preset_id: 'deleted-one', mirror_state: 'source_missing' }
+];
+
+test('a mirror of a local preset is not editable and stays out of the Edit menu', () => {
+	const entries = normalizeCatalog(mirrored);
+	assert.deepEqual(entries.map((entry) => [entry.id, entry.kind, entry.mirrorOf, entry.editable]), [
+		['mine', 'local', null, true],
+		['mine-anime', 'local', 'mine', false],
+		['krea-dark', 'marketplace', 'krea', false],
+		['gone', 'marketplace', 'deleted-one', false]
+	]);
+	assert.deepEqual(localPresets(entries).map((entry) => entry.id), ['mine']);
+	assert.deepEqual(filterPresets(entries, { kind: 'local' }).map((entry) => entry.id), ['mine', 'mine-anime']);
+});
+
+test('a preset naming itself as its source is not a mirror', () => {
+	const entry = normalizePreset({ id: 'mine', origin: { kind: 'local', path: 'Mine/v1' }, source_preset_id: 'mine' });
+	assert.equal(entry.mirrorOf, null);
+	assert.equal(entry.editable, true);
+	assert.equal(normalizePreset({ id: 'x', origin: { kind: 'local' }, source_preset_id: '' }).editable, true);
 });
 
 test('filterPresets combines the kind, the installation state and the query', () => {
