@@ -6,7 +6,7 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 
 | Plugin | Folder | Version | State |
 |---|---|---|---|
-| Video Producer | `video-producer/` | 0.2.0 | Maintained and tested by the CI against the pinned core. Its working copy is still the M4-S4/PotionUI fork: see [Following the fork](#following-the-fork). |
+| Video Producer | `video-producer/` | 0.2.0 | Maintained and tested by the CI against the pinned official core; its page ships its own stylesheet (see [Tailwind classes](#tailwind-classes)). It is still developed in the M4-S4/PotionUI fork and imported here: see [Following the fork](#following-the-fork). |
 | Preset Editor | `preset-editor/` | 0.2.3 | Brought up to the pinned core in November 2026 (its catalogue entry requires PotionUI 0.1.0 or later), tested by the CI like Video Producer and checked on screen on a running instance of that core. Not released yet: see [its README](preset-editor/README.md#what-is-left-to-do). |
 
 `archive/` holds the older copies of `model-browser` and `deepseek-provider`, with their core-side tests and the design variants of Model Browser. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. Nothing in `archive/` is in the catalogue, the CI or the scripts' scope.
@@ -36,7 +36,7 @@ Every text file is stored with LF line endings (`.gitattributes`), whatever `cor
 Copy `.env.example` to `.env.local` (ignored by git, never committed) and set `POTIONUI_SRC` to a PotionUI checkout. The scripts read it, or take `-PotionUISrc`:
 
 - `scripts/sync-plugins.ps1 [-Plugin <id>]` mirrors each plugin into `content/plugins/local/<id>` of the checkout, as a real folder (robocopy on Windows, rsync elsewhere).
-- `scripts/build-plugins.ps1 [-Plugin <id>] [-Local]` builds the frontend of a plugin with the core's toolchain (`scripts/build-plugins.mjs`) and copies `frontend/dist` back here. `frontend/dist` is ignored by git for every plugin: the CI builds it and the releases carry it.
+- `scripts/build-plugins.ps1 [-Plugin <id>] [-Local]` builds the frontend of a plugin with the core's toolchain (`scripts/build-plugins.mjs`) and copies `frontend/dist` back here. `frontend/dist` is ignored by git for every plugin: the CI builds it and the releases carry it. The script installs the plugin toolchain (`npm install` in `content/plugins/`) when it is missing, but not the packages of the core's `frontend/`: for a plugin whose page ships a stylesheet, such as Video Producer, run `npm ci` in `frontend/` of the checkout first, or the build stops when it compiles the sheet.
 - `scripts/test-plugins.ps1 [-Plugin <id>]` runs the pytest suite of each plugin in its own process, from the checkout or in the container named by `POTIONUI_CONTAINER`.
 - `scripts/import-from-fork.ps1` brings Video Producer here from the fork (next section).
 
@@ -50,7 +50,7 @@ git config core.hooksPath .githooks
 
 ### Following the fork
 
-Until the core loads a CSS file shipped with a plugin installed outside its tree (see [Tailwind classes](#tailwind-classes)), Video Producer is developed in the M4-S4/PotionUI fork, under `content/plugins/marketplace/video-producer/`, which is what the fork's instance and CI run. `scripts/import-from-fork.ps1` copies its current state from a checkout of the fork (`POTIONUI_SRC` or `-PotionUISrc`):
+Video Producer is still developed in the M4-S4/PotionUI fork, under `content/plugins/marketplace/video-producer/`, which is what the fork's development instance and CI run. The plugin no longer needs the fork to run: every core change it relies on is in PotionUI/PotionUI, and its page ships its own stylesheet. Keeping the fork as its working copy is a working choice, until the plugin is developed here. `scripts/import-from-fork.ps1` copies its current state from a checkout of the fork (`POTIONUI_SRC` or `-PotionUISrc`):
 
 - `content/plugins/marketplace/video-producer/` to `video-producer/`, and `tests/plugins/marketplace/test_video_producer_*.py` to `core-tests/video-producer/`, as a robocopy mirror: a file removed in the fork is removed here;
 - never `node_modules`, `frontend/dist`, `__pycache__`, `.pytest_cache` nor `docs/screenshots`: the screenshots are kept here as WebP, and the references of `README.md` and `docs/user-guide.md` are pointed at the `.webp` files. A screenshot added in the fork is listed in a warning: convert it to WebP and add it by hand.
@@ -61,14 +61,18 @@ The script then runs `scripts/check-public-hygiene.py` on `video-producer/` and 
 
 1. Put the plugin folder, with its built `frontend/dist`, at `content/plugins/local/<id>` of the instance:
    - from a release: unzip `<id>-<version>.zip` into `content/plugins/local/` (the zip holds the folder `<id>/` with its dist and without its tests);
-   - from a clone of this repository: copy `<id>/`, then build its dist (`scripts/build-plugins.ps1 -Plugin <id> -Local`, or `node scripts/build-plugins.mjs <id>` from the root of a core checkout that holds the plugin).
+   - from a clone of this repository: copy `<id>/`, then build its dist (`scripts/build-plugins.ps1 -Plugin <id> -Local`, or `node scripts/build-plugins.mjs <id>` from the root of a core checkout that holds the plugin). The build needs the packages of the core's `content/plugins/` and, for a page that ships a stylesheet, of its `frontend/` (`npm ci` in each).
 
    In a Docker container the folder is `/app/content/plugins/local/<id>`: bind-mount it, or copy it with `scripts/potionui-docker.ps1 copy -Plugin <id>`.
 2. In PotionUI, open Admin → Plugins, click **Scan for Plugins**, then enable the plugin.
 
 ### Tailwind classes
 
-The dist of a plugin carries no Tailwind CSS. The classes a plugin uses are compiled by the build of the host's frontend, which scans `content/plugins/*/*/frontend/src`. A plugin installed after a Docker image was built was not scanned: a class that neither the app nor the plugins bundled in the image already use has no CSS, until the core loads a CSS file shipped with the plugin, or until the app frontend is rebuilt from a checkout that holds the plugin. Write plugin markup with the host's token classes, and use inline styles for a new arbitrary value.
+The build of the host's frontend compiles the Tailwind classes of the plugins that are on disk when it runs (it scans `content/plugins/*/*/frontend/src`). A plugin installed later, from a release or the catalogue on a Docker image for example, was not scanned: a class that neither the app nor the plugins bundled in the image use has no CSS there.
+
+A page plugin therefore ships its own stylesheet. When `frontend/src/` holds `<Component>.css` next to the page component, the core's `scripts/build-plugins.mjs` compiles it into `frontend/dist/<Component>.css`, with the app's `frontend/tailwind.config.js` as a preset, over the plugin's own `frontend/src` only and without Tailwind's base styles; `@tailwind utilities;` is usually the whole file. The page route of the core loads that sheet with the page and confines every rule to the page element, so it follows the app's light and dark themes and touches nothing outside the page. Video Producer ships `frontend/src/VideoProducerPage.css`; Preset Editor ships none and relies on the host's classes. Compiling the sheet needs the packages of the core's `frontend/` (`npm ci` there), which the CI and the release workflows install.
+
+The sheet does not reach content that a plugin renders outside its page element, such as a menu or a dialog moved to `document.body`: render those with the host components, which carry the app's own classes, or give their root the attribute `data-potionui-plugin` with the plugin id, which brings the sheet to the descendants of that root but not to the root itself. See "Shipping a stylesheet with a plugin page" in the core's `docs/plugin-api.md`.
 
 ## Catalogue
 
