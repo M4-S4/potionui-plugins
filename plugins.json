@@ -16,8 +16,8 @@
         "plugin_api": null
       },
       "release": {
-        "archive": null,
-        "sha256": null
+        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/video-producer-v0.3.2/video-producer-0.3.2.zip",
+        "sha256": "d1a45abe25d8aeb6c62fb53a2058ba350a2331000d7eba487e523c6c001c786e"
       }
     },
     {
