@@ -215,6 +215,10 @@ def _store(
     return takes.get_take(take_id)
 
 
+def _chain_video(plan: ShotPlan) -> Optional[Dict[str, Any]]:
+    return plan.chain_video.trace() if plan.chain_video is not None else None
+
+
 @contextmanager
 def whole_batch(created: List[Dict[str, Any]]) -> Iterator[None]:
     """Create the takes of one request together: when one of them is Blocked, the ones created before it are dropped and their minutes refunded, and the request is refused as a whole."""
@@ -254,7 +258,7 @@ async def start(owner: User, project: Mapping[str, Any], evaluation: Evaluation)
                         variant=letter,
                         minutes=evaluation.minutes.get(plan.shot_id, 0.0) if applies and reserve and not plan.cloud else 0.0,
                         revision=director.shot_revision(project["doc"], plan.shot_id),
-                        chain=chaining.record(evaluation.waits.get(plan.shot_id), letter, created, batch),
+                        chain=chaining.record(evaluation.waits.get(plan.shot_id), letter, created, batch, _chain_video(plan)),
                     )
                 )
     await pump(owner)
@@ -658,7 +662,15 @@ async def final_plan(
         return _upscale_plan(owner, source, upscalers.resolve_target(target, project.get("doc") or {}, source), upscaler, rtx_source)
     if method == GUIDED:
         return await _guided_plan(owner, project, source)
-    return await _render_plan(owner, project, source, "final")
+    return await _render_plan(owner, project, source, "final", _continued(project, source["shot_id"]))
+
+
+def _continued(project: Mapping[str, Any], shot_id: str) -> Dict[str, chaining.Wait]:
+    doc = project["doc"]
+    clip = director.clip_of(doc, shot_id)
+    if clip is None or not chaining.continues(doc, clip):
+        return {}
+    return chaining.waits(project["id"], doc, [shot_id])
 
 
 async def with_first(owner: User, pairs: List[Tuple[Mapping[str, Any], ShotPlan]]) -> None:
@@ -693,6 +705,7 @@ def create_final(
         minutes=minutes,
         parent_take_id=source["id"],
         revision=director.shot_revision(project["doc"], source["shot_id"]) if method == RENDER else source.get("shot_revision"),
+        chain=chaining.record(_continued(project, source["shot_id"]).get(source["shot_id"]), source.get("variant") or variant_letter(0), [], core_bridge.generate_ulid(), _chain_video(plan)) if plan.chain else None,
     )
 
 
@@ -766,7 +779,7 @@ async def retry(owner: User, project: Mapping[str, Any], source: Mapping[str, An
             minutes=minutes if reserve else 0.0,
             parent_take_id=source.get("parent_take_id"),
             revision=revision,
-            chain=chaining.record(found.get(plan.shot_id) if plan.chain else None, source.get("variant") or variant_letter(0), [], core_bridge.generate_ulid()),
+            chain=chaining.record(found.get(plan.shot_id) if plan.chain else None, source.get("variant") or variant_letter(0), [], core_bridge.generate_ulid(), _chain_video(plan)),
         )
     from . import renditions
 

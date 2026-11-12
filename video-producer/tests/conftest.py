@@ -208,6 +208,7 @@ def peak_cache_reset():
 
 WAN_ID = "01KX47WANVIDEO0000000000TV"
 H3_ID = "01KX47H3MINIMAX000000000VA"
+H3_12GB_ID = "01M54HN72B0KY7H63BKQ16T253"
 LTX25_ID = "01KX47LTX25VIDEO00000000TV"
 SEEDVR2_ID = "01KXB7C553THYMSMKY1QSYESFM"
 RTX_ID = "01KXRTXUPSCALE0000000000RU"
@@ -341,6 +342,20 @@ def h3_refs_fields():
     fields["duration"] = _plain("slider", 5)
     fields["references"] = _plain("media")
     fields["reference_short_edge"] = _plain("slider", 1088)
+    return fields
+
+
+def h3_12gb_refs_fields():
+    fields = h3_refs_fields()
+    fields["reference_pixel_budget"] = _plain("select", "1", ("0", "1", "2", "4"))
+    return fields
+
+
+def h3_continue_fields():
+    fields = h3_video_fields()
+    fields.pop("upscale_model")
+    fields["frames"] = _plain("stepper", 120)
+    fields["source_video"] = _plain("video", required=True)
     return fields
 
 
@@ -617,6 +632,17 @@ class FakeCore:
 
     def use_ltx25(self):
         return self.add_preset(LTX25_ID, "LTX-2.5", {"video": ltx25_fields()}, variables=LTX25_VARS)
+
+    def use_h3_12gb(self):
+        return self.add_preset(H3_12GB_ID, "MiniMax-H3 (12 GB)", {"video": h3_video_fields(), "refs": h3_12gb_refs_fields()}, variables=H3_VARS)
+
+    def use_h3_continue(self):
+        return self.add_preset(
+            H3_ID,
+            "MiniMax-H3",
+            {"video": h3_video_fields(), "refs": h3_refs_fields(), "continue": h3_continue_fields(), "upscale": h3_upscale_fields()},
+            variables=H3_VARS,
+        )
 
     def use_h3_variant(self, preset_id, name):
         director = {**H3_VARS["video_director"], "preset_modes": ["video"]}

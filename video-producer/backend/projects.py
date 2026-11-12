@@ -7,7 +7,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import best_match
 
 from . import formats, reception, settings, upscalers
-from .bible import LAYOUTS, PARTS
+from .bible import LAYOUTS, PARTS, WORDS
 from .catalog import PROFILES
 from .core_bridge import generate_ulid
 
@@ -236,6 +236,8 @@ CLIP = _object(
         "referencePrompt": REFERENCE_PROMPT,
         "dialogue": _array(LINE),
         "firstFromPrevious": FLAG,
+        "cardWords": _enum(*WORDS),
+        "chainBy": _enum("frame", "video"),
         "keepFraming": FLAG,
         "speed": _enum(*formats.SLOW_SPEEDS),
     },
@@ -406,6 +408,8 @@ DOC_SCHEMA: Dict[str, Any] = {
             "profiles": _array(PROFILE),
             "hybrid": HYBRID,
             "firstFromPrevious": FLAG,
+            "cardWords": _enum(*WORDS),
+            "chainBy": _enum("frame", "video"),
             "bible": BIBLE,
             "dialogueLanguage": TEXT,
             REMOVED_TAKES: IDS,

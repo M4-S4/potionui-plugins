@@ -157,6 +157,7 @@
 	"chain.batchTaken": "Première image de « {shot} » (prise {variant}) : la dernière image de « {previous} »",
 	"chain.waitTake": "Attend la prise {variant} de « {shot} »",
 	"chain.waitFrame": "Attend la dernière image de « {shot} »",
+	"chain.waitEnd": "Attend la fin de « {shot} »",
 	"chain.error.noMedia": "Le plan précédent n’a ni prise ni vidéo dont reprendre une image.",
 	"chain.error.ffmpeg": "ffmpeg manque sur le serveur : la dernière image ne peut pas être reprise.",
 	"chain.error.workdir": "Le serveur ne peut pas écrire ses fichiers de travail : la dernière image ne peut pas être reprise. Demandez à un administrateur de vérifier le dossier de stockage des fichiers.",

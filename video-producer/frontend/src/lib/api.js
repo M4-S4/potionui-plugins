@@ -751,6 +751,53 @@ export async function coreModels(api, presetId, modelType, signal = null) {
 	}
 }
 
+export const MEDIA_RUNS = '/api/media-tools/runs';
+
+export async function coreJson(api, method, path, body) {
+	if (typeof api?.fetchRawFromApp !== 'function') return failure(0, 'no_api');
+	const init = { method };
+	if (body !== undefined) {
+		init.headers = { 'Content-Type': 'application/json' };
+		init.body = JSON.stringify(body);
+	}
+	try {
+		return await settle(await api.fetchRawFromApp(path, init));
+	} catch (err) {
+		return thrown(err);
+	}
+}
+
+const RUN_STATES = ['queued', 'running', 'completed', 'failed', 'cancelled'];
+
+export function normalizeRunItem(value) {
+	if (!isObject(value) || !text(value.id) || !text(value.url)) return null;
+	return {
+		id: value.id,
+		name: text(value.original_filename) || text(value.filename),
+		mediaType: text(value.media_type),
+		url: value.url,
+		duration: number(value.duration_seconds),
+		width: number(value.width),
+		height: number(value.height),
+		fps: number(value.fps)
+	};
+}
+
+export function normalizeRun(value) {
+	if (!isObject(value) || !text(value.run_id) || !RUN_STATES.includes(value.status)) return null;
+	const progress = number(value.progress, 0);
+	return {
+		id: value.run_id,
+		status: value.status,
+		progress: Math.min(1, Math.max(0, progress)),
+		label: text(value.label),
+		items: list(value.items, normalizeRunItem) ?? [],
+		error: isObject(value.error) ? { code: text(value.error.code), message: text(value.error.message) } : null
+	};
+}
+
+const runPath = (runId) => `${MEDIA_RUNS}/${encodeURIComponent(runId)}`;
+
 export function createClient(api, save) {
 	return {
 		async me() {
@@ -897,6 +944,15 @@ export function createClient(api, save) {
 		},
 		presetModels(presetId, modelType, signal) {
 			return coreModels(api, presetId, modelType, signal);
+		},
+		async startMediaRun(body) {
+			return mapped(await coreJson(api, 'POST', MEDIA_RUNS, body), (data) => (text(data.run_id) ? { id: data.run_id } : null));
+		},
+		async mediaRun(runId) {
+			return mapped(await coreJson(api, 'GET', runPath(runId)), normalizeRun);
+		},
+		async cancelMediaRun(runId) {
+			return mapped(await coreJson(api, 'DELETE', runPath(runId)), normalizeRun);
 		}
 	};
 }

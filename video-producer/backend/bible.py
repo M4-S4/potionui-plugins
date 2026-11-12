@@ -41,6 +41,11 @@ LAYOUTS: Dict[str, Tuple[str, ...]] = {
 
 PARTS = (SUBJECT_DEFINITIONS, RETENTION, CITATIONS, CAST_PART, SHEET_PART)
 
+CARD_WORDS = "card"
+LABEL_WORDS = "label"
+PICTURE_WORDS = "picture"
+WORDS = (CARD_WORDS, LABEL_WORDS, PICTURE_WORDS)
+
 TEXT: Dict[str, Dict[str, str]] = {
     "en": {
         "named": "{label}: {description}",
@@ -50,6 +55,8 @@ TEXT: Dict[str, Dict[str, str]] = {
         "define_setting": "<Subject {subject}> is the setting, {card}",
         "shown_character": "<Subject {subject}> is the character shown in {label}, {card}",
         "shown_setting": "<Subject {subject}> is the setting shown in {label}, {card}",
+        "shown_character_alone": "<Subject {subject}> is the character shown in {label}.",
+        "shown_setting_alone": "<Subject {subject}> is the setting shown in {label}.",
         "and": "and",
     },
     "fr": {
@@ -60,6 +67,8 @@ TEXT: Dict[str, Dict[str, str]] = {
         "define_setting": "<Subject {subject}> est le décor, {card}",
         "shown_character": "<Subject {subject}> est le personnage montré par {label}, {card}",
         "shown_setting": "<Subject {subject}> est le décor montré par {label}, {card}",
+        "shown_character_alone": "<Subject {subject}> est le personnage montré par {label}.",
+        "shown_setting_alone": "<Subject {subject}> est le décor montré par {label}.",
         "and": "et",
     },
 }
@@ -191,6 +200,20 @@ def named(card: Card, language: str, initial: bool = False) -> str:
     return _language(language)["named"].format(label=label, description=words) if words else _sentence(label)
 
 
+def labelled(card: Card, language: str) -> str:
+    parts = [_sentence(card.label)]
+    if card.props:
+        parts.append(_sentence(_language(language)["props"].format(props=card.props)))
+    return " ".join(parts)
+
+
+def card_words(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
+    own = clip.get("cardWords")
+    if own in WORDS:
+        return own
+    return doc.get("cardWords") if doc.get("cardWords") in WORDS else CARD_WORDS
+
+
 def prose(characters: Sequence[Card], place: Optional[Card], language: str) -> List[str]:
     """The cast of a shot as sentences, one per character then the place, repeated word for word in every shot."""
     lines = [named(card, language, initial=True) for card in characters]
@@ -206,12 +229,15 @@ def listed(labels: Sequence[str], language: str) -> str:
     return f"{', '.join(labels[:-1])} {_language(language)['and']} {labels[-1]}"
 
 
-def definition(card: Card, subject: int, language: str, shown: Optional[str] = None) -> str:
+def definition(card: Card, subject: int, language: str, shown: Optional[str] = None, words: str = CARD_WORDS) -> str:
     """The MiniMax-H3 definition of a card as a subject, tied to the reference that shows it when one is sent."""
     text = _language(language)
     kind = "character" if card.kind == CHARACTERS else "setting"
+    if shown is not None and words == PICTURE_WORDS:
+        return text[f"shown_{kind}_alone"].format(subject=subject, label=shown)
     if shown is not None:
-        return text[f"shown_{kind}"].format(subject=subject, label=shown, card=named(card, language))
+        words_of = labelled if words == LABEL_WORDS else named
+        return text[f"shown_{kind}"].format(subject=subject, label=shown, card=words_of(card, language))
     return text[f"define_{kind}"].format(subject=subject, card=named(card, language))
 
 

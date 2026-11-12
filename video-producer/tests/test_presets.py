@@ -139,7 +139,7 @@ TIERS = {
         director_modes=H3_MODES,
         profiles=("FL2VA", "Ref2VA", "Hybrid AV"),
         max_duration=15,
-        modes=("video", "refs"),
+        modes=("video", "refs", "continue"),
     ),
     "MiniMax-H3-Fast-12GB": Tier(
         id=presets.MINIMAX_H3_FAST_12GB,

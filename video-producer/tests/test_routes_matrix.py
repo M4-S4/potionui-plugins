@@ -15,7 +15,7 @@ from src.plugin_api import get_current_active_user
 
 BASE = "/api/plugins/video-producer"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-README = PLUGIN_ROOT / "README.md"
+README = PLUGIN_ROOT / "docs" / "technical-reference.md"
 REFERENCE = PLUGIN_ROOT / "tests" / "fixtures" / "exports" / "reference-project.json"
 SHOTS = [{"id": "s1", "start": 0, "dur": 4}, {"id": "s2", "start": 4, "dur": 4}]
 ORDER = {"shots": ["s1"], "quality": "draft", "variants": 1, "preset_id": presets.WAN}

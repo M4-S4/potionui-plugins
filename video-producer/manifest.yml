@@ -1,6 +1,6 @@
 id: "video-producer"
 name: "Video Producer"
-version: "0.2.0"
+version: "0.3.0"
 description: "Storyboard, draft and final takes, editing, sound and delivery for AI video, driven by Video Director documents."
 author: "M4-S4"
 license: "GPL-3.0"
@@ -182,7 +182,19 @@ docs:
     title: "Video Producer: administration"
     audience: "admin"
     order: 10
+  - path: "docs/admin-reference.md"
+    title: "Video Producer: admin reference"
+    audience: "admin"
+    order: 15
   - path: "docs/user-guide.md"
     title: "Video Producer: user guide"
     audience: "user"
     order: 20
+  - path: "docs/user-reference.md"
+    title: "Video Producer: complete reference"
+    audience: "user"
+    order: 25
+  - path: "docs/technical-reference.md"
+    title: "Video Producer: technical reference"
+    audience: "developer"
+    order: 30

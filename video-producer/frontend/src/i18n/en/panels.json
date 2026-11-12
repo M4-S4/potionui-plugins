@@ -392,5 +392,6 @@
 	"director.pick.vrefUnsent.other": "{labels} are under the shot, but {engine} does not take them: relaunching this take will not send them.",
 	"director.pick.suite": "Seam of the continuation",
 	"director.pick.suiteText": "This shot continues {label}: the light can jump at the seam. The colour match brings the take toward the last frame of the cut; nothing is done on its own.",
-	"director.pick.suiteMatch": "Match the colour"
+	"director.pick.suiteMatch": "Match the colour",
+	"media.splitShots": "Split into shots…"
 }

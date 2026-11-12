@@ -186,7 +186,7 @@ export function missingWords(text, sent) {
 		}, []);
 }
 
-const AFTER_PREVIOUS = ['previous_take_failed', 'previous_take_cancelled', 'previous_take_gone', 'chain_frame_failed'];
+const AFTER_PREVIOUS = ['previous_take_failed', 'previous_take_cancelled', 'previous_take_gone', 'chain_frame_failed', 'chain_video_failed'];
 const REFUSED = ['banned_prompt', 'content_blocked'];
 
 export function failureFixes(take) {

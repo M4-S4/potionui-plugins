@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Mapping, NoReturn
 
 from fastapi import APIRouter, Body, Depends
 
-from . import access, bible, director, projects
+from . import access, bible, chaining, director, projects
 from .core_bridge import User, get_current_active_user
 from .projects import DocError
 from .responses import fail, ok
@@ -52,6 +52,9 @@ def compose_prompts(project_id: str, body: Any = Body(default=None), user: User 
     checked = _checked(body)
     project = access.project_for(user, project_id)
     doc = _document(checked, project["doc"])
+    clips = {clip.get("id"): clip for clip in doc.get("clips") or []}
+    found = chaining.waits(project_id, doc, checked["shots"])
+    chained = {shot_id: wait for shot_id, wait in found.items() if chaining.continues(doc, clips[shot_id])}
     plans = director.build_plans(
         access.owner_of(user, project),
         doc,
@@ -60,6 +63,7 @@ def compose_prompts(project_id: str, body: Any = Body(default=None), user: User 
         "draft",
         checked.get("model_id"),
         overrides=True,
+        chained=chaining.chain_map(chained),
     )
     return ok(
         {

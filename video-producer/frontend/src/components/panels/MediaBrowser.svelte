@@ -12,6 +12,7 @@
 	import { deleteAsset } from '../../lib/assets.svelte.js';
 	import { fileDrop } from '../../lib/filedrop.js';
 	import { LOCAL_KINDS } from '../../lib/upload.js';
+	import { cuttable } from '../../lib/cuts.js';
 	import { activateOnKey } from '../../lib/keyboard.js';
 	import PanelHeader from './PanelHeader.svelte';
 	import ImportButtons from './ImportButtons.svelte';
@@ -157,6 +158,9 @@
 			</div>
 			{#if cur.kind !== 'audio'}
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'image', class: 'w-full', onclick: () => addFrame(cur.id) }}>{t('panels.media.useAsFrame')}</HostUi>
+			{/if}
+			{#if cuttable(cur)}
+				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'scissors', class: 'w-full', onclick: () => (ui.modal = { type: 'cuts', assetId: cur.id }) }}>{t('panels.media.splitShots')}</HostUi>
 			{/if}
 		</div>
 	{/if}

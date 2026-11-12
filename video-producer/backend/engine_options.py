@@ -15,6 +15,7 @@ LORA_TYPE = "lora_picker"
 EDITABLE_TYPES = (*NUMBER_TYPES, *FLAG_TYPES, *CHOICE_TYPES, *TEXT_TYPES, SEED_TYPE, MODEL_TYPE, LORA_TYPE)
 
 REFERENCE_SHORT_EDGE = "reference_short_edge"
+REFERENCE_PIXEL_BUDGET = "reference_pixel_budget"
 
 MANAGED = ("video_director", "references", "quantity", "resolution", "fps", "prompt", "negative_prompt", "aspect_ratio", REFERENCE_SHORT_EDGE)
 CLOUD_MANAGED = ("model",)

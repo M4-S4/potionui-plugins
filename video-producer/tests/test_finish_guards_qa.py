@@ -10,7 +10,7 @@ I18N = PLUGIN / "frontend" / "src" / "i18n"
 SHOTS = PLUGIN / "docs" / "screenshots"
 DIST = PLUGIN / "frontend" / "dist" / "VideoProducerPage.js"
 ALLOWED_COMMENTS = {("backend/exports/video.py", "# one frame of slack: a file can end a frame before its probed length")}
-GUIDES = (PLUGIN / "docs" / "user-guide.md",)
+GUIDES = (PLUGIN / "docs" / "user-guide.md", PLUGIN / "docs" / "user-reference.md")
 
 
 def test_nothing_is_simulated_any_more_in_the_dictionaries_the_readme_or_the_guides():
@@ -25,7 +25,7 @@ def test_nothing_is_simulated_any_more_in_the_dictionaries_the_readme_or_the_gui
         assert not re.search(r"Simulated features|What is simulated|\*\*Simul", text), path.name
 
 
-@pytest.mark.parametrize("path", GUIDES, ids=["guide-en"])
+@pytest.mark.parametrize("path", GUIDES, ids=["guide-en", "reference-en"])
 def test_the_chapters_of_a_guide_follow_each_other_and_every_chapter_it_names_exists(path):
     text = path.read_text(encoding="utf-8")
     numbers = [int(number) for number in re.findall(r"^## (\d+)\. ", text, re.M)]

@@ -6,7 +6,7 @@ import shutil
 from dataclasses import dataclass, field, replace
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
-from . import bible, catalog, core_bridge, dialogue, engine_options, formats, keepframing, models, presets, reception, sequence, settings, upscalers, workdir
+from . import bible, catalog, core_bridge, dialogue, encoder, engine_options, formats, keepframing, models, presets, reception, sequence, settings, upscalers, workdir
 from .catalog import FL2VA, PROFILES, REF2VA, REFS_MODE
 from .core_bridge import CLOUD_ENGINE, DirectorBindingError, MediaRefError, User
 
@@ -68,6 +68,7 @@ SEED_RANGE = 2**31
 REFERENCE = "reference"
 TRACK = "track"
 VTRACK = "vtrack"
+CHAINED = "chained"
 
 TRACK_PREFIX = "track:"
 VTRACK_PREFIX = "vtrack:"
@@ -81,6 +82,14 @@ READY = "ready"
 TAG = re.compile(r"(?P<space>[ \t]*)(?<![0-9A-Za-z_])@vref(?P<slot>[1-9])(?![0-9A-Za-z_])", re.IGNORECASE)
 
 CHAIN_PREFIX = "chain:"
+CHAIN_VIDEO_PREFIX = "chainvideo:"
+
+CONTINUE_MODE = "continue"
+FRAME_CHAIN = "frame"
+VIDEO_CHAIN = "video"
+CHAIN_BY = (FRAME_CHAIN, VIDEO_CHAIN)
+OVERLAP_FRAMES = 17
+MAX_CONTINUE_FRAMES = 328
 
 CONDITION = "condition"
 MUX = "mux"
@@ -235,6 +244,7 @@ class ShotPlan:
     work_scale: float = 1.0
     reference: Optional[bible.ReferencePart] = None
     chain: Optional[str] = None
+    chain_video: Optional["ChainCut"] = None
     video: List["VideoCut"] = field(default_factory=list)
     video_labels: Dict[int, str] = field(default_factory=dict)
     rows: Optional[sequence.Rows] = None
@@ -283,6 +293,7 @@ class ShotPlan:
                 else None
             ),
             "chain": self.chain,
+            "chain_video": self.chain_video.trace() if self.chain_video is not None else None,
             "sheet": self.sheet.trace() if self.sheet is not None else None,
         }
 
@@ -309,6 +320,25 @@ class Chain:
 def chain_value(previous: str) -> str:
     """The stand-in a request carries for the last image of the previous shot until it is taken."""
     return f"{CHAIN_PREFIX}{previous}"
+
+
+def chain_video_value(previous: str) -> str:
+    return f"{CHAIN_VIDEO_PREFIX}{previous}"
+
+
+@dataclass(frozen=True)
+class ChainCut:
+    previous: str
+    frames: int
+    size: Tuple[int, int]
+    sound: bool = False
+
+    @property
+    def seconds(self) -> float:
+        return round(self.frames / reception.VIDEO_TRACKS["fps"], 6)
+
+    def trace(self) -> Dict[str, Any]:
+        return {"previous": self.previous, "frames": self.frames, "seconds": self.seconds, "size": list(self.size), "sound": self.sound}
 
 
 @dataclass(frozen=True)
@@ -424,6 +454,8 @@ class SentReference:
     def role(self) -> str:
         if self.kind == "audio":
             return "audio"
+        if self.origin == CHAINED:
+            return reception.CONTINUATION
         if self.origin == VTRACK:
             return reception.CONTINUATION if (self.item or {}).get("role") == reception.CONTINUATION else reception.MOTION
         return ROLES_BY_SPACE.get(str((self.item or {}).get("space")), "setting")
@@ -1134,6 +1166,7 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
     language = _language(doc)
     text = REFS_TEXT[language]
     numbers = _subjects(doc, clip, sent)
+    words = bible.card_words(doc, clip)
     definitions: List[str] = []
     retention: List[str] = []
     citations: List[str] = []
@@ -1158,7 +1191,7 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
             item = {"definition": text["define_voice"].format(label=entry.label, who=who), "retention": text["keep_voice"].format(label=entry.label, who=who)}
         else:
             item = {"definition": text[f"define_{role}"].format(label=entry.label), "retention": text[f"keep_{role}"].format(label=entry.label)}
-        if entry.origin == VTRACK:
+        if entry.origin in (VTRACK, CHAINED):
             item["citation"] = text[f"cite_{role}"].format(label=entry.label)
         items.append(item)
     subject = 0
@@ -1174,7 +1207,7 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
         shown = bible.listed(item["labels"], language)
         if card is not None:
             defined.add(card.id)
-            definitions.append(bible.definition(card, subject, language, shown=shown))
+            definitions.append(bible.definition(card, subject, language, shown=shown, words=words))
             kept = "character" if card.kind == bible.CHARACTERS else "setting"
         else:
             definitions.append(text[f"define_{item['role']}"].format(subject=subject, label=shown))
@@ -1187,7 +1220,7 @@ def compose_refs(doc: Mapping[str, Any], clip: Mapping[str, Any], sent: Sequence
             subject += 1
             definitions.append(bible.definition(card, subject, language))
             citations.append(text["cite_character" if card.kind == bible.CHARACTERS else "cite_setting"].format(subject=subject))
-    continued = next((entry for entry in sent if entry.origin == VTRACK and entry.role == reception.CONTINUATION), None)
+    continued = next((entry for entry in sent if entry.origin in (VTRACK, CHAINED) and entry.role == reception.CONTINUATION), None)
     if continued is not None:
         summary = text["summary_continuation"].format(seconds=_seconds_text(seconds, language), label=continued.label)
     else:
@@ -1389,6 +1422,7 @@ def reference_media(
     shot_id: str,
     tracks: Sequence[str] = (),
     videos: Sequence[VideoCut] = (),
+    chained: Optional[ChainCut] = None,
 ) -> List[SentReference]:
     """What a shot sends as references, within the per-kind limits and in the order of the table, each with its rank in its kind."""
     groups = shot_reference_groups(doc, shot_id)
@@ -1424,6 +1458,9 @@ def reference_media(
             for cut in videos:
                 item = {"trackId": cut.track_id, "slot": cut.slot, "role": cut.role}
                 add(VTRACK, None, item, "video", {"value": f"{VTRACK_PREFIX}{cut.track_id}", "media_type": "video"})
+            if chained is not None:
+                value = chain_video_value(chained.previous)
+                add(CHAINED, None, {"previous": chained.previous}, "video", {"value": value, "media_type": "video"})
         else:
             for reference in groups.shared:
                 add(REFERENCE, reference.get("assetId"), reference)
@@ -1489,6 +1526,122 @@ def _chained_start(context: _Context, shot_id: str) -> bool:
     first = shot_frames(context.doc, shot_id)[0]
     asset = _asset(context.doc, first.get("assetId")) if first is not None else None
     return asset is not None and isinstance(asset.get("frameOf"), Mapping)
+
+
+def chain_wanted(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> bool:
+    own = clip.get("firstFromPrevious")
+    return own if isinstance(own, bool) else doc.get("firstFromPrevious") is not False
+
+
+def chain_by(doc: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
+    own = clip.get("chainBy")
+    if own in CHAIN_BY:
+        return own
+    return doc.get("chainBy") if doc.get("chainBy") in CHAIN_BY else FRAME_CHAIN
+
+
+def previous_clip(doc: Mapping[str, Any], shot_id: str) -> Optional[Dict[str, Any]]:
+    clips = doc.get("clips") or []
+    index = next((i for i, clip in enumerate(clips) if clip.get("id") == shot_id), 0)
+    return clips[index - 1] if index > 0 else None
+
+
+def _chain_cut(context: _Context, clip: Mapping[str, Any], ready: Sequence[ShotTrack], resolution: Optional[str], warnings: List[Dict[str, Any]]) -> Optional[ChainCut]:
+    doc, shot_id = context.doc, clip["id"]
+    previous = previous_clip(doc, shot_id)
+    if previous is None or not chain_wanted(doc, clip) or chain_by(doc, clip) != VIDEO_CHAIN:
+        return None
+    own = next((track for track in ready if track.cut is not None and track.cut.role == reception.CONTINUATION), None)
+    if own is not None:
+        warnings.append(_track_note("chain_video_own", f"The shot continues the video of track vref{own.slot}: the end of the previous take is not added.", shot_id, own))
+        return None
+    chain = context.chained.get(shot_id)
+    if chain is None:
+        warnings.append(note("chain_video_none", "The previous shot has no take to continue yet: this shot starts from its text and its references.", shot_id=shot_id, previous=previous["id"]))
+        return None
+    if chain.asset_id is not None:
+        warnings.append(note("chain_video_still", "The previous shot shows a still, not footage: this shot starts from its text and its references.", shot_id=shot_id, previous=previous["id"]))
+        return None
+    length = float(previous.get("dur") or 0) * formats.speed_of(previous)
+    frames = reception.video_frames(min(length, reception.least_seconds()))
+    if frames < reception.VIDEO_TRACKS["minFrames"]:
+        least = reception.least_seconds()
+        warnings.append(
+            note("chain_video_short", f"The previous shot lasts less than {least:.2f} s: there is too little of it to continue, this shot starts from its text and its references.", shot_id=shot_id, previous=previous["id"])
+        )
+        return None
+    size = reception.cut_size(size_ratio(resolution) or aspect_of(doc), models.parse_size(resolution))
+    return ChainCut(chain.previous, frames, size)
+
+
+def _fall_back(code: str, reason: str, shot_id: str, warnings: List[Dict[str, Any]]) -> None:
+    _add(warnings, note(code, f"{reason}: the shot starts from the last image of the previous shot.", shot_id=shot_id))
+
+
+def _continue_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict[str, Any]]) -> Optional["ShotPlan"]:
+    preset, doc, shot_id = context.preset, context.doc, clip["id"]
+    chain = context.chained.get(shot_id)
+    if chain is None or chain_by(doc, clip) != VIDEO_CHAIN:
+        return None
+    engine = bible.family(preset.id, preset.cloud)
+    if engine != bible.H3 or CONTINUE_MODE not in preset.modes or context.profile != FL2VA:
+        _fall_back("chain_continue_unsupported", f"{preset.name} cannot continue a video in {context.profile}", shot_id, warnings)
+        return None
+    if chain.asset_id is not None:
+        _fall_back("chain_continue_still", "The previous shot shows a still, not footage", shot_id, warnings)
+        return None
+    previous = previous_clip(doc, shot_id) or {}
+    if float(previous.get("dur") or 0) * formats.speed_of(previous) < reception.least_seconds():
+        _fall_back("chain_continue_short", f"The previous shot lasts less than {reception.least_seconds():.2f} s", shot_id, warnings)
+        return None
+    if shot_frames(doc, shot_id)[1] is not None or keepframing.keeps_framing(clip):
+        _fall_back("chain_continue_last_frame", "A continuation takes no last frame and the shot has one", shot_id, warnings)
+        return None
+    fps = preset.fps
+    wanted = min(_wanted_seconds(clip, preset), float(preset.limits.get("max_duration") or _wanted_seconds(clip, preset)))
+    if math.floor(wanted * fps + 0.5) > MAX_CONTINUE_FRAMES:
+        _fall_back("chain_continue_too_long", f"A continuation adds at most {MAX_CONTINUE_FRAMES / fps:.2f} s", shot_id, warnings)
+        return None
+    if audio_behavior(preset, context.profile) == MUX and (mixed_references(doc, shot_id) or reference_lanes(doc, shot_id, *mux_window(clip, wanted))):
+        _fall_back("chain_continue_sound", "A continuation cannot have the sound of the shot mixed onto it", shot_id, warnings)
+        return None
+    fields = context.mode_fields(CONTINUE_MODE)
+    resolution = _native_size(context, fields, warnings)
+    seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
+    frames = max(OVERLAP_FRAMES, math.floor(seconds * fps + 0.5))
+    prompt, reference = compose_shot(doc, clip, engine)
+    _ignored_tracks(doc, clip, seconds, warnings)
+    _bible_warnings(doc, clip, prompt, engine, warnings, reference)
+    _dialogue_warnings(doc, clip, engine, seconds, warnings, None)
+    form: Dict[str, Any] = {"seed": -1, "frames": frames, "source_video": chain_video_value(chain.previous)}
+    if "resolution" in fields:
+        form["resolution"] = resolution
+    if "quantity" in fields:
+        form["quantity"] = 1
+    request = _request(preset.id, CONTINUE_MODE, prompt, form)
+    resolved = models.resolve_models(preset.id, CONTINUE_MODE, "i2v", fields, (AUDIO_VAE,))
+    request["form_data"].update(resolved.values)
+    chosen = project_options(context, fields, warnings)
+    request["form_data"].update(chosen.values)
+    size = models.parse_size(resolution) or (0, 0)
+    least = reception.video_frames(reception.least_seconds())
+    return ShotPlan(
+        shot_id=shot_id,
+        profile=context.profile,
+        director_mode=CONTINUE_MODE,
+        preset_mode=CONTINUE_MODE,
+        seconds=seconds,
+        resolution=resolution,
+        fps=fps,
+        prompt_text=prompt,
+        request=request,
+        missing_models=[name for name in resolved.missing if name not in chosen.values],
+        seed=chosen.seed,
+        work_scale=engine_options.work_scale(fields, request["form_data"]) * (frames + OVERLAP_FRAMES) / frames,
+        reference=reference,
+        chain=chain.previous,
+        chain_video=ChainCut(chain.previous, least, size, sound=True),
+    )
 
 
 def _text_only(preset: Preset) -> bool:
@@ -1636,6 +1789,17 @@ def _native_form(fields: models.Fields, document: Dict[str, Any], resolution: Op
     return form
 
 
+def _reference_budget(context: _Context, fields: models.Fields) -> Optional[float]:
+    spec = fields.get(engine_options.REFERENCE_PIXEL_BUDGET)
+    if spec is None:
+        return None
+    value = engine_options.chosen(context.doc, context.preset.id, fields, context.preset.cloud).values.get(engine_options.REFERENCE_PIXEL_BUDGET, spec.get("default"))
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def project_options(context: _Context, fields: models.Fields, warnings: List[Dict[str, Any]]) -> engine_options.Chosen:
     """The options the project sets for the preset of a plan, a warning naming those that no longer fit their field and are left out."""
     chosen = engine_options.chosen(context.doc, context.preset.id, fields, context.preset.cloud)
@@ -1663,6 +1827,9 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     refs = reception.takes_references(context.profile, engine)
     fallback: Optional[Dict[str, Any]] = None
     if not refs:
+        continued = _continue_plan(context, clip, warnings)
+        if continued is not None:
+            return continued
         handed, fallback = _companion_plan(context, clip, warnings)
         if handed is not None:
             return handed
@@ -1681,12 +1848,19 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
     labels: Dict[int, str] = {}
     rows: Optional[sequence.Rows] = None
     edge: Optional[int] = None
+    auto: Optional[ChainCut] = None
     if refs:
         window = condition_window(doc, clip, seconds)
         tracks = _track_lanes(doc, shot_id, *window, warnings, context.silent.get(shot_id, ()))
         context.cuts.extend(TrackCut(shot_id, lane_id, *window) for lane_id in tracks)
         ready = _ready_tracks(doc, clip, seconds, warnings)
-        sent = reference_media(context.user, doc, shot_id, tracks, [track.cut for track in ready])
+        auto = _chain_cut(context, clip, ready, resolution, warnings)
+        sent = reference_media(context.user, doc, shot_id, tracks, [track.cut for track in ready], auto)
+        if auto is not None and not any(entry.origin == CHAINED for entry in sent):
+            warnings.append(
+                note("chain_video_trimmed", f"The shot already sends {REFERENCE_LIMITS['video']} videos: the end of the previous take is not added.", shot_id=shot_id, previous=auto.previous)
+            )
+            auto = None
         video = _sent_tracks(doc, shot_id, tracks, ready, sent, warnings)
         for cut in video:
             cut.size = reception.cut_size(size_ratio(resolution) or aspect_of(doc), models.parse_size(resolution))
@@ -1697,6 +1871,49 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
             raise DirectorError(
                 "audio_only_references", "Ref2VA needs a picture or a video next to the sound of this shot.", shot_id=shot_id
             )
+        size = models.parse_size(resolution)
+        pictures = [_picture_size(doc, str((entry.item or {}).get("assetId"))) for entry in sent if entry.kind == "image"]
+        if auto is not None and preset.id in presets.MINIMAX_H3_12GB_PRESETS:
+            limit = encoder.max_pixels(_reference_budget(context, fields), size)
+            videos = [(cut.frames, cut.size or size) for cut in video if cut.size or size]
+            tokens = encoder.vision_tokens(pictures, [*videos, (min(auto.frames, math.floor(seconds * encoder.FPS)), auto.size)], limit)
+            if tokens > encoder.LIMIT_12GB:
+                warnings.append(
+                    note(
+                        "chain_video_encoder",
+                        f"With the end of the previous take the shot would send about {tokens} vision tokens to the text encoder, past about {encoder.LIMIT_12GB} that a 12 GB card holds: it is not added.",
+                        shot_id=shot_id,
+                        previous=auto.previous,
+                        tokens=tokens,
+                        limit=encoder.LIMIT_12GB,
+                    )
+                )
+                auto = None
+                sent = reference_media(context.user, doc, shot_id, tracks, [track.cut for track in ready])
+        if engine_options.REFERENCE_SHORT_EDGE in fields:
+            edge = sequence.reference_short_edge(size, context.quality == "final", pictures)
+        if video or auto is not None:
+            images = [sequence.image_rows(edge or sequence.SHORT_EDGE, picture, size) for picture in pictures]
+            cuts = [(cut.frames, cut.size) for cut in video]
+            rows = sequence.shot_rows(seconds, fps or reception.VIDEO_TRACKS["fps"], size, images, cuts + ([(auto.frames, auto.size)] if auto is not None else []))
+            if auto is not None and rows.high:
+                without = sequence.shot_rows(seconds, fps or reception.VIDEO_TRACKS["fps"], size, images, cuts) if cuts else None
+                if without is None or not without.high:
+                    warnings.append(
+                        note(
+                            "chain_video_rows",
+                            f"With the end of the previous take the shot would send about {rows.total} rows to the model, past about {sequence.CEILING} that a 12 GB card holds: it is not added.",
+                            shot_id=shot_id,
+                            previous=auto.previous,
+                            rows=rows.total,
+                            limit=sequence.CEILING,
+                        )
+                    )
+                    auto = None
+                    sent = reference_media(context.user, doc, shot_id, tracks, [track.cut for track in ready])
+                    rows = without
+            if rows is not None:
+                _row_warnings(shot_id, rows, warnings)
         sounds = [entry for entry in sent if entry.kind == "audio"]
         if sounds:
             warnings.append(_audio_note(CONDITION, shot_id))
@@ -1711,14 +1928,6 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         prompt, reference = compose_refs(doc, clip, sent, seconds)
         _unlinked_warnings(doc, clip, sent, warnings)
         labels = {int((entry.item or {})["slot"]): entry.label for entry in sent if entry.origin == VTRACK}
-        size = models.parse_size(resolution)
-        pictures = [_picture_size(doc, str((entry.item or {}).get("assetId"))) for entry in sent if entry.kind == "image"]
-        if engine_options.REFERENCE_SHORT_EDGE in fields:
-            edge = sequence.reference_short_edge(size, context.quality == "final", pictures)
-        if video:
-            images = [sequence.image_rows(edge or sequence.SHORT_EDGE, picture, size) for picture in pictures]
-            rows = sequence.shot_rows(seconds, fps or reception.VIDEO_TRACKS["fps"], size, images, [(cut.frames, cut.size) for cut in video])
-            _row_warnings(shot_id, rows, warnings)
     else:
         prompt, reference = compose_shot(doc, clip, engine)
         audio = _shot_mux(context, clip, seconds, warnings)
@@ -1791,7 +2000,8 @@ def _native_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Dict
         audio=audio,
         work_scale=engine_options.work_scale(fields, request["form_data"]),
         reference=reference,
-        chain=_chain_of(context, shot_id, chained, director_mode),
+        chain=auto.previous if refs and auto is not None else _chain_of(context, shot_id, chained, director_mode),
+        chain_video=auto if refs else None,
         video=video,
         video_labels=labels,
         rows=rows,
