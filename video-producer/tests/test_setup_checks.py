@@ -18,6 +18,7 @@ from backend.setup_checks import (
 )
 from src.plugin_api import SetupCheck, SetupCheckContext, SetupCheckResult
 from src.plugin_api.cloud import CLOUD_ENGINE
+from src.plugin_api.presets import PresetInstallState
 
 CONTEXT = SetupCheckContext(plugin_id="video-producer", settings={})
 
@@ -61,6 +62,8 @@ def _cloud(backend_id, name):
 
 
 def _state(preset_id, name=None, loaded=True, installed=False, assigned=False, variables=None):
+    if variables is None and loaded:
+        variables = {}
     return PresetState(id=preset_id, name=name or preset_id, loaded=loaded, installed=installed, assigned=assigned, variables=variables)
 
 
@@ -958,6 +961,28 @@ def test_a_missing_latent_upscaler_of_the_upscale_mode_is_reported(preset_states
 
     assert result.done is False
     assert result.description.startswith("MiniMax-H3 is missing its latent upscaler. ")
+
+
+def test_a_missing_file_is_named_for_the_preset_state_the_core_gives(monkeypatch, models):
+    described = SimpleNamespace(name="MiniMax-H3 (12 GB)", vars={"video_director": {"preset_modes": ["video", "refs"]}})
+    monkeypatch.setattr(
+        core_bridge,
+        "api_presets",
+        SimpleNamespace(
+            describe_preset=lambda preset_id: described if preset_id == presets.MINIMAX_H3_12GB else None,
+            preset_install_state=lambda preset_id: PresetInstallState(installed=True, assigned=True),
+        ),
+    )
+    models.recommend(presets.MINIMAX_H3_12GB, model={"a" * 64}, text_encoder={"b" * 64})
+    models.present = {"a" * 64}
+
+    state = core_bridge.preset_state(presets.MINIMAX_H3_12GB)
+    result = MiniMaxH3Ready().evaluate(CONTEXT)
+
+    assert state.variables == described.vars
+    assert result.done is False
+    assert result.description.startswith("MiniMax-H3 (12 GB) is missing its text encoder. ")
+    assert (result.action_label, result.action_href) == ("Open MiniMax-H3 (12 GB)", f"{PRESETS_HREF}&id={presets.MINIMAX_H3_12GB}")
 
 
 def test_a_variant_without_an_upscale_mode_is_not_asked_for_the_latent_upscaler(preset_states, models):
