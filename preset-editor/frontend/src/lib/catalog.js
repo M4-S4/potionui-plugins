@@ -12,9 +12,15 @@ function kindOf(raw) {
 	return raw.source === 'custom' ? 'local' : 'marketplace';
 }
 
+function mirrorSource(raw) {
+	const source = raw.source_preset_id;
+	return typeof source === 'string' && source && source !== raw.id ? source : null;
+}
+
 export function normalizePreset(raw) {
 	if (!isObject(raw) || typeof raw.id !== 'string' || !raw.id) return null;
 	const kind = kindOf(raw);
+	const mirrorOf = mirrorSource(raw);
 	return {
 		id: raw.id,
 		name: typeof raw.name === 'string' && raw.name ? raw.name : raw.id,
@@ -28,7 +34,8 @@ export function normalizePreset(raw) {
 		modes: Array.isArray(raw.modes) ? raw.modes.filter((mode) => typeof mode === 'string') : [],
 		tags: Array.isArray(raw.tags) ? raw.tags.filter((tag) => typeof tag === 'string') : [],
 		cover: typeof raw.media?.cover === 'string' && raw.media.cover ? raw.media.cover : null,
-		editable: kind === 'local'
+		mirrorOf,
+		editable: kind === 'local' && !mirrorOf
 	};
 }
 
@@ -56,7 +63,7 @@ export function filterPresets(entries, { query = '', kind = 'all', installed = '
 }
 
 export function localPresets(entries) {
-	return sortPresets(entries.filter((entry) => entry.kind === 'local'));
+	return sortPresets(entries.filter((entry) => entry.editable));
 }
 
 export function countByKind(entries) {

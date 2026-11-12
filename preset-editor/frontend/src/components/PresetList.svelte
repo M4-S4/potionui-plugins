@@ -26,6 +26,10 @@
 	const shown = $derived(sortPresets(filterPresets(entries, { query, kind, installed })));
 	const KIND_FILTERS = ['all', 'local', 'marketplace', 'plugin'];
 	const KIND_TONES = { local: 'accent', marketplace: 'neutral', plugin: 'info' };
+
+	function sourceName(entry) {
+		return entries.find((candidate) => candidate.id === entry.mirrorOf)?.name ?? entry.mirrorOf;
+	}
 </script>
 
 {#if drafts.length}
@@ -108,6 +112,7 @@
 							<span class="truncate text-sm font-medium text-fg" title={entry.name}>{entry.name}</span>
 							<Pill tone={KIND_TONES[entry.kind] ?? 'neutral'}>{entry.kind === 'plugin' && entry.pluginId ? entry.pluginId : KIND_LABELS[entry.kind]}</Pill>
 							{#if entry.installed}<Pill tone="success">installed</Pill>{/if}
+							{#if entry.mirrorOf}<Pill tone="neutral" title="A mirror of {sourceName(entry)}: it uses the files of that preset. Manage it in Admin → Presets">mirror</Pill>{/if}
 						</p>
 						<p class="truncate text-xs text-fg-subtle">
 							<span class="font-mono">{entry.id}</span>
