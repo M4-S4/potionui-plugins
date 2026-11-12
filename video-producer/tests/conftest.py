@@ -640,7 +640,7 @@ class FakeCore:
         return self.add_preset(
             H3_ID,
             "MiniMax-H3",
-            {"video": h3_video_fields(), "refs": h3_refs_fields(), "continue": h3_continue_fields(), "upscale": h3_upscale_fields()},
+            {"video": h3_video_fields(), "refs": h3_refs_fields(), "extend": h3_continue_fields(), "upscale": h3_upscale_fields()},
             variables=H3_VARS,
         )
 

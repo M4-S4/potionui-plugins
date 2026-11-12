@@ -84,7 +84,7 @@ TAG = re.compile(r"(?P<space>[ \t]*)(?<![0-9A-Za-z_])@vref(?P<slot>[1-9])(?![0-9
 CHAIN_PREFIX = "chain:"
 CHAIN_VIDEO_PREFIX = "chainvideo:"
 
-CONTINUE_MODE = "continue"
+EXTEND_MODE = "extend"
 FRAME_CHAIN = "frame"
 VIDEO_CHAIN = "video"
 CHAIN_BY = (FRAME_CHAIN, VIDEO_CHAIN)
@@ -1584,7 +1584,7 @@ def _continue_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Di
     if chain is None or chain_by(doc, clip) != VIDEO_CHAIN:
         return None
     engine = bible.family(preset.id, preset.cloud)
-    if engine != bible.H3 or CONTINUE_MODE not in preset.modes or context.profile != FL2VA:
+    if engine != bible.H3 or EXTEND_MODE not in preset.modes or context.profile != FL2VA:
         _fall_back("chain_continue_unsupported", f"{preset.name} cannot continue a video in {context.profile}", shot_id, warnings)
         return None
     if chain.asset_id is not None:
@@ -1605,7 +1605,7 @@ def _continue_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Di
     if audio_behavior(preset, context.profile) == MUX and (mixed_references(doc, shot_id) or reference_lanes(doc, shot_id, *mux_window(clip, wanted))):
         _fall_back("chain_continue_sound", "A continuation cannot have the sound of the shot mixed onto it", shot_id, warnings)
         return None
-    fields = context.mode_fields(CONTINUE_MODE)
+    fields = context.mode_fields(EXTEND_MODE)
     resolution = _native_size(context, fields, warnings)
     seconds = _clamped(_wanted_seconds(clip, preset), preset.limits.get("max_duration"), shot_id, warnings)
     frames = max(OVERLAP_FRAMES, math.floor(seconds * fps + 0.5))
@@ -1618,8 +1618,8 @@ def _continue_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Di
         form["resolution"] = resolution
     if "quantity" in fields:
         form["quantity"] = 1
-    request = _request(preset.id, CONTINUE_MODE, prompt, form)
-    resolved = models.resolve_models(preset.id, CONTINUE_MODE, "i2v", fields, (AUDIO_VAE,))
+    request = _request(preset.id, EXTEND_MODE, prompt, form)
+    resolved = models.resolve_models(preset.id, EXTEND_MODE, "i2v", fields, (AUDIO_VAE,))
     request["form_data"].update(resolved.values)
     chosen = project_options(context, fields, warnings)
     request["form_data"].update(chosen.values)
@@ -1628,8 +1628,8 @@ def _continue_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Di
     return ShotPlan(
         shot_id=shot_id,
         profile=context.profile,
-        director_mode=CONTINUE_MODE,
-        preset_mode=CONTINUE_MODE,
+        director_mode=EXTEND_MODE,
+        preset_mode=EXTEND_MODE,
         seconds=seconds,
         resolution=resolution,
         fps=fps,

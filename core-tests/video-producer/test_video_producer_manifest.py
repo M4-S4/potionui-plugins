@@ -1487,7 +1487,7 @@ SHIPPED_PRESETS = {
         defaults={**H3_DEFAULTS, "speed_profile": "custom", "steps": 20},
         recommended={"model": [COMFY_DIT, WAN2GP_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
         modes=("video", "refs"),
-        own_modes=("continue",),
+        own_modes=("extend",),
     ),
     H3_FAST_12GB: Shipped(
         name="MiniMax-H3-Fast (12 GB)",
@@ -1696,9 +1696,9 @@ CONTINUE_OWN_CONFIG = {
 }
 
 
-def test_the_12_gb_continue_mode_runs_the_core_extend_pipeline_after_the_source_and_hands_back_the_new_footage_alone(shipped_presets):
+def test_the_12_gb_extend_mode_runs_the_core_extend_pipeline_after_the_source_and_hands_back_the_new_footage_alone(shipped_presets):
     preset = shipped_presets[H3_12GB]
-    copy = yaml.safe_load((PLUGIN_ROOT / "presets" / "MiniMax-H3-12GB" / "modes" / "continue" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
+    copy = yaml.safe_load((PLUGIN_ROOT / "presets" / "MiniMax-H3-12GB" / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
     original = yaml.safe_load((CORE_PRESETS / "MiniMax-H3" / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
     kept = [pipe for pipe in original if pipe["name"] != "video_concat"]
 
@@ -1713,7 +1713,7 @@ def test_the_12_gb_continue_mode_runs_the_core_extend_pipeline_after_the_source_
             assert mine["input"] == [["video", "generator", "video"], ["seed", "seed_generator", "seed"]]
             continue
         assert mine == theirs, mine["name"]
-    assert "continue" in preset.modes and "continue" not in preset.vars["video_director"]["preset_modes"]
+    assert "extend" in preset.modes and "extend" not in preset.vars["video_director"]["preset_modes"]
 
 
 def test_the_shipped_presets_run_the_core_pipelines_unchanged(shipped_presets, core_presets):

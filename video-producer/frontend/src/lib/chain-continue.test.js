@@ -97,7 +97,7 @@ const FACE = { id: 'face', kind: 'image', name: 'face', src: '/api/media/uploads
 const QUAY = { id: 'quay', kind: 'image', name: 'quay', src: '/api/media/uploads/quay.png', width: 1344, height: 768 };
 const BOOTS = { id: 'boots', kind: 'image', name: 'boots', src: '/api/media/uploads/boots.png', width: 1024, height: 1024 };
 
-function chained({ mode, by = 'video', modes = ['video', 'refs', 'continue'], size = '832x480', pictures = [], first = {}, second = {} }) {
+function chained({ mode, by = 'video', modes = ['video', 'refs', 'extend'], size = '832x480', pictures = [], first = {}, second = {} }) {
 	ui.me = {
 		engines: [{ id: 'native', kind: 'local', name: 'Local' }],
 		presets: [

@@ -87,7 +87,7 @@ def test_a_shot_chained_by_continuation_sends_the_end_of_the_previous_take_as_it
     form = plan.request["form_data"]
 
     assert evaluation.payload["blocks"] == []
-    assert (plan.request["mode"], plan.preset_mode, plan.director_mode) == ("continue", "continue", "continue")
+    assert (plan.request["mode"], plan.preset_mode, plan.director_mode) == ("extend", "extend", "extend")
     assert "video_director" not in form
     assert (form["source_video"], form["frames"], form["resolution"], form["quantity"]) == (STAND_IN, 72, plan.resolution, 1)
     assert form["model"] == "model:id-fl2va-sha" and form["audio_vae"].startswith("model:")
@@ -109,7 +109,7 @@ def test_by_default_a_shot_still_chains_by_the_last_image(core, make_project, sl
     continued = _plan(_evaluate(core, project, ["s1", "s2"]))
 
     assert (plan.request["mode"], plan.director_mode, plan.chain_video) == ("video", "i2v", None)
-    assert continued.request["mode"] == "continue"
+    assert continued.request["mode"] == "extend"
 
 
 def test_the_take_of_a_shot_chained_by_continuation_waits_then_receives_the_end_of_the_previous_take_with_its_sound(core, make_project, ends, slots):
@@ -124,7 +124,7 @@ def test_the_take_of_a_shot_chained_by_continuation_waits_then_receives_the_end_
 
     (_, request) = core.submitted[1]
     assert ends.calls == [("s1", s1["id"], 56, tuple(s2["chain"]["video"]["size"]), True)]
-    assert request["mode"] == "continue" and request["form_data"]["source_video"] == "uploads/end-s1.mp4"
+    assert request["mode"] == "extend" and request["form_data"]["source_video"] == "uploads/end-s1.mp4"
     assert "chainvideo:" not in json.dumps(request)
 
 
@@ -136,7 +136,7 @@ def test_a_first_frame_the_page_took_from_the_previous_shot_does_not_stop_the_co
 
     plan = _plan(_evaluate(core, project, ["s2"]))
 
-    assert plan.request["mode"] == "continue" and plan.chain == "s1"
+    assert plan.request["mode"] == "extend" and plan.chain == "s1"
 
 
 def test_a_shot_with_a_first_frame_of_its_own_does_not_chain(core, make_project, slots):
@@ -148,7 +148,7 @@ def test_a_shot_with_a_first_frame_of_its_own_does_not_chain(core, make_project,
     assert _plan(evaluation).request["mode"] == "video" and _plan(evaluation).chain is None
     assert "s2" not in evaluation.waits
     project["doc"]["frames"] = []
-    assert _plan(_evaluate(core, project, ["s1", "s2"])).request["mode"] == "continue"
+    assert _plan(_evaluate(core, project, ["s1", "s2"])).request["mode"] == "extend"
 
 
 @pytest.mark.parametrize("case", ["last", "keep"])
@@ -223,7 +223,7 @@ def test_the_final_render_of_a_shot_chained_by_continuation_continues_the_placed
     plan, _, _ = asyncio.run(generation.final_plan(user, project, source, generation.RENDER, "final"))
     take = generation.create_final(user, project, source, generation.RENDER, plan, presets.MINIMAX_H3, 0.0)
 
-    assert (plan.request["mode"], plan.chain, plan.quality) == ("continue", "s1", "final")
+    assert (plan.request["mode"], plan.chain, plan.quality) == ("extend", "s1", "final")
     assert take["chain"]["state"] == "waiting" and take["chain"]["after"] is None and take["chain"]["video"]["sound"] is True
 
 
@@ -274,14 +274,14 @@ def test_a_document_may_chain_by_the_last_image_or_by_continuation_and_nothing_e
 
 
 def test_the_continue_mode_of_the_12_gb_preset_returns_the_new_footage_alone_from_the_fl2va_files():
-    pipeline = yaml.safe_load((PRESET / "modes" / "continue" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
+    pipeline = yaml.safe_load((PRESET / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
     manifest = yaml.safe_load((PRESET / "preset.yml").read_text(encoding="utf-8"))
-    generation_tab = (PRESET / "modes" / "continue" / "tabs" / "generation.yml").read_text(encoding="utf-8")
+    generation_tab = (PRESET / "modes" / "extend" / "tabs" / "generation.yml").read_text(encoding="utf-8")
     generator = next(step for step in pipeline if step["name"] == "generator/video_minimax_h3")
     gallery = next(step for step in pipeline if step["name"] == "gallery")
     fields = {field["name"]: field for field in yaml.safe_load(generation_tab)["fields"][1]["children"] if "name" in field}
 
-    assert manifest["modes"][-1] == "continue" and "continue" not in manifest["vars"]["video_director"]["preset_modes"]
+    assert manifest["modes"][-1] == "extend" and "extend" not in manifest["vars"]["video_director"]["preset_modes"]
     assert generator["configuration"]["source_video_role"] == "continue" and generator["configuration"]["source_overlap_latents"] == 5
     assert generator["configuration"]["decode"] is True and "document" not in generator["configuration"]
     assert ["source_video", "source", "video"] in generator["input"]

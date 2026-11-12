@@ -8,12 +8,12 @@ fields:
         anchor: "generation"
         label: "Generation"
         configuration: {icon: "generation", icon_display: "icon_only"}
-        children: "{{ paths.preset }}/modes/continue/tabs/generation.yml"
+        children: "{{ paths.preset }}/modes/extend/tabs/generation.yml"
       - type: "tab"
         anchor: "references"
         label: "References"
         configuration: {icon: "image", icon_display: "icon_only"}
-        children: "{{ paths.preset }}/modes/continue/tabs/references.yml"
+        children: "{{ paths.preset }}/modes/extend/tabs/references.yml"
       - type: "tab"
         anchor: "lora"
         label: "LoRA"

@@ -348,4 +348,4 @@ prompt_syntax:
 modes:
   - video
   - refs
-  - continue
+  - extend

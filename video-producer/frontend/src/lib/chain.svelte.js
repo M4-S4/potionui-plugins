@@ -110,7 +110,7 @@ export function seamChainOf(clip) {
 	const option = optionFor(engineChoices(), engine);
 	const references = engine.profile === 'Ref2VA';
 	const modes = option && option.kind !== 'cloud' ? (option.info?.modes ?? []) : [];
-	const continues = chainByOf(doc, doc.clips[i]) === 'video' && (references || modes.includes('continue'));
+	const continues = chainByOf(doc, doc.clips[i]) === 'video' && (references || modes.includes('extend'));
 	const fallback = continues ? continueFallback(doc, i, { references, tokens: references ? encoderTokens(doc.clips[i], option) : null, maxDuration: option?.info?.limits?.maxDuration ?? null, least: leastSeconds() }) : null;
 	return seamChain(doc, i, takeStore.list, ignoresFirstFrame(option), continues, references, fallback);
 }
