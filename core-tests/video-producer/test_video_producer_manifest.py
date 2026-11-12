@@ -341,6 +341,7 @@ def test_the_page_is_the_built_component(manifest):
     assert (page["route"], page["component"], page["label"]) == ("video-producer", "VideoProducerPage.js", "Video Producer")
     assert page.get("require_role") is None
     assert (PLUGIN_ROOT / "frontend" / "dist" / page["component"]).is_file()
+    assert (PLUGIN_ROOT / "frontend" / "dist" / Path(page["component"]).with_suffix(".css")).is_file()
     [item] = manifest.sidebar_items
     assert item["label"] == "Video Producer" and item["icon"]
 
