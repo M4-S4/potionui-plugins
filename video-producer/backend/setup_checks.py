@@ -340,7 +340,7 @@ class MiniMaxH3Ready(SetupCheck):
                 for state in (core_bridge.preset_state(preset_id) for preset_id in presets.MINIMAX_H3_PRESETS)
                 if state.installed
             ]
-            missing = {state: labels for state in installed if (labels := self._missing(state))}
+            missing = [(state, labels) for state in installed if (labels := self._missing(state))]
         except Exception as exc:
             logger.warning("[VIDEO-PRODUCER] Setup check: could not read the MiniMax-H3 model files: %s", exc)
             return _unchecked("the MiniMax-H3 model files", "Open presets", PRESETS_HREF)
@@ -354,8 +354,8 @@ class MiniMaxH3Ready(SetupCheck):
                     f"are on disk for {_names(installed)}."
                 ),
             )
-        first = next(iter(missing))
-        details = " ".join(f"{state.name} is missing its {_join(labels)}." for state, labels in missing.items())
+        first = missing[0][0]
+        details = " ".join(f"{state.name} is missing its {_join(labels)}." for state, labels in missing)
         return SetupCheckResult(
             done=False,
             description=(
