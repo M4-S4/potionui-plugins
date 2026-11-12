@@ -42,10 +42,16 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: core/content/plugins/package-lock.json
+          cache-dependency-path: |
+            core/content/plugins/package-lock.json
+            core/frontend/package-lock.json
 
       - name: npm ci (plugin toolchain)
         working-directory: core/content/plugins
+        run: npm ci
+
+      - name: npm ci (app frontend, which compiles the page stylesheet of a plugin)
+        working-directory: core/frontend
         run: npm ci
 
       - name: Copy the plugin into content/plugins/local of the core

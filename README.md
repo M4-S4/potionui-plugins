@@ -89,7 +89,7 @@ The dist of a plugin carries no Tailwind CSS. The classes a plugin uses are comp
 Push a tag `<id>-v<version>`, where `<version>` is the one of the plugin's `manifest.yml` (for example `video-producer-v0.1.0`). `.github/workflows/release.yml` then:
 
 1. checks the tag against the manifest (`scripts/catalogue.py --tag`);
-2. builds the dist against the core of `core.ref`;
+2. builds the dist against the core of `core.ref`, after `npm ci` in its `content/plugins/` and `frontend/`, so that the zip carries the page stylesheet of a plugin that ships one;
 3. packages `<id>-<version>.zip`, the plugin folder with its dist and without `tests/`, and writes its sha256 in `<id>-<version>.sha256`;
 4. creates the GitHub release with both files.
 
@@ -106,7 +106,7 @@ and commit `plugins.json`. The command checks the zip (name, manifest version, d
 `.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`. Its `hygiene` job needs no core: it runs `scripts/check-public-hygiene.py` on every tracked file, then the check's self-tests. Next to it runs one job per plugin of its matrix (`video-producer`, `preset-editor`; each entry names the plugin's core-side test files and Node test globs). Each of these jobs:
 
 1. checks the catalogue;
-2. checks out M4-S4/PotionUI at `core.ref`, installs Python 3.12 with the core's `requirements-ci.txt` (CPU-only torch) as the core's own `backend-tests.yml` does, and Node 24 with `npm ci` in `content/plugins/`;
+2. checks out M4-S4/PotionUI at `core.ref`, installs Python 3.12 with the core's `requirements-ci.txt` (CPU-only torch) as the core's own `backend-tests.yml` does, and Node 24 with `npm ci` in `content/plugins/` and in `frontend/`, whose packages compile the stylesheet a plugin page ships;
 3. copies its plugin into `content/plugins/local/` of the core with `sync-plugins.ps1`, puts this repository's copy in place of the core's own `content/plugins/marketplace/<id>/` when the core has one (Video Producer does, Preset Editor does not), and puts the plugin's core-side tests from `core-tests/<id>/` in place of the core's copies in `tests/plugins/marketplace/`;
 4. builds the dist and publishes it as the `<id>-dist` artifact of the run;
 5. runs the plugin's pytest suite and its core-side tests with the markers of the core's CI (`not requires_gpu and not requires_models and not gc_sensitive`), and its Node tests (`frontend/src/i18n/*.test.js` and `frontend/src/lib/*.test.js` for Video Producer, `frontend/src/lib/*.test.js` for Preset Editor).
