@@ -95,6 +95,7 @@ class ReferencePart:
     overridden: bool = False
     changed: bool = False
     ignored: bool = False
+    card_words: Optional[str] = None
 
     def summary(self) -> Dict[str, Any]:
         """The part as the prompts route reports it."""

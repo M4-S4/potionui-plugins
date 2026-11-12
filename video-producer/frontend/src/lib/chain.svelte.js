@@ -4,7 +4,7 @@ import { project, getClient, flushSave, projectGone } from './project.svelte.js'
 import { onTake, takeStore } from './takes.svelte.js';
 import { isRemoved } from './removedtakes.js';
 import { engineChoices } from './production.svelte.js';
-import { aspectOf, draftResolution, optionFor } from './generation.js';
+import { aspectOf, draftResolution, optionFor, presetProfiles } from './generation.js';
 import { effectiveEngine } from './engine.js';
 import { frameErrorText, placeSeamFrame, previousShot, seamImage } from './seam.js';
 import { chainByOf, setShotChainBy, chainOn, chainPlan, chainSource, chainState, chainWaiting, continueFallback, frameAsset, ignoresFirstFrame, placesTakeFrame, resetShotChain, seamChain, setShotChain, shotChained, stillAsset, takeFrameAsset } from './chain.js';
@@ -110,9 +110,12 @@ export function seamChainOf(clip) {
 	const option = optionFor(engineChoices(), engine);
 	const references = engine.profile === 'Ref2VA';
 	const modes = option && option.kind !== 'cloud' ? (option.info?.modes ?? []) : [];
-	const continues = chainByOf(doc, doc.clips[i]) === 'video' && (references || (TWELVE_GB_PRESETS.includes(option?.preset) && modes.includes('extend')));
+	const extendable = engine.profile === 'FL2VA' && TWELVE_GB_PRESETS.includes(option?.preset) && modes.includes('extend');
+	const continues = chainByOf(doc, doc.clips[i]) === 'video' && (references || extendable);
 	const fallback = continues ? continueFallback(doc, i, { references, tokens: references ? encoderTokens(doc.clips[i], option) : null, maxDuration: option?.info?.limits?.maxDuration ?? null, least: leastSeconds() }) : null;
-	return seamChain(doc, i, takeStore.list, ignoresFirstFrame(option), continues, references, fallback);
+	const state = seamChain(doc, i, takeStore.list, ignoresFirstFrame(option), continues, references, fallback);
+	if (state && !['off', 'waiting'].includes(state.state) && option && !presetProfiles(option.info).includes(engine.profile)) return { ...state, state: 'profileUnsupported', profile: engine.profile, extends: false };
+	return state;
 }
 
 export function encoderTokens(clip, option) {
@@ -143,6 +146,7 @@ const MAX_EXTEND_SECONDS = 328 / 24;
 export function chainStatusText(state) {
 	const previous = clipLabel(state.from);
 	if (state.state === 'off') return t('storyboard.chain.off');
+	if (state.state === 'profileUnsupported') return t('modals.shot.profileUnsupported', { profile: state.profile });
 	if (state.state === 'textOnly') return t('storyboard.chain.textOnly');
 	if (state.state === 'waiting') return waitText(state.take);
 	if (state.state === 'own') return t('storyboard.chain.own');

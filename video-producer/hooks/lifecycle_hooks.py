@@ -1,11 +1,11 @@
 import logging
 
 if __name__.count(".") >= 2:
-    from ..backend import PLUGIN_ID, tables, tracker
+    from ..backend import PLUGIN_ID, prompt_writer, tables, tracker
     from ..backend.core_bridge import HookContext
     from ..backend.exports import jobs
 else:
-    from backend import PLUGIN_ID, tables, tracker
+    from backend import PLUGIN_ID, prompt_writer, tables, tracker
     from backend.core_bridge import HookContext
     from backend.exports import jobs
 
@@ -19,6 +19,12 @@ def on_boot(context: HookContext) -> HookContext:
         logger.info("[VIDEO-PRODUCER] Tables ready: %s", ", ".join(tables.TABLE_NAMES))
     except Exception:
         logger.exception("[VIDEO-PRODUCER] Could not create the plugin's tables")
+    try:
+        cleared = prompt_writer.clear_work_area()
+        if cleared:
+            logger.info("[VIDEO-PRODUCER] %s work folder(s) of the prompt writer cleared", cleared)
+    except Exception:
+        logger.exception("[VIDEO-PRODUCER] Could not clear the work folder of the prompt writer")
     return context
 
 

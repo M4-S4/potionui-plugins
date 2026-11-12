@@ -1,6 +1,6 @@
 Generate a short video and its soundtrack together from one prompt with FastVideo's **FastH3 8-Step V2**, a distilled MiniMax-H3 that finishes a clip in 8 steps, set up for a graphics card with **12 GB of VRAM** and **64 GB of system RAM**. Clips of up to 15 seconds at a fixed 24 fps, 832×480 by default. You can anchor the first and last frames with your own images. It needs no guidance scale and no negative prompt.
 
-**Limits.** It has the Video mode only: no References mode and no Upscale mode.
+**Limits.** It has the Video mode and a Continue mode, which carries on the end of a video with new footage; Video Producer uses it to chain a shot to the previous one by continuation. There is no References mode and no Upscale mode.
 
 **Before the first run.** The 32B text encoder is larger than the card. Set the text encoder placement of the native backend to stream it from system RAM (Admin › Backends); otherwise it runs out of GPU memory before sampling starts. Count about 6 minutes for a 5-second draft on a 12 GB card. With less than 64 GB of system RAM, the process can be killed for lack of memory.
 

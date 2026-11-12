@@ -15,7 +15,7 @@
 		{ id: 'frame', label: t('shell.properties.chainByFrame') },
 		{ id: 'video', label: t('shell.properties.chainByVideo') }
 	]);
-	const tone = $derived(['textOnly', 'stale', 'continueStill', 'continueShort', 'continueOwnLast', 'continueLong', 'continueEncoder'].includes(chain?.state) ? 'text-warning' : 'text-fg-subtle');
+	const tone = $derived(['textOnly', 'stale', 'continueStill', 'continueShort', 'continueOwnLast', 'continueLong', 'continueEncoder', 'profileUnsupported'].includes(chain?.state) ? 'text-warning' : 'text-fg-subtle');
 </script>
 
 {#if chain}

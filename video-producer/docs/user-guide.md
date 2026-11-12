@@ -110,6 +110,16 @@ Ctrl+click a shot (⌘+click on a Mac) to add it to the selection, and Shift+cli
 
 **Save** applies everything, and **Edit › Undo** brings it all back. Saving never deletes a take.
 
+#### Write the prompt
+
+**Write the prompt**, above the shot prompt text, lets the language model of PotionUI write the prompt of the shot. Type in a few words what the shot should show, then click **Write** (or press Ctrl+Enter). The model reads your words, the shot's prompt as it stands, its start and end images and the prompting guide of the shot's engine, and proposes a prompt. Nothing changes until you choose: **Use this prompt** puts it in place of the shot prompt text, **Discard** leaves your prompt as it was. **Undo**, under the text, gives back your prompt of before, as long as you have not typed in it since. **Cancel** stops a writing that takes too long.
+
+The model writes only what the camera sees, in English. The page still adds the cast cards, the global direction and the format of the engine, as for a prompt you type yourself. The button is greyed when no language model is set up for you: hover it to read why, and ask an admin to set one up. A model that cannot look at images writes from your words alone.
+
+#### Card words of one shot
+
+When a picture of a cast card goes with the shot (MiniMax-H3 with the Ref2VA profile), the shot editor shows **Card words beside a picture** under **Prompt part from the references**. **As the project** follows **File › Project properties…**; **Description**, **Label** or **Picture only** apply to this shot alone. **Prompt sent to the engine** shows the result.
+
 ### Director AI
 
 Director AI shows one of four views in the center. Open them from the left panel, the **Window** menu or Alt+1 to Alt+4. The left panel sums up the state of each view, the engine of the project, and **To check**: the conflicts with the direction, the cards a shot names without casting them, the failed takes and the seams to fix.
@@ -390,7 +400,7 @@ With the FL2VA profile, a take starts on the first frame of its shot. Give a sho
 
 When you generate several chained shots at once, each take waits for the take of the previous shot, takes its last frame, then joins the queue: the card says "Waiting for take A of “Shot 2”". If the previous take fails, the chained one fails too, and **Retry** starts it again.
 
-**Chain by.** In **File › Project properties…**, or for one shot under its chain switch, **Chain by** chooses how a chained shot follows the previous one. **Last frame**, the default, starts it from the last image. **Continuation** sends the last 2.33 seconds of the previous take, with its motion and sound, to MiniMax-H3: in Ref2VA as a continuation video, and with MiniMax-H3 (12 GB) in FL2VA as a video to continue. Under the chain switch of a shot, its card says what the take will do (continue the previous take, or start from the last frame, from its text or from its references) and why, for example when the previous shot shows a still or is too short.
+**Chain by.** In **File › Project properties…**, or for one shot under its chain switch, **Chain by** chooses how a chained shot follows the previous one. **Last frame**, the default, starts it from the last image. **Continuation** sends the last 2.33 seconds of the previous take, with its motion and sound, to MiniMax-H3: in Ref2VA as a continuation video, and with MiniMax-H3 (12 GB) or MiniMax-H3-Fast (12 GB) in FL2VA as a video to continue. Under the chain switch of a shot, its card says what the take will do (continue the previous take, or start from the last frame, from its text or from its references) and why, for example when the previous shot shows a still or is too short.
 
 An engine that generates from text only, such as **Wan 2.1 T2V 1.3B (8 GB)**, does not use first frames. **Wan 2.2 14B Lightning (12 GB)** hands a shot that starts from an image to its image-to-video companion, when your administrator installed it.
 
@@ -457,6 +467,10 @@ The video holds the shots with their color and fades, and the sound as the conso
 The export runs on the server, in the background: you can close the window or leave the page. Its card shows the step and the progress, and **Cancel** stops it. When it is ready, the card offers **Download** and PotionUI sends a notification. A web or social video is also copied to your library. The master and the archive stay in the export folder: download them from the window.
 
 **Previous exports** lists the earlier exports of the project, with a download and a delete button. Your administrator sets a size budget for your exports; when it is full, your oldest exports are deleted to make room.
+
+### Finishing
+
+Under **Sound**, **Finishing** gives a web or social video a last touch with PotionUI's own effects: **Fix colours** (neutral whites and full contrast), a **LUT** your administrator installed, one of your **Looks**, a **Vignette** and **Film grain**. All are off by default: switch on the ones you want and set their strength. **Export** then reads **Export and finish**. When the export is ready, PotionUI encodes the film a second time with the finishing and saves it to your library as a new video. A second card follows the finishing, with **Cancel finishing**; when it is ready it offers **Download finished** and **Show in the library**. The plain export is always kept: if the finishing fails or you cancel it, the window says so and the plain file stays ready to download. The master and the archive are never finished. Your choices are saved with the project.
 
 ### To other software
 

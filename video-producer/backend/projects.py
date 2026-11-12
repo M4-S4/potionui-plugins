@@ -170,6 +170,19 @@ SHOT_ENGINE = _object(
 
 HYBRID = _object({"continuite": NUMBER, "identite": NUMBER, "audio": NUMBER, "mouvement": NUMBER, "style": NUMBER})
 
+FINISH_LEVEL = {"type": "number", "minimum": 0, "maximum": 100}
+FINISH_SHARE = {"type": "number", "minimum": 0, "maximum": 1}
+FINISHING = _object(
+    {},
+    optional={
+        "fixColors": _object({"on": FLAG}, optional={"strength": FINISH_LEVEL}),
+        "lut": _object({"on": FLAG}, optional={"ref": TEXT, "strength": FINISH_SHARE}),
+        "look": _object({"on": FLAG}, optional={"ref": TEXT, "strength": FINISH_SHARE}),
+        "vignette": _object({"on": FLAG}, optional={"amount": FINISH_LEVEL, "radius": FINISH_LEVEL}),
+        "grain": _object({"on": FLAG}, optional={"amount": FINISH_LEVEL, "size": {"type": "number", "minimum": 1, "maximum": 3}}),
+    },
+)
+
 IDS = {**_array(ID), "uniqueItems": True}
 
 CAST = _object({}, optional={"characters": IDS, "place": REF})
@@ -398,6 +411,7 @@ DOC_SCHEMA: Dict[str, Any] = {
                 optional={
                     "loudness": _enum(*LOUDNESS_TARGETS),
                     "crossfade": {"type": "number", "minimum": 0, "maximum": MAX_CROSSFADE},
+                    "finishing": FINISHING,
                 },
             ),
             "engine": ENGINE,

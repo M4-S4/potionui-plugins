@@ -37,6 +37,7 @@ from src.plugin_api import media as api_media
 from src.plugin_api import models as api_models
 from src.plugin_api import notifications as api_notifications
 from src.plugin_api import presets as api_presets
+from src.plugin_api import prompts as api_prompts
 from src.plugin_api.cloud import CLOUD_ENGINE
 from src.plugin_api.limits import LimitExceeded
 from src.plugin_api.media import FfmpegUnavailableError, TranscodeSpec, VideoProbe, VideoTranscodeError
@@ -61,6 +62,7 @@ __all__ = [
     "NATIVE_DRIVERS",
     "NotificationTypeSpec",
     "PresetState",
+    "PromptWriteRefused",
     "REACTION_ACTIONS",
     "REFERENCE_ROLE",
     "REGISTRY_FIELDS",
@@ -113,6 +115,7 @@ __all__ = [
     "preset_state",
     "preview_memory",
     "probe_video",
+    "prompt_writer_status",
     "record_limit_event",
     "refund_limit_event",
     "register_notification_types",
@@ -123,6 +126,7 @@ __all__ = [
     "storage_directory",
     "submit_generation",
     "transcode_video",
+    "write_prompt_for_preset",
 ]
 
 logger = logging.getLogger("plugins.video-producer")
@@ -771,3 +775,30 @@ def preset_form_fields(preset_id: str, mode: str) -> Optional[Dict[str, Dict[str
     for form in forms:
         _describe_fields(form.fields, resolve, fields)
     return fields
+
+
+PromptWriteRefused = api_prompts.PromptWriteRefused
+
+
+def prompt_writer_status(user_id: str) -> Dict[str, Any]:
+    return dict(api_prompts.prompt_writer_status(user_id))
+
+
+async def write_prompt_for_preset(
+    user_id: str,
+    instruction: str,
+    *,
+    preset_id: Optional[str] = None,
+    mode: Optional[str] = None,
+    form_data: Optional[Mapping[str, Any]] = None,
+    media: Sequence[Mapping[str, Any]] = (),
+) -> Dict[str, Any]:
+    written = await api_prompts.write_prompt_for_preset(
+        user_id,
+        instruction,
+        preset_id=preset_id,
+        mode=mode,
+        form_data=dict(form_data) if form_data is not None else None,
+        media=[dict(item) for item in media],
+    )
+    return dict(written)

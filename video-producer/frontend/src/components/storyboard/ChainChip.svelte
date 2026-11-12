@@ -9,7 +9,7 @@
 
 	const chain = $derived(seamChainOf(clip));
 	const on = $derived(Boolean(chain) && chain.state !== 'off');
-	const dot = $derived(chain?.state === 'textOnly' || chain?.state === 'stale' ? 'bg-warning-solid' : chain?.state === 'waiting' ? 'bg-signal' : null);
+	const dot = $derived(chain?.state === 'textOnly' || chain?.state === 'stale' || chain?.state === 'profileUnsupported' ? 'bg-warning-solid' : chain?.state === 'waiting' ? 'bg-signal' : null);
 	const label = $derived(chain ? (on ? t('storyboard.chain.chipOn', { previous: clipLabel(chain.from) }) : t('storyboard.chain.chipOff', { previous: clipLabel(chain.from) })) : '');
 
 	function toggle(event) {

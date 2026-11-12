@@ -84,6 +84,8 @@ class World:
         monkeypatch.setattr(core_bridge, "save_user_media", self._save_user_media)
         monkeypatch.setattr(frame_grab, "run", self._run)
         monkeypatch.setattr(core_bridge, "resolve_media", self._resolve_as_owner(core.resolve_media))
+        monkeypatch.setattr(core_bridge, "prompt_writer_status", lambda user_id: {"available": True, "vision": True, "name": "Writer", "code": None, "message": None})
+        monkeypatch.setattr(core_bridge, "write_prompt_for_preset", self._write_prompt)
         core.add_media({"kind": "library", "item_id": "item-1"}, "uploads/still.png", media_type="image")
         core.add_media({"kind": "library", "item_id": "item-user-1"}, "uploads/upload.png", media_type="image")
         self.project = make_project(clips=SHOTS, assets=[{"id": "still", "kind": "image", "origin": {"kind": "library", "itemId": "item-1"}}])
@@ -103,6 +105,10 @@ class World:
     async def _extract_frame(user, ref, at="last"):
         stored = {"kind": "library", "item_id": f"item-{user.id}"}
         return {"value": "uploads/frame.png", "media_type": "image", "original_filename": "frame.png", "origin": None, "ref": stored, "width": 832, "height": 480}
+
+    @staticmethod
+    async def _write_prompt(user_id, instruction, **options):
+        return {"text": "A lantern glows on the quay.", "llm_id": "llm-1"}
 
     @staticmethod
     async def _run(command):
@@ -282,6 +288,15 @@ ROUTES = {
         success=lambda w: Call(f"/projects/{w.pid}/prompts", PROMPTS, check=lambda r: [item["shot_id"] for item in _data(r)["prompts"]] == ["s1"]),
         denied=lambda w: Call(f"/projects/{w.pid}/prompts", PROMPTS, 404, "project_not_found", "user-2"),
         invalid=lambda w: Call(f"/projects/{w.pid}/prompts", {**PROMPTS, "shots": "s1"}, 422, "invalid_request"),
+    ),
+    "GET /prompt-writer": Route(
+        success=lambda w: Call("/prompt-writer", check=lambda r: _data(r)["available"] is True),
+        denied=lambda w: Call("/prompt-writer", status=401, who=ANONYMOUS),
+    ),
+    "POST /projects/{id}/shots/{shot}/write-prompt": Route(
+        success=lambda w: Call(f"/projects/{w.pid}/shots/s1/write-prompt", {"request": "a lantern", "preset_id": presets.WAN}, check=lambda r: _data(r)["text"] == "A lantern glows on the quay."),
+        denied=lambda w: Call(f"/projects/{w.pid}/shots/s1/write-prompt", {"request": "a lantern", "preset_id": presets.WAN}, 404, "project_not_found", "user-2"),
+        invalid=lambda w: Call(f"/projects/{w.pid}/shots/s1/write-prompt", {"preset_id": presets.WAN}, 422, "invalid_request"),
     ),
     "POST /projects/{id}/estimate": Route(
         success=lambda w: Call(f"/projects/{w.pid}/estimate", ORDER, check=lambda r: _data(r)["blocks"] == []),

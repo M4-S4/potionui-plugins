@@ -216,7 +216,8 @@ test('shot editor: the draft reads the prompt, the frames, the references and th
 		referencePrompt: null,
 		firstFromPrevious: null,
 		keepFraming: false,
-		speed: 1
+		speed: 1,
+		cardWords: null
 	});
 });
 

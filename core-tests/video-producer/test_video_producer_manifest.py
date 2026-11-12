@@ -201,6 +201,8 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
         ("POST", f"{base}/takes/{{take_id}}/retry"),
         ("POST", f"{base}/projects/{{project_id}}/estimate"),
         ("POST", f"{base}/projects/{{project_id}}/prompts"),
+        ("GET", f"{base}/prompt-writer"),
+        ("POST", f"{base}/projects/{{project_id}}/shots/{{shot_id}}/write-prompt"),
         ("POST", f"{base}/projects/{{project_id}}/generate"),
         ("GET", f"{base}/projects/{{project_id}}/queue"),
         ("GET", f"{base}/projects/{{project_id}}/exports"),
@@ -1511,6 +1513,7 @@ SHIPPED_PRESETS = {
         },
         defaults={**H3_DEFAULTS, "speed_profile": "distilled", "steps": 8},
         recommended={"model": [FASTH3_DIT], "text_encoder": [TEXT_ENCODER], "video_vae": [VIDEO_VAE], "audio_vae": [AUDIO_VAE]},
+        own_modes=("extend",),
     ),
 }
 H3_PRESETS = {preset_id: shipped for preset_id, shipped in SHIPPED_PRESETS.items() if not shipped.is_wan}
@@ -1696,10 +1699,11 @@ CONTINUE_OWN_CONFIG = {
 }
 
 
-def test_the_12_gb_extend_mode_runs_the_core_extend_pipeline_after_the_source_and_hands_back_the_new_footage_alone(shipped_presets):
-    preset = shipped_presets[H3_12GB]
-    copy = yaml.safe_load((PLUGIN_ROOT / "presets" / "MiniMax-H3-12GB" / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
-    original = yaml.safe_load((CORE_PRESETS / "MiniMax-H3" / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
+@pytest.mark.parametrize("preset_id", [H3_12GB, H3_FAST_12GB])
+def test_the_12_gb_extend_mode_runs_the_core_extend_pipeline_after_the_source_and_hands_back_the_new_footage_alone(shipped_presets, preset_id):
+    preset, shipped = shipped_presets[preset_id], SHIPPED_PRESETS[preset_id]
+    copy = yaml.safe_load((PLUGIN_ROOT / "presets" / shipped.folder / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
+    original = yaml.safe_load((CORE_PRESETS / shipped.source_folder / "modes" / "extend" / "pipeline.yml").read_text(encoding="utf-8"))["pipeline"]
     kept = [pipe for pipe in original if pipe["name"] != "video_concat"]
 
     assert [pipe["name"] for pipe in copy] == [pipe["name"] for pipe in kept]

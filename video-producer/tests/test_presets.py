@@ -154,6 +154,7 @@ TIERS = {
         director_modes=H3_MODES,
         profiles=("FL2VA", "Hybrid AV"),
         max_duration=15,
+        modes=("video", "extend"),
     ),
 }
 

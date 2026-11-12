@@ -37,7 +37,7 @@
 	const withFinal = $derived(Boolean(final) && ui.compare?.length === 2 && ui.compare.includes(final.id) && ui.compare.includes(take.id));
 	const inCompare = $derived(!withFinal && Boolean(ui.compare?.includes(take.id)));
 	const nextChain = $derived(next ? seamChainOf(next) : null);
-	const chained = $derived(Boolean(nextChain) && !['off', 'textOnly', 'own'].includes(nextChain.state));
+	const chained = $derived(Boolean(nextChain) && !['off', 'textOnly', 'own', 'profileUnsupported'].includes(nextChain.state));
 	const thumb = $derived(takeThumb(take));
 	const looks = $derived(currentLooks());
 	const look = $derived(takeLook(looks, take.id));

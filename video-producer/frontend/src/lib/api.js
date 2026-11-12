@@ -7,6 +7,8 @@ import { normalizeLooks } from './looks.js';
 import { normalizeKeyframeEstimate, normalizeKeyframePreset } from './keyframes.js';
 import { STARTER_IMAGES } from './starter.js';
 import { isObject } from './values.js';
+import { normalizeWriterStatus, normalizeWritten } from './promptwriter.js';
+import { CARD_WORDS } from './cardwords.js';
 
 const CODE_BY_STATUS = {
 	400: 'invalid_request',
@@ -440,6 +442,7 @@ function normalizeComposed(value) {
 		engine: ENGINE_FAMILIES.includes(value.engine) ? value.engine : 'other',
 		prompt: text(value.prompt),
 		reference: normalizeReference(value.reference),
+		cardWords: CARD_WORDS.includes(value.card_words) ? value.card_words : null,
 		videoTracks: list(value.video_tracks, normalizeTrackLabel) ?? [],
 		warnings: list(value.warnings, normalizeNote) ?? []
 	};
@@ -798,6 +801,59 @@ export function normalizeRun(value) {
 
 const runPath = (runId) => `${MEDIA_RUNS}/${encodeURIComponent(runId)}`;
 
+export const MEDIA_TOOLS = '/api/media-tools';
+
+function normalizeToolOption(value) {
+	if (!isObject(value) || typeof value.value !== 'string') return null;
+	return { label: text(value.label) || value.value, value: value.value, group: text(value.group) || null };
+}
+
+function normalizeToolParam(value) {
+	if (!isObject(value) || !text(value.name)) return null;
+	return {
+		name: value.name,
+		type: text(value.type),
+		default: value.default === undefined ? null : value.default,
+		min: number(value.min),
+		max: number(value.max),
+		step: number(value.step),
+		options: list(value.options, normalizeToolOption)
+	};
+}
+
+export function normalizeTool(value) {
+	if (!isObject(value) || !text(value.id)) return null;
+	return { id: value.id, label: text(value.label) || value.id, runnable: value.runnable !== false, params: list(value.params, normalizeToolParam) ?? [] };
+}
+
+export const LIBRARY_FILE = /^\/api\/media\/uploads\/[^/\\?#:.%][^/\\?#:%]*$/;
+
+export async function coreFile(api, path, filename, save) {
+	if (typeof api?.fetchRawFromApp !== 'function') return failure(0, 'no_api');
+	if (typeof path !== 'string' || !LIBRARY_FILE.test(path)) return failure(0, 'invalid_path');
+	let response;
+	try {
+		response = await api.fetchRawFromApp(path, { method: 'GET' });
+	} catch (err) {
+		return thrown(err);
+	}
+	if (!response.ok) {
+		let body = null;
+		try {
+			body = await response.json();
+		} catch {
+			body = null;
+		}
+		return { ok: false, error: normalizeError(body, response.status) };
+	}
+	try {
+		save(filename, await response.blob());
+	} catch (err) {
+		return thrown(err);
+	}
+	return { ok: true, data: { filename } };
+}
+
 export function createClient(api, save) {
 	return {
 		async me() {
@@ -878,6 +934,12 @@ export function createClient(api, save) {
 		async prompts(projectId, body, signal) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/prompts`, body, signal), normalizePrompts);
 		},
+		async promptWriter(signal) {
+			return mapped(await call(api, 'get', '/prompt-writer', undefined, signal), normalizeWriterStatus);
+		},
+		async writePrompt(projectId, shotId, body, signal) {
+			return mapped(await call(api, 'post', `${projectPath(projectId)}/shots/${encodeURIComponent(shotId)}/write-prompt`, body, signal), normalizeWritten);
+		},
 		async generate(projectId, body) {
 			return mapped(await call(api, 'post', `${projectPath(projectId)}/generate`, body), (data) => list(data.takes, normalizeTake));
 		},
@@ -953,6 +1015,12 @@ export function createClient(api, save) {
 		},
 		async cancelMediaRun(runId) {
 			return mapped(await coreJson(api, 'DELETE', runPath(runId)), normalizeRun);
+		},
+		async mediaTools(kind) {
+			return mapped(await coreJson(api, 'GET', `${MEDIA_TOOLS}?kind=${encodeURIComponent(kind)}`), (data) => list(data.tools, normalizeTool));
+		},
+		downloadCore(path, filename) {
+			return coreFile(api, path, filename, save);
 		}
 	};
 }
