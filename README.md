@@ -29,7 +29,7 @@ Every text file is stored with LF line endings (`.gitattributes`), whatever `cor
 
 ## The pinned core
 
-`core.ref` holds the PotionUI commit that the CI and the releases check out. Every core change that Video Producer needs is now merged upstream, so it is a commit of the `master` branch of PotionUI/PotionUI, after release 0.1.0. The CI checks it out from the M4-S4/PotionUI fork, whose `main` branch is that same commit; it becomes a tag of PotionUI/PotionUI once a release of the core holds it. Each catalogue entry states the PotionUI version it needs in `requires.core` (see [Catalogue](#catalogue)).
+`core.ref` holds the PotionUI commit that the CI and the releases check out from the official repository, PotionUI/PotionUI. Every core change that Video Producer needs is merged there, so it is a commit of its `master` branch, after release 0.1.0; it becomes a tag once a release of the core holds it. Each catalogue entry states the PotionUI version it needs in `requires.core` (see [Catalogue](#catalogue)).
 
 ## Day-to-day work
 
@@ -106,7 +106,7 @@ and commit `plugins.json`. The command checks the zip (name, manifest version, d
 `.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`. Its `hygiene` job needs no core: it runs `scripts/check-public-hygiene.py` on every tracked file, then the check's self-tests. Next to it runs one job per plugin of its matrix (`video-producer`, `preset-editor`; each entry names the plugin's core-side test files and Node test globs). Each of these jobs:
 
 1. checks the catalogue;
-2. checks out M4-S4/PotionUI at `core.ref`, installs Python 3.12 with the core's `requirements-ci.txt` (CPU-only torch) as the core's own `backend-tests.yml` does, and Node 24 with `npm ci` in `content/plugins/` and in `frontend/`, whose packages compile the stylesheet a plugin page ships;
+2. checks out PotionUI/PotionUI at `core.ref`, installs Python 3.12 with the core's `requirements-ci.txt` (CPU-only torch) as the core's own `backend-tests.yml` does, and Node 24 with `npm ci` in `content/plugins/` and in `frontend/`, whose packages compile the stylesheet a plugin page ships;
 3. copies its plugin into `content/plugins/local/` of the core with `sync-plugins.ps1`, puts this repository's copy in place of the core's own `content/plugins/marketplace/<id>/` when the core has one (Video Producer does, Preset Editor does not), and puts the plugin's core-side tests from `core-tests/<id>/` in place of the core's copies in `tests/plugins/marketplace/`;
 4. builds the dist and publishes it as the `<id>-dist` artifact of the run;
 5. runs the plugin's pytest suite and its core-side tests with the markers of the core's CI (`not requires_gpu and not requires_models and not gc_sensitive`), and its Node tests (`frontend/src/i18n/*.test.js` and `frontend/src/lib/*.test.js` for Video Producer, `frontend/src/lib/*.test.js` for Preset Editor).

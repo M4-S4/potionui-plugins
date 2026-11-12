@@ -34,7 +34,7 @@ jobs:
       - name: Check out the core
         uses: actions/checkout@v4
         with:
-          repository: M4-S4/PotionUI
+          repository: PotionUI/PotionUI
           ref: ${{ steps.core.outputs.ref }}
           path: core
 
