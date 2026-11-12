@@ -24,6 +24,7 @@ PLACED = {
 STILL = {"id": "img", "kind": "image", "src": "/api/media/uploads/harbour.png", "origin": {"kind": "library", "itemId": "it-1"}}
 OWN = {"id": "own", "kind": "image", "src": "/api/media/uploads/own.png", "origin": {"kind": "library", "itemId": "it-own"}}
 STAND_IN = "chainvideo:s1"
+TWELVE = presets.MINIMAX_H3_12GB
 
 
 class Ends:
@@ -48,8 +49,8 @@ def slots(store):
     store[("max_parallel_jobs", None)] = "4"
 
 
-def _project(core, make_project, chain_by="video", clips=SHOTS, assets=(), frames=(), continues=True, **extra):
-    (core.use_h3_continue if continues else core.use_h3)()
+def _project(core, make_project, chain_by="video", clips=SHOTS, assets=(), frames=(), **extra):
+    core.use_h3_continue()
     core.add_media({"kind": "library", "item_id": "it-1"}, "uploads/harbour.png")
     core.add_media({"kind": "library", "item_id": "it-own"}, "uploads/own.png")
     project = make_project(clips=[dict(clip) for clip in clips], assets=list(assets), frames=list(frames), direction={"mode": "FL2VA"}, **extra)
@@ -58,13 +59,13 @@ def _project(core, make_project, chain_by="video", clips=SHOTS, assets=(), frame
     return project
 
 
-def _order(shots):
-    return Order(shots=list(shots), quality="draft", variants=1, preset_id=presets.MINIMAX_H3)
+def _order(shots, preset_id=TWELVE):
+    return Order(shots=list(shots), quality="draft", variants=1, preset_id=preset_id)
 
 
-def _evaluate(core, project, shots):
+def _evaluate(core, project, shots, preset_id=TWELVE):
     user = core.users["user-1"]
-    return asyncio.run(estimate.evaluate(user, user, project["doc"], _order(shots), project["id"]))
+    return asyncio.run(estimate.evaluate(user, user, project["doc"], _order(shots, preset_id), project["id"]))
 
 
 def _plan(evaluation, shot_id="s2"):
@@ -181,10 +182,10 @@ def test_a_shot_that_cannot_be_continued_starts_from_the_last_image_and_says_why
         clips[0]["dur"] = 2.0
     if case == "long":
         clips[1]["dur"] = 14.0
-    project = _project(core, make_project, clips=clips, assets=[STILL], continues=case != "engine")
+    project = _project(core, make_project, clips=clips, assets=[STILL])
     shots = ["s2"] if case == "still" else ["s1", "s2"]
 
-    evaluation = _evaluate(core, project, shots)
+    evaluation = _evaluate(core, project, shots, presets.MINIMAX_H3 if case == "engine" else TWELVE)
     plan = _plan(evaluation)
 
     assert (plan.request["mode"], plan.director_mode, plan.chain_video) == ("video", mode, None)
@@ -216,12 +217,12 @@ def test_the_final_render_of_a_shot_chained_by_continuation_continues_the_placed
     first = {**SHOTS[0], "assetId": PLACED["id"], "stage": "draft", "take": "t0"}
     project = _project(core, make_project, clips=[first, {**SHOTS[1], "stage": "draft"}], assets=[PLACED])
     source = takes.create_take(
-        {"project_id": project["id"], "shot_id": "s2", "user_id": "user-1", "quality": "draft", "kind": "render", "status": "done", "generation_id": "g-2", "file_id": "f-2", "preset_id": presets.MINIMAX_H3, "seed": 7, "variant": "A", "profile": "FL2VA"}
+        {"project_id": project["id"], "shot_id": "s2", "user_id": "user-1", "quality": "draft", "kind": "render", "status": "done", "generation_id": "g-2", "file_id": "f-2", "preset_id": TWELVE, "seed": 7, "variant": "A", "profile": "FL2VA"}
     )
     user = core.users["user-1"]
 
     plan, _, _ = asyncio.run(generation.final_plan(user, project, source, generation.RENDER, "final"))
-    take = generation.create_final(user, project, source, generation.RENDER, plan, presets.MINIMAX_H3, 0.0)
+    take = generation.create_final(user, project, source, generation.RENDER, plan, TWELVE, 0.0)
 
     assert (plan.request["mode"], plan.chain, plan.quality) == ("extend", "s1", "final")
     assert take["chain"]["state"] == "waiting" and take["chain"]["after"] is None and take["chain"]["video"]["sound"] is True

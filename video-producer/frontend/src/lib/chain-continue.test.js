@@ -97,12 +97,12 @@ const FACE = { id: 'face', kind: 'image', name: 'face', src: '/api/media/uploads
 const QUAY = { id: 'quay', kind: 'image', name: 'quay', src: '/api/media/uploads/quay.png', width: 1344, height: 768 };
 const BOOTS = { id: 'boots', kind: 'image', name: 'boots', src: '/api/media/uploads/boots.png', width: 1024, height: 1024 };
 
-function chained({ mode, by = 'video', modes = ['video', 'refs', 'extend'], size = '832x480', pictures = [], first = {}, second = {} }) {
+function chained({ mode, by = 'video', preset = H3_12GB, modes = ['video', 'refs', 'extend'], size = '832x480', pictures = [], first = {}, second = {} }) {
 	ui.me = {
 		engines: [{ id: 'native', kind: 'local', name: 'Local' }],
 		presets: [
 			{
-				id: H3_12GB,
+				id: preset,
 				name: 'MiniMax-H3 (12 GB)',
 				video: true,
 				cloud: false,
@@ -117,7 +117,7 @@ function chained({ mode, by = 'video', modes = ['video', 'refs', 'extend'], size
 		]
 	};
 	project.id = 'p1';
-	doc.engine = { backend: 'native', preset: H3_12GB, model: null, sizes: { [H3_12GB]: { draft: size } } };
+	doc.engine = { backend: 'native', preset, model: null, sizes: { [preset]: { draft: size } } };
 	doc.direction = { ...(doc.direction ?? {}), mode };
 	if (by === 'video') doc.chainBy = 'video';
 	else delete doc.chainBy;
@@ -143,6 +143,14 @@ test('a chained shot says what the server does in FL2VA and Ref2VA, by the last 
 	assert.deepEqual(chained({ mode: 'Ref2VA', modes: ['video', 'refs'] }), { state: 'continueLater', extends: false, tokens: null, text: t('storyboard.chain.continueLater', { previous }) });
 	assert.deepEqual(chained({ mode: 'Ref2VA', by: 'frame' }), { state: 'references', extends: false, tokens: null, text: t('storyboard.chain.references', { previous }) });
 	assert.notEqual(t('storyboard.chain.extendLater', { previous }), t('storyboard.chain.later', { previous }));
+});
+
+test('a core MiniMax-H3 preset keeps the last frame in FL2VA although its own extend mode is listed', () => {
+	const previous = 'One';
+	const last = { state: 'later', extends: false, tokens: null, text: t('storyboard.chain.later', { previous }) };
+	assert.deepEqual(chained({ mode: 'FL2VA', preset: '01KX47H3MINIMAX000000000VA', modes: ['video', 'refs', 'upscale', 'refine_faces', 'extend', 'remix', 'talk', 'long'] }), last);
+	assert.deepEqual(chained({ mode: 'FL2VA', preset: '01KX47H3FASTH30000000000VA', modes: ['video', 'refine_faces', 'extend'] }), last);
+	assert.equal(chained({ mode: 'FL2VA' }).state, 'continueLater');
 });
 
 test('a shot chained by continuation in FL2VA keeps the last frame for the reasons the server falls back on, and says which', () => {

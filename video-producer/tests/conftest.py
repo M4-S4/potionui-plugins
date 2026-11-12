@@ -359,6 +359,16 @@ def h3_continue_fields():
     return fields
 
 
+def h3_core_extend_fields():
+    fields = h3_video_fields()
+    fields.pop("upscale_model")
+    fields.pop("resolution")
+    fields["added_seconds"] = _plain("slider", 5)
+    fields["source_video"] = _plain("video", required=True)
+    fields["direction"] = _plain("select", "after", ("after", "before"))
+    return fields
+
+
 def h3_upscale_fields():
     return {
         "input_video": _plain("video", required=True),
@@ -637,10 +647,16 @@ class FakeCore:
         return self.add_preset(H3_12GB_ID, "MiniMax-H3 (12 GB)", {"video": h3_video_fields(), "refs": h3_12gb_refs_fields()}, variables=H3_VARS)
 
     def use_h3_continue(self):
-        return self.add_preset(
+        self.add_preset(
             H3_ID,
             "MiniMax-H3",
-            {"video": h3_video_fields(), "refs": h3_refs_fields(), "extend": h3_continue_fields(), "upscale": h3_upscale_fields()},
+            {"video": h3_video_fields(), "refs": h3_refs_fields(), "extend": h3_core_extend_fields(), "upscale": h3_upscale_fields()},
+            variables=H3_VARS,
+        )
+        return self.add_preset(
+            H3_12GB_ID,
+            "MiniMax-H3 (12 GB)",
+            {"video": h3_video_fields(), "refs": h3_12gb_refs_fields(), "extend": h3_continue_fields()},
             variables=H3_VARS,
         )
 

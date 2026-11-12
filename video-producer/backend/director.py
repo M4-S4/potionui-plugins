@@ -1584,7 +1584,7 @@ def _continue_plan(context: _Context, clip: Mapping[str, Any], warnings: List[Di
     if chain is None or chain_by(doc, clip) != VIDEO_CHAIN:
         return None
     engine = bible.family(preset.id, preset.cloud)
-    if engine != bible.H3 or EXTEND_MODE not in preset.modes or context.profile != FL2VA:
+    if engine != bible.H3 or preset.id not in presets.MINIMAX_H3_12GB_PRESETS or EXTEND_MODE not in preset.modes or context.profile != FL2VA:
         _fall_back("chain_continue_unsupported", f"{preset.name} cannot continue a video in {context.profile}", shot_id, warnings)
         return None
     if chain.asset_id is not None:
