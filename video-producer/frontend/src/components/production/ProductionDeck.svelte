@@ -6,6 +6,7 @@
 	import { ms } from '../../lib/motion.js';
 	import { ui, doc, secs, allIssues, fmtDuration, openDirector, pickedClips, clearPicked, clipLabel } from '../../lib/state.svelte.js';
 	import {
+		pickTarget,
 		readiness,
 		startGeneration,
 		cancelGeneration,
@@ -296,12 +297,7 @@
 		if (said) spoken = `${said.label} · ${t('exports.percent', { value: said.value })}`;
 	});
 
-	function pick(id) {
-		if (id === 'picked') return;
-		clearPicked();
-		p.target = id;
-		if (id === 'range' && !ui.range) ui.range = { in: ready.range[0], out: ready.range[1] };
-	}
+	const pick = (id) => pickTarget(id);
 
 	function directionIssues() {
 		openDirector('direction');

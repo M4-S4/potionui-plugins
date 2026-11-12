@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from .. import bible, formats
 from ..core_bridge import generate_ulid
 from ..director import FIRST_ROLES, LAST_ROLES, shot_revision
+from ..dissolve import chained, layout, rounded
 
 GRID = 0.04
 PROMPT_STRENGTH = 75
@@ -100,17 +101,16 @@ def relayout(doc: Dict[str, Any]) -> None:
     """Lay the shots end to end from zero, moving the prompts and frames linked to each shot with it."""
     clips = clips_of(doc)
     before = {clip["id"]: number(clip.get("start")) for clip in clips}
-    at = 0.0
-    for clip in clips:
-        clip["start"] = snap(at)
-        at += number(clip.get("dur"))
+    exact = chained(clips)
+    for clip, start in zip(clips, layout(clips, snap)):
+        clip["start"] = start
     for clip in clips:
         delta = clip["start"] - before.get(clip["id"], clip["start"])
         if abs(delta) <= 1e-6:
             continue
         for item in _linked(doc, clip["id"]):
             key = "time" if "time" in item else "start"
-            item[key] = snap(number(item.get(key)) + delta)
+            item[key] = rounded(number(item.get(key)) + delta) if exact else snap(number(item.get(key)) + delta)
 
 
 def _folded(text: Any) -> str:
@@ -219,10 +219,11 @@ def frames_of(doc: Mapping[str, Any], clip: Mapping[str, Any], kind: str) -> Lis
     return [frame for frame in dicts(doc.get("frames")) if frame.get("shotId") == clip.get("id") and role_kind(frame.get("role")) == kind]
 
 
-def frame_time(clip: Mapping[str, Any], kind: str) -> float:
+def frame_time(clip: Mapping[str, Any], kind: str, exact: bool = False) -> float:
     """Where the first or last frame of a shot sits on the timeline."""
     start = number(clip.get("start"))
-    return snap(start + max(0.0, number(clip.get("dur")) - GRID)) if kind == LAST else snap(start)
+    at = start + max(0.0, number(clip.get("dur")) - GRID) if kind == LAST else start
+    return rounded(at) if exact else snap(at)
 
 
 def frame_asset(doc: Mapping[str, Any], clip: Mapping[str, Any], kind: str) -> Optional[str]:
@@ -237,7 +238,7 @@ def place_frame(doc: Dict[str, Any], clip: Mapping[str, Any], kind: str, asset_i
     if not asset_id:
         doc["frames"] = [frame for frame in frames if not any(frame is item for item in existing)]
         return
-    fields = {"shotId": clip["id"], "time": frame_time(clip, kind), "assetId": asset_id, "role": kind, "strength": existing[0].get("strength", FRAME_STRENGTH) if existing else FRAME_STRENGTH}
+    fields = {"shotId": clip["id"], "time": frame_time(clip, kind, chained(clips_of(doc))), "assetId": asset_id, "role": kind, "strength": existing[0].get("strength", FRAME_STRENGTH) if existing else FRAME_STRENGTH}
     if existing:
         existing[0].update(fields)
         doc["frames"] = [frame for frame in frames if not any(frame is item for item in existing[1:])]

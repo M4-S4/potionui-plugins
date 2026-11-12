@@ -1,5 +1,6 @@
 import { touch } from './shots.js';
 import { castLabels } from './bible.js';
+import { chained } from './dissolve.js';
 import { takeLabelOf as takeLabel } from './labels.js';
 
 export const PROMPT_LIMIT = 300;
@@ -27,14 +28,17 @@ export function promptFor(doc, shotId) {
 }
 
 export function shotsContext(doc, takeLabelOf, takesOf = () => []) {
+	const exact = chained(doc.clips ?? []);
+	const time = (value) => (exact ? +(Number(value) || 0).toFixed(6) : seconds(value));
 	return (doc.clips ?? []).map((c) => {
 		const p = promptFor(doc, c.id);
 		const takes = takesOf(c.id);
 		return {
 			id: c.id,
 			label: takeLabelOf(c),
-			start: seconds(c.start),
-			dur: seconds(c.dur),
+			start: time(c.start),
+			dur: time(c.dur),
+			...(c.dissolve ? { dissolve: c.dissolve } : {}),
 			stage: c.stage,
 			promptId: p?.id ?? null,
 			prompt: clipped(p?.text),

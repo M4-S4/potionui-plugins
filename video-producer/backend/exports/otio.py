@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .. import formats
+from ..dissolve import cuts
 from .common import UNDEFINED, Timebase, asset_of, clip_label, js_json
 
 
@@ -23,14 +24,29 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
         }
 
     video: List[Dict[str, Any]] = []
+    edits = cuts(doc["clips"], time.frames)
     for index, clip in enumerate(doc["clips"]):
         entry = files.get(("clips", index))
+        cut = edits[index]
+        length = time.span(clip["start"], clip["dur"]) if cut is None else cut.end - cut.start
+        if cut is not None and cut.overlap:
+            video.append(
+                {
+                    "OTIO_SCHEMA": "Transition.1",
+                    "name": "Cross Dissolve",
+                    "metadata": {},
+                    "transition_type": "SMPTE_Dissolve",
+                    "in_offset": {"OTIO_SCHEMA": "RationalTime.1", "rate": time.fps, "value": cut.head},
+                    "out_offset": {"OTIO_SCHEMA": "RationalTime.1", "rate": time.fps, "value": cut.overlap - cut.head},
+                }
+            )
         if entry:
             speed = formats.speed_of(clip)
+            source_in = clip["srcIn"] if cut is None or not cut.head else clip["srcIn"] + cut.head / time.fps * speed
             item: Dict[str, Any] = {
                 "OTIO_SCHEMA": "Clip.2",
                 "name": clip_label(doc, clip, locale),
-                "source_range": span(time.frames(clip["srcIn"]), time.span(clip["start"], clip["dur"])),
+                "source_range": span(time.frames(source_in), length),
                 "media_references": reference(entry),
                 "active_media_reference_key": "DEFAULT_MEDIA",
                 "metadata": {"video_producer": {"stage": clip.get("stage", UNDEFINED), "take": clip.get("take", UNDEFINED)}},
@@ -39,7 +55,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
                 item["effects"] = [{"OTIO_SCHEMA": "LinearTimeWarp.1", "name": "", "effect_name": "LinearTimeWarp", "metadata": {}, "time_scalar": speed}]
             video.append(item)
         else:
-            video.append({"OTIO_SCHEMA": "Gap.1", "name": clip_label(doc, clip, locale), "source_range": span(0, time.span(clip["start"], clip["dur"]))})
+            video.append({"OTIO_SCHEMA": "Gap.1", "name": clip_label(doc, clip, locale), "source_range": span(0, length)})
     lanes = []
     audio = list(enumerate(doc.get("audio") or []))
     for position, lane in enumerate(doc.get("lanes") or [], start=1):

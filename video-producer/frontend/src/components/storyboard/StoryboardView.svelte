@@ -5,7 +5,7 @@
 	import { getLocale, t } from '../../i18n/index.svelte.js';
 	import { ms } from '../../lib/motion.js';
 	import { anchoredPopover } from '../../lib/popover.js';
-	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf, isPicked, pickClip, pickedClips } from '../../lib/state.svelte.js';
+	import { ui, doc, select, act, secs, clipLabel, addShot, moveClip, seqDuration, deleteSelection, promptOf, isPicked, pickClip, pickedClips, entryTime } from '../../lib/state.svelte.js';
 	import { takesOf, promoteToFinal, shotActivity, shotEngineText, soundOf } from '../../lib/production.svelte.js';
 	import { seek } from '../../lib/playback.svelte.js';
 	import { clipFilter } from '../../lib/look.js';
@@ -117,7 +117,7 @@
 		const mode = e ? pickMode(e) : null;
 		if (mode) return pickClip(c.id, mode);
 		select('clip', c.id);
-		seek(c.start + 0.01);
+		seek(entryTime(c));
 	}
 	function holdText(e) {
 		if (e.shiftKey && e.target.tagName !== 'INPUT') e.preventDefault();

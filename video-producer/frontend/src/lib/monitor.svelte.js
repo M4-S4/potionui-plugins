@@ -1,4 +1,4 @@
-import { ui, doc, asset, clipAt, select, bandView, directorView } from './state.svelte.js';
+import { ui, doc, asset, select, bandView, directorView, entryTime, playsAlone } from './state.svelte.js';
 import { findTake } from './production.svelte.js';
 import { seek } from './playback.svelte.js';
 import { shownShots } from './monitor.js';
@@ -7,7 +7,8 @@ const reviewing = () => ui.workspace === 'director' && directorView() === 'revie
 
 function bringUnder(clip) {
 	if (ui.selection?.kind !== 'clip' || ui.selection.id !== clip.id) select('clip', clip.id);
-	if (clipAt(ui.playhead)?.id !== clip.id) seek(clip.start + 0.01);
+	const entry = entryTime(clip);
+	if (!playsAlone(clip, ui.playhead) && ui.playhead !== entry) seek(entry);
 }
 
 export function showShot(clip) {

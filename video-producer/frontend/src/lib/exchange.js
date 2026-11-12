@@ -1,6 +1,10 @@
 import { laneCode } from './tracks.js';
 import { BOX, deliverySize, ratioOf } from './formats.js';
 import { sourceSeconds, speedOf } from './cadence.js';
+import { cuts, moved, placement } from './dissolve.js';
+
+const DISSOLVE_NAME = 'Cross Dissolve';
+const DISSOLVE_EFFECT = 'FxPlug:4731E73A-8DAC-4113-9A30-AE85B1761265';
 
 export const EXCHANGE = {
 	fcpxml: { ext: 'fcpxml', mime: 'application/xml' },
@@ -78,13 +82,24 @@ export function fcpxml(doc, { label }) {
 		(c, i) =>
 			`\t\t<asset id="r${i + 2}" name="${esc(label(c))}" start="0s" duration="${rt(assetOf(doc, c.assetId).srcDur ?? c.srcIn + sourceSeconds(c))}" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/${esc(encodeURI(file(c)))}"/></asset>`
 	);
-	const timeMap = (c) =>
-		`<timeMap><timept time="${rt(c.srcIn)}" value="${rt(c.srcIn)}" interp="linear"/><timept time="${count(frames(c.srcIn) + span(c.start, c.dur))}" value="${rt(c.srcIn + sourceSeconds(c, span(c.start, c.dur) / doc.fps))}" interp="linear"/></timeMap>`;
-	const spine = doc.clips.map((c) =>
-		file(c)
-			? `\t\t\t\t\t\t<asset-clip ref="r${media.indexOf(c) + 2}" name="${esc(label(c))}" offset="${rt(c.start)}" start="${rt(c.srcIn)}" duration="${count(span(c.start, c.dur))}"${speedOf(c) === 1 ? '/>' : `>${timeMap(c)}</asset-clip>`}`
-			: `\t\t\t\t\t\t<gap name="${esc(label(c))}" offset="${rt(c.start)}" start="0s" duration="${count(span(c.start, c.dur))}"/>`
-	);
+	const edits = cuts(doc.clips, frames);
+	const effect = media.length + 2;
+	if (edits.some((cut) => cut?.overlap)) assets.push(`\t\t<effect id="r${effect}" name="${DISSOLVE_NAME}" uid="${DISSOLVE_EFFECT}"/>`);
+	const timeMap = (c, source, length) =>
+		`<timeMap><timept time="${rt(source)}" value="${rt(source)}" interp="linear"/><timept time="${count(frames(source) + length)}" value="${rt(source + sourceSeconds(c, length / doc.fps))}" interp="linear"/></timeMap>`;
+	const spine = doc.clips.flatMap((c, i) => {
+		const cut = edits[i];
+		const length = cut ? cut.end - cut.start : span(c.start, c.dur);
+		const offset = cut ? count(cut.start) : rt(c.start);
+		const source = cut?.head ? c.srcIn + (cut.head / doc.fps) * speedOf(c) : c.srcIn;
+		const transition = cut?.overlap ? [`\t\t\t\t\t\t<transition name="${DISSOLVE_NAME}" offset="${count(cut.start - cut.head)}" duration="${count(cut.overlap)}"><filter-video ref="r${effect}" name="${DISSOLVE_NAME}"/></transition>`] : [];
+		return [
+			...transition,
+			file(c)
+				? `\t\t\t\t\t\t<asset-clip ref="r${media.indexOf(c) + 2}" name="${esc(label(c))}" offset="${offset}" start="${rt(source)}" duration="${count(length)}"${speedOf(c) === 1 ? '/>' : `>${timeMap(c, source, length)}</asset-clip>`}`
+				: `\t\t\t\t\t\t<gap name="${esc(label(c))}" offset="${offset}" start="0s" duration="${count(length)}"/>`
+		];
+	});
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE fcpxml>
 <fcpxml version="1.10">
@@ -113,19 +128,27 @@ export function otio(doc, { label }) {
 	const file = (c) => fileOf(doc, c, label);
 	const range = (start, length) => ({ OTIO_SCHEMA: 'TimeRange.1', start_time: { OTIO_SCHEMA: 'RationalTime.1', rate, value: start }, duration: { OTIO_SCHEMA: 'RationalTime.1', rate, value: length } });
 	const reference = (url) => ({ DEFAULT_MEDIA: url ? { OTIO_SCHEMA: 'ExternalReference.1', target_url: url } : { OTIO_SCHEMA: 'MissingReference.1' } });
-	const video = doc.clips.map((c) =>
+	const edits = cuts(doc.clips, frames);
+	const time = (value) => ({ OTIO_SCHEMA: 'RationalTime.1', rate, value });
+	const item = (c, source, length) =>
 		file(c)
 			? {
 					OTIO_SCHEMA: 'Clip.2',
 					name: label(c),
-					source_range: range(frames(c.srcIn), span(c.start, c.dur)),
+					source_range: range(frames(source), length),
 					media_references: reference(file(c)),
 					active_media_reference_key: 'DEFAULT_MEDIA',
 					metadata: { video_producer: { stage: c.stage, take: c.take } },
 					...(speedOf(c) === 1 ? {} : { effects: [{ OTIO_SCHEMA: 'LinearTimeWarp.1', name: '', effect_name: 'LinearTimeWarp', metadata: {}, time_scalar: speedOf(c) }] })
 				}
-			: { OTIO_SCHEMA: 'Gap.1', name: label(c), source_range: range(0, span(c.start, c.dur)) }
-	);
+			: { OTIO_SCHEMA: 'Gap.1', name: label(c), source_range: range(0, length) };
+	const video = doc.clips.flatMap((c, i) => {
+		const cut = edits[i];
+		const length = cut ? cut.end - cut.start : span(c.start, c.dur);
+		const source = cut?.head ? c.srcIn + (cut.head / doc.fps) * speedOf(c) : c.srcIn;
+		const transition = cut?.overlap ? [{ OTIO_SCHEMA: 'Transition.1', name: DISSOLVE_NAME, metadata: {}, transition_type: 'SMPTE_Dissolve', in_offset: time(cut.head), out_offset: time(cut.overlap - cut.head) }] : [];
+		return [...transition, item(c, source, length)];
+	});
 	const lanes = doc.lanes.map((l) => {
 		const items = doc.audio.filter((a) => a.lane === l.id).sort((a, b) => a.start - b.start);
 		const children = [];
@@ -152,16 +175,31 @@ export function otio(doc, { label }) {
 }
 
 export function edl(doc, { label }) {
-	const { tcode } = timing(doc);
+	const { tcode, frames } = timing(doc);
 	const lines = [`TITLE: ${oneLine(doc.name).toUpperCase()}`, 'FCM: NON-DROP FRAME', ''];
+	const joins = [...cuts(doc.clips, frames).map((cut) => cut?.overlap ?? 0), 0];
+	const places = joins.some(Boolean) ? placement(doc.clips) : doc.clips.map(() => null);
 	doc.clips.forEach((c, i) => {
 		const file = fileOf(doc, c, label);
 		const n = String(i + 1).padStart(3, '0');
 		const reel = file ? `VP${n}` : 'BL';
 		const speed = speedOf(c);
-		lines.push(`${n}  ${reel.padEnd(8)} V     C        ${tcode(c.srcIn)} ${tcode(c.srcIn + c.dur * speed)} ${tcode(c.start)} ${tcode(c.start + c.dur)}`);
+		const shifted = moved(c, places[i]);
+		const recordIn = shifted ? places[i].start : c.start;
+		const recordOut = joins[i + 1] > 0 ? doc.clips[i + 1].start : places[i] ? places[i].end : c.start + c.dur;
+		const sourceOut = joins[i + 1] > 0 || shifted ? c.srcIn + (recordOut - recordIn) * speed : c.srcIn + c.dur * speed;
+		let cut = 'C       ';
+		if (joins[i] > 0) {
+			const before = doc.clips[i - 1];
+			const held = before.srcIn + (c.start - before.start) * speedOf(before);
+			const beforeReel = fileOf(doc, before, label) ? `VP${String(i).padStart(3, '0')}` : 'BL';
+			lines.push(`${n}  ${beforeReel.padEnd(8)} V     C        ${tcode(held)} ${tcode(held)} ${tcode(c.start)} ${tcode(c.start)}`);
+			cut = `D    ${String(joins[i]).padStart(3, '0')}`;
+		}
+		lines.push(`${n}  ${reel.padEnd(8)} V     ${cut} ${tcode(c.srcIn)} ${tcode(sourceOut)} ${tcode(recordIn)} ${tcode(recordOut)}`);
 		if (speed !== 1) lines.push(`M2   ${reel.padEnd(8)}       ${(doc.fps * speed).toFixed(1).padStart(5, '0')}                ${tcode(c.srcIn)}`);
-		lines.push(`* FROM CLIP NAME: ${oneLine(label(c))}`);
+		if (joins[i] > 0) lines.push(`* FROM CLIP NAME: ${oneLine(label(doc.clips[i - 1]))}`, `* TO CLIP NAME: ${oneLine(label(c))}`);
+		else lines.push(`* FROM CLIP NAME: ${oneLine(label(c))}`);
 		if (file) lines.push(`* SOURCE FILE: ${oneLine(file)}`);
 		lines.push('');
 	});

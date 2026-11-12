@@ -30,6 +30,8 @@
 	import Icon from '../Icon.svelte';
 	import SoundNote from '../shots/SoundNote.svelte';
 	import ChainChip from './ChainChip.svelte';
+	import { lostSeconds } from '../../lib/dissolve.js';
+	import { bandTrim } from '../../lib/trims.js';
 
 	const HEAD = 120;
 	const SONG = 48;
@@ -48,7 +50,7 @@
 	const x = (time) => time * pps;
 	const layout = $derived(proposalLayout());
 	const starts = $derived(doc.clips.map((c, i) => displayStart(c, i, layout)));
-	const cut = $derived(doc.clips.reduce((sum, c) => sum + c.dur, 0) + (layout?.shift ?? 0));
+	const cut = $derived(doc.clips.reduce((sum, c) => sum + c.dur, 0) - lostSeconds(doc.clips) + (layout?.shift ?? 0));
 	const song = $derived(musicEnd(doc));
 	const total = $derived(Math.max(cut, song, 1));
 	const laneW = $derived(Math.max(0, viewW));
@@ -107,23 +109,7 @@
 
 	function trimDown(e, c) {
 		pickShot(c, false);
-		const range = shotDurationLimit(c);
-		const max = sourceLength(c);
-		const d0 = c.dur;
-		drag(e, {
-			onMove: (dx) => {
-				const end = ui.snapping ? snap(c.start + d0 + dx / pps, c.id) : { t: c.start + d0 + dx / pps, at: null };
-				const nd = clamp(end.t - c.start, 0.4, range.max);
-				const limit = nd >= range.max - 0.001;
-				c.dur = round(nd, 0.04);
-				relayout();
-				if (ui.drag) ui.drag.at = end.at;
-				trimText(range, max, d0, c.dur, limit);
-			},
-			onEnd: () => {
-				if (fitShot(c, d0)) relayout();
-			}
-		});
+		drag(e, bandTrim(c));
 	}
 
 	function wheel(e) {

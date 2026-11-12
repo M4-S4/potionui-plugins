@@ -1,5 +1,5 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, relayout, select, moveClip, promptOf, toast, clipLabel, secs, openDirector, clipAt } from './state.svelte.js';
+import { ui, doc, act, relayout, select, moveClip, promptOf, toast, clipLabel, secs, openDirector, clipAt, entryTime } from './state.svelte.js';
 import { takesOf, findTake, shotDurationLimit, settleRelease, labelTake } from './production.svelte.js';
 import { applyShotDraft, shotDraft, shotStale } from './shots.js';
 import { identityTakes, seam } from './continuity.svelte.js';
@@ -9,6 +9,7 @@ import { takeStore } from './takes.svelte.js';
 import { reviewChoice, reviewCounts, reviewFilterOf, reviewShots } from './director.js';
 import { ulid } from './ulid.js';
 import { BAND_STEP, ghostLayout, insertIndex, lastFailure, previewable } from './band.js';
+import { lostSeconds } from './dissolve.js';
 
 export function selectedShot() {
 	return ui.selection?.kind === 'clip' ? (doc.clips.find((c) => c.id === ui.selection.id) ?? null) : null;
@@ -20,7 +21,7 @@ export function pickShot(clip, seekTo = true) {
 	if (shown && shown.shotId !== clip.id) ui.preview = null;
 	if (ui.seamCompare && ui.seamCompare !== clip.id) ui.seamCompare = null;
 	select('clip', clip.id);
-	if (seekTo) seek(clip.start + 0.01);
+	if (seekTo) seek(entryTime(clip));
 }
 
 export function stepShot(delta) {
@@ -158,7 +159,8 @@ export function openSeam(clip) {
 
 export function proposalLayout() {
 	if (!ui.storyOpen || ui.storyTab !== 'cut' || !ui.storyProposal?.length) return null;
-	const layout = ghostLayout(doc.clips, ui.storyProposal, insertIndex(doc.clips, ui.storyAt, selectedShot()?.id ?? null));
+	const index = insertIndex(doc.clips, ui.storyAt, selectedShot()?.id ?? null);
+	const layout = ghostLayout(doc.clips, ui.storyProposal, index, lostSeconds(doc.clips.slice(0, index)));
 	return layout.ghosts.length ? layout : null;
 }
 

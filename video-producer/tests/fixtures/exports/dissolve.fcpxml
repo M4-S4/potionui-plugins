@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+	<resources>
+		<format id="r1" name="FFVideoFormat1080p25" frameDuration="1/25s" width="1920" height="1080"/>
+		<asset id="r2" name="Le port endormi" start="0s" duration="127/25s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/1.mp4"/></asset>
+		<asset id="r3" name="Les mains du pêcheur" start="0s" duration="129/25s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/1.mp4"/></asset>
+		<asset id="r4" name="harbour-wide.mp4" start="0s" duration="100/25s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/03927418-58f2-440f-9a15-456093037531.mp4"/></asset>
+		<effect id="r5" name="Cross Dissolve" uid="FxPlug:4731E73A-8DAC-4113-9A30-AE85B1761265"/>
+	</resources>
+	<library>
+		<event name="Video Producer">
+			<project name="Harbour dissolves">
+				<sequence format="r1" duration="393/25s" tcStart="0s">
+					<spine>
+						<asset-clip ref="r2" name="Le port endormi" offset="0/25s" start="0/25s" duration="112/25s"/>
+						<transition name="Cross Dissolve" offset="100/25s" duration="25/25s"><filter-video ref="r5" name="Cross Dissolve"/></transition>
+						<asset-clip ref="r3" name="Les mains du pêcheur" offset="112/25s" start="16/25s" duration="86/25s"><timeMap><timept time="16/25s" value="16/25s" interp="linear"/><timept time="102/25s" value="59/25s" interp="linear"/></timeMap></asset-clip>
+						<transition name="Cross Dissolve" offset="192/25s" duration="13/25s"><filter-video ref="r5" name="Cross Dissolve"/></transition>
+						<gap name="Le départ &lt;large&gt;" offset="198/25s" start="0s" duration="50/25s"/>
+						<transition name="Cross Dissolve" offset="230/25s" duration="37/25s"><filter-video ref="r5" name="Cross Dissolve"/></transition>
+						<asset-clip ref="r4" name="harbour-wide.mp4" offset="248/25s" start="24/25s" duration="70/25s"/>
+					</spine>
+				</sequence>
+			</project>
+		</event>
+	</library>
+</fcpxml>
