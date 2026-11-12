@@ -7,7 +7,7 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 | Plugin | Folder | Version | State |
 |---|---|---|---|
 | Video Producer | `video-producer/` | 0.2.0 | Maintained and tested by the CI against the pinned official core; its page ships its own stylesheet (see [Tailwind classes](#tailwind-classes)). It is still developed in the M4-S4/PotionUI fork and imported here: see [Following the fork](#following-the-fork). |
-| Preset Editor | `preset-editor/` | 0.2.3 | Brought up to the pinned core in November 2026 (its catalogue entry requires PotionUI 0.1.0 or later), tested by the CI like Video Producer and checked on screen on a running instance of that core. Not released yet: see [its README](preset-editor/README.md#what-is-left-to-do). |
+| Preset Editor | `preset-editor/` | 0.2.3 | Brought up to the pinned core in November 2026 (its catalogue entry requires PotionUI 0.1.0 or later), tested by the CI like Video Producer and checked on screen on a running instance of that core. Released as 0.2.3; [its README](preset-editor/README.md#what-is-left-to-do) lists what is left to do. |
 
 `archive/` holds the older copies of `model-browser` and `deepseek-provider`, with their core-side tests and the design variants of Model Browser. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. Nothing in `archive/` is in the catalogue, the CI or the scripts' scope.
 

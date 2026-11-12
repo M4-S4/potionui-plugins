@@ -35,8 +35,8 @@
         "plugin_api": null
       },
       "release": {
-        "archive": null,
-        "sha256": null
+        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/preset-editor-v0.2.3/preset-editor-0.2.3.zip",
+        "sha256": "8b09f20a7ca14e9ff89391085111925522164bd258814f3b1968b75799fa1ec9"
       }
     }
   ]
