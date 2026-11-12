@@ -1,17 +1,55 @@
 # PotionUI plugins
 
-The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catalogue (`plugins.json`) that lists them with their releases, a CI that tests them against a pinned PotionUI core, and a GitHub release for each plugin version.
+Plugins for [PotionUI](https://github.com/PotionUI/PotionUI), the self-hosted app for AI images and video. Install them from the catalogue of this repository, in a few clicks, from the admin pages of your PotionUI.
 
 ## Plugins
 
-| Plugin | Folder | Version | State |
-|---|---|---|---|
-| Video Producer | `video-producer/` | 0.2.0 | Maintained and tested by the CI against the pinned official core; its page ships its own stylesheet (see [Tailwind classes](#tailwind-classes)). It is still developed in the M4-S4/PotionUI fork and imported here: see [Following the fork](#following-the-fork). |
-| Preset Editor | `preset-editor/` | 0.2.3 | Brought up to the pinned core in November 2026 (its catalogue entry requires PotionUI 0.1.0 or later), tested by the CI like Video Producer and checked on screen on a running instance of that core. Released as 0.2.3; [its README](preset-editor/README.md#what-is-left-to-do) lists what is left to do. |
+| Plugin | What it does | Who uses it | Version | Read first |
+|---|---|---|---|---|
+| Video Producer | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. | Every user; an admin sets it up. | 0.2.0 | [Administration](video-producer/README.md), [user guide](video-producer/docs/user-guide.md) |
+| Preset Editor | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | 0.2.3 | [README](preset-editor/README.md) |
+
+Both are free software under the GPL-3.0 license.
+
+## Install a plugin from the catalogue
+
+You need an admin account on a PotionUI whose **Admin › Plugins** page shows the **Install from catalog** button.
+
+1. Open **Admin › Plugins** and click **Install from catalog**.
+2. Paste the catalogue URL of this repository and click **Read catalog**:
+
+   ```text
+   https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/plugins.json
+   ```
+
+3. Click **Install** next to the plugin you want. PotionUI downloads the release, checks its checksum and says whether the plugin is running or waits, disabled, in the list.
+4. If it is disabled, open it in the list and turn it on with its **Enable plugin** switch.
+5. Follow the plugin's **Setup** steps in its **Overview** tab, then read its documentation in **Admin › Documentation**.
+
+A plugin runs with the same rights as PotionUI: install only from a catalogue you trust. To update a plugin, open the catalogue again: a newer version shows **Update to** and its version number in place of **Install**.
+
+Video Producer needs more than the plugin itself: a video engine, video presets and their model files, and ffmpeg on the server. Its [administration page](video-producer/README.md) says what to prepare. Preset Editor needs nothing else.
+
+### Install by hand
+
+Without the catalogue, put the plugin folder in `content/plugins/local/<id>` of the instance, then click **Scan for Plugins** in **Admin › Plugins** and enable it:
+
+- from a release: unzip `<id>-<version>.zip` from the [releases page](https://github.com/M4-S4/potionui-plugins/releases) into `content/plugins/local/` (the zip holds the folder `<id>/` with its built frontend);
+- from a clone of this repository: copy `<id>/`, then build its frontend (see [Day-to-day work](#day-to-day-work)).
+
+In a Docker container the folder is `/app/content/plugins/local/<id>`: bind-mount it, or copy it with `scripts/potionui-docker.ps1 copy -Plugin <id>`.
+
+## For maintainers
+
+The rest of this page is for the people who develop, test and release these plugins.
+
+This repository holds one folder per plugin, a catalogue (`plugins.json`) that lists them with their releases, a CI that tests them against a pinned PotionUI core, and a GitHub release for each plugin version.
+
+Video Producer is developed in the M4-S4/PotionUI fork and imported here (see [Following the fork](#following-the-fork)); its page ships its own stylesheet (see [Tailwind classes](#tailwind-classes)). Preset Editor is developed here; [its README](preset-editor/README.md#what-is-left-to-do) lists what is left to do.
 
 `archive/` holds the older copies of `model-browser` and `deepseek-provider`, with their core-side tests and the design variants of Model Browser. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. Nothing in `archive/` is in the catalogue, the CI or the scripts' scope.
 
-## Layout
+### Layout
 
 | Path | What it holds |
 |---|---|
@@ -27,16 +65,16 @@ The PotionUI plugins of M4-S4, in one repository: one folder per plugin, a catal
 
 Every text file is stored with LF line endings (`.gitattributes`), whatever `core.autocrlf` says.
 
-## The pinned core
+### The pinned core
 
 `core.ref` holds the PotionUI commit that the CI and the releases check out from the official repository, PotionUI/PotionUI. Every core change that Video Producer needs is merged there, so it is a commit of its `master` branch, after release 0.1.0; it becomes a tag once a release of the core holds it. Each catalogue entry states the PotionUI version it needs in `requires.core` (see [Catalogue](#catalogue)).
 
-## Day-to-day work
+### Day-to-day work
 
 Copy `.env.example` to `.env.local` (ignored by git, never committed) and set `POTIONUI_SRC` to a PotionUI checkout. The scripts read it, or take `-PotionUISrc`:
 
 - `scripts/sync-plugins.ps1 [-Plugin <id>]` mirrors each plugin into `content/plugins/local/<id>` of the checkout, as a real folder (robocopy on Windows, rsync elsewhere).
-- `scripts/build-plugins.ps1 [-Plugin <id>] [-Local]` builds the frontend of a plugin with the core's toolchain (`scripts/build-plugins.mjs`) and copies `frontend/dist` back here. `frontend/dist` is ignored by git for every plugin: the CI builds it and the releases carry it. The script installs the plugin toolchain (`npm install` in `content/plugins/`) when it is missing, but not the packages of the core's `frontend/`: for a plugin whose page ships a stylesheet, such as Video Producer, run `npm ci` in `frontend/` of the checkout first, or the build stops when it compiles the sheet.
+- `scripts/build-plugins.ps1 [-Plugin <id>] [-Local]` builds the frontend of a plugin with the core's toolchain (`scripts/build-plugins.mjs`) and copies `frontend/dist` back here. `frontend/dist` is ignored by git for every plugin: the CI builds it and the releases carry it. The script installs the plugin toolchain (`npm install` in `content/plugins/`) when it is missing, but not the packages of the core's `frontend/`: for a plugin whose page ships a stylesheet, such as Video Producer, run `npm ci` in `frontend/` of the checkout first, or the build stops when it compiles the sheet. From the root of a core checkout that holds the plugin, `node scripts/build-plugins.mjs <id>` does the same build; it needs the packages of the core's `content/plugins/` and, for a page that ships a stylesheet, of its `frontend/` (`npm ci` in each).
 - `scripts/test-plugins.ps1 [-Plugin <id>]` runs the pytest suite of each plugin in its own process, from the checkout or in the container named by `POTIONUI_CONTAINER`.
 - `scripts/import-from-fork.ps1` brings Video Producer here from the fork (next section).
 
@@ -57,15 +95,6 @@ Video Producer is still developed in the M4-S4/PotionUI fork, under `content/plu
 
 The script then runs `scripts/check-public-hygiene.py` on `video-producer/` and `core-tests/video-producer/` and stops with an error when a file fails (fix it in the fork, then import again), and shows `git status`. Review the changes with `git diff` and commit them.
 
-## Installing a plugin on an instance
-
-1. Put the plugin folder, with its built `frontend/dist`, at `content/plugins/local/<id>` of the instance:
-   - from a release: unzip `<id>-<version>.zip` into `content/plugins/local/` (the zip holds the folder `<id>/` with its dist and without its tests);
-   - from a clone of this repository: copy `<id>/`, then build its dist (`scripts/build-plugins.ps1 -Plugin <id> -Local`, or `node scripts/build-plugins.mjs <id>` from the root of a core checkout that holds the plugin). The build needs the packages of the core's `content/plugins/` and, for a page that ships a stylesheet, of its `frontend/` (`npm ci` in each).
-
-   In a Docker container the folder is `/app/content/plugins/local/<id>`: bind-mount it, or copy it with `scripts/potionui-docker.ps1 copy -Plugin <id>`.
-2. In PotionUI, open Admin → Plugins, click **Scan for Plugins**, then enable the plugin.
-
 ### Tailwind classes
 
 The build of the host's frontend compiles the Tailwind classes of the plugins that are on disk when it runs (it scans `content/plugins/*/*/frontend/src`). A plugin installed later, from a release or the catalogue on a Docker image for example, was not scanned: a class that neither the app nor the plugins bundled in the image use has no CSS there.
@@ -74,7 +103,7 @@ A page plugin therefore ships its own stylesheet. When `frontend/src/` holds `<C
 
 The sheet does not reach content that a plugin renders outside its page element, such as a menu or a dialog moved to `document.body`: render those with the host components, which carry the app's own classes, or give their root the attribute `data-potionui-plugin` with the plugin id, which brings the sheet to the descendants of that root but not to the root itself. See "Shipping a stylesheet with a plugin page" in the core's `docs/plugin-api.md`.
 
-## Catalogue
+### Catalogue
 
 `plugins.json` is an object `{"schema": 1, "plugins": [...]}` with one entry per plugin hosted here and alive:
 
@@ -88,7 +117,7 @@ The sheet does not reach content that a plugin renders outside its page element,
 
 `python scripts/catalogue.py --check` checks the schema, that each plugin folder exists, and that each version, id and license equals its manifest's; the CI runs it. When the version of a manifest changes, change the entry's `version` too and set its `release` back to `null` until the new release exists.
 
-## Releases
+### Releases
 
 Push a tag `<id>-v<version>`, where `<version>` is the one of the plugin's `manifest.yml` (for example `video-producer-v0.1.0`). `.github/workflows/release.yml` then:
 
@@ -105,7 +134,7 @@ python scripts/catalogue.py --release <id> <id>-<version>.zip https://github.com
 
 and commit `plugins.json`. The command checks the zip (name, manifest version, dist present, no tests) before it writes the URL and the sha256.
 
-## CI
+### CI
 
 `.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`. Its `hygiene` job needs no core: it runs `scripts/check-public-hygiene.py` on every tracked file, then the check's self-tests. Next to it runs one job per plugin of its matrix (`video-producer`, `preset-editor`; each entry names the plugin's core-side test files and Node test globs). Each of these jobs:
 
