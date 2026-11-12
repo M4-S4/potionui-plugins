@@ -1,6 +1,6 @@
 id: "preset-editor"
 name: "Preset Editor"
-version: "0.2.3"
+version: "0.2.4"
 description: "Create, edit, validate and publish presets without leaving PotionUI"
 author: "M4-S4"
 license: "GPL-3.0"

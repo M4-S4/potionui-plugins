@@ -5,7 +5,7 @@ copy of an existing one or from a blank skeleton, lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/`, where Admin → Presets picks
 it up without a restart. Admins only.
 
-Version 0.2.3. It needs PotionUI 0.1.0 or later and is in the catalogue of this repository.
+Version 0.2.4. It needs PotionUI 0.1.0 or later and is in the catalogue of this repository.
 
 ## Getting started
 
@@ -121,6 +121,15 @@ In Admin → Plugins → Preset Editor → Settings:
 
 ## Changes
 
+### What changed in 0.2.4
+
+- **Preset mirrors in the list.** The preset list and the Edit… menu no longer offer Edit,
+  History, Delete or the zip export for a preset mirror, which the server refuses since
+  0.2.3: a mirror has no files of its own. The list marks it with a *mirror* pill whose hint
+  names its source preset. Duplicate stays and copies the files of the source. The page tells
+  a mirror by the `source_preset_id` that the core's admin preset list gives each preset; on a
+  core without mirrors nothing changes.
+
 ### What changed in 0.2.3
 
 - **Preset mirrors.** On a core where an admin can mirror a preset in Admin → Presets (a
@@ -230,11 +239,10 @@ In Admin → Plugins → Preset Editor → Settings:
   where the host now uses its `Tooltip` and `IconButton` tooltips.
 - **Page bundle.** The page is one bundle; the core's build can now split it on dynamic
   imports, which the workbench could use.
-- **Not seen on screen yet.** The light theme and widths under 1024 px; drag and drop in the
-  form builder, a zip import, Restore, the pipeline builder and the form preview of a
-  published preset; the rollback of a preset whose field `type:` the loader refuses; the
-  0.2.2 description preview; the 0.2.3 refusals for a mirror, whose Edit, Delete and zip
-  buttons the preset list still shows.
+- **Not seen on screen yet.** The light theme beyond the preset list and its Edit… menu, and
+  widths under 1024 px; drag and drop in the form builder, a zip import, Restore, the pipeline
+  builder and the form preview of a published preset; the rollback of a preset whose field
+  `type:` the loader refuses; the 0.2.2 description preview.
 
 ## Tests
 
