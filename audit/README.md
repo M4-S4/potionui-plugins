@@ -3,7 +3,9 @@ Potion audit
 
 An external API client that audits the presets PotionUI ships by default. It runs on a workstation, connects to the instance to test by its URL and never starts an instance itself. Results are written to an output folder outside this repository and are never committed.
 
-Lot 0 brought the skeleton, a read-only `check`, a minimal `run --only` for single cases, the disk probes and the PyAV helpers. Lot 1 adds the potion pack: the prompts, the frozen inputs and one cell per preset and mode, with `pack verify`, `pack make-inputs`, `check --pack` and `run --pack --profile <profile> --dry-run`. Lot 2 runs the cells of a profile on the instance with `run --pack --profile <profile> --confirm-gpu`. Lot 3 adds `report`, `reevaluate` and `merge`, which read run folders only: no GPU, no network. Lot 4 adds the Video Producer scenario (`vp run`, `vp cleanup`), which `report` and `merge` read too.
+It is for the operator of a PotionUI instance, or a coding agent working for them, who wants to know which presets of that instance work on its hardware. It runs one short generation per preset and mode, checks each output (duration, size, frames, sound, the run report of the server), and writes a report that can be read in a browser and compared with the report of another machine. It can also run a Video Producer scenario: a small film made through the plugin's API.
+
+What it needs and what it costs: an admin account on the instance, the models already installed there, and the GPU of the instance for as long as the run lasts. Only the commands marked "yes" in the GPU column of [Commands](#commands) use the GPU, and each of them asks for `--confirm-gpu`.
 
 Replaying the audit on another machine
 --------------------------------------
