@@ -1,4 +1,5 @@
 import { newAsset } from './starter.js';
+import { chained } from './dissolve.js';
 import { ulid } from './ulid.js';
 import { isObject } from './values.js';
 
@@ -54,8 +55,9 @@ export function requestBody(source) {
 	return { source: { take_id: source.takeId, at: source.at } };
 }
 
-export function frameTime(clip, kind) {
-	return kind === 'last' ? snap(clip.start + Math.max(0, clip.dur - 0.04)) : snap(clip.start);
+export function frameTime(clip, kind, exact = false) {
+	const at = kind === 'last' ? clip.start + Math.max(0, clip.dur - 0.04) : clip.start;
+	return exact ? +at.toFixed(6) : snap(at);
 }
 
 export function playheadPick(clip, playhead, placed) {
@@ -81,7 +83,7 @@ export function seamAsset(media, fallbackName) {
 export function placeSeamFrame(doc, clip, kind, asset, makeId = ulid) {
 	if (!doc.assets.some((a) => a.id === asset.id)) doc.assets.push(asset);
 	const existing = framesOf(doc, clip.id, kind);
-	const fields = { shotId: clip.id, time: frameTime(clip, kind), assetId: asset.id, role: kind, strength: SEAM_STRENGTH };
+	const fields = { shotId: clip.id, time: frameTime(clip, kind, chained(doc.clips)), assetId: asset.id, role: kind, strength: SEAM_STRENGTH };
 	if (existing.length) {
 		Object.assign(existing[0], fields);
 		for (const extra of existing.slice(1)) doc.frames.splice(doc.frames.indexOf(extra), 1);

@@ -12,6 +12,7 @@
 		clamp,
 		round,
 		bladeAt,
+		bladeTime,
 		undo,
 		redo,
 		history,
@@ -38,7 +39,7 @@
 	import { speedOf } from '../../lib/cadence.js';
 	import { activityStep } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { drag, cancelDrag, snap, snapMove, rulerStep, rulerTicks, rulerLabel, zoomTo, dragText, trimText, waveform, peakWaveform } from '../../lib/timeline.js';
+	import { drag, cancelDrag, rangeDraw, snap, snapMove, rulerStep, rulerTicks, rulerLabel, zoomTo, dragText, trimText, waveform, peakWaveform } from '../../lib/timeline.js';
 	import { pickMode } from '../../lib/keyboard.js';
 	import { audioPeaks } from '../../lib/sources.svelte.js';
 	import { roleColor, stages, frameRoleLabel } from '../../lib/catalog.js';
@@ -60,6 +61,8 @@
 	import { engineTitle, shotReceptionFor } from '../../lib/references.js';
 	import { LIMITS, VIDEO_TRACKS, leastSeconds } from '../../lib/reception.js';
 	import { TAG_CLASS } from '../../lib/reftags.js';
+	import { chained, dissolveMarks, shownSpans } from '../../lib/dissolve.js';
+	import { shotTrim } from '../../lib/trims.js';
 	import Icon from '../Icon.svelte';
 	import Dropdown from '../shell/Dropdown.svelte';
 	import ZoomControls from './ZoomControls.svelte';
@@ -76,6 +79,8 @@
 
 	const pps = $derived(ui.pxPerSec);
 	const tracks = $derived(videoTracksOf(doc));
+	const spans = $derived(shownSpans(doc.clips));
+	const dissolves = $derived(chained(doc.clips));
 	const shots = $derived(tracks.length ? doc.clips.map((c) => shotReceptionFor(c)) : []);
 	const total = $derived(Math.max(seqDuration(), ...(doc.vrefItems ?? []).map((item) => item.start + item.dur)));
 	const contentW = $derived(Math.max(viewW - HEAD, (total + 8) * pps));
@@ -181,17 +186,7 @@
 	}
 
 	function rangeDown(e) {
-		const t0 = snap(timeAt(e.clientX)).t;
-		drag(e, {
-			undoable: false,
-			onMove: (dx, dy, ev) => {
-				const t1 = snap(timeAt(ev.clientX)).t;
-				ui.range = { in: Math.min(t0, t1), out: Math.max(t0, t1) };
-				ui.production.target = 'range';
-				dragText(t('timeline.drag.range', { start: secs(ui.range.in), end: secs(ui.range.out) }));
-			},
-			onClick: () => (ui.range = null)
-		});
+		drag(e, rangeDraw(timeAt(e.clientX), (ev) => timeAt(ev.clientX)));
 	}
 
 	function laneDown(e) {
@@ -212,7 +207,7 @@
 	function moveBlock(e, kind, item) {
 		if (ui.tool === 'blade' && kind === 'audio') {
 			select(kind, item.id);
-			return bladeAt(timeAt(e.clientX));
+			return bladeAt(bladeTime(timeAt(e.clientX)));
 		}
 		select(kind, item.id);
 		const s0 = item.start;
@@ -291,7 +286,7 @@
 		}
 		if (ui.tool === 'blade') {
 			select('clip', c.id);
-			return bladeAt(timeAt(e.clientX));
+			return bladeAt(bladeTime(timeAt(e.clientX)));
 		}
 		select('clip', c.id);
 		drag(e, {
@@ -315,32 +310,7 @@
 	}
 	function clipTrim(e, c, edge) {
 		select('clip', c.id);
-		const max = sourceLength(c);
-		const range = shotDurationLimit(c);
-		const d0 = c.dur;
-		const in0 = c.srcIn;
-		const speed = speedOf(c);
-		drag(e, {
-			onMove: (dx) => {
-				const dt = dx / pps;
-				let limit = false;
-				if (edge === 'start') {
-					const nIn = clamp(in0 + dt * speed, 0, in0 + (d0 - 0.4) * speed);
-					limit = nIn <= 0.001;
-					c.srcIn = round(nIn, 0.04);
-					c.dur = round(d0 - (nIn - in0) / speed, 0.04);
-				} else {
-					const nd = clamp(d0 + dt, 0.4, range.max);
-					limit = nd >= range.max - 0.001;
-					c.dur = round(nd, 0.04);
-				}
-				relayout();
-				trimText(range, max, d0, c.dur, limit);
-			},
-			onEnd: () => {
-				if (edge === 'end' && fitShot(c, d0)) relayout();
-			}
-		});
+		drag(e, shotTrim(c, edge));
 	}
 
 	function frameDown(e, f) {
@@ -615,8 +585,11 @@
 								</button>
 							{/each}
 						{:else if row.id === 'v1'}
-							{#each doc.clips as c (c.id)}
-								{@render clip(c)}
+							{#each doc.clips as c, i (c.id)}
+								{@render clip(c, i)}
+							{/each}
+							{#each dissolveMarks(doc.clips) as mark (mark.id)}
+								{@render dissolve(mark)}
 							{/each}
 							{#if reorder}
 								<div class="absolute inset-y-0 z-20 w-0.5 bg-signal" style:left="{x(reorder.at)}px"></div>
@@ -707,18 +680,18 @@
 	</div>
 {/if}
 
-{#snippet fades(item, kind, w, h, light = false)}
+{#snippet fades(item, kind, w, h, light = false, head = true, tail = true)}
 	<svg class="pointer-events-none absolute inset-0" width={w} height={h} aria-hidden="true">
-		{#if item.fadeIn > 0}
+		{#if head && item.fadeIn > 0}
 			<polygon points="0,0 {x(item.fadeIn)},0 0,{h}" fill="rgb(0 0 0 / {light ? 0.35 : 0.5})" />
 			<line x1="0" y1={h} x2={x(item.fadeIn)} y2="0" stroke="rgb(255 255 255 / 0.7)" />
 		{/if}
-		{#if item.fadeOut > 0}
+		{#if tail && item.fadeOut > 0}
 			<polygon points="{w},0 {w - x(item.fadeOut)},0 {w},{h}" fill="rgb(0 0 0 / {light ? 0.35 : 0.5})" />
 			<line x1={w} y1={h} x2={w - x(item.fadeOut)} y2="0" stroke="rgb(255 255 255 / 0.7)" />
 		{/if}
 	</svg>
-	<button
+	{#if head}<button
 		type="button"
 		tabindex="-1"
 		class="vp-hit absolute top-1.5 z-[25] -ml-[5px] h-2.5 w-2.5 rounded-full border border-black/50 bg-white opacity-0 group-hover:opacity-100 {isSel(kind, item.id) ? 'opacity-100' : ''}"
@@ -726,8 +699,8 @@
 		aria-label={t('timeline.fade.in')}
 		title={t('timeline.fade.inTip', { dur: secs(item.fadeIn) })}
 		onpointerdown={(e) => fadeDrag(e, kind, item, 'in')}
-	></button>
-	<button
+	></button>{/if}
+	{#if tail}<button
 		type="button"
 		tabindex="-1"
 		class="vp-hit absolute top-1.5 z-[25] -ml-[5px] h-2.5 w-2.5 rounded-full border border-black/50 bg-white opacity-0 group-hover:opacity-100 {isSel(kind, item.id) ? 'opacity-100' : ''}"
@@ -735,22 +708,53 @@
 		aria-label={t('timeline.fade.out')}
 		title={t('timeline.fade.outTip', { dur: secs(item.fadeOut) })}
 		onpointerdown={(e) => fadeDrag(e, kind, item, 'out')}
+	></button>{/if}
+{/snippet}
+
+{#snippet dissolve(mark)}
+	{@const text = t('timeline.dissolve.tip', { dur: `${formatNumber(mark.dur, { minimumFractionDigits: 1, maximumFractionDigits: 2 })} s` })}
+	{@const middle = x(mark.start + mark.dur / 2)}
+	<div
+		class="pointer-events-none absolute bottom-1 top-6 z-20 -translate-x-1/2 rounded-sm border border-white/50 bg-black/45 {isSel('clip', mark.id) ? 'ring-1 ring-signal' : ''}"
+		style:left="{middle}px"
+		style:width="{Math.max(x(mark.dur), 6)}px"
+		aria-hidden="true"
+		data-dissolve-box={mark.id}
+	>
+		<svg class="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+			<line x1="0" y1="100" x2="100" y2="0" stroke="rgb(255 255 255 / 0.85)" vector-effect="non-scaling-stroke" />
+			<line x1="0" y1="0" x2="100" y2="100" stroke="rgb(255 255 255 / 0.85)" vector-effect="non-scaling-stroke" />
+		</svg>
+	</div>
+	<button
+		type="button"
+		tabindex="-1"
+		class="absolute top-6 z-20 h-3 -translate-x-1/2 touch-none rounded-sm border border-white/70 bg-white/30 hover:bg-white/60 {isSel('clip', mark.id) ? 'ring-1 ring-signal' : ''}"
+		style:left="{middle}px"
+		style:width="{Math.max(x(mark.dur), 12)}px"
+		aria-label={text}
+		title={text}
+		data-dissolve={mark.id}
+		onpointerdown={(e) => e.stopPropagation()}
+		onclick={() => (select('clip', mark.id), (ui.inspectorOpen = true))}
 	></button>
 {/snippet}
 
-{#snippet clip(c)}
+{#snippet clip(c, i)}
 	{@const thumb = clipThumb(c)}
 	{@const media = asset(c.assetId)}
-	{@const w = x(c.dur)}
+	{@const span = spans[i]}
+	{@const w = x(span.dur)}
 	{@const sel = isSel('clip', c.id)}
 	{@const picked = isPicked(c.id)}
 	{@const takes = takesOf(c).length}
 	{@const activity = shotActivity(c.id)}
 	{@const waiting = activity.state === 'running' && !activity.running ? shotWaitText(c.id) : ''}
 	{@const ownEngine = shotEngineText(c)}
+	{@const reach = dissolves ? `${Math.min(16, Math.max(w / 2 - 8, 0))}px` : null}
 	<div
 		class="vp-touch-none group absolute bottom-1 top-1 overflow-hidden rounded border {sel || picked ? 'z-10 border-signal ring-1 ring-signal' : 'border-black/40'} {reorder?.id === c.id ? 'opacity-60' : ''}"
-		style:left="{x(c.start)}px"
+		style:left="{x(span.start)}px"
 		style:width="{w}px"
 		style:transform={reorder?.id === c.id ? `translateX(${reorder.dx}px)` : null}
 		style:background="rgb(var(--viz-1) / 0.35)"
@@ -803,11 +807,12 @@
 				onclick={() => act(() => (c.mute = !c.mute))}
 			><Icon name={c.mute ? 'volume-x' : 'volume'} class="h-3 w-3" /></button>
 		{/if}
-		{@render fades(c, 'clip', w, 52)}
+		{@render fades(c, 'clip', w, 52, false, !span.head, !span.tail)}
 		<button
 			type="button"
 			tabindex="-1"
 			class="vp-hit vp-edge-start absolute inset-y-0 left-0 z-20 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
+			style:--vp-reach={reach}
 			aria-label={t('timeline.trim.start')}
 			title={t('timeline.trim.start')}
 			onpointerdown={(e) => clipTrim(e, c, 'start')}
@@ -816,6 +821,7 @@
 			type="button"
 			tabindex="-1"
 			class="vp-hit vp-edge-end absolute inset-y-0 right-0 z-20 w-2 cursor-ew-resize hover:bg-warning {sel ? 'bg-warning/70' : ''}"
+			style:--vp-reach={reach}
 			aria-label={t('timeline.trim.end')}
 			title={t('timeline.trim.end')}
 			onpointerdown={(e) => clipTrim(e, c, 'end')}

@@ -1,5 +1,5 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, itemsOf, pickedClips, globalPrompt, clipAt, secs, onRestore, openDirector, generates, directorShot, relayout } from './state.svelte.js';
+import { ui, doc, act, toast, asset, newAsset, clipLabel, productionRange, shotsIn, itemsIn, itemsOf, pickedClips, clearPicked, globalPrompt, clipAt, secs, onRestore, openDirector, generates, directorShot, relayout } from './state.svelte.js';
 import { project, getClient, flushSave, projectGone, onLoaded } from './project.svelte.js';
 import { takeStore, setTakes, upsertTake, patchTake, removeTake, takeById, realTakesOf, flyingTakes } from './takes.svelte.js';
 import { PROFILES, aggregate, canUpscale, engineOptions, isInFlight, listedOptions, migrateEngine, optionFor, presetLabel, presetProfiles, progressText, takeAsset } from './generation.js';
@@ -10,6 +10,7 @@ import { speedOf } from './cadence.js';
 import { effectiveEngine, projectQuality, shotEngineOf } from './engine.js';
 import { CONDITION, audioBehavior, shotSound } from './sound.js';
 import { fieldTitle, presetFields } from './options.js';
+import { dissolving, shownSpans } from './dissolve.js';
 import { prioritized } from './queue.js';
 import { laneTitle } from './tracks.js';
 import { clearRemoved, isRemoved, pruneRemoved } from './removedtakes.js';
@@ -314,6 +315,32 @@ function clipsRange(clips) {
 	return [Math.min(...clips.map((c) => c.start)), Math.max(...clips.map((c) => c.start + c.dur))];
 }
 
+export function rangeFromTarget() {
+	const range = productionRange();
+	if (!dissolving(doc.clips)) return range;
+	const i = doc.clips.findIndex((c) => Math.abs(c.start - range[0]) <= 1e-6 && Math.abs(c.start + c.dur - range[1]) <= 1e-6);
+	if (i < 0) return range;
+	const span = shownSpans(doc.clips)[i];
+	return [span.start, span.end];
+}
+
+export function pickTarget(id) {
+	if (id === 'picked') return;
+	clearPicked();
+	ui.production.target = id;
+	if (id === 'range' && !ui.range) {
+		const [from, to] = rangeFromTarget();
+		ui.range = { in: from, out: to };
+	}
+}
+
+export function productionItems(range = productionRange(), opts = {}) {
+	const picked = opts.clips?.length ? [] : pickedClips();
+	if (picked.length) return itemsOf(picked);
+	const own = dissolving(doc.clips) ? (opts.clips?.length ? opts.clips : ui.production.target === 'clip' ? jobClips(range) : null) : null;
+	return own ? itemsOf(own) : itemsIn(range);
+}
+
 export function jobClips(range = productionRange()) {
 	const picked = pickedClips();
 	if (picked.length) return picked;
@@ -415,7 +442,7 @@ export function scheduleEstimate(request) {
 export function readiness(opts = {}) {
 	const picked = opts.clips?.length ? [] : pickedClips();
 	const range = opts.clips?.length ? clipsRange(opts.clips) : picked.length ? clipsRange(picked) : productionRange();
-	const items = picked.length ? itemsOf(picked) : itemsIn(range);
+	const items = productionItems(range, opts);
 	const missing = [];
 	const reasons = [];
 	const warnings = [];

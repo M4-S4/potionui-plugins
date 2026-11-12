@@ -1,5 +1,6 @@
 import { takeLabelOf } from './labels.js';
 import { SEAM_STRENGTH, frameTime, framesOf } from './seam.js';
+import { chained } from './dissolve.js';
 import { migrateShotEngine, setShotEngine, shotEngineOf } from './engine.js';
 import { KINDS, castCards, castOf, cardsOf, migrateCast, sameCast, setCast, usable } from './bible.js';
 import { linesOf, migrateDialogue, sameDialogue, setDialogue } from './dialogue.js';
@@ -282,7 +283,7 @@ function placeFrame(doc, clip, kind, assetId, makeId) {
 		for (const f of existing) doc.frames.splice(doc.frames.indexOf(f), 1);
 		return;
 	}
-	const fields = { shotId: clip.id, time: frameTime(clip, kind), assetId, role: kind, strength: existing[0]?.strength ?? SEAM_STRENGTH };
+	const fields = { shotId: clip.id, time: frameTime(clip, kind, chained(doc.clips)), assetId, role: kind, strength: existing[0]?.strength ?? SEAM_STRENGTH };
 	if (existing.length) {
 		Object.assign(existing[0], fields);
 		for (const extra of existing.slice(1)) doc.frames.splice(doc.frames.indexOf(extra), 1);

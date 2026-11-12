@@ -1,3 +1,5 @@
+import { mixAt } from './dissolve.js';
+
 const shotAt = (clips, time) => clips.find((c) => time >= c.start && time < c.start + c.dur) ?? null;
 
 export function placedOn(clips, take) {
@@ -17,6 +19,8 @@ export function shownShots({ clips, playhead, preview = null, compare = null, se
 	const takes = pair.length === 2 ? pair : single ? [single] : null;
 	if (takes) return takes.map((take) => placedOn(clips, take)?.id).filter(Boolean);
 	if (preview?.kind === 'asset' && find.asset(preview.id)) return [];
+	const mix = mixAt(clips, playhead);
+	if (mix) return [mix.from.id, mix.to.id];
 	const clip = shotAt(clips, playhead);
 	return clip ? [clip.id] : [];
 }

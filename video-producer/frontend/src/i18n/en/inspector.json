@@ -242,5 +242,6 @@
 	"speed.failed": "Slowed to {value}%: the {fps} fps version failed; the export repeats frames.",
 	"speed.needed": "Slowed to {value}%: without its {fps} fps version, the export repeats frames.",
 	"speed.noInterpolator": "Slowed to {value}%: no interpolator is ready for its {fps} fps version; the export repeats frames.",
-	"speed.prepare": "Prepare"
+	"speed.prepare": "Prepare",
+	"fades.dissolved": "A cross-dissolve takes the place of the fade on the edge it joins."
 }

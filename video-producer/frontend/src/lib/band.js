@@ -125,9 +125,9 @@ export function insertIndex(clips, at, selectedId) {
 	return (clips ?? []).length;
 }
 
-export function ghostLayout(clips, items, index) {
+export function ghostLayout(clips, items, index, lost = 0) {
 	const kept = (items ?? []).filter((x) => x.keep);
-	let at = (clips ?? []).slice(0, index).reduce((sum, c) => sum + c.dur, 0);
+	let at = (clips ?? []).slice(0, index).reduce((sum, c) => sum + c.dur, 0) - lost;
 	const ghosts = kept.map((item, j) => {
 		const out = { ...item, n: index + j + 1, start: fixed(at) };
 		at += item.dur;

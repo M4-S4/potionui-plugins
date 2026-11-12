@@ -1,6 +1,7 @@
 import { formatNumber, t } from '../i18n/index.svelte.js';
-import { ui, doc, checkpoint, discardLast, round, clamp, secs } from './state.svelte.js';
+import { ui, doc, checkpoint, discardLast, round, clamp, secs, settle } from './state.svelte.js';
 import { overrunsTake } from './shots.js';
+import { dissolving, shownSpans } from './dissolve.js';
 
 let release = null;
 
@@ -43,6 +44,7 @@ export function drag(e, { onMove, onEnd, onClick, onCancel, undoable = true }) {
 		if (started) onEnd?.(ev);
 		else onClick?.(ev);
 		ui.drag = null;
+		settle();
 	};
 	const cancel = (ev) => {
 		if (!mine(ev)) return;
@@ -52,6 +54,7 @@ export function drag(e, { onMove, onEnd, onClick, onCancel, undoable = true }) {
 			onCancel?.(ev);
 		}
 		ui.drag = null;
+		settle();
 	};
 	release = () => {
 		window.removeEventListener('pointermove', move);
@@ -64,26 +67,42 @@ export function drag(e, { onMove, onEnd, onClick, onCancel, undoable = true }) {
 	window.addEventListener('pointercancel', cancel);
 }
 
-export function snapTargets(excludeId) {
+export function snapTargets(excludeId, drawn = false) {
 	const t = [0, ui.playhead];
-	for (const c of doc.clips) if (c.id !== excludeId) t.push(c.start, c.start + c.dur);
+	const own = drawn && dissolving(doc.clips);
+	if (own) for (const span of shownSpans(doc.clips)) t.push(span.start, span.end);
+	else for (const c of doc.clips) if (c.id !== excludeId) t.push(c.start, c.start + c.dur);
 	for (const list of [doc.audio, doc.prompts, doc.titles, doc.vrefItems ?? []])
 		for (const x of list) if (x.id !== excludeId) t.push(x.start, x.start + x.dur);
 	for (const f of doc.frames) if (f.id !== excludeId) t.push(f.time);
 	for (const m of doc.markers) t.push(m.time);
-	if (ui.range) t.push(ui.range.in, ui.range.out);
+	if (ui.range && !own) t.push(ui.range.in, ui.range.out);
 	return t;
 }
 
-export function snap(time, excludeId) {
+export function snap(time, excludeId, drawn = false) {
 	if (!ui.snapping) return { t: round(time, 0.04), at: null };
 	const tol = 8 / ui.pxPerSec;
 	let best = null;
-	for (const c of snapTargets(excludeId)) {
+	for (const c of snapTargets(excludeId, drawn)) {
 		const d = Math.abs(c - time);
 		if (d < tol && (!best || d < Math.abs(best - time))) best = c;
 	}
 	return best == null ? { t: round(time, 0.04), at: null } : { t: best, at: best };
+}
+
+export function rangeDraw(from, timeOf) {
+	const t0 = snap(from, undefined, true).t;
+	return {
+		undoable: false,
+		onMove: (dx, dy, ev) => {
+			const t1 = snap(timeOf(ev), undefined, true).t;
+			ui.range = { in: Math.min(t0, t1), out: Math.max(t0, t1) };
+			ui.production.target = 'range';
+			dragText(t('timeline.drag.range', { start: secs(ui.range.in), end: secs(ui.range.out) }));
+		},
+		onClick: () => (ui.range = null)
+	};
 }
 
 export function snapMove(start, dur, id) {

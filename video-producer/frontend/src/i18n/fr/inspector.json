@@ -242,5 +242,6 @@
 	"speed.failed": "Ralenti à {value} % : la version à {fps} i/s a échoué ; l’export répète des images.",
 	"speed.needed": "Ralenti à {value} % : sans sa version à {fps} i/s, l’export répète des images.",
 	"speed.noInterpolator": "Ralenti à {value} % : aucun interpolateur n’est prêt pour sa version à {fps} i/s ; l’export répète des images.",
-	"speed.prepare": "Préparer"
+	"speed.prepare": "Préparer",
+	"fades.dissolved": "Un fondu enchaîné remplace le fondu au noir sur le bord qu’il joint."
 }

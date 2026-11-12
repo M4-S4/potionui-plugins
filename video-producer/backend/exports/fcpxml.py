@@ -3,9 +3,14 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 from urllib.parse import quote
 
 from .. import formats
+from ..dissolve import cuts
 from .common import Timebase, asset_of, clip_label, js_number, seq_duration
 
 NAMED_RATES = ("24", "25", "30", "50", "60")
+
+DISSOLVE_NAME = "Cross Dissolve"
+
+DISSOLVE_EFFECT = "FxPlug:4731E73A-8DAC-4113-9A30-AE85B1761265"
 
 _URI_SAFE = ";,/?:@&=+$!*'()#"
 
@@ -67,27 +72,39 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
             f'duration="{time.rational(length)}" hasVideo="1" format="r1">'
             f'<media-rep kind="original-media" src="{media_url(files[("clips", index)])}"/></asset>'
         )
+    edits = cuts(doc["clips"], time.frames)
+    effect = len(media) + 2
+    if any(cut is not None and cut.overlap for cut in edits):
+        assets.append(f'\t\t<effect id="r{effect}" name="{DISSOLVE_NAME}" uid="{DISSOLVE_EFFECT}"/>')
     spine = []
     for index, clip in enumerate(doc["clips"]):
         name = esc(clip_label(doc, clip, locale))
         speed = formats.speed_of(clip)
-        length = time.span(clip["start"], clip["dur"])
+        cut = edits[index]
+        length = time.span(clip["start"], clip["dur"]) if cut is None else cut.end - cut.start
+        offset = time.rational(clip["start"]) if cut is None else time.count(cut.start)
+        source = clip["srcIn"] if cut is None or not cut.head else clip["srcIn"] + cut.head / time.fps * speed
+        if cut is not None and cut.overlap:
+            spine.append(
+                f'\t\t\t\t\t\t<transition name="{DISSOLVE_NAME}" offset="{time.count(cut.start - cut.head)}" duration="{time.count(cut.overlap)}">'
+                f'<filter-video ref="r{effect}" name="{DISSOLVE_NAME}"/></transition>'
+            )
         if index in refs and speed != 1:
             spine.append(
-                f'\t\t\t\t\t\t<asset-clip ref="r{refs[index]}" name="{name}" offset="{time.rational(clip["start"])}" '
-                f'start="{time.rational(clip["srcIn"])}" duration="{time.count(length)}">'
-                f'<timeMap><timept time="{time.rational(clip["srcIn"])}" value="{time.rational(clip["srcIn"])}" interp="linear"/>'
-                f'<timept time="{time.count(time.frames(clip["srcIn"]) + length)}" value="{time.rational(clip["srcIn"] + length / time.fps * speed)}" interp="linear"/>'
+                f'\t\t\t\t\t\t<asset-clip ref="r{refs[index]}" name="{name}" offset="{offset}" '
+                f'start="{time.rational(source)}" duration="{time.count(length)}">'
+                f'<timeMap><timept time="{time.rational(source)}" value="{time.rational(source)}" interp="linear"/>'
+                f'<timept time="{time.count(time.frames(source) + length)}" value="{time.rational(source + length / time.fps * speed)}" interp="linear"/>'
                 "</timeMap></asset-clip>"
             )
         elif index in refs:
             spine.append(
-                f'\t\t\t\t\t\t<asset-clip ref="r{refs[index]}" name="{name}" offset="{time.rational(clip["start"])}" '
-                f'start="{time.rational(clip["srcIn"])}" duration="{time.count(length)}"/>'
+                f'\t\t\t\t\t\t<asset-clip ref="r{refs[index]}" name="{name}" offset="{offset}" '
+                f'start="{time.rational(source)}" duration="{time.count(length)}"/>'
             )
         else:
             spine.append(
-                f'\t\t\t\t\t\t<gap name="{name}" offset="{time.rational(clip["start"])}" start="0s" '
+                f'\t\t\t\t\t\t<gap name="{name}" offset="{offset}" start="0s" '
                 f'duration="{time.count(length)}"/>'
             )
     fps = js_number(time.fps)

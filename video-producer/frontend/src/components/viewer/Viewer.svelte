@@ -19,6 +19,8 @@
 	import { fitClass, formatSections, framed, sizeOf } from '../../lib/framing.js';
 	import { formatGroupText, setFormat, setResolution } from '../../lib/framing.svelte.js';
 	import MatchCanvas from './MatchCanvas.svelte';
+	import DissolveLayer from './DissolveLayer.svelte';
+	import { mixAt, unfaded } from '../../lib/dissolve.js';
 	import Icon from '../Icon.svelte';
 
 	let { player = false } = $props();
@@ -31,15 +33,24 @@
 	const box = $derived(w / h > r ? { w: h * r, h } : { w, h: w / r });
 
 	const time = $derived(ui.playhead);
-	const clip = $derived(clipAt(time));
+	const mix = $derived(mixAt(doc.clips, time));
+	const clip = $derived(mix ? mix.from : clipAt(time));
+	const under = $derived(clipAt(time));
 	const a = $derived(clip ? asset(clip.assetId) : null);
+	const opacity = $derived(clip ? fadeOpacity(unfaded(doc.clips, doc.clips.indexOf(clip)), time) : 1);
+	let lastMix = $state(null);
+	let ready = $state(null);
+	$effect(() => {
+		if (mix) lastMix = { ...mix, progress: 1 };
+	});
+	const held = $derived(!mix && lastMix && clip?.id === lastMix.to.id && liveVideo && ready !== liveVideo ? lastMix : null);
 
 	const title = $derived(doc.titles.find((x) => time >= x.start && time < x.start + x.dur));
 
 	const previewAsset = $derived(!player && ui.preview?.kind === 'asset' ? asset(ui.preview.id) : null);
 	const previewResult = $derived(!player && ui.preview?.kind === 'result' ? findTake(ui.preview.id) : null);
 	const compareRes = $derived(!player && ui.compare ? ui.compare.map((id) => findTake(id)).filter(Boolean) : []);
-	const localPrompt = $derived(clip ? promptOf(clip) : null);
+	const localPrompt = $derived(under ? promptOf(under) : null);
 	const mode = $derived(compareRes.length === 2 ? 'compare' : previewResult ? 'result' : previewAsset ? 'asset' : 'sequence');
 	const bare = $derived(mode === 'sequence' && !(clip && a));
 	const previewThumb = $derived(previewAsset ? assetThumb(previewAsset) : null);
@@ -225,16 +236,18 @@
 							playsinline
 							preload="auto"
 							aria-label={a.name}
-							style:opacity={fadeOpacity(clip, time)}
+							style:opacity={opacity}
 							style:filter={clipFilter(clip)}
 							onerror={(e) => mark(liveVideo, e.currentTarget)}
 							onloadedmetadata={(e) => (mark(liveVideo, e.currentTarget, true), measure(liveVideo, e.currentTarget))}
+							onseeked={() => (ready = liveVideo)}
+							oncanplay={() => (ready = liveVideo)}
 						></video>
-						{#if lut && video}<MatchCanvas source={video} {lut} filter={clipFilter(clip)} fade={fadeOpacity(clip, time)} cover={liveFit !== BARS} />{/if}
+						{#if lut && video}<MatchCanvas source={video} {lut} filter={clipFilter(clip)} fade={opacity} cover={liveFit !== BARS} />{/if}
 					{/key}
 				{:else if liveImage}
-					<img bind:this={picture} src={liveImage} alt={a.name} class="h-full w-full {fitClass(liveFit)}" style:opacity={fadeOpacity(clip, time)} style:filter={clipFilter(clip)} onload={(e) => measure(liveImage, e.currentTarget)} />
-					{#if lut && picture}<MatchCanvas source={picture} {lut} filter={clipFilter(clip)} fade={fadeOpacity(clip, time)} cover={liveFit !== BARS} />{/if}
+					<img bind:this={picture} src={liveImage} alt={a.name} class="h-full w-full {fitClass(liveFit)}" style:opacity={opacity} style:filter={clipFilter(clip)} onload={(e) => measure(liveImage, e.currentTarget)} />
+					{#if lut && picture}<MatchCanvas source={picture} {lut} filter={clipFilter(clip)} fade={opacity} cover={liveFit !== BARS} />{/if}
 				{:else if clip && a}
 					<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center text-white/70">
 						<Icon name="film" class="h-7 w-7" />
@@ -247,6 +260,10 @@
 					</div>
 				{:else}
 					<div class="flex h-full items-center justify-center text-sm {bare ? 'text-fg-muted' : 'text-white/60'}">{t('viewer.end')}</div>
+				{/if}
+
+				{#if (mix || held) && mode === 'sequence'}
+					<DissolveLayer mix={mix ?? held} {time} />
 				{/if}
 
 				{#if title && mode === 'sequence'}
@@ -278,8 +295,8 @@
 				props={{ icon: hostIconName(ui.muted ? 'volume-x' : 'volume'), label: ui.muted ? t('viewer.unmute') : t('viewer.mute'), size: 'sm', class: 'vp-h7 shrink-0', tooltip: t('viewer.monitor'), onclick: () => (ui.muted = !ui.muted) }}
 			/>
 			{#if sideW >= 136}<input class="vp-slider w-24 shrink-0" type="range" min="0" max="1" step="0.01" bind:value={ui.monitorVol} aria-label={t('viewer.monitor')} />{/if}
-			{#if player && clip}
-				<span class="ml-1 min-w-0 truncate text-sm text-fg-muted">{t('viewer.shot', { index: doc.clips.indexOf(clip) + 1, count: doc.clips.length, name: clipLabel(clip) })}</span>
+			{#if player && under}
+				<span class="ml-1 min-w-0 truncate text-sm text-fg-muted">{t('viewer.shot', { index: doc.clips.indexOf(under) + 1, count: doc.clips.length, name: clipLabel(under) })}</span>
 			{/if}
 		</div>
 		<div class="flex items-center gap-1">

@@ -1,6 +1,7 @@
 import { ulid } from './ulid.js';
 import { speedOf } from './cadence.js';
 import { isObject } from './values.js';
+import { shownSpans } from './dissolve.js';
 
 export const newVideoTrack = () => ({ mute: false, solo: false });
 
@@ -81,7 +82,9 @@ export function sliceCuts(dur, seconds) {
 
 export function shotCuts(item, clips) {
 	const end = item.start + item.dur;
-	const bounds = (clips ?? []).flatMap((clip) => [clip.start, clip.start + clip.dur]).sort((a, b) => a - b);
+	const bounds = shownSpans(clips ?? [])
+		.flatMap((span) => [span.start, span.end])
+		.sort((a, b) => a - b);
 	const cuts = [];
 	for (const at of bounds) {
 		if (exact(at - item.start) < SLICE_EDGE || exact(end - at) < SLICE_EDGE) continue;

@@ -1,0 +1,24 @@
+TITLE: HARBOUR DISSOLVES
+FCM: NON-DROP FRAME
+
+001  VP001    V     C        00:00:00:00 00:00:04:00 00:00:00:00 00:00:04:00
+* FROM CLIP NAME: Le port endormi
+* SOURCE FILE: 1.mp4
+
+002  VP001    V     C        00:00:04:00 00:00:04:00 00:00:04:00 00:00:04:00
+002  VP002    V     D    025 00:00:00:10 00:00:02:06 00:00:04:00 00:00:07:17
+M2   VP002          012.5                00:00:00:10
+* FROM CLIP NAME: Le port endormi
+* TO CLIP NAME: Les mains du pêcheur
+* SOURCE FILE: 1.mp4
+
+003  VP002    V     C        00:00:02:06 00:00:02:06 00:00:07:17 00:00:07:17
+003  BL       V     D    013 00:00:00:00 00:00:01:13 00:00:07:17 00:00:09:05
+* FROM CLIP NAME: Les mains du pêcheur
+* TO CLIP NAME: Le départ <large>
+
+004  BL       V     C        00:00:01:13 00:00:01:13 00:00:09:05 00:00:09:05
+004  VP004    V     D    037 00:00:00:06 00:00:03:19 00:00:09:05 00:00:12:18
+* FROM CLIP NAME: Le départ <large>
+* TO CLIP NAME: harbour-wide.mp4
+* SOURCE FILE: 03927418-58f2-440f-9a15-456093037531.mp4

@@ -580,10 +580,10 @@
 			inset: -8px;
 		}
 		.vp-root .vp-hit.vp-edge-start::before {
-			inset: 0 -16px 0 0;
+			inset: 0 calc(0px - var(--vp-reach, 16px)) 0 0;
 		}
 		.vp-root .vp-hit.vp-edge-end::before {
-			inset: 0 0 0 -16px;
+			inset: 0 0 0 calc(0px - var(--vp-reach, 16px));
 		}
 		.vp-root .vp-link-hit {
 			display: inline-block;

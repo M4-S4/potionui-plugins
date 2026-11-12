@@ -408,6 +408,19 @@ An engine that generates from text only, such as **Wan 2.1 T2V 1.3B (8 GB)**, do
 
 For another moment than the last image, put the playhead on the shot and click **Extract a frame at the playhead** on a finished take. In the first half of the shot, the image becomes its **First frame**; in the second half, its **Last frame**.
 
+### Cross-dissolve between two shots
+
+A cut can be a cross-dissolve: the picture of the shot that ends blends into the picture of the shot that starts. Select the shot that starts and choose its **Transition** in the Inspector (the window of a cut that carries a continuity alert in the Storyboard grid offers it too): **Cut**, or **Cross-dissolve** of 0.4, 0.6, 1, 1.2 or 2 seconds.
+
+- **The film gets shorter by the length of the dissolve.** No frame is generated for it and each take keeps the length of its shot: the shot that starts moves earlier, and the later shots follow with their prompts and frames (the first dissolve of a project can also move earlier shots by a hair, when their lengths are off the 0.04 s grid). Sounds, titles and markers stay where they are, as when you trim a shot; move them if they must follow the picture. Under the choice, the page says how much shorter the film gets.
+- A dissolve lasts at most half of the shorter of its two shots; the page says when it shortens the one you chose. The frame rate of the project does not change it.
+- A shot that starts from the last frame of the shot before already continues its motion: with a dissolve on the same cut, that motion shows twice. The page says so under the choice.
+- The blade does not cut inside a dissolve, nor where a piece would be too short for its dissolve.
+- On a cut with a cross-dissolve, the fades to black of the two shots on that cut are not played: choosing a dissolve sets them to zero, and the Inspector greys them out.
+- The sound of the two shots crosses over the same time. The **Crossfade between neighbouring clips** of the export window is another setting: it only joins the clips of the audio tracks and changes no duration.
+- The timeline draws a crossed box on the cut (click the strip on its top to select the shot that starts) and each shot up to the middle of its dissolve. The viewer and playback blend the two pictures.
+- The exported video holds the dissolve, and so do the FCPXML, OpenTimelineIO and EDL files.
+
 ## 13. Audio and subtitles
 
 Audio lives in tracks, each with a role: **Dialogue**, **Music**, **Ambience** or **SFX**. **Audio › Add audio track** adds one, and **Audio › Import audio from the library…** or **from this computer…** brings sounds in. You can also drop audio files on a track.
@@ -474,7 +487,7 @@ Under **Sound**, **Finishing** gives a web or social video a last touch with Pot
 
 ### To other software
 
-Three files of the cut, for editing and grading software: **FCPXML** (`.fcpxml`), **OpenTimelineIO** (`.otio`) and **EDL CMX 3600** (`.edl`). They hold the order of the shots, their names and in points, and, for OpenTimelineIO, the audio tracks. They carry no fades, no color settings and no titles.
+Three files of the cut, for editing and grading software: **FCPXML** (`.fcpxml`), **OpenTimelineIO** (`.otio`) and **EDL CMX 3600** (`.edl`). They hold the order of the shots, their names and in points, and, for OpenTimelineIO, the audio tracks. They carry no fades, no color settings and no titles. A cross-dissolve between two shots is the exception: the three files write it as a transition (chapter 12).
 
 The files point to the media as the server stores them. If your editing software runs on another computer, copy the videos of your takes there (download them from your gallery) and relink them in your software.
 
