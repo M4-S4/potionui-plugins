@@ -4,7 +4,7 @@
 	import { ui, doc, asset, secs, shotNumber } from '../../lib/state.svelte.js';
 	import { SENSITIVITY, SHORTEST, bounded, cuttable } from '../../lib/cuts.js';
 	import { cancelCuts, clearCuts, cutFailureText, cuts, findCuts } from '../../lib/cuts.svelte.js';
-	import { pickLocalMedia, pickMedia } from '../../lib/importer.js';
+	import { kitsAvailable, pickKitMedia, pickLocalMedia, pickMedia } from '../../lib/importer.js';
 	import Modal from './Modal.svelte';
 
 	let { assetId = null, settings = null } = $props();
@@ -38,6 +38,12 @@
 		const keep = chosen;
 		ui.modal = null;
 		setTimeout(() => pickMedia('video', t('project.cuts.pickTitle'), reopen, () => reopen(keep)));
+	}
+
+	function fromKit() {
+		const keep = chosen;
+		ui.modal = null;
+		setTimeout(() => pickKitMedia('video', t('project.cuts.pickKitTitle'), reopen, () => reopen(keep)));
 	}
 
 	function fromComputer() {
@@ -74,6 +80,9 @@
 			{/if}
 			<div class="flex gap-1.5">
 				<HostUi name="Button" props={{ variant: 'secondary', size: 'sm', icon: 'folder', class: 'flex-1', disabled: running, onclick: fromLibrary }}>{t('project.cuts.fromLibrary')}</HostUi>
+				{#if kitsAvailable()}
+					<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: 'layers', class: 'flex-1', disabled: running, onclick: fromKit }}>{t('project.cuts.fromKit')}</HostUi>
+				{/if}
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'sm', icon: 'upload', class: 'flex-1', disabled: running, onclick: fromComputer }}>{t('project.cuts.fromComputer')}</HostUi>
 			</div>
 		</section>

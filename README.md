@@ -6,8 +6,8 @@ Plugins for [PotionUI](https://github.com/PotionUI/PotionUI), the self-hosted ap
 
 | Plugin | What it does | Who uses it | Version | Read first |
 |---|---|---|---|---|
-| Video Producer | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. | Every user; an admin sets it up. | 0.5.2 | [Administration](video-producer/README.md), [user guide](video-producer/docs/user-guide.md) |
-| Preset Editor | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | 0.2.4 | [README](preset-editor/README.md) |
+| Video Producer | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. | Every user; an admin sets it up. | 0.6.0 | [Administration](video-producer/README.md), [user guide](video-producer/docs/user-guide.md) |
+| Preset Editor | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | 0.2.5 | [README](preset-editor/README.md) |
 
 Both are free software under the GPL-3.0 license.
 
@@ -67,7 +67,7 @@ Every text file is stored with LF line endings (`.gitattributes`), whatever `cor
 
 ### The pinned core
 
-`core.ref` holds the PotionUI commit that the CI and the releases check out from the official repository, PotionUI/PotionUI. Every core change that Video Producer needs is merged there, so it is a commit of its `master` branch, after release 0.1.0; it becomes a tag once a release of the core holds it. Each catalogue entry states the PotionUI version it needs in `requires.core` (see [Catalogue](#catalogue)).
+`core.ref` holds the PotionUI commit that the CI and the releases check out from the official repository, PotionUI/PotionUI. Every core change that Video Producer needs is merged there, so it is a commit of its `master` branch: today the commit that the tag `v0.2.0` of release 0.2.0 names. Each catalogue entry states the PotionUI version it needs in `requires.core` (see [Catalogue](#catalogue)).
 
 ### Day-to-day work
 

@@ -4,7 +4,7 @@
 	import { ui, doc, act, asset, toast, undo, shotNumber } from '../../lib/state.svelte.js';
 	import { CHARACTERS, PLACES, SPACES, LABEL_MAX, cardsOf, linkable, removeCard, setVoice, shotsCasting, usable, voiceChoices } from '../../lib/bible.js';
 	import { LANGUAGES, spokenLanguage } from '../../lib/dialogue.js';
-	import { addCardImage, refTypeLabel, cardReceptionFor, engineTitle } from '../../lib/references.js';
+	import { addCardImage, addCardImages, refTypeLabel, cardReceptionFor, engineTitle } from '../../lib/references.js';
 	import { CARD_ICONS } from '../../lib/reftags.js';
 	import { assetThumb } from '../../lib/media.js';
 	import { commandById } from '../../lib/commands.js';
@@ -118,7 +118,7 @@
 					{:else}
 						<p class="text-xs text-fg-subtle">{noReferences(kind)}</p>
 					{/if}
-					<MediaPicker title={t('panels.director.aside.addImage')} onpick={(id) => addCardImage(card, SPACES[kind], id)} removable={false} compact />
+					<MediaPicker title={t('panels.director.aside.addImage')} onpick={(id) => addCardImage(card, SPACES[kind], id)} onpickall={(ids) => addCardImages(card, SPACES[kind], ids)} removable={false} compact many />
 					<p class="text-xs text-fg-subtle">{referencesHint(kind)}</p>
 				</section>
 				<section class="space-y-2" data-card-reception>

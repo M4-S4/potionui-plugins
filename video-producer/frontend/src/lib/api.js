@@ -1004,6 +1004,9 @@ export function createClient(api, save) {
 		async uploadedMedia(itemId) {
 			return mapped(await call(api, 'post', '/media/uploaded', { id: itemId }), (data) => normalizeMedia(data.media));
 		},
+		async libraryItem(itemId) {
+			return mapped(await coreJson(api, 'GET', `/api/library/items/${encodeURIComponent(itemId)}`), (data) => (isObject(data) ? { fps: number(data.fps) } : null));
+		},
 		presetModels(presetId, modelType, signal) {
 			return coreModels(api, presetId, modelType, signal);
 		},

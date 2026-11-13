@@ -146,6 +146,7 @@ pipeline:
       preview_decoder: "{{ form.preview_decoder | default('') }}"
       mode: "video"
       document: "{{ form.video_director if form.video_director is defined else none }}"
+      drift_correction: "{{ form.drift_correction | default(0.0) }}"
       steps: "{{ form.steps | default(generation.profile.steps) }}"
       resolution: "{{ form.resolution }}"
       frames: "{{ ((form.video_director.settings.duration * preset.vars.fps) | round(0, 'floor') | int) if (form.video_director is defined and form.video_director.settings is defined and form.video_director.settings.duration is not none) else (form.frames | default(preset.vars.default_frames)) }}"

@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends
 from src.plugin_api import User, get_current_admin_user
 
 from . import PLUGIN_ID, PLUGIN_VERSION
+from .routes_common import KEYS_REFUSED
 from .routes_archive import router as archive_router
 from .routes_drafts import router as drafts_router
 from .routes_files import router as files_router
 from .routes_media import router as media_router
 from .routes_presets import router as presets_router
 
-router = APIRouter(prefix="/api/plugins/preset-editor", tags=["preset-editor"])
+router = APIRouter(prefix="/api/plugins/preset-editor", tags=["preset-editor"], dependencies=KEYS_REFUSED)
 
 
 @router.get("/me")

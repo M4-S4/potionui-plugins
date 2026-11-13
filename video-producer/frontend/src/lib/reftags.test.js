@@ -7,6 +7,7 @@ import { typesOf } from './refmedia.js';
 const { doc, ui, dispose } = await import('./state.svelte.js');
 const { t } = await import('../i18n/index.svelte.js');
 const { refRoleLabel, refTypeLabel, referenceTagText } = await import('./references.js');
+const { readiness } = await import('./production.svelte.js');
 const url = (path) => new URL(path, import.meta.url).href;
 const REF_TAGS = url('../components/references/RefTags.svelte');
 const BOARD = url('../components/references/ReferenceBoard.svelte');
@@ -14,7 +15,6 @@ const BIBLE_ASIDE = url('../components/director/BibleAside.svelte');
 const BIBLE_VIEW = url('../components/director/BibleView.svelte');
 const SHOT_EDITOR = url('../components/modals/ShotEditor.svelte');
 const INSPECTOR = url('../components/inspector/Inspector.svelte');
-const MODALS = url('../components/modals/Modals.svelte');
 
 after(() => dispose());
 
@@ -85,9 +85,7 @@ test('Director AI › Bible and References, the shot editor and the Inspector sh
 	await shows(SHOT_EDITOR, { id: 's1' });
 	const view = await renderComponent(BIBLE_VIEW);
 	assert.ok(view.includes(`title="${lea.name} · ${referenceTagText(lea)}" data-ref-thumb`));
-	ui.modal = { type: 'recap' };
-	assert.ok(textOf(await renderComponent(MODALS)).includes(`${lea.name} · ${referenceTagText(lea)}`));
-	ui.modal = null;
+	assert.ok(readiness().items.references.some((r) => r.id === 'r-lea'));
 	assert.equal(refTypeLabel('Personnage'), t(`lib.refType.${TYPE_KEYS.Personnage}`));
 	assert.equal(refTypeLabel('Whatever'), 'Whatever');
 	assert.notEqual(refRoleLabel('Identité'), 'Identité');

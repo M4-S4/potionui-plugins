@@ -118,6 +118,28 @@ def test_a_mode_whose_files_another_mode_loads_is_kept(client, draft, roots):
     assert client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/img2img").status_code == 200
 
 
+def test_a_mode_whose_pipeline_another_mode_takes_is_kept(client, draft, roots):
+    client.post(f"{DRAFTS_URL}/{draft['draft_id']}/modes", json={"mode": "img2img"})
+    pointer = drafts.load(roots, draft["draft_id"]).dir / "modes" / "img2img" / "pipeline.yml"
+    pointer.write_text("pipeline_from: txt2img\n", encoding="utf-8")
+
+    refused = client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/txt2img")
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["citing"] == ["modes/img2img/pipeline.yml"]
+    assert (pointer.parent.parent / "txt2img" / "pipeline.yml").is_file()
+    assert client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/img2img").status_code == 200
+
+
+def test_a_pipeline_that_only_mentions_pipeline_from_does_not_keep_a_mode(client, draft, roots):
+    client.post(f"{DRAFTS_URL}/{draft['draft_id']}/modes", json={"mode": "img2img"})
+    other = drafts.load(roots, draft["draft_id"]).dir / "modes" / "img2img" / "pipeline.yml"
+    other.write_text("pipeline_from: img2img_other\n", encoding="utf-8")
+    (other.parent / "tabs" / "main.yml").write_text("# pipeline_from: txt2img\nfields: []\n", encoding="utf-8")
+
+    assert client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/txt2img").status_code == 200
+
+
 def test_a_family_mode_is_added_with_the_family_tabs(client, draft):
     body = {"mode": "img2img", "family": {**FAMILY.__dict__, "model_slots": list(FAMILY.model_slots), "sampler_choices": list(FAMILY.sampler_choices)}}
 

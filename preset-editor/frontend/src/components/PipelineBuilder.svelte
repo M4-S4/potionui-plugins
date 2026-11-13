@@ -5,10 +5,10 @@
 	import { readFile, writeFile } from '../lib/client.js';
 	import { confirm, toast } from '../lib/dom.js';
 	import { modeOf } from '../lib/files.js';
-	import { PIPE_KEYS, insertPipe, isTemplated, movePipe, newPipe, parsePipelineDocument, pipeRef, pipeTitle, pipelineProblems, referenceMap, removePipe, serializePipelineDocument, sourcesBefore, startChain, toPipe } from '../lib/pipelineModel.js';
+	import { PIPE_KEYS, POINTER_KEY, insertPipe, isPointer, isTemplated, movePipe, newPipe, parsePipelineDocument, pipeRef, pipeTitle, pipelineProblems, pointerFile, pointerProblems, referenceMap, removePipe, serializePipelineDocument, sourcesBefore, startChain, toPipe } from '../lib/pipelineModel.js';
 	import { commentLines, dumpYaml, parseYaml } from '../lib/yaml.js';
 
-	let { api, draftId, path, reference = [], onDirty, onSaved, onOpenYaml } = $props();
+	let { api, draftId, path, reference = [], files = [], onDirty, onSaved, onOpenYaml, onOpenFile } = $props();
 
 	let phase = $state('loading');
 	let error = $state('');
@@ -31,7 +31,11 @@
 	const snapshot = $derived(doc ? serializePipelineDocument(doc) : '');
 	const dirty = $derived(phase === 'ready' && snapshot !== loaded);
 	const report = $derived(doc ? pipelineProblems(doc, reference) : { byPipe: new Map(), count: 0 });
-	const blocked = $derived(report.count + (extraError ? 1 : 0));
+	const pointer = $derived(phase === 'ready' && isPointer(doc));
+	const pointerTarget = $derived(pointer ? doc.unknown[POINTER_KEY] : null);
+	const pointerPath = $derived(pointer ? pointerFile(doc) : null);
+	const pointerIssues = $derived(pointer ? pointerProblems(doc, { mode, files }) : []);
+	const blocked = $derived(report.count + (extraError ? 1 : 0) + pointerIssues.length);
 	const selected = $derived(doc ? doc.pipes.find((pipe) => pipe.id === selectedId) ?? null : null);
 	const index = $derived(doc && selected ? doc.pipes.indexOf(selected) : -1);
 	const known = $derived(selected ? refs.get(String(selected.attrs.name ?? '')) ?? null : null);
@@ -91,7 +95,7 @@
 	}
 
 	async function save(overrideEtag = null) {
-		if (saving || blocked || !doc) return;
+		if (saving || blocked || !doc || pointer) return;
 		const text = serializePipelineDocument(doc);
 		if (comments && overrideEtag === null) {
 			const ok = await confirm({ title: `Rewrite ${path}?`, message: `The builder writes the whole file: its ${comments} comment line${comments > 1 ? 's' : ''} and the original formatting go away. The YAML view keeps them.`, variant: 'warning' });
@@ -236,7 +240,7 @@
 	function onKeydown(event) {
 		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
 			event.preventDefault();
-			if (dirty) save();
+			if (dirty && !pointer) save();
 		}
 	}
 
@@ -258,7 +262,7 @@
 		{#if blocked}<Pill tone="danger">{blocked} problem{blocked > 1 ? 's' : ''}</Pill>{/if}
 		<span class="flex-1"></span>
 		<ActionButton variant="ghost" icon="edit" title="Edit the raw YAML" onclick={onOpenYaml}>YAML</ActionButton>
-		<ActionButton variant="primary" icon="check" loading={saving} disabled={!dirty || !!blocked || phase !== 'ready'} title="Save (Ctrl+S)" onclick={() => save()}>Save</ActionButton>
+		<ActionButton variant="primary" icon="check" loading={saving} disabled={!dirty || !!blocked || phase !== 'ready' || pointer} title={pointer ? 'This mode takes its pipeline from another mode: nothing to save here' : 'Save (Ctrl+S)'} onclick={() => save()}>Save</ActionButton>
 	</div>
 
 	{#if conflict}
@@ -277,6 +281,29 @@
 		<div class="space-y-2 px-3 py-6 text-center text-xs">
 			<p class="text-danger">{error}</p>
 			<ActionButton icon="edit" onclick={onOpenYaml}>Open the YAML</ActionButton>
+		</div>
+	{:else if pointer}
+		<div class="space-y-3 px-3 py-3 text-xs" data-pointer={pointerTarget ?? ''}>
+			<Pill tone="info">read-only</Pill>
+			<p class="text-fg">
+				{#if typeof pointerTarget === 'string' && pointerTarget}
+					This mode has no pipeline of its own: it runs the pipeline of the <span class="font-mono">{pointerTarget}</span> mode, with its own form (<span class="font-mono">{POINTER_KEY}: {pointerTarget}</span>).
+				{:else}
+					This mode names the mode whose pipeline it runs (<span class="font-mono">{POINTER_KEY}</span>), and the builder cannot read that name.
+				{/if}
+			</p>
+			<p class="text-fg-muted">The builder shows it read-only, so saving the preset never changes this file. Edit the shared pipeline in <span class="font-mono">{pointerPath ?? 'the mode it names'}</span>; to give this mode a pipeline of its own, replace that line with a <span class="font-mono">pipeline:</span> list in the YAML view.</p>
+			{#if pointerIssues.length}
+				<ul class="space-y-0.5 rounded border border-danger/40 bg-danger/10 px-2 py-1 text-danger">
+					{#each pointerIssues as issue, position (position)}
+						<li>{issue}</li>
+					{/each}
+				</ul>
+			{/if}
+			<div class="flex flex-wrap gap-2">
+				<ActionButton icon="edit" disabled={!pointerPath || !files.includes(pointerPath) || !onOpenFile} onclick={() => onOpenFile?.(pointerPath)}>Open {pointerPath ?? 'the shared pipeline'}</ActionButton>
+				<ActionButton variant="ghost" icon="edit" onclick={onOpenYaml}>YAML</ActionButton>
+			</div>
 		</div>
 	{:else}
 		<div class="builder-grid grid grid-cols-1 gap-3 px-3 py-3">

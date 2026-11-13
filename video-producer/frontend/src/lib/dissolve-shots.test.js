@@ -7,7 +7,7 @@ import { shownShots } from './monitor.js';
 globalThis.document ??= { body: {}, querySelector: () => null };
 
 const { doc, ui, act, relayout, select, relink, clipAt, pickClip, entryTime, itemsIn, undo, dispose } = await import('./state.svelte.js');
-const { readiness, productionItems, jobClips, estimateState } = await import('./production.svelte.js');
+const { readiness, productionItems, jobClips, sentRange, estimateState } = await import('./production.svelte.js');
 const { project } = await import('./project.svelte.js');
 const { pickShot, stepShot } = await import('./band.svelte.js');
 const { showShot } = await import('./monitor.svelte.js');
@@ -75,9 +75,7 @@ test('dissolve shots: a shot target keeps only its own prompts, frames and refer
 	assert.deepEqual(ids(productionItems(undefined, { clips: [doc.clips[2]] }).prompts), ['pc']);
 });
 
-test('dissolve shots: in a project without dissolve, a shot target after a shot off the grid keeps only its own prompts, and the recap says the same', async () => {
-	const { clean, renderComponent } = await import('./svelte-harness.js');
-	const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
+test('dissolve shots: in a project without dissolve, a shot target after a shot off the grid keeps only its own prompts, and the generation sends that shot alone', () => {
 	scene([0, 0, 0]);
 	doc.clips[0].dur = 4.13;
 	relayout();
@@ -89,13 +87,10 @@ test('dissolve shots: in a project without dissolve, a shot target after a shot 
 	assert.deepEqual(ids(readiness().items.prompts), ['pb']);
 	assert.ok(!readiness().reasons.some((r) => r.code === 'emptyPrompts'));
 	doc.prompts[0].text = 'Alpha walks.';
-	try {
-		ui.modal = { type: 'recap' };
-		const plain = clean(await renderComponent(MODALS));
-		assert.ok(plain.includes('A walk.') && !plain.includes('Alpha walks.'), plain.slice(0, 200));
-	} finally {
-		ui.modal = null;
-	}
+	const { range, items } = readiness();
+	assert.deepEqual(items.prompts.map((p) => p.text), ['A walk.']);
+	assert.deepEqual(range, [doc.clips[1].start, doc.clips[1].start + doc.clips[1].dur]);
+	assert.deepEqual(ids(jobClips(range)), ['b']);
 });
 
 test('dissolve shots: in a project without dissolve on the grid, a shot target with a shot selected keeps what its range read by time', () => {
@@ -133,10 +128,7 @@ test('dissolve shots: shots passed to the generation read only their own prompts
 	assert.deepEqual(ids(readiness({ clips: [doc.clips[0], doc.clips[2]] }).items.prompts), ['pa', 'pc']);
 });
 
-test('dissolve shots: with the shot target and a prompt or a title selected, the checks, the recap and its range are those of the shot that goes', async () => {
-	const { clean, renderComponent } = await import('./svelte-harness.js');
-	const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
-	const { secs } = await import('./state.svelte.js');
+test('dissolve shots: with the shot target and a prompt or a title selected, the checks, the prompts they read and the range sent are those of the shot that goes', () => {
 	scene([0, 0, 0]);
 	doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pc', 'c', 8, 'Charlie jumps.')];
 	doc.prompts[0].dur = 1;
@@ -147,15 +139,11 @@ test('dissolve shots: with the shot target and a prompt or a title selected, the
 			select(kind, id);
 			assert.deepEqual(ids(jobClips()), ['c'], kind);
 			assert.deepEqual(readiness().range, [8, 12], kind);
-			assert.deepEqual(ids(readiness().items.prompts), ['pc'], kind);
-			ui.modal = { type: 'recap' };
-			const plain = clean(await renderComponent(MODALS));
-			assert.ok(plain.includes('Charlie jumps.') && !plain.includes('Alpha walks.'), plain.slice(0, 200));
-			assert.ok(plain.includes(`${secs(8)} → ${secs(12)}`), plain.slice(0, 300));
-			ui.modal = null;
+			assert.deepEqual(readiness().items.prompts.map((p) => p.text), ['Charlie jumps.'], kind);
+			assert.deepEqual(sentRange(), [8, 12], kind);
+			assert.deepEqual(ids(jobClips(sentRange())), ['c'], kind);
 		}
 	} finally {
-		ui.modal = null;
 		ui.playhead = 0;
 		doc.titles = [];
 	}
@@ -395,29 +383,25 @@ test('dissolve shots: every dissolve a command limits or stops is said, three or
 	assert.deepEqual(heard.slice(count), [`${t('timeline.dissolve.trimStoppedMany', { count: 2 })} ${t('timeline.dissolve.trimLimitedMany', { list: '0.8 s and 0.8 s' })}`]);
 });
 
-test('dissolve shots: the recap of picked shots lists their own prompts and shows their range, with or without dissolve', async () => {
-	const { clean, renderComponent } = await import('./svelte-harness.js');
-	const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
-	const { secs } = await import('./state.svelte.js');
+test('dissolve shots: the checks of picked shots read their own prompts over their range, and the generation sends them, with or without dissolve', () => {
 	try {
 		scene([0, 0, 0]);
 		doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pb', 'b', 4, 'Bravo runs.'), prompt('pc', 'c', 8, 'Charlie jumps.')];
 		select('clip', 'a');
 		ui.picked = ['b', 'c'];
 		assert.deepEqual(ids(productionItems().prompts), ['pb', 'pc']);
-		ui.modal = { type: 'recap' };
-		const plain = clean(await renderComponent(MODALS));
-		assert.ok(plain.includes('Bravo runs.') && plain.includes('Charlie jumps.') && !plain.includes('Alpha walks.'), plain.slice(0, 200));
-		assert.ok(plain.includes(`${secs(4)} → ${secs(12)}`), plain.slice(0, 300));
+		const picked = readiness();
+		assert.deepEqual(picked.items.prompts.map((p) => p.text), ['Bravo runs.', 'Charlie jumps.']);
+		assert.deepEqual(picked.range, [4, 12]);
+		assert.deepEqual(ids(jobClips(picked.range)), ['b', 'c']);
 		ui.picked = [];
 		scene([0, 1, 0]);
 		doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pb', 'b', 3, 'Bravo runs.')];
 		select('clip', 'a');
-		ui.modal = { type: 'recap' };
-		const dissolving = clean(await renderComponent(MODALS));
-		assert.ok(dissolving.includes('Alpha walks.') && !dissolving.includes('Bravo runs.'));
+		const dissolving = readiness();
+		assert.deepEqual(dissolving.items.prompts.map((p) => p.text), ['Alpha walks.']);
+		assert.deepEqual(ids(jobClips(dissolving.range)), ['a']);
 	} finally {
-		ui.modal = null;
 		ui.picked = [];
 	}
 });
@@ -484,9 +468,7 @@ test('dissolve shots: on projects drawn at random, Shot then Range keeps that sh
 	assert.ok(checked > 800, `${checked} checked, ${points} taken whole`);
 });
 
-test('dissolve shots: a document whose valid dissolve keys sit on starts end to end plays no dissolve, and its recap of picked shots lists their own prompts as any other', async () => {
-	const { clean, renderComponent } = await import('./svelte-harness.js');
-	const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
+test('dissolve shots: a document whose valid dissolve keys sit on starts end to end plays no dissolve, and the checks of picked shots read their own prompts as any other', () => {
 	scene([0, 0, 0]);
 	doc.clips = [shot('a', 4, { start: 0 }), shot('b', 4, { start: 4, dissolve: 1 }), shot('c', 4, { start: 8, dissolve: 1 })];
 	assert.deepEqual(joins(doc.clips), [0, 0, 0]);
@@ -494,12 +476,12 @@ test('dissolve shots: a document whose valid dissolve keys sit on starts end to 
 	select('clip', 'a');
 	ui.picked = ['b', 'c'];
 	try {
-		ui.modal = { type: 'recap' };
-		const html = clean(await renderComponent(MODALS));
-		assert.ok(html.includes('Bravo runs.') && html.includes('Charlie jumps.') && !html.includes('Alpha walks.'));
+		const { range, items } = readiness();
+		assert.deepEqual(items.prompts.map((p) => p.text), ['Bravo runs.', 'Charlie jumps.']);
+		assert.deepEqual(range, [4, 12]);
+		assert.deepEqual(ids(jobClips(range)), ['b', 'c']);
 	} finally {
 		ui.picked = [];
-		ui.modal = null;
 	}
 });
 

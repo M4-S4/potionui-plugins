@@ -36,7 +36,7 @@ import { BAND_STEP } from './band.js';
 import { speedOf } from './cadence.js';
 import { startGeneration, cancelGeneration, openQueue, openEngineSettings, openResults, assembleChosen, promoteToFinal, busy, fitShot, setProjectQuality } from './production.svelte.js';
 import { createProject as createProjectOnServer, flushSave } from './project.svelte.js';
-import { openGallery, openImport, openLocalImport } from './importer.js';
+import { kitsAvailable, openGallery, openImport, openKitImport, openLocalImport } from './importer.js';
 import { ulid } from './ulid.js';
 import { matchToPrevious } from './continuity.svelte.js';
 import { openFinalPass } from './finalpass.svelte.js';
@@ -68,10 +68,12 @@ export function pointerShortcuts() {
 	];
 }
 
-function command(id, run, { keys = null, alias = null, check = null, global = false, claim = false, typing = false, press = null, repeat = false, vars = null } = {}) {
+function command(id, run, { keys = null, alias = null, check = null, global = false, claim = false, typing = false, press = null, repeat = false, vars = null, hidden = null, searchOnly = false } = {}) {
 	return {
 		id,
 		run,
+		hidden,
+		searchOnly,
 		keys,
 		alias,
 		check,
@@ -107,6 +109,9 @@ function menu(id, groups) {
 	};
 }
 
+export const shown = (c) => !c.hidden?.();
+
+const noKits = () => !kitsAvailable();
 const ws = (w) => () => (ui.workspace = w);
 const modal = (type, props = {}) => () => (ui.modal = { type, ...props });
 const flag = (f) => () => {
@@ -226,7 +231,7 @@ export const menus = [
 			command('save', () => save(), { keys: 'mod+s' }),
 			command('versions', modal('versions'))
 		],
-		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-local', () => openLocalImport(), { keys: 'ctrl+mod+i' }), command('import-gallery', gallery), command('import-cuts', modal('cuts')), command('project-props', modal('project'))],
+		[command('import', () => openImport(), { keys: 'mod+i' }), command('import-kit', () => openKitImport(), { hidden: noKits, searchOnly: true }), command('import-local', () => openLocalImport(), { keys: 'ctrl+mod+i' }), command('import-gallery', gallery), command('import-cuts', modal('cuts')), command('project-props', modal('project'))],
 		[
 			command('export', modal('export', { tab: 'video' }), { keys: 'mod+e' }),
 			command('export-xml', modal('export', { tab: 'exchange' }), { keys: 'shift+mod+e' }),
@@ -285,7 +290,7 @@ export const menus = [
 		[command('engine', openEngineSettings)]
 	]),
 	menu('audio', [
-		[command('audio-add', addAudioLane), command('audio-import', () => openImport('audio')), command('audio-import-local', () => openLocalImport('audio')), command('audio-mixer', mixer)]
+		[command('audio-add', addAudioLane), command('audio-import', () => openImport('audio')), command('audio-import-kit', () => openKitImport('audio'), { hidden: noKits, searchOnly: true }), command('audio-import-local', () => openLocalImport('audio')), command('audio-mixer', mixer)]
 	]),
 	menu('view', [
 		[
@@ -341,6 +346,14 @@ export const menus = [
 ];
 
 export const allCommands = menus.flatMap((m) => m.groups.flat());
+
+export const PALETTE_SIZE = 12;
+const folded = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+export function paletteCommands(query = '') {
+	const words = folded(query);
+	return allCommands.filter((c) => shown(c) && (words ? folded(`${c.label} ${c.menu}`).includes(words) : !c.searchOnly)).slice(0, PALETTE_SIZE);
+}
 
 export function commandById(id) {
 	return allCommands.find((x) => x.id === id) ?? null;

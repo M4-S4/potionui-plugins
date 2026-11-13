@@ -8,7 +8,7 @@
 	import { hostIconName } from '../../lib/icons.js';
 	import { mountHostSlot } from '../../lib/host.js';
 	import { emptyActions } from '../../lib/empty.js';
-	import { addToTimeline, importFiles, openImport, openLocalImport } from '../../lib/importer.js';
+	import { addToTimeline, importFiles, kitsAvailable, openImport, openKitImport, openLocalImport } from '../../lib/importer.js';
 	import { deleteAsset } from '../../lib/assets.svelte.js';
 	import { fileDrop } from '../../lib/filedrop.js';
 	import { LOCAL_KINDS } from '../../lib/upload.js';
@@ -64,6 +64,7 @@
 		actions: emptyActions(
 			[
 				{ variant: 'secondary', icon: 'folder', onclick: () => openImport(), children: t('panels.media.import') },
+				...(kitsAvailable() ? [{ variant: 'ghost', icon: 'layers', onclick: () => openKitImport(), children: t('panels.media.importKit') }] : []),
 				{ variant: 'ghost', icon: 'upload', onclick: () => openLocalImport(), children: t('panels.media.importLocal') }
 			],
 			[commandById('import')?.key, commandById('import-local')?.key].filter(Boolean).join(' · ')

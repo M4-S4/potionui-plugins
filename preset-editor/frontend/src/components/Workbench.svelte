@@ -251,7 +251,7 @@
 				</div>
 				{#key selected}
 					{#if fileView === 'builder' && selectedKind === 'pipeline'}
-						<PipelineBuilder {api} draftId={draft.draft_id} path={selected} reference={pipes} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onOpenYaml={() => showFileView('yaml')} />
+						<PipelineBuilder {api} draftId={draft.draft_id} path={selected} reference={pipes} files={files.map((file) => file.path)} onOpenFile={select} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onOpenYaml={() => showFileView('yaml')} />
 					{:else if fileView === 'builder'}
 						<FormBuilder {api} draftId={draft.draft_id} path={selected} {types} {sharedFiles} {mediaFiles} onDirty={(value) => (dirty = value)} onSaved={(data) => updated({ lint: data.lint })} onOpenYaml={() => showFileView('yaml')} onOpenFile={select} onFilesChanged={refresh} />
 					{:else}

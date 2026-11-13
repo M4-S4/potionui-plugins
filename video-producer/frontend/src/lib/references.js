@@ -1,5 +1,5 @@
 import { t } from '../i18n/index.svelte.js';
-import { ui, doc, act, select, toast, clipLabel, openDirector } from './state.svelte.js';
+import { ui, doc, act, step, select, toast, clipLabel, openDirector } from './state.svelte.js';
 import { ulid } from './ulid.js';
 import { SOUND_SPACE, shotSound } from './sound.js';
 import { refMediaKind, typesOf } from './refmedia.js';
@@ -198,5 +198,17 @@ export function addCardImage(card, space, assetId) {
 		card.references = [...(card.references ?? []), r.id];
 	});
 	return r;
+}
+
+export function addCardImages(card, space, assetIds) {
+	const ids = (assetIds ?? []).filter(Boolean);
+	if (!card || !ids.length) return [];
+	const type = typesOf(space)[0];
+	const made = ids.map((assetId) => ({ id: ulid(), name: card.label || t('lib.default.reference', { type: refTypeLabel(type) }), space, type, assetId, role: roles[space], scope: { type: 'global' } }));
+	step(() => {
+		doc.references.push(...made);
+		card.references = [...(card.references ?? []), ...made.map((r) => r.id)];
+	});
+	return made;
 }
 

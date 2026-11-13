@@ -125,6 +125,7 @@ vars:
             audio: false
             continuation: null
             max_overlap_frames: null
+            max_segments: 6
 
   video_producer:
     profile: "12 GB · 64 GB RAM"
@@ -240,17 +241,21 @@ prompt_resources:
       kind: "image"
       label: "Pictures"
       token: "<Picture @>"
+      limit: 9
+      limit_total: 12
     - field: "references"
       kind: "video"
       label: "Videos"
       token: "<Video @>"
+      limit: 3
     - field: "references"
       kind: "audio"
       label: "Audio"
       token: "<Audio @>"
+      limit: 3
 
 prompt_syntax:
-  video:
+  "*":
     - token: "integrated_multimodal_description:"
       kind: "label"
       help: "Opens the three-field document: shots, camera, speakers and dialogue"

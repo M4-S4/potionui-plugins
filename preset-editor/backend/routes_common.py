@@ -4,6 +4,13 @@ from fastapi import HTTPException
 
 from . import catalog, drafts
 
+try:
+    from src.plugin_api.identity import SESSION_ONLY
+except ImportError:
+    SESSION_ONLY = None
+
+KEYS_REFUSED = [] if SESSION_ONLY is None else [SESSION_ONLY]
+
 
 def error(status: int, code: str, message: str, **extra: Any) -> HTTPException:
     return HTTPException(status_code=status, detail={"success": False, "error": code, "message": message, **extra})
