@@ -11,8 +11,11 @@ from .common import (
     MP3_VBR,
     OPUS_KBPS,
     check_duration,
+    check_length,
+    check_size,
     guard,
     input_args,
+    limit_args,
     metadata_args,
     quality,
     read_streams,
@@ -20,6 +23,8 @@ from .common import (
 )
 
 SAME_SUFFIXES = {"wav": (".wav",), "flac": (".flac",)}
+EMPTY_SOUND = "This sound is empty: there is nothing to convert"
+EMPTY_FROM_VIDEO = "The sound of this video is empty: there is nothing to extract"
 
 
 def codec_args(fmt: str, level: str, bit_depth, channels: int) -> list[str]:
@@ -49,6 +54,7 @@ def encode_audio(media, params, ctx, *, from_video: bool):
     check_duration(media.duration)
     guard(ctx)
     streams = read_streams(media.path)
+    check_duration(streams.duration)
     if not streams.audio:
         raise ToolFailed("This video has no sound to extract" if from_video else "This file has no sound")
     track = streams.audio[0]
@@ -58,9 +64,17 @@ def encode_audio(media, params, ctx, *, from_video: bool):
     args += metadata_args(streams, track, keep)
     if fmt == "m4a":
         args += ["-movflags", "+faststart"]
-    args += [*thread_args()[:2], str(out)]
+    args += [*limit_args(media.path), *thread_args()[:2], str(out)]
     ctx.ffmpeg(args, duration=media.duration)
     guard(ctx)
+    check_size(out, media.path)
+    try:
+        result = read_streams(out)
+    except ToolFailed:
+        result = None
+    if result is None or not result.audio or not result.duration:
+        raise ToolFailed(EMPTY_FROM_VIDEO if from_video else EMPTY_SOUND)
+    check_length(result.duration)
     return ctx.probe(out, "audio")
 
 

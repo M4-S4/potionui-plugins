@@ -44,8 +44,16 @@ TEXT_SUBTITLES = frozenset({"subrip", "srt", "ass", "ssa", "mov_text", "webvtt",
 
 DEFAULT_THREADS = 4
 MAX_THREADS = 16
-DEFAULT_MAX_MINUTES = 60
+DEFAULT_MAX_MINUTES = 30
+MAX_MINUTES = 30
 PROBE_TIMEOUT_SECONDS = 30
+
+MAX_IMAGE_PIXELS = 8192 * 8192
+MAX_VIDEO_PIXELS = 4096 * 2304
+OUTPUT_RATIO = 32
+OUTPUT_FLOOR = 1 << 30
+OUTPUT_CEILING = 4 << 30
+MEGABYTE = 1 << 20
 
 
 def quality(params: dict) -> str:
@@ -75,15 +83,45 @@ def max_seconds() -> float:
         minutes = float(settings().get("max_minutes", DEFAULT_MAX_MINUTES))
     except (TypeError, ValueError):
         minutes = DEFAULT_MAX_MINUTES
-    return max(1.0, minutes) * 60.0
+    return min(float(MAX_MINUTES), max(1.0, minutes)) * 60.0
+
+
+def minutes(count: int) -> str:
+    return f"{count} minute" if count == 1 else f"{count} minutes"
 
 
 def check_duration(duration: Optional[float]) -> None:
     limit = max_seconds()
     if duration and duration > limit:
         raise ToolFailed(
-            f"This file lasts {math.ceil(duration / 60)} minutes; "
-            f"Media Converter takes files of up to {int(limit // 60)} minutes on this server"
+            f"This file lasts {minutes(math.ceil(duration / 60))}; "
+            f"Media Converter takes files of up to {minutes(int(limit // 60))} on this server"
+        )
+
+
+def output_cap(source: Path) -> int:
+    return min(OUTPUT_CEILING, max(OUTPUT_FLOOR, OUTPUT_RATIO * Path(source).stat().st_size))
+
+
+def limit_args(source: Path) -> list[str]:
+    return ["-t", f"{max_seconds() + 1:.3f}", "-fs", str(output_cap(source))]
+
+
+def check_size(out: Path, source: Path) -> None:
+    cap = output_cap(source)
+    if Path(out).stat().st_size >= cap:
+        raise ToolFailed(
+            f"The result would weigh more than {cap // MEGABYTE} MB, the most Media Converter writes "
+            "for this file; choose a lighter format"
+        )
+
+
+def check_length(duration: Optional[float]) -> None:
+    limit = max_seconds()
+    if duration and duration > limit:
+        raise ToolFailed(
+            f"This file lasts more than {minutes(int(limit // 60))}; "
+            f"Media Converter takes files of up to {minutes(int(limit // 60))} on this server"
         )
 
 
@@ -124,6 +162,7 @@ class Stream:
 class Streams:
     streams: tuple
     tags: dict
+    duration: Optional[float] = None
 
     @property
     def video(self) -> Optional[Stream]:
@@ -180,7 +219,12 @@ def read_streams(path: Path) -> Streams:
         )
         for item in payload.get("streams") or []
     )
-    return Streams(streams=streams, tags=dict((payload.get("format") or {}).get("tags") or {}))
+    container = payload.get("format") or {}
+    try:
+        duration = float(container.get("duration")) if container.get("duration") else None
+    except (TypeError, ValueError):
+        duration = None
+    return Streams(streams=streams, tags=dict(container.get("tags") or {}), duration=duration)
 
 
 def metadata_args(streams: Streams, audio: Optional[Stream], keep: bool) -> list[str]:

@@ -23,10 +23,10 @@ settings:
   - name: "max_minutes"
     type: "number"
     label: "Longest video or sound, in minutes"
-    description: "Longer files are refused with a message."
-    default: 60
+    description: "Longer files are refused with a message. PotionUI stops any conversion after 30 minutes of work, so 30 is the most this can be."
+    default: 30
     min: 1
-    max: 600
+    max: 30
   - name: "load_notice"
     type: "info"
     label: "Conversions run on the server's processor"
@@ -36,7 +36,7 @@ media_tools:
   - id: "media-convert.image"
     label: "Convert image"
     description: "Save the image as PNG, JPEG or WebP, optionally smaller"
-    icon: "swap"
+    icon: "image"
     accepts: [image]
     produces: image
     cardinality: one_to_one

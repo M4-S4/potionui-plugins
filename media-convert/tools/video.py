@@ -3,15 +3,19 @@ from src.plugin_api.media_tools import MediaTool, ToolFailed
 from .common import (
     H264_CRF,
     H264_PRESET,
+    MAX_VIDEO_PIXELS,
     VIDEO_AAC_KBPS,
     VIDEO_FORMATS,
     VIDEO_OPUS_KBPS,
     VP9_CPU_USED,
     VP9_CRF,
     check_duration,
+    check_length,
+    check_size,
     fit,
     guard,
     input_args,
+    limit_args,
     max_side,
     metadata_args,
     quality,
@@ -55,13 +59,21 @@ class ConvertVideo(MediaTool):
         level = quality(params)
         keep = bool(params.get("keep_metadata", True))
         check_duration(media.duration)
+        if not media.width or not media.height:
+            raise ToolFailed("Media Converter cannot read the size of this video")
+        if media.width * media.height > MAX_VIDEO_PIXELS:
+            raise ToolFailed(
+                f"This video is {media.width} × {media.height} pixels; Media Converter takes videos "
+                "of up to 4096 × 2304 pixels (about 9.4 million)"
+            )
+        if min(fit(media.width, media.height, max_side(params), even=False)) < 2:
+            raise ToolFailed("This video is too small: a converted video needs at least 2 pixels on each side")
         guard(ctx)
         streams = read_streams(media.path)
+        check_duration(streams.duration)
         picture = streams.video
         if picture is None:
             raise ToolFailed("This video has no picture to convert")
-        if not media.width or not media.height:
-            raise ToolFailed("Media Converter cannot read the size of this video")
         width, height = fit(media.width, media.height, max_side(params), even=True)
         tracks = streams.audio if keep else streams.audio[:1]
         subtitles = streams.text_subtitles if keep else []
@@ -78,7 +90,9 @@ class ConvertVideo(MediaTool):
         if fmt != "webm":
             args += ["-movflags", "+faststart"]
         out = ctx.new_path(VIDEO_FORMATS[fmt])
-        args += [*thread_args()[:2], str(out)]
+        args += [*limit_args(media.path), *thread_args()[:2], str(out)]
         ctx.ffmpeg(args, duration=media.duration)
         guard(ctx)
+        check_size(out, media.path)
+        check_length(read_streams(out).duration)
         return ctx.probe(out, "video")

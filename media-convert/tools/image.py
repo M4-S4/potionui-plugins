@@ -5,6 +5,7 @@ from src.plugin_api.media_tools import MediaTool, ToolFailed
 from .common import (
     IMAGE_FORMATS,
     JPEG_QUALITY,
+    MAX_IMAGE_PIXELS,
     PNG_COMPRESSION,
     WEBP_QUALITY,
     fit,
@@ -16,6 +17,8 @@ from .common import (
 READABLE = ("PNG", "JPEG", "WEBP", "GIF", "BMP")
 ORIENTATION = 0x0112
 ICC_SPACES = {b"RGB ": ("RGB", "RGBA"), b"GRAY": ("L", "LA"), b"CMYK": ("CMYK",)}
+MAX_ICC_BYTES = 1 << 20
+MAX_JPEG_EXIF_BYTES = 65533
 
 
 def parse_color(value) -> tuple[int, int, int]:
@@ -29,7 +32,9 @@ def parse_color(value) -> tuple[int, int, int]:
 
 
 def icc_fits(icc, mode: str) -> bool:
-    if not icc or len(icc) < 20:
+    if not icc or not 128 <= len(icc) <= MAX_ICC_BYTES:
+        return False
+    if int.from_bytes(icc[0:4], "big") != len(icc):
         return False
     return mode in ICC_SPACES.get(bytes(icc[16:20]), ())
 
@@ -102,7 +107,7 @@ def save_options(source: Image.Image, image: Image.Image, fmt: str, level: str, 
         options["icc_profile"] = icc
     if keep:
         exif = exif_bytes(source)
-        if exif:
+        if exif and not (fmt == "jpeg" and len(exif) > MAX_JPEG_EXIF_BYTES):
             options["exif"] = exif
         if fmt == "png" and source.format == "PNG":
             text = png_text(source)
@@ -115,6 +120,11 @@ def save_options(source: Image.Image, image: Image.Image, fmt: str, level: str, 
     else:
         options.update(compress_level=PNG_COMPRESSION)
     return options
+
+
+def unchanged(source: Image.Image, limit) -> bool:
+    turned = source.getexif().get(ORIENTATION) not in (None, 1)
+    return not turned and fit(source.width, source.height, limit, even=False) == source.size
 
 
 class ConvertImage(MediaTool):
@@ -136,13 +146,20 @@ class ConvertImage(MediaTool):
         except Image.DecompressionBombError as exc:
             raise ToolFailed("This image is too large to convert") from exc
         with source:
+            if source.width * source.height > MAX_IMAGE_PIXELS:
+                raise ToolFailed(
+                    f"This image is {source.width} × {source.height} pixels; Media Converter takes images "
+                    "of up to 67 million pixels, such as 8192 × 8192"
+                )
             frames = getattr(source, "n_frames", 1)
             if frames > 1:
                 raise ToolFailed(
                     f"This image is animated ({frames} frames); Media Converter converts still images only"
                 )
-            if fmt == "png" and source.format == "PNG" and not limit:
-                raise ToolFailed("This image is already a PNG; choose another format or a maximum size")
+            if fmt == "png" and source.format == "PNG" and unchanged(source, limit):
+                raise ToolFailed(
+                    "This image is already a PNG of this size; choose another format or a smaller largest side"
+                )
             try:
                 source.load()
             except (OSError, Image.DecompressionBombError) as exc:
