@@ -1,3 +1,5 @@
+import { onStep } from './grid.js';
+
 export const DISSOLVE_KEY = 'dissolve';
 export const MAX_DISSOLVE = 2;
 export const DISSOLVE_CHOICES = [0.4, 0.6, 1, 1.2, 2];
@@ -11,8 +13,14 @@ const NEAR = 2 * EPSILON;
 const positive = (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0);
 const finite = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
 const rounded = (value) => +value.toFixed(6);
+export const REACH = rounded(GRID + EPSILON);
 
 export const framesOf = (seconds, fps) => Math.floor(finite(seconds) * positive(fps) + 0.5);
+
+export function readAt(srcIn, start, frame, fps, speed = 1) {
+	const shift = positive(fps) ? rounded(frame / positive(fps) - finite(start)) : 0;
+	return shift ? rounded(finite(srcIn) + shift * speed) : finite(srcIn);
+}
 
 export function limitOf(before, clip) {
 	const asked = positive(clip?.[DISSOLVE_KEY]);
@@ -87,7 +95,7 @@ export function headTrim(srcIn, dur, speed, shift) {
 	const from = finite(srcIn);
 	const length = finite(dur);
 	const rate = positive(speed) ? speed : 1;
-	const moved = Math.min(Math.max(Math.round(finite(shift) / GRID) * GRID, -from / rate), Math.max(length - LEAST_SHOT, 0));
+	const moved = Math.min(Math.max(onStep(finite(shift), GRID), -from / rate), Math.max(length - LEAST_SHOT, 0));
 	return { srcIn: rounded(Math.max(from + moved * rate, 0)), dur: rounded(length - moved) };
 }
 
@@ -221,9 +229,23 @@ export function dissolveGain(clips, i, time, places = placement(clips)) {
 	return Math.min(Math.max(gain, 0), 1);
 }
 
+export function filled(places) {
+	const result = places.map(() => false);
+	let last = null;
+	places.forEach((place, index) => {
+		if (!place) return;
+		if (last !== null && !place.overlap) {
+			const gap = rounded(place.start - places[last].end);
+			if (gap > 0 && gap <= REACH) result[last] = true;
+		}
+		last = index;
+	});
+	return result;
+}
+
 export function cuts(clips, frames) {
 	const places = placement(clips);
-	if (!places.some((place) => place?.overlap)) return clips.map(() => null);
+	const fills = filled(places);
 	const starts = places.map((place) => (place ? frames(place.start) : 0));
 	const ends = places.map((place) => (place ? frames(place.end) : 0));
 	const overlaps = clips.map(() => 0);
@@ -231,13 +253,13 @@ export function cuts(clips, frames) {
 		if (places[i]?.overlap) {
 			ends[i - 1] = Math.max(ends[i - 1], starts[i] + 1);
 			overlaps[i] = ends[i - 1] - starts[i];
-		} else if (places[i]) ends[i - 1] = Math.min(ends[i - 1], starts[i]);
+		} else if (places[i]) ends[i - 1] = fills[i - 1] ? starts[i] : Math.min(ends[i - 1], starts[i]);
 	}
 	const edits = starts.map((start, i) => start + Math.floor(overlaps[i] / 2));
 	return clips.map((clip, i) => {
 		const place = places[i];
 		const following = i + 1 < clips.length && overlaps[i + 1] > 0;
-		if (!place || !(overlaps[i] || following || moved(clip, place))) return null;
+		if (!place || !(overlaps[i] || following || moved(clip, place) || fills[i] || ends[i] !== frames(finite(clip.start) + positive(clip.dur)))) return null;
 		const start = overlaps[i] ? edits[i] : starts[i];
 		const end = following ? edits[i + 1] : ends[i];
 		return { start, end, overlap: overlaps[i], head: start - starts[i] };

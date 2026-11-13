@@ -3,7 +3,7 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 from urllib.parse import quote
 
 from .. import formats
-from ..dissolve import cuts
+from ..dissolve import cuts, placement, read_at
 from .common import Timebase, asset_of, clip_label, js_number, seq_duration
 
 NAMED_RATES = ("24", "25", "30", "50", "60")
@@ -73,6 +73,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
             f'<media-rep kind="original-media" src="{media_url(files[("clips", index)])}"/></asset>'
         )
     edits = cuts(doc["clips"], time.frames)
+    places = placement(doc["clips"])
     effect = len(media) + 2
     if any(cut is not None and cut.overlap for cut in edits):
         assets.append(f'\t\t<effect id="r{effect}" name="{DISSOLVE_NAME}" uid="{DISSOLVE_EFFECT}"/>')
@@ -83,7 +84,8 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
         cut = edits[index]
         length = time.span(clip["start"], clip["dur"]) if cut is None else cut.end - cut.start
         offset = time.rational(clip["start"]) if cut is None else time.count(cut.start)
-        source = clip["srcIn"] if cut is None or not cut.head else clip["srcIn"] + cut.head / time.fps * speed
+        at = clip["start"] if places[index] is None else places[index].start
+        source = max(read_at(clip["srcIn"], at, time.frames(clip["start"]) if cut is None else cut.start, time.fps, speed), 0.0)
         if cut is not None and cut.overlap:
             spine.append(
                 f'\t\t\t\t\t\t<transition name="{DISSOLVE_NAME}" offset="{time.count(cut.start - cut.head)}" duration="{time.count(cut.overlap)}">'

@@ -9,6 +9,7 @@ import { CARD_WORDS, setShotCardWords, shotCardWordsOf } from './cardwords.js';
 import { merge3 } from './merge.js';
 import { SLOW_SPEEDS, speedOf } from './cadence.js';
 import { isObject } from './values.js';
+import { onGrid } from './grid.js';
 
 export const MIN_DRAFTS = 1;
 export const MAX_DRAFTS = 8;
@@ -206,7 +207,7 @@ export function migrateShots(doc) {
 }
 
 const MIN_SHOT = 0.4;
-const snap = (value) => +(Math.round(value / 0.04) * 0.04).toFixed(3);
+const snap = onGrid;
 export const SHOT_CAP = 60;
 export const TAKE_SLACK = 0.05;
 

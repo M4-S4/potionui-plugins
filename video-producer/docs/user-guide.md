@@ -467,6 +467,8 @@ Pick a format and a resolution (720p, 1080p, 1440p or 4K), then click **Export**
 - **Master file · ProRes 422 HQ**, a MOV for editing and grading software.
 - **Archive · H.265 10-bit**, a compact, high-quality MP4 to keep.
 
+Each cut falls on the frame of its time in the project, so the picture and the sound of the shots stay in step with your music and subtitles however long the film is, and a shot of an odd length, such as a 3.1 s video, leaves no black frame at the cut.
+
 Options:
 
 - **Audio stems by role**: five WAV files besides the video, one per role and one for the sound of the shots, in a ZIP.

@@ -1,4 +1,3 @@
-import math
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .. import bible, formats
@@ -42,7 +41,8 @@ class EditError(ValueError):
 
 def snap(value: float, step: float = GRID) -> float:
     """A time on the page's grid, rounded the way the page rounds it."""
-    return float(f"{math.floor(value / step + 0.5) * step:.3f}")
+    unit = round(step * 1_000_000)
+    return float(f"{(2 * round(rounded(value) * 1_000_000) + unit) // (2 * unit) * step:.3f}")
 
 
 def dicts(value: Any) -> List[Dict[str, Any]]:

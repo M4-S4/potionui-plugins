@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { clean, renderComponent } from './svelte-harness.js';
 import { DISSOLVE_CHOICES, headTrim, joins, onFrame, playedLengths, setDissolve, tailTrim } from './dissolve.js';
 
-const { doc, ui, act, adopt, checkpoint, relayout, select, bladeAt, bladeTime, duplicateSelection, undo, seqDuration, clipAt, shotIdAt, addPrompt, addFrame, limitNote, dispose } = await import('./state.svelte.js');
+const { doc, ui, act, adopt, checkpoint, relayout, select, bladeAt, bladeTime, duplicateSelection, undo, seqDuration, clipAt, shotIdAt, addPrompt, addFrame, limitNote, dispose, round } = await import('./state.svelte.js');
 const { drag } = await import('./timeline.js');
 const { shotTrim, bandTrim, setShotDuration, setShotIn } = await import('./trims.js');
 const { nudgeDuration } = await import('./band.svelte.js');
@@ -429,6 +429,140 @@ test('dissolve flow: in a project that dissolves, the blade cuts a shot off the 
 			[6.1, 1, 0]
 		]
 	);
+});
+
+test('dissolve flow: without dissolve, the blade cuts on the grid and the two pieces make the shot, the second reading its source on from the end of the first', () => {
+	project();
+	doc.clips[0].dur = 3.1;
+	doc.clips[1].dur = 4.1;
+	doc.clips[1].srcIn = 0.3;
+	relayout();
+	assert.deepEqual(doc.clips.map((c) => c.start), [0, 3.12, 7.2]);
+	doc.prompts = [{ id: 'early', shotId: 'b', start: 4.31, dur: 0.5, text: 'x', strength: 75 }, { id: 'late', shotId: 'b', start: 4.32, dur: 0.5, text: 'y', strength: 75 }];
+	select('clip', 'b');
+	bladeAt(4.31);
+	const [first, second] = doc.clips.slice(1, 3);
+	assert.deepEqual([first.dur, second.dur, second.srcIn], [1.2, 2.9, 1.5]);
+	assert.equal(+(first.dur + second.dur).toFixed(6), 4.1);
+	assert.equal(+(second.srcIn - first.srcIn).toFixed(6), first.dur);
+	assert.deepEqual(doc.prompts.map((p) => [p.id, p.shotId === first.id ? 'first' : p.shotId === second.id ? 'second' : p.shotId]), [
+		['early', 'first'],
+		['late', 'second']
+	]);
+});
+
+function bladeOnTheGrid(at) {
+	project();
+	doc.clips[1].srcIn = 0.25;
+	select('clip', 'b');
+	bladeAt(at);
+	return doc.clips.map((c) => [c.start, c.dur, +c.srcIn.toFixed(9)]);
+}
+
+test('dissolve flow: without dissolve, the blade on the grid of a shot on the grid gives the document of before', () => {
+	assert.deepEqual(bladeOnTheGrid(3.2), [
+		[0, 2, 0],
+		[2, 1.2, 0.25],
+		[3.2, 0.8, 1.45],
+		[4, 1, 0]
+	]);
+});
+
+test('dissolve flow: without dissolve, at positions drawn at random the blade cuts on the step nearest its point, the two pieces make the shot, the second starts exactly where the first stops and reads on from its end', () => {
+	const random = seeded(120);
+	const before = [2, 3.1, 1.013, 2.52, 1.02];
+	const lengths = [2, 4.1, 3.37, 1.6, 2.9, 2.4];
+	let checked = 0;
+	for (let n = 0; n < 600; n++) {
+		project();
+		doc.clips[0].dur = before[n % before.length];
+		doc.clips[1].dur = lengths[Math.floor(n / before.length) % lengths.length];
+		doc.clips[1].srcIn = 0.25;
+		doc.clips[1].speed = n % 5 === 0 ? 0.5 : 1;
+		relayout();
+		const b = doc.clips[1];
+		const [start, dur, srcIn, speed] = [b.start, b.dur, b.srcIn, b.speed];
+		const at = +(start + 0.1 + random() * (dur - 0.2)).toFixed(3);
+		const kept = +(Math.floor((2 * Math.round((at - start) * 1e6) + 40000) / 80000) * 0.04).toFixed(3);
+		const after = doc.clips[2].start;
+		select('clip', 'b');
+		bladeAt(at);
+		const label = `${doc.clips[0].dur} then ${dur} at ${at}`;
+		assert.equal(doc.clips.length, 4, label);
+		const [first, second] = doc.clips.slice(1, 3);
+		assert.equal(first.dur, kept, label);
+		assert.ok(first.dur > 0 && second.dur > 0, label);
+		assert.equal(+(first.dur + second.dur).toFixed(6), dur, label);
+		assert.equal(first.start, start, label);
+		assert.equal(second.start, +(first.start + first.dur).toFixed(6), label);
+		assert.ok(Math.abs(second.srcIn - (srcIn + kept * speed)) < 1e-6, label);
+		assert.equal(doc.clips[3].start, after, label);
+		checked += 1;
+	}
+	assert.equal(checked, 600);
+});
+
+test('dissolve flow: the layout rounds a time to the step as the server does, a half step up even when the sum that gives it falls just below', () => {
+	const cases = JSON.parse(readFileSync(join(here, '..', '..', '..', 'tests', 'fixtures', 'snap_cases.json'), 'utf-8'));
+	for (const [value, snapped] of cases) assert.equal(round(value, 0.04), snapped, String(value));
+	assert.equal(round(1.02 + 0.84, 0.04), 1.88);
+	const random = seeded(11);
+	for (let n = 0; n < 2000; n++) {
+		const x = +(random() * 50).toFixed(n % 2 ? 3 : 2);
+		const steps = Math.floor(random() * 400);
+		assert.equal(round(x + steps * 0.04, 0.04), +(round(x, 0.04) + steps * 0.04).toFixed(3), `${x} + ${steps}`);
+	}
+});
+
+function music(start, dur, srcIn = 0, extra = {}) {
+	project();
+	doc.audio = [{ id: 'm', assetId: null, lane: 'A1', start, dur, srcIn, fadeIn: 0.3, fadeOut: 0.5, gain: -2, ...extra }];
+	select('audio', 'm');
+}
+
+test('dissolve flow: the blade of a sound clip cuts exactly at its point on the grid, so a music of 4 s cut at 1.01 s gives pieces of 1 and 3 s that read on in the source', () => {
+	music(0, 4);
+	bladeAt(1.01);
+	assert.deepEqual(
+		doc.audio.map((a) => [a.start, a.dur, a.srcIn, a.fadeIn, a.fadeOut, a.gain]),
+		[
+			[0, 1, 0, 0.3, 0, -2],
+			[1, 3, 1, 0, 0.5, -2]
+		]
+	);
+});
+
+test('dissolve flow: the blade of a sound clip on the grid gives the document of before', () => {
+	music(0.4, 4, 0.2, { reference: true });
+	bladeAt(2.4);
+	assert.deepEqual(
+		doc.audio.map((a) => [a.start, a.dur, a.srcIn, a.fadeIn, a.fadeOut, a.reference]),
+		[
+			[0.4, 2, 0.2, 0.3, 0, true],
+			[2.4, 2, 2.2, 0, 0.5, true]
+		]
+	);
+});
+
+test('dissolve flow: at positions drawn at random, the blade of a sound clip cuts on the grid, the two pieces make the clip and the second reads on from the end of the first', () => {
+	const random = seeded(121);
+	for (let n = 0; n < 600; n++) {
+		const start = +(random() * 3).toFixed(3);
+		const dur = +(0.3 + random() * 6).toFixed(3);
+		const srcIn = +(random() * 2).toFixed(3);
+		music(start, dur, srcIn);
+		const at = +(start + 0.11 + random() * (dur - 0.22)).toFixed(3);
+		const cut = +(Math.floor((2 * Math.round(at * 1e6) + 40000) / 80000) * 0.04).toFixed(3);
+		bladeAt(at);
+		const label = `${start} + ${dur} at ${at}`;
+		assert.equal(doc.audio.length, 2, label);
+		const [first, second] = doc.audio;
+		assert.equal(second.start, cut, label);
+		assert.ok(Math.abs(first.start + first.dur - cut) < 1e-6, label);
+		assert.ok(first.dur > 0 && second.dur > 0, label);
+		assert.ok(Math.abs(first.dur + second.dur - dur) < 1e-6, label);
+		assert.ok(Math.abs(second.srcIn - (srcIn + first.dur)) < 1e-6, label);
+	}
 });
 
 test('dissolve flow: in a project that dissolves, trimming the head of a shot from the keyboard leaves round lengths', () => {

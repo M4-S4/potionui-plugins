@@ -1,4 +1,5 @@
 import { SvelteMap } from 'svelte/reactivity';
+import { onStep } from './grid.js';
 
 const THUMB_WIDTH = 480;
 const PEAK_RATE = 50;
@@ -121,7 +122,7 @@ async function resolveFrames(src, duration) {
 
 export function videoFrame(a, at) {
 	if (!a?.src || a.kind !== 'video' || typeof document === 'undefined') return null;
-	const time = +(Math.round(Math.max(0, Number(at) || 0) / FRAME_STEP) * FRAME_STEP).toFixed(3);
+	const time = onStep(Math.max(0, Number(at) || 0), FRAME_STEP);
 	const known = frames.get(frameKey(a.src, time));
 	if (known !== undefined) return known || null;
 	wanted.set(a.src, time);

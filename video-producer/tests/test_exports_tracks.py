@@ -142,12 +142,12 @@ def test_mute_wins_over_solo_on_the_video_track(make_doc):
 
 
 def test_the_shot_sound_follows_the_fades_of_its_shot(make_doc):
-    doc = _doc(make_doc, [{"id": "c1", "start": 0, "dur": 2.5, "srcIn": 0.5, "fadeIn": 0.4, "fadeOut": 0.6}])
+    doc = _doc(make_doc, [{"id": "c1", "start": 0, "dur": 2.52, "srcIn": 0.5, "fadeIn": 0.4, "fadeOut": 0.6}])
 
     assert _shot_sound(_graph(doc, {"c1": SHOT}, audio={"c1": True})) == (
-        "[0:a]atrim=start=0.5:duration=2.5,asetpts=PTS-STARTPTS,aresample=48000,"
-        "aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=2.5,atrim=duration=2.5,"
-        "afade=t=in:st=0:d=0.4,afade=t=out:st=1.9:d=0.6[a0]"
+        "[0:a]atrim=start=0.5:duration=2.52,asetpts=PTS-STARTPTS,aresample=48000,"
+        "aformat=sample_fmts=fltp:channel_layouts=stereo,apad=whole_dur=2.52,atrim=duration=2.52,"
+        "afade=t=in:st=0:d=0.4,afade=t=out:st=1.92:d=0.6[a0]"
     )
 
 

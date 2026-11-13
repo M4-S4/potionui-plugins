@@ -63,7 +63,7 @@ test('formats: gaps for shots without a file, escaped names, CRLF edit list, cue
 	assert.match(xml, /<project name="Dawn &amp; &lt;Port&gt;">/);
 	assert.match(xml, /<asset id="r2" name="Ridge" start="0s" duration="150\/25s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:\/\/\/Video%20Producer\/ridge%20take\.mp4"\/><\/asset>/);
 	assert.match(xml, /<gap name="Shot" offset="50\/25s" start="0s" duration="38\/25s"\/>/);
-	assert.match(xml, /<asset-clip ref="r3" name="Hut · wide" offset="88\/25s" start="0\/25s" duration="25\/25s"\/>/);
+	assert.match(xml, /<asset-clip ref="r3" name="Hut · wide" offset="88\/25s" start="1\/25s" duration="25\/25s"\/>/);
 	const timeline = JSON.parse(otio(doc, options));
 	const [video, voices] = timeline.tracks.children;
 	assert.deepEqual(video.children.map((c) => c.OTIO_SCHEMA), ['Clip.2', 'Gap.1', 'Clip.2']);

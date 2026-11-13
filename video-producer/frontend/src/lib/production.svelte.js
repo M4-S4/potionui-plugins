@@ -337,7 +337,7 @@ export function pickTarget(id) {
 export function productionItems(range = productionRange(), opts = {}) {
 	const picked = opts.clips?.length ? [] : pickedClips();
 	if (picked.length) return itemsOf(picked);
-	const own = dissolving(doc.clips) ? (opts.clips?.length ? opts.clips : ui.production.target === 'clip' ? jobClips(range) : null) : null;
+	const own = opts.clips?.length ? opts.clips : ui.production.target === 'clip' ? jobClips(range) : null;
 	return own ? itemsOf(own) : itemsIn(range);
 }
 
@@ -439,9 +439,17 @@ export function scheduleEstimate(request) {
 	}, ESTIMATE_DELAY);
 }
 
+export function sentRange(opts = {}) {
+	if (opts.clips?.length) return clipsRange(opts.clips);
+	const picked = pickedClips();
+	if (picked.length) return clipsRange(picked);
+	const shots = ui.production.target === 'clip' ? jobClips() : [];
+	return shots.length ? clipsRange(shots) : productionRange();
+}
+
 export function readiness(opts = {}) {
 	const picked = opts.clips?.length ? [] : pickedClips();
-	const range = opts.clips?.length ? clipsRange(opts.clips) : picked.length ? clipsRange(picked) : productionRange();
+	const range = sentRange(opts);
 	const items = productionItems(range, opts);
 	const missing = [];
 	const reasons = [];

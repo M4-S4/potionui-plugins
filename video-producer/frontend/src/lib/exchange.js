@@ -1,7 +1,7 @@
 import { laneCode } from './tracks.js';
 import { BOX, deliverySize, ratioOf } from './formats.js';
 import { sourceSeconds, speedOf } from './cadence.js';
-import { cuts, moved, placement } from './dissolve.js';
+import { cuts, filled, moved, placement, readAt } from './dissolve.js';
 
 const DISSOLVE_NAME = 'Cross Dissolve';
 const DISSOLVE_EFFECT = 'FxPlug:4731E73A-8DAC-4113-9A30-AE85B1761265';
@@ -83,6 +83,7 @@ export function fcpxml(doc, { label }) {
 			`\t\t<asset id="r${i + 2}" name="${esc(label(c))}" start="0s" duration="${rt(assetOf(doc, c.assetId).srcDur ?? c.srcIn + sourceSeconds(c))}" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/${esc(encodeURI(file(c)))}"/></asset>`
 	);
 	const edits = cuts(doc.clips, frames);
+	const places = placement(doc.clips);
 	const effect = media.length + 2;
 	if (edits.some((cut) => cut?.overlap)) assets.push(`\t\t<effect id="r${effect}" name="${DISSOLVE_NAME}" uid="${DISSOLVE_EFFECT}"/>`);
 	const timeMap = (c, source, length) =>
@@ -91,7 +92,7 @@ export function fcpxml(doc, { label }) {
 		const cut = edits[i];
 		const length = cut ? cut.end - cut.start : span(c.start, c.dur);
 		const offset = cut ? count(cut.start) : rt(c.start);
-		const source = cut?.head ? c.srcIn + (cut.head / doc.fps) * speedOf(c) : c.srcIn;
+		const source = Math.max(readAt(c.srcIn, places[i]?.start ?? c.start, cut ? cut.start : frames(c.start), doc.fps, speedOf(c)), 0);
 		const transition = cut?.overlap ? [`\t\t\t\t\t\t<transition name="${DISSOLVE_NAME}" offset="${count(cut.start - cut.head)}" duration="${count(cut.overlap)}"><filter-video ref="r${effect}" name="${DISSOLVE_NAME}"/></transition>`] : [];
 		return [
 			...transition,
@@ -129,6 +130,7 @@ export function otio(doc, { label }) {
 	const range = (start, length) => ({ OTIO_SCHEMA: 'TimeRange.1', start_time: { OTIO_SCHEMA: 'RationalTime.1', rate, value: start }, duration: { OTIO_SCHEMA: 'RationalTime.1', rate, value: length } });
 	const reference = (url) => ({ DEFAULT_MEDIA: url ? { OTIO_SCHEMA: 'ExternalReference.1', target_url: url } : { OTIO_SCHEMA: 'MissingReference.1' } });
 	const edits = cuts(doc.clips, frames);
+	const places = placement(doc.clips);
 	const time = (value) => ({ OTIO_SCHEMA: 'RationalTime.1', rate, value });
 	const item = (c, source, length) =>
 		file(c)
@@ -145,7 +147,7 @@ export function otio(doc, { label }) {
 	const video = doc.clips.flatMap((c, i) => {
 		const cut = edits[i];
 		const length = cut ? cut.end - cut.start : span(c.start, c.dur);
-		const source = cut?.head ? c.srcIn + (cut.head / doc.fps) * speedOf(c) : c.srcIn;
+		const source = Math.max(readAt(c.srcIn, places[i]?.start ?? c.start, cut ? cut.start : frames(c.start), doc.fps, speedOf(c)), 0);
 		const transition = cut?.overlap ? [{ OTIO_SCHEMA: 'Transition.1', name: DISSOLVE_NAME, metadata: {}, transition_type: 'SMPTE_Dissolve', in_offset: time(cut.head), out_offset: time(cut.overlap - cut.head) }] : [];
 		return [...transition, item(c, source, length)];
 	});
@@ -178,26 +180,30 @@ export function edl(doc, { label }) {
 	const { tcode, frames } = timing(doc);
 	const lines = [`TITLE: ${oneLine(doc.name).toUpperCase()}`, 'FCM: NON-DROP FRAME', ''];
 	const joins = [...cuts(doc.clips, frames).map((cut) => cut?.overlap ?? 0), 0];
-	const places = joins.some(Boolean) ? placement(doc.clips) : doc.clips.map(() => null);
+	const places = placement(doc.clips);
+	const fills = filled(places);
+	const onFrame = (at) => !+(frames(at) / doc.fps - at).toFixed(6);
+	const sourceAt = (srcIn, start, at, speed) => Math.max(onFrame(at) ? srcIn + (at - start) * speed : readAt(srcIn, start, frames(at), doc.fps, speed), 0);
 	doc.clips.forEach((c, i) => {
 		const file = fileOf(doc, c, label);
 		const n = String(i + 1).padStart(3, '0');
 		const reel = file ? `VP${n}` : 'BL';
 		const speed = speedOf(c);
-		const shifted = moved(c, places[i]);
-		const recordIn = shifted ? places[i].start : c.start;
-		const recordOut = joins[i + 1] > 0 ? doc.clips[i + 1].start : places[i] ? places[i].end : c.start + c.dur;
-		const sourceOut = joins[i + 1] > 0 || shifted ? c.srcIn + (recordOut - recordIn) * speed : c.srcIn + c.dur * speed;
+		const recordIn = moved(c, places[i]) ? places[i].start : c.start;
+		const recordOut = joins[i + 1] > 0 ? doc.clips[i + 1].start : fills[i] ? places.slice(i + 1).find(Boolean).start : places[i] ? places[i].end : c.start + c.dur;
+		const plain = !(joins[i + 1] > 0) && !fills[i] && !moved(c, places[i]);
+		const sourceIn = sourceAt(c.srcIn, recordIn, recordIn, speed);
+		const sourceOut = speed === 1 ? (frames(sourceIn) + frames(recordOut) - frames(recordIn)) / doc.fps : plain && onFrame(recordOut) ? c.srcIn + c.dur * speed : sourceAt(c.srcIn, recordIn, recordOut, speed);
 		let cut = 'C       ';
 		if (joins[i] > 0) {
 			const before = doc.clips[i - 1];
-			const held = before.srcIn + (c.start - before.start) * speedOf(before);
+			const held = sourceAt(before.srcIn, before.start, c.start, speedOf(before));
 			const beforeReel = fileOf(doc, before, label) ? `VP${String(i).padStart(3, '0')}` : 'BL';
 			lines.push(`${n}  ${beforeReel.padEnd(8)} V     C        ${tcode(held)} ${tcode(held)} ${tcode(c.start)} ${tcode(c.start)}`);
 			cut = `D    ${String(joins[i]).padStart(3, '0')}`;
 		}
-		lines.push(`${n}  ${reel.padEnd(8)} V     ${cut} ${tcode(c.srcIn)} ${tcode(sourceOut)} ${tcode(recordIn)} ${tcode(recordOut)}`);
-		if (speed !== 1) lines.push(`M2   ${reel.padEnd(8)}       ${(doc.fps * speed).toFixed(1).padStart(5, '0')}                ${tcode(c.srcIn)}`);
+		lines.push(`${n}  ${reel.padEnd(8)} V     ${cut} ${tcode(sourceIn)} ${tcode(sourceOut)} ${tcode(recordIn)} ${tcode(recordOut)}`);
+		if (speed !== 1) lines.push(`M2   ${reel.padEnd(8)}       ${(doc.fps * speed).toFixed(1).padStart(5, '0')}                ${tcode(sourceIn)}`);
 		if (joins[i] > 0) lines.push(`* FROM CLIP NAME: ${oneLine(label(doc.clips[i - 1]))}`, `* TO CLIP NAME: ${oneLine(label(c))}`);
 		else lines.push(`* FROM CLIP NAME: ${oneLine(label(c))}`);
 		if (file) lines.push(`* SOURCE FILE: ${oneLine(file)}`);

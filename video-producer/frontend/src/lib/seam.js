@@ -1,6 +1,7 @@
 import { newAsset } from './starter.js';
 import { chained } from './dissolve.js';
 import { ulid } from './ulid.js';
+import { onGrid } from './grid.js';
 import { isObject } from './values.js';
 
 export const FIRST_ROLES = ['first', 'début', 'debut'];
@@ -22,7 +23,7 @@ export function frameErrorText(error, t, { noMedia = t('lib.chain.error.noMedia'
 
 const text = (value) => (typeof value === 'string' ? value : '');
 const integer = (value) => (Number.isInteger(value) ? value : null);
-const snap = (value) => +(Math.round(value / 0.04) * 0.04).toFixed(3);
+const snap = onGrid;
 
 export function roleKind(role) {
 	const value = String(role ?? '')

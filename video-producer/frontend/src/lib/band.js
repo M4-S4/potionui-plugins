@@ -1,5 +1,6 @@
 import { CHARACTERS, PLACES, names } from './bible.js';
 import { GROUP_ORDER, takeLabelOf } from './labels.js';
+import { onStep } from './grid.js';
 
 export const BAND_MIN_SHOT = 1;
 export const BAND_STEP = 0.5;
@@ -9,7 +10,7 @@ export const AVG_MIN = 2;
 export const AVG_MAX = 8;
 
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
-const snapTo = (v, step) => Math.round(v / step) * step;
+const snapTo = onStep;
 const fixed = (v) => +v.toFixed(3);
 
 export function musicEnd(doc) {

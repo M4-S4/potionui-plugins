@@ -133,7 +133,7 @@ def test_the_timeline_fills_the_holes_between_shots_and_up_to_the_end_with_black
 
     segments, total = timeline(doc)
 
-    assert [(round(dur, 6), clip and clip["id"]) for dur, clip in segments] == [(2, "c1"), (1, None), (1, "c2"), (1.5, None)]
+    assert [(round(dur, 6), clip and clip["id"]) for dur, clip in segments] == [(2, "c1"), (1, None), (1, "c2"), (1.52, None)]
     assert total == 5.5
 
 
@@ -201,7 +201,7 @@ def test_a_shot_without_file_is_black_and_silent_for_its_duration(make_doc):
 
     assert graph[0] == "color=c=black:s=1280x720:r=25:d=2,setsar=1,format=yuv420p[v0]"
     assert graph[1] == "anullsrc=r=48000:cl=stereo,atrim=duration=2[a0]"
-    assert graph[3] == "anullsrc=r=48000:cl=stereo,atrim=duration=1.5[a1]"
+    assert graph[3] == "anullsrc=r=48000:cl=stereo,atrim=duration=1.52[a1]"
     assert graph[4] == "[v0][a0][v1][a1]concat=n=2:v=1:a=1[vout][bed]"
     assert _inputs(command) == ["/media/2.mp4"] and "[0:v]" in graph[2]
 

@@ -195,7 +195,7 @@ def test_me_without_a_saved_locale_or_settings_reports_the_defaults(client, stor
             "is_admin": False,
             "limits": {"gpu_minutes": UNLIMITED},
             "settings": DEFAULT_SETTINGS,
-            "plugin": {"id": "video-producer", "version": "0.5.0"},
+            "plugin": {"id": "video-producer", "version": "0.5.1"},
             "engines": [],
             "presets": [],
             "measured": {},
@@ -215,7 +215,7 @@ def test_me_tells_whether_the_user_is_an_admin(app, client, make_user, store, no
 
 
 def test_me_names_the_plugin_and_its_version(client, store, no_container):
-    assert client.get(ME_URL).json()["data"]["plugin"] == {"id": "video-producer", "version": "0.5.0"}
+    assert client.get(ME_URL).json()["data"]["plugin"] == {"id": "video-producer", "version": "0.5.1"}
 
 
 def test_me_asks_for_the_quota_of_the_signed_in_user(app, client, make_user, store, monkeypatch):
