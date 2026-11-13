@@ -9,7 +9,9 @@ Media Converter adds four tools to the **Tools** menu of the Library and of the 
 | **Convert sound** | a sound | WAV, MP3, FLAC, M4A (AAC) or OGG (Opus) |
 | **Extract sound** | a video with sound | WAV, MP3, FLAC, M4A (AAC) or OGG (Opus) |
 
-The result is a new item in the Library, next to the original, which stays as it was. It keeps the name of the original with the extension of the new format: `Cat.png` converted to WebP becomes `Cat.webp`. A file of a generation keeps the name it has in the History. Select several items and run a tool once to convert them all in one run; two sources with the same name, such as `Cat.png` and `Cat.webp` converted to JPEG, give two items both named `Cat.jpg`. The tools never replace the original, because a replaced item would keep its old name and extension.
+The result is a new item in the Library, next to the original, which stays as it was. It keeps the name of the original with the extension of the new format: `Cat.png` converted to WebP becomes `Cat.webp`. A file of a generation keeps the name it has in the History. Select several items and run a tool once to convert them all in one run; if one of them is refused, the whole run fails and none of them is saved. Two sources with the same name, such as `Cat.png` and `Cat.webp` converted to JPEG, give two items both named `Cat.jpg`.
+
+The tool window always saves a new item and never offers to replace the original. A request from the chat, the automation or the API can still ask PotionUI to replace an image, a video or a sound by its conversion; the item then keeps its old name and extension over the new content (`Cat.png` holding a WebP picture), which a download or a zip export of the Library carries along. The chat asks before it replaces anything: answer no and ask for a new item instead.
 
 The plugin has no page of its own: each tool opens the usual tool window of PotionUI with the settings below, filled with the values you used last. It needs ffmpeg and ffprobe on the server, which the PotionUI image ships, and nothing else.
 
@@ -25,7 +27,7 @@ The plugin has no page of its own: each tool opens the usual tool window of Poti
 | Background | The colour that fills transparent areas, white by default. Shown for JPEG only, since JPEG has no transparency. |
 | Keep metadata | On by default. |
 
-It reads PNG, JPEG, WebP, GIF and BMP images. The orientation that a camera writes in the EXIF data is applied to the picture, so the result is upright everywhere.
+It reads PNG, JPEG, WebP, GIF and BMP images of up to 67 million pixels, such as 8192 × 8192. The orientation that a camera writes in the EXIF data is applied to the picture, so the result is upright everywhere.
 
 ### Convert video
 
@@ -36,7 +38,7 @@ It reads PNG, JPEG, WebP, GIF and BMP images. The orientation that a camera writ
 | Largest side | Original size (default), 3840, 2560, 1920, 1280, 1024 or 640 px, never larger than the original. |
 | Keep metadata | On by default. |
 
-The picture and the sound are always encoded again, even when the source already has the format you pick: converting an MP4 to MP4 at Small makes a lighter copy. The frame rate and the length stay those of the source. Width and height are rounded down to even numbers, which H.264 needs. A rotation stored in the file is applied to the picture.
+It takes videos of up to 4096 × 2304 pixels (about 9.4 million, which covers 4K). The picture and the sound are always encoded again, even when the source already has the format you pick: converting an MP4 to MP4 at Small makes a lighter copy. The frame rate and the length stay those of the source. The picture comes out in 8-bit 4:2:0 colour, which every browser plays. Width and height are rounded down to even numbers, which H.264 needs. A rotation stored in the file is applied to the picture.
 
 ### Convert sound
 
@@ -58,10 +60,10 @@ The three steps stand for these encoder settings. Small files lose more detail; 
 |---|---|---|---|---|
 | JPEG | Pillow | quality 95, full colour resolution | quality 85 | quality 72 |
 | WebP | Pillow (libwebp) | quality 92 | quality 80 | quality 65 |
-| PNG | Pillow | lossless | lossless | lossless |
-| MP4, MOV picture | libx264, preset `medium` | CRF 18 | CRF 23 | CRF 28 |
+| PNG | Pillow, compression level 6 | lossless | lossless | lossless |
+| MP4, MOV picture | libx264, preset `medium`, 8-bit 4:2:0 | CRF 18 | CRF 23 | CRF 28 |
 | MP4, MOV sound | aac | 192 kbit/s | 160 kbit/s | 128 kbit/s |
-| WebM picture | libvpx-vp9, `-cpu-used 4` | CRF 27 | CRF 32 | CRF 37 |
+| WebM picture | libvpx-vp9, `-cpu-used 4`, 8-bit 4:2:0 | CRF 27 | CRF 32 | CRF 37 |
 | WebM sound | libopus | 160 kbit/s | 128 kbit/s | 96 kbit/s |
 | MP3 | libmp3lame, variable bitrate | `-q:a 0` | `-q:a 2` | `-q:a 5` |
 | M4A | aac | 256 kbit/s | 192 kbit/s | 128 kbit/s |
@@ -71,13 +73,17 @@ The three steps stand for these encoder settings. Small files lose more detail; 
 
 ## What is kept and what is lost
 
+**Keep metadata** is on by default. Turn it off before you share a photo or a video taken with a phone: the place where it was taken is kept otherwise.
+
 | Converting | With **Keep metadata** on | With it off | Always lost |
 |---|---|---|---|
-| An image | EXIF data (camera, date, place), with the orientation set to normal; the text chunks of a PNG, such as generation parameters, when the result is a PNG too | No EXIF data, no text chunks | Animation (animated images are refused); XMP data, except from PNG to PNG; the text chunks of a PNG when the result is JPEG or WebP; transparency in JPEG (filled with the background colour); 16 bits per channel (the result has 8) |
-| An image's colour profile | Kept | Kept | A profile that does not match the result's colours, such as a CMYK profile on a picture converted to RGB |
-| A video | Title and other tags, chapters, every sound track with its language, text subtitles (as `mov_text` in MP4 and MOV, WebVTT in WebM) | Only the picture and the first sound track, no tags, no chapters, no subtitles | Picture subtitles (DVD, Blu-ray), attached files, data tracks; HDR and 10-bit colour (the result is 8-bit SDR, without tone mapping, so an HDR source can look flat); more than two sound channels in WebM (mixed down to stereo) |
-| A sound | Title, artist and the other tags | No tags | Cover art; more than two channels in MP3 and OGG (mixed down to stereo); sample rates other than 48 kHz in OGG (Opus works at 48 kHz) |
+| An image | EXIF data (camera, date, place), with the orientation set to normal; the text chunks of a PNG, such as generation parameters, when the result is a PNG too | No EXIF data, no text chunks | Animation (animated images are refused); XMP data, except from PNG to PNG; the text chunks of a PNG when the result is JPEG or WebP; EXIF data longer than 64 KB when the result is a JPEG, which cannot hold it; transparency in JPEG (filled with the background colour); 16 bits per channel (the result has 8) |
+| An image's colour profile | Kept | Kept | A profile that does not match the result's colours, such as a CMYK profile on a picture converted to RGB; a profile larger than 1 MB, or one whose declared length does not match its bytes |
+| A video | Title and other tags, the place where it was filmed (MOV and WebM; MP4 does not hold it), chapters, every sound track with its language, text subtitles (as `mov_text` in MP4 and MOV, WebVTT in WebM) | Only the picture and the first sound track, no tags, no place, no chapters, no subtitles | Picture subtitles (DVD, Blu-ray), attached files, data tracks; HDR and 10-bit colour (the result is 8-bit SDR, without tone mapping, so an HDR source can look flat); more than two sound channels in WebM (mixed down to stereo) |
+| A sound | Title, artist and the other tags | No tags | Cover art; more than two channels in MP3 and OGG (mixed down to stereo); sample rates above 48 kHz in MP3 (it goes up to 48 kHz) and every rate other than 48 kHz in OGG (Opus works at 48 kHz) |
 | The sound of a video | The tags of the video, such as its title | No tags | Every sound track after the first |
+
+ffmpeg writes its own name and version in every video and sound it makes, whatever the switch says.
 
 ## When a tool refuses
 
@@ -86,11 +92,16 @@ The tool window shows the reason, and nothing is added to the Library.
 | Case | What happens |
 |---|---|
 | An animated GIF or WebP | Refused: "This image is animated (N frames); Media Converter converts still images only". |
-| An SVG drawing, or a file that is not a PNG, JPEG, WebP, GIF or BMP image | Refused with the list of the image formats it reads. |
-| A PNG converted to PNG at its original size | Refused, since nothing would change. With a largest side, it is shrunk. |
+| An SVG drawing | The Library accepts SVG files but PotionUI cannot read them as pictures: the run ends with "This image cannot be read". |
+| An image larger than 67 million pixels | Refused before it is decoded, with its size and the limit. |
+| A PNG converted to PNG with the same size | Refused, since nothing would change. With a largest side smaller than the picture, it is shrunk. |
 | A WAV converted to WAV, a FLAC to FLAC | Refused, since nothing would change. A JPEG, WebP, MP3, M4A or OGG file can be converted to its own format to make it lighter. |
+| A video larger than 4096 × 2304 pixels | Refused before it is decoded, with its size and the limit. |
+| A video thinner than 2 pixels, or one that a largest side would make so | Refused. |
 | A video without sound given to **Extract sound** | The menu offers the tool, since the Library does not record whether an uploaded video has sound; the run ends with "Extract sound needs a video with sound". |
-| A video or sound longer than the limit the admin set | Refused before any encoding, with its length and the limit. |
+| A sound with no samples | Refused: "This sound is empty: there is nothing to convert". |
+| A video or sound longer than the limit the admin set | Refused before any encoding when the file states its length. A file that does not state it is encoded up to the limit plus one second, then refused. |
+| A result that would weigh more than the most a conversion may write | Refused when the limit is reached, with the limit in megabytes (see Load on the server). |
 | A transparent image converted to JPEG | Converted, with transparent areas filled with the background colour. |
 | A cancelled run | The encoder stops at once and nothing is published. |
 
@@ -103,7 +114,9 @@ In **Admin › Plugins › Media Converter**:
 | Setting | Default | What it does |
 |---|---|---|
 | ffmpeg threads per conversion | 4 | How many processor threads one video or sound conversion may use, from 1 to 16. |
-| Longest video or sound, in minutes | 60 | Longer files are refused with a message, from 1 to 600 minutes. |
+| Longest video or sound, in minutes | 30 | Longer files are refused with a message, from 1 to 30 minutes. |
+
+PotionUI stops any single encoding after 30 minutes of work, with "Editing timed out", so the length limit cannot go beyond 30 minutes. Sound converts in seconds, but a long video in 4K at High quality can take longer to encode than it lasts: if such runs time out, pick a largest side, raise the thread count, or lower the length limit.
 
 Any signed-in user can run the tools. To turn them off for everyone, disable the plugin.
 
@@ -111,15 +124,22 @@ Any signed-in user can run the tools. To turn them off for everyone, disable the
 
 Conversions run on the server's processor and never use the graphics card: no hardware encoder is used, so a generation keeps the whole card. PotionUI runs at most two tool runs at once on the server, and each video or sound conversion uses at most the number of threads set above; the slowest encoder setting used is libx264's `medium` preset. A long video still takes the processor for a while and slows down the preparation of a generation that starts meanwhile: lower the thread count if that matters on your server.
 
+Each run is bounded:
+
+- an image of 67 million pixels adds about 0.8 GB to the server's memory while it converts, which is why larger ones are refused;
+- a 4K video takes about 2 GB of memory in ffmpeg, which is why larger ones are refused;
+- ffmpeg stops at the length limit plus one second, even when a file does not state its length;
+- one conversion writes at most 32 times the size of its source, never less than 1 GB and never more than 4 GB; a WAV made from a very compressed sound can hit this limit.
+
 The results count toward each user's storage, as uploads do. A WAV or a PNG can weigh much more than its source; when a user's storage is full, the run fails at the end, and nothing is kept.
 
-ffmpeg reads only the file it converts: the command allows local files only, a fixed list of container formats, and an absolute path. No text typed by a user reaches the command line: every setting is a choice from a list or a switch.
+ffmpeg reads only the file it converts: the command allows local files only, a fixed list of container formats, and an absolute path, so a playlist or a concat list disguised as a video is refused. No text typed by a user reaches the command line: every setting is a choice from a list or a switch.
 
 ### Installing and updating
 
 Install it from the catalogue of this repository, then enable it in **Admin › Plugins**; its tools appear in the Tools menus at once. After an update from the catalogue, restart PotionUI: the server keeps running the code of the version it had loaded until it restarts.
 
-From chat, MCP and automation, PotionUI offers these tools like its own. A run from chat is cancelled after ten minutes, so convert long videos from the Library.
+From chat, MCP and automation, PotionUI offers these tools like its own. A run from chat is cancelled after ten minutes and an automation node waits five minutes by default, so convert long videos from the Library.
 
 ## Not in this version
 
