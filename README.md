@@ -6,7 +6,7 @@ Plugins for [PotionUI](https://github.com/PotionUI/PotionUI), the self-hosted ap
 
 | Plugin | What it does | Who uses it | Version | Read first |
 |---|---|---|---|---|
-| Video Producer | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. | Every user; an admin sets it up. | 0.5.2 | [Administration](video-producer/README.md), [user guide](video-producer/docs/user-guide.md) |
+| Video Producer | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. | Every user; an admin sets it up. | 0.6.0 | [Administration](video-producer/README.md), [user guide](video-producer/docs/user-guide.md) |
 | Preset Editor | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | 0.2.4 | [README](preset-editor/README.md) |
 
 Both are free software under the GPL-3.0 license.
