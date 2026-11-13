@@ -4,6 +4,8 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
+
 TEXT_EXTENSIONS = frozenset({".yml", ".yaml", ".md", ".json", ".txt"})
 MEDIA_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".webm"})
 MAX_TEXT_BYTES = 1024 * 1024
@@ -12,6 +14,7 @@ MANIFEST = "preset.yml"
 MODE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 PRESET_PATH_RE = r"\{\{\s*paths\.preset\s*\}\}/"
 YAML_EXTENSIONS = frozenset({".yml", ".yaml"})
+POINTER_KEY = "pipeline_from"
 
 
 class FilesError(Exception):
@@ -158,6 +161,17 @@ def check_mode_name(value: str) -> str:
     return value
 
 
+def _points_at(path: Path, draft_dir: Path, text: str, mode: str) -> bool:
+    relative = path.relative_to(draft_dir).parts
+    if len(relative) != 3 or relative[0] != "modes" or relative[2] != "pipeline.yml" or POINTER_KEY not in text:
+        return False
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return False
+    return isinstance(data, dict) and data.get(POINTER_KEY) == mode
+
+
 def citing_files(draft_dir: Path, mode: str) -> List[str]:
     pattern = re.compile(rf"{PRESET_PATH_RE}modes/{re.escape(mode)}/")
     own = draft_dir / "modes" / mode
@@ -165,7 +179,8 @@ def citing_files(draft_dir: Path, mode: str) -> List[str]:
     for path in sorted(draft_dir.rglob("*")):
         if path.suffix.lower() not in YAML_EXTENSIONS or not path.is_file() or own in path.parents:
             continue
-        if pattern.search(path.read_text(encoding="utf-8", errors="replace")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if pattern.search(text) or _points_at(path, draft_dir, text, mode):
             found.append(path.relative_to(draft_dir).as_posix())
     return found
 
