@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { merge3, mergeDocs, same } from './merge.js';
+import { chained, joins, layout } from './dissolve.js';
+import { onGrid } from './grid.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -300,4 +305,98 @@ test('a list of ids emptied by both sides leaves the key out, as the page stores
 	const { value } = mergeDocs(base, mine, theirs);
 
 	assert.equal('removedTakes' in value, false);
+});
+
+const fixtures = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tests', 'fixtures');
+const placed = (doc) => {
+	const at = new Map(doc.clips.map((c) => [c.id, c.start]));
+	const items = [...doc.prompts.map((p) => [p, p.start]), ...doc.frames.map((f) => [f, f.time])];
+	return new Map(items.map(([item, time]) => [item.id, at.has(item.shotId) ? +(time - at.get(item.shotId)).toFixed(6) : time]));
+};
+const laidOut = (doc) => {
+	const starts = layout(doc.clips, onGrid);
+	return { ...doc, clips: doc.clips.map((c, i) => ({ ...c, start: starts[i] })) };
+};
+
+function dissolving(clips, mineEdit, theirsEdit) {
+	const base = laidOut({ clips });
+	base.prompts = [{ id: 'p', shotId: 'c', start: base.clips[2].start, dur: 1, text: 'Harbour' }];
+	const side = (change) => {
+		const doc = laidOut({ clips: base.clips.map(change) });
+		return { ...doc, prompts: [{ ...base.prompts[0], start: doc.clips[2].start }] };
+	};
+	return mergeDocs(base, side(mineEdit), side(theirsEdit)).value;
+}
+
+test('merge: in a project that dissolves, the merged shots start where the layout of the page puts them, so the dissolves still play and the linked items follow', () => {
+	const lengthened = dissolving(
+		[{ id: 'a', dur: 2 }, { id: 'b', dur: 2, dissolve: 0.4 }, { id: 'c', dur: 2 }],
+		(c) => (c.id === 'a' ? { ...c, dur: 2.4 } : c),
+		(c) => (c.id === 'c' ? { ...c, dur: 3 } : c)
+	);
+	assert.deepEqual(lengthened.clips.map((c) => c.start), [0, 2, 4]);
+	assert.deepEqual(joins(lengthened.clips), [0, 0.4, 0]);
+	assert.equal(lengthened.prompts[0].start, 4);
+	const both = dissolving(
+		[{ id: 'a', dur: 2 }, { id: 'b', dur: 1.8, dissolve: 0.4 }, { id: 'c', dur: 2, dissolve: 0.4 }],
+		(c) => (c.id === 'a' ? { ...c, dur: 2.4 } : c),
+		(c) => (c.id === 'b' ? { ...c, dur: 2 } : c)
+	);
+	assert.deepEqual(both.clips.map((c) => [c.dur, c.start]), [[2.4, 0], [2, 2], [2, 3.6]]);
+	assert.deepEqual(joins(both.clips), [0, 0.4, 0.4]);
+	const chosen = dissolving(
+		[{ id: 'a', dur: 2 }, { id: 'b', dur: 2 }, { id: 'c', dur: 2 }],
+		(c) => (c.id === 'b' ? { ...c, dissolve: 0.4 } : c),
+		(c) => (c.id === 'c' ? { ...c, dissolve: 0.4 } : c)
+	);
+	assert.deepEqual(chosen.clips.map((c) => c.start), [0, 1.6, 3.2]);
+	assert.deepEqual(joins(chosen.clips), [0, 0.4, 0.4]);
+	assert.equal(chosen.prompts[0].start, 3.2);
+	const removed = dissolving(
+		[{ id: 'a', dur: 2 }, { id: 'b', dur: 2, dissolve: 0.4 }, { id: 'c', dur: 2 }],
+		(c) => c,
+		(c) => (c.id === 'b' ? { ...c, dissolve: 0 } : c)
+	);
+	assert.deepEqual(removed.clips.map((c) => c.start), [0, 2, 4]);
+	assert.equal(removed.prompts[0].start, 4);
+});
+
+test('merge: when no input dissolves but the merge does, the merge keeps, drops and counts what version 0.5.1 did, and lays the shots out so that the dissolve plays', () => {
+	const base = laidOut({ clips: [{ id: 'a', dur: 0.1 }, { id: 'b', dur: 2 }, { id: 'c', dur: 2 }], frames: [] });
+	base.prompts = [{ id: 'p', shotId: 'c', start: +(base.clips[2].start + 0.3203).toFixed(6), dur: 1, text: 'Harbour' }];
+	const mine = laidOut({ ...base, clips: base.clips.map((c) => (c.id === 'a' ? { ...c, dur: 2 } : c)) });
+	mine.prompts = [{ ...base.prompts[0], start: 4.32 }];
+	const keyed = (doc) => laidOut({ ...doc, clips: doc.clips.map((c) => (c.id === 'b' ? { ...c, dissolve: 0.4 } : c)) });
+	const deleted = mergeDocs(base, mine, keyed({ ...base, prompts: [] }));
+	assert.deepEqual([deleted.value.prompts, deleted.conflicts, deleted.dropped], [[], 0, 0]);
+	const gone = mergeDocs(base, mine, keyed({ ...base, clips: base.clips.filter((c) => c.id !== 'c'), prompts: [] }));
+	assert.deepEqual([gone.value.clips.map((c) => c.id), gone.value.prompts, gone.conflicts, gone.dropped], [['a', 'b'], [], 0, 0]);
+	const kept = mergeDocs(base, mine, keyed(base));
+	assert.deepEqual(kept.value.clips.map((c) => c.start), [0, 1.6, 3.6]);
+	assert.deepEqual(joins(kept.value.clips), [0, 0.4, 0]);
+	assert.deepEqual([kept.value.prompts.map((p) => p.start), kept.conflicts, kept.dropped], [[3.92], 0, 0]);
+});
+
+test('merge: at seeded concurrent edits of shots off the grid with dissolves, the merged starts are those of the layout of the page and of the server, and each prompt or frame stays in its shot at its offset, to the millionth when a cut of an input and of the merge dissolves', () => {
+	const cases = JSON.parse(readFileSync(join(fixtures, 'merge_dissolve_cases.json'), 'utf-8'));
+	assert.ok(cases.length >= 100);
+	for (const [n, { base, mine, theirs, merged, starts }] of cases.entries()) {
+		const value = mergeDocs(base, mine, theirs).value;
+		assert.deepEqual(value.clips.map(({ id, dur, dissolve }) => ({ id, dur, ...(dissolve === undefined ? {} : { dissolve }) })), merged, `case ${n}`);
+		assert.deepEqual(value.clips.map((c) => c.start), starts, `case ${n}`);
+		assert.deepEqual(layout(value.clips, onGrid), starts, `case ${n}`);
+		const [b, m, t, v] = [base, mine, theirs, value].map(placed);
+		const exact = [base, mine, theirs].some((doc) => chained(doc.clips)) && chained(value.clips);
+		for (const [id, offset] of v) {
+			const wanted = m.get(id) === b.get(id) ? t.get(id) : m.get(id);
+			if (exact) assert.equal(offset, wanted, `case ${n} ${id}`);
+			else assert.ok(Math.abs(offset - wanted) < 0.0005 + 1e-9, `case ${n} ${id}`);
+		}
+	}
+});
+
+test('merge: at seeded concurrent edits of shots without a dissolve, the merge gives the document of version 0.5.1 byte for byte', () => {
+	const cases = JSON.parse(readFileSync(join(fixtures, 'merge_no_dissolve_cases.json'), 'utf-8'));
+	assert.ok(cases.length >= 100);
+	for (const [n, { base, mine, theirs, merged }] of cases.entries()) assert.equal(JSON.stringify(mergeDocs(base, mine, theirs).value), JSON.stringify(merged), `case ${n}`);
 });

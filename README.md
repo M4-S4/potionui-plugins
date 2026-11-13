@@ -6,7 +6,7 @@ Plugins for [PotionUI](https://github.com/PotionUI/PotionUI), the self-hosted ap
 
 | Plugin | What it does | Who uses it | Version | Read first |
 |---|---|---|---|---|
-| Video Producer | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. | Every user; an admin sets it up. | 0.5.1 | [Administration](video-producer/README.md), [user guide](video-producer/docs/user-guide.md) |
+| Video Producer | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. | Every user; an admin sets it up. | 0.5.2 | [Administration](video-producer/README.md), [user guide](video-producer/docs/user-guide.md) |
 | Preset Editor | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | 0.2.4 | [README](preset-editor/README.md) |
 
 Both are free software under the GPL-3.0 license.
@@ -26,7 +26,7 @@ You need an admin account on a PotionUI whose **Admin › Plugins** page shows t
 4. If it is disabled, open it in the list and turn it on with its **Enable plugin** switch.
 5. Follow the plugin's **Setup** steps in its **Overview** tab, then read its documentation in **Admin › Documentation**.
 
-A plugin runs with the same rights as PotionUI: install only from a catalogue you trust. To update a plugin, open the catalogue again: a newer version shows **Update to** and its version number in place of **Install**. After an update, restart PotionUI: the page runs the new version at once, but the server keeps running the code of the version it had loaded until it restarts.
+A plugin runs with the same rights as PotionUI: install only from a catalogue you trust. To update a plugin, open the catalogue again: a newer version shows **Update to** and its version number in place of **Install**. Read the catalogue at the same URL as the first time: PotionUI updates a plugin only from the exact address it was installed from, and under any other address, even one that serves the same file, the plugin shows **Installed elsewhere** with no update. After an update, restart PotionUI: the page runs the new version at once, but the server keeps running the code of the version it had loaded until it restarts.
 
 Video Producer needs more than the plugin itself: a video engine, video presets and their model files, and ffmpeg on the server. Its [administration page](video-producer/README.md) says what to prepare. Preset Editor needs nothing else.
 
