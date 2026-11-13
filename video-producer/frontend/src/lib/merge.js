@@ -1,6 +1,7 @@
 import { migrateVrefs } from './vrefs.js';
 import { isObject } from './values.js';
 import { onGrid } from './grid.js';
+import { chained, dissolveOf, layout } from './dissolve.js';
 
 const ABSENT = Symbol('absent');
 const SETS = new Set(['removedTakes', 'characters', 'exclude', 'excludeLanes', 'excludeVrefs']);
@@ -108,7 +109,7 @@ const fixed = (value) => +value.toFixed(3);
 const timeKey = (item) => ('time' in item ? 'time' : 'start');
 const clipsOf = (doc) => (Array.isArray(doc?.clips) ? doc.clips.filter(isObject) : []);
 const startsOf = (doc) => new Map(clipsOf(doc).map((c) => [c.id, c.start]));
-const sequenceOf = (doc) => clipsOf(doc).map((c) => [c.id, c.dur]);
+const sequenceOf = (doc) => clipsOf(doc).map((c, i, all) => [c.id, c.dur, i ? dissolveOf(all[i - 1], c) : 0]);
 const ownedBy = (reference, shots) => isObject(reference?.scope) && reference.scope.type === 'shot' && shots.has(reference.scope.shotId);
 
 function shifted(doc, starts, move) {
@@ -124,9 +125,9 @@ function shifted(doc, starts, move) {
 	return next;
 }
 
-function relative(doc) {
+function relative(doc, fine) {
 	if (!isObject(doc) || !Array.isArray(doc.clips)) return doc;
-	const next = shifted(doc, startsOf(doc), (time, start) => fixed(time - start));
+	const next = shifted(doc, startsOf(doc), (time, start) => (fine ? +(time - start).toFixed(6) : fixed(time - start)));
 	next.clips = doc.clips.map((c) => {
 		if (!isObject(c)) return c;
 		const { start, ...rest } = c;
@@ -147,10 +148,13 @@ function laidOut(clips) {
 
 function absolute(doc, mine, theirs) {
 	if (!isObject(doc) || !Array.isArray(doc.clips)) return doc;
+	const clips = clipsOf(doc);
+	const exact = chained(clips);
 	const sequence = sequenceOf(doc);
-	const source = [mine, theirs].find((side) => same(sequenceOf(side), sequence));
-	const starts = source ? startsOf(source) : laidOut(clipsOf(doc));
-	const next = shifted(doc, starts, (offset, start) => fixed(start + offset));
+	const source = exact ? null : [mine, theirs].find((side) => same(sequenceOf(side), sequence));
+	const laid = exact ? layout(clips, snap) : null;
+	const starts = source ? startsOf(source) : exact ? new Map(clips.map((c, i) => [c.id, laid[i]])) : laidOut(clips);
+	const next = shifted(doc, starts, (offset, start) => (exact ? +(start + offset).toFixed(6) : fixed(start + offset)));
 	next.clips = doc.clips.map((c) => (isObject(c) && starts.has(c.id) ? { ...c, start: starts.get(c.id) } : c));
 	return next;
 }
@@ -172,7 +176,8 @@ function withoutShots(doc, gone) {
 }
 
 export function mergeDocs(base, mine, theirs) {
-	const [b, m, t] = [base, mine, theirs].map(relative);
+	const fine = [base, mine, theirs].some((doc) => chained(clipsOf(doc)));
+	const [b, m, t] = [base, mine, theirs].map((doc) => relative(doc, fine));
 	const out = { conflicts: 0, dropped: 0 };
 	const present = (doc) => new Set(clipsOf(doc).map((c) => c.id));
 	const [inMine, inTheirs] = [present(m), present(t)];

@@ -12,7 +12,7 @@ import pytest
 
 from backend import core_bridge, projects, takes
 from backend.chat import context, edits
-from backend.dissolve import MAX_DISSOLVE, cuts, dissolve_of, frames_of, joins, moved, placement, rounded, shown
+from backend.dissolve import MAX_DISSOLVE, chained, cuts, dissolve_of, frames_of, joins, moved, placement, rounded, shown
 from backend.exports import render
 from backend.exports import video
 from backend.exports.common import js_round
@@ -335,6 +335,16 @@ def test_the_last_frame_of_a_shot_and_a_length_the_assistant_asks_are_rounded_as
     doc = {"clips": [{"id": "c", "assetId": None, "start": 0, "dur": 5, "srcIn": 0}], "prompts": [], "frames": [], "assets": []}
     edits.resize(doc, doc["clips"][0], 0.58)
     assert doc["clips"][0]["dur"] == 0.6
+
+
+def test_the_assistant_lays_out_a_merged_project_that_dissolves_where_the_page_merges_it():
+    cases = json.loads((FIXTURES / "merge_dissolve_cases.json").read_text(encoding="utf-8"))
+
+    for case in cases:
+        doc = {"clips": [{**clip, "start": 0} for clip in case["merged"]], "prompts": [], "frames": []}
+        edits.relayout(doc)
+        assert [clip["start"] for clip in doc["clips"]] == case["starts"]
+    assert sum(1 for case in cases if chained(case["merged"])) >= 100
 
 
 def test_a_project_whose_lengths_sit_on_the_grid_keeps_its_layout_and_after_a_cut_the_next_shot_starts_where_the_one_before_ends():

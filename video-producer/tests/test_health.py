@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from src.plugin_api import AccountType, get_current_active_user
 
 HEALTH_URL = "/api/plugins/video-producer/health"
-HEALTH_DATA = {"status": "ok", "plugin": "video-producer", "version": "0.5.1"}
+HEALTH_DATA = {"status": "ok", "plugin": "video-producer", "version": "0.5.2"}
 
 
 def test_health_answers_any_signed_in_user(client):
