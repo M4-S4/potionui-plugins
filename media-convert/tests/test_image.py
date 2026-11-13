@@ -1,5 +1,5 @@
 import pytest
-from PIL import Image, ImageCms, PngImagePlugin
+from PIL import Image, ImageCms, ImageFile, PngImagePlugin
 
 from src.plugin_api.media import upload_formats
 from src.plugin_api.media_tools import ToolCancelled, ToolContext, ToolFailed
@@ -259,3 +259,107 @@ def test_the_result_is_the_only_file_written(ctx, source_dir):
     convert(ctx, path, format="webp")
 
     assert [entry.suffix for entry in ctx.scratch_dir.iterdir()] == [".webp"]
+
+
+def test_an_image_above_the_pixel_cap_is_refused_before_it_is_decoded(ctx, source_dir, monkeypatch):
+    path = source_dir / "huge.png"
+    Image.new("1", (8193, 8192), 0).save(path)
+    media = ctx.probe(path, "image")
+    loads = []
+    monkeypatch.setattr(ImageFile.ImageFile, "load", lambda self: loads.append(self.size))
+
+    with pytest.raises(ToolFailed, match=r"This image is 8193 × 8192 pixels; Media Converter takes images of up to 67 million pixels"):
+        ConvertImage().run([media], params_for(TOOL, format="jpeg"), ctx)
+
+    assert loads == []
+
+
+def test_an_image_at_the_pixel_cap_is_converted(ctx, source_dir):
+    path = source_dir / "big.png"
+    Image.new("1", (8192, 8192), 1).save(path)
+
+    result = convert(ctx, path, format="png", max_side=640)
+
+    assert (result.width, result.height) == (640, 640)
+
+
+def test_a_png_whose_size_would_not_change_is_refused(ctx, source_dir):
+    path = make_image(source_dir / "small.png", size=(64, 48))
+
+    with pytest.raises(ToolFailed, match="already a PNG of this size"):
+        convert(ctx, path, format="png", max_side=640)
+
+
+def test_a_turned_png_is_converted_to_png_to_apply_its_orientation(ctx, source_dir):
+    path = make_image(source_dir / "turned.png", size=(40, 20), exif=exif_with(orientation=6))
+
+    result = convert(ctx, path, format="png")
+
+    assert (result.width, result.height) == (20, 40)
+
+
+def long_exif():
+    exif = Image.Exif()
+    exif[MODEL] = "Test camera"
+    exif[0x9286] = "x" * 70000
+    return exif.tobytes()
+
+
+def test_exif_too_long_for_a_jpeg_is_left_out_and_kept_elsewhere(ctx, source_dir):
+    path = make_image(source_dir / "chatty.png", size=(32, 32), exif=long_exif())
+
+    jpeg = convert(ctx, path, format="jpeg", keep_metadata=True)
+    webp = convert(ctx, path, format="webp", keep_metadata=True)
+
+    with Image.open(jpeg.path) as written:
+        assert MODEL not in written.getexif()
+    with Image.open(webp.path) as written:
+        assert written.getexif().get(MODEL) == "Test camera"
+
+
+def with_size(icc, extra):
+    grown = bytearray(icc + extra)
+    grown[0:4] = len(grown).to_bytes(4, "big")
+    return bytes(grown)
+
+
+@pytest.mark.parametrize(
+    "case,make",
+    [
+        ("text after the profile", lambda icc: icc + b"hidden text" * 400),
+        ("larger than a megabyte", lambda icc: with_size(icc, bytes(1 << 20))),
+    ],
+)
+def test_a_profile_that_is_not_plain_is_left_out(ctx, source_dir, case, make):
+    path = make_image(source_dir / "odd.jpg", icc_profile=make(srgb_icc()))
+
+    result = convert(ctx, path, format="jpeg")
+
+    with Image.open(result.path) as written:
+        assert "icc_profile" not in written.info
+
+
+def test_a_cancel_after_decoding_writes_no_file(tmp_path, source_dir):
+    path = make_image(source_dir / "photo.jpg")
+    calls = []
+
+    def cancelled():
+        calls.append(1)
+        return len(calls) >= 2
+
+    context = ToolContext(tmp_path / "scratch", is_cancelled=cancelled)
+
+    with pytest.raises(ToolCancelled):
+        ConvertImage().run([context.probe(path, "image")], params_for(TOOL, format="png"), context)
+
+    scratch = tmp_path / "scratch"
+    assert not scratch.exists() or not any(scratch.iterdir())
+
+
+def test_png_output_is_compressed(ctx, source_dir):
+    path = source_dir / "gradient.jpg"
+    Image.linear_gradient("L").resize((512, 512)).convert("RGB").save(path, quality=95)
+
+    result = convert(ctx, path, format="png")
+
+    assert result.path.stat().st_size < 512 * 512 * 3 // 4

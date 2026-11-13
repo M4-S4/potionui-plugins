@@ -6,9 +6,20 @@ import pytest
 from src.plugin_api.media import upload_formats
 from src.plugin_api.media_tools import ToolCancelled, ToolContext, ToolFailed
 
+from tools import common
 from tools.video import ConvertVideo
 
-from .conftest import make_video, need_encoders, params_for, probe, run_ffmpeg, streams_of
+from .conftest import (
+    make_video,
+    need_encoders,
+    need_target,
+    params_for,
+    piped,
+    probe,
+    run_ffmpeg,
+    stream_bytes,
+    streams_of,
+)
 
 TOOL = "media-convert.video"
 EXPECTED = {
@@ -19,6 +30,7 @@ EXPECTED = {
 
 
 def convert(ctx, path, **given):
+    need_target(given.get("format", "mp4"))
     return ConvertVideo().run([ctx.probe(path, "video")], params_for(TOOL, **given), ctx)[0]
 
 
@@ -216,7 +228,7 @@ def test_a_video_longer_than_the_setting_is_refused_before_encoding(ctx, source_
     path = make_video(source_dir / "clip.mp4")
     media = ctx.probe(path, "video").with_changes(duration=61.0)
 
-    with pytest.raises(ToolFailed, match="lasts 2 minutes; Media Converter takes files of up to 1 minutes"):
+    with pytest.raises(ToolFailed, match="lasts 2 minutes; Media Converter takes files of up to 1 minute on this server"):
         ConvertVideo().run([media], params_for(TOOL), ctx)
 
     assert ctx.commands == []
@@ -235,7 +247,7 @@ def encoders_writing(marker):
 
 def test_cancelling_stops_the_encoder_and_leaves_no_result(tmp_path, source_dir):
     need_encoders("libx264", "aac")
-    path = make_video(source_dir / "long.mp4", seconds=20.0, size=(640, 360), fps=25, source="testsrc2")
+    path = make_video(source_dir / "long.mp4", seconds=40.0, size=(640, 360), fps=25, source="testsrc2")
     started = threading.Event()
     stop = threading.Event()
     scratch = tmp_path / "scratch"
@@ -258,9 +270,134 @@ def test_cancelling_stops_the_encoder_and_leaves_no_result(tmp_path, source_dir)
     worker = threading.Thread(target=work)
     worker.start()
     assert started.wait(60)
-    assert encoders_writing(tmp_path.name)
+    seen = []
+    for _ in range(100):
+        seen = encoders_writing(tmp_path.name)
+        if seen or not worker.is_alive():
+            break
+        threading.Event().wait(0.02)
+    assert seen
     stop.set()
     worker.join(30)
 
     assert outcome["result"] == "cancelled"
     assert not encoders_writing(tmp_path.name)
+
+
+@pytest.mark.parametrize("fmt", ["mp4", "webm"])
+def test_each_quality_step_changes_the_picture_alone(ctx, source_dir, fmt):
+    need_target(fmt)
+    path = make_video(
+        source_dir / "busy.mkv", seconds=1.0, size=(160, 120), fps=15, audio=False, source="testsrc2",
+        extra=("-vf", "noise=alls=30:allf=t"),
+    )
+
+    sizes = [stream_bytes(convert(ctx, path, format=fmt, quality=level).path, "v:0") for level in ("high", "balanced", "small")]
+
+    assert sizes[0] > sizes[1] > sizes[2]
+
+
+@pytest.mark.parametrize("fmt", ["mp4", "webm"])
+def test_each_quality_step_changes_the_sound_of_a_video_alone(ctx, source_dir, fmt):
+    need_target(fmt)
+    path = source_dir / "noisy.mkv"
+    run_ffmpeg(
+        "-f", "lavfi", "-i", "testsrc=size=64x48:rate=10:duration=3", "-f", "lavfi", "-i", "anoisesrc=d=3:c=pink:r=48000",
+        "-ac", "2", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "flac", path,
+    )
+
+    sizes = [stream_bytes(convert(ctx, path, format=fmt, quality=level).path, "a:0") for level in ("high", "balanced", "small")]
+
+    assert sizes[0] > sizes[1] > sizes[2]
+
+
+@pytest.mark.parametrize("fmt", ["mp4", "webm"])
+@pytest.mark.parametrize("pix_fmt", ["yuv444p", "yuv422p", "yuv420p10le"])
+def test_every_picture_format_comes_out_in_eight_bit_four_two_zero(ctx, source_dir, fmt, pix_fmt):
+    path = source_dir / "deep.mkv"
+    run_ffmpeg("-f", "lavfi", "-i", "testsrc=size=64x48:rate=10:duration=0.5", "-pix_fmt", pix_fmt, "-c:v", "ffv1", path)
+
+    video = streams_of(convert(ctx, path, format=fmt).path, "video")[0]
+
+    assert video["pix_fmt"] == "yuv420p"
+    if fmt == "mp4":
+        assert video["profile"] == "High"
+
+
+def test_a_video_larger_than_four_k_is_refused_before_anything_runs(ctx, source_dir):
+    path = make_video(source_dir / "clip.mp4")
+    media = ctx.probe(path, "video").with_changes(width=4097, height=2304)
+
+    with pytest.raises(ToolFailed, match=r"This video is 4097 × 2304 pixels; Media Converter takes videos of up to 4096 × 2304"):
+        ConvertVideo().run([media], params_for(TOOL), ctx)
+
+    assert ctx.commands == []
+
+
+def test_a_video_of_exactly_four_k_area_is_converted(ctx, source_dir):
+    need_target("mp4")
+    path = make_video(source_dir / "clip.mp4")
+    media = ctx.probe(path, "video").with_changes(width=4096, height=2304)
+
+    result = ConvertVideo().run([media], params_for(TOOL, max_side=640), ctx)[0]
+
+    assert result.path.is_file()
+
+
+@pytest.mark.parametrize("size,limit", [((64, 1), 0), ((2000, 3), 640)])
+def test_a_video_thinner_than_two_pixels_is_refused(ctx, source_dir, size, limit):
+    path = source_dir / "thin.mkv"
+    run_ffmpeg("-f", "lavfi", "-i", f"testsrc=size={size[0]}x{size[1]}:rate=10:duration=0.3", "-c:v", "ffv1", path)
+
+    with pytest.raises(ToolFailed, match="at least 2 pixels on each side"):
+        convert(ctx, path, format="mp4", max_side=limit)
+
+    assert ctx.commands == []
+
+
+def test_a_video_that_does_not_declare_its_length_is_stopped_at_the_limit(ctx, source_dir, server_settings):
+    need_target("mp4")
+    server_settings["max_minutes"] = 1
+    path = piped(
+        source_dir / "long.mkv", "-f", "lavfi", "-i", "color=c=black:s=32x32:r=5:d=75",
+        "-c:v", "libx264", "-preset", "ultrafast", "-f", "matroska",
+    )
+    media = ctx.probe(path, "video")
+    assert media.duration is None
+
+    with pytest.raises(ToolFailed, match="lasts more than 1 minute; Media Converter takes files of up to 1 minute"):
+        ConvertVideo().run([media], params_for(TOOL, format="mp4"), ctx)
+
+    [written] = ctx.scratch_dir.iterdir()
+    assert float(probe(written)["format"]["duration"]) <= 61.5
+
+
+def test_a_result_heavier_than_the_cap_is_refused_and_writing_stops_at_the_cap(ctx, source_dir, monkeypatch):
+    need_target("mp4")
+    monkeypatch.setattr(common, "OUTPUT_FLOOR", 64 << 10)
+    monkeypatch.setattr(common, "OUTPUT_RATIO", 1)
+    path = make_video(source_dir / "busy.mp4", seconds=4.0, size=(320, 240), fps=25, audio=False, source="testsrc2", extra=("-crf", "45"))
+    cap = common.output_cap(path)
+
+    with pytest.raises(ToolFailed, match="would weigh more than"):
+        convert(ctx, path, format="mp4", quality="high")
+
+    [written] = ctx.scratch_dir.iterdir()
+    assert cap <= written.stat().st_size < 2 * cap
+
+
+def test_a_cancel_that_arrives_as_the_encoder_ends_publishes_nothing(tmp_path, source_dir):
+    need_target("mp4")
+    path = make_video(source_dir / "clip.mp4")
+    stop = {"now": False}
+    context = ToolContext(tmp_path / "scratch", is_cancelled=lambda: stop["now"])
+    encode = context.ffmpeg
+
+    def ffmpeg(args, duration=None):
+        encode(args, duration=duration)
+        stop["now"] = True
+
+    context.ffmpeg = ffmpeg
+
+    with pytest.raises(ToolCancelled):
+        ConvertVideo().run([context.probe(path, "video")], params_for(TOOL), context)

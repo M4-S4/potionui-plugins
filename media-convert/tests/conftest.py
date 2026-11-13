@@ -31,6 +31,17 @@ from src.plugin_api.media_tools import ToolContext, validate_params
 MANIFEST = yaml.safe_load((PLUGIN_ROOT / "manifest.yml").read_text(encoding="utf-8"))
 TOOLS = {entry["id"]: entry for entry in MANIFEST["media_tools"]}
 ENCODER_LINE = re.compile(r"^\s*[VAS][A-Z.]{5}\s+(\S+)")
+CODEC_FLAGS = ("-c", "-c:v", "-c:a", "-c:s", "-codec", "-vcodec", "-acodec")
+TARGET_ENCODERS = {
+    "mp4": ("libx264", "aac"),
+    "mov": ("libx264", "aac"),
+    "webm": ("libvpx-vp9", "libopus"),
+    "wav": ("pcm_s16le", "pcm_s24le"),
+    "mp3": ("libmp3lame",),
+    "flac": ("flac",),
+    "m4a": ("aac",),
+    "ogg": ("libopus",),
+}
 
 
 def ffmpeg_binary():
@@ -61,11 +72,39 @@ def need_encoders(*names):
         pytest.skip(f"this ffmpeg has no {', '.join(missing)} encoder")
 
 
+def need_target(fmt):
+    need_encoders(*TARGET_ENCODERS[fmt])
+
+
+def codecs_in(args):
+    args = [str(arg) for arg in args]
+    return [value for flag, value in zip(args, args[1:]) if flag in CODEC_FLAGS and value != "copy"]
+
+
 def run_ffmpeg(*args):
+    need_encoders(*codecs_in(args))
     subprocess.run(
         [ffmpeg_binary(), "-hide_banner", "-nostdin", "-y", "-loglevel", "error", *map(str, args)],
         check=True, capture_output=True,
     )
+
+
+def piped(path, *args):
+    need_encoders(*codecs_in(args))
+    with open(path, "wb") as out:
+        subprocess.run(
+            [ffmpeg_binary(), "-hide_banner", "-nostdin", "-loglevel", "error", *map(str, args), "pipe:1"],
+            stdout=out, check=True,
+        )
+    return Path(path)
+
+
+def stream_bytes(path, selector):
+    result = subprocess.run(
+        [ffprobe_binary(), "-v", "error", "-select_streams", selector, "-show_entries", "packet=size", "-of", "csv=p=0", str(path)],
+        check=True, capture_output=True, text=True,
+    )
+    return sum(int(line.split(",")[0]) for line in result.stdout.split() if line.strip())
 
 
 def probe(path):
@@ -134,7 +173,7 @@ def params_for(tool_id, **given):
 def server_settings(monkeypatch):
     from tools import common
 
-    values = {"ffmpeg_threads": 4, "max_minutes": 60}
+    values = {"ffmpeg_threads": 4, "max_minutes": 30}
     monkeypatch.setattr(common, "plugin_settings", lambda plugin_id: values)
     return values
 

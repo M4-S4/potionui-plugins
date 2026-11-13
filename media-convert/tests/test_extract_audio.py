@@ -4,7 +4,7 @@ from src.plugin_api.media_tools import ToolFailed
 
 from tools.extract_audio import ExtractAudio
 
-from .conftest import make_video, need_encoders, params_for, probe, run_ffmpeg, streams_of
+from .conftest import make_video, need_encoders, need_target, params_for, piped, probe, run_ffmpeg, streams_of
 
 TOOL = "media-convert.extract-audio"
 EXPECTED = {
@@ -17,6 +17,7 @@ EXPECTED = {
 
 
 def extract(ctx, path, **given):
+    need_target(given.get("format", "m4a"))
     return ExtractAudio().run([ctx.probe(path, "video")], params_for(TOOL, **given), ctx)[0]
 
 
@@ -66,3 +67,19 @@ def test_only_the_first_sound_track_is_extracted(ctx, source_dir):
 
     assert len(streams_of(result.path, "audio")) == 1
     assert abs(float(probe(result.path)["format"]["duration"]) - 1.0) < 0.1
+
+
+def test_the_sound_of_a_video_that_does_not_declare_its_length_is_stopped_at_the_limit(ctx, source_dir, server_settings):
+    server_settings["max_minutes"] = 1
+    path = piped(
+        source_dir / "long.mkv", "-f", "lavfi", "-i", "color=c=black:s=32x32:r=2:d=75", "-f", "lavfi", "-i",
+        "sine=frequency=440:duration=75", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "flac", "-f", "matroska",
+    )
+    media = ctx.probe(path, "video")
+    assert media.duration is None
+
+    with pytest.raises(ToolFailed, match="lasts more than 1 minute"):
+        extract(ctx, path, format="wav")
+
+    [written] = ctx.scratch_dir.iterdir()
+    assert float(probe(written)["format"]["duration"]) <= 61.5

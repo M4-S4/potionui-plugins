@@ -1,11 +1,12 @@
 import pytest
 
 from src.plugin_api.media import upload_formats
-from src.plugin_api.media_tools import ToolFailed
+from src.plugin_api.media_tools import ToolCancelled, ToolContext, ToolFailed
 
+from tools import common
 from tools.audio import ConvertAudio
 
-from .conftest import make_audio, need_encoders, params_for, probe, run_ffmpeg, streams_of
+from .conftest import make_audio, need_encoders, need_target, params_for, piped, probe, run_ffmpeg, streams_of
 
 TOOL = "media-convert.audio"
 EXPECTED = {
@@ -27,6 +28,7 @@ TAGS = ("-metadata", "title=Song", "-metadata", "artist=Someone")
 
 
 def convert(ctx, path, **given):
+    need_target(given.get("format", "mp3"))
     return ConvertAudio().run([ctx.probe(path, "audio")], params_for(TOOL, **given), ctx)[0]
 
 
@@ -139,3 +141,68 @@ def test_a_sound_longer_than_the_setting_is_refused(ctx, source_dir, server_sett
 
     with pytest.raises(ToolFailed, match="lasts 10 minutes"):
         ConvertAudio().run([media], params_for(TOOL), ctx)
+
+
+@pytest.mark.parametrize("container", ["flac", "matroska"])
+def test_a_sound_that_does_not_declare_its_length_is_stopped_at_the_limit(ctx, source_dir, server_settings, container):
+    server_settings["max_minutes"] = 1
+    path = piped(source_dir / "long.bin", "-f", "lavfi", "-i", "sine=frequency=440:duration=75", "-c:a", "flac", "-f", container)
+    path = path.rename(path.with_suffix(".flac" if container == "flac" else ".mkv"))
+    media = ctx.probe(path, "audio")
+    assert media.duration is None
+
+    with pytest.raises(ToolFailed, match="lasts more than 1 minute"):
+        convert(ctx, path, format="wav")
+
+    [written] = ctx.scratch_dir.iterdir()
+    assert float(probe(written)["format"]["duration"]) <= 61.5
+
+
+def test_a_result_heavier_than_the_cap_is_refused_and_writing_stops_at_the_cap(ctx, source_dir, monkeypatch):
+    monkeypatch.setattr(common, "OUTPUT_FLOOR", 64 << 10)
+    monkeypatch.setattr(common, "OUTPUT_RATIO", 1)
+    path = piped(source_dir / "quiet.flac", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "20", "-c:a", "flac", "-f", "flac")
+    cap = common.output_cap(path)
+
+    with pytest.raises(ToolFailed, match="would weigh more than"):
+        convert(ctx, path, format="wav")
+
+    [written] = ctx.scratch_dir.iterdir()
+    assert cap <= written.stat().st_size < 2 * cap
+
+
+@pytest.mark.parametrize("fmt", ["mp3", "m4a", "ogg", "flac", "wav"])
+def test_an_empty_sound_is_refused_with_a_clear_message(ctx, source_dir, fmt):
+    path = source_dir / "empty.wav" if fmt != "wav" else source_dir / "empty.flac"
+    codec = ("-c:a", "pcm_s16le") if fmt != "wav" else ("-c:a", "flac")
+    run_ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-t", "0", *codec, path)
+    media = ctx.probe(path, "audio")
+
+    with pytest.raises(ToolFailed, match="This sound is empty: there is nothing to convert"):
+        need_target(fmt)
+        ConvertAudio().run([media], params_for(TOOL, format=fmt), ctx)
+
+
+def test_m4a_puts_the_index_first_for_streaming(ctx, source_dir):
+    path = make_audio(source_dir / "tone.wav", seconds=2, codec_args=("-c:a", "pcm_s16le"))
+
+    data = convert(ctx, path, format="m4a").path.read_bytes()
+
+    assert data.find(b"moov") < data.find(b"mdat")
+
+
+def test_a_cancel_that_arrives_as_the_encoder_ends_publishes_nothing(tmp_path, source_dir):
+    need_target("mp3")
+    path = make_audio(source_dir / "tone.wav", codec_args=("-c:a", "pcm_s16le"))
+    stop = {"now": False}
+    context = ToolContext(tmp_path / "scratch", is_cancelled=lambda: stop["now"])
+    encode = context.ffmpeg
+
+    def ffmpeg(args, duration=None):
+        encode(args, duration=duration)
+        stop["now"] = True
+
+    context.ffmpeg = ffmpeg
+
+    with pytest.raises(ToolCancelled):
+        ConvertAudio().run([context.probe(path, "audio")], params_for(TOOL, format="mp3"), context)

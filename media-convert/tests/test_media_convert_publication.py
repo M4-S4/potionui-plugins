@@ -47,7 +47,7 @@ def library(tmp_path, monkeypatch):
         with database.get_cursor() as cursor:
             cursor.execute(
                 "INSERT INTO users (id, username, email, password_hash, account_type) VALUES (?, ?, ?, ?, ?)",
-                (USER, USER, "mc@example.com", "hash", "USER"),
+                (USER, USER, "mc-user", "hash", "USER"),
             )
         marketplace, local = tmp_path / "marketplace", tmp_path / "local"
         marketplace.mkdir()
@@ -252,3 +252,50 @@ def test_cancelling_a_run_kills_the_encode_and_publishes_nothing(library, source
     assert run.status == "cancelled"
     assert run.items == []
     assert len(library.rows()) == 1 and library.guard.admits == []
+
+
+def test_an_svg_drawing_is_refused_by_the_core_before_the_tool_runs(library, source_dir):
+    path = source_dir / "icon.svg"
+    path.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>', encoding="utf-8")
+    item = library.add(path, "Icon.svg", "image")
+
+    result = library.run("media-convert.image", {"format": "png"}, item)
+
+    assert (result.status, result.error.code, result.error.message) == ("failed", "unsupported_media", "This image cannot be read")
+
+
+def test_one_refused_item_fails_the_whole_selection(library, source_dir):
+    frames = [Image.new("RGB", (16, 16), color) for color in ("red", "blue")]
+    loop = source_dir / "loop.gif"
+    frames[0].save(loop, save_all=True, append_images=frames[1:], duration=100, loop=0)
+    items = [library.add(make_image(source_dir / "a.jpg"), "Photo.jpg", "image"), library.add(loop, "Loop.gif", "image")]
+
+    result = library.run("media-convert.image", {"format": "png"}, *items)
+
+    assert result.status == "failed" and result.items == []
+    assert len(library.rows()) == 2
+
+
+def test_an_image_above_the_pixel_cap_shows_the_plugin_message(library, source_dir):
+    path = source_dir / "huge.png"
+    Image.new("1", (8193, 8192), 0).save(path)
+    item = library.add(path, "Huge.png", "image")
+
+    result = library.run("media-convert.image", {"format": "jpeg"}, item)
+
+    assert result.status == "failed"
+    assert result.error.message.startswith("This image is 8193 × 8192 pixels; Media Converter takes images of up to 67 million")
+
+
+def test_a_replace_asked_outside_the_window_keeps_the_old_name_over_the_new_content(library, source_dir):
+    item = library.add(make_image(source_dir / "a.png", size=(32, 24)), "Chat.png", "image")
+
+    result = library.service.run_blocking(
+        USER, [{"tool": "media-convert.image", "params": {"format": "webp"}}], [{"item_id": item.id}],
+        {"mode": "replace"}, timeout=WAIT_SECONDS,
+    )
+
+    assert result.ok and result.replaced
+    row = library.repo.get_by_id(item.id, USER)
+    assert row.original_filename == "Chat.png"
+    assert row.filename.endswith(".webp") and row.mime_type == "image/webp"

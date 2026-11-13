@@ -6,6 +6,8 @@ from src.plugin_api.media_tools import ToolCancelled, ToolContext, ToolFailed
 
 from tools import common
 
+from .conftest import make_audio
+
 
 @pytest.mark.parametrize(
     "size,limit,even,expected",
@@ -88,3 +90,53 @@ def test_metadata_args_pick_the_stream_tags_of_an_ogg_source():
     assert common.metadata_args(streams, track, True)[:2] == ["-map_metadata", "0:s:0"]
     assert common.metadata_args(common.Streams((track,), {"title": "x"}), track, True)[:2] == ["-map_metadata", "0"]
     assert common.metadata_args(streams, track, False) == ["-map_metadata", "-1", "-map_chapters", "-1"]
+
+
+def test_the_length_setting_never_goes_past_the_thirty_minutes_the_core_allows(server_settings):
+    server_settings["max_minutes"] = 600
+    assert common.max_seconds() == 30 * 60
+    server_settings["max_minutes"] = 0
+    assert common.max_seconds() == 60
+
+
+@pytest.mark.parametrize(
+    "source_bytes,cap",
+    [(1000, 1 << 30), (64 << 20, 2 << 30), (1 << 30, 4 << 30)],
+)
+def test_the_output_cap_grows_with_the_source_between_a_floor_and_a_ceiling(tmp_path, source_bytes, cap):
+    path = tmp_path / "source.bin"
+    with path.open("wb") as handle:
+        handle.truncate(source_bytes)
+
+    assert common.output_cap(path) == cap
+    assert common.limit_args(path) == ["-t", "1801.000", "-fs", str(cap)]
+
+
+def test_the_list_of_containers_ffmpeg_may_open_is_exactly_this_one():
+    assert common.DEMUXERS.split(",") == [
+        "mov", "mp4", "m4a", "3gp", "3g2", "mj2", "matroska", "webm", "avi", "mp3", "wav", "flac", "ogg", "aac",
+    ]
+
+
+def hostile_files(folder):
+    sound = make_audio(folder / "witness.wav", seconds=2, codec_args=("-c:a", "pcm_s16le"))
+    playlist = folder / "list.m3u8"
+    lines = ["#EXTM3U", "#EXT-X-TARGETDURATION:2", "#EXTINF:2,", sound.resolve().as_posix(), "#EXT-X-ENDLIST", ""]
+    playlist.write_text("\n".join(lines), encoding="utf-8")
+    concat = folder / "list.ffconcat"
+    concat.write_text(f"ffconcat version 1.0\nfile '{sound.name}'\n", encoding="utf-8")
+    return [playlist, concat]
+
+
+def test_ffprobe_refuses_a_playlist_or_a_concat_list(source_dir):
+    for path in hostile_files(source_dir):
+        with pytest.raises(ToolFailed, match="cannot read this file"):
+            common.read_streams(path)
+
+
+def test_ffmpeg_refuses_to_encode_a_playlist_or_a_concat_list(ctx, source_dir):
+    for path in hostile_files(source_dir):
+        out = ctx.new_path(".wav")
+        with pytest.raises(ToolFailed):
+            ctx.ffmpeg([*common.input_args(path), "-c:a", "pcm_s16le", str(out)])
+        assert not out.exists() or out.stat().st_size == 0

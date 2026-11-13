@@ -8,7 +8,10 @@ from src.plugin_api.media_tools import InvalidToolParams, MediaTool
 import tools
 from tools import common
 
-from .conftest import MANIFEST, PLUGIN_ROOT, TOOLS, need_encoders, params_for
+from . import conftest
+from .conftest import MANIFEST, PLUGIN_ROOT, TOOLS, make_video, need_encoders, params_for
+
+ICONS_ON_BOTH_CORES = {"image", "film", "audio", "editor-music"}
 
 SUFFIXES = {
     "media-convert.image": ("image", common.IMAGE_FORMATS),
@@ -108,7 +111,8 @@ def test_the_settings_match_the_code_defaults():
     settings = {entry["name"]: entry for entry in MANIFEST["settings"]}
     assert settings["ffmpeg_threads"]["default"] == common.DEFAULT_THREADS
     assert settings["ffmpeg_threads"]["max"] == common.MAX_THREADS
-    assert settings["max_minutes"]["default"] == common.DEFAULT_MAX_MINUTES
+    assert settings["max_minutes"]["default"] == common.DEFAULT_MAX_MINUTES == 30
+    assert settings["max_minutes"]["max"] == common.MAX_MINUTES == 30
     assert settings["load_notice"]["type"] == "info"
 
 
@@ -120,3 +124,14 @@ def test_the_readme_is_the_plugin_documentation():
 def test_a_missing_encoder_skips_the_test_and_names_the_encoder():
     with pytest.raises(pytest.skip.Exception, match="this ffmpeg has no imaginary-codec encoder"):
         need_encoders("imaginary-codec")
+
+
+def test_every_icon_exists_in_the_menus_of_both_cores():
+    assert {entry["icon"] for entry in TOOLS.values()} <= ICONS_ON_BOTH_CORES
+
+
+def test_a_missing_encoder_while_making_a_source_skips_the_test(tmp_path, monkeypatch):
+    monkeypatch.setattr(conftest, "encoders", lambda: frozenset({"aac"}))
+
+    with pytest.raises(pytest.skip.Exception, match="this ffmpeg has no libx264 encoder"):
+        make_video(tmp_path / "clip.mp4")
