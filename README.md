@@ -26,7 +26,7 @@ You need an admin account on a PotionUI whose **Admin › Plugins** page shows t
 4. If it is disabled, open it in the list and turn it on with its **Enable plugin** switch.
 5. Follow the plugin's **Setup** steps in its **Overview** tab, then read its documentation in **Admin › Documentation**.
 
-A plugin runs with the same rights as PotionUI: install only from a catalogue you trust. To update a plugin, open the catalogue again: a newer version shows **Update to** and its version number in place of **Install**. After an update, restart PotionUI: the page runs the new version at once, but the server keeps running the code of the version it had loaded until it restarts.
+A plugin runs with the same rights as PotionUI: install only from a catalogue you trust. To update a plugin, open the catalogue again: a newer version shows **Update to** and its version number in place of **Install**. Read the catalogue at the same URL as the first time: PotionUI updates a plugin only from the exact address it was installed from, and under any other address, even one that serves the same file, the plugin shows **Installed elsewhere** with no update. After an update, restart PotionUI: the page runs the new version at once, but the server keeps running the code of the version it had loaded until it restarts.
 
 Video Producer needs more than the plugin itself: a video engine, video presets and their model files, and ffmpeg on the server. Its [administration page](video-producer/README.md) says what to prepare. Preset Editor needs nothing else.
 
