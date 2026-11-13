@@ -1,4 +1,126 @@
-const SAFE_URL_SCHEMES = ['http:', 'https:', 'mailto:'];
+const NAMED_ENTITIES = {
+	amp: '&',
+	lt: '<',
+	gt: '>',
+	quot: '"',
+	apos: "'",
+	nbsp: '\u00a0',
+	colon: ':',
+	tab: '\t',
+	newline: '\n',
+	sol: '/',
+	bsol: '\\',
+	lpar: '(',
+	rpar: ')',
+	period: '.',
+	comma: ',',
+	semi: ';',
+	equals: '=',
+	quest: '?',
+	num: '#',
+	percnt: '%',
+	excl: '!',
+	lbrack: '[',
+	rbrack: ']',
+	lsqb: '[',
+	rsqb: ']',
+	lcub: '{',
+	rcub: '}',
+	lbrace: '{',
+	rbrace: '}',
+	grave: '`',
+	plus: '+',
+	dollar: '$',
+	commat: '@',
+	ast: '*',
+	lowbar: '_',
+	hyphen: '-',
+	dash: '-',
+	verbar: '|',
+	vert: '|'
+};
+
+const ENTITY_RE = /&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|([a-zA-Z][a-zA-Z0-9]*));?/g;
+const MAX_DECODE_PASSES = 16;
+const STRIPPED_CHARS_RE =
+	/[\u0000-\u0020\u007f-\u009f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202f\u2060-\u206f\u3000\u3164\ufeff\uffa0]/g;
+const SAFE_LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+
+function codePointToString(code) {
+	if (!Number.isFinite(code) || code < 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) {
+		return '\ufffd';
+	}
+	return String.fromCodePoint(code);
+}
+
+function decodeEntitiesOnce(input) {
+	return input.replace(ENTITY_RE, (match, dec, hex, name) => {
+		if (dec !== undefined) return codePointToString(parseInt(dec, 10));
+		if (hex !== undefined) return codePointToString(parseInt(hex, 16));
+		const decoded = NAMED_ENTITIES[name.toLowerCase()];
+		return decoded === undefined ? match : decoded;
+	});
+}
+
+function decodeUntilStable(input) {
+	let current = input;
+	for (let i = 0; i < MAX_DECODE_PASSES; i++) {
+		const next = decodeEntitiesOnce(current);
+		if (next === current) return current;
+		current = next;
+	}
+	return null;
+}
+
+function escapeAttribute(value) {
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
+function isRelative(normalized) {
+	if (normalized.startsWith('//') || normalized.startsWith('/\\') || normalized.startsWith('\\')) return false;
+	return (
+		normalized.startsWith('/') ||
+		normalized.startsWith('#') ||
+		normalized.startsWith('?') ||
+		normalized.startsWith('./') ||
+		normalized.startsWith('../')
+	);
+}
+
+function sanitize(raw, schemes, allowMailto) {
+	if (!raw) return null;
+	const decoded = decodeUntilStable(raw);
+	if (decoded === null) return null;
+
+	const normalized = decoded.replace(STRIPPED_CHARS_RE, '').toLowerCase();
+	if (!normalized) return null;
+
+	if (!isRelative(normalized)) {
+		const scheme = /^([a-z][a-z0-9+.-]*:)/.exec(normalized)?.[1];
+		if (!scheme || !schemes.has(scheme)) return null;
+		if (scheme === 'mailto:' && !allowMailto) return null;
+		try {
+			new URL(normalized);
+		} catch {
+			return null;
+		}
+	}
+
+	const visible = decoded.replace(
+		/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g,
+		''
+	);
+	return escapeAttribute(visible.trim().replace(/\s/g, '%20'));
+}
+
+export function sanitizeLinkUrl(raw) {
+	return sanitize(raw, SAFE_LINK_SCHEMES, true);
+}
 
 function splitTableRow(line) {
 	let l = line.trim().replace(/\\\|/g, '\x01PIPE\x01');
@@ -92,18 +214,6 @@ function processBlockElements(text) {
 	return output.join('\n');
 }
 
-function sanitizeUrl(raw) {
-	const url = raw.trim();
-	if (!url) return null;
-	const isRelative = url.startsWith('/') || url.startsWith('#') || url.startsWith('./');
-	if (!isRelative) {
-		const scheme = url.slice(0, url.indexOf(':') + 1).toLowerCase();
-		const hasScheme = scheme.length > 1 && !url.slice(0, url.indexOf(':')).includes('/');
-		if (hasScheme && !SAFE_URL_SCHEMES.includes(scheme)) return null;
-	}
-	return url.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\s/g, '%20');
-}
-
 export function processMarkdown(text) {
 	if (!text) return '';
 	const codeBlocks = [];
@@ -126,7 +236,7 @@ export function processMarkdown(text) {
 		.replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
 		.replace(/`(.*?)`/g, '<code class="bg-surface-2 px-1 py-0.5 rounded text-sm font-mono text-fg-muted">$1</code>')
 		.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
-			const safe = sanitizeUrl(href);
+			const safe = sanitizeLinkUrl(href);
 			if (!safe) return label;
 			return `<a href="${safe}" class="text-signal hover:underline" target="_blank" rel="noopener noreferrer">${label}</a>`;
 		});
