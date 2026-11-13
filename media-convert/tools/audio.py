@@ -54,7 +54,6 @@ def encode_audio(media, params, ctx, *, from_video: bool):
     check_duration(media.duration)
     guard(ctx)
     streams = read_streams(media.path)
-    check_duration(streams.duration)
     if not streams.audio:
         raise ToolFailed("This video has no sound to extract" if from_video else "This file has no sound")
     track = streams.audio[0]

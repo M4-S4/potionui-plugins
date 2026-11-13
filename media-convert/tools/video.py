@@ -70,7 +70,6 @@ class ConvertVideo(MediaTool):
             raise ToolFailed("This video is too small: a converted video needs at least 2 pixels on each side")
         guard(ctx)
         streams = read_streams(media.path)
-        check_duration(streams.duration)
         picture = streams.video
         if picture is None:
             raise ToolFailed("This video has no picture to convert")
