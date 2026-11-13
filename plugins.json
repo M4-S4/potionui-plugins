@@ -4,7 +4,7 @@
     {
       "id": "video-producer",
       "name": "Video Producer",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "description": "Storyboard, draft and final takes, editing, sound and delivery for AI video, driven by Video Director documents.",
       "license": "GPL-3.0",
       "source": {
@@ -16,8 +16,8 @@
         "plugin_api": null
       },
       "release": {
-        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/video-producer-v0.5.0/video-producer-0.5.0.zip",
-        "sha256": "ad72873153c674482de8542cea5bc781d667bd82dc55fd64510b4e8128f9ce85"
+        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/video-producer-v0.5.1/video-producer-0.5.1.zip",
+        "sha256": "697d9a0f18f5b16a7163050219408d37b0a9dc55a19dc4f0c82b58c92dfe6887"
       }
     },
     {

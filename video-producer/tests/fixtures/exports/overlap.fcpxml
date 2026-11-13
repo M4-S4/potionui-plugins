@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+	<resources>
+		<format id="r1" name="FFVideoFormat1080p24" frameDuration="1/24s" width="1920" height="1080"/>
+		<asset id="r2" name="Le port endormi" start="0s" duration="122/24s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/1.mp4"/></asset>
+		<asset id="r3" name="Les mains du pêcheur" start="0s" duration="124/24s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/1.mp4"/></asset>
+		<asset id="r4" name="harbour-wide.mp4" start="0s" duration="96/24s" hasVideo="1" format="r1"><media-rep kind="original-media" src="file:///Video%20Producer/03927418-58f2-440f-9a15-456093037531.mp4"/></asset>
+	</resources>
+	<library>
+		<event name="Video Producer">
+			<project name="Harbour overlaps">
+				<sequence format="r1" duration="377/24s" tcStart="0s">
+					<spine>
+						<asset-clip ref="r2" name="Le port endormi" offset="0/24s" start="12/24s" duration="25/24s"/>
+						<asset-clip ref="r3" name="Les mains du pêcheur" offset="25/24s" start="10/24s" duration="36/24s"><timeMap><timept time="10/24s" value="10/24s" interp="linear"/><timept time="46/24s" value="28/24s" interp="linear"/></timeMap></asset-clip>
+						<gap name="Le départ &lt;large&gt;" offset="61/24s" start="0s" duration="24/24s"/>
+						<asset-clip ref="r4" name="harbour-wide.mp4" offset="85/24s" start="0/24s" duration="49/24s"/>
+					</spine>
+				</sequence>
+			</project>
+		</event>
+	</library>
+</fcpxml>

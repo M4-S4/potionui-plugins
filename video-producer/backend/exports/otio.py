@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .. import formats
-from ..dissolve import cuts
+from ..dissolve import cuts, placement, read_at
 from .common import UNDEFINED, Timebase, asset_of, clip_label, js_json
 
 
@@ -25,6 +25,7 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
 
     video: List[Dict[str, Any]] = []
     edits = cuts(doc["clips"], time.frames)
+    places = placement(doc["clips"])
     for index, clip in enumerate(doc["clips"]):
         entry = files.get(("clips", index))
         cut = edits[index]
@@ -42,7 +43,8 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
             )
         if entry:
             speed = formats.speed_of(clip)
-            source_in = clip["srcIn"] if cut is None or not cut.head else clip["srcIn"] + cut.head / time.fps * speed
+            at = clip["start"] if places[index] is None else places[index].start
+            source_in = max(read_at(clip["srcIn"], at, time.frames(clip["start"]) if cut is None else cut.start, time.fps, speed), 0.0)
             item: Dict[str, Any] = {
                 "OTIO_SCHEMA": "Clip.2",
                 "name": clip_label(doc, clip, locale),

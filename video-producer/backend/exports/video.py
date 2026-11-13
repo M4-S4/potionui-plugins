@@ -13,7 +13,7 @@ import psutil
 
 from .. import core_bridge, director, formats, takes, workdir
 from ..core_bridge import User
-from ..dissolve import dissolving, frames_of, placement, rounded
+from ..dissolve import filled, frames_of, placement, read_at, rounded
 from . import levels, match, media, slug
 from .common import asset_of, fps_of, seq_duration, timing_error
 from .mix import RULE as MIX_RULE, delay_taps, gain_of, pan_of, strip_of, write_impulse
@@ -238,6 +238,10 @@ def frame_size(doc: Mapping[str, Any], fmt: str, resolution: str, ratio: Optiona
 
 JOIN = "join"
 
+UNTIL = "until"
+
+READ = "read"
+
 
 def _unfaded(clip: Mapping[str, Any], head: bool, tail: bool) -> Mapping[str, Any]:
     return {**clip, **({"fadeIn": 0} if head else {}), **({"fadeOut": 0} if tail else {})}
@@ -245,16 +249,26 @@ def _unfaded(clip: Mapping[str, Any], head: bool, tail: bool) -> Mapping[str, An
 
 def _framed(doc: Mapping[str, Any], total: float) -> List[Segment]:
     rate = fps_of(doc)
-    placed = [(clip, place) for clip, place in zip(doc["clips"], placement(doc["clips"])) if place is not None]
+    clips = doc.get("clips") or []
+    places = placement(clips)
+    fills = filled(places)
+    indexes = [index for index, place in enumerate(places) if place is not None]
+    placed = [(clips[index], places[index]) for index in indexes]
     bounds = [[frames_of(place.start, rate), frames_of(place.end, rate)] for _, place in placed]
     for index in range(1, len(placed)):
         if placed[index][1].overlap:
             bounds[index - 1][1] = max(bounds[index - 1][1], bounds[index][0] + 1)
+        elif fills[indexes[index - 1]]:
+            bounds[index - 1][1] = bounds[index][0]
         else:
             bounds[index - 1][1] = min(bounds[index - 1][1], bounds[index][0])
     segments: List[Segment] = []
     cursor = 0
+    film = rounded(total)
+    end = frames_of(film, rate)
     for index, ((clip, place), (first, last)) in enumerate(zip(placed, bounds)):
+        if first >= end:
+            continue
         joined = index > 0 and place.overlap > 0
         following = index + 1 < len(placed) and placed[index + 1][1].overlap > 0
         if not joined and first > cursor:
@@ -262,9 +276,11 @@ def _framed(doc: Mapping[str, Any], total: float) -> List[Segment]:
         if last - first < 1:
             continue
         overlap = cursor - first if joined else 0
-        segments.append(((last - first) / rate, {**_unfaded(clip, joined, following), **({JOIN: overlap} if joined else {})}))
+        until = {UNTIL: film - first / rate} if last / rate > film + EPSILON else {}
+        point = read_at(clip.get("srcIn"), place.start, first, rate, formats.speed_of(clip))
+        read = {READ: point} if point != float(clip.get("srcIn") or 0) else {}
+        segments.append(((last - first) / rate, {**_unfaded(clip, joined, following), **({JOIN: overlap} if joined else {}), **until, **read}))
         cursor = last
-    end = frames_of(rounded(total), rate)
     if end > cursor:
         segments.append(((end - cursor) / rate, None))
     return segments
@@ -272,25 +288,8 @@ def _framed(doc: Mapping[str, Any], total: float) -> List[Segment]:
 
 def timeline(doc: Mapping[str, Any]) -> Tuple[List[Segment], float]:
     """The shots in document order with black where nothing plays, and the running time of the sequence."""
-    if dissolving(doc.get("clips") or []):
-        total = float(seq_duration(doc))
-        return _framed(doc, total), total
-    segments: List[Segment] = []
-    cursor = 0.0
-    for clip in doc.get("clips") or []:
-        dur = float(clip.get("dur") or 0)
-        if dur <= EPSILON:
-            continue
-        start = float(clip.get("start") or 0)
-        if start > cursor + EPSILON:
-            segments.append((start - cursor, None))
-            cursor = start
-        segments.append((dur, clip))
-        cursor += dur
     total = float(seq_duration(doc))
-    if total > cursor + EPSILON:
-        segments.append((total - cursor, None))
-    return segments, total
+    return _framed(doc, total), total
 
 
 def _look(clip: Mapping[str, Any]) -> List[str]:
@@ -326,13 +325,14 @@ def _match(clip: Mapping[str, Any], options: Mapping[str, Any], cwd: Optional[st
     return [f"lut3d=file={filter_path(path, cwd)}:interp=trilinear"]
 
 
-def _fades(item: Mapping[str, Any], dur: float, name: str) -> List[str]:
+def _fades(item: Mapping[str, Any], dur: float, name: str, until: Optional[float] = None) -> List[str]:
     filters = []
     fade_in, fade_out = float(item.get("fadeIn") or 0), float(item.get("fadeOut") or 0)
+    end = dur if until is None else until
     if fade_in >= MIN_FADE:
         filters.append(f"{name}=t=in:st=0:d={num(min(fade_in, dur))}")
     if fade_out >= MIN_FADE:
-        filters.append(f"{name}=t=out:st={num(max(dur - fade_out, 0))}:d={num(min(fade_out, dur))}")
+        filters.append(f"{name}=t=out:st={num(max(end - fade_out, 0))}:d={num(min(fade_out, end))}")
     return filters
 
 
@@ -431,6 +431,7 @@ class Shot:
     sound: bool
     blind: bool
     speed: float = 1.0
+    lead: float = 0.0
 
     @property
     def span(self) -> float:
@@ -449,17 +450,22 @@ def _shots(
     shots = []
     for dur, clip in segments:
         entry = files.get(clip["id"]) if clip is not None else None
-        start = float(clip.get("srcIn") or 0) if clip is not None else 0.0
         still = entry is not None and clip["id"] in stills
+        speed = 1.0 if clip is None or still else formats.speed_of(clip)
+        point = 0.0 if clip is None else float((clip.get("srcIn") if still else clip.get(READ, clip.get("srcIn"))) or 0)
+        start, lead = max(point, 0.0), max(-point, 0.0) / speed
         source_end = None if entry is None or still else _source_length(doc, clip, lengths)
         sound = entry is not None and not still and bool(clip_audio.get(clip["id"])) and clip_heard(doc, clip)
         if source_end is not None and start >= source_end - EPSILON:
             entry = None
         elif entry is not None and clip["id"] in blind and not sound:
             entry = None
-        speed = 1.0 if clip is None or still else formats.speed_of(clip)
-        shots.append(Shot(dur, clip, entry, start, still, source_end, sound, clip is not None and clip["id"] in blind, speed))
+        shots.append(Shot(dur, clip, entry, start, still, source_end, sound, clip is not None and clip["id"] in blind, speed, lead))
     return shots
+
+
+def _source_in(shot: Shot) -> float:
+    return float(shot.clip.get("srcIn") or 0) if shot.clip is not None else shot.start
 
 
 class _Inputs:
@@ -479,7 +485,7 @@ class _Inputs:
         if shot.still:
             return True
         last = self.reading.get(shot.entry["path"])
-        return last is None or shot.start < last[1] - EPSILON
+        return last is None or _source_in(shot) < last[1] - EPSILON
 
     def add(self, path: Any, still_for: Optional[float] = None, picture: bool = True) -> int:
         if picture:
@@ -498,7 +504,9 @@ class _Inputs:
         if shot.still:
             return self.add(path, shot.start + shot.dur)
         index = self.add(path) if self.opens(shot) else self.reading[path][0]
-        self.reading[path] = (index, shot.start + shot.span)
+        planned = shot.clip.get("dur") if shot.clip is not None else None
+        length = float(planned) * shot.speed if isinstance(planned, (int, float)) and not isinstance(planned, bool) else shot.span
+        self.reading[path] = (index, _source_in(shot) + length)
         return index
 
 
@@ -850,15 +858,15 @@ def _assembly(
                     f"tpad=stop_mode=clone:stop_duration={num(pad)}",
                     f"trim=duration={length}",
                     *_look(shot.clip),
-                    *_fades(shot.clip, shot.dur, "fade"),
+                    *_fades(shot.clip, shot.dur, "fade", shot.clip.get(UNTIL)),
                 ]
                 graph.append(f"[{source}:v]{','.join(video)}[v{index}]")
             if shot.sound:
                 lift = f"{MONO_UP}," if str(shot.entry["path"]) in mono else ""
                 graph.append(
-                    f"[{source}:a]atrim=start={num(shot.start)}:duration={length},asetpts=PTS-STARTPTS,"
-                    f"aresample={SAMPLE_RATE},{lift}aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                    f"apad=whole_dur={length},atrim=duration={length}{''.join(',' + fade for fade in _fades(shot.clip, shot.dur, 'afade'))}[a{index}]"
+                    f"[{source}:a]atrim=start={num(shot.start)}:duration={num(shot.dur - shot.lead) if shot.lead > EPSILON else length},asetpts=PTS-STARTPTS,"
+                    f"aresample={SAMPLE_RATE},{lift}{f'adelay=delays={round(shot.lead * SAMPLE_RATE)}S:all=1,' if shot.lead > EPSILON else ''}aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                    f"apad=whole_dur={length},atrim=duration={length}{''.join(',' + fade for fade in _fades(shot.clip, shot.dur, 'afade', shot.clip.get(UNTIL)))}[a{index}]"
                 )
             else:
                 graph.append(silence)
@@ -1156,7 +1164,6 @@ async def assemble_sequence(
     rounds = _rounds(len(groups))
     work = max(rounds * total, EPSILON)
     done, level, ceiling = 0.0, 0, MIX_FROM - 0.1
-    framed = dissolving(doc.get("clips") or [])
     while len(groups) > 1:
         parts: Dict[str, Mapping[str, Any]] = {}
         lengths: Dict[str, float] = {}
@@ -1165,10 +1172,7 @@ async def assemble_sequence(
             start = min(done / work * MIX_FROM, ceiling)
             _step(report, start)
             head = joins_of(group)[0]
-            if framed:
-                span = (sum(frames_of(dur, fps) for dur, _ in group) - sum(joins_of(group)[1:])) / fps
-            else:
-                span = sum(dur for dur, _ in group)
+            span = (sum(frames_of(dur, fps) for dur, _ in group) - sum(joins_of(group)[1:])) / fps
             graph, output = folder / PART_GRAPH.format(level, index), folder / PART_NAME.format(level, index)
             inputs, chains = _assembly(doc, files, picks, {}, cwd, group, mix=False)
             graph.write_text(";".join(chains), encoding="utf-8")
@@ -1178,7 +1182,7 @@ async def assemble_sequence(
             key = f"part-{level}-{index}"
             parts[key] = {"name": output.name, "path": str(output), "still": False}
             lengths[key] = await _part_length(output, span)
-            joined.append((span if framed else lengths[key], {"id": key, **({JOIN: head} if head else {})}))
+            joined.append((span, {"id": key, **({JOIN: head} if head else {})}))
         files, cwd, segments = parts, str(folder), joined
         picks = {**options, "audio": {key: True for key in parts}, "stills": [], "blind": [], "lengths": lengths}
         groups = plan_parts(doc, files, picks, segments)

@@ -19,6 +19,7 @@ import { isPlayer } from './workspaces.js';
 import sharedRules from './rules.json';
 import { DISSOLVE_KEY, chained, dissolveOf, dissolving, droppedDissolves, holderAt, indexAt, layout, mixAt, newlyLimited, onFrame, placement, playedLengths, shownSpans, splitKeepsDissolves, startingAt } from './dissolve.js';
 import { roleKind } from './seam.js';
+import { onStep } from './grid.js';
 
 export { newAsset, newClip };
 
@@ -122,7 +123,7 @@ export function applyMe(me) {
 }
 
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-export const round = (v, s = 0.1) => +(Math.round(v / s) * s).toFixed(3);
+export const round = onStep;
 
 export const bandView = () => ui.workspace === 'storyboard' && ui.storyView === 'band';
 export const drawerMode = () => viewport.narrow && !isPlayer(ui.workspace);
@@ -469,9 +470,10 @@ export function bladeAt(time = ui.playhead) {
 		const a = doc.audio.find((x) => x.id === s.id);
 		if (a && time > a.start + 0.1 && time < a.start + a.dur - 0.1) {
 			act(() => {
-				const left = time - a.start;
-				const b = { ...$state.snapshot(a), id: ulid(), start: round(time, 0.04), dur: a.dur - left, srcIn: a.srcIn + left, fadeIn: 0 };
-				a.dur = left;
+				const cut = round(time, 0.04);
+				const kept = +(cut - a.start).toFixed(6);
+				const b = { ...$state.snapshot(a), id: ulid(), start: cut, dur: +(a.dur - kept).toFixed(6), srcIn: +(a.srcIn + kept).toFixed(6), fadeIn: 0 };
+				a.dur = kept;
 				a.fadeOut = 0;
 				doc.audio.push(b);
 			});
@@ -495,14 +497,13 @@ export function bladeAt(time = ui.playhead) {
 		const left = time - c.start;
 		const i = doc.clips.indexOf(c);
 		const kept = exact ? +left.toFixed(6) : round(left, 0.04);
-		const b = exact
-			? { ...$state.snapshot(c), id: ulid(), start: +(c.start + kept).toFixed(6), dur: +(c.dur - kept).toFixed(6), srcIn: +(c.srcIn + kept * speedOf(c)).toFixed(6), fadeIn: 0 }
-			: { ...$state.snapshot(c), id: ulid(), start: round(c.start + kept, 0.04), dur: round(c.dur - left, 0.04), srcIn: c.srcIn + left * speedOf(c), fadeIn: 0 };
+		const b = { ...$state.snapshot(c), id: ulid(), start: +(c.start + kept).toFixed(6), dur: +(c.dur - kept).toFixed(6), srcIn: +(c.srcIn + kept * speedOf(c)).toFixed(6), fadeIn: 0 };
+		const cut = exact ? time : b.start;
 		delete b[DISSOLVE_KEY];
 		c.dur = kept;
 		c.fadeOut = 0;
 		doc.clips.splice(i + 1, 0, b);
-		for (const item of linkedTo(c.id)) if (startOf(item) >= time) item.shotId = b.id;
+		for (const item of linkedTo(c.id)) if (startOf(item) >= cut) item.shotId = b.id;
 		relayout();
 	});
 	toast(t('lib.toast.shotSplit'));

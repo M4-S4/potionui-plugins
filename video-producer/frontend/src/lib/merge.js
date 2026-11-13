@@ -1,5 +1,6 @@
 import { migrateVrefs } from './vrefs.js';
 import { isObject } from './values.js';
+import { onGrid } from './grid.js';
 
 const ABSENT = Symbol('absent');
 const SETS = new Set(['removedTakes', 'characters', 'exclude', 'excludeLanes', 'excludeVrefs']);
@@ -102,7 +103,7 @@ export function merge3(base, mine, theirs) {
 	return { value, conflicts: out.conflicts };
 }
 
-const snap = (value) => +(Math.round(value / 0.04) * 0.04).toFixed(3);
+const snap = onGrid;
 const fixed = (value) => +value.toFixed(3);
 const timeKey = (item) => ('time' in item ? 'time' : 'start');
 const clipsOf = (doc) => (Array.isArray(doc?.clips) ? doc.clips.filter(isObject) : []);

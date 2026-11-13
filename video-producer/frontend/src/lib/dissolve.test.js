@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOMAINS, mergeDomains, translate } from '../i18n/core.js';
-import { DISSOLVE_CHOICES, MAX_DISSOLVE, cuts, dissolveGain, dissolveMarks, dissolveOf, indexAt, joins, layout, limitOf, lostSeconds, mixAt, placement, setDissolve, shownSpan, shownSpans, startingAt, unfaded } from './dissolve.js';
+import { DISSOLVE_CHOICES, MAX_DISSOLVE, cuts, dissolveGain, dissolveMarks, dissolveOf, filled, indexAt, joins, layout, limitOf, lostSeconds, mixAt, placement, readAt, setDissolve, shownSpan, shownSpans, startingAt, unfaded } from './dissolve.js';
 import { MAKERS } from './exchange.js';
 import { ghostLayout } from './band.js';
 import { shotsContext } from './assistant.js';
@@ -226,6 +226,51 @@ test('dissolve: the page writes the EDL, OTIO and FCPXML of a project with disso
 	const edl = MAKERS.edl(fixture.doc, { label }).split('\r\n');
 	assert.ok(edl.includes('002  VP002    V     D    025 00:00:00:10 00:00:02:06 00:00:04:00 00:00:07:17'));
 	assert.ok(edl.includes('004  VP004    V     D    037 00:00:00:06 00:00:03:19 00:00:09:05 00:00:12:18'));
+});
+
+test('dissolve: the page writes the EDL, OTIO and FCPXML of a project whose layout leaves gaps of less than a step as the server does, byte for byte', () => {
+	const fixture = JSON.parse(readFileSync(join(tests, 'exports', 'gap-project.json'), 'utf-8'));
+	const fallback = translate(dictionaries, 'en', 'lib.default.clip');
+	const label = (c) => c?.label || fixture.doc.assets?.find((a) => a.id === c?.assetId)?.name || fallback;
+	for (const format of ['edl', 'otio', 'fcpxml']) {
+		const golden = readFileSync(join(tests, 'exports', `gap.${format}`));
+		assert.ok(Buffer.from(MAKERS[format](fixture.doc, { label }), 'utf-8').equals(golden), `${format} differs from gap.${format}`);
+	}
+	assert.ok(MAKERS.edl(fixture.doc, { label }).split('\r\n').includes('001  VP001    V     C        00:00:00:00 00:00:03:03 00:00:00:00 00:00:03:03'));
+});
+
+test('dissolve: the page writes the EDL, OTIO and FCPXML of a project off the grid that only overlaps as the server does, byte for byte', () => {
+	const fixture = JSON.parse(readFileSync(join(tests, 'exports', 'overlap-project.json'), 'utf-8'));
+	const fallback = translate(dictionaries, 'en', 'lib.default.clip');
+	const label = (c) => c?.label || fixture.doc.assets?.find((a) => a.id === c?.assetId)?.name || fallback;
+	for (const format of ['edl', 'otio', 'fcpxml']) {
+		const golden = readFileSync(join(tests, 'exports', `overlap.${format}`));
+		assert.ok(Buffer.from(MAKERS[format](fixture.doc, { label }), 'utf-8').equals(golden), `${format} differs from overlap.${format}`);
+	}
+});
+
+test('dissolve: the page writes the exchange files of a project on the grid at 25 fps with slowed shots as version 0.5.0 did', () => {
+	const cases = JSON.parse(readFileSync(join(tests, 'exports', 'on-grid-slowed.json'), 'utf-8'));
+	const label = (c) => c.label;
+	for (const [n, { doc, edl, otio, fcpxml }] of cases.entries()) {
+		assert.equal(MAKERS.edl(doc, { label }), edl, `edl ${n}`);
+		assert.equal(MAKERS.otio(doc, { label }), otio, `otio ${n}`);
+		assert.equal(MAKERS.fcpxml(doc, { label }), fcpxml, `fcpxml ${n}`);
+	}
+});
+
+test('dissolve: a gap of one step and a millionth is closed and one of two millionths is not, wherever it falls', () => {
+	for (const after of [1.2, 2.0, 3.48, 7.12, 10]) {
+		const rule = [0.04, 0.040001, 0.040002].map((gap) => filled(placement([{ start: 0, dur: after }, { start: +(after + gap).toFixed(6), dur: 1 }]))[0]);
+		assert.deepEqual(rule, [true, true, false], String(after));
+	}
+});
+
+test('dissolve: a shot reads its source from where the film reaches it, its first frame before the start of its source held at 0', () => {
+	assert.equal(readAt(1.02, 1.02, 24, 24), 1);
+	assert.equal(readAt(0, 1.02, 24, 24), -0.02);
+	assert.equal(readAt(0.37, 1.04, 26, 25), 0.37);
+	assert.equal(readAt(0.4, 1.04, 25, 24, 0.5), 0.400834);
 });
 
 test('dissolve: the page writes a dissolve the starts overlap and a bare overlap in the EDL as the server does', () => {

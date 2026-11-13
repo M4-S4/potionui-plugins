@@ -30,6 +30,8 @@ CASES = json.loads((FIXTURES / "dissolve_cases.json").read_text(encoding="utf-8"
 PROPERTY = json.loads((FIXTURES / "dissolve_property.json").read_text(encoding="utf-8"))
 CADENCES = (24, 25, 30, 48, 50, 60)
 LEGACY = json.loads((EXPORTS / "legacy-graphs.json").read_text(encoding="utf-8"))
+ON_GRID = json.loads((EXPORTS / "on-grid-graphs.json").read_text(encoding="utf-8"))
+ON_GRID_FRAMES = json.loads((EXPORTS / "on-grid-graphs-24-30.json").read_text(encoding="utf-8"))
 PATHS = {"ffmpeg": "/usr/bin/ffmpeg", "output": "/tmp/out/mezzanine.mkv", "graph": "/tmp/out/graph.txt"}
 
 
@@ -119,15 +121,76 @@ def test_a_dissolve_never_needs_a_migration(make_doc):
     assert projects.migrate(doc) is doc
 
 
-@pytest.mark.parametrize("case", LEGACY, ids=[case["name"] for case in LEGACY])
-def test_a_project_without_dissolve_gives_the_graph_of_before_byte_for_byte(case):
+async def _runs(case, limit, folder, monkeypatch):
+    found = []
+
+    def clean(text):
+        return text.replace(str(folder), "<work>").replace("<work>\\", "<work>/")
+
+    def relative(text):
+        return "./" + text[2:] if text.startswith(".\\") else text
+
+    async def assemble(command, total, on_progress=None, on_process=None, cwd=None, code="ffmpeg_failed"):
+        option = next(argument for argument in command if argument in (video.GRAPH_OPTION, video.LEGACY_GRAPH_OPTION))
+        graph = Path(command[command.index(option) + 1]).read_text(encoding="utf-8")
+        found.append({"command": [relative(clean(argument)) for argument in command], "graph": clean(graph), "total": round(total, 9)})
+        return ""
+
+    async def part_length(path, nominal):
+        return nominal
+
+    with monkeypatch.context() as patch:
+        patch.setattr(video, "assemble", assemble)
+        patch.setattr(video, "_part_length", part_length)
+        if limit is not None:
+            patch.setattr(video, "PART_INPUTS", limit)
+        paths = {**case["paths"], "output": str(folder / "mezzanine.mkv"), "graph": str(folder / "graph.txt"), "audio": {}}
+        await video.assemble_sequence(case["doc"], case["files"], case["options"], paths, folder, lambda progress, step: True)
+    return found
+
+
+@pytest.mark.parametrize("case", ON_GRID, ids=[case["name"] for case in ON_GRID])
+async def test_a_project_on_the_grid_without_dissolve_gives_the_export_of_before_byte_for_byte_with_its_parts(case, tmp_path, monkeypatch):
     doc, files, options, paths = case["doc"], case["files"], case["options"], case["paths"]
     segments, total = timeline(doc)
 
     assert filter_graph(doc, files, options, paths) == case["graph"]
     assert build_command(doc, files, options, paths) == case["command"]
-    assert (total, [dur for dur, _ in segments]) == (case["total"], case["segments"])
-    assert [[[dur, clip["id"] if clip else None] for dur, clip in group] for group in plan_parts(doc, files, options, segments, 1)] == case["parts"]
+    assert total == case["total"]
+    assert [[round(dur, 9), clip["id"] if clip else None] for dur, clip in segments] == case["segments"]
+    assert [[[round(dur, 9), clip["id"] if clip else None] for dur, clip in group] for group in plan_parts(doc, files, options, segments, 1)] == case["parts of one input"]
+    whole, halves = tmp_path / "whole", tmp_path / "halves"
+    whole.mkdir()
+    halves.mkdir()
+    assert await _runs(case, None, whole, monkeypatch) == case["runs"]
+    assert await _runs(case, 2, halves, monkeypatch) == case["runs in parts of two inputs"]
+
+
+@pytest.mark.parametrize("case", ON_GRID_FRAMES, ids=[case["name"] for case in ON_GRID_FRAMES])
+async def test_a_project_on_the_grid_at_24_or_30_fps_keeps_the_export_on_whole_frames_of_version_0_5_1(case, tmp_path, monkeypatch):
+    await test_a_project_on_the_grid_without_dissolve_gives_the_export_of_before_byte_for_byte_with_its_parts(case, tmp_path, monkeypatch)
+
+
+def _last_shot_on_whole_frames(chain):
+    return re.sub(r"(?<=[=])3\.5(?=[,\[:]|$)", "3.52", chain)
+
+
+@pytest.mark.parametrize("case", LEGACY, ids=[case["name"] for case in LEGACY])
+def test_a_project_of_before_whose_film_ends_on_half_a_frame_changes_only_its_last_shot_which_now_lasts_its_whole_frames(case):
+    doc, files, options, paths = case["doc"], case["files"], case["options"], case["paths"]
+    segments, total = timeline(doc)
+    before, after = case["graph"].split(";"), filter_graph(doc, files, options, paths).split(";")
+    last = len(segments) - 1
+
+    assert (total, case["segments"][-1], segments[-1][0]) == (case["total"], 3.5, pytest.approx(3.52))
+    assert [round(dur, 9) for dur, _ in segments[:-1]] == [round(dur, 9) for dur in case["segments"][:-1]]
+    assert len(before) == len(after)
+    changed = [index for index, (old, new) in enumerate(zip(before, after)) if old != new]
+    assert [re.findall(r"\[[av]\d+\]$", after[index])[0] for index in changed] == [f"[v{last}]", f"[a{last}]"]
+    assert all(_last_shot_on_whole_frames(before[index]) == after[index] for index in changed)
+    command = build_command(doc, files, options, paths)
+    assert [(old, new) for old, new in zip(case["command"], command) if old != new] == ([("3.75", "3.77")] if case["name"] == "gap-social-stills" else [])
+    assert [len(group) for group in plan_parts(doc, files, options, segments, 1)] == [len(group) for group in case["parts"]]
 
 
 def test_the_film_lasts_the_shots_less_their_dissolves(make_doc):
@@ -253,6 +316,71 @@ def test_each_exchange_format_writes_the_dissolves_as_its_golden_file(fmt):
     fixture, files = _fixture()
 
     assert render(fmt, fixture["doc"], files).encode("utf-8") == (EXPORTS / f"dissolve.{fmt}").read_bytes()
+
+
+def test_the_layout_rounds_a_time_to_the_step_as_the_page_does_a_half_step_up_even_when_the_sum_that_gives_it_falls_just_below():
+    cases = json.loads((FIXTURES / "snap_cases.json").read_text(encoding="utf-8"))
+
+    assert [edits.snap(value) for value, _ in cases] == [snapped for _, snapped in cases]
+    assert edits.snap(1.02 + 0.84) == 1.88
+    pick = random.Random("120 snap shift")
+    for _ in range(2000):
+        x = round(pick.uniform(0, 50), pick.choice((2, 3)))
+        steps = pick.randint(0, 400)
+        assert edits.snap(x + steps * 0.04) == round(edits.snap(x) + steps * 0.04, 3), (x, steps)
+
+
+def test_the_last_frame_of_a_shot_and_a_length_the_assistant_asks_are_rounded_as_the_page_rounds_them():
+    assert edits.frame_time({"start": 1.48, "dur": 0.42}, "last") == 1.88
+    doc = {"clips": [{"id": "c", "assetId": None, "start": 0, "dur": 5, "srcIn": 0}], "prompts": [], "frames": [], "assets": []}
+    edits.resize(doc, doc["clips"][0], 0.58)
+    assert doc["clips"][0]["dur"] == 0.6
+
+
+def test_a_project_whose_lengths_sit_on_the_grid_keeps_its_layout_and_after_a_cut_the_next_shot_starts_where_the_one_before_ends():
+    pick = random.Random("120 grid layout")
+    for _ in range(300):
+        durations = [round(pick.randint(5, 100) * 0.04, 2) for _ in range(pick.randint(2, 30))]
+        doc = {"clips": [{"id": f"c{index}", "dur": dur} for index, dur in enumerate(durations)]}
+        edits.relayout(doc)
+        at = 0.0
+        for clip, dur in zip(doc["clips"], durations):
+            assert clip["start"] == round(at, 2)
+            at += dur
+    doc = {"clips": [{"id": "a", "dur": 1.02}, {"id": "b1", "dur": 0.84}, {"id": "b2", "dur": 1.56}]}
+    edits.relayout(doc)
+    assert [clip["start"] for clip in doc["clips"]] == [0, 1.04, 1.88]
+
+
+@pytest.mark.parametrize("fmt", ("edl", "otio", "fcpxml"))
+def test_each_exchange_format_closes_the_gaps_of_the_layout_as_the_video_in_its_golden_file(fmt):
+    fixture = json.loads((EXPORTS / "gap-project.json").read_text(encoding="utf-8"))
+    files = files_of(fixture["doc"], fixture["takes"], FixtureResolver(fixture["uploads"]), media="name")
+
+    assert render(fmt, fixture["doc"], files).encode("utf-8") == (EXPORTS / f"gap.{fmt}").read_bytes()
+
+
+@pytest.mark.parametrize("fmt", ("edl", "otio", "fcpxml"))
+def test_each_exchange_format_of_a_project_that_only_overlaps_off_the_grid_follows_the_video_in_its_golden_file(fmt):
+    fixture = json.loads((EXPORTS / "overlap-project.json").read_text(encoding="utf-8"))
+    files = files_of(fixture["doc"], fixture["takes"], FixtureResolver(fixture["uploads"]), media="name")
+
+    assert render(fmt, fixture["doc"], files).encode("utf-8") == (EXPORTS / f"overlap.{fmt}").read_bytes()
+
+
+def test_the_edl_of_a_project_that_only_overlaps_cuts_on_the_frames_of_the_video_and_reads_the_sources_where_the_video_does():
+    fixture = json.loads((EXPORTS / "overlap-project.json").read_text(encoding="utf-8"))
+    files = files_of(fixture["doc"], fixture["takes"], FixtureResolver(fixture["uploads"]), media="name")
+    doc = fixture["doc"]
+    starts, _ = _read_graph(_graph(doc), doc["fps"])
+
+    lines = render("edl", doc, files).split("\r\n")
+
+    assert list(starts.values())[:4] == [0, 25, 61, 85]
+    assert "001  VP001    V     C        00:00:00:12 00:00:01:13 00:00:00:00 00:00:01:01" in lines
+    assert "004  VP004    V     C        00:00:00:00 00:00:02:01 00:00:03:13 00:00:05:14" in lines
+    last = next(part for part in _graph(doc) if part.endswith("[v3]"))
+    assert "trim=start=0:" in last and "tpad=start_mode" not in last
 
 
 def test_the_edl_writes_a_dissolve_as_a_zero_length_cut_then_a_d_event_in_frames():
@@ -803,7 +931,7 @@ def test_the_export_never_plays_a_dissolve_longer_than_the_rule(make_doc):
     assert not any("xfade" in part for part in _graph(alone))
     assert _graph(alone) == _graph(plain)
     segments = lambda doc: ([(dur, clip and clip["id"]) for dur, clip in timeline(doc)[0]], timeline(doc)[1])
-    assert segments(alone) == segments(plain) == ([(150, "a"), (150, "b")], 230)
+    assert segments(alone) == segments(plain) == ([(80, "a"), (150, "b")], 230)
 
     run = _doc(make_doc, [{"id": "a", "assetId": "x", "start": 0, "dur": 4}, {"id": "b", "assetId": "y", "start": 3, "dur": 4, "dissolve": 1}, {"id": "c", "assetId": "z", "start": 5.5, "dur": 4, "dissolve": 1}], fps=25)
     assert joins(run["clips"]) == [0, 1, 0]

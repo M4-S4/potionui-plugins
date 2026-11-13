@@ -20,6 +20,7 @@
 	import { CONDITION, SOUND_ROLE, SOUND_SPACE, SOUND_TYPES, conditionWindow, muxWindow, referenceLanes, trackPortion } from '../../lib/sound.js';
 	import { laneTitle } from '../../lib/tracks.js';
 	import { ulid } from '../../lib/ulid.js';
+	import { onGrid } from '../../lib/grid.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { parkWriter, writerFor } from '../../lib/promptwriter.svelte.js';
 	import { CARD_WORDS, cardWordsOf, shotCardWordsView } from '../../lib/cardwords.js';
@@ -70,7 +71,7 @@
 	function setDraftSpeed(value) {
 		const next = Number(value);
 		if (!SPEEDS.includes(next) || next === draft.speed) return;
-		draft.dur = Math.round(((Number(draft.dur) || clip.dur) * (draft.speed ?? 1)) / next / 0.04) * 0.04;
+		draft.dur = onGrid(((Number(draft.dur) || clip.dur) * (draft.speed ?? 1)) / next);
 		draft.speed = next;
 	}
 	const beyondTake = $derived(clip ? overrunsTake(limit.take, clip.dur, +draft.dur) : false);

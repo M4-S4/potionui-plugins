@@ -2,7 +2,7 @@ import re
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from .. import formats
-from ..dissolve import cuts, moved, placement
+from ..dissolve import cuts, filled, moved, placement, read_at, rounded
 from .common import Timebase, clip_label
 
 _LINE_BREAK = re.compile(r"[\r\n]")
@@ -13,6 +13,13 @@ def one_line(text: Any) -> str:
     return _LINE_BREAK.sub("", str(text))
 
 
+def _source_at(time: Timebase, src_in: Any, start: Any, at: Any, speed: float) -> float:
+    frame = time.frames(at)
+    if not rounded(frame / time.fps - at):
+        return max(src_in + (at - start) * speed, 0.0)
+    return max(read_at(src_in, start, frame, time.fps, speed), 0.0)
+
+
 def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict[str, str]]], locale: str = "en") -> str:
     """The sequence as a CMX 3600 edit decision list, non-drop frame, CRLF line ends; a slowed shot reads the seconds of source its speed covers and carries an M2 line with the rate its source plays at."""
     time = Timebase(doc)
@@ -20,31 +27,37 @@ def render(doc: Mapping[str, Any], files: Mapping[Tuple[str, int], Optional[Dict
     clips = doc["clips"]
     edits = cuts(clips, time.frames)
     joins = [*(cut.overlap if cut is not None else 0 for cut in edits), 0]
-    places = placement(clips) if any(joins) else [None] * len(clips)
+    places = placement(clips)
+    fills = filled(places)
     for index, clip in enumerate(clips):
         number = str(index + 1).rjust(3, "0")
         entry = files.get(("clips", index))
         reel = f"VP{number}" if entry else "BL"
-        source_in, record_in = clip["srcIn"], clip["start"]
+        record_in = clip["start"]
         speed = formats.speed_of(clip)
-        shifted = moved(clip, places[index])
-        if shifted:
+        plain = False
+        if moved(clip, places[index]):
             record_in = places[index].start
         if joins[index + 1] > 0:
             record_out = clips[index + 1]["start"]
-            source_out = source_in + (record_out - record_in) * speed
-        elif shifted:
-            record_out = places[index].end
-            source_out = source_in + (record_out - record_in) * speed
+        elif fills[index]:
+            record_out = next(place.start for place in places[index + 1 :] if place is not None)
         elif places[index] is not None:
             record_out = places[index].end
-            source_out = source_in + clip["dur"] * speed
+            plain = not moved(clip, places[index])
         else:
             record_out = record_in + clip["dur"]
-            source_out = source_in + clip["dur"] * speed
+            plain = True
+        source_in = _source_at(time, clip["srcIn"], record_in, record_in, speed)
+        if speed == 1:
+            source_out = (time.frames(source_in) + time.frames(record_out) - time.frames(record_in)) / time.fps
+        elif plain and not rounded(time.frames(record_out) / time.fps - record_out):
+            source_out = clip["srcIn"] + clip["dur"] * speed
+        else:
+            source_out = _source_at(time, clip["srcIn"], record_in, record_out, speed)
         if joins[index] > 0:
             before = clips[index - 1]
-            held = before["srcIn"] + (record_in - before["start"]) * formats.speed_of(before)
+            held = _source_at(time, before["srcIn"], before["start"], record_in, formats.speed_of(before))
             before_reel = f"VP{str(index).rjust(3, '0')}" if files.get(("clips", index - 1)) else "BL"
             lines.append(f"{number}  {before_reel.ljust(8)} V     C        {time.timecode(held)} {time.timecode(held)} {time.timecode(record_in)} {time.timecode(record_in)}")
             cut = f"D    {str(joins[index]).rjust(3, '0')}"

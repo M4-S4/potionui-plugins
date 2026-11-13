@@ -32,8 +32,16 @@ def rounded(value: float) -> float:
     return float(Decimal(value).quantize(MICRO, rounding=ROUND_HALF_UP)) if math.isfinite(value) and abs(value) < COARSE else value
 
 
+REACH = rounded(GRID + EPSILON)
+
+
 def frames_of(seconds: Any, fps: Any) -> int:
     return math.floor(_number(seconds) * _seconds(fps) + 0.5)
+
+
+def read_at(src_in: Any, start: Any, frame: int, fps: Any, speed: float = 1.0) -> float:
+    shift = rounded(frame / _seconds(fps) - _number(start)) if _seconds(fps) else 0.0
+    return rounded(_number(src_in) + shift * speed) if shift else _number(src_in)
 
 
 def dissolve_of(before: Optional[Mapping[str, Any]], clip: Optional[Mapping[str, Any]]) -> float:
@@ -87,16 +95,24 @@ def placement(clips: Sequence[Mapping[str, Any]]) -> List[Optional[Place]]:
     return places
 
 
+def filled(places: Sequence[Optional[Place]]) -> List[bool]:
+    result = [False] * len(places)
+    last: Optional[int] = None
+    for index, place in enumerate(places):
+        if place is None:
+            continue
+        if last is not None and not place.overlap and 0 < rounded(place.start - places[last].end) <= REACH:
+            result[last] = True
+        last = index
+    return result
+
+
 def moved(clip: Mapping[str, Any], place: Optional[Place]) -> bool:
     return place is not None and (place.start != _number(clip.get("start")) or place.end != rounded(place.start + _seconds(clip.get("dur"))))
 
 
 def joins(clips: Sequence[Mapping[str, Any]]) -> List[float]:
     return [place.overlap if place is not None else 0.0 for place in placement(clips)]
-
-
-def dissolving(clips: Sequence[Mapping[str, Any]]) -> bool:
-    return any(joins(clips))
 
 
 def shown(clips: Sequence[Mapping[str, Any]]) -> List[Place]:
@@ -142,8 +158,7 @@ class Cut:
 
 def cuts(clips: Sequence[Mapping[str, Any]], frames: Callable[[Any], int]) -> List[Optional[Cut]]:
     places = placement(clips)
-    if not any(place is not None and place.overlap for place in places):
-        return [None] * len(clips)
+    fills = filled(places)
     starts = [frames(place.start) if place is not None else 0 for place in places]
     ends = [frames(place.end) if place is not None else 0 for place in places]
     overlaps = [0] * len(clips)
@@ -152,13 +167,14 @@ def cuts(clips: Sequence[Mapping[str, Any]], frames: Callable[[Any], int]) -> Li
             ends[index - 1] = max(ends[index - 1], starts[index] + 1)
             overlaps[index] = ends[index - 1] - starts[index]
         elif places[index] is not None:
-            ends[index - 1] = min(ends[index - 1], starts[index])
+            ends[index - 1] = starts[index] if fills[index - 1] else min(ends[index - 1], starts[index])
     edits = [start + overlap // 2 for start, overlap in zip(starts, overlaps)]
     result: List[Optional[Cut]] = []
     for index, clip in enumerate(clips):
         place = places[index]
         following = index + 1 < len(clips) and overlaps[index + 1] > 0
-        if place is None or not (overlaps[index] or following or moved(clip, place)):
+        own = frames(_number(clip.get("start")) + _seconds(clip.get("dur")))
+        if place is None or not (overlaps[index] or following or moved(clip, place) or fills[index] or ends[index] != own):
             result.append(None)
             continue
         start = edits[index] if overlaps[index] else starts[index]

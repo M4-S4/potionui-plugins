@@ -6,7 +6,7 @@ import { shownShots } from './monitor.js';
 
 globalThis.document ??= { body: {}, querySelector: () => null };
 
-const { doc, ui, act, relayout, select, relink, clipAt, pickClip, entryTime, undo, dispose } = await import('./state.svelte.js');
+const { doc, ui, act, relayout, select, relink, clipAt, pickClip, entryTime, itemsIn, undo, dispose } = await import('./state.svelte.js');
 const { readiness, productionItems, jobClips, estimateState } = await import('./production.svelte.js');
 const { project } = await import('./project.svelte.js');
 const { pickShot, stepShot } = await import('./band.svelte.js');
@@ -75,13 +75,90 @@ test('dissolve shots: a shot target keeps only its own prompts, frames and refer
 	assert.deepEqual(ids(productionItems(undefined, { clips: [doc.clips[2]] }).prompts), ['pc']);
 });
 
-test('dissolve shots: in a project without dissolve, a shot target keeps the base reading by time', () => {
+test('dissolve shots: in a project without dissolve, a shot target after a shot off the grid keeps only its own prompts, and the recap says the same', async () => {
+	const { clean, renderComponent } = await import('./svelte-harness.js');
+	const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
 	scene([0, 0, 0]);
 	doc.clips[0].dur = 4.13;
 	relayout();
+	assert.deepEqual(doc.clips.map((c) => c.start), [0, 4.12, 8.12]);
 	doc.prompts = [prompt('pa', 'a', 0, ''), prompt('pb', 'b', 4.12, 'A walk.')];
 	select('clip', 'a');
-	assert.deepEqual(ids(readiness().items.prompts), ['pa', 'pb']);
+	assert.deepEqual(ids(readiness().items.prompts), ['pa']);
+	select('clip', 'b');
+	assert.deepEqual(ids(readiness().items.prompts), ['pb']);
+	assert.ok(!readiness().reasons.some((r) => r.code === 'emptyPrompts'));
+	doc.prompts[0].text = 'Alpha walks.';
+	try {
+		ui.modal = { type: 'recap' };
+		const plain = clean(await renderComponent(MODALS));
+		assert.ok(plain.includes('A walk.') && !plain.includes('Alpha walks.'), plain.slice(0, 200));
+	} finally {
+		ui.modal = null;
+	}
+});
+
+test('dissolve shots: in a project without dissolve on the grid, a shot target with a shot selected keeps what its range read by time', () => {
+	scene([0, 0, 0]);
+	doc.prompts = [prompt('pa', 'a', 0, ''), prompt('pb', 'b', 4, 'A walk.'), { id: 'free', start: 5, dur: 1, strength: 75, text: 'Loose.' }];
+	doc.frames = [{ id: 'fb', shotId: 'b', time: 7.96, assetId: 'mb', role: 'Fin', strength: 75 }];
+	for (const id of ['a', 'b', 'c']) {
+		select('clip', id);
+		const range = readiness().range;
+		const kept = readiness().items;
+		const byTime = itemsIn(range);
+		assert.deepEqual([ids(kept.prompts).sort(), ids(kept.frames)], [ids(byTime.prompts).sort(), ids(byTime.frames)], id);
+	}
+	ui.production.target = 'sequence';
+	assert.deepEqual(ids(readiness().items.prompts).sort(), ['free', 'pa', 'pb']);
+	ui.production.target = 'clip';
+});
+
+test('dissolve shots: shots passed to the generation read only their own prompts and frames, so a shot that does not go never blocks them', () => {
+	scene([0, 0, 0]);
+	doc.clips[0].dur = 4.13;
+	relayout();
+	doc.prompts = [prompt('pa', 'a', 0, 'Alpha.'), prompt('pb', 'b', 4.12, ''), prompt('pc', 'c', 8.12, 'Charlie.')];
+	doc.frames = [{ id: 'fb', shotId: 'b', time: 4.12, assetId: 'mb', role: 'Début', strength: 75 }];
+	const alone = readiness({ clips: [doc.clips[0]] });
+	assert.deepEqual([ids(alone.items.prompts), ids(alone.items.frames)], [['pa'], []]);
+	assert.ok(!alone.reasons.some((r) => r.code === 'emptyPrompts'));
+	const remaining = readiness({ clips: [doc.clips[0], doc.clips[2]] });
+	assert.deepEqual(ids(remaining.items.prompts), ['pa', 'pc']);
+	assert.ok(!remaining.reasons.some((r) => r.code === 'emptyPrompts'));
+	assert.deepEqual(remaining.range, [0, 12.12]);
+	assert.ok(readiness({ clips: [doc.clips[1]] }).reasons.some((r) => r.code === 'emptyPrompts'));
+	scene([0, 1, 0]);
+	doc.prompts = [prompt('pa', 'a', 0, 'Alpha.'), prompt('pb', 'b', 3, ''), prompt('pc', 'c', 7, 'Charlie.')];
+	assert.deepEqual(ids(readiness({ clips: [doc.clips[0], doc.clips[2]] }).items.prompts), ['pa', 'pc']);
+});
+
+test('dissolve shots: with the shot target and a prompt or a title selected, the checks, the recap and its range are those of the shot that goes', async () => {
+	const { clean, renderComponent } = await import('./svelte-harness.js');
+	const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
+	const { secs } = await import('./state.svelte.js');
+	scene([0, 0, 0]);
+	doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pc', 'c', 8, 'Charlie jumps.')];
+	doc.prompts[0].dur = 1;
+	doc.titles = [{ id: 't', text: 'T', sub: '', start: 1, dur: 2 }];
+	ui.playhead = 9;
+	try {
+		for (const [kind, id] of [['prompt', 'pa'], ['title', 't']]) {
+			select(kind, id);
+			assert.deepEqual(ids(jobClips()), ['c'], kind);
+			assert.deepEqual(readiness().range, [8, 12], kind);
+			assert.deepEqual(ids(readiness().items.prompts), ['pc'], kind);
+			ui.modal = { type: 'recap' };
+			const plain = clean(await renderComponent(MODALS));
+			assert.ok(plain.includes('Charlie jumps.') && !plain.includes('Alpha walks.'), plain.slice(0, 200));
+			assert.ok(plain.includes(`${secs(8)} → ${secs(12)}`), plain.slice(0, 300));
+			ui.modal = null;
+		}
+	} finally {
+		ui.modal = null;
+		ui.playhead = 0;
+		doc.titles = [];
+	}
 });
 
 test('dissolve shots: in a project that dissolves, a last frame dragged into a dissolve stays on the outgoing shot, and a first frame on the incoming one', () => {
@@ -318,25 +395,31 @@ test('dissolve shots: every dissolve a command limits or stops is said, three or
 	assert.deepEqual(heard.slice(count), [`${t('timeline.dissolve.trimStoppedMany', { count: 2 })} ${t('timeline.dissolve.trimLimitedMany', { list: '0.8 s and 0.8 s' })}`]);
 });
 
-test('dissolve shots: without dissolve, the recap reads the range by time as the base, even with picked shots', async () => {
+test('dissolve shots: the recap of picked shots lists their own prompts and shows their range, with or without dissolve', async () => {
 	const { clean, renderComponent } = await import('./svelte-harness.js');
 	const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
-	scene([0, 0, 0]);
-	doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pb', 'b', 4, 'Bravo runs.'), prompt('pc', 'c', 8, 'Charlie jumps.')];
-	select('clip', 'a');
-	ui.picked = ['b', 'c'];
-	assert.deepEqual(ids(productionItems().prompts), ['pb', 'pc']);
-	ui.modal = { type: 'recap' };
-	const plain = clean(await renderComponent(MODALS));
-	assert.ok(plain.includes('Alpha walks.') && !plain.includes('Bravo runs.'), plain.slice(0, 200));
-	scene([0, 1, 0]);
-	doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pb', 'b', 3, 'Bravo runs.')];
-	select('clip', 'a');
-	ui.modal = { type: 'recap' };
-	const dissolving = clean(await renderComponent(MODALS));
-	assert.ok(dissolving.includes('Alpha walks.') && !dissolving.includes('Bravo runs.'));
-	ui.modal = null;
-	ui.picked = [];
+	const { secs } = await import('./state.svelte.js');
+	try {
+		scene([0, 0, 0]);
+		doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pb', 'b', 4, 'Bravo runs.'), prompt('pc', 'c', 8, 'Charlie jumps.')];
+		select('clip', 'a');
+		ui.picked = ['b', 'c'];
+		assert.deepEqual(ids(productionItems().prompts), ['pb', 'pc']);
+		ui.modal = { type: 'recap' };
+		const plain = clean(await renderComponent(MODALS));
+		assert.ok(plain.includes('Bravo runs.') && plain.includes('Charlie jumps.') && !plain.includes('Alpha walks.'), plain.slice(0, 200));
+		assert.ok(plain.includes(`${secs(4)} → ${secs(12)}`), plain.slice(0, 300));
+		ui.picked = [];
+		scene([0, 1, 0]);
+		doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pb', 'b', 3, 'Bravo runs.')];
+		select('clip', 'a');
+		ui.modal = { type: 'recap' };
+		const dissolving = clean(await renderComponent(MODALS));
+		assert.ok(dissolving.includes('Alpha walks.') && !dissolving.includes('Bravo runs.'));
+	} finally {
+		ui.modal = null;
+		ui.picked = [];
+	}
 });
 
 test('dissolve shots: with a first shot of 3.14 s, a range made from either shot keeps that shot alone', () => {
@@ -401,7 +484,7 @@ test('dissolve shots: on projects drawn at random, Shot then Range keeps that sh
 	assert.ok(checked > 800, `${checked} checked, ${points} taken whole`);
 });
 
-test('dissolve shots: a document whose valid dissolve keys sit on starts end to end plays no dissolve, so the recap and the items read as the base', async () => {
+test('dissolve shots: a document whose valid dissolve keys sit on starts end to end plays no dissolve, and its recap of picked shots lists their own prompts as any other', async () => {
 	const { clean, renderComponent } = await import('./svelte-harness.js');
 	const MODALS = new URL('../components/modals/Modals.svelte', import.meta.url).href;
 	scene([0, 0, 0]);
@@ -410,11 +493,14 @@ test('dissolve shots: a document whose valid dissolve keys sit on starts end to 
 	doc.prompts = [prompt('pa', 'a', 0, 'Alpha walks.'), prompt('pb', 'b', 4, 'Bravo runs.'), prompt('pc', 'c', 8, 'Charlie jumps.')];
 	select('clip', 'a');
 	ui.picked = ['b', 'c'];
-	ui.modal = { type: 'recap' };
-	const html = clean(await renderComponent(MODALS));
-	assert.ok(html.includes('Alpha walks.') && !html.includes('Bravo runs.'));
-	ui.picked = [];
-	ui.modal = null;
+	try {
+		ui.modal = { type: 'recap' };
+		const html = clean(await renderComponent(MODALS));
+		assert.ok(html.includes('Bravo runs.') && html.includes('Charlie jumps.') && !html.includes('Alpha walks.'));
+	} finally {
+		ui.picked = [];
+		ui.modal = null;
+	}
 });
 
 const { rangeDraw } = await import('./timeline.js');
