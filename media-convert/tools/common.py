@@ -1,0 +1,191 @@
+import json
+import math
+import shutil
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+from src.plugin_api.media import find_ffmpeg
+from src.plugin_api.media_tools import ToolCancelled, ToolFailed
+from src.plugin_api.storage import plugin_settings
+
+from . import PLUGIN_ID
+
+QUALITIES = ("high", "balanced", "small")
+DEFAULT_QUALITY = "balanced"
+
+JPEG_QUALITY = {"high": 95, "balanced": 85, "small": 72}
+WEBP_QUALITY = {"high": 92, "balanced": 80, "small": 65}
+PNG_COMPRESSION = 6
+
+H264_CRF = {"high": 18, "balanced": 23, "small": 28}
+H264_PRESET = "medium"
+VP9_CRF = {"high": 27, "balanced": 32, "small": 37}
+VP9_CPU_USED = 4
+VIDEO_AAC_KBPS = {"high": 192, "balanced": 160, "small": 128}
+VIDEO_OPUS_KBPS = {"high": 160, "balanced": 128, "small": 96}
+
+MP3_VBR = {"high": 0, "balanced": 2, "small": 5}
+AAC_KBPS = {"high": 256, "balanced": 192, "small": 128}
+OPUS_KBPS = {"high": 160, "balanced": 128, "small": 96}
+FLAC_COMPRESSION = 5
+
+IMAGE_FORMATS = {"png": ".png", "jpeg": ".jpg", "webp": ".webp"}
+IMAGE_NAMES = {"png": "PNG", "jpeg": "JPEG", "webp": "WebP"}
+VIDEO_FORMATS = {"mp4": ".mp4", "mov": ".mov", "webm": ".webm"}
+VIDEO_NAMES = {"mp4": "MP4", "mov": "MOV", "webm": "WebM"}
+AUDIO_FORMATS = {"wav": ".wav", "mp3": ".mp3", "flac": ".flac", "m4a": ".m4a", "ogg": ".ogg"}
+AUDIO_NAMES = {"wav": "WAV", "mp3": "MP3", "flac": "FLAC", "m4a": "M4A", "ogg": "OGG"}
+LOSSLESS_AUDIO = ("wav", "flac")
+
+DEMUXERS = "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,mp3,wav,flac,ogg,aac"
+TEXT_SUBTITLES = frozenset({"subrip", "srt", "ass", "ssa", "mov_text", "webvtt", "text"})
+
+DEFAULT_THREADS = 4
+MAX_THREADS = 16
+DEFAULT_MAX_MINUTES = 60
+PROBE_TIMEOUT_SECONDS = 30
+
+
+def quality(params: dict) -> str:
+    value = params.get("quality") or DEFAULT_QUALITY
+    return value if value in QUALITIES else DEFAULT_QUALITY
+
+
+def max_side(params: dict) -> Optional[int]:
+    value = params.get("max_side") or 0
+    return int(value) if int(value) > 0 else None
+
+
+def settings() -> dict:
+    return plugin_settings(PLUGIN_ID) or {}
+
+
+def threads() -> int:
+    try:
+        value = int(settings().get("ffmpeg_threads", DEFAULT_THREADS))
+    except (TypeError, ValueError):
+        value = DEFAULT_THREADS
+    return min(MAX_THREADS, max(1, value))
+
+
+def max_seconds() -> float:
+    try:
+        minutes = float(settings().get("max_minutes", DEFAULT_MAX_MINUTES))
+    except (TypeError, ValueError):
+        minutes = DEFAULT_MAX_MINUTES
+    return max(1.0, minutes) * 60.0
+
+
+def check_duration(duration: Optional[float]) -> None:
+    limit = max_seconds()
+    if duration and duration > limit:
+        raise ToolFailed(
+            f"This file lasts {math.ceil(duration / 60)} minutes; "
+            f"Media Converter takes files of up to {int(limit // 60)} minutes on this server"
+        )
+
+
+def guard(ctx) -> None:
+    if ctx.is_cancelled():
+        raise ToolCancelled()
+
+
+def fit(width: int, height: int, limit: Optional[int], even: bool) -> tuple[int, int]:
+    if limit and max(width, height) > limit:
+        scale = limit / max(width, height)
+        width, height = max(1, round(width * scale)), max(1, round(height * scale))
+    if even:
+        width, height = max(2, width - width % 2), max(2, height - height % 2)
+    return width, height
+
+
+def input_args(path: Path) -> list[str]:
+    return ["-protocol_whitelist", "file", "-format_whitelist", DEMUXERS, "-i", str(Path(path).resolve())]
+
+
+def thread_args() -> list[str]:
+    count = str(threads())
+    return ["-threads", count, "-filter_threads", count]
+
+
+@dataclass(frozen=True)
+class Stream:
+    index: int
+    kind: str
+    codec: str
+    channels: int = 0
+    attached: bool = False
+    tags: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Streams:
+    streams: tuple
+    tags: dict
+
+    @property
+    def video(self) -> Optional[Stream]:
+        return next((s for s in self.streams if s.kind == "video" and not s.attached), None)
+
+    @property
+    def audio(self) -> list:
+        return [s for s in self.streams if s.kind == "audio"]
+
+    @property
+    def text_subtitles(self) -> list:
+        return [s for s in self.streams if s.kind == "subtitle" and s.codec in TEXT_SUBTITLES]
+
+    @property
+    def other_subtitles(self) -> list:
+        return [s for s in self.streams if s.kind == "subtitle" and s.codec not in TEXT_SUBTITLES]
+
+
+def ffprobe_binary() -> str:
+    ffmpeg = find_ffmpeg()
+    if ffmpeg:
+        sibling = Path(ffmpeg).with_name(Path(ffmpeg).name.replace("ffmpeg", "ffprobe"))
+        if sibling.is_file():
+            return str(sibling)
+    found = shutil.which("ffprobe")
+    if not found:
+        raise ToolFailed("ffprobe is not available on this server")
+    return found
+
+
+def read_streams(path: Path) -> Streams:
+    command = [
+        ffprobe_binary(), "-v", "error", "-protocol_whitelist", "file", "-format_whitelist", DEMUXERS,
+        "-print_format", "json", "-show_format", "-show_streams", str(Path(path).resolve()),
+    ]
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=PROBE_TIMEOUT_SECONDS, stdin=subprocess.DEVNULL,
+        )
+        payload = json.loads(result.stdout or "{}") if result.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        payload = None
+    if payload is None:
+        raise ToolFailed("Media Converter cannot read this file")
+    streams = tuple(
+        Stream(
+            index=int(item.get("index", 0)),
+            kind=str(item.get("codec_type") or ""),
+            codec=str(item.get("codec_name") or ""),
+            channels=int(item.get("channels") or 0),
+            attached=bool((item.get("disposition") or {}).get("attached_pic")),
+            tags=dict(item.get("tags") or {}),
+        )
+        for item in payload.get("streams") or []
+    )
+    return Streams(streams=streams, tags=dict((payload.get("format") or {}).get("tags") or {}))
+
+
+def metadata_args(streams: Streams, audio: Optional[Stream], keep: bool) -> list[str]:
+    if not keep:
+        return ["-map_metadata", "-1", "-map_chapters", "-1"]
+    if not streams.tags and audio is not None and audio.tags:
+        return ["-map_metadata", f"0:s:{audio.index}", "-map_chapters", "0"]
+    return ["-map_metadata", "0", "-map_chapters", "0"]

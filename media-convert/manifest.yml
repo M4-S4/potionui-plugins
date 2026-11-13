@@ -1,0 +1,206 @@
+id: "media-convert"
+name: "Media Converter"
+version: "0.1.0"
+description: "Convert images, videos and sounds of the Library to another format, and extract the sound of a video"
+author: "M4-S4"
+license: "GPL-3.0"
+type: "backend-only"
+category: "tools"
+
+docs:
+  - path: "README.md"
+    title: "Media Converter"
+    audience: "admin"
+
+settings:
+  - name: "ffmpeg_threads"
+    type: "number"
+    label: "ffmpeg threads per conversion"
+    description: "How many processor threads one video or sound conversion may use. PotionUI runs at most two tool runs at once."
+    default: 4
+    min: 1
+    max: 16
+  - name: "max_minutes"
+    type: "number"
+    label: "Longest video or sound, in minutes"
+    description: "Longer files are refused with a message."
+    default: 60
+    min: 1
+    max: 600
+  - name: "load_notice"
+    type: "info"
+    label: "Conversions run on the server's processor"
+    description: "They never use the graphics card, but a long video conversion slows down the preparation of a generation that starts meanwhile."
+
+media_tools:
+  - id: "media-convert.image"
+    label: "Convert image"
+    description: "Save the image as PNG, JPEG or WebP, optionally smaller"
+    icon: "swap"
+    accepts: [image]
+    produces: image
+    cardinality: one_to_one
+    scopes: [library, history]
+    python: "tools/image.py:ConvertImage"
+    params:
+      - name: format
+        type: select
+        label: "Format"
+        default: jpeg
+        options:
+          - { label: "PNG", value: png }
+          - { label: "JPEG", value: jpeg }
+          - { label: "WebP", value: webp }
+      - name: quality
+        type: select
+        label: "Quality"
+        default: balanced
+        description: "Small files lose more detail. PNG is always lossless."
+        when: { field: format, not_equals: png }
+        options:
+          - { label: "High", value: high }
+          - { label: "Balanced", value: balanced }
+          - { label: "Small", value: small }
+      - name: max_side
+        type: select
+        label: "Largest side"
+        default: 0
+        description: "Shrinks a larger image so that its longest side fits; a smaller one keeps its size."
+        options:
+          - { label: "Original size", value: 0 }
+          - { label: "3840 px", value: 3840 }
+          - { label: "2560 px", value: 2560 }
+          - { label: "1920 px", value: 1920 }
+          - { label: "1280 px", value: 1280 }
+          - { label: "1024 px", value: 1024 }
+          - { label: "640 px", value: 640 }
+      - name: background
+        type: color
+        label: "Background"
+        default: "#ffffff"
+        description: "JPEG has no transparency: transparent areas are filled with this colour."
+        when: { field: format, equals: jpeg }
+      - name: keep_metadata
+        type: checkbox
+        label: "Keep metadata"
+        default: true
+        description: "Keeps the EXIF data, such as the camera and the date. The colour profile is always kept."
+
+  - id: "media-convert.video"
+    label: "Convert video"
+    description: "Save the video as MP4 or MOV (H.264) or WebM (VP9), optionally smaller"
+    icon: "film"
+    accepts: [video]
+    produces: video
+    cardinality: one_to_one
+    scopes: [library, history]
+    python: "tools/video.py:ConvertVideo"
+    params:
+      - name: format
+        type: select
+        label: "Format"
+        default: mp4
+        options:
+          - { label: "MP4 (H.264)", value: mp4 }
+          - { label: "MOV (H.264)", value: mov }
+          - { label: "WebM (VP9)", value: webm }
+      - name: quality
+        type: select
+        label: "Quality"
+        default: balanced
+        description: "Small files lose more detail."
+        options:
+          - { label: "High", value: high }
+          - { label: "Balanced", value: balanced }
+          - { label: "Small", value: small }
+      - name: max_side
+        type: select
+        label: "Largest side"
+        default: 0
+        description: "Shrinks a larger video so that its longest side fits; a smaller one keeps its size."
+        options:
+          - { label: "Original size", value: 0 }
+          - { label: "3840 px", value: 3840 }
+          - { label: "2560 px", value: 2560 }
+          - { label: "1920 px", value: 1920 }
+          - { label: "1280 px", value: 1280 }
+          - { label: "1024 px", value: 1024 }
+          - { label: "640 px", value: 640 }
+      - name: keep_metadata
+        type: checkbox
+        label: "Keep metadata"
+        default: true
+        description: "Keeps the title and other tags, the chapters, every sound track and the text subtitles. Off, only the picture and the first sound track are kept."
+
+  - id: "media-convert.audio"
+    label: "Convert sound"
+    description: "Save the sound as WAV, MP3, FLAC, M4A or OGG"
+    icon: "audio"
+    accepts: [audio]
+    produces: audio
+    cardinality: one_to_one
+    scopes: [library, history]
+    python: "tools/audio.py:ConvertAudio"
+    params:
+      - name: format
+        type: select
+        label: "Format"
+        default: mp3
+        options:
+          - { label: "WAV", value: wav }
+          - { label: "MP3", value: mp3 }
+          - { label: "FLAC", value: flac }
+          - { label: "M4A (AAC)", value: m4a }
+          - { label: "OGG (Opus)", value: ogg }
+      - name: quality
+        type: select
+        label: "Quality"
+        default: balanced
+        description: "Small files lose more detail. WAV and FLAC are always lossless."
+        when: { field: format, not_in: [wav, flac] }
+        options:
+          - { label: "High", value: high }
+          - { label: "Balanced", value: balanced }
+          - { label: "Small", value: small }
+      - name: keep_metadata
+        type: checkbox
+        label: "Keep metadata"
+        default: true
+        description: "Keeps the title, the artist and the other tags."
+
+  - id: "media-convert.extract-audio"
+    label: "Extract sound"
+    description: "Save the sound of a video as WAV, MP3, FLAC, M4A or OGG"
+    icon: "editor-music"
+    accepts: [video]
+    produces: audio
+    cardinality: one_to_one
+    requires: { has_audio: true }
+    scopes: [library, history]
+    python: "tools/extract_audio.py:ExtractAudio"
+    params:
+      - name: format
+        type: select
+        label: "Format"
+        default: m4a
+        options:
+          - { label: "WAV", value: wav }
+          - { label: "MP3", value: mp3 }
+          - { label: "FLAC", value: flac }
+          - { label: "M4A (AAC)", value: m4a }
+          - { label: "OGG (Opus)", value: ogg }
+      - name: quality
+        type: select
+        label: "Quality"
+        default: balanced
+        description: "Small files lose more detail. WAV and FLAC are always lossless."
+        when: { field: format, not_in: [wav, flac] }
+        options:
+          - { label: "High", value: high }
+          - { label: "Balanced", value: balanced }
+          - { label: "Small", value: small }
+      - name: keep_metadata
+        type: checkbox
+        label: "Keep metadata"
+        default: true
+        description: "Keeps the title and the other tags of the video."
