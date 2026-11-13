@@ -33,7 +33,7 @@ def codec_args(fmt: str, level: str, bit_depth, channels: int) -> list[str]:
         args = ["-c:a", "aac", "-b:a", f"{AAC_KBPS[level]}k"]
     else:
         args = ["-c:a", "libopus", "-b:a", f"{OPUS_KBPS[level]}k"]
-    if fmt in ("mp3", "ogg") and channels > 2:
+    if fmt == "ogg" and channels > 2:
         args += ["-ac", "2"]
     return args
 
