@@ -5,7 +5,7 @@ copy of an existing one or from a blank skeleton, lives as a draft, is checked w
 own preset linter, then is published into `content/presets/local/`, where Admin → Presets picks
 it up without a restart. Admins only.
 
-Version 0.2.4. It needs PotionUI 0.1.0 or later and is in the catalogue of this repository.
+Version 0.2.5. It needs PotionUI 0.1.0 or later and is in the catalogue of this repository.
 
 ## Getting started
 
@@ -18,7 +18,8 @@ checkout), then click **Scan for Plugins** in Admin → Plugins and enable it.
 Two things appear, for admins only: a **Preset Editor** entry in the sidebar (the page
 `/plugins/preset-editor`) and, in the header of Admin → Presets, the buttons **New Preset** and
 **Edit…**. The plugin needs no setting to work and keeps no database table: drafts and the
-history are folders under `storage/plugins/preset-editor/`.
+history are folders under `storage/plugins/preset-editor/`. Its routes are for a signed-in
+admin only: on PotionUI 0.2.0 and later, no API key reaches them, whatever its scope.
 
 ## What you can do
 
@@ -46,8 +47,11 @@ history are folders under `storage/plugins/preset-editor/`.
   cover among the files already there and deletes files. `description.md` has a Markdown
   preview built by a copy of the core's `processMarkdown`, the renderer of Admin → Presets,
   with the same HTML and classes: a single line break stays a line break, headings stop at
-  `###`, GFM tables are tables, a relative link is a link, and an image line appears as its `!`
-  and its link, since PotionUI shows no image in a description.
+  `###`, GFM tables are tables, and an image line appears as its `!` and its link, since
+  PotionUI shows no image in a description. Links follow the rule of PotionUI 0.2.0: an
+  `http`, `https` or `mailto` link is a link, and so is a relative target that starts with
+  `/`, `./`, `../`, `#` or `?`; anything else (`javascript:` or `data:`, even written with
+  HTML entities, `//host`, a bare `docs/guide.md`) stays text.
 - `form.yml`, `tabs/*.yml` and the fragments under `files/` open in a builder: the field tree
   (drag and drop, containers, tabs and includes backed by files), a palette of every field
   type this instance knows, an inspector for the attributes PotionUI's schema defines (typed
@@ -64,7 +68,12 @@ history are folders under `storage/plugins/preset-editor/`.
   type), each pipe's declared configuration keys with their choices, Jinja values kept as
   text, and two start chains (a native family, cloud). Once the preset is published, the
   form preview can render the pipeline with the form's current values through PotionUI's
-  own pipeline builder, which needs every value the pipeline reads, models included.
+  own pipeline builder, which needs every value the pipeline reads, models included. A mode
+  whose `pipeline.yml` is the single line `pipeline_from: <mode>` (PotionUI 0.2.0: it runs the
+  pipeline of that sibling mode with its own form) opens read-only: the builder names that
+  mode and opens its `pipeline.yml`, and never writes the file. To give such a mode a pipeline
+  of its own, replace the line in the YAML view. A mode that another mode names this way
+  cannot be removed until that other mode points elsewhere.
 - **Download zip** on a draft, and the `zip` button of each local preset in the Edit… menu,
   give the folder as an archive. **Import zip** turns such an archive, or any zipped preset
   folder with `preset.yml` at its root, into a draft: every entry is checked before
@@ -90,6 +99,11 @@ history are folders under `storage/plugins/preset-editor/`.
   core's lint, run on every save, tells whether each include gives it the vars it needs.
 - The form preview and the rendered pipeline exist only for a published version, and the
   pipeline renders only when every form value it reads is filled in, models included.
+- The description preview applies the link rule of PotionUI 0.2.0 on every core. On PotionUI
+  0.1.0, Admin → Presets still links a bare relative target such as `docs/guide.md` or
+  `//host`, which the preview shows as text.
+- The pipeline builder checks the `pipeline_from` line as the core does, except a pointer to a
+  mode that is itself a pointer: the core's lint, run on every save, reports that one.
 - Media uploads are capped at 20 MB and limited to PotionUI's own extensions (`.jpg`,
   `.jpeg`, `.png`, `.webp`, `.gif`, `.mp4`, `.webm`; no SVG). Images become 1024 px WebP.
   Draft media are fetched whole before they show, videos included.
@@ -120,6 +134,20 @@ In Admin → Plugins → Preset Editor → Settings:
   override it each time).
 
 ## Changes
+
+### What changed in 0.2.5
+
+- **Modes that take the pipeline of another mode.** PotionUI 0.2.0 lets a mode's
+  `pipeline.yml` be the single line `pipeline_from: <mode>`, as in the Text to Video, Image to
+  Video and First to Last Frame modes of its MiniMax-H3 preset. The pipeline builder of 0.2.4
+  wrote such a file back with `pipeline: []` beside that line, which PotionUI refuses, so
+  saving it broke the mode. The builder now opens it read-only and names the mode whose
+  pipeline runs, and removing a mode that another mode names this way is refused.
+- **Links in the description preview.** The preview follows the link rule of PotionUI 0.2.0
+  (`safeUrl`): an encoded `javascript:` link, a `data:` link, `//host` and a bare relative
+  target are text, as in Admin → Presets.
+- **API keys.** On PotionUI 0.2.0, an API key with the `admin` scope could reach every route
+  of the plugin. Every route now refuses every API key; a signed-in admin works as before.
 
 ### What changed in 0.2.4
 
