@@ -5,7 +5,7 @@
 	import { commandById, save, toggleSidebar } from '../../lib/commands.js';
 	import { WORKSPACES, isPlayer } from '../../lib/workspaces.js';
 	import { chat } from '../../lib/host.js';
-	import { openImport, openLocalImport } from '../../lib/importer.js';
+	import { kitsAvailable, openImport, openKitImport, openLocalImport } from '../../lib/importer.js';
 	import { project } from '../../lib/project.svelte.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import Icon from '../Icon.svelte';
@@ -21,6 +21,7 @@
 
 	const importItems = $derived([
 		{ label: t('shell.project.importLibrary'), icon: 'folder', key: commandById('import')?.key, run: () => openImport() },
+		...(kitsAvailable() ? [{ label: t('shell.project.importKit'), icon: 'layers', run: () => openKitImport() }] : []),
 		{ label: t('shell.project.importLocal'), icon: 'upload', key: commandById('import-local')?.key, run: () => openLocalImport() },
 		{ label: t('shell.project.importCuts'), icon: 'scissors', run: () => (ui.modal = { type: 'cuts' }) }
 	]);

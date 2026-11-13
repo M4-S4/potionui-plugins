@@ -1,15 +1,14 @@
 <script>
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { getLocale, t } from '../../i18n/index.svelte.js';
-	import { ui, doc, act, globalPrompt, secs, select, openDirector } from '../../lib/state.svelte.js';
-	import { productionItems, sentRange } from '../../lib/production.svelte.js';
+	import { ui, doc, act, secs, select, openDirector } from '../../lib/state.svelte.js';
 	import { cardWordsOf, setCardWords } from '../../lib/cardwords.js';
 	import { chainByOf, chainOn, ignoresFirstFrame, setChain, setChainBy } from '../../lib/chain.js';
 	import { engineOptions, optionFor } from '../../lib/generation.js';
 	import { seek } from '../../lib/playback.svelte.js';
-	import { allCommands, pointerShortcuts } from '../../lib/commands.js';
+	import { allCommands, pointerShortcuts, shown } from '../../lib/commands.js';
 	import { frameRoleLabel } from '../../lib/catalog.js';
-	import { openReferences, referenceTagText } from '../../lib/references.js';
+	import { openReferences } from '../../lib/references.js';
 	import Modal from './Modal.svelte';
 	import OpenProject from './OpenProject.svelte';
 	import VersionHistory from './VersionHistory.svelte';
@@ -36,14 +35,7 @@
 	const projectEngine = $derived(optionFor(engineOptions(ui.me), doc.engine));
 	const close = () => (ui.modal = null);
 
-	const recap = $derived.by(() => {
-		if (m?.type !== 'recap') return null;
-		const range = sentRange();
-		const it = productionItems(range);
-		return { range, it, local: it.prompts.map((p) => p.text) };
-	});
-
-	const shortcutList = $derived(allCommands.filter((c) => c.keys));
+	const shortcutList = $derived(allCommands.filter((c) => c.keys && shown(c)));
 
 	const tour = $derived([
 		[t('shell.tour.project.title'), t('shell.tour.project.text'), () => (ui.modal = { type: 'project' })],
@@ -116,36 +108,6 @@
 		<FinalPass />
 	{:else if m?.type === 'cuts'}
 		<CutImport assetId={m.assetId ?? null} settings={m.settings ?? null} />
-	{:else if m?.type === 'recap' && recap}
-		<Modal title={t('shell.recap.title')} subtitle="{secs(recap.range[0])} → {secs(recap.range[1])}" icon="list" width={640}>
-			<div class="space-y-3 p-4 text-sm">
-				<section class="rounded-lg border border-line-strong p-3">
-					<div class="mb-1 flex items-center gap-2">
-						<span class="flex h-4 w-4 items-center justify-center rounded-sm bg-surface-3 text-2xs font-semibold">1</span>
-						<span class="font-medium">{t('shell.recap.global')}</span>
-						<span class="text-xs text-fg-subtle">{t('shell.recap.allVideos')}</span>
-					</div>
-					<p class="text-xs leading-5 text-fg-muted">{globalPrompt()}</p>
-				</section>
-				<section class="rounded-lg border border-line-strong p-3">
-					<div class="mb-1 flex items-center gap-2">
-						<span class="flex h-4 w-4 items-center justify-center rounded-sm bg-surface-3 text-2xs font-semibold">2</span>
-						<span class="font-medium">{t('shell.recap.local')}</span>
-					</div>
-					{#each recap.local as line}<p class="text-xs text-fg-muted">{t('shell.recap.quote', { text: line })}</p>{:else}<p class="text-xs text-fg-subtle">{t('shell.recap.none')}</p>{/each}
-				</section>
-				<section class="rounded-lg border border-line-strong p-3">
-					<div class="mb-1 flex items-center gap-2">
-						<span class="flex h-4 w-4 items-center justify-center rounded-sm bg-surface-3 text-2xs font-semibold">3</span>
-						<span class="font-medium">{t('shell.recap.refs')}</span>
-					</div>
-					<ul class="text-xs text-fg-muted">
-						{#each recap.it.references as r}<li>{r.name} · {referenceTagText(r)}</li>{/each}
-						{#each recap.it.frames as f}<li>{t('shell.recap.frame', { role: frameRoleLabel(f.role), time: secs(f.time), strength: f.strength })}</li>{/each}
-					</ul>
-				</section>
-			</div>
-		</Modal>
 	{:else if m?.type === 'shortcuts'}
 		<Modal title={t('shell.shortcuts.title')} icon="command" width={680}>
 			<dl class="columns-2 gap-6 p-4">

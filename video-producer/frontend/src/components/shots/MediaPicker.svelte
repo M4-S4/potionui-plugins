@@ -3,10 +3,10 @@
 	import { t } from '../../i18n/index.svelte.js';
 	import { doc, asset } from '../../lib/state.svelte.js';
 	import { assetThumb } from '../../lib/media.js';
-	import { libraryAvailable, pickMedia, pickLocalMedia } from '../../lib/importer.js';
+	import { kitsAvailable, libraryAvailable, pickKitMany, pickKitMedia, pickMedia, pickLocalMedia, requireAll } from '../../lib/importer.js';
 	import Icon from '../Icon.svelte';
 
-	let { value = null, title, onpick, removable = true, compact = false, kind = 'image' } = $props();
+	let { value = null, title, onpick, onpickall = null, removable = true, compact = false, kind = 'image', many = false } = $props();
 
 	let open = $state(false);
 	const video = $derived(kind === 'video');
@@ -18,6 +18,16 @@
 		open = false;
 		onpick(id);
 	}
+
+	requireAll(many, onpickall);
+
+	function chooseAll(ids) {
+		const pickAll = onpickall;
+		open = false;
+		pickAll(ids);
+	}
+
+	const fromKit = () => (many ? pickKitMany(kind, title, chooseAll) : pickKitMedia(kind, title, choose));
 </script>
 
 <div class="space-y-1.5">
@@ -58,6 +68,9 @@
 			<div class="flex flex-wrap gap-1">
 				{#if libraryAvailable()}
 					<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'folder', onclick: () => pickMedia(kind, title, choose) }}>{t('panels.media.import')}</HostUi>
+				{/if}
+				{#if kitsAvailable()}
+					<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'layers', onclick: fromKit }}>{t('panels.media.importKit')}</HostUi>
 				{/if}
 				<HostUi name="Button" props={{ variant: 'ghost', size: 'xs', icon: 'upload', onclick: () => pickLocalMedia(kind, choose) }}>{t('panels.media.importLocal')}</HostUi>
 				{#if removable && value}

@@ -7,6 +7,8 @@
 	"media.import": "Bibliothèque",
 	"media.importTip": "Importer depuis la bibliothèque PotionUI",
 	"media.importLocal": "Depuis l’ordinateur",
+	"media.importKit": "Depuis un kit",
+	"media.importKitTip": "Prendre des médias dans vos kits PotionUI",
 	"media.importLocalTip": "Importer des fichiers de cet ordinateur",
 	"media.search": "Rechercher un média",
 	"media.collections": "Collections",

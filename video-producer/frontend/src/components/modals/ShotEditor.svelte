@@ -360,9 +360,9 @@
 							</span>
 						</div>
 						{#if adding === 'image'}
-							<MediaPicker title={t('modals.shot.newReference')} onpick={addOwn} removable={false} compact />
+							<MediaPicker title={t('modals.shot.newReference')} onpick={addOwn} onpickall={(ids) => ids.forEach(addOwn)} removable={false} compact many />
 						{:else if adding === 'sound'}
-							<AudioPicker title={t('modals.shot.newSound')} onpick={addSound} removable={false} />
+							<AudioPicker title={t('modals.shot.newSound')} onpick={addSound} onpickall={(ids) => ids.forEach(addSound)} removable={false} many />
 						{/if}
 						{#if draft.own.length}
 							<ul class="divide-y divide-line rounded-lg border border-line-strong">

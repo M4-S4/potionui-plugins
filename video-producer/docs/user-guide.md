@@ -181,6 +181,7 @@ The media of a project are the images, videos and audio files you imported, and 
 
 - **From the library**: **File › Import from the library…** (Ctrl+I), or the **Library** buttons. You pick files of your PotionUI library.
 - **From the gallery**: **File › From the PotionUI gallery** lists your past generations.
+- **From a kit**: on a PotionUI that has kits, the **From a kit** buttons, next to **Library** wherever you import or choose a media (the Media and Sounds panels, a reference, the frames and references of a shot, a Bible card, Import a cut as shots). Open a kit and pick one item, several, or **Use whole kit**. Each item you take becomes an ordinary media of the project, a link to the library file it points to. It does not follow the kit afterwards: changing or deleting the kit changes nothing in the project. Texts, and files deleted from the library, are left out, and the page says how many. On a PotionUI without kits, there is no such button.
 - **From this computer**: **File › Import from this computer…** (Ctrl+Alt+I), the **From computer** buttons, or drop files on the Media panel or on the timeline. Each file is sent to your PotionUI library, then added to the project.
 
 Accepted files: images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`), videos (`.mp4`, `.webm`, `.mov`, `.mkv`, `.avi`) and audio (`.wav`, `.mp3`, `.ogg`, `.flac`, `.m4a`, `.aac`). The size limit is the one of your PotionUI storage plan.

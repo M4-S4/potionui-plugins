@@ -2,7 +2,7 @@
 	import HostUi from '../../../../../../sdk/HostUi.svelte';
 	import { t } from '../../i18n/index.svelte.js';
 	import { doc, secs } from '../../lib/state.svelte.js';
-	import { addToTimeline, openImport, openLocalImport } from '../../lib/importer.js';
+	import { addToTimeline, kitsAvailable, openImport, openKitImport, openLocalImport } from '../../lib/importer.js';
 	import { emptyActions } from '../../lib/empty.js';
 	import { hostIconName } from '../../lib/icons.js';
 	import { roleColor, audioRoleLabel } from '../../lib/catalog.js';
@@ -24,6 +24,7 @@
 		actions: emptyActions(
 			[
 				{ variant: 'secondary', icon: 'folder', onclick: () => openImport('audio'), children: t('panels.media.import') },
+				...(kitsAvailable() ? [{ variant: 'ghost', icon: 'layers', onclick: () => openKitImport('audio'), children: t('panels.media.importKit') }] : []),
 				{ variant: 'ghost', icon: 'upload', onclick: () => openLocalImport('audio'), children: t('panels.media.importLocal') }
 			]
 		)

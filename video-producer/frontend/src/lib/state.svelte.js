@@ -277,6 +277,12 @@ export function act(fn, say = true) {
 	if (!say && !had) watched = null;
 	settle();
 }
+export function step(fn) {
+	if (acting) return fn();
+	let result;
+	act(() => (result = fn()));
+	return result;
+}
 export function adopt(next) {
 	const known = new Set(doc.clips.map((c) => c.id));
 	act(() => {

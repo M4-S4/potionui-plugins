@@ -4,7 +4,7 @@
 	import { ms } from '../../lib/motion.js';
 	import { overlayLayer } from '../../lib/host.js';
 	import { ui } from '../../lib/state.svelte.js';
-	import { menus } from '../../lib/commands.js';
+	import { menus, shown } from '../../lib/commands.js';
 	import { setReturnFocus } from '../../lib/focus.js';
 	import Icon from '../Icon.svelte';
 
@@ -46,7 +46,7 @@
 				<div class="vp-menu vp-menu-list top-7 left-0" role="menu" use:overlayLayer in:fly={{ y: -4, duration: ms(120) }}>
 					{#each m.groups as group, gi}
 						{#if gi > 0}<div class="vp-menu-sep" role="separator"></div>{/if}
-						{#each group as item (item.id)}
+						{#each group.filter(shown) as item (item.id)}
 							<button type="button" role="menuitem" onclick={() => run(item, m.id)}>
 								<span class="w-3.5 shrink-0 text-signal">
 									{#if item.check?.()}<Icon name="check" class="h-3.5 w-3.5" />{/if}

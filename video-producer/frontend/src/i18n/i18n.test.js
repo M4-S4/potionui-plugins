@@ -9,7 +9,7 @@ import { EXPORT_ERROR_CODES } from '../lib/exports.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, '..');
-const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.', 'generation.failed.', 'exports.error.', 'generation.label.', 'generation.labels.group.', 'keyframes.note.', 'keyframes.state.', 'keyframes.pictureRole.', 'keyframes.reason.', 'keyframes.unusable.', 'keyframes.frameNote.', 'keyframes.retrieve.previousState.', 'keyframes.retrieve.nextState.', 'lib.refType.', 'lib.refRole.', 'lib.language.', 'panels.director.pick.lookState.', 'modals.shot.writer.error.'];
+const DYNAMIC_PREFIXES = ['shell.error.', 'shell.menu.', 'commands.cmd.', 'generation.failed.', 'exports.error.', 'generation.label.', 'generation.labels.group.', 'keyframes.note.', 'keyframes.state.', 'keyframes.pictureRole.', 'keyframes.reason.', 'keyframes.unusable.', 'keyframes.frameNote.', 'keyframes.retrieve.previousState.', 'keyframes.retrieve.nextState.', 'lib.refType.', 'lib.refRole.', 'lib.language.', 'panels.director.pick.lookState.', 'modals.shot.writer.error.', 'project.kits.reason.', 'project.kits.leftOne.'];
 const PLURAL_SUFFIX = /\.(zero|one|two|few|many|other)$/;
 const SKIPPED_DIRS = new Set(['dist', 'node_modules']);
 
@@ -207,7 +207,7 @@ test('exports.error.<code> matches the export error codes the export window tran
 });
 
 test('every command and menu of lib/commands.js has a label, and every label has a command', () => {
-	assert.equal(commandIds.length, 102, 'the source editor has 97 commands, minus the theme switch, plus the version history, the two imports from the computer, the slicing, joining and slicing on the shots of an audio clip, the Play workspace, the Synopsis and breakdown window, the Storyboard band and the shot editor, minus the advanced workshop, the Hybrid builder and the camera keyframes, minus the 3D scene workspace and its new scene command, plus the four views of Director AI, the final pass of the film, and picking every shot and clearing the shots picked, minus the voice and the five sounds of the retired Sound design workshop, minus the Simulated features window of the Help menu, plus the import of a cut as shots');
+	assert.equal(commandIds.length, 104, 'the source editor has 97 commands, minus the theme switch, plus the version history, the two imports from the computer, the slicing, joining and slicing on the shots of an audio clip, the Play workspace, the Synopsis and breakdown window, the Storyboard band and the shot editor, minus the advanced workshop, the Hybrid builder and the camera keyframes, minus the 3D scene workspace and its new scene command, plus the four views of Director AI, the final pass of the film, and picking every shot and clearing the shots picked, minus the voice and the five sounds of the retired Sound design workshop, minus the Simulated features window of the Help menu, plus the import of a cut as shots, plus the two imports from a kit');
 	assert.equal(new Set(commandIds).size, commandIds.length, 'duplicate command id');
 	assert.equal(menuIds.length, 10);
 	assert.ok(!commandIds.includes('theme'), 'the theme command belongs to the host');
