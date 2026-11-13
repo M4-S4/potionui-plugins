@@ -1,6 +1,6 @@
 # Media Converter
 
-Media Converter adds four tools to the **Tools** menu of the Library and of the History in PotionUI:
+Media Converter adds four tools to the **Tools** menu of the Library and of the History in PotionUI, under **Edit**, where the menu names them with "Media Convert" below each tool:
 
 | Tool | Takes | Makes |
 |---|---|---|
@@ -9,9 +9,9 @@ Media Converter adds four tools to the **Tools** menu of the Library and of the 
 | **Convert sound** | a sound | WAV, MP3, FLAC, M4A (AAC) or OGG (Opus) |
 | **Extract sound** | a video with sound | WAV, MP3, FLAC, M4A (AAC) or OGG (Opus) |
 
-The result is a new item in the Library, next to the original, which stays as it was. It keeps the name of the original with the extension of the new format: `Cat.png` converted to WebP becomes `Cat.webp`. Select several items and run a tool once to convert them all in one run. The tools never replace the original, because a replaced item would keep its old name and extension.
+The result is a new item in the Library, next to the original, which stays as it was. It keeps the name of the original with the extension of the new format: `Cat.png` converted to WebP becomes `Cat.webp`. A file of a generation keeps the name it has in the History. Select several items and run a tool once to convert them all in one run; two sources with the same name, such as `Cat.png` and `Cat.webp` converted to JPEG, give two items both named `Cat.jpg`. The tools never replace the original, because a replaced item would keep its old name and extension.
 
-The plugin has no page of its own: each tool opens the usual tool window of PotionUI with the settings below. It needs ffmpeg and ffprobe on the server, which the PotionUI image ships, and nothing else.
+The plugin has no page of its own: each tool opens the usual tool window of PotionUI with the settings below, filled with the values you used last. It needs ffmpeg and ffprobe on the server, which the PotionUI image ships, and nothing else.
 
 ## The tools
 
@@ -48,7 +48,7 @@ The picture and the sound are always encoded again, even when the source already
 
 ### Extract sound
 
-The same settings as **Convert sound**, with M4A as the default format. It takes the first sound track of the video. It is offered only for videos with sound.
+The same settings as **Convert sound**, with M4A as the default format. It takes the first sound track of the video.
 
 ## Quality
 
@@ -89,7 +89,7 @@ The tool window shows the reason, and nothing is added to the Library.
 | An SVG drawing, or a file that is not a PNG, JPEG, WebP, GIF or BMP image | Refused with the list of the image formats it reads. |
 | A PNG converted to PNG at its original size | Refused, since nothing would change. With a largest side, it is shrunk. |
 | A WAV converted to WAV, a FLAC to FLAC | Refused, since nothing would change. A JPEG, WebP, MP3, M4A or OGG file can be converted to its own format to make it lighter. |
-| A video without sound given to **Extract sound** | The tool is not offered for it; a run asked through the API or the chat ends with "Extract sound needs a video with sound". |
+| A video without sound given to **Extract sound** | The menu offers the tool, since the Library does not record whether an uploaded video has sound; the run ends with "Extract sound needs a video with sound". |
 | A video or sound longer than the limit the admin set | Refused before any encoding, with its length and the limit. |
 | A transparent image converted to JPEG | Converted, with transparent areas filled with the background colour. |
 | A cancelled run | The encoder stops at once and nothing is published. |
