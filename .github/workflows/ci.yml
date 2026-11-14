@@ -80,10 +80,17 @@ jobs:
             name: Video Producer
             core-tests: test_video_producer_*.py
             node-tests: "'frontend/src/i18n/*.test.js' 'frontend/src/lib/*.test.js'"
+            dist: true
           - id: preset-editor
             name: Preset Editor
             core-tests: test_preset_editor_*.py
             node-tests: "'frontend/src/lib/*.test.js'"
+            dist: true
+          - id: media-convert
+            name: Media Converter
+            core-tests: ""
+            node-tests: ""
+            dist: false
     env:
       PLUGIN_ID: ${{ matrix.id }}
       CORE_TESTS: ${{ matrix.core-tests }}
@@ -204,6 +211,7 @@ jobs:
         run: node scripts/build-plugins.mjs "$PLUGIN_ID"
 
       - name: Upload the built dist
+        if: ${{ matrix.dist }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.id }}-dist
