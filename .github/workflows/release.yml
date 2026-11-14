@@ -65,7 +65,7 @@ jobs:
           PLUGIN_ID: ${{ steps.tag.outputs.id }}
         run: node scripts/build-plugins.mjs "$PLUGIN_ID"
 
-      - name: Package the plugin with its dist, without its tests
+      - name: Package the plugin with its dist, without its tests or its screenshots
         env:
           PLUGIN_ID: ${{ steps.tag.outputs.id }}
           VERSION: ${{ steps.tag.outputs.version }}
@@ -73,7 +73,7 @@ jobs:
           archive="$PLUGIN_ID-$VERSION.zip"
           staging="$RUNNER_TEMP/package"
           mkdir -p "$staging"
-          rsync -a --exclude /tests/ --exclude __pycache__/ --exclude '*.pyc' --exclude node_modules/ "core/content/plugins/local/$PLUGIN_ID/" "$staging/$PLUGIN_ID/"
+          rsync -a --exclude /tests/ --exclude /docs/screenshots/ --exclude __pycache__/ --exclude '*.pyc' --exclude node_modules/ "core/content/plugins/local/$PLUGIN_ID/" "$staging/$PLUGIN_ID/"
           (cd "$staging" && zip -r -X -q "$GITHUB_WORKSPACE/$archive" "$PLUGIN_ID")
           sha256sum "$archive" > "$PLUGIN_ID-$VERSION.sha256"
           cat "$PLUGIN_ID-$VERSION.sha256"
