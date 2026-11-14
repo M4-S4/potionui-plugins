@@ -691,8 +691,26 @@ bind = {"video_director.media[0].media" = "bottle", "video_director.media[1].med
 
 [[cells]]
 preset = "core/MiniMax-H3"
+mode = "video"
+variant = "flex"
+case = "minimax-h3-flex-t2va-fast"
+prompt = "t2va"
+profiles = ["full"]
+
+[[cells]]
+preset = "core/MiniMax-H3"
 mode = "refs"
 case = "minimax-h3-ref2va-fast"
+fix = "references holds a PLACEHOLDER image: bound to lumi"
+prompt = "refs"
+profiles = ["full"]
+bind = {"references[0]" = "lumi"}
+
+[[cells]]
+preset = "core/MiniMax-H3"
+mode = "refs"
+variant = "flex"
+case = "minimax-h3-flex-ref2va-fast"
 fix = "references holds a PLACEHOLDER image: bound to lumi"
 prompt = "refs"
 profiles = ["full"]
@@ -750,9 +768,10 @@ prompt = "loop"
 seed = 12345
 profiles = ["full"]
 models_from = "minimax-h3-text-to-video-fast"
-form = {loop_seconds = 4, movement = "subtle", sound = false, steps = 24}
+form = {resolution = "832x480", loop_seconds = 4, movement = "subtle", sound = false, steps = 24}
 bind = {start_picture = "bottle"}
-sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=loop on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-text-to-video-fast", prompt = "pack", start_picture = "pack: the field is optional; the mode brings a picture to life, so the cell gives it bottle"}
+checks = {min_outputs = 1, not_black = true, resolution = "832x480"}
+sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=loop on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults but resolution, the pack's choice: 832x480 is one of the form's options and the size of every other MiniMax-H3 cell, while the default 1344x768 risks running out of memory on a 12 GB GPU; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-text-to-video-fast", prompt = "pack", start_picture = "pack: the field is optional; the mode brings a picture to life, so the cell gives it bottle"}
 
 [[cells]]
 preset = "core/MiniMax-H3"
@@ -761,9 +780,10 @@ prompt = "extend"
 seed = 12345
 profiles = ["full"]
 models_from = "minimax-h3-t2va-fast"
-form = {speed_profile = "quality", steps = 4}
+form = {speed_profile = "turbo", steps = 4}
 bind = {source_video = "clip"}
-sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-t2va-fast", prompt = "pack"}
+checks = {min_outputs = 1, not_black = true}
+sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: speed_profile turbo with its 4 steps is the pack's choice, as in the fast cases of the core for this preset; the form's default is quality, which sets 24 steps, and pack 1.0.0 sent quality with 4 steps, a pair the form never produces; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-t2va-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/MiniMax-H3"
@@ -782,9 +802,10 @@ prompt = "remix"
 seed = 12345
 profiles = ["full"]
 models_from = "minimax-h3-ref2va-fast"
-form = {speed_profile = "quality", steps = 4}
+form = {speed_profile = "turbo", steps = 4}
 bind = {source_video = "clip"}
-sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=remix on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-ref2va-fast", prompt = "pack"}
+checks = {min_outputs = 1, not_black = true}
+sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=remix on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: speed_profile turbo with its 4 steps is the pack's choice, as in the fast cases of the core for this preset; the form's default is quality, which sets 24 steps, and pack 1.0.0 sent quality with 4 steps, a pair the form never produces; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-ref2va-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/MiniMax-H3"
@@ -847,6 +868,7 @@ profiles = ["full"]
 models_from = "minimax-h3-image-txt2img"
 form = {match_picture_1 = true}
 bind = {"references[0]" = "bottle"}
+checks = {min_outputs = 1, not_black = true}
 sources = {form = "GET /api/presets/01M732Q89GSPYP058BTVGJDR89/form?mode=edit on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-image-txt2img", prompt = "pack"}
 notes = "24 GB tier: planned only with --beyond-tier; the core says its weights licence excludes the European Union, the United Kingdom, the Republic of Korea and the United States, and forbids using the weights or their outputs there: read the preset's description.md before running it"
 
@@ -1232,8 +1254,9 @@ prompt = "extend"
 seed = 12345
 profiles = ["full"]
 models_from = "minimax-h3-12gb-t2va"
-form = {speed_profile = "custom", steps = 20}
+form = {speed_profile = "custom", resolution = "832x480", steps = 20}
 bind = {source_video = "clip"}
+checks = {min_outputs = 1, not_black = true, resolution = "832x480"}
 sources = {form = "GET /api/presets/01M54HN72B0KY7H63BKQ16T253/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-12gb-t2va", prompt = "pack"}
 
 [[cells]]
@@ -1251,8 +1274,9 @@ prompt = "extend"
 seed = 12345
 profiles = ["full"]
 models_from = "minimax-h3-fast-12gb-t2va"
-form = {speed_profile = "distilled", steps = 8}
+form = {speed_profile = "distilled", resolution = "832x480", steps = 8}
 bind = {source_video = "clip"}
+checks = {min_outputs = 1, not_black = true, resolution = "832x480"}
 sources = {form = "GET /api/presets/01M54HN72PABVRE54YNQA2Q7ZT/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-fast-12gb-t2va", prompt = "pack"}
 
 [[cells]]
