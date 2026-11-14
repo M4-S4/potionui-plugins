@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 import shutil
 import subprocess
@@ -62,6 +63,8 @@ DISK_RESERVE = 2 << 30
 CONCURRENT_RUNS = 2
 MIN_ROOM = 1 << 20
 LENGTH_TOLERANCE = 0.5
+
+logger = logging.getLogger("plugins.media-convert")
 
 
 def quality(params: dict) -> str:
@@ -128,6 +131,7 @@ def size_text(count: int) -> str:
 class Room:
     size: int
     reason: str
+    free: Optional[int] = field(default=None, compare=False)
 
 
 def scratch_bytes(folder: Path) -> int:
@@ -146,7 +150,10 @@ def storage_limit(user_id: Optional[str], kind: str):
         return None
     try:
         return limits.limit_status(user_id, kind)
-    except Exception:
+    except Exception as error:
+        logger.warning(
+            "Media Converter could not read the %s limit and converts without it: %s", kind, type(error).__name__
+        )
         return None
 
 
@@ -160,7 +167,7 @@ def rooms(ctx, cap: int) -> list:
     except OSError:
         free = None
     if free is not None:
-        found.append(Room((free - DISK_RESERVE) // CONCURRENT_RUNS, "disk"))
+        found.append(Room((free - DISK_RESERVE) // CONCURRENT_RUNS, "disk", free))
     storage = storage_limit(ctx.user_id, "storage_bytes")
     if storage is not None and storage.remaining is not None:
         found.append(Room(int(storage.remaining) - written, "storage"))
@@ -177,10 +184,7 @@ def room_message(room: Room) -> str:
             "in one run; convert fewer items at a time"
         )
     if room.reason == "disk":
-        return (
-            f"The server is short of disk space: Media Converter keeps {size_text(DISK_RESERVE)} free "
-            "and cannot write this result now; ask an admin to free some space"
-        )
+        return "The server cannot take this conversion now; try again later or ask an admin"
     if room.reason == "storage":
         return (
             "This result would not fit in what is left of your storage; free some space "
@@ -197,14 +201,24 @@ def room_message(room: Room) -> str:
     )
 
 
+def refuse(room: Room, needed: int) -> None:
+    if room.reason == "disk":
+        logger.warning(
+            "Media Converter refused a conversion for lack of disk space: %s bytes free, %s bytes kept free, "
+            "%s bytes for this conversion, at least %s bytes needed",
+            room.free, DISK_RESERVE, room.size, needed,
+        )
+    raise ToolFailed(room_message(room))
+
+
 def make_room(ctx, cap: int, needed: int = 0, unstoppable: int = 0) -> Room:
     found = rooms(ctx, cap)
     for item in found:
         if item.reason == "disk" and item.size < unstoppable:
-            raise ToolFailed(room_message(item))
+            refuse(item, unstoppable)
     room = min(found, key=lambda item: item.size)
     if room.size < max(MIN_ROOM, needed):
-        raise ToolFailed(room_message(room))
+        refuse(room, max(MIN_ROOM, needed))
     return room
 
 
@@ -213,8 +227,9 @@ def limit_args(room: Room) -> list[str]:
 
 
 def check_size(out: Path, room: Room) -> None:
-    if Path(out).stat().st_size >= room.size:
-        raise ToolFailed(room_message(room))
+    written = Path(out).stat().st_size
+    if written >= room.size:
+        refuse(room, written)
 
 
 def check_length(duration: Optional[float]) -> None:

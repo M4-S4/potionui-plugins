@@ -59,13 +59,14 @@ def sample_width(fmt: str, bit_depth) -> int:
     return 2
 
 
-def sound_cap(fmt: str, bit_depth, track, source) -> int:
+def sound_cap(fmt: str, bit_depth, track, source, duration) -> int:
     if not track.sample_rate or not track.channels:
         return output_cap(source)
     per_second = track.sample_rate * track.channels * sample_width(fmt, bit_depth)
     if fmt not in LOSSLESS_AUDIO:
         per_second = max(per_second, LOSSY_BYTES_PER_SECOND)
-    return min(OUTPUT_CEILING, int((max_seconds() + 1) * per_second * SOUND_MARGIN) + MEGABYTE)
+    cap = min(OUTPUT_CEILING, int((max_seconds() + 1) * per_second * SOUND_MARGIN) + MEGABYTE)
+    return cap if duration else min(cap, output_cap(source))
 
 
 def sound_needed(fmt: str, bit_depth, track, duration) -> int:
@@ -91,10 +92,11 @@ def encode_audio(media, params, ctx, *, from_video: bool):
     check_duration(streams.duration)
     track = streams.audio[0]
     out = ctx.new_path(AUDIO_FORMATS[fmt])
+    duration = longest(media.duration, streams.duration)
     room = make_room(
         ctx,
-        sound_cap(fmt, media.bit_depth, track, media.path),
-        needed=sound_needed(fmt, media.bit_depth, track, longest(media.duration, streams.duration)),
+        sound_cap(fmt, media.bit_depth, track, media.path, duration),
+        needed=sound_needed(fmt, media.bit_depth, track, duration),
     )
     args = [*thread_args(), *input_args(media.path), "-map", f"0:{track.index}", "-vn", "-sn", "-dn"]
     args += codec_args(fmt, level, media.bit_depth, track.channels)
