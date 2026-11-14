@@ -16,7 +16,7 @@ settings:
   - name: "ffmpeg_threads"
     type: "number"
     label: "ffmpeg threads per conversion"
-    description: "How many processor threads one video or sound conversion may use. PotionUI runs at most two tool runs at once."
+    description: "How many processor threads one video or sound conversion may use."
     default: 4
     min: 1
     max: 16
