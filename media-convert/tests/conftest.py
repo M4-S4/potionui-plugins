@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections import namedtuple
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,6 +33,7 @@ MANIFEST = yaml.safe_load((PLUGIN_ROOT / "manifest.yml").read_text(encoding="utf
 TOOLS = {entry["id"]: entry for entry in MANIFEST["media_tools"]}
 ENCODER_LINE = re.compile(r"^\s*[VAS][A-Z.]{5}\s+(\S+)")
 CODEC_FLAGS = ("-c", "-c:v", "-c:a", "-c:s", "-codec", "-vcodec", "-acodec")
+ROOMY_DISK = namedtuple("Usage", "total used free")(256 << 30, 192 << 30, 64 << 30)
 TARGET_ENCODERS = {
     "mp4": ("libx264", "aac"),
     "mov": ("libx264", "aac"),
@@ -176,6 +178,14 @@ def server_settings(monkeypatch):
     values = {"ffmpeg_threads": 4, "max_minutes": 30}
     monkeypatch.setattr(common, "plugin_settings", lambda plugin_id: values)
     return values
+
+
+@pytest.fixture(autouse=True)
+def roomy_disk(monkeypatch):
+    from tools import common
+
+    monkeypatch.setattr(common.shutil, "disk_usage", lambda path: ROOMY_DISK)
+    return ROOMY_DISK
 
 
 @pytest.fixture
