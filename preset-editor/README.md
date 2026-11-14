@@ -15,6 +15,11 @@ catalogue `https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/plugins
 the plugin folder under `content/plugins/local/preset-editor/`, build its frontend (`node scripts/build-plugins.mjs preset-editor` from the root of a core
 checkout), then click **Scan for Plugins** in Admin → Plugins and enable it.
 
+To update from 0.2.4 to 0.2.5, disable Preset Editor in Admin → Plugins, restart PotionUI,
+update it from the catalogue, then enable it. An update started while 0.2.4 is enabled is
+refused with the message that 0.2.5 did not start, and 0.2.4 stays in place; restarting and
+updating again gives the same refusal.
+
 Two things appear, for admins only: a **Preset Editor** entry in the sidebar (the page
 `/plugins/preset-editor`) and, in the header of Admin → Presets, the buttons **New Preset** and
 **Edit…**. The plugin needs no setting to work and keeps no database table: drafts and the
