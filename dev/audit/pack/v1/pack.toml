@@ -869,6 +869,15 @@ profiles = ["full"]
 bind = {"video_director.media[0].media" = "bottle", "video_director.media[1].media" = "bottle-gold"}
 
 [[cells]]
+preset = "core/MiniMax-H3-VDN"
+mode = "video"
+variant = "quality"
+case = "minimax-h3-vdn-quality"
+prompt = "t2va"
+profiles = ["full"]
+notes = "the quality tier, 50 steps without the dense time embedder, which the core gives no download for: the turbo cells need it, so on an instance without it this cell is the only one of the preset that can run"
+
+[[cells]]
 preset = "core/MiniMax-Music3"
 mode = "song"
 case = "minimax-music3-song-fast"
@@ -953,8 +962,11 @@ sources = {form = "GET /api/presets/01K0W24A3RADXXABH16YQ7KF00/form?mode=img2img
 preset = "core/QwenImage-2.1"
 mode = "txt2img"
 case = "qwen-image-21-baseline-fast"
+fix = "the case names a diffusion_model sha256 (0bb8f51912366e230bdc212004667c112fdae7587cbde44d3509d8edd0e4810e) that nothing else in the core gives, no recommendation and no recipe, so no route of the core can fetch it: the cell takes the form's first recommendation, qwen_image_2.1_bf16.safetensors, by its sha256"
+models = {diffusion_model = "89f4158d066cc33906a199fca85634f766892dd78f49b6698dabf187ac86c4bc"}
 prompt = "image"
 profiles = ["smoke", "full"]
+sources = {models = "diffusion_model: the first recommendation of the txt2img form, GET /api/presets/01M31Y6WNM07EHAXXCDV1QVJVX/form?mode=txt2img on potionui-dev, core 0.2.0 (dev 54c51e21d); text_encoder and vae: the case's own, which are the form's first recommendations too"}
 
 [[cells]]
 preset = "core/QwenImage-2.1"
