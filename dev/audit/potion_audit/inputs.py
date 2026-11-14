@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 from . import __version__
-from .client import ApiClient, unwrap
+from .client import ApiClient, ApiError, ApiUnreachable, unwrap
 from .coverage import ModelResolver, live_state
 from .pack import InputSpec, Pack, PackError, build_cell_request, cell_checks, cell_models, file_sha, load_pack, make_cell, set_input_facts
 from .run import RunRefused, ensure_idle, runner_info, submit_and_collect
@@ -34,13 +34,36 @@ class Uploads:
         if sha != spec.sha256:
             raise RunRefused(f"input {input_id}: {spec.file} does not match the sha256 in the pack, run pack verify")
         if sha not in self.done:
+            before = self.newest()
             data = unwrap(self.client.upload("/api/media/upload", path, CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream"))) or {}
             if not data.get("path"):
                 raise RunRefused(f"uploading {spec.file} gave no path")
+            created, proof = creation(before, self.newest(), data.get("id"))
             self.done[sha] = {key: data.get(key) for key in ("path", "relative_path", "url", "filename", "id", "width", "height", "duration_seconds", "fps", "size")}
+            self.done[sha].update(created=created, created_proof=proof)
             self.record.parent.mkdir(parents=True, exist_ok=True)
             self.record.write_text(json.dumps(self.done, indent=1) + "\n", encoding="utf-8", newline="\n")
         return media_item(self.done[sha], spec)
+
+    def newest(self) -> tuple[int, str | None] | None:
+        try:
+            page = unwrap(self.client.get_json("/api/media/uploads", {"limit": 1}))
+        except (ApiError, ApiUnreachable, ValueError):
+            return None
+        if not isinstance(page, dict) or not isinstance(page.get("total"), int):
+            return None
+        items = page.get("uploads") or []
+        return page["total"], (items[0].get("id") if items and isinstance(items[0], dict) else None)
+
+
+def creation(before: tuple[int, str | None] | None, after: tuple[int, str | None] | None, upload_id) -> tuple[bool | None, str]:
+    if before is None or after is None:
+        return None, "the library of the account could not be read around the upload"
+    if after[0] == before[0] + 1 and upload_id and after[1] == upload_id:
+        return True, "the library of the account grew by one file, and its newest file is this upload"
+    if after[0] == before[0] and upload_id and after[1] == before[1]:
+        return False, "the library of the account did not grow: the server answered a file it already held"
+    return None, f"the library of the account went from {before[0]} to {after[0]} files during the upload: another change ran meanwhile"
 
 
 def media_item(data: dict, spec: InputSpec) -> dict:

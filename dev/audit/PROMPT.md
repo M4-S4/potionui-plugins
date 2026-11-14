@@ -140,7 +140,7 @@ uv run --locked potion-audit report <segment folders> <scenario folder> --compar
 - what the comparison flags: verdicts changed, run times beyond 20 %, peak VRAM beyond 512 MiB, low SSIM, disk or mount changes;
 - the path of `index.html`.
 
-Then ask about the cleanup. The run left one generation per cell in the history of the audit account (`run.json` lists their ids): potion-audit has no command to delete those, so the owner decides and does it. The scenario left its projects, takes and uploads: `uv run --locked potion-audit vp cleanup <scenario folder>` lists them without touching anything, and deletes them with `--confirm`, which you pass only on the owner's decision. Ask also whether the report may be shared, and with whom.
+Then ask about the cleanup. The run left one generation per cell in the history of the audit account (`run.json` lists their ids) and the files it uploaded: `uv run --locked potion-audit cleanup <segment folders>` lists them without touching anything, with the files the run did not create marked as kept, and deletes them with `--confirm`. The scenario left its projects, takes, uploads, chain frames and published exports: `uv run --locked potion-audit vp cleanup <scenario folder>` lists them the same way. Pass `--confirm` to either only on the owner's decision. Ask also whether the report may be shared, and with whom.
 
 Traps
 -----

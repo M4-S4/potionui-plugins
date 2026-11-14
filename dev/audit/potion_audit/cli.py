@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .cases import CaseFileError, import_from_core, load_cases, write_case_set
 from .check import collect, write_preflight
+from .cleanup import matrix_cleanup
 from .client import ApiClient, ApiError, ApiUnreachable
 from .config import ConfigError, credentials, load_config
 from .coverage import FormReader, ModelResolver, coverage, live_state
@@ -63,6 +64,11 @@ def _parser() -> argparse.ArgumentParser:
     reevaluate = commands.add_parser("reevaluate", help="check the outputs and run reports of a run again with the current checks, without GPU or network")
     reevaluate.add_argument("runs", type=Path, nargs="+")
     reevaluate.add_argument("--pack", type=Path, default=DEFAULT_PACK)
+
+    clean = commands.add_parser("cleanup", help="list the generations of a matrix run and the files it created on the instance, delete them with --confirm")
+    clean.add_argument("runs", type=Path, nargs="+", help="the segment folders of one matrix run, each with its run.json")
+    clean.add_argument("--config", type=Path, default=Path("audit.toml"))
+    clean.add_argument("--confirm", action="store_true", help="delete what the listing attributes to the run, and write cleanup.json in each segment folder")
 
     merge = commands.add_parser("merge", help="one page with a column per machine")
     merge.add_argument("runs", type=Path, nargs="+", help="run folders, night folders and scenario folders of several machines; the segments of one machine are put together, its scenario goes in its column")
@@ -280,6 +286,15 @@ def _reevaluate(args) -> int:
     return EXIT_OK
 
 
+def _cleanup(args) -> int:
+    config = load_config(args.config)
+    username, password = credentials(config.target, os.environ)
+    client = ApiClient(config.target.url, config.target.timeout_seconds)
+    client.login(username, password)
+    matrix_cleanup(client, list(args.runs), args.confirm)
+    return EXIT_OK
+
+
 def _merge(args) -> int:
     matrix_dirs, scenario_dirs = split_dirs(args.runs)
     sets = [load_set(dirs) for dirs in group_by_machine(matrix_dirs).values()]
@@ -295,7 +310,7 @@ def _merge(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media, "report": _report, "reevaluate": _reevaluate, "merge": _merge, "vp": vp_command}
+    handlers = {"check": _check, "run": _run, "cases": _cases, "pack": _pack, "media": _media, "report": _report, "reevaluate": _reevaluate, "cleanup": _cleanup, "merge": _merge, "vp": vp_command}
     try:
         return handlers[args.command](args)
     except (ConfigError, CaseFileError, RunRefused, PackError, ReportError, ReevaluateError) as error:
