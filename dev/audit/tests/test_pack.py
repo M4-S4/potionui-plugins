@@ -433,3 +433,13 @@ def test_reevaluate_passes_the_minimax_h3_image_edit_that_its_txt2img_step_faile
     records = reevaluate_run(run_dir, pack, lambda line: None)
     assert [(record["previous"]["verdict"], record["verdict"]) for record in records] == [("FAIL", "PASS")]
     assert [check["check"] for check in records[0]["checks"]] == ["min_outputs", "not_black", "media_loaded"]
+
+
+@pytest.mark.parametrize(("cell_gb", "preset_gb", "expected"), [(12, 24, (12.0, True)), (24, 24, (24, False)), (30, 24, (24, False)), ("12", 24, (24, False)), (True, 24, (24, False)), (12, None, (None, False)), (float("nan"), 24, (24, False))])
+def test_run_and_check_honour_only_a_threshold_below_a_declared_tier(pack, cell_gb, preset_gb, expected):
+    import dataclasses
+
+    from potion_audit.coverage import tier_need
+
+    wan = dataclasses.replace(cell(pack, "core/Wan:video"), min_vram_gb=cell_gb)
+    assert tier_need({"requires": {"min_vram_gb": preset_gb}}, wan) == expected

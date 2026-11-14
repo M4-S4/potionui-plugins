@@ -1,8 +1,9 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from potion_audit.cleanup import matrix_cleanup
+from potion_audit.cleanup import attribute, candidate, matrix_cleanup, run_span
 from potion_audit.cli import main
 from potion_audit.client import ApiClient
 from potion_audit.inputs import creation
@@ -11,9 +12,11 @@ from potion_audit.pack import load_pack
 from potion_audit.run import RunRefused
 
 from conftest import PASSWORD, USER
+
 from packs import write_pack
 
 OLD = "2026-01-01T00:00:00+00:00"
+T0 = datetime(2026, 11, 14, 20, 0, 0, tzinfo=UTC)
 
 
 class FakeClock:
@@ -57,10 +60,31 @@ def files_of(plan):
     return [(item["filename"], item["attributed"], item["on_instance"]) for item in plan["files"]]
 
 
-def test_a_run_records_whether_each_upload_was_created_or_reused(fake_api, tmp_path, case_file):
+def at(seconds: float) -> str:
+    return (T0 + timedelta(seconds=seconds)).isoformat(timespec="seconds")
+
+
+def old_run(run_dir, start: float, end: float, strip_created: bool = True) -> None:
+    run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    run.pop("library_start")
+    run.pop("library_end")
+    run.update(started_at=at(start), ended_at=at(end))
+    (run_dir / "run.json").write_text(json.dumps(run), encoding="utf-8")
+    if strip_created:
+        uploads = recorded(run_dir)
+        for item in uploads.values():
+            item.pop("created")
+            item.pop("created_proof")
+        (run_dir / "uploads.json").write_text(json.dumps(uploads), encoding="utf-8")
+
+
+def test_a_run_records_whether_each_upload_was_created_or_reused_and_the_library_around_it(fake_api, tmp_path, case_file):
     pack = made_pack(tmp_path, case_file)
     first = segment(fake_api, pack, tmp_path, "seg-1")
     assert [(item["filename"], item["created"]) for item in recorded(first).values()] == [("1-bottle.png", True), ("2-mask.png", True)]
+    run = json.loads((first / "run.json").read_text(encoding="utf-8"))
+    assert (run["library_start"]["total"], run["library_start"]["id"]) == (0, None)
+    assert (run["library_end"]["total"], run["library_end"]["id"]) == (2, "01F0002")
     fake_api.dedupe = True
     second = segment(fake_api, pack, tmp_path, "seg-2")
     assert [(item["filename"], item["created"]) for item in recorded(second).values()] == [("1-bottle.png", False), ("2-mask.png", False)]
@@ -72,14 +96,19 @@ def test_an_unreadable_library_leaves_the_creation_unknown(fake_api, tmp_path, c
     fake_api.library_readable = False
     run_dir = segment(fake_api, pack, tmp_path, "seg-3")
     assert [item["created"] for item in recorded(run_dir).values()] == [None, None]
+    run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert (run["library_start"], run["library_end"]) == (None, None)
 
 
 def test_the_creation_proof_needs_one_more_file_and_this_one_on_top():
-    assert creation((5, "A"), (6, "B"), "B")[0] is True
-    assert creation((5, "A"), (5, "A"), "Z")[0] is False
-    assert creation((5, "A"), (7, "B"), "B")[0] is None
-    assert creation((5, "A"), (6, "C"), "B")[0] is None
-    assert creation(None, (6, "B"), "B")[0] is None
+    def mark(total, newest):
+        return {"total": total, "id": newest, "created_at": OLD}
+
+    assert creation(mark(5, "A"), mark(6, "B"), "B")[0] is True
+    assert creation(mark(5, "A"), mark(5, "A"), "Z")[0] is False
+    assert creation(mark(5, "A"), mark(7, "B"), "B")[0] is None
+    assert creation(mark(5, "A"), mark(6, "C"), "B")[0] is None
+    assert creation(None, mark(6, "B"), "B")[0] is None
 
 
 def test_cleanup_lists_then_deletes_the_generations_and_the_files_the_run_created(fake_api, config_file, credentials_env, tmp_path, case_file):
@@ -90,6 +119,7 @@ def test_cleanup_lists_then_deletes_the_generations_and_the_files_the_run_create
     plan = matrix_cleanup(logged_in(fake_api), [run_dir], False, lines.append)
     assert [(item["id"], item["on_instance"]) for item in plan["generations"]] == [("G1", True)]
     assert files_of(plan) == [("1-bottle.png", True, True), ("2-mask.png", True, True)]
+    assert abs(plan["clock"]["server_offset_seconds"]) < 2 and plan["clock"]["margin_seconds"] >= 2
     assert lines[-1].startswith("1 of 1 generations and 2 files of seg-4 to delete: pass --confirm")
     assert not [method for method, _ in fake_api.methods() if method == "DELETE"]
     assert not (run_dir / "cleanup.json").exists()
@@ -115,7 +145,7 @@ def test_a_file_reused_by_a_segment_is_kept_unless_another_segment_created_it(fa
     assert [path for path in fake_api.deleted if "/media/" in path] == []
 
 
-def test_a_run_made_before_the_records_deletes_only_what_the_instance_dates_inside_it(fake_api, tmp_path, case_file):
+def test_without_created_the_library_marks_of_the_run_decide(fake_api, tmp_path, case_file):
     pack = made_pack(tmp_path, case_file)
     fake_api.dedupe = True
     fake_api.add_file("old-bottle.png", "bottle.png", OLD, (pack.root / "inputs" / "bottle.png").read_bytes(), "OLD1")
@@ -127,8 +157,8 @@ def test_a_run_made_before_the_records_deletes_only_what_the_instance_dates_insi
     (run_dir / "uploads.json").write_text(json.dumps(uploads), encoding="utf-8")
     plan = matrix_cleanup(logged_in(fake_api), [run_dir], True, quiet)
     assert files_of(plan) == [("old-bottle.png", False, True), ("2-mask.png", True, True)]
-    assert plan["files"][0]["proof"] == f"created at {OLD}, outside seg-7"
-    assert "during seg-7" in plan["files"][1]["proof"]
+    assert plan["files"][0]["proof"] == "created at 2026-01-01T00:00:00+00:00, outside the library files seg-7 saw appear"
+    assert "after the newest library file at the start of seg-7" in plan["files"][1]["proof"]
     assert fake_api.deleted == ["/api/generations/history/G1", "/api/media/uploads/2-mask.png"]
     matrix_cleanup(logged_in(fake_api), [run_dir], True, quiet)
     assert (run_dir / "cleanup.json").is_file() and (run_dir / "cleanup-2.json").is_file()
@@ -136,9 +166,63 @@ def test_a_run_made_before_the_records_deletes_only_what_the_instance_dates_insi
     assert [(item["on_instance"], item.get("exists_after")) for item in again["generations"]] == [(False, False)]
 
 
-def test_a_recorded_id_that_does_not_match_the_library_keeps_the_file(fake_api, tmp_path, case_file):
+def test_a_run_made_before_the_marks_attributes_by_its_window_less_the_clock_margin(fake_api, tmp_path, case_file):
     pack = made_pack(tmp_path, case_file)
     run_dir = segment(fake_api, pack, tmp_path, "seg-8")
+    old_run(run_dir, 0, 600)
+    rows = {row["filename"]: row for row in fake_api.library}
+    rows["1-bottle.png"]["created_at"] = at(1)
+    rows["2-mask.png"]["created_at"] = at(300)
+    plan = matrix_cleanup(logged_in(fake_api), [run_dir], False, quiet)
+    margin = plan["clock"]["margin_seconds"]
+    assert files_of(plan) == [("1-bottle.png", False, True), ("2-mask.png", True, True)]
+    assert plan["files"][0]["proof"] == f"created at {at(1)}, outside seg-8 less {margin} s at each end"
+    assert plan["files"][1]["proof"].startswith(f"created at {at(300)}, during seg-8")
+
+
+def test_a_reuse_recorded_by_a_run_is_not_undone_by_its_window_or_its_project():
+    span = {"run": "vp-1", "window": (T0, T0 + timedelta(seconds=600)), "marks": None}
+    rows = {"a.png": {"id": "L1", "filename": "a.png", "original_filename": "lumi.jpg", "created_at": at(100)}}
+    item = candidate("a.png", "upload", span, upload_id="L1", created=False)
+    item["evidence"] += candidate("a.png", "project_asset", span, upload_id="L1")["evidence"]
+    found = attribute(item, rows, 2.0)
+    assert found["attributed"] is False
+    assert found["proof"] == "uploads.json of vp-1 records that the server answered a file it already held"
+    assert attribute(candidate("a.png", "project_asset", span, upload_id="L1"), rows, 2.0)["attributed"] is True
+
+
+def test_the_library_marks_override_a_window_that_a_clock_drift_would_widen():
+    marks = ((T0, "B5"), (T0 + timedelta(seconds=600), "C9"))
+    span = {"run": "vp-2", "window": (T0 - timedelta(seconds=300), T0 + timedelta(seconds=600)), "marks": marks}
+    before = {"a.png": {"id": "B4", "filename": "a.png", "original_filename": None, "created_at": at(-10)}}
+    during = {"a.png": {"id": "B6", "filename": "a.png", "original_filename": None, "created_at": at(10)}}
+    after = {"a.png": {"id": "D1", "filename": "a.png", "original_filename": None, "created_at": at(900)}}
+    assert attribute(candidate("a.png", "chain_frame", span, upload_id="B4"), before, 2.0)["attributed"] is False
+    assert attribute(candidate("a.png", "chain_frame", span, upload_id="B6"), during, 2.0)["attributed"] is True
+    assert attribute(candidate("a.png", "chain_frame", span, upload_id="D1"), after, 2.0)["attributed"] is False
+    empty = {"run": "vp-3", "window": None, "marks": (None, (T0 + timedelta(seconds=600), "C9"))}
+    assert attribute(candidate("a.png", "chain_frame", empty, upload_id="B6"), during, None)["attributed"] is True
+
+
+def test_a_window_proof_needs_a_recorded_id_and_a_readable_clock():
+    span = {"run": "vp-4", "window": (T0, T0 + timedelta(seconds=600)), "marks": None}
+    rows = {"a.png": {"id": "L1", "filename": "a.png", "original_filename": None, "created_at": at(100)}}
+    found = attribute(candidate("a.png", "chain_frame", span), rows, 2.0)
+    assert (found["attributed"], found["proof"]) == (False, "vp-4 recorded no library id for it")
+    found = attribute(candidate("a.png", "chain_frame", span, upload_id="L1"), rows, None)
+    assert (found["attributed"], found["proof"]) == (False, "vp-4 recorded no library marks, and the clock of the server could not be read")
+
+
+def test_marks_that_cannot_be_read_back_leave_the_window():
+    record = {"started_at": at(0), "ended_at": at(60), "library_start": {"total": 1, "id": "A1", "created_at": "not a time"}, "library_end": {"total": 2, "id": "A2", "created_at": at(50)}}
+    assert run_span("r", record)["marks"] is None
+    record["library_start"] = {"total": 0, "id": None, "created_at": None}
+    assert run_span("r", record)["marks"] == (None, (T0 + timedelta(seconds=50), "A2"))
+
+
+def test_a_recorded_id_that_does_not_match_the_library_keeps_the_file(fake_api, tmp_path, case_file):
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-9")
     uploads = recorded(run_dir)
     next(iter(uploads.values()))["id"] = "SOMEONE"
     (run_dir / "uploads.json").write_text(json.dumps(uploads), encoding="utf-8")
@@ -146,11 +230,31 @@ def test_a_recorded_id_that_does_not_match_the_library_keeps_the_file(fake_api, 
     assert files_of(plan) == [("1-bottle.png", False, True), ("2-mask.png", True, True)]
 
 
+def test_an_error_while_deleting_is_recorded_and_the_trace_is_written(fake_api, tmp_path, case_file):
+    pack = made_pack(tmp_path, case_file)
+    run_dir = segment(fake_api, pack, tmp_path, "seg-10")
+    route = fake_api.route
+
+    def failing(method, path, query, body, headers):
+        if method == "DELETE" and path == "/api/media/uploads/1-bottle.png":
+            return 503, {"detail": "the instance is restarting"}, "application/json"
+        return route(method, path, query, body, headers)
+
+    fake_api.route = failing
+    lines = []
+    plan = matrix_cleanup(logged_in(fake_api), [run_dir], True, lines.append)
+    assert "HTTP 503" in plan["files"][0]["error"] and plan["files"][0]["exists_after"] is None
+    assert plan["files"][1]["deleted"] is True
+    assert "1 errors" in lines[-1]
+    trace = json.loads((run_dir / "cleanup.json").read_text(encoding="utf-8"))
+    assert "HTTP 503" in trace["files"][0]["error"]
+
+
 def test_cleanup_refuses_a_folder_that_is_not_a_matrix_run(fake_api, tmp_path, case_file):
     pack = made_pack(tmp_path, case_file)
     with pytest.raises(RunRefused, match="holds no run.json"):
         matrix_cleanup(logged_in(fake_api), [tmp_path], False, quiet)
-    run_dir = segment(fake_api, pack, tmp_path, "seg-9")
+    run_dir = segment(fake_api, pack, tmp_path, "seg-11")
     run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     (run_dir / "run.json").write_text(json.dumps({**run, "dry_run": True}), encoding="utf-8")
     with pytest.raises(RunRefused, match="dry run"):

@@ -106,9 +106,13 @@ def missing_mode_reason(live_preset: dict, mode: str) -> str | None:
     return f"the instance offers no mode {mode!r} for this preset{replaced}; its modes: {', '.join(names)}"
 
 
+def _gb(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+
+
 def tier_need(live_preset: dict, cell: Cell) -> tuple[float | None, bool]:
     need = (live_preset.get("requires") or {}).get("min_vram_gb")
-    if cell.min_vram_gb is not None and (need is None or float(cell.min_vram_gb) < float(need)):
+    if _gb(cell.min_vram_gb) and _gb(need) and cell.min_vram_gb < need:
         return float(cell.min_vram_gb), True
     return need, False
 

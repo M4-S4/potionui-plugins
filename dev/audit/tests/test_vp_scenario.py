@@ -424,7 +424,7 @@ def test_a_run_creates_the_project_chains_the_second_shot_and_sends_the_referenc
     assert len(vp_api.uploads) == 3 and vp_api.media_uploaded == ["1-lumi.jpg", "2-bottle.jpg", "3-bottle-gold.jpg"]
     project = vp_api.projects["P1"]
     assert project["name"] == "potion-audit vp-1 MiniMax-H3-12GB"
-    assert [asset["origin"] for asset in project["doc"]["assets"][:2]] == [{"kind": "library", "itemId": "U1"}, {"kind": "library", "itemId": "U2"}]
+    assert [asset["origin"] for asset in project["doc"]["assets"][:2]] == [{"kind": "library", "itemId": "01F0001"}, {"kind": "library", "itemId": "01F0002"}]
     assert [(kind, body.get("shots") or body.get("takes") or body.get("format")) for kind, body in vp_api.orders] == [("generate", ["s1-workshop"]), ("generate", ["s2-bottle"]), ("generate", ["s3-lumi"]), ("generate", ["s4-gold"]), ("final-pass", ["T1"]), ("export", "web")]
     assert [body["shots"] for body in vp_api.estimates] == [["s1-workshop"], ["s2-bottle"], ["s3-lumi"], ["s4-gold"]]
     assert vp_api.orders[4][1] == {"takes": ["T1"], "method": "upscale", "target": "fhd1080", "upscaler": "rtx"}
@@ -432,7 +432,7 @@ def test_a_run_creates_the_project_chains_the_second_shot_and_sends_the_referenc
     second = next(take for take in vp_api.vp_takes if take["shot_id"] == "s2-bottle")
     assert second["chain"]["state"] == "taken" and second["chain"]["source"]["takeId"] == "T1"
     assert vp_api.puts[-1]["doc"]["clips"][0]["take"] == "T5"
-    assert [asset["origin"] for asset in project["doc"]["assets"] if asset["id"].startswith("frame-")] == [{"kind": "library", "itemId": "U2"}, {"kind": "library", "itemId": "U3"}]
+    assert [asset["origin"] for asset in project["doc"]["assets"] if asset["id"].startswith("frame-")] == [{"kind": "library", "itemId": "01F0002"}, {"kind": "library", "itemId": "01F0003"}]
     entry = scenario["engines"][3]
     assert [(step["step"], step.get("verdict")) for step in entry["steps"]] == [("take", "PASS"), ("take", "PASS"), ("take", "PASS"), ("take", "PASS"), ("final_pass", "PASS"), ("export", "PASS")]
     run_dir = tmp_path / "out" / "vp-1"
@@ -501,6 +501,7 @@ def test_cleanup_lists_then_deletes_the_projects_generations_and_every_file_the_
     assert [(item["filename"], item["kind"], item["step"]) for item in scenario["library"]] == [("frame-4.png", "chain_frame", "take s2-bottle"), ("export-5.mp4", "export", "export")]
     uploads = json.loads((run_dir / "uploads.json").read_text(encoding="utf-8"))
     assert [item["created"] for item in uploads.values()] == [True, True, True]
+    assert (scenario["library_start"]["total"], scenario["library_end"]["total"], scenario["library_end"]["id"]) == (0, 5, "01F0005")
     plan = cleanup(logged_in(vp_api), run_dir, False, quiet)
     assert [item["id"] for item in plan["projects"]] == ["P1"]
     assert [item["id"] for item in plan["generations"]] == ["G1"]
@@ -529,7 +530,7 @@ def test_cleanup_keeps_a_file_the_run_reused_and_skips_those_already_gone(vp_api
     assert files_of(plan)[:3] == [("old-lumi.jpg", "upload+project_asset", False, True), ("2-bottle.jpg", "upload", None, False), ("3-bottle-gold.jpg", "upload+project_asset", True, True)]
     assert "the server answered a file it already held" in plan["files"][0]["proof"]
     assert any(line.startswith("file old-lumi.jpg (upload+project_asset): not attributed, kept") for line in lines)
-    assert lines[-1].startswith("1 projects, 1 generations and 3 files of vp-5 to delete") and "1 files not attributed are kept" in lines[-1]
+    assert lines[-1] == "1 projects, 1 generations and 3 files of vp-5 to delete: pass --confirm to delete them; not attributed and kept: 0 projects, 0 generations, 1 files; already gone: 0 projects, 0 generations, 1 files"
     assert not [method for method, _ in vp_api.methods() if method == "DELETE"]
     plan = cleanup(logged_in(vp_api), run_dir, True, quiet)
     assert "/api/media/uploads/old-lumi.jpg" not in vp_api.deleted
@@ -537,7 +538,7 @@ def test_cleanup_keeps_a_file_the_run_reused_and_skips_those_already_gone(vp_api
     assert [row["filename"] for row in vp_api.listed()] == ["old-lumi.jpg"]
 
 
-def test_cleanup_of_a_run_made_before_the_records_attributes_by_creation_time_and_export_name(vp_api, tmp_path):
+def test_cleanup_of_a_run_made_before_the_records_attributes_by_its_window_and_export_name(vp_api, tmp_path):
     run_dir = run_five(vp_api, tmp_path, "vp-6")
     uploads = json.loads((run_dir / "uploads.json").read_text(encoding="utf-8"))
     for item in uploads.values():
@@ -545,20 +546,39 @@ def test_cleanup_of_a_run_made_before_the_records_attributes_by_creation_time_an
         item.pop("created_proof")
     (run_dir / "uploads.json").write_text(json.dumps(uploads), encoding="utf-8")
     scenario = json.loads((run_dir / "scenario.json").read_text(encoding="utf-8"))
-    scenario.pop("library")
+    for key in ("library", "library_start", "library_end"):
+        scenario.pop(key)
+    scenario.update(started_at="2026-11-14T20:00:00+00:00", ended_at="2026-11-14T20:10:00+00:00")
     (run_dir / "scenario.json").write_text(json.dumps(scenario), encoding="utf-8")
+    for row in vp_api.library:
+        row["created_at"] = "2026-11-14T20:05:00+00:00"
     rows = {row["filename"]: row for row in vp_api.library}
-    rows["frame-4.png"]["created_at"] = "2026-01-01T00:00:00+00:00"
-    rows["export-5.mp4"]["created_at"] = "2026-01-01T00:00:00+00:00"
+    rows["frame-4.png"]["created_at"] = "2026-11-14T19:59:00+00:00"
+    rows["export-5.mp4"]["created_at"] = "2026-11-14T19:59:00+00:00"
     plan = cleanup(logged_in(vp_api), run_dir, False, quiet)
     found = {item["filename"]: item for item in plan["files"]}
     assert [(name, found[name]["attributed"]) for name in found] == [("1-lumi.jpg", True), ("2-bottle.jpg", True), ("3-bottle-gold.jpg", True), ("frame-4.png", False), ("export-5.mp4", True)]
-    assert found["1-lumi.jpg"]["proof"].startswith("created at ") and "during vp-6" in found["1-lumi.jpg"]["proof"]
-    assert found["frame-4.png"]["proof"] == "created at 2026-01-01T00:00:00+00:00, outside vp-6"
+    assert found["1-lumi.jpg"]["proof"].startswith("created at 2026-11-14T20:05:00+00:00, during vp-6")
+    assert found["frame-4.png"]["proof"] == f"created at 2026-11-14T19:59:00+00:00, outside vp-6 less {plan['clock']['margin_seconds']} s at each end"
     assert found["export-5.mp4"]["proof"] == "its original name potion-audit_vp-6_Wan2.2-TI2V-5B-8GB_1080p.mp4 is the export file name vp-6 recorded, with its run id"
     plan = cleanup(logged_in(vp_api), run_dir, True, quiet)
     assert "/api/media/uploads/frame-4.png" not in vp_api.deleted and "/api/media/uploads/export-5.mp4" in vp_api.deleted
     assert [row["filename"] for row in vp_api.listed()] == ["frame-4.png"]
+
+
+def test_cleanup_keeps_a_project_found_by_its_name_only_and_a_take_the_run_did_not_order(vp_api, tmp_path):
+    run_dir = run_five(vp_api, tmp_path, "vp-8")
+    vp_api.projects["P9"] = {"id": "P9", "name": "potion-audit vp-8 copy", "version": 1, "doc": {}}
+    vp_api.vp_takes.append({**vp_api.vp_takes[0], "id": "T99", "generation_id": "G7", "status": "done", "polls": 9})
+    lines = []
+    plan = cleanup(logged_in(vp_api), run_dir, False, lines.append)
+    assert [(item["id"], item["attributed"]) for item in plan["projects"]] == [("P1", True), ("P9", False)]
+    assert [item["id"] for item in plan["generations"]] == ["G1"]
+    assert [(item["id"], item["proof"]) for item in plan["generations_kept"]] == [("G7", "a take of a project of the run that the run did not record")]
+    assert "project P9: on the instance, not attributed, kept: only its name starts with the prefix of the run, scenario.json does not record it" in lines
+    cleanup(logged_in(vp_api), run_dir, True, quiet)
+    assert f"{VP}/projects/P9" not in vp_api.deleted and "/api/generations/history/G7" not in vp_api.deleted
+    assert set(vp_api.projects) == {"P9"}
 
 
 def test_cleanup_refuses_a_dry_run_and_keeps_an_earlier_trace(vp_api, vp_config, credentials_env, tmp_path):

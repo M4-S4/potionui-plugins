@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 
 from .check import runner_info
-from .cleanup import attribute, candidate, chain_frame, delete_generation, delete_upload, export_media, generation_on_instance, library, log_files, merge, recorded_uploads, run_window, split, write_trace
+from .cleanup import FAILURES, attribute, candidate, chain_frame, clock_margin, delete_generation, delete_upload, export_media, generation_on_instance, library, library_mark, log_files, merge, recorded_uploads, run_span, split, write_trace
 from .client import ApiClient, ApiError, unwrap
 from .config import load_config, credentials
 from .inputs import Uploads
@@ -1004,6 +1004,7 @@ def run_scenario(client: ApiClient, pack: Pack, out_root: Path, run_id: str, eng
     scenario = _head(client, pack, run_id, False, machine, matrix, quality, final, target, companion_steps)
     run_dir = out_root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    scenario["library_start"] = library_mark(client)
     base = {"schema": 1, "run_id": run_id, "kind": "vp-scenario", "pack": scenario["pack"], "cases": scenario["cases"], "app_version": scenario["app_version"], "plugin": scenario["plugin"], "runner": scenario["runner"]}
     limit = timeout or DEFAULT_TIMEOUT
     try:
@@ -1036,6 +1037,7 @@ def run_scenario(client: ApiClient, pack: Pack, out_root: Path, run_id: str, eng
         scenario["stopped"] = "stopped with Ctrl+C: the running take was cancelled"
         raise
     finally:
+        scenario["library_end"] = library_mark(client)
         scenario["ended_at"] = datetime.now(UTC).isoformat(timespec="seconds")
         scenario["summary"] = summarize(scenario)
         _write_json(run_dir / "scenario.json", scenario)
@@ -1051,10 +1053,14 @@ def scenario_passed(scenario: dict) -> bool:
     return not scenario["stopped"] and all(verdict == "PASS" for entry in scenario["engines"] for verdict in _engine_summary(entry))
 
 
-def _result_files(run_dir: Path, scenario: dict) -> list[dict]:
+def _result_files(run_dir: Path, scenario: dict) -> tuple[list[dict], set[str], set[str]]:
     found = []
+    takes = set()
+    generations = set()
     for entry in scenario.get("engines") or ():
         for step in entry.get("steps") or ():
+            takes.update(str(value) for value in (step.get("take_id"),) if value)
+            generations.update(str(value) for value in (step.get("generation_id"),) if value)
             path = run_dir / str(step.get("result") or "")
             if not step.get("result") or not path.is_file():
                 continue
@@ -1062,8 +1068,11 @@ def _result_files(run_dir: Path, scenario: dict) -> list[dict]:
                 result = json.loads(path.read_text(encoding="utf-8"))
             except ValueError:
                 continue
-            found += [item for item in (chain_frame(result.get("take") or {}), export_media(result.get("job") or {})) if item]
-    return found
+            take = result.get("take") or {}
+            takes.update(str(value) for value in (take.get("id"),) if value)
+            generations.update(str(value) for value in (take.get("generation_id"), result.get("generation_id")) if value)
+            found += [item for item in (chain_frame(take), export_media(result.get("job") or {})) if item]
+    return found, takes, generations
 
 
 def _asset_ids(doc: dict) -> list[str]:
@@ -1078,64 +1087,73 @@ def cleanup(client: ApiClient, run_dir: Path, confirm: bool, log: Callable[[str]
     if scenario.get("dry_run"):
         raise RunRefused(f"{run_dir.name} is a dry run: it created nothing on the instance")
     run_id = scenario["run_id"]
-    window = run_window(run_id, scenario)
-    projects = {entry["project"]["id"] for entry in scenario.get("engines") or () if entry.get("project") and entry["project"].get("id")}
+    span = run_span(run_id, scenario)
+    recorded = {entry["project"]["id"] for entry in scenario.get("engines") or () if entry.get("project") and entry["project"].get("id")}
     listed = (unwrap(client.get_json(f"{VP}/projects")) or {}).get("projects") or []
-    projects |= {item["id"] for item in listed if str(item.get("name") or "").startswith(project_prefix(run_id))}
-    generations = []
-    for entry in scenario.get("engines") or ():
-        for step in entry.get("steps") or ():
-            if step.get("generation_id") and step["generation_id"] not in generations:
-                generations.append(step["generation_id"])
-    named = [dict(item) for item in scenario.get("library") or () if isinstance(item, dict)] + _result_files(run_dir, scenario)
+    named_only = {item["id"] for item in listed if str(item.get("name") or "").startswith(project_prefix(run_id))} - recorded
+    named, takes, generations = _result_files(run_dir, scenario)
+    named += [dict(item) for item in scenario.get("library") or () if isinstance(item, dict)]
     asset_ids = []
     project_items = []
-    for project_id in sorted(projects):
+    others = []
+    for project_id in sorted(recorded | named_only):
         project = client.get_json(f"{VP}/projects/{project_id}", missing_ok=True)
-        project_items.append({"id": project_id, "on_instance": project is not None})
-        if project is not None:
+        mine = project_id in recorded
+        project_items.append({"id": project_id, "on_instance": project is not None, "attributed": mine, "proof": "scenario.json records its id" if mine else "only its name starts with the prefix of the run, scenario.json does not record it"})
+        if project is not None and mine:
             asset_ids += _asset_ids(((unwrap(project) or {}).get("project") or {}).get("doc") or {})
-        takes = client.get_json(f"{VP}/projects/{project_id}/takes", missing_ok=True)
-        for take in (unwrap(takes) or {}).get("takes") or () if takes else ():
-            if take.get("generation_id") and take["generation_id"] not in generations:
-                generations.append(take["generation_id"])
+        found = client.get_json(f"{VP}/projects/{project_id}/takes", missing_ok=True) if project is not None else None
+        for take in (unwrap(found) or {}).get("takes") or () if found else ():
+            generation_id = str(take.get("generation_id") or "")
+            if generation_id and generation_id not in generations and generation_id not in others:
+                others.append(generation_id)
             frame = chain_frame(take)
-            if frame:
+            if frame and str(take.get("id")) in takes:
                 named.append(frame)
     rows = library(client)
     by_id = {row["id"]: name for name, row in rows.items() if row.get("id")}
     named += [{"filename": by_id[item_id], "id": item_id, "kind": "project_asset", "export_name": None} for item_id in asset_ids if item_id in by_id]
-    found = recorded_uploads(run_dir, run_id, window)
-    found += [candidate(item["filename"], item["kind"], run_id, window, upload_id=item.get("id"), export_name=item.get("export_name")) for item in named if item.get("filename")]
+    found = recorded_uploads(run_dir, span)
+    found += [candidate(item["filename"], item["kind"], span, upload_id=item.get("id"), export_name=item.get("export_name")) for item in named if item.get("filename")]
     merged = {}
     for item in found:
         merge(merged, item)
-    files = [attribute(item, rows) for item in merged.values()]
-    generation_items = [{"id": generation_id, "on_instance": generation_on_instance(client, generation_id)} for generation_id in generations]
-    plan = {"run_id": run_id, "confirmed": confirm, "projects": project_items, "generations": generation_items, "files": files}
+    clock = clock_margin(client)
+    files = [attribute(item, rows, clock["margin_seconds"]) for item in merged.values()]
+    generation_items = [{"id": generation_id, "on_instance": generation_on_instance(client, generation_id)} for generation_id in sorted(generations)]
+    kept_generations = [{"id": generation_id, "on_instance": generation_on_instance(client, generation_id), "proof": "a take of a project of the run that the run did not record"} for generation_id in others]
+    plan = {"run_id": run_id, "confirmed": confirm, "clock": clock, "projects": project_items, "generations": generation_items, "generations_kept": kept_generations, "files": files}
     for item in project_items:
-        log(f"project {item['id']}: {'on the instance' if item['on_instance'] else 'no longer on the instance'}")
+        state = "on the instance" if item["on_instance"] else "no longer on the instance"
+        log(f"project {item['id']}: {state}" + ("" if item["attributed"] else f", not attributed, kept: {item['proof']}"))
     for item in generation_items:
         log(f"generation {item['id']}: {'on the instance' if item['on_instance'] else 'no longer on the instance'}")
+    for item in kept_generations:
+        log(f"generation {item['id']}: not attributed, kept: {item['proof']}")
     log_files(files, log)
     delete, kept, gone = split(files)
-    live_projects = [item for item in project_items if item["on_instance"]]
+    live_projects = [item for item in project_items if item["on_instance"] and item["attributed"]]
     live_generations = [item for item in generation_items if item["on_instance"]]
     if not confirm:
-        log(f"{len(live_projects)} projects, {len(live_generations)} generations and {len(delete)} files of {run_id} to delete: pass --confirm to delete them; {len(kept)} files not attributed are kept; already gone: {len(project_items) - len(live_projects)} projects, {len(generation_items) - len(live_generations)} generations, {len(gone)} files")
+        log(f"{len(live_projects)} projects, {len(live_generations)} generations and {len(delete)} files of {run_id} to delete: pass --confirm to delete them; not attributed and kept: {len(project_items) - len([item for item in project_items if item['attributed']])} projects, {len(kept_generations)} generations, {len(kept)} files; already gone: {len([item for item in project_items if not item['on_instance']])} projects, {len(generation_items) - len(live_generations)} generations, {len(gone)} files")
         return plan
-    for item in project_items:
-        answer = client.delete_json(f"{VP}/projects/{item['id']}", missing_ok=True) if item["on_instance"] else None
-        item["deleted"] = answer is not None
-    for item in generation_items:
-        delete_generation(client, item)
-    for item in delete:
-        delete_upload(client, item)
-    plan["done_at"] = datetime.now(UTC).isoformat(timespec="seconds")
-    plan["trace"] = str(write_trace(run_dir, plan))
-    left = [item["id"] for item in generation_items if item["exists_after"]]
-    files_left = [item["filename"] for item in delete if item["exists_after"]]
-    log(f"{len(live_projects)} projects, {len(live_generations)} generations and {len(delete)} files of {run_id} deleted, {len(left)} generations and {len(files_left)} files still there; {len(kept)} files not attributed are kept")
+    try:
+        for item in live_projects:
+            try:
+                item["deleted"] = client.delete_json(f"{VP}/projects/{item['id']}", missing_ok=True) is not None
+            except FAILURES as error:
+                item["error"] = str(error) or type(error).__name__
+        for item in generation_items:
+            delete_generation(client, item)
+        for item in delete:
+            delete_upload(client, item)
+    finally:
+        plan["done_at"] = datetime.now(UTC).isoformat(timespec="seconds")
+        plan["trace"] = str(write_trace(run_dir, plan))
+    left = [item["id"] for item in generation_items if item.get("exists_after")]
+    files_left = [item["filename"] for item in delete if item.get("exists_after")]
+    errors = [item for item in project_items + generation_items + delete if item.get("error")]
+    log(f"{len(live_projects)} projects, {len(live_generations)} generations and {len(delete)} files of {run_id} deleted, {len(left)} generations and {len(files_left)} files still there, {len(errors)} errors; {len(kept)} files not attributed are kept")
     return plan
 
 

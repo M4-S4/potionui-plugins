@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .cleanup import library_mark
 from .client import ApiClient, ApiError, unwrap
 from .coverage import ModelResolver, assess, live_state
 from .inputs import Uploads
@@ -73,6 +74,7 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
     app_version = ((client.get_json("/openapi.json") or {}).get("info") or {}).get("version")
     run_dir = out_root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    library_start = library_mark(client)
     uploads = Uploads(client, run_dir / "uploads.json")
     (run_dir / "instance.json").write_text(json.dumps(instance_snapshot(client), indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     if host_probe is not None:
@@ -84,6 +86,8 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
         "dry_run": False,
         "started_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "ended_at": None,
+        "library_start": library_start,
+        "library_end": None,
         "machine": machine,
         "mode": mode,
         "app_version": app_version,
@@ -183,6 +187,7 @@ def run_profile(client: ApiClient, pack: Pack, profile: str, out_root: Path, run
             current["verdict"] = "STOPPED"
         raise
     finally:
+        run["library_end"] = library_mark(client)
         run["ended_at"] = datetime.now(UTC).isoformat(timespec="seconds")
         run["summary"] = _summary(entries)
         (run_dir / "run.json").write_text(json.dumps(run, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")

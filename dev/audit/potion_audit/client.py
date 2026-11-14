@@ -1,3 +1,4 @@
+import email.utils
 import json
 import shutil
 import urllib.error
@@ -5,6 +6,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -98,6 +100,23 @@ class ApiClient:
                 shutil.copyfileobj(response, handle, 1024 * 1024)
         partial.replace(dest)
         return Download(dest, dest.stat().st_size, content_type, filename)
+
+    def server_offset(self) -> float | None:
+        before = datetime.now(UTC)
+        try:
+            with self._open("GET", "/health") as response:
+                stamp = response.headers.get("Date")
+                response.read()
+        except (ApiError, ApiUnreachable):
+            return None
+        after = datetime.now(UTC)
+        try:
+            server = email.utils.parsedate_to_datetime(stamp) if stamp else None
+        except (TypeError, ValueError):
+            return None
+        if server is None or server.tzinfo is None:
+            return None
+        return round((server - (before + (after - before) / 2)).total_seconds(), 3)
 
     def _with_query(self, path: str, params: dict | None) -> str:
         if not params:

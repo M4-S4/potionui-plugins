@@ -92,7 +92,7 @@ class FakeApi:
         return self.stats_after if self.finished else self.stats_before
 
     def add_file(self, filename: str, original: str, created_at: str | None = None, content: bytes | None = None, row_id: str | None = None) -> dict:
-        row = {"id": row_id or f"L{len(self.library) + 1}", "filename": filename, "original_filename": original, "media_type": "image", "created_at": created_at or datetime.now(UTC).isoformat(timespec="seconds"), "content": content}
+        row = {"id": row_id or f"01F{len(self.library) + 1:04d}", "filename": filename, "original_filename": original, "media_type": "image", "created_at": created_at or datetime.now(UTC).isoformat(timespec="seconds"), "content": content}
         self.library.append(row)
         return row
 
@@ -110,7 +110,7 @@ class FakeApi:
         held = next((row for row in self.listed() if self.dedupe and row["content"] == content), None)
         if held is None:
             stored = f"{len(self.uploads)}-{filename}"
-            held = self.add_file(stored, filename, content=content, row_id=f"U{len(self.uploads)}")
+            held = self.add_file(stored, filename, content=content)
         stored = held["filename"]
         return 200, envelope({"path": f"storage/uploads/{stored}", "relative_path": f"uploads/{stored}", "url": f"/api/media/uploads/{stored}", "filename": stored, "size": len(body), "width": 64, "height": 64, "duration_seconds": None, "fps": None, "id": held["id"]}), "application/json"
 
