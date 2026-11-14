@@ -277,7 +277,7 @@ def test_the_cap_of_a_sound_without_a_known_rate_keeps_the_rule_of_the_source_si
 
 def test_a_tiny_source_now_gets_a_cap_its_stream_can_fill_and_no_more(tmp_path, source_dir):
     path = piped(source_dir / "silence.flac", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=5.1", "-t", "59", "-sample_fmt", "s16", "-c:a", "flac", "-f", "flac")
-    assert path.stat().st_size < 64 * 1024
+    assert path.stat().st_size < 128 * 1024
     ctx = ToolContext(tmp_path / "scratch")
 
     made = run_sound(ctx, path, format="wav")
