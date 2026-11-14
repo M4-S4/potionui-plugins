@@ -89,7 +89,7 @@ Push a tag `<id>-v<version>`, where `<version>` is the one of the plugin's `mani
 
 1. checks the tag against the manifest (`dev/scripts/catalogue.py --tag`);
 2. builds the dist against the core of `dev/core.ref`, after `npm ci` in its `content/plugins/` and `frontend/`, so that the zip carries the page stylesheet of a plugin that ships one;
-3. packages `<id>-<version>.zip`, the plugin folder with its dist, when it has a frontend, and without `tests/`, and writes its sha256 in `<id>-<version>.sha256`;
+3. packages `<id>-<version>.zip`, the plugin folder with its dist, when it has a frontend, without `tests/` and without `docs/screenshots/`, which the READMEs cite by their GitHub address, and writes its sha256 in `<id>-<version>.sha256`;
 4. creates the GitHub release with both files.
 
 Recording the release in the catalogue stays manual. Download the zip from the release, then run from the root of the repository:
