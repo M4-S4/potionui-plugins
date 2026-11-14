@@ -71,7 +71,9 @@ def test_the_run_budget_counts_every_file_already_in_the_scratch_folder(tmp_path
     found = {room.reason: room.size for room in common.rooms(ctx, 4 << 30)}
 
     assert found["run"] == 50 * MB
-    assert common.make_room(ctx, 4 << 30) == common.Room(50 * MB, "run")
+    room = common.make_room(ctx, 4 << 30)
+    common.release(room)
+    assert room == common.Room(50 * MB, "run")
 
 
 def test_the_disk_room_keeps_the_reserve_and_is_shared_by_two_runs(tmp_path, monkeypatch):
@@ -79,6 +81,7 @@ def test_the_disk_room_keeps_the_reserve_and_is_shared_by_two_runs(tmp_path, mon
     ctx = ToolContext(tmp_path / "scratch")
 
     room = common.make_room(ctx, 4 << 30)
+    common.release(room)
 
     assert room == common.Room(300 * MB, "disk")
     assert asked == [ctx.scratch_dir]
@@ -101,7 +104,9 @@ def test_the_storage_left_counts_what_the_run_already_wrote(tmp_path, monkeypatc
 
     assert found["storage"] == 30 * MB
     assert found["upload"] == 25 * MB
-    assert common.make_room(ctx, 4 << 30) == common.Room(25 * MB, "upload")
+    room = common.make_room(ctx, 4 << 30)
+    common.release(room)
+    assert room == common.Room(25 * MB, "upload")
     assert ("someone", "storage_bytes") in asked and ("someone", "upload_file_size") in asked
 
 
@@ -237,7 +242,7 @@ def test_a_full_disk_tells_the_user_what_to_do_and_the_log_what_was_free(tmp_pat
     assert line.levelno == logging.WARNING
     assert line.getMessage() == (
         "Media Converter refused a conversion for lack of disk space: "
-        f"{free} bytes free, {2 << 30} bytes kept free, {MB // 2} bytes for this conversion, at least {MB} bytes needed"
+        f"{free} bytes free, {2 << 30} bytes kept free, 0 bytes promised to conversions still running, {MB // 2} bytes for this conversion, at least {MB} bytes needed"
     )
 
 
@@ -257,7 +262,7 @@ def test_a_result_cut_by_the_disk_room_is_logged_with_what_it_reached(tmp_path, 
     [line] = [record.getMessage() for record in caplog.records if record.name == "plugins.media-convert"]
     assert line == (
         "Media Converter refused a conversion for lack of disk space: "
-        f"{free} bytes free, {2 << 30} bytes kept free, {2 * MB} bytes for this conversion, at least {size} bytes needed"
+        f"{free} bytes free, {2 << 30} bytes kept free, 0 bytes promised to conversions still running, {2 * MB} bytes for this conversion, at least {size} bytes needed"
     )
 
 

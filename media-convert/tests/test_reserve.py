@@ -27,17 +27,19 @@ def test_quick_conversions_beside_a_slow_one_leave_the_reserve_free(tmp_path, mo
     first = common.make_room(quick, 4 * GB)
     other = common.make_room(slow, 4 * GB)
     write(quick, first.size)
-    granted = [first.size, other.size]
+    given = [first, other]
     for _ in range(40):
         try:
             room = common.make_room(quick, 4 * GB)
         except ToolFailed:
             break
-        granted.append(room.size)
+        given.append(room)
         write(quick, room.size)
     else:
         pytest.fail("the quick conversions were never refused")
     write(slow, other.size)
 
-    assert sum(granted) <= start_free - common.DISK_RESERVE
+    assert sum(room.size for room in given) <= start_free - common.DISK_RESERVE
     assert start_free - sum(written.values()) >= common.DISK_RESERVE
+    for room in given:
+        common.release(room)

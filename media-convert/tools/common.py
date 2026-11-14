@@ -4,7 +4,7 @@ import math
 import shutil
 import subprocess
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -143,6 +143,7 @@ class Room:
     size: int
     reason: str
     free: Optional[int] = field(default=None, compare=False)
+    held: Optional[int] = field(default=None, compare=False)
     grant: Optional[Grant] = field(default=None, compare=False, repr=False)
 
 
@@ -177,23 +178,30 @@ def storage_limit(user_id: Optional[str], kind: str):
         return None
 
 
-def rooms(ctx, cap: int) -> list:
-    folder = Path(ctx.scratch_dir)
-    folder.mkdir(parents=True, exist_ok=True)
-    written = scratch_bytes(folder)
-    found = [Room(int(cap), "file"), Room(RUN_BUDGET - written, "run")]
-    try:
-        free = shutil.disk_usage(folder).free
-    except OSError:
-        free = None
-    if free is not None:
-        found.append(Room((free - DISK_RESERVE - promised()) // CONCURRENT_RUNS, "disk", free))
+def quota_rooms(ctx, written: int) -> list:
+    found = []
     storage = storage_limit(ctx.user_id, "storage_bytes")
     if storage is not None and storage.remaining is not None:
         found.append(Room(int(storage.remaining) - written, "storage"))
     upload = storage_limit(ctx.user_id, "upload_file_size")
     if upload is not None and upload.limited:
         found.append(Room(int(upload.limit), "upload"))
+    return found
+
+
+def rooms(ctx, cap: int, quota: Optional[list] = None) -> list:
+    folder = Path(ctx.scratch_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    written = scratch_bytes(folder)
+    found = [Room(int(cap), "file"), Room(RUN_BUDGET - written, "run")]
+    held = promised()
+    try:
+        free = shutil.disk_usage(folder).free
+    except OSError:
+        free = None
+    if free is not None:
+        found.append(Room((free - DISK_RESERVE - held) // CONCURRENT_RUNS, "disk", free, held))
+    found += quota_rooms(ctx, written) if quota is None else quota
     return found
 
 
@@ -225,25 +233,27 @@ def refuse(room: Room, needed: int) -> None:
     if room.reason == "disk":
         logger.warning(
             "Media Converter refused a conversion for lack of disk space: %s bytes free, %s bytes kept free, "
-            "%s bytes for this conversion, at least %s bytes needed",
-            room.free, DISK_RESERVE, room.size, needed,
+            "%s bytes promised to conversions still running, %s bytes for this conversion, at least %s bytes needed",
+            room.free, DISK_RESERVE, room.held, room.size, needed,
         )
     raise ToolFailed(room_message(room))
 
 
 def make_room(ctx, cap: int, needed: int = 0, unstoppable: int = 0) -> Room:
+    folder = Path(ctx.scratch_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    quota = quota_rooms(ctx, scratch_bytes(folder))
     with GRANTS_LOCK:
-        found = rooms(ctx, cap)
+        found = rooms(ctx, cap, quota)
         for item in found:
             if item.reason == "disk" and item.size < unstoppable:
                 refuse(item, unstoppable)
         room = min(found, key=lambda item: item.size)
         if room.size < max(MIN_ROOM, needed):
             refuse(room, max(MIN_ROOM, needed))
-        folder = Path(ctx.scratch_dir)
         grant = Grant(folder, max(room.size, unstoppable), scratch_bytes(folder))
         GRANTS.add(grant)
-    return Room(room.size, room.reason, room.free, grant)
+    return replace(room, grant=grant)
 
 
 def release(room: Room) -> None:

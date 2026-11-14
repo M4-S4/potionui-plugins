@@ -194,7 +194,10 @@ def no_grants(monkeypatch):
 
     fresh = set()
     monkeypatch.setattr(common, "GRANTS", fresh)
-    return fresh
+    yield fresh
+    left = len(fresh | common.GRANTS)
+    if left:
+        pytest.fail(f"{left} disk room(s) still counted after the test")
 
 
 @pytest.fixture

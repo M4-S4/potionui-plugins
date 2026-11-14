@@ -1,10 +1,13 @@
+import logging
 import threading
 import time
 from collections import namedtuple
+from pathlib import Path
 
 import pytest
 from PIL import Image
 
+from src.plugin_api import limits
 from src.plugin_api.media_tools import ToolCancelled, ToolContext, ToolFailed
 
 from tools import common
@@ -95,6 +98,8 @@ def test_a_granted_room_is_taken_from_the_disk_until_it_is_written(tmp_path, mon
     two = common.make_room(second, 4 << 30)
     assert two.size == 250 * MB
     assert common.promised() == 750 * MB
+    common.release(one)
+    common.release(two)
 
 
 def test_what_a_conversion_already_wrote_is_not_counted_twice(tmp_path, monkeypatch):
@@ -113,6 +118,7 @@ def test_what_a_conversion_already_wrote_is_not_counted_twice(tmp_path, monkeypa
 
     fill(ctx.scratch_dir, 600 * MB, "out-001.wav")
     assert common.promised() == 0
+    common.release(room)
 
 
 def test_a_released_room_stops_counting_and_a_second_release_changes_nothing(tmp_path, monkeypatch, watched):
@@ -128,7 +134,9 @@ def test_a_released_room_stops_counting_and_a_second_release_changes_nothing(tmp
     common.release(second)
     assert common.promised() == 0
     assert len(watched) == 0
-    assert common.make_room(ToolContext(tmp_path / "third"), 4 << 30).size == 500 * MB
+    third = common.make_room(ToolContext(tmp_path / "third"), 4 << 30)
+    common.release(third)
+    assert third.size == 500 * MB
 
 
 def test_an_image_counts_the_largest_result_it_may_write(tmp_path, monkeypatch, watched):
@@ -139,6 +147,7 @@ def test_an_image_counts_the_largest_result_it_may_write(tmp_path, monkeypatch, 
     assert room.size == 2 * MB
     assert watched.added == [(40 * MB, tmp_path / "scratch")]
     assert common.promised() == 40 * MB
+    common.release(room)
 
 
 def test_a_refused_room_is_never_counted(tmp_path, monkeypatch, watched):
@@ -161,11 +170,11 @@ def test_rooms_asked_at_the_same_moment_never_share_the_same_free_space(tmp_path
 
     monkeypatch.setattr(common, "scratch_bytes", slow)
     start = threading.Barrier(4)
-    sizes = []
+    given = []
 
     def ask(index):
         start.wait()
-        sizes.append(common.make_room(ToolContext(tmp_path / f"run-{index}"), 4 << 30).size)
+        given.append(common.make_room(ToolContext(tmp_path / f"run-{index}"), 4 << 30))
 
     workers = [threading.Thread(target=ask, args=(index,)) for index in range(4)]
     for worker in workers:
@@ -173,7 +182,68 @@ def test_rooms_asked_at_the_same_moment_never_share_the_same_free_space(tmp_path
     for worker in workers:
         worker.join()
 
-    assert sorted(sizes, reverse=True) == [400 * MB, 200 * MB, 100 * MB, 50 * MB]
+    for room in given:
+        common.release(room)
+    assert sorted((room.size for room in given), reverse=True) == [400 * MB, 200 * MB, 100 * MB, 50 * MB]
+
+
+def test_what_another_conversion_writes_while_the_disk_is_measured_never_eats_the_reserve(tmp_path, monkeypatch):
+    start = common.DISK_RESERVE + 1010 * MB
+    burst = 20 * MB
+    other = tmp_path / "other"
+    state = {"written": 0}
+    monkeypatch.setattr(common.shutil, "disk_usage", lambda path: Usage(64 << 30, 0, start - state["written"]))
+
+    def walk(folder):
+        if Path(folder) == other:
+            state["written"] += burst
+            return state["written"]
+        return 0
+
+    monkeypatch.setattr(common, "scratch_bytes", walk)
+    held = common.Grant(other, 1000 * MB, 0)
+    common.GRANTS.add(held)
+
+    room = common.make_room(ToolContext(tmp_path / "new"), 4 << 30)
+    common.release(room)
+    common.GRANTS.discard(held)
+
+    assert room.size == 5 * MB
+    assert start - 1000 * MB - room.size >= common.DISK_RESERVE
+
+
+def test_the_plan_of_the_user_is_read_before_the_disk_room_is_locked(tmp_path, monkeypatch):
+    seen = []
+
+    def status(user_id, kind):
+        seen.append(common.GRANTS_LOCK.locked())
+        return limits.LimitStatus(kind=kind, limit=500 * MB, used=0)
+
+    monkeypatch.setattr(limits, "limit_status", status)
+    room = common.make_room(ToolContext(tmp_path / "scratch", user_id="someone"), 4 << 30)
+    common.release(room)
+
+    assert room == common.Room(500 * MB, "storage")
+    assert seen == [False, False]
+
+
+def test_a_disk_refusal_logs_what_is_promised_to_the_conversions_still_running(tmp_path, monkeypatch, caplog):
+    free = common.DISK_RESERVE + 3 * MB
+    free_space(monkeypatch, free)
+    held = common.make_room(ToolContext(tmp_path / "other"), 4 << 30)
+
+    with caplog.at_level(logging.WARNING, logger="plugins.media-convert"):
+        with pytest.raises(ToolFailed, match=f"^{DISK_FULL}$"):
+            common.make_room(ToolContext(tmp_path / "scratch"), 4 << 30)
+    common.release(held)
+
+    assert held.size == 3 * MB // 2
+    [line] = [record.getMessage() for record in caplog.records if record.name == "plugins.media-convert"]
+    assert line == (
+        "Media Converter refused a conversion for lack of disk space: "
+        f"{free} bytes free, {2 << 30} bytes kept free, {held.size} bytes promised to conversions still running, "
+        f"{3 * MB // 4} bytes for this conversion, at least {MB} bytes needed"
+    )
 
 
 @pytest.mark.parametrize("name", TOOLS)
@@ -285,3 +355,4 @@ def test_a_long_sound_beside_a_finished_one_gets_the_room_the_first_gave_back(tm
     assert again.commands[0][again.commands[0].index("-fs") + 1] == str(20 * MB)
     assert made.path.stat().st_size < 10 * MB
     assert len(watched) == 0
+
