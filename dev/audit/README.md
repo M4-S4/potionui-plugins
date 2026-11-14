@@ -92,7 +92,9 @@ Commands
 Cases
 -----
 
-A case file holds the cases of the `tests.yml` files of the core and of its marketplace plugins at one commit of M4-S4/PotionUI, with the presets, their modes and the recipes found there. `cases/02cce6fdd.json` is the one the pack and the default configuration use: 78 cases of 35 presets at `02cce6fdd`, the fork's `dev` on release 0.1.0. `cases/d7ff033de.json` is the lot 0 file, kept for comparison.
+A case file holds the cases of the `tests.yml` files of the core and of its marketplace plugins at one commit of M4-S4/PotionUI, with the presets, their modes and the recipes found there. `cases/54c51e21d.json` is the one the pack and the default configuration use: 83 cases of 37 presets at `54c51e21d`, the fork's `dev` on core 0.2.0 with Video Producer 0.6.0. Two imports at that commit give the same file byte for byte. `cases/02cce6fdd.json` (78 cases of 35 presets, core 0.1.0) and `cases/d7ff033de.json` (lot 0) stay for the reports that cite them.
+
+The import reads the preset folders directly under `content/presets/marketplace/` and under each plugin's `presets/`. The core also ships `content/presets/marketplace/FieldCatalog/all-fields`, one level deeper: that preset is not in the case file.
 
 A case whose `tests.yml` gives an all-zero sha256 takes, in this order:
 
@@ -112,7 +114,9 @@ The pack
 - `[prompts.<key>]`: one English prompt per kind of output, written with `{bible key}` fields; a prompt may also set form fields (`description` and `style` for the songs, `current_text` and `new_text` for the text edit);
 - `[negatives]`: a negative prompt per model family, used where the case of origin has one;
 - `[inputs.<id>]`: the frozen inputs (see below);
-- `[[cells]]`: one cell per preset and mode, sometimes more (`variant`). A cell either takes a case of the case file (`case`), or corrects it (`case` and `fix`: what was wrong and how the cell fixes it), or defines a new case (no `case`, with `sources`: where each setting comes from), or excludes the preset or the mode (`exclude`, with `mode = "*"` for a whole preset).
+- `[[cells]]`: one cell per preset and mode, sometimes more (`variant`). A cell either takes a case of the case file (`case`), or corrects it (`case` and `fix`: what was wrong and how the cell fixes it), or defines a new case (no `case`, with `sources`: where each setting comes from), or excludes the preset or the mode (`exclude`, with `mode = "*"` for a whole preset). An excluded cell may name by its id a preset that the case file does not hold (`preset = "field-catalog-all-fields"`); any other cell names a preset of the case file.
+
+Version 1.1.0 of the pack builds on `cases/54c51e21d.json` and covers every mode of core 0.2.0 and of Video Producer 0.6.0: it adds `txt2video`, `img2video`, `first_last` and `loop` of MiniMax-H3, `ingredients` of LTX-2.5, `extend` of MiniMax-H3-12GB and MiniMax-H3-Fast-12GB, the `video` mode of Wan2.2-14B-Lightning-I2V-12GB and the `txt2img` and `edit` modes of MiniMax-H3-Image (24 GB, so `beyond_tier` on a 12 GB GPU). The `long` mode of MiniMax-H3, which core 0.2.0 removed in favour of its Video Director `video` mode, has no cell any more, and the Frontend Field Catalog, an inert development preset, is excluded. The cells that set their own values were read again against the 0.2.0 forms. 1.1.0 has the same keys as 1.0.0, so the tool reads both; as with any change of the pack, a report on a 1.0.0 run lists the cells that run left out only when given the 1.0.0 pack with `--pack`.
 
 A cell may set:
 
@@ -158,7 +162,9 @@ Verification
 Coverage
 --------
 
-`check --pack` gives each cell one status: `ready`, `input_pending` (an input is not made yet), `beyond_tier`, `model_missing` (a model is not on the instance, alternatives included), `model_unresolved` (no sha256 and no file name to look up), `preset_not_installed`, `plugin_inactive`, or `excluded`. Preset modes of the instance that the pack does not cover are listed as `no_case`, and cloud presets as `excluded`.
+`check --pack` gives each cell one status: `ready`, `input_pending` (an input is not made yet), `beyond_tier`, `model_missing` (a model is not on the instance, alternatives included), `model_unresolved` (no sha256 and no file name to look up), `preset_not_installed`, `mode_missing` (the installed preset no longer offers the cell's mode; the reason names the mode that replaced it when the preset says so in `retired_modes`), `plugin_inactive`, or `excluded`. `run --pack --dry-run` gives the same statuses and builds no request for a cell that is not ready. Preset modes of the instance that the pack does not cover are listed as `no_case`, and cloud presets as `excluded`.
+
+`check --pack` also reads the form of each cell's mode on the instance (`GET /api/presets/{id}/form?mode=…`) and lists, as a warning and in `undeclared_fields`, the fields the cell would send that the form does not declare. The server strips such a field, or, for a model reference, passes it on to a pipeline that does not read it. Not counted: `video_director`, `music_director`, `llm`, `prompt_timeline` and `timeline`, which the server passes through, and `<field>_inpaint_mask` and `<field>__origin` beside a declared field. A form that cannot be read is recorded in `form_error`. The status of the cell does not change.
 
 Runs
 ----
@@ -255,7 +261,7 @@ The matrix measures each preset on its own. The scenario measures what only the 
 
 Options of `vp run`: `--matrix` (repeatable) takes a `run.json` or `results.json` of a matrix, a run folder, or the folder of a night with `night.json`, whose segments are read from the sibling folders; `--engines a,b` names presets of the plugin; `--quality draft|final` (draft by default), `--upscaler seedvr2|rtx` (SeedVR2 by default), `--target` of the final pass (`fhd1080` by default), `--companion-steps N` (the steps of the image-to-video companion an engine hands its image shots to, written in the project's engine options for that companion: `{"speed_profile": "custom", "steps": N, "cfg": 1.0}`, since the custom profile otherwise takes the CFG of the form, 5, which burns a distilled LoRA's frames; only Wan2.2-14B-Lightning-12GB has one), `--timeout` per take, `--interval`, `--run-id` (default `<date>-<machine>-vp`).
 
-Engines: the five presets of the plugin, Wan2.1-T2V-1.3B-8GB, Wan2.2-TI2V-5B-8GB, Wan2.2-14B-Lightning-12GB, MiniMax-H3-12GB and MiniMax-H3-Fast-12GB. With `--matrix`, an engine plays only when every run of its `video` cell passed; with `--engines` too, only the named ones among those. An engine offers Ref2VA when its preset has a `refs` mode and, with a matrix, its `refs` cell passed: only MiniMax-H3-12GB today. The final pass runs only when the upscaler's cell passed the matrix (`core/SeedVR2:video_upscale` or `plugin:nvidia-rtx-upscale/RTX-Upscale:video_upscale`); otherwise it is `not_run` with the reason, and the export goes on without it.
+Engines: the five presets of the plugin, Wan2.1-T2V-1.3B-8GB, Wan2.2-TI2V-5B-8GB, Wan2.2-14B-Lightning-12GB, MiniMax-H3-12GB and MiniMax-H3-Fast-12GB. With `--matrix`, an engine plays only when every run of its `video` cell passed; with `--engines` too, only the named ones among those. An engine offers Ref2VA when its preset has a `refs` mode and, with a matrix, its `refs` cell passed: only MiniMax-H3-12GB today. Wan2.2-14B-Lightning-12GB hands its image shots (the chained shot and the first and last image shot) to Wan2.2-14B-Lightning-I2V-12GB, a companion that Video Producer 0.6.0 does not list as an engine (`listed: false`); with a matrix, those shots play only when the companion's `video` cell passed too, otherwise they are `skipped` with the reason, and the plan estimates them on the companion's cell and timings. The final pass runs only when the upscaler's cell passed the matrix (`core/SeedVR2:video_upscale` or `plugin:nvidia-rtx-upscale/RTX-Upscale:video_upscale`); otherwise it is `not_run` with the reason, and the export goes on without it.
 
 One project per engine, named `potion-audit <run id> <engine>`, its synopsis and a marker holding the run id. Four shots of 5 s at 24 fps, written from the bible of the pack:
 
