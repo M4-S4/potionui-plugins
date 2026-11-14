@@ -28,7 +28,7 @@ def options(tool_id, name):
 
 def test_the_manifest_names_the_plugin_and_its_version():
     assert MANIFEST["id"] == tools.PLUGIN_ID == "media-convert"
-    assert MANIFEST["version"] == tools.PLUGIN_VERSION == "0.1.0"
+    assert MANIFEST["version"] == tools.PLUGIN_VERSION == "0.1.1"
     assert MANIFEST["type"] == "backend-only"
     assert MANIFEST["license"] == "GPL-3.0"
     assert "pages" not in MANIFEST and "api" not in MANIFEST

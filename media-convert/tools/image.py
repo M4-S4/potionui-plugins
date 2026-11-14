@@ -15,6 +15,7 @@ from .common import (
     make_room,
     max_side,
     quality,
+    release,
 )
 
 READABLE = ("PNG", "JPEG", "WEBP", "GIF", "BMP")
@@ -187,7 +188,15 @@ class ConvertImage(MediaTool):
             out = ctx.new_path(IMAGE_FORMATS[fmt])
             bound = image_bound(image, options)
             room = make_room(ctx, bound, unstoppable=bound)
-            image.save(out, format=fmt.upper(), **options)
-        guard(ctx)
-        check_size(out, room)
+            try:
+                try:
+                    image.save(out, format=fmt.upper(), **options)
+                except OSError:
+                    if not options.get("optimize"):
+                        raise
+                    image.save(out, format=fmt.upper(), **{**options, "optimize": False})
+                guard(ctx)
+                check_size(out, room)
+            finally:
+                release(room)
         return ctx.probe(out, "image")

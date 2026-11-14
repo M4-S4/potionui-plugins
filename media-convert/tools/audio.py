@@ -25,6 +25,7 @@ from .common import (
     output_cap,
     quality,
     read_streams,
+    release,
     thread_args,
 )
 
@@ -98,15 +99,18 @@ def encode_audio(media, params, ctx, *, from_video: bool):
         sound_cap(fmt, media.bit_depth, track, media.path, duration),
         needed=sound_needed(fmt, media.bit_depth, track, duration),
     )
-    args = [*thread_args(), *input_args(media.path), "-map", f"0:{track.index}", "-vn", "-sn", "-dn"]
-    args += codec_args(fmt, level, media.bit_depth, track.channels)
-    args += metadata_args(streams, track, keep)
-    if fmt == "m4a":
-        args += ["-movflags", "+faststart"]
-    args += [*limit_args(room), *thread_args()[:2], str(out)]
-    ctx.ffmpeg(args, duration=media.duration)
-    guard(ctx)
-    check_size(out, room)
+    try:
+        args = [*thread_args(), *input_args(media.path), "-map", f"0:{track.index}", "-vn", "-sn", "-dn"]
+        args += codec_args(fmt, level, media.bit_depth, track.channels)
+        args += metadata_args(streams, track, keep)
+        if fmt == "m4a":
+            args += ["-movflags", "+faststart"]
+        args += [*limit_args(room), *thread_args()[:2], str(out)]
+        ctx.ffmpeg(args, duration=media.duration)
+        guard(ctx)
+        check_size(out, room)
+    finally:
+        release(room)
     try:
         result = read_streams(out)
     except ToolFailed:

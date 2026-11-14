@@ -188,6 +188,18 @@ def roomy_disk(monkeypatch):
     return ROOMY_DISK
 
 
+@pytest.fixture(autouse=True)
+def no_grants(monkeypatch):
+    from tools import common
+
+    fresh = set()
+    monkeypatch.setattr(common, "GRANTS", fresh)
+    yield fresh
+    left = len(fresh | common.GRANTS)
+    if left:
+        pytest.fail(f"{left} disk room(s) still counted after the test")
+
+
 @pytest.fixture
 def ctx(tmp_path):
     return ToolContext(tmp_path / "scratch")
