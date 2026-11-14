@@ -79,7 +79,7 @@ The three steps stand for these encoder settings. Small files lose more detail; 
 |---|---|---|---|
 | An image | EXIF data (camera, date, place), with the orientation set to normal; the text chunks of a PNG, such as generation parameters, when the result is a PNG too | No EXIF data, no text chunks | Animation (animated images are refused); XMP data, except from PNG to PNG; the text chunks of a PNG when the result is JPEG or WebP; EXIF data longer than 64 KB when the result is a JPEG, which cannot hold it; transparency in JPEG (filled with the background colour); 16 bits per channel (the result has 8) |
 | An image's colour profile | Kept | Kept | A profile that does not match the result's colours, such as a CMYK profile on a picture converted to RGB; a profile larger than 1 MB, or one whose declared length does not match its bytes |
-| A video | Title and other tags, the place where it was filmed (MOV and WebM; MP4 does not hold it), chapters, every sound track with its language, text subtitles (as `mov_text` in MP4 and MOV, WebVTT in WebM) | Only the picture and the first sound track, no tags, no place, no chapters, no subtitles | Picture subtitles (DVD, Blu-ray), attached files, data tracks; HDR and 10-bit colour (the result is 8-bit SDR, without tone mapping, so an HDR source can look flat); more than two sound channels in WebM (mixed down to stereo) |
+| A video | Title and other tags, the place where it was filmed (in MP4, MOV and WebM alike), chapters, the first eight sound tracks with their language, text subtitles (as `mov_text` in MP4 and MOV, WebVTT in WebM) | Only the picture and the first sound track, no tags, no place, no chapters, no subtitles | Picture subtitles (DVD, Blu-ray), attached files, data tracks; sound tracks after the eighth; HDR and 10-bit colour (the result is 8-bit SDR, without tone mapping, so an HDR source can look flat); more than two sound channels in WebM (mixed down to stereo) |
 | A sound | Title, artist and the other tags | No tags | Cover art; more than two channels in MP3 and OGG (mixed down to stereo); sample rates above 48 kHz in MP3 (it goes up to 48 kHz) and every rate other than 48 kHz in OGG (Opus works at 48 kHz) |
 | The sound of a video | The tags of the video, such as its title | No tags | Every sound track after the first |
 
@@ -93,15 +93,16 @@ The tool window shows the reason, and nothing is added to the Library.
 |---|---|
 | An animated GIF or WebP | Refused: "This image is animated (N frames); Media Converter converts still images only". |
 | An SVG drawing | The Library accepts SVG files but PotionUI cannot read them as pictures: the run ends with "This image cannot be read". |
-| An image larger than 67 million pixels | Refused before it is decoded, with its size and the limit. |
+| An image larger than 67 million pixels | Refused with its size and the limit. Media Converter reads only the size written in the file and does not decode the picture. |
 | A PNG converted to PNG with the same size | Refused, since nothing would change. With a largest side smaller than the picture, it is shrunk. |
 | A WAV converted to WAV, a FLAC to FLAC | Refused, since nothing would change. A JPEG, WebP, MP3, M4A or OGG file can be converted to its own format to make it lighter. |
-| A video larger than 4096 × 2304 pixels | Refused before it is decoded, with its size and the limit. |
+| A video larger than 4096 × 2304 pixels | Refused before any encoding, with its size and the limit. |
+| A video whose picture grows past 4096 × 2304 pixels partway through | The larger pictures are not decoded and are left out of the result. |
 | A video thinner than 2 pixels, or one that a largest side would make so | Refused. |
 | A video without sound given to **Extract sound** | The menu offers the tool, since the Library does not record whether an uploaded video has sound; the run ends with "Extract sound needs a video with sound". |
 | A sound with no samples | Refused: "This sound is empty: there is nothing to convert". |
-| A video or sound longer than the limit the admin set | Refused before any encoding when the file states its length. A file that does not state it is encoded up to the limit plus one second, then refused. |
-| A result that would weigh more than the most a conversion may write | Refused when the limit is reached, with the limit in megabytes (see Load on the server). |
+| A video or sound longer than the limit the admin set | Refused before any encoding when the file, or any of its tracks, states a longer length. A file that states no length, or a shorter one than it has, is encoded up to the limit plus one second, then refused. Half a second over the limit is let through, since encoders add a few milliseconds. |
+| A result that would weigh more than one conversion or one run may write, more than the server can hold, or more than is left of the user's storage | Refused with what to do: choose a lighter format, convert fewer items at a time, free some space, or ask an admin to free disk space (see Load on the server). A WAV of known length is refused before encoding, since its size is known in advance; any other result is refused as soon as it reaches the limit. |
 | A transparent image converted to JPEG | Converted, with transparent areas filled with the background colour. |
 | A cancelled run | The encoder stops at once and nothing is published. |
 
@@ -126,12 +127,16 @@ Conversions run on the server's processor and never use the graphics card: no ha
 
 Each run is bounded:
 
-- an image of 67 million pixels adds about 0.8 GB to the server's memory while it converts, which is why larger ones are refused;
+- an image of 67 million pixels takes up to about 1.6 GB of memory while it converts (WebP takes the most), which is why larger ones are refused;
 - a 4K video takes about 2 GB of memory in ffmpeg, which is why larger ones are refused;
 - ffmpeg stops at the length limit plus one second, even when a file does not state its length;
-- one conversion writes at most 32 times the size of its source, never less than 1 GB and never more than 4 GB; a WAV made from a very compressed sound can hit this limit.
+- one sound conversion writes at most what its sound can fill in the length limit: sample rate × channels × sample size × the limit, plus 2 %, and never less than 64 kB per second for MP3, M4A and OGG. A stereo WAV at 44.1 kHz may weigh up to about 325 MB with the 30-minute limit, whatever the size of its source;
+- one video conversion writes at most 32 times the size of its source, never less than 1 GB; no conversion writes more than 4 GB;
+- one run writes at most 8 GB, every item and every step of a chain together, counting what PotionUI's own tools wrote earlier in the chain; a conversion that would go past it is refused with a message that asks to convert fewer items at a time;
+- Media Converter keeps 2 GB free on the disk where PotionUI keeps its working files: with less, it refuses to convert, and a conversion never gets more than half of the space above these 2 GB, so that the two runs PotionUI allows at once cannot fill the disk;
+- when a user's plan limits their storage or the size of one file, a result that would not fit is refused, before encoding for a WAV of known length, otherwise as soon as it reaches the limit.
 
-The results count toward each user's storage, as uploads do. A WAV or a PNG can weigh much more than its source; when a user's storage is full, the run fails at the end, and nothing is kept.
+The results count toward each user's storage, as uploads do. A WAV or a PNG can weigh much more than its source.
 
 ffmpeg reads only the file it converts: the command allows local files only, a fixed list of container formats, and an absolute path, so a playlist or a concat list disguised as a video is refused. No text typed by a user reaches the command line: every setting is a choice from a list or a switch.
 
@@ -149,6 +154,7 @@ From chat, MCP and automation, PotionUI offers these tools like its own. A run f
 - Copying the sound or the picture without encoding it again, such as a MOV to MP4 change of container.
 - Keeping the cover art of a sound file.
 - The tool in the media field of a generation form.
+- Photos above 67 million pixels, such as the 108 and 200 megapixel photos of some phones and large panoramas, and videos above 4096 × 2304 pixels, such as 5.7K and 8K: they are refused.
 
 ## License
 
