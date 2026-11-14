@@ -141,6 +141,28 @@ def test_a_run_past_its_timeout_is_cancelled(fake_api, case_set, tmp_path):
     assert ("POST", "/api/generations/G1/cancel") in fake_api.methods()
 
 
+def test_a_timed_out_run_waits_for_its_cancel_to_reach_a_terminal_state(fake_api, case_set, tmp_path):
+    fake_api.statuses = [{"id": "G1", "status": "running", "current_step_num": 1, "total_steps": 4}] * 10
+    fake_api.final = "cancelled"
+    result, lines = run_case(fake_api, case_set, tmp_path, timeout=5)
+    assert result["verdict"] == "TIMEOUT"
+    assert fake_api.statuses == []
+    assert (result["cancel"]["settled"], result["cancel"]["status"], result["cancel"]["bound_seconds"]) == (True, "cancelled", 300.0)
+    methods = fake_api.methods()
+    cancel = methods.index(("POST", "/api/generations/G1/cancel"))
+    assert ("GET", "/api/generations/G1/status") in methods[cancel:]
+    assert any("cancelled, settled" in line for line in lines)
+
+
+def test_a_cancel_that_never_settles_stops_waiting_at_its_bound(fake_api, case_set, tmp_path):
+    fake_api.statuses = [{"id": "G1", "status": "running", "current_step_num": 1, "total_steps": 4}] * 4
+    fake_api.final = "running"
+    result, _ = run_case(fake_api, case_set, tmp_path, timeout=5)
+    assert result["verdict"] == "TIMEOUT"
+    assert result["cancel"]["settled"] is False and result["cancel"]["status"] == "running"
+    assert 300.0 < result["cancel"]["waited_seconds"] <= 304.0
+
+
 def test_a_busy_queue_refuses_the_run_before_submitting(fake_api, case_set, tmp_path):
     fake_api.queue = {"pending": [], "running": [{"id": "other"}]}
     with pytest.raises(RunRefused, match="busy"):

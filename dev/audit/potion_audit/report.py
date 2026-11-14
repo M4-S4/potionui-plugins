@@ -40,7 +40,7 @@ STATUS_CLASS = {
     "input_pending": "warn",
     "request_error": "bad",
     "preset_not_installed": "warn",
-    "mode_missing": "bad",
+    "mode_missing": "warn",
 }
 
 DARK = (

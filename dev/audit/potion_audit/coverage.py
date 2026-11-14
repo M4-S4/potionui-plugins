@@ -3,7 +3,7 @@ from pathlib import PurePosixPath
 
 from .cases import ModelRef
 from .check import lookup_model
-from .client import ApiClient, ApiError, unwrap
+from .client import ApiClient, ApiError, ApiUnreachable, unwrap
 from .pack import Cell, Pack, PackError, cell_models, merged_form, preset_ref
 
 STATUS_ORDER = (
@@ -21,6 +21,8 @@ TIER_MARGIN_GB = 0.25
 PASSTHROUGH_KEYS = {"video_director", "music_director", "llm", "prompt_timeline", "timeline"}
 MASK_SUFFIX = "_inpaint_mask"
 ORIGIN_SUFFIX = "__origin"
+REGIONAL_KEY = "regional_prompt"
+MEDIA_TYPES = {"image", "video", "audio", "media", "file"}
 FORM_CHECKED = {"ready", "input_pending", "beyond_tier", "model_missing", "model_unresolved"}
 
 
@@ -97,8 +99,10 @@ def missing_mode_reason(live_preset: dict, mode: str) -> str | None:
     names = mode_names(live_preset)
     if names is None or mode in names:
         return None
-    retired = ((live_preset.get("vars") or {}).get("retired_modes") or {}).get(mode)
-    replaced = f", which replaced it with {retired!r}" if retired else ""
+    variables = live_preset.get("vars")
+    retired = variables.get("retired_modes") if isinstance(variables, dict) else None
+    target = retired.get(mode) if isinstance(retired, dict) else None
+    replaced = f", which replaced it with {target.strip()!r}" if isinstance(target, str) and target.strip() else ""
     return f"the instance offers no mode {mode!r} for this preset{replaced}; its modes: {', '.join(names)}"
 
 
@@ -178,25 +182,40 @@ class FormReader:
         self.client = client
         self._forms = {}
 
-    def fields(self, preset_id: str, mode: str) -> set[str]:
+    def fields(self, preset_id: str, mode: str) -> dict[str, str]:
         key = (preset_id, mode)
         if key not in self._forms:
-            form = unwrap(self.client.get_json(f"/api/presets/{preset_id}/form", {"mode": mode})) or {}
-            self._forms[key] = form_field_names(form.get("form_schema"))
+            form = unwrap(self.client.get_json(f"/api/presets/{preset_id}/form", {"mode": mode}))
+            if not isinstance(form, dict):
+                raise ValueError(f"the form of mode {mode!r} is not an object")
+            if not isinstance(form.get("form_schema"), (dict, list)):
+                raise ValueError(f"the form of mode {mode!r} has no form_schema")
+            self._forms[key] = form_fields(form["form_schema"])
         return self._forms[key]
 
 
-def form_field_names(node, found: set[str] | None = None) -> set[str]:
-    found = set() if found is None else found
+def form_fields(node, found: dict[str, str] | None = None) -> dict[str, str]:
+    found = {} if found is None else found
     if isinstance(node, dict):
         if isinstance(node.get("name"), str) and node["name"] and "type" in node:
-            found.add(node["name"])
+            found.setdefault(node["name"], str(node["type"]))
         for value in node.values():
-            form_field_names(value, found)
+            form_fields(value, found)
     elif isinstance(node, list):
         for value in node:
-            form_field_names(value, found)
+            form_fields(value, found)
     return found
+
+
+def form_field_names(node) -> set[str]:
+    return set(form_fields(node))
+
+
+def offers_regional(live_preset: dict, mode: str) -> bool:
+    variables = live_preset.get("vars")
+    option = variables.get(REGIONAL_KEY) if isinstance(variables, dict) else None
+    modes = option.get("modes") if isinstance(option, dict) else None
+    return isinstance(modes, list) and mode in modes
 
 
 def sent_fields(pack: Pack, cell: Cell) -> set[str]:
@@ -207,36 +226,41 @@ def sent_fields(pack: Pack, cell: Cell) -> set[str]:
     return sent
 
 
-def undeclared(sent: set[str], declared: set[str]) -> list[str]:
+def undeclared(sent: set[str], types: dict[str, str], regional: bool = False) -> list[str]:
     found = []
     for key in sorted(sent):
-        if key in declared or key in PASSTHROUGH_KEYS:
+        if key in types or key in PASSTHROUGH_KEYS or (regional and key == REGIONAL_KEY):
             continue
-        if key.endswith(MASK_SUFFIX) and key[: -len(MASK_SUFFIX)] in declared:
+        if key.endswith(MASK_SUFFIX) and types.get(key[: -len(MASK_SUFFIX)]) in MEDIA_TYPES:
             continue
-        if key.endswith(ORIGIN_SUFFIX) and key[: -len(ORIGIN_SUFFIX)] in declared:
+        if key.endswith(ORIGIN_SUFFIX) and key[: -len(ORIGIN_SUFFIX)] in types:
             continue
         found.append(key)
     return found
 
 
-def check_forms(pack: Pack, entries: list[dict], forms: FormReader) -> None:
+def check_forms(pack: Pack, entries: list[dict], forms: FormReader, live: Live) -> None:
     cells = {cell.id: cell for cell in pack.cells}
     for entry in entries:
         if entry["status"] not in FORM_CHECKED:
             continue
         cell = cells[entry["id"]]
         try:
+            sent = sent_fields(pack, cell)
+        except PackError:
+            continue
+        try:
             declared = forms.fields(cell.preset_id, cell.mode)
-            entry["undeclared_fields"] = undeclared(sent_fields(pack, cell), declared)
-        except (ApiError, ValueError) as error:
-            entry["form_error"] = str(error)
+        except (ApiError, ApiUnreachable, OSError, ValueError) as error:
+            entry["form_error"] = str(error) or type(error).__name__
+            continue
+        entry["undeclared_fields"] = undeclared(sent, declared, offers_regional(live.presets.get(cell.preset_id) or {}, cell.mode))
 
 
 def coverage(pack: Pack, resolver: ModelResolver, live: Live, forms: FormReader | None = None) -> dict:
     cells = [assess(pack, cell, resolver, live) for cell in pack.cells]
     if forms is not None:
-        check_forms(pack, cells, forms)
+        check_forms(pack, cells, forms, live)
     counts = {}
     for cell in cells:
         counts[cell["status"]] = counts.get(cell["status"], 0) + 1

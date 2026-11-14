@@ -618,6 +618,8 @@ def verify(pack: Pack, allow_pending: bool = False) -> list[Problem]:
         if cell.id in seen:
             problems.append(Problem("error", where, "defined twice"))
         seen.add(cell.id)
+        if cell.exclude and pack.preset(cell.preset_ref) is None:
+            problems.append(Problem("info", where, f"excludes by id the preset {cell.preset_id!r}, which {pack.case_set.path.name} does not hold: check the id against the instance"))
         if cell.mode == "*":
             if not cell.exclude:
                 problems.append(Problem("error", where, "mode \"*\" is only for a whole-preset exclusion"))

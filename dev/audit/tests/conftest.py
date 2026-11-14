@@ -74,6 +74,7 @@ class FakeApi:
         self.sdxl_modes = ["txt2img"]
         self.sdxl_vars = {}
         self.forms = {}
+        self.raw_forms = {}
         self.plugins = [{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
@@ -132,6 +133,8 @@ class FakeApi:
             return 200, envelope({"id": WAN_ID, "vars": {"video_director": {"preset_modes": ["video"], "limits": {"default_duration": 5, "default_fps": 16}}}}), "application/json"
         if path.startswith("/api/presets/") and path.endswith("/form"):
             key = (path.split("/")[3], (query.get("mode") or [""])[0])
+            if key in self.raw_forms:
+                return 200, envelope(self.raw_forms[key]), "application/json"
             if key in self.forms:
                 return 200, envelope({"preset_id": key[0], "form_schema": self.forms[key]}), "application/json"
             return 500, {"detail": f"Mode '{key[1]}' not found"}, "application/json"
