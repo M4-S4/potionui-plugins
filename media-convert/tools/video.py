@@ -23,6 +23,7 @@ from .common import (
     output_cap,
     quality,
     read_streams,
+    release,
     thread_args,
 )
 
@@ -94,9 +95,12 @@ class ConvertVideo(MediaTool):
             args += ["-movflags", "+faststart"]
         out = ctx.new_path(VIDEO_FORMATS[fmt])
         room = make_room(ctx, output_cap(media.path))
-        args += [*limit_args(room), *thread_args()[:2], str(out)]
-        ctx.ffmpeg(args, duration=media.duration)
-        guard(ctx)
-        check_size(out, room)
+        try:
+            args += [*limit_args(room), *thread_args()[:2], str(out)]
+            ctx.ffmpeg(args, duration=media.duration)
+            guard(ctx)
+            check_size(out, room)
+        finally:
+            release(room)
         check_length(read_streams(out).duration)
         return ctx.probe(out, "video")

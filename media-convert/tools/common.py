@@ -3,6 +3,7 @@ import logging
 import math
 import shutil
 import subprocess
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -127,11 +128,30 @@ def size_text(count: int) -> str:
     return f"{max(1, count // 1024)} KB"
 
 
+@dataclass(eq=False)
+class Grant:
+    folder: Path
+    size: int
+    base: int
+
+    def left(self) -> int:
+        return max(0, self.size - max(0, scratch_bytes(self.folder) - self.base))
+
+
 @dataclass(frozen=True)
 class Room:
     size: int
     reason: str
     free: Optional[int] = field(default=None, compare=False)
+    grant: Optional[Grant] = field(default=None, compare=False, repr=False)
+
+
+GRANTS: set = set()
+GRANTS_LOCK = threading.Lock()
+
+
+def promised() -> int:
+    return sum(grant.left() for grant in list(GRANTS))
 
 
 def scratch_bytes(folder: Path) -> int:
@@ -167,7 +187,7 @@ def rooms(ctx, cap: int) -> list:
     except OSError:
         free = None
     if free is not None:
-        found.append(Room((free - DISK_RESERVE) // CONCURRENT_RUNS, "disk", free))
+        found.append(Room((free - DISK_RESERVE - promised()) // CONCURRENT_RUNS, "disk", free))
     storage = storage_limit(ctx.user_id, "storage_bytes")
     if storage is not None and storage.remaining is not None:
         found.append(Room(int(storage.remaining) - written, "storage"))
@@ -212,14 +232,23 @@ def refuse(room: Room, needed: int) -> None:
 
 
 def make_room(ctx, cap: int, needed: int = 0, unstoppable: int = 0) -> Room:
-    found = rooms(ctx, cap)
-    for item in found:
-        if item.reason == "disk" and item.size < unstoppable:
-            refuse(item, unstoppable)
-    room = min(found, key=lambda item: item.size)
-    if room.size < max(MIN_ROOM, needed):
-        refuse(room, max(MIN_ROOM, needed))
-    return room
+    with GRANTS_LOCK:
+        found = rooms(ctx, cap)
+        for item in found:
+            if item.reason == "disk" and item.size < unstoppable:
+                refuse(item, unstoppable)
+        room = min(found, key=lambda item: item.size)
+        if room.size < max(MIN_ROOM, needed):
+            refuse(room, max(MIN_ROOM, needed))
+        folder = Path(ctx.scratch_dir)
+        grant = Grant(folder, max(room.size, unstoppable), scratch_bytes(folder))
+        GRANTS.add(grant)
+    return Room(room.size, room.reason, room.free, grant)
+
+
+def release(room: Room) -> None:
+    with GRANTS_LOCK:
+        GRANTS.discard(room.grant)
 
 
 def limit_args(room: Room) -> list[str]:

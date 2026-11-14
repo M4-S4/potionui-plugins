@@ -188,6 +188,15 @@ def roomy_disk(monkeypatch):
     return ROOMY_DISK
 
 
+@pytest.fixture(autouse=True)
+def no_grants(monkeypatch):
+    from tools import common
+
+    fresh = set()
+    monkeypatch.setattr(common, "GRANTS", fresh)
+    return fresh
+
+
 @pytest.fixture
 def ctx(tmp_path):
     return ToolContext(tmp_path / "scratch")
