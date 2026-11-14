@@ -857,7 +857,7 @@ mode = "txt2img"
 case = "minimax-h3-image-txt2img"
 prompt = "image"
 profiles = ["smoke", "full"]
-notes = "24 GB tier: planned only with --beyond-tier; the core says its weights licence excludes the European Union, the United Kingdom, the Republic of Korea and the United States, and forbids using the weights or their outputs there: read the preset's description.md before running it"
+notes = "24 GB tier: planned only with --beyond-tier"
 
 [[cells]]
 preset = "core/MiniMax-H3-Image"
@@ -870,7 +870,7 @@ form = {match_picture_1 = true}
 bind = {"references[0]" = "bottle"}
 checks = {min_outputs = 1, not_black = true}
 sources = {form = "GET /api/presets/01M732Q89GSPYP058BTVGJDR89/form?mode=edit on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-image-txt2img", prompt = "pack"}
-notes = "24 GB tier: planned only with --beyond-tier; the core says its weights licence excludes the European Union, the United Kingdom, the Republic of Korea and the United States, and forbids using the weights or their outputs there: read the preset's description.md before running it"
+notes = "24 GB tier: planned only with --beyond-tier"
 
 [[cells]]
 preset = "core/MiniMax-H3-VDN"
