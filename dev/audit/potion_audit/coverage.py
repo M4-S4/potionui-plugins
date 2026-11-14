@@ -106,8 +106,14 @@ def missing_mode_reason(live_preset: dict, mode: str) -> str | None:
     return f"the instance offers no mode {mode!r} for this preset{replaced}; its modes: {', '.join(names)}"
 
 
-def _beyond(live_preset: dict, vram: float | None) -> bool:
+def tier_need(live_preset: dict, cell: Cell) -> tuple[float | None, bool]:
     need = (live_preset.get("requires") or {}).get("min_vram_gb")
+    if cell.min_vram_gb is not None and (need is None or float(cell.min_vram_gb) < float(need)):
+        return float(cell.min_vram_gb), True
+    return need, False
+
+
+def _beyond(need: float | None, vram: float | None) -> bool:
     return need is not None and vram is not None and float(need) > float(vram) + TIER_MARGIN_GB
 
 
@@ -148,12 +154,15 @@ def assess(pack: Pack, cell: Cell, resolver: ModelResolver, live: Live) -> dict:
     models = [resolver.resolve(ref, cell.preset_id) for ref in refs]
     entry["models"] = [{key: model[key] for key in ("field", "sha256", "filename", "by", "present")} | {"model_id": (model["found"] or {}).get("model_id")} for model in models]
     pending = [input_id for input_id in entry["inputs"] if pack.inputs[input_id].pending]
+    need, lowered = tier_need(live_preset, cell)
+    if lowered:
+        entry["tier"] = {"preset_min_vram_gb": (live_preset.get("requires") or {}).get("min_vram_gb"), "cell_min_vram_gb": need, "measure": cell.sources.get("min_vram_gb")}
     if any(model["present"] is None for model in models):
         entry.update(status="model_unresolved", reason="no sha256 and no file name: " + ", ".join(model["field"] for model in models if model["present"] is None))
     elif any(model["present"] is False for model in models):
         entry.update(status="model_missing", reason="not on the instance: " + ", ".join(f"{model['field']} ({model['filename'] or model['sha256'][:12]})" for model in models if model["present"] is False))
-    elif _beyond(live_preset, live.vram_gb):
-        entry.update(status="beyond_tier", reason=f"needs {live_preset['requires']['min_vram_gb']} GB, the GPU has {live.vram_gb} GB")
+    elif _beyond(need, live.vram_gb):
+        entry.update(status="beyond_tier", reason=f"needs {need} GB{' by its cell' if lowered else ''}, the GPU has {live.vram_gb} GB")
     elif pending:
         entry.update(status="input_pending", reason="inputs not made yet: " + ", ".join(pending))
     else:

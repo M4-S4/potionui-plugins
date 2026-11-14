@@ -129,6 +129,8 @@ def _check(args) -> int:
                 print(f"warning: {cell['id']} sends fields its form on the instance does not declare: {', '.join(cell['undeclared_fields'])}")
             if cell.get("form_error"):
                 print(f"warning: {cell['id']}: its form could not be read: {cell['form_error']}")
+            if cell.get("tier") and cell["status"] == "ready":
+                print(f"info: {cell['id']} runs from {cell['tier']['cell_min_vram_gb']} GB by its cell, below the {cell['tier']['preset_min_vram_gb']} GB its preset declares")
     for item in preflight["warnings"]:
         print(f"warning: {item}")
     for item in preflight["blocking"]:

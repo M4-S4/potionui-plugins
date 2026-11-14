@@ -1,6 +1,6 @@
 schema = 1
 id = "potion-v1"
-version = "1.1.0"
+version = "1.2.0"
 seed = 12345
 
 [cases]
@@ -857,7 +857,9 @@ mode = "txt2img"
 case = "minimax-h3-image-txt2img"
 prompt = "image"
 profiles = ["smoke", "full"]
-notes = "24 GB tier: planned only with --beyond-tier"
+min_vram_gb = 12
+sources = {min_vram_gb = {machine = "rtx4070ti-12gb", date = "2026-11-14", peak_vram_mb = 11497, run = "audit-54c51e21-4", note = "core 0.2.0 (dev 54c51e21d): PASS in 77 s at 2048x2048; the peak is the whole device, sampled at each poll; the preset statistics give 10046 MiB"}}
+notes = "the preset declares 24 GB; the cell runs from 12 GB, on the measure in sources"
 
 [[cells]]
 preset = "core/MiniMax-H3-Image"
@@ -869,8 +871,10 @@ models_from = "minimax-h3-image-txt2img"
 form = {match_picture_1 = true}
 bind = {"references[0]" = "bottle"}
 checks = {min_outputs = 1, not_black = true}
-sources = {form = "GET /api/presets/01M732Q89GSPYP058BTVGJDR89/form?mode=edit on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-image-txt2img", prompt = "pack"}
-notes = "24 GB tier: planned only with --beyond-tier"
+min_vram_gb = 12
+allowed_steps = ["TXT2IMG"]
+sources = {form = "GET /api/presets/01M732Q89GSPYP058BTVGJDR89/form?mode=edit on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-image-txt2img", prompt = "pack", min_vram_gb = {machine = "rtx4070ti-12gb", date = "2026-11-14", peak_vram_mb = 11671, run = "audit-54c51e21-4", note = "core 0.2.0 (dev 54c51e21d): a correct edit of the bottle picture in 57 s; the peak is the whole device, sampled at each poll; the preset statistics give 10427 MiB"}, allowed_steps = "the edit mode passes its pictures to generator/minimax_h3_image as reference_images (modes/edit/pipeline.yml), and that generator runs generate_one of FlowMatchGeneratorPipe (src/pipelines/pipes/_shared/generation/flow_generator_pipe.py), which reports every denoising step as TXT2IMG: TXT2IMG is the only step name of this mode, and media_loaded still checks that the picture was loaded"}
+notes = "the preset declares 24 GB; the cell runs from 12 GB, on the measure in sources"
 
 [[cells]]
 preset = "core/MiniMax-H3-VDN"
