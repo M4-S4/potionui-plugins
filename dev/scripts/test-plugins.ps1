@@ -4,14 +4,14 @@
 .DESCRIPTION
   With -Container (or POTIONUI_CONTAINER in .env.local), tests run inside the PotionUI Docker container
   from /app with its venv, against content/plugins/local/<id>/tests: the plugin must be present there
-  (bind mount, or copied with scripts/potionui-docker.ps1 copy).
+  (bind mount, or copied with dev/scripts/potionui-docker.ps1 copy).
   Without a container, tests run natively from the PotionUI checkout (POTIONUI_SRC), which needs
   PotionUI's own Python environment to be active.
   pytest.ini at the PotionUI root applies in both cases: network_guard blocks every network call.
 .PARAMETER Plugin
   Only this plugin id. Default: every plugin of the repo that has a tests/ folder.
 .EXAMPLE
-  .\scripts\test-plugins.ps1 -Plugin model-browser -- -x -k health
+  .\dev\scripts\test-plugins.ps1 -Plugin model-browser -- -x -k health
 #>
 [CmdletBinding()]
 param(

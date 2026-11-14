@@ -2,7 +2,7 @@
 # Dot-source it from a script:  . (Join-Path $PSScriptRoot 'common.ps1')
 
 function Get-RepoRoot {
-    Split-Path -Parent $PSScriptRoot
+    Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 }
 
 function Get-DotEnvValue {

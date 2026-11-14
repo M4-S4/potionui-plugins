@@ -11,6 +11,9 @@ docs:
   - path: "README.md"
     title: "Media Converter"
     audience: "admin"
+  - path: "docs/reference.md"
+    title: "Media Converter: reference"
+    audience: "admin"
 
 settings:
   - name: "ffmpeg_threads"

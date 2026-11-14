@@ -1,9 +1,0 @@
-#!/bin/sh
-root=$(git rev-parse --show-toplevel) || exit 1
-for python in python3 python; do
-    if "$python" -c "" >/dev/null 2>&1; then
-        exec "$python" -B "$root/scripts/check-public-hygiene.py" --staged
-    fi
-done
-echo "pre-commit: Python is needed to run scripts/check-public-hygiene.py" >&2
-exit 1

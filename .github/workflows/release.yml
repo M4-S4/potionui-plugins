@@ -25,11 +25,11 @@ jobs:
 
       - name: Read the tag against the manifest
         id: tag
-        run: python3 plugins/scripts/catalogue.py --tag "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+        run: python3 plugins/dev/scripts/catalogue.py --tag "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Read the pinned core
         id: core
-        run: echo "ref=$(tr -d '[:space:]' < plugins/core.ref)" >> "$GITHUB_OUTPUT"
+        run: echo "ref=$(tr -d '[:space:]' < plugins/dev/core.ref)" >> "$GITHUB_OUTPUT"
 
       - name: Check out the core
         uses: actions/checkout@v4
@@ -57,7 +57,7 @@ jobs:
       - name: Copy the plugin into content/plugins/local of the core
         env:
           PLUGIN_ID: ${{ steps.tag.outputs.id }}
-        run: pwsh plugins/scripts/sync-plugins.ps1 -PotionUISrc core -Plugin "$PLUGIN_ID"
+        run: pwsh plugins/dev/scripts/sync-plugins.ps1 -PotionUISrc core -Plugin "$PLUGIN_ID"
 
       - name: Build the dist
         working-directory: core
@@ -85,7 +85,7 @@ jobs:
         run: |
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$PLUGIN_ID-$VERSION.zip"
           cp "$PLUGIN_ID-$VERSION.zip" "$RUNNER_TEMP/"
-          python3 plugins/scripts/catalogue.py --release "$PLUGIN_ID" "$RUNNER_TEMP/$PLUGIN_ID-$VERSION.zip" "$url"
+          python3 plugins/dev/scripts/catalogue.py --release "$PLUGIN_ID" "$RUNNER_TEMP/$PLUGIN_ID-$VERSION.zip" "$url"
           git -C plugins diff -- plugins.json
 
       - name: Create the GitHub release
@@ -96,7 +96,7 @@ jobs:
           NAME: ${{ steps.tag.outputs.name }}
         run: |
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$PLUGIN_ID-$VERSION.zip"
-          notes="$NAME $VERSION, built against the core $(tr -d '[:space:]' < plugins/core.ref). Unzip $PLUGIN_ID-$VERSION.zip into content/plugins/local/ of a PotionUI instance, then Admin > Plugins > Scan for Plugins. To list this release in the catalogue, download the zip and run: python scripts/catalogue.py --release $PLUGIN_ID $PLUGIN_ID-$VERSION.zip $url, then commit plugins.json."
+          notes="$NAME $VERSION, built against the core $(tr -d '[:space:]' < plugins/dev/core.ref). Unzip $PLUGIN_ID-$VERSION.zip into content/plugins/local/ of a PotionUI instance, then Admin > Plugins > Scan for Plugins. To list this release in the catalogue, download the zip and run: python dev/scripts/catalogue.py --release $PLUGIN_ID $PLUGIN_ID-$VERSION.zip $url, then commit plugins.json."
           gh release create "$GITHUB_REF_NAME" "$PLUGIN_ID-$VERSION.zip" "$PLUGIN_ID-$VERSION.sha256" --repo "$GITHUB_REPOSITORY" --title "$NAME $VERSION" --notes "$notes"
           {
             echo "### $NAME $VERSION"
@@ -104,6 +104,6 @@ jobs:
             echo "Record it in the catalogue:"
             echo
             echo '```'
-            echo "python scripts/catalogue.py --release $PLUGIN_ID $PLUGIN_ID-$VERSION.zip $url"
+            echo "python dev/scripts/catalogue.py --release $PLUGIN_ID $PLUGIN_ID-$VERSION.zip $url"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

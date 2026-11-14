@@ -4,8 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
-ALLOW_FILE = "scripts/public-hygiene-allow.txt"
+REPO = Path(__file__).resolve().parents[2]
+ALLOW_FILE = "dev/scripts/public-hygiene-allow.txt"
 NAME = r"[^\\/\s\"'`<>{}$%|*?:;,()\[\]]+"
 PATTERNS = (
     ("account path", rf"(?<![A-Za-z])[A-Za-z]:[\\/]+(?i:users)[\\/]+{NAME}|/(?:home|Users)/{NAME}/"),

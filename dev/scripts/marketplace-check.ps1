@@ -3,7 +3,7 @@
   Check a plugin the way PotionUI's CI checks a marketplace plugin, in a worktree of the clone.
 .DESCRIPTION
   1. Mirrors <repo>/<id> into <worktree>/content/plugins/marketplace/<id> and copies
-     <repo>/core-tests/<id>/*.py into <worktree>/tests/plugins/marketplace/ (core-side tests:
+     <repo>/dev/core-tests/<id>/*.py into <worktree>/tests/plugins/marketplace/ (core-side tests:
      the ones that need a core internal, which a plugin's own tests/ may not import).
   2. In the potionui-core-tests container (clone mounted on /work):
        python tests/plugins/run_suites.py -q --timeout=300 -m "<CI marker filter>"   (every marketplace suite, as backend-tests.yml)
@@ -37,7 +37,7 @@ $failures = @()
 
 robocopy $source $target /MIR /XD __pycache__ node_modules .pytest_cache /XF PLAN.md /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "mirroring $Plugin failed (robocopy $LASTEXITCODE)" }
-$coreTests = Join-Path $repo "core-tests\$Plugin"
+$coreTests = Join-Path $repo "dev\core-tests\$Plugin"
 $prefix = 'test_' + ($Plugin -replace '-', '_') + '_'
 Get-ChildItem (Join-Path $Worktree 'tests\plugins\marketplace') -Filter "$prefix*.py" | Remove-Item
 if (Test-Path $coreTests) { Copy-Item (Join-Path $coreTests '*.py') (Join-Path $Worktree 'tests\plugins\marketplace') }

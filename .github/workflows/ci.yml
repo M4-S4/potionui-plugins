@@ -25,10 +25,10 @@ jobs:
           python-version: "3.12"
 
       - name: No private path, internal note or relay address in the tracked files
-        run: python -B scripts/check-public-hygiene.py
+        run: python -B dev/scripts/check-public-hygiene.py
 
       - name: Self-tests of the check
-        run: python -B -m unittest discover -s scripts -p "test_check_public_hygiene.py" -v
+        run: python -B -m unittest discover -s dev/scripts -p "test_check_public_hygiene.py" -v
 
   audit:
     name: Potion audit on ${{ matrix.os }}
@@ -41,7 +41,7 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: audit
+        working-directory: dev/audit
     steps:
       - name: Check out this repository
         uses: actions/checkout@v4
@@ -102,7 +102,7 @@ jobs:
 
       - name: Read the pinned core
         id: core
-        run: echo "ref=$(tr -d '[:space:]' < plugins/core.ref)" >> "$GITHUB_OUTPUT"
+        run: echo "ref=$(tr -d '[:space:]' < plugins/dev/core.ref)" >> "$GITHUB_OUTPUT"
 
       - name: Check out the core
         uses: actions/checkout@v4
@@ -118,7 +118,7 @@ jobs:
 
       - name: Check the catalogue
         working-directory: plugins
-        run: python scripts/catalogue.py --check
+        run: python dev/scripts/catalogue.py --check
 
       - uses: actions/setup-node@v4
         with:
@@ -194,15 +194,15 @@ jobs:
         run: npm ci
 
       - name: Copy the plugin into content/plugins/local of the core
-        run: pwsh plugins/scripts/sync-plugins.ps1 -PotionUISrc core -Plugin "$PLUGIN_ID"
+        run: pwsh plugins/dev/scripts/sync-plugins.ps1 -PotionUISrc core -Plugin "$PLUGIN_ID"
 
       - name: Put this repository's plugin and core-side tests in place of the core's own copies
         run: |
           if [ -d "core/content/plugins/marketplace/$PLUGIN_ID" ]; then
             rsync -a --delete --exclude /frontend/dist/ --exclude /docs/screenshots/ "plugins/$PLUGIN_ID/" "core/content/plugins/marketplace/$PLUGIN_ID/"
           fi
-          if [ -d "plugins/core-tests/$PLUGIN_ID" ]; then
-            rsync -a --delete --include "$CORE_TESTS" --exclude '*' "plugins/core-tests/$PLUGIN_ID/" core/tests/plugins/marketplace/
+          if [ -d "plugins/dev/core-tests/$PLUGIN_ID" ]; then
+            rsync -a --delete --include "$CORE_TESTS" --exclude '*' "plugins/dev/core-tests/$PLUGIN_ID/" core/tests/plugins/marketplace/
           fi
 
       - name: Build the plugin

@@ -35,7 +35,7 @@ Rules
 Steps
 -----
 
-All commands run from the `audit/` folder of a checkout of M4-S4/potionui-plugins. When the machine has none, clone `https://github.com/M4-S4/potionui-plugins`; when it has one, update it (`git pull --ff-only`). Tell the operator which commit you run: two audits compare only when they use the same pack.
+All commands run from the `dev/audit/` folder of a checkout of M4-S4/potionui-plugins. When the machine has none, clone `https://github.com/M4-S4/potionui-plugins`; when it has one, update it (`git pull --ff-only`). Tell the operator which commit you run: two audits compare only when they use the same pack.
 
 ### 1. Environment
 

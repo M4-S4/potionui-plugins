@@ -116,9 +116,13 @@ def test_the_settings_match_the_code_defaults():
     assert settings["load_notice"]["type"] == "info"
 
 
-def test_the_readme_is_the_plugin_documentation():
-    assert MANIFEST["docs"] == [{"path": "README.md", "title": "Media Converter", "audience": "admin"}]
-    assert (PLUGIN_ROOT / "README.md").is_file()
+def test_the_readme_and_the_reference_are_the_plugin_documentation():
+    assert MANIFEST["docs"] == [
+        {"path": "README.md", "title": "Media Converter", "audience": "admin"},
+        {"path": "docs/reference.md", "title": "Media Converter: reference", "audience": "admin"},
+    ]
+    for doc in MANIFEST["docs"]:
+        assert (PLUGIN_ROOT / doc["path"]).is_file()
 
 
 def test_a_missing_encoder_skips_the_test_and_names_the_encoder():
