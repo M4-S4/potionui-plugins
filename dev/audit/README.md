@@ -57,7 +57,7 @@ Setup
 The project uses [uv](https://docs.astral.sh/uv/) with a uv-managed Python 3.13 and the committed `uv.lock`:
 
 ```bash
-cd audit
+cd dev/audit
 uv sync --locked
 uv run --locked pytest
 ```
