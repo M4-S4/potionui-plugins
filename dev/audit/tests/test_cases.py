@@ -173,7 +173,7 @@ def test_a_size_label_reads_as_decimal_bytes(label, expected):
 
 def test_the_case_file_of_the_pack_gives_each_mode_its_own_model():
     case_set = load_cases(DEFAULT_CASES)
-    assert case_set.source["ref"].startswith("02cce6fdd")
+    assert case_set.source["ref"].startswith("54c51e21d")
     refs = {case.name: {ref.field: ref for ref in case.models} for case in case_set.cases if case.preset_key == "MiniMax-H3"}
     assert refs["minimax-h3-ref2va-fast"]["model"].filename == "minimax_h3_ref2va_pruned_fp8_scaled.safetensors"
     assert refs["minimax-h3-t2va-fast"]["model"].filename == "minimax_h3_fl2va_pruned_fp8_scaled.safetensors"

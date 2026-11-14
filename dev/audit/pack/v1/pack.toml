@@ -1,11 +1,11 @@
 schema = 1
 id = "potion-v1"
-version = "1.0.0"
+version = "1.1.0"
 seed = 12345
 
 [cases]
-file = "../../cases/02cce6fdd.json"
-sha256 = "e6fe2971ed93eb46e4b77bf3eb539459ab211ff61f7703ce6a7fd8ecc574db32"
+file = "../../cases/54c51e21d.json"
+sha256 = "f4adf3ee856698b8f9727cf3beb02a119c2bf1a0783621aa6ff3f122b8a3d2eb"
 
 [bible]
 bottle = "a small round glass potion bottle with a long neck, sealed with a cork stopper, filled with a glowing violet liquid, a cream paper label hand-lettered with the word \"PotionUI\", standing on an old oak workbench"
@@ -74,6 +74,9 @@ positive = "{lumi}, in her workshop, slowly turns her head towards the camera an
 [prompts.i2v]
 positive = "the violet liquid inside the bottle starts to swirl and glow, golden sparks rise from the cork, the camera slowly pushes in, {motion}"
 
+[prompts.i2va]
+positive = "the violet liquid inside the bottle starts to swirl and glow, golden sparks rise from the cork, the camera slowly pushes in, {motion}, the soft bubbling of the potion and the crackle of the fire"
+
 [prompts.flf]
 positive = "the glowing violet liquid inside the bottle slowly turns to molten gold, golden sparks swirl around the neck, {motion}"
 
@@ -85,6 +88,12 @@ positive = "Lumi, the witch from the reference, lifts a small glowing violet pot
 
 [prompts.remix]
 positive = "the same shot, but the liquid in the bottle now glows emerald green, {motion}"
+
+[prompts.loop]
+positive = "the violet liquid inside the bottle swirls slowly round and round, the candle flames behind it flicker, a few golden sparks drift up from the cork and fade"
+
+[prompts.ingredients]
+positive = "Lumi, the witch from the first panel, lifts the small glowing violet potion bottle from the second panel off her oak workbench and smiles at it, medium shot, slow push in, {motion}"
 
 [prompts.extend]
 positive = "the camera keeps pushing in on the bottle as the violet liquid glows brighter and golden sparks rise from the cork, {motion}"
@@ -335,7 +344,7 @@ profiles = ["full"]
 models_from = "flux1-baseline-fast"
 form = {denoise = 0.55, steps = 30, guidance = 3.5}
 bind = {source_image = "bottle"}
-sources = {form = "GET /api/presets/01M0J6CPKRJZW0SVEXMZ90CM7K/form?mode=img2img on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case flux1-baseline-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01M0J6CPKRJZW0SVEXMZ90CM7K/form?mode=img2img on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case flux1-baseline-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/Flux2"
@@ -353,7 +362,7 @@ profiles = ["full"]
 models_from = "flux-klein-baseline-fast"
 form = {denoise = 0.55, steps = 30, guidance = 3.5}
 bind = {source_image = "bottle"}
-sources = {form = "GET /api/presets/01KX46YCC5RB5EGYY38SBMVKR5/form?mode=img2img on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case flux-klein-baseline-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX46YCC5RB5EGYY38SBMVKR5/form?mode=img2img on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case flux-klein-baseline-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/Flux3"
@@ -429,7 +438,7 @@ profiles = ["full"]
 models_from = "krea2-turbo-baseline-fast"
 form = {cfg = 1.0}
 bind = {source_image = "bottle"}
-sources = {form = "GET /api/presets/4TK1KBQZ2XMB8ME0PTMXS1YJQP/form?mode=enhance on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case krea2-turbo-baseline-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/4TK1KBQZ2XMB8ME0PTMXS1YJQP/form?mode=enhance on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case krea2-turbo-baseline-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/Krea2"
@@ -532,10 +541,11 @@ prompt = "add_water"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
+drop_models = ["audio_vae"]
 models = {effect_lora = {filename = "ltx-2.5-22b-ic-lora-water-simulation-0.9.safetensors"}}
 form = {speed_profile = "distilled", output_size = "1080p", steps = 8, cfg = 1.0}
 bind = {input_video = "clip"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=add_water on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=add_water on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast but its audio_vae, which this mode does not declare; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
 
 [[cells]]
 preset = "core/LTX-2.5"
@@ -544,10 +554,11 @@ prompt = "cinemagraph"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
+drop_models = ["audio_vae"]
 models = {effect_lora = {filename = "ltx-2.5-22b-lora-cinemagraph-0.9.safetensors"}}
 form = {speed_profile = "distilled", resolution = "768x512", duration = 3, steps = 8, cfg = 1.0}
 bind = {input_image = "bottle"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=cinemagraph on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=cinemagraph on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast but its audio_vae, which this mode does not declare; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
 
 [[cells]]
 preset = "core/LTX-2.5"
@@ -556,10 +567,11 @@ prompt = "colorize"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
+drop_models = ["audio_vae"]
 models = {effect_lora = {filename = "ltx-2.5-22b-ic-lora-colorization-0.9.safetensors"}}
 form = {speed_profile = "distilled", output_size = "544p", steps = 8, cfg = 1.0}
 bind = {input_video = "clip-gray"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=colorize on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=colorize on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast but its audio_vae, which this mode does not declare; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
 
 [[cells]]
 preset = "core/LTX-2.5"
@@ -568,10 +580,11 @@ prompt = "day_to_night"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
+drop_models = ["audio_vae"]
 models = {effect_lora = {filename = "ltx-2.5-22b-ic-lora-day-to-night-0.9.safetensors"}}
 form = {speed_profile = "distilled", output_size = "1080p", steps = 8, cfg = 1.0}
 bind = {input_video = "clip"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=day_to_night on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=day_to_night on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast but its audio_vae, which this mode does not declare; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
 
 [[cells]]
 preset = "core/LTX-2.5"
@@ -582,7 +595,7 @@ profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
 form = {speed_profile = "distilled", duration = 5, resolution = "768x512", fps = 25, steps = 8, cfg = 1.0}
 bind = {input_video = "clip"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=extend on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/LTX-2.5"
@@ -591,10 +604,11 @@ prompt = "layout"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
+drop_models = ["audio_vae"]
 models = {upscale_model = "eb5a71fe4068ee87ccdb1c3aa635e547ca76bd2d30ae20ae889f2c325c0677e8", effect_lora = {filename = "ltx-2.5-22b-ic-lora-layout-to-render-1.0.safetensors"}}
 form = {speed_profile = "distilled", steps = 8, cfg = 1.0}
 bind = {input_video = "clip", style_image = "workshop"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=layout_to_render on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; upscale_model: the form's first recommendation, ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors, by its sha256 read on 2026-11-08 (the core gives none; the file equals the installed ltx-2.5-spatial-upscaler-x2-1.0_bf16.safetensors); effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=layout_to_render on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast but its audio_vae, which this mode does not declare; upscale_model: the form's first recommendation, ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors, by its sha256 read on 2026-11-08 (the core gives none; the file equals the installed ltx-2.5-spatial-upscaler-x2-1.0_bf16.safetensors); effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
 
 [[cells]]
 preset = "core/LTX-2.5"
@@ -602,8 +616,9 @@ mode = "refine_faces"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
+drop_models = ["audio_vae"]
 bind = {input_video = "lumi-clip"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=refine_faces on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast", prompt = "none"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=refine_faces on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast but its audio_vae, which this mode does not declare", prompt = "none"}
 
 [[cells]]
 preset = "core/LTX-2.5"
@@ -612,10 +627,22 @@ prompt = "remove_object"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
+drop_models = ["audio_vae"]
 models = {effect_lora = {filename = "ltx-2.5-22b-ic-lora-clean-plate-1.0.safetensors"}}
 form = {speed_profile = "distilled", output_size = "1080p", steps = 8, cfg = 1.0}
 bind = {input_video = "clip"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=remove_object on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=remove_object on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast but its audio_vae, which this mode does not declare; effect_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "pack"}
+
+[[cells]]
+preset = "core/LTX-2.5"
+mode = "ingredients"
+case = "ltx25-ingredients-fast"
+fix = "the case gives no picture and names its effect_lora by the unrendered template {{ vars.lora_file }}: pictures holds lumi and object, and effect_lora is the form's first recommendation, ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors, matched by file name (no sha256 in the core)"
+models = {effect_lora = {filename = "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors"}}
+prompt = "ingredients"
+profiles = ["full"]
+bind = {"pictures[0]" = "lumi", "pictures[1]" = "object"}
+sources = {pictures = "pack: the form asks for one clean subject per picture on a plain background; object is the bottle alone on a grey studio background, lumi the character"}
 
 [[cells]]
 preset = "core/LTX-2.5"
@@ -623,10 +650,11 @@ mode = "restore"
 seed = 12345
 profiles = ["full"]
 models_from = "ltx25-video-distilled-t2v-fast"
+drop_models = ["audio_vae"]
 models = {restore_lora = {filename = "ltx-2.5-22b-ic-lora-restore-1.0.safetensors"}, deblur_lora = {filename = "ltx-2.5-22b-ic-lora-deblur-0.9.safetensors"}, decompress_lora = {filename = "ltx-2.5-22b-ic-lora-decompression-0.9.safetensors"}}
 form = {speed_profile = "distilled", output_size = "1080p", steps = 8, cfg = 1.0}
 bind = {input_video = "clip"}
-sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=restore on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast; restore_lora: the form's first recommendation, matched by file name (no sha256 in the core); deblur_lora: the form's first recommendation, matched by file name (no sha256 in the core); decompress_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "none"}
+sources = {form = "GET /api/presets/01KX47LTX25VIDEO00000000TV/form?mode=restore on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case ltx25-video-distilled-t2v-fast but its audio_vae, which this mode does not declare; restore_lora: the form's first recommendation, matched by file name (no sha256 in the core); deblur_lora: the form's first recommendation, matched by file name (no sha256 in the core); decompress_lora: the form's first recommendation, matched by file name (no sha256 in the core)", prompt = "none"}
 
 [[cells]]
 preset = "core/MOSS-Image"
@@ -692,10 +720,39 @@ bind = {input_image = "lumi", input_video = "lumi-clip"}
 
 [[cells]]
 preset = "core/MiniMax-H3"
-mode = "long"
-case = "minimax-h3-long-fast"
+mode = "txt2video"
+case = "minimax-h3-text-to-video-fast"
 prompt = "t2va"
 profiles = ["full"]
+
+[[cells]]
+preset = "core/MiniMax-H3"
+mode = "img2video"
+case = "minimax-h3-image-to-video-fast"
+fix = "start_image holds a PLACEHOLDER file: bound to bottle"
+prompt = "i2va"
+profiles = ["full"]
+bind = {start_image = "bottle"}
+
+[[cells]]
+preset = "core/MiniMax-H3"
+mode = "first_last"
+case = "minimax-h3-first-to-last-fast"
+fix = "start_image and end_image hold PLACEHOLDER files: bound to bottle and bottle-gold"
+prompt = "flfa"
+profiles = ["full"]
+bind = {start_image = "bottle", end_image = "bottle-gold"}
+
+[[cells]]
+preset = "core/MiniMax-H3"
+mode = "loop"
+prompt = "loop"
+seed = 12345
+profiles = ["full"]
+models_from = "minimax-h3-text-to-video-fast"
+form = {loop_seconds = 4, movement = "subtle", sound = false, steps = 24}
+bind = {start_picture = "bottle"}
+sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=loop on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-text-to-video-fast", prompt = "pack", start_picture = "pack: the field is optional; the mode brings a picture to life, so the cell gives it bottle"}
 
 [[cells]]
 preset = "core/MiniMax-H3"
@@ -706,7 +763,7 @@ profiles = ["full"]
 models_from = "minimax-h3-t2va-fast"
 form = {speed_profile = "quality", steps = 4}
 bind = {source_video = "clip"}
-sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=extend on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-t2va-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-t2va-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/MiniMax-H3"
@@ -716,7 +773,7 @@ profiles = ["full"]
 models_from = "minimax-h3-t2va-fast"
 form = {speed_profile = "custom", steps = 6}
 bind = {input_video = "lumi-clip"}
-sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=refine_faces on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-t2va-fast", prompt = "none"}
+sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=refine_faces on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-t2va-fast", prompt = "none"}
 
 [[cells]]
 preset = "core/MiniMax-H3"
@@ -727,7 +784,7 @@ profiles = ["full"]
 models_from = "minimax-h3-ref2va-fast"
 form = {speed_profile = "quality", steps = 4}
 bind = {source_video = "clip"}
-sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=remix on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-ref2va-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47H3MINIMAX000000000VA/form?mode=remix on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-ref2va-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/MiniMax-H3"
@@ -761,7 +818,7 @@ profiles = ["full"]
 models_from = "minimax-h3-fast-t2va-fast"
 form = {speed_profile = "distilled", steps = 8}
 bind = {source_video = "clip"}
-sources = {form = "GET /api/presets/01KX47H3FASTH30000000000VA/form?mode=extend on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-fast-t2va-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01KX47H3FASTH30000000000VA/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-fast-t2va-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/MiniMax-H3-Fast"
@@ -771,7 +828,27 @@ profiles = ["full"]
 models_from = "minimax-h3-fast-t2va-fast"
 form = {speed_profile = "custom", steps = 4}
 bind = {input_video = "lumi-clip"}
-sources = {form = "GET /api/presets/01KX47H3FASTH30000000000VA/form?mode=refine_faces on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-fast-t2va-fast", prompt = "none"}
+sources = {form = "GET /api/presets/01KX47H3FASTH30000000000VA/form?mode=refine_faces on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-fast-t2va-fast", prompt = "none"}
+
+[[cells]]
+preset = "core/MiniMax-H3-Image"
+mode = "txt2img"
+case = "minimax-h3-image-txt2img"
+prompt = "image"
+profiles = ["smoke", "full"]
+notes = "24 GB tier: planned only with --beyond-tier; the core says its weights licence excludes the European Union, the United Kingdom, the Republic of Korea and the United States, and forbids using the weights or their outputs there: read the preset's description.md before running it"
+
+[[cells]]
+preset = "core/MiniMax-H3-Image"
+mode = "edit"
+prompt = "edit"
+seed = 12345
+profiles = ["full"]
+models_from = "minimax-h3-image-txt2img"
+form = {match_picture_1 = true}
+bind = {"references[0]" = "bottle"}
+sources = {form = "GET /api/presets/01M732Q89GSPYP058BTVGJDR89/form?mode=edit on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-image-txt2img", prompt = "pack"}
+notes = "24 GB tier: planned only with --beyond-tier; the core says its weights licence excludes the European Union, the United Kingdom, the Republic of Korea and the United States, and forbids using the weights or their outputs there: read the preset's description.md before running it"
 
 [[cells]]
 preset = "core/MiniMax-H3-VDN"
@@ -804,13 +881,18 @@ mode = "*"
 exclude = "writes into the instance's model store"
 
 [[cells]]
+preset = "field-catalog-all-fields"
+mode = "catalog"
+exclude = "a development preset of the core (content/presets/marketplace/FieldCatalog/all-fields): a catalogue of every form field the frontend renders, whose gallery-only pipeline generates nothing"
+
+[[cells]]
 preset = "core/Pixal3D"
 mode = "img2mesh"
 seed = 12345
 profiles = ["smoke", "full"]
 models = {diffusion_model = "5f3cd67b7ff9104d810754bcd89e47a6c2393e41f8c0a808d0dead37802d85fe", shape_vae = "de0cb4949a76c59ee5c091a995a69bcc8c51d5aeda939f0c641a50d2a72341f4", texture_vae = "714e5ebf094a610e12a8e3b5175c18a62f37f6ea4218acb6073644456b73ab0e", image_encoder = "4ad2ec4e0879a5b5b04cd97325cc37da954a7b6edca5170b86510f17f2b2290f", camera_estimator = "cb1a692d03235671e959e81360d7b4d9f44aefadb1f852d6ca6aa17799d5e31f"}
 bind = {source_image = "object"}
-sources = {form = "GET /api/presets/01M4AJGF0EQ9DR9NAKEEY3K8P3/form?mode=img2mesh on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "diffusion_model from the pixal3d-starter recipe; shape_vae from the pixal3d-starter recipe; texture_vae from the pixal3d-starter recipe; image_encoder from the pixal3d-starter recipe; camera_estimator from the pixal3d-starter recipe", prompt = "none"}
+sources = {form = "GET /api/presets/01M4AJGF0EQ9DR9NAKEEY3K8P3/form?mode=img2mesh on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "diffusion_model from the pixal3d-starter recipe; shape_vae from the pixal3d-starter recipe; texture_vae from the pixal3d-starter recipe; image_encoder from the pixal3d-starter recipe; camera_estimator from the pixal3d-starter recipe", prompt = "none"}
 notes = "16 GB tier: planned only with --beyond-tier"
 
 [[cells]]
@@ -820,7 +902,7 @@ seed = 12345
 profiles = ["full"]
 models = {diffusion_model = "302d00adb453f089c87ea083ebde2c9087bc259170d17910136ad1d8231f49a3", shape_vae = "de0cb4949a76c59ee5c091a995a69bcc8c51d5aeda939f0c641a50d2a72341f4", texture_vae = "714e5ebf094a610e12a8e3b5175c18a62f37f6ea4218acb6073644456b73ab0e", image_encoder = "4ad2ec4e0879a5b5b04cd97325cc37da954a7b6edca5170b86510f17f2b2290f", camera_estimator = "cb1a692d03235671e959e81360d7b4d9f44aefadb1f852d6ca6aa17799d5e31f"}
 bind = {front_image = "object"}
-sources = {form = "GET /api/presets/01M4AJGF0EQ9DR9NAKEEY3K8P3/form?mode=views2mesh on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "diffusion_model from the pixal3d-starter recipe; shape_vae from the pixal3d-starter recipe; texture_vae from the pixal3d-starter recipe; image_encoder from the pixal3d-starter recipe; camera_estimator from the pixal3d-starter recipe", prompt = "none"}
+sources = {form = "GET /api/presets/01M4AJGF0EQ9DR9NAKEEY3K8P3/form?mode=views2mesh on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "diffusion_model from the pixal3d-starter recipe; shape_vae from the pixal3d-starter recipe; texture_vae from the pixal3d-starter recipe; image_encoder from the pixal3d-starter recipe; camera_estimator from the pixal3d-starter recipe", prompt = "none"}
 notes = "16 GB tier: planned only with --beyond-tier"
 
 [[cells]]
@@ -854,7 +936,7 @@ drop_models = ["camera_lora"]
 models_from = "qwen-image-camera-angle-fast"
 form = {speed_profile = "balanced", output_size = "match", resolution = "1024x1024", steps = 20, cfg = 4.0}
 bind = {"source_image[0]" = "bottle"}
-sources = {form = "GET /api/presets/01K0W24A3RADXXABH16YQ7KF00/form?mode=edit on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-camera-angle-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01K0W24A3RADXXABH16YQ7KF00/form?mode=edit on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-camera-angle-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/QwenImage"
@@ -865,7 +947,7 @@ profiles = ["full"]
 models_from = "qwen-image-baseline-fast"
 form = {speed_profile = "balanced", denoise = 0.55, steps = 20, cfg = 4.0}
 bind = {source_image = "bottle"}
-sources = {form = "GET /api/presets/01K0W24A3RADXXABH16YQ7KF00/form?mode=img2img on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-baseline-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01K0W24A3RADXXABH16YQ7KF00/form?mode=img2img on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-baseline-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/QwenImage-2.1"
@@ -908,7 +990,7 @@ models_from = "qwen-image-21-edit-fast"
 models = {control_model = "65d6b66d734da9e7ff5ef04e7db3a133553a52a3f29a7fcb3e9cce8fa21dcfcd"}
 form = {speed_profile = "control", resolution = "1024x1024", steps = 40, cfg = 1.0, guide = "canny", guide_extract = false, guide_from_other = true}
 bind = {source_image = "bottle", guide_image = "bottle-edges"}
-sources = {form = "GET /api/presets/01M31Y6WNM07EHAXXCDV1QVJVX/form?mode=control on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-21-edit-fast; control_model: the form's first recommendation with a sha256 (Qwen-Image-2.1-Fun-Controlnet-Union.safetensors)", prompt = "pack", guide = "pack: the control image is bottle-edges, an edge map made by code, so the mode reads it as a ready canny guide"}
+sources = {form = "GET /api/presets/01M31Y6WNM07EHAXXCDV1QVJVX/form?mode=control on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults but guide_extract = false and guide_from_other = true, which are the pack's choice (see guide; the form defaults are true and false, in 0.1.0 as in 0.2.0); every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-21-edit-fast; control_model: the form's first recommendation with a sha256 (Qwen-Image-2.1-Fun-Controlnet-Union.safetensors)", prompt = "pack", guide = "pack: the control image is bottle-edges, an edge map made by code, so the mode reads it as a ready canny guide"}
 
 [[cells]]
 preset = "core/QwenImage-2.1"
@@ -919,7 +1001,7 @@ profiles = ["full"]
 models_from = "qwen-image-21-edit-fast"
 form = {speed_profile = "balanced", steps = 40, cfg = 4.0}
 bind = {source_image = "bottle"}
-sources = {form = "GET /api/presets/01M31Y6WNM07EHAXXCDV1QVJVX/form?mode=restyle on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-21-edit-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01M31Y6WNM07EHAXXCDV1QVJVX/form?mode=restyle on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-21-edit-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/QwenImage-2.1"
@@ -930,7 +1012,7 @@ profiles = ["full"]
 models_from = "qwen-image-21-edit-fast"
 form = {speed_profile = "balanced", steps = 40, cfg = 4.0}
 bind = {source_image = "bottle"}
-sources = {form = "GET /api/presets/01M31Y6WNM07EHAXXCDV1QVJVX/form?mode=text on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-21-edit-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01M31Y6WNM07EHAXXCDV1QVJVX/form?mode=text on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case qwen-image-21-edit-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/SDXL"
@@ -978,27 +1060,21 @@ profiles = ["full"]
 models_from = "sdxl-juggernaut-baseline-fast"
 form = {denoise = 0.75, steps = 20, cfg = 4}
 bind = {source_image = "bottle", source_image_inpaint_mask = "mask:path"}
-sources = {form = "GET /api/presets/01K0W24A3RADXXABH16YQ7KE90/form?mode=inpaint on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case sdxl-juggernaut-baseline-fast", prompt = "pack"}
+sources = {form = "GET /api/presets/01K0W24A3RADXXABH16YQ7KE90/form?mode=inpaint on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case sdxl-juggernaut-baseline-fast", prompt = "pack"}
 
 [[cells]]
 preset = "core/SeedVR2"
 mode = "upscale"
 case = "seedvr2-image-upscale-heavy-fast"
-fix = "the core's tests.yml gives zero sha256 and the 0.1.0 recipe and form give none: the three sha256 come from the seedvr2-starter recipe at d7ff033de (cases/d7ff033de.json)"
 profiles = ["smoke", "full"]
-models = {diffusion_model = "2fd0e03a3dad24e07086750360727ca437de4ecd456f769856e960ae93e2b304", vae = "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1", prompt_embedding = "fa07a14844314772266b66c3b95deb0027696d8fe7065721263db5176f45d799"}
 bind = {input_image = "bottle"}
-sources = {models = "the core's tests.yml gives zero sha256 and the 0.1.0 recipe and form give none: the three sha256 come from the seedvr2-starter recipe at d7ff033de (cases/d7ff033de.json)"}
 
 [[cells]]
 preset = "core/SeedVR2"
 mode = "video_upscale"
 case = "seedvr2-video-upscale-fast"
-fix = "the core's tests.yml gives zero sha256 and the 0.1.0 recipe and form give none: the three sha256 come from the seedvr2-starter recipe at d7ff033de (cases/d7ff033de.json)"
 profiles = ["full"]
-models = {diffusion_model = "2fd0e03a3dad24e07086750360727ca437de4ecd456f769856e960ae93e2b304", vae = "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1", prompt_embedding = "fa07a14844314772266b66c3b95deb0027696d8fe7065721263db5176f45d799"}
 bind = {input_video = "clip"}
-sources = {models = "the core's tests.yml gives zero sha256 and the 0.1.0 recipe and form give none: the three sha256 come from the seedvr2-starter recipe at d7ff033de (cases/d7ff033de.json)"}
 
 [[cells]]
 preset = "core/TRELLIS2"
@@ -1007,7 +1083,7 @@ seed = 12345
 profiles = ["smoke", "full"]
 models = {diffusion_model = "bf8ebe29f2d73722ca8a17b7aa65ef07650eb26d04799ae600482058f96921b5", shape_vae = "de0cb4949a76c59ee5c091a995a69bcc8c51d5aeda939f0c641a50d2a72341f4", texture_vae = "714e5ebf094a610e12a8e3b5175c18a62f37f6ea4218acb6073644456b73ab0e", image_encoder = "5cb785e458de7c460579082418af81f5c62380c181599344bdc60898c63468ee"}
 bind = {source_image = "object"}
-sources = {form = "GET /api/presets/01M1ERSFQTVP21KDSRF81CXEZY/form?mode=img2mesh on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "diffusion_model from the trellis2-starter recipe; shape_vae from the trellis2-starter recipe; texture_vae from the trellis2-starter recipe; image_encoder from the trellis2-starter recipe", prompt = "none"}
+sources = {form = "GET /api/presets/01M1ERSFQTVP21KDSRF81CXEZY/form?mode=img2mesh on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "diffusion_model from the trellis2-starter recipe; shape_vae from the trellis2-starter recipe; texture_vae from the trellis2-starter recipe; image_encoder from the trellis2-starter recipe", prompt = "none"}
 
 [[cells]]
 preset = "core/VideoTools"
@@ -1096,32 +1172,29 @@ exclude = "comfyui engine: the audit has no ComfyUI backend"
 [[cells]]
 preset = "plugin:nvidia-rtx-upscale/RTX-Upscale"
 mode = "upscale"
-seed = 12345
 profiles = ["full"]
 requires_plugin = "nvidia-rtx-upscale"
 form = {scale = 2.0}
 bind = {input_image = "bottle"}
-sources = {form = "GET /api/presets/01KXRTXUPSCALE0000000000RU/form?mode=upscale on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the mode needs no model", prompt = "none"}
+sources = {form = "GET /api/presets/01KXRTXUPSCALE0000000000RU/form?mode=upscale on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the mode needs no model", prompt = "none"}
 
 [[cells]]
 preset = "plugin:nvidia-rtx-upscale/RTX-Upscale"
 mode = "video_upscale"
-seed = 12345
 profiles = ["full"]
 requires_plugin = "nvidia-rtx-upscale"
 form = {scale = 2.0}
 bind = {input_video = "clip"}
-sources = {form = "GET /api/presets/01KXRTXUPSCALE0000000000RU/form?mode=video_upscale on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the mode needs no model", prompt = "none"}
+sources = {form = "GET /api/presets/01KXRTXUPSCALE0000000000RU/form?mode=video_upscale on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the mode needs no model", prompt = "none"}
 
 [[cells]]
 preset = "plugin:nvidia-rtx-upscale/RTX-Upscale"
 mode = "interpolate"
-seed = 12345
 profiles = ["full"]
 requires_plugin = "nvidia-rtx-upscale"
 form = {factor = 2}
 bind = {input_video = "clip"}
-sources = {form = "GET /api/presets/01KXRTXUPSCALE0000000000RU/form?mode=interpolate on potionui-dev, core 0.1.0 (its presets equal those of 02cce6fdd): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the mode needs no model", prompt = "none"}
+sources = {form = "GET /api/presets/01KXRTXUPSCALE0000000000RU/form?mode=interpolate on potionui-dev, core 0.2.0 (dev 54c51e21d), read again on 2026-11-14: the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the mode needs no model", prompt = "none"}
 
 [[cells]]
 preset = "plugin:video-producer/MiniMax-H3-12GB"
@@ -1141,12 +1214,34 @@ profiles = ["full"]
 bind = {"references[0]" = "lumi"}
 
 [[cells]]
+preset = "plugin:video-producer/MiniMax-H3-12GB"
+mode = "extend"
+prompt = "extend"
+seed = 12345
+profiles = ["full"]
+models_from = "minimax-h3-12gb-t2va"
+form = {speed_profile = "custom", steps = 20}
+bind = {source_video = "clip"}
+sources = {form = "GET /api/presets/01M54HN72B0KY7H63BKQ16T253/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-12gb-t2va", prompt = "pack"}
+
+[[cells]]
 preset = "plugin:video-producer/MiniMax-H3-Fast-12GB"
 mode = "video"
 case = "minimax-h3-fast-12gb-t2va"
 prompt = "t2va"
 profiles = ["smoke", "full"]
 repeat_warm = true
+
+[[cells]]
+preset = "plugin:video-producer/MiniMax-H3-Fast-12GB"
+mode = "extend"
+prompt = "extend"
+seed = 12345
+profiles = ["full"]
+models_from = "minimax-h3-fast-12gb-t2va"
+form = {speed_profile = "distilled", steps = 8}
+bind = {source_video = "clip"}
+sources = {form = "GET /api/presets/01M54HN72PABVRE54YNQA2Q7ZT/form?mode=extend on potionui-dev, core 0.2.0 (dev 54c51e21d): the values set here are the form defaults; every field left out keeps its default, which the server applies (src/features/forms/binding.py, step 4)", models = "the models of case minimax-h3-fast-12gb-t2va", prompt = "pack"}
 
 [[cells]]
 preset = "plugin:video-producer/Wan2.1-T2V-1.3B-8GB"
@@ -1163,6 +1258,16 @@ case = "wan22-14b-lightning-12gb-t2v"
 prompt = "t2v"
 profiles = ["smoke", "full"]
 repeat_warm = true
+
+[[cells]]
+preset = "plugin:video-producer/Wan2.2-14B-Lightning-I2V-12GB"
+mode = "video"
+case = "wan22-14b-lightning-i2v-12gb-i2v"
+fix = "its Video Director document points at a PLACEHOLDER first frame: bound to bottle"
+prompt = "i2v"
+profiles = ["smoke", "full"]
+repeat_warm = true
+bind = {"video_director.media[0].media" = "bottle"}
 
 [[cells]]
 preset = "plugin:video-producer/Wan2.2-TI2V-5B-8GB"

@@ -250,7 +250,7 @@ def test_the_shipped_pack_verifies_with_its_inputs_pending():
     pack = load_pack(DEFAULT_PACK)
     problems = verify(pack, allow_pending=True)
     assert errors(problems) == [], messages(errors(problems))
-    assert pack.case_set.source["ref"].startswith("02cce6fdd")
+    assert pack.case_set.source["ref"].startswith("54c51e21d")
     assert all(cell.profiles or cell.exclude for cell in pack.cells)
 
 
