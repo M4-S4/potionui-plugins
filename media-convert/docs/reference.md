@@ -83,8 +83,8 @@ The tool window shows the reason, and nothing is added to the Library.
 | An image larger than 67 million pixels | Refused with its size and the limit. Media Converter reads only the size written in the file and does not decode the picture. |
 | A PNG converted to PNG with the same size | Refused, since nothing would change. With a largest side smaller than the picture, it is shrunk. |
 | A WAV converted to WAV, a FLAC to FLAC | Refused, since nothing would change. A JPEG, WebP, MP3, M4A or OGG file can be converted to its own format to make it lighter. |
-| A video larger than 4096 × 2304 pixels | Refused before any encoding, with its size and the limit. |
-| A video whose picture grows past 4096 × 2304 pixels partway through | The larger pictures are not decoded and are left out of the result. |
+| A video of more than 4096 × 2304 pixels (about 9.4 million) | Refused before any encoding, with its size and the limit. |
+| A video whose picture grows past about 9.4 million pixels partway through | The larger pictures are not decoded and are left out of the result. |
 | A video thinner than 2 pixels, or one that a largest side would make so | Refused. |
 | A video without sound given to **Extract sound** | The menu offers the tool, since the Library does not record whether an uploaded video has sound; the run ends with "Extract sound needs a video with sound". |
 | A sound with no samples | Refused: "This sound is empty: there is nothing to convert". |
@@ -97,7 +97,7 @@ The tool window shows the reason, and nothing is added to the Library.
 
 ### Settings
 
-In **Admin › Plugins › Media Converter**:
+In **Admin › Plugins › Media Converter › Settings**:
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -139,4 +139,4 @@ From chat, MCP and automation, PotionUI offers these tools like its own. A run f
 - Copying the sound or the picture without encoding it again, such as a MOV to MP4 change of container.
 - Keeping the cover art of a sound file.
 - The tool in the media field of a generation form.
-- Photos above 67 million pixels, such as the 108 and 200 megapixel photos of some phones and large panoramas, and videos above 4096 × 2304 pixels, such as 5.7K and 8K: they are refused.
+- Photos above 67 million pixels, such as the 108 and 200 megapixel photos of some phones and large panoramas, and videos above about 9.4 million pixels (4096 × 2304), such as 5.7K and 8K: they are refused.

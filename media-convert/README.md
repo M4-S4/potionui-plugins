@@ -1,16 +1,15 @@
 # Media Converter
 
-Media Converter adds four tools to the **Tools** menu of the Library and of the History in PotionUI, for every user: convert an image, a video or a sound to another format, and extract the sound of a video.
-
-Version 0.1.1. It needs PotionUI 0.2.0 or later. Install it from the catalogue of this repository:
-
+Media Converter adds four tools to the **Tools** menu of the Library and of the History in PotionUI, for every user: convert an image, a video or a sound to another format, and extract the sound of a video. Install it from this catalogue:
 ```text
 https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/plugins.json
 ```
 
+Version 0.1.1. It needs PotionUI 0.2.0 or later.
+
 1. In **Admin › Plugins**, click **Install from catalog**, paste the catalogue URL and click **Read catalog**.
-2. Click **Install** next to **Media Converter**.
-3. Enable it. Its tools appear in the Tools menus at once.
+2. Click **Install** next to **Media Converter**, then **Install** in the window that asks to confirm. It arrives in the list, disabled.
+3. Turn it on with its switch. Its tools appear in the Tools menus at once.
 
 Unless the notes of a version say otherwise, restart PotionUI after an update from the catalogue.
 
@@ -22,7 +21,7 @@ Updating from 0.1.0 to 0.1.1 needs its own order: disable Media Converter in **A
 
 ffmpeg and ffprobe, which the PotionUI image ships, and nothing else. Conversions run on the server's processor and never use the graphics card, so a generation keeps the whole card; a long video still takes the processor for a while and slows down the preparation of a generation that starts meanwhile.
 
-In **Admin › Plugins › Media Converter**, an admin sets the number of ffmpeg threads per conversion (4 by default, from 1 to 16) and the longest video or sound a user may convert (30 minutes by default, from 1 to 30). Any signed-in user can run the tools. To turn them off for everyone, disable the plugin.
+In **Admin › Plugins › Media Converter › Settings**, an admin sets the number of ffmpeg threads per conversion (4 by default, from 1 to 16) and the longest video or sound a user may convert (30 minutes by default, from 1 to 30). Any signed-in user can run the tools. To turn them off for everyone, disable the plugin.
 
 ## Using it
 
@@ -35,7 +34,7 @@ The tools sit under **Edit**, where the menu names them with "Media Convert" bel
 | **Convert sound** | a sound | WAV, MP3, FLAC, M4A (AAC) or OGG (Opus) |
 | **Extract sound** | a video with sound | WAV, MP3, FLAC, M4A (AAC) or OGG (Opus) |
 
-The plugin has no page of its own: each tool opens the usual tool window of PotionUI, filled with the values you used last. Every tool has three quality steps (High, Balanced, Small) and a **Keep metadata** switch; Convert image and Convert video can also shrink the result to a largest side from 3840 down to 640 px.
+The plugin has no page of its own: each tool opens the usual tool window of PotionUI, filled with the values you used last. Every tool has three quality steps (High, Balanced, Small), hidden for the lossless PNG, WAV and FLAC, and a **Keep metadata** switch; Convert image and Convert video can also shrink the result to a largest side from 3840 down to 640 px.
 
 The result is a new item in the Library, next to the original, which stays as it was. It keeps the name of the original with the extension of the new format: `Cat.png` converted to WebP becomes `Cat.webp`. A file of a generation keeps the name it has in the History. Select several items and run a tool once to convert them all in one run; if one of them is refused, the whole run fails and none of them is saved. Two sources with the same name, such as `Cat.png` and `Cat.webp` converted to JPEG, give two items both named `Cat.jpg`.
 
@@ -52,7 +51,7 @@ Every setting, the encoder behind each quality step, what each conversion keeps 
 ## Limits worth knowing
 
 - Still images only: animated GIF and WebP are refused, and an SVG cannot be read.
-- Images up to 67 million pixels (8192 × 8192), videos up to 4096 × 2304 (4K): larger ones are refused.
+- Images up to 67 million pixels (8192 × 8192), videos up to about 9.4 million pixels (4096 × 2304, which covers 4K): larger ones are refused.
 - A video comes out in 8-bit SDR colour: HDR and 10-bit sources lose their range, without tone mapping.
 - A result that would be too large for one conversion (4 GB at most), one run (8 GB), the user's storage or the disk is refused. Media Converter keeps 2 GB free on the disk where PotionUI keeps its working files: a safeguard, not a guarantee that the disk never fills.
 - A run from chat is cancelled after ten minutes and an automation node waits five minutes by default, so convert long videos from the Library.
@@ -69,9 +68,9 @@ Every setting, the encoder behind each quality step, what each conversion keeps 
 ### What changed in 0.1.0
 
 - **First version.** Four tools in the Tools menu of the Library and the History: Convert image saves an image as PNG, JPEG or WebP; Convert video saves a video as MP4 or MOV in H.264, or as WebM in VP9; Convert sound saves a sound as WAV, MP3, FLAC, M4A (AAC) or OGG (Opus); Extract sound saves the sound of a video in the same five formats.
-- **Settings of each tool.** Three quality steps (High, Balanced, Small) and a Keep metadata switch; Convert image and Convert video can also make the result smaller, with a largest side from 3840 px down to 640 px.
+- **Settings of each tool.** Three quality steps (High, Balanced, Small) for the lossy formats and a Keep metadata switch; Convert image and Convert video can also make the result smaller, with a largest side from 3840 px down to 640 px.
 - **Admin settings.** The number of ffmpeg threads per conversion, and the longest video or sound a user may convert, 30 minutes at most.
-- **Bounds.** Images over 67 million pixels and videos over 4096 × 2304 are refused. One conversion writes at most 4 GB and one run at most 8 GB. Media Converter refuses to convert when less than 2 GB are free on the disk where PotionUI keeps its working files.
+- **Bounds.** Images over 67 million pixels and videos over about 9.4 million pixels (4096 × 2304) are refused. One conversion writes at most 4 GB and one run at most 8 GB. Media Converter refuses to convert when less than 2 GB are free on the disk where PotionUI keeps its working files.
 
 ## License
 
