@@ -119,7 +119,9 @@ def output_cap(source: Path) -> int:
 def size_text(count: int) -> str:
     if count >= GIGABYTE and count % GIGABYTE == 0:
         return f"{count // GIGABYTE} GB"
-    return f"{max(1, count // MEGABYTE)} MB"
+    if count >= MEGABYTE:
+        return f"{count // MEGABYTE} MB"
+    return f"{max(1, count // 1024)} KB"
 
 
 @dataclass(frozen=True)

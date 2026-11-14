@@ -115,6 +115,11 @@ def test_each_bound_says_what_to_do(reason, text):
     assert common.room_message(common.Room(25 * MB, reason)) == text
 
 
+@pytest.mark.parametrize("size,text", [(8 << 30, "8 GB"), (4 << 30, "4 GB"), (325 * MB + 5, "325 MB"), (512 * 1024, "512 KB"), (10, "1 KB")])
+def test_sizes_are_written_in_the_largest_unit_that_keeps_them_whole(size, text):
+    assert common.size_text(size) == text
+
+
 def test_a_spent_run_budget_refuses_before_any_encoding(tmp_path, source_dir, monkeypatch):
     monkeypatch.setattr(common, "RUN_BUDGET", 40 * MB)
     ctx = ToolContext(tmp_path / "scratch")
