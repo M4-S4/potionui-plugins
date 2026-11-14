@@ -1,4 +1,5 @@
 import logging
+import random
 import threading
 import time
 from collections import namedtuple
@@ -356,3 +357,44 @@ def test_a_long_sound_beside_a_finished_one_gets_the_room_the_first_gave_back(tm
     assert made.path.stat().st_size < 10 * MB
     assert len(watched) == 0
 
+
+def test_a_grainy_image_converts_to_a_high_quality_jpeg(tmp_path, source_dir, watched):
+    picture = source_dir / "grain.png"
+    Image.frombytes("RGB", (1024, 1024), random.Random(7).randbytes(3 << 20)).save(picture)
+    ctx = ToolContext(tmp_path / "scratch")
+
+    [made] = ConvertImage().run(
+        [ctx.probe(picture, "image")], params_for("media-convert.image", format="jpeg", quality="high"), ctx
+    )
+
+    reference = tmp_path / "reference.jpg"
+    Image.new("RGB", (16, 16)).save(reference, quality=common.JPEG_QUALITY["high"], subsampling=0)
+    with Image.open(made.path) as result, Image.open(reference) as expected:
+        assert result.format == "JPEG"
+        assert result.size == (1024, 1024)
+        assert result.quantization == expected.quantization
+    [(granted, _)] = watched.added
+    assert made.path.stat().st_size <= granted
+    assert len(watched) == 0
+
+
+def test_a_jpeg_the_optimizer_cannot_write_is_written_again_without_it(tmp_path, sources, monkeypatch, watched):
+    ctx = ToolContext(tmp_path / "scratch")
+    media = ctx.probe(sources["image"], "image")
+    real = Image.Image.save
+    calls = []
+
+    def save(self, fp, format=None, **options):
+        calls.append(options.get("optimize"))
+        if options.get("optimize"):
+            raise OSError("broken data stream when writing image file")
+        return real(self, fp, format, **options)
+
+    monkeypatch.setattr(Image.Image, "save", save)
+    [made] = ConvertImage().run([media], params_for("media-convert.image", format="jpeg"), ctx)
+    monkeypatch.setattr(Image.Image, "save", real)
+
+    assert calls == [True, False]
+    with Image.open(made.path) as result:
+        assert result.format == "JPEG"
+    assert len(watched) == 0

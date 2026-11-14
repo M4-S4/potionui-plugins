@@ -189,7 +189,12 @@ class ConvertImage(MediaTool):
             bound = image_bound(image, options)
             room = make_room(ctx, bound, unstoppable=bound)
             try:
-                image.save(out, format=fmt.upper(), **options)
+                try:
+                    image.save(out, format=fmt.upper(), **options)
+                except OSError:
+                    if not options.get("optimize"):
+                        raise
+                    image.save(out, format=fmt.upper(), **{**options, "optimize": False})
                 guard(ctx)
                 check_size(out, room)
             finally:
