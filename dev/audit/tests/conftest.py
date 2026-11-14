@@ -71,6 +71,9 @@ class FakeApi:
         self.history = [{"at": "2026-01-01T00:00:00+00:00", "step": "Loading model x", "message": "<<PIPE:Loading model>>"}]
         self.named_models = {}
         self.vram_gb = 12.0
+        self.sdxl_modes = ["txt2img"]
+        self.sdxl_vars = {}
+        self.forms = {}
         self.plugins = [{"id": "video-producer", "version": "0.1.0", "enabled": True, "state": "enabled", "source": "marketplace"}]
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
@@ -119,7 +122,7 @@ class FakeApi:
             return 200, envelope(self.queue), "application/json"
         if path == "/api/presets":
             listed = [
-                {"id": SDXL_ID, "name": "SDXL", "version": "1.0.1", "installed": True, "assignment_count": 1, "group_count": 0, "requires": {"min_vram_gb": 8}, "modes": ["txt2img"], "vars": {}, "engine": "native"},
+                {"id": SDXL_ID, "name": "SDXL", "version": "1.0.1", "installed": True, "assignment_count": 1, "group_count": 0, "requires": {"min_vram_gb": 8}, "modes": self.sdxl_modes, "vars": self.sdxl_vars, "engine": "native"},
                 {"id": WAN_ID, "name": "Wan", "version": "2.0.0", "installed": True, "assignment_count": 0, "group_count": 0, "requires": {"min_vram_gb": 16}, "modes": ["video"], "vars": {"video_director": {"preset_modes": ["video"], "limits": {"default_duration": 5, "default_fps": 16}}}, "engine": "native"},
             ]
             return 200, envelope(listed if query.get("include_uninstalled") == ["true"] else listed[:1]), "application/json"
@@ -127,6 +130,11 @@ class FakeApi:
             return 200, envelope({"id": SDXL_ID, "vars": {}}), "application/json"
         if path == f"/api/presets/{WAN_ID}":
             return 200, envelope({"id": WAN_ID, "vars": {"video_director": {"preset_modes": ["video"], "limits": {"default_duration": 5, "default_fps": 16}}}}), "application/json"
+        if path.startswith("/api/presets/") and path.endswith("/form"):
+            key = (path.split("/")[3], (query.get("mode") or [""])[0])
+            if key in self.forms:
+                return 200, envelope({"preset_id": key[0], "form_schema": self.forms[key]}), "application/json"
+            return 500, {"detail": f"Mode '{key[1]}' not found"}, "application/json"
         if path.startswith("/api/presets/") and path.endswith("/models"):
             search = (query.get("search") or [""])[0]
             found = [{"id": model_id, "filename": name, "model_type": "lora", "file_size": 10, "sha256": "e" * 64, "is_available": True} for name, model_id in self.named_models.items() if search in name]

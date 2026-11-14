@@ -9,7 +9,7 @@ from .cases import CaseFileError, import_from_core, load_cases, write_case_set
 from .check import collect, write_preflight
 from .client import ApiClient, ApiError, ApiUnreachable
 from .config import ConfigError, credentials, load_config
-from .coverage import ModelResolver, coverage, live_state
+from .coverage import FormReader, ModelResolver, coverage, live_state
 from .inputs import make_inputs
 from .matrix import run_passed, run_profile
 from .media import probe_image, probe_video, video_encoders, write_preview
@@ -111,7 +111,7 @@ def _check(args) -> int:
     client = ApiClient(config.target.url, config.target.timeout_seconds)
     preflight = collect(client, config, case_set, username, password)
     if pack is not None and client.authenticated and not any(item.startswith(("login_failed", "not_admin", "api_unreachable")) for item in preflight["blocking"]):
-        preflight["pack"] = coverage(pack, ModelResolver(client), live_state(client))
+        preflight["pack"] = coverage(pack, ModelResolver(client), live_state(client), FormReader(client))
     json_path, html_path = write_preflight(preflight, args.out or config.output_dir / "preflight")
     summary = preflight.get("summary") or {}
     print(f"preflight: {json_path}")
@@ -124,6 +124,11 @@ def _check(args) -> int:
     if preflight.get("pack"):
         counts = ", ".join(f"{name} {count}" for name, count in sorted(preflight["pack"]["summary"].items()))
         print(f"pack {pack.id}: {counts}")
+        for cell in preflight["pack"]["cells"]:
+            if cell.get("undeclared_fields"):
+                print(f"warning: {cell['id']} sends fields its form on the instance does not declare: {', '.join(cell['undeclared_fields'])}")
+            if cell.get("form_error"):
+                print(f"warning: {cell['id']}: its form could not be read: {cell['form_error']}")
     for item in preflight["warnings"]:
         print(f"warning: {item}")
     for item in preflight["blocking"]:

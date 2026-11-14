@@ -136,7 +136,7 @@ class Pack:
 
 
 def preset_ref(preset: dict) -> str:
-    return f"{preset['origin']}/{preset['key']}"
+    return f"{preset['origin']}/{preset['key']}" if preset["origin"] else preset["id"]
 
 
 def preset_by_ref(case_set: CaseSet, ref: str) -> dict | None:
@@ -160,6 +160,8 @@ def _cell(raw: dict, case_set: CaseSet, position: int, keys: set[str]) -> Cell:
         raise PackError(f"cell {raw.get('preset')}:{raw.get('mode')} has unknown keys: {', '.join(unknown)}")
     ref = str(raw.get("preset") or "")
     preset = preset_by_ref(case_set, ref)
+    if preset is None and raw.get("exclude") and "/" not in ref and ref:
+        preset = {"origin": "", "key": ref, "id": ref}
     if preset is None:
         raise PackError(f"cell {ref}:{raw.get('mode')}: no preset {ref!r} in {case_set.path.name}")
     profiles = tuple(raw.get("profiles") or ())
