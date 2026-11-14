@@ -10,7 +10,7 @@ from potion_audit.client import ApiClient
 from potion_audit.inputs import _encode
 from potion_audit.pack import DEFAULT_PACK, load_pack
 from potion_audit.run import RunRefused
-from potion_audit.vp_scenario import LIGHTNING_I2V_ID, SHOT_SECONDS, SHOTS, VP, cleanup, load_matrix, run_scenario, select_engines
+from potion_audit.vp_scenario import LIGHTNING_I2V_ID, SHOT_SECONDS, SHOTS, VP, cleanup, load_matrix, plan_engine, run_scenario, select_engines
 
 from conftest import PASSWORD, USER, FakeApi, bundle_bytes, envelope
 
@@ -23,6 +23,7 @@ LIGHTNING = "plugin:video-producer/Wan2.2-14B-Lightning-12GB"
 LIGHTNING_ID = "01M57QPEMDPKHHW83YSEYBN0X1"
 I2V_ID = LIGHTNING_I2V_ID
 FAST = "plugin:video-producer/MiniMax-H3-Fast-12GB"
+I2V = "plugin:video-producer/Wan2.2-14B-Lightning-I2V-12GB"
 ALL = ["plugin:video-producer/Wan2.1-T2V-1.3B-8GB", "plugin:video-producer/Wan2.2-TI2V-5B-8GB", "plugin:video-producer/Wan2.2-14B-Lightning-12GB", H3, FAST]
 
 
@@ -285,6 +286,7 @@ def matrix_file(tmp_path: Path, verdicts: dict[str, str]) -> Path:
 def all_passed(**changes: str) -> dict[str, str]:
     verdicts = {f"{ref}:video": "PASS" for ref in ALL}
     verdicts[f"{H3}:refs"] = "PASS"
+    verdicts[f"{I2V}:video"] = "PASS"
     verdicts["core/SeedVR2:video_upscale"] = "OOM"
     verdicts["plugin:nvidia-rtx-upscale/RTX-Upscale:video_upscale"] = "PASS"
     verdicts.update(changes)
@@ -320,6 +322,35 @@ def test_engines_come_from_the_matrix_or_from_the_option(tmp_path):
         select_engines(pack, matrix, ["SDXL"])
     with pytest.raises(RunRefused, match="needs a matrix"):
         select_engines(pack, None, None)
+
+
+def test_the_image_shots_of_an_engine_wait_for_its_companion_in_the_matrix(tmp_path):
+    pack = load_pack(DEFAULT_PACK)
+    matrix = load_matrix([matrix_file(tmp_path, all_passed(**{f"{I2V}:video": "FAIL"}))])
+    engines = {engine["engine"]: engine for engine in select_engines(pack, matrix, None)}
+    lightning = engines[LIGHTNING]
+    assert lightning["selected"] is True
+    assert lightning["image_preset_reason"] == f"Wan2.2-14B-Lightning-12GB hands its image shots to Wan2.2-14B-Lightning-I2V-12GB: {I2V}:video did not pass the matrix (FAIL)"
+    assert all(engine["image_preset_reason"] is None for ref, engine in engines.items() if ref != LIGHTNING)
+    final = {"upscaler": "rtx", "allowed": True, "reason": None, "cell": "x", "preset_id": None}
+    steps = plan_engine(pack, lightning, matrix, {}, final, "draft", "fhd1080", "vp-x")
+    assert [(step.get("shot"), step["status"]) for step in steps[:4]] == [("s1-workshop", "planned"), ("s2-bottle", "skipped"), ("s3-lumi", "skipped"), ("s4-gold", "skipped")]
+    assert steps[1]["reason"] == lightning["image_preset_reason"] and steps[3]["reason"] == lightning["image_preset_reason"]
+    assert select_engines(pack, None, ["Wan2.2-14B-Lightning-12GB"])[2]["image_preset_reason"] is None
+
+
+def test_the_image_shots_handed_to_a_companion_are_estimated_on_it(tmp_path):
+    pack = load_pack(DEFAULT_PACK)
+    matrix = load_matrix([matrix_file(tmp_path, all_passed())])
+    lightning = next(engine for engine in select_engines(pack, matrix, None) if engine["engine"] == LIGHTNING)
+    final = {"upscaler": "rtx", "allowed": True, "reason": None, "cell": "x", "preset_id": None}
+    steps = plan_engine(pack, lightning, matrix, {}, final, "draft", "fhd1080", "vp-x")
+    assert steps[0]["estimate_basis"].startswith(f"run seconds of {LIGHTNING}:video")
+    assert steps[1]["estimate_basis"].startswith(f"run seconds of {I2V}:video")
+    assert steps[3]["estimate_basis"].startswith(f"run seconds of {I2V}:video")
+    timing = {I2V_ID: {"avg_cold_duration_ms": 50000.0, "avg_warm_duration_ms": 40000.0}, LIGHTNING_ID: {"avg_cold_duration_ms": 90000.0, "avg_warm_duration_ms": 80000.0}}
+    alone = plan_engine(pack, {**lightning, "image_preset_reason": None}, None, timing, final, "draft", "fhd1080", "vp-x")
+    assert [step.get("estimate_seconds") for step in alone[:4]] == [90.0, 40.0, None, 40.0]
 
 
 def test_a_night_folder_reads_its_segments(tmp_path):

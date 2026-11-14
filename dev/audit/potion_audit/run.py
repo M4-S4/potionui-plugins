@@ -16,6 +16,7 @@ VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_TIMEOUT = 1800.0
 DEFAULT_DURATION = 5.0
+CANCEL_WAIT_SECONDS = 300.0
 OOM_CODES = {"cuda_oom", "gpu_restart_required"}
 MEDIA_PROCESSING = re.compile(r"Processing <<NUMBER:(\d+) media files")
 MEDIA_LOADED = re.compile(r"Loaded <<NUMBER:(\d+) files")
@@ -155,6 +156,16 @@ def follow(client: ApiClient, generation_id: str, timeout: float, interval: floa
             return status, samples, False
         if clock() - started > timeout:
             return status, samples, True
+        sleep(interval)
+
+
+def settle(client: ApiClient, generation_id: str, bound: float, interval: float, clock: Callable[[], float], sleep: Callable[[float], None]) -> dict:
+    started = clock()
+    while True:
+        state = _status(client, generation_id).get("status")
+        waited = round(clock() - started, 3)
+        if state in TERMINAL or waited > bound:
+            return {"settled": state in TERMINAL, "status": state, "waited_seconds": waited, "bound_seconds": bound}
         sleep(interval)
 
 
@@ -356,6 +367,8 @@ def submit_and_collect(client: ApiClient, request: dict, preset_id: str, checks:
         raise
     if timed_out:
         client.post_json(f"/api/generations/{generation_id}/cancel", {})
+        result["cancel"] = settle(client, generation_id, CANCEL_WAIT_SECONDS, interval, clock, sleep)
+        log(f"{label}: cancelled, {'settled' if result['cancel']['settled'] else 'still ' + str(result['cancel']['status'])} after {result['cancel']['waited_seconds']} s")
     result["samples"] = samples
     result["final_status"] = status
     admin, stats_after = wait_for_stats(client, generation_id, preset_id, stats_before, 10, interval, sleep)

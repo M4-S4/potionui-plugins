@@ -8,7 +8,7 @@ timeout_seconds = 60
 [run]
 output_dir = "out"
 machine = "workstation"
-cases = "cases/02cce6fdd.json"
+cases = "cases/54c51e21d.json"
 
 [probe]
 source = "none"

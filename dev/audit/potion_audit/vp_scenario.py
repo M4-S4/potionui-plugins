@@ -118,6 +118,11 @@ def engine_key(ref: str) -> str:
     return ref.rsplit("/", 1)[-1]
 
 
+def companion_ref(engine: dict) -> str | None:
+    found = engine.get("image_preset")
+    return f"{engine['engine'].rsplit('/', 1)[0]}/{found['key']}" if found else None
+
+
 def project_prefix(run_id: str) -> str:
     return f"{MARK} {run_id} "
 
@@ -215,7 +220,11 @@ def select_engines(pack: Pack, matrix: dict | None, names: list[str] | None) -> 
             "flf": expected["flf_reason"] is None,
             "flf_reason": expected["flf_reason"],
             "image_preset": expected["image_preset"],
+            "image_preset_reason": None,
         }
+        companion = companion_ref(entry)
+        if companion and not passed(matrix, f"{companion}:video"):
+            entry["image_preset_reason"] = f"{entry['key']} hands its image shots to {engine_key(companion)}: " + _not_passed(matrix, f"{companion}:video")
         if ref not in wanted:
             entry.update(selected=False, reason="left out by --engines")
         elif not passed(matrix, f"{ref}:video"):
@@ -406,6 +415,8 @@ def not_offered(engine: dict, shot: dict) -> str | None:
         return engine["ref2va_reason"]
     if shot["frames"] and not engine["flf"]:
         return engine["flf_reason"]
+    if image_shot(engine, shot) and engine.get("image_preset_reason"):
+        return engine["image_preset_reason"]
     return None
 
 
@@ -441,8 +452,11 @@ def plan_engine(pack: Pack, engine: dict, matrix: dict | None, timing: dict, fin
         if reason:
             step.update(status="skipped", reason=reason, order=None, checks=[], not_offered=[])
         cell = f"{engine['engine']}:{REFS_MODE if shot['profile'] == REF2VA else 'video'}"
+        preset_id = engine["preset_id"]
+        if image_shot(engine, shot) and engine.get("image_preset"):
+            cell, preset_id = f"{companion_ref(engine)}:video", engine["image_preset"]["id"]
         if step["status"] == "planned":
-            step["estimate_seconds"], step["estimate_basis"] = _estimate(matrix, timing, cell, engine["preset_id"], index > 0)
+            step["estimate_seconds"], step["estimate_basis"] = _estimate(matrix, timing, cell, preset_id, index > 0)
         steps.append(step)
     step = {"step": "final_pass", "shot": SHOTS[0]["id"], "upscaler": final["upscaler"], "status": "planned", "reason": None, "order": final_order(f"<take of {SHOTS[0]['id']}>", final["upscaler"], target)}
     if not final["allowed"]:

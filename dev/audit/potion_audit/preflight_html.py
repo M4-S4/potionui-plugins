@@ -28,6 +28,7 @@ PACK_CLASS = {
     "model_missing": "warn",
     "model_unresolved": "bad",
     "preset_not_installed": "bad",
+    "mode_missing": "bad",
     "plugin_inactive": "muted",
     "excluded": "muted",
 }
@@ -49,6 +50,15 @@ def _list(items: list[str], css: str) -> str:
     if not items:
         return '<p class="ok">None.</p>'
     return "<ul>" + "".join(f'<li class="{css}">{escape(item)}</li>' for item in items) + "</ul>"
+
+
+def _cell_reason(cell: dict) -> str:
+    parts = [cell["reason"]] if cell.get("reason") else []
+    if cell.get("undeclared_fields"):
+        parts.append("fields the form does not declare: " + ", ".join(cell["undeclared_fields"]))
+    if cell.get("form_error"):
+        parts.append("form not read: " + cell["form_error"])
+    return "; ".join(parts)
 
 
 def render(preflight: dict) -> str:
@@ -186,7 +196,7 @@ def render(preflight: dict) -> str:
                 escape(", ".join(cell["profiles"])) + (" + warm" if cell["repeat_warm"] else ""),
                 escape(", ".join(cell["inputs"])),
                 f'<span class="{css}">{escape(cell["status"])}</span>',
-                escape(cell["reason"] or ""),
+                escape(_cell_reason(cell)),
             ])
         for cell in pack["uncovered"]:
             rows.append([escape(f"{cell['name']}:{cell['mode']}"), "", "", "", "", '<span class="bad">no_case</span>', escape(cell["reason"])])
