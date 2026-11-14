@@ -4,7 +4,7 @@ This page is for the people who develop, test and release the plugins of this re
 
 This repository holds one folder per plugin, a catalogue (`plugins.json`) that lists them with their releases, a CI that tests them against a pinned PotionUI core, and a GitHub release for each plugin version.
 
-Video Producer is developed in the M4-S4/PotionUI fork and imported here (see [Following the fork](#following-the-fork)); its page ships its own stylesheet (see [Tailwind classes](#tailwind-classes)). Preset Editor is developed here; [its notes](../preset-editor/docs/reference.md#what-is-left-to-do) list what is left to do. Media Converter is developed here as well; it adds tools and no page, so it has no frontend and no dist.
+Video Producer is developed in the M4-S4/PotionUI fork and imported here (see [Following the fork](#following-the-fork)); its page ships its own stylesheet (see [Tailwind classes](#tailwind-classes)). Preset Editor is developed here; [its notes](../preset-editor/docs/development.md#what-is-left-to-do) list what is left to do. Media Converter is developed here as well; it adds tools and no page, so it has no frontend and no dist.
 
 `dev/archive/` holds the older copies of `model-browser` and `deepseek-provider`, with their core-side tests and the design variants of Model Browser. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. Nothing in `dev/archive/` is in the catalogue, the CI or the scripts' scope.
 

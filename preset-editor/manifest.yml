@@ -37,6 +37,9 @@ docs:
   - path: "README.md"
     title: "Preset Editor"
     audience: "admin"
+  - path: "docs/reference.md"
+    title: "Preset Editor: reference"
+    audience: "admin"
 
 settings:
   - name: "history_depth"
