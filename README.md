@@ -35,8 +35,8 @@ Video Producer needs more than the plugin itself: a video engine, video presets 
 
 Without the catalogue, put the plugin folder in `content/plugins/local/<id>` of the instance, then click **Scan for Plugins** in **Admin › Plugins** and enable it:
 
-- from a release: unzip `<id>-<version>.zip` from the [releases page](https://github.com/M4-S4/potionui-plugins/releases) into `content/plugins/local/` (the zip holds the folder `<id>/` with its built frontend);
-- from a clone of this repository: copy `<id>/`, then build its frontend (see [Day-to-day work](#day-to-day-work)).
+- from a release: unzip `<id>-<version>.zip` from the [releases page](https://github.com/M4-S4/potionui-plugins/releases) into `content/plugins/local/` (the zip holds the folder `<id>/`, with its built frontend when the plugin has one);
+- from a clone of this repository: copy `<id>/`, then build its frontend (see [Day-to-day work](#day-to-day-work)); Media Converter has no frontend to build.
 
 In a Docker container the folder is `/app/content/plugins/local/<id>`: bind-mount it, or copy it with `scripts/potionui-docker.ps1 copy -Plugin <id>`.
 
@@ -113,7 +113,7 @@ The sheet does not reach content that a plugin renders outside its page element,
 | `id`, `name`, `description`, `license` | As in the plugin's `manifest.yml`. |
 | `version` | The `version` of `manifest.yml`. |
 | `source` | `{"repository": "M4-S4/potionui-plugins", "path": "<id>"}`. |
-| `requires` | `{"core": "<version or range>", "plugin_api": null}`. `core` is a PotionUI version or a PEP 440 version range, which the core compares with its own version when it reads the catalogue: a bare version means that version or later (`0.1.0` reads as `>=0.1.0`), and a core that does not match, or a value that is not a version, lists the plugin as incompatible. Every core that installs from a catalogue reports 0.1.0 until the next release of PotionUI. |
+| `requires` | `{"core": "<version or range>", "plugin_api": null}`. `core` is a PotionUI version or a PEP 440 version range, which the core compares with its own version when it reads the catalogue: a bare version means that version or later (`0.1.0` reads as `>=0.1.0`), and a core that does not match, or a value that is not a version, lists the plugin as incompatible. |
 | `release` | `{"archive": "<URL of the zip>", "sha256": "<hex>"}`, or both `null` while the version has no release. |
 
 `python scripts/catalogue.py --check` checks the schema, that each plugin folder exists, and that each version, id and license equals its manifest's; the CI runs it. When the version of a manifest changes, change the entry's `version` too and set its `release` back to `null` until the new release exists.
