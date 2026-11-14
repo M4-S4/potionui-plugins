@@ -23,7 +23,7 @@ If its **Overview** tab then shows a **Setup** section, follow its steps, and re
 | [Preset Editor](preset-editor/README.md) | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | Nothing else. | 0.2.5 |
 | [Media Converter](media-convert/README.md) | Adds four tools to the Tools menu of the Library and the History: convert an image to PNG, JPEG or WebP, a video to MP4, MOV or WebM, or a sound to WAV, MP3, FLAC, M4A or OGG, and extract the sound of a video. | Every user. | ffmpeg and ffprobe, which the PotionUI image ships. | 0.1.1 |
 
-The README of Preset Editor and of Media Converter lists the changes of each version, newest first; every version also has its notes on the [releases page](https://github.com/M4-S4/potionui-plugins/releases).
+The README of Preset Editor and of Media Converter lists the changes of each version, newest first.
 
 ## Update
 

@@ -11,8 +11,6 @@ Version 0.1.1. It needs PotionUI 0.2.0 or later.
 2. Click **Install** next to **Media Converter**, then **Install** in the window that asks to confirm. It arrives in the list, disabled.
 3. Turn it on with its switch. Its tools appear in the Tools menus at once.
 
-Unless the notes of a version say otherwise, restart PotionUI after an update from the catalogue.
-
 Updating from 0.1.0 to 0.1.1 needs its own order: disable Media Converter in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. Tried in another order, the tools of 0.1.1 did not load: the update or the enabling ended with an error, and Media Converter stayed on 0.1.0 or without its tools. If that happens, start again from the first step, and skip the update step if the catalogue already shows 0.1.1 installed.
 
 ![The Library in the dark theme, with the Edit menu of a video open: Convert video and Extract sound, each marked Media Convert, below the tools of PotionUI](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/tools-menu-dark.webp)

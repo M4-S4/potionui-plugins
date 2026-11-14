@@ -47,11 +47,11 @@ Every option, check and setting is in the [reference](docs/reference.md), which 
 - The linter does not check field types: a preset that lints clean but uses a `type:` the loader refuses is rolled back at publish time, with the loader's messages.
 - Media uploads are capped at 20 MB, with PotionUI's own extensions only (no SVG).
 
-The [reference](docs/reference.md#limits-worth-knowing) lists them all. What is left to do and how to run the tests are in [docs/development.md](docs/development.md).
+The [reference](docs/reference.md#limits-worth-knowing) lists them all. What is left to do and how to run the tests are in [docs/development.md](https://github.com/M4-S4/potionui-plugins/blob/main/preset-editor/docs/development.md).
 
 ## Changes
 
-The details of each version are in [docs/development.md](docs/development.md#changes-in-detail).
+The details of each version are in [docs/development.md](https://github.com/M4-S4/potionui-plugins/blob/main/preset-editor/docs/development.md#changes-in-detail).
 
 ### What changed in 0.2.5
 
@@ -62,7 +62,7 @@ The details of each version are in [docs/development.md](docs/development.md#cha
 
 ### What changed in 0.2.4
 
-- A preset mirror is marked *mirror* in the list and the Edit… menu, which no longer offer to edit, export, delete it or show its history; Duplicate copies its source.
+- The preset list marks a preset mirror with a *mirror* pill; the list and the Edit… menu no longer offer to edit, export or delete it or show its history, and Duplicate copies its source.
 
 ### What changed in 0.2.3
 
@@ -77,7 +77,6 @@ The details of each version are in [docs/development.md](docs/development.md#cha
 
 ### What changed in 0.2.1
 
-- Checked on screen on the pinned core, in the dark theme at 1440 and 1024 px.
 - The description preview shows an image line as text, as **Admin › Presets** does.
 - The buttons in **Admin › Presets** take the size of the host's, and the zip of a local preset shows its download.
 - In the form builder, a value being typed is no longer lost or written into another node when you click the tree.
