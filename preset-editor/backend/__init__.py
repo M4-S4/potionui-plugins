@@ -1,3 +1,3 @@
 PLUGIN_ID = "preset-editor"
 
-PLUGIN_VERSION = "0.2.4"
+PLUGIN_VERSION = "0.2.5"

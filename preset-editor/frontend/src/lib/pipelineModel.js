@@ -3,6 +3,7 @@ import { dumpYaml, parseYaml } from './yaml.js';
 
 export const PIPE_KEYS = ['name', 'id', 'enabled', 'input', 'configuration'];
 export const CHAINS = { native: 'native-chain', cloud: 'cloud-chain' };
+export const POINTER_KEY = 'pipeline_from';
 
 let counter = 0;
 
@@ -42,10 +43,34 @@ export function parsePipelineDocument(text) {
 	return { ok: true, keyOrder: Object.keys(data), unknown, pipes: raw.map(toPipe) };
 }
 
+export function isPointer(doc) {
+	return Boolean(doc) && POINTER_KEY in (doc.unknown ?? {});
+}
+
+export function pointerFile(doc) {
+	const target = doc?.unknown?.[POINTER_KEY];
+	return typeof target === 'string' && target.trim() ? `modes/${target}/pipeline.yml` : null;
+}
+
+export function pointerProblems(doc, { mode = null, files = null } = {}) {
+	if (!isPointer(doc)) return [];
+	const target = doc.unknown[POINTER_KEY];
+	if (typeof target !== 'string' || !target.trim() || target.includes('/') || target.includes('\\') || target.startsWith('.')) {
+		return [`${POINTER_KEY} must name a sibling mode directory, got ${JSON.stringify(target)}`];
+	}
+	const others = new Set([...(doc.keyOrder ?? []), ...Object.keys(doc.unknown)].filter((key) => key !== POINTER_KEY));
+	if (doc.pipes.length) others.add('pipeline');
+	if (others.size) return [`${POINTER_KEY} cannot be combined with other keys (${[...others].sort().join(', ')})`];
+	if (Array.isArray(files) && !files.includes(`modes/${target}/pipeline.yml`)) return [`${POINTER_KEY}: modes/${target}/pipeline.yml not found`];
+	if (mode && target === mode) return [`${POINTER_KEY}: a mode cannot point at itself`];
+	return [];
+}
+
 export function serializePipelineDocument(doc) {
 	const out = {};
 	const order = [...(doc.keyOrder ?? [])];
-	for (const key of ['pipeline', ...Object.keys(doc.unknown ?? {})]) if (!order.includes(key)) order.push(key);
+	const keys = isPointer(doc) && !doc.pipes.length ? Object.keys(doc.unknown ?? {}) : ['pipeline', ...Object.keys(doc.unknown ?? {})];
+	for (const key of keys) if (!order.includes(key)) order.push(key);
 	for (const key of order) {
 		if (key === 'pipeline') out.pipeline = doc.pipes.map(fromPipe);
 		else if (key in (doc.unknown ?? {})) out[key] = clone(doc.unknown[key]);

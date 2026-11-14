@@ -16,14 +16,14 @@
         "plugin_api": null
       },
       "release": {
-        "archive": null,
-        "sha256": null
+        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/video-producer-v0.6.0/video-producer-0.6.0.zip",
+        "sha256": "87ac49cbb52d05292f510cc59512c8f47846253068b94d96ca6745a6b6d08c1a"
       }
     },
     {
       "id": "preset-editor",
       "name": "Preset Editor",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "description": "Create, edit, validate and publish presets without leaving PotionUI",
       "license": "GPL-3.0",
       "source": {
@@ -35,8 +35,8 @@
         "plugin_api": null
       },
       "release": {
-        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/preset-editor-v0.2.4/preset-editor-0.2.4.zip",
-        "sha256": "8f25d4bddb3784250060167e88a841cefd979146b6a4fc9260795cd3ecb330e8"
+        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/preset-editor-v0.2.5/preset-editor-0.2.5.zip",
+        "sha256": "4ffb778ba87059db95e54cef9d690c7be33709df83b9330ef00929a5a38dab64"
       }
     }
   ]

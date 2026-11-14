@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { insertPipe, movePipe, newPipe, parsePipelineDocument, pipeRef, pipeTitle, pipelineProblems, removePipe, serializePipelineDocument, sourcesBefore, startChain } from './pipelineModel.js';
+import { insertPipe, isPointer, movePipe, newPipe, parsePipelineDocument, pipeRef, pipeTitle, pipelineProblems, pointerFile, pointerProblems, removePipe, serializePipelineDocument, sourcesBefore, startChain } from './pipelineModel.js';
 import { parseYaml } from './yaml.js';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'tests', 'fixtures');
@@ -115,4 +115,38 @@ test('a pipe cache key is refused, since the core dropped it from PipeSpec', () 
 
 	assert.deepEqual(report.byPipe.get(doc.pipes[0].id), [{ key: 'cache', message: 'unknown key (the core refuses it)' }]);
 	assert.equal(report.count, 1);
+});
+
+test('a mode that takes the pipeline of another mode saves back with pipeline_from alone', () => {
+	for (const text of ['pipeline_from: video\n', 'pipeline_from: "video"\n']) {
+		const doc = parsePipelineDocument(text);
+		assert.equal(doc.ok, true);
+		assert.equal(isPointer(doc), true);
+		assert.equal(pointerFile(doc), 'modes/video/pipeline.yml');
+		assert.deepEqual(doc.pipes, []);
+		assert.equal(serializePipelineDocument(doc), 'pipeline_from: video\n');
+		assert.deepEqual(pointerProblems(doc, { mode: 'first_last', files: ['modes/video/pipeline.yml'] }), []);
+	}
+});
+
+test('a pipeline of its own is still written with its pipeline list, empty or not', () => {
+	assert.equal(isPointer(parsePipelineDocument('pipeline: []\n')), false);
+	assert.equal(serializePipelineDocument(parsePipelineDocument('')), 'pipeline: []\n');
+	assert.equal(serializePipelineDocument(parsePipelineDocument('pipeline: []\n')), 'pipeline: []\n');
+	assert.equal(pointerFile(parsePipelineDocument('pipeline: []\n')), null);
+	assert.deepEqual(pointerProblems(parsePipelineDocument('pipeline: []\n')), []);
+});
+
+test('pointerProblems refuses what the core loader refuses', () => {
+	const files = ['modes/video/pipeline.yml', 'modes/first_last/pipeline.yml'];
+	const problems = (text, mode = 'first_last') => pointerProblems(parsePipelineDocument(text), { mode, files });
+	assert.match(problems('pipeline_from: video\npipeline: []\n')[0], /cannot be combined with other keys \(pipeline\)/);
+	assert.match(problems('pipeline_from: video\nnote: x\n')[0], /cannot be combined with other keys \(note\)/);
+	assert.match(problems('pipeline_from: ../video\n')[0], /must name a sibling mode directory/);
+	assert.match(problems('pipeline_from: .video\n')[0], /must name a sibling mode directory/);
+	assert.match(problems('pipeline_from: ""\n')[0], /must name a sibling mode directory/);
+	assert.match(problems('pipeline_from: 3\n')[0], /must name a sibling mode directory/);
+	assert.match(problems('pipeline_from: refs\n')[0], /modes\/refs\/pipeline\.yml not found/);
+	assert.match(problems('pipeline_from: first_last\n')[0], /cannot point at itself/);
+	assert.deepEqual(problems('pipeline_from: video\n'), []);
 });
