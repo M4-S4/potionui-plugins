@@ -4,7 +4,7 @@ const path = require('path');
 function dotenvValue(key) {
   if (process.env[key]) return process.env[key];
   for (const name of ['.env.local', '.env']) {
-    const file = path.join(__dirname, '..', name);
+    const file = path.join(__dirname, '..', '..', name);
     if (!fs.existsSync(file)) continue;
     for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
       if (/^\s*#/.test(line) || !line.includes('=')) continue;

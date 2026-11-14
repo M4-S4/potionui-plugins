@@ -6,7 +6,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CATALOGUE = ROOT / "plugins.json"
 REPOSITORY = "M4-S4/potionui-plugins"
 ENTRY_KEYS = {"id", "name", "version", "description", "license", "source", "requires", "release"}

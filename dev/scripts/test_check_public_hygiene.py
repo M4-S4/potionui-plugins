@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
-PLUGIN_TEST = SCRIPTS.parent / "video-producer" / "tests" / "test_public_hygiene.py"
+PLUGIN_TEST = SCRIPTS.parents[1] / "video-producer" / "tests" / "test_public_hygiene.py"
 SPEC = importlib.util.spec_from_file_location("check_public_hygiene", SCRIPTS / "check-public-hygiene.py")
 CHECK = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECK)
@@ -63,7 +63,7 @@ class CheckTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.git("init", "-q")
-        (self.root / "scripts").mkdir()
+        (self.root / "dev" / "scripts").mkdir(parents=True)
         self.write(CHECK.ALLOW_FILE, f"fake.py\t{BOB}\n")
         self.write("fake.py", f'CLIP = "{BOB}Videos/clip.mp4"\n')
         self.write("notes.md", "another program (OneDrive) held the file open\n")

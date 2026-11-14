@@ -26,8 +26,8 @@ Then give the prompt below to a coding agent on that machine, with the values fi
 Run the Potion audit on this machine.
 
 1. Get the tool: clone https://github.com/M4-S4/potionui-plugins, or update the
-   checkout that is already here, and work from its audit/ folder.
-2. Read audit/PROMPT.md in full, then follow it step by step. audit/README.md is
+   checkout that is already here, and work from its dev/audit/ folder.
+2. Read dev/audit/PROMPT.md in full, then follow it step by step. dev/audit/README.md is
    the reference for every command.
 3. Use these parameters:
    URL = <base URL of the instance, for example http://127.0.0.1:8000>

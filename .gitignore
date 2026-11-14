@@ -20,6 +20,6 @@ Thumbs.db
 .idea/
 .vscode/
 
-audit/.venv/
-audit/audit.toml
-audit/out/
+dev/audit/.venv/
+dev/audit/audit.toml
+dev/audit/out/

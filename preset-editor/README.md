@@ -279,10 +279,10 @@ In Admin → Plugins → Preset Editor → Settings:
 
 ## Tests
 
-The CI runs these suites against the core of `core.ref` at the root of this repository.
+The CI runs these suites against the core of `dev/core.ref` in this repository.
 
 From the root of a core checkout that holds the plugin in `content/plugins/local/preset-editor`
-(`scripts/sync-plugins.ps1 -Plugin preset-editor`) and its core-side tests in
+(`dev/scripts/sync-plugins.ps1 -Plugin preset-editor`) and its core-side tests in
 `tests/plugins/marketplace/`:
 
 ```bash

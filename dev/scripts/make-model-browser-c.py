@@ -36,7 +36,7 @@ import sys
 import tarfile
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 SOURCE_DIR = "model-browser"
 VARIANT_DIR = "variants/model-browser-c"
 GITHUB_PAGES = {"README.github.md": ".github/README.md"}

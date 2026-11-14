@@ -5,7 +5,7 @@
   The fork stays the working copy of Video Producer until the core loads the CSS of a plugin
   installed outside its tree. This script brings its current state here:
     <checkout>/content/plugins/marketplace/video-producer           ->  video-producer/
-    <checkout>/tests/plugins/marketplace/test_video_producer_*.py   ->  core-tests/video-producer/
+    <checkout>/tests/plugins/marketplace/test_video_producer_*.py   ->  dev/core-tests/video-producer/
   A robocopy mirror: a file removed in the fork is removed here. Never copied and never purged:
   node_modules, __pycache__, .pytest_cache, *.pyc, frontend/dist (built by the CI, attached to
   the releases) and docs/screenshots (kept here as WebP). In README.md and docs/user-guide.md, a
@@ -31,7 +31,7 @@ if (-not (Test-Path (Join-Path $pluginSrc 'manifest.yml'))) { throw "No Video Pr
 
 $repo = Get-RepoRoot
 $pluginDest = Join-Path $repo 'video-producer'
-$testsDest = Join-Path $repo 'core-tests\video-producer'
+$testsDest = Join-Path $repo 'dev\core-tests\video-producer'
 
 $kept = foreach ($sub in @('frontend\dist', 'docs\screenshots')) { Join-Path $pluginSrc $sub; Join-Path $pluginDest $sub }
 robocopy $pluginSrc $pluginDest /MIR /XJ /XD node_modules __pycache__ .pytest_cache @kept /XF *.pyc /NFL /NDL /NJH /NJS /NP | Out-Null
@@ -66,7 +66,7 @@ if ($missing.Count) {
     Write-Warning ("screenshots cited but absent from video-producer/docs/screenshots, add them as WebP:`n  " + ($missing -join "`n  "))
 }
 
-$scope = @('video-producer', 'core-tests/video-producer')
+$scope = @('video-producer', 'dev/core-tests/video-producer')
 $edited = @(git -C $repo -c core.safecrlf=false diff --name-only -- @scope)
 $eolOnly = @(git -C $repo -c core.safecrlf=false ls-files -m -- @scope | Where-Object { $edited -notcontains $_ })
 if ($eolOnly.Count) {
@@ -75,7 +75,7 @@ if ($eolOnly.Count) {
 }
 
 $python = Get-Command python, python3 -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $python) { throw 'Python is needed to run scripts/check-public-hygiene.py' }
+if (-not $python) { throw 'Python is needed to run dev/scripts/check-public-hygiene.py' }
 & $python.Source -B (Join-Path $PSScriptRoot 'check-public-hygiene.py') $pluginDest $testsDest
 if ($LASTEXITCODE -ne 0) { throw "check-public-hygiene.py refused the import (exit $LASTEXITCODE): fix those files in the fork, then import again" }
 

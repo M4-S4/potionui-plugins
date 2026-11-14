@@ -5,7 +5,7 @@
   Reads POTIONUI_URL, POTIONUI_USER, POTIONUI_PASSWORD, POTIONUI_CONTAINER and POTIONUI_APP_DIR (the
   directory the backend runs from inside the container: /app for the published image, /work for a
   container serving a PotionUI checkout mounted there) from the environment or .env.local (see
-  .env.example). Actions:
+  dev/.env.example). Actions:
     status            container state and health
     restart           docker restart, then wait until the health check passes
     logs [-Tail n]    container logs (default: last 80 lines)
@@ -17,7 +17,7 @@
     copy [-Plugin x]  docker cp the plugin folder(s) into /app/content/plugins/local/ (only needed
                       when the plugin folder is not bind-mounted into the container)
 .EXAMPLE
-  .\scripts\potionui-docker.ps1 pytest -Plugin model-browser -- -q -x
+  .\dev\scripts\potionui-docker.ps1 pytest -Plugin model-browser -- -q -x
 #>
 [CmdletBinding()]
 param(
