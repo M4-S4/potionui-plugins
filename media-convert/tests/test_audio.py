@@ -3,7 +3,7 @@ import pytest
 from src.plugin_api.media import upload_formats
 from src.plugin_api.media_tools import ToolCancelled, ToolContext, ToolFailed
 
-from tools import common
+from tools import audio, common
 from tools.audio import ConvertAudio
 
 from .conftest import make_audio, need_encoders, need_target, params_for, piped, probe, run_ffmpeg, streams_of
@@ -158,11 +158,11 @@ def test_a_sound_that_does_not_declare_its_length_is_stopped_at_the_limit(ctx, s
     assert float(probe(written)["format"]["duration"]) <= 61.5
 
 
-def test_a_result_heavier_than_the_cap_is_refused_and_writing_stops_at_the_cap(ctx, source_dir, monkeypatch):
-    monkeypatch.setattr(common, "OUTPUT_FLOOR", 64 << 10)
-    monkeypatch.setattr(common, "OUTPUT_RATIO", 1)
+def test_a_result_heavier_than_the_cap_is_refused_and_writing_stops_at_the_cap(ctx, source_dir, monkeypatch, server_settings):
+    server_settings["max_minutes"] = 1
+    monkeypatch.setattr(audio, "SOUND_MARGIN", 0.05)
     path = piped(source_dir / "quiet.flac", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "20", "-c:a", "flac", "-f", "flac")
-    cap = common.output_cap(path)
+    cap = int(61 * 48000 * 2 * 2 * 0.05) + common.MEGABYTE
 
     with pytest.raises(ToolFailed, match="would weigh more than"):
         convert(ctx, path, format="wav")

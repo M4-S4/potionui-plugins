@@ -3,6 +3,7 @@ from src.plugin_api.media_tools import MediaTool, ToolFailed
 from .common import (
     H264_CRF,
     H264_PRESET,
+    MAX_SOUND_TRACKS,
     MAX_VIDEO_PIXELS,
     VIDEO_AAC_KBPS,
     VIDEO_FORMATS,
@@ -16,8 +17,10 @@ from .common import (
     guard,
     input_args,
     limit_args,
+    make_room,
     max_side,
     metadata_args,
+    output_cap,
     quality,
     read_streams,
     thread_args,
@@ -70,13 +73,14 @@ class ConvertVideo(MediaTool):
             raise ToolFailed("This video is too small: a converted video needs at least 2 pixels on each side")
         guard(ctx)
         streams = read_streams(media.path)
+        check_duration(streams.duration)
         picture = streams.video
         if picture is None:
             raise ToolFailed("This video has no picture to convert")
         width, height = fit(media.width, media.height, max_side(params), even=True)
-        tracks = streams.audio if keep else streams.audio[:1]
+        tracks = streams.audio[:MAX_SOUND_TRACKS] if keep else streams.audio[:1]
         subtitles = streams.text_subtitles if keep else []
-        args = [*thread_args(), *input_args(media.path), "-map", f"0:{picture.index}"]
+        args = [*thread_args(), *input_args(media.path, MAX_VIDEO_PIXELS), "-map", f"0:{picture.index}"]
         for stream in [*tracks, *subtitles]:
             args += ["-map", f"0:{stream.index}"]
         if (width, height) != (media.width, media.height):
@@ -89,9 +93,10 @@ class ConvertVideo(MediaTool):
         if fmt != "webm":
             args += ["-movflags", "+faststart"]
         out = ctx.new_path(VIDEO_FORMATS[fmt])
-        args += [*limit_args(media.path), *thread_args()[:2], str(out)]
+        room = make_room(ctx, output_cap(media.path))
+        args += [*limit_args(room), *thread_args()[:2], str(out)]
         ctx.ffmpeg(args, duration=media.duration)
         guard(ctx)
-        check_size(out, media.path)
+        check_size(out, room)
         check_length(read_streams(out).duration)
         return ctx.probe(out, "video")

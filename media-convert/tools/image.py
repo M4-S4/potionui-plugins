@@ -6,10 +6,13 @@ from .common import (
     IMAGE_FORMATS,
     JPEG_QUALITY,
     MAX_IMAGE_PIXELS,
+    MEGABYTE,
     PNG_COMPRESSION,
     WEBP_QUALITY,
+    check_size,
     fit,
     guard,
+    make_room,
     max_side,
     quality,
 )
@@ -19,6 +22,7 @@ ORIENTATION = 0x0112
 ICC_SPACES = {b"RGB ": ("RGB", "RGBA"), b"GRAY": ("L", "LA"), b"CMYK": ("CMYK",)}
 MAX_ICC_BYTES = 1 << 20
 MAX_JPEG_EXIF_BYTES = 65533
+IMAGE_MARGIN = 2
 
 
 def parse_color(value) -> tuple[int, int, int]:
@@ -122,6 +126,11 @@ def save_options(source: Image.Image, image: Image.Image, fmt: str, level: str, 
     return options
 
 
+def image_bound(image: Image.Image, options: dict) -> int:
+    extra = len(options.get("icc_profile") or b"") + len(options.get("exif") or b"")
+    return int(image.width * image.height * len(image.getbands()) * IMAGE_MARGIN) + extra + MEGABYTE
+
+
 def unchanged(source: Image.Image, limit) -> bool:
     turned = source.getexif().get(ORIENTATION) not in (None, 1)
     return not turned and fit(source.width, source.height, limit, even=False) == source.size
@@ -156,14 +165,16 @@ class ConvertImage(MediaTool):
                 raise ToolFailed(
                     f"This image is animated ({frames} frames); Media Converter converts still images only"
                 )
-            if fmt == "png" and source.format == "PNG" and unchanged(source, limit):
+            try:
+                same = fmt == "png" and source.format == "PNG" and unchanged(source, limit)
+                if not same:
+                    source.load()
+            except (OSError, SyntaxError, Image.DecompressionBombError) as exc:
+                raise ToolFailed("This image cannot be read") from exc
+            if same:
                 raise ToolFailed(
                     "This image is already a PNG of this size; choose another format or a smaller largest side"
                 )
-            try:
-                source.load()
-            except (OSError, Image.DecompressionBombError) as exc:
-                raise ToolFailed("This image cannot be read") from exc
             image = normalize(ImageOps.exif_transpose(source))
             if limit:
                 width, height = fit(image.width, image.height, limit, even=False)
@@ -174,6 +185,9 @@ class ConvertImage(MediaTool):
             options = save_options(source, image, fmt, level, keep)
             guard(ctx)
             out = ctx.new_path(IMAGE_FORMATS[fmt])
+            bound = image_bound(image, options)
+            room = make_room(ctx, bound, unstoppable=bound)
             image.save(out, format=fmt.upper(), **options)
         guard(ctx)
+        check_size(out, room)
         return ctx.probe(out, "image")

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from src.plugin_api import limits
 from src.plugin_api.media import find_ffmpeg
 from src.plugin_api.media_tools import ToolCancelled, ToolFailed
 from src.plugin_api.storage import plugin_settings
@@ -50,10 +51,17 @@ PROBE_TIMEOUT_SECONDS = 30
 
 MAX_IMAGE_PIXELS = 8192 * 8192
 MAX_VIDEO_PIXELS = 4096 * 2304
+MAX_SOUND_TRACKS = 8
 OUTPUT_RATIO = 32
 OUTPUT_FLOOR = 1 << 30
 OUTPUT_CEILING = 4 << 30
 MEGABYTE = 1 << 20
+GIGABYTE = 1 << 30
+RUN_BUDGET = 8 << 30
+DISK_RESERVE = 2 << 30
+CONCURRENT_RUNS = 2
+MIN_ROOM = 1 << 20
+LENGTH_TOLERANCE = 0.5
 
 
 def quality(params: dict) -> str:
@@ -90,9 +98,14 @@ def minutes(count: int) -> str:
     return f"{count} minute" if count == 1 else f"{count} minutes"
 
 
+def longest(*durations: Optional[float]) -> Optional[float]:
+    known = [value for value in durations if value and value > 0]
+    return max(known) if known else None
+
+
 def check_duration(duration: Optional[float]) -> None:
     limit = max_seconds()
-    if duration and duration > limit:
+    if duration and duration > limit + LENGTH_TOLERANCE:
         raise ToolFailed(
             f"This file lasts {minutes(math.ceil(duration / 60))}; "
             f"Media Converter takes files of up to {minutes(int(limit // 60))} on this server"
@@ -103,22 +116,108 @@ def output_cap(source: Path) -> int:
     return min(OUTPUT_CEILING, max(OUTPUT_FLOOR, OUTPUT_RATIO * Path(source).stat().st_size))
 
 
-def limit_args(source: Path) -> list[str]:
-    return ["-t", f"{max_seconds() + 1:.3f}", "-fs", str(output_cap(source))]
+def size_text(count: int) -> str:
+    if count >= GIGABYTE and count % GIGABYTE == 0:
+        return f"{count // GIGABYTE} GB"
+    return f"{max(1, count // MEGABYTE)} MB"
 
 
-def check_size(out: Path, source: Path) -> None:
-    cap = output_cap(source)
-    if Path(out).stat().st_size >= cap:
-        raise ToolFailed(
-            f"The result would weigh more than {cap // MEGABYTE} MB, the most Media Converter writes "
-            "for this file; choose a lighter format"
+@dataclass(frozen=True)
+class Room:
+    size: int
+    reason: str
+
+
+def scratch_bytes(folder: Path) -> int:
+    total = 0
+    for path in Path(folder).rglob("*"):
+        try:
+            if path.is_file() and not path.is_symlink():
+                total += path.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def storage_limit(user_id: Optional[str], kind: str):
+    if not user_id:
+        return None
+    try:
+        return limits.limit_status(user_id, kind)
+    except Exception:
+        return None
+
+
+def rooms(ctx, cap: int) -> list:
+    folder = Path(ctx.scratch_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    written = scratch_bytes(folder)
+    found = [Room(int(cap), "file"), Room(RUN_BUDGET - written, "run")]
+    try:
+        free = shutil.disk_usage(folder).free
+    except OSError:
+        free = None
+    if free is not None:
+        found.append(Room((free - DISK_RESERVE) // CONCURRENT_RUNS, "disk"))
+    storage = storage_limit(ctx.user_id, "storage_bytes")
+    if storage is not None and storage.remaining is not None:
+        found.append(Room(int(storage.remaining) - written, "storage"))
+    upload = storage_limit(ctx.user_id, "upload_file_size")
+    if upload is not None and upload.limited:
+        found.append(Room(int(upload.limit), "upload"))
+    return found
+
+
+def room_message(room: Room) -> str:
+    if room.reason == "run":
+        return (
+            f"This run would write more than {size_text(RUN_BUDGET)}, the most Media Converter writes "
+            "in one run; convert fewer items at a time"
         )
+    if room.reason == "disk":
+        return (
+            f"The server is short of disk space: Media Converter keeps {size_text(DISK_RESERVE)} free "
+            "and cannot write this result now; ask an admin to free some space"
+        )
+    if room.reason == "storage":
+        return (
+            "This result would not fit in what is left of your storage; free some space "
+            "or convert fewer items at a time"
+        )
+    if room.reason == "upload":
+        return (
+            f"The result would weigh more than {size_text(room.size)}, the largest file you may keep; "
+            "choose a lighter format"
+        )
+    return (
+        f"The result would weigh more than {size_text(room.size)}, the most Media Converter writes "
+        "for this file; choose a lighter format"
+    )
+
+
+def make_room(ctx, cap: int, needed: int = 0, unstoppable: int = 0) -> Room:
+    found = rooms(ctx, cap)
+    for item in found:
+        if item.reason == "disk" and item.size < unstoppable:
+            raise ToolFailed(room_message(item))
+    room = min(found, key=lambda item: item.size)
+    if room.size < max(MIN_ROOM, needed):
+        raise ToolFailed(room_message(room))
+    return room
+
+
+def limit_args(room: Room) -> list[str]:
+    return ["-t", f"{max_seconds() + 1:.3f}", "-fs", str(room.size)]
+
+
+def check_size(out: Path, room: Room) -> None:
+    if Path(out).stat().st_size >= room.size:
+        raise ToolFailed(room_message(room))
 
 
 def check_length(duration: Optional[float]) -> None:
     limit = max_seconds()
-    if duration and duration > limit:
+    if duration and duration > limit + LENGTH_TOLERANCE:
         raise ToolFailed(
             f"This file lasts more than {minutes(int(limit // 60))}; "
             f"Media Converter takes files of up to {minutes(int(limit // 60))} on this server"
@@ -139,8 +238,11 @@ def fit(width: int, height: int, limit: Optional[int], even: bool) -> tuple[int,
     return width, height
 
 
-def input_args(path: Path) -> list[str]:
-    return ["-protocol_whitelist", "file", "-format_whitelist", DEMUXERS, "-i", str(Path(path).resolve())]
+def input_args(path: Path, max_pixels: Optional[int] = None) -> list[str]:
+    decoder = ["-max_pixels", str(max_pixels)] if max_pixels else []
+    return [
+        "-protocol_whitelist", "file", "-format_whitelist", DEMUXERS, *decoder, "-i", str(Path(path).resolve()),
+    ]
 
 
 def thread_args() -> list[str]:
@@ -154,6 +256,7 @@ class Stream:
     kind: str
     codec: str
     channels: int = 0
+    sample_rate: int = 0
     attached: bool = False
     tags: dict = field(default_factory=dict)
 
@@ -214,6 +317,7 @@ def read_streams(path: Path) -> Streams:
             kind=str(item.get("codec_type") or ""),
             codec=str(item.get("codec_name") or ""),
             channels=int(item.get("channels") or 0),
+            sample_rate=int(item.get("sample_rate") or 0),
             attached=bool((item.get("disposition") or {}).get("attached_pic")),
             tags=dict(item.get("tags") or {}),
         )

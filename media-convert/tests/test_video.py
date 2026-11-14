@@ -372,19 +372,25 @@ def test_a_video_that_does_not_declare_its_length_is_stopped_at_the_limit(ctx, s
     assert float(probe(written)["format"]["duration"]) <= 61.5
 
 
-def test_a_result_heavier_than_the_cap_is_refused_and_writing_stops_at_the_cap(ctx, source_dir, monkeypatch):
-    need_target("mp4")
-    monkeypatch.setattr(common, "OUTPUT_FLOOR", 64 << 10)
-    monkeypatch.setattr(common, "OUTPUT_RATIO", 1)
-    path = make_video(source_dir / "busy.mp4", seconds=4.0, size=(320, 240), fps=25, audio=False, source="testsrc2", extra=("-crf", "45"))
+@pytest.mark.parametrize("fmt", ["mp4", "mov"])
+def test_a_result_heavier_than_the_cap_is_refused_and_writing_stops_at_the_cap(tmp_path, source_dir, monkeypatch, fmt):
+    need_target(fmt)
+    path = make_video(
+        source_dir / "busy.mp4", seconds=4.0, size=(640, 360), fps=25, audio=False, source="testsrc2",
+        extra=("-vf", "noise=alls=30:allf=t", "-crf", "26"),
+    )
+    whole = convert(ToolContext(tmp_path / "whole"), path, format=fmt, quality="high").path.stat().st_size
+    monkeypatch.setattr(common, "OUTPUT_FLOOR", 1 << 20)
+    monkeypatch.setattr(common, "OUTPUT_RATIO", 0)
     cap = common.output_cap(path)
+    assert cap == 1 << 20 and whole > 3 * cap
+    ctx = ToolContext(tmp_path / "scratch")
 
-    with pytest.raises(ToolFailed, match="would weigh more than"):
-        convert(ctx, path, format="mp4", quality="high")
+    with pytest.raises(ToolFailed, match="would weigh more than 1 MB, the most Media Converter writes for this file"):
+        convert(ctx, path, format=fmt, quality="high")
 
     [written] = ctx.scratch_dir.iterdir()
     assert cap <= written.stat().st_size < 2 * cap
-
 
 def test_a_cancel_that_arrives_as_the_encoder_ends_publishes_nothing(tmp_path, source_dir):
     need_target("mp4")

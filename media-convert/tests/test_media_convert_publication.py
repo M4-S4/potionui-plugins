@@ -1,3 +1,4 @@
+import inspect
 import shutil
 import threading
 import time
@@ -16,16 +17,19 @@ from src.features.media_tools.service import MediaToolService
 from src.features.plugins.records import Plugin
 from src.features.plugins.repository import PluginRepository
 from src.platform.filesystem.storage_driver import LocalFileStorageDriver
+from src.platform.media_tools.ffmpeg import FfmpegRunner
 from src.platform.media_tools import MediaToolRegistry
 from src.platform.media_tools.ops import register_core_tools
 from src.platform.plugins import runtime_registries
 from src.platform.plugins.registry import PluginRegistry
+from src.plugin_api import limits
 from src.plugin_api.testing import scratch_database, use_database
 
-from .conftest import PLUGIN_ROOT, make_audio, make_image, make_video, need_encoders
+from .conftest import PLUGIN_ROOT, make_audio, make_image, make_video, need_encoders, run_ffmpeg
 
 USER = "mc-user"
 WAIT_SECONDS = 60
+MB = 1 << 20
 
 
 class Guard:
@@ -299,3 +303,124 @@ def test_a_replace_asked_outside_the_window_keeps_the_old_name_over_the_new_cont
     row = library.repo.get_by_id(item.id, USER)
     assert row.original_filename == "Chat.png"
     assert row.filename.endswith(".webp") and row.mime_type == "image/webp"
+
+
+def plugin_constants(library):
+    impl = library.tools.get("media-convert.audio").impl
+    return vars(inspect.getmodule(type(impl)))["make_room"].__globals__
+
+
+@pytest.fixture
+def scratch_peak(tmp_path, monkeypatch):
+    seen = []
+    real = FfmpegRunner.run
+
+    def measured(self, *args, **kwargs):
+        try:
+            return real(self, *args, **kwargs)
+        finally:
+            files = [path for path in (tmp_path / "scratch").rglob("*") if path.is_file()]
+            seen.append((sum(path.stat().st_size for path in files), sorted(path.name for path in files)))
+
+    monkeypatch.setattr(FfmpegRunner, "run", measured)
+    return seen
+
+
+def chain(library, items, *formats):
+    steps = [{"tool": "media-convert.audio", "params": {"format": fmt}} for fmt in formats]
+    return library.service.run_blocking(USER, steps, [{"item_id": item.id} for item in items], timeout=3 * WAIT_SECONDS)
+
+
+def quiet_surround(source_dir, index):
+    path = source_dir / f"quiet{index}.flac"
+    run_ffmpeg("-f", "lavfi", "-i", "anullsrc=r=48000:cl=5.1", "-t", "59", "-sample_fmt", "s16", "-c:a", "flac", path)
+    return path
+
+
+def test_two_sounds_through_five_steps_stay_within_the_run_budget(library, source_dir, monkeypatch, scratch_peak):
+    need_encoders("flac")
+    items = [library.add(quiet_surround(source_dir, index), f"Quiet{index}.flac", "audio") for index in range(2)]
+    constants = plugin_constants(library)
+    monkeypatch.setitem(constants, "RUN_BUDGET", 300 * MB)
+
+    result = chain(library, items, "wav", "flac", "wav", "flac", "wav")
+
+    assert result.ok, result.error
+    assert 150 * MB < max(size for size, _ in scratch_peak) <= 300 * MB
+    scratch_peak.clear()
+    monkeypatch.setitem(constants, "RUN_BUDGET", 100 * MB)
+
+    result = chain(library, items, "wav", "flac", "wav", "flac", "wav")
+
+    assert result.status == "failed"
+    assert result.error.message == (
+        "This run would write more than 100 MB, the most Media Converter writes in one run; convert fewer items at a time"
+    )
+    assert max(size for size, _ in scratch_peak) <= 100 * MB
+    assert len(library.rows()) == 4
+
+
+def talks(library, source_dir, count):
+    return [
+        library.add(make_audio(source_dir / f"{index}.mp3", seconds=10, channels=2, codec_args=("-c:a", "libmp3lame")), f"Talk {index}.mp3", "audio")
+        for index in range(count)
+    ]
+
+
+def test_an_ordinary_selection_converts_and_a_larger_one_stops_at_the_run_budget(library, source_dir, monkeypatch, scratch_peak):
+    need_encoders("libmp3lame")
+    items = talks(library, source_dir, 6)
+
+    result = library.run("media-convert.audio", {"format": "wav"}, *items)
+
+    assert result.ok, result.error
+    assert len(result.items) == 6
+    scratch_peak.clear()
+    monkeypatch.setitem(plugin_constants(library), "RUN_BUDGET", 5 * MB)
+
+    result = library.run("media-convert.audio", {"format": "wav"}, *items)
+
+    assert result.status == "failed" and "convert fewer items at a time" in result.error.message
+    assert len(scratch_peak) == 2
+    assert max(size for size, _ in scratch_peak) <= 5 * MB
+    assert len(library.rows()) == 12
+
+
+def test_the_storage_left_to_the_user_is_read_by_the_real_service(library, source_dir, monkeypatch, scratch_peak):
+    need_encoders("libmp3lame")
+    items = talks(library, source_dir, 3)
+    asked = []
+
+    def status(user_id, kind):
+        asked.append((user_id, kind))
+        if kind == "storage_bytes":
+            return limits.LimitStatus(kind=kind, limit=4 * MB, used=0)
+        return limits.LimitStatus(kind=kind)
+
+    monkeypatch.setattr(limits, "limit_status", status)
+
+    result = library.run("media-convert.audio", {"format": "wav"}, *items)
+
+    assert result.status == "failed"
+    assert result.error.message.startswith("This result would not fit in what is left of your storage")
+    assert (USER, "storage_bytes") in asked
+    assert len(scratch_peak) == 2 and library.guard.admits == []
+
+
+def test_a_core_step_before_the_tool_counts_toward_the_run_budget(library, source_dir, monkeypatch, scratch_peak):
+    need_encoders("flac")
+    path = source_dir / "noise.flac"
+    run_ffmpeg("-f", "lavfi", "-i", "anoisesrc=d=20:c=white:r=44100", "-ac", "2", "-sample_fmt", "s16", "-c:a", "flac", path)
+    item = library.add(path, "Noise.flac", "audio")
+    monkeypatch.setitem(plugin_constants(library), "RUN_BUDGET", 4 * MB + MB // 2)
+
+    alone = library.run("media-convert.audio", {"format": "wav"}, item)
+    assert alone.ok, alone.error
+    scratch_peak.clear()
+
+    steps = [{"tool": "volume", "params": {"unit": "percent", "percent": 50}}, {"tool": "media-convert.audio", "params": {"format": "wav"}}]
+    result = library.service.run_blocking(USER, steps, [{"item_id": item.id}], timeout=WAIT_SECONDS)
+
+    assert result.status == "failed" and "convert fewer items at a time" in result.error.message
+    [(size, [name])] = scratch_peak
+    assert name.endswith(".flac") and size > MB

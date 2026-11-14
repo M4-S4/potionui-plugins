@@ -58,8 +58,9 @@ def test_the_duration_limit_comes_from_the_setting(server_settings):
     server_settings["max_minutes"] = 5
     common.check_duration(300.0)
     common.check_duration(None)
+    common.check_duration(300.4)
     with pytest.raises(ToolFailed, match="lasts 6 minutes"):
-        common.check_duration(300.5)
+        common.check_duration(300.6)
 
 
 def test_missing_settings_use_the_defaults(monkeypatch):
@@ -109,7 +110,7 @@ def test_the_output_cap_grows_with_the_source_between_a_floor_and_a_ceiling(tmp_
         handle.truncate(source_bytes)
 
     assert common.output_cap(path) == cap
-    assert common.limit_args(path) == ["-t", "1801.000", "-fs", str(cap)]
+    assert common.limit_args(common.Room(cap, "file")) == ["-t", "1801.000", "-fs", str(cap)]
 
 
 def test_the_list_of_containers_ffmpeg_may_open_is_exactly_this_one():
