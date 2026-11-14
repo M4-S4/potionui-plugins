@@ -38,6 +38,25 @@
         "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/preset-editor-v0.2.5/preset-editor-0.2.5.zip",
         "sha256": "4ffb778ba87059db95e54cef9d690c7be33709df83b9330ef00929a5a38dab64"
       }
+    },
+    {
+      "id": "media-convert",
+      "name": "Media Converter",
+      "version": "0.1.0",
+      "description": "Convert images, videos and sounds of the Library to another format, and extract the sound of a video",
+      "license": "GPL-3.0",
+      "source": {
+        "repository": "M4-S4/potionui-plugins",
+        "path": "media-convert"
+      },
+      "requires": {
+        "core": ">=0.2.0",
+        "plugin_api": null
+      },
+      "release": {
+        "archive": "https://github.com/M4-S4/potionui-plugins/releases/download/media-convert-v0.1.0/media-convert-0.1.0.zip",
+        "sha256": "b04ed0583bb1d7daa6a0b890110799d5a8e60b05a07c408384f59b6ef6c68da5"
+      }
     }
   ]
 }

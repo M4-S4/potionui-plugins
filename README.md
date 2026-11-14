@@ -8,8 +8,9 @@ Plugins for [PotionUI](https://github.com/PotionUI/PotionUI), the self-hosted ap
 |---|---|---|---|---|
 | Video Producer | A page for making short films with AI video: write a synopsis, split it into shots, generate takes, pick the best ones, then edit, match colors, mix the sound and export the film. | Every user; an admin sets it up. | 0.6.0 | [Administration](video-producer/README.md), [user guide](video-producer/docs/user-guide.md) |
 | Preset Editor | Create, edit, check and publish presets without leaving PotionUI. | Admins only. | 0.2.5 | [README](preset-editor/README.md) |
+| Media Converter | Adds four tools to the Tools menu of the Library and the History: convert an image to PNG, JPEG or WebP, a video to MP4, MOV or WebM, or a sound to WAV, MP3, FLAC, M4A or OGG, and extract the sound of a video. | Every user. | 0.1.0 | [README](media-convert/README.md) |
 
-Both are free software under the GPL-3.0 license.
+All three are free software under the GPL-3.0 license.
 
 ## Install a plugin from the catalogue
 
@@ -28,14 +29,14 @@ You need an admin account on a PotionUI whose **Admin › Plugins** page shows t
 
 A plugin runs with the same rights as PotionUI: install only from a catalogue you trust. To update a plugin, open the catalogue again: a newer version shows **Update to** and its version number in place of **Install**. Read the catalogue at the same URL as the first time: PotionUI updates a plugin only from the exact address it was installed from, and under any other address, even one that serves the same file, the plugin shows **Installed elsewhere** with no update. After an update, restart PotionUI: the page runs the new version at once, but the server keeps running the code of the version it had loaded until it restarts.
 
-Video Producer needs more than the plugin itself: a video engine, video presets and their model files, and ffmpeg on the server. Its [administration page](video-producer/README.md) says what to prepare. Preset Editor needs nothing else.
+Video Producer needs more than the plugin itself: a video engine, video presets and their model files, and ffmpeg on the server. Its [administration page](video-producer/README.md) says what to prepare. Preset Editor needs nothing else. Media Converter needs ffmpeg and ffprobe on the server, which the PotionUI image ships.
 
 ### Install by hand
 
 Without the catalogue, put the plugin folder in `content/plugins/local/<id>` of the instance, then click **Scan for Plugins** in **Admin › Plugins** and enable it:
 
-- from a release: unzip `<id>-<version>.zip` from the [releases page](https://github.com/M4-S4/potionui-plugins/releases) into `content/plugins/local/` (the zip holds the folder `<id>/` with its built frontend);
-- from a clone of this repository: copy `<id>/`, then build its frontend (see [Day-to-day work](#day-to-day-work)).
+- from a release: unzip `<id>-<version>.zip` from the [releases page](https://github.com/M4-S4/potionui-plugins/releases) into `content/plugins/local/` (the zip holds the folder `<id>/`, with its built frontend when the plugin has one);
+- from a clone of this repository: copy `<id>/`, then build its frontend (see [Day-to-day work](#day-to-day-work)); Media Converter has no frontend to build.
 
 In a Docker container the folder is `/app/content/plugins/local/<id>`: bind-mount it, or copy it with `scripts/potionui-docker.ps1 copy -Plugin <id>`.
 
@@ -45,7 +46,7 @@ The rest of this page is for the people who develop, test and release these plug
 
 This repository holds one folder per plugin, a catalogue (`plugins.json`) that lists them with their releases, a CI that tests them against a pinned PotionUI core, and a GitHub release for each plugin version.
 
-Video Producer is developed in the M4-S4/PotionUI fork and imported here (see [Following the fork](#following-the-fork)); its page ships its own stylesheet (see [Tailwind classes](#tailwind-classes)). Preset Editor is developed here; [its README](preset-editor/README.md#what-is-left-to-do) lists what is left to do.
+Video Producer is developed in the M4-S4/PotionUI fork and imported here (see [Following the fork](#following-the-fork)); its page ships its own stylesheet (see [Tailwind classes](#tailwind-classes)). Preset Editor is developed here; [its README](preset-editor/README.md#what-is-left-to-do) lists what is left to do. Media Converter is developed here as well; it adds tools and no page, so it has no frontend and no dist.
 
 `archive/` holds the older copies of `model-browser` and `deepseek-provider`, with their core-side tests and the design variants of Model Browser. Both plugins now live upstream, reworked, in PotionUI/PotionUI (`content/plugins/marketplace/`): install them from PotionUI itself. Nothing in `archive/` is in the catalogue, the CI or the scripts' scope.
 
@@ -112,7 +113,7 @@ The sheet does not reach content that a plugin renders outside its page element,
 | `id`, `name`, `description`, `license` | As in the plugin's `manifest.yml`. |
 | `version` | The `version` of `manifest.yml`. |
 | `source` | `{"repository": "M4-S4/potionui-plugins", "path": "<id>"}`. |
-| `requires` | `{"core": "<version or range>", "plugin_api": null}`. `core` is a PotionUI version or a PEP 440 version range, which the core compares with its own version when it reads the catalogue: a bare version means that version or later (`0.1.0` reads as `>=0.1.0`), and a core that does not match, or a value that is not a version, lists the plugin as incompatible. Every core that installs from a catalogue reports 0.1.0 until the next release of PotionUI. |
+| `requires` | `{"core": "<version or range>", "plugin_api": null}`. `core` is a PotionUI version or a PEP 440 version range, which the core compares with its own version when it reads the catalogue: a bare version means that version or later (`0.1.0` reads as `>=0.1.0`), and a core that does not match, or a value that is not a version, lists the plugin as incompatible. |
 | `release` | `{"archive": "<URL of the zip>", "sha256": "<hex>"}`, or both `null` while the version has no release. |
 
 `python scripts/catalogue.py --check` checks the schema, that each plugin folder exists, and that each version, id and license equals its manifest's; the CI runs it. When the version of a manifest changes, change the entry's `version` too and set its `release` back to `null` until the new release exists.
@@ -123,7 +124,7 @@ Push a tag `<id>-v<version>`, where `<version>` is the one of the plugin's `mani
 
 1. checks the tag against the manifest (`scripts/catalogue.py --tag`);
 2. builds the dist against the core of `core.ref`, after `npm ci` in its `content/plugins/` and `frontend/`, so that the zip carries the page stylesheet of a plugin that ships one;
-3. packages `<id>-<version>.zip`, the plugin folder with its dist and without `tests/`, and writes its sha256 in `<id>-<version>.sha256`;
+3. packages `<id>-<version>.zip`, the plugin folder with its dist, when it has a frontend, and without `tests/`, and writes its sha256 in `<id>-<version>.sha256`;
 4. creates the GitHub release with both files.
 
 Recording the release in the catalogue stays manual. Download the zip from the release, then run:
@@ -132,20 +133,20 @@ Recording the release in the catalogue stays manual. Download the zip from the r
 python scripts/catalogue.py --release <id> <id>-<version>.zip https://github.com/M4-S4/potionui-plugins/releases/download/<id>-v<version>/<id>-<version>.zip
 ```
 
-and commit `plugins.json`. The command checks the zip (name, manifest version, dist present, no tests) before it writes the URL and the sha256.
+and commit `plugins.json`. The command checks the zip (name, manifest version, dist present when the plugin has a frontend, no tests) before it writes the URL and the sha256.
 
 ### CI
 
-`.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`. Its `hygiene` job needs no core: it runs `scripts/check-public-hygiene.py` on every tracked file, then the check's self-tests. Next to it runs one job per plugin of its matrix (`video-producer`, `preset-editor`; each entry names the plugin's core-side test files and Node test globs). Each of these jobs:
+`.github/workflows/ci.yml` runs on every push and pull request, on `ubuntu-latest`. Its `hygiene` job needs no core: it runs `scripts/check-public-hygiene.py` on every tracked file, then the check's self-tests. Next to it runs one job per plugin of its matrix (`video-producer`, `preset-editor`, `media-convert`; each entry names the plugin's core-side test files and Node test globs, both empty for Media Converter, and says whether the plugin builds a dist). Each of these jobs:
 
 1. checks the catalogue;
 2. checks out PotionUI/PotionUI at `core.ref`, installs Python 3.12 with the core's `requirements-ci.txt` (CPU-only torch) as the core's own `backend-tests.yml` does, and Node 24 with `npm ci` in `content/plugins/` and in `frontend/`, whose packages compile the stylesheet a plugin page ships;
-3. copies its plugin into `content/plugins/local/` of the core with `sync-plugins.ps1`, puts this repository's copy in place of the core's own `content/plugins/marketplace/<id>/` when the core has one (the fork's core has Video Producer there; PotionUI/PotionUI has neither plugin), and puts the plugin's core-side tests from `core-tests/<id>/` in place of the core's copies in `tests/plugins/marketplace/`;
-4. builds the dist and publishes it as the `<id>-dist` artifact of the run;
-5. runs the plugin's pytest suite and its core-side tests with the markers of the core's CI (`not requires_gpu and not requires_models and not gc_sensitive`), and its Node tests (`frontend/src/i18n/*.test.js` and `frontend/src/lib/*.test.js` for Video Producer, `frontend/src/lib/*.test.js` for Preset Editor).
-6. copies the built plugin, without its `tests/`, into `content/plugins/marketplace/<id>/` of the core as well, then runs five of the core's own tests with the same markers: `tests/features/presets/test_mode_labels.py`, `tests/features/recipes/test_shipped_recipes_lint.py`, `tests/features/recipes/executors/test_fixture_form_reactions.py`, `tests/features/plugins/test_default_enabled.py` and `tests/platform/plugins/test_manifest_categories.py`. Most of them read only `content/plugins/marketplace/`, never `local/`, so this pass checks the plugin as a core that ships it would: every mode key of its presets has a plain name, its recipes pass the core's lint, it is not enabled by default, and its manifest has a current category. Preset Editor ships no preset and no recipe, so only the last two bite for it; `test_fixture_form_reactions.py` reads the core's own presets only. The steps before this one still see the plugin in `local/` only.
+3. copies its plugin into `content/plugins/local/` of the core with `sync-plugins.ps1`, puts this repository's copy in place of the core's own `content/plugins/marketplace/<id>/` when the core has one (the fork's core has Video Producer there; PotionUI/PotionUI has none of the three plugins), and puts the plugin's core-side tests from `core-tests/<id>/` in place of the core's copies in `tests/plugins/marketplace/`;
+4. builds the dist and publishes it as the `<id>-dist` artifact of the run; Media Converter has no frontend, so its job builds nothing and publishes no dist;
+5. runs the plugin's pytest suite and its core-side tests with the markers of the core's CI (`not requires_gpu and not requires_models and not gc_sensitive`), and its Node tests (`frontend/src/i18n/*.test.js` and `frontend/src/lib/*.test.js` for Video Producer, `frontend/src/lib/*.test.js` for Preset Editor; Media Converter has neither core-side tests nor Node tests).
+6. copies the built plugin, without its `tests/`, into `content/plugins/marketplace/<id>/` of the core as well, then runs five of the core's own tests with the same markers: `tests/features/presets/test_mode_labels.py`, `tests/features/recipes/test_shipped_recipes_lint.py`, `tests/features/recipes/executors/test_fixture_form_reactions.py`, `tests/features/plugins/test_default_enabled.py` and `tests/platform/plugins/test_manifest_categories.py`. Most of them read only `content/plugins/marketplace/`, never `local/`, so this pass checks the plugin as a core that ships it would: every mode key of its presets has a plain name, its recipes pass the core's lint, it is not enabled by default, and its manifest has a current category. Preset Editor and Media Converter ship no preset and no recipe, so only the last two bite for them; `test_fixture_form_reactions.py` reads the core's own presets only. The steps before this one still see the plugin in `local/` only.
 
-To add a plugin to the CI, add an entry to the matrix.
+To add a plugin to the CI, add an entry to the matrix, with `dist: false` when the plugin has no frontend.
 
 ## License
 
