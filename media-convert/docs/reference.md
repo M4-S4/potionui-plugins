@@ -1,6 +1,6 @@
 # Media Converter: reference
 
-Every setting of the four tools, the encoder settings behind each quality, what a conversion keeps and loses, every refusal, the admin settings and the load on the server. The [README](../README.md) gives the short version.
+Every setting of the four tools, the encoder settings behind each quality, what a conversion keeps and loses, every refusal, the admin settings and the load on the server. The [README](https://github.com/M4-S4/potionui-plugins/blob/main/media-convert/README.md), also in Admin › Documentation as "Media Converter", gives the short version.
 
 ## The tools
 

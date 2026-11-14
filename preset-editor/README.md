@@ -16,6 +16,8 @@ Without the catalogue, put the plugin folder under `content/plugins/local/preset
 
 To update from 0.2.4 to 0.2.5, disable Preset Editor in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. An update started while 0.2.4 is enabled is refused with the message that 0.2.5 did not start, and 0.2.4 stays in place; restarting and updating again gives the same refusal.
 
+![The draft workbench of a copy of the Flux2 preset in the dark theme: the files of the preset on the left, and the form builder open on the form of the txt2img mode, with its tabs, the field palette and the inspector of the selected node](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/preset-editor/docs/screenshots/form-builder-dark.webp)
+
 ## What it needs on the server
 
 Nothing else: the plugin needs no setting to work and keeps no database table. Drafts and the history are folders under `storage/plugins/preset-editor/`, which are not part of the core backup. Published presets go to `content/presets/local/`: in Docker, mount that folder as a volume, or a published preset vanishes when the container is recreated. Its routes are for a signed-in admin only: on PotionUI 0.2.0 and later, no API key reaches them, whatever its scope.
@@ -28,6 +30,14 @@ Two things appear, for admins only: a **Preset Editor** entry in the sidebar (th
 - The draft workbench edits every file of the preset: `preset.yml` as a form, `form.yml`, its tabs and fragments in a form builder, `pipeline.yml` in a pipeline builder, any file in a text editor, and the cover and gallery in the Media view, with a preview of `description.md` as **Admin › Presets** shows it.
 - A draft shows the report of PotionUI's own preset linter. **Publish** needs a report without errors, writes the preset, reloads the catalogue without a restart and checks that PotionUI loads it; when the loader refuses it, the previous state is put back.
 - **History** keeps the versions replaced or deleted, and **Restore** opens one as a draft. **Download zip** and **Import zip** move a preset folder in and out as an archive.
+
+![The Preset Editor page: a draft whose lint is clean, above the list of the presets of the instance, each with its Duplicate button](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/preset-editor/docs/screenshots/presets-dark.webp)
+
+![Admin › Presets with the New Preset and Edit… buttons that Preset Editor adds to its header; the Edit… menu says that there is no local preset yet](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/preset-editor/docs/screenshots/admin-presets-dark.webp)
+
+The page follows the light theme of PotionUI as well:
+
+![The same form builder in the light theme](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/preset-editor/docs/screenshots/form-builder-light.webp)
 
 Every option, check and setting is in the [reference](docs/reference.md), which PotionUI also shows in **Admin › Documentation** as "Preset Editor: reference".
 
@@ -160,4 +170,4 @@ The [reference](docs/reference.md#limits-worth-knowing) lists them all. What is 
 
 ## License
 
-GPL-3.0, like the other plugins of this repository; the text is in the [LICENSE](../LICENSE) of the repository.
+GPL-3.0, like the other plugins of this repository; the text is in the [LICENSE](https://github.com/M4-S4/potionui-plugins/blob/main/LICENSE) of the repository.

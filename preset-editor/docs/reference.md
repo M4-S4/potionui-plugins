@@ -1,6 +1,6 @@
 # Preset Editor: reference
 
-The whole of what Preset Editor does, its limits, where it keeps its files and its settings. The [README](../README.md) gives the short version.
+The whole of what Preset Editor does, its limits, where it keeps its files and its settings. The [README](https://github.com/M4-S4/potionui-plugins/blob/main/preset-editor/README.md), also in Admin › Documentation as "Preset Editor", gives the short version.
 
 ## What you can do
 

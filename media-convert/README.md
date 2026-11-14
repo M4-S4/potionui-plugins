@@ -16,6 +16,8 @@ Unless the notes of a version say otherwise, restart PotionUI after an update fr
 
 Updating from 0.1.0 to 0.1.1 needs its own order: disable Media Converter in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. Tried in another order, the tools of 0.1.1 did not load: the update or the enabling ended with an error, and Media Converter stayed on 0.1.0 or without its tools. If that happens, start again from the first step, and skip the update step if the catalogue already shows 0.1.1 installed.
 
+![The Library in the dark theme, with the Edit menu of a video open: Convert video and Extract sound, each marked Media Convert, below the tools of PotionUI](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/tools-menu-dark.webp)
+
 ## What it needs on the server
 
 ffmpeg and ffprobe, which the PotionUI image ships, and nothing else. Conversions run on the server's processor and never use the graphics card, so a generation keeps the whole card; a long video still takes the processor for a while and slows down the preparation of a generation that starts meanwhile.
@@ -38,6 +40,10 @@ The plugin has no page of its own: each tool opens the usual tool window of Poti
 The result is a new item in the Library, next to the original, which stays as it was. It keeps the name of the original with the extension of the new format: `Cat.png` converted to WebP becomes `Cat.webp`. A file of a generation keeps the name it has in the History. Select several items and run a tool once to convert them all in one run; if one of them is refused, the whole run fails and none of them is saved. Two sources with the same name, such as `Cat.png` and `Cat.webp` converted to JPEG, give two items both named `Cat.jpg`.
 
 The tool window always saves a new item and never offers to replace the original. A request from the chat, the automation or the API can still ask PotionUI to replace an image, a video or a sound by its conversion; the item then keeps its old name and extension over the new content (`Cat.png` holding a WebP picture), which a download or a zip export of the Library carries along. The chat asks before it replaces anything: answer no and ask for a new item instead.
+
+![The Convert video window on a 1280 × 720 clip: format WebM (VP9), quality Balanced, original size, Keep metadata on](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/convert-video-dark.webp)
+
+![The Library after the conversion: Test clip.webm, marked new, next to Test clip.mp4, which stays as it was](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/media-convert/docs/screenshots/result-dark.webp)
 
 **Keep metadata** is on by default. Turn it off before you share a photo or a video taken with a phone: the place where it was taken is kept otherwise.
 
@@ -69,4 +75,4 @@ Every setting, the encoder behind each quality step, what each conversion keeps 
 
 ## License
 
-GPL-3.0, like the other plugins of this repository; the text is in the [LICENSE](../LICENSE) of the repository.
+GPL-3.0, like the other plugins of this repository; the text is in the [LICENSE](https://github.com/M4-S4/potionui-plugins/blob/main/LICENSE) of the repository.
