@@ -315,3 +315,17 @@ def test_the_12_gb_h3_preset_runs_ref2va_through_its_refs_mode():
     assert catalog.profiles(presets.MINIMAX_H3_12GB, variables, manifest["modes"]) == ["FL2VA", "Ref2VA", "Hybrid AV"]
     assert catalog.main_mode(variables, manifest["modes"]) == "video"
     assert (PRESETS_ROOT / "MiniMax-H3-12GB" / "modes" / "refs" / "pipeline.yml").is_file()
+
+
+@pytest.mark.parametrize("folder", ["MiniMax-H3-12GB", "MiniMax-H3-Fast-12GB"])
+def test_a_12_gb_h3_preset_chains_up_to_12_segments_in_the_video_mode_of_video_director(folder):
+    director = _manifest(folder)["vars"]["video_director"]
+
+    assert director["modes"]["director"]["max_segments"] == 12
+    assert director["modes"]["director"]["continuation"] == {"source": "tail_frames", "overlap_frames": 17, "stitch": True}
+
+
+def test_the_refs_mode_of_the_12_gb_h3_preset_keeps_its_ceiling_of_6_segments():
+    director = _manifest("MiniMax-H3-12GB")["vars"]["video_director"]
+
+    assert director["preset_mode_overrides"]["refs"]["modes"]["director"]["max_segments"] == 6

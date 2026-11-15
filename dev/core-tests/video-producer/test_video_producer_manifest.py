@@ -28,9 +28,12 @@ from src.features.notifications.types import NotificationTypeRegistry
 from src.features.plans.guard import LimitGuard, PlanSettings
 from src.features.plans.records import Plan, PlanLimit, PlanSubject
 from src.features.plugins.setup import PluginSetup
+from src.features.video_director import normalize_video_director
+from src.features.video_director.normalize import VideoDirectorValidationError
 from src.platform.plugins.limit_kinds import AdmissionRequest, LimitKindRegistry
 from src.platform.plugins.loader import EXTRA_PLUGIN_DIRS_ENV, PluginLoader
 from src.platform.plugins.registry import PluginRegistry
+from src.platform.util.path_resolution import apply_preset_mode_overlay
 from src.plugin_api import HookContext, SetupCheck, get_current_active_user
 from src.plugin_api.chat import ToolContext
 
@@ -354,6 +357,7 @@ def test_docs_files_exist_and_the_admin_readme_comes_first(manifest):
 
     assert [(doc["path"], doc["audience"]) for doc in manifest.docs] == [
         ("README.md", "admin"),
+        ("docs/setup.md", "admin"),
         ("docs/admin-reference.md", "admin"),
         ("docs/user-guide.md", "user"),
         ("docs/user-reference.md", "user"),
@@ -1647,7 +1651,7 @@ def test_the_shipped_h3_presets_keep_the_director_and_prompt_help_of_the_core_pr
         preset, source = shipped_presets[preset_id], core_presets[shipped.source_id]
         director = source.vars["video_director"]
         overrides = {mode: value for mode, value in director.get("preset_mode_overrides", {}).items() if mode in shipped.modes}
-        cap = {**director["modes"]["director"], "max_segments": 6}
+        cap = {**director["modes"]["director"], "max_segments": 12}
         expected = {key: value for key, value in director.items() if key not in ("simple_modes", "preset_mode_overrides")}
         assert preset.vars["video_director"] == {**expected, "modes": {**director["modes"], "director": cap}, **({"preset_mode_overrides": overrides} if overrides else {})}
         assert preset.vars["prompt"]["segment_templates"] == source.vars["prompt"]["segment_templates"][:1]
@@ -1657,6 +1661,38 @@ def test_the_shipped_h3_presets_keep_the_director_and_prompt_help_of_the_core_pr
         assert preset.prompt_syntax == {mode: source.prompt_syntax[mode] for mode in (*shipped.modes, *shipped.own_modes)}
         assert preset.prompt_resources == {mode: entries for mode, entries in (source.prompt_resources or {}).items() if mode in shipped.modes}
         assert preset.formulas["groups"] == {name: group for name, group in source.formulas["groups"].items() if name != "memory"}
+
+
+def _chain_document(shots, continuation=True):
+    settings = {"fps": 24, "seed": 1}
+    if continuation:
+        settings["continuation"] = {"source": "tail_frames", "overlap_frames": 17, "stitch": True}
+    return {
+        "schema_version": 1,
+        "mode": "director",
+        "settings": settings,
+        "segments": [{"id": f"seg-{index}", "prompt": f"shot {index}", "frames": 124} for index in range(shots)],
+        "media": [],
+        "audio": [],
+    }
+
+
+@pytest.mark.parametrize("preset_id", [H3_12GB, H3_FAST_12GB])
+def test_a_12_gb_h3_preset_admits_12_chained_segments_in_its_video_mode_and_refuses_13(shipped_presets, tmp_path, preset_id):
+    capabilities = apply_preset_mode_overlay(shipped_presets[preset_id].vars["video_director"], "video")
+
+    assert len(normalize_video_director(_chain_document(12), capabilities, str(tmp_path))["segments"]) == 12
+    with pytest.raises(VideoDirectorValidationError, match="at most 12 segments"):
+        normalize_video_director(_chain_document(13), capabilities, str(tmp_path))
+
+
+def test_the_refs_mode_of_the_12_gb_h3_preset_admits_6_chained_segments_and_refuses_a_seventh(shipped_presets, tmp_path):
+    capabilities = apply_preset_mode_overlay(shipped_presets[H3_12GB].vars["video_director"], "refs")
+
+    assert len(normalize_video_director(_chain_document(6, continuation=False), capabilities, str(tmp_path))["segments"]) == 6
+    with pytest.raises(VideoDirectorValidationError) as refused:
+        normalize_video_director(_chain_document(7, continuation=False), capabilities, str(tmp_path))
+    assert refused.value.errors == ["segments: chain mode allows at most 6 segments, got 7"]
 
 
 def test_the_shipped_wan_presets_keep_the_prompt_help_of_the_core_preset_and_offer_only_the_modes_their_models_run(shipped_presets, core_presets):

@@ -53,6 +53,7 @@ class Writer:
         self.cancelled = []
         self.root = None
         self.sizes = []
+        self.entered = None
         monkeypatch.setattr(core_bridge, "prompt_writer_status", self.prompt_writer_status)
         monkeypatch.setattr(core_bridge, "write_prompt_for_preset", self.write_prompt_for_preset)
 
@@ -65,6 +66,8 @@ class Writer:
 
     async def write_prompt_for_preset(self, user_id, instruction, *, preset_id=None, mode=None, form_data=None, media=()):
         self.calls.append({"user_id": user_id, "instruction": instruction, "preset_id": preset_id, "mode": mode, "form_data": form_data, "media": list(media)})
+        if self.entered is not None:
+            self.entered.set()
         if self.root is not None:
             self.sizes.append([(self.root / item["value"]).stat().st_size for item in media])
         if self.delay:
@@ -407,8 +410,11 @@ def test_one_user_writes_one_prompt_at_a_time_and_another_user_is_not_held(core,
     one, two = core.users["user-1"], core.users["user-2"]
 
     async def scenario():
+        writer.entered = asyncio.Event()
         first = asyncio.ensure_future(prompt_writer.write(one, one, doc, clip, "a", presets.MINIMAX_H3, None, ""))
-        await asyncio.sleep(0.1)
+        waiting = asyncio.ensure_future(writer.entered.wait())
+        await asyncio.wait({first, waiting}, timeout=5, return_when=asyncio.FIRST_COMPLETED)
+        assert writer.entered.is_set(), first.exception() if first.done() else "the first writer reached no language model call within 5 s"
         with pytest.raises(HTTPException) as busy:
             await prompt_writer.write(one, one, doc, clip, "b", presets.MINIMAX_H3, None, "")
         other = await prompt_writer.write(two, two, doc, clip, "c", presets.MINIMAX_H3, None, "")
