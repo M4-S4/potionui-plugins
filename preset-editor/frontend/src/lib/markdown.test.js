@@ -10,7 +10,11 @@ const CORE_UTILS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..
 const CORE_MARKDOWN = join(CORE_UTILS, 'markdown.ts');
 const CORE_SAFE_URL = join(CORE_UTILS, 'safeUrl.ts');
 const skip = existsSync(CORE_MARKDOWN) ? false : 'the plugin is not inside a core checkout (content/plugins/<kind>/preset-editor)';
-const coreHasSafeUrl = !skip && existsSync(CORE_SAFE_URL) && readFileSync(CORE_MARKDOWN, 'utf8').includes("from './safeUrl'");
+const SAFE_URL_IMPORT = "import { sanitizeLinkUrl } from './safeUrl';";
+const coreSource = skip ? '' : readFileSync(CORE_MARKDOWN, 'utf8');
+const coreImports = [...coreSource.matchAll(/^import\s[^;]*?\sfrom\s+(['"])([^'"]+)\1/gm)].map((match) => match[2]);
+const coreHasSafeUrl = !skip && existsSync(CORE_SAFE_URL);
+const knownShape = coreHasSafeUrl ? coreSource.includes(SAFE_URL_IMPORT) && coreImports.length === 1 : coreImports.length === 0;
 
 registerHooks({
 	resolve(specifier, context, nextResolve) {
@@ -39,8 +43,20 @@ const SAMPLES = {
 	'html and entities': '<script>alert(1)</script> &amp; & &copy; &#169; &#xA9; "quotes" \'single\'',
 	'emphasis edge cases': '**bold** *italic* ***both*** snake_case_name _under_ 2*3*4',
 	'rule and empty lines': 'Above\n\n---\n\nBelow\n',
+	'entity-encoded colons and letters': '[a](javascript&#58;x) [b](javascript&#x3a;x) [c](javascript&#X3A;x) [d](javascript&#0000058;x) [e](javascript&#58x) [f](javascript&amp;#58;x) [g](&#x6A;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;&#x3A;x) [h](jav&#x61;script:x) [i](java&#13;script:x) [j](java&#10;script:x) [k](java&Tab;script:x) [l](javascript&NewLine;:x) [m](&#0;javascript:x) [n](vbscript&#58;x) [o](data&#58;text/html,x)',
+	'raw html': '<a href="javascript:x">a</a> <img src=x onerror=alert(1)> <svg onload=alert(1)> <iframe src="javascript:x"></iframe> <math><mi>x</mi></math>',
+	'table with links': '| Link | Note |\n|---|---|\n| [ok](https://example.com/) | [bad](javascript&#58;x) |\n| [rel](./guide.md) | `code` |\n',
 	'description of a preset': '# Wan 2.2 Lightning\n\nFast text-to-video.\nFour steps, 960×544 cap.\n\n## Modes\n\n| Mode | Steps |\n|---|---|\n| Fast | 4 |\n\nSee [the guide](docs/guide.md).\n'
 };
+
+test('the core Markdown module has a shape this test knows how to load', { skip }, () => {
+	assert.ok(
+		knownShape,
+		`frontend/src/lib/utils/markdown.ts of the core imports ${JSON.stringify(coreImports)} and safeUrl.ts is ${coreHasSafeUrl ? 'there' : 'missing'}. ` +
+			`This test knows two shapes: no import and no safeUrl.ts (before 0.2.0), and exactly ${SAFE_URL_IMPORT} with safeUrl.ts (0.2.0). ` +
+			'Teach the resolve hook and knownShape of markdown.test.js the new line, then compare markdown.js with the link rule of the core again.'
+	);
+});
 
 test('renderMarkdown gives the same HTML as the core processMarkdown on every sample', { skip: skip || (!coreHasSafeUrl && 'this core links without its safeUrl rule (before 0.2.0)') }, async () => {
 	const core = await import(pathToFileURL(CORE_MARKDOWN).href);
@@ -77,6 +93,11 @@ test('a link the core 0.2.0 refuses is text in the preview', () => {
 	for (const source of ['[x](&#106;avascript:alert(1))', '[x](java&#x09;script:x)', '[x](data:image/png;base64,AAAA)', '[x](//evil.example/x)', '[x](guide.md)', '[x](file:///etc/passwd)']) {
 		assert.deepEqual(hrefs(renderMarkdown(source)), [], source);
 	}
+	for (const [link] of SAMPLES['entity-encoded colons and letters'].matchAll(/\[[a-z]\]\([^)]+\)/g)) {
+		assert.deepEqual(hrefs(renderMarkdown(link)), [], link);
+	}
+	assert.deepEqual(hrefs(renderMarkdown(SAMPLES['table with links'])), ['https://example.com/', './guide.md']);
+	assert.doesNotMatch(renderMarkdown(SAMPLES['raw html']), /<(a|img|svg|iframe|math)\b/);
 	assert.deepEqual(hrefs(renderMarkdown('[a](./guide.md) [b](#modes) [c](?tab=2) [d](https://example.com/?a=1&b=2) [e](mailto:a@example.com)')), ['./guide.md', '#modes', '?tab=2', 'https://example.com/?a=1&amp;b=2', 'mailto:a@example.com']);
 });
 
