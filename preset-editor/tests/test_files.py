@@ -128,6 +128,12 @@ def test_write_text_refuses_media_paths_and_oversize_content(draft_dir):
 
 
 def test_delete_file_removes_it_and_its_emptied_folders_but_never_the_manifest(draft_dir):
+    with pytest.raises(files.FilesError) as failure:
+        files.delete_file(draft_dir, "modes/txt2img/tabs/main.yml")
+    assert failure.value.code == "conflict"
+    assert failure.value.extra == {"citing": ["modes/txt2img/form.yml"]}
+    (draft_dir / "modes" / "txt2img" / "form.yml").write_text("fields: []\n", encoding="utf-8")
+
     files.delete_file(draft_dir, "modes/txt2img/tabs/main.yml")
 
     assert not (draft_dir / "modes" / "txt2img" / "tabs").exists()
@@ -173,3 +179,34 @@ def test_remove_mode_drops_the_item_and_leaves_the_rest():
     assert files.remove_mode_from_manifest(BLOCK, "txt2img") == 'schema: 1\nid: "x"\nmodes:\n  - "img2img"\ntags: []\n'
     assert files.remove_mode_from_manifest(FLOW, "txt2img") == "schema: 1\nmodes: [img2img]\ntags: []\n"
     assert files.remove_mode_from_manifest(BLOCK, "nope") == BLOCK
+
+
+def test_the_refusal_names_each_citing_file_in_one_sentence():
+    loads = ("loads one of its files", "load its files")
+
+    assert files.citation_message("The mode video cannot be removed", [], ["modes/a/form.yml"], loads) == (
+        "The mode video cannot be removed: modes/a/form.yml loads one of its files. Point it elsewhere first."
+    )
+    assert files.citation_message("The mode video cannot be removed", ["modes/a/pipeline.yml"], [], loads) == (
+        "The mode video cannot be removed: modes/a/pipeline.yml takes its pipeline from it. Point it elsewhere first."
+    )
+    pointers = ["modes/a/pipeline.yml", "modes/b/pipeline.yml", "modes/c/pipeline.yml"]
+    assert files.citation_message("The mode video cannot be removed", pointers, ["modes/a/form.yml", "modes/b/form.yml"], loads) == (
+        "The mode video cannot be removed: modes/a/pipeline.yml, modes/b/pipeline.yml and modes/c/pipeline.yml take their pipeline from it, "
+        "and modes/a/form.yml and modes/b/form.yml load its files. Point them elsewhere first."
+    )
+    assert files.citation_message("x.yml cannot be deleted", [], ["a.yml", "b.yml"], ("loads it", "load it")) == (
+        "x.yml cannot be deleted: a.yml and b.yml load it. Point them elsewhere first."
+    )
+
+
+def test_a_pointer_and_a_loader_are_told_apart(draft_dir):
+    (draft_dir / "modes" / "video").mkdir(parents=True, exist_ok=True)
+    (draft_dir / "modes" / "video" / "pipeline.yml").write_text("pipeline: []\n", encoding="utf-8")
+    (draft_dir / "modes" / "clip").mkdir(parents=True, exist_ok=True)
+    (draft_dir / "modes" / "clip" / "pipeline.yml").write_text("pipeline_from: video\n", encoding="utf-8")
+    (draft_dir / "modes" / "clip" / "form.yml").write_text('fields: "{{ paths.preset }}/modes/video/pipeline.yml"\n', encoding="utf-8")
+
+    assert files.mode_citations(draft_dir, "video") == (["modes/clip/pipeline.yml"], ["modes/clip/form.yml"])
+    assert files.file_citations(draft_dir, "modes/video/pipeline.yml") == (["modes/clip/pipeline.yml"], ["modes/clip/form.yml"])
+    assert files.file_citations(draft_dir, "modes/clip/form.yml") == ([], [])

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -74,13 +76,54 @@ def test_bad_reads_are_refused(client, draft, path, status, code):
 
 
 def test_deleting_a_file_updates_the_tree_and_never_touches_the_manifest(client, draft):
-    response = client.delete(_file_url(draft, "modes/txt2img/tabs/main.yml"))
+    assert client.put(_file_url(draft, "modes/txt2img/tabs/extra.yml"), json={"content": "fields: []\n"}).status_code == 200
+
+    response = client.delete(_file_url(draft, "modes/txt2img/tabs/extra.yml"))
 
     assert response.status_code == 200
-    assert "modes/txt2img/tabs/main.yml" not in [f["path"] for f in response.json()["data"]["files"]]
+    assert "modes/txt2img/tabs/extra.yml" not in [f["path"] for f in response.json()["data"]["files"]]
     assert response.json()["data"]["lint"]["errors"] == []
     assert client.delete(_file_url(draft, "preset.yml")).status_code == 400
-    assert client.delete(_file_url(draft, "modes/txt2img/tabs/main.yml")).status_code == 404
+    assert client.delete(_file_url(draft, "modes/txt2img/tabs/extra.yml")).status_code == 404
+
+
+def test_a_pipeline_that_another_mode_takes_is_not_deleted(client, draft, roots):
+    client.post(f"{DRAFTS_URL}/{draft['draft_id']}/modes", json={"mode": "img2img"})
+    pointer = drafts.load(roots, draft["draft_id"]).dir / "modes" / "img2img" / "pipeline.yml"
+    pointer.write_text("pipeline_from: txt2img\n", encoding="utf-8")
+    shared = pointer.parent.parent / "txt2img" / "pipeline.yml"
+
+    refused = client.delete(_file_url(draft, "modes/txt2img/pipeline.yml"))
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["citing"] == ["modes/img2img/pipeline.yml"]
+    assert refused.json()["detail"]["message"] == (
+        "modes/txt2img/pipeline.yml cannot be deleted: modes/img2img/pipeline.yml takes its pipeline from it. Point it elsewhere first."
+    )
+    assert shared.is_file()
+    pointer.write_text("pipeline: []\n", encoding="utf-8")
+    assert client.delete(_file_url(draft, "modes/txt2img/pipeline.yml")).status_code == 200
+
+
+def test_a_file_that_another_file_loads_is_not_deleted(client, draft, roots):
+    tab = drafts.load(roots, draft["draft_id"]).dir / "modes" / "txt2img" / "tabs" / "main.yml"
+
+    refused = client.delete(_file_url(draft, "modes/txt2img/tabs/main.yml"))
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["citing"] == ["modes/txt2img/form.yml"]
+    assert refused.json()["detail"]["message"] == (
+        "modes/txt2img/tabs/main.yml cannot be deleted: modes/txt2img/form.yml loads it. Point it elsewhere first."
+    )
+    assert tab.is_file()
+
+
+def test_a_file_whose_path_only_starts_another_cited_path_is_deleted(client, draft, roots):
+    assert client.put(_file_url(draft, "modes/txt2img/tabs/main.y.yml"), json={"content": "fields: []\n"}).status_code == 200
+    form = drafts.load(roots, draft["draft_id"]).dir / "modes" / "txt2img" / "form.yml"
+    form.write_text(form.read_text(encoding="utf-8") + "# see {{ paths.preset }}/modes/txt2img/tabs/main.y.yml.bak\n", encoding="utf-8")
+
+    assert client.delete(_file_url(draft, "modes/txt2img/tabs/main.y.yml")).status_code == 200
 
 
 def test_a_mode_is_added_from_the_skeleton_and_removed_with_its_folder(client, draft, roots):
@@ -113,7 +156,9 @@ def test_a_mode_whose_files_another_mode_loads_is_kept(client, draft, roots):
 
     assert refused.status_code == 409
     assert refused.json()["detail"]["citing"] == ["modes/img2img/form.yml"]
-    assert "modes/img2img/form.yml" in refused.json()["detail"]["message"]
+    assert refused.json()["detail"]["message"] == (
+        "The mode txt2img cannot be removed: modes/img2img/form.yml loads one of its files. Point it elsewhere first."
+    )
     assert (form.parent.parent / "txt2img" / "tabs" / "main.yml").is_file()
     assert client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/img2img").status_code == 200
 
@@ -127,6 +172,9 @@ def test_a_mode_whose_pipeline_another_mode_takes_is_kept(client, draft, roots):
 
     assert refused.status_code == 409
     assert refused.json()["detail"]["citing"] == ["modes/img2img/pipeline.yml"]
+    assert refused.json()["detail"]["message"] == (
+        "The mode txt2img cannot be removed: modes/img2img/pipeline.yml takes its pipeline from it. Point it elsewhere first."
+    )
     assert (pointer.parent.parent / "txt2img" / "pipeline.yml").is_file()
     assert client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/img2img").status_code == 200
 
@@ -204,3 +252,74 @@ def test_the_shared_reference_lists_the_fragments_and_the_cloud_blocks(client, t
     assert data["root"] == "{{ paths._shared }}"
     assert data["files"] == ["cloud/tabs/image.yml", "resolutions/sdxl.yml"]
     assert "tabs/image.yml" in data["cloud_blocks"] and "models/txt2img.yml" in data["cloud_blocks"]
+
+
+def _lint_by_modes(core):
+    async def lint_async(path):
+        core.lint_calls.append(Path(path))
+        manifest = (Path(path) / "preset.yml").read_text(encoding="utf-8")
+        listed = "- img2img" in manifest
+        errors = [] if listed or "simple_modes: [img2img]" not in manifest else [
+            "[ERROR] preset.yml: vars.video_director.simple_modes.img2img: not a mode of this preset"
+        ]
+        return errors, ["[WARNING] preset.yml: no tests.yml"]
+
+    return lint_async
+
+
+def test_the_removal_check_names_the_lint_errors_a_removal_would_add(client, draft, roots, core, monkeypatch):
+    from backend import core_bridge
+
+    client.post(f"{DRAFTS_URL}/{draft['draft_id']}/modes", json={"mode": "img2img"})
+    manifest = drafts.load(roots, draft["draft_id"]).dir / "preset.yml"
+    manifest.write_text(manifest.read_text(encoding="utf-8") + "vars:\n  video_director:\n    simple_modes: [img2img]\n", encoding="utf-8")
+    before = manifest.read_bytes()
+    monkeypatch.setattr(core_bridge, "lint_async", _lint_by_modes(core))
+
+    check = client.get(f"{DRAFTS_URL}/{draft['draft_id']}/modes/img2img/removal")
+
+    assert check.status_code == 200, check.text
+    assert check.json()["data"] == {
+        "mode": "img2img",
+        "allowed": True,
+        "message": "",
+        "citing": [],
+        "errors": ["[ERROR] preset.yml: vars.video_director.simple_modes.img2img: not a mode of this preset"],
+        "warnings": [],
+    }
+    assert manifest.read_bytes() == before
+    assert (manifest.parent / "modes" / "img2img" / "form.yml").is_file()
+    assert core.lint_calls[-2] == manifest.parent
+    assert core.lint_calls[-1] != manifest.parent
+    assert not core.lint_calls[-1].exists()
+
+
+def test_the_removal_check_of_a_mode_nothing_names_adds_no_error(client, draft, core, monkeypatch):
+    from backend import core_bridge
+
+    client.post(f"{DRAFTS_URL}/{draft['draft_id']}/modes", json={"mode": "img2img"})
+    monkeypatch.setattr(core_bridge, "lint_async", _lint_by_modes(core))
+
+    check = client.get(f"{DRAFTS_URL}/{draft['draft_id']}/modes/img2img/removal")
+
+    assert check.json()["data"]["allowed"] is True
+    assert check.json()["data"]["errors"] == []
+
+
+def test_the_removal_check_gives_the_refusal_of_a_cited_mode(client, draft, roots):
+    client.post(f"{DRAFTS_URL}/{draft['draft_id']}/modes", json={"mode": "img2img"})
+    pointer = drafts.load(roots, draft["draft_id"]).dir / "modes" / "img2img" / "pipeline.yml"
+    pointer.write_text("pipeline_from: txt2img\n", encoding="utf-8")
+
+    check = client.get(f"{DRAFTS_URL}/{draft['draft_id']}/modes/txt2img/removal")
+
+    assert check.status_code == 200
+    assert check.json()["data"]["allowed"] is False
+    assert check.json()["data"]["citing"] == ["modes/img2img/pipeline.yml"]
+    removal = client.delete(f"{DRAFTS_URL}/{draft['draft_id']}/modes/txt2img")
+    assert check.json()["data"]["message"] == removal.json()["detail"]["message"]
+
+
+@pytest.mark.parametrize("mode, status", [("nope", 404), ("txt2img", 409), ("Bad", 400)])
+def test_the_removal_check_refuses_what_the_removal_refuses(client, draft, mode, status):
+    assert client.get(f"{DRAFTS_URL}/{draft['draft_id']}/modes/{mode}/removal").status_code == status

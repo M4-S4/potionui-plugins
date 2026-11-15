@@ -105,6 +105,7 @@ def test_api_module_loads_and_exposes_the_router(loader, manifest):
             "drafts/{draft_id}/media/{path:path}",
             "drafts/{draft_id}/modes",
             "drafts/{draft_id}/modes/{mode}",
+            "drafts/{draft_id}/modes/{mode}/removal",
             "drafts/{draft_id}/public/{path:path}",
             "drafts/{draft_id}/publish",
             "me",

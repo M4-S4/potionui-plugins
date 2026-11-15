@@ -110,6 +110,13 @@ def delete_file(draft_dir: Path, value: str) -> Dict[str, Any]:
         raise FilesError("invalid_request", "preset.yml cannot be deleted")
     if not target.is_file():
         raise FilesError("not_found", f"no file {relative}")
+    pointers, loaders = file_citations(draft_dir, str(relative))
+    if pointers or loaders:
+        raise FilesError(
+            "conflict",
+            citation_message(f"{relative} cannot be deleted", pointers, loaders, ("loads it", "load it")),
+            citing=sorted(pointers + loaders),
+        )
     target.unlink()
     parent = target.parent
     while parent != draft_dir.resolve() and parent.is_dir() and not any(parent.iterdir()):
@@ -172,17 +179,58 @@ def _points_at(path: Path, draft_dir: Path, text: str, mode: str) -> bool:
     return isinstance(data, dict) and data.get(POINTER_KEY) == mode
 
 
-def citing_files(draft_dir: Path, mode: str) -> List[str]:
-    pattern = re.compile(rf"{PRESET_PATH_RE}modes/{re.escape(mode)}/")
-    own = draft_dir / "modes" / mode
-    found = []
+def _yaml_files(draft_dir: Path, skip: Optional[Path] = None):
     for path in sorted(draft_dir.rglob("*")):
-        if path.suffix.lower() not in YAML_EXTENSIONS or not path.is_file() or own in path.parents:
+        if path.suffix.lower() not in YAML_EXTENSIONS or not path.is_file():
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        if pattern.search(text) or _points_at(path, draft_dir, text, mode):
-            found.append(path.relative_to(draft_dir).as_posix())
-    return found
+        if skip is not None and (path == skip or skip in path.parents):
+            continue
+        yield path, path.read_text(encoding="utf-8", errors="replace")
+
+
+def mode_citations(draft_dir: Path, mode: str) -> Tuple[List[str], List[str]]:
+    pattern = re.compile(rf"{PRESET_PATH_RE}modes/{re.escape(mode)}/")
+    pointers, loaders = [], []
+    for path, text in _yaml_files(draft_dir, draft_dir / "modes" / mode):
+        relative = path.relative_to(draft_dir).as_posix()
+        if _points_at(path, draft_dir, text, mode):
+            pointers.append(relative)
+        elif pattern.search(text):
+            loaders.append(relative)
+    return pointers, loaders
+
+
+def file_citations(draft_dir: Path, value: str) -> Tuple[List[str], List[str]]:
+    parts = value.split("/")
+    pointed = parts[1] if len(parts) == 3 and parts[0] == "modes" and parts[2] == "pipeline.yml" else None
+    pattern = re.compile(rf"{PRESET_PATH_RE}{re.escape(value)}(?![\w./-])")
+    pointers, loaders = [], []
+    for path, text in _yaml_files(draft_dir, draft_dir / value):
+        relative = path.relative_to(draft_dir).as_posix()
+        if pointed is not None and _points_at(path, draft_dir, text, pointed):
+            pointers.append(relative)
+        elif pattern.search(text):
+            loaders.append(relative)
+    return pointers, loaders
+
+
+def citing_files(draft_dir: Path, mode: str) -> List[str]:
+    pointers, loaders = mode_citations(draft_dir, mode)
+    return sorted(pointers + loaders)
+
+
+def _join(paths: List[str]) -> str:
+    return paths[0] if len(paths) == 1 else f"{', '.join(paths[:-1])} and {paths[-1]}"
+
+
+def citation_message(subject: str, pointers: List[str], loaders: List[str], loads: Tuple[str, str]) -> str:
+    clauses = []
+    if pointers:
+        clauses.append(f"{_join(pointers)} {'takes its' if len(pointers) == 1 else 'take their'} pipeline from it")
+    if loaders:
+        clauses.append(f"{_join(loaders)} {loads[0] if len(loaders) == 1 else loads[1]}")
+    count = len(pointers) + len(loaders)
+    return f"{subject}: {', and '.join(clauses)}. Point {'it' if count == 1 else 'them'} elsewhere first."
 
 
 def manifest_modes(text: str) -> List[str]:

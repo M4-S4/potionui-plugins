@@ -12,7 +12,8 @@
 	import PreviewPanel from './PreviewPanel.svelte';
 	import TextEditor from './TextEditor.svelte';
 	import { adminPresetUrl } from '../lib/catalog.js';
-	import { addMode, deleteDraft, downloadDraft, fieldTypes, knownModes, getDraft, lintDraft, pipesReference, publishDraft, removeMode, sharedReference } from '../lib/client.js';
+	import { addMode, deleteDraft, downloadDraft, fieldTypes, knownModes, getDraft, lintDraft, modeRemoval, pipesReference, publishDraft, removeMode, sharedReference } from '../lib/client.js';
+	import { removalMessage } from '../lib/modes.js';
 	import { MODE_RE, canPublish, describeSource, formatTimestamp } from '../lib/drafts.js';
 	import { fileKind, isEditable, isMedia, modeOf } from '../lib/files.js';
 	import { confirm, toast } from '../lib/dom.js';
@@ -164,7 +165,18 @@
 	}
 
 	async function dropMode(mode) {
-		const ok = await confirm({ title: `Remove the mode ${mode}?`, message: 'Its folder leaves the draft and the mode is removed from preset.yml.', variant: 'danger' });
+		busy = 'mode';
+		const check = await modeRemoval(api, draft.draft_id, mode);
+		busy = '';
+		if (!check.ok) {
+			toast('error', check.error.message);
+			return;
+		}
+		if (!check.data.allowed) {
+			toast('error', check.data.message);
+			return;
+		}
+		const ok = await confirm({ title: `Remove the mode ${mode}?`, message: removalMessage(check.data), variant: 'danger' });
 		if (!ok) return;
 		busy = 'mode';
 		const result = await removeMode(api, draft.draft_id, mode);

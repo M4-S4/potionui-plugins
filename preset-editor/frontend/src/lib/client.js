@@ -231,6 +231,10 @@ export function removeMode(api, draftId, mode) {
 	return callPlugin(api, 'delete', `/drafts/${segment(draftId)}/modes/${segment(mode)}`);
 }
 
+export function modeRemoval(api, draftId, mode) {
+	return callPlugin(api, 'get', `/drafts/${segment(draftId)}/modes/${segment(mode)}/removal`);
+}
+
 export function mediaPath(draftId, path) {
 	return `/drafts/${segment(draftId)}/public/${filePath(path)}`;
 }
