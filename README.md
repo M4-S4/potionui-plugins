@@ -39,7 +39,7 @@ If PotionUI refuses an update with the message that the new version did not star
 3. update it;
 4. enable it.
 
-Preset Editor 0.2.4 needs these steps to reach 0.2.5, and Media Converter 0.1.0 to reach 0.1.1.
+Use these steps for every update of Preset Editor, and to take Media Converter from 0.1.0 to 0.1.1.
 
 ## Install by hand
 

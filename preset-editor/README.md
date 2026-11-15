@@ -13,7 +13,7 @@ Version 0.2.6. It runs on PotionUI 0.1.0 or later; the catalogue needs PotionUI 
 
 Without the catalogue, on PotionUI 0.1.0 for example, install it by hand from its release zip, as the [README of the repository](https://github.com/M4-S4/potionui-plugins#install-by-hand) says.
 
-To update from 0.2.4 to 0.2.5, disable Preset Editor in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. An update started while 0.2.4 is enabled is refused with the message that 0.2.5 did not start, and 0.2.4 stays in place; restarting and updating again gives the same refusal.
+To update from an earlier version, disable Preset Editor in **Admin › Plugins**, restart PotionUI, update it from the catalogue, then enable it. An update made while Preset Editor is enabled may be refused, or may take full effect only once PotionUI restarts.
 
 ![The draft workbench of a copy of the Flux2 preset in the dark theme: the files of the preset on the left, and the form builder open on the form of the txt2img mode, with its tabs, the field palette and the inspector of the selected node](https://raw.githubusercontent.com/M4-S4/potionui-plugins/main/preset-editor/docs/screenshots/form-builder-dark.webp)
 
