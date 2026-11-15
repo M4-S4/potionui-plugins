@@ -76,7 +76,7 @@ vars:
         audio: true
         max_keyframes: 8
         fps_locked: true
-        max_segments: 6
+        max_segments: 12
         max_frames_per_segment: 345
         continuation:
           source: "tail_frames"
