@@ -52,7 +52,7 @@ export function pointerFile(doc) {
 	return typeof target === 'string' && target.trim() ? `modes/${target}/pipeline.yml` : null;
 }
 
-export function pointerProblems(doc, { mode = null, files = null } = {}) {
+export function pointerProblems(doc, { mode = null, files = null, targetText = null } = {}) {
 	if (!isPointer(doc)) return [];
 	const target = doc.unknown[POINTER_KEY];
 	if (typeof target !== 'string' || !target.trim() || target.includes('/') || target.includes('\\') || target.startsWith('.')) {
@@ -63,7 +63,16 @@ export function pointerProblems(doc, { mode = null, files = null } = {}) {
 	if (others.size) return [`${POINTER_KEY} cannot be combined with other keys (${[...others].sort().join(', ')})`];
 	if (Array.isArray(files) && !files.includes(`modes/${target}/pipeline.yml`)) return [`${POINTER_KEY}: modes/${target}/pipeline.yml not found`];
 	if (mode && target === mode) return [`${POINTER_KEY}: a mode cannot point at itself`];
+	if (typeof targetText === 'string') {
+		const parsed = parseYaml(targetText);
+		if (!parsed.ok) return [`${POINTER_KEY}: modes/${target}/pipeline.yml failed to parse: ${parsed.error.message}`];
+		if (isObject(parsed.data) && POINTER_KEY in parsed.data) return [`${POINTER_KEY}: modes/${target} is itself a pointer; point at the mode that owns the pipeline`];
+	}
 	return [];
+}
+
+export function saveAllowed({ phase, doc, dirty, problems = 0, saving = false }) {
+	return phase === 'ready' && Boolean(doc) && !isPointer(doc) && Boolean(dirty) && !problems && !saving;
 }
 
 export function serializePipelineDocument(doc) {
